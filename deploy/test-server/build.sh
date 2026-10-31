@@ -122,11 +122,11 @@ configure_server() {
   rm -rf "$SERVER/world"
   set_prop "$props" online-mode true
   set_prop "$props" white-list true
-  set_prop "$props" motd "RotN 3.3.4 test $BATCH_NAME"
   [[ -n ${LEVEL_SEED:-} ]] && set_prop "$props" level-seed "$LEVEL_SEED"
   if [[ $CAPTURE == 1 ]]; then
     set_prop "$props" network-compression-threshold -1
   fi
+  write_whitelist > "$SERVER/whitelist.json"
   # The pack ships eula=true already; the harness re-asserts it (human-approved pack defaults).
   printf 'eula=true\n' > "$SERVER/eula.txt"
   render_start_script "$FORGE_JAR" > "$SERVER/start-test.sh"
@@ -148,19 +148,29 @@ wait_for_done() {
   log "server ready after ~${waited}s: $(cat "$STATE/done-line")"
 }
 
-apply_whitelist() {
-  local name
-  for name in $WHITELIST; do
-    /usr/local/sbin/rotn-test console --wait 3 "whitelist add $name" || true
+# write_whitelist: WHITELIST_ENTRIES ("Name:uuid ...", resolved on the PC) -> whitelist.json.
+# Written before the first start, so the server never needs its own (unreliable) name lookup.
+write_whitelist() {
+  local e out='[]'
+  for e in $WHITELIST_ENTRIES; do
+    out=$(jq -c --arg n "${e%%:*}" --arg u "${e#*:}" '. + [{uuid: $u, name: $n}]' <<< "$out")
   done
-  /usr/local/sbin/rotn-test console --wait 2 "whitelist reload" || true
-  for name in $WHITELIST; do
+  jq . <<< "$out"
+}
+
+# check_whitelist: after the start, every configured name must still be in whitelist.json.
+check_whitelist() {
+  local e name missing=''
+  : > "$STATE/whitelist-missing"
+  for e in $WHITELIST_ENTRIES; do
+    name=${e%%:*}
     if ! jq -e --arg n "$name" 'any(.[]; (.name | ascii_downcase) == ($n | ascii_downcase))' \
         "$SERVER/whitelist.json" > /dev/null 2>&1; then
-      log "WARNING: $name is not in whitelist.json (Mojang name lookup failed?)"
       printf '%s\n' "$name" >> "$STATE/whitelist-missing"
+      missing+=" $name"
     fi
   done
+  [[ -z $missing ]] || fail "not whitelisted after start:$missing"
 }
 
 main() {
@@ -207,7 +217,7 @@ main() {
   wait_for_done
 
   phase whitelist
-  apply_whitelist
+  check_whitelist
   phase ready
 }
 

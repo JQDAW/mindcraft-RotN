@@ -23,7 +23,9 @@ cmd=${1:-help}
 
 case $cmd in
   phase)
-    if [[ -f $STATE/phase ]]; then cat "$STATE/phase"; else echo booting; fi
+    # Before the build writes a phase, report cloud-init's own status (booting:running, booting:error...).
+    if [[ -f $STATE/phase ]]; then cat "$STATE/phase"
+    else echo "booting:$(cloud-init status 2>/dev/null | sed -n 's/^status: //p' | head -1)"; fi
     ;;
   start)
     touch "$STATE/start-requested"

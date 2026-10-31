@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
@@ -17,6 +17,10 @@ const fixtures = path.join(here, 'fixtures');
 const PIN = '90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205';
 const NOW = 1793534400; // 2026-11-01T12:00:00Z
 const fwd = (p) => p.replace(/\\/g, '/');
+// Fake profiles (not the real accounts' UUIDs); the API returns undashed ids and canonical case.
+const PROFILES = { FRCFLD: '000000000000400080000000000000f1', JQDAW: '000000000000400080000000000000a2' };
+const UUID_FRCFLD = '00000000-0000-4000-8000-0000000000f1';
+const UUID_JQDAW = '00000000-0000-4000-8000-0000000000a2';
 
 function findBash() {
     if (process.env.BASH_BIN) return process.env.BASH_BIN;
@@ -46,7 +50,14 @@ beforeEach(() => {
     writeExe(path.join(bin, 'ssh'), `#!/usr/bin/env bash\nexec "${node}" "${fwd(fixtures)}/fake-ssh.mjs" ssh "$@"\n`);
     writeExe(path.join(bin, 'scp'), `#!/usr/bin/env bash\nexec "${node}" "${fwd(fixtures)}/fake-ssh.mjs" scp "$@"\n`);
     writeExe(path.join(bin, 'ping'), `#!/usr/bin/env bash\necho "fake status ping $*" >&2\n`);
+    // Offline stand-in for Mojang's profile API (curl reads file:// URLs).
+    const profiles = path.join(tmp, 'profiles');
+    fs.mkdirSync(profiles);
+    for (const [name, id] of Object.entries(PROFILES)) {
+        fs.writeFileSync(path.join(profiles, name), JSON.stringify({ id, name }));
+    }
     env = {
+        MOJANG_PROFILE_URL: pathToFileURL(profiles).href,
         ...process.env,
         HCLOUD_BIN: fwd(path.join(bin, 'hcloud')),
         SSH_BIN: fwd(path.join(bin, 'ssh')),
@@ -131,7 +142,8 @@ describe('render-user-data', () => {
         assert.match(cfg, new RegExp(`^PACK_SHA256=${PIN}$`, 'm'));
         assert.match(cfg, /^FORGE_JAR=forge-1\.12\.2-14\.23\.5\.2860\.jar$/m);
         assert.match(cfg, /^PACK_URL=https:\/\/mediafilez\.forgecdn\.net\/files\/7564\/549\//m);
-        assert.match(cfg, /^WHITELIST=FRCFLD\\ JQDAW$/m, 'default whitelist is the bot and the task giver');
+        assert.equal(cfg.match(/^WHITELIST_ENTRIES=(.*)$/m)[1], `FRCFLD:${UUID_FRCFLD}\\ JQDAW:${UUID_JQDAW}`,
+            'default whitelist is the bot and the task giver, with UUIDs resolved on the PC');
         assert.match(cfg, /^CAPTURE=0$/m);
         assert.match(cfg, /^HOLD_START=0$/m);
         assert.match(cfg, /^HEAP_MIN=4G$/m);
@@ -150,7 +162,20 @@ describe('render-user-data', () => {
         assert.match(cfg, /^JVM_EXTRA=-Dfml\.debugNetworkHandshake=true$/m);
         assert.match(cfg, /^HOLD_START=1$/m);
         assert.match(cfg, /^PACK_URL=''$/m);
-        assert.match(cfg, /^WHITELIST=FRCFLD$/m);
+        assert.equal(cfg.match(/^WHITELIST_ENTRIES=(.*)$/m)[1], `FRCFLD:${UUID_FRCFLD}`);
+    });
+
+    test('whitelist: NAME:UUID skips the lookup; an unknown name fails before anything is created', () => {
+        const r = run(['render-user-data', '--whitelist', 'Steve:00000000000040008000000000000ABC'],
+            { MOJANG_PROFILE_URL: 'file:///nonexistent' });
+        assert.equal(r.code, 0, r.stderr);
+        const cfg = decodeWriteFiles(r.stdout)['/etc/rotn-test/config.env'].content;
+        assert.match(cfg, /^WHITELIST_ENTRIES=Steve:00000000-0000-4000-8000-000000000abc$/m);
+
+        const up = run(['up', '--yes', '--whitelist', 'NoSuchPlayer']);
+        assert.notEqual(up.code, 0);
+        assert.match(up.stderr, /could not resolve the UUID of 'NoSuchPlayer'/);
+        assert.equal(hcloudCalls().length, 0, 'no hcloud call at all');
     });
 
     test('rejects bad input', () => {
@@ -247,6 +272,14 @@ describe('up / run / down', () => {
         assert.equal(st.primary_ips.length, 0);
         assert.equal(st.ssh_keys.length, 0);
         assert.match(r.stderr, /EXIT trap: tearing down mcr-test-crfail/);
+    });
+
+    test('up: cloud-init finishing without starting the build fails early and tears down', () => {
+        const r = run(['up', '--yes', '--name', 'mcr-test-ci'], { FAKE_SSH_PHASES: 'booting:running,booting:error' });
+        assert.notEqual(r.code, 0);
+        assert.match(r.stderr, /cloud-init finished \(booting:error\) but the build never started/);
+        const st = state();
+        assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0);
     });
 
     test('up: a failed build tears everything down and shows the build log', () => {
@@ -410,6 +443,16 @@ describe('sweep (watchdog)', () => {
         assert.deepEqual(state(), before);
     });
 
+    test('a far-future delete-after cannot keep a labelled server past created + 24 h + grace', () => {
+        seed({ servers: [
+            { id: 31, name: 'hand-set', labels: { ...P, 'delete-after': '9999999999' }, created: iso(NOW - 25 * 3600) },
+            { id: 32, name: 'young', labels: { ...P, 'delete-after': '9999999999' }, created: iso(NOW - 23 * 3600) },
+        ], primary_ips: [], ssh_keys: [] });
+        const r = run(['sweep']);
+        assert.equal(r.code, 0, r.all);
+        assert.deepEqual(state().servers.map((s) => s.name), ['young']);
+    });
+
     test('fails loudly without hcloud auth', () => {
         const r = run(['sweep'], { FAKE_HCLOUD_NOAUTH: '1' });
         assert.notEqual(r.code, 0);
@@ -429,6 +472,24 @@ describe('build.sh helpers (sourced)', () => {
         assert.equal(r.status, 0, r.stderr);
         assert.equal(r.stdout, 'Rebirth of the Night\\!\n');
         assert.equal(fs.readFileSync(f, 'utf8'), '#c\nonline-mode=true\nwhite-list=true\nmotd=Rebirth of the Night\\!\nlevel-seed=42\n');
+    });
+
+    test('write_whitelist and check_whitelist', () => {
+        const dir = fwd(tmp);
+        const entries = `FRCFLD:${UUID_FRCFLD} JQDAW:${UUID_JQDAW}`;
+        const r = bashFn(`WHITELIST_ENTRIES="${entries}"; write_whitelist`);
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(JSON.parse(r.stdout), [{ uuid: UUID_FRCFLD, name: 'FRCFLD' }, { uuid: UUID_JQDAW, name: 'JQDAW' }]);
+
+        fs.mkdirSync(path.join(tmp, 'server'));
+        fs.mkdirSync(path.join(tmp, 'state'));
+        fs.writeFileSync(path.join(tmp, 'server', 'whitelist.json'), JSON.stringify([{ uuid: UUID_FRCFLD, name: 'frcfld' }]));
+        const ctx = `SERVER="${dir}/server"; STATE="${dir}/state"; WHITELIST_ENTRIES="${entries}"`;
+        const chk = bashFn(`${ctx}; check_whitelist`);
+        assert.notEqual(chk.status, 0, 'JQDAW missing must fail the build');
+        assert.equal(fs.readFileSync(path.join(tmp, 'state', 'phase'), 'utf8').trim(), 'failed:not whitelisted after start: JQDAW');
+        fs.writeFileSync(path.join(tmp, 'server', 'whitelist.json'), r.stdout);
+        assert.equal(bashFn(`${ctx}; check_whitelist`).status, 0);
     });
 
     test('has_done_line recognises the vanilla ready line only', () => {

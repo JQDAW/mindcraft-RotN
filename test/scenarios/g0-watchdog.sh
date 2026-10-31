@@ -3,7 +3,10 @@
 #   a labelled server with delete-after in the past is gone, with its Primary IP, within one
 #   sweeper interval; a server without the test label is left untouched.
 #
-#   test/scenarios/g0-watchdog.sh --yes [--mode scheduled|dispatch|local] [--timeout MIN]
+#   test/scenarios/g0-watchdog.sh --yes [--mode scheduled|dispatch|local] [--timeout MIN] [--context CTX]
+#
+# PASS needs the target gone within one sweeper interval (15 min) plus 5 min for the run itself.
+# GitHub may start scheduled runs late; that shows up here as a FAIL, on purpose.
 #
 #   scheduled  (default) wait for the 15-minute cron run of .github/workflows/test-server-sweeper.yml
 #   dispatch   trigger that workflow on develop now with `gh workflow run`
@@ -19,6 +22,8 @@
 set -Eeuo pipefail
 
 HCLOUD_BIN=${HCLOUD_BIN:-hcloud}
+CONTEXT=${HCLOUD_CONTEXT:-}
+INTERVAL_S=900 RUN_SLACK_S=300
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 STATE_ROOT=${ROTN_TEST_STATE_DIR:-$HOME/.mindcraft-rotn/test-server}
 MODE=scheduled TIMEOUT_MIN=35 YES=0 LOCATION=nbg1 TYPE=cx23
@@ -28,6 +33,7 @@ while (( $# )); do
     --mode) MODE=$2; shift 2 ;;
     --timeout) TIMEOUT_MIN=$2; shift 2 ;;
     --location) LOCATION=$2; shift 2 ;;
+    --context) CONTEXT=$2; shift 2 ;;
     --yes) YES=1; shift ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
@@ -36,7 +42,7 @@ done
 (( YES )) || { echo "pass --yes: creates two $TYPE servers (about EUR 0.03 in total)" >&2; exit 2; }
 
 log() { printf '[watchdog %s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
-hc() { "$HCLOUD_BIN" "$@"; }
+hc() { if [[ -n $CONTEXT ]]; then "$HCLOUD_BIN" --context "$CONTEXT" "$@"; else "$HCLOUD_BIN" "$@"; fi; }
 exists() { hc "$1" describe "$2" -o json > /dev/null 2>&1; }
 
 TS=$(date -u +%Y%m%d-%H%M%S)
@@ -88,7 +94,7 @@ T0=$(date -u +%s)
 log "created at $(date -u -d "@$T0" +%H:%M:%SZ); mode=$MODE"
 
 case $MODE in
-  local) "$REPO_ROOT/deploy/test-server.sh" sweep || log "local sweep reported a problem" ;;
+  local) HCLOUD_CONTEXT=$CONTEXT "$REPO_ROOT/deploy/test-server.sh" sweep || log "local sweep reported a problem" ;;
   dispatch) gh workflow run test-server-sweeper.yml --ref develop ;;
   scheduled) log "waiting for the scheduled sweeper (every 15 min; GitHub may start it late)" ;;
 esac
@@ -105,18 +111,20 @@ done
 
 control_ok=false
 exists server "$CONTROL" && control_ok=true
-pass=false
-[[ -n $gone_at && $control_ok == true ]] && pass=true
 elapsed=$([[ -n $gone_at ]] && echo $(( gone_at - T0 )) || echo null)
+in_interval=false
+if [[ -n $gone_at ]] && (( gone_at - T0 <= INTERVAL_S + RUN_SLACK_S )); then in_interval=true; fi
+pass=false
+[[ $in_interval == true && $control_ok == true ]] && pass=true
 runs=$(gh run list --workflow test-server-sweeper.yml --limit 5 --json databaseId,event,status,conclusion,createdAt 2>/dev/null || echo '[]')
-jq -n --arg b "$NAME" --arg m "$MODE" --argjson pass "$pass" --argjson e "$elapsed" --argjson c "$control_ok" \
+jq -n --arg b "$NAME" --arg m "$MODE" --argjson pass "$pass" --argjson e "$elapsed" --argjson c "$control_ok" --argjson w "$in_interval" \
   --arg t0 "$(date -u -d "@$T0" +%Y-%m-%dT%H:%M:%SZ)" --argjson runs "$runs" \
   '{scenario:"g0-watchdog", batch:$b, mode:$m, pass:$pass, created:$t0, seconds_until_gone:$e,
-    control_untouched:$c, recent_sweeper_runs:$runs}' | tee "$WORK/result.json"
+    within_one_interval:$w, control_untouched:$c, recent_sweeper_runs:$runs}' | tee "$WORK/result.json"
 
 if [[ $pass == true ]]; then
   log "PASS: target server, Primary IPv4 and SSH key deleted by the sweeper after ${elapsed}s; control untouched"
 else
-  log "FAIL: gone_at=${gone_at:-never} control_untouched=$control_ok"
+  log "FAIL: seconds_until_gone=$elapsed (limit $(( INTERVAL_S + RUN_SLACK_S ))) control_untouched=$control_ok"
   exit 1
 fi

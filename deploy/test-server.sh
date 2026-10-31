@@ -34,11 +34,14 @@
 #   --extra-mod JAR               upload JAR to mods/ before the first start (repeatable)
 #   --console "CMD"               run CMD on the console once ready (repeatable)
 #   --fetch PATH                  fetch PATH after the console commands (repeatable), into --out DIR
-#   --whitelist NAME              whitelist NAME (repeatable; default: $ROTN_TEST_WHITELIST or "FRCFLD JQDAW")
+#   --whitelist NAME[:UUID]       whitelist NAME (repeatable; default: $ROTN_TEST_WHITELIST or "FRCFLD JQDAW").
+#                                 UUIDs are resolved on the PC (Mojang profile API) before anything is created,
+#                                 and whitelist.json is written before the first start: 1.12.2's own
+#                                 `whitelist add` lookup is unreliable (legacy API, datacenter IPs blocked).
 #   --seed SEED  --heap-min 4G  --heap-max 8G
 #   --pack-source auto|url|upload (auto: CurseForge download if its SHA-256 matches, else upload)
 #   --pack-zip PATH               local zip for upload (default: $ROTN_PACK_ZIP)
-#   --ready-timeout MIN (60)  --yes (no cost prompt)  --allow-multiple  --keep-on-failure
+#   --ready-timeout MIN (120, restarts after a pack upload)  --yes (no cost prompt)  --allow-multiple  --keep-on-failure
 #   --dry-run                     print mutating hcloud commands instead of running them
 # Global: --name NAME (or $TEST_SERVER_NAME), --context CTX (or $HCLOUD_CONTEXT), --out DIR
 set -Eeuo pipefail
@@ -57,6 +60,7 @@ readonly LABEL_PURPOSE=mindcraft-rotn-test
 readonly LABEL_CONTROL=mindcraft-rotn-watchdog-control   # g0-watchdog control servers: alert, never delete
 readonly MAX_TTL_HOURS=24
 readonly DEFAULT_TTL_HOURS=8
+readonly SWEEP_GRACE_SECONDS=1800   # sweeper: no labelled resource outlives created + MAX_TTL_HOURS + grace
 readonly USER_DATA_MAX_BYTES=32768
 
 # ---- Overridable for tests ----
@@ -66,15 +70,16 @@ SCP_BIN=${SCP_BIN:-scp}
 SSH_KEYGEN_BIN=${SSH_KEYGEN_BIN:-ssh-keygen}
 STATUS_PING_CMD=${STATUS_PING_CMD:-node $REPO_ROOT/test/tools/status-ping.mjs}
 POLL_SECONDS=${ROTN_TEST_POLL_SECONDS:-15}
+MOJANG_PROFILE_URL=${MOJANG_PROFILE_URL:-https://api.mojang.com/users/profiles/minecraft}
 STATE_ROOT=${ROTN_TEST_STATE_DIR:-$HOME/.mindcraft-rotn/test-server}
 
 # ---- Option defaults ----
 TYPE=cpx42 LOCATION=nbg1 IMAGE=ubuntu-24.04 NAME=${TEST_SERVER_NAME:-}
 TTL_HOURS=$DEFAULT_TTL_HOURS CAPTURE=0 SEED='' HEAP_MIN=4G HEAP_MAX=8G
 PACK_SOURCE=auto PACK_ZIP=${ROTN_PACK_ZIP:-C:/Users/admin/source/RotN 3.3.4 Server Pack.zip}
-READY_TIMEOUT_MIN=60 YES=0 ALLOW_MULTIPLE=0 KEEP_ON_FAILURE=0 DRY_RUN=0 OUT_DIR='' WAIT_S=5
+READY_TIMEOUT_MIN=120 YES=0 ALLOW_MULTIPLE=0 KEEP_ON_FAILURE=0 DRY_RUN=0 OUT_DIR='' WAIT_S=5
 CONTEXT=${HCLOUD_CONTEXT:-}
-EXTRA_MODS=() CONSOLE_CMDS=() FETCH_PATHS=() WHITELIST=() ARGS=()
+EXTRA_MODS=() CONSOLE_CMDS=() FETCH_PATHS=() WHITELIST=() WHITELIST_ENTRIES=() ARGS=()
 
 # ---- Teardown state for the EXIT trap ----
 CLEANUP_NAME='' UP_OK=0 KEEP_ON_SUCCESS=0
@@ -149,10 +154,7 @@ validate_up_opts() {
   if (( ${#WHITELIST[@]} == 0 )); then
     read -r -a WHITELIST <<< "${ROTN_TEST_WHITELIST:-FRCFLD JQDAW}"
   fi
-  local n
-  for n in "${WHITELIST[@]}"; do
-    [[ $n =~ ^[A-Za-z0-9_]{3,16}$ ]] || die "bad Minecraft name '$n'"
-  done
+  resolve_whitelist
   local jar
   for jar in "${EXTRA_MODS[@]}"; do
     [[ -f $jar ]] || die "--extra-mod: no such file '$jar'"
@@ -162,6 +164,29 @@ validate_up_opts() {
   for p in "${FETCH_PATHS[@]}"; do valid_rel_path "$p" || die "--fetch: bad path '$p'"; done
   if [[ -z $NAME ]]; then NAME="mcr-test-$(date -u -d "@$(now)" +%Y%m%d-%H%M%S)"; fi
   [[ $NAME =~ ^[a-z0-9][a-z0-9-]{2,62}$ ]] || die "bad --name '$NAME'"
+}
+
+# resolve_whitelist: WHITELIST (NAME or NAME:UUID) -> WHITELIST_ENTRIES (Name:dashed-uuid).
+resolve_whitelist() {
+  local w n u json
+  WHITELIST_ENTRIES=()
+  for w in "${WHITELIST[@]}"; do
+    n=${w%%:*}
+    u=''
+    [[ $w == *:* ]] && u=${w#*:}
+    [[ $n =~ ^[A-Za-z0-9_]{3,16}$ ]] || die "bad Minecraft name '$n'"
+    if [[ -z $u ]]; then
+      # Mojang rate-limits bursts (HTTP 429); curl --retry covers 429 and 5xx.
+      json=$(curl -fsS --max-time 15 --retry 4 --retry-delay 3 "$MOJANG_PROFILE_URL/$n" 2>/dev/null) \
+        || die "could not resolve the UUID of '$n' (Mojang profile API); pass --whitelist $n:<uuid>"
+      u=$(jqr -r '.id // empty' <<< "$json")
+      n=$(jqr -r '.name // empty' <<< "$json")
+    fi
+    u=${u//-/}
+    u=${u,,}
+    [[ $u =~ ^[0-9a-f]{32}$ && -n $n ]] || die "bad UUID for '$w'"
+    WHITELIST_ENTRIES+=("$n:${u:0:8}-${u:8:4}-${u:12:4}-${u:16:4}-${u:20:12}")
+  done
 }
 
 valid_rel_path() { [[ $1 =~ ^[A-Za-z0-9._/-]+$ && $1 != /* && $1 != *..* ]]; }
@@ -192,7 +217,7 @@ render_config_env() {
     HOLD_WAIT_SECONDS 3600 \
     START_TIMEOUT_SECONDS 2400 \
     LEVEL_SEED "$SEED" \
-    WHITELIST "${WHITELIST[*]}"
+    WHITELIST_ENTRIES "${WHITELIST_ENTRIES[*]}"
 }
 
 render_user_data() {
@@ -298,6 +323,7 @@ count_batch() {  # count_batch KIND NAME -> number of labelled resources of KIND
 on_exit() {
   local rc=$?
   trap - EXIT
+  trap '' INT TERM HUP   # a second Ctrl-C must not interrupt the teardown
   if [[ -n $CLEANUP_NAME ]]; then
     if (( UP_OK && KEEP_ON_SUCCESS )); then
       :
@@ -362,13 +388,23 @@ wait_ready() {
   local deadline=$(( $(date +%s) + READY_TIMEOUT_MIN * 60 )) ph last='' packed=0 modded=0
   log "waiting for SSH and the build (up to ${READY_TIMEOUT_MIN} min)"
   while :; do
-    ph=$(rssh 'rotn-test phase 2>/dev/null || echo booting' 2>/dev/null | tr -d '\r' | tail -1) || true
+    # Falls back to cloud-init's status if write_files never installed rotn-test.
+    ph=$(rssh 'rotn-test phase 2>/dev/null || echo "booting:$(cloud-init status 2>/dev/null | sed -n "s/^status: //p")"' \
+      2>/dev/null | tr -d '\r' | tail -1) || true
     [[ -n $ph ]] || ph=unreachable
     [[ $ph != "$last" ]] && log "phase: $ph"
     last=$ph
     case $ph in
       ready) return 0 ;;
-      need-pack) if (( !packed )); then packed=1; upload_pack; fi ;;
+      need-pack)
+        if (( !packed )); then
+          packed=1
+          upload_pack
+          deadline=$(( $(date +%s) + READY_TIMEOUT_MIN * 60 ))   # unpack + first start still to come
+        fi ;;
+      booting:done*|booting:error*|booting:degraded*)
+        rssh 'tail -n 60 /var/log/cloud-init-output.log' >&2 || true
+        die "cloud-init finished ($ph) but the build never started" ;;
       hold) if (( !modded )); then modded=1; upload_mods; fi ;;
       failed*)
         rssh 'rotn-test build-log 60' >&2 || true
@@ -540,13 +576,17 @@ do_down() {
 # ---------------------------------------------------------------- sweep (watchdog)
 # Prints "id<TAB>name" for every resource in the JSON array on stdin that carries
 # purpose=mindcraft-rotn-test and whose delete-after has passed. A labelled resource
-# without a valid delete-after expires DEFAULT_TTL_HOURS after its creation time.
+# without a valid delete-after expires DEFAULT_TTL_HOURS after its creation time, and no
+# delete-after (mistyped or hand-set) keeps one alive past created + MAX_TTL_HOURS + grace.
 expired_filter() {
-  jqr -r --argjson now "$1" --argjson ttl "$(( DEFAULT_TTL_HOURS * 3600 ))" --arg purpose "$LABEL_PURPOSE" '
+  jqr -r --argjson now "$1" --argjson ttl "$(( DEFAULT_TTL_HOURS * 3600 ))" \
+    --argjson cap "$(( MAX_TTL_HOURS * 3600 + SWEEP_GRACE_SECONDS ))" --arg purpose "$LABEL_PURPOSE" '
     def created_epoch: (.created // "" | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z")
                         | try fromdateiso8601 catch 0);
-    def expiry: (.labels["delete-after"] // "") as $d
-      | if ($d | test("^[0-9]+$")) then ($d | tonumber) else (created_epoch + $ttl) end;
+    def expiry: (.labels["delete-after"] // "") as $d | created_epoch as $c
+      | if ($d | test("^[0-9]+$")) then
+          (if $c > 0 then ([($d | tonumber), $c + $cap] | min) else ($d | tonumber) end)
+        else (if $c > 0 then $c + $ttl else 0 end) end;
     .[] | select((.labels // {}).purpose == $purpose) | select(expiry <= $now)
         | "\(.id)\t\(.name)\t\(.assignee_id // "")"'
 }

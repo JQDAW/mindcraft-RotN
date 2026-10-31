@@ -10,7 +10,7 @@ Updated: 2026-11-01
   - `.github/workflows/test-server-sweeper.yml`: the off-PC watchdog.
   - `test/scenarios/g0-test-server.sh` and `test/scenarios/g0-watchdog.sh`.
   - `test/tools/status-ping.mjs`.
-  - `test/unit/*.test.js`: 32 tests (`npm test`), all passing; `npx eslint test/` is clean, and the repo total is still 259.
+  - `test/unit/*.test.js`: 36 tests (`npm test`), all passing; `npx eslint test/` is clean, and the repo total is still 259.
 - Read-only checks against the real API (2026-11-01), all passing:
   - `hcloud context list` shows `mindcraft-rotn-test` active.
   - The project has no servers and no Primary IPs. It has one human SSH key with no labels, which the sweeper's selector never matches.
@@ -23,7 +23,13 @@ Updated: 2026-11-01
 
 ## Doing
 
-- Opening the G0 tooling PR against `develop`.
+- Independent verifier pass (2026-11-01): static PASS, no blockers. Its should-fixes are applied:
+  - The whitelist is written by UUID, resolved on the PC, before the first start; a missing name fails the build.
+  - The sweeper caps any `delete-after` at created + 24 h + 30 min.
+  - The watchdog test asserts "gone within one interval".
+  - The ready timeout restarts after a pack upload.
+  - A cloud-init failure is detected early; teardown ignores a second Ctrl-C; `--context` added to the watchdog scenario.
+- G0 tooling PR open against `develop`; waiting for the lead's review and merge.
 
 ## Planned real batches (written before any create, per the lead's rule)
 
@@ -44,19 +50,13 @@ All in the test project (context `mindcraft-rotn-test`). Every resource carries 
 
 ## Blocked
 
-- Watchdog proof (batch 2), since 2026-11-01. It needs:
-  - the sweeper workflow on `develop` (this PR merged);
-  - the GitHub Environment and its secret (request 2 below).
+- Both real batches (G0 build and watchdog proof), since 2026-11-01, by the lead's decision (option 1): no real server is created until the off-PC sweeper is live. Only the merge of the G0 PR is left; then both batches run together.
 
 ## Requests to other agents or the lead
 
 1. **Lead:** review and merge the G0 tooling PR. The scheduled sweeper only runs from the default branch.
-2. **Human, via NEEDS-HUMAN** (the lead routes it). Create a GitHub Environment for the off-PC sweeper:
-   - Repo Settings -> Environments -> New environment named `hetzner-test-sweeper`.
-   - Deployment branches and tags: "Selected branches", add `develop` only. Required reviewers: none, or the schedule would wait.
-   - Environment secret `HCLOUD_TOKEN`: a new **Read & Write** API token of the Hetzner **test** project (Hetzner console -> project -> Security -> API tokens). Not a repository secret.
-   - The agent never sees or handles the token.
-3. **Lead:** my unit tests use `"test/unit/**/*.test.js"`, which `npm test` already covers. CI (brief deliverable 3) comes in a later PR.
+2. ~~Human: GitHub Environment `hetzner-test-sweeper`~~ **Done** (the lead verified it via the GitHub API on 2026-11-01): deployment branches `develop` only, environment secret `HCLOUD_TOKEN`, no repository-level secrets.
+3. **Lead (info only):** my unit tests use `"test/unit/**/*.test.js"`, which `npm test` already covers. CI (brief deliverable 3) comes in a later PR.
 
 ## Open PRs
 

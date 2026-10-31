@@ -10,9 +10,10 @@ Owner: harness-ops. Test server first (gate G0); CX23 provisioning, the systemd 
 - cloud-init does the whole build on the box (`test-server/build.sh`):
   1. Installs Java 8 (`openjdk-8-jre-headless`, noble universe), plus `unzip`, `tmux`, `jq` and `ufw`. The firewall allows 22 and 25565 only.
   2. Gets the pack. It tries the CurseForge 3.3.4 server file (id 7564549) first and keeps it only if its SHA-256 equals the ADR 0005 pin (`90642fd5...f5205`). Otherwise the PC uploads the local zip over SSH, after checking it against the same pin.
-  3. Unpacks it with default configs, and sets `online-mode=true` and `white-list=true`. The world is fresh every time. `eula=true` is shipped by the pack and re-asserted.
-  4. Starts `forge-1.12.2-14.23.5.2860.jar` with `-Xms4G -Xmx8G` as user `minecraft`, in a tmux console under systemd (`rotn-server.service`).
-  5. Waits for the `Done (...)! For help` line, then whitelists the players.
+  3. Unpacks it with default configs. It changes only `online-mode=true` and `white-list=true` (plus `network-compression-threshold=-1` with `--capture`). The world is fresh every time. `eula=true` is shipped by the pack and re-asserted.
+  4. Writes `whitelist.json` before the first start, with UUIDs the PC resolved from Mojang's profile API. 1.12.2's own `whitelist add` uses a legacy lookup that is known to fail, and Mojang blocks some datacenter IPs.
+  5. Starts `forge-1.12.2-14.23.5.2860.jar` with `-Xms4G -Xmx8G` as user `minecraft`, in a tmux console under systemd (`rotn-server.service`).
+  6. Waits for the `Done (...)! For help` line, then checks that every name is still whitelisted. A missing name fails the build.
 
 ### Commands
 
@@ -37,7 +38,8 @@ Options for the other agents:
 
 - **net-forge Run A:** `--capture` sets `-Dfml.debugNetworkHandshake=true` and `network-compression-threshold=-1`. Then use `fetch logs`.
 - **rotn-data dumper (ADR 0004):** `--extra-mod tools/dumper/build/libs/<jar>` uploads the jar before the first start. `--console "<dump command>"` runs once the server is ready, and `--fetch <output dir>` copies the files into `--out DIR`.
-- **Whitelist:** `--whitelist NAME`, repeatable. The default is `FRCFLD JQDAW` (the bot and the task giver), or `$ROTN_TEST_WHITELIST`.
+- **Whitelist:** `--whitelist NAME` or `NAME:UUID`, repeatable. The default is `FRCFLD JQDAW` (the bot and the task giver), or `$ROTN_TEST_WHITELIST`. A name that cannot be resolved stops the script before anything is created.
+- **Timeouts:** `--ready-timeout` (120 min) starts again after a pack upload, because the upload, unpacking and the first Forge start all count against it.
 
 Inside `run`, the command gets `TEST_SERVER_NAME`, `TEST_SERVER_HOST`, `TEST_SERVER_PORT`, `TEST_SERVER_STATE_DIR` and `TEST_SERVER_CTL` (this script).
 
@@ -47,7 +49,7 @@ Inside `run`, the command gets `TEST_SERVER_NAME`, `TEST_SERVER_HOST`, `TEST_SER
 | --- | --- |
 | Labels | Every server, Primary IP and SSH key gets `purpose=mindcraft-rotn-test`, `delete-after=<epoch>` and `batch=<name>`. |
 | EXIT trap | `run` always deletes. `up` deletes if the build fails (unless `--keep-on-failure`). Deletion runs server first, then the IP, then the key, and checks that each is gone. |
-| Off-PC sweeper | `.github/workflows/test-server-sweeper.yml` runs every 15 min from `develop`. It deletes labelled resources whose `delete-after` has passed, selecting only by label. The job fails if an expired labelled resource survives. |
+| Off-PC sweeper | `.github/workflows/test-server-sweeper.yml` runs every 15 min from `develop`. It deletes labelled resources whose `delete-after` has passed, selecting only by label. No `delete-after` keeps a labelled resource alive past created + 24 h + 30 min. The job fails if an expired labelled resource survives, and it alerts (never deletes) on overdue watchdog-control servers. |
 | Guards | No create without `--yes` (or a TTY prompt). A second server needs `--allow-multiple`. The TTL is at most 24 h. Each batch has its own SSH key, so Hetzner sends no root-password email. |
 
 The sweeper needs a GitHub Environment named `hetzner-test-sweeper`:
@@ -55,7 +57,9 @@ The sweeper needs a GitHub Environment named `hetzner-test-sweeper`:
 - Its deployment branches are limited to `develop`.
 - It holds the secret `HCLOUD_TOKEN`: a Read & Write token of the **test** project, set by the human.
 
-Watchdog acceptance test: `test/scenarios/g0-watchdog.sh --yes --mode dispatch` (or `scheduled`).
+Watchdog acceptance test: `test/scenarios/g0-watchdog.sh --yes --mode dispatch` (or `scheduled`). It passes only if the target is gone within one interval (15 min, plus 5 min for the run).
+
+GitHub disables scheduled workflows in a public repository after 60 days without repository activity. If the sweeper's run history stops, re-enable it under Actions -> test-server-sweeper.
 
 ### Local state and cost log
 

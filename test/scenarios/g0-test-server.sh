@@ -40,6 +40,7 @@ check eula                 "$(is "$(v eula)" true)"                         "eul
 check online_mode          "$(is "$(v online_mode)" true)"                  "online-mode=$(v online_mode)"
 check white_list_on        "$(is "$(v white_list)" true)"                   "white-list=$(v white_list)"
 for n in ${ROTN_TEST_WHITELIST:-FRCFLD JQDAW}; do
+  n=${n%%:*}
   check "whitelisted_$n"   "$(has ",$(v whitelist_names | tr '[:upper:]' '[:lower:]')," ",${n,,},")" "whitelist=$(v whitelist_names)"
 done
 check done_line            "$(has "$(v done_line)" 'Done (')"               "$(v done_line)"
