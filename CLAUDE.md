@@ -12,7 +12,7 @@ Read `docs/PLAN.md` once at the start of every session. Read your own brief in `
 | --- | --- |
 | Minecraft | 1.12.2 (Forge, FML protocol 2) |
 | RotN pack | 3.3.2, official server pack zip, default configs |
-| Node.js | 20 LTS (Mindcraft warns that v24+ breaks native deps) |
+| Node.js | 22 LTS (ADR 0002; mineflayer 4.27+ needs >=22, Mindcraft warns that v24+ breaks native deps) |
 | Java on test server | 8 |
 | Integration branch | `develop` (this fork's default branch) |
 | Bot OS | Ubuntu 24.04 on the CX23 |
@@ -21,8 +21,8 @@ Read `docs/PLAN.md` once at the start of every session. Read your own brief in `
 
 | Agent | Kind | Owns (only it edits these) |
 | --- | --- | --- |
-| rotn-lead | Main Claude Code session, Orca main worktree | `docs/PLAN.md`, `docs/adr/`, `docs/briefs/`, `coord/`, merges into `develop`, release tags |
-| net-forge | Dev agent, own Orca worktree | `packages/forge-bridge/`, `patches/` entries for mineflayer/protocol, the `initBot` part of `src/utils/mcdata.js` |
+| rotn-lead | Main Claude Code session, Orca main worktree | `docs/PLAN.md`, `docs/adr/`, `docs/research/`, `docs/briefs/`, `coord/`, `package.json` + lockfile, root `settings.js`, merges into `develop`, release tags |
+| net-forge | Dev agent, own Orca worktree | `packages/forge-bridge/`, `patches/` entries for mineflayer, minecraft-protocol, protodef, prismarine-chunk, minecraft-data and mineflayer-pathfinder, the `initBot` part of `src/utils/mcdata.js`, `src/process/agent_process.js` |
 | rotn-data | Dev agent, own Orca worktree | `packages/rotn-data/`, `tools/dumper/`, the name/registry helpers in `src/utils/mcdata.js` |
 | skills-rotn | Dev agent, own Orca worktree | `src/agent/` (skills, commands, modes, self_prompter, new task queue), `profiles/` |
 | harness-ops | Dev agent, own Orca worktree | `test/`, `deploy/`, `.github/workflows/`, `TRY_IT.md` |

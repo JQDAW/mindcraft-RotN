@@ -30,3 +30,53 @@ Use rotn-data's API for every block, item and recipe fact. Do not hard-code RotN
 
 - Harness scenarios for G3: rocks to stone tools on a fresh spawn; survives the first night; a task preempts the agenda, then the agenda resumes; queue survives a restart.
 - `npm test` passes; no new ESLint errors; upstream code paths you did not need to change stay unchanged.
+
+## Phase 0 research revisions (rotn-lead, 2026-11-01)
+
+Read `docs/research/rotn-progression.md` (progression graph, hazard table, first-day script) and the seam-map rows owned by SK. Where this section and the text above disagree, this section wins.
+
+**Safety and stability fixes first.** Small, test-backed, and possible before G2 (seam-map sections B and E):
+
+- Hard-disable cheat mode: `!setMode cheat`, `/tp`, `/setblock`, and the `god_mode` profile. The bot has no op on RotN.
+- Remove the process restart after every `!smeltItem` (`actions.js` L284-291). On Forge, every restart means a full relogin.
+- Drop the `/skin` command at login.
+- Wrap the `agent.js` update loop so one throwing mode cannot kill it.
+- Guard `block.name` uses for modded blocks with no name.
+- Stop modes from re-prompting the LLM on every reflex (`modes.js` L306-330).
+- Limit `isClearPath` A* cost on the CX23.
+- Kick handling in `agent.js` L69-89: coordinate with net-forge, which owns the restart policy in `src/process/agent_process.js`.
+
+**Profile.**
+
+- Remove examples that use non-existent commands (`!collectBlock`, `!craftItem`) and `!newAction`, which is disabled because `allow_insecure_coding` is false.
+- Remove "don't refuse requests". It conflicts with the task-giver rule.
+- Use RotN 1.12.2 names from `rotn-progression.md` section 4.
+- Remove or block `!searchWiki`, which returns vanilla 1.21 information. Blocked actions live in `settings.js`, which the lead owns: request the change.
+
+**RotN early game (G3).** This follows `rotn-progression.md` section 1.
+
+- Gather rocks from surface piles.
+- Crude axe in the 2x2 grid. It has 8 durability, so keep spares.
+- Fell a tree, then the **first plank**: place a log, right-click it with the crude axe to debark it, then right-click again for a plank. This is a world interaction, not a recipe, so it needs its own skill.
+- Crafting Tools, then crafting table, then log to 3 planks in the table, then sticks.
+- Stone pickaxe and axe (3 rocks + 2 sticks each).
+- Mine stone for rocks, then 4 rocks to 1 cobblestone.
+- In RotN, mining stone with a pickaxe below Sturdy yields rocks, not cobblestone. Fix the `collectBlock` aliasing (`cobblestone`→`stone`) accordingly.
+
+**Survival rules.**
+
+- Nights are double length, with Hardcore Darkness.
+- Mobs dig through walls and are drawn to visible light. Build shelters from cobblestone or stone, not dirt.
+- Do not rely on world time values (Extended Days is installed); use sky light and the sunset signal.
+- Eat at food 12 or lower; starving is instant death.
+- Avoid hawthorn berries, cloudsbluff, villages (bandits), swamps and deep caves early.
+- Re-plan after any position jump of 5 or more blocks (AggroTP).
+
+**Death (Corpse Complex).**
+
+- The bot keeps its main hand, off hand, armor and baubles. Everything else drops at the death spot and does not despawn. Respawn takes 7 s.
+- The bot reports what it lost and may go back for its items, without chat spam.
+
+**Rules.** Use rotn-data's API for all item, recipe and harvest facts; no hard-coded RotN names where the data package can answer. The task-giver list is still pending from the human (NEEDS-HUMAN); read it from settings, never hard-code it.
+
+**Start condition.** At G2, as planned. You may start early on the safety fixes and the task queue, which need no modded facts.

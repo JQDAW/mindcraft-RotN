@@ -13,7 +13,7 @@ An autonomous LLM bot that joins the human's Rebirth of the Night 3.3.2 server (
 | Server | The human admins it. RotN 3.3.2, default server pack configs. Bot is whitelisted. Small server-side helper mods are allowed when they save real work. Agents never get admin access to the live server. |
 | Test server | Hetzner CPX42 (8 vCPU, 16 GB, 320 GB), EUR 0.138/h, EUR 86.17/month cap. Built from scratch for every test batch from the official RotN 3.3.2 server pack zip (pinned URL + SHA-256) with Java 8, then deleted along with its IPv4. Delete-after watchdog, default 8 h. Nothing is copied from the live host. |
 | Data dump | Runs on the test server, which runs the same default pack as live. |
-| Bot VPS | Hetzner CX23, Ubuntu 24.04, Node 20. Root SSH is used once to create a key-based `deploy` user; root and password login are then disabled. |
+| Bot VPS | Hetzner CX23, Ubuntu 24.04, Node 22 LTS (ADR 0002). Root SSH is used once to create a key-based `deploy` user; root and password login are then disabled. |
 | LLM | OpenRouter via Mindcraft's `openrouter` provider (`OPENROUTER_API_KEY`, model `openrouter/<vendor>/<model>`). One key per bot with a credit limit. Models chosen by scenario benchmark. Embeddings fall back to word overlap. |
 | Behavior | Autonomous, player tasks take priority (see priority stack). |
 | Scale | One bot at launch. Everything per-bot is configuration. |
@@ -95,9 +95,20 @@ At most three dev agents run at once. Phase 1 starts net-forge; rotn-data starts
 | LLM uses 1.21 names | Translate at the command boundary; `!lookup` command over the RotN catalog; RotN examples in the profile |
 | Anti-cheat or admin kicks | Whitelist; normal movement limits; `block_place_delay` if needed |
 | OpenRouter model quality varies | Benchmark 3-4 models on the same scenarios; primary + fallback model in the profile |
-| No OpenRouter embeddings | Accept word overlap; add a cheap embedding key from a supported provider if scenarios show harm |
+| Embeddings | OpenRouter now has `/api/v1/embeddings` (`docs/research/ops.md` D), but Mindcraft's `openrouter.js` does not use it, so word overlap runs today. Wire it in only if scenarios show harm |
+| RoughlyEnoughIDs changes the wire format (VarInt slot ids, VarInt biome array, VarInt effect ids) | forge-bridge applies REID protocol overrides when REID is in the ModList (ADR 0003); G1 spike checks chunk and inventory parsing first |
+| Mod-local entity IDs are not sent to clients | rotn-data's server-side dumper mod exports the table (ADR 0004) |
+| Hetzner prices or availability changed (June 2026, unverified) | Human checks the console; harness-ops logs real hourly prices per batch; ADR if a type is unavailable |
 
 If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge client with a small control-API client mod (needs a larger VPS), or (b) a server-side puppet mod controlling a fake player (possible because the human admins the server).
+
+## Status
+
+- 2026-11-01, Phase 0.
+  - The four research reports are filed in `docs/research/`.
+  - ADRs 0002 (Node 22), 0003 (forge-bridge approach) and 0004 (dumper approach) are accepted.
+  - The dev briefs are revised (see the "Phase 0 research revisions" section in each), and the human's approval is pending.
+  - G0 is not passed. It needs the human items in `coord/NEEDS-HUMAN.md` and harness-ops' test-server script.
 
 ## Open items
 
