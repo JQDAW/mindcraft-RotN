@@ -45,12 +45,12 @@
       "gl": "^8.1.6"
     },
     "scripts": {
-        "postinstall": "patch-package",
+        "postinstall": "patch-package --error-on-fail",
         "start": "node main.js",
-        "test": "node --test",
+        "test": "node --test \"packages/*/test/**/*.test.js\" \"test/unit/**/*.test.js\" \"src/**/*.test.js\"",
         "lint": "eslint .",
-        "reinstall": "npm run clean:modules && npm install",
-        "clean:modules": "node -e \"const fs=require('fs');const p=require('path');['node_modules','package-lock.json'].forEach(f=>{if(fs.existsSync(f)){if(fs.lstatSync(f).isDirectory()){fs.rmSync(f,{recursive:true,force:true});}else{fs.unlinkSync(f);}}});\""
+        "reinstall": "npm run clean:modules && npm ci",
+        "clean:modules": "node -e \"const fs=require('fs');const p=require('path');['node_modules'].forEach(f=>{if(fs.existsSync(f)){if(fs.lstatSync(f).isDirectory()){fs.rmSync(f,{recursive:true,force:true});}else{fs.unlinkSync(f);}}});\""
     },
     "devDependencies": {
         "patch-package": "^8.0.0"
