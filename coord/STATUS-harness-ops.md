@@ -60,4 +60,4 @@ All in the test project (context `mindcraft-rotn-test`). Every resource carries 
 
 ## Open PRs
 
-- (being opened) G0: disposable RotN 3.3.4 test server, cleanup and off-PC watchdog (gate G0)
+- #4 G0: disposable RotN 3.3.4 test server, cleanup and off-PC watchdog (gate G0, test-server half). Waiting for the lead review and merge; then the G0 batch and the watchdog proof run together.
