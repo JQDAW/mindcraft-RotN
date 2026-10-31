@@ -1,0 +1,7 @@
+# These files run on Linux (cloud-init, systemd, GitHub runners). Keep LF even on Windows checkouts.
+*.sh       text eol=lf
+*.service  text eol=lf
+*.yaml     text eol=lf
+*.yml      text eol=lf
+*.env      text eol=lf
+*.tmpl     text eol=lf

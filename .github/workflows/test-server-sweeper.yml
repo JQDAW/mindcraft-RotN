@@ -1,0 +1,64 @@
+# Off-PC watchdog for disposable Hetzner test servers (harness-ops, gate G0).
+#
+# Every 15 minutes, deletes servers, Primary IPs and SSH keys in the TEST project that carry
+# purpose=mindcraft-rotn-test and whose delete-after label (unix epoch) has passed.
+# It selects only by that label; it never touches anything else (e.g. the bot's CX23, which
+# is not in the test project anyway). The job fails, so GitHub notifies, if an expired
+# labelled resource survives the sweep.
+#
+# Token: a Read & Write API token of the Hetzner TEST project, stored by the human as the secret
+# HCLOUD_TOKEN of the GitHub Environment "hetzner-test-sweeper", whose deployment branches are
+# limited to `develop`. A workflow edited on an agent branch cannot read it.
+name: test-server-sweeper
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List what would be deleted, delete nothing'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-server-sweeper
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: hetzner-test-sweeper
+    env:
+      HCLOUD_VERSION: v1.70.2
+      HCLOUD_SHA256: b844bd28240112b0254183ba5266d0a0f59a6167c196636936459755efb88050
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install hcloud (pinned, checksum-verified)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o hcloud.tar.gz \
+            "https://github.com/hetznercloud/cli/releases/download/${HCLOUD_VERSION}/hcloud-linux-amd64.tar.gz"
+          echo "${HCLOUD_SHA256}  hcloud.tar.gz" | sha256sum -c -
+          mkdir -p bin
+          tar -xzf hcloud.tar.gz -C bin hcloud
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Sweep expired labelled test resources
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: |
+          set -euo pipefail
+          test -n "${HCLOUD_TOKEN:-}" || { echo "::error::HCLOUD_TOKEN is not set in environment hetzner-test-sweeper"; exit 1; }
+          hcloud version
+          bash deploy/test-server.sh sweep $DRY_RUN
