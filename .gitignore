@@ -28,3 +28,13 @@ tasks/construction_tasks/train/**
 server_data*
 **/.DS_Store
 src/mindcraft-py/__pycache__/
+
+# Mindcraft-RotN: secrets and local artifacts
+.env
+.env.*
+**/nmp-cache/
+*.token
+*.pem
+deploy/secrets/
+server-pack/
+captures/raw/
