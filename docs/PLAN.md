@@ -4,16 +4,16 @@ Owner: rotn-lead. Source: the concept doc agreed with the human on 31 Oct 2026. 
 
 ## Goal
 
-An autonomous LLM bot that joins the human's Rebirth of the Night 3.3.2 server (Forge 1.12.2, online mode) with its own Microsoft account. It plays on its own, takes tasks from trusted players as priorities, and runs on a Hetzner CX23. "Done" means every item in the ready-to-try list below passes.
+An autonomous LLM bot that joins the human's Rebirth of the Night 3.3.4 server (ADR 0005) (Forge 1.12.2, online mode) with its own Microsoft account. It plays on its own, takes tasks from trusted players as priorities, and runs on a Hetzner CX23. "Done" means every item in the ready-to-try list below passes.
 
 ## Confirmed decisions
 
 | Topic | Decision |
 | --- | --- |
-| Server | The human admins it. RotN 3.3.2, default server pack configs. Bot is whitelisted. Small server-side helper mods are allowed when they save real work. Agents never get admin access to the live server. |
-| Test server | Hetzner CPX42 (8 vCPU, 16 GB, 320 GB), EUR 0.138/h, EUR 86.17/month cap. Built from scratch for every test batch from the official RotN 3.3.2 server pack zip (pinned URL + SHA-256) with Java 8, then deleted along with its IPv4. Delete-after watchdog, default 8 h. Nothing is copied from the live host. |
+| Server | The human admins it. RotN 3.3.4 (ADR 0005), default server pack configs. Bot is whitelisted. Small server-side helper mods are allowed when they save real work. Agents never get admin access to the live server. |
+| Test server | Hetzner CPX42 (8 vCPU, 16 GB, 320 GB), EUR 0.138/h, EUR 86.17/month cap. Built from scratch for every test batch from the RotN 3.3.4 server pack zip (pinned SHA-256, ADR 0005) with Java 8, then deleted along with its IPv4. Delete-after watchdog, default 8 h. Nothing is copied from the live host. |
 | Data dump | Runs on the test server, which runs the same default pack as live. |
-| Bot VPS | Hetzner CX23, Ubuntu 24.04, Node 20. Root SSH is used once to create a key-based `deploy` user; root and password login are then disabled. |
+| Bot VPS | Hetzner CX23, Ubuntu 24.04, Node 22 LTS (ADR 0002). Root SSH is used once to create a key-based `deploy` user; root and password login are then disabled. |
 | LLM | OpenRouter via Mindcraft's `openrouter` provider (`OPENROUTER_API_KEY`, model `openrouter/<vendor>/<model>`). One key per bot with a credit limit. Models chosen by scenario benchmark. Embeddings fall back to word overlap. |
 | Behavior | Autonomous, player tasks take priority (see priority stack). |
 | Scale | One bot at launch. Everything per-bot is configuration. |
@@ -60,7 +60,7 @@ Per bot: profile JSON (name equals the account's Minecraft name), Microsoft acco
 
 | Phase | Work | Agents | Exit gate (checked by a harness scenario) |
 | --- | --- | --- | --- |
-| 0 Bootstrap | Briefs, subagents, test-server script, human setup items | rotn-lead, harness-ops | G0: test server builds from the pack zip and runs RotN 3.3.2; human has approved the briefs |
+| 0 Bootstrap | Briefs, subagents, test-server script, human setup items | rotn-lead, harness-ops | G0: test server builds from the pack zip and runs RotN 3.3.4; human has approved the briefs |
 | 1 Research + spike | Four research subagents in parallel; net-forge spikes the FML login | lead, net-forge, harness-ops | G1: bot logs in online, stays 10 min, chats, walks. Fail -> ADR picks a fallback |
 | 2 See the world | Registry sync, mod entities, data dump, name translation | net-forge, rotn-data, harness-ops | G2: top 50 blocks near spawn and common mobs are named; old/new names round-trip |
 | 3 Act in RotN | Skills and modes for RotN, task queue, agenda | skills-rotn, rotn-data, harness-ops | G3: rocks to stone tools on a fresh spawn; survives the first night; a task preempts the agenda, which then resumes |
@@ -87,7 +87,7 @@ At most three dev agents run at once. Phase 1 starts net-forge; rotn-data starts
 
 | Risk | Mitigation |
 | --- | --- |
-| `minecraft-protocol-forge` is old and breaks with current mineflayer | Fork it into forge-bridge; port from Minecraft Console Client and the Velocity/Gate legacy-Forge code |
+| `minecraft-protocol-forge` is old and breaks with current mineflayer | Fresh nmp plugin in forge-bridge (ADR 0003); MCC, Velocity and Gate as behavioural references only, for licence reasons |
 | Mod entities invisible | Decode FML entity spawn messages; backup: a server-side helper mod announcing entities on a custom channel |
 | Mods kick silent clients | Log all plugin-channel traffic in the spike; stub only where a kick is proven |
 | Modded crafting stations | Recipe dump plus slot-click crafting; ready-to-try needs only crafting table and 2x2 grid |
@@ -95,11 +95,24 @@ At most three dev agents run at once. Phase 1 starts net-forge; rotn-data starts
 | LLM uses 1.21 names | Translate at the command boundary; `!lookup` command over the RotN catalog; RotN examples in the profile |
 | Anti-cheat or admin kicks | Whitelist; normal movement limits; `block_place_delay` if needed |
 | OpenRouter model quality varies | Benchmark 3-4 models on the same scenarios; primary + fallback model in the profile |
-| No OpenRouter embeddings | Accept word overlap; add a cheap embedding key from a supported provider if scenarios show harm |
+| Embeddings | OpenRouter now has `/api/v1/embeddings` (`docs/research/ops.md` D), but Mindcraft's `openrouter.js` does not use it, so word overlap runs today. Wire it in only if scenarios show harm |
+| RoughlyEnoughIDs 2.2.2 changes the wire format (VarInt slot ids, a VarInt biome array inside chunk data, int effect ids, its own `jeid` channel) | forge-bridge protocol overrides plus a prismarine-chunk patch when REID is in the ModList (ADR 0003, `fml-spec.md` section R); the G1 spike checks chunk and inventory parsing first |
+| Mod-local entity IDs are not sent to clients | rotn-data's server-side dumper mod exports the table (ADR 0004) |
+| Hetzner prices or availability change | Checked on 2026-11-01: both types orderable, CPX42 EUR 0.1381/h, CX23 EUR 0.0109/h. harness-ops logs the real hourly price per batch |
 
 If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge client with a small control-API client mod (needs a larger VPS), or (b) a server-side puppet mod controlling a fake player (possible because the human admins the server).
 
+## Status
+
+- 2026-11-01, Phase 0.
+  - The four research reports are filed in `docs/research/`.
+  - ADRs 0002 (Node 22), 0003 (forge-bridge approach), 0004 (dumper approach) and 0005 (RotN 3.3.4, chosen by the human) are accepted.
+  - PR #2 review findings are addressed. Node 22, hcloud and HCLOUD_TOKEN are set up on this PC, and the task giver is JQDAW.
+  - The dev briefs are revised (see the "Phase 0 research revisions" section in each) and were **approved by the human on 2026-11-01**.
+  - G0 is not passed: its human half is done, and the test-server half needs harness-ops' script.
+
 ## Open items
 
-- The list of players allowed to give tasks and control commands (ask the human in `coord/NEEDS-HUMAN.md`).
+- Task givers: `JQDAW` (human, 2026-11-01); more later. skills-rotn reads the list from a setting.
+- The bot's own Microsoft account name and its first login on this PC (NEEDS-HUMAN), needed for the G1 spike.
 - Memory and hourly-cost targets for the soak test (lead sets them in an ADR after the first measurements).

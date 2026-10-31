@@ -1,6 +1,6 @@
 # Mindcraft-RotN: project rules for every agent
 
-This repo is a fork of [mindcraft-bots/mindcraft](https://github.com/mindcraft-bots/mindcraft). The goal is an LLM-driven bot that plays the Minecraft 1.12.2 modpack **Rebirth of the Night (RotN) 3.3.2** on a Forge server, running on a Hetzner CX23 VPS.
+This repo is a fork of [mindcraft-bots/mindcraft](https://github.com/mindcraft-bots/mindcraft). The goal is an LLM-driven bot that plays the Minecraft 1.12.2 modpack **Rebirth of the Night (RotN) 3.3.4** on a Forge server, running on a Hetzner CX23 VPS.
 
 The single success criterion is **ready-to-try**: every item in `docs/PLAN.md` -> "Definition of ready-to-try" passes in a harness scenario on the real CX23. An agent's claim that something works does not count.
 
@@ -11,8 +11,8 @@ Read `docs/PLAN.md` once at the start of every session. Read your own brief in `
 | Thing | Version |
 | --- | --- |
 | Minecraft | 1.12.2 (Forge, FML protocol 2) |
-| RotN pack | 3.3.2, official server pack zip, default configs |
-| Node.js | 20 LTS (Mindcraft warns that v24+ breaks native deps) |
+| RotN pack | 3.3.4, server pack zip SHA-256 `90642fd5...f5205`, default configs (ADR 0005) |
+| Node.js | 22 LTS (ADR 0002; mineflayer 4.26+ needs >=22, Mindcraft warns that v24+ breaks native deps) |
 | Java on test server | 8 |
 | Integration branch | `develop` (this fork's default branch) |
 | Bot OS | Ubuntu 24.04 on the CX23 |
@@ -21,12 +21,14 @@ Read `docs/PLAN.md` once at the start of every session. Read your own brief in `
 
 | Agent | Kind | Owns (only it edits these) |
 | --- | --- | --- |
-| rotn-lead | Main Claude Code session, Orca main worktree | `docs/PLAN.md`, `docs/adr/`, `docs/briefs/`, `coord/`, merges into `develop`, release tags |
-| net-forge | Dev agent, own Orca worktree | `packages/forge-bridge/`, `patches/` entries for mineflayer/protocol, the `initBot` part of `src/utils/mcdata.js` |
+| rotn-lead | Main Claude Code session, Orca main worktree | `docs/PLAN.md`, `docs/adr/`, `docs/research/`, `docs/briefs/`, `coord/`, `package.json` + lockfile, root `settings.js`, merges into `develop`, release tags |
+| net-forge | Dev agent, own Orca worktree | `packages/forge-bridge/`, `patches/` entries for mineflayer, minecraft-protocol, protodef, prismarine-chunk, minecraft-data, mineflayer-pathfinder, mineflayer-pvp and prismarine-viewer, the `initBot` part of `src/utils/mcdata.js`, `src/process/agent_process.js` |
 | rotn-data | Dev agent, own Orca worktree | `packages/rotn-data/`, `tools/dumper/`, the name/registry helpers in `src/utils/mcdata.js` |
 | skills-rotn | Dev agent, own Orca worktree | `src/agent/` (skills, commands, modes, self_prompter, new task queue), `profiles/` |
 | harness-ops | Dev agent, own Orca worktree | `test/`, `deploy/`, `.github/workflows/`, `TRY_IT.md` |
 | research + reviewer subagents | Defined in `.claude/agents/` | Nothing. They return reports; the lead files them in `docs/research/` |
+
+Anything not listed above (for example `main.js`, `src/mindcraft/`, `src/models/`, other `src/utils/` files, `tasks/`, `eslint.config.js`, `.gitignore`, `.claude/`) is owned by rotn-lead. Request changes through your status file.
 
 `src/utils/mcdata.js` is shared by net-forge and rotn-data. Change it only in the functions your brief names, and keep each PR's diff to that file small.
 

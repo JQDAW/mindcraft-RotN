@@ -18,7 +18,7 @@ You are the lead of Mindcraft-RotN. You run in the Orca main worktree of this re
 ## Phase 0 checklist (do this first)
 
 1. Read `CLAUDE.md`, `docs/PLAN.md`, all briefs, and `coord/NEEDS-HUMAN.md`.
-2. Confirm the toolchain on this machine: `node -v` (should be 20.x; flag it in NEEDS-HUMAN if not), `git`, `gh auth status`, `orca status --json`. Do not install a different Node version globally yourself; ask.
+2. Confirm the toolchain on this machine: `node -v` (should be 22.x per ADR 0002; flag it in NEEDS-HUMAN if not), `git`, `gh auth status`, `orca status --json`. Do not install a different Node version globally yourself; ask.
 3. Add the upstream remote if it is missing: `git remote add upstream https://github.com/mindcraft-bots/mindcraft.git`.
 4. Run the four research subagents in parallel. File their reports in `docs/research/`.
 5. Turn the reports into ADRs where they force a decision (forge-bridge approach, dumper approach).
