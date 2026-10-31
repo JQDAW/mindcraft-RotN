@@ -4,37 +4,43 @@ Updated: 2026-11-01
 
 ## Done
 
-- Phase 0 steps 1-3:
-  - Read all docs.
-  - Toolchain check: git, gh (JQDAW) and Orca 1.4.245 are OK. Node, hcloud and `HCLOUD_TOKEN` are missing (see NEEDS-HUMAN).
-  - The `upstream` remote was already present.
-- Phase 0 step 4: four research reports filed: `docs/research/seam-map.md`, `fml-spec.md`, `rotn-progression.md` and `ops.md`. Lead spot-checks:
-  - three seam-map claims, checked in the code;
-  - mineflayer's Node >=22 requirement, checked on the npm registry;
-  - the RotN 3.3.2 commit and two recipes, checked with `gh api`;
-  - REID present in 3.3.2, with its network mixins read.
-- Phase 0 step 5: ADR 0002 (Node 22, decided by the human), ADR 0003 (forge-bridge: fresh nmp plugin, REID-aware, shared `bot.registry`), ADR 0004 (dumper: server-side Forge mod on the test server).
-- Phase 0 step 6: briefs revised; ownership gaps closed in CLAUDE.md; PLAN risks and status updated.
+- Phase 0 steps 1-3: read all docs; toolchain check; the `upstream` remote was already present.
+- Human setup (2026-11-01), verified by the lead:
+  - Node v22.23.4 (nvm-windows), hcloud 1.70.2, `HCLOUD_TOKEN` set (user variable).
+  - Task giver `JQDAW`.
+  - Pack chosen: RotN 3.3.4 zip, SHA-256 `90642fd5…f5205`.
+  - Prices from the Hetzner API: CPX42 EUR 0.1381/h, CX23 EUR 0.0109/h.
+- Phase 0 step 4: four research reports filed in `docs/research/`.
+- Phase 0 step 5: ADRs 0002 (Node 22), 0003 (forge-bridge), 0004 (dumper) and 0005 (RotN 3.3.4).
+- Phase 0 step 6: briefs revised. The PR #2 independent review (REQUEST CHANGES, 12 findings) is addressed:
+  - REID facts corrected against the 2.2.2 jar shipped in the zip: remove-effect is i32; biomes sit inside the chunk buffer; there is a `jeid` channel; enchantment ids are ints.
+  - Exit-code contract (0/1/3).
+  - Bot login on this PC added to NEEDS-HUMAN.
+  - Ownership defaults to the lead.
+  - Recipe shape and crafting owner decided.
+  - harvestInfo test reworded.
+  - Env-var safety for `INSECURE_CODING`/`SETTINGS_JSON`.
+  - The sweeper's secret goes in a GitHub Environment.
+  - Stale facts fixed (mineflayer 4.26, prices).
 
 ## Doing
 
-- PR for the Phase 0 docs (branch `agent/rotn-lead/phase0`), with an independent-reviewer pass.
+- PR #2: re-review of the fixes, then merge.
 
 ## Next
 
-- Human approves the briefs (NEEDS-HUMAN). Then spawn harness-ops (G0 test-server script), then net-forge (G1 spike).
-- Once Node 22 is installed here: `npm install`, commit `package-lock.json`, and add `engines` to `package.json`.
+- Human: approve the briefs; restart Orca; decide on `mindcraft-test-env`; name the bot account.
+- Lead (PR #3): `npm install` on Node 22, commit `package-lock.json`, add `engines` and a `"test"` script (`node --test`) to `package.json`, and check that the patch files still apply.
+- Then spawn harness-ops (G0), then net-forge (G1).
 
 ## Blocked
 
-- Spawning dev agents: waiting for the human's brief approval (G0 human half), since 2026-11-01.
-- Local tests: waiting for Node 22 on this PC, since 2026-10-31.
-- G0 server build: waiting for hcloud, `HCLOUD_TOKEN`, pack confirmation and the Hetzner availability check, since 2026-10-31.
+- Spawning dev agents: waiting for brief approval and an Orca restart (so agents inherit Node, hcloud and the token).
 
 ## Spend so far
 
-- Hetzner: EUR 0 (no servers created). OpenRouter: EUR 0.
+- Hetzner: one unlabelled CPX42 (`mindcraft-test-env`), created by the human about 1 h before 2026-11-01's check, costing EUR 0.138/h while it exists. No servers were created by agents. OpenRouter: EUR 0.
 
 ## Open PRs
 
-- (being opened) Phase 0 research, ADRs 0002-0004, revised briefs
+- #2 Phase 0: research reports, ADRs 0002-0005, revised dev briefs

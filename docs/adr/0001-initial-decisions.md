@@ -1,6 +1,6 @@
 # ADR 0001: Initial architecture and decisions
 
-- Status: accepted
+- Status: accepted; Node pin superseded by ADR 0002, pack version (3.3.2) superseded by ADR 0005 (3.3.4)
 - Date: 2026-10-31
 - Author: human + planning session
 

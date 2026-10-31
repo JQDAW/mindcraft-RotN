@@ -11,7 +11,7 @@ You build everything that proves the bot works and keeps it running: the disposa
 
 ## Test server (CPX42, disposable)
 
-- `deploy/test-server.sh` (plus cloud-init) creates a Hetzner CPX42 with the `hcloud` CLI in the dedicated test project, installs Java 8, downloads the official RotN 3.3.2 server pack zip from a pinned URL, checks its SHA-256, unpacks it with default configs, accepts the EULA, sets online mode, whitelists the bot and a test account, and starts a fresh world.
+- `deploy/test-server.sh` (plus cloud-init) creates a Hetzner CPX42 with the `hcloud` CLI in the dedicated test project, installs Java 8, gets the RotN 3.3.4 server pack zip (ADR 0005), checks its SHA-256, unpacks it with default configs, accepts the EULA, sets online mode, whitelists the bot and a test account, and starts a fresh world.
 - Labels every server it creates. Always deletes the server and its Primary IPv4 at the end of a batch (powering off does not stop billing).
 - A delete-after watchdog (default 8 hours) removes any labelled server that outlives its batch, even if the script crashed.
 - Price reference: EUR 0.138/h, EUR 86.17/month cap. Log the run time and estimated cost of each batch.
@@ -34,7 +34,7 @@ You build everything that proves the bot works and keeps it running: the disposa
 
 ## Deliverables, in order
 
-1. G0: `deploy/test-server.sh` builds a working RotN 3.3.2 test server and deletes it cleanly; watchdog proven.
+1. G0: `deploy/test-server.sh` builds a working RotN 3.3.4 test server and deletes it cleanly; watchdog proven.
 2. Scenario runner plus G1 scenarios for net-forge.
 3. CI: lint and unit tests on every PR.
 4. Scenarios for G2 and G3 as the other agents get there.
@@ -59,9 +59,10 @@ Read `docs/research/ops.md` (hcloud commands, watchdog design, systemd unit, tok
   - An EXIT trap in the script deletes them on normal exit.
   - An **off-PC sweeper** (scheduled GitHub Actions workflow) deletes expired labelled resources even if this PC is asleep. It selects only by label.
   - The sweeper needs a Read & Write Hetzner token as a GitHub Actions secret. Write that request into `coord/STATUS-harness-ops.md` when you need it; the lead puts it in NEEDS-HUMAN. Never handle the token yourself.
-  - Prove the watchdog by letting it delete a short-lived labelled server.
+  - Keep the sweeper's token in a **GitHub Environment** that only the scheduled workflow on `develop` can use, not in a plain repository secret, so a workflow edited on an agent branch cannot read it.
+  - Prove the watchdog by letting it delete a short-lived labelled server. **Acceptance test:** a labelled server with `delete-after` in the past is gone, with its Primary IP, within one sweeper interval. An unlabelled server is left untouched.
 - **Pack.**
-  - Candidate: CurseForge file 7219650 ("Rebirth of the Night 3.3.2 Server Pack.zip", 771,286,293 bytes). The human must confirm it in NEEDS-HUMAN first.
+  - **Pack (ADR 0005): RotN 3.3.4**, local zip `C:/Users/admin/source/RotN 3.3.4 Server Pack.zip`, 791,130,136 bytes, SHA-256 `90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205`. Prefer the CurseForge 3.3.4 server file (id 7564549) if its SHA-256 matches; otherwise upload the local zip to the test server over SSH. Never commit the zip.
   - CurseForge publishes no hash, so record the SHA-256 on first download and pin it in the script.
   - Use the pack's own start script and heap flags as the baseline. Starting point: `-Xms4G -Xmx8G` on the CPX42.
   - The server is ready when the log shows "Done" (the pack README also mentions "Unloading dimension 7").
@@ -70,10 +71,15 @@ Read `docs/research/ops.md` (hcloud commands, watchdog design, systemd unit, tok
   - `--capture` sets JVM flag `-Dfml.debugNetworkHandshake=true` and `network-compression-threshold=-1` (net-forge Run A).
   - `--extra-mod <jar>` and `--console "<command>"` let the rotn-data dumper run, and fetch its output files (ADR 0004).
   - Console access to the **test** server is fine; never the live server.
-- **Cost.** Hetzner prices may have changed in June 2026 (unverified, see NEEDS-HUMAN). Log the server type, the start and stop times, and the hourly price from `hcloud server-type describe` for each batch, not a hard-coded figure.
+- **Cost.** The lead read the prices from the Hetzner API on 2026-11-01 (gross): CPX42 EUR 0.1381/h (EUR 86.17/month cap), CX23 EUR 0.0109/h (EUR 6.81/month), the same in hel1, nbg1 and fsn1. Still log the server type, the start and stop times, and the hourly price from `hcloud server-type describe` for each batch, rather than hard-coding them.
 - **CI** needs a committed lockfile for `npm ci`. The lead owns `package.json` and the lockfile, and commits it once Node 22 is installed on this PC. Until then, CI may use `npm install`.
 - **CX23.**
   - Use the unit template in `ops.md` section 2 as the starting point (`Restart=always`, `UMask=0077`, memory caps to confirm in the soak).
   - Each bot's `MINDCRAFT_PROFILES_FOLDER` is mode 0700 outside the repo.
   - The first device-code login is a human action (NEEDS-HUMAN).
-- **Hetzner availability.** If CPX42 or CX23 cannot be ordered, stop and report it in your status file. The lead decides the replacement type in an ADR.
+- **Hetzner availability.** CPX42 and CX23 can both be ordered (the human confirmed this on 2026-11-01). The bot's CX23 is not in the test project. The sweeper must never touch it, and it would not, because it selects by label.
+- **Settings safety on the CX23.**
+  - `main.js` turns on `allow_insecure_coding` for **any** non-empty `INSECURE_CODING`, even `false`. Per-bot env files must never set `INSECURE_CODING`.
+  - `SETTINGS_JSON` and `BLOCKED_ACTIONS` can override the lead's `settings.js`. Use `SETTINGS_JSON` only for per-bot values that have no env var (`auth: "microsoft"`, `host`, `port`), and never for `allow_insecure_coding` or `blocked_actions`.
+  - The G4 acceptance run asserts the settings the running process actually uses (insecure coding off), not just the files.
+- **Unit file.** Add `RestartPreventExitStatus=0 3` to match ADR 0003 decision 5, so systemd does not restart a clean stop or a fatal kick.

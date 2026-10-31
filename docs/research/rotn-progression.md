@@ -1,6 +1,7 @@
 # RotN 3.3.2 early game: progression graph, hazards, first-day script, item names
 
 - Source: `rotn-gameplay-analyst` subagent, 2026-10-31, filed by rotn-lead on 2026-11-01. Input, not a decision.
+- **Pack version note (2026-11-01):** the project now targets **RotN 3.3.4** (ADR 0005). This report was researched against 3.3.2. The lead re-checked the early-game recipes in the 3.3.4 zip's own `scripts/`, and they are unchanged: Crafting Tools, crafting table, crude axe, rocks to cobblestone, stone axe. Re-check anything else against the 3.3.4 zip before relying on it. The 3.3.4 repo reference is commit `775cc6e7`.
 - **Lead checks (2026-11-01), done with `gh api` against the pack repo:**
   - Commit `bd2d078d…` is titled "3.3.2" and its `pack_version_number.json` reads `{"version": "3.3.2"}`. The commit message links CurseForge file 7219585, the client pack named in section A.
   - `scripts/crafting_tables.zs` line 9 (Crafting Tools) and `scripts/pyrotech/pyrotech_recipes_craftingtable.zs` lines 238-240 (crude axe) match this report exactly.

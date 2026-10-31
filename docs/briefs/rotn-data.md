@@ -1,6 +1,6 @@
 # Brief: rotn-data
 
-You give the bot knowledge of RotN 3.3.2's blocks, items, recipes, harvest levels and mobs, plus a translation layer between Mindcraft's 1.13+ names and 1.12.2 names.
+You give the bot knowledge of RotN 3.3.4's blocks (ADR 0005), items, recipes, harvest levels and mobs, plus a translation layer between Mindcraft's 1.13+ names and 1.12.2 names.
 
 ## You own
 
@@ -17,7 +17,7 @@ You give the bot knowledge of RotN 3.3.2's blocks, items, recipes, harvest level
 ## Deliverables
 
 1. **Dumper:** produces JSON for blocks (registry name, metadata variants, hardness, material, harvest tool and level), items (name, metadata, stack size, tool tier), recipes (shaped, shapeless, smelting, including CraftTweaker changes) and entities (registry name, hostility if available). Document how to rerun it.
-2. **Data package:** versioned by pack version (`3.3.2/`), with a loader API: `getBlock(name)`, `getItem(name)`, `recipesFor(item)`, `harvestInfo(block)`, `lookup(query)` (fuzzy search for the `!lookup` command).
+2. **Data package:** versioned by pack version (`3.3.4/`), with a loader API: `getBlock(name)`, `getItem(name)`, `recipesFor(item)`, `harvestInfo(block)`, `lookup(query)` (fuzzy search for the `!lookup` command).
 3. **Name translation:** two-way mapping between Mindcraft's 1.13+ names (`oak_log`, `oak_planks`) and 1.12.2 names (`log:0`, `planks:0`) plus modded names. Used at the command boundary so prompts can stay readable.
 4. **Integration with mcdata.js:** replace the vanilla-only helpers the seam map lists, keeping function signatures stable where possible so skills code changes little.
 
@@ -54,10 +54,14 @@ Read `docs/research/rotn-progression.md`, `docs/research/seam-map.md` (rows owne
 
 Keep the function signatures.
 
+**Recipe shape (ADR 0004).** Emit recipes in a prismarine-recipe-compatible shape (`inShape`/`ingredients`, `result {id, metadata, count}`, `requiresTable`), with ore dictionary keys expanded. skills-rotn turns them into real crafts.
+
+**Enchantments.** REID stores the enchantment NBT `id` as TAG_Int (`fml-spec.md` section R). Any helper that reads enchantments must accept both int and short.
+
 **Revised acceptance tests:**
 
 - `recipesFor` returns RotN's crude axe, Crafting Tools (`contenttweaker:crafting_tools`), crafting table (plank + Crafting Tools), 4 rocks to cobblestone, and the stone pickaxe and axe (3 rocks + 2 sticks). Each must match the pinned scripts.
-- `harvestInfo('stone')` reflects RotN: a pickaxe below Sturdy drops 4 `pyrotech:rock`.
+- `harvestInfo('stone')` reports RotN's harvest tool and level from the dump. The drop ("a pickaxe below Sturdy gives 4 `pyrotech:rock`") is an event-handler behaviour, so it is checked in a G3 harness scenario, not here (ADR 0004).
 - Every block in `rotn-progression.md` section 4 resolves both ways through name translation.
 - The mod-local entity table maps every mod mob seen in net-forge's spawn fixtures.
 

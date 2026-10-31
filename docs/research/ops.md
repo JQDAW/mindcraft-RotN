@@ -2,7 +2,7 @@
 
 - Source: `ops-analyst` subagent, 2026-10-31, filed by rotn-lead. Input, not a decision.
 - No keys, .env, token caches or Hetzner tokens were read or handled. Estimates are labelled. The repo has no `package-lock.json` and no `node_modules`, so package versions come from npm manifests, not an install.
-- Lead check (2026-10-31): flag 1 confirmed directly against the npm registry. mineflayer `engines.node` is `>=18` up to 4.25.0 and `>=22` from 4.27.0 through 4.39.0; minecraft-protocol 1.68.0 is also `>=22`. Node 20 reached end-of-life in April 2026. Flag 4 (prices and availability) comes from a secondary source and is **not yet verified** with `hcloud`.
+- Lead check (2026-10-31): flag 1 confirmed directly against the npm registry. mineflayer `engines.node` is `>=18` up to 4.25.0 and `>=22` from 4.26.0 through 4.39.0; minecraft-protocol 1.68.0 is also `>=22`. Node 20 reached end-of-life in April 2026. **Flag 4 is wrong:** on 2026-11-01 the Hetzner API (`hcloud server-type describe`) gave CPX42 EUR 0.1381/h (EUR 86.17/month) and CX23 EUR 0.0109/h (EUR 6.81/month) gross, in hel1, nbg1 and fsn1, and the human has both types ordered. The brief's figures stand.
 
 ## Flags for the lead (read first)
 

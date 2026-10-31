@@ -1,7 +1,7 @@
 # FML protocol 2 (Forge 1.12.2) client spec for `packages/forge-bridge`
 
 - Source: `forge-protocol-analyst` subagent, researched 2026-11-01, filed by rotn-lead. Input, not a decision; the decision is `docs/adr/0003-forge-bridge-approach.md`.
-- Read the **lead addendum (section R)** first. It answers the report's open JEID/REID question: RotN 3.3.2 ships RoughlyEnoughIDs, which changes several packet formats.
+- Read the **lead addendum (section R)** first. It answers the report's open JEID/REID question: RotN ships RoughlyEnoughIDs (2.2.2 in the pinned 3.3.4 pack, ADR 0005), which changes several packet formats.
 - Two corrections from the lead:
   - The report's `[ROTN-SRV]`/`[ROTN-VER]` sources point at an older fork (`CalaMariGold/Rebirth-Of-The-Night`, pack 3.1.1). The canonical repo is `Rebirth-of-the-Night/Rebirth-of-the-Night`, commit `bd2d078d…` "3.3.2" (see `rotn-progression.md`). It also ships `_server-only/forge-1.12.2-14.23.5.2860.jar`, so 2860 is very likely, but confirm it from the zip.
   - The Node conflict is resolved by ADR 0002 (Node 22).
@@ -314,26 +314,41 @@ Risks:
 
 ---
 
-## R. Lead addendum: RoughlyEnoughIDs (REID) is in RotN 3.3.2 and changes the wire format
+## R. Lead addendum: RoughlyEnoughIDs (REID) is in RotN and changes the wire format
 
-**Evidence.** `config/RoughlyEnoughIDs.cfg` exists in the RotN repo at the 3.3.2 commit (`Rebirth-of-the-Night/Rebirth-of-the-Night@bd2d078d`, checked by the lead with `gh api`). REID source: https://github.com/TerraFirmaCraft-The-Final-Frontier/RoughlyEnoughIDs (MIT, last push 2026-05-02). REID is the maintained successor to JustEnoughIDs (package `org.dimdev.jeid`).
+Revised 2026-11-01 after the independent review of PR #2 and after inspecting the REID 2.2.2 jar from the 3.3.4 zip (ADR 0005).
 
-The lead read these mixins at REID's default-branch HEAD. **The REID version shipped in 3.3.2 is UNVERIFIED**; check the jar version in the zip and the ModList, and re-read the mixins at that tag.
+**Evidence.**
 
-| Mixin (`src/main/java/org/dimdev/jeid/mixin/core/...`) | Wire change |
-|---|---|
-| `network/MixinPacketBuffer` | `writeItemStack` and `readItemStack`: the item **id is a VarInt** instead of a `short`. That covers both `writeShort` calls in vanilla: the `-1` for an empty stack and the real id. Count (byte), damage (short) and NBT are unchanged. Applies to every packet with a slot: `window_items`, `set_slot`, entity equipment, item-entity metadata, and serverbound `window_click` and creative slots. |
-| `network/MixinPacketUtil` | Same change in Forge's `writeItemStackFromClientToServer` (serverbound slots). |
-| `network/MixinSPacketChunkData` | In full chunks, the 256-byte biome array is **replaced by a VarInt array** (`writeVarIntArray`: VarInt length, then VarInt biome ids). Section block data is unchanged by this mixin; bits per block still come from the packet (section C). |
-| `network/MixinSPacketBlockAction` | The block id limit 4095 is raised to `Integer.MAX_VALUE - 1` (the field is already a VarInt on the wire; the value can now be larger). |
-| `potion/MixinSPacketEntityEffect` (+ `MixinSPacketRemoveEntityEffect`) | Effect id is a **VarInt** instead of a byte. Remove-effect was not opened; assume the same. |
-| `world/MixinBlockStateContainer` | Changes NBT storage (palette ids), not the network path, as far as read. Block state ids can exceed `4095<<4\|15`, so the global palette may need more than 16 bits. |
+- `config/RoughlyEnoughIDs.cfg` exists in the RotN repo at the 3.3.2 commit (`Rebirth-of-the-Night/Rebirth-of-the-Night@bd2d078d`).
+- The 3.3.4 server zip ships `mods/RoughlyEnoughIDs-2.2.2.jar`.
+- REID source: https://github.com/TerraFirmaCraft-The-Final-Frontier/RoughlyEnoughIDs (MIT). It is the maintained successor to JustEnoughIDs (package `org.dimdev.jeid`).
+- **The version matters.** REID's default-branch HEAD is 2.3.1, not 2.2.2, and the two differ. The list below is from the 2.2.2 jar's `mixins.jeid.core.json` and its class files. Where only HEAD source was read, the row is marked "(HEAD)".
 
-**Consequences for forge-bridge** (now in ADR 0003 and the net-forge brief):
+**`mixins.jeid.core.json` in 2.2.2:**
 
-1. Override the 1.12.2 protocol types in nmp (`slot`, the `map_chunk` biome field, the entity effect ids), conditional on REID being in the server's ModList. Do it as a protocol customization or a minecraft-data patch, not by editing upstream files in place.
-2. Without (1), inventory parsing fails and every chunk packet misparses, so even G1 ("walks a few blocks") may fail. Check for REID first in the spike.
-3. Fixtures must include `window_items` and `set_slot` captures.
+- Common: `enchant.MixinEnchantmentHelper`, `enchant.MixinItemEnchantedBook`, `misc.MixinBlock`, `misc.MixinGameData`, `misc.MixinStatList`, `network.MixinPacketBuffer`, `network.MixinPacketUtil`, `network.MixinSPacketChunkData`, `potion.MixinSPacketEntityEffect`, `potion.MixinSPacketRemoveEntityEffect`, `world.*`.
+- Client: `network.client.MixinNetHandlerPlayClient`, `potion.client.MixinNetHandlerPlayClient`, `world.client.MixinChunk`, among others.
+- **There is no `MixinSPacketBlockAction` in 2.2.2.** That mixin exists only at HEAD.
+
+| Mixin or class | Wire change | Where the bot must handle it |
+|---|---|---|
+| `network.MixinPacketBuffer` (2.2.2 and HEAD) | In `writeItemStack`/`readItemStack`, the item **id is a VarInt** instead of a `short`, including the `-1` for an empty stack. Count (byte), damage (short) and NBT are unchanged. This covers every slot in both directions: `window_items`, `set_slot`, entity equipment, item-entity metadata, `window_click`, creative slots. | nmp protocol type override for `slot` |
+| `network.MixinPacketUtil` (2.2.2) | The same change in Forge's `writeItemStackFromClientToServer` (serverbound slots). | Same `slot` override |
+| `network.MixinSPacketChunkData` (2.2.2 and HEAD) | In full chunks, the 256-byte biome array is replaced by a **VarInt array**: a VarInt length, then VarInt biome ids. This happens **inside the opaque `chunkData` byte buffer** (`extractChunkData`), after the block sections; it is not a separate `map_chunk` field. | **prismarine-chunk `ChunkColumn.load` patch**, not an nmp type override. Block sections come first, so block parsing may still work while the biome tail is wrong; check with a fixture. |
+| `potion.MixinSPacketEntityEffect` (2.2.2) | Effect id as an int. At HEAD the vanilla byte is replaced by a VarInt. In 2.2.2 the injections target the method TAIL, so the int may be **appended after** the vanilla fields instead. **UNVERIFIED layout; settle it from a capture.** | nmp override for `entity_effect`, per capture |
+| `potion.MixinSPacketRemoveEntityEffect` (2.2.2) | Effect id is a **fixed 4-byte int (i32)** (`readInt`/`writeInt`), **not a VarInt**. | nmp override for `remove_entity_effect` |
+| `org.dimdev.jeid.network.MessageManager` (2.2.2) | REID's own `SimpleNetworkWrapper` channel **`jeid`**. Server-to-client messages: `BiomeChunkChangeMessage`, `BiomeAreaChangeMessage`, `BiomePositionChangeMessage`. | forge-bridge: log them, optionally apply biome updates. No reply is needed. |
+| `enchant.MixinEnchantmentHelper` (2.2.2 and HEAD) | Enchantment NBT `id` is stored as TAG_Int instead of a short. | rotn-data and skills code that reads enchantments from NBT |
+| `network.client.MixinNetHandlerPlayClient` (HEAD read) | Falling-block spawn data carries the full 32-bit state id. | mineflayer object spawn for falling blocks (low priority) |
+| `world.MixinBlockStateContainer` | Changes NBT storage (palette ids), not the network path, as far as read. Block state ids can exceed `4095<<4\|15`, so the global palette may need more than 16 bits. | prismarine-chunk bits patch (section C) |
+
+**Consequences for forge-bridge** (in ADR 0003 and the net-forge brief):
+
+1. nmp protocol type overrides for `slot`, `entity_effect` and `remove_entity_effect`, applied only when REID is in the server's ModList. Do them as a protocol customization or a minecraft-data patch; never edit upstream files in place.
+2. A prismarine-chunk patch for the biome VarInt tail and the packet's `bitsPerBlock`.
+3. Without (1), inventory parsing fails. Without (2), at least the biome tail of every full chunk misparses; block data may survive. The spike checks both early with fixtures.
+4. Fixtures must include `window_items`, `set_slot`, `map_chunk`, `entity_effect`, `remove_entity_effect` and any `jeid` channel payloads.
 
 ---
 

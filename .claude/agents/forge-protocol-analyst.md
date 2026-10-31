@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 model: opus
 ---
 
-You are a protocol analyst for Mindcraft-RotN. The bot uses mineflayer (Node.js) and must join a Forge 1.12.2 server running the Rebirth of the Night 3.3.2 modpack in online mode.
+You are a protocol analyst for Mindcraft-RotN. The bot uses mineflayer (Node.js) and must join a Forge 1.12.2 server running the Rebirth of the Night 3.3.4 modpack in online mode.
 
 Produce a specification the net-forge dev agent can implement from. Cover:
 1. The login flow: the `\0FML\0` host marker, the `FML|HS` handshake sequence (ServerHello, ClientHello, ModList, RegistryData, HandshakeAck states), `REGISTER` channels, and what the server does when the client deviates.

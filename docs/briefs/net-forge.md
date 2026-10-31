@@ -1,6 +1,6 @@
 # Brief: net-forge
 
-You make a mineflayer bot join a Forge 1.12.2 server running RotN 3.3.2 in online mode, and see the modded world at the protocol level. This is the highest-risk work in the project, and it gates everything else (G1).
+You make a mineflayer bot join a Forge 1.12.2 server running RotN 3.3.4 (ADR 0005) in online mode, and see the modded world at the protocol level. This is the highest-risk work in the project, and it gates everything else (G1).
 
 ## You own
 
@@ -43,15 +43,16 @@ Read `docs/research/fml-spec.md` (especially **section R**), `docs/research/seam
 **Ownership additions.** You also own:
 
 - `src/process/agent_process.js`, for restart and backoff.
-- patch-package entries for prismarine-chunk, minecraft-data's 1.12.2 protocol and mineflayer-pathfinder.
+- patch-package entries for prismarine-chunk, minecraft-data's 1.12.2 protocol, mineflayer-pathfinder, mineflayer-pvp and prismarine-viewer. The existing patch files name pinned versions (`mineflayer+4.33.0`, `minecraft-data+3.97.0`). Once the lead commits the lockfile, rebase any patch whose version no longer matches.
 
-**RotN 3.3.2 ships RoughlyEnoughIDs (REID)**, which changes the wire format:
+**RotN 3.3.4 ships RoughlyEnoughIDs (REID) 2.2.2**, which changes the wire format:
 
-- Slot item ids are VarInts, in both directions.
-- Full-chunk biomes are a VarInt array.
-- Effect ids are VarInts.
+- Slot item ids are VarInts, in both directions. Fix with an nmp `slot` override.
+- The full-chunk biome array is a VarInt array **inside the chunk-data buffer**. Fix it in the prismarine-chunk patch, not with a protocol override.
+- `entity_effect` carries an int effect id; settle the layout from a capture, since 2.2.2 may append it after the vanilla fields. `remove_entity_effect` carries an **i32**.
+- REID's own `jeid` channel sends biome-change messages. Decode and log them; no reply is needed.
 
-Stock mineflayer will misparse chunks and inventories even after a perfect handshake. Detect REID from the server's ModList and apply protocol overrides. Check REID's exact version in the zip, and re-read its mixins at that tag.
+`fml-spec.md` section R lists these against the 2.2.2 jar. Detect REID from the server's ModList. Stock mineflayer will misparse inventories, and at least the biome part of chunks, even after a perfect handshake.
 
 **Revised deliverables, in order:**
 
@@ -62,9 +63,10 @@ Stock mineflayer will misparse chunks and inventories even after a perfect hands
    - Then: online login, stay 10 minutes, chat, walk.
    - Classify every kick (spec section 4).
 2. **`initBot` fixes**, all small and in your function:
-   - Pin the version for real. `mc_version` is read at module load, before settings exist, so a configured version never reaches `createBot` (seam-map section A).
+   - Pin the version for real. `mc_version` is read at module load, before settings exist, so a configured version never reaches `createBot` (seam-map section A). Read `settings.minecraft_version` inside `initBot`; do not edit module-level line 11, so the change stays inside your function.
+   - The position-packet throttle (`mcdata.js` L70-98, inside `initBot`) drops newer packets while one is pending. Fix it so the newest position is sent.
    - Add `profilesFolder` from `MINDCRAFT_PROFILES_FOLDER`, so each bot has its own token cache (`docs/research/ops.md` section 1).
-   - Stop silently swallowing `PartialReadError`: count and log it, and keep the capture when it happens.
+   - Stop silently swallowing `PartialReadError`: count and log it, and keep the capture when it happens. Also make the protodef "partial packet" log line (silenced by `patches/protodef+1.19.0.patch`) switchable by an env var.
 3. **Fixtures.** Handshake, RegistryData bodies, `window_items`/`set_slot`, chunk samples and FML entity spawns. Sanitize them: no tokens, username or UUID.
 4. **Registry sync and the shared-registry contract (ADR 0003, decision item 4).**
    - Extend `bot.registry` after the last RegistryData, so `bot.blockAt()` and inventory items carry modded names.
@@ -81,9 +83,11 @@ Stock mineflayer will misparse chunks and inventories even after a perfect hands
 7. **Channel stubs**, only where a kick is proven.
 8. **Resilience.**
    - Reconnect with backoff after kicks and server restarts.
-   - Split fatal kicks (mod rejection, ban) from transient ones (`agent_process.js`).
+   - Split fatal kicks (mod rejection, ban) from transient ones, using the exit-code contract in ADR 0003 decision 5: `0` clean stop, `1` transient (backoff), `3` fatal (no restart).
    - Kick handling inside `src/agent/agent.js` belongs to skills-rotn; coordinate through your status file.
    - `spawn_timeout` lives in `settings.js`, which the lead owns. Request a change if the Forge login takes longer than 30 s.
+
+**Online login.** The spike needs the bot's Microsoft account signed in on the machine where you run it. The human does this once on this PC, using a device code; the token cache lives in a `MINDCRAFT_PROFILES_FOLDER` outside the repo (NEEDS-HUMAN). Never read or print the cache.
 
 **Added acceptance tests:**
 

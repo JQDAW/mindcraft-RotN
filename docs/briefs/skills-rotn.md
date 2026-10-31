@@ -53,6 +53,10 @@ Read `docs/research/rotn-progression.md` (progression graph, hazard table, first
 - Use RotN 1.12.2 names from `rotn-progression.md` section 4.
 - Remove or block `!searchWiki`, which returns vanilla 1.21 information. Blocked actions live in `settings.js`, which the lead owns: request the change.
 
+**Crafting on the server (ADR 0004).** You own executing crafts. mineflayer's `bot.recipesFor` only knows vanilla minecraft-data recipes, so feed rotn-data's prismarine-recipe-shaped recipes to `bot.craft`, or click slots directly. Serverbound slots need net-forge's REID `slot` override; coordinate through your status file.
+
+**Exit codes (ADR 0003 decision 5).** `agent.js` exits with `0` on a requested stop, `1` on a transient disconnect and `3` on a fatal one (mod rejection, ban, not whitelisted). Today it always exits with `1`; net-forge implements the restart side.
+
 **RotN early game (G3).** This follows `rotn-progression.md` section 1.
 
 - Gather rocks from surface piles.
@@ -77,6 +81,15 @@ Read `docs/research/rotn-progression.md` (progression graph, hazard table, first
 - The bot keeps its main hand, off hand, armor and baubles. Everything else drops at the death spot and does not despawn. Respawn takes 7 s.
 - The bot reports what it lost and may go back for its items, without chat spam.
 
-**Rules.** Use rotn-data's API for all item, recipe and harvest facts; no hard-coded RotN names where the data package can answer. The task-giver list is still pending from the human (NEEDS-HUMAN); read it from settings, never hard-code it.
+**Rules.** Use rotn-data's API for all item, recipe and harvest facts; no hard-coded RotN names where the data package can answer.
+
+**Task givers.** The human named `JQDAW` as the first task giver on 2026-11-01; more will be added later. Read the list from a setting (propose the key name and default to the lead, who owns `settings.js`); never hard-code it.
+
+**Added acceptance tests:**
+
+- Unit tests prove that cheat mode cannot be enabled, by `!setMode` or by profile.
+- The update loop survives a mode that throws.
+- `!smeltItem` no longer exits the process.
+- A task from a player who is not on the list is refused, and one from `JQDAW` is queued.
 
 **Start condition.** At G2, as planned. You may start early on the safety fixes and the task queue, which need no modded facts.
