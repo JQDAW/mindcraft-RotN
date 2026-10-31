@@ -38,7 +38,7 @@ Read `docs/research/rotn-progression.md`, `docs/research/seam-map.md` (rows owne
   - the **mod-local entity table** (`modId`, `modEntityTypeId`, registry name, hostile or not), which forge-bridge needs to name mod mobs;
   - the **ore dictionary**;
   - **block state to metadata** mappings.
-- Use `/ct recipes` and the pack's public scripts (`Rebirth-of-the-Night/Rebirth-of-the-Night@bd2d078d933e798ad9f87d3171ca31ddbe6b24f4`) only as cross-checks in tests.
+- Use `/ct recipes` and the pinned pack's `scripts/` (read from the 3.3.4 zip, ADR 0005; cite repo commit `775cc6e7ca1e116f407e8f313bc1cd9069e9a93d`) only as cross-checks in tests.
 - Pin the build toolchain (JDK 8, Gradle 4.x, ForgeGradle 2.3, Forge 14.23.5.2860). Don't commit the jar.
 - If the toolchain cannot be made to work within one working session, escalate (fallback in ADR 0004).
 
@@ -60,7 +60,7 @@ Keep the function signatures.
 
 **Revised acceptance tests:**
 
-- `recipesFor` returns RotN's crude axe, Crafting Tools (`contenttweaker:crafting_tools`), crafting table (plank + Crafting Tools), 4 rocks to cobblestone, and the stone pickaxe and axe (3 rocks + 2 sticks). Each must match the pinned scripts.
+- `recipesFor` returns RotN's crude axe, Crafting Tools (`contenttweaker:crafting_tools`), crafting table (plank + Crafting Tools), 4 rocks to cobblestone, and the stone pickaxe and axe (3 rocks + 2 sticks). Each must match the 3.3.4 zip's `scripts/`.
 - `harvestInfo('stone')` reports RotN's harvest tool and level from the dump. The drop ("a pickaxe below Sturdy gives 4 `pyrotech:rock`") is an event-handler behaviour, so it is checked in a G3 harness scenario, not here (ADR 0004).
 - Every block in `rotn-progression.md` section 4 resolves both ways through name translation.
 - The mod-local entity table maps every mod mob seen in net-forge's spawn fixtures.

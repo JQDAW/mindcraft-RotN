@@ -108,8 +108,8 @@ If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge
   - The four research reports are filed in `docs/research/`.
   - ADRs 0002 (Node 22), 0003 (forge-bridge approach), 0004 (dumper approach) and 0005 (RotN 3.3.4, chosen by the human) are accepted.
   - PR #2 review findings are addressed. Node 22, hcloud and HCLOUD_TOKEN are set up on this PC, and the task giver is JQDAW.
-  - The dev briefs are revised (see the "Phase 0 research revisions" section in each), and the human's approval is pending.
-  - G0 is not passed. It needs the human items in `coord/NEEDS-HUMAN.md` and harness-ops' test-server script.
+  - The dev briefs are revised (see the "Phase 0 research revisions" section in each) and were **approved by the human on 2026-11-01**.
+  - G0 is not passed: its human half is done, and the test-server half needs harness-ops' script.
 
 ## Open items
 

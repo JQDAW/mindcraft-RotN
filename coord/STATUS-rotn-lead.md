@@ -29,17 +29,17 @@ Updated: 2026-11-01
 
 ## Next
 
-- Human: approve the briefs; restart Orca; decide on `mindcraft-test-env`; name the bot account.
+- Human: restart Orca; name the bot account. (Briefs approved, `mindcraft-test-env` deleted, live server confirmed as the 3.3.4 zip: all 2026-11-01.)
 - Lead (PR #3): `npm install` on Node 22, commit `package-lock.json`, add `engines` and a `"test"` script (`node --test`) to `package.json`, and check that the patch files still apply.
 - Then spawn harness-ops (G0), then net-forge (G1).
 
 ## Blocked
 
-- Spawning dev agents: waiting for brief approval and an Orca restart (so agents inherit Node, hcloud and the token).
+- Spawning dev agents: waiting for the PR #2 merge and an Orca restart (so agents inherit Node, hcloud and the token).
 
 ## Spend so far
 
-- Hetzner: one unlabelled CPX42 (`mindcraft-test-env`), created by the human about 1 h before 2026-11-01's check, costing EUR 0.138/h while it exists. No servers were created by agents. OpenRouter: EUR 0.
+- Hetzner: the human's CPX42 `mindcraft-test-env` ran about 1-2 h (about EUR 0.28), then the lead deleted it at the human's request on 2026-11-01. The test project is empty. No servers were created by agents. OpenRouter: EUR 0.
 
 ## Open PRs
 

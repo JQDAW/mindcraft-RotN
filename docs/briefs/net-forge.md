@@ -49,10 +49,10 @@ Read `docs/research/fml-spec.md` (especially **section R**), `docs/research/seam
 
 - Slot item ids are VarInts, in both directions. Fix with an nmp `slot` override.
 - The full-chunk biome array is a VarInt array **inside the chunk-data buffer**. Fix it in the prismarine-chunk patch, not with a protocol override.
-- `entity_effect` carries an int effect id; settle the layout from a capture, since 2.2.2 may append it after the vanilla fields. `remove_entity_effect` carries an **i32**.
+- `entity_effect`: expected layout is the vanilla byte kept, with a VarInt effect id appended after the vanilla fields (2.2.2 TAIL injection); a capture fixture must confirm it. `remove_entity_effect` carries an **i32**.
 - REID's own `jeid` channel sends biome-change messages. Decode and log them; no reply is needed.
 
-`fml-spec.md` section R lists these against the 2.2.2 jar. Detect REID from the server's ModList. Stock mineflayer will misparse inventories, and at least the biome part of chunks, even after a perfect handshake.
+`fml-spec.md` section R lists these against the 2.2.2 jar. Detect REID from the server's ModList entry **`jeid`** (version 2.2.2); the mod id is not `roughlyenoughids`. Stock mineflayer will misparse inventories, and at least the biome part of chunks, even after a perfect handshake.
 
 **Revised deliverables, in order:**
 
@@ -83,7 +83,7 @@ Read `docs/research/fml-spec.md` (especially **section R**), `docs/research/seam
 7. **Channel stubs**, only where a kick is proven.
 8. **Resilience.**
    - Reconnect with backoff after kicks and server restarts.
-   - Split fatal kicks (mod rejection, ban) from transient ones, using the exit-code contract in ADR 0003 decision 5: `0` clean stop, `1` transient (backoff), `3` fatal (no restart).
+   - Split fatal kicks (mod rejection, ban) from transient ones, using the exit-code contract in ADR 0003 decision 5: `0` clean stop, `1` transient (backoff), `3` fatal (no restart). This includes the main-process behaviour on agent exit `0` and `3` described there.
    - Kick handling inside `src/agent/agent.js` belongs to skills-rotn; coordinate through your status file.
    - `spawn_timeout` lives in `settings.js`, which the lead owns. Request a change if the Forge login takes longer than 30 s.
 

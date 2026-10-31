@@ -55,7 +55,7 @@ Read `docs/research/rotn-progression.md` (progression graph, hazard table, first
 
 **Crafting on the server (ADR 0004).** You own executing crafts. mineflayer's `bot.recipesFor` only knows vanilla minecraft-data recipes, so feed rotn-data's prismarine-recipe-shaped recipes to `bot.craft`, or click slots directly. Serverbound slots need net-forge's REID `slot` override; coordinate through your status file.
 
-**Exit codes (ADR 0003 decision 5).** `agent.js` exits with `0` on a requested stop, `1` on a transient disconnect and `3` on a fatal one (mod rejection, ban, not whitelisted). Today it always exits with `1`; net-forge implements the restart side.
+**Exit codes (ADR 0003 decision 5).** `agent.js` exits with `0` on a requested stop, `1` on a transient disconnect and `3` on a fatal one (mod rejection, ban, not whitelisted). Today it exits with `1` on kicks and with **`0` when the spawn handler throws** (`agent.js` L142). Change that to `1` (or `3` if the cause is fatal), because `0` now means "clean stop, never restart". Codes `2` and `4` are reserved for the task framework. net-forge implements the restart side.
 
 **RotN early game (G3).** This follows `rotn-progression.md` section 1.
 

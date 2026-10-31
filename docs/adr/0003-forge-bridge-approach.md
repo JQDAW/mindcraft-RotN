@@ -36,7 +36,7 @@ Option 3, with these specifics.
    - It implements the Forge client handshake state machine exactly (spec section 1.3). It sends its ModList as the server's ModList, taken from a status ping or a pinned fixture.
    - It reassembles `FML|MP` multipart payloads and decodes the `FML` (EntitySpawn, OpenGui) and `FORGE` (DimensionRegister, FluidIdMap) channels.
    - It emits typed events.
-2. **REID support**, gated on REID being in the server's ModList:
+2. **REID support**, gated on the ModList entry `jeid` (REID's mod id; version 2.2.2 in the pinned pack):
    - nmp protocol type overrides: `slot` item id as VarInt; `entity_effect` effect id per capture; `remove_entity_effect` effect id as i32.
    - The full-chunk biome VarInt array sits inside the opaque chunk-data buffer, so it is handled in the prismarine-chunk patch (item 3), not as a protocol override.
    - The `jeid` channel messages are decoded and logged.
@@ -53,7 +53,12 @@ Option 3, with these specifics.
    - `0`: clean, requested stop. Do not restart.
    - `1`: transient disconnect (kick for a timeout, server restart, network error). Restart with exponential backoff: 10 s, doubling, capped at 5 min, reset after 10 minutes connected.
    - `3`: fatal. Mod-list rejection, ban, not whitelisted, or an auth failure that needs a human. Do not restart; log the reason and leave a line for the human in the bot's log.
-   - Under systemd, harness-ops sets `RestartPreventExitStatus=0 3`.
+   - Codes `2` and `4` stay reserved for Mindcraft's task framework (`agent.js` L229, `agent_process.js` "Ending task"). Do not reuse them.
+   - **Main process** (`agent_process.js`, net-forge):
+     - On agent exit `3`, end the main process with `3`. Today any code above 1 already does this.
+     - On agent exit `0`, end the main process with `0` when it runs as a single-bot service (`mindcraft-rotn@<bot>`). Today it stays alive and idle, so systemd never sees the stop.
+     - On `1`, restart the agent in-process with backoff, without exiting the main process.
+   - Under systemd, harness-ops sets `RestartPreventExitStatus=0 3`. Any other exit of the main process (a crash) is restarted by systemd.
 6. **Licensing.** No code is translated from MCC, Velocity or BungeeCord; they serve as behavioural references only. Copied BSD-3 code keeps its notice in `packages/forge-bridge/THIRD_PARTY.md`.
 7. **Spike order** (G1):
    1. Handshake, with the full capture.
