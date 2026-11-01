@@ -18,4 +18,4 @@ export { assertOutsideGitWorkTrees, prepareSecretFolder, findGitWorkTree, realLo
 export { decideAgentExit, readExitReason, writeExitReason, recordAgentExit, createRequestedRestartGuard, REQUESTED_RESTART } from './src/exit-contract.js';
 export { extendRegistry, applyProperties } from './src/registry-extension.js';
 export { spawnFmlEntity, attachFmlEntities, fmlEntityName, fmlEntityTable } from './src/fml-entities.js';
-export { METADATA_SERIALIZER_TYPES, rotnMetadataSerializers, INFERRED_METADATA_SERIALIZERS } from './src/reid.js';
+export { METADATA_SERIALIZER_TYPES, METADATA_SERIALIZER_CLASSES, rotnMetadataSerializers, metadataSerializersFromDump } from './src/reid.js';
