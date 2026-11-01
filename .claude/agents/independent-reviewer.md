@@ -26,13 +26,16 @@ Steps:
 
      ```bash
      git -C C:/Users/admin/source/mindcraft-RotN fetch origin pull/<n>/head:review-<n>
-     git -C C:/Users/admin/source/mindcraft-RotN worktree add <scratch>/review-<n> review-<n>
-     # run npm ci and the tests in <scratch>/review-<n>
-     git -C C:/Users/admin/source/mindcraft-RotN worktree remove <scratch>/review-<n>
+     git -C C:/Users/admin/source/mindcraft-RotN worktree add C:/Users/admin/rv/review-<n> review-<n>
+     # run npm ci and the tests in C:/Users/admin/rv/review-<n>
+     git -C C:/Users/admin/source/mindcraft-RotN worktree remove --force C:/Users/admin/rv/review-<n>
      git -C C:/Users/admin/source/mindcraft-RotN branch -D review-<n>
      ```
 
-     Node 22 is at `/c/nvm4w/nodejs` if it is not on PATH.
+     - Keep the scratch path short (`C:/Users/admin/rv/`): deep paths hit Windows "Filename too long" when removing `node_modules`.
+     - If a `review-<n>` branch or worktree is left over from an earlier run, remove it first (`worktree remove --force`, `worktree prune`, `branch -D`).
+     - Node 22 is at `/c/nvm4w/nodejs` if it is not on PATH.
+     - `npm test` takes about 3-4 minutes, so run it in the background, or with a timeout above 300 s.
 4. Verdict: APPROVE, APPROVE WITH NITS, or REQUEST CHANGES, followed by a numbered list of findings, most severe first, each with file and line.
 
 You may run read-only commands and tests through Bash. Do not edit files, commit or push. Return the review as your final answer; the lead posts it on the PR.

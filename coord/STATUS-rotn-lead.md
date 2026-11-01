@@ -58,6 +58,20 @@ Updated: 2026-11-01 (about 01:00 UTC)
 - #4 G0 tooling: test-server script, cleanup, off-PC sweeper (harness-ops). Review: REQUEST CHANGES, then APPROVE WITH NITS. Orca removed the agent's worktree on merge because of `--delete-branch`; nothing was lost.
 - #5 G0 evidence (harness-ops). Review: APPROVE WITH NITS; the nits are assigned to the next harness-ops PR. Merged without `--delete-branch`.
 
+## Batch approvals (written)
+
+- **2026-11-01 11:40 UTC, net-forge G1 batches.** Approved as planned in `coord/STATUS-net-forge.md` ("Planned real batches"):
+  - **Batch A (handshake capture):** approved as written. CPX42, nbg1, `--ttl-hours 2`; expected about EUR 0.14, maximum about EUR 0.42 + IPv4.
+  - **Batch B (online spike, 11 min):** approved as a **spike only**. It is not G1 gate evidence.
+  - **Batch C (G1 gate evidence):** approved in principle. It must run through harness-ops' runner (`test/runner/run.mjs` with `test/scenarios/g1/g1-login-chat-walk.mjs`) and a forge-bridge driver that implements `test/runner/DRIVER.md`. Same server type, TTL and cost bounds as A and B. Batches B and C may share one server run if the driver is ready.
+  - **Conditions for all three:**
+    - One server at a time, in order.
+    - `deploy/test-server.sh` unchanged, with its preflight passing; `--skip-sweeper-check` is not allowed.
+    - Stop and delete if a batch runs past 1.5 times its expected time.
+    - After each batch, confirm the project is empty, and record the real start and stop times and cost.
+    - Raw captures stay in `captures/raw/`; only sanitized fixtures and evidence are committed.
+    - Never the live server; the FRCFLD cache is used only from this PC.
+
 ## Notes for dev agents
 
 - mineflayer-pvp pulls in a nested `mineflayer@2.41.0` and `minecraft-data@2.221.0` through `mineflayer-utils` (upstream issue). net-forge should keep this in mind when it extends the registry.
@@ -66,4 +80,4 @@ Updated: 2026-11-01 (about 01:00 UTC)
 - PR #8 (CI) merged 2026-11-01 as `a04ea22`. Review: APPROVE WITH NITS. Follow-ups 1, 2, 3, 5 and 7 are queued with harness-ops.
 - PR #7 (G0 follow-ups) merged 2026-11-01 as `bbcb0ef`, after the lead updated the branch so CI ran (pass). Review: APPROVE WITH NITS. Findings 1-7 are queued with harness-ops; finding 1 (scheduled-mode attribution) must be fixed before scheduled mode counts as evidence.
   - The new preflight in `deploy/test-server.sh up` refuses to create servers until an `event=schedule` sweeper run on `develop` exists. This enforces the lead rule in code.
-- Lead edit, not yet committed: `.claude/agents/independent-reviewer.md` gained two rules: always flag gate-file changes, and run tests in a scratch worktree, never in an agent's live worktree.
+- `.claude/agents/independent-reviewer.md` (committed in PR #14) gained two rules: always flag gate-file changes, and run tests in a scratch worktree, never in an agent's live worktree.
