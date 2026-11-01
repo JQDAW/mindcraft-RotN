@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (12:36 UTC)
+Updated: 2026-11-01 (13:50 UTC)
 
 ## Done
 
@@ -70,14 +70,12 @@ Updated: 2026-11-01 (12:36 UTC)
 - PR #11 (review follow-ups: scheduled-only watchdog evidence, `gh --repo`, lint ratchet that fails closed) merged as e3c1732: APPROVE, lint gate proven end to end. Its review findings 1 and 3 and nits 4 and 5 were fixed in 5296086.
 - PR #12 (sweeper cron at the off-peak minutes `7,22,37,52 * * * *`) merged as 971262f at 11:45:11 UTC: APPROVE.
 - PR #13 (PR #9 re-review nits: confirm the `say` marker before `bot.start`; reject `[Rcon]` and `[@]`) merged as 04b57c3: APPROVE WITH NITS.
+- PR #17 (low-priority nits from the #11, #12 and #13 reviews) merged as 032da12 at 12:16:28 UTC.
 
 ## Doing
 
-- **Observing the sweeper schedule** for 2 h after the cron change (see Watching). net-forge's batches wait for the first scheduled run.
-- Next, low priority, as one later PR:
-  - #13 nits: match the marker with `includes`; pause `consoleWaitS` between `say` retries; consider a chat-prefix allowlist.
-  - #12 nit: the cron comment should say both `up` and `run` enforce the check.
-  - #11 nit: the hint text under `--allow-raise`.
+- **Helper preflight**, on `agent/harness-ops/helper-cron-preflight` (dca4357, committed, not pushed yet). `check_sweeper` also accepts path (b): a scheduled `dispatch-sweeper.yml` run in `JQDAW/rotn-sweeper-cron` within 40 min, plus a later successful sweeper run on develop. It adds a 60-day keep-alive reminder, tests and `deploy/README.md` docs. The full suite passes 209/209.
+  - The lead asked for the PR to be opened after the first scheduled helper run is recorded here (see Watching).
 
 ## Watching
 
@@ -88,9 +86,25 @@ Updated: 2026-11-01 (12:36 UTC)
   | 11:52 | none | | | missed |
   | 12:07 | none | | | missed |
   | 12:22 | none | | | missed |
+  | 12:37 | none | | | missed |
+  | 12:52 | none | | | missed |
+  | 13:07 | none | | | missed |
+  | 13:22 | none | | | missed |
+  | 13:37 | none | | | missed |
 
-  Last checked 12:36:08 UTC (one manual `gh run list --event schedule`). The newest scheduled run is still 41281143865 (06:30:54 UTC).
-  My two background watchers were stopped at about 12:30 UTC by Claude Code because the PC was low on memory, not because of an error. The rest of the window needs the lead's go-ahead to restart them, or manual checks.
+  **Result: 0 of 8 slots fired.** Checked 13:45:34 UTC with one manual `gh run list --branch develop`. The newest scheduled run is still 41281143865 (06:30:54 UTC).
+  - The off-peak minutes did not help. GitHub's scheduling for this fork is simply not reliable.
+  - Caveat: #17 changed a comment in the workflow file and merged at 12:16:28 UTC, inside the window, which may have re-registered the schedule. Neither part of the window fired a run.
+  - Background watchers were stopped twice by Claude Code because the PC was low on memory (about 12:30 and about 13:40 UTC), not because of an error. The table comes from manual checks.
+
+- **First scheduled run of the helper `JQDAW/rotn-sweeper-cron` `dispatch-sweeper.yml`** (cron `3,18,33,48`, set up by the human at about 13:02 UTC).
+  - The manual test chain worked: helper `workflow_dispatch` run 41309775533 at 13:08:08Z (success), then sweeper `workflow_dispatch` run 41309787687 on develop at 13:08:17Z (success).
+  - **No scheduled helper run yet:** the 13:18 and 13:33 slots were empty as of 13:45:34 UTC. A brand-new schedule often starts late. The next slots are 13:48 and 14:03.
+
+  | Helper slot (UTC) | Helper run | Created | Result | Sweeper run it triggered | Created | Result |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | 13:18 | none | | missed | | | |
+  | 13:33 | none | | missed | | | |
 
   Before the change (`*/15`): one scheduled run in about 11 h (41281143865, 06:30:54 UTC, success).
 
@@ -120,8 +134,15 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
    - **Routed:** the lead asked the human (NEEDS-HUMAN) to re-enable or re-register the workflow in the Actions tab.
    - **Update (lead):** the schedule fired once, at 06:30:54 UTC (success). That is the only scheduled run in about 10 h, so the cron is registered but GitHub drops almost every run at the busy :00/:15/:30/:45 marks. The preflight correctly refuses today: its 120-min window stays as it is.
    - **Authorized fix:** a separate PR from develop moves the cron to the off-peak minutes `7,22,37,52 * * * *`. Merging it also re-registers the schedule. After the merge I watch for 2 h and record the scheduled-run cadence here. `test-server.sh up` passes its preflight once a scheduled run has succeeded within 120 min.
-   - **Done:** #12 merged at 11:45:11 UTC. The cadence is recorded under Watching.
+   - **Done:** #12 merged at 11:45:11 UTC. Result: 0 of 8 off-peak slots fired (see Watching).
+   - **Next fix (lead and human):** the helper repo `JQDAW/rotn-sweeper-cron` dispatches the sweeper every 15 min. My preflight change (path b) accepts its scheduled runs as evidence. Waiting for the first scheduled helper run.
+6. **Lead: review notes on the helper workflow `dispatch-sweeper.yml`** (read from the public repo):
+   1. Every line of the committed file starts with one space (checked in the raw bytes). The YAML is still valid and GitHub accepted it, but an edit that adds a line at column 0 would break the file. Remove the leading spaces.
+   2. The fine-grained token expires. When it lapses, helper runs fail (GitHub emails the owner) and path (b) refuses. Note its expiry date.
+   3. Brand-new schedules often start late: the 13:18 and 13:33 slots were missed. Path (b)'s 40-min window tolerates about two missed slots.
+   4. The rest looks right: `permissions: {}`, no checkout, no third-party actions, the secret is scoped to one step, the timeout is 3 min. `ubuntu-latest` instead of a pinned image is a minor point.
+   5. GitHub disables the helper's schedule after 60 days without activity in the helper repo. The preflight warns from day 45; a small commit to the helper repo resets the clock.
 
 ## Open PRs
 
-- None open. #11, #12 and #13 are merged.
+- None open. #11, #12, #13 and #17 are merged. The helper-preflight PR opens once the first scheduled helper run is recorded.
