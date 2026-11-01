@@ -1,0 +1,489 @@
+{
+ "description": "G1 Batch A (spec Run A): every plugin-channel payload between forge-bridge (the bot account, online mode) and a disposable RotN 3.3.4 test server started with -Dfml.debugNetworkHandshake=true and compression off, in wire order. Payload bytes are concatenated in handshake-runA.bin.br (brotli). The capture was redacted at write time (no username, no UUID; login packets are never recorded).",
+ "capturedAt": "2026-11-01T15:39:44Z",
+ "server": {
+  "pack": "RotN 3.3.4",
+  "forge": "14.23.5.2860",
+  "reid": "2.2.2",
+  "mods": 346
+ },
+ "bytes": 1283513,
+ "sha256": "bd11e9b22f2508956ed6550550f3da701b2c3077dc6e05c83350853258f3973e",
+ "records": [
+  {
+   "t": 2994,
+   "dir": "S2C",
+   "channel": "REGISTER",
+   "len": 1676
+  },
+  {
+   "t": 2996,
+   "dir": "C2S",
+   "channel": "REGISTER",
+   "len": 1672
+  },
+  {
+   "t": 2997,
+   "dir": "C2S",
+   "channel": "FML|HS",
+   "len": 2
+  },
+  {
+   "t": 2998,
+   "dir": "C2S",
+   "channel": "FML|HS",
+   "len": 6997
+  },
+  {
+   "t": 2999,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 6
+  },
+  {
+   "t": 3082,
+   "dir": "C2S",
+   "channel": "FML|HS",
+   "len": 2
+  },
+  {
+   "t": 3082,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 6997
+  },
+  {
+   "t": 3151,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 7959
+  },
+  {
+   "t": 3152,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 410
+  },
+  {
+   "t": 3152,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 436
+  },
+  {
+   "t": 3152,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 846
+  },
+  {
+   "t": 3153,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 1129
+  },
+  {
+   "t": 3184,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 32
+  },
+  {
+   "t": 3185,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 8326
+  },
+  {
+   "t": 3185,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 31
+  },
+  {
+   "t": 3222,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 59663
+  },
+  {
+   "t": 3223,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 62
+  },
+  {
+   "t": 3403,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 34134
+  },
+  {
+   "t": 3404,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 36
+  },
+  {
+   "t": 3404,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 452
+  },
+  {
+   "t": 3404,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 375
+  },
+  {
+   "t": 3404,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 1747
+  },
+  {
+   "t": 3404,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 714
+  },
+  {
+   "t": 3406,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 25173
+  },
+  {
+   "t": 3406,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 3632
+  },
+  {
+   "t": 3406,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 125
+  },
+  {
+   "t": 3406,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 211
+  },
+  {
+   "t": 3406,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 388
+  },
+  {
+   "t": 3406,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 479
+  },
+  {
+   "t": 3407,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 6512
+  },
+  {
+   "t": 3407,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 701
+  },
+  {
+   "t": 3438,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 59048
+  },
+  {
+   "t": 3438,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 4767
+  },
+  {
+   "t": 3439,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 562
+  },
+  {
+   "t": 3439,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 1732
+  },
+  {
+   "t": 3439,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 32
+  },
+  {
+   "t": 3540,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 167327
+  },
+  {
+   "t": 3818,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 509330
+  },
+  {
+   "t": 3824,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 4751
+  },
+  {
+   "t": 3824,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 109
+  },
+  {
+   "t": 3824,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 84
+  },
+  {
+   "t": 3824,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 420
+  },
+  {
+   "t": 3824,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 1232
+  },
+  {
+   "t": 3824,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 5739
+  },
+  {
+   "t": 3824,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 141
+  },
+  {
+   "t": 3824,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 84
+  },
+  {
+   "t": 3824,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 38
+  },
+  {
+   "t": 3825,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 607
+  },
+  {
+   "t": 3825,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 463
+  },
+  {
+   "t": 3825,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 281
+  },
+  {
+   "t": 3826,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 4372
+  },
+  {
+   "t": 3826,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 591
+  },
+  {
+   "t": 3826,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 264
+  },
+  {
+   "t": 3826,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 826
+  },
+  {
+   "t": 3826,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 620
+  },
+  {
+   "t": 3826,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 103
+  },
+  {
+   "t": 3984,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 308088
+  },
+  {
+   "t": 3986,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 28
+  },
+  {
+   "t": 3987,
+   "dir": "C2S",
+   "channel": "FML|HS",
+   "len": 2
+  },
+  {
+   "t": 3989,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 30857
+  },
+  {
+   "t": 3989,
+   "dir": "C2S",
+   "channel": "FML|HS",
+   "len": 2
+  },
+  {
+   "t": 3990,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 2
+  },
+  {
+   "t": 3990,
+   "dir": "S2C",
+   "channel": "OBFUSCATE|HS",
+   "len": 5
+  },
+  {
+   "t": 4012,
+   "dir": "S2C",
+   "channel": "FORGE",
+   "len": 9760
+  },
+  {
+   "t": 4012,
+   "dir": "S2C",
+   "channel": "dimstack",
+   "len": 317
+  },
+  {
+   "t": 4024,
+   "dir": "C2S",
+   "channel": "FML|HS",
+   "len": 2
+  },
+  {
+   "t": 4024,
+   "dir": "S2C",
+   "channel": "FML|HS",
+   "len": 2
+  }
+ ],
+ "events": [
+  {
+   "t": 2882,
+   "name": "hs_state",
+   "from": "START",
+   "to": "HELLO"
+  },
+  {
+   "t": 2999,
+   "name": "hs_state",
+   "from": "HELLO",
+   "to": "WAITINGSERVERDATA"
+  },
+  {
+   "t": 3082,
+   "name": "hs_state",
+   "from": "WAITINGSERVERDATA",
+   "to": "WAITINGSERVERCOMPLETE"
+  },
+  {
+   "t": 3987,
+   "name": "hs_state",
+   "from": "WAITINGSERVERCOMPLETE",
+   "to": "PENDINGCOMPLETE"
+  },
+  {
+   "t": 3989,
+   "name": "hs_state",
+   "from": "PENDINGCOMPLETE",
+   "to": "COMPLETE"
+  },
+  {
+   "t": 4024,
+   "name": "hs_state",
+   "from": "COMPLETE",
+   "to": "DONE"
+  },
+  {
+   "t": 4024,
+   "name": "hs_complete",
+   "overrideDimension": 0,
+   "sent": [
+    {
+     "channel": "REGISTER",
+     "kind": "REGISTER"
+    },
+    {
+     "channel": "FML|HS",
+     "kind": "ClientHello"
+    },
+    {
+     "channel": "FML|HS",
+     "kind": "ModList"
+    },
+    {
+     "channel": "FML|HS",
+     "kind": "Ack2"
+    },
+    {
+     "channel": "FML|HS",
+     "kind": "Ack3"
+    },
+    {
+     "channel": "FML|HS",
+     "kind": "Ack4"
+    },
+    {
+     "channel": "FML|HS",
+     "kind": "Ack5"
+    }
+   ]
+  }
+ ]
+}
