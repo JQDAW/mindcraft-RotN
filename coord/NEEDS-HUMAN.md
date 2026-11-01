@@ -4,6 +4,48 @@ Agents add items here when they need something only the human can do. The human 
 
 ## Open
 
+- [x] **Helper repo set up by the human (2026-11-01, about 13:08 UTC).** The lead verified through the API:
+  - `JQDAW/rotn-sweeper-cron` is public and not a fork; its secret `SWEEPER_DISPATCH_TOKEN` exists (name only).
+  - `dispatch-sweeper` is active, with the expected content.
+  - A manual test chain worked: helper run at 13:08:08, then a test-server-sweeper `workflow_dispatch` run at 13:08:17, both successful.
+  - Still to observe: the helper's own scheduled runs (slots :03/:18/:33/:48).
+  - (Original item:) **Set up the helper repo that triggers the sweeper every 15 min** (rotn-lead, 2026-11-01 13:00 UTC; you chose this option).
+  - **Why.** GitHub drops almost all scheduled runs of `test-server-sweeper` in this fork: one in about 12 h, and all four off-peak slots after the 11:45 fix. Manual dispatch always works. A small **non-fork** repo with its own schedule dispatches the sweeper. If the problem is fork-specific, its schedule fires normally.
+  - **About 10 minutes:**
+    1. **Create a public repo** named `rotn-sweeper-cron` under JQDAW (https://github.com/new). Public means free Actions minutes; a secret stays secret in a public repo too. Tick "Add a README".
+    2. **Create a fine-grained token** at https://github.com/settings/personal-access-tokens/new:
+       - Name: `rotn-sweeper-dispatch`. Expiration: 90 days (put a reminder in your calendar).
+       - Resource owner: JQDAW. Repository access: **Only select repositories**, then **mindcraft-RotN** only.
+       - Permissions: Repository permissions, **Actions: Read and write**. Nothing else (Metadata: read is added automatically).
+       - Generate it and copy it. Do not paste it anywhere except step 3.
+    3. **Store it as a secret** in the new repo: `rotn-sweeper-cron`, Settings, Secrets and variables, Actions, **New repository secret**, name **`SWEEPER_DISPATCH_TOKEN`**, value is the token.
+    4. **Add the workflow.** In `rotn-sweeper-cron`, "Add file", "Create new file", path `.github/workflows/dispatch-sweeper.yml`, with exactly this content, then commit to `main`:
+
+       ```yaml
+       name: dispatch-sweeper
+       # Triggers JQDAW/mindcraft-RotN's test-server-sweeper every 15 minutes.
+       # GitHub drops nearly all scheduled runs in that repo (a fork), so this non-fork repo
+       # provides the schedule. The token can only run Actions workflows in mindcraft-RotN.
+       on:
+         schedule:
+           - cron: '3,18,33,48 * * * *'
+         workflow_dispatch:
+       permissions: {}
+       jobs:
+         dispatch:
+           runs-on: ubuntu-latest
+           timeout-minutes: 3
+           steps:
+             - name: Dispatch test-server-sweeper on develop
+               env:
+                 GH_TOKEN: ${{ secrets.SWEEPER_DISPATCH_TOKEN }}
+               run: gh workflow run test-server-sweeper.yml --repo JQDAW/mindcraft-RotN --ref develop
+       ```
+
+    5. **Test it once.** In `rotn-sweeper-cron`, Actions, dispatch-sweeper, **Run workflow**. Within a minute a new `workflow_dispatch` run should appear in mindcraft-RotN, Actions, test-server-sweeper.
+  - Then tick this box. The lead checks that the helper's scheduled runs fire. harness-ops changes the preflight so it accepts "a successful scheduled run of the helper within 40 min, followed by a sweeper run", in addition to the sweeper's own scheduled runs.
+  - Note: GitHub turns off schedules in public repos after 60 days without activity. harness-ops will add a monthly keep-alive or a reminder.
+
 - [ ] **The off-PC sweeper runs far too rarely on its schedule** (rotn-lead, 2026-11-01 02:05 UTC; updated 11:15 UTC).
   - **Update, 11:15 UTC:** one scheduled run did happen, at 06:30:54 UTC (success). That is the only one in about 10 h on a `*/15` cron, so the schedule is registered but GitHub drops almost every run.
   - The lead has authorized harness-ops to move the cron to off-peak minutes (`7,22,37,52 * * * *`) in a small reviewed PR. Busy :00/:15/:30/:45 marks are a known cause of dropped runs, and merging the change also re-registers the schedule.
