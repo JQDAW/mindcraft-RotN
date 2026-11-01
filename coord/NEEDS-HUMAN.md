@@ -4,6 +4,51 @@ Agents add items here when they need something only the human can do. The human 
 
 ## Open
 
+- [ ] **The off-PC sweeper runs far too rarely on its schedule** (rotn-lead, 2026-11-01 02:05 UTC; updated 11:15 UTC).
+  - **Update, 11:15 UTC:** one scheduled run did happen, at 06:30:54 UTC (success). That is the only one in about 10 h on a `*/15` cron, so the schedule is registered but GitHub drops almost every run.
+  - The lead has authorized harness-ops to move the cron to off-peak minutes (`7,22,37,52 * * * *`) in a small reviewed PR. Busy :00/:15/:30/:45 marks are a known cause of dropped runs, and merging the change also re-registers the schedule.
+  - Steps 1-2 below are still worth a look if you have a minute. If you check the Actions tab, please note here what it shows.
+  - Original report (02:05 UTC): This blocks every paid test batch, because `deploy/test-server.sh up` refuses until a scheduled sweeper run exists.
+  - **Facts.**
+    - `test-server-sweeper.yml` has been on `develop` (the default branch) since 00:25 UTC, with `cron: '*/15 * * * *'`, and its state is `active`.
+    - It ran twice through manual dispatch (00:32, 00:37, both successful), but there has been **no `event=schedule` run in 1 h 40 min**.
+    - GitHub's docs say nothing about forks for `schedule`. Community reports say scheduled workflows are often off by default in **forks** (this repo is a fork of mindcraft-bots/mindcraft), or never fire until the workflow is re-registered.
+  - **The lead tried to disable and re-enable the workflow with `gh`.** Claude Code's permission check blocked that as a CI change, which is right: it is your decision.
+  - Please try, in order. Stop as soon as a scheduled run appears in the Actions tab; allow about 30 minutes after each step.
+    1. GitHub, repo **Actions** tab. If there is a banner about workflows or scheduled workflows being disabled in this fork, click to enable them.
+    2. Actions, **test-server-sweeper**, "..." menu, **Disable workflow**, then **Enable workflow**.
+    3. If still nothing: tell the lead. Options then:
+       - have harness-ops commit a trivial change to the cron line (this re-registers the schedule);
+       - ask GitHub Support;
+       - detach the repo from the fork network (Settings, a GitHub Support request; a big change, your call);
+       - trigger the sweeper from an outside scheduler through `workflow_dispatch`.
+  - Sources the lead read:
+    - https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
+    - https://github.com/orgs/community/discussions/203880
+    - https://github.com/orgs/community/discussions/205999
+- [x] **FRCFLD device-code login: done by the human on 2026-11-01**, as FRCFLD, using the steps below.
+  - The lead verified it without opening any file. Names only: `C:/Users/admin/.mindcraft-rotn/FRCFLD/msa` holds three prismarine-auth cache files (live, xbl, mca).
+  - The folder's ACL allows only admin, Administrators and SYSTEM, and it is not inside any git work tree.
+  - (Original item, kept for reference:) **Ready now: one-time FRCFLD device-code login** (net-forge via rotn-lead, 2026-11-01). Needed for net-forge's online G1 run.
+  - **About the helper.** `packages/forge-bridge/tools/msa-login.mjs`, reviewed line by line and merged in PR #10 (`26a0b5e`).
+    - It contacts only Microsoft/Xbox/Minecraft login servers.
+    - It prints only Microsoft's sign-in instruction and the profile name.
+    - It writes only token-cache files into the folder below, outside the repo.
+    - The lead checked that `DEBUG` is not set on this PC. If it were, the auth library could print tokens, so step 2 clears it anyway.
+  - **Steps.** Use a new **PowerShell** window of your own, not an agent's terminal:
+
+    ```powershell
+    cd C:\Users\admin\source\mindcraft-RotN
+    git log -1 --format="%h %s"          # should start with 26a0b5e or later on develop
+    Remove-Item Env:DEBUG -ErrorAction SilentlyContinue
+    $env:MINDCRAFT_PROFILES_FOLDER = "C:/Users/admin/.mindcraft-rotn/FRCFLD/msa"
+    & "C:\nvm4w\nodejs\node.exe" packages/forge-bridge/tools/msa-login.mjs FRCFLD
+    ```
+
+    1. It prints a message like "To sign in, use a web browser to open https://www.microsoft.com/link and enter the code XXXXXXXX".
+    2. Open that page, enter the code, and sign in with the **bot account**. Type the credentials **only there**.
+    3. Back in PowerShell it should end with `Signed in. Minecraft profile: FRCFLD`.
+  - **Afterwards:** tick this box and write here only whether the profile name was `FRCFLD`. Never paste the code, the email, the password or anything from the cache folder.
 - [x] **Create a GitHub Environment for the off-PC test-server sweeper**: done by the human on 2026-11-01. The lead verified through the API: environment `hetzner-test-sweeper`, deployment branch policy `develop` only, environment secret `HCLOUD_TOKEN` (name only), no repository-level secrets. (harness-ops via rotn-lead, 2026-11-01) The sweeper deletes expired test servers even if this PC is asleep. Its token must live in an Environment that only `develop` can use, so a workflow changed on an agent branch cannot read it.
   1. https://github.com/JQDAW/mindcraft-RotN/settings/environments, "New environment", name **`hetzner-test-sweeper`**.
   2. "Deployment branches and tags": choose "Selected branches", add **`develop`** only. "Required reviewers": none, otherwise every scheduled run would wait for you.

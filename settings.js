@@ -1,8 +1,8 @@
 const settings = {
-    "minecraft_version": "auto", // or specific version like "1.21.6"
+    "minecraft_version": "1.12.2", // RotN 3.3.4 is Forge 1.12.2 (ADR 0005); upstream default was "auto"
     "host": "127.0.0.1", // or "localhost", "your.ip.address.here"
     "port": 55916, // set to -1 to automatically scan for open ports
-    "auth": "offline", // or "microsoft"
+    "auth": "microsoft", // RotN servers run in online mode; token cache per bot via MINDCRAFT_PROFILES_FOLDER (upstream default "offline")
 
     // the mindserver manages all agents and hosts the UI
     "mindserver_port": 8080,
