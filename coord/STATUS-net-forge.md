@@ -159,16 +159,66 @@ The review findings on PR #10, numbered as in the review comment:
 - `e2e-initbot` asserts `modListSource === 'ping'` again when the first login attempt succeeds. `file` is allowed only after a retried login.
 - `npm test` passes 233/233; lint 257, unchanged.
 
+## Done: brief item 4, `bot.registry` extension (branch `agent/net-forge/registry-extension`, from develop 1cbe6a8; PR #24 merged)
+
+- `extendRegistry(bot.registry, snapshot, {properties})` (`src/registry-extension.js`) runs in `initBot` after the last RegistryData. It covers blocks, items, entities and biomes; block states are `id << 4 | meta`.
+  - Modded entries carry full registry names and safe defaults: a solid full cube, diggable, hardness `null`.
+  - Vanilla names keep minecraft-data's objects; a moved vanilla id is rebound and dummied entries are skipped.
+  - The shared minecraft-data object stays vanilla.
+- **Contract for rotn-data:** feed properties keyed by full registry name (`minecraft:stone`, `pyrotech:rock`). Properties cannot rename an entry. See the README section "Registry extension".
+- **Tests:** `registry-extension.test.js` (6, with the real prismarine-registry, prismarine-block and prismarine-item). `e2e-initbot` now checks that `blockAt` gives `pyrotech:rock` and that the inventory gives `pyrotech:crude_axe`.
+- `npm test` passes 239/239; lint 257, unchanged.
+
+## Batch A result (G1 spec Run A, handshake capture): PASS
+
+The lead's GO was recorded at 15:35 UTC. The batch ran from a clean branch at origin/develop 2abdd3b (`agent/net-forge/g1-batch-a`), with the command exactly as planned, `MINDCRAFT_PROFILES_FOLDER` set, `DEBUG` unset, and a 30-minute TERM guard (`timeout 1800`).
+
+- **Before:** `msa-login.mjs FRCFLD --check` printed `Signed in. Minecraft profile: FRCFLD`, and the test project was empty.
+- **Preflight passed on its own:** "sweeper OK (via cadence): 3 dispatch runs on develop in the last 50 min, gaps 14.5, 15.2 min, newest 5.8 min ago". No `--skip-sweeper-check`.
+- **Times (UTC):**
+
+  | Event | Time |
+  | --- | --- |
+  | Command start | 15:36:19 |
+  | Server created (CPX42, nbg1, TTL 2 h) | 15:36:30 |
+  | Server ready | 15:39:34 |
+  | Status ping: FML, 346 mods, jeid 2.2.2 | 15:39:36 |
+  | Spike login, handshake done | 15:39:44 |
+  | EXIT trap deleted server, Primary IPv4 and SSH key, verified gone | 15:40:14 |
+
+  - Ran 224 s, against an expected ~20 min and a 30 min cap.
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. Primary IPv4), against the planned maximum of EUR 0.42 plus IPv4.
+- **After (15:40:35 UTC):** `hcloud server list`, `hcloud primary-ip list` and the labelled `ssh-key list` are all empty, and `deploy/test-server.sh list` shows nothing.
+- **Handshake, against the real RotN 3.3.4 server:**
+  - The client went START, HELLO, WAITINGSERVERDATA, WAITINGSERVERCOMPLETE, PENDINGCOMPLETE, COMPLETE, DONE in 1.1 s.
+  - It sent REGISTER, ClientHello, ModList (346) and acks 2, 3, 4 and 5.
+  - The server logged "Client attempting to join with 346 mods", "Server side modded connection established" and "FRCFLD ... logged in with entity id 793".
+  - It then closed with "Handshake Complete review log file for details". That is `-Dfml.debugNetworkHandshake` by design, not a kick.
+  - 0 parse errors, 0 partial reads, `lastKick` null, mod list from the live ping, `overrideDimension` 0.
+- **Confirmed on the wire:**
+  - Forge 14.23.5.2860 and REID (`jeid`) 2.2.2, from the server's ModList.
+  - The live ModList has the same 346 entries as the pinned ping fixture.
+  - 52 registries: `minecraft:blocks` 4896 (max id 4895), `items` 9710 (max id 13394), `entities` 971, `biomes` 175, `recipes` 10687. Every RegistryData was read to its last byte.
+  - Vanilla block ids are unchanged (`minecraft:stone` = 1).
+  - Also received: `FORGE` FluidIdMap (decoded), plus `OBFUSCATE|HS` (5 bytes) and `dimstack` (317 bytes) with no decoder. Run A closes right after them, so whether they need an answer shows only in Batch B.
+- **Server-side note for Batch B:** right after login, JustEnoughDimensions' `ServerConnectionFromClientEvent` handler threw "DISPATCHER expects a NetworkDispatcher". It is not a kick, and it may come from the debug-flag connection; Batch B will show whether it also happens normally.
+- **Not tested in Batch A:** chunks, slots, entity effects and `jeid` messages (Run A ends before play), and chat, walking and staying connected. Those are Batch B+C.
+- **Raw files** stay in `captures/raw/g1-runA/` (capture, summary, registries, server logs, batch log) and are git-ignored.
+- **Committed (sanitized):**
+  - `packages/forge-bridge/test/fixtures/rotn-3.3.4/handshake-runA.json` (index, 7 KB) and `handshake-runA.bin.br` (all 67 payloads, brotli, 252 KB). No username, UUID or IP, and the SHA-256 is checked.
+  - `test/real-handshake.test.js` replays the real server messages through `attachForgeBridge`: the bridge's replies are byte-identical to what it really sent.
+- **Batch B+C:** waits for the lead's separate go-ahead.
+
 ## Doing
 
-- PR #24 (status-ping budget) open. **Batch A waits for the lead's written go-ahead** (the last blocker is PR #21, the preflight fix; the external sweeper cron is live).
+- Batch A done (above). PR #25 (registry extension) open; PR #26 has the Batch A fixture, the real-handshake test and these results. **Batch B+C wait for the lead's separate go-ahead.**
 
 ## Next
 
 1. **G1 batches** (below), after the lead's written approval and a scheduled sweeper run within 120 min (PR #12).
 2. Captured fixtures: real handshake, RegistryData, `window_items`/`set_slot`, chunks, `entity_effect`, `jeid`. Then the handshake test against real captured server messages; real Run A bytes become extra golden vectors.
 3. Classify every kick seen, confirm chunk bits per block and the REID formats on the wire, and record walk blocks.
-4. Brief items 4 (`bot.registry` extension), 6 (EntitySpawn into `bot.entities`) and 8 (`agent_process.js` consumes `createRestartPolicy`).
+4. Brief item 6 (FML EntitySpawn into `bot.entities`). Items 4 and 8 are done.
 
 ## G1 batches (approved by the lead 2026-11-01 11:40 UTC in STATUS-rotn-lead.md; nothing run yet)
 
@@ -226,4 +276,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15, #16, #18, #19 and #23 merged.) #24: status-ping budget, on `agent/net-forge/ping-budget`. `npm test` 233/233; lint 257.
+- (#15, #16, #18, #19, #23 and #24 merged.) #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. `npm test` 239/239; lint 257.
