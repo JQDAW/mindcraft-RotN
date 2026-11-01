@@ -109,7 +109,7 @@ If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge
   - ADRs 0002 (Node 22), 0003 (forge-bridge approach), 0004 (dumper approach) and 0005 (RotN 3.3.4, chosen by the human) are accepted.
   - PR #2 review findings are addressed. Node 22, hcloud and HCLOUD_TOKEN are set up on this PC, and the task giver is JQDAW.
   - The dev briefs are revised (see the "Phase 0 research revisions" section in each) and were **approved by the human on 2026-11-01**.
-- 2026-11-01, **G0 passed** (one item pending):
+- 2026-11-01, **G0 passed (cron schedule not yet observed)**:
   - Human half: briefs approved.
   - Test-server half: PR #4 (tooling) and PR #5 (evidence in `test/evidence/g0/`). A real labelled CPX42 built RotN 3.3.4 from the pinned zip, with 21/21 checks passing:
     - SHA-256 match; Java 8; Forge 14.23.5.2860; REID `jeid` 2.2.2;
@@ -117,9 +117,9 @@ If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge
     - "Done" line; ping shows protocol 340, FML and 346 mods.
 
     The server was then deleted. Total time 00:32:37-00:36:16 UTC.
-  - Watchdog proof: the off-PC sweeper (`workflow_dispatch` on `develop`) deleted an expired, labelled CX23 with its Primary IPv4 and SSH key, and left an unlabelled control alone.
-  - Spend: about EUR 0.16. The project was empty afterwards.
-  - **Pending:** no `event=schedule` sweeper run has been seen yet. One observed scheduled run is a precondition for the next real paid batch. If none appears by about 04:00 UTC, the lead raises it in NEEDS-HUMAN.
+  - Watchdog proof: the off-PC sweeper (`workflow_dispatch` on `develop`) deleted an expired, labelled CX23 with its Primary IPv4 and SSH key, and left alone a control that was expired too but carried a different label (`purpose=mindcraft-rotn-watchdog-control`), which proves it selects by label.
+  - Spend: about EUR 0.16 for the servers. Primary IPv4 hours come on top, and the CX23 share is estimated, because the watchdog scenario writes no ledger entry. The project was empty afterwards.
+  - **Pending:** no `event=schedule` sweeper run has been seen yet. One observed scheduled run is a precondition for the next real paid batch. If none appears by about 02:00 UTC, the lead investigates (cron delay on a new default-branch workflow is common) and raises it in NEEDS-HUMAN if needed.
 - Phase 1 may start: net-forge's FML login spike (G1). harness-ops builds the G1 scenarios and CI meanwhile.
 
 ## Open items

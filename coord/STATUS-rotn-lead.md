@@ -9,7 +9,7 @@ Updated: 2026-11-01 (about 01:00 UTC)
   - ADRs 0002 (Node 22), 0003 (forge-bridge), 0004 (dumper) and 0005 (RotN 3.3.4).
   - Briefs revised and approved by the human.
   - Toolchain and human setup verified.
-- G0 test-server half (harness-ops): a real CPX42 built RotN 3.3.4 with 21/21 checks passing and was deleted. The watchdog proof passed: the sweeper deleted an expired, labelled CX23 with its IPv4 and key, and left the unlabelled control alone.
+- G0 test-server half (harness-ops): a real CPX42 built RotN 3.3.4 with 21/21 checks passing and was deleted. The watchdog proof passed: the sweeper deleted an expired, labelled CX23 with its IPv4 and key, and left alone a differently labelled control (`purpose=mindcraft-rotn-watchdog-control`).
 - **Pending:** no `event=schedule` sweeper run has been seen yet. One is a precondition for the next real paid batch.
 
 ## Doing
@@ -39,7 +39,7 @@ Updated: 2026-11-01 (about 01:00 UTC)
 
 - Hetzner:
   - The human's CPX42 `mindcraft-test-env`: about 1-2 h, about EUR 0.28; the lead deleted it at the human's request.
-  - G0 batches: about EUR 0.16 (CPX42 build plus two CX23s for the watchdog).
+  - G0 batches: about EUR 0.16 (CPX42 build plus two CX23s for the watchdog), plus Primary IPv4 hours. The CX23 share is estimated.
   - The test project is empty, except for the human's unlabelled SSH key.
 - OpenRouter: EUR 0.
 
