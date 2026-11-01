@@ -191,14 +191,29 @@ test('real RotN ids: vanilla entries under their 1.12 names are kept and aliased
     const vanilla = freshRegistry();
     const registry = freshRegistry();
     const report = extendRegistry(registry, realSnapshot());
-    for (const [name, id] of [['silver_shulker_box', 227], ['silver_glazed_terracotta', 243]]) {
-        assert.equal(registry.blocks[id], vanilla.blocks[id], `${name}: block ${id} keeps minecraft-data's entry`);
-        assert.equal(registry.blocksByName[name], vanilla.blocks[id], `${name} is an alias`);
+    const kept = (kind, name, id) => {
+        const v = vanilla[kind][id];
+        const e = registry[kind][id];
+        assert.ok(v, `${kind} ${id} exists in minecraft-data`);
+        // The vanilla data is kept (a copy): every minecraft-data field is unchanged.
+        for (const [k, val] of Object.entries(v)) if (k !== 'shapes') assert.deepEqual(e[k], val, `${kind} ${id}.${k}`);
+        assert.equal(e.registryName, `minecraft:${name}`, 'registryName is the 1.12 name');
+        assert.equal(e.forge, undefined, 'not a modded default');
+        assert.equal(registry[`${kind}ByName`][name], e, `${name} (1.12 name) resolves`);
+        assert.equal(registry[`${kind}ByName`][v.name], e, `${v.name} (minecraft-data name) resolves`);
+        assert.equal(v.registryName, undefined, 'the shared minecraft-data object is untouched');
+    };
+    for (const [name, id] of [['silver_shulker_box', 227], ['silver_glazed_terracotta', 243]]) kept('blocks', name, id);
+    for (const [name, id] of [['beaches', 16], ['void', 127], ['mutated_mesa', 165]]) kept('biomes', name, id);
+    assert.equal(registry.blocksByStateId[227 << 4], registry.blocks[227]);
+    // The 4 vanilla items minecraft-data has no entry for: defaults, unprefixed name, not modded.
+    for (const name of ['air', 'portal', 'end_portal', 'end_gateway']) {
+        const e = registry.itemsByName[name];
+        assert.ok(e, name);
+        assert.equal(e.registryName, `minecraft:${name}`);
+        assert.equal(e.forge.modded, false);
     }
-    for (const [name, id] of [['beaches', 16], ['void', 127], ['mutated_mesa', 165]]) {
-        assert.equal(registry.biomes[id], vanilla.biomes[id], `${name}: biome ${id} keeps minecraft-data's entry`);
-        assert.equal(registry.biomesByName[name], vanilla.biomes[id]);
-    }
+    assert.equal(registry.items[0].name, 'air');
     const count = (kind) => report.aliases.filter(a => a.kind === kind).length;
     assert.equal(count('blocks'), 2);
     assert.equal(count('biomes'), 45);
@@ -216,4 +231,29 @@ test('real RotN ids: no minecraft: entry is flagged forge.modded (re-review C)',
     assert.deepEqual(badForge.map(e => e.registryName), []);
     // ...and the modded ones still are.
     assert.ok(registry.blocksArray.some(b => b.registryName?.startsWith('pyrotech:') && b.forge?.modded));
+});
+
+// PR #25 review: 1.12 object ids overlap mob ids (50 = tnt object and creeper), so the
+// entity list and names must not be rebuilt from the id map.
+test('real RotN ids: every vanilla entitiesByName key survives and resolves to the same object', () => {
+    const vanilla = freshRegistry();
+    const registry = freshRegistry();
+    extendRegistry(registry, realSnapshot());
+    for (const [name, e] of Object.entries(vanilla.entitiesByName)) {
+        assert.equal(registry.entitiesByName[name], e, `entitiesByName.${name}`);
+    }
+    for (const e of vanilla.entitiesArray) assert.ok(registry.entitiesArray.includes(e), `entitiesArray keeps ${e.name}/${e.id}`);
+    for (const name of ['creeper', 'skeleton', 'blaze', 'silverfish', 'xp_orb']) {
+        assert.equal(registry.entitiesByName[name]?.name, name, `${name} is still known`);
+    }
+    assert.equal(registry.entities[50], vanilla.entities[50], 'the id map itself is untouched for vanilla ids');
+    const modded = registry.entitiesArray.filter(e => e.forge?.modded);
+    assert.ok(modded.length > 800 && modded.every(e => registry.entitiesByName[e.name] === e), 'modded entities are appended and named');
+});
+
+test('aliased vanilla entries also resolve under their full minecraft: 1.12 name', () => {
+    const registry = freshRegistry();
+    extendRegistry(registry, realSnapshot());
+    assert.equal(registry.blocksByName['minecraft:silver_shulker_box'], registry.blocks[227]);
+    assert.equal(registry.biomesByName['minecraft:beaches'], registry.biomes[16]);
 });
