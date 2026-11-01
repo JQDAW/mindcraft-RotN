@@ -1,0 +1,6 @@
+# Build outputs and caches of the dumper (the jar is never committed, ADR 0004).
+/build/
+/.gradle/
+/run/
+/out/
+*.jar
