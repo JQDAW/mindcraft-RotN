@@ -1,6 +1,6 @@
 {
  "description": "Entity threat overrides for RotN 3.3.4, beyond the dump's `hostile` (= the class implements IMob). Read by catalog.entity(): `hostile` becomes true for every entry with targetsPlayers, and `dangerous` marks threats to avoid rather than fight. Every entry cites the mod's own bytecode.",
- "method": "javap -c -p (reads class files; no mod code is run) on the mod jars of the pinned server pack zip (SHA-256 90642fd5...f5205), extracted to a scratch folder outside the repo, 2026-11-02. Scope: every modded living entity whose class does not implement IMob (317 in the second dump). For each, the entity class and its mod superclasses were scanned for a targeting AI task (class name containing 'Target') whose constructor receives EntityPlayer.class; tasks that target EntityLivingBase with a predicate were reviewed by reading the predicate's apply(). EntityAIHurtByTarget (retaliation) is not counted. Conditions (added after the PR #62 review): for each entry, every branch instruction (if*, goto, *switch) before the task's `new` in the same method was checked for a jump target past the task, and the method's callers were checked: initEntityAI is called by EntityLiving's constructor; Undead Rising's func_175456_n is called from initEntityAI with no branch before the call; the death worm's task is in its own constructor. Only the grove sprite (onUpdate branch) is conditional among the marked entries.",
+ "method": "javap -c -p (reads class files; no mod code is run) on the mod jars of the pinned server pack zip (SHA-256 90642fd5...f5205), extracted to a scratch folder outside the repo, 2026-11-01. Scope: every modded living entity whose class does not implement IMob (317 in the second dump). For each, the entity class and its mod superclasses were scanned for a targeting AI task (class name containing 'Target') whose constructor receives EntityPlayer.class; tasks that target EntityLivingBase with a predicate were reviewed by reading the predicate's apply(). EntityAIHurtByTarget (retaliation) is not counted. Conditions (added after the PR #62 review): for each entry, every branch instruction (if*, goto, *switch) before the task's `new` in the same method was checked for a jump target past the task, and the method's callers were checked: initEntityAI is called by EntityLiving's constructor; Undead Rising's func_175456_n is called from initEntityAI with no branch before the call; the death worm's task is in its own constructor. Only the grove sprite (onUpdate branch) is conditional among the marked entries.",
  "confidence": {
   "verified": "The bytecode shows players are targeted (an EntityPlayer target class without a predicate, or a predicate read and found to accept players).",
   "task": "A targeting task with EntityPlayer or EntityLivingBase as its target class; its predicate or shouldExecute was not inspected.",
@@ -135,7 +135,7 @@
     "by": "animania",
     "config": "config/animania.cfg:104 B:replaceVanillaChickens=true, in the pinned 3.3.4 server pack (default configs, ADR 0005)",
     "replacementsPackage": "com.animania.common.entities.chickens",
-    "observed": "G2 batch 1 (harness-ops, 2026-11-02): the server refused /summon minecraft:chicken and minecraft:pig."
+    "observed": "G2 batch 1 (harness-ops, 2026-11-01): the server refused /summon minecraft:chicken and minecraft:pig."
    },
    "minecraft:cow": {
     "by": "animania",
@@ -146,7 +146,7 @@
     "by": "animania",
     "config": "config/animania.cfg:113 B:replaceVanillaPigs=true, in the pinned 3.3.4 server pack (default configs, ADR 0005)",
     "replacementsPackage": "com.animania.common.entities.pigs",
-    "observed": "G2 batch 1 (harness-ops, 2026-11-02): the server refused /summon minecraft:chicken and minecraft:pig."
+    "observed": "G2 batch 1 (harness-ops, 2026-11-01): the server refused /summon minecraft:chicken and minecraft:pig."
    },
    "minecraft:rabbit": {
     "by": "animania",
