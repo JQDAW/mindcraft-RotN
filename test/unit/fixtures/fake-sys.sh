@@ -6,7 +6,7 @@
 # Generic behaviour, per command NAME (with '-' turned into '_'):
 #   FAKE_OUT_NAME   printed on stdout        FAKE_RC_NAME   exit code (default 0)
 # Special cases:
-#   -o FILE   (curl, gpg --dearmor)   creates FILE
+#   -o FILE   (curl and gpg only)     creates FILE
 #   ln -sfn TARGET LINK               writes TARGET into the file LINK (no symlinks needed on Windows)
 #   fallocate -l SIZE FILE            creates FILE
 #   sudo -n /usr/local/sbin/mindcraft-rotn-ctl ACTION [BOT]
@@ -44,11 +44,14 @@ case $name in
     esac ;;
 esac
 
-prev=''
-for a in "$@"; do
-  [[ $prev == -o ]] && : > "$a"
-  prev=$a
-done
+# Only curl and gpg take -o FILE (journalctl -o cat is an output format, not a file).
+if [[ $name == curl || $name == gpg ]]; then
+  prev=''
+  for a in "$@"; do
+    [[ $prev == -o ]] && : > "$a"
+    prev=$a
+  done
+fi
 
 [[ -n ${!out_var:-} ]] && printf '%s\n' "${!out_var}"
 exit "${!rc_var:-0}"

@@ -3,16 +3,17 @@
 # Copy this folder (deploy/cx23/) to the server and run it there; it never connects anywhere except
 # the Ubuntu and NodeSource apt mirrors.
 #
-#   bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G]
+#   bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override]
 #       Users: `deploy` (SSH key login, in groups sudo and mindcraft-rotn) and the system user
 #       `mindcraft-rotn` (no login) that runs the bots. Unattended security upgrades. ufw: SSH only.
 #       2 GB swap. Node 22 from NodeSource (key fingerprint pinned). git. The unit template, check-env,
 #       mindcraft-rotn-ctl, a sudoers rule that lets `deploy` run only mindcraft-rotn-ctl without a
 #       password, and the folders under /opt, /etc and /var/lib. Root and password login stay ON.
 #   bootstrap.sh add-bot BOT [--mindserver-port N]
-#       Per-bot folders (token cache 0700) and /etc/mindcraft-rotn/BOT.env (0640) from bot.env.example.
+#       Per-bot folders (token cache 0700) and /etc/mindcraft-rotn/BOT.env (0600 root:root) from bot.env.example.
 #       Never overwrites an existing env file.
 #   bootstrap.sh lockdown --i-tested-deploy-login
+#       Also needs evidence: an "Accepted publickey for deploy" line in the ssh journal since setup.
 #       Turns root login and password login off (sshd drop-in, checked with `sshd -t`). Refuses until
 #       `deploy` has an authorized key and a sudo password, so nobody is locked out of admin access.
 #
@@ -26,10 +27,16 @@ SVC_USER=mindcraft-rotn
 BOT_RE='^[a-z0-9][a-z0-9-]{0,31}$'
 KEY_RE='^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+={0,3}( [^[:cntrl:]]*)?$'
 NODE_MAJOR=22   # ADR 0002
-# NodeSource's repository signing key (https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key).
-# The fingerprint as harness-ops understands NodeSource to publish it; NOT yet verified against a live
-# download. setup refuses on a mismatch and prints the downloaded fingerprint, so a wrong pin fails safe.
-NODESOURCE_KEY_FPR=${NODESOURCE_KEY_FPR:-6F71F525282841EEDAF851B42F59B5F99B1BE0B4}
+# NodeSource's repository signing key. The URL is the one NodeSource's own setup script uses
+# (github.com/nodesource/distributions, scripts/deb/setup_22.x: curl ... https://deb.nodesource.com/
+# gpgkey/nodesource-repo.gpg.key | gpg --dearmor). NodeSource's README and DEV_README publish no
+# fingerprint, and their script checks none. harness-ops downloaded the live key on 2026-11-01 and
+# `gpg --show-keys` gave primary fingerprint 6F71F525282841EEDAF851B42F59B5F99B1BE0B4,
+# uid "NSolid <nsolid-gpg@nodesource.com>", RSA 2048, created 2016-05-23 (file SHA-256
+# b42e0321dabdc24e892115da705cf061167eac12a317f23d329862d0aa0a271d). setup refuses any other key.
+readonly NODESOURCE_KEY_FPR_PINNED=6F71F525282841EEDAF851B42F59B5F99B1BE0B4
+FPR_FROM_ENV=${NODESOURCE_KEY_FPR:-}
+NODESOURCE_KEY_FPR=$NODESOURCE_KEY_FPR_PINNED   # only `setup --allow-fpr-override` takes $NODESOURCE_KEY_FPR instead
 NODESOURCE_KEY_URL=https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
 
 log()  { echo "[bootstrap] $*" >&2; }
@@ -75,8 +82,15 @@ setup_users() {
   fi
   usermod --append --groups sudo,"$SVC_USER" "$DEPLOY_USER"
   dir_owned 0700 "$DEPLOY_USER:$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh"
-  printf '%s\n' "$key" | file_owned 0600 "$DEPLOY_USER:$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh/authorized_keys"
-  log "authorized one key for $DEPLOY_USER"
+  # Append the key if it is missing; never drop keys already there (PR #30 review finding 5).
+  local ak; ak=$(p "/home/$DEPLOY_USER/.ssh/authorized_keys")
+  if [[ -f $ak ]] && tr -d '\r' < "$ak" | grep -qxF -- "$key"; then
+    log "$DEPLOY_USER already has this key"
+  else
+    { [[ -f $ak ]] && tr -d '\r' < "$ak" | sed '/^$/d'; printf '%s\n' "$key"; } \
+      | file_owned 0600 "$DEPLOY_USER:$DEPLOY_USER" "/home/$DEPLOY_USER/.ssh/authorized_keys"
+    log "authorized the key for $DEPLOY_USER"
+  fi
 }
 
 setup_sudoers() {
@@ -113,7 +127,7 @@ setup_node() {
   fpr=$(gpg --show-keys --with-colons "$tmpkey" 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
   if [[ ${fpr^^} != "${NODESOURCE_KEY_FPR^^}" ]]; then
     rm -f "$tmpkey"
-    die "NodeSource key fingerprint is '${fpr:-none}', expected $NODESOURCE_KEY_FPR. Check it against NodeSource's published fingerprint; if theirs changed, set NODESOURCE_KEY_FPR (lead's decision)."
+    die "NodeSource key fingerprint is '${fpr:-none}', expected $NODESOURCE_KEY_FPR. If NodeSource really rotated its key, the lead decides; then rerun with NODESOURCE_KEY_FPR=<new> and --allow-fpr-override."
   fi
   mkdir -p "$(p /etc/apt/keyrings)"
   gpg --dearmor --yes -o "$(p /etc/apt/keyrings/nodesource.gpg)" "$tmpkey"
@@ -149,8 +163,14 @@ setup_firewall() {
   # Allow SSH before enabling, so the running session survives.
   ufw default deny incoming > /dev/null
   ufw default allow outgoing > /dev/null
-  if [[ -n $from ]]; then ufw allow proto tcp from "$from" to any port 22 > /dev/null
-  else ufw allow 22/tcp > /dev/null; fi
+  if [[ -n $from ]]; then
+    ufw allow proto tcp from "$from" to any port 22 > /dev/null
+    # A re-run with --ssh-from after an open setup: drop the open rule, after adding the narrow one
+    # (PR #30 review finding 5). Established sessions are not cut. No error if there is none.
+    ufw delete allow 22/tcp > /dev/null 2>&1 || true
+  else
+    ufw allow 22/tcp > /dev/null
+  fi
   ufw --force enable > /dev/null
   log "ufw: incoming SSH only${from:+ from $from}"
 }
@@ -163,22 +183,34 @@ setup_files() {
   dir_owned 0750 "root:$SVC_USER" /etc/mindcraft-rotn
   dir_owned 0755 root:root /usr/local/lib/mindcraft-rotn
   file_owned 0755 root:root /usr/local/lib/mindcraft-rotn/check-env < "$HERE/check-env.sh"
+  file_owned 0644 root:root /usr/local/lib/mindcraft-rotn/check-env.mjs < "$HERE/check-env.mjs"
   file_owned 0755 root:root /usr/local/sbin/mindcraft-rotn-ctl < "$HERE/mindcraft-rotn-ctl.sh"
   file_owned 0644 root:root /etc/systemd/system/mindcraft-rotn@.service < "$HERE/mindcraft-rotn@.service"
   file_owned 0644 root:root /etc/mindcraft-rotn/bot.env.example < "$HERE/bot.env.example"
   systemctl daemon-reload
+  # lockdown looks for a deploy key login after this moment.
+  date -u +%s | file_owned 0644 root:root /etc/mindcraft-rotn/.setup-epoch
 }
 
 do_setup() {
-  local keyfile='' from='' swap=2G
+  local keyfile='' from='' swap=2G fpr_override=0
   while (( $# )); do
     case $1 in
       --deploy-key-file) keyfile=${2:?}; shift 2 ;;
       --ssh-from) from=${2:?}; shift 2 ;;
       --swap-size) swap=${2:?}; shift 2 ;;
+      --allow-fpr-override) fpr_override=1; shift ;;
       *) die "setup: unknown option $1" ;;
     esac
   done
+  # The pinned NodeSource fingerprint changes only on purpose: an override needs the env var AND the flag.
+  if (( fpr_override )); then
+    [[ $FPR_FROM_ENV =~ ^[0-9A-Fa-f]{40}$ ]] || die "--allow-fpr-override needs NODESOURCE_KEY_FPR=<40 hex digits>"
+    NODESOURCE_KEY_FPR=$FPR_FROM_ENV
+    log "WARNING: NodeSource key fingerprint overridden to $NODESOURCE_KEY_FPR (pinned: $NODESOURCE_KEY_FPR_PINNED)"
+  elif [[ -n $FPR_FROM_ENV && ${FPR_FROM_ENV^^} != "$NODESOURCE_KEY_FPR_PINNED" ]]; then
+    die "NODESOURCE_KEY_FPR is set but --allow-fpr-override is not; refusing to use an unpinned NodeSource key"
+  fi
   [[ -n $keyfile && -f $keyfile ]] || die "setup needs --deploy-key-file FILE (the deploy user's public key)"
   [[ -z $from || $from =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]] || die "--ssh-from must be an IPv4 CIDR"
   [[ $swap =~ ^[1-9][0-9]*[MG]$ ]] || die "--swap-size like 2G"
@@ -221,8 +253,10 @@ do_add_bot() {
   if [[ -e $(p "$envf") ]]; then
     log "$envf exists; not touching it"
   else
+    # 0600 root:root: systemd reads it as root; the deploy user (in group mindcraft-rotn) and the bot
+    # process itself cannot read the OpenRouter key from the file (PR #30 review finding 6).
     sed -e "s/__BOT__/$bot/g" -e "s/__MINDSERVER_PORT__/$port/g" -e 's/\r$//' "$HERE/bot.env.example" \
-      | file_owned 0640 "root:$SVC_USER" "$envf"
+      | file_owned 0600 root:root "$envf"
     log "wrote $envf (MindServer port $port)"
   fi
   log "next, as the human: put the OpenRouter key into $envf; do the bot's first Microsoft device-code login"
@@ -238,6 +272,13 @@ do_lockdown() {
   [[ -s $ak ]] && grep -Eq "$KEY_RE" "$ak" || die "$DEPLOY_USER has no authorized key (run setup)"
   local st; st=$(passwd --status "$DEPLOY_USER" | awk '{ print $2 }')
   [[ $st == P ]] || die "$DEPLOY_USER has no usable password (passwd --status says '$st'); set one with 'passwd $DEPLOY_USER' first, or nobody can sudo after lockdown"
+  # Evidence, not just the flag: sshd must have logged a key login for deploy since setup
+  # (PR #30 review finding 3). Ubuntu 24.04 logs it under ssh.service; sshd.service is the alias.
+  local since ef; ef=$(p /etc/mindcraft-rotn/.setup-epoch)
+  since=$(tr -d '\r' < "$ef" 2> /dev/null) && [[ $since =~ ^[0-9]{9,11}$ ]] || die "no setup timestamp in /etc/mindcraft-rotn/.setup-epoch (run setup first)"
+  journalctl -u ssh -u sshd --since "@$since" --no-pager -o cat 2> /dev/null \
+    | grep -Eq "^Accepted publickey for $DEPLOY_USER from [0-9A-Fa-f.:]+ port [0-9]+ ssh2" \
+    || die "no 'Accepted publickey for $DEPLOY_USER' in the ssh journal since setup; log in as $DEPLOY_USER with the key first (ssh $DEPLOY_USER@<cx23>), then rerun lockdown"
   # 00- sorts first in sshd_config.d, and for sshd the first value it reads wins (cloud-init's
   # 50-cloud-init.conf may say PasswordAuthentication yes).
   file_owned 0644 root:root /etc/ssh/sshd_config.d/00-mindcraft-rotn.conf <<EOF
@@ -260,5 +301,5 @@ case ${1:-} in
   setup) shift; do_setup "$@" ;;
   add-bot) shift; do_add_bot "$@" ;;
   lockdown) shift; do_lockdown "$@" ;;
-  *) die "usage: bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] | add-bot BOT [--mindserver-port N] | lockdown --i-tested-deploy-login" ;;
+  *) die "usage: bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override] | add-bot BOT [--mindserver-port N] | lockdown --i-tested-deploy-login" ;;
 esac

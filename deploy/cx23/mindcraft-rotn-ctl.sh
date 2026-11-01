@@ -7,17 +7,22 @@
 #   sudo mindcraft-rotn-ctl ACTION BOT     ACTION: start | stop | restart | status | is-active | is-enabled | enable | disable
 #   sudo mindcraft-rotn-ctl list           the bots that have an env file in /etc/mindcraft-rotn
 #   sudo mindcraft-rotn-ctl daemon-reload
+#
+# The paths are fixed on purpose: nothing in the caller's environment may change what root runs
+# (PR #30 review finding 8). The offline tests run a copy with these two lines rewritten.
 set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-SYSTEMCTL=${SYSTEMCTL:-systemctl}
-ETC_DIR=${MINDCRAFT_ROTN_ETC:-/etc/mindcraft-rotn}
-BOT_RE='^[a-z0-9][a-z0-9-]{0,31}$'
+readonly SYSTEMCTL=/usr/bin/systemctl
+readonly ETC_DIR=/etc/mindcraft-rotn
+readonly BOT_RE='^[a-z0-9][a-z0-9-]{0,31}$'
 
 die() { echo "mindcraft-rotn-ctl: $*" >&2; exit 2; }
 
 action=${1:-}
 case $action in
   list)
+    (( $# == 1 )) || die "list takes no arguments"
     shopt -s nullglob
     for f in "$ETC_DIR"/*.env; do b=$(basename "$f" .env); [[ $b =~ $BOT_RE ]] && echo "$b"; done
     exit 0 ;;

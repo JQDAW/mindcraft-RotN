@@ -32,7 +32,8 @@ function findBash() {
 const BASH = findBash();
 
 const FAKES = ['id', 'getent', 'useradd', 'usermod', 'passwd', 'chown', 'chmod', 'chgrp', 'apt-get', 'curl', 'gpg', 'node',
-    'swapon', 'fallocate', 'mkswap', 'sysctl', 'ufw', 'visudo', 'sshd', 'systemctl', 'npm', 'sudo', 'ln'];
+    'swapon', 'fallocate', 'mkswap', 'sysctl', 'ufw', 'visudo', 'sshd', 'systemctl', 'npm', 'sudo', 'ln', 'journalctl'];
+const ACCEPTED = 'Accepted publickey for deploy from 203.0.113.5 port 50122 ssh2: ED25519 SHA256:AAAAfakefakefake';
 
 let tmp, ROOT, bin, logFile;
 
@@ -53,7 +54,10 @@ function run(scriptPath, args, extraEnv = {}, fakes = true) {
     const argv = fakes
         ? ['-c', 'PATH="$(cygpath -u "$1" 2>/dev/null || echo "$1"):$PATH"; shift; exec bash "$@"', '_', fwd(bin), fwd(scriptPath), ...args]
         : [fwd(scriptPath), ...args];
-    const r = spawnSync(BASH, argv, { env: { ...process.env, ROOT, FAKE_LOG: logFile, ...extraEnv }, encoding: 'utf8', timeout: 120000 });
+    // A value of undefined removes that variable (so an inherited DEBUG or NODE_OPTIONS cannot leak in).
+    const e = { ...process.env, ROOT, FAKE_LOG: logFile, ...extraEnv };
+    for (const [k, v] of Object.entries(e)) if (v === undefined) delete e[k];
+    const r = spawnSync(BASH, argv, { env: e, encoding: 'utf8', timeout: 120000 });
     return { code: r.status, stdout: r.stdout, stderr: r.stderr, all: `${r.stdout}\n${r.stderr}` };
 }
 const calls = () => (fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map((l) => l.split('\t')) : []);
@@ -114,28 +118,89 @@ describe('check-env (ExecStartPre)', () => {
         fs.mkdirSync(path.join(tmp, 'msa'), { recursive: true });
         fs.writeFileSync(path.join(tmp, 'bot.env'), 'x=1\n');
         const map = fwd(path.join(tmp, 'stat.map'));
-        fs.writeFileSync(map, `${pf}\t700 mindcraft-rotn\n${envf}\t640 root\n`);
+        fs.writeFileSync(map, `${pf}\t700 mindcraft-rotn\n${envf}\t600 root\n`);
         fs.writeFileSync(path.join(bin, 'fake-stat'), `#!/usr/bin/env bash\nawk -F'\\t' -v p="\${@: -1}" '$1 == p { print $2 }' "${map}"\n`, { mode: 0o755 });
         return {
             envf, pf, map,
-            env: { STAT_BIN: fwd(path.join(bin, 'fake-stat')), FAKE_OUT_id: 'mindcraft-rotn', MINDCRAFT_SINGLE_BOT_SERVICE: '1',
-                MINDCRAFT_PROFILES_FOLDER: pf, OPENROUTER_API_KEY: 'sk-or-v1-SECRET-VALUE-123', INSECURE_CODING: '', SETTINGS_JSON: '{"host":"x"}' },
+            env: { FAKE_OUT_id: 'mindcraft-rotn', MINDCRAFT_SINGLE_BOT_SERVICE: '1', MINDCRAFT_PROFILES_FOLDER: pf,
+                OPENROUTER_API_KEY: 'sk-or-v1-SECRET-VALUE-123', SETTINGS_JSON: '{"host":"mc.example.invalid","port":25565,"auth":"microsoft","auto_open_ui":false}',
+                NODE_OPTIONS: '--max-old-space-size=768',
+                INSECURE_CODING: undefined, BLOCKED_ACTIONS: undefined, DEBUG: undefined, NODE_PATH: undefined },
         };
     };
-    const check = (g, over = {}) => run(path.join(CX, 'check-env.sh'), [g.envf], { ...g.env, ...over });
+    // Tool paths are flags (the unit passes none): real node, a fake stat, this repo as the "release".
+    const check = (g, over = {}) => run(path.join(CX, 'check-env.sh'),
+        ['--node', fwd(process.execPath), '--stat', fwd(path.join(bin, 'fake-stat')), '--release', fwd(repo), g.envf], { ...g.env, ...over });
 
     test('a safe environment passes', () => {
         const g = good();
         const r = check(g);
         assert.equal(r.code, 0, r.all);
+        assert.equal(check(g, { DEBUG: 'minecraft-protocol,-prismarine-auth*' }).code, 0, 'a DEBUG that cannot reach prismarine-auth is fine');
+        assert.equal(check(g, { SETTINGS_JSON: undefined }).code, 0, 'no SETTINGS_JSON is fine');
+    });
+
+    test('values are parsed like main.js: escaped, unknown and disallowed SETTINGS_JSON keys refuse (PR #30 finding 1)', () => {
+        const g = good();
+        for (const [json, re] of [
+            ['{"allow_insecure_coding":true}', /keys outside auth, host, port, auto_open_ui: "allow_insecure_coding"/],
+            ['{"\\u0061llow_insecure_coding":true}', /keys outside .*"allow_insecure_coding"/], // escaped: grep would miss it
+            ['{"host":"x","blocked_actions":[]}', /keys outside .*"blocked_actions"/],
+            ['{"__proto__":{"allow_insecure_coding":true}}', /keys outside .*"__proto__"/],
+            ['{"profiles":["./x.json"]}', /keys outside .*"profiles"/],
+            ['{"auto_open_ui":true}', /auto_open_ui may only be false/],
+            ['{"auth":"offline"}', /auth must be "microsoft"/],
+            ['{"port":"25565"}', /port must be an integer/],
+            ['{"host":"a b"}', /host must be a host name/],
+            ['[1]', /must be a JSON object/],
+            ['null', /must be a JSON object/],
+            ['{"host":', /not valid JSON/],
+        ]) {
+            const r = check(g, { SETTINGS_JSON: json });
+            assert.equal(r.code, 1, json);
+            assert.match(r.stderr, re, json);
+        }
+    });
+
+    test('INSECURE_CODING and BLOCKED_ACTIONS refuse when set at all; DEBUG reaching prismarine-auth refuses; NODE_OPTIONS only a heap size', () => {
+        const g = good();
+        for (const [over, re] of [
+            [{ INSECURE_CODING: '' }, /INSECURE_CODING is set/],
+            [{ INSECURE_CODING: 'false' }, /INSECURE_CODING is set/],
+            [{ BLOCKED_ACTIONS: '[]' }, /BLOCKED_ACTIONS is set/],
+            [{ BLOCKED_ACTIONS: '' }, /BLOCKED_ACTIONS is set/],
+            [{ DEBUG: 'prismarine-auth' }, /DEBUG could enable prismarine-auth/],
+            [{ DEBUG: '*' }, /DEBUG could enable prismarine-auth/],
+            [{ DEBUG: 'minecraft-protocol prismarine-*' }, /DEBUG could enable prismarine-auth/],
+            [{ NODE_OPTIONS: '--max-old-space-size=768 --require /tmp/x.js' }, /NODE_OPTIONS may only hold --max-old-space-size/],
+            [{ NODE_OPTIONS: '--import=data:text/javascript,0' }, /NODE_OPTIONS may only hold/],
+        ]) {
+            const r = check(g, over);
+            assert.equal(r.code, 1, JSON.stringify(over));
+            assert.match(r.stderr, re, JSON.stringify(over));
+        }
+        // Without the release's auth guard, any DEBUG refuses (fail closed).
+        const r = run(path.join(CX, 'check-env.sh'), ['--node', fwd(process.execPath), '--stat', fwd(path.join(bin, 'fake-stat')),
+            '--release', fwd(path.join(tmp, 'no-release')), g.envf], { ...g.env, DEBUG: 'minecraft-protocol' });
+        assert.equal(r.code, 1);
+        assert.match(r.stderr, /auth guard could not be loaded/);
+    });
+
+    test('the checker\'s tool paths are fixed: env vars cannot redirect them; NODE_OPTIONS does not reach the checker', () => {
+        const src = fs.readFileSync(path.join(CX, 'check-env.sh'), 'utf8');
+        assert.match(src, /^NODE_BIN=\/usr\/bin\/node STAT_BIN=\/usr\/bin\/stat RELEASE=\/opt\/mindcraft-rotn\/current/m);
+        assert.ok(!/\$\{(NODE_BIN|STAT_BIN|RELEASE):-/.test(src), 'no env defaults for tool paths');
+        assert.match(src, /env -u NODE_OPTIONS -u NODE_PATH/);
+        const g = good();
+        // A STAT_BIN in the environment is ignored: the fake stat given by flag still decides.
+        assert.equal(check(g, { STAT_BIN: '/bin/false' }).code, 0);
     });
 
     test('every unsafe setting refuses, and no variable value is ever printed', () => {
         const g = good();
         const cases = [
             [{ INSECURE_CODING: '1' }, /INSECURE_CODING is set/],
-            [{ INSECURE_CODING: 'false' }, /INSECURE_CODING is set/],
-            [{ SETTINGS_JSON: '{"allow_insecure_coding":true}' }, /SETTINGS_JSON mentions allow_insecure_coding/],
+            [{ SETTINGS_JSON: '{"allow_insecure_coding":true}', OPENROUTER_API_KEY: 'sk-or-v1-SECRET-VALUE-123' }, /keys outside/],
             [{ MINDCRAFT_SINGLE_BOT_SERVICE: '0' }, /MINDCRAFT_SINGLE_BOT_SERVICE must be 1/],
             [{ MINDCRAFT_SINGLE_BOT_SERVICE: '' }, /MINDCRAFT_SINGLE_BOT_SERVICE must be 1/],
             [{ MINDCRAFT_PROFILES_FOLDER: '' }, /MINDCRAFT_PROFILES_FOLDER is not set/],
@@ -155,11 +220,12 @@ describe('check-env (ExecStartPre)', () => {
 
     test('a loose token-cache folder or env file refuses', () => {
         for (const [pfLine, envLine, re] of [
-            ['755 mindcraft-rotn', '640 root', /has mode 755, must be 700/],
-            ['700 deploy', '640 root', /owned by deploy, must be mindcraft-rotn/],
+            ['755 mindcraft-rotn', '600 root', /has mode 755, must be 700/],
+            ['700 deploy', '600 root', /owned by deploy, must be mindcraft-rotn/],
+            ['700 mindcraft-rotn', '640 root', /env file has mode 640, must be 0600/], // group-readable: deploy could read the key
             ['700 mindcraft-rotn', '644 root', /env file has mode 644/],
             ['700 mindcraft-rotn', '660 root', /env file has mode 660/],
-            ['700 mindcraft-rotn', '640 deploy', /env file is owned by deploy, must be root/],
+            ['700 mindcraft-rotn', '600 deploy', /env file is owned by deploy, must be root/],
         ]) {
             const g = good();
             fs.writeFileSync(g.map, `${g.pf}\t${pfLine}\n${g.envf}\t${envLine}\n`);
@@ -172,13 +238,29 @@ describe('check-env (ExecStartPre)', () => {
 
 // ---------------------------------------------------------------- mindcraft-rotn-ctl
 describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
-    const ctl = (args) => {
+    // The wrapper's paths are fixed (root runs it). The tests run a copy with exactly those two lines
+    // pointed at the fake systemctl and a temp /etc; everything else is the real file.
+    const SRC = fs.readFileSync(path.join(CX, 'mindcraft-rotn-ctl.sh'), 'utf8').replace(/\r/g, '');
+    const ctl = (args, extraEnv = {}) => {
         const etc = path.join(ROOT, 'etc', 'mindcraft-rotn');
         fs.mkdirSync(etc, { recursive: true });
         fs.writeFileSync(path.join(etc, 'rotn-bot.env'), 'x=1\n');
         fs.writeFileSync(path.join(etc, 'bot.env.example'), 'x=1\n');
-        return run(path.join(CX, 'mindcraft-rotn-ctl.sh'), args, { MINDCRAFT_ROTN_ETC: fwd(etc) });
+        const copy = path.join(tmp, 'ctl-under-test.sh');
+        const body = SRC.replace(/^PATH=.*$/m, '')
+            .replace('readonly SYSTEMCTL=/usr/bin/systemctl', `readonly SYSTEMCTL=${posix(path.join(bin, 'systemctl'))}`)
+            .replace('readonly ETC_DIR=/etc/mindcraft-rotn', `readonly ETC_DIR=${fwd(etc)}`);
+        assert.notEqual(body, SRC);
+        fs.writeFileSync(copy, body);
+        return run(copy, args, extraEnv);
     };
+
+    test('systemctl and /etc are hard-coded and PATH is reset: the caller\'s environment cannot redirect root (PR #30 finding 8)', () => {
+        assert.match(SRC, /^readonly SYSTEMCTL=\/usr\/bin\/systemctl$/m);
+        assert.match(SRC, /^readonly ETC_DIR=\/etc\/mindcraft-rotn$/m);
+        assert.match(SRC, /^PATH=\/usr\/sbin:\/usr\/bin:\/sbin:\/bin$/m);
+        assert.ok(!/\$\{(SYSTEMCTL|MINDCRAFT_ROTN_ETC|ETC_DIR):-/.test(SRC), 'no env overrides');
+    });
 
     test('valid actions run systemctl on exactly mindcraft-rotn@BOT.service', () => {
         assert.equal(ctl(['restart', 'rotn-bot']).code, 0);
@@ -211,7 +293,7 @@ describe('bootstrap.sh', () => {
         fs.writeFileSync(f, `${content}\n`);
         return f;
     };
-    const ok = { FAKE_OUT_id: '0', FAKE_RC_getent: '2', FAKE_OUT_gpg: `fpr:::::::::${FPR}:`, FAKE_OUT_node: 'v22.11.0' };
+    const ok = { FAKE_OUT_id: '0', FAKE_RC_getent: '2', FAKE_OUT_gpg: `fpr:::::::::${FPR}:`, FAKE_OUT_node: 'v22.11.0', NODESOURCE_KEY_FPR: undefined };
     const boot = (args, extra = {}) => run(path.join(CX, 'bootstrap.sh'), args, { ...ok, ...extra });
 
     test('setup: users, key, sudoers, upgrades, Node 22, swap, firewall, unit; root login stays on', () => {
@@ -255,6 +337,8 @@ describe('bootstrap.sh', () => {
         assert.equal(read('etc/systemd/system/mindcraft-rotn@.service'), lf('mindcraft-rotn@.service'));
         assert.equal(read('usr/local/lib/mindcraft-rotn/check-env'), lf('check-env.sh'));
         assert.equal(read('usr/local/sbin/mindcraft-rotn-ctl'), lf('mindcraft-rotn-ctl.sh'));
+        assert.equal(read('usr/local/lib/mindcraft-rotn/check-env.mjs'), lf('check-env.mjs'), 'the parser next to check-env');
+        assert.match(read('etc/mindcraft-rotn/.setup-epoch'), /^\d{10}\n$/, 'lockdown looks for a key login after this');
         for (const f of ['usr/local/lib/mindcraft-rotn/check-env', 'usr/local/sbin/mindcraft-rotn-ctl', 'etc/mindcraft-rotn/bot.env.example'])
             assert.ok(!read(f).includes('\r'), `${f} has no CR`);
         for (const d of ['opt/mindcraft-rotn/releases', 'var/lib/mindcraft-rotn/bots', 'etc/mindcraft-rotn']) assert.ok(exists(d), d);
@@ -293,6 +377,24 @@ describe('bootstrap.sh', () => {
         assert.ok(!called('apt-get').some((c) => c.includes('nodejs')));
     });
 
+    test('the pinned fingerprint changes only with NODESOURCE_KEY_FPR and --allow-fpr-override together (PR #30 finding 4)', () => {
+        ubuntu();
+        const other = 'ABCDEF0123456789ABCDEF0123456789ABCDEF01';
+        const env = { NODESOURCE_KEY_FPR: other, FAKE_OUT_gpg: `fpr:::::::::${other}:` };
+        const noFlag = boot(['setup', '--deploy-key-file', keyFile()], env);
+        assert.equal(noFlag.code, 1);
+        assert.match(noFlag.stderr, /NODESOURCE_KEY_FPR is set but --allow-fpr-override is not/);
+        assert.equal(called('useradd').length, 0, 'refused before anything was done');
+        assert.match(boot(['setup', '--deploy-key-file', keyFile(), '--allow-fpr-override'], { NODESOURCE_KEY_FPR: undefined }).stderr,
+            /--allow-fpr-override needs NODESOURCE_KEY_FPR=<40 hex digits>/);
+        const r = boot(['setup', '--deploy-key-file', keyFile(), '--allow-fpr-override'], env);
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, new RegExp(`WARNING: NodeSource key fingerprint overridden to ${other} \\(pinned: ${FPR}\\)`));
+        // The pinned value in the environment needs no flag.
+        assert.equal(boot(['setup', '--deploy-key-file', keyFile()], { NODESOURCE_KEY_FPR: FPR }).code, 0);
+        assert.match(fs.readFileSync(path.join(CX, 'bootstrap.sh'), 'utf8'), /readonly NODESOURCE_KEY_FPR_PINNED=6F71F525282841EEDAF851B42F59B5F99B1BE0B4/);
+    });
+
     test('setup refuses a Node that is not 22, and a sudoers rule visudo rejects', () => {
         ubuntu();
         assert.match(boot(['setup', '--deploy-key-file', keyFile()], { FAKE_OUT_node: 'v20.18.0' }).stderr, /node --version is 'v20\.18\.0', expected v22\.x/);
@@ -310,10 +412,26 @@ describe('bootstrap.sh', () => {
         assert.equal(r.code, 0, r.all);
         assert.equal(called('useradd').length, 0);
         assert.equal(called('fallocate').length, 0);
-        assert.ok(called('ufw').some((c) => c.join(' ') === 'ufw allow proto tcp from 203.0.113.0/24 to any port 22'));
+        // The narrow rule first, then the open 22/tcp rule of an earlier run is removed (PR #30 finding 5).
+        const allowFrom = callIndex((c) => c.join(' ') === 'ufw allow proto tcp from 203.0.113.0/24 to any port 22');
+        const delOpen = callIndex((c) => c.join(' ') === 'ufw delete allow 22/tcp');
+        assert.ok(allowFrom >= 0 && delOpen > allowFrom, 'allow from CIDR, then delete the open rule');
+        assert.ok(!called('ufw').some((c) => c.join(' ') === 'ufw allow 22/tcp'), 'no open rule added');
     });
 
-    test('add-bot: 0700 token cache, 0640 env file from the template, ports count up, never overwrites', () => {
+    test('authorized_keys: a missing key is appended, existing keys are kept, a re-run adds no duplicate (PR #30 finding 5)', () => {
+        ubuntu();
+        const other = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtherOtherOtherOtherOtherOtherOtherOther other@example.invalid';
+        fs.mkdirSync(rootFile('home/deploy/.ssh'), { recursive: true });
+        fs.writeFileSync(rootFile('home/deploy/.ssh/authorized_keys'), `${other}\r\n`);
+        assert.equal(boot(['setup', '--deploy-key-file', keyFile()], { FAKE_RC_getent: '0' }).code, 0);
+        assert.equal(read('home/deploy/.ssh/authorized_keys'), `${other}\n${KEY}\n`);
+        const again = boot(['setup', '--deploy-key-file', keyFile()], { FAKE_RC_getent: '0' });
+        assert.match(again.stderr, /deploy already has this key/);
+        assert.equal(read('home/deploy/.ssh/authorized_keys'), `${other}\n${KEY}\n`);
+    });
+
+    test('add-bot: 0700 token cache, 0600 root:root env file from the template, ports count up, never overwrites', () => {
         ubuntu();
         const env = { FAKE_RC_getent: '0' };
         assert.equal(boot(['add-bot', 'rotn-bot'], env).code, 0);
@@ -324,8 +442,10 @@ describe('bootstrap.sh', () => {
         assert.ok(!e.includes('__BOT__') && !e.includes('__MINDSERVER_PORT__'));
         assert.ok(!e.includes('\r'), 'no CR in env values (MINDSERVER_PORT=8080 followed by CR would break)');
         assert.ok(called('chmod').some((c) => c[1] === '0700' && c[2].endsWith('/var/lib/mindcraft-rotn/rotn-bot/msa')));
-        assert.ok(called('chmod').some((c) => c[1] === '0640' && c[2].includes('/etc/mindcraft-rotn/rotn-bot.env')));
-        assert.ok(called('chown').some((c) => c[1] === 'root:mindcraft-rotn' && c[2].includes('/etc/mindcraft-rotn/rotn-bot.env')));
+        // root only: the deploy user is in group mindcraft-rotn and must not read the key (PR #30 finding 6)
+        const envMode = called('chmod').filter((c) => c[2].includes('/etc/mindcraft-rotn/rotn-bot.env')).map((c) => c[1]);
+        const envOwner = called('chown').filter((c) => c[2].includes('/etc/mindcraft-rotn/rotn-bot.env')).map((c) => c[1]);
+        assert.deepEqual([envMode, envOwner], [['0600'], ['root:root']]);
         assert.equal(boot(['add-bot', 'bot-two'], env).code, 0);
         assert.match(read('etc/mindcraft-rotn/bot-two.env'), /^MINDSERVER_PORT=8081$/m);
         fs.writeFileSync(rootFile('etc/mindcraft-rotn/rotn-bot.env'), 'OPENROUTER_API_KEY=human-set\n');
@@ -347,11 +467,35 @@ describe('bootstrap.sh', () => {
         assert.ok(!called('systemctl').some((c) => c[1] === 'reload'));
     });
 
-    test('lockdown turns root and password login off, checked by sshd -t; a rejected config is removed', () => {
+    test('lockdown needs a real key login for deploy in the ssh journal since setup, not just the flag (PR #30 finding 3)', () => {
         ubuntu();
         fs.mkdirSync(rootFile('home/deploy/.ssh'), { recursive: true });
         fs.writeFileSync(rootFile('home/deploy/.ssh/authorized_keys'), `${KEY}\n`);
         const env = { FAKE_OUT_passwd: 'deploy P 2026-11-01 0 99999 7 -1' };
+        assert.match(boot(['lockdown', '--i-tested-deploy-login'], { ...env, FAKE_OUT_journalctl: ACCEPTED }).stderr, /no setup timestamp/);
+        fs.mkdirSync(rootFile('etc/mindcraft-rotn'), { recursive: true });
+        fs.writeFileSync(rootFile('etc/mindcraft-rotn/.setup-epoch'), '1793534400\n');
+        for (const journal of ['', 'Accepted password for deploy from 203.0.113.5 port 50122 ssh2',
+            'Accepted publickey for root from 203.0.113.5 port 50122 ssh2: ED25519 SHA256:x',
+            'Failed publickey for deploy from 203.0.113.5 port 50122 ssh2', `Invalid user x: ${ACCEPTED}`]) {
+            const r = boot(['lockdown', '--i-tested-deploy-login'], { ...env, FAKE_OUT_journalctl: journal });
+            assert.equal(r.code, 1, journal);
+            assert.match(r.stderr, /no 'Accepted publickey for deploy' in the ssh journal since setup/, journal);
+        }
+        assert.ok(!exists('etc/ssh/sshd_config.d/00-mindcraft-rotn.conf'));
+        const j = called('journalctl')[0];
+        assert.deepEqual(j, ['journalctl', '-u', 'ssh', '-u', 'sshd', '--since', '@1793534400', '--no-pager', '-o', 'cat']);
+        const r = boot(['lockdown', '--i-tested-deploy-login'], { ...env, FAKE_OUT_journalctl: `Server listening on 0.0.0.0 port 22.\n${ACCEPTED}` });
+        assert.equal(r.code, 0, r.all);
+    });
+
+    test('lockdown turns root and password login off, checked by sshd -t; a rejected config is removed', () => {
+        ubuntu();
+        fs.mkdirSync(rootFile('home/deploy/.ssh'), { recursive: true });
+        fs.writeFileSync(rootFile('home/deploy/.ssh/authorized_keys'), `${KEY}\n`);
+        fs.mkdirSync(rootFile('etc/mindcraft-rotn'), { recursive: true });
+        fs.writeFileSync(rootFile('etc/mindcraft-rotn/.setup-epoch'), '1793534400\n');
+        const env = { FAKE_OUT_passwd: 'deploy P 2026-11-01 0 99999 7 -1', FAKE_OUT_journalctl: ACCEPTED };
         const bad = boot(['lockdown', '--i-tested-deploy-login'], { ...env, FAKE_RC_sshd: '255' });
         assert.equal(bad.code, 1);
         assert.match(bad.stderr, /sshd -t rejected the config; removed it/);
@@ -377,8 +521,10 @@ describe('deploy.sh (real git and tar on a local repo)', () => {
         return r.stdout.trim();
     };
     let src;
-    const commit = (insecure, msg) => {
-        fs.writeFileSync(path.join(src, 'settings.js'), `const settings = {\n    "allow_insecure_coding": ${insecure}, // comment\n};\n`);
+    // settings.js is a real ES module, evaluated by the real node (the fake node is removed below).
+    const commit = (insecure, msg, body = null) => {
+        fs.writeFileSync(path.join(src, 'settings.js'),
+            body ?? `const settings = {\n    "allow_insecure_coding": ${insecure}, // comment\n};\n\nexport default settings;\n`);
         fs.writeFileSync(path.join(src, 'main.js'), `// ${msg}\n`);
         git(src, 'add', '-A');
         git(src, 'commit', '-q', '-m', msg);
@@ -388,11 +534,17 @@ describe('deploy.sh (real git and tar on a local repo)', () => {
         src = path.join(tmp, 'src');
         fs.mkdirSync(src);
         git(src, 'init', '-q', '-b', 'develop');
-        fs.writeFileSync(path.join(src, 'package.json'), '{"name":"x","version":"1.0.0"}\n');
+        fs.writeFileSync(path.join(src, 'package.json'), '{"name":"x","version":"1.0.0","type":"module"}\n');
         commit('false', 'one'); git(src, 'tag', 'v1');
         commit('false', 'two'); git(src, 'tag', 'v2');
         commit('false', 'three'); git(src, 'tag', 'v3');
         commit('true', 'insecure'); git(src, 'tag', 'vinsecure');
+        // A grep for '"allow_insecure_coding": false' would pass these; evaluating settings.js does not (PR #30 finding 7).
+        // 0 also catches a loose == false.
+        commit(null, 'sneaky', 'const settings = {\n    // "allow_insecure_coding": false,\n    "allow_insecure_coding": true,\n};\nexport default settings;\n');
+        git(src, 'tag', 'vsneaky');
+        commit(null, 'override', 'const settings = { "allow_insecure_coding": false };\nsettings.allow_insecure_coding = 0;\nexport default settings;\n');
+        git(src, 'tag', 'vstring');
         git(src, 'checkout', '-q', '-b', 'side', 'v1');
         commit('false', 'side'); git(src, 'tag', 'vside');
         git(src, 'checkout', '-q', 'develop');
@@ -401,7 +553,10 @@ describe('deploy.sh (real git and tar on a local repo)', () => {
     const BASE = 'opt/mindcraft-rotn';
     const env = () => ({ MINDCRAFT_ROTN_REPO_URL: fwd(src), HEALTH_WAIT_S: '0', FAKE_BOTS: 'rotn-bot idle-bot', FAKE_ENABLED: 'rotn-bot',
         FAKE_CURRENT_FILE: fwd(rootFile(`${BASE}/current`)) });
-    const dep = (args, extra = {}) => run(path.join(CX, 'deploy.sh'), args, { ...env(), ...extra });
+    const dep = (args, extra = {}) => {
+        fs.rmSync(path.join(bin, 'node'), { force: true }); // deploy.sh evaluates settings.js with the real node
+        return run(path.join(CX, 'deploy.sh'), args, { ...env(), ...extra });
+    };
     const state = () => Object.fromEntries(read(`${BASE}/state`).trim().split('\n').map((l) => l.split('=')));
     const releases = () => fs.readdirSync(rootFile(`${BASE}/releases`)).sort();
 
@@ -451,7 +606,9 @@ describe('deploy.sh (real git and tar on a local repo)', () => {
             [['deploy', 'nope'], /no tag 'nope'/],
             [['deploy', '../../etc'], /bad tag/],
             [['deploy', '--force'], /bad tag/],
-            [['deploy', 'vinsecure'], /settings\.js does not set "allow_insecure_coding": false; refusing/],
+            [['deploy', 'vinsecure'], /settings\.js does not evaluate to allow_insecure_coding === false; refusing/],
+            [['deploy', 'vsneaky'], /settings\.js does not evaluate to allow_insecure_coding === false/],
+            [['deploy', 'vstring'], /settings\.js does not evaluate to allow_insecure_coding === false/],
         ];
         for (const [args, re] of cases) {
             const r = dep(args);

@@ -1,7 +1,7 @@
 # Mindcraft-RotN bot, one instance per bot: mindcraft-rotn@<bot>.service (harness-ops, brief deliverable 5).
 # Based on docs/research/ops.md section 2. Installed by deploy/cx23/bootstrap.sh setup to
 # /etc/systemd/system/mindcraft-rotn@.service. Per-bot values live in /etc/mindcraft-rotn/<bot>.env
-# (root:mindcraft-rotn, 0640), created by `bootstrap.sh add-bot <bot>`.
+# (root:root, 0600; systemd reads it as root), created by `bootstrap.sh add-bot <bot>`.
 [Unit]
 Description=Mindcraft-RotN bot %i
 After=network-online.target
@@ -20,8 +20,9 @@ EnvironmentFile=/etc/mindcraft-rotn/%i.env
 # agent_process.js ends the main process with 0 on a clean stop only in single-bot mode
 # (ADR 0003 decision 5). check-env refuses an env file that overrides it.
 Environment=MINDCRAFT_SINGLE_BOT_SERVICE=1
-# Refuses to start on an unsafe environment: INSECURE_CODING, allow_insecure_coding in
-# SETTINGS_JSON, a token-cache folder that is not 0700 and ours, a loose env file.
+# Refuses to start on an unsafe environment (deploy/cx23/check-env.sh and check-env.mjs): INSECURE_CODING
+# or BLOCKED_ACTIONS set, SETTINGS_JSON keys outside an allowlist, a DEBUG reaching prismarine-auth, a
+# token-cache folder that is not 0700 and ours, an env file that is not 0600 root.
 ExecStartPre=/usr/local/lib/mindcraft-rotn/check-env /etc/mindcraft-rotn/%i.env
 ExecStart=/usr/bin/node /opt/mindcraft-rotn/current/main.js
 # always: a bot that exits on a transient problem comes back. Exit 0 (requested stop) and

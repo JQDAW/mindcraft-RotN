@@ -84,14 +84,26 @@ fetch() {
   git_ fetch --quiet --prune --force origin '+refs/heads/develop:refs/heads/develop' '+refs/tags/*:refs/tags/*'
 }
 
+# insecure_check DIR: 0 only if DIR/settings.js's default export has allow_insecure_coding === false.
+insecure_check() {
+  local node; node=$(command -v node) || return 1
+  (cd "$1" && env -i PATH=/usr/bin:/bin "$node" --input-type=module -e '
+    import { pathToFileURL } from "node:url";
+    const s = (await import(pathToFileURL(process.cwd() + "/settings.js").href)).default;
+    process.exit(s && typeof s === "object" && s.allow_insecure_coding === false ? 0 : 1);
+  ' > /dev/null 2>&1)
+}
+
 # build TAG SHA NAME: extract, check, npm ci, link bots. Leaves releases/NAME complete or nothing.
 build() {
   local tag=$1 sha=$2 name=$3 tmp
   tmp="$BASE/releases/.tmp-$name-$$"
   rm -rf "$tmp"; mkdir -p "$tmp"
   git_ archive --format=tar "$sha" | tar -x -C "$tmp"
-  grep -Eq '"allow_insecure_coding"[[:space:]]*:[[:space:]]*false' "$tmp/settings.js" 2> /dev/null \
-    || { rm -rf "$tmp"; die "$tag: settings.js does not set \"allow_insecure_coding\": false; refusing"; }
+  # Evaluate settings.js the way main.js does (import its default export), not by grep: only a real
+  # `allow_insecure_coding === false` passes (PR #30 review finding 7). It runs with an empty
+  # environment so nothing outside the release can change the answer.
+  insecure_check "$tmp" || { rm -rf "$tmp"; die "$tag: settings.js does not evaluate to allow_insecure_coding === false; refusing"; }
   log "npm ci in $name"
   (cd "$tmp" && npm ci --no-audit --no-fund) || { rm -rf "$tmp"; die "$tag: npm ci failed"; }
   rm -rf "$tmp/bots"
