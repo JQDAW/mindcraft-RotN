@@ -1,6 +1,25 @@
 # Status: rotn-lead
 
-Updated: 2026-11-01 (about 21:25 UTC)
+Updated: 2026-11-01 (about 22:05 UTC)
+
+## Current snapshot (22:05 UTC)
+
+- **Every G2 precondition is merged** (develop `36d7ee8`):
+  - #51 the G2 batch plan;
+  - #53 the minimal env for the naming check;
+  - #54 g1-driver for the G2 protocol;
+  - #55 the second dump with serializers.json;
+  - #56 the entity table and serializers 14-18 in initBot;
+  - #57 the census waits for chunks and counts unloaded positions apart;
+  - #59 canonical import order and maxTickMs;
+  - #60 the driver census and chunk-wait knob.
+- **Second dump batch (serializers): PASS, within the 21:23 GO.**
+  - CPX42 21:23:50-21:27:46 UTC, about EUR 0.14 + IPv4. The project was empty at 21:27:56.
+  - Jar SHA-256 `438b3ce6...7d33` (run 41351598338) matches the manifest; 0 errors, 0 entryErrors.
+  - Serializer 14 is confirmed as AquaAcrobatics' pose; 15 Base, 16 Mowzie's Mobs, 17 Charset, 18 Requious, 256/257 DoggyTalents.
+- Hetzner spend for agent batches: about EUR 0.86 + IPv4-hours.
+- **G2 batch: GO given at 22:03 UTC** (below). G2 is not passed until its evidence PR is reviewed and merged.
+- Open: #58 (CX23 env-file name allowlist). REQUEST: the check fails open on an unreadable file, so it must fail closed.
 
 ## Current snapshot (21:25 UTC)
 
@@ -24,6 +43,9 @@ Updated: 2026-11-01 (about 21:25 UTC)
 - **Lint baseline** is now 255 (#44); CLAUDE.md updated.
 
 ## Requests for skills-rotn (route when it is spawned)
+
+- From PR #55's review: never key on CraftTweaker-generated recipe ids (e.g. `crafttweaker:rustic_chair_N`); they are rebound between dumps. Match recipes by output and ingredients.
+- From PR #56's review: rotn-data's entity table types mobs by `IMob`, so the Ice and Fire fire dragon shows as passive (other large modded threats may too). The lead **requested** (22:00 UTC, terminal message, not yet agreed or recorded by rotn-data) a documented `dangerous` override list with a source for each entry. Danger and avoid logic must not rely on `type` alone.
 
 - From PR #44's review: with `prefer: 'old'`, `grass`, `stone_slab`, `snow`, `melon` and `nether_brick` keep their 1.12 meaning. `src/agent/library/skills.js:706` (`empty_blocks`) uses `'grass'` for the plant, so it would treat grass blocks as empty. Review every 1.21 block or item name in skills, modes and prompts against `mcdata.resolveName`.
 - From PR #44's review: `getItemId('spruce_log')` returns the shared 1.12 `log` id, dropping the meta, so inventory counts by id lump all logs together. Use `resolveName(...).meta` for counts and crafting checks.
@@ -162,6 +184,19 @@ Updated: 2026-11-01 (about 21:25 UTC)
   - Afterwards the project must be empty; record the real times and cost.
   - Raw output stays out of git. Commit only the imported data and the manifest, in a PR.
   - Report `manifest.timing` per part and the error count.
+
+- **2026-11-01 21:23 UTC: GO for rotn-data's second dump batch** (serializers.json), given as an Orca terminal message.
+  - Same conditions as the first. The jar is from dumper-build push run 41351598338 (develop `7f0feef`).
+  - One CPX42, TTL 2 h, `timeout 2700`. Maximum about EUR 0.28 + IPv4.
+  - Result: PASS (see the 22:05 snapshot).
+- **2026-11-01 22:03 UTC: GO for harness-ops' first real G2 batch**, exactly as planned in `coord/STATUS-harness-ops.md` "G2 batch" (#51).
+  - A clean checkout of origin/develop at `36d7ee8` or later; `git.dirty` must be false.
+  - Runtime preconditions are checked just before creating the server: `agentNaming` wired, `msa-login FRCFLD --check` (stop and add a NEEDS-HUMAN item if it asks for a login; its output is never evidence), and the preflight passing on its own. No `--skip-sweeper-check`.
+  - One CPX42 in nbg1, TTL 2 h, `timeout 15m` per scenario. Hard stop at 56 min; worst case about EUR 0.42 + IPv4. No concurrent batch.
+  - Console commands only on the test server, only those the plan lists: `time set day` and `gamerule doDaylightCycle false`, no peaceful.
+  - Afterwards: the project empty; real times and cost recorded; raw output in `captures/raw/`.
+  - The FRCFLD token cache is used only from this PC. The driver gets only the runner's allowlisted env: no cloud credentials and no `TEST_SERVER_CTL`.
+  - The evidence PR redacts every IP (including the `FRCFLD[/IP:port] logged in` line), every UUID and local paths, with a CI check. Each scenario's pass, gateValid and notGate reasons are reported honestly. A failure needs a new written GO.
 
 ## Notes for dev agents
 
