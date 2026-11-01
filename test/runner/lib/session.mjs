@@ -1,0 +1,62 @@
+// The start of a scenario that needs a logged-in bot: write a marker to the server log, confirm it,
+// start the driver and wait for the join. G2 scenarios use it; G1 keeps its own copy of the same
+// steps (it was gate evidence as it is).
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { linesAfter, loginUuid, uuidVersion, playerEvents, classifyKick } from './server-log.mjs';
+import { agentNaming } from './g2.mjs';
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+const MS = 1000;
+const MARKER_TRIES = 3;
+
+/**
+ * startSession(ctx, {name, env, naming}) -> {ok, why, sinceMarker, events, joinedAt, uuidVersion, naming}
+ * naming: a precomputed agentNaming() result (the items scenario needs it before the login), else computed here.
+ * Throws if the marker never lands (before the driver is started). ok=false with a reason when the
+ * bot did not join with an online-mode (version-4) UUID; the caller records that as its login check.
+ */
+export async function startSession(ctx, { name, env = {}, naming = null }) {
+    const { server, bot, clock, params: p, runId } = ctx;
+    const marker = `scenario-${runId}-begin`;
+    const markerSeen = (lines) => lines.some((l) => l.includes(marker));
+    let markerOk = false;
+    for (let i = 0; i < MARKER_TRIES && !markerOk; i++) {
+        if (i) await clock.sleep(p.consoleWaitS * MS);
+        markerOk = markerSeen(server.console(`say ${marker}`, 1)) || markerSeen(server.log(p.logTail));
+    }
+    if (!markerOk) throw new Error(`the scenario marker never appeared in the server log after ${MARKER_TRIES} 'say' attempts`);
+    const sinceMarker = () => {
+        const lines = linesAfter(server.log(p.logTail), marker);
+        if (lines === null) throw new Error(`scenario marker not in the last ${p.logTail} log lines; raise logTail`);
+        return lines;
+    };
+    const events = () => playerEvents(sinceMarker(), name);
+    const gone = (e) => ['lost', 'left', 'kicked'].includes(e.type);
+    // The world the evidence is about (PR #36 review finding 5). 1.12 prints "Seed: N" (later versions "Seed: [N]").
+    const seedLine = server.console('seed', p.consoleWaitS).map((l) => /Seed: \[?(-?\d+)\]?\s*$/.exec(l)).find(Boolean);
+    ctx.note('worldSeed', seedLine ? seedLine[1] : null);
+    if (!seedLine) ctx.notGate('no world seed from the console "seed" command: the seed is part of the G2 evidence');
+    // G2 is about the agent's own naming API (mcdata.js toNew/toOld): no run counts until a child
+    // process finds it and the full table round-trips through it.
+    const agent = naming ?? agentNaming(p.dataRoot || REPO);
+    ctx.note('naming', { wired: agent.wired, why: agent.why, entries: agent.entries, failureCount: agent.failureCount });
+    if (!agent.wired) ctx.notGate(`mcdata.js not wired to rotn-data: ${agent.why}`);
+
+    bot.start({ ROTN_SCENARIO_BOT: name, ROTN_SCENARIO_RUN: runId, ...env });
+    const first = await ctx.waitFor(() => events().find((e) => e.type === 'joined' || gone(e))
+        || (!bot.alive() && { type: 'exited' }), p.loginTimeoutMs);
+    const joinedAt = clock.now();
+    const uuid = loginUuid(sinceMarker(), name);
+    ctx.note('kicks', events().filter(gone).map((e) => ({ ...e, class: classifyKick(e.reason) })));
+    ctx.note('uuidVersion', uuidVersion(uuid));
+    const base = { sinceMarker, events, gone, joinedAt, uuidVersion: uuidVersion(uuid), naming: agent };
+    if (first?.type !== 'joined') {
+        const why = first?.type === 'exited' ? `driver exited with code ${bot.exitCode()} before joining`
+            : first ? `${first.type}: ${first.reason ?? ''} (${classifyKick(first.reason)})` : `no join within ${p.loginTimeoutMs / MS}s`;
+        return { ...base, ok: false, why };
+    }
+    const online = uuidVersion(uuid) === 4;
+    return { ...base, ok: online, why: `${name} joined; UUID ${uuid ?? 'not logged'} (version ${uuidVersion(uuid) ?? '?'}${online ? ', Mojang account' : ', NOT an online-mode login'})` };
+}

@@ -43,6 +43,7 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
     const p = { ...scenario.defaults, ...params };
     const results = new Map();
     const notes = {};
+    const notGate = [];
     const ctx = {
         server, bot, clock, params: p, runId, log,
         check(name, pass, detail) {
@@ -51,6 +52,8 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
             log(`${pass ? 'PASS' : 'FAIL'} ${name}: ${detail ?? ''}`);
         },
         note(key, value) { notes[key] = value; },
+        // The run cannot count for the gate (e.g. its gate data is missing), whatever its checks say.
+        notGate(reason) { notGate.push(String(reason)); log(`not a gate run: ${reason}`); },
         waitFor: (fn, timeoutMs, pollMs = p.pollMs) => waitFor(clock, fn, timeoutMs, pollMs),
     };
     const started = clock.now();
@@ -69,7 +72,7 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
     }));
     const passed = checks.filter((c) => c.pass).length;
     const checksPassed = !error && passed === checks.length;
-    const weakened = weakenedParams(scenario, p);
+    const weakened = [...weakenedParams(scenario, p), ...notGate];
     const gateValid = weakened.length === 0;
     if (!gateValid) log(`SMOKE run, not a ${scenario.gate} pass: ${weakened.join(', ')}`);
     return {

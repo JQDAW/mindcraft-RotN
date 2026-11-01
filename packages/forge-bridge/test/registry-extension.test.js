@@ -257,3 +257,67 @@ test('aliased vanilla entries also resolve under their full minecraft: 1.12 name
     assert.equal(registry.blocksByName['minecraft:silver_shulker_box'], registry.blocks[227]);
     assert.equal(registry.biomesByName['minecraft:beaches'], registry.biomes[16]);
 });
+
+// rotn-data request 2: properties applied after the extension (harvestTools need item ids).
+test('applyProperties updates an extended registry in every map, aliases included', async () => {
+    const { applyProperties } = await import('../src/registry-extension.js');
+    const registry = freshRegistry();
+    const snap = realSnapshot();
+    extendRegistry(registry, snap);
+    const rockName = [...snap.get('minecraft:blocks').byName.keys()].find((n) => n.startsWith('pyrotech:'));
+    const rockId = snap.idOf('minecraft:blocks', rockName);
+    const pickaxe = registry.itemsByName.stone_pickaxe.id;
+    const report = applyProperties(registry, {
+        blocks: {
+            [rockName]: { hardness: 0.6, harvestTools: { [pickaxe]: true }, shapes: [[0, 0, 0, 1, 0.5, 1]] },
+            'minecraft:silver_shulker_box': { hardness: 9 }, // an aliased vanilla entry, by its 1.12 name
+            'nope:missing': { hardness: 1 },
+        },
+        items: { 'minecraft:stick': { stackSize: 16 } },
+    });
+    assert.deepEqual(report.applied, { blocks: 2, items: 1 });
+    assert.deepEqual(report.missing, ['blocks:nope:missing']);
+    const rock = registry.blocks[rockId];
+    assert.equal(rock.hardness, 0.6);
+    assert.deepEqual(rock.harvestTools, { [pickaxe]: true });
+    assert.equal(rock.forge.propertiesKnown, true);
+    assert.equal(registry.blocksByName[rockName], rock);
+    assert.equal(registry.blocksByStateId[(rockId << 4) | 7], rock);
+    assert.ok(registry.blocksArray.includes(rock));
+    const box = registry.blocks[227];
+    assert.equal(box.hardness, 9);
+    for (const n of ['silver_shulker_box', 'minecraft:silver_shulker_box', 'light_gray_shulker_box']) assert.equal(registry.blocksByName[n], box, n);
+    assert.equal(registry.items[280].stackSize, 16);
+    assert.equal(require('minecraft-data')('1.12.2').items[280].stackSize, 64, 'the shared minecraft-data stays vanilla');
+    const Block = require('prismarine-block')(registry);
+    assert.deepEqual(Block.fromStateId(rockId << 4, 1).shapes, [[0, 0, 0, 1, 0.5, 1]], 'a Block class made later keeps the new shape');
+});
+
+// PR #46 review follow-ups.
+test('applyProperties refuses a registry that was never extended (the shared minecraft-data maps stay untouched)', async () => {
+    const { applyProperties } = await import('../src/registry-extension.js');
+    const plain = freshRegistry();
+    assert.throws(() => applyProperties(plain, { blocks: { 'minecraft:stone': { hardness: 99 } } }), /was not extended/);
+    assert.equal(require('minecraft-data')('1.12.2').blocksByName.stone.hardness, 1.5);
+    assert.equal(freshRegistry().blocksByName.stone.hardness, 1.5);
+});
+
+test('applyProperties ignores protected fields and merges properties given under two names of one entry', async () => {
+    const { applyProperties } = await import('../src/registry-extension.js');
+    const registry = freshRegistry();
+    extendRegistry(registry, realSnapshot());
+    const before = registry.blocks[227];
+    const report = applyProperties(registry, {
+        blocks: {
+            'minecraft:silver_shulker_box': { hardness: 4, id: 9999, name: 'evil', registryName: 'x:y', forge: { modded: true }, minStateId: 0, maxStateId: 99999, defaultState: 7 },
+            light_gray_shulker_box: { resistance: 12 }, // minecraft-data's name for the same entry
+        },
+    });
+    assert.deepEqual(report.applied, { blocks: 1 }, 'one entry, both names');
+    const box = registry.blocks[227];
+    assert.equal(box.hardness, 4);
+    assert.equal(box.resistance, 12);
+    for (const k of ['id', 'name', 'registryName', 'forge', 'minStateId', 'maxStateId', 'defaultState']) assert.deepEqual(box[k], before[k], `${k} is protected`);
+    assert.equal(registry.blocksByStateId[(227 << 4) | 3], box);
+    assert.equal(registry.blocksByStateId[0].name, 'air', 'state 0 untouched');
+});

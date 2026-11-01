@@ -42,7 +42,7 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
 
     const { setSettings } = await import('../../../src/agent/settings.js');
     setSettings({ host: '127.0.0.1', port: server.port, auth: 'offline', minecraft_version: '1.12.2' });
-    const { initBot } = await import('../../../src/utils/mcdata.js');
+    const { initBot, getBlockId, getBlockName, getItemId, getItemName } = await import('../../../src/utils/mcdata.js');
 
     // One retry of the whole login: under heavy load a loopback connect can fail
     // at once with ETIMEDOUT, which says nothing about the protocol path under test.
@@ -87,6 +87,12 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.equal(moddedBlock.name, 'pyrotech:rock');
     assert.equal(moddedBlock.boundingBox, 'block');
     assert.deepEqual(bot.forge.registryReport.added, { blocks: 2, items: 2, entities: 1, biomes: 1 });
+    // rotn-data request 4: Mindcraft's name helpers read bot.registry, so they know modded names.
+    assert.equal(getBlockId('pyrotech:rock'), 4001);
+    assert.equal(getBlockName(4001), 'pyrotech:rock');
+    assert.equal(getItemId('pyrotech:crude_axe'), 5003);
+    assert.equal(getItemName(5003), 'pyrotech:crude_axe');
+    assert.equal(getBlockId('stone'), 1, 'vanilla names unchanged');
     assert.equal(bot.inventory.slots[36].name, 'stone');
     assert.equal(bot.inventory.slots[36].count, 64);
     assert.equal(bot.inventory.slots[37].name, 'stick');

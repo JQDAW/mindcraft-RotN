@@ -15,7 +15,9 @@
 // Exit codes (ADR 0003 decision 5): 0 clean stop (SIGTERM), 1 transient disconnect, 3 fatal.
 import process from 'node:process';
 import mineflayer from 'mineflayer';
-import { attachScenario, event } from './scenario-protocol.mjs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { attachScenario, attachG2, loadAgentNames, stockNames, event } from './scenario-protocol.mjs';
 import { classifyKick, FATAL_KICKS } from '../lib/server-log.mjs';
 
 const host = process.env.TEST_SERVER_HOST;
@@ -44,6 +46,13 @@ const bot = mineflayer.createBot({
     hideErrors: false,
 });
 attachScenario(bot);
+// G2 through the agent's own naming path (src/utils/mcdata.js, as agentNames describes); if mcdata.js
+// cannot be imported, stock names, said in the driver log (and the G2 items checks fail).
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+loadAgentNames(repoRoot).then((m) => {
+    event('g2_adapter', { source: m?.source ?? 'stockNames (src/utils/mcdata.js could not be imported)', translation: m?.translation ?? false });
+    attachG2(bot, { names: m?.names ?? stockNames });
+}, (err) => event('g2_adapter_error', { message: String(err?.message ?? err) }));
 
 let stopping = false;
 let fatal = null;

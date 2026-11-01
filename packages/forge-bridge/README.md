@@ -91,6 +91,10 @@ After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snaps
   - A block is a solid full cube (`boundingBox: 'block'`, so the bot never falls through a modded floor), diggable, with a conservative hardness of 1.5 (stone's), so `digTime` is finite and above 0, and no drops.
   - An item stacks to 64. An entity is a `mob`. A biome is a neutral overworld biome.
 - **Properties.** `extendRegistry(registry, snapshot, { properties: { blocks: { 'pyrotech:rock': {...} } } })` fills in or overrides fields, keyed by full registry name; vanilla names use `minecraft:stone`. rotn-data's dump (ADR 0004) is meant to feed this. Properties cannot rename an entry.
+- **Properties after the extension** (rotn-data's request 2). `applyProperties(registry, properties)` applies rotn-data's properties to an already-extended `bot.registry`, keyed by full registry name, so `harvestTools` can use its item ids. It builds one old-to-new map per kind and swaps in a single pass over every map that can hold an entry (id map, array, all `*ByName` keys including aliases, `blocksByStateId`, `entitiesByForgeId`, and the collision-shape table when shapes change). It returns `{ applied, missing }`.
+  - Properties never change `id`, `name`, `registryName`, `forge`, `minStateId`, `maxStateId` or `defaultState`; those keys are stripped. Properties under two names of one entry merge.
+  - It **refuses a registry `extendRegistry` never touched**, whose maps would still be minecraft-data's process-wide objects.
+- **Mindcraft's name helpers** (rotn-data's request 4). `initBot` sets `mcdata.js`'s `mcdata` to `bot.registry` at login, and again after the extension. `getBlockId`, `getItemName` and the rest therefore know the server's modded names; vanilla names are unchanged.
 - **Isolation.** Dummied entries are skipped. Only `bot.registry`'s own maps and its `blockCollisionShapes` are replaced; prismarine-registry copies minecraft-data only shallowly, so the maps are copied first. The process-wide `minecraft-data` object stays vanilla.
 - **Shapes.** Each modded block is registered in the copied collision-shape table, so a Block class made later keeps its shapes (prismarine-block resets shapes by name).
 - **Not covered:** FML EntitySpawn uses the mod-local entity table (`modId` + `modEntityTypeId`), not `minecraft:entities`; that is brief item 6.
@@ -104,11 +108,34 @@ Forge spawns most mod entities with an FML message (`FML` channel, disc 2), not 
 - **Name.** The message has the mod id and a *mod-local* type id (`EntityRegistry.registerModEntity`'s id), which RegistryData does not map.
   - With rotn-data's table (`{ [modId]: { [modEntityTypeId]: 'modid:name' } }`, passed as `modEntityTable`), the entity gets its registry name, and `displayName`, size and category come from `bot.registry.entitiesByName` (PR #25).
   - **TODO(rotn-data):** until that table exists, the name is the placeholder `<modId>:entity_<n>`, with `entity.forge.nameKnown: false`.
-  - A table value can also be an object, `{ name, type?, category?, width?, height? }`.
+  - A table value can also be an object, `{ name, type?, category?, width?, height? }`. **The table must supply `type` explicitly** for an entity to be a `mob` (or anything else): `category` alone only sets `entity.kind`.
 - **Type.** It is never `mob` by default, because Mindcraft's `isHostile` treats every `mob` as hostile, and FML also spawns projectiles, vehicles and decorations. It is the table's `type` when given, else `projectile` for a thrown entity (`throwerId != 0`), else `other`. Hostility belongs to rotn-data's table and skills-rotn.
 - **Size.** `width` and `height` come from the table, or from `bot.registry` when rotn-data's properties are in. Without them they are prismarine-entity's defaults, **0 × 0**, which pvp aim and collision checks should treat as unknown.
 - **Debug info.** `entity.forge` has `{ modId, modEntityTypeId, nameKnown, throwerId, metadataError }`.
 - **Safety.** A message that cannot be applied is logged and leaves no half-made entity behind.
+
+## Mod entity-metadata serializers
+
+Vanilla 1.12 defines entity-metadata serializer ids 0-13. A protodef switch cannot skip an unknown type, so a packet using one is dropped as a PartialReadError (G1: a player's AquaAcrobatics pose, key 17). `reid.js` adds the mod ones to `entityMetadataItem`, for nmp's protocol and for the FML EntitySpawn reader alike:
+
+- **Formats.** `METADATA_SERIALIZER_TYPES` holds each mod serializer's wire format, from `javap` on its `write()` in the pinned pack:
+
+  | Serializer | Wire format |
+  | --- | --- |
+  | `aquaacrobatics:pose` | VarInt enum |
+  | `base:resource_location` | two strings |
+  | `charset:quaternion` | four floats |
+  | `mowziesmobs:optional_trade` | slot; then, unless empty, a slot and an int |
+  | `requious:spark_effect` | int |
+  | `doggytalents:talent_level_list` | an int count of (string, byte) |
+  | `doggytalents:optional_text_component` | an optional string |
+
+- **Ids.** Mods that call vanilla `DataSerializers.registerSerializer` get ids 14, 15, ... in call order. Forge-registry serializers start at 256 and are synced by name.
+- **Defaults** (`rotnMetadataSerializers(modList)`):
+  - 14 = `aquaacrobatics:pose`, **inferred by fit, to be confirmed with rotn-data's dumper**. G1's player packet has a one-byte value under type 14 that ends exactly at the next key; only the VarInt among the five candidates fits. Until the dumper confirms it, the bridge logs (and captures) the first value it decodes with id 14 (`INFERRED_METADATA_SERIALIZERS`). Passing id 14 explicitly in `metadataSerializers` ends that.
+  - 256 and 257 = the DoggyTalents pair (Batch A's synced registry).
+  - Ids 15-18 (base, Charset, Mowzie's Mobs, Requious, order unknown) come from rotn-data's dumper as the bridge option `metadataSerializers: { id: name }`.
+- **Check.** The protocol is compiled before RegistryData arrives. So after it, the bridge compares the >= 256 ids with the synced `minecraft:dataserializers` and logs (and captures) any mismatch.
 
 ## Other protocol changes
 

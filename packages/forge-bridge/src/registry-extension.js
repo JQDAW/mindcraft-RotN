@@ -51,9 +51,14 @@ const DEFAULTS = {
     biomes: (id, name) => ({ id, name, displayName: displayNameOf(name), category: 'none', temperature: 0.5, precipitation: 'rain', rainfall: 0.5, depth: 0, dimension: 'overworld', color: 0 }),
 };
 
+// Fields that properties must never change: identity and the extension's own bookkeeping.
+const PROTECTED_FIELDS = ['id', 'name', 'registryName', 'forge', 'minStateId', 'maxStateId', 'defaultState'];
+
 function applyProps(entry, props, id) {
     if (!props) return entry;
-    const e = { ...entry, ...props, id, name: entry.name };
+    const clean = { ...props };
+    for (const k of PROTECTED_FIELDS) delete clean[k];
+    const e = { ...entry, ...clean, id, name: entry.name };
     if (e.forge) e.forge = { ...e.forge, propertiesKnown: true };
     return e;
 }
@@ -180,6 +185,53 @@ export function extendRegistry(registry, snapshot, { properties = {}, log = () =
         report.added[kind] = added;
         report.rebound[kind] = rebound;
         report.total[kind] = array.length;
+    }
+    return report;
+}
+
+/**
+ * Applies rotn-data's properties to a registry that extendRegistry already
+ * extended (rotn-data's request 2: harvestTools need bot.registry's item ids,
+ * so properties come after the extension). Keyed by full registry name
+ * ("pyrotech:rock", "minecraft:stone"); an unprefixed vanilla name works too.
+ * Every map that points at a changed entry is updated: the id map, the array,
+ * every *ByName key (aliases included), blocksByStateId, entitiesByForgeId,
+ * and the collision-shape table when shapes change. Names and ids never change.
+ * @returns {{ applied: object, missing: string[] }}
+ */
+export function applyProperties(registry, properties = {}) {
+    // On a registry extendRegistry never touched, prismarine-registry's maps are still
+    // minecraft-data's process-wide objects; swapping entries there would change every
+    // registry in the process. extendRegistry always sets entitiesByForgeId.
+    if (!registry?.entitiesByForgeId) {
+        throw new Error('applyProperties: this registry was not extended (call extendRegistry first); refusing to change the shared minecraft-data maps');
+    }
+    const report = { applied: {}, missing: [] };
+    for (const kind of Object.keys(SECTION)) {
+        const props = properties[kind];
+        if (!props) continue;
+        const byName = registry[`${kind}ByName`] ?? {};
+        // 1. One old -> new map for this kind.
+        const swaps = new Map();
+        const reshaped = [];
+        for (const [regName, p] of Object.entries(props)) {
+            const old = byName[regName] ?? (regName.startsWith('minecraft:') ? byName[regName.slice('minecraft:'.length)] : undefined);
+            if (!old) { report.missing.push(`${kind}:${regName}`); continue; }
+            const base = swaps.get(old) ?? old; // two names for one entry merge their properties
+            const next = applyProps(base, p, old.id);
+            swaps.set(old, next);
+            if (kind === 'blocks' && p.shapes) reshaped.push(old);
+        }
+        // 2. One pass over every map that can hold an entry.
+        const swapMap = (map) => { for (const k of Object.keys(map ?? {})) { const n = swaps.get(map[k]); if (n) map[k] = n; } };
+        swapMap(registry[kind]);
+        swapMap(byName);
+        const arr = registry[`${kind}Array`];
+        if (arr) for (let i = 0; i < arr.length; i++) { const n = swaps.get(arr[i]); if (n) arr[i] = n; }
+        if (kind === 'blocks') swapMap(registry.blocksByStateId);
+        if (kind === 'entities') swapMap(registry.entitiesByForgeId);
+        if (reshaped.length) registerShapes(registry, reshaped.map((o) => swaps.get(o)));
+        report.applied[kind] = swaps.size;
     }
     return report;
 }
