@@ -5,6 +5,7 @@ import { Buffer } from 'node:buffer';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
 import { attachForgeBridge } from '../src/bridge.js';
 import { CaptureWriter, readCapture } from '../src/capture.js';
 import { encodeMultipart, PART_SIZE } from '../src/channels.js';
@@ -143,4 +144,15 @@ test('outgoing packets are capped per name too', () => {
     for (let i = 0; i < 60; i++) client.write('window_click', { windowId: 0, slot: i });
     capture.close();
     assert.equal(readCapture(file).filter(l => l.kind === 'packet' && l.name === 'window_click').length, 50);
+});
+
+test('maxFileBytes counts UTF-8 bytes, not characters', () => {
+    const file = tmpFile('utf8.jsonl');
+    // Each record carries 300 three-byte characters: ~900 bytes, ~300 characters.
+    const capture = new CaptureWriter({ file, maxFileBytes: 2500 });
+    let written = 0;
+    for (let i = 0; i < 10; i++) if (capture.record({ kind: 'event', name: 'x', text: '€'.repeat(300) })) written++;
+    capture.close();
+    assert.equal(written, 2, 'a character count would have let 7 through');
+    assert.ok(fs.statSync(file).size < 2500 + 1000, 'only the closing summary goes past the cap');
 });

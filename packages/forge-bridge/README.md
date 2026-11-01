@@ -8,6 +8,14 @@ A Forge 1.12.2 (FML protocol 2) client plugin for node-minecraft-protocol (nmp),
 
 ## How Mindcraft uses it
 
+With `auth: "microsoft"`, `initBot` refuses to start (it throws before any bot or socket exists) in three cases (`src/auth-guard.js`):
+
+- `MINDCRAFT_PROFILES_FOLDER` is unset. nmp would otherwise use its shared default cache.
+- The folder is inside a git work tree, as given or at its real path. This check is read-only.
+- `DEBUG` enables the `prismarine-auth` namespace (`prismarine-auth`, `*`, `prismarine*` and so on, by the `debug` package's own rules), or the loaded `debug` instance already has it on. That output prints access and refresh tokens, and `main.js` cannot clear `DEBUG` before its imports load. Unset `DEBUG` or narrow it, for example `DEBUG=minecraft-protocol`.
+
+It never shows a device code. The default `onMsaCode` (`quietMsaCodeHandler`) logs only `device-code login needed, see coord/NEEDS-HUMAN.md`, never the code, message or URL. prismarine-auth then **keeps polling until the code expires (about 15 min) and the login fails with an error**. The fix is the human's login (`tools/msa-login.mjs`). A caller can pass its own handler instead (`initBot(name, { onMsaCode })`): g1-driver exits 3 at once.
+
 `initBot` in `src/utils/mcdata.js` passes `createForgeConnect(...)` as nmp's `connect` option. nmp calls it after authentication. It then:
 
 1. Pings the server. If the status response has `modinfo.type == "FML"`, it uses that mod list. If the ping fails, it falls back to `FORGE_MODLIST_FILE`.
@@ -96,7 +104,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 ## Tools
 
 - `tools/msa-login.mjs <Bot>`: the human's one-time device-code login. It prints only the Minecraft profile name, never a token.
-  - `MINDCRAFT_PROFILES_FOLDER` must be outside every git work tree: it walks up looking for `.git` (a folder, or a file in a worktree). It creates the folder with mode 0700, and chmods it on POSIX (`src/secret-folder.js`).
+  - `MINDCRAFT_PROFILES_FOLDER` must be outside every git work tree: it walks up looking for `.git` (a folder, or a file in a worktree), from both the given path and its real path, so a junction or symlink into a repo is refused too. It creates the folder with mode 0700, and chmods it on POSIX (`src/secret-folder.js`).
   - It clears `DEBUG` before prismarine-auth loads, so the `debug` package cannot log HTTP details.
 - `tools/g1-spike.mjs`: the G1 spike. It uses Mindcraft's real `initBot` against a disposable test server, normally inside `deploy/test-server.sh run ... --`. It logs in, stays `--minutes`, chats both ways (the `say` check uses the server console), walks, and writes `capture.jsonl`, `registries.json` and `summary.json`.
   - `--mode handshake` is Run A. It is for a server started with `--capture`, which closes the connection right after the handshake.
@@ -106,7 +114,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - It needs `MINDCRAFT_PROFILES_FOLDER` and never starts a device-code login: `initBot(name, { onMsaCode })` makes a stale cache exit 3.
   - Kicks: exit 3 when the runner's `FATAL_KICKS` or forge-bridge's `classifyKick` says fatal, otherwise 1. SIGTERM exits 0.
   - Switches: `ROTN_DRIVER_AUTH` (`offline` for loopback tests only), `ROTN_DRIVER_FORGE_BRIDGE` (default `on`), `ROTN_DRIVER_CAPTURE` (default `1`, `captures/raw/`), `ROTN_DRIVER_MODLIST_FILE`.
-  - Its `DRIVER {json}` lines add the handshake result, registry sizes, `walkMethod` and the block under the bot with its Forge registry name.
+  - Its `DRIVER {json}` lines add the handshake result, registry sizes, `walkMethod` and the block under the bot with its Forge registry name. `walkMethod` is the scenario's: its `method` field if `walk()` reports one, otherwise `scenario-protocol walk()`.
 
 ## Tests
 
@@ -118,6 +126,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - FML, FORGE, `jeid` and FML|MP decoders.
 - REID `window_items`, `set_slot`, `window_click`, `entity_effect` and `remove_entity_effect`, through nmp's real compiled 1.12.2 protocol.
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
+- `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
 - `g1-driver.test.js`: the driver as a subprocess against the fake Forge server, with the runner's allowlisted environment: hello exactly once, echo, a 3-block walk, a clean stop, a redacted capture, and exit 3 without a token-cache folder or host.
 - `e2e-initbot.test.js`: Mindcraft's real `initBot` against an in-process fake Forge server on 127.0.0.1. The run covers the status ping, tagHost, the handshake, Join Game, a REID chunk, inventory and effects, chat both ways, walking, and the capture.
