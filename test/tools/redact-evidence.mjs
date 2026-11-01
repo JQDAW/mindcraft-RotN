@@ -4,9 +4,11 @@
 //   node test/tools/redact-evidence.mjs --check DIR...         list leftovers; exit 1 if any
 //
 // Rules (G2 batch plan in coord/STATUS-harness-ops.md; the lead's notes and the PR #66 review):
-// - IPv6 first: a run of hex digits, colons and dots with at least two colons is an address if
-//   net.isIPv6 says so, also with a trailing ":port" (Java 8 prints "/2001:db8:0:0:0:0:0:1:51234" in the
-//   1.12 login line) and in the IPv4-mapped form (::ffff:203.0.113.7). The whole address becomes <ip>.
+// - IPv6 first: inside every run of hex digits, colons and dots, the longest substring net.isIPv6
+//   accepts (two or more groups) is an address, wherever it starts: also glued to a word or key
+//   ("addr:2001:db8::1", "_2001:...", "v2001:..."), with a trailing ":port" (Java 8 prints
+//   "/2001:db8:0:0:0:0:0:1:51234" in the 1.12 login line) or ":" ("2001:db8::1: timeout"), and in the
+//   IPv4-mapped form (::ffff:203.0.113.7). The whole address becomes <ip>.
 // - IPv4 is REDACTED where a log shows an address: after "/", inside "[ ]", as host:port, or as a whole
 //   JSON string.
 // - The CHECK is stricter than the redaction and fails closed. It flags EVERY dotted quad with octets
@@ -14,7 +16,10 @@
 //     {1.2.3.4}                 a brace pair around the quad (FML's mod table)
 //     -1.2.3.4.jar, -1.2.3.4-build.0673.jar   a jar file name
 //     modid@1.2.3.4             on FML's "Client attempting to join with N mods : ..." line only, inside
-//                               an entry that is exactly "modid@version" (also 1.12.2-1.2.3.4, 1.2.3.4-mixins8)
+//                               an entry that is exactly "modid@version" (also 1.12.2-1.2.3.4, 1.2.3.4-mixins8).
+//                               NOTE: so EVERY name@<IPv4> entry on that line is exempt, whatever the name.
+//                               Accepted (lead, PR #66 re-review): the line is FML's own list of the
+//                               client's mods and versions.
 //   It also flags any IPv6 address, any UUID, this PC's user paths, and partial leftovers next to
 //   <ip> (e.g. "<ip>.0.113.7"). A flagged address is fixed by a manual redaction, never a wider allowlist.
 // - UUIDs become <uuid-vN> (N = the version nibble; G1's <uuid-v4> for Mojang player UUIDs). The bot's
@@ -38,8 +43,9 @@ const ADDRESS_CONTEXTS = [
     new RegExp(String.raw`(?<=")${QUAD}(?=")`, 'g'), // "host": "1.2.3.4"
 ];
 
-// IPv6 candidates: maximal runs of hex digits, colons and dots with at least two colons.
-const V6_RUN = /(?<![\w:.])[0-9A-Fa-f.]*:[0-9A-Fa-f.:]*:[0-9A-Fa-f.:]*/g;
+// IPv6 candidates: maximal runs of hex digits, colons and dots (searched inside, see v6Spans). No
+// lookbehind: an address glued to a word or a key ("addr:2001:db8::1", "_2001...", "v2001...") is found.
+const V6_RUN = /[0-9A-Fa-f.:]+/g;
 const UUID = /\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-([0-9A-Fa-f])[0-9A-Fa-f]{3}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b/g;
 // This PC's user folder in any spelling (C:\Users\x, C:/Users/x, /c/Users/x, JSON-escaped).
 const LOCAL_PATH = /(?:[A-Za-z]:|\/[a-z])(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)[^\\/"'\s]+/g;
@@ -48,17 +54,28 @@ const PARTIAL = /<ip>\.\d|\d\.<ip>|[0-9A-Fa-f]{1,4}:<ip>|<ip>:[0-9A-Fa-f]{1,4}:/
 
 const FML_JOIN = /Client attempting to join with \d+ mods : /;
 
+const HEX = /[0-9A-Fa-f]/;
+const isAddress6 = (s) => net.isIPv6(s) && s.split(':').filter(Boolean).length >= 2;   // not "::", "::1", "a::b"-short
+
 /**
- * The IPv6 address in a candidate run, as [start, end] offsets within it, or null. A trailing ":port"
- * (1-5 digits) is not part of the address. "::" alone is never an address (Java's method references).
+ * The IPv6 addresses in a candidate run, as [start, end] offsets within it. From the earliest start, the
+ * longest substring that net.isIPv6 accepts and that does not end inside a hex group (so a ":port", a
+ * trailing ":" or "." stays outside: "/2001:db8:0:0:0:0:0:1:51234", "2001:db8::1: timeout"). At least two
+ * non-empty groups, so "::", "::1" and method references ("Foo::bar") are never addresses.
  */
-function v6Span(run) {
-    const r = run.replace(/\.+$/, '');   // a sentence's full stop
-    if (r === '::') return null;
-    if (net.isIPv6(r)) return [0, r.length];
-    const m = /^(.*):(\d{1,5})$/.exec(r);
-    if (m && m[1] !== '::' && net.isIPv6(m[1])) return [0, m[1].length];
-    return null;
+function v6Spans(run) {
+    const spans = [];
+    if ((run.match(/:/g) ?? []).length < 2) return spans;
+    for (let i = 0; i < run.length;) {
+        let found = 0;
+        for (let j = run.length; j > i + 2; j--) {
+            if (HEX.test(run[j] ?? '') || !isAddress6(run.slice(i, j))) continue;
+            found = j;
+            break;
+        }
+        if (found) { spans.push([i, found]); i = found; } else i++;
+    }
+    return spans;
 }
 
 function lineAround(text, index) {
@@ -89,8 +106,9 @@ function isVersionContext(text, index, match) {
 
 function redactV6(text) {
     return text.replace(V6_RUN, (run) => {
-        const span = v6Span(run);
-        return span ? `${run.slice(0, span[0])}<ip>${run.slice(span[1])}` : run;
+        let out = run;
+        for (const [a, b] of v6Spans(run).reverse()) out = `${out.slice(0, a)}<ip>${out.slice(b)}`;
+        return out;
     });
 }
 
@@ -113,7 +131,7 @@ export function redact(text, { bot } = {}) {
 export function findLeaks(text) {
     const leaks = [];
     const lineOf = (i) => text.slice(0, i).split('\n').length;
-    for (const m of text.matchAll(V6_RUN)) if (v6Span(m[0])) leaks.push({ kind: 'ipv6', line: lineOf(m.index) });
+    for (const m of text.matchAll(V6_RUN)) for (const [a] of v6Spans(m[0])) leaks.push({ kind: 'ipv6', line: lineOf(m.index + a) });
     for (const m of text.matchAll(QUAD_ANY)) {
         if (!isVersionContext(text, m.index, m[0])) leaks.push({ kind: 'ipv4', line: lineOf(m.index) });
     }

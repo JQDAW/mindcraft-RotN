@@ -40,6 +40,19 @@ describe('IPv6 (PR #66 review findings 1 and 3)', () => {
         both('peer 2001:0db8:0000:0000:0000:ff00:0042:8329.', 'peer <ip>.', 'ipv6');
     });
 
+    test('glued to a word or key, or followed by a colon (PR #66 re-review)', () => {
+        both('addr:2001:db8::1 up', 'addr:<ip> up', 'ipv6');
+        both('host:2001:db8:0:0:0:0:0:1', 'host:<ip>', 'ipv6');
+        both('peer_2001:db8::1', 'peer_<ip>', 'ipv6');
+        both('v2001:db8::1', 'v<ip>', 'ipv6');
+        both('cafe2001:db8::1', 'cafe<ip>', 'ipv6');
+        both('from 2001:db8::1: timeout', 'from <ip>: timeout', 'ipv6');
+        both('from 2001:db8:0:0:0:0:0:1:51234: reset', 'from <ip>:51234: reset', 'ipv6');
+        both('a 2001:db8::1 and b 2001:db8::2', 'a <ip> and b <ip>', 'ipv6');
+        assert.deepEqual(kinds('x 2001:db8::1 y 2001:db8::2'), ['ipv6', 'ipv6'], 'each address counts');
+        both('x 2001:db8:0:0:0:0:0:1.2001:db8::2 y', 'x <ip>.<ip> y', 'ipv6');   // two addresses in one run
+    });
+
     test('IPv4-mapped IPv6 goes whole: no ".0.113.7" left', () => {
         both('from ::ffff:203.0.113.7 now', 'from <ip> now', 'ipv6');
         both('FRCFLD[/::ffff:203.0.113.7:51234] logged in', 'FRCFLD[/<ip>:51234] logged in', 'ipv6');
@@ -54,7 +67,8 @@ describe('IPv6 (PR #66 review findings 1 and 3)', () => {
     });
 
     test('clock times, "::" and hex words are not IPv6', () => {
-        const t = '[22:10:20] [Server thread/INFO]: at 22:10:20.123 Foo::bar ::  cafe:babe:1 minecraft:stone';
+        const t = '[22:10:20] [Server thread/INFO]: at 22:10:20.123 Foo::bar ::  cafe:babe:1 minecraft:stone ::1 deadbeef::'
+            + ' {"t":"2026-11-01T22:13:16.608Z","pos":[-45.5,80,-64.5]}';
         assert.deepEqual(findLeaks(t), []);
         assert.equal(redact(t), t);
     });
