@@ -1,0 +1,15 @@
+[
+  {
+    "modid": "rotndump",
+    "name": "RotN Data Dumper",
+    "description": "Exports blocks, items, recipes, ore dictionary, entities and spawn lists as JSON. For the Mindcraft-RotN disposable test server only.",
+    "version": "${version}",
+    "mcversion": "1.12.2",
+    "url": "",
+    "authorList": ["Mindcraft-RotN rotn-data"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]
