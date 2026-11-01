@@ -52,7 +52,7 @@
    "targetsPlayers": true,
    "dangerous": true,
    "confidence": "verified",
-   "evidence": "IceAndFireRotN-1.9.1-1.2.1.jar: EntityCockatrice.initEntityAI adds CockatriceAITarget(EntityLivingBase.class, EntityCockatrice$1). EntityCockatrice$1.apply returns true for an EntityPlayer (bytecode 38 -> 52 -> 59) unless it is an Animania chicken. CockatriceAITarget's own conditions were not inspected.",
+   "evidence": "IceAndFireRotN-1.9.1-1.2.1.jar: EntityCockatrice.initEntityAI adds CockatriceAITarget(EntityLivingBase.class, EntityCockatrice$1) at bytecode 253 (183 is CockatriceAITargetItems, item targeting). EntityCockatrice$1.apply returns true for an EntityPlayer (bytecode 38 -> 52 -> 59) unless it is an Animania chicken. CockatriceAITarget's own conditions were not inspected.",
    "note": "Cockatrice: its stare petrifies or withers. Do not look at it or fight it early."
   },
   "iceandfire:seaserpent": {

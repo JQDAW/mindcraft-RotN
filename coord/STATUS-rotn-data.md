@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-01T22:40Z (from `date -u`)
+Updated: 2026-11-01T23:07Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -13,6 +13,8 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#47 merged** (`7978d27`): the first dump import, `common-mobs.json`, acceptance tests on.
 - **#55 merged** (`59f9271`): the second dump's import, the importer's jar check and raw SHA-256s.
 - **#59 merged**: canonical list order in the importer, `maxTickMs` and the sorted recipe sample in the dumper, the corrected first-vs-second dump comparison.
+- **#62 merged** (`b47449e`): entity threat overrides beyond IMob, cited from the mods' bytecode (13 entries; dangerous: fire and ice dragons, sea serpent, death worm, cockatrice; 33 reviewed and not marked, among them the 24 Animania rabbits, whose player targeting is only for a rabbit named "Killer"). It also marks the vanilla animals Animania replaces (chicken, cow, pig, rabbit, sheep; `config/animania.cfg` lines 104-119; G2 batch 1) and leaves them out of `common-mobs.json`.
+  - Correction to its PR description's condition table: the cockatrice's player-targeting task, `CockatriceAITarget(EntityLivingBase, EntityCockatrice$1)`, is at bytecode **253**. Offset 183 is `CockatriceAITargetItems` (item targeting), which my checker's name match also caught. Neither has a branch that skips it, so the classification stands. The offset is now in the `entity-overrides.json` evidence.
 - **#48 merged** (`7f0feef`): the dumper's per-tick time cap, per-entry isolation and `serializers.json`; the importer requires `serializers.json` and blocks on `entryErrors`.
 - **First RotN 3.3.4 dump batch: PASS** (lead's written GO, 2026-11-01 about 19:24 UTC, before the server was created at 19:25:54; record below).
 - **Second dump batch (serializers): PASS** (lead's written GO 21:23 UTC; record below). It is imported in PR #55, which replaces the first dump.
@@ -112,7 +114,7 @@ Ids 0-13 are vanilla. Registered entities that use a modded serializer: `doggyta
 
 ## Doing
 
-- **PR #62**: entity threat overrides beyond IMob, cited from the mods' bytecode (13 entries; dangerous: fire and ice dragons, sea serpent, death worm, cockatrice; 33 reviewed and not marked, among them the 24 Animania rabbits, whose player targeting is only for a rabbit named "Killer"). It also marks the vanilla animals Animania replaces (chicken, cow, pig, rabbit, sheep; `config/animania.cfg` lines 104-119; G2 batch 1) and leaves them out of `common-mobs.json`.
+- Holding until G2 passes (lead, 2026-11-01). Then the next phase's work.
 
 ## Follow-ups (later PRs)
 
@@ -145,4 +147,4 @@ Ids 0-13 are vanilla. Registered entities that use a modded serializer: `doggyta
 
 ## Open PRs
 
-- #62: entity threats and Animania-replaced vanilla animals (above).
+- This PR: the cockatrice offset correction (253, not 183) in `entity-overrides.json` and here.
