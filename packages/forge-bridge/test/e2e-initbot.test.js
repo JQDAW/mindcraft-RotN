@@ -97,6 +97,16 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.equal(bot.entity.effects[300]?.amplifier, 1, 'REID effect id from the VarInt tail');
     assert.equal(bridge.stats.reidEffectTails, 1);
     assert.equal(bridge.stats.entitySpawns, 1);
+    // Brief item 6: the FML-spawned mod mob is in bot.entities, and mineflayer tracks it from there.
+    const mob = bot.entities[77];
+    assert.ok(mob, 'FML EntitySpawn reached bot.entities');
+    assert.equal(mob.name, 'iceandfire:entity_4', 'placeholder name until rotn-data\'s mod-local table exists');
+    assert.equal(mob.forge.modId, 'iceandfire');
+    assert.deepEqual([mob.position.x, mob.position.y, mob.position.z], [10, 65, 10]);
+    const gone = once(bot, 'entityGone');
+    server.state.client.write('entity_destroy', { entityIds: [77] });
+    await within(10000, gone, 'entityGone');
+    assert.equal(bot.entities[77], undefined, 'mineflayer\'s own entity_destroy removed it');
     assert.equal(bridge.stats.jeidMessages, 1);
     assert.equal(bridge.stats.parseErrors, 0);
     assert.equal(bridge.stats.partialReadErrors, 0);

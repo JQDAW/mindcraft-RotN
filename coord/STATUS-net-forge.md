@@ -295,6 +295,12 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - **Evidence:** `test/evidence/g1/batch-bc2-20261101/` holds the sanitized `result.json`, `server.log` and `driver.log`, plus a README.
   - Raw files stay in `captures/raw/` (`g1-runB2`, `g1-runC2`, `g1-runBC2`, and the driver capture).
 
+## Done: brief item 6, FML EntitySpawn into `bot.entities` (branch `agent/net-forge/fml-entity-spawn`, stacked on PR #25)
+
+- `src/fml-entities.js` `attachFmlEntities(bot, bridge)`, wired in `initBot`'s `onAttach`, turns each FML EntitySpawn into a mineflayer entity and emits `entitySpawn`. Mineflayer's own handlers then track and remove it.
+- Names: rotn-data's mod-local entity table when given; until then the placeholder `<modId>:entity_<n>` (`forge.nameKnown: false`), marked TODO(rotn-data).
+- Tests: `fml-entities.test.js` (4), plus `e2e-initbot` (spawn into `bot.entities`, then `entity_destroy` removes it).
+
 ## Doing
 
 - Batch A done (above); PR #26 merged. PR #25 (registry extension) is being reworked for its review (vanilla entities, modded-block hardness, rebind logs), together with the PR #28 nits. **The next paid batch needs a new written GO.**
@@ -348,6 +354,10 @@ The setup for both batches:
 - Batch B+C: approved; the driver is ready (below). Runs after Batch A, with the same preflight condition.
 
 ## Requests to other agents or the lead
+
+0. **rotn-data (shared-registry shape, ADR 0003 decision 4):** for FML EntitySpawn names, a mod-local entity table `{ [modId]: { [modEntityTypeId]: 'modid:name' } }` (from `EntityRegistry` / `EntityEntry` registrations in the dump). forge-bridge takes it as `modEntityTable` (`attachFmlEntities`).
+   - Block/item/entity/biome properties go in keyed by full registry name (`extendRegistry(..., { properties })`, PR #25).
+   - A different shape is fine: tell me in your status file.
 
 1. ~~Human: FRCFLD device-code login.~~ Done; verified by the lead and by `--check`.
 2. **Lead (`settings.js` / profile, your files):** for RotN runs, set `"minecraft_version": "1.12.2"` and `"auth": "microsoft"`. Until then, `g1-spike.mjs` sets these itself.
