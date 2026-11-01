@@ -115,7 +115,7 @@ async function main() {
 
     async function finish(code) {
         const b = bridge();
-        result.scope = 'G1 spike: login, handshake, chat, walk, stay. It does not exercise reconnects or the ADR 0003 exit codes: src/process/agent_process.js does not consume classifyKick yet (brief item 8). The process exit code here is only pass (0) or fail (1).';
+        result.scope = 'G1 spike: login, handshake, chat, walk, stay. It does not exercise reconnects or the ADR 0003 exit codes: it runs one bot directly, without the main process (src/process/agent_process.js) that applies them. The process exit code here is only pass (0) or fail (1).';
         result.endedAt = new Date().toISOString();
         result.elapsedS = secs();
         result.end = ended;
