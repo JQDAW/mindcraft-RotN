@@ -19,6 +19,9 @@
 //      are checked too but do not count). Every answer must be right. Then the spot checks are weighed
 //      against the census: a type hit at least absentHits times but missing from the census, or whose
 //      spot share differs from its census share by more than maxShareGap, fails (the census misreports).
+//   Unloaded positions (no chunk at the bot after it waited for the cube) are never a block type: the
+//   census reports them as "#unloaded U T" and spot answers as "#unloaded"; notes.unloaded records both,
+//   and above maxUnloadedShare (1%) the run is not a gate run.
 import crypto from 'node:crypto';
 import { startSession } from '../../runner/lib/session.mjs';
 import { lastTeleport } from '../../runner/lib/server-log.mjs';
@@ -27,6 +30,7 @@ import { awaitReply, isRegistryName, ints, prng, sample, testforblockVerdict } f
 const MS = 1000;
 const BATCH = 8;
 const AIR = 'minecraft:air';
+const UNLOADED = '#unloaded';   // scenario-protocol.mjs: a position without a loaded chunk
 
 export default {
     id: 'g2-blocks-named',
@@ -49,6 +53,7 @@ export default {
         spotMaxPositions: 400,     // give up after this many random positions
         absentHits: 4,             // a type hit this often in spot checks must be in the census
         maxShareGap: 0.25,         // |spot share - census share| allowed per type
+        maxUnloadedShare: 0.01,    // above this share of unloaded positions (census or spot) the run is not a gate run
         seed: 0,                   // 0 = random; the seed used is recorded in notes
         dataRoot: '',              // '' = this repo (its mcdata.js wiring decides gate validity); tests use fixtures
         loginTimeoutMs: 240 * MS,
@@ -60,7 +65,7 @@ export default {
     },
     gateParams: {
         bot: 'equal', radius: 'min', topN: 'min', minTypes: 'min', candidates: 'min', samplesPerType: 'min',
-        spotChecks: 'min', absentHits: 'equal', maxShareGap: 'equal', dataRoot: 'equal',
+        spotChecks: 'min', absentHits: 'equal', maxShareGap: 'equal', maxUnloadedShare: 'equal', dataRoot: 'equal',
     },
 
     async run(ctx) {
@@ -90,13 +95,21 @@ export default {
         const token = crypto.randomBytes(6).toString('hex');
         server.console(`tell ${name} scenario-blocks ${token} ${p.radius} ${p.topN} ${p.candidates}`, 1);
         const rep = await awaitReply(ctx, s.sinceMarker, name, 'blocks', token, p.replyTimeoutMs);
-        const all = (rep?.entries ?? []).map((f) => {
+        // The "#unloaded U T" entry: positions without a loaded chunk, counted apart (never a block type).
+        const unl = (rep?.entries ?? []).find((f) => f[0] === UNLOADED);
+        const unloaded = unl ? ints(unl.slice(1, 3)) : null;
+        const all = (rep?.entries ?? []).filter((f) => f[0] !== UNLOADED).map((f) => {
             const n = ints(f.slice(1, 3));
             const cand = f.slice(3).map((q) => ints(q.split(',')));
             return { name: f[0], meta: n?.[0], count: n?.[1], cand, raw: `${f[0]} ${f[1]} ${f[2]} (${f.length - 3} candidates)` };
         });
         const entries = all.filter((e) => e.name !== AIR);
         const bad = [];
+        const cubeSize = (2 * p.radius + 1) ** 3;
+        if (rep?.complete && (!unloaded || unloaded[1] !== cubeSize || unloaded[0] < 0 || unloaded[0] > cubeSize)) {
+            bad.push(`no valid "${UNLOADED} U ${cubeSize}" entry (unloaded positions out of the cube's ${cubeSize})`);
+        }
+        const censusUnloaded = unloaded && unloaded[1] === cubeSize ? unloaded[0] : null;
         for (const e of entries) {
             if (!isRegistryName(e.name)) bad.push(`unknown name "${e.name}"`);
             else if (e.meta === undefined || e.meta < 0 || e.meta > 15 || !(e.count >= 1)) bad.push(`${e.raw}: malformed`);
@@ -133,6 +146,7 @@ export default {
         const hits = new Map();
         let nonAir = 0;
         let asked = 0;
+        let spotUnloaded = 0;
         while (nonAir < p.spotChecks && asked < p.spotMaxPositions && spotFail.length < 10) {
             const batch = Array.from({ length: BATCH }, () => [r(c[0] - p.radius, c[0] + p.radius),
                 Math.min(254, Math.max(1, r(c[1] - p.radius, c[1] + p.radius))), r(c[2] - p.radius, c[2] + p.radius)]);
@@ -145,6 +159,7 @@ export default {
                 const f = byPos.get(q.join(','));
                 const meta = f ? ints([f[4]])?.[0] : undefined;
                 if (!f) { spotFail.push(`${q.join(',')}: no answer`); continue; }
+                if (f[3] === UNLOADED) { spotUnloaded++; continue; }   // counted apart; capped by maxUnloadedShare
                 if (!isRegistryName(f[3]) || meta === undefined) { spotFail.push(`${q.join(',')}: "${f.slice(3).join(' ')}" is not a registry name and meta`); continue; }
                 const v = testforblockVerdict(server.console(`testforblock ${q.join(' ')} ${f[3]} ${meta}`, p.consoleWaitS), q);
                 if (!v.ok) { spotFail.push(`${q.join(',')} ${f[3]} ${meta}: ${v.detail}`); continue; }
@@ -166,9 +181,23 @@ export default {
         ctx.note('spotDistribution', Object.fromEntries([...hits.entries()].sort((a, b) => b[1] - a[1])));
         ctx.note('spotFailures', sample(spotFail));
         ctx.note('spotSkew', skew);
+        // Unloaded positions, in the census and in the spot answers. Above maxUnloadedShare the run is not a
+        // gate run: the evidence would not cover the cube, and "unloaded" is the one answer the server
+        // cannot check, so this share also caps what a bot could hide behind it.
+        const unloadedNote = {
+            census: censusUnloaded, cube: cubeSize, censusShare: censusUnloaded === null ? null : censusUnloaded / cubeSize,
+            spot: spotUnloaded, spotAsked: asked, spotShare: asked ? spotUnloaded / asked : 0, maxShare: p.maxUnloadedShare,
+        };
+        ctx.note('unloaded', unloadedNote);
+        if (unloadedNote.censusShare !== null && unloadedNote.censusShare > p.maxUnloadedShare) {
+            ctx.notGate(`${(100 * unloadedNote.censusShare).toFixed(1)}% of the cube was unloaded in the census (max ${100 * p.maxUnloadedShare}%)`);
+        }
+        if (unloadedNote.spotShare > p.maxUnloadedShare) {
+            ctx.notGate(`${spotUnloaded} of ${asked} spot positions were unloaded (max ${100 * p.maxUnloadedShare}%)`);
+        }
         const spotOk = spotFail.length === 0 && nonAir >= p.spotChecks && skew.length === 0;
         ctx.check('blocks_spotcheck', spotOk,
-            `${nonAir} confirmed non-air answers of ${p.spotChecks} needed (${asked} positions asked, seed ${seed})`
+            `${nonAir} confirmed non-air answers of ${p.spotChecks} needed (${asked} positions asked, ${spotUnloaded} unloaded, seed ${seed})`
             + `${spotFail.length ? `; wrong: ${spotFail[0]}` : ''}${skew.length ? `; census inconsistent: ${skew.slice(0, 3).join('; ')}` : ''}`);
     },
 };
