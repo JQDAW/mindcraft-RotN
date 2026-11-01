@@ -6,8 +6,8 @@
 //   <BOT> KIND TOKEN PAGE/PAGES field field ...; field field ...; ...
 // The 1.12.2 en_us strings parsed below are the server's own (lang keys commands.testforblock.*,
 // commands.testfor.success, commands.summon.*, commands.give.*); a real run confirms them.
-import fs from 'node:fs';
-import path from 'node:path';
+import process from 'node:process';
+import { spawnSync } from 'node:child_process';
 import { chatLines, parseLine } from './server-log.mjs';
 
 /** A full registry name, "namespace:path". Anything else (null, a number, "unknown") is not a name. */
@@ -95,23 +95,70 @@ export function prng(seed) {
 export const sample = (arr, n = 20) => ({ count: arr.length, first: arr.slice(0, n) });
 
 /**
- * Is the agent's naming path wired to rotn-data (rotn-data brief item 4)? G2 asks whether the AGENT
- * sees correct names, so until src/utils/mcdata.js itself imports rotn-data's package and exports
- * toNew and toOld, no G2 run counts (PR #36 re-review, item 3). Read statically on purpose: importing
- * mcdata.js would load mineflayer and every plugin into the runner. Returns {wired, why}.
+ * Is the agent's naming API wired and correct? G2 asks whether the AGENT sees correct names, and the
+ * agent's naming API is src/utils/mcdata.js's toNew(name, meta?) and toOld(name) (PR #36 / #44
+ * contract, same signatures and null semantics as rotn-data's). A child process (node --input-type=module)
+ * imports src/utils/mcdata.js, the module the agent itself runs, and
+ *   1. requires typeof toNew === 'function' && typeof toOld === 'function';
+ *   2. runs every entry of packages/rotn-data/vanilla/flattening-items.json (expected values only)
+ *      through THOSE exports both ways: toNew(old, meta) === new and toOld(new) deep-equals {name: old, meta}.
+ * "wired" only if both pass; otherwise every G2 run calls notGate (PR #36 re-review). A child process,
+ * so the runner itself never loads mineflayer and its plugins, and a module that hangs or crashes cannot
+ * take the runner with it.
+ * Returns {wired, why, entries, failureCount, failures (first 20)}.
  */
-export function mcdataWiring(repoRoot) {
-    let src;
-    try {
-        src = fs.readFileSync(path.join(repoRoot, 'src', 'utils', 'mcdata.js'), 'utf8');
-    } catch (e) {
-        return { wired: false, why: `src/utils/mcdata.js not readable (${e.code ?? e.message})` };
+export const AGENT_NAMING_SCRIPT = `
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+import { pathToFileURL } from 'node:url';
+const root = process.env.ROTN_G2_ROOT;
+const out = (o) => { process.stdout.write('G2NAMING ' + JSON.stringify(o) + '\\n'); process.exit(0); };
+let mc;
+try {
+    mc = await import(pathToFileURL(path.join(root, 'src', 'utils', 'mcdata.js')).href);
+} catch (e) {
+    out({ wired: false, why: 'src/utils/mcdata.js could not be imported: ' + String(e && e.message || e).slice(0, 300) });
+}
+const missing = ['toNew', 'toOld'].filter((n) => typeof mc[n] !== 'function');
+if (missing.length) out({ wired: false, why: 'src/utils/mcdata.js does not export ' + missing.join(' and ') + ' as functions' });
+let entries;
+try {
+    entries = JSON.parse(fs.readFileSync(path.join(root, 'packages', 'rotn-data', 'vanilla', 'flattening-items.json'), 'utf8')).entries;
+} catch (e) {
+    out({ wired: false, why: 'packages/rotn-data/vanilla/flattening-items.json not available (' + (e.code || e.message) + ')' });
+}
+if (!Array.isArray(entries) || entries.length === 0) out({ wired: false, why: 'flattening-items.json has no entries' });
+const failures = [];
+for (const e of entries) {
+    let next, back;
+    try { next = mc.toNew(e.old, e.meta); } catch (err) { next = 'threw: ' + (err && err.message); }
+    try { back = mc.toOld(e.new); } catch (err) { back = 'threw: ' + (err && err.message); }
+    if (next !== e.new) failures.push('toNew(' + e.old + ', ' + e.meta + ') = ' + JSON.stringify(next) + ', table says ' + e.new);
+    if (!back || back.name !== e.old || back.meta !== e.meta) failures.push('toOld(' + e.new + ') = ' + JSON.stringify(back) + ', table says ' + e.old + ':' + e.meta);
+}
+out({
+    wired: failures.length === 0,
+    why: failures.length
+        ? failures.length + ' failure(s) in the ' + entries.length + '-entry round trip through mcdata.js toNew/toOld; first: ' + failures[0]
+        : 'mcdata.js exports toNew and toOld; all ' + entries.length + ' table entries round-trip through them',
+    entries: entries.length, failureCount: failures.length, failures: failures.slice(0, 20),
+});
+`;
+
+export function agentNaming(repoRoot, { timeoutMs = 180000, run = spawnSync, node = process.execPath } = {}) {
+    const r = run(node, ['--input-type=module', '-e', AGENT_NAMING_SCRIPT], {
+        cwd: repoRoot, env: { ...process.env, ROTN_G2_ROOT: repoRoot, NODE_OPTIONS: '' }, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024,
+    });
+    const line = String(r.stdout ?? '').split('\n').reverse().find((l) => l.startsWith('G2NAMING '));
+    if (!line) {
+        const why = r.error ? `the naming check could not run (${r.error.code ?? r.error.message})` : `the naming check gave no result (exit ${r.status}): ${String(r.stderr ?? '').trim().slice(-300)}`;
+        return { wired: false, why, entries: 0, failureCount: 0, failures: [] };
     }
-    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-    const imports = /\bfrom\s+['"][^'"]*packages\/rotn-data(?:\/[^'"]*)?['"]/.test(code) || /\bimport\(\s*['"][^'"]*packages\/rotn-data/.test(code);
-    const exported = (n) => new RegExp(String.raw`export\s+(?:async\s+)?function\s+${n}\b|export\s+(?:const|let|var)\s+${n}\b|export\s*\{[^}]*\b${n}\b[^}]*\}`).test(code);
-    const missing = ['toNew', 'toOld'].filter((n) => !exported(n));
-    if (!imports) return { wired: false, why: 'src/utils/mcdata.js does not import packages/rotn-data' };
-    if (missing.length) return { wired: false, why: `src/utils/mcdata.js does not export ${missing.join(' and ')}` };
-    return { wired: true, why: 'src/utils/mcdata.js imports packages/rotn-data and exports toNew and toOld' };
+    try {
+        const o = JSON.parse(line.slice('G2NAMING '.length));
+        return { wired: o.wired === true, why: String(o.why ?? ''), entries: o.entries ?? 0, failureCount: o.failureCount ?? 0, failures: o.failures ?? [] };
+    } catch {
+        return { wired: false, why: 'the naming check printed an unreadable result', entries: 0, failureCount: 0, failures: [] };
+    }
 }

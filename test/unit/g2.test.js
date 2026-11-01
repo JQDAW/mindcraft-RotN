@@ -14,7 +14,7 @@ import { setImmediate } from 'node:timers';
 import { Vec3 } from 'vec3';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { attachG2, pages, stockNames, agentNames } from '../runner/drivers/scenario-protocol.mjs';
-import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, mcdataWiring } from '../runner/lib/g2.mjs';
+import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, agentNaming } from '../runner/lib/g2.mjs';
 import blocks from '../scenarios/g2/g2-blocks-named.mjs';
 import mobs, { VANILLA_COMMON_MOBS, chooseMobs, readCommonMobs } from '../scenarios/g2/g2-mobs-named.mjs';
 import items, { VANILLA_SAMPLE, parseItems, checkFullTable } from '../scenarios/g2/g2-items-roundtrip.mjs';
@@ -214,23 +214,40 @@ describe('G2 helpers', () => {
 
 describe('the agent\'s naming path (PR #36 re-review item 3)', () => {
     const at = (body) => writeData(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-mc-')), { mcdataBody: body });
-    test('mcdataWiring: wired only if mcdata.js imports packages/rotn-data AND exports toNew and toOld', () => {
-        assert.deepEqual(mcdataWiring(DATA), { wired: true, why: 'src/utils/mcdata.js imports packages/rotn-data and exports toNew and toOld' });
-        assert.equal(mcdataWiring(at("import { toNew, toOld } from '../../packages/rotn-data/index.js';\nexport function toNew2() {}\nexport { toNew, toOld };\n")).wired, true);
-        assert.equal(mcdataWiring(at("import * as rd from '../../packages/rotn-data/index.js';\nexport function toNew(o, m) { return rd.toNew(o, m); }\nexport const toOld = (n) => rd.toOld(n);\n")).wired, true);
-        assert.match(mcdataWiring(at('export function getBlockName() {}\n')).why, /does not import packages\/rotn-data/);
-        assert.match(mcdataWiring(at("import { toNew } from '../../packages/rotn-data/index.js';\nexport { toNew };\n")).why, /does not export toOld/);
-        assert.match(mcdataWiring(at("// import { toNew, toOld } from '../../packages/rotn-data/index.js';\n/* export { toNew, toOld }; */\n")).why, /does not import/, 'comments do not count');
-        assert.match(mcdataWiring(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-nomc-'))).why, /not readable/);
-        assert.equal(typeof mcdataWiring(process.cwd()).wired, 'boolean', 'the real repo is checked the same way');
+    test('agentNaming: a child process imports mcdata.js; wired only if toNew/toOld are functions AND the full table round-trips through them', () => {
+        const ok = agentNaming(DATA);
+        assert.equal(ok.wired, true, ok.why);
+        assert.equal(ok.entries, 31);
+        assert.match(ok.why, /all 31 table entries round-trip through them/);
+        // The reviewer's case: a text match would accept these; the real import does not.
+        assert.match(agentNaming(at('export const toNew = null;\nexport const toOld = null;\n')).why, /does not export toNew and toOld as functions/);
+        assert.match(agentNaming(at("// import { toNew, toOld } from '../../packages/rotn-data/index.js';\nexport { toNew } from '../../packages/rotn-data/index.js';\n")).why, /does not export toOld as functions/);
+        assert.match(agentNaming(at('export function getBlockName() {}\n')).why, /does not export toNew and toOld/);
+        // Exported but wrong: the round trip through the agent's functions decides.
+        // One wrong mapping in an otherwise correct mcdata.js is enough to fail.
+        const wrong = agentNaming(at("import * as rd from '../../packages/rotn-data/index.js';\nexport const toNew = (o, m) => (o === 'minecraft:coal' && m === 1 ? 'coal' : rd.toNew(o, m));\nexport const toOld = rd.toOld;\n"));
+        assert.equal(wrong.wired, false);
+        assert.equal(wrong.failureCount, 1);
+        assert.match(wrong.why, /^1 failure\(s\) in the 31-entry round trip through mcdata\.js toNew\/toOld; first: toNew\(minecraft:coal, 1\) = "coal", table says charcoal$/);
+        assert.match(agentNaming(at('export const toNew = (;\n')).why, /could not be imported/);
+        assert.match(agentNaming(at('export const toNew = () => { throw new Error("boom"); };\nexport const toOld = () => null;\n')).failures[0], /threw: boom/);
+        const noTable = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-notable-'));
+        fs.mkdirSync(path.join(noTable, 'src', 'utils'), { recursive: true });
+        fs.writeFileSync(path.join(noTable, 'package.json'), '{"type":"module"}\n');
+        fs.writeFileSync(path.join(noTable, 'src', 'utils', 'mcdata.js'), 'export const toNew = () => null;\nexport const toOld = () => null;\n');
+        assert.match(agentNaming(noTable).why, /flattening-items\.json not available/);
+        assert.match(agentNaming(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-nomc-'))).why, /could not be imported/);
+        // A child that never answers is a failed check, not a pass.
+        assert.equal(agentNaming(DATA, { run: () => ({ status: 1, stdout: '', stderr: 'killed' }) }).wired, false);
+        assert.equal(agentNaming(DATA, { run: () => ({ status: 0, stdout: 'G2NAMING {nope', stderr: '' }) }).wired, false);
     });
 
     test('a run on an unwired naming path, or without a world seed, is never a gate run', async () => {
         const unwired = at('export function getBlockName() {}\n');
         const r = await run(blocks, sim(), { seed: 7, dataRoot: unwired });
         assert.equal(r.checksPassed, true, JSON.stringify(r.checks, null, 1));
-        assert.ok(r.weakenedParams.some((w) => /^mcdata\.js not wired to rotn-data: src\/utils\/mcdata\.js does not import packages\/rotn-data$/.test(w)), JSON.stringify(r.weakenedParams));
-        assert.deepEqual(r.notes.naming, { wired: false, why: 'src/utils/mcdata.js does not import packages/rotn-data' });
+        assert.ok(r.weakenedParams.some((w) => /^mcdata\.js not wired to rotn-data: src\/utils\/mcdata\.js does not export toNew and toOld as functions$/.test(w)), JSON.stringify(r.weakenedParams));
+        assert.equal(r.notes.naming.wired, false);
         const r2 = await run(blocks, sim({ noSeed: true }), { seed: 7, dataRoot: DATA });
         assert.equal(r2.notes.worldSeed, null);
         assert.ok(r2.weakenedParams.some((w) => /no world seed/.test(w)), JSON.stringify(r2.weakenedParams));
@@ -406,26 +423,27 @@ describe('g2-items-roundtrip on a simulated server', () => {
         const r = await run(items, s, { dataRoot: DATA });
         assert.equal(r.checksPassed, true, JSON.stringify(r.checks, null, 1));
         assert.match(byName(r).items_roundtrip.detail, /^30\/30 round-trip/);
-        assert.match(byName(r).items_table.detail, /^31 table entries both ways, 30 sample items in the table: all correct/);
+        assert.match(byName(r).items_table.detail, /^agent naming \(src\/utils\/mcdata\.js toNew\/toOld\): mcdata\.js exports toNew and toOld; all 31 table entries round-trip through them; sample: all 30 in the table$/);
         assert.equal(s.inventory.length, 0, 'the inventory is cleared afterwards');
         assert.ok(TABLE.some((x) => x.name === 'minecraft:dye' && x.meta === 1 && x.expected === 'red_dye'), '1.21 names, as rotn-data toNew gives them');
     });
 
-    test('items_table fails without rotn-data\'s table or module, and on any wrong entry or a sample outside the table', async () => {
+    test('items_table fails unless the agent naming check passes and the sample is a subset of the table', async () => {
+        const wired = { wired: true, why: 'ok', failures: [] };
+        assert.equal(checkFullTable(TABLE, wired, { repo: DATA }).ok, true);
+        assert.equal(checkFullTable(TABLE, { wired: false, why: 'no toNew', failures: ['x'] }, { repo: DATA }).ok, false);
         const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-none-'));
-        assert.match((await checkFullTable(TABLE, { repo: empty })).detail, /flattening-items\.json not available/);
-        const badModule = writeData(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-bad-')), {
-            moduleBody: "export const toNew = (o, m) => (o === 'minecraft:coal' && m === 1 ? 'coal' : null);\nexport const toOld = () => null;\nexport const registryName = (x) => x.name;",
-        });
-        const bad = await checkFullTable(TABLE, { repo: badModule });
-        assert.equal(bad.ok, false);
-        assert.match(bad.failures.join('\n'), /toNew\(minecraft:coal, 1\) = "coal", table says charcoal/);
+        assert.match(checkFullTable(TABLE, wired, { repo: empty }).detail, /flattening-items\.json not available/);
         const short = writeData(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-short-')), { tableEntries: [{ old: 'minecraft:log', meta: 0, new: 'oak_log' }] });
-        const sub = await checkFullTable(TABLE, { repo: short });
+        const sub = checkFullTable(TABLE, wired, { repo: short });
         assert.equal(sub.ok, false);
         assert.match(sub.failures.join('\n'), /sample minecraft:coal:1=charcoal not in the table/);
-        const r = await run(items, sim(), { dataRoot: empty });
-        assert.equal(byName(r).items_table.pass, false, 'G2 is gated on the full table');
+        // In a run: an agent whose mcdata.js does not translate fails items_table and is not a gate run.
+        const unwired = writeData(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-unw-')), { mcdataBody: 'export function getItemName() {}\n' });
+        const r = await run(items, sim(), { dataRoot: unwired });
+        assert.equal(byName(r).items_table.pass, false, 'G2 is gated on the full table through the agent');
+        assert.match(byName(r).items_table.detail, /does not export toNew and toOld as functions/);
+        assert.equal(r.gateValid, false);
         assert.equal(r.pass, false);
     });
 

@@ -4,7 +4,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { linesAfter, loginUuid, uuidVersion, playerEvents, classifyKick } from './server-log.mjs';
-import { mcdataWiring } from './g2.mjs';
+import { agentNaming } from './g2.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -12,11 +12,12 @@ const MS = 1000;
 const MARKER_TRIES = 3;
 
 /**
- * startSession(ctx, {name, env}) -> {ok, why, sinceMarker, events, joinedAt, uuidVersion}
+ * startSession(ctx, {name, env, naming}) -> {ok, why, sinceMarker, events, joinedAt, uuidVersion, naming}
+ * naming: a precomputed agentNaming() result (the items scenario needs it before the login), else computed here.
  * Throws if the marker never lands (before the driver is started). ok=false with a reason when the
  * bot did not join with an online-mode (version-4) UUID; the caller records that as its login check.
  */
-export async function startSession(ctx, { name, env = {} }) {
+export async function startSession(ctx, { name, env = {}, naming = null }) {
     const { server, bot, clock, params: p, runId } = ctx;
     const marker = `scenario-${runId}-begin`;
     const markerSeen = (lines) => lines.some((l) => l.includes(marker));
@@ -37,10 +38,11 @@ export async function startSession(ctx, { name, env = {} }) {
     const seedLine = server.console('seed', p.consoleWaitS).map((l) => /Seed: \[?(-?\d+)\]?\s*$/.exec(l)).find(Boolean);
     ctx.note('worldSeed', seedLine ? seedLine[1] : null);
     if (!seedLine) ctx.notGate('no world seed from the console "seed" command: the seed is part of the G2 evidence');
-    // G2 is about the agent's own naming: no run counts until mcdata.js is wired to rotn-data.
-    const naming = mcdataWiring(p.dataRoot || REPO);
-    ctx.note('naming', naming);
-    if (!naming.wired) ctx.notGate(`mcdata.js not wired to rotn-data: ${naming.why}`);
+    // G2 is about the agent's own naming API (mcdata.js toNew/toOld): no run counts until a child
+    // process finds it and the full table round-trips through it.
+    const agent = naming ?? agentNaming(p.dataRoot || REPO);
+    ctx.note('naming', { wired: agent.wired, why: agent.why, entries: agent.entries, failureCount: agent.failureCount });
+    if (!agent.wired) ctx.notGate(`mcdata.js not wired to rotn-data: ${agent.why}`);
 
     bot.start({ ROTN_SCENARIO_BOT: name, ROTN_SCENARIO_RUN: runId, ...env });
     const first = await ctx.waitFor(() => events().find((e) => e.type === 'joined' || gone(e))
@@ -49,7 +51,7 @@ export async function startSession(ctx, { name, env = {} }) {
     const uuid = loginUuid(sinceMarker(), name);
     ctx.note('kicks', events().filter(gone).map((e) => ({ ...e, class: classifyKick(e.reason) })));
     ctx.note('uuidVersion', uuidVersion(uuid));
-    const base = { sinceMarker, events, gone, joinedAt, uuidVersion: uuidVersion(uuid) };
+    const base = { sinceMarker, events, gone, joinedAt, uuidVersion: uuidVersion(uuid), naming: agent };
     if (first?.type !== 'joined') {
         const why = first?.type === 'exited' ? `driver exited with code ${bot.exitCode()} before joining`
             : first ? `${first.type}: ${first.reason ?? ''} (${classifyKick(first.reason)})` : `no join within ${p.loginTimeoutMs / MS}s`;

@@ -115,7 +115,8 @@ export async function walk(bot, n, timeoutMs, stepMs = 250) {
 // src/utils/mcdata.js (its toNew/toOld exports; rotn-data's brief item 4 wires them). It imports no
 // naming code of its own. The one change it makes is the "minecraft:" namespace that vanilla names lack
 // in mineflayer, which the server's testforblock/testfor need. Until mcdata.js exports toNew/toOld the
-// translation is null, and the runner marks the run "not a gate run" (mcdataWiring in lib/g2.mjs).
+// translation is null, and the runner marks the run "not a gate run": agentNaming in lib/g2.mjs imports
+// mcdata.js in a child process and runs the full table through its toNew/toOld.
 // stockNames is the same without translation, only for trying the protocol.
 // A name the adapter cannot give is reported as "null" (the runner fails it); the driver never guesses.
 
