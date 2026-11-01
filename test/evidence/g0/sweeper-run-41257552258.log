@@ -1,0 +1,5 @@
+2026-11-01T00:37:35.9687002Z [test-server 00:37:35] sweep at 2026-11-01T00:37:35Z, selector purpose=mindcraft-rotn-test
+2026-11-01T00:37:36.4437881Z [test-server 00:37:36] expired server mcr-wd-20261101-003652 (173873036): deleting
+2026-11-01T00:37:51.4831931Z [test-server 00:37:51] expired Primary IP mcr-wd-20261101-003652-ipv4 (159353814): deleting
+2026-11-01T00:37:52.5782416Z [test-server 00:37:52] expired SSH key mcr-wd-20261101-003652 (132037905): deleting
+2026-11-01T00:37:55.5359151Z [test-server 00:37:55] sweep done: 3 deletion(s), status 0

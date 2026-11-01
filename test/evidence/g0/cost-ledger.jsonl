@@ -1,0 +1,2 @@
+{"event":"created","batch":"mcr-test-20261101-003243","type":"cpx42","location":"nbg1","ip":"2.31.4.15","price_hourly_gross_eur":"0.1381","started":"2026-11-01T00:32:44Z","delete_after":"2026-11-01T08:32:44Z"}
+{"event":"deleted","batch":"mcr-test-20261101-003243","type":"cpx42","location":"nbg1","price_hourly_gross_eur":"0.1381","started":"2026-11-01T00:32:44Z","stopped":"2026-11-01T00:36:16Z","run_seconds":212,"hours_billed":1,"cost_estimate_eur":"0.1381","note":"excl. Primary IPv4"}
