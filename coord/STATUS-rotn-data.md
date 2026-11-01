@@ -26,9 +26,15 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
   - the nits.
 
   **The mod compiles:** harness-ops' dumper-build trial on `3398b03` is green (run 41338507034: Temurin 1.8.0_504, Gradle 4.10.3 checksum OK, BUILD SUCCESSFUL; `rotndump-0.1.0.jar`, 48,212 bytes, SHA-256 `fcfe6b47...c898`). The workflow itself is harness-ops' PR #40. Not yet run on a server.
-- **PR #37 (`agent/rotn-data/data-package`): `packages/rotn-data`**, items 2 and 3. Translation API `toNew`/`toOld` (643 vanilla item pairs, a clean bijection), catalog API, names from the real capture, script cross-check fixtures, 25 offline tests. The dump-dependent acceptance tests skip until a dump is imported.
+- **PR #37 (`agent/rotn-data/data-package`): `packages/rotn-data`**, items 2 and 3. Translation API `toNew`/`toOld` (642 vanilla item pairs, a clean bijection; `spawn_egg` excluded, its mob is in NBT), catalog API, names from the real capture, script cross-check fixtures, 25 offline tests. The dump-dependent acceptance tests skip until a dump is imported.
 - Then item 4: the `mcdata.js` helpers on `bot.registry`, after net-forge's PR #25 merges (see Request 4).
 - The lead's low-memory rule (2026-11-01) applies: targeted `node --test <file>` runs only, no parallel heavy jobs.
+
+## Follow-ups (from the PR #37 review, 2026-11-01; not part of #37)
+
+- **3.** `toOld`'s old-name fallback gives a changed meaning for a few names: `toOld('stone_slab')` is the 1.12 smooth slab, and `toOld('grass')` is the grass block, while Mindcraft (`skills.js:706`) means the plant. Handle this at the command boundary in brief item 4 / with skills-rotn (prefer the 1.21 meaning for names Mindcraft uses).
+- **4.** A reverse-coverage test: every synced `minecraft:` item name maps (except `air`, `portal`, `end_portal`, `end_gateway`), plus per-meta gaps such as item `tallgrass:0`.
+- **5.** `blockToNew` falls back to the item table and so accepts invalid block metas (e.g. `silver_glazed_terracotta:9`). Restrict the fallback to names that have no block entry.
 
 ## Blocked
 
@@ -66,4 +72,4 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 ## Open PRs
 
 - #34 RotN dumper mod (brief item 1, ADR 0004).
-- #37 data package, name translation, catalog, dump importer (brief items 2-3).
+- #37 data package, name translation, catalog, dump importer (brief items 2-3). Review fixes 1, 2, 7 at `d416177`; 3-5 are follow-ups above.
