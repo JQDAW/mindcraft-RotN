@@ -211,7 +211,7 @@ The lead's GO was recorded at 15:35 UTC. The batch ran from a clean branch at or
 
 ## Doing
 
-- Batch A done (above). PR #25 (registry extension) open; a PR with the Batch A fixture and real-handshake test is next. **Batch B+C wait for the lead's separate go-ahead.**
+- Batch A done (above). PR #25 (registry extension) open; PR #26 has the Batch A fixture, the real-handshake test and these results. **Batch B+C wait for the lead's separate go-ahead.**
 
 ## Next
 
