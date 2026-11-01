@@ -105,7 +105,7 @@ The review findings on PR #10, numbered as in the review comment:
 
 ## Doing
 
-- PR for the stricter DEBUG guard open. Waiting for a scheduled sweeper run within 120 min, then Batch A, then Batch B+C on one server.
+- PR #18 (stricter DEBUG guard) open. Waiting for a scheduled sweeper run within 120 min, then Batch A, then Batch B+C on one server.
 
 ## Next
 
@@ -167,4 +167,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15 merged as 74b23ed; #16 merged.) New PR: stricter DEBUG guard, on `agent/net-forge/debug-guard-strict`. `npm test` 203/203; lint 259.
+- (#15 merged as 74b23ed; #16 merged.) #18: stricter DEBUG guard, on `agent/net-forge/debug-guard-strict`. `npm test` 203/203; lint 259.
