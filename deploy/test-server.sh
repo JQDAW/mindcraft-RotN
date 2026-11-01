@@ -43,7 +43,10 @@
 #   --pack-zip PATH               local zip for upload (default: $ROTN_PACK_ZIP)
 #   --ready-timeout MIN (120, restarts after a pack upload)  --yes (no cost prompt)  --allow-multiple  --keep-on-failure
 #   --dry-run                     print mutating hcloud commands instead of running them
-# Global: --name NAME (or $TEST_SERVER_NAME), --context CTX (or $HCLOUD_CONTEXT), --out DIR
+# Global: --name NAME (or $TEST_SERVER_NAME), --out DIR
+#   hcloud always runs with --context mindcraft-rotn-test (the test project); any other
+#   --context / $HCLOUD_CONTEXT is refused. ROTN_HCLOUD_AUTH=env-token (HCLOUD_TOKEN, no context)
+#   is accepted only inside GitHub Actions, for the sweeper.
 set -Eeuo pipefail
 
 SELF=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")
@@ -57,7 +60,10 @@ readonly PACK_BYTES=791130136
 readonly PACK_URL_DEFAULT='https://mediafilez.forgecdn.net/files/7564/549/RotN%203.3.4%20Server%20Pack.zip'
 readonly FORGE_JAR=forge-1.12.2-14.23.5.2860.jar
 readonly LABEL_PURPOSE=mindcraft-rotn-test
-readonly LABEL_CONTROL=mindcraft-rotn-watchdog-control   # g0-watchdog control servers: alert, never delete
+readonly LABEL_CONTROL=mindcraft-rotn-watchdog-control   # g0-watchdog control servers (own expiry label)
+readonly CONTROL_GRACE_SECONDS=1800                      # control deleted at control-expires + 30 min
+readonly CONTROL_DEFAULT_TTL_SECONDS=7200                # control without a valid control-expires
+readonly TEST_CONTEXT=mindcraft-rotn-test                # the only hcloud context this script may use
 readonly MAX_TTL_HOURS=24
 readonly DEFAULT_TTL_HOURS=8
 readonly SWEEP_GRACE_SECONDS=1800   # sweeper: no labelled resource outlives created + MAX_TTL_HOURS + grace
@@ -78,7 +84,9 @@ TYPE=cpx42 LOCATION=nbg1 IMAGE=ubuntu-24.04 NAME=${TEST_SERVER_NAME:-}
 TTL_HOURS=$DEFAULT_TTL_HOURS CAPTURE=0 SEED='' HEAP_MIN=4G HEAP_MAX=8G
 PACK_SOURCE=auto PACK_ZIP=${ROTN_PACK_ZIP:-C:/Users/admin/source/RotN 3.3.4 Server Pack.zip}
 READY_TIMEOUT_MIN=120 YES=0 ALLOW_MULTIPLE=0 KEEP_ON_FAILURE=0 DRY_RUN=0 OUT_DIR='' WAIT_S=5
-CONTEXT=${HCLOUD_CONTEXT:-}
+CONTEXT=${HCLOUD_CONTEXT:-$TEST_CONTEXT}
+# hcloud auth: "context" (PC, default) or "env-token" (the GitHub sweeper only; see check_context).
+HCLOUD_AUTH=${ROTN_HCLOUD_AUTH:-context}
 EXTRA_MODS=() CONSOLE_CMDS=() FETCH_PATHS=() WHITELIST=() WHITELIST_ENTRIES=() ARGS=()
 
 # ---- Teardown state for the EXIT trap ----
@@ -91,8 +99,31 @@ now()  { if [[ -n ${ROTN_TEST_NOW:-} ]]; then echo "$ROTN_TEST_NOW"; else date -
 iso()  { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
 jqr()  { jq "$@" | tr -d '\r'; }
 
+# Every hcloud call goes through hc. On the PC it always passes --context mindcraft-rotn-test and
+# removes HCLOUD_TOKEN / HCLOUD_CONTEXT from hcloud's environment, so a token for another project
+# in the environment cannot redirect a create (environment variables outrank the config file).
 hc() {
-  if [[ -n $CONTEXT ]]; then "$HCLOUD_BIN" --context "$CONTEXT" "$@"; else "$HCLOUD_BIN" "$@"; fi
+  if [[ $HCLOUD_AUTH == env-token ]]; then
+    "$HCLOUD_BIN" "$@"
+  else
+    env -u HCLOUD_TOKEN -u HCLOUD_CONTEXT "$HCLOUD_BIN" --context "$CONTEXT" "$@"
+  fi
+}
+
+# Refuse anything but the test project.
+#  - context mode: the context must be exactly mindcraft-rotn-test.
+#  - env-token mode: only inside GitHub Actions, where HCLOUD_TOKEN comes from the
+#    develop-only Environment hetzner-test-sweeper and is a test-project token by construction.
+check_context() {
+  case $HCLOUD_AUTH in
+    context)
+      [[ $CONTEXT == "$TEST_CONTEXT" ]] \
+        || die "refusing hcloud context '$CONTEXT': only '$TEST_CONTEXT' (the test project) is allowed" ;;
+    env-token)
+      [[ ${GITHUB_ACTIONS:-} == true ]] \
+        || die "ROTN_HCLOUD_AUTH=env-token is only for the GitHub sweeper (GITHUB_ACTIONS=true)" ;;
+    *) die "ROTN_HCLOUD_AUTH must be 'context' or 'env-token'" ;;
+  esac
 }
 
 # Mutating hcloud call: printed instead of run under --dry-run.
@@ -343,8 +374,10 @@ on_exit() {
 confirm_cost() {
   local price=$1 max
   if [[ -n $price ]]; then
-    max=$(awk -v p="$price" -v h="$TTL_HOURS" 'BEGIN { printf "%.2f", p * h }')
-    log "plan: $TYPE in $LOCATION at EUR $price/h gross; worst case (TTL ${TTL_HOURS}h) EUR $max plus Primary IPv4"
+    # Worst case: the EXIT trap fails and the sweeper (every 15 min, cron may start late) deletes it
+    # after delete-after: TTL + 1 billed hours. If the sweeper is not running, the cost is open-ended.
+    max=$(awk -v p="$price" -v h="$(( TTL_HOURS + 1 ))" 'BEGIN { printf "%.2f", p * h }')
+    log "plan: $TYPE in $LOCATION at EUR $price/h gross; worst case (TTL ${TTL_HOURS}h, sweeper deletes it) ~$(( TTL_HOURS + 1 )) billed hours, EUR $max plus Primary IPv4"
   else
     warn "could not read the hourly price of $TYPE in $LOCATION from the API"
   fi
@@ -423,10 +456,14 @@ do_up() {
   if [[ $PACK_SOURCE == upload ]]; then check_local_pack; fi
   require_auth
 
-  local existing
-  existing=$(hc server list -l "$(selector)" -o json | jqr -r '[.[].name] | join(" ")')
+  # Any labelled server, Primary IP or SSH key left over means an earlier batch did not clean up.
+  local existing='' kind names
+  for kind in server primary-ip ssh-key; do
+    names=$(hc "$kind" list -l "$(selector)" -o json | jqr -r '[.[].name] | join(" ")')
+    [[ -n $names ]] && existing+=" $kind: $names;"
+  done
   if [[ -n $existing ]] && (( !ALLOW_MULTIPLE )); then
-    die "labelled test servers already exist: $existing (run 'down' first, or pass --allow-multiple)"
+    die "labelled test resources already exist:$existing run 'down' (or wait for the sweeper), or pass --allow-multiple"
   fi
 
   local price
@@ -574,19 +611,28 @@ do_down() {
 }
 
 # ---------------------------------------------------------------- sweep (watchdog)
-# Prints "id<TAB>name" for every resource in the JSON array on stdin that carries
-# purpose=mindcraft-rotn-test and whose delete-after has passed. A labelled resource
-# without a valid delete-after expires DEFAULT_TTL_HOURS after its creation time, and no
-# delete-after (mistyped or hand-set) keeps one alive past created + MAX_TTL_HOURS + grace.
+# expired_filter NOW [control]
+# Reads a JSON array of resources on stdin and prints "id<TAB>name<TAB>assignee" for each expired one.
+#   default: resources with purpose=mindcraft-rotn-test whose delete-after has passed.
+#   control: watchdog-control servers (purpose=mindcraft-rotn-watchdog-control) whose
+#            control-expires + CONTROL_GRACE_SECONDS has passed. Their delete-after label is
+#            deliberately expired bait and is ignored here (g0-watchdog.sh proves label selection).
+# A missing or unparsable expiry label falls back to created + default TTL. An unparsable creation
+# time as well counts as expired at once (fail-safe: these are disposable by label). No expiry label
+# keeps a resource alive past created + MAX_TTL_HOURS + SWEEP_GRACE_SECONDS.
 expired_filter() {
-  jqr -r --argjson now "$1" --argjson ttl "$(( DEFAULT_TTL_HOURS * 3600 ))" \
-    --argjson cap "$(( MAX_TTL_HOURS * 3600 + SWEEP_GRACE_SECONDS ))" --arg purpose "$LABEL_PURPOSE" '
+  local purpose=$LABEL_PURPOSE label=delete-after grace=0 ttl=$(( DEFAULT_TTL_HOURS * 3600 ))
+  if [[ ${2:-} == control ]]; then
+    purpose=$LABEL_CONTROL label=control-expires grace=$CONTROL_GRACE_SECONDS ttl=$CONTROL_DEFAULT_TTL_SECONDS
+  fi
+  jqr -r --argjson now "$1" --argjson ttl "$ttl" --argjson grace "$grace" --arg label "$label" \
+    --argjson cap "$(( MAX_TTL_HOURS * 3600 + SWEEP_GRACE_SECONDS ))" --arg purpose "$purpose" '
     def created_epoch: (.created // "" | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z")
                         | try fromdateiso8601 catch 0);
-    def expiry: (.labels["delete-after"] // "") as $d | created_epoch as $c
+    def expiry: ((.labels // {})[$label] // "") as $d | created_epoch as $c
       | if ($d | test("^[0-9]+$")) then
-          (if $c > 0 then ([($d | tonumber), $c + $cap] | min) else ($d | tonumber) end)
-        else (if $c > 0 then $c + $ttl else 0 end) end;
+          (if $c > 0 then ([($d | tonumber) + $grace, $c + $cap] | min) else ($d | tonumber) + $grace end)
+        else (if $c > 0 then $c + $ttl + $grace else 0 end) end;
     .[] | select((.labels // {}).purpose == $purpose) | select(expiry <= $now)
         | "\(.id)\t\(.name)\t\(.assignee_id // "")"'
 }
@@ -635,12 +681,15 @@ do_sweep() {
     hc_mut ssh-key delete "$id" > /dev/null && deleted=$(( deleted + 1 )) || { warn "delete ssh-key $id failed"; rc=1; }
   done < <(hc ssh-key list -l "$sel" -o json | expired_filter "$t")
 
-  # Alert only (never delete): control servers of test/scenarios/g0-watchdog.sh that outlived their
-  # delete-after mean a crashed watchdog test. They are outside the sweeper's label on purpose.
-  local ctl
-  ctl=$(hc server list -l "purpose=$LABEL_CONTROL" -o json | jqr -r --argjson now "$t" \
-    '.[] | select((((.labels // {})["delete-after"] // "0") | tonumber? // 0) <= $now) | .name' | paste -sd' ' -)
-  if [[ -n $ctl ]]; then warn "overdue watchdog-control server(s), delete them by hand: $ctl"; rc=1; fi
+  # Watchdog-control servers (test/scenarios/g0-watchdog.sh): never selected by the test label, and
+  # their delete-after is expired bait. They get their own watchdog: deleted once control-expires
+  # plus a grace period has passed, so a crashed watchdog test cannot leave one billing.
+  local csel="purpose=$LABEL_CONTROL"
+  while IFS=$'\t' read -r id name _; do
+    [[ -n $id ]] || continue
+    log "overdue watchdog-control server $name ($id): deleting"
+    hc_mut server delete "$id" > /dev/null && deleted=$(( deleted + 1 )) || { warn "delete server $id failed"; rc=1; }
+  done < <(hc server list -l "$csel" -o json | expired_filter "$t" control)
 
   if (( !DRY_RUN )); then
     local left kind
@@ -648,6 +697,8 @@ do_sweep() {
       left=$(hc "$kind" list -l "$sel" -o json | expired_filter "$t" | cut -f2 | paste -sd' ' -)
       if [[ -n $left ]]; then warn "expired $kind still present after sweep: $left"; rc=1; fi
     done
+    left=$(hc server list -l "$csel" -o json | expired_filter "$t" control | cut -f2 | paste -sd' ' -)
+    if [[ -n $left ]]; then warn "overdue watchdog-control server still present after sweep: $left"; rc=1; fi
   fi
   log "sweep done: $deleted deletion(s), status $rc"
   return "$rc"
@@ -673,6 +724,10 @@ main() {
   local cmd=${1:-help}
   (( $# )) && shift
   parse_opts "$@"
+  case $cmd in
+    render-user-data|help|-h|--help) ;;
+    *) check_context ;;   # before any hcloud call
+  esac
   case $cmd in
     up)
       KEEP_ON_SUCCESS=1

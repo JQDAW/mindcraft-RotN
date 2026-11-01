@@ -13,6 +13,10 @@ const statePath = process.env.FAKE_HCLOUD_STATE;
 const logPath = process.env.FAKE_HCLOUD_LOG;
 const argv = process.argv.slice(2);
 if (logPath) fs.appendFileSync(logPath, JSON.stringify(argv) + '\n');
+// Record (never the value) whether HCLOUD_TOKEN / HCLOUD_CONTEXT reached hcloud's environment.
+if (logPath && (process.env.HCLOUD_TOKEN !== undefined || process.env.HCLOUD_CONTEXT !== undefined)) {
+    fs.appendFileSync(logPath + '.env', JSON.stringify(argv) + '\n');
+}
 
 const VALUE_FLAGS = new Set(['context', 'name', 'type', 'image', 'location', 'ssh-key', 'primary-ipv4',
     'primary-ipv6', 'user-data-from-file', 'label', 'public-key-from-file', 'o', 'output', 'l', 'selector',

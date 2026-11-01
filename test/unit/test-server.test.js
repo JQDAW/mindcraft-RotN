@@ -90,7 +90,8 @@ const readJsonl = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8').trim().s
 const hcloudCalls = () => readJsonl(env.FAKE_HCLOUD_LOG);
 const sshCalls = () => readJsonl(env.FAKE_SSH_LOG);
 const state = () => JSON.parse(fs.readFileSync(env.FAKE_HCLOUD_STATE, 'utf8'));
-const verbOf = (argv) => argv.filter((a) => !a.startsWith('-')).slice(0, 2).join(' ');
+const withoutContext = (argv) => (argv[0] === '--context' ? argv.slice(2) : argv);
+const verbOf = (argv) => withoutContext(argv).filter((a) => !a.startsWith('-')).slice(0, 2).join(' ');
 const mutating = () => hcloudCalls().filter((a) => /^(\S+) (create|delete)$/.test(verbOf(a)));
 const indexOfCall = (pred) => hcloudCalls().findIndex(pred);
 const flagValues = (argv, flag) => argv.flatMap((a, i) => (a === flag ? [argv[i + 1]] : []));
@@ -210,7 +211,7 @@ describe('up / run / down', () => {
         assert.match(r.stderr, /DRY-RUN: hcloud primary-ip create --name mcr-test-dry-ipv4 --type ipv4 --location nbg1 --auto-delete=true/);
         assert.match(r.stderr, /DRY-RUN: hcloud server create --name mcr-test-dry --type cpx42 --image ubuntu-24\.04 --location nbg1 --ssh-key mcr-test-dry --primary-ipv4 mcr-test-dry-ipv4 --without-ipv6/);
         assert.match(r.stderr, new RegExp(`--label delete-after=${NOW + 8 * 3600}`));
-        assert.match(r.stderr, /EUR 0\.1381\/h gross; worst case \(TTL 8h\) EUR 1\.10/);
+        assert.match(r.stderr, /EUR 0\.1381\/h gross; worst case \(TTL 8h, sweeper deletes it\) ~9 billed hours, EUR 1\.24/);
         assert.deepEqual(fs.readdirSync(path.join(env.ROTN_TEST_STATE_DIR, 'active')), [], 'no stale state left behind');
         assert.ok(fs.existsSync(path.join(env.ROTN_TEST_STATE_DIR, 'dry-run-user-data.yaml')));
     });
@@ -302,7 +303,7 @@ describe('up / run / down', () => {
 
         const again = run(['up', '--yes', '--name', 'mcr-test-second']);
         assert.notEqual(again.code, 0, 'refuses a second server without --allow-multiple');
-        assert.match(again.stderr, /already exist: mcr-test-keep/);
+        assert.match(again.stderr, /already exist: server: mcr-test-keep; primary-ip: mcr-test-keep-ipv4; ssh-key: mcr-test-keep;/);
 
         const down = run(['down']);
         assert.equal(down.code, 0, down.all);
@@ -423,16 +424,19 @@ describe('sweep (watchdog)', () => {
         }
     });
 
-    test('overdue watchdog-control servers raise an alert but are never deleted', () => {
+    test('watchdog-control: an expired delete-after is ignored; control-expires + 30 min grace deletes it', () => {
+        const C = { purpose: 'mindcraft-rotn-watchdog-control', 'delete-after': String(NOW - 600) };
         seed({ servers: [
-            { id: 7, name: 'mcr-wdctl-x', labels: { purpose: 'mindcraft-rotn-watchdog-control', 'delete-after': String(NOW - 1) }, created: iso(NOW - 3 * 3600) },
-            { id: 8, name: 'mcr-wdctl-y', labels: { purpose: 'mindcraft-rotn-watchdog-control', 'delete-after': String(NOW + 3600) }, created: iso(NOW - 60) },
+            { id: 7, name: 'ctl-live', labels: { ...C, 'control-expires': String(NOW + 600) }, created: iso(NOW - 600) },
+            { id: 8, name: 'ctl-in-grace', labels: { ...C, 'control-expires': String(NOW - 1700) }, created: iso(NOW - 5400) },
+            { id: 9, name: 'ctl-overdue', labels: { ...C, 'control-expires': String(NOW - 1900) }, created: iso(NOW - 5400) },
+            { id: 10, name: 'ctl-no-expiry-old', labels: { ...C }, created: iso(NOW - 3 * 3600) },
+            { id: 11, name: 'target', labels: { ...P, 'delete-after': String(NOW - 600) }, created: iso(NOW - 600) },
         ], primary_ips: [], ssh_keys: [] });
         const r = run(['sweep']);
-        assert.notEqual(r.code, 0);
-        assert.match(r.stderr, /overdue watchdog-control server\(s\), delete them by hand: mcr-wdctl-x$/m);
-        assert.equal(state().servers.length, 2);
-        assert.equal(mutating().length, 0);
+        assert.equal(r.code, 0, r.all);
+        assert.deepEqual(state().servers.map((s) => s.name).sort(), ['ctl-in-grace', 'ctl-live']);
+        assert.match(r.stderr, /overdue watchdog-control server ctl-overdue \(9\): deleting/);
     });
 
     test('--dry-run deletes nothing', () => {
@@ -456,6 +460,100 @@ describe('sweep (watchdog)', () => {
     test('fails loudly without hcloud auth', () => {
         const r = run(['sweep'], { FAKE_HCLOUD_NOAUTH: '1' });
         assert.notEqual(r.code, 0);
+    });
+});
+
+describe('hcloud context pin (review finding 1)', () => {
+    test('every hcloud call carries --context mindcraft-rotn-test and never sees HCLOUD_TOKEN', () => {
+        const r = run(['run', '--yes', '--name', 'mcr-test-ctx', '--', 'true'],
+            { HCLOUD_TOKEN: 'not-a-real-token', HCLOUD_CONTEXT: 'mindcraft-rotn-test' });
+        assert.equal(r.code, 0, r.all);
+        const calls = hcloudCalls();
+        assert.ok(calls.length > 5);
+        for (const a of calls) assert.deepEqual(a.slice(0, 2), ['--context', 'mindcraft-rotn-test'], a.join(' '));
+        assert.ok(!fs.existsSync(env.FAKE_HCLOUD_LOG + '.env'), 'HCLOUD_TOKEN/HCLOUD_CONTEXT stripped from hcloud env');
+    });
+
+    test('any other context is refused before the first hcloud call', () => {
+        for (const args of [['up', '--yes'], ['sweep'], ['down', '--name', 'mcr-test-x'], ['list']]) {
+            const r = run(args, { HCLOUD_CONTEXT: 'production' });
+            assert.notEqual(r.code, 0);
+            assert.match(r.stderr, /refusing hcloud context 'production'/);
+        }
+        assert.notEqual(run(['up', '--yes', '--context', 'other']).code, 0);
+        assert.equal(hcloudCalls().length, 0);
+    });
+
+    test('env-token mode (no context) is accepted only inside GitHub Actions', () => {
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        const off = run(['sweep'], { ROTN_HCLOUD_AUTH: 'env-token', GITHUB_ACTIONS: '' });
+        assert.notEqual(off.code, 0);
+        assert.match(off.stderr, /only for the GitHub sweeper/);
+        assert.equal(hcloudCalls().length, 0);
+        const on = run(['sweep'], { ROTN_HCLOUD_AUTH: 'env-token', GITHUB_ACTIONS: 'true', HCLOUD_TOKEN: 'x' });
+        assert.equal(on.code, 0, on.all);
+        for (const a of hcloudCalls()) assert.ok(!a.includes('--context'));
+    });
+});
+
+describe('pre-create guard (review finding 6)', () => {
+    for (const [kind, key] of [['primary-ip', 'primary_ips'], ['ssh-key', 'ssh_keys']]) {
+        test(`a leftover labelled ${kind} blocks a new batch`, () => {
+            seed({ servers: [], primary_ips: [], ssh_keys: [],
+                [key]: [{ id: 1, name: 'leftover', labels: { purpose: 'mindcraft-rotn-test', 'delete-after': String(NOW + 60) }, created: '2026-11-01T11:00:00+00:00' }] });
+            const r = run(['up', '--yes', '--name', 'mcr-test-guard']);
+            assert.notEqual(r.code, 0);
+            assert.match(r.stderr, new RegExp(`already exist: ${kind}: leftover;`));
+            assert.equal(mutating().length, 0);
+        });
+    }
+});
+
+describe('g0-watchdog.sh against the fake API (review findings 1, 2, 4)', () => {
+    const wd = fwd(path.join(repo, 'test', 'scenarios', 'g0-watchdog.sh'));
+    const TS = '20261101-120000';
+    function runWd(args, extraEnv = {}) {
+        const e = { ...env, WATCHDOG_TS: TS, WATCHDOG_POLL_SECONDS: '0', GH_BIN: 'false', ...extraEnv };
+        delete e.ROTN_TEST_NOW; // the scenario and the sweep use the real clock
+        const r = spawnSync(BASH, [wd, ...args], { env: e, encoding: 'utf8', timeout: 120000 });
+        return { code: r.status, stderr: r.stderr, all: `${r.stdout}\n${r.stderr}` };
+    }
+
+    test('local mode: sweep deletes the expired target and its IP, leaves the bait control; cleanup removes the control by ID', () => {
+        const r = runWd(['--yes', '--mode', 'local', '--timeout', '1']);
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, /PASS: target server, Primary IPv4 and SSH key deleted/);
+        const calls = hcloudCalls();
+        const ctlCreate = calls.find((a) => verbOf(a) === 'server create' && a.includes('mcr-wdctl-' + TS));
+        const labels = flagValues(ctlCreate, '--label');
+        assert.ok(!labels.includes('purpose=mindcraft-rotn-test'), 'control has no test label');
+        assert.ok(labels.some((l) => /^delete-after=\d+$/.test(l) && Number(l.split('=')[1]) < Date.now() / 1000), 'control has an expired delete-after');
+        assert.ok(labels.some((l) => /^control-expires=\d+$/.test(l)));
+        // every delete is by numeric ID; the control is deleted by the cleanup, not the sweep
+        for (const a of calls.filter((x) => verbOf(x).endsWith('delete'))) assert.match(a[a.length - 1], /^\d+$/, a.join(' '));
+        const st = state();
+        assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0);
+        for (const a of calls) assert.deepEqual(a.slice(0, 2), ['--context', 'mindcraft-rotn-test']);
+    });
+
+    test('a failed create never deletes a pre-existing resource that has the same name', () => {
+        seed({ servers: [{ id: 77, name: `mcr-wdctl-${TS}`, labels: {}, created: '2026-01-01T00:00:00+00:00' }],
+            primary_ips: [], ssh_keys: [{ id: 78, name: 'human-key', labels: {}, created: '2026-01-01T00:00:00+00:00' }] });
+        const r = runWd(['--yes', '--mode', 'local']);
+        assert.notEqual(r.code, 0, 'control create fails with a name clash');
+        const st = state();
+        assert.deepEqual(st.servers.map((s) => s.id), [77], 'the pre-existing server with the control name survives');
+        assert.deepEqual(st.ssh_keys.map((s) => s.id), [78]);
+        assert.equal(st.primary_ips.length, 0, 'the IP this run created is cleaned up');
+        assert.match(r.stderr, /cleanup verified/);
+        for (const a of hcloudCalls().filter((x) => verbOf(x).endsWith('delete'))) assert.notEqual(a[a.length - 1], '77');
+    });
+
+    test('refuses any other context', () => {
+        const r = runWd(['--yes', '--context', 'production']);
+        assert.equal(r.code, 2);
+        assert.match(r.stderr, /refusing hcloud context 'production'/);
+        assert.equal(hcloudCalls().length, 0);
     });
 });
 

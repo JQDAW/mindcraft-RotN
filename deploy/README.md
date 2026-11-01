@@ -17,7 +17,11 @@ Owner: harness-ops. Test server first (gate G0); CX23 provisioning, the systemd 
 
 ### Commands
 
-Run from Git Bash on Windows or bash on Linux. `hcloud` must be authenticated: `hcloud server list` must succeed.
+Run from Git Bash on Windows or bash on Linux. The scripts only ever use the hcloud context `mindcraft-rotn-test` (the test project):
+
+- Every call passes `--context mindcraft-rotn-test`, with `HCLOUD_TOKEN` and `HCLOUD_CONTEXT` removed from hcloud's environment.
+- Any other `--context` or `$HCLOUD_CONTEXT` is refused before the first call.
+- Only the GitHub sweeper runs without a context (`ROTN_HCLOUD_AUTH=env-token`, accepted only when `GITHUB_ACTIONS=true`).
 
 ```bash
 # Batch: create, run a command, always delete (server, then Primary IPv4, then SSH key; verified).
@@ -49,15 +53,20 @@ Inside `run`, the command gets `TEST_SERVER_NAME`, `TEST_SERVER_HOST`, `TEST_SER
 | --- | --- |
 | Labels | Every server, Primary IP and SSH key gets `purpose=mindcraft-rotn-test`, `delete-after=<epoch>` and `batch=<name>`. |
 | EXIT trap | `run` always deletes. `up` deletes if the build fails (unless `--keep-on-failure`). Deletion runs server first, then the IP, then the key, and checks that each is gone. |
-| Off-PC sweeper | `.github/workflows/test-server-sweeper.yml` runs every 15 min from `develop`. It deletes labelled resources whose `delete-after` has passed, selecting only by label. No `delete-after` keeps a labelled resource alive past created + 24 h + 30 min. The job fails if an expired labelled resource survives, and it alerts (never deletes) on overdue watchdog-control servers. |
-| Guards | No create without `--yes` (or a TTY prompt). A second server needs `--allow-multiple`. The TTL is at most 24 h. Each batch has its own SSH key, so Hetzner sends no root-password email. |
+| Off-PC sweeper | `.github/workflows/test-server-sweeper.yml` runs every 15 min from `develop`. It deletes labelled resources whose `delete-after` has passed, selecting only by label. No `delete-after` keeps a labelled resource alive past created + 24 h + 30 min. The job fails if an expired labelled resource survives. Watchdog-control servers (`purpose=mindcraft-rotn-watchdog-control`) are never selected by the test label; the sweeper deletes them at their own `control-expires` label plus 30 min. |
+| Guards | No create without `--yes` (or a TTY prompt). Any leftover labelled server, Primary IP or SSH key blocks a new batch unless `--allow-multiple` is passed. The TTL is at most 24 h. Each batch has its own SSH key, so Hetzner sends no root-password email. |
 
 The sweeper needs a GitHub Environment named `hetzner-test-sweeper`:
 
 - Its deployment branches are limited to `develop`.
 - It holds the secret `HCLOUD_TOKEN`: a Read & Write token of the **test** project, set by the human.
 
-Watchdog acceptance test: `test/scenarios/g0-watchdog.sh --yes --mode dispatch` (or `scheduled`). It passes only if the target is gone within one interval (15 min, plus 5 min for the run).
+Watchdog acceptance test: `test/scenarios/g0-watchdog.sh --yes --mode dispatch` (or `scheduled`). It passes only if both of these hold:
+
+- The target is gone within one interval (15 min, plus 5 min for the run).
+- The control is still there. The control has the same expired `delete-after` as the target but no test label, so it proves the sweeper selects by label.
+
+The script's cleanup deletes only the IDs its own creates returned.
 
 GitHub disables scheduled workflows in a public repository after 60 days without repository activity. If the sweeper's run history stops, re-enable it under Actions -> test-server-sweeper.
 

@@ -56,6 +56,8 @@ jobs:
       - name: Sweep expired labelled test resources
         env:
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          # No hcloud context on the runner: the Environment's token is the test project's.
+          ROTN_HCLOUD_AUTH: env-token
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
         run: |
           set -euo pipefail
