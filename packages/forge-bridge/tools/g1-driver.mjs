@@ -1,0 +1,136 @@
+#!/usr/bin/env node
+// forge-bridge scenario driver for harness-ops' runner (test/runner/DRIVER.md).
+// It is the bot under test in the G1 gate scenario (g1-login-chat-walk): Mindcraft's
+// real initBot (src/utils/mcdata.js) with forge-bridge attached, plus the
+// runner's scenario protocol (hello, echo, walk, stay until SIGTERM).
+//
+//   deploy/test-server.sh run --yes --ttl-hours 2 -- \
+//     node test/runner/run.mjs --scenario g1-login-chat-walk -- \
+//       node packages/forge-bridge/tools/g1-driver.mjs
+//
+// The runner decides pass or fail from the server's log, never from this driver.
+//
+// Env (allowlisted by the runner; see DRIVER.md):
+//   TEST_SERVER_HOST, TEST_SERVER_PORT   the disposable test server (never anything else)
+//   ROTN_SCENARIO_BOT                    bot account name (FRCFLD)
+//   ROTN_SCENARIO_HELLO                  said once after spawn (attachScenario)
+//   MINDCRAFT_PROFILES_FOLDER            the bot's token cache; required with Microsoft auth,
+//                                        never printed. A missing or stale cache exits 3; this
+//                                        driver never starts a device-code login.
+//   ROTN_DRIVER_AUTH                     microsoft (default) | offline (loopback tests only)
+//   ROTN_DRIVER_FORGE_BRIDGE             on (default) | auto | off  -> FORGE_BRIDGE
+//   ROTN_DRIVER_CAPTURE                  1 (default: captures/raw/<bot>-<time>.jsonl) | a path | 0
+//   ROTN_DRIVER_MODLIST_FILE             ping JSON fallback (default: the pinned RotN 3.3.4 fixture)
+//
+// Exit codes (ADR 0003 decision 5, DRIVER.md): 0 clean stop on SIGTERM/SIGINT,
+// 1 transient disconnect, 3 fatal (setup error, or a kick that the runner's
+// FATAL_KICKS or forge-bridge's classifyKick calls fatal).
+
+import process from 'node:process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { attachScenario, event } from '../../../test/runner/drivers/scenario-protocol.mjs';
+import { classifyKick as runnerClassifyKick, FATAL_KICKS } from '../../../test/runner/lib/server-log.mjs';
+import { classifyKick } from '../src/kicks.js';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const PINNED_MODLIST = path.join(HERE, '..', 'test', 'fixtures', 'rotn-3.3.4', 'ping.json');
+
+const host = process.env.TEST_SERVER_HOST;
+const port = Number(process.env.TEST_SERVER_PORT ?? 25565);
+const name = process.env.ROTN_SCENARIO_BOT ?? 'FRCFLD';
+const auth = process.env.ROTN_DRIVER_AUTH ?? 'microsoft';
+
+function fatalSetup(reason) {
+    event('fatal', { reason });
+    console.error(`g1-driver: ${reason}`);
+    process.exit(3);
+}
+
+if (!host) fatalSetup('TEST_SERVER_HOST is not set');
+if (!['microsoft', 'offline'].includes(auth)) fatalSetup(`ROTN_DRIVER_AUTH must be microsoft or offline, not ${auth}`);
+if (auth === 'microsoft' && !process.env.MINDCRAFT_PROFILES_FOLDER) {
+    fatalSetup('MINDCRAFT_PROFILES_FOLDER is not set: the bot account needs its own token cache folder');
+}
+
+// prismarine-auth logs HTTP details through `debug` when DEBUG matches; it loads
+// with mineflayer below, so clear it first. initBot reads the FORGE_* switches.
+delete process.env.DEBUG;
+process.env.FORGE_BRIDGE = process.env.ROTN_DRIVER_FORGE_BRIDGE ?? 'on';
+const capture = process.env.ROTN_DRIVER_CAPTURE ?? '1';
+if (capture === '0') delete process.env.FORGE_CAPTURE; else process.env.FORGE_CAPTURE = capture;
+process.env.FORGE_MODLIST_FILE = process.env.ROTN_DRIVER_MODLIST_FILE ?? PINNED_MODLIST;
+
+process.on('unhandledRejection', (e) => event('error', { message: `unhandled rejection: ${String(e?.message ?? e).slice(0, 2000)}` }));
+
+async function main() {
+    const { setSettings } = await import('../../../src/agent/settings.js');
+    setSettings({ host, port, auth, minecraft_version: '1.12.2' });
+    const { initBot } = await import('../../../src/utils/mcdata.js');
+
+    const bot = initBot(name, {
+        onMsaCode: () => fatalSetup('Microsoft device-code login needed; the human must redo the login (coord/NEEDS-HUMAN.md)'),
+    });
+    const bridge = () => bot.forge?.bridge ?? null;
+
+    // Modded blocks have no name in bot.registry yet (brief item 4); add the Forge registry name.
+    function blockBelow() {
+        if (!bot.entity) return null;
+        const b = bot.blockAt(bot.entity.position.offset(0, -1, 0));
+        if (!b) return null;
+        return {
+            pos: [b.position.x, b.position.y, b.position.z], id: b.type, meta: b.metadata,
+            name: b.name || null, registryName: bridge()?.registries?.nameOf('minecraft:blocks', b.type) ?? null,
+        };
+    }
+
+    attachScenario(bot, {
+        emit: (type, data = {}) => event(type, type === 'walked' || type === 'spawn' ? { ...data, blockBelow: blockBelow(), walkMethod: 'forward-control' } : data),
+    });
+
+    let stopping = false;
+    let fatal = null;
+    bot.on('login', () => {
+        const b = bridge();
+        event('login', { username: bot.username, forgeBridge: !!b, modListSource: b?.modListSource ?? null, reid: b?.reid ?? null });
+    });
+    bot.once('spawn', () => {
+        const b = bridge();
+        event('forge', {
+            handshakeDone: b?.handshakeDone ?? false, handshakeState: b?.handshake?.stateName ?? null,
+            registrySizes: b?.registries?.sizes() ?? null, blockNamespaces: b?.registries?.namespaces('minecraft:blocks') ?? null,
+            capture: bot.forge?.capture?.file ? path.relative(process.cwd(), bot.forge.capture.file) : null,
+        });
+    });
+    bot.on('kicked', (reason) => {
+        const text = typeof reason === 'string' ? reason : JSON.stringify(reason);
+        const runnerClass = runnerClassifyKick(text);
+        const ours = classifyKick(text);
+        const isFatal = FATAL_KICKS.has(runnerClass) || ours.fatal;
+        if (isFatal) fatal = ours.fatal ? ours.category : runnerClass;
+        event('kicked', { reason: text.slice(0, 2000), class: runnerClass, forgeCategory: ours.category, fatal: isFatal });
+    });
+    bot.on('error', (e) => event('error', { message: String(e?.message ?? e).slice(0, 2000) }));
+    bot.on('end', (why) => {
+        const b = bridge();
+        const code = stopping ? 0 : fatal ? 3 : 1;
+        event('end', {
+            reason: String(why ?? ''), exitCode: code,
+            stats: b?.stats ?? null, partialReadErrors: bot.partialReadErrors ?? null,
+        });
+        try { bot.forge?.capture?.close(); } catch { /* already closed */ }
+        process.exit(code);
+    });
+
+    const stop = () => {
+        if (stopping) return;
+        stopping = true;
+        event('stopping');
+        try { bot.quit('scenario finished'); } catch { /* not connected */ }
+        setTimeout(() => { try { bot.forge?.capture?.close(); } catch { /* closed */ } process.exit(0); }, 5000).unref();
+    };
+    process.on('SIGTERM', stop);
+    process.on('SIGINT', stop);
+}
+
+main().catch((e) => fatalSetup(`startup failed: ${String(e?.stack ?? e).slice(0, 2000)}`));

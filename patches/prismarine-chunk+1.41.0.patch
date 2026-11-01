@@ -1,8 +1,50 @@
 diff --git a/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js b/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js
-index 1de1a3c..831f634 100644
+index 1de1a3c..265594e 100644
 --- a/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js
 +++ b/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js
-@@ -224,9 +224,12 @@ module.exports = (Block, mcData) => {
+@@ -12,7 +12,7 @@ const exists = val => val !== undefined
+ module.exports = (Block, mcData) => {
+   return class ChunkColumn extends CommonChunkColumn {
+     static get section () { return ChunkSection }
+-    constructor () {
++    constructor (options = {}) {
+       super(mcData)
+       this.sectionMask = 0
+       this.skyLightSent = true
+@@ -21,6 +21,9 @@ module.exports = (Block, mcData) => {
+         constants.SECTION_WIDTH * constants.SECTION_WIDTH
+       ).fill(1)
+       this.maxBitsPerBlock = neededBits(Object.values(mcData.blocks).reduce((high, block) => Math.max(high, block.maxStateId), 0))
++      // Forge/REID: a caller may seed a wider global palette (from the synced block registry).
++      // Sections also widen on write, so this is only a starting width. mindcraft-rotn forge-bridge.
++      if (options && options.maxBitsPerBlock > this.maxBitsPerBlock) this.maxBitsPerBlock = options.maxBitsPerBlock
+     }
+ 
+     toJson () {
+@@ -178,10 +181,18 @@ module.exports = (Block, mcData) => {
+         }
+       })
+ 
+-      // write biome data
+-      this.biomes.forEach(biome => {
+-        smartBuffer.writeUInt8(biome)
+-      })
++      // write biome data. REID (jeid) VarInt biomes are written back in the format they were
++      // read in, or whenever an id does not fit in a byte. mindcraft-rotn forge-bridge.
++      if (this.biomesFormat === 'varint' || this.biomes.some(biome => biome > 255 || biome < 0)) {
++        varInt.write(smartBuffer, this.biomes.length)
++        this.biomes.forEach(biome => {
++          varInt.write(smartBuffer, biome)
++        })
++      } else {
++        this.biomes.forEach(biome => {
++          smartBuffer.writeUInt8(biome)
++        })
++      }
+ 
+       return smartBuffer.toBuffer()
+     }
+@@ -224,9 +235,12 @@ module.exports = (Block, mcData) => {
            palette = null
          }
  
@@ -16,7 +58,7 @@ index 1de1a3c..831f634 100644
            capacity: 4096
          }).readBuffer(reader, varInt.read(reader) * 2)
  
-@@ -255,16 +258,45 @@ module.exports = (Block, mcData) => {
+@@ -255,16 +269,45 @@ module.exports = (Block, mcData) => {
        // read biomes
        if (fullChunk) {
          const p = { x: 0, y: 0, z: 0 }
@@ -65,3 +107,36 @@ index 1de1a3c..831f634 100644
  function getBiomeIndex (pos) {
    return (pos.z * 16) | pos.x
  }
+diff --git a/node_modules/prismarine-chunk/src/pc/1.9/ChunkSection.js b/node_modules/prismarine-chunk/src/pc/1.9/ChunkSection.js
+index 80ac01e..db19359 100644
+--- a/node_modules/prismarine-chunk/src/pc/1.9/ChunkSection.js
++++ b/node_modules/prismarine-chunk/src/pc/1.9/ChunkSection.js
+@@ -116,9 +116,11 @@ class ChunkSection {
+           if (bitsPerValue <= constants.MAX_BITS_PER_BLOCK) {
+             this.data = this.data.resizeTo(bitsPerValue)
+           } else {
+-            // switches to the global palette
++            // switches to the global palette, wide enough for every state id in it
++            // (Forge/REID ids can exceed the vanilla 13 bits). mindcraft-rotn forge-bridge.
++            const globalBits = Math.max(this.maxBitsPerBlock, neededBits(Math.max(...this.palette)))
+             const newData = new BitArray({
+-              bitsPerValue: this.maxBitsPerBlock,
++              bitsPerValue: globalBits,
+               capacity: constants.BLOCK_SECTION_VOLUME
+             })
+             for (let i = 0; i < constants.BLOCK_SECTION_VOLUME; i++) {
+@@ -133,7 +135,13 @@ class ChunkSection {
+         }
+       }
+     } else {
+-      // uses global palette
++      // uses global palette; widen the data array if this state id does not fit
++      // (Forge/REID ids can exceed the vanilla 13 bits). mindcraft-rotn forge-bridge.
++      const bitsPerValue = neededBits(stateId)
++      if (bitsPerValue > this.data.getBitsPerValue()) {
++        this.data = this.data.resizeTo(bitsPerValue)
++        if (bitsPerValue > this.maxBitsPerBlock) this.maxBitsPerBlock = bitsPerValue
++      }
+       palettedIndex = stateId
+     }
+ 
