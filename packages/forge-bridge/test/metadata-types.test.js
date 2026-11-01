@@ -98,3 +98,26 @@ test('the Forge-registry serializer ids match what the real server synced; a wro
     const bad = replayRunA({ metadataSerializers: { 256: 'doggytalents:optional_text_component', 257: 'doggytalents:talent_level_list' } });
     assert.equal(bad.logs.filter((l) => /entity-metadata serializer 25[67]: expected .* server synced doggytalents:/.test(l)).length, 2);
 });
+
+test('serializer 14 is marked inferred, and the bridge logs its first decode once (until the dumper confirms it)', async () => {
+    const { INFERRED_METADATA_SERIALIZERS } = await import('../src/reid.js');
+    assert.deepEqual(INFERRED_METADATA_SERIALIZERS, { 14: 'aquaacrobatics:pose' });
+    const mk = (opts) => {
+        const client = new EventEmitter();
+        client.write = () => true;
+        client.setSerializer = () => {};
+        const logs = [];
+        attachForgeBridge(client, { modList: pinnedModList(), log: (m) => logs.push(m), ...opts });
+        const meta = (entityId) => client.emit('packet', { entityId, metadata: [{ key: 17, type: 14, value: 0 }, { key: 18, type: 6, value: false }] }, { name: 'entity_metadata', state: 'play' }, null, null);
+        return { logs, meta };
+    };
+    const a = mk({});
+    a.meta(284);
+    a.meta(285);
+    const lines = a.logs.filter((l) => /inferred\) first decoded/.test(l));
+    assert.deepEqual(lines, ['entity-metadata serializer 14 (aquaacrobatics:pose, inferred) first decoded in entity_metadata: entity 284 key 17 value 0']);
+    // Once the dumper supplies id 14 explicitly, it is no longer an inference: no log.
+    const b = mk({ metadataSerializers: { 14: 'aquaacrobatics:pose' } });
+    b.meta(284);
+    assert.equal(b.logs.filter((l) => /inferred/.test(l)).length, 0);
+});

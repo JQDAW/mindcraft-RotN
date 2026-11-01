@@ -91,7 +91,9 @@ After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snaps
   - A block is a solid full cube (`boundingBox: 'block'`, so the bot never falls through a modded floor), diggable, with a conservative hardness of 1.5 (stone's), so `digTime` is finite and above 0, and no drops.
   - An item stacks to 64. An entity is a `mob`. A biome is a neutral overworld biome.
 - **Properties.** `extendRegistry(registry, snapshot, { properties: { blocks: { 'pyrotech:rock': {...} } } })` fills in or overrides fields, keyed by full registry name; vanilla names use `minecraft:stone`. rotn-data's dump (ADR 0004) is meant to feed this. Properties cannot rename an entry.
-- **Properties after the extension** (rotn-data's request 2). `applyProperties(registry, properties)` applies rotn-data's properties to an already-extended `bot.registry`, keyed by full registry name, so `harvestTools` can use its item ids. It updates every map that points at a changed entry (id map, array, all `*ByName` keys including aliases, `blocksByStateId`, `entitiesByForgeId`, and the collision-shape table when shapes change) and returns `{ applied, missing }`.
+- **Properties after the extension** (rotn-data's request 2). `applyProperties(registry, properties)` applies rotn-data's properties to an already-extended `bot.registry`, keyed by full registry name, so `harvestTools` can use its item ids. It builds one old-to-new map per kind and swaps in a single pass over every map that can hold an entry (id map, array, all `*ByName` keys including aliases, `blocksByStateId`, `entitiesByForgeId`, and the collision-shape table when shapes change). It returns `{ applied, missing }`.
+  - Properties never change `id`, `name`, `registryName`, `forge`, `minStateId`, `maxStateId` or `defaultState`; those keys are stripped. Properties under two names of one entry merge.
+  - It **refuses a registry `extendRegistry` never touched**, whose maps would still be minecraft-data's process-wide objects.
 - **Mindcraft's name helpers** (rotn-data's request 4). `initBot` sets `mcdata.js`'s `mcdata` to `bot.registry` at login, and again after the extension. `getBlockId`, `getItemName` and the rest therefore know the server's modded names; vanilla names are unchanged.
 - **Isolation.** Dummied entries are skipped. Only `bot.registry`'s own maps and its `blockCollisionShapes` are replaced; prismarine-registry copies minecraft-data only shallowly, so the maps are copied first. The process-wide `minecraft-data` object stays vanilla.
 - **Shapes.** Each modded block is registered in the copied collision-shape table, so a Block class made later keeps its shapes (prismarine-block resets shapes by name).
@@ -129,8 +131,8 @@ Vanilla 1.12 defines entity-metadata serializer ids 0-13. A protodef switch cann
   | `doggytalents:optional_text_component` | an optional string |
 
 - **Ids.** Mods that call vanilla `DataSerializers.registerSerializer` get ids 14, 15, ... in call order. Forge-registry serializers start at 256 and are synced by name.
-- **Defaults** (`rotnMetadataSerializers(modList)`) contain only proven ids:
-  - 14 = `aquaacrobatics:pose`. G1's player packet has a one-byte value under type 14 that ends exactly at the next key; only the VarInt among the five candidates fits.
+- **Defaults** (`rotnMetadataSerializers(modList)`):
+  - 14 = `aquaacrobatics:pose`, **inferred by fit, to be confirmed with rotn-data's dumper**. G1's player packet has a one-byte value under type 14 that ends exactly at the next key; only the VarInt among the five candidates fits. Until the dumper confirms it, the bridge logs (and captures) the first value it decodes with id 14 (`INFERRED_METADATA_SERIALIZERS`). Passing id 14 explicitly in `metadataSerializers` ends that.
   - 256 and 257 = the DoggyTalents pair (Batch A's synced registry).
   - Ids 15-18 (base, Charset, Mowzie's Mobs, Requious, order unknown) come from rotn-data's dumper as the bridge option `metadataSerializers: { id: name }`.
 - **Check.** The protocol is compiled before RegistryData arrives. So after it, the bridge compares the >= 256 ids with the synced `minecraft:dataserializers` and logs (and captures) any mismatch.

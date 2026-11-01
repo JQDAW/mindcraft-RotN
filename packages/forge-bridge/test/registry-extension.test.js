@@ -292,3 +292,32 @@ test('applyProperties updates an extended registry in every map, aliases include
     const Block = require('prismarine-block')(registry);
     assert.deepEqual(Block.fromStateId(rockId << 4, 1).shapes, [[0, 0, 0, 1, 0.5, 1]], 'a Block class made later keeps the new shape');
 });
+
+// PR #46 review follow-ups.
+test('applyProperties refuses a registry that was never extended (the shared minecraft-data maps stay untouched)', async () => {
+    const { applyProperties } = await import('../src/registry-extension.js');
+    const plain = freshRegistry();
+    assert.throws(() => applyProperties(plain, { blocks: { 'minecraft:stone': { hardness: 99 } } }), /was not extended/);
+    assert.equal(require('minecraft-data')('1.12.2').blocksByName.stone.hardness, 1.5);
+    assert.equal(freshRegistry().blocksByName.stone.hardness, 1.5);
+});
+
+test('applyProperties ignores protected fields and merges properties given under two names of one entry', async () => {
+    const { applyProperties } = await import('../src/registry-extension.js');
+    const registry = freshRegistry();
+    extendRegistry(registry, realSnapshot());
+    const before = registry.blocks[227];
+    const report = applyProperties(registry, {
+        blocks: {
+            'minecraft:silver_shulker_box': { hardness: 4, id: 9999, name: 'evil', registryName: 'x:y', forge: { modded: true }, minStateId: 0, maxStateId: 99999, defaultState: 7 },
+            light_gray_shulker_box: { resistance: 12 }, // minecraft-data's name for the same entry
+        },
+    });
+    assert.deepEqual(report.applied, { blocks: 1 }, 'one entry, both names');
+    const box = registry.blocks[227];
+    assert.equal(box.hardness, 4);
+    assert.equal(box.resistance, 12);
+    for (const k of ['id', 'name', 'registryName', 'forge', 'minStateId', 'maxStateId', 'defaultState']) assert.deepEqual(box[k], before[k], `${k} is protected`);
+    assert.equal(registry.blocksByStateId[(227 << 4) | 3], box);
+    assert.equal(registry.blocksByStateId[0].name, 'air', 'state 0 untouched');
+});

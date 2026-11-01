@@ -315,6 +315,12 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - **PR #38 nits:** `entity.kind` is `unknown` when the name is unknown, and the README says the table must give `type` explicitly.
 - **Tests (targeted):** `metadata-types` 5, `registry-extension` 15 (`applyProperties` on real data), `fml-entities` 6, `e2e-initbot` (Mindcraft's `getBlockId`/`getItemName` see modded names).
 
+## Done: PR #46 follow-ups (branch `agent/net-forge/apply-properties-hardening`, from #46 head fd27ceb)
+
+- Serializer 14 is worded as inferred by fit, to be confirmed by the dumper (`INFERRED_METADATA_SERIALIZERS`). The bridge logs and captures its first decode, from `entity_metadata` or an FML spawn.
+- `applyProperties`: protected fields are stripped (`id`, `name`, `registryName`, `forge`, `minStateId`, `maxStateId`, `defaultState`), and an unextended registry is refused (it requires `entitiesByForgeId`). One old-to-new map per kind, swapped in a single pass; two names for one entry merge.
+- Targeted tests: `registry-extension` 17, `metadata-types` 6, `bridge` and `fml-entities` pass.
+
 ## Doing
 
 - Batch A done (above); PR #26 merged. PR #25 (registry extension) is being reworked for its review (vanilla entities, modded-block hardness, rebind logs), together with the PR #28 nits. **The next paid batch needs a new written GO.**

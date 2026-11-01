@@ -67,11 +67,19 @@ export const METADATA_SERIALIZER_TYPES = Object.freeze({
 });
 
 /**
- * Serializer ids for RotN 3.3.4, from the ModList. Only ids that are proven:
- * - 14 = aquaacrobatics:pose. G1 Batch B/C: a player's key 17 has type 14 with a
- *   one-byte value that ends exactly at the next key; of the five vanilla-id mod
- *   serializers only a VarInt fits (two strings, an int, 4 floats or a stack do not).
- * - 256, 257 = the DoggyTalents Forge-registry serializers (synced ids in Batch A).
+ * Ids whose serializer is inferred, not read from the server: the bridge logs the
+ * first value it decodes with each, until rotn-data's dumper confirms them.
+ */
+export const INFERRED_METADATA_SERIALIZERS = Object.freeze({ 14: 'aquaacrobatics:pose' });
+
+/**
+ * Serializer ids for RotN 3.3.4, from the ModList:
+ * - 14 = aquaacrobatics:pose, INFERRED BY FIT, to be confirmed with rotn-data's
+ *   dumper. G1 Batch B/C: a player's key 17 has type 14 with a one-byte value that
+ *   ends exactly at the next key; of the five vanilla-id mod serializers only a
+ *   VarInt fits (two strings, an int, 4 floats or a stack do not).
+ * - 256, 257 = the DoggyTalents Forge-registry serializers (synced ids in Batch A;
+ *   checked against RegistryData at every login).
  * Ids 15-18 (base, Charset, Mowzie's Mobs, Requious, in an unknown order) come
  * from rotn-data's dumper; pass them as `metadataSerializers`.
  */
