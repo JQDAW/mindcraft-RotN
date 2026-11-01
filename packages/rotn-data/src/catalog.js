@@ -50,7 +50,10 @@ export class RotnData {
         this.names = { blocks: ids('minecraft:blocks'), items: ids('minecraft:items'), entities: ids('minecraft:entities'), biomes: ids('minecraft:biomes') };
         this.miningLevels = readJson(dir, 'mining-levels')?.levels ?? {};
         // Threat overrides beyond IMob, each citing the mod's bytecode (entity-overrides.json).
-        this.entityOverrides = readJson(dir, 'entity-overrides')?.entities ?? {};
+        const ov = readJson(dir, 'entity-overrides');
+        this.entityOverrides = ov?.entities ?? {};
+        // Vanilla animals another mod removes on this pack (Animania: config/animania.cfg).
+        this.replacedByMod = ov?.replacedByMod?.entities ?? {};
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
@@ -240,7 +243,19 @@ export class RotnData {
         const out = { ...e, imob, targetsPlayers: !!o?.targetsPlayers, dangerous: !!o?.dangerous };
         if (imob !== null || o) out.hostile = !!(imob || o?.targetsPlayers);
         if (o) out.threat = { confidence: o.confidence, evidence: o.evidence, ...(o.note ? { note: o.note } : {}) };
+        const r = this.replacedByMod[name];
+        if (r) {
+            const replacements = Object.entries(this.dump.entities?.entities ?? {})
+                .filter(([, x]) => x.class?.startsWith(r.replacementsPackage + '.') && x.class.slice(r.replacementsPackage.length + 1).indexOf('.') < 0)
+                .map(([n]) => n).sort();
+            out.replacedBy = { by: r.by, config: r.config, replacements };
+        }
         return out;
+    }
+
+    /** True if another mod removes this vanilla entity on this pack (Animania's chicken, cow, pig, rabbit, sheep). */
+    isReplaced(input) {
+        return !!this.entity(input)?.replacedBy;
     }
 
     /** True for entities to avoid rather than fight (Ice and Fire dragons, sea serpent, ...). */

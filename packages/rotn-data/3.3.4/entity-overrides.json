@@ -127,5 +127,37 @@
   "iceandfire:myrmex_soldier": "EntityAINearestAttackableTarget(EntityLiving.class, ...): players are not EntityLiving; retaliates (EntityAIHurtByTarget).",
   "iceandfire:myrmex_worker": "EntityAINearestAttackableTarget(EntityLiving.class, EntityMyrmexWorker$1): EntityPlayer is not an EntityLiving, so players are not targeted; only EntityAIHurtByTarget (retaliation).",
   "mod_lavacow:mimic": "Targets EntityItem only (EntityAITargetItem); retaliates (EntityAIHurtByTarget)."
+ },
+ "replacedByMod": {
+  "description": "Vanilla animals that Animania removes and replaces with its own breeds on this pack. The server refuses to spawn or summon them, so the bot will not meet them and scenarios must not expect them. catalog.entity() adds `replacedBy` (with the replacing breeds from the dump, by class package); build-common-mobs.mjs leaves them out. replaceVanillaHorses=false (config/animania.cfg:110), so horses stay.",
+  "entities": {
+   "minecraft:chicken": {
+    "by": "animania",
+    "config": "config/animania.cfg:104 B:replaceVanillaChickens=true, in the pinned 3.3.4 server pack (default configs, ADR 0005)",
+    "replacementsPackage": "com.animania.common.entities.chickens",
+    "observed": "G2 batch 1 (harness-ops, 2026-11-02): the server refused /summon minecraft:chicken and minecraft:pig."
+   },
+   "minecraft:cow": {
+    "by": "animania",
+    "config": "config/animania.cfg:107 B:replaceVanillaCows=true, in the pinned 3.3.4 server pack (default configs, ADR 0005)",
+    "replacementsPackage": "com.animania.common.entities.cows"
+   },
+   "minecraft:pig": {
+    "by": "animania",
+    "config": "config/animania.cfg:113 B:replaceVanillaPigs=true, in the pinned 3.3.4 server pack (default configs, ADR 0005)",
+    "replacementsPackage": "com.animania.common.entities.pigs",
+    "observed": "G2 batch 1 (harness-ops, 2026-11-02): the server refused /summon minecraft:chicken and minecraft:pig."
+   },
+   "minecraft:rabbit": {
+    "by": "animania",
+    "config": "config/animania.cfg:116 B:replaceVanillaRabbits=true, in the pinned 3.3.4 server pack (default configs, ADR 0005)",
+    "replacementsPackage": "com.animania.common.entities.rodents.rabbits"
+   },
+   "minecraft:sheep": {
+    "by": "animania",
+    "config": "config/animania.cfg:119 B:replaceVanillaSheep=true, in the pinned 3.3.4 server pack (default configs, ADR 0005)",
+    "replacementsPackage": "com.animania.common.entities.sheep"
+   }
+  }
  }
 }

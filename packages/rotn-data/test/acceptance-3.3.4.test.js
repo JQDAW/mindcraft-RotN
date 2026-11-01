@@ -118,5 +118,8 @@ test('common-mobs.json is up to date, names real entities, and has modded mobs (
     assert.equal(first12.length, 12);
     assert.ok(first12.some(n => !n.startsWith('minecraft:')), 'no modded mob among the first 12');
     for (const m of committed.mobs) assert.ok(pack.names.entities.has(m.name), m.name);
-    assert.ok(first12.includes('minecraft:zombie') && first12.includes('minecraft:sheep'));
+    assert.ok(first12.includes('minecraft:zombie'));
+    // Animania removes vanilla chickens, cows, pigs, rabbits and sheep on this pack (G2 batch 1).
+    for (const m of committed.mobs) assert.equal(pack.isReplaced(m.name), false, `${m.name} never spawns here`);
+    assert.ok(first12.some(n => n.startsWith('animania:')));
 });

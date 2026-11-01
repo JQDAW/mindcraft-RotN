@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { loadRotnData, isDangerous, entity } from '../index.js';
+import { loadRotnData, isDangerous, isReplaced, entity } from '../index.js';
 
 const require = createRequire(import.meta.url);
 const pack = loadRotnData('3.3.4');
@@ -92,4 +92,24 @@ test('IMob mobs stay hostile without an override; reviewed retaliators stay pass
     assert.equal(entity('animania:doe_dutch').targetsPlayers, false);
     assert.equal(isDangerous('animania:doe_dutch'), false);
     assert.match(overrides.reviewedNotMarked['animania:doe_dutch'], /"Killer"/);
+});
+
+test('vanilla animals Animania replaces are marked, citing the pack config (G2 batch 1)', { skip }, () => {
+    const replaced = overrides.replacedByMod.entities;
+    assert.deepEqual(Object.keys(replaced).sort(), ['minecraft:chicken', 'minecraft:cow', 'minecraft:pig', 'minecraft:rabbit', 'minecraft:sheep']);
+    for (const [name, r] of Object.entries(replaced)) {
+        assert.match(r.config, /^config\/animania\.cfg:\d+ B:replaceVanilla\w+=true/, name);
+        const e = entity(name);
+        assert.equal(isReplaced(name), true, name);
+        assert.equal(e.replacedBy.by, 'animania');
+        assert.ok(e.replacedBy.replacements.length >= 15, `${name}: ${e.replacedBy.replacements.length} replacements`);
+        assert.ok(e.replacedBy.replacements.every(n => n.startsWith('animania:')), name);
+    }
+    assert.ok(entity('minecraft:chicken').replacedBy.replacements.includes('animania:hen_leghorn'));
+    assert.ok(entity('minecraft:pig').replacedBy.replacements.includes('animania:sow_duroc'));
+    // Rabbits, not goats (both use buck/doe/kit names).
+    assert.ok(entity('minecraft:rabbit').replacedBy.replacements.includes('animania:doe_dutch'));
+    assert.ok(!entity('minecraft:rabbit').replacedBy.replacements.includes('animania:doe_alpine'));
+    // replaceVanillaHorses=false, and other vanilla mobs are untouched.
+    for (const name of ['minecraft:horse', 'minecraft:zombie', 'minecraft:mooshroom']) assert.equal(isReplaced(name), false, name);
 });
