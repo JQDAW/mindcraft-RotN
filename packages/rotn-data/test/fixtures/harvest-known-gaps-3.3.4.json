@@ -1,5 +1,5 @@
 {
- "description": "Known harvest-info gaps in the first RotN 3.3.4 dump (2026-11-01, dumper 0.1.0, jar sha256 2d32ee40...b94c). acceptance-3.3.4.test.js asserts the gaps are exactly these, so a new gap or a fixed one shows up. None is a natural surface block; the G2 harness scenario checks the real top-50 blocks near spawn. Dumper follow-up: fall back to the default state when no metadata round-trips, and to the block item for tile-entity hardness.",
+ "description": "Known harvest-info gaps in the RotN 3.3.4 dumps (2026-11-01: first dump, jar sha256 2d32ee40...b94c; unchanged in the second dump, jar 438b3ce6...7d33). acceptance-3.3.4.test.js asserts the gaps are exactly these, so a new gap or a fixed one shows up. None is a natural surface block; the G2 harness scenario checks the real top-50 blocks near spawn. Dumper follow-up: fall back to the default state when no metadata round-trips, and to the block item for tile-entity hardness.",
  "nullHardness": {
   "reason": "getBlockHardness(world, (0,0,0)) threw: the block reads its tile entity or neighbours",
   "states": {

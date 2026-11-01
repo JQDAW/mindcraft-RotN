@@ -42,10 +42,17 @@ RotN 3.3.4 facts (ADR 0005) and two-way name translation between Minecraft 1.12.
 | --- | --- |
 | `registry-names.json` | every block, item, entity, biome, enchantment and potion name the real 3.3.4 server synced, from net-forge's G1 Batch A RegistryData capture (`packages/forge-bridge/test/fixtures/rotn-3.3.4/handshake-runA.*`). Rebuild: `node packages/rotn-data/tools/registry-from-capture.mjs`. Numeric ids are kept for reference only. |
 | `mining-levels.json` | `config/tool_progression/mining_level_names.cfg` from the pinned zip |
-| `manifest.json`, `blocks.json`, `items.json`, `recipes.json`, `smelting.json`, `oredict.json`, `entities.json`, `spawns.json` | the dump (ADR 0004, `tools/dumper/README.md`): the first RotN 3.3.4 dump, 2026-11-01, dumper jar SHA-256 in `manifest.json`. `blocks`, `items` and `recipes` are stored as `.json.br`. Known harvest gaps are pinned in `test/fixtures/harvest-known-gaps-3.3.4.json`. |
+| `manifest.json`, `blocks.json`, `items.json`, `recipes.json`, `smelting.json`, `oredict.json`, `entities.json`, `spawns.json` | the dump (ADR 0004, `tools/dumper/README.md`): the first RotN 3.3.4 dump, 2026-11-01, dumper jar SHA-256 in `manifest.json`. `blocks`, `items`, `recipes` and `spawns` are stored as `.json.br`. Known harvest gaps are pinned in `test/fixtures/harvest-known-gaps-3.3.4.json`. |
 | `common-mobs.json` | mobs most likely met in the overworld, from `spawns.json` (`tools/build-common-mobs.mjs`); harness-ops' G2 mob scenario reads `mobs[].name` |
 
-Import a fetched dump with `node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir>`. It refuses a dump without its `DONE` marker, without one of the dump files (`serializers.json` included, so the first 3.3.4 dump cannot be re-imported as is), with dumper errors or dropped entries (`manifest.entryErrors`; `--allow-errors` overrides both), with another Forge build, with names that differ from the registry capture, or without the early-game recipes from the pack's scripts (`test/fixtures/scripts-3.3.4-early-recipes.json`, transcribed from the zip with file and line).
+Import a fetched dump with `node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir> --jar-sha256 <SHA-256 of the dumper-build artifact>`. The importer refuses a manifest whose `dumperJar.sha256` differs, and records the SHA-256 of every raw fetched file in `manifest.import.rawSha256`. Files over 1 MiB are stored as `.json.br`. It also refuses a dump:
+
+- without its `DONE` marker;
+- without one of the dump files (`serializers.json` included, so a dump made before PR #48 cannot be imported as is);
+- with dumper errors or dropped entries (`manifest.entryErrors`; `--allow-errors` overrides both);
+- with another Forge build;
+- with names that differ from the registry capture;
+- without the early-game recipes from the pack's scripts (`test/fixtures/scripts-3.3.4-early-recipes.json`, transcribed from the zip with file and line).
 
 ## Tests
 
