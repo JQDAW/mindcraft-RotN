@@ -355,15 +355,15 @@ The setup for both batches:
 
 ## Requests to other agents or the lead
 
-0. **rotn-data (shared-registry shape, ADR 0003 decision 4):** for FML EntitySpawn names, a mod-local entity table `{ [modId]: { [modEntityTypeId]: 'modid:name' } }` (from `EntityRegistry` / `EntityEntry` registrations in the dump). forge-bridge takes it as `modEntityTable` (`attachFmlEntities`).
+0. **rotn-data (shared-registry shape, ADR 0003 decision 4): accepted (lead, 2026-11-01).** rotn-data will produce the mod-local entity table in the proposed shape `{ [modId]: { [modEntityTypeId]: 'modid:name' } }` for `attachFmlEntities({ modEntityTable })`; it reads this file.
    - Block/item/entity/biome properties go in keyed by full registry name (`extendRegistry(..., { properties })`, PR #25).
    - A different shape is fine: tell me in your status file.
 
 1. ~~Human: FRCFLD device-code login.~~ Done; verified by the lead and by `--check`.
-2. **Lead (`settings.js` / profile, your files):** for RotN runs, set `"minecraft_version": "1.12.2"` and `"auth": "microsoft"`. Until then, `g1-spike.mjs` sets these itself.
-3. **Lead (`package.json`, optional; review item 12):** make the transitive dependencies forge-bridge imports direct ones: `minecraft-protocol`, `protodef`, `prismarine-nbt`, `lodash.merge`, `prismarine-auth`. The lockfile pins them today.
-4. **Lead (`docs/research/fml-spec.md`, optional):** the Forge 14.23.5.2860 layouts confirmed by `javap` are listed at the top of `packages/forge-bridge/test/golden.test.js`, if you want them in the spec.
-5. **harness-ops (optional):** have `walk()` in `test/runner/drivers/scenario-protocol.mjs` return a `method` field (for example `forward+jump+turn`). g1-driver then reports it as `walkMethod`.
+2. ~~Lead (`settings.js`): `minecraft_version` 1.12.2 and `auth` microsoft.~~ Done since PR #14 (ff9e154).
+3. **Lead (`package.json`): accepted.** The lead adds `minecraft-protocol`, `protodef`, `prismarine-nbt`, `lodash.merge` and `prismarine-auth` as direct dependencies, pinned to the lockfile versions, in a lead PR.
+4. **Lead (`docs/research/fml-spec.md`): noted for the spec later.** The Forge 14.23.5.2860 layouts confirmed by `javap` are listed at the top of `packages/forge-bridge/test/golden.test.js`.
+5. **harness-ops: walk() `method`.** harness-ops adds `method: 'forward+jump+turn'` to `walk()`'s result. `g1-driver.test.js` now accepts the scenario's method when present and the fallback otherwise, so that one line can land on its own.
 6. **harness-ops / lead (`TRY_IT.md`, `main.js` docs):** with `auth: "microsoft"` (develop's default), `initBot` now refuses to start without `MINDCRAFT_PROFILES_FOLDER`. Please mention this where the run steps are.
 8. ~~skills-rotn (`agent.js` exit lines).~~ Done by net-forge under the lead-approved exception (PR #19 follow-ups).
 9. ~~Lead (`init_agent.js` exit 3).~~ Done by net-forge under the same exception.
