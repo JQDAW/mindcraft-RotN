@@ -14,7 +14,7 @@ import { setImmediate } from 'node:timers';
 import { Vec3 } from 'vec3';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { attachG2, pages, stockNames, agentNames } from '../runner/drivers/scenario-protocol.mjs';
-import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, agentNaming } from '../runner/lib/g2.mjs';
+import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, agentNaming, namingCheckEnv } from '../runner/lib/g2.mjs';
 import blocks from '../scenarios/g2/g2-blocks-named.mjs';
 import mobs, { VANILLA_COMMON_MOBS, chooseMobs, readCommonMobs } from '../scenarios/g2/g2-mobs-named.mjs';
 import items, { VANILLA_SAMPLE, parseItems, checkFullTable } from '../scenarios/g2/g2-items-roundtrip.mjs';
@@ -240,6 +240,13 @@ describe('the agent\'s naming path (PR #36 re-review item 3)', () => {
         // A child that never answers is a failed check, not a pass.
         assert.equal(agentNaming(DATA, { run: () => ({ status: 1, stdout: '', stderr: 'killed' }) }).wired, false);
         assert.equal(agentNaming(DATA, { run: () => ({ status: 0, stdout: 'G2NAMING {nope', stderr: '' }) }).wired, false);
+        // The child gets a minimal environment: nothing secret or test-server related reaches mcdata.js.
+        let seen;
+        agentNaming(DATA, { run: (cmd, args, opts) => { seen = opts.env; return { status: 0, stdout: 'G2NAMING {"wired":false,"why":"x"}' }; } });
+        assert.equal(seen.ROTN_G2_ROOT, DATA);
+        for (const k of Object.keys(seen)) assert.ok(['PATH', 'Path', 'SYSTEMROOT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE', 'LANG', 'ROTN_G2_ROOT'].includes(k), k);
+        const env = namingCheckEnv({ PATH: '/bin', OPENROUTER_API_KEY: 'sk-x', TEST_SERVER_CTL: '/x', HCLOUD_TOKEN: 't', NODE_OPTIONS: '--require x', NODE_PATH: '/y', GH_TOKEN: 'g' }, '/r');
+        assert.deepEqual(env, { PATH: '/bin', ROTN_G2_ROOT: '/r' });
     });
 
     test('a run on an unwired naming path, or without a world seed, is never a gate run', async () => {

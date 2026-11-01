@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 // forge-bridge scenario driver for harness-ops' runner (test/runner/DRIVER.md).
-// It is the bot under test in the G1 gate scenario (g1-login-chat-walk): Mindcraft's
-// real initBot (src/utils/mcdata.js) with forge-bridge attached, plus the
-// runner's scenario protocol (hello, echo, walk, stay until SIGTERM).
+// It is the bot under test in the G1 and G2 gate scenarios: Mindcraft's real initBot
+// (src/utils/mcdata.js) with forge-bridge attached, plus the runner's scenario protocol.
+// G1 (g1-login-chat-walk): hello, echo, walk, stay until SIGTERM.
+// G2 (g2-blocks-named, g2-mobs-named, g2-items-roundtrip): scenario-blocks, -blockat,
+// -entities and -items, answered through the agent's own naming path (attachG2 with
+// loadAgentNames). harness-ops' reference driver uses stock mineflayer, which a Forge
+// server rejects at the handshake, so this driver is the one for real G2 runs.
 //
 //   deploy/test-server.sh run --yes --ttl-hours 2 -- \
 //     node test/runner/run.mjs --scenario g1-login-chat-walk -- \
@@ -30,12 +34,13 @@
 import process from 'node:process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { attachScenario, event } from '../../../test/runner/drivers/scenario-protocol.mjs';
+import { attachScenario, attachG2, loadAgentNames, stockNames, event } from '../../../test/runner/drivers/scenario-protocol.mjs';
 import { classifyKick as runnerClassifyKick, FATAL_KICKS } from '../../../test/runner/lib/server-log.mjs';
 import { classifyKick } from '../src/kicks.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PINNED_MODLIST = path.join(HERE, '..', 'test', 'fixtures', 'rotn-3.3.4', 'ping.json');
+const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 
 const host = process.env.TEST_SERVER_HOST;
 const port = Number(process.env.TEST_SERVER_PORT ?? 25565);
@@ -95,6 +100,16 @@ async function main() {
             return event(type, data);
         },
     });
+    // G2 (test/runner/DRIVER.md): the bot names what it sees through the agent's own naming
+    // path. loadAgentNames imports the same src/utils/mcdata.js module initBot came from, so
+    // names come from bot.registry as forge-bridge extends it, and translation from its
+    // toNew/toOld. Stock names (no translation) only if mcdata.js cannot be imported; the
+    // runner then fails the G2 items checks.
+    loadAgentNames(REPO_ROOT).then((m) => {
+        event('g2_adapter', { source: m?.source ?? 'stockNames (src/utils/mcdata.js could not be imported)', translation: m?.translation ?? false });
+        attachG2(bot, { names: m?.names ?? stockNames });
+    }, (err) => event('g2_adapter_error', { message: String(err?.message ?? err) }));
+
 
     let stopping = false;
     let fatal = null;
