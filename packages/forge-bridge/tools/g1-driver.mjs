@@ -39,6 +39,7 @@ import { fileURLToPath } from 'node:url';
 import { attachScenario, attachG2, loadAgentNames, stockNames, event } from '../../../test/runner/drivers/scenario-protocol.mjs';
 import { classifyKick as runnerClassifyKick, FATAL_KICKS } from '../../../test/runner/lib/server-log.mjs';
 import { classifyKick } from '../src/kicks.js';
+import { createExitTracker } from './driver-exit.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PINNED_MODLIST = path.join(HERE, '..', 'test', 'fixtures', 'rotn-3.3.4', 'ping.json');
@@ -54,7 +55,7 @@ const SCENARIO_CHUNK_WAIT_MS = 30000;
 const chunkWaitMs = chunkWaitRaw === undefined || chunkWaitRaw === '' ? undefined : Number(chunkWaitRaw);
 
 function fatalSetup(reason) {
-    event('fatal', { reason });
+    event('fatal', { reason, exitCode: 3, joined: false, beforeJoin: true });
     console.error(`g1-driver: ${reason}`);
     process.exit(3);
 }
@@ -125,9 +126,15 @@ async function main() {
     }).catch((err) => event('g2_adapter_error', { message: String(err?.message ?? err) }));
 
 
-    let stopping = false;
-    let fatal = null;
+    // The exit decision (driver-exit.mjs): an error or a drained event loop before the
+    // bot joins exits 1, never 0 (G2 batch 2's auth failure exited 0).
+    const exitTracker = createExitTracker({
+        emit: event,
+        onFinish: () => { try { bot.forge?.capture?.close(); } catch { /* already closed */ } },
+    });
+    process.on('beforeExit', () => exitTracker.drained());
     bot.on('login', () => {
+        exitTracker.joined();
         const b = bridge();
         event('login', { username: bot.username, forgeBridge: !!b, modListSource: b?.modListSource ?? null, reid: b?.reid ?? null });
     });
@@ -144,24 +151,21 @@ async function main() {
         const runnerClass = runnerClassifyKick(text);
         const ours = classifyKick(text);
         const isFatal = FATAL_KICKS.has(runnerClass) || ours.fatal;
-        if (isFatal) fatal = ours.fatal ? ours.category : runnerClass;
+        if (isFatal) exitTracker.fatal(ours.fatal ? ours.category : runnerClass);
         event('kicked', { reason: text.slice(0, 2000), class: runnerClass, forgeCategory: ours.category, fatal: isFatal });
     });
-    bot.on('error', (e) => event('error', { message: String(e?.message ?? e).slice(0, 2000) }));
+    bot.on('error', (e) => {
+        event('error', { message: String(e?.message ?? e).slice(0, 2000) });
+        exitTracker.error(e);
+    });
     bot.on('end', (why) => {
         const b = bridge();
-        const code = stopping ? 0 : fatal ? 3 : 1;
-        event('end', {
-            reason: String(why ?? ''), exitCode: code,
-            stats: b?.stats ?? null, partialReadErrors: bot.partialReadErrors ?? null,
-        });
-        try { bot.forge?.capture?.close(); } catch { /* already closed */ }
-        process.exit(code);
+        exitTracker.end(why, { stats: b?.stats ?? null, partialReadErrors: bot.partialReadErrors ?? null });
     });
 
     const stop = () => {
-        if (stopping) return;
-        stopping = true;
+        if (exitTracker.state.stopping) return;
+        exitTracker.stopping();
         event('stopping');
         try { bot.quit('scenario finished'); } catch { /* not connected */ }
         setTimeout(() => { try { bot.forge?.capture?.close(); } catch { /* closed */ } process.exit(0); }, 5000).unref();

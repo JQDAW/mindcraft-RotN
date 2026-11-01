@@ -6,6 +6,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -169,4 +170,20 @@ test('g1-driver exits 3 on a bad ROTN_DRIVER_CHUNK_WAIT_MS, before connecting an
     });
     assert.equal(r.status, 3, r.stderr);
     assert.match(r.stdout, /DRIVER .*"type":"fatal".*ROTN_DRIVER_CHUNK_WAIT_MS must be a whole number/);
+});
+
+test('g1-driver exits 1, not 0, when it cannot join, and says beforeJoin (G2 batch 2)', async () => {
+    // A loopback port that was just freed: the connect is refused before any login.
+    const probe = net.createServer();
+    await new Promise((resolve) => probe.listen(0, '127.0.0.1', resolve));
+    const port = probe.address().port;
+    await new Promise((resolve) => probe.close(resolve));
+    const r = spawnSync(process.execPath, [DRIVER], {
+        env: driverEnv({ TEST_SERVER_HOST: '127.0.0.1', TEST_SERVER_PORT: String(port), ROTN_DRIVER_AUTH: 'offline', ROTN_DRIVER_CAPTURE: '0', ROTN_DRIVER_PING_TIMEOUT_MS: '2000' }),
+        encoding: 'utf8', timeout: 120000,
+    });
+    assert.equal(r.status, 1, r.stdout + r.stderr);
+    const end = r.stdout.split('\n').filter((l) => l.startsWith('DRIVER ')).map((l) => JSON.parse(l.slice(7))).find((e) => e.type === 'end');
+    assert.ok(end, r.stdout);
+    assert.deepEqual([end.exitCode, end.joined, end.beforeJoin], [1, false, true]);
 });
