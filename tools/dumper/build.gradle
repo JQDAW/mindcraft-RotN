@@ -2,52 +2,45 @@
 //
 // Toolchain (pinned; see README.md "Build"):
 //   JDK 8, Gradle 4.10.3 (build.sh downloads it and checks its SHA-256),
-//   ForgeGradle 2.3 as anatawa12's maintained fork 2.3-1.0.8 (Maven Central). The
-//   original net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT still fetches MCP
-//   metadata from the retired export.mcpbot.bspk.rs; pass -Pfg=official to try it.
-//   Forge 14.23.5.2860 (the pack's build), MCP mappings stable_39.
+//   ForgeGradle 3.0.197, Forge 14.23.5.2860 (the pack's build), MCP mappings stable 39-1.12.
+//
+// Why ForgeGradle 3 and not the 2.3 the brief named: maven.minecraftforge.net no longer serves
+// the ForgeGradle 2 "userdev" artifact for 14.23.5.2860 (404), only "userdev3". The official
+// 14.23.5.2860 MDK (re-released 2021-12) builds with ForgeGradle 3 on Gradle 4.9. First CI trial
+// with FG 2.3 (harness-ops, run 41338011357): "Could not find net.minecraftforge:forge:1.12.2-14.23.5.2860".
 buildscript {
     repositories {
-        mavenCentral()
         maven { url = 'https://maven.minecraftforge.net/' }
+        mavenCentral()
     }
     dependencies {
-        if (project.findProperty('fg') == 'official') {
-            classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
-        } else {
-            classpath 'com.anatawa12.forge:ForgeGradle:2.3-1.0.8'
-        }
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '3.0.197', changing: false
     }
 }
 
-apply plugin: 'net.minecraftforge.gradle.forge'
+apply plugin: 'net.minecraftforge.gradle'
 
-version = '0.1.0'
+version = '0.1.0' // keep equal to RotnDump.VERSION (build.sh checks)
 group = 'mindcraftrotn.dumper'
 archivesBaseName = 'rotndump'
 
-sourceCompatibility = targetCompatibility = '1.8'
-compileJava {
-    sourceCompatibility = targetCompatibility = '1.8'
-    options.encoding = 'UTF-8'
-}
+sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
+compileJava.options.encoding = 'UTF-8'
 
 minecraft {
-    version = '1.12.2-14.23.5.2860'
-    runDir = 'run'
-    mappings = 'stable_39'
-    makeObfSourceJar = false
-    replace '@VERSION@', project.version
-    replaceIn 'RotnDump.java'
+    mappings channel: 'stable', version: '39-1.12'
+}
+
+dependencies {
+    minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2860'
 }
 
 processResources {
     inputs.property 'version', project.version
-    from(sourceSets.main.resources.srcDirs) {
-        include 'mcmod.info'
+    filesMatching('mcmod.info') {
         expand 'version': project.version
     }
-    from(sourceSets.main.resources.srcDirs) {
-        exclude 'mcmod.info'
-    }
 }
+
+// Reobfuscate the jar to SRG names so it runs on the real (obfuscated) server.
+jar.finalizedBy('reobfJar')

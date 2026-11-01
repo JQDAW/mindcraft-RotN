@@ -3,6 +3,7 @@ package mindcraftrotn.dumper;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -22,14 +23,17 @@ import net.minecraft.world.World;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 /**
- * blocks.json: {"format", "blocks": {"minecraft:stone": {"displayName", "defaultMeta", "states": [state...]}}}
+ * blocks.json: {"format", "blocks": {"minecraft:stone": {"defaultMeta", "class", "states": [state...]}}}
  * One state per metadata value m in 0..15 with getMetaFromState(getStateFromMeta(m)) == m:
  * {meta, props, displayName, hardness, explosionResistance, material, harvestTool, harvestLevel,
- *  toolRequired, light, opacity, fullCube, opaque, solid, liquid, replaceable, collision, item, drops}.
+ *  toolRequired, solid, liquid, replaceable, light, opacity, fullCube, opaque, collision, item, drops}.
+ * Every value is computed first and written as null if the game call throws (J).
  * Harvest tool and level come from Forge's Block#getHarvestTool/getHarvestLevel, so Tool
  * Progression's overrides are included. Hardness is read at (0,0,0) in the overworld, so
  * CraftTweaker hardness changes are included. Drops are the nominal getItemDropped and
  * quantityDropped with a fixed seed; event-handler drops (Pyrotech, Dropt) are not here (ADR 0004).
+ * "material" is the lower-cased MCP field name of the vanilla Material (Material.PLANTS ->
+ * "plants", GROUND -> "ground", CLOTH -> "cloth"); rotn-data maps it to prismarine's strings.
  */
 final class BlockDumper {
     private static final Map<Material, String> MATERIALS = new IdentityHashMap<>();
@@ -76,7 +80,7 @@ final class BlockDumper {
     private final World world;
     private final BlockPos pos = BlockPos.ORIGIN;
 
-    BlockDumper(Names names, World world) {
+    BlockDumper(World world) {
         this.world = world;
     }
 
@@ -90,7 +94,7 @@ final class BlockDumper {
         List<Block> blocks = new ArrayList<>(ForgeRegistries.BLOCKS.getValuesCollection());
         blocks.sort((a, b) -> String.valueOf(a.getRegistryName()).compareTo(String.valueOf(b.getRegistryName())));
         w.beginObject();
-        w.name("format").value(RotnDump.FORMAT);
+        J.str(w, "format", RotnDump.FORMAT);
         w.name("blocks").beginObject();
         int n = 0;
         for (Block b : blocks) {
@@ -105,141 +109,119 @@ final class BlockDumper {
     }
 
     private void writeBlock(JsonWriter w, Block b) throws IOException {
-        w.beginObject();
-        int defMeta = 0;
-        try {
-            defMeta = b.getMetaFromState(b.getDefaultState());
-        } catch (Throwable t) {
-            w.name("defaultMetaError").value(String.valueOf(t));
-        }
-        w.name("defaultMeta").value(defMeta);
-        w.name("class").value(b.getClass().getName());
-        w.name("states").beginArray();
+        Integer defMeta = J.get(() -> b.getMetaFromState(b.getDefaultState()));
+        List<Integer> metas = new ArrayList<>();
+        List<IBlockState> states = new ArrayList<>();
         for (int m = 0; m < 16; m++) {
-            IBlockState s;
-            try {
-                s = b.getStateFromMeta(m);
-                if (s == null || s.getBlock() != b || b.getMetaFromState(s) != m) continue;
-            } catch (Throwable t) {
-                continue;
+            final int meta = m;
+            IBlockState s = J.get(() -> {
+                IBlockState x = b.getStateFromMeta(meta);
+                return x != null && x.getBlock() == b && b.getMetaFromState(x) == meta ? x : null;
+            });
+            if (s != null) {
+                metas.add(m);
+                states.add(s);
             }
-            writeState(w, b, s, m);
         }
+        w.beginObject();
+        J.num(w, "defaultMeta", defMeta);
+        J.str(w, "class", b.getClass().getName());
+        w.name("states").beginArray();
+        for (int i = 0; i < states.size(); i++) writeState(w, b, states.get(i), metas.get(i));
         w.endArray();
         w.endObject();
     }
 
     private void writeState(JsonWriter w, Block b, IBlockState s, int meta) throws IOException {
-        w.beginObject();
-        w.name("meta").value(meta);
-        w.name("props").beginObject();
-        try {
-            for (Map.Entry<IProperty<?>, Comparable<?>> e : s.getProperties().entrySet()) {
-                w.name(e.getKey().getName()).value(valueName(e.getKey(), e.getValue()));
-            }
-        } catch (Throwable t) {
-            // leave props partial
-        }
-        w.endObject();
-
-        Item item = Item.getItemFromBlock(b);
-        int itemMeta = 0;
-        try {
-            itemMeta = b.damageDropped(s);
-        } catch (Throwable t) {
-            // keep 0
-        }
-        String display = null;
-        try {
-            if (item != null && item != Items.AIR) display = new ItemStack(item, 1, itemMeta).getDisplayName();
-            else display = b.getLocalizedName();
-        } catch (Throwable t) {
-            // no display name
-        }
-        w.name("displayName").value(display);
-
-        Double hardness = null;
-        try {
-            hardness = Names.finite(s.getBlockHardness(world, pos));
-        } catch (Throwable t) {
-            // null
-        }
-        Names.num(w, "hardness", hardness);
-        Double resistance = null;
-        try {
-            resistance = Names.finite(b.getExplosionResistance(null));
-        } catch (Throwable t) {
-            // null
-        }
-        Names.num(w, "explosionResistance", resistance);
-
-        Material mat = null;
-        try {
-            mat = s.getMaterial();
-        } catch (Throwable t) {
-            // null
-        }
-        w.name("material").value(materialName(mat));
-        String tool = null;
-        int level = -1;
-        try {
-            tool = b.getHarvestTool(s);
-            level = b.getHarvestLevel(s);
-        } catch (Throwable t) {
-            // defaults
-        }
-        w.name("harvestTool").value(tool);
-        w.name("harvestLevel").value(level);
-        if (mat != null) {
-            w.name("toolRequired").value(!mat.isToolNotRequired());
-            w.name("solid").value(mat.blocksMovement());
-            w.name("liquid").value(mat.isLiquid());
-            w.name("replaceable").value(mat.isReplaceable());
-        }
-        try {
-            w.name("light").value(s.getLightValue());
-            w.name("opacity").value(s.getLightOpacity());
-            w.name("fullCube").value(s.isFullCube());
-            w.name("opaque").value(s.isOpaqueCube());
-        } catch (Throwable t) {
-            // partial
-        }
-        w.name("collision");
-        try {
+        Map<String, String> props = J.get(() -> {
+            Map<String, String> out = new LinkedHashMap<>();
+            for (Map.Entry<IProperty<?>, Comparable<?>> e : s.getProperties().entrySet()) out.put(e.getKey().getName(), valueName(e.getKey(), e.getValue()));
+            return out;
+        });
+        Item item = J.get(() -> Item.getItemFromBlock(b));
+        boolean hasItem = item != null && item != Items.AIR && Names.name(item) != null;
+        Integer itemMeta = J.get(() -> b.damageDropped(s));
+        int im = itemMeta == null ? 0 : itemMeta;
+        String display = J.get(() -> hasItem ? new ItemStack(item, 1, im).getDisplayName() : b.getLocalizedName());
+        Float hardness = J.get(() -> s.getBlockHardness(world, pos));
+        Float resistance = J.get(() -> b.getExplosionResistance(null));
+        Material mat = J.get(s::getMaterial);
+        String tool = J.get(() -> b.getHarvestTool(s));
+        Integer level = J.get(() -> b.getHarvestLevel(s));
+        Boolean toolRequired = mat == null ? null : J.get(() -> !mat.isToolNotRequired());
+        Boolean solid = mat == null ? null : J.get(mat::blocksMovement);
+        Boolean liquid = mat == null ? null : J.get(mat::isLiquid);
+        Boolean replaceable = mat == null ? null : J.get(mat::isReplaceable);
+        Integer light = J.get(s::getLightValue);
+        Integer opacity = J.get(s::getLightOpacity);
+        Boolean fullCube = J.get(s::isFullCube);
+        Boolean opaque = J.get(s::isOpaqueCube);
+        // [] = no collision, [[x0,y0,z0,x1,y1,z1]] = one box, null = unknown (the call threw)
+        double[][] collision = J.get(() -> {
             AxisAlignedBB bb = s.getCollisionBoundingBox(world, pos);
-            if (bb == null || bb == Block.NULL_AABB) {
-                w.beginArray().endArray();
-            } else {
-                w.beginArray().beginArray();
-                w.value(bb.minX).value(bb.minY).value(bb.minZ).value(bb.maxX).value(bb.maxY).value(bb.maxZ);
-                w.endArray().endArray();
-            }
-        } catch (Throwable t) {
-            w.nullValue();
-        }
+            if (bb == null || bb == Block.NULL_AABB) return new double[0][];
+            return new double[][] {{bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ}};
+        });
+        Object[] drop = J.get(() -> {
+            Item d = b.getItemDropped(s, new Random(0), 0);
+            int count = b.quantityDropped(s, 0, new Random(0));
+            if (d == null || d == Items.AIR || count <= 0 || Names.name(d) == null) return new Object[0];
+            return new Object[] {Names.name(d), b.damageDropped(s), count};
+        });
 
+        w.beginObject();
+        J.num(w, "meta", meta);
+        w.name("props").beginObject();
+        if (props != null) for (Map.Entry<String, String> e : props.entrySet()) J.str(w, e.getKey(), e.getValue());
+        w.endObject();
+        J.str(w, "displayName", display);
+        J.num(w, "hardness", hardness);
+        J.num(w, "explosionResistance", resistance);
+        J.str(w, "material", materialName(mat));
+        J.str(w, "harvestTool", tool);
+        J.num(w, "harvestLevel", level == null ? -1 : level);
+        J.bool(w, "toolRequired", toolRequired);
+        J.bool(w, "solid", solid);
+        J.bool(w, "liquid", liquid);
+        J.bool(w, "replaceable", replaceable);
+        J.num(w, "light", light);
+        J.num(w, "opacity", opacity);
+        J.bool(w, "fullCube", fullCube);
+        J.bool(w, "opaque", opaque);
+        w.name("collision");
+        if (collision == null) {
+            w.nullValue();
+        } else {
+            w.beginArray();
+            for (double[] box : collision) {
+                w.beginArray();
+                for (double d : box) w.value(d);
+                w.endArray();
+            }
+            w.endArray();
+        }
         w.name("item");
-        if (item != null && item != Items.AIR && Names.name(item) != null) {
-            w.beginObject().name("name").value(Names.name(item)).name("meta").value(itemMeta).endObject();
+        if (hasItem) {
+            w.beginObject();
+            J.str(w, "name", Names.name(item));
+            J.num(w, "meta", im);
+            w.endObject();
         } else {
             w.nullValue();
         }
-
         w.name("drops");
-        try {
-            Item drop = b.getItemDropped(s, new Random(0), 0);
-            int count = b.quantityDropped(s, 0, new Random(0));
-            if (drop == null || drop == Items.AIR || count <= 0) {
-                w.beginArray().endArray();
-            } else {
-                w.beginArray().beginObject();
-                w.name("name").value(Names.name(drop));
-                w.name("meta").value(b.damageDropped(s));
-                w.name("count").value(count);
-                w.endObject().endArray();
-            }
-        } catch (Throwable t) {
+        if (drop == null) {
             w.nullValue();
+        } else {
+            w.beginArray();
+            if (drop.length == 3) {
+                w.beginObject();
+                J.str(w, "name", (String) drop[0]);
+                J.num(w, "meta", (Integer) drop[1]);
+                J.num(w, "count", (Integer) drop[2]);
+                w.endObject();
+            }
+            w.endArray();
         }
         w.endObject();
     }

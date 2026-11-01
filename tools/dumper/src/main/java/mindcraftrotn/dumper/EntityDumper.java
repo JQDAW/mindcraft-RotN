@@ -26,11 +26,14 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 /**
  * entities.json: {"format", "entities": {"specialmobs:firecreeper": {modId, modEntityTypeId, class,
- * entityName, displayName, hostile, kinds, tracking {range, frequency, velocity}}}}
+ * entityName, displayName, modSpawn, usesVanillaSpawning, hostile, kinds, tracking {range, frequency, velocity}}}}
  *
  * modId + modEntityTypeId is the mod-local id that FML's EntitySpawn message carries (the
  * server never sends this table; fml-spec.md section 3). Vanilla entities have no mod-local id
- * (null). hostile = the class implements IMob. kinds lists the base classes it extends.
+ * (null). modSpawn is false for an entity without an FML mod spawn registration (then modId is
+ * only its registry namespace and modEntityTypeId is null). A mod entity with usesVanillaSpawning
+ * arrives in a vanilla spawn packet with its minecraft:entities id, not in FML EntitySpawn.
+ * hostile = the class implements IMob. kinds lists the base classes it extends.
  */
 final class EntityDumper {
     int write(JsonWriter w) throws IOException {
@@ -38,7 +41,7 @@ final class EntityDumper {
         entries.sort((a, b) -> String.valueOf(a.getRegistryName()).compareTo(String.valueOf(b.getRegistryName())));
         int n = 0;
         w.beginObject();
-        w.name("format").value(RotnDump.FORMAT);
+        J.str(w, "format", RotnDump.FORMAT);
         w.name("entities").beginObject();
         for (EntityEntry e : entries) {
             if (e.getRegistryName() == null) continue;
@@ -52,57 +55,59 @@ final class EntityDumper {
     }
 
     private static void writeEntity(JsonWriter w, EntityEntry e) throws IOException {
-        Class<? extends Entity> c = e.getEntityClass();
-        w.beginObject();
-        w.name("class").value(c == null ? null : c.getName());
-        w.name("entityName").value(e.getName());
-        String display = null;
-        try {
+        Class<? extends Entity> c = J.get(e::getEntityClass);
+        String display = J.get(() -> {
             String key = "entity." + e.getName() + ".name";
-            if (I18n.canTranslate(key)) display = I18n.translateToLocal(key);
-        } catch (Throwable t) {
-            // none
-        }
-        w.name("displayName").value(display);
-
-        EntityRegistry.EntityRegistration reg = null;
-        try {
-            if (c != null) reg = EntityRegistry.instance().lookupModSpawn(c, false);
-        } catch (Throwable t) {
-            // vanilla or unknown
-        }
-        if (reg != null) {
-            w.name("modId").value(reg.getContainer().getModId());
-            w.name("modEntityTypeId").value(reg.getModEntityId());
-            w.name("tracking").beginObject()
-                    .name("range").value(reg.getTrackingRange())
-                    .name("frequency").value(reg.getUpdateFrequency())
-                    .name("velocity").value(reg.sendsVelocityUpdates())
-                    .endObject();
-        } else {
-            w.name("modId").value(e.getRegistryName().getNamespace());
-            w.name("modEntityTypeId").nullValue();
-        }
-        w.name("hostile").value(c != null && IMob.class.isAssignableFrom(c));
-        w.name("kinds").beginArray();
+            return I18n.canTranslate(key) ? I18n.translateToLocal(key) : null;
+        });
+        EntityRegistry.EntityRegistration reg = c == null ? null : J.get(() -> EntityRegistry.instance().lookupModSpawn(c, false));
+        String regMod = reg == null ? null : J.get(() -> reg.getContainer().getModId());
+        Integer typeId = reg == null ? null : J.get(reg::getModEntityId);
+        Boolean vanillaSpawning = reg == null ? null : J.get(reg::usesVanillaSpawning);
+        Integer range = reg == null ? null : J.get(reg::getTrackingRange);
+        Integer frequency = reg == null ? null : J.get(reg::getUpdateFrequency);
+        Boolean velocity = reg == null ? null : J.get(reg::sendsVelocityUpdates);
+        String namespace = e.getRegistryName().getNamespace();
+        List<String> kinds = new ArrayList<>();
         if (c != null) {
-            kind(w, c, EntityLivingBase.class, "living");
-            kind(w, c, EntityLiving.class, "ai");
-            kind(w, c, EntityCreature.class, "creature");
-            kind(w, c, EntityMob.class, "monster");
-            kind(w, c, IAnimals.class, "animals");
-            kind(w, c, EntityAgeable.class, "ageable");
-            kind(w, c, EntityAnimal.class, "animal");
-            kind(w, c, EntityTameable.class, "tameable");
-            kind(w, c, EntityWaterMob.class, "water");
-            kind(w, c, EntityAmbientCreature.class, "ambient");
-            kind(w, c, EntityFlying.class, "flying");
+            kind(kinds, c, EntityLivingBase.class, "living");
+            kind(kinds, c, EntityLiving.class, "ai");
+            kind(kinds, c, EntityCreature.class, "creature");
+            kind(kinds, c, EntityMob.class, "monster");
+            kind(kinds, c, IAnimals.class, "animals");
+            kind(kinds, c, EntityAgeable.class, "ageable");
+            kind(kinds, c, EntityAnimal.class, "animal");
+            kind(kinds, c, EntityTameable.class, "tameable");
+            kind(kinds, c, EntityWaterMob.class, "water");
+            kind(kinds, c, EntityAmbientCreature.class, "ambient");
+            kind(kinds, c, EntityFlying.class, "flying");
         }
+
+        w.beginObject();
+        J.str(w, "class", c == null ? null : c.getName());
+        J.str(w, "entityName", J.get(e::getName));
+        J.str(w, "displayName", display);
+        // modSpawn: FML knows a mod spawn registration for this class (EntityRegistry.registerModEntity).
+        // usesVanillaSpawning: such an entity is still sent with vanilla spawn packets, not FML EntitySpawn.
+        J.bool(w, "modSpawn", reg != null);
+        J.str(w, "modId", reg != null ? regMod : namespace);
+        J.num(w, "modEntityTypeId", typeId);
+        J.bool(w, "usesVanillaSpawning", vanillaSpawning);
+        if (reg != null) {
+            w.name("tracking").beginObject();
+            J.num(w, "range", range);
+            J.num(w, "frequency", frequency);
+            J.bool(w, "velocity", velocity);
+            w.endObject();
+        }
+        J.bool(w, "hostile", c != null && IMob.class.isAssignableFrom(c));
+        w.name("kinds").beginArray();
+        for (String k : kinds) w.value(k);
         w.endArray();
         w.endObject();
     }
 
-    private static void kind(JsonWriter w, Class<?> c, Class<?> base, String name) throws IOException {
-        if (base.isAssignableFrom(c)) w.value(name);
+    private static void kind(List<String> out, Class<?> c, Class<?> base, String name) {
+        if (base.isAssignableFrom(c)) out.add(name);
     }
 }

@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Builds the RotN dumper jar (tools/dumper, ADR 0004) with the pinned toolchain:
-# JDK 8, Gradle 4.10.3 (downloaded and SHA-256 checked here), ForgeGradle 2.3
-# (anatawa12 fork 2.3-1.0.8), Forge 14.23.5.2860, MCP stable_39.
+# JDK 8, Gradle 4.10.3 (downloaded and SHA-256 checked here), ForgeGradle 3.0.197,
+# Forge 14.23.5.2860, MCP stable 39-1.12 (see build.gradle for why not ForgeGradle 2.3).
 #
 # Usage: tools/dumper/build.sh            -> tools/dumper/build/libs/rotndump-<version>.jar
 # Env:   JAVA_HOME     a JDK 8 (required unless `java` on PATH is 1.8)
 #        DUMPER_CACHE  where Gradle is unpacked (default: $HOME/.cache/rotndump)
-#        DUMPER_FG     "official" to use net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT
 # Runs in CI (harness-ops' workflow) or on the disposable test server. Never on the live server.
 set -Eeuo pipefail
 
@@ -34,11 +33,18 @@ if [[ ! -x $GRADLE_HOME/bin/gradle ]]; then
   (cd "$CACHE" && unzip -q -o "$zip")
 fi
 
-args=(--no-daemon --stacktrace -p "$HERE")
-[[ ${DUMPER_FG:-} == official ]] && args+=(-Pfg=official)
-"$GRADLE_HOME/bin/gradle" "${args[@]}" setupCIWorkspace build
+# The mod's VERSION constant and build.gradle's version must agree.
+gv=$(sed -n "s/^version = '\([^']*\)'.*/\1/p" "$HERE/build.gradle")
+jv=$(sed -n 's/.*String VERSION = "\([^"]*\)".*/\1/p' "$HERE/src/main/java/mindcraftrotn/dumper/RotnDump.java")
+[[ -n $gv && $gv == "$jv" ]] || die "version mismatch: build.gradle '$gv', RotnDump.VERSION '$jv'"
 
-jar=$(ls "$HERE"/build/libs/rotndump-*.jar | grep -v -- '-sources\|-dev' | head -1)
-[[ -f $jar ]] || die "no jar in $HERE/build/libs"
+"$GRADLE_HOME/bin/gradle" --no-daemon --stacktrace -p "$HERE" build
+
+shopt -s nullglob
+jar=''
+for j in "$HERE"/build/libs/rotndump-*.jar; do
+  case $j in *-sources.jar|*-dev.jar) ;; *) jar=$j; break ;; esac
+done
+[[ -n $jar ]] || die "no jar in $HERE/build/libs"
 echo "build.sh: built $jar"
 sha256sum "$jar"
