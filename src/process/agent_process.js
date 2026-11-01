@@ -14,6 +14,27 @@ import {
 export { decideAgentExit, readExitReason };
 
 const init_agent_path = fileURLToPath(new URL('./init_agent.js', import.meta.url));
+
+// One private mkdtemp folder per AgentProcess, removed when the main process exits.
+const reasonDirs = new Set();
+let reasonCleanupHooked = false;
+function makeReasonFile(base, log) {
+    try {
+        const dir = fs.mkdtempSync(path.join(base, 'mindcraft-exit-'));
+        reasonDirs.add(dir);
+        if (!reasonCleanupHooked) {
+            reasonCleanupHooked = true;
+            process.once('exit', () => {
+                for (const d of reasonDirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
+            });
+        }
+        return path.join(dir, 'reason.json');
+    } catch (err) {
+        // Without the file the contract still works on exit codes alone.
+        log.error(`[agent_process] no exit-reason folder (${err.message}); using exit codes only`);
+        return null;
+    }
+}
 const TASK_CODES = new Set([2, 4]);
 
 // Exit-code contract, ADR 0003 decision 5 (net-forge brief item 8):
@@ -47,7 +68,7 @@ export class AgentProcess {
         this.policy = this.deps.policy ?? createRestartPolicy();
         this.guard = this.deps.guard ?? createRequestedRestartGuard();
         this.singleBotService = this.deps.env.MINDCRAFT_SINGLE_BOT_SERVICE === '1';
-        this.reasonFile = path.join(fs.mkdtempSync(path.join(this.deps.reasonBase, 'mindcraft-exit-')), 'reason.json');
+        this.reasonFile = makeReasonFile(this.deps.reasonBase, this.deps.log);
         this.restartTimer = null;
         this.stopRequested = false;
         this.restartRequested = false;
@@ -71,12 +92,12 @@ export class AgentProcess {
         args.push('-p', this.port);
 
         const reasonFile = this.reasonFile;
-        try { fs.rmSync(reasonFile, { force: true }); } catch { /* not there */ }
+        if (reasonFile) { try { fs.rmSync(reasonFile, { force: true }); } catch { /* not there */ } }
 
         const agentProcess = d.spawn(process.execPath, args, {
             stdio: 'inherit',
             stderr: 'inherit',
-            env: { ...d.env, MINDCRAFT_EXIT_REASON_FILE: reasonFile },
+            env: reasonFile ? { ...d.env, MINDCRAFT_EXIT_REASON_FILE: reasonFile } : { ...d.env },
         });
         // "Connected" time for the backoff reset is measured from spawn.
         const startedAt = d.now();
@@ -86,7 +107,7 @@ export class AgentProcess {
             this.running = false;
             d.logout(this.name);
             const reason = readExitReason(reasonFile);
-            try { fs.rmSync(reasonFile, { force: true }); } catch { /* not there */ }
+            if (reasonFile) { try { fs.rmSync(reasonFile, { force: true }); } catch { /* not there */ } }
 
             const decision = decideAgentExit({
                 code, signal, requestedStop: this.stopRequested, restartRequested: this.restartRequested,
@@ -128,7 +149,11 @@ export class AgentProcess {
 
     stop() {
         this.cancelPendingRestart();
-        if (!this.running) return;
+        if (!this.running) {
+            // A single-bot service waiting out a backoff: the stop ends the main process (systemd sees it).
+            if (this.singleBotService) this.deps.exit(EXIT.CLEAN);
+            return;
+        }
         this.stopRequested = true;
         this.process.kill('SIGINT');
     }

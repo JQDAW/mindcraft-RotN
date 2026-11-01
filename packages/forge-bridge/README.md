@@ -58,6 +58,7 @@ The bridge also decodes the other Forge and REID channels:
 | --- | --- |
 | `FORGE_BRIDGE` | `auto` (default): attach when the ping reports FML. `on`: require it. `off`: never. |
 | `FORGE_CAPTURE` | `1`: write `captures/raw/<bot>-<time>.jsonl` (git-ignored). Any other value is used as the file path. |
+| `FORGE_PING_TIMEOUT_MS` | Status-ping timeout per attempt (default 15000). The ping is tried twice before the `FORGE_MODLIST_FILE` fallback. g1-driver maps `ROTN_DRIVER_PING_TIMEOUT_MS` to it. |
 | `FORGE_MODLIST_FILE` | Ping JSON to use when the live ping has no mod list. The pinned one is `test/fixtures/rotn-3.3.4/ping.json`. |
 | `MINDCRAFT_PROFILES_FOLDER` | Per-bot Microsoft token cache, outside the repo. Becomes nmp's `profilesFolder`. |
 | `PROTODEF_LOG_PARTIAL=1` | Turns protodef's "partial packet" console line back on (`patches/protodef+1.19.0.patch`). |
@@ -89,12 +90,14 @@ These still need a real capture to confirm them on the wire (G1 Run B).
     - `cleanKill` while still connected (`!restart`, the stuck mode, mindserver `restart-agent`) returns 1 with `requested_restart`. After a kick, `cleanKill` reports the kick instead, so a kick never skips the backoff.
     - A startup error returns 3 if it carries `exitCode: 3` (the `initBot` setup refusals), otherwise 1, never 0. An invalid bot name exits 3, and so does `init_agent.js` for errors with `exitCode: 3`.
   - **Main side,** `decideAgentExit()`:
-    - Exit 1 restarts the agent in-process after the backoff. A `requested_restart` restarts at once without touching the backoff streak. More than 5 of those within 10 min fall back to the backoff, so a loop cannot hammer the session servers with logins.
+    - Exit 1 restarts the agent in-process after the backoff. A `requested_restart` restarts at once and adds nothing to the backoff streak, but a session of 10 minutes or more still resets it. More than 5 of those within 10 min fall back to the backoff, so a loop cannot hammer the session servers with logins.
     - Exit 3 ends the main process with 3, plus a line for the human. In multi-bot mode (one main process, several agents) this also stops the sibling agents, as upstream's "code > 1" did. Run each bot as its own single-bot service if one bot must not stop the others.
     - Exit 2 and 4 stay task codes.
-    - Exit 0, and a requested stop (mindserver `stopAgent`/`destroyAgent`, SIGINT, SIGTERM), end the main process with 0 when `MINDCRAFT_SINGLE_BOT_SERVICE=1` (the `mindcraft-rotn@<bot>` unit), so systemd sees the stop. Otherwise the main process stays up. `forceRestart()` is never a stop.
+    - Exit 0, and a requested stop (mindserver `stopAgent`/`destroyAgent`, SIGINT, SIGTERM), end the main process with 0 when `MINDCRAFT_SINGLE_BOT_SERVICE=1` (the `mindcraft-rotn@<bot>` unit), so systemd sees the stop. Otherwise the main process stays up. `forceRestart()` is never a stop. A `stop()` while a backoff restart is pending also ends a single-bot service with 0.
     - "Connected" for the 10-minute reset is measured from the agent's spawn, so it includes the login.
-  - The reason file sits in a private `mkdtemp` folder per agent (mode 0700 on POSIX), so its path cannot be predicted.
+  - The reason file sits in a private `mkdtemp` folder per agent (mode 0700 on POSIX), so its path cannot be predicted. The folder is removed when the main process exits.
+    - A file over 4 KB is ignored unread.
+    - If no folder can be made, the contract falls back to exit codes alone.
   - No real run has shown reconnect or exit-code behaviour yet. The G1 spike and driver run without `agent_process.js`.
 
 ## Capture format

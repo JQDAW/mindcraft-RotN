@@ -137,6 +137,20 @@ The review findings on PR #10, numbered as in the review comment:
 - **Lint ratchet:** `test/lint-baseline.json` updated to 257 with `node test/tools/lint-baseline.mjs --update` (the same value as lead PR #20).
 - `npm test` passes 224/224; the lint ratchet passes (257, baseline 257).
 
+## Done: PR #23 review (REQUEST CHANGES) fixes, on the same branch
+
+1. A `requested_restart` applies the 10-minute reset (`policy.noteSession`) but still adds nothing to the streak. Test: 2 auth kicks, a 5 h session ended by `!restart`, then 1 auth kick gives a 10 s restart, not fatal.
+2. Single-bot service: `stop()` while a backoff restart is pending calls `exit(0)`.
+3. `readExitReason` ignores files over 4 KB (or not a file), checked with `statSync` before reading.
+4. (Nit) The mkdtemp folders are removed when the main process exits. The constructor no longer throws: without a folder, the contract runs on exit codes only.
+5. (Nit) The `cleanKill` exit comment in `agent.js` is reworded.
+6. New end-to-end test: a real child process classifies a ban and calls `recordAgentExit`, which writes the reason file; `AgentProcess` then calls `exit(3)` with "FATAL (banned)".
+7. **Flaky loopback tests.** Under heavy load, a loopback connect on this Windows machine can fail at once with `ETIMEDOUT` (in about 300 ms).
+   - forge-bridge: the status ping is now tried twice, 1 s apart. Its timeout is configurable (`FORGE_PING_TIMEOUT_MS`, and `ROTN_DRIVER_PING_TIMEOUT_MS` for the driver).
+   - Tests: generous budgets. e2e-initbot gets the pinned mod-list fallback and one login retry. The g1-driver test restarts the driver once if it exits before hello. initbot-auth uses a local hang-up server and accepts a connect error to that port as proof of start.
+   - **Load check:** 3 full `npm test` runs at once on this PC. All forge-bridge tests passed in all 3 runs, and the ping retry was used 3 times. Before the fixes the same check failed 2 tests per run.
+- `npm test` (single run): 231/231. Lint ratchet: 257, unchanged.
+
 ## Doing
 
 - PR #23 (PR #19 follow-ups) open. The G1 batches wait for the preflight (harness-ops is adapting it to the rotn-sweeper-cron helper repo).
@@ -199,6 +213,7 @@ The setup for both batches:
 6. **harness-ops / lead (`TRY_IT.md`, `main.js` docs):** with `auth: "microsoft"` (develop's default), `initBot` now refuses to start without `MINDCRAFT_PROFILES_FOLDER`. Please mention this where the run steps are.
 8. ~~skills-rotn (`agent.js` exit lines).~~ Done by net-forge under the lead-approved exception (PR #19 follow-ups).
 9. ~~Lead (`init_agent.js` exit 3).~~ Done by net-forge under the same exception.
+11. **harness-ops (`test/unit/status-ping.test.js`):** under heavy load (3 `npm test` runs at once), "ping talks to a fake server and reassembles a large, chunked response" failed with an immediate `connect ETIMEDOUT 127.0.0.1:<port>` in 7 of the 9 loaded runs I did today (my changes do not touch that test). The same loopback symptom is fixed in forge-bridge's tests by retrying the connect once after 1 s.
 10. **harness-ops (systemd unit `mindcraft-rotn@<bot>`):** set `Environment=MINDCRAFT_SINGLE_BOT_SERVICE=1`, so a clean agent stop ends the main process with 0, and `RestartPreventExitStatus=0 3` (ADR 0003).
 
 ## Open PRs

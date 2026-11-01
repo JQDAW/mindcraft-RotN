@@ -533,8 +533,8 @@ export class Agent {
         this.history.add('system', msg);
         this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.');
         this.history.save();
-        // Exit 1 here is a deliberate restart (requested_restart), unless the
-        // connection is already gone (kicked/end handlers): then the kick is reported.
+        // Exit 1 here is a deliberate restart (requested_restart). If the Minecraft
+        // connection is already gone, recordExit reports the disconnect or kick instead.
         process.exit(code === 1 ? (this.bot?.forge?.recordExit?.({ requestedRestart: true }) ?? code) : code);
     }
     async checkTaskDone() {

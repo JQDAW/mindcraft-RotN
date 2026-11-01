@@ -21,6 +21,7 @@
 //   ROTN_DRIVER_FORGE_BRIDGE             on (default) | auto | off  -> FORGE_BRIDGE
 //   ROTN_DRIVER_CAPTURE                  1 (default: captures/raw/<bot>-<time>.jsonl) | a path | 0
 //   ROTN_DRIVER_MODLIST_FILE             ping JSON fallback (default: the pinned RotN 3.3.4 fixture)
+//   ROTN_DRIVER_PING_TIMEOUT_MS          status-ping timeout per attempt -> FORGE_PING_TIMEOUT_MS
 //
 // Exit codes (ADR 0003 decision 5, DRIVER.md): 0 clean stop on SIGTERM/SIGINT,
 // 1 transient disconnect, 3 fatal (setup error, or a kick that the runner's
@@ -60,6 +61,7 @@ process.env.FORGE_BRIDGE = process.env.ROTN_DRIVER_FORGE_BRIDGE ?? 'on';
 const capture = process.env.ROTN_DRIVER_CAPTURE ?? '1';
 if (capture === '0') delete process.env.FORGE_CAPTURE; else process.env.FORGE_CAPTURE = capture;
 process.env.FORGE_MODLIST_FILE = process.env.ROTN_DRIVER_MODLIST_FILE ?? PINNED_MODLIST;
+if (process.env.ROTN_DRIVER_PING_TIMEOUT_MS) process.env.FORGE_PING_TIMEOUT_MS = process.env.ROTN_DRIVER_PING_TIMEOUT_MS;
 
 process.on('unhandledRejection', (e) => event('error', { message: `unhandled rejection: ${String(e?.message ?? e).slice(0, 2000)}` }));
 

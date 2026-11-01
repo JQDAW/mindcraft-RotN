@@ -5,6 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { spawn as realSpawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -270,4 +271,88 @@ test('the reason file sits in a private, unpredictable folder per agent', () => 
     assert.notEqual(path.dirname(a.reasonFile), path.dirname(b.reasonFile));
     assert.match(path.basename(path.dirname(a.reasonFile)), /^mindcraft-exit-.{6}$/);
     if (process.platform !== 'win32') assert.equal(fs.statSync(path.dirname(a.reasonFile)).mode & 0o777, 0o700);
+});
+
+// PR #23 review.
+test('a requested restart after a long session still applies the 10-minute reset (review 1)', () => {
+    const h = harness();
+    new AgentProcess('FRCFLD', 8080, h.deps).start();
+    const auth = classifyKick('Failed to verify username!');
+    for (const i of [0, 1]) {
+        writeReason(h.children[i], auth);
+        h.advance(5_000);
+        h.children[i].emit('exit', 1, null);
+        h.timers.at(-1).fn();
+    }
+    // A 5-hour session ended by !restart: adds nothing to the streak, but resets it.
+    writeReason(h.children[2], { category: 'requested_restart', exitCode: 1 });
+    h.advance(5 * 60 * MIN);
+    h.children[2].emit('exit', 1, null);
+    assert.equal(h.timers.at(-1).ms, 0);
+    h.timers.at(-1).fn();
+    // One auth hiccup now is the first of a new streak, with the first backoff step.
+    writeReason(h.children[3], auth);
+    h.advance(5_000);
+    h.children[3].emit('exit', 1, null);
+    assert.deepEqual(h.exits, [], 'not "auth: 3 times in a row"');
+    assert.equal(h.timers.at(-1).ms, 10_000);
+});
+
+test('single-bot service: stop() during a pending backoff ends the main process with 0 (review 2)', () => {
+    const h = harness({ MINDCRAFT_SINGLE_BOT_SERVICE: '1' });
+    const ap = new AgentProcess('FRCFLD', 8080, h.deps);
+    ap.start();
+    h.children[0].emit('exit', 1, null);
+    assert.equal(h.timers.length, 1);
+    ap.stop();
+    assert.equal(h.timers[0].cleared, true);
+    assert.deepEqual(h.exits, [0]);
+});
+
+test('readExitReason rejects files over the size cap without parsing them (review 3)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-exit-big-'));
+    const f = path.join(dir, 'reason.json');
+    fs.writeFileSync(f, JSON.stringify({ category: 'banned', exitCode: 3, pad: 'x'.repeat(5000) }));
+    let parsed = false;
+    assert.equal(readExitReason(f, { readFile: () => { parsed = true; return '{}'; } }), null);
+    assert.equal(parsed, false, 'the size check comes before the read');
+    fs.mkdirSync(path.join(dir, 'a-dir'));
+    assert.equal(readExitReason(path.join(dir, 'a-dir')), null);
+});
+
+test('AgentProcess does not throw without a usable temp folder; it falls back to exit codes (review 4)', () => {
+    const h = harness();
+    const ap = new AgentProcess('FRCFLD', 8080, { ...h.deps, reasonBase: path.join(h.deps.reasonBase, 'missing', 'deeper') });
+    assert.equal(ap.reasonFile, null);
+    ap.start();
+    assert.equal(h.children[0].opts.env.MINDCRAFT_EXIT_REASON_FILE, undefined);
+    h.children[0].emit('exit', 3, null);
+    assert.deepEqual(h.exits, [3]);
+    assert.ok(h.lines.some(l => /no exit-reason folder/.test(l)));
+});
+
+test('end to end: a ban in a real agent child -> recordAgentExit -> reason file -> AgentProcess -> exit(3) (review 6)', async () => {
+    const contract = new URL('../src/exit-contract.js', import.meta.url).href;
+    const kicks = new URL('../src/kicks.js', import.meta.url).href;
+    // The child stands in for agent.js onDisconnect: bridge.lastKick is the classified ban.
+    const child = [
+        `import { recordAgentExit } from ${JSON.stringify(contract)};`,
+        `import { classifyKick } from ${JSON.stringify(kicks)};`,
+        `const lastKick = classifyKick('{"translate":"multiplayer.disconnect.banned.reason","with":["griefing"]}');`,
+        `process.exit(recordAgentExit({ kick: lastKick, event: 'Kicked', clientEnded: true }));`,
+    ].join('\n');
+    const lines = [];
+    const exited = new Promise((resolve) => {
+        const ap = new AgentProcess('FRCFLD', 8080, {
+            spawn: (cmd, args, opts) => realSpawn(process.execPath, ['--input-type=module', '-e', child], { env: opts.env, stdio: 'ignore' }),
+            exit: resolve,
+            log: { log: (...a) => lines.push(a.join(' ')), error: (...a) => lines.push(a.join(' ')) },
+            logout: () => {},
+            env: { PATH: process.env.PATH, SYSTEMROOT: process.env.SYSTEMROOT },
+        });
+        ap.start();
+    });
+    assert.equal(await exited, 3);
+    assert.ok(lines.some(l => /exited with code 3/.test(l)), 'the child itself exited 3');
+    assert.ok(lines.some(l => /FRCFLD: FATAL \(banned\)/.test(l)), 'the main process read the reason file');
 });

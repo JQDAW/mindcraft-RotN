@@ -101,6 +101,7 @@ export function initBot(username, { onMsaCode } = {}) {
             port: options.port,
             mode: forge.mode,
             modListFile: env.modListFile,
+            pingTimeoutMs: env.pingTimeoutMs,
             capture: forge.capture,
             onAttach: (bridge) => { forge.bridge = bridge; options.brand = 'fml,forge'; },
         });

@@ -19,10 +19,16 @@ import { EXIT, classifyKick } from './kicks.js';
 export const REQUESTED_RESTART = 'requested_restart';
 const TASK_CODES = new Set([2, 4]);
 const STOP_SIGNALS = new Set(['SIGINT', 'SIGTERM']);
+// The file holds one small JSON object; anything bigger is not ours.
+export const MAX_EXIT_REASON_BYTES = 4096;
 
-/** Reads and validates the agent's exit-reason file; null if absent or malformed. */
-export function readExitReason(file, { readFile = fs.readFileSync } = {}) {
+/** Reads and validates the agent's exit-reason file; null if absent, too big or malformed. */
+export function readExitReason(file, { readFile = fs.readFileSync, stat = fs.statSync } = {}) {
     if (!file) return null;
+    try {
+        const st = stat(file);
+        if (!st.isFile() || st.size > MAX_EXIT_REASON_BYTES) return null;
+    } catch { return null; }
     let raw;
     try { raw = readFile(file, 'utf8'); } catch { return null; }
     let r;
@@ -114,6 +120,8 @@ export function decideAgentExit({
     }
     if (typeof code === 'number' && code > EXIT.FATAL) return { action: 'exit', code, reason: `exit ${code}` };
     if (code === EXIT.TRANSIENT && reason?.category === REQUESTED_RESTART && (!guard || guard.allowImmediate(now))) {
+        // Adds nothing to the streak, but a long session still resets it (PR #23 review 1).
+        policy.noteSession?.(connectedMs);
         return { action: 'restart', delayMs: 0, reason: REQUESTED_RESTART };
     }
     // 1, or killed by a signal the main process did not send: transient.
