@@ -103,6 +103,7 @@ test('g1-driver: hello, echo, walk and a clean SIGTERM stop through forge-bridge
     const adapter = await until(() => events().find(e => e.type === 'g2_adapter'), 15000, 'g2_adapter event');
     assert.match(adapter.source, /src\/utils\/mcdata\.js/);
     assert.equal(adapter.translation, true, 'mcdata.js exports toNew/toOld (rotn-data #44)');
+    assert.deepEqual([adapter.chunkWaitMs, adapter.chunkWaitSource], [0, 'ROTN_DRIVER_CHUNK_WAIT_MS'], 'the effective census chunk wait is logged');
     const reply = async (kind, token) => {
         const lines = await until(() => {
             const got = server.state.chats.filter(c => c.startsWith(`${kind} ${token} `));

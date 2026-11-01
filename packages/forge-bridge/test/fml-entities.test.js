@@ -150,20 +150,27 @@ test('the real rotn-data table: FML mobs get their registry names, type and cate
     };
     const got = (e) => ({ name: e.name, displayName: e.displayName, hostile: isHostile(e), type: e.type, kind: e.kind });
 
-    // Every entry of the mod-local table spawns as the catalog says.
-    let count = 0;
-    let hostileCount = 0;
+    // Every entry of the mod-local table spawns as the catalog says, into bot.entities.
+    // Counted per branch of rotn-data's rule (hostile = imob || targetsPlayers), so a
+    // branch that empties out (for example every override reverted) is noticed.
+    const branches = { imob: 0, override: 0, passive: 0, nonLiving: 0 };
     for (const [modId, byId] of Object.entries(rotnData.modEntityTable())) {
         for (const id of Object.keys(byId).map(Number)) {
             const want = expected(modId, id);
+            const entityId = nextId;
             const e = spawn(modId, id);
+            assert.equal(bot.entities[entityId], e, `${modId} #${id} is in bot.entities`);
             assert.deepEqual(got(e), want, `${modId} #${id}`);
             assert.equal(e.forge.nameKnown, true);
-            count++;
-            if (want.hostile) hostileCount++;
+            const f = rotnData.entityByModId(modId, id);
+            if (want.type === 'other') branches.nonLiving++;
+            else if (!want.hostile) branches.passive++;
+            else if (f.imob) branches.imob++;
+            else branches.override++;
         }
     }
-    assert.ok(count >= 500 && hostileCount >= 50 && count - hostileCount >= 100, `${count} entities, ${hostileCount} hostile`);
+    const count = Object.values(branches).reduce((a, b) => a + b, 0);
+    assert.ok(count >= 500 && branches.imob >= 50 && branches.passive >= 100 && branches.nonLiving >= 50 && branches.override >= 1, JSON.stringify(branches));
 
     // Every modded mob in rotn-data's common-mobs.json (G2's mobs_named list, which the
     // console summons) is in the table under its own registry name.
@@ -175,18 +182,19 @@ test('the real rotn-data table: FML mobs get their registry names, type and cate
         assert.deepEqual(got(spawn(modId, modEntityTypeId)), expected(modId, modEntityTypeId), `${m.name} (${modId} #${modEntityTypeId})`);
     }
 
-    // Pinned: cases that must not drift whatever rotn-data's overrides say.
-    const dragon = spawn('iceandfire', 905);
-    assert.deepEqual([dragon.name, dragon.displayName], ['iceandfire:firedragon', 'Fire Dragon']);
-    assert.ok(['hostile', 'passive'].includes(dragon.type), 'a dragon is a living mob (its hostility is rotn-data\'s call)');
-    const cockatrice = spawn('aether_legacy', 7);
-    assert.deepEqual([cockatrice.name, cockatrice.type, cockatrice.kind, isHostile(cockatrice)], ['aether_legacy:cockatrice', 'hostile', 'Hostile mobs', true]);
-    const butterfly = spawn('butterflies', 0);
-    assert.deepEqual([butterfly.name, butterfly.type, isHostile(butterfly)], ['butterflies:butterfly', 'passive', false]);
-    const arrow = spawn('iceandfire', 902, { throwerId: 4243 });
-    assert.deepEqual([arrow.name, arrow.type, isHostile(arrow)], ['iceandfire:dragonarrow', 'projectile', false], 'not living: the thrower rule applies');
-    const unknown = spawn('iceandfire', 4);
-    assert.deepEqual([unknown.name, unknown.type, unknown.kind], ['iceandfire:entity_4', 'other', 'unknown'], 'an id the dump lacks keeps the placeholder');
+    // Pinned: one literal case per branch, so the rule itself cannot drift.
+    const pin = (e) => [e.name, e.displayName, e.type, e.kind, isHostile(e)];
+    // Hostile because the class implements IMob (the dump's fact).
+    assert.deepEqual(pin(spawn('aether_legacy', 7)), ['aether_legacy:cockatrice', 'Cockatrice', 'hostile', 'Hostile mobs', true]);
+    // Hostile through a rotn-data override (not IMob; targetsPlayers, verified from bytecode).
+    assert.deepEqual(pin(spawn('iceandfire', 905)), ['iceandfire:firedragon', 'Fire Dragon', 'hostile', 'Hostile mobs', true]);
+    // Living, neither IMob nor an override: passive.
+    assert.deepEqual(pin(spawn('butterflies', 0)), ['butterflies:butterfly', 'Butterfly', 'passive', 'Passive mobs', false]);
+    // Not living: no type from the table, so the spawn rule applies, unthrown and thrown.
+    assert.deepEqual(pin(spawn('iceandfire', 902)), ['iceandfire:dragonarrow', 'Dragon Bone Arrow', 'other', 'Modded', false]);
+    assert.deepEqual(pin(spawn('iceandfire', 902, { throwerId: 4243 })), ['iceandfire:dragonarrow', 'Dragon Bone Arrow', 'projectile', 'Modded', false]);
+    // An id the dump lacks keeps the placeholder.
+    assert.deepEqual(pin(spawn('iceandfire', 4)), ['iceandfire:entity_4', 'iceandfire:entity_4', 'other', 'unknown', false]);
 });
 
 test('fmlEntityTable tolerates a missing or empty catalog', () => {
