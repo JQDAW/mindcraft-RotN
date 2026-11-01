@@ -70,7 +70,8 @@ export function spawnFmlEntity(bot, msg, { modEntityTable = null, Entity = null,
         entity.uuid = msg.uuid;
         entity.name = name;
         entity.displayName = entry?.displayName ?? name;
-        entity.kind = info.category ?? 'Modded';
+        // Like mineflayer for an unknown entity: kind "unknown" until the name is known.
+        entity.kind = info.category ?? (known ? 'Modded' : 'unknown');
         entity.entityType = entry?.id ?? null;
         const height = info.height ?? entry?.height;
         const width = info.width ?? entry?.width;

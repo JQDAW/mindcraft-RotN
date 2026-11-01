@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { toNew, toOld, blockToNew, blockToOld, loadRotnData, registryName, parseOld } from '../index.js';
-import { buildFlattening } from '../tools/build-flattening.mjs';
+import { buildFlattening, KNOWN_ITEM_GAPS, NBT_VARIANTS } from '../tools/build-flattening.mjs';
+import * as rotnData from '../index.js';
 import { buildRegistryNames } from '../tools/registry-from-capture.mjs';
 
 const require = createRequire(import.meta.url);
@@ -26,7 +27,7 @@ test('registry-names.json holds the real 3.3.4 capture sizes', () => {
 });
 
 test('every vanilla 1.12.2 item with a 1.13+ name round-trips both ways', () => {
-    assert.equal(items.entries.length, 642); // 643 legacy pairs minus spawn_egg (NBT variant)
+    assert.equal(items.entries.length, 643); // 643 legacy pairs - spawn_egg (NBT variant) + stone_slab:2
     for (const e of items.entries) {
         const neu = toNew(e.old, e.meta);
         assert.equal(neu, e.new, `${e.old}:${e.meta}`);
@@ -48,6 +49,44 @@ test('every vanilla block in the table exists in the RotN 3.3.4 block registry',
     assert.equal(blockToNew('silver_glazed_terracotta'), 'light_gray_glazed_terracotta');
     assert.equal(blockToNew('silver_shulker_box'), 'light_gray_shulker_box');
     assert.deepEqual(blockToOld('light_gray_shulker_box').map(s => s.name), Array(6).fill('minecraft:silver_shulker_box'));
+});
+
+// Follow-up 4 (PR #37 review): reverse coverage. Every vanilla item name the 3.3.4 server syncs is
+// in the table, except names with no item form and items whose variant is in NBT.
+const NO_ITEM_FORM = ['minecraft:air', 'minecraft:portal', 'minecraft:end_portal', 'minecraft:end_gateway'];
+
+test('reverse coverage: every synced minecraft: item name is in the table', () => {
+    const inTable = new Set(items.entries.map(e => e.old));
+    const missing = [...pack.names.items].filter(n => n.startsWith('minecraft:') && !inTable.has(n)
+        && !NO_ITEM_FORM.includes(n) && !NBT_VARIANTS.has(n));
+    assert.deepEqual(missing, []);
+});
+
+test('per-meta item gaps: stone_slab:2 is mapped, tallgrass:0 stays null on purpose', () => {
+    assert.equal(toNew('stone_slab', 2), 'petrified_oak_slab');
+    assert.deepEqual(toOld('petrified_oak_slab'), { name: 'minecraft:stone_slab', meta: 2 });
+    for (const gap of KNOWN_ITEM_GAPS) assert.equal(toNew(gap), null, gap);
+    assert.equal(toNew('deadbush'), 'dead_bush');
+    assert.deepEqual(toOld('dead_bush'), { name: 'minecraft:deadbush', meta: 0 });
+});
+
+test('blockToNew rejects metas the block does not have (follow-up 5)', () => {
+    assert.equal(blockToNew('silver_glazed_terracotta', 9), null);
+    assert.equal(blockToNew('silver_glazed_terracotta', 2), 'light_gray_glazed_terracotta');
+    assert.equal(blockToNew('stone', 7), null);
+    assert.equal(blockToNew('dirt', 5), null);
+    assert.equal(blockToNew('crafting_table', 3), null);
+    assert.equal(blockToNew('crafting_table', 0), 'crafting_table');
+    // Items still ignore a damage value.
+    assert.equal(toNew('stone_pickaxe', 17), 'stone_pickaxe');
+    // A name with no block states (an item only) still answers through the item table.
+    assert.equal(blockToNew('stick'), 'stick');
+});
+
+test('the named exports harness-ops imports stay (follow-up 6, PR #36 DRIVER.md)', () => {
+    for (const name of ['toNew', 'toOld', 'registryName', 'blockToNew', 'blockToOld', 'loadRotnData', 'lookup', 'recipesFor', 'harvestInfo', 'getBlock', 'getItem']) {
+        assert.equal(typeof rotnData[name], 'function', name);
+    }
 });
 
 test('spawn eggs are not guessed: the mob is in NBT in 1.12', () => {

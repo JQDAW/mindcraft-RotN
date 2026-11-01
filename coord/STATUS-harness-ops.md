@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (16:15 UTC)
+Updated: 2026-11-01 (21:30 UTC)
 
 ## Done
 
@@ -73,27 +73,32 @@ Updated: 2026-11-01 (16:15 UTC)
 - PR #17 (low-priority nits from the #11, #12 and #13 reviews) merged as 032da12 at 12:16:28 UTC.
 - PR #21 (sweeper preflight: (a) its own schedule, (b) the helper repo's schedule, or (c) a cadence of external-cron dispatch runs; a failed newest sweeper run blocks all three) merged as 2abdd3b. Its CI race fix is in c5a4a8c (atomic writes of the fakes' state).
 - PR #22 (status: off-peak cron 0/8, helper not firing, helper workflow review) merged as a8ccac8.
-- **Off-PC sweeper trigger:** cron-job.org has dispatched the sweeper every 15 min since 14:15 UTC (set up by the human). Path (c) passed on the live runs at 14:55 UTC: gaps 15.2 and 14.8 min. G1 Batch A passed (lead, #26).
+- **Off-PC sweeper trigger:** cron-job.org has dispatched the sweeper every 15 min since 14:15 UTC (set up by the human). Path (c) passed on the live runs at 14:55 UTC: gaps 15.2 and 14.8 min.
+- PR #27 (small queued items: status-ping flake, PR #21 findings 3/4/6, PR #17 nits; then the sweeper preflight refuses without GitHub's Date header, and ROTN_TEST_NOW needs ROTN_TEST_MODE=1) merged as 62ec6f1.
+- PR #30 (CX23 runtime, offline: bootstrap, unit template, check-env, ctl wrapper, tag deploy and rollback) merged as 501c490 after re-review: APPROVE WITH NITS. The lead cross-checked the pinned NodeSource fingerprint on keyserver.ubuntu.com.
+- **G1 PASSED** (PR #31, b554547), with this runner and the G1 scenario as the gate evidence.
 
 ## Doing
 
-- **Small queued items**, `agent/harness-ops/small-queued`, one PR:
-  - the status-ping loopback flake;
-  - PR #21 review findings 3 (GitHub's clock), 4 (document what (b) cannot prove) and 6 (empty `pushed_at`);
-  - the PR #17 review nits (the `chatPrefixes` note after the walk check; what the note covers).
-- **Next: brief deliverable 5, offline only.** The CX23 bootstrap script, the `mindcraft-rotn@.service` template, the per-bot env file, and the tag-based deploy and rollback, tested with fakes. Nothing connects to the CX23: the human has not given its root login yet.
+- **PR #33** (`agent/harness-ops/runner-git-sha`): result.json records `git: {sha, dirty, untracked}`. In review.
+- **G2 scenarios** (`agent/harness-ops/g2-scenarios`), offline-tested:
+  - `g2-blocks-named`, `g2-mobs-named` and `g2-items-roundtrip`, the driver-side `attachG2` with a naming adapter, and the G2 section of `test/runner/DRIVER.md`.
+  - Every name the bot gives is checked by the server: `testforblock`, `testfor`, summon and give.
+  - rotn-data agreed the adapter: `registryName`, `toNew` and `toOld` in `packages/rotn-data/index.js`; `null` for anything unmappable; `vanilla/flattening-items.json` as the expected-name table; `common-mobs.json` after the first dump.
+  - net-forge's `walk()` `method` request: held out of this PR. Their `g1-driver.test.js:93` asserts the fallback text, so the one-line change and their test update have to land together; I sent net-forge the diff.
+- **Next, before the first real CX23 run (lead, PR #30 re-review):** check-env allowlists the variable NAMES allowed in the per-bot env file and refuses any other (e.g. `NODE_TLS_REJECT_UNAUTHORIZED`, `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`, `LD_PRELOAD`, `NODE_EXTRA_CA_CERTS`).
 
 ## Watching
 
-- Nothing. The 2 h observation of GitHub's own schedule ended with 0 of 8 slots, and the helper repo's schedule did not fire in its first three slots (13:18, 13:33, 13:48). Both are recorded in this file at a8ccac8. The preflight now also accepts the external cron cadence (path c).
+- Nothing.
 
 ## Planned real batches
 
-None planned. The next real batch is a G1 run or net-forge's capture run (`--capture`). Each needs the lead's approval and an observed scheduled sweeper run. The plan for the two G0 batches, as written before they ran, is in this file at commit 70c5c3a.
+None planned. The first real G2 run needs net-forge's and rotn-data's naming in the driver, plus the lead's approval. The sweeper preflight passes on the cron-job.org cadence.
 
 ## Blocked
 
-- Nothing. Paid batches need the lead's approval and a passing sweeper preflight, which the cron-job.org cadence now gives.
+- Nothing.
 
 ## Requests to other agents or the lead
 
@@ -101,21 +106,7 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 2. ~~Human: GitHub Environment `hetzner-test-sweeper`~~ **Done** (the lead verified it via the GitHub API on 2026-11-01): deployment branches `develop` only, environment secret `HCLOUD_TOKEN`, no repository-level secrets.
 3. **Lead (info only):** my unit tests use `"test/unit/**/*.test.js"`, which `npm test` already covers.
 4. ~~Lead: merge the G0 evidence PR~~ **Done** (#5, 65792f3).
-5. **Lead / human: the sweeper's schedule has never fired.**
-   - `test-server-sweeper.yml` has been on `develop` (the default branch) since 00:25 UTC (70c5c3a), and the workflow state is `active`. Pushes to develop at 00:52, 00:55, 01:16 and 01:21 UTC did not change that.
-   - A watch from 01:41 to 04:00:23 UTC found **no `event=schedule` run at all**: no success, no failure, no skipped run. The only runs are my two manual dispatches (41257157372, 41257552258), and both succeeded. A `*/15` cron that is late by minutes is normal on GitHub; 3.5 hours with no run is not.
-   - Likely cause: this repo is a **fork** (`fork: true`). GitHub keeps scheduled workflows off in forks until someone enables them, even when manual dispatch works. Unconfirmed.
-   - Under the lead's rule, and enforced by `test-server.sh up`, **no paid batch can start until a scheduled run succeeds**.
-   - Options, all reversible. The repo settings belong to the lead or human, so I have not touched them:
-     1. Human, in the GitHub UI: Actions tab → `test-server-sweeper` → look for a "scheduled workflows are disabled" banner and enable it, then check Settings → Actions → General.
-     2. Lead: `gh workflow disable test-server-sweeper.yml` followed by `gh workflow enable test-server-sweeper.yml`. That usually re-registers the cron.
-     3. Me: a one-line comment PR to the workflow file. When merged, it registers the schedule again. Only if the lead asks: the lead's rule is no cron or workflow changes without a request.
-   - **Routed:** the lead asked the human (NEEDS-HUMAN) to re-enable or re-register the workflow in the Actions tab.
-   - **Update (lead):** the schedule fired once, at 06:30:54 UTC (success). That is the only scheduled run in about 10 h, so the cron is registered but GitHub drops almost every run at the busy :00/:15/:30/:45 marks. The preflight correctly refuses today: its 120-min window stays as it is.
-   - **Authorized fix:** a separate PR from develop moves the cron to the off-peak minutes `7,22,37,52 * * * *`. Merging it also re-registers the schedule. After the merge I watch for 2 h and record the scheduled-run cadence here. `test-server.sh up` passes its preflight once a scheduled run has succeeded within 120 min.
-   - **Done:** #12 merged at 11:45:11 UTC. Result: 0 of 8 off-peak slots fired (see Watching).
-   - **Next fix (lead and human):** the helper repo `JQDAW/rotn-sweeper-cron` dispatches the sweeper every 15 min. My preflight change (path b) accepts its scheduled runs as evidence. Its schedule did not fire either.
-   - **Resolved:** the human set up cron-job.org (a POST to the dispatches endpoint every 15 min). PR #21's path (c) accepts that cadence. It has been live since 14:15 UTC.
+5. ~~Lead / human: the sweeper's schedule never fired~~ **Done.** GitHub ran almost no scheduled workflows for this account: its own cron fired 1 of about 44 slots, the off-peak cron 0 of 8, and the helper repo 0 of 3. The human set up cron-job.org (a dispatch every 15 min), and the preflight accepts that cadence (path c, PRs #21 and #27). The history is in this file at a8ccac8.
 6. **Lead: review notes on the helper workflow `dispatch-sweeper.yml`** (read from the public repo):
    1. Every line of the committed file starts with one space (checked in the raw bytes). The YAML is still valid and GitHub accepted it, but an edit that adds a line at column 0 would break the file. Remove the leading spaces.
    2. The fine-grained token expires. When it lapses, helper runs fail (GitHub emails the owner) and path (b) refuses. Note its expiry date.
@@ -123,6 +114,10 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
    4. The rest looks right: `permissions: {}`, no checkout, no third-party actions, the secret is scoped to one step, the timeout is 3 min. `ubuntu-latest` instead of a pinned image is a minor point.
    5. GitHub disables the helper's schedule after 60 days without activity in the helper repo. The preflight warns from day 45; a small commit to the helper repo resets the clock.
 
+7. **Lead: a `.gitattributes`** with `*.sh text eol=lf` and `deploy/cx23/** text eol=lf`. Root files are yours. The stopgap is in place: the scripts are `.sh`, and bootstrap strips CRs.
+8. **Human, via the lead, for the first real CX23 run (later, after the lead's approval):** the CX23's root login and IP, the `deploy` user's public key, the bot's OpenRouter key (set on the server only), and the bot's first Microsoft device-code login. Steps: `deploy/cx23/README.md`.
+
 ## Open PRs
 
-- The small-queued PR (`agent/harness-ops/small-queued`), opened with this update.
+- #33 (`agent/harness-ops/runner-git-sha`): the git SHA, dirty flag and untracked count in result.json.
+- The G2 scenarios PR (`agent/harness-ops/g2-scenarios`), opened with this update.
