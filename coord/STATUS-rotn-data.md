@@ -44,7 +44,7 @@ Import: every block, item and entity name agrees with the RegistryData capture. 
 
 Known gaps, pinned in `packages/rotn-data/test/fixtures/harvest-known-gaps-3.3.4.json`:
 
-- 39 of 23,499 states have `null` hardness (tile-entity blocks: Aether chests, BWM waterwheel and windmill, ...).
+- 30 of 23,499 states, in 5 blocks, have `null` hardness (tile-entity blocks: Aether chests, BWM waterwheel and windmill, ...). (An earlier count of 39 wrongly included the 9 blocks below.)
 - 9 blocks have no metadata-consistent state (BetterNether and Growthcraft half slabs, `betterwithmods:blood_leaves`, `twilightforest:force_field`).
 
 None is a natural surface block. 20 recipes do not match their own sample grid (`matchesSample: false`); they are for skills-rotn to check if one matters.
@@ -60,6 +60,7 @@ None is a natural surface block. 20 recipes do not match their own sample grid (
 - **3** (PR #37 review): the meaning of names valid in both versions. Resolved in #44 by `resolveName`: 1.12 meaning by default (`grass`, `stone_slab`, `snow`, `melon`, `nether_brick`), and `prefer: 'new'` for names the LLM wrote. skills-rotn: Mindcraft's `'grass'` in `skills.js:706` means the plant (`tallgrass` in 1.12).
 - **4, 5, 6**: in PR #43.
 - **#34 review follow-ups 1-3**: a later dumper PR.
+- **#47 review follow-ups** (later PR): record each raw dump file's SHA-256 in the import, and make the importer reject an unexpected `dumperJar.sha256`; consider a lower brotli threshold; assert `harvestInfo('stone').level === 0` directly.
 
 ## Blocked
 
