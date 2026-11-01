@@ -54,16 +54,34 @@ export class CaptureWriter {
      * @param {string} opts.file JSONL output path (parent folders are created)
      * @param {{username?:string, uuid?:string}} [opts.redact]
      * @param {Record<string, number>} [opts.packetLimits] max records per play packet name
+     *   (S2C), or per `C2S:<name>` for outgoing packets
+     * @param {Record<string, number>} [opts.channelLimits] max payload records per
+     *   `<dir> <channel>` or per channel name; `Infinity` for no limit
+     * @param {number} [opts.defaultChannelLimit] for channels not listed
+     * @param {number} [opts.maxPayloadBytes] larger payloads are recorded without bytes
+     * @param {number} [opts.maxFileBytes] stop recording (except the closing summary) past this size
      */
-    constructor({ file, redact = {}, packetLimits = {} }) {
+    constructor({
+        file, redact = {}, packetLimits = {}, channelLimits = {},
+        defaultChannelLimit = 2000, maxPayloadBytes = 1 << 20, maxFileBytes = 256 << 20,
+    }) {
         this.file = file;
         this.redact = { ...redact };
         this.packetLimits = { map_chunk: 40, window_items: 50, set_slot: 300, entity_effect: 100, remove_entity_effect: 100, ...packetLimits };
+        // The handshake and channel registration are small and must be complete.
+        this.channelLimits = { 'FML|HS': Infinity, REGISTER: Infinity, UNREGISTER: Infinity, FORGE: Infinity, ...channelLimits };
+        this.defaultChannelLimit = defaultChannelLimit;
+        this.maxPayloadBytes = maxPayloadBytes;
+        this.maxFileBytes = maxFileBytes;
         this.counts = {};
+        this.channelCounts = {};
+        this.dropped = { packets: 0, payloads: 0, full: 0 };
         this.start = Date.now();
         fs.mkdirSync(path.dirname(file), { recursive: true });
         this.fd = fs.openSync(file, 'a');
         this.closed = false;
+        this.full = false;
+        this.bytes = 0;
         this.lines = 0;
     }
 
@@ -72,40 +90,66 @@ export class CaptureWriter {
         if (uuid) this.redact.uuid = uuid;
     }
 
-    record(entry) {
-        if (this.closed) return;
+    record(entry, { force = false } = {}) {
+        if (this.closed) return false;
+        if (this.full && !force) { this.dropped.full++; return false; }
         const line = { t: Date.now() - this.start, ...entry };
         // Buffers anywhere in the entry are redacted before base64 (jsonReplacer),
         // and the JSON text is redacted again for plain-string identities.
-        const json = redactString(JSON.stringify(line, jsonReplacer(this.redact)), this.redact);
-        fs.writeSync(this.fd, json + '\n');
+        const json = redactString(JSON.stringify(line, jsonReplacer(this.redact)), this.redact) + '\n';
+        if (!force && this.bytes + Buffer.byteLength(json) > this.maxFileBytes) {
+            this.full = true;
+            this.dropped.full++;
+            this._write(JSON.stringify({ t: line.t, kind: 'event', name: 'capture_full', bytes: this.bytes, maxFileBytes: this.maxFileBytes }) + '\n');
+            return false;
+        }
+        this._write(json);
+        return true;
+    }
+
+    _write(text) {
+        fs.writeSync(this.fd, text);
+        this.bytes += Buffer.byteLength(text);
         this.lines++;
     }
 
+    // Returns false when the record was dropped by a limit.
     payload(dir, channel, data, extra = {}) {
-        const red = redactBuffer(data, this.redact);
-        this.record({
-            kind: 'payload', dir, channel,
+        const key = `${dir} ${channel}`;
+        const n = (this.channelCounts[key] ?? 0) + 1;
+        this.channelCounts[key] = n;
+        const limit = this.channelLimits[key] ?? this.channelLimits[channel] ?? this.defaultChannelLimit;
+        if (n > limit) {
+            this.dropped.payloads++;
+            if (n === limit + 1) this.event('channel_limit', { dir, channel, limit });
+            return false;
+        }
+        const big = data.length > this.maxPayloadBytes;
+        return this.record({
+            kind: 'payload', dir, channel, n,
             disc: data.length ? data.readInt8(0) : null,
             len: data.length,
-            b64: red.toString('base64'),
+            b64: big ? null : redactBuffer(data, this.redact).toString('base64'),
+            ...(big ? { bytesOmitted: true } : {}),
             ...extra,
         });
     }
 
-    // Returns false once the per-name limit is reached.
+    // Returns false once the per-name limit is reached. Outgoing packets count
+    // and look up their limit as `C2S:<name>`.
     packet(dir, name, buffer, extra = {}) {
-        const n = (this.counts[name] ?? 0) + 1;
-        this.counts[name] = n;
-        const limit = this.packetLimits[name];
-        if (limit !== undefined && n > limit) return false;
-        this.record({
+        const key = dir === 'S2C' ? name : `${dir}:${name}`;
+        const n = (this.counts[key] ?? 0) + 1;
+        this.counts[key] = n;
+        const limit = this.packetLimits[key];
+        if (limit !== undefined && n > limit) { this.dropped.packets++; return false; }
+        const big = (buffer?.length ?? 0) > this.maxPayloadBytes;
+        return this.record({
             kind: 'packet', dir, name, n,
             len: buffer?.length ?? 0,
-            b64: buffer ? redactBuffer(buffer, this.redact).toString('base64') : null,
+            b64: buffer && !big ? redactBuffer(buffer, this.redact).toString('base64') : null,
             ...extra,
         });
-        return true;
     }
 
     event(name, data = {}) { this.record({ kind: 'event', name, ...data }); }
@@ -118,7 +162,7 @@ export class CaptureWriter {
 
     close() {
         if (this.closed) return;
-        this.event('capture_closed', { lines: this.lines, packetCounts: this.counts });
+        this.record({ kind: 'event', name: 'capture_closed', lines: this.lines, bytes: this.bytes, packetCounts: this.counts, channelCounts: this.channelCounts, dropped: this.dropped }, { force: true });
         this.closed = true;
         try { fs.closeSync(this.fd); } catch { /* already closed */ }
     }

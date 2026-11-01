@@ -5,6 +5,7 @@ import { Buffer } from 'node:buffer';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
 import { attachForgeBridge } from '../src/bridge.js';
 import { CaptureWriter, readCapture } from '../src/capture.js';
 import { encodeMultipart, PART_SIZE } from '../src/channels.js';
@@ -97,4 +98,61 @@ test('record() re-redacts base64 strings handed in by callers', () => {
     capture.record({ kind: 'partial_packet', b64: withIdentity.toString('base64') });
     capture.close();
     assertNoIdentity(readCapture(file));
+});
+
+test('per-channel capture limits: busy mod channels are capped, the handshake never is (review item 11)', () => {
+    const file = tmpFile('limits.jsonl');
+    const capture = new CaptureWriter({ file, redact: { username: NAME }, defaultChannelLimit: 5, channelLimits: { 'S2C chatty': 2 }, maxPayloadBytes: 64 });
+    for (let i = 0; i < 10; i++) assert.equal(capture.payload('S2C', 'FML|HS', Buffer.from([3, i])), true);
+    const kept = Array.from({ length: 10 }, () => capture.payload('S2C', 'somemod', Buffer.from([1, 2])));
+    assert.deepEqual(kept, [true, true, true, true, true, false, false, false, false, false]);
+    for (let i = 0; i < 4; i++) capture.payload('S2C', 'chatty', Buffer.from([0]));
+    capture.payload('C2S', 'chatty', Buffer.from([0]));
+    capture.payload('S2C', 'bigmod', Buffer.alloc(65, 1));
+    capture.close();
+    const lines = readCapture(file);
+    const payloads = (ch, dir = 'S2C') => lines.filter(l => l.kind === 'payload' && l.channel === ch && l.dir === dir).length;
+    assert.equal(payloads('FML|HS'), 10);
+    assert.equal(payloads('somemod'), 5);
+    assert.equal(payloads('chatty'), 2);
+    assert.equal(payloads('chatty', 'C2S'), 1, 'limits are per direction when keyed "<dir> <channel>"');
+    assert.deepEqual(lines.filter(l => l.name === 'channel_limit').map(l => l.channel), ['somemod', 'chatty']);
+    const big = lines.find(l => l.channel === 'bigmod');
+    assert.equal(big.b64, null);
+    assert.equal(big.bytesOmitted, true);
+    const closed = lines.at(-1);
+    assert.equal(closed.name, 'capture_closed');
+    assert.equal(closed.dropped.payloads, 7);
+    assert.equal(closed.channelCounts['S2C somemod'], 10);
+});
+
+test('the capture stops at maxFileBytes but still writes its closing summary', () => {
+    const file = tmpFile('full.jsonl');
+    const capture = new CaptureWriter({ file, maxFileBytes: 2000, defaultChannelLimit: Infinity });
+    let written = 0;
+    for (let i = 0; i < 100; i++) if (capture.payload('S2C', 'somemod', Buffer.alloc(40, i))) written++;
+    capture.close();
+    const lines = readCapture(file);
+    assert.ok(written > 0 && written < 100);
+    assert.equal(lines.filter(l => l.name === 'capture_full').length, 1);
+    assert.equal(lines.at(-1).name, 'capture_closed');
+    assert.equal(lines.at(-1).dropped.full, 100 - written);
+});
+
+test('outgoing packets are capped per name too', () => {
+    const { client, capture, file } = setup(() => ({ data: {}, metadata: { size: 0 } }));
+    for (let i = 0; i < 60; i++) client.write('window_click', { windowId: 0, slot: i });
+    capture.close();
+    assert.equal(readCapture(file).filter(l => l.kind === 'packet' && l.name === 'window_click').length, 50);
+});
+
+test('maxFileBytes counts UTF-8 bytes, not characters', () => {
+    const file = tmpFile('utf8.jsonl');
+    // Each record carries 300 three-byte characters: ~900 bytes, ~300 characters.
+    const capture = new CaptureWriter({ file, maxFileBytes: 2500 });
+    let written = 0;
+    for (let i = 0; i < 10; i++) if (capture.record({ kind: 'event', name: 'x', text: '€'.repeat(300) })) written++;
+    capture.close();
+    assert.equal(written, 2, 'a character count would have let 7 through');
+    assert.ok(fs.statSync(file).size < 2500 + 1000, 'only the closing summary goes past the cap');
 });

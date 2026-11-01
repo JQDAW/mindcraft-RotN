@@ -80,3 +80,52 @@ test('non-full chunks have no biome tail', () => {
     assert.equal(col.getBlockStateId({ x: 0, y: 0, z: 0 }), MODDED);
     assert.equal(col.biomesFormat, undefined);
 });
+
+// Local writes (block_change, multi_block_change) of Forge/REID state ids wider
+// than the vanilla 13 bits must not be truncated (PR #10 review item 5).
+const WIDE = (40000 << 4) | 5; // REID block id 40000, meta 5: needs 20 bits
+
+test('a wide state id written into a vanilla 13-bit global section is kept', () => {
+    const col = new ChunkColumn();
+    col.load(Buffer.concat([globalPaletteSection(13, () => 1 << 4), Buffer.alloc(256, 1)]), 0b1, true, true);
+    col.setBlockStateId({ x: 2, y: 3, z: 4 }, WIDE);
+    assert.equal(col.getBlockStateId({ x: 2, y: 3, z: 4 }), WIDE);
+    assert.equal(col.getBlockStateId({ x: 3, y: 3, z: 4 }), 1 << 4, 'neighbours survive the resize');
+    assert.equal(col.sections[0].data.getBitsPerValue(), 20);
+});
+
+test('a palette section switching to the global palette keeps wide ids', () => {
+    const col = new ChunkColumn();
+    // 300 distinct modded states overflow the 8-bit section palette.
+    for (let i = 0; i < 300; i++) col.setBlockStateId({ x: i & 15, y: i >> 8, z: (i >> 4) & 15 }, WIDE + (i << 4));
+    for (let i = 0; i < 300; i++) assert.equal(col.getBlockStateId({ x: i & 15, y: i >> 8, z: (i >> 4) & 15 }), WIDE + (i << 4));
+    assert.equal(col.sections[0].palette, null);
+    assert.ok(col.sections[0].data.getBitsPerValue() >= 20);
+});
+
+test('a caller can seed the column width; the default stays vanilla', () => {
+    assert.equal(new ChunkColumn({ maxBitsPerBlock: 18 }).maxBitsPerBlock, 18);
+    assert.ok(new ChunkColumn().maxBitsPerBlock <= 13);
+});
+
+test('dump writes REID VarInt biomes back, and the dump reloads (review item 7)', () => {
+    const a = new ChunkColumn();
+    a.load(Buffer.concat([globalPaletteSection(16, stateAt), varintBiomes((i) => (i === 0 ? 300 : 1))]), 0b1, true, true);
+    a.setBlockStateId({ x: 9, y: 9, z: 9 }, WIDE);
+    const b = new ChunkColumn();
+    b.load(a.dump(), a.getMask(), true, true);
+    assert.equal(b.biomesFormat, 'varint');
+    assert.equal(b.getBiome({ x: 0, y: 0, z: 0 }), 300);
+    assert.equal(b.getBlockStateId({ x: 0, y: 0, z: 0 }), MODDED);
+    assert.equal(b.getBlockStateId({ x: 9, y: 9, z: 9 }), WIDE);
+});
+
+test('dump switches to VarInt biomes when an id does not fit in a byte', () => {
+    const a = new ChunkColumn();
+    a.setBlockStateId({ x: 0, y: 0, z: 0 }, 1 << 4);
+    a.setBiome({ x: 4, y: 0, z: 4 }, 260);
+    const b = new ChunkColumn();
+    b.load(a.dump(), a.getMask(), true, true);
+    assert.equal(b.biomesFormat, 'varint');
+    assert.equal(b.getBiome({ x: 4, y: 0, z: 4 }), 260);
+});

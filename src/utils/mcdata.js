@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler } from '../../packages/forge-bridge/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -53,7 +53,7 @@ export const WOOL_COLORS = [
 ]
 
 
-export function initBot(username) {
+export function initBot(username, { onMsaCode } = {}) {
     // Read the version here, not at module load: settings are empty until
     // setSettings() runs, which is after this module is imported (seam-map A).
     const configuredVersion = settings.minecraft_version;
@@ -71,10 +71,21 @@ export function initBot(username) {
     // Env switches (FORGE_BRIDGE, FORGE_CAPTURE, FORGE_MODLIST_FILE,
     // MINDCRAFT_PROFILES_FOLDER) are documented in packages/forge-bridge/src/env.js.
     const env = forgeOptionsFromEnv(username);
-    // Per-bot Microsoft token cache, outside the repo (docs/research/ops.md section 1).
+    // Per-bot Microsoft token cache, outside every repo (docs/research/ops.md
+    // section 1). Refuse to start without it (nmp would use its shared default
+    // cache), with it inside a git work tree, or with DEBUG enabling
+    // prismarine-auth's output (it prints tokens). See forge-bridge src/auth-guard.js.
+    if (options.auth === 'microsoft') {
+        assertMicrosoftAuthSafe({ username, profilesFolder: env.profilesFolder });
+    }
     if (env.profilesFolder) {
         options.profilesFolder = env.profilesFolder;
     }
+    // A bot never runs the interactive device-code login itself: that is the
+    // human's step (packages/forge-bridge/tools/msa-login.mjs). The default logs
+    // one line and never the code; a caller (a harness driver) can pass its own
+    // onMsaCode to fail fast.
+    options.onMsaCode = onMsaCode ?? quietMsaCodeHandler(username);
 
     // Forge 1.12.2 (RotN): ping first, then attach forge-bridge with the server's
     // ModList before the socket opens (ADR 0003). FORGE_BRIDGE=auto attaches only

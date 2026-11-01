@@ -165,11 +165,12 @@ async function main(argv) {
         ok &&= b.ok;
     }
     const c = compare(baseline, current, o);
-    for (const m of c.moved) console.log(`per-file count moved (allowed while the total does not rise): ${m}`);
+    const movedNote = o.allowRaise ? 'per-file count moved' : 'per-file count moved (allowed while the total does not rise)';
+    for (const m of c.moved) console.log(`${movedNote}: ${m}`);
     for (const p of c.problems) console.error(`LINT RATCHET: ${p}`);
     ok &&= c.ok;
     console.log(`lint: ${c.total} errors (baseline ${baseline.total}, ceiling ${MAX_TOTAL}): ${ok ? 'OK' : 'FAIL'}`);
-    if (!ok && c.total > baseline.total) console.error('Run `npx eslint <file>` on the files you changed and fix the new errors; do not raise the baseline.');
+    if (!ok && c.total > baseline.total && !o.allowRaise) console.error('Run `npx eslint <file>` on the files you changed and fix the new errors; do not raise the baseline.');
     return ok ? 0 : 1;
 }
 

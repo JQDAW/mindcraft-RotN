@@ -16,8 +16,8 @@ on:
     # Every 15 min, at off-peak minutes on purpose. GitHub delays and drops scheduled runs when load
     # is high, and the top of the hour and :15/:30/:45 are the busiest marks: with '*/15' this
     # workflow got one scheduled run (06:30:54 UTC) in about 10 h on 2026-11-01. Keep the minutes
-    # off those marks. test-server.sh up still refuses to create anything unless a scheduled run
-    # succeeded within ROTN_SWEEPER_MAX_AGE_MIN (default 120).
+    # off those marks. test-server.sh up and run (run calls up) still refuse to create anything
+    # unless a scheduled run succeeded within ROTN_SWEEPER_MAX_AGE_MIN (default 120).
     - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
     inputs:
