@@ -12,7 +12,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { runScenario, waitFor } from '../runner/lib/runner.mjs';
 import * as L from '../runner/lib/server-log.mjs';
-import { parseArgs, loadScenarios } from '../runner/run.mjs';
+import { parseArgs, loadScenarios, gitInfo } from '../runner/run.mjs';
 import { driverEnv, ctlServer } from '../runner/lib/adapters.mjs';
 import { attachScenario } from '../runner/drivers/scenario-protocol.mjs';
 import g1 from '../scenarios/g1/g1-login-chat-walk.mjs';
@@ -386,6 +386,20 @@ describe('waitFor', () => {
 });
 
 describe('run.mjs', () => {
+    test('gitInfo: sha, dirty only for tracked changes, untracked counted; nulls when git cannot answer', () => {
+        const SHA = 'a'.repeat(40);
+        const lines = (...l) => l.map((x) => `${x}\n`).join('');
+        const fake = (status) => (cmd, args) => (args[0] === 'rev-parse' ? lines(SHA) : status);
+        assert.deepEqual(gitInfo('.', fake('')), { sha: SHA, dirty: false, untracked: 0 });
+        assert.deepEqual(gitInfo('.', fake(lines('?? captures/x.jsonl', '?? test/scenarios/g2/new.mjs'))), { sha: SHA, dirty: false, untracked: 2 });
+        assert.deepEqual(gitInfo('.', fake(lines(' M test/runner/run.mjs', '?? x'))), { sha: SHA, dirty: true, untracked: 1 });
+        assert.deepEqual(gitInfo('.', fake(lines('M  staged.js'))), { sha: SHA, dirty: true, untracked: 0 });
+        assert.deepEqual(gitInfo('.', () => { throw new Error('not a git repository'); }), { sha: null, dirty: null, untracked: null });
+        assert.deepEqual(gitInfo('.', () => lines('garbage')), { sha: null, dirty: null, untracked: null });
+        const real = gitInfo();
+        assert.match(real.sha, /^[0-9a-f]{40}$/);
+    });
+
     test('parseArgs', () => {
         assert.deepEqual(parseArgs(['--scenario', 'g1', '--param', 'stayMs=60000', '--param', 'bot=X=Y', '--', 'node', 'd.mjs', '--x']),
             { params: { stayMs: 60000, bot: 'X=Y' }, driver: ['node', 'd.mjs', '--x'], list: false, scenario: 'g1', out: null, passEnv: [] });
@@ -434,6 +448,10 @@ describe('run.mjs end to end with its real adapters (fake test-server CLI and fa
             assert.equal(res.pass, false);
             assert.equal(res.verdict, 'SMOKE-PASS (not a gate pass)');
             assert.equal(res.server, 'mcr-test-x');
+            const head = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).stdout.trim();
+            assert.equal(res.git.sha, head, 'result.json records the commit under test');
+            assert.equal(typeof res.git.dirty, 'boolean');
+            assert.equal(typeof res.git.untracked, 'number');
             const serverLog = fs.readFileSync(path.join(out, 'server.log'), 'utf8');
             assert.match(serverLog, /^.*FRCFLD joined the game$/m);
             assert.doesNotMatch(serverLog, /scenario-.*-begin/, 'starts after the marker');

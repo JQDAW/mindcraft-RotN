@@ -97,6 +97,16 @@ Updated: 2026-11-01 (about 01:00 UTC)
   - net-forge is diagnosing offline. The next batch needs a new written go-ahead.
 - PR #26 (Batch A evidence) merged as `c40856d`, APPROVE WITH NITS. The STATUS-line fixes are queued for net-forge.
 
+- **2026-11-01 17:05 UTC: GO for net-forge Batch B + C retry** (one server).
+  - Prerequisite met: PR #28 merged (`a83c22b`): the Triumph advancements are opaque, and the parse safety net is in place.
+  - Run from a clean checkout of origin/develop at `a83c22b` or later, **without** the unmerged PR #25.
+  - Same conditions as the 15:55 GO: preflight on its own; one CPX42; stop and delete at 55 min; maximum about EUR 0.42 + IPv4; the project empty afterwards; real times and cost recorded; sanitized evidence only (`test/evidence/g1/` exception stands).
+
+- **Batch B + C retry result: G1 PASS** (PR #31 `b554547`, confirmed by an independent reviewer). CPX42 17:09:58-17:34:44 UTC, about EUR 0.14; the project was empty at 17:35:19 (lead verified at about 17:48).
+- Hetzner spend for agent batches so far: G0 about EUR 0.16, Batch A about EUR 0.14, B+C about EUR 0.14, retry about EUR 0.14, so about EUR 0.58 + IPv4-hours.
+
+- **rotn-data spawned 2026-11-01 about 18:00 UTC** for Phase 2 (G2). Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`, branch `agent/rotn-data/g2-dumper`, terminal `term_ea9c811e-debc-4b19-8707-aefda537172d`, auto mode (launch screen checked). Three dev agents now run (the maximum).
+
 ## Notes for dev agents
 
 - mineflayer-pvp pulls in a nested `mineflayer@2.41.0` and `minecraft-data@2.221.0` through `mineflayer-utils` (upstream issue). net-forge should keep this in mind when it extends the registry.

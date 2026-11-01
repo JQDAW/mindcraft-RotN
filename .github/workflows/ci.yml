@@ -59,3 +59,20 @@ jobs:
           BASE_REF: ${{ github.base_ref || 'develop' }}
           ALLOW_RAISE: ${{ contains(github.event.pull_request.labels.*.name, 'lint-raise-approved') && '--allow-raise' || '' }}
         run: node test/tools/lint-baseline.mjs --base-ref "origin/$BASE_REF" $ALLOW_RAISE
+
+      # deploy/cx23 (brief deliverable 5): shellcheck and systemd-analyze, which the Windows dev PC
+      # does not have. verify needs the programs a unit names to exist, so a copy of the template
+      # runs as instance "ci" with ExecStartPre and ExecStart pointed at stand-ins.
+      - name: CX23 scripts (shellcheck) and unit (systemd-analyze verify)
+        run: |
+          set -euo pipefail
+          shellcheck --version | sed -n 2p
+          shellcheck -S warning deploy/cx23/bootstrap.sh deploy/cx23/deploy.sh deploy/cx23/check-env.sh deploy/cx23/mindcraft-rotn-ctl.sh
+          d=$(mktemp -d)
+          printf '#!/bin/sh\nexit 0\n' > "$d/check-env"
+          chmod +x "$d/check-env"
+          sed -e "s#^ExecStartPre=/usr/local/lib/mindcraft-rotn/check-env#ExecStartPre=$d/check-env#" \
+              -e "s#^ExecStart=/usr/bin/node #ExecStart=$(command -v node) #" \
+              deploy/cx23/mindcraft-rotn@.service > "$d/mindcraft-rotn@ci.service"
+          systemd-analyze --version | head -1
+          systemd-analyze verify --man=no "$d/mindcraft-rotn@ci.service"
