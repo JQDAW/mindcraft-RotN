@@ -71,6 +71,9 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.equal(server.state.hsState, 'DONE');
     assert.equal(bridge.handshakeDone, true);
     assert.equal(bridge.reid.version, '2.2.2');
+    // initBot passes rotn-data's dumped entity-metadata serializer ids (15-18) to the bridge.
+    assert.deepEqual([15, 16, 17, 18].map((id) => bridge.metadataSerializers[id]),
+        ['base:resource_location', 'mowziesmobs:optional_trade', 'charset:quaternion', 'requious:spark_effect']);
     const hsOut = server.state.fromClient.filter(p => p.channel === 'FML|HS' || p.channel === 'REGISTER').map(p => `${p.channel}:${p.data[0]}`);
     assert.deepEqual(hsOut.slice(0, 7), ['REGISTER:70', 'FML|HS:1', 'FML|HS:2', 'FML|HS:255', 'FML|HS:255', 'FML|HS:255', 'FML|HS:255']);
     const acks = server.state.fromClient.filter(p => p.channel === 'FML|HS' && p.data[0] === 0xff).map(p => p.data[1]);

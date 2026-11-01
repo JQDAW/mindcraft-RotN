@@ -119,23 +119,24 @@ Forge spawns most mod entities with an FML message (`FML` channel, disc 2), not 
 
 Vanilla 1.12 defines entity-metadata serializer ids 0-13. A protodef switch cannot skip an unknown type, so a packet using one is dropped as a PartialReadError (G1: a player's AquaAcrobatics pose, key 17). `reid.js` adds the mod ones to `entityMetadataItem`, for nmp's protocol and for the FML EntitySpawn reader alike:
 
-- **Formats.** `METADATA_SERIALIZER_TYPES` holds each mod serializer's wire format, from `javap` on its `write()` in the pinned pack:
+- **Formats.** `METADATA_SERIALIZER_TYPES` holds each mod serializer's wire format. Each one comes from `javap` on the `write()` and `read()` of the class that rotn-data's dump names for it (`METADATA_SERIALIZER_CLASSES`), in the pinned pack:
 
-  | Serializer | Wire format |
-  | --- | --- |
-  | `aquaacrobatics:pose` | VarInt enum |
-  | `base:resource_location` | two strings |
-  | `charset:quaternion` | four floats |
-  | `mowziesmobs:optional_trade` | slot; then, unless empty, a slot and an int |
-  | `requious:spark_effect` | int |
-  | `doggytalents:talent_level_list` | an int count of (string, byte) |
-  | `doggytalents:optional_text_component` | an optional string |
+  | Id | Serializer | Class (dump) | Wire format |
+  | --- | --- | --- | --- |
+  | 14 | `aquaacrobatics:pose` | `PoseSerializer$1` | VarInt enum |
+  | 15 | `base:resource_location` | `ResourceLocationDataSerializer` | two strings (namespace, path) |
+  | 16 | `mowziesmobs:optional_trade` | `ServerProxy$1` | slot; then, unless empty, a slot and an int |
+  | 17 | `charset:quaternion` | `DataSerializersCharset$1` | four floats, **w, x, y, z** |
+  | 18 | `requious:spark_effect` | `ExtraSerializers$1` | int (enum ordinal) |
+  | 256 | `doggytalents:talent_level_list` | `TalentListSerializer` | an int count of (string, byte) |
+  | 257 | `doggytalents:optional_text_component` | `OptionalTextComponentSerializer` | an optional string |
 
 - **Ids.** Mods that call vanilla `DataSerializers.registerSerializer` get ids 14, 15, ... in call order. Forge-registry serializers start at 256 and are synced by name.
-- **Defaults** (`rotnMetadataSerializers(modList)`):
-  - 14 = `aquaacrobatics:pose`, **inferred by fit, to be confirmed with rotn-data's dumper**. G1's player packet has a one-byte value under type 14 that ends exactly at the next key; only the VarInt among the five candidates fits. Until the dumper confirms it, the bridge logs (and captures) the first value it decodes with id 14 (`INFERRED_METADATA_SERIALIZERS`). Passing id 14 explicitly in `metadataSerializers` ends that.
+- **From the dump.** `initBot` passes `metadataSerializersFromDump(loadRotnData(PACK_VERSION).serializers()).map` as the bridge option `metadataSerializers`. That covers every id above. A mod class with no known format is logged, and if rotn-data fails to load, the bridge falls back to the defaults.
+- **Defaults** (`rotnMetadataSerializers(modList)`), the ids the bridge assumes without the dump:
+  - 14 = `aquaacrobatics:pose`, **confirmed by rotn-data's dump**. G1 had inferred it by fit. Its player packet has a one-byte value under type 14 that ends exactly at the next key; only the VarInt among the five candidates fits.
   - 256 and 257 = the DoggyTalents pair (Batch A's synced registry).
-  - Ids 15-18 (base, Charset, Mowzie's Mobs, Requious, order unknown) come from rotn-data's dumper as the bridge option `metadataSerializers: { id: name }`.
+  - Ids 15-18 are vanilla-registry ids in mod call order, so they come only from the dump.
 - **Check.** The protocol is compiled before RegistryData arrives. So after it, the bridge compares the >= 256 ids with the synced `minecraft:dataserializers` and logs (and captures) any mismatch.
 
 ## Other protocol changes

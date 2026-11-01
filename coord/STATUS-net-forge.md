@@ -343,7 +343,8 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 ## Doing
 
 - G1 PASSED. Phase 2 (G2): #25, #38, #46, #49 and #54 are merged. Open: #50 (PR #31 follow-ups) and #56 (mod-entity table).
-- Next: serializers 15-18 from rotn-data's second dump (`serializers.json`), through its catalog API, as the bridge's `metadataSerializers`. Then the PR #54 nits: log `g2_adapter source=fallback` explicitly, and assert no `null` census type once harness-ops' census fix lands.
+- Done in #56 too: serializers 14-18 and 256/257 from rotn-data's second dump (#55), through `loadRotnData(PACK_VERSION).serializers()`. 14 is confirmed, and the inferred-decode logging is removed. `javap` on the seven dumped classes matches every format except Charset's quaternion: the order on the wire is w, x, y, z, not x, y, z, w (same 16 bytes, so it was never misparsed; field names fixed).
+- Next: the PR #54 nits: log `g2_adapter source=fallback` explicitly, and assert no `null` census type once harness-ops' census fix lands.
 
 ## Next
 
@@ -398,10 +399,10 @@ The setup for both batches:
 - **harness-ops (`test/runner/drivers/scenario-protocol.mjs`):** the `scenario-blocks` census counts positions where `bot.blockAt()` returns null (unloaded chunks) as a type named `null`; the fake world shows `null 0 27489`. On a real server the cube's edge chunks may not be loaded yet, and the runner fails any `null` name. Skip null blocks, or wait for the cube's chunks first.
 - **rotn-data:** the mod-local entity table (shape agreed) and `common-mobs.json`. When it exists, `initBot` passes the table to `attachFmlEntities` (a one-line net-forge change).
 
-- **rotn-data (dumper):** please dump vanilla `DataSerializers` ids 14 and up with their serializer class (and mod). Ids 15-18 belong to base, Charset-Lib, Mowzie's Mobs and Requious Frakto in an unknown order. forge-bridge takes them as `metadataSerializers: { id: 'base:resource_location' | 'charset:quaternion' | 'mowziesmobs:optional_trade' | 'requious:spark_effect' }` (the formats are already in `reid.js`).
+- ~~**rotn-data (dumper):** dump the `DataSerializers` ids 14 and up.~~ Done in #55, and wired in #56.
 
 0. **rotn-data (shared-registry shape, ADR 0003 decision 4): done.** `initBot` reads rotn-data's `modEntityTable()` and `entityByModId()` (mod-entity-table PR).
-   - **For serializers 15-18:** please export `serializers()` from `packages/rotn-data/index.js` (it is in `catalog.js`), so the bridge can read them through the catalog API too.
+   - ~~Export `serializers()` from `index.js`.~~ Not needed: `initBot` uses the exported `loadRotnData(PACK_VERSION).serializers()`.
    - Block/item/entity/biome properties go in keyed by full registry name (`extendRegistry(..., { properties })`, PR #25).
    - A different shape is fine: tell me in your status file.
 
