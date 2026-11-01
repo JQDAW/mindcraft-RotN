@@ -55,10 +55,20 @@ test('offline without a folder still starts', async () => {
     setSettings({ host: '127.0.0.1', port: 1, auth: 'offline', minecraft_version: '1.12.2' });
     const bot = initBot('FRCFLD');
     assert.ok(bot?._client, 'a bot and its client exist');
+    assert.equal(typeof bot.forge.recordExit, 'function', 'initBot gives agent.js its exit-reason hook');
     // Port 1 refuses the connection: the bot got as far as connecting.
     const err = await new Promise((resolve) => { bot.once('error', resolve); bot.once('end', () => resolve(null)); });
     if (err) assert.equal(err.code, 'ECONNREFUSED');
     // nmp leaves a 30 s close timer after end(): clear it so the test exits promptly.
     try { bot.end(); bot._client.socket?.destroy(); } catch { /* already ended */ }
     clearTimeout(bot._client.closeTimer);
+    // Not connected any more: a cleanKill exit reports the disconnect, not a requested restart.
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'initbot-exit-')), 'reason.json');
+    process.env.MINDCRAFT_EXIT_REASON_FILE = file;
+    try {
+        assert.equal(bot.forge.recordExit({ requestedRestart: true }), 1);
+        assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).category, 'disconnect');
+    } finally {
+        delete process.env.MINDCRAFT_EXIT_REASON_FILE;
+    }
 });

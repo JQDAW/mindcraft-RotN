@@ -49,6 +49,7 @@ const argv = yargs(args)
         console.error('Failed to start agent process:');
         console.error(error.message);
         console.error(error.stack);
-        process.exit(1);
+        // initBot's setup refusals (forge-bridge auth-guard) carry exitCode 3: fatal, no restart.
+        process.exit(error?.exitCode === 3 ? 3 : 1);
     }
 })();

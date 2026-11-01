@@ -78,8 +78,9 @@ export function classifySocketError(err) {
 /**
  * The ADR 0003 restart rule for exit code 1: wait 10 s, doubling, capped at
  * 5 min, reset after 10 min connected. A category with `retryCap` becomes
- * fatal once it has ended that many sessions in a row. Not wired in yet: the
- * consumer is src/process/agent_process.js (net-forge brief item 8).
+ * fatal once it has ended that many sessions in a row. Used by
+ * src/process/agent_process.js through decideAgentExit (src/exit-contract.js);
+ * "connected" is measured there from the agent's spawn.
  */
 export function createRestartPolicy({ baseMs = 10_000, maxMs = 300_000, resetAfterMs = 600_000 } = {}) {
     let attempt = 0;
