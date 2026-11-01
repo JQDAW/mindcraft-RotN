@@ -47,9 +47,10 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
  * marker present, a dump is scheduled once the server has started, and the console command
  * "rotndump" (permission level 4) schedules another.
  *
- * A dump writes format "rotn-dump/1" files to ./rotn-dump/: one part per server tick (oredict,
- * blocks, items, recipes, smelting, entities, spawns, then manifest), each written to
- * NAME.json.tmp and renamed into place, and the DONE marker last. A reader must wait for DONE.
+ * A dump writes format "rotn-dump/1" files to ./rotn-dump/ (oredict, blocks, items, recipes,
+ * smelting, entities, spawns, then manifest), at most BATCH entries per server tick, each file
+ * written to NAME.json.tmp and renamed into place, and the DONE marker last. A reader must wait
+ * for DONE.
  * It only reads game state. acceptableRemoteVersions = "*": clients without the mod can join.
  */
 @Mod(modid = RotnDump.MODID, name = "RotN Data Dumper", version = RotnDump.VERSION,
@@ -103,18 +104,31 @@ public class RotnDump {
         if (running == job) running = null;
     }
 
-    interface Part {
-        int write(JsonWriter w) throws IOException;
-    }
+    /** Entries written per server tick, at most (PR #34 review: about 500). */
+    static final int BATCH = 500;
 
-    /** One dump: a queue of parts, one per server tick. */
+    /**
+     * One dump: parts in order, each written in batches of at most BATCH entries per server tick.
+     * Each part's duration and tick count are logged and stored in the manifest.
+     */
     public static final class Job {
         private final File dir;
         private final long t0 = System.currentTimeMillis();
         private final Names names = new Names();
         private final Map<String, Object> counts = new LinkedHashMap<>();
+        private final Map<String, long[]> timing = new LinkedHashMap<>(); // name -> {ms, ticks}
         private final List<String> errors = new ArrayList<>();
         private final Deque<String> todo = new ArrayDeque<>();
+
+        // the part being written
+        private String name;
+        private Part<?> part;
+        private Writer out;
+        private JsonWriter w;
+        private int next;
+        private int written;
+        private long partMs;
+        private long partTicks;
 
         Job(File dir) {
             this.dir = dir;
@@ -124,48 +138,79 @@ public class RotnDump {
         @SubscribeEvent
         public void onTick(TickEvent.ServerTickEvent event) {
             if (event.phase != TickEvent.Phase.END) return;
-            String p = todo.poll();
-            if (p == null) {
-                finish();
-                return;
-            }
             long t = System.currentTimeMillis();
-            write(p, partFor(p));
-            LOG.info("[rotndump] {}: {} in {} ms", p, counts.get(p), System.currentTimeMillis() - t);
-        }
-
-        private Part partFor(String p) {
-            switch (p) {
-                case "oredict": return w -> new OreDumper().write(w);
-                case "blocks": return w -> new BlockDumper(DimensionManager.getWorld(0)).write(w);
-                case "items": return w -> new ItemDumper(names).write(w);
-                case "recipes": return w -> new RecipeDumper(names, DimensionManager.getWorld(0)).write(w);
-                case "smelting": return w -> new SmeltingDumper().write(w);
-                case "entities": return w -> new EntityDumper().write(w);
-                case "spawns": return w -> new SpawnDumper().write(w);
-                default: return this::writeManifest;
-            }
-        }
-
-        private void write(String name, Part part) {
-            File tmp = new File(dir, name + ".json.tmp");
-            File dst = new File(dir, name + ".json");
             try {
-                try (Writer out = new OutputStreamWriter(new FileOutputStream(tmp), StandardCharsets.UTF_8)) {
-                    JsonWriter w = new JsonWriter(out);
-                    w.setIndent("");
-                    w.setSerializeNulls(true);
-                    int n = part.write(w);
-                    w.flush();
-                    counts.put(name, n);
+                if (part == null) {
+                    String p = todo.poll();
+                    if (p == null) {
+                        finish();
+                        return;
+                    }
+                    open(p);
                 }
-                move(tmp, dst);
-            } catch (Throwable t) {
-                LOG.error("[rotndump] {} failed", name, t);
-                errors.add(name + ": " + t);
-                counts.put(name, "error");
-                if (!tmp.delete()) tmp.deleteOnExit();
+                int stop = Math.min(part.size(), next + BATCH);
+                for (; next < stop; next++) if (part.write(w, next)) written++;
+                partTicks++;
+                partMs += System.currentTimeMillis() - t;
+                if (next >= part.size()) close();
+            } catch (Throwable e) {
+                fail(e);
             }
+        }
+
+        private Part<?> partFor(String p) {
+            switch (p) {
+                case "oredict": return new OreDumper();
+                case "blocks": return new BlockDumper(DimensionManager.getWorld(0));
+                case "items": return new ItemDumper(names);
+                case "recipes": return new RecipeDumper(names, DimensionManager.getWorld(0));
+                case "smelting": return new SmeltingDumper();
+                case "entities": return new EntityDumper();
+                case "spawns": return new SpawnDumper();
+                default: return new ManifestPart();
+            }
+        }
+
+        private void open(String p) throws IOException {
+            long t = System.currentTimeMillis();
+            name = p;
+            part = partFor(p);
+            next = 0;
+            written = 0;
+            partTicks = 0;
+            out = new OutputStreamWriter(new FileOutputStream(new File(dir, p + ".json.tmp")), StandardCharsets.UTF_8);
+            w = new JsonWriter(out);
+            w.setIndent("");
+            w.setSerializeNulls(true);
+            part.begin(w);
+            partMs = System.currentTimeMillis() - t;
+        }
+
+        private void close() throws IOException {
+            long t = System.currentTimeMillis();
+            part.end(w);
+            w.flush();
+            out.close();
+            move(new File(dir, name + ".json.tmp"), new File(dir, name + ".json"));
+            partMs += System.currentTimeMillis() - t;
+            counts.put(name, written);
+            timing.put(name, new long[] {partMs, partTicks});
+            LOG.info("[rotndump] {}: {} entries in {} ms over {} ticks", name, written, partMs, partTicks);
+            part = null;
+        }
+
+        private void fail(Throwable e) {
+            LOG.error("[rotndump] {} failed", name, e);
+            errors.add(name + ": " + e);
+            counts.put(name, "error");
+            try {
+                if (out != null) out.close();
+            } catch (IOException ignored) {
+                // nothing more to do
+            }
+            File tmp = new File(dir, name + ".json.tmp");
+            if (!tmp.delete()) tmp.deleteOnExit();
+            part = null;
         }
 
         private void finish() {
@@ -173,8 +218,8 @@ public class RotnDump {
                     + (System.currentTimeMillis() - t0) + " ms, errors: " + errors.size();
             File tmp = new File(dir, "DONE.tmp");
             try {
-                try (Writer w = new OutputStreamWriter(new FileOutputStream(tmp), StandardCharsets.UTF_8)) {
-                    w.write(summary + "\n");
+                try (Writer d = new OutputStreamWriter(new FileOutputStream(tmp), StandardCharsets.UTF_8)) {
+                    d.write(summary + "\n");
                 }
                 move(tmp, new File(dir, "DONE"));
             } catch (IOException e) {
@@ -184,41 +229,80 @@ public class RotnDump {
             finished(this);
         }
 
-        private int writeManifest(JsonWriter w) throws IOException {
+        /** manifest.json: written last, so it holds every other part's count, timing and errors. */
+        private final class ManifestPart extends Part<Object> {
+            @Override
+            protected List<Object> entries() {
+                return java.util.Collections.singletonList(null);
+            }
+
+            @Override
+            protected void head(JsonWriter j) {
+            }
+
+            @Override
+            protected boolean entry(JsonWriter j, Object ignored) throws IOException {
+                writeManifest(j);
+                return true;
+            }
+
+            @Override
+            protected void tail(JsonWriter j) {
+            }
+        }
+
+        private void writeManifest(JsonWriter j) throws IOException {
             SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'");
             iso.setTimeZone(TimeZone.getTimeZone("UTC"));
             List<ModContainer> mods = new ArrayList<>(Loader.instance().getActiveModList());
             mods.sort((a, b) -> a.getModId().compareTo(b.getModId()));
             StringBuilder modList = new StringBuilder();
             for (ModContainer m : mods) modList.append(m.getModId()).append('@').append(m.getVersion()).append('\n');
+            File jar = J.get(() -> Loader.instance().getIndexedModList().get(MODID).getSource());
+            String jarSha = jar == null || !jar.isFile() ? null : J.get(() -> sha256(Files.readAllBytes(jar.toPath())));
+            Long jarBytes = jar == null || !jar.isFile() ? null : jar.length();
 
-            w.beginObject();
-            J.str(w, "format", FORMAT);
-            J.str(w, "dumper", VERSION);
-            J.str(w, "minecraft", "1.12.2");
-            J.str(w, "forge", ForgeVersion.getVersion());
-            J.str(w, "dumpedAt", iso.format(new Date(t0)));
-            J.num(w, "modCount", mods.size());
-            J.str(w, "modListSha256", sha256(modList.toString()));
-            w.name("mods").beginArray();
+            j.beginObject();
+            J.str(j, "format", FORMAT);
+            J.str(j, "dumper", VERSION);
+            // FG3's build is not byte-reproducible, so the jar that ran is identified by its hash.
+            j.name("dumperJar").beginObject();
+            J.str(j, "file", jar == null ? null : jar.getName());
+            J.num(j, "bytes", jarBytes);
+            J.str(j, "sha256", jarSha);
+            j.endObject();
+            J.str(j, "minecraft", "1.12.2");
+            J.str(j, "forge", ForgeVersion.getVersion());
+            J.str(j, "dumpedAt", iso.format(new Date(t0)));
+            J.num(j, "batch", BATCH);
+            J.num(j, "modCount", mods.size());
+            J.str(j, "modListSha256", sha256(modList.toString().getBytes(StandardCharsets.UTF_8)));
+            j.name("mods").beginArray();
             for (ModContainer m : mods) {
-                w.beginObject();
-                J.str(w, "id", m.getModId());
-                J.str(w, "version", m.getVersion());
-                w.endObject();
+                j.beginObject();
+                J.str(j, "id", m.getModId());
+                J.str(j, "version", m.getVersion());
+                j.endObject();
             }
-            w.endArray();
-            w.name("counts").beginObject();
+            j.endArray();
+            j.name("counts").beginObject();
             for (Map.Entry<String, Object> e : counts.entrySet()) {
-                if (e.getValue() instanceof Number) J.num(w, e.getKey(), (Number) e.getValue());
-                else J.str(w, e.getKey(), String.valueOf(e.getValue()));
+                if (e.getValue() instanceof Number) J.num(j, e.getKey(), (Number) e.getValue());
+                else J.str(j, e.getKey(), String.valueOf(e.getValue()));
             }
-            w.endObject();
-            w.name("errors").beginArray();
-            for (String e : errors) w.value(e);
-            w.endArray();
-            w.endObject();
-            return 1;
+            j.endObject();
+            j.name("timing").beginObject();
+            for (Map.Entry<String, long[]> e : timing.entrySet()) {
+                j.name(e.getKey()).beginObject();
+                J.num(j, "ms", e.getValue()[0]);
+                J.num(j, "ticks", e.getValue()[1]);
+                j.endObject();
+            }
+            j.endObject();
+            j.name("errors").beginArray();
+            for (String e : errors) j.value(e);
+            j.endArray();
+            j.endObject();
         }
     }
 
@@ -230,9 +314,9 @@ public class RotnDump {
         }
     }
 
-    static String sha256(String s) {
+    static String sha256(byte[] data) {
         try {
-            byte[] d = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
+            byte[] d = MessageDigest.getInstance("SHA-256").digest(data);
             StringBuilder b = new StringBuilder();
             for (byte x : d) b.append(String.format("%02x", x));
             return b.toString();

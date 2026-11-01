@@ -36,7 +36,7 @@ import net.minecraftforge.oredict.OreDictionary;
  * translation key is new for the item (stops after 64 metas with nothing new).
  * The variants are also handed to Names, which uses them to match wildcard ore entries.
  */
-final class ItemDumper {
+final class ItemDumper extends Part<Item> {
     private static final int PROBE_MAX = 1023;
     private static final int PROBE_GIVE_UP = 64;
     private final Names names;
@@ -45,26 +45,37 @@ final class ItemDumper {
         this.names = names;
     }
 
-    int write(JsonWriter w) throws IOException {
-        Map<Item, Set<Integer>> known = knownMetas();
+    private Map<Item, Set<Integer>> known;
+
+    @Override
+    protected List<Item> entries() {
+        known = knownMetas();
         List<Item> items = new ArrayList<>(ForgeRegistries.ITEMS.getValuesCollection());
-        items.sort((a, b) -> String.valueOf(a.getRegistryName()).compareTo(String.valueOf(b.getRegistryName())));
+        items.removeIf(i -> Names.name(i) == null);
+        items.sort((a, b) -> Names.name(a).compareTo(Names.name(b)));
+        return items;
+    }
+
+    @Override
+    protected void head(JsonWriter w) throws IOException {
         w.beginObject();
         J.str(w, "format", RotnDump.FORMAT);
         w.name("items").beginObject();
-        int n = 0;
-        for (Item item : items) {
-            String name = Names.name(item);
-            if (name == null) continue;
-            Set<Integer> metas = variantMetas(item, known.get(item));
-            names.setVariants(item, metas);
-            w.name(name);
-            writeItem(w, item, metas);
-            n++;
-        }
+    }
+
+    @Override
+    protected boolean entry(JsonWriter w, Item item) throws IOException {
+        Set<Integer> metas = variantMetas(item, known.get(item));
+        names.setVariants(item, metas);
+        w.name(Names.name(item));
+        writeItem(w, item, metas);
+        return true;
+    }
+
+    @Override
+    protected void tail(JsonWriter w) throws IOException {
         w.endObject();
         w.endObject();
-        return n;
     }
 
     private static Map<Item, Set<Integer>> knownMetas() {
@@ -91,7 +102,7 @@ final class ItemDumper {
     }
 
     private static void writeItem(JsonWriter w, Item item, Set<Integer> metas) throws IOException {
-        ItemStack base = new ItemStack(item);
+        ItemStack base = J.get(() -> new ItemStack(item)); // null if the item's constructor hook throws
         Integer stackSize = J.get(() -> item.getItemStackLimit(base));
         Integer maxDamage = J.get(() -> item.getMaxDamage(base));
         Boolean hasSubtypes = J.get(item::getHasSubtypes);
@@ -102,9 +113,11 @@ final class ItemDumper {
             return out;
         });
         Map<String, Float> speed = new LinkedHashMap<>();
-        speed(speed, item, base, "pickaxe", Blocks.STONE.getDefaultState());
-        speed(speed, item, base, "axe", Blocks.LOG.getDefaultState());
-        speed(speed, item, base, "shovel", Blocks.DIRT.getDefaultState());
+        if (base != null) {
+            speed(speed, item, base, "pickaxe", Blocks.STONE.getDefaultState());
+            speed(speed, item, base, "axe", Blocks.LOG.getDefaultState());
+            speed(speed, item, base, "shovel", Blocks.DIRT.getDefaultState());
+        }
 
         w.beginObject();
         J.str(w, "class", item.getClass().getName());
@@ -164,12 +177,12 @@ final class ItemDumper {
     }
 
     private static void writeVariant(JsonWriter w, Item item, int meta) throws IOException {
-        ItemStack s = new ItemStack(item, 1, meta);
-        String display = J.get(s::getDisplayName);
+        ItemStack s = J.get(() -> new ItemStack(item, 1, meta));
+        String display = s == null ? null : J.get(() -> s.getDisplayName());
         String key = key(item, meta);
-        Integer burn = J.get(() -> TileEntityFurnace.getItemBurnTime(s));
-        Integer hunger = item instanceof ItemFood ? J.get(() -> ((ItemFood) item).getHealAmount(s)) : null;
-        Float saturation = item instanceof ItemFood ? J.get(() -> ((ItemFood) item).getSaturationModifier(s)) : null;
+        Integer burn = s == null ? null : J.get(() -> TileEntityFurnace.getItemBurnTime(s));
+        Integer hunger = s != null && item instanceof ItemFood ? J.get(() -> ((ItemFood) item).getHealAmount(s)) : null;
+        Float saturation = s != null && item instanceof ItemFood ? J.get(() -> ((ItemFood) item).getSaturationModifier(s)) : null;
 
         w.beginObject();
         J.num(w, "meta", meta);

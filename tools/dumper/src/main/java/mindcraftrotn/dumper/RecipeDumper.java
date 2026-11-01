@@ -31,10 +31,11 @@ import net.minecraftforge.oredict.OreIngredient;
  *           width + height + slots (shaped, row-major, null = empty) | ingredients (shapeless),
  *           matchesSample, mirroredTested, remaining, remainingError}
  * ingredient = {stacks: [{name, meta}] (32767 = any meta), ore: the key when the ingredient is
- *              exactly one ore (its stacks are then the ore's own list, as in oredict.json),
+ *              exactly one ore (its stacks are then the ore's own list, as in oredict.json, so
+ *              they keep wildcard metas 32767 instead of listing each variant),
  *              ores: every ore key it includes (e.g. ["rock"] for <ore:rock>|<minecraft:flint>)}
  */
-final class RecipeDumper {
+final class RecipeDumper extends Part<IRecipe> {
     private final Names names;
     private final World world;
 
@@ -43,27 +44,38 @@ final class RecipeDumper {
         this.world = world;
     }
 
-    int write(JsonWriter w) throws IOException {
+    private int empty;
+
+    @Override
+    protected List<IRecipe> entries() {
         List<IRecipe> recipes = new ArrayList<>(ForgeRegistries.RECIPES.getValuesCollection());
         recipes.sort((a, b) -> String.valueOf(a.getRegistryName()).compareTo(String.valueOf(b.getRegistryName())));
-        int n = 0;
-        int empty = 0;
+        return recipes;
+    }
+
+    @Override
+    protected void head(JsonWriter w) throws IOException {
         w.beginObject();
         J.str(w, "format", RotnDump.FORMAT);
         w.name("recipes").beginArray();
-        for (IRecipe r : recipes) {
-            ItemStack out = J.get(r::getRecipeOutput);
-            if (out == null || out.isEmpty()) {
-                empty++;
-                continue;
-            }
-            writeRecipe(w, r, out);
-            n++;
+    }
+
+    @Override
+    protected boolean entry(JsonWriter w, IRecipe r) throws IOException {
+        ItemStack out = J.get(r::getRecipeOutput);
+        if (out == null || out.isEmpty()) {
+            empty++;
+            return false;
         }
+        writeRecipe(w, r, out);
+        return true;
+    }
+
+    @Override
+    protected void tail(JsonWriter w) throws IOException {
         w.endArray();
         J.num(w, "skippedEmpty", empty);
         w.endObject();
-        return n;
     }
 
     /** One ingredient, computed before writing. */

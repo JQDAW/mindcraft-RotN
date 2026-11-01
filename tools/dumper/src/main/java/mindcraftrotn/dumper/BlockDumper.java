@@ -35,7 +35,7 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
  * "material" is the lower-cased MCP field name of the vanilla Material (Material.PLANTS ->
  * "plants", GROUND -> "ground", CLOTH -> "cloth"); rotn-data maps it to prismarine's strings.
  */
-final class BlockDumper {
+final class BlockDumper extends Part<Block> {
     private static final Map<Material, String> MATERIALS = new IdentityHashMap<>();
 
     static {
@@ -90,22 +90,32 @@ final class BlockDumper {
         return n != null ? n : "modded:" + m.getClass().getName();
     }
 
-    int write(JsonWriter w) throws IOException {
+    @Override
+    protected List<Block> entries() {
         List<Block> blocks = new ArrayList<>(ForgeRegistries.BLOCKS.getValuesCollection());
-        blocks.sort((a, b) -> String.valueOf(a.getRegistryName()).compareTo(String.valueOf(b.getRegistryName())));
+        blocks.removeIf(b -> b.getRegistryName() == null);
+        blocks.sort((a, b) -> a.getRegistryName().toString().compareTo(b.getRegistryName().toString()));
+        return blocks;
+    }
+
+    @Override
+    protected void head(JsonWriter w) throws IOException {
         w.beginObject();
         J.str(w, "format", RotnDump.FORMAT);
         w.name("blocks").beginObject();
-        int n = 0;
-        for (Block b : blocks) {
-            if (b.getRegistryName() == null) continue;
-            w.name(b.getRegistryName().toString());
-            writeBlock(w, b);
-            n++;
-        }
+    }
+
+    @Override
+    protected boolean entry(JsonWriter w, Block b) throws IOException {
+        w.name(b.getRegistryName().toString());
+        writeBlock(w, b);
+        return true;
+    }
+
+    @Override
+    protected void tail(JsonWriter w) throws IOException {
         w.endObject();
         w.endObject();
-        return n;
     }
 
     private void writeBlock(JsonWriter w, Block b) throws IOException {

@@ -35,23 +35,33 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
  * arrives in a vanilla spawn packet with its minecraft:entities id, not in FML EntitySpawn.
  * hostile = the class implements IMob. kinds lists the base classes it extends.
  */
-final class EntityDumper {
-    int write(JsonWriter w) throws IOException {
+final class EntityDumper extends Part<EntityEntry> {
+    @Override
+    protected List<EntityEntry> entries() {
         List<EntityEntry> entries = new ArrayList<>(ForgeRegistries.ENTITIES.getValuesCollection());
-        entries.sort((a, b) -> String.valueOf(a.getRegistryName()).compareTo(String.valueOf(b.getRegistryName())));
-        int n = 0;
+        entries.removeIf(e -> e.getRegistryName() == null);
+        entries.sort((a, b) -> a.getRegistryName().toString().compareTo(b.getRegistryName().toString()));
+        return entries;
+    }
+
+    @Override
+    protected void head(JsonWriter w) throws IOException {
         w.beginObject();
         J.str(w, "format", RotnDump.FORMAT);
         w.name("entities").beginObject();
-        for (EntityEntry e : entries) {
-            if (e.getRegistryName() == null) continue;
-            w.name(e.getRegistryName().toString());
-            writeEntity(w, e);
-            n++;
-        }
+    }
+
+    @Override
+    protected boolean entry(JsonWriter w, EntityEntry e) throws IOException {
+        w.name(e.getRegistryName().toString());
+        writeEntity(w, e);
+        return true;
+    }
+
+    @Override
+    protected void tail(JsonWriter w) throws IOException {
         w.endObject();
         w.endObject();
-        return n;
     }
 
     private static void writeEntity(JsonWriter w, EntityEntry e) throws IOException {
