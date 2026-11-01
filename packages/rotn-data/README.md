@@ -42,7 +42,8 @@ RotN 3.3.4 facts (ADR 0005) and two-way name translation between Minecraft 1.12.
 | --- | --- |
 | `registry-names.json` | every block, item, entity, biome, enchantment and potion name the real 3.3.4 server synced, from net-forge's G1 Batch A RegistryData capture (`packages/forge-bridge/test/fixtures/rotn-3.3.4/handshake-runA.*`). Rebuild: `node packages/rotn-data/tools/registry-from-capture.mjs`. Numeric ids are kept for reference only. |
 | `mining-levels.json` | `config/tool_progression/mining_level_names.cfg` from the pinned zip |
-| `manifest.json`, `blocks.json`, `items.json`, `recipes.json`, `smelting.json`, `oredict.json`, `entities.json`, `spawns.json` | the dump (ADR 0004, `tools/dumper/README.md`), **not yet present**: it needs a test-server run. Large files are stored as `.json.br`. |
+| `manifest.json`, `blocks.json`, `items.json`, `recipes.json`, `smelting.json`, `oredict.json`, `entities.json`, `spawns.json` | the dump (ADR 0004, `tools/dumper/README.md`): the first RotN 3.3.4 dump, 2026-11-01, dumper jar SHA-256 in `manifest.json`. `blocks`, `items` and `recipes` are stored as `.json.br`. Known harvest gaps are pinned in `test/fixtures/harvest-known-gaps-3.3.4.json`. |
+| `common-mobs.json` | mobs most likely met in the overworld, from `spawns.json` (`tools/build-common-mobs.mjs`); harness-ops' G2 mob scenario reads `mobs[].name` |
 
 Import a fetched dump with `node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir>`. It refuses a dump without its `DONE` marker, with dumper errors, with another Forge build, with names that differ from the registry capture, or without the early-game recipes from the pack's scripts (`test/fixtures/scripts-3.3.4-early-recipes.json`, transcribed from the zip with file and line).
 
@@ -53,4 +54,4 @@ Import a fetched dump with `node packages/rotn-data/tools/import-dump.mjs <fetch
 - `translate.test.js`: every vanilla item round-trips; all names in `rotn-progression.md` section 4 resolve both ways; generated files are up to date.
 - `catalog.test.js`: the API on a synthetic mini dump (`test/fixtures/mini-dump`, values made up).
 - `import-dump.test.js`: the importer's checks.
-- `acceptance-3.3.4.test.js`: the brief's acceptance tests on the real dump (crude axe, Crafting Tools, crafting table, rocks to cobblestone, stone pickaxe and axe recipes match the scripts; `harvestInfo('stone')`; harvest info for every block state; the mod-local entity table is complete). **Skipped until the dump is imported.**
+- `acceptance-3.3.4.test.js`: the brief's acceptance tests on the real dump (crude axe, Crafting Tools, crafting table, rocks to cobblestone, stone pickaxe and axe recipes match the scripts; `harvestInfo('stone')`; harvest info for every block state; the mod-local entity table is complete). They skip only when no dump is imported.
