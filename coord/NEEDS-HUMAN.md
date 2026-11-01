@@ -26,7 +26,10 @@ Agents add items here when they need something only the human can do. The human 
     - https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
     - https://github.com/orgs/community/discussions/203880
     - https://github.com/orgs/community/discussions/205999
-- [ ] **Ready now: one-time FRCFLD device-code login** (net-forge via rotn-lead, 2026-11-01). Needed for net-forge's online G1 run.
+- [x] **FRCFLD device-code login: done by the human on 2026-11-01**, as FRCFLD, using the steps below.
+  - The lead verified it without opening any file. Names only: `C:/Users/admin/.mindcraft-rotn/FRCFLD/msa` holds three prismarine-auth cache files (live, xbl, mca).
+  - The folder's ACL allows only admin, Administrators and SYSTEM, and it is not inside any git work tree.
+  - (Original item, kept for reference:) **Ready now: one-time FRCFLD device-code login** (net-forge via rotn-lead, 2026-11-01). Needed for net-forge's online G1 run.
   - **About the helper.** `packages/forge-bridge/tools/msa-login.mjs`, reviewed line by line and merged in PR #10 (`26a0b5e`).
     - It contacts only Microsoft/Xbox/Minecraft login servers.
     - It prints only Microsoft's sign-in instruction and the profile name.
