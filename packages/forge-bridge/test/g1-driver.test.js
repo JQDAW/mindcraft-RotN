@@ -97,6 +97,39 @@ test('g1-driver: hello, echo, walk and a clean SIGTERM stop through forge-bridge
     assert.equal(forge.handshakeDone, true);
     assert.deepEqual(forge.blockNamespaces, { minecraft: 3, pyrotech: 2 });
 
+    // G2 scenario protocol (DRIVER.md), through the agent's own naming path on Mindcraft's real initBot.
+    const adapter = await until(() => events().find(e => e.type === 'g2_adapter'), 15000, 'g2_adapter event');
+    assert.match(adapter.source, /src\/utils\/mcdata\.js/);
+    assert.equal(adapter.translation, true, 'mcdata.js exports toNew/toOld (rotn-data #44)');
+    const reply = async (kind, token) => {
+        const lines = await until(() => {
+            const got = server.state.chats.filter(c => c.startsWith(`${kind} ${token} `));
+            const total = got.length ? Number(/ \d+\/(\d+)/.exec(got[0])[1]) : 0;
+            return got.length && got.length === total ? got : null;
+        }, 60000, `${kind} reply`);
+        return lines.join(' ');
+    };
+    say('[Server] whispers: scenario-blocks aaaaaa01 16 50 2');
+    const census = await reply('blocks', 'aaaaaa01');
+    assert.match(census, /minecraft:stone 0 \d+/, census);
+    assert.match(census, /pyrotech:rock 3 1 0,64,0/, 'the modded block is named from bot.registry (forge-bridge extension)');
+    // The fake world has one chunk, so most of the radius-16 cube is unloaded: scenario-protocol's census
+    // counts those positions as a "null" type (reported to harness-ops). Every loaded type is named.
+    const types = census.replace(/^.*? \d+\/\d+ /, '').split('; ').map((e) => e.split(' ')[0]);
+    assert.deepEqual(types.filter((t) => t !== 'null').sort(), ['minecraft:stone', 'pyrotech:rock']);
+    assert.doesNotMatch(census, /minecraft:air|unknown/);
+    say('[Server] whispers: scenario-blockat bbbbbb02 0,64,0 5,64,5');
+    const at = await reply('blockat', 'bbbbbb02');
+    assert.match(at, /0 64 0 pyrotech:rock 3/);
+    assert.match(at, /5 64 5 minecraft:stone 0/);
+    say('[Server] whispers: scenario-entities cccccc03 32');
+    const ents = await reply('entities', 'cccccc03');
+    assert.match(ents, /iceandfire:entity_4 10(\.0+)? 65(\.0+)? 10(\.0+)?/, 'the FML-spawned mob is reported (placeholder name until rotn-data\'s table)');
+    say('[Server] whispers: scenario-items dddddd04');
+    const items = await reply('items', 'dddddd04');
+    assert.match(items, /36 minecraft:stone 0 /, items);
+    assert.match(items, /pyrotech:crude_axe/);
+
     child.kill('SIGTERM');
     const { code, signal } = await exited;
     // Windows has no SIGTERM handler delivery: kill() terminates the process.
