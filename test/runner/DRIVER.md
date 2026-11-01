@@ -93,4 +93,4 @@ Some changes make a run a smoke run, never a G2 pass:
 
 The run's `weakenedParams` says why.
 
-The 1.12 command replies parsed (`Successfully found the block at x,y,z.`, `Found <name>`, `Object successfully summoned`, `Given [...] * 1 to NAME`, `Seed: N`) are the server's en_us strings; the first real run confirms them.
+The 1.12 command replies parsed are `Successfully found the block at x, y, z`, `Found <name>`, `Object successfully summoned`, `Given [...] * 1 to NAME` and `Seed: N`. The first real G2 run (2026-11-01) confirmed them on the RotN 3.3.4 server, except that `testforblock` prints `x, y, z` with spaces and no full stop, where the en_us lang key has `x,y,z.`. The parser accepts both forms.

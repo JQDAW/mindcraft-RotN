@@ -115,20 +115,16 @@ test('g1-driver: hello, echo, walk and a clean SIGTERM stop through forge-bridge
     const census = await reply('blocks', 'aaaaaa01');
     assert.match(census, /minecraft:stone 0 \d+/, census);
     assert.match(census, /pyrotech:rock 3 1 0,64,0/, 'the modded block is named from bot.registry (forge-bridge extension)');
-    // The fake world has one chunk, so most of the radius-16 cube is unloaded. Since harness-ops' #57
-    // the census counts those positions apart, in a first "#unloaded U T" entry, never as a type.
-    // Before #57 they were a "null" type. Entries starting with "#" are not block types.
+    // The fake world has one chunk, so most of the radius-16 cube is unloaded. The census (#57)
+    // counts those positions apart, in a first "#unloaded U T" entry, never as a block type.
     const entries = census.split(/(?:^| )blocks aaaaaa01 \d+\/\d+ ?/).filter(Boolean).join('; ').split('; ');
     const types = entries.map((e) => e.split(' ')[0]);
-    assert.deepEqual(types.filter((t) => !t.startsWith('#') && t !== 'null').sort(), ['minecraft:stone', 'pyrotech:rock']);
-    const unloaded = entries.find((e) => e.startsWith('#unloaded '));
-    if (unloaded) {
-        // #57's protocol: assert the new behaviour (the lead's #54 nit: no "null" type).
-        const [, u, t] = unloaded.split(' ').map(Number);
-        assert.equal(t, 33 ** 3, unloaded);
-        assert.ok(u > 0 && u < t, `some positions are unloaded in the fake world: ${unloaded}`);
-        assert.ok(!types.includes('null'), 'unloaded positions are never a "null" type');
-    }
+    assert.ok(entries[0].startsWith('#unloaded '), `the first census entry is "#unloaded U T": ${entries[0]}`);
+    const [, u, t] = entries[0].split(' ').map(Number);
+    assert.equal(t, 33 ** 3, entries[0]);
+    assert.ok(u > 0 && u < t, `some positions are unloaded in the fake world: ${entries[0]}`);
+    assert.ok(!types.includes('null'), 'unloaded positions are never a "null" type');
+    assert.deepEqual(types.slice(1).sort(), ['minecraft:stone', 'pyrotech:rock'], 'every other entry is a named block type');
     assert.doesNotMatch(census, /minecraft:air|unknown/);
     say('[Server] whispers: scenario-blockat bbbbbb02 0,64,0 5,64,5');
     const at = await reply('blockat', 'bbbbbb02');

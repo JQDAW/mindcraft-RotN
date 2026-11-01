@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (22:30 UTC)
+Updated: 2026-11-01 (22:48 UTC, from `date -u`)
 
 ## Done
 
@@ -90,17 +90,71 @@ Updated: 2026-11-01 (22:30 UTC)
 
 ## Doing
 
-- **G2 batch plan** (below, under "Planned real batches"): reviewed (APPROVE WITH NITS), amended with the review's five points. Not to be run without the lead's written GO, once every precondition is met.
-- **Small follow-ups PR:** the `agentNaming` child process gets a minimal environment (lead, after #36); `walk()` returns `method: 'forward+jump+turn'` (net-forge's request; their test accepts it since #38).
-- **Next, before the first real CX23 run (lead, PR #30 re-review):** check-env allowlists the variable NAMES allowed in the per-bot env file and refuses any other (e.g. `NODE_TLS_REJECT_UNAUTHORIZED`, `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`, `LD_PRELOAD`, `NODE_EXTRA_CA_CERTS`).
+- **G2 batch 1 ran on the lead's GO (22:03 UTC) and FAILED; the server is deleted.** Details are under "Real G2 batches" below. Items passed. Blocks failed on a reply-parser bug (fixed in #64) plus Dynamic Trees state drift. Mobs failed on three mob-list and scenario issues.
+- **The lead's decisions on findings 2-6** (comment on #65) are implemented in #67. Finding 6, `time set day` before each scenario, is in the plan below. The re-run plan is updated under "Planned real batches"; it needs #64, #66 and #67 merged and a new written GO.
+- **G2 evidence PR:** the redaction tool and its CI check over `test/evidence/g2/**` are drafted and tested. Addresses are redacted only in log context, and the version strings are allowlisted, both tested. On the real logs no leftovers remain and the mod lists stay intact.
+- **#58 (check-env-names):** the review fix is at a713e50 and CI is green. It fails closed on a missing or unreadable file, and PROFILES and port values are validated.
 
 ## Watching
 
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
+## Real G2 batches
+
+### G2 batch 1 (2026-11-01): FAIL; the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 22:03 UTC.
+- **Code:** a clean detached checkout of develop at 36d7ee8, after `npm ci`. All three `result.json` show `git.dirty: false` and `untracked: 0`.
+- **Checks right before the create, all passed:**
+  - `agentNaming('.')`: `wired: true`, all 643 entries round-trip.
+  - `msa-login FRCFLD --check`: OK. Its output is not recorded.
+  - The preflight on its own (`up --dry-run`): sweeper OK via path (a), a scheduled run 54 min old; no leftover labelled resources.
+- **Command:** the planned one, unchanged (one CPX42, nbg1, `--ttl-hours 2`). No `--skip-sweeper-check`.
+- **Console:** only `time set day` and `gamerule doDaylightCycle false`, plus the runner's scenario commands. Nothing on the live server.
+
+**Real times (UTC)**
+
+| Event | Time |
+| --- | --- |
+| Batch start | 22:10:12 |
+| Server created | 22:10:20 |
+| Ready | 22:13:02 |
+| `g2-blocks-named` | 22:13:10 to 22:20:18 (425 s) |
+| `g2-mobs-named` | 22:20:18 to 22:22:07 (106 s) |
+| `g2-items-roundtrip` | 22:22:07 to 22:23:58 (108 s) |
+| EXIT-trap teardown | started 22:24:07; "verified gone" 22:24:20 |
+
+- **Server up:** 14 min (plan about 37, hard stop 56).
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. IPv4), plus 1 Primary IPv4-hour.
+- **Afterwards:** at 22:24:37 UTC, `hcloud server list`, `hcloud primary-ip list` and the labelled `ssh-key list` were all empty.
+
+**Results** (`captures/raw/g2-*/result.json`). Every run had `gateValid: true`, `weakenedParams: []`, no `notGate` reasons and no kicks.
+
+| Scenario | Verdict | Checks |
+| --- | --- | --- |
+| `g2-items-roundtrip` | **PASS** | all 5 passed. `items_table`: 643/643. `items_read`, `items_named`, `items_roundtrip`: 30/30. |
+| `g2-blocks-named` | FAIL | `login_online` and `blocks_named` passed (50 non-air types). `blocks_confirmed` failed (0/150). `blocks_spotcheck` failed (0 of 40; it stopped after 16 positions and 10 failures). |
+| `g2-mobs-named` | FAIL | `login_online` passed. `mobs_named` failed (9/12). `mobs_confirmed` failed (10/12). |
+
+**Findings**
+1. **Parser bug, fixed in #64.** The server prints `Successfully found the block at -38, 72, -58`: commas with spaces, no full stop. The parser expected the lang form `x,y,z.`, so every confirmation counted as a failure. This was a false fail, never a false pass. The server log has 158 success lines out of 166 `testforblock` calls.
+2. **Dynamic Trees state drift** (needs a decision). The other 8 replies were `had the data value of N (expected: M)`, all on `dynamictrees`/`dynamictreesbop` leaves and branches.
+   - In every case the name was right; only the meta differed (for example 14 against 6, the 8 bit).
+   - These blocks change state over time, and the samples were checked 2-5 min after the census.
+   - So even with #64, `blocks_confirmed` would be 142/150 and still fail under the exact rule.
+   - **Proposal:** re-ask the bot for each sample position right before its `testforblock`, and require (a) the fresh answer to equal the server exactly and (b) the fresh name to equal the census name. Every verdict stays the server's, comparing the same moment.
+3. **Vanilla animals that can't exist in RotN** (needs a decision). The server refused to summon `minecraft:chicken` and `minecraft:pig` (`Unable to summon object`); Animania probably replaces vanilla animals as they join. They come from `common-mobs.json` (rotn-data, built from spawn lists). **Proposal:** either rotn-data drops mobs that can't be summoned, or the scenario replaces a refused summon with the next mob in rank and notes it. A refusal is the server's, not the bot's.
+4. **`charm:spectre`** (needs a decision). It was summoned but was gone before the bot looked (`kill` didn't find it either). It probably vanishes in daylight. **Proposal:** right before asking the bot, `testfor` each summoned entity; any the server no longer has are replaced and noted, and the bot must report all the rest.
+5. **`mobs_confirmed` checked ambient mobs** (needs a decision). It ran `testfor` on every entity the bot reported, including two untagged, never-summoned Animania animals (`cow_angus`, `calf_angus`) that had walked out of the 3-block radius by then. **Proposal:** confirm only the summoned, run-tagged entities (`@e[tag=<run tag>,type=...]`); other reports go to notes.
+6. **Time Shall Not Pass re-enables the daylight cycle on each player connect** (FYI). It logged "Daylight Cycle Module: The daylight cycle has been enabled" at each join, so `gamerule doDaylightCycle false` did not hold. **Proposal:** approve `time set day` before each scenario for the re-run (test server only).
+7. **A pack mod runs commands as the player on join** (FYI, not ours). The log shows `[FRCFLD: Game rule commandBlockOutput/sendCommandFeedback has been updated to false]`, and on the first join also `Given [Bread]` / `Given [Bundle]`. `git grep` finds neither gamerule in this repo. The runner's console replies were unaffected.
+
+**Evidence:** raw output is in `captures/raw/g2*` (git-ignored). The redacted `test/evidence/g2/` comes in the evidence PR.
+
 ## Planned real batches
 
-### G2 batch (not approved yet; needs the lead's review and written GO, after #47 merges)
+### G2 batch (batch 1 ran on 2026-11-01 and FAILED; this is the re-run plan, updated after the lead's decisions on #65. It needs a new written GO.)
 
 **Goal:** G2 gate evidence. All three G2 scenarios at the gate parameters (no `--param` overrides, so the default `dataRoot`), with the agent's own naming, on one disposable test server.
 
@@ -120,6 +174,11 @@ Updated: 2026-11-01 (22:30 UTC)
 9. **rotn-data's second dump import merged.**
 10. **#57 merged:** the census waits for the cube's chunks and counts unloaded positions apart; more than 1% unloaded makes the run `notGate`.
 11. **#53 merged** (the minimal environment for the naming check), and `agentNaming('.')` (precondition 3) **rerun on develop under that reduced environment**: `wired: true`, all entries round-trip.
+12. **For the re-run after batch 1:**
+    - #64 merged: `testforblock` replies in the real server's form;
+    - #67 merged: findings 2-5 (re-asked block samples, mob replacements capped at 3, tagged confirms, placeholder names fail);
+    - #66 merged: the batch 1 evidence plus the redaction tool and CI leak check;
+    - and a **new** written GO from the lead.
 
 **Driver (agreed: net-forge's #54).**
 - **The driver:** net-forge's `packages/forge-bridge/tools/g1-driver.mjs`. It already builds the bot with the real `initBot` (`src/utils/mcdata.js`) with forge-bridge attached, and speaks the G1 protocol through `attachScenario`. The G2 extension is about three lines in **their** file:
@@ -139,7 +198,8 @@ Updated: 2026-11-01 (22:30 UTC)
 - **Login cache:** `MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa` exists only in this PC's environment, as for G1.
 - **Whitelist:** FRCFLD and JQDAW (the default).
 - **Console use (test server only, never the live server):**
-  - **Before the first scenario**, approved by the lead on the disposable test server only: `time set day` and `gamerule doDaylightCycle false`, so the bot isn't attacked at night during the run. **No** peaceful difficulty.
+  - **Before the first scenario**, approved by the lead on the disposable test server only: `gamerule doDaylightCycle false`. **No** peaceful difficulty.
+  - **Before each scenario**, approved by the lead on #65 for the disposable test server only: `time set day`, so the bot isn't attacked at night. Batch 1 showed that Time Shall Not Pass re-enables the daylight cycle whenever a player connects, so the gamerule alone does not hold.
   - **During the scenarios**, through the runner: `say`, `seed`, `tp`, `tell`, `testforblock`, `testfor`, `summon`, `kill @e[tag=<run tag>]`, `clear` and `give`.
 
 **Command** (one server, three scenarios in sequence, each with its own bot session):
@@ -147,11 +207,11 @@ Updated: 2026-11-01 (22:30 UTC)
 ```bash
 deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c '
   C() { bash "$TEST_SERVER_CTL" console --wait 2 -- "$@"; };
-  C time set day; C gamerule doDaylightCycle false;
+  C gamerule doDaylightCycle false;
   D="node packages/forge-bridge/tools/g1-driver.mjs";
-  timeout 15m node test/runner/run.mjs --scenario g2-blocks-named    --out captures/raw/g2-blocks -- $D; b=$?;
-  timeout 15m node test/runner/run.mjs --scenario g2-mobs-named      --out captures/raw/g2-mobs   -- $D; m=$?;
-  timeout 15m node test/runner/run.mjs --scenario g2-items-roundtrip --out captures/raw/g2-items  -- $D; i=$?;
+  C time set day; timeout 15m node test/runner/run.mjs --scenario g2-blocks-named    --out captures/raw/g2-blocks -- $D; b=$?;
+  C time set day; timeout 15m node test/runner/run.mjs --scenario g2-mobs-named      --out captures/raw/g2-mobs   -- $D; m=$?;
+  C time set day; timeout 15m node test/runner/run.mjs --scenario g2-items-roundtrip --out captures/raw/g2-items  -- $D; i=$?;
   bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g2/server;
   echo "blocks=$b mobs=$m items=$i"; [ "$b$m$i" = 000 ]'
 ```
@@ -162,11 +222,11 @@ deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c '
 
 | Step | Expected |
 | --- | --- |
-| Server build and boot (as in G1) | about 15 min |
-| `g2-blocks-named`: login 1-4 min, settle 20 s, census about 40 chat pages at 1.2 s, about 150 runner-picked `testforblock`, and about 100 spot positions with their `testforblock` | about 12 min |
-| `g2-mobs-named`: login, 12 summons, about 15 `testfor` | about 5 min |
-| `g2-items-roundtrip`: the full-table check (a few seconds), login, `clear`, 30 `give`, one reply | about 5 min |
-| **Total** | **about 37 min**: 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour |
+| Server build and boot (batch 1: 3 min from create to ready; G1 took longer) | about 5-15 min |
+| `g2-blocks-named`: login, settle 20 s, census, about 150 samples re-asked in about 19 batches of 8 and each checked with `testforblock`, then about 100 spot positions. Batch 1 took 7 min without the re-asks. | about 10-12 min |
+| `g2-mobs-named`: login, 12 summons plus replacements, 1-4 verify rounds of 12 tagged `testfor` 10 s apart, the reply, about 12 `testfor`. Batch 1 took 2 min. | about 3-5 min |
+| `g2-items-roundtrip`: the full-table check, login, `clear`, 30 `give`, one reply. Batch 1 took 2 min. | about 2-5 min |
+| **Total** | **about 20-37 min**: 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour |
 
 - **Hard stop:** past **56 min (1.5x)** I stop and delete the server.
 - **Worst case** if everything else fails: TTL + 1 h = 3 h, about **EUR 0.42** plus IPv4.
@@ -189,11 +249,20 @@ deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c '
 
 Nothing about crafting, survival or reconnects.
 
-**Known risk.** The 1.12 command-reply strings the runner parses haven't been seen on a real server yet: `Successfully found the block at …`, `Found <name>`, `Object successfully summoned`, `Given [...] * 1 to NAME`, `Seed: N`. If one differs, the affected checks fail; they don't pass falsely. I'd then fix the parser in a PR, cite the real lines, and ask for a re-run. The gate isn't weakened.
+**Reply strings: confirmed by batch 1.** All of these matched the real server:
+- `Found <name>`;
+- `Object successfully summoned` and `Unable to summon object`;
+- `Given [...] * 1 to NAME`;
+- `Seed: N`;
+- `Selector '...' found nothing`.
+
+The exception was `testforblock`: it prints `x, y, z` with no full stop, which #64 fixed.
+
+**Known risk for the re-run:** the tagged `testfor @e[tag=...,type=...,x=,y=,z=,r=3]` selector hasn't been run on this server yet. If it never matches, `mobs_confirmed` fails and every summon counts as "vanished" (so the run is notGate). Neither can pass falsely.
 
 ## Blocked
 
-- Nothing. The G2 batch waits for #47, the driver agreement and the lead's GO.
+- **G2 re-run:** waits for #64, #66 and #67 to merge, then a new written GO.
 
 ## Requests to other agents or the lead
 
@@ -216,6 +285,9 @@ Nothing about crafting, survival or reconnects.
 
 ## Open PRs
 
-- This status update with the G2 batch plan (`agent/harness-ops/status-g2-plan`).
-- #53 (`agent/harness-ops/g2-followups`): the minimal environment for `agentNaming`, and `walk()` `method`.
-- #57 (`agent/harness-ops/g2-unloaded`): the census waits for the cube's chunks; unloaded positions are counted apart, never as a block type.
+- This status update with the G2 batch 1 report (`agent/harness-ops/status-g2-batch1`).
+- #58 (`agent/harness-ops/check-env-names`): the env file's variable names allowlisted as root, and the deny list in check-env. The review fix is at a713e50; CI is green.
+- #64 (`agent/harness-ops/g2-reply-formats`): parse `testforblock` replies in the real server's form.
+- #66 (`agent/harness-ops/g2-evidence-batch1`): the batch 1 evidence (FAIL), plus the redaction tool and CI leak check.
+- #67 (`agent/harness-ops/g2-scenario-fixes`, stacked on #64): findings 2-5 as the lead decided.
+- Merged since the last update: #51 (the G2 plan), #53, #57.
