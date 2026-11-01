@@ -21,8 +21,12 @@ const require = createRequire(import.meta.url);
  * @param {(bridge:any, source:string) => void} [o.onAttach]
  * @param {(msg:string) => void} [o.log]
  * @param {(o:object) => Promise<object>} [o.ping]  injectable for tests
- * @param {number} [o.pingTimeoutMs=15000]  per attempt; the ping is tried twice before the file fallback
- * @param {number} [o.retryDelayMs=1000]  pause between the two ping attempts
+ * @param {number} [o.pingTimeoutMs=15000]  total budget for the status ping, retry included, so the
+ *   mod-list file fallback is reached well inside Mindcraft's spawn_timeout (30 s)
+ * @param {number} [o.retryDelayMs=1000]  pause before the one retry
+ * @param {number} [o.fastFailMs=3000]  only a failure this fast is retried (a dropped or refused
+ *   connect on a loaded machine); a ping that ran into its timeout is not
+ * @param {() => number} [o.now]  injectable clock for tests
  * @param {(port:number, host:string) => import('node:net').Socket} [o.socket]  injectable for tests
  */
 export function createForgeConnect(o) {
@@ -34,17 +38,25 @@ export function createForgeConnect(o) {
         socket = (p, h) => net.connect(p, h),
         resolveSrv = (name) => dns.promises.resolveSrv(name),
         retryDelayMs = 1000,
+        fastFailMs = 3000,
+        now = Date.now,
     } = o;
+    const budgetMs = pingTimeoutMs ?? 15000;
 
     return function connect(client) {
         (async () => {
             let modList = null;
             let source = null;
             if (mode !== 'off') {
-                // Two attempts: a busy server (or a loaded machine) can miss one ping.
+                // One total budget (default 15 s), so a server that drops pings still reaches
+                // the file fallback in time. A fast failure (a loaded machine can fail a
+                // loopback connect at once with ETIMEDOUT) is retried once within the budget.
+                const start = now();
+                let closeTimeout = budgetMs;
                 for (let attempt = 1; attempt <= 2 && !modList; attempt++) {
+                    const tried = now();
                     try {
-                        const res = await ping({ host, port, version: '1.12.2', closeTimeout: pingTimeoutMs ?? 15000 });
+                        const res = await ping({ host, port, version: '1.12.2', closeTimeout });
                         modList = modListFromPing(res);
                         if (modList) source = 'ping';
                         capture?.event('status_ping', { attempt, version: res?.version, modinfoType: res?.modinfo?.type ?? null, mods: modList?.length ?? 0 });
@@ -52,8 +64,11 @@ export function createForgeConnect(o) {
                     } catch (e) {
                         log(`status ping attempt ${attempt} failed: ${e.message}`);
                         capture?.event('status_ping_failed', { attempt, message: e.message });
-                        // A loaded machine can fail a loopback connect at once (ETIMEDOUT): wait before retrying.
-                        if (attempt < 2 && retryDelayMs > 0) await new Promise((r) => setTimeout(r, retryDelayMs));
+                        const fast = now() - tried < fastFailMs;
+                        const left = budgetMs - (now() - start) - retryDelayMs;
+                        if (attempt === 2 || !fast || left < 1000) break;
+                        if (retryDelayMs > 0) await new Promise((r) => setTimeout(r, retryDelayMs));
+                        closeTimeout = left;
                     }
                 }
                 if (!modList && modListFile) {

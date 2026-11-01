@@ -151,9 +151,17 @@ The review findings on PR #10, numbered as in the review comment:
    - **Load check:** 3 full `npm test` runs at once on this PC. All forge-bridge tests passed in all 3 runs, and the ping retry was used 3 times. Before the fixes the same check failed 2 tests per run.
 - `npm test` (single run): 231/231. Lint ratchet: 257, unchanged.
 
+## Done: status-ping budget (branch `agent/net-forge/ping-budget`, from develop e744e44; PR #23 merged)
+
+- Lead's production item: the ping retry could take 15 + 1 + 15 = 31 s, over `spawn_timeout` (30 s). The status ping now has one total budget (`FORGE_PING_TIMEOUT_MS`, default 15 s).
+  - Only a fast failure (under 3 s) is retried, once, 1 s later, and only with what is left of the budget. A ping that timed out goes straight to the mod-list file fallback.
+  - Fake-clock tests show the total never exceeds the budget.
+- `e2e-initbot` asserts `modListSource === 'ping'` again when the first login attempt succeeds. `file` is allowed only after a retried login.
+- `npm test` passes 233/233; lint 257, unchanged.
+
 ## Doing
 
-- PR #23 (PR #19 follow-ups) open. The G1 batches wait for the preflight (harness-ops is adapting it to the rotn-sweeper-cron helper repo).
+- PR #24 (status-ping budget) open. **Batch A waits for the lead's written go-ahead** (the last blocker is PR #21, the preflight fix; the external sweeper cron is live).
 
 ## Next
 
@@ -218,4 +226,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15, #16, #18 and #19 merged.) #23: PR #19 follow-ups (agent-side exit codes, requested restarts, service stop), on `agent/net-forge/exit-contract-followups`. `npm test` 224/224; lint 257.
+- (#15, #16, #18, #19 and #23 merged.) #24: status-ping budget, on `agent/net-forge/ping-budget`. `npm test` 233/233; lint 257.

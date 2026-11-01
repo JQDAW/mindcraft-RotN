@@ -46,7 +46,9 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
 
     // One retry of the whole login: under heavy load a loopback connect can fail
     // at once with ETIMEDOUT, which says nothing about the protocol path under test.
+    let loginAttempt = 0;
     for (let attempt = 1; ; attempt++) {
+        loginAttempt = attempt;
         bot = initBot('FRCFLD');
         const spawned = once(bot, 'spawn').then(() => true);
         const failed = new Promise((resolve) => bot.once('end', () => resolve(false)));
@@ -60,7 +62,10 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     // Handshake
     const bridge = bot.forge.bridge;
     assert.ok(bridge, 'bridge attached');
-    assert.ok(['ping', 'file'].includes(bridge.modListSource), bridge.modListSource);
+    // The live ping is the path under test. Only after a failed first login (a loaded
+    // machine) may the bridge have come up from the pinned mod list instead.
+    if (loginAttempt === 1) assert.equal(bridge.modListSource, 'ping');
+    else assert.ok(['ping', 'file'].includes(bridge.modListSource), bridge.modListSource);
     assert.ok(server.state.serverHost.endsWith('\0FML\0'), 'tagHost on the handshake host');
     assert.equal(server.state.hsState, 'DONE');
     assert.equal(bridge.handshakeDone, true);

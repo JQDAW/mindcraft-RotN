@@ -58,7 +58,7 @@ The bridge also decodes the other Forge and REID channels:
 | --- | --- |
 | `FORGE_BRIDGE` | `auto` (default): attach when the ping reports FML. `on`: require it. `off`: never. |
 | `FORGE_CAPTURE` | `1`: write `captures/raw/<bot>-<time>.jsonl` (git-ignored). Any other value is used as the file path. |
-| `FORGE_PING_TIMEOUT_MS` | Status-ping timeout per attempt (default 15000). The ping is tried twice before the `FORGE_MODLIST_FILE` fallback. g1-driver maps `ROTN_DRIVER_PING_TIMEOUT_MS` to it. |
+| `FORGE_PING_TIMEOUT_MS` | Total status-ping budget, retry included (default 15000). Only a fast failure (under 3 s, such as a refused or dropped connect) is retried, once, 1 s later and within what is left. A ping that times out goes straight to the `FORGE_MODLIST_FILE` fallback. Keep it well under Mindcraft's `spawn_timeout` (30 s). g1-driver maps `ROTN_DRIVER_PING_TIMEOUT_MS` to it. |
 | `FORGE_MODLIST_FILE` | Ping JSON to use when the live ping has no mod list. The pinned one is `test/fixtures/rotn-3.3.4/ping.json`. |
 | `MINDCRAFT_PROFILES_FOLDER` | Per-bot Microsoft token cache, outside the repo. Becomes nmp's `profilesFolder`. |
 | `PROTODEF_LOG_PARTIAL=1` | Turns protodef's "partial packet" console line back on (`patches/protodef+1.19.0.patch`). |
