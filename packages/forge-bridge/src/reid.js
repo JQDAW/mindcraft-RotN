@@ -67,17 +67,82 @@ export function reidTypes(version = MC_VERSION) {
 }
 
 /**
- * customPackets object for nmp's createClient / client.customPackets.
- * @param {{reid?: boolean, version?: string}} opts
+ * Triumph (mod id 'triumph', 3.19.2 in RotN 3.3.4) overrides.
+ *
+ * com.bloodnbonesgaming.triumph.advancements.display.ExtendedDisplayInfo.func_192290_a
+ * (javap on the pack's Triumph-1.12.2-3.19.2.jar) writes the vanilla display
+ * fields with flag bit 8 set, then: 4 optional i32 (uncompleted/completed icon
+ * and title colours), an optional bool (drawDirectLines), 2 optional i32
+ * (uncompleted/completed line colours), an optional bool (hideLines), an i32
+ * count of extra connection ids (ResourceLocation strings), and 2 optional
+ * i32 (posX, posY). Each optional is a bool, then the value if true.
+ * Without it, minecraft-data's vanilla layout fails on these packets (G1 Batch B+C).
+ * Not used on the wire: buildCustomPackets keeps advancements opaque. Kept as a
+ * decoder checked against the real packets, for analysis and later use.
  */
-export function buildCustomPackets({ reid = false, version = MC_VERSION } = {}) {
+export function triumphTypes(version = MC_VERSION) {
+    const adv = clone(mcData(version).protocol.play.toClient.types.packet_advancements);
+    const mapping = fieldOf(adv, 'advancementMapping');
+    const value = fieldOf(mapping.type[1].type, 'value');
+    const display = fieldOf(value.type, 'displayData').type[1]; // ['container', [...]] inside the option
+    const flags = fieldOf(display, 'flags');
+    const bits = flags.type[1];
+    const unused = bits.find((b) => b.name === '_unused');
+    unused.size -= 1;
+    bits.splice(bits.indexOf(unused) + 1, 0, { name: 'triumph_extended', size: 1, signed: false });
+    const oi32 = ['option', 'i32'];
+    const obool = ['option', 'bool'];
+    display[1].push({
+        name: 'triumph',
+        type: ['switch', {
+            compareTo: 'flags/triumph_extended',
+            fields: {
+                1: ['container', [
+                    { name: 'uncompletedIconColor', type: oi32 },
+                    { name: 'completedIconColor', type: oi32 },
+                    { name: 'uncompletedTitleColor', type: oi32 },
+                    { name: 'completedTitleColor', type: oi32 },
+                    { name: 'drawDirectLines', type: obool },
+                    { name: 'uncompletedLineColor', type: oi32 },
+                    { name: 'completedLineColor', type: oi32 },
+                    { name: 'hideLines', type: obool },
+                    { name: 'extraConnections', type: ['array', { countType: 'i32', type: 'string' }] },
+                    { name: 'posX', type: oi32 },
+                    { name: 'posY', type: oi32 },
+                ]],
+            },
+            default: 'void',
+        }],
+    });
+    return { toClient: { packet_advancements: adv } };
+}
+
+// The bot never needs advancements. With Triumph present they are kept as an
+// opaque buffer (lead decision after G1 Batch B+C) instead of being parsed with
+// triumphTypes(), which is kept as a tested offline decoder.
+// packet_advancements is pointed at a named type: nmp's lodash.merge merges
+// arrays index by index, so a shorter container would leave vanilla fields in
+// place, while a string replaces the whole definition.
+export const OPAQUE_PACKET_TYPE = 'forge_bridge_opaque_packet';
+
+/**
+ * customPackets object for nmp's createClient / client.customPackets.
+ * @param {{reid?: boolean, triumph?: boolean, version?: string}} opts
+ */
+export function buildCustomPackets({ reid = false, triumph = false, version = MC_VERSION } = {}) {
     const major = mcData(version).version.majorVersion;
     const out = { types: { ...forgeTypes(version) } };
+    const toClient = {};
     if (reid) {
         const r = reidTypes(version);
         Object.assign(out.types, r.types);
-        out.play = { toClient: { types: r.toClient } };
+        Object.assign(toClient, r.toClient);
     }
+    if (triumph) {
+        out.types[OPAQUE_PACKET_TYPE] = ['container', [{ name: 'data', type: 'restBuffer' }]];
+        toClient.packet_advancements = OPAQUE_PACKET_TYPE;
+    }
+    if (Object.keys(toClient).length) out.play = { toClient: { types: toClient } };
     return { [major]: out };
 }
 

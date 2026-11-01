@@ -209,9 +209,57 @@ The lead's GO was recorded at 15:35 UTC. The batch ran from a clean branch at or
   - `test/real-handshake.test.js` replays the real server messages through `attachForgeBridge`: the bridge's replies are byte-identical to what it really sent.
 - **Batch B+C:** waits for the lead's separate go-ahead.
 
+## Batch B+C result (G1): FAIL, root cause found (Triumph advancements)
+
+The lead's GO was recorded at 15:55 UTC. The batch ran from a clean branch at origin/develop 2abdd3b (`agent/net-forge/g1-batch-bc`), without PR #25, on one server: B = `g1-spike --minutes 11`, then C = `test/runner/run.mjs --scenario g1-login-chat-walk` with `g1-driver.mjs` and default parameters. It had a 55-minute TERM guard.
+
+- **Before:** `msa-login --check` printed FRCFLD, and the project was empty.
+- **Preflight:** passed on its own (cadence: 3 dispatch runs, gaps 15.2 and 14.7 min, newest 8 min old).
+- **Times (UTC):**
+
+  | Event | Time |
+  | --- | --- |
+  | Command start | 15:53:19 |
+  | Server created (CPX42, nbg1, TTL 2 h) | 15:53:27 |
+  | Server ready | 15:56:33 |
+  | B start | 15:56:35 |
+  | C start | 15:58:25 |
+  | C end | 16:01:43 |
+  | EXIT trap deleted everything, verified gone | 16:02:09 |
+
+  - Up 522 s, against an expected ~35 min and a 55 min cap.
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. Primary IPv4).
+- **After (16:02:36 UTC):** server, Primary IP and labelled SSH-key lists all empty.
+- **C (gate evidence), `result.json`:** `gateValid: true`, `pass: false`.
+  - PASS: `login_online` (online mode, v4 UUID) and `chat_send`.
+  - FAIL: `chat_receive`, `walk` and `stay_10min`.
+  - **B (spike):** handshake, spawn, outgoing chat and a local 19-block walk worked; incoming chat and the stay failed.
+- **Root cause:**
+  - The first `play.advancements` packet fails to parse (`unexpected tag end`), and a full parse error makes protodef end nmp's packet stream. No packet arrives after that, so the client keep-alive times out after 60 s and the bot quits. Everything else follows from this.
+  - **Why it fails:** RotN's Triumph 3.19.2 `ExtendedDisplayInfo` (confirmed with `javap` on the pack jar in scratch, never run) sets display flag bit 8. It appends optional colours (4 optional ints), an optional boolean, 2 optional line colours, another optional boolean, a count-prefixed list of extra connection ids, and 2 optional positions. minecraft-data's vanilla layout lacks all of these.
+  - A hand-written parser with the extension reads both captured packets (42 KB and 50 KB) to the last byte: 150 and 174 advancements, all extended.
+- **Also checked on the wire:** REID's VarInt slot id holds for non-empty slots (`set_slot` with modded item 4924, count byte, damage, NBT end).
+  - StackUp 0.2.5 (`javap`) writes counts over 64 as `0xD6` plus an int. None appeared, and I have not handled it yet.
+  - The bot spawned on `dynamictrees:leaves1`, which develop still treats as empty (PR #25 makes modded blocks solid).
+- **The lead's watch items:**
+  - **Kicks:** none. Both sessions ended as `client-quit` after the keep-alive timeout.
+  - **JustEnoughDimensions error:** 0 occurrences, so it was a Batch A debug-flag artifact.
+  - **`OBFUSCATE|HS` (5 zero bytes) and `dimstack` (317 bytes, every login):** neither got an answer, and there was no kick in the 60 s each session lasted, so there is no sign either needs one. The re-run's 10-minute stay is the real check.
+- **Evidence:** `test/evidence/g1/batch-bc-20261101/` holds the sanitized `result.json`, `server.log` and `driver.log`, plus a README (the lead-approved exception).
+  - Fixture: `packages/forge-bridge/test/fixtures/rotn-3.3.4/advancements-triumph.{json,bin.br}`, the two real packets.
+  - Raw files stay in `captures/raw/`.
+- **Fix done (lead direction):**
+  - With `triumph` in the ModList, `advancements` is an opaque buffer; `triumphTypes()` stays as an offline decoder.
+  - Safety net: a parse error in an allowlisted cosmetic packet (advancements, statistics, unlock_recipes and others) is logged and captured in full, and the packet dropped; essential packets still fail loudly.
+  - Tests replay the two real packets through nmp's real deserializer stream. `npm test` passes 258/258.
+- **Next (superseded):**
+  1. A fix PR: a Triumph-aware `advancements` type, gated on ModList `triumph`. Also an unparseable play packet should be dropped and counted rather than ending the stream, and parse-error captures should keep larger packets in full.
+  2. Then PR #25's requested changes.
+  3. A re-run of B+C needs a new GO.
+
 ## Doing
 
-- Batch A done (above). PR #25 (registry extension) open; PR #26 has the Batch A fixture, the real-handshake test and these results. **Batch B+C wait for the lead's separate go-ahead.**
+- Batch B+C done: FAIL, root cause found (above). PR #28 (B+C evidence + fix) is open. **The next paid batch needs a new written GO after review.** Queued: PR #25 fixes, then the STATUS-line corrections from #26.
 
 ## Next
 
