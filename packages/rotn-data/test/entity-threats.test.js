@@ -10,6 +10,26 @@ const pack = loadRotnData('3.3.4');
 const overrides = require('../3.3.4/entity-overrides.json');
 const skip = pack.hasDump ? false : 'no 3.3.4 dump imported';
 
+// The exact list is pinned, so any change to it is deliberate and reviewed.
+const MARKED = {
+    'betteranimalsplus:eel_freshwater': false, 'betteranimalsplus:eel_saltwater': false, 'betteranimalsplus:moose': false,
+    'iceandfire:deathworm': true, 'iceandfire:firedragon': true, 'iceandfire:icedragon': true, 'iceandfire:if_cockatrice': true,
+    'iceandfire:seaserpent': true, 'mod_lavacow:salamander': false, 'mod_lavacow:scarecrow': false, 'mod_lavacow:unburied': false,
+    'primitivemobs:grovesprite': false, 'primitivemobs:lily_lurker': false,
+}; // name -> dangerous
+
+test('the override list is exactly the reviewed one (13 entries, 33 reviewed and not marked)', () => {
+    assert.deepEqual(Object.keys(overrides.entities).sort(), Object.keys(MARKED).sort());
+    assert.equal(Object.keys(overrides.entities).length, 13);
+    for (const [name, dangerous] of Object.entries(MARKED)) {
+        assert.equal(overrides.entities[name].dangerous, dangerous, name);
+        assert.equal(overrides.entities[name].targetsPlayers, true, name);
+    }
+    assert.equal(Object.keys(overrides.reviewedNotMarked).length, 33);
+    assert.equal(Object.keys(overrides.reviewedNotMarked).filter(n => /^animania:(buck|doe|kit)_/.test(n)).length, 24);
+    assert.equal(overrides.entities['primitivemobs:grovesprite'].confidence, 'conditional');
+});
+
 test('every override is documented and names a real, non-IMob entity', () => {
     for (const k of ['description', 'method', 'confidence', 'entities', 'reviewedNotMarked']) assert.ok(overrides[k], k);
     for (const [name, o] of Object.entries(overrides.entities)) {
@@ -66,7 +86,10 @@ test('IMob mobs stay hostile without an override; reviewed retaliators stay pass
         assert.equal(entity(name).hostile, false, name);
         assert.equal(entity(name).dangerous, false, name);
     }
-    // Small player-targeting animals are hostile but not dangerous.
-    assert.equal(entity('animania:doe_dutch').hostile, true);
+    // Animania rabbits are passive: their player targeting is only for a rabbit named "Killer"
+    // (PR #62 review; the first version of this list wrongly marked them).
+    assert.equal(entity('animania:doe_dutch').hostile, false);
+    assert.equal(entity('animania:doe_dutch').targetsPlayers, false);
     assert.equal(isDangerous('animania:doe_dutch'), false);
+    assert.match(overrides.reviewedNotMarked['animania:doe_dutch'], /"Killer"/);
 });

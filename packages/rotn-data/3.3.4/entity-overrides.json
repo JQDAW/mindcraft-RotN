@@ -1,6 +1,6 @@
 {
  "description": "Entity threat overrides for RotN 3.3.4, beyond the dump's `hostile` (= the class implements IMob). Read by catalog.entity(): `hostile` becomes true for every entry with targetsPlayers, and `dangerous` marks threats to avoid rather than fight. Every entry cites the mod's own bytecode.",
- "method": "javap -c -p (reads class files; no mod code is run) on the mod jars of the pinned server pack zip (SHA-256 90642fd5...f5205), extracted to a scratch folder outside the repo, 2026-11-02. Scope: every modded living entity whose class does not implement IMob (317 in the second dump). For each, the entity class and its mod superclasses were scanned for a targeting AI task (class name containing 'Target') whose constructor receives EntityPlayer.class; tasks that target EntityLivingBase with a predicate were reviewed by reading the predicate's apply(). EntityAIHurtByTarget (retaliation) is not counted.",
+ "method": "javap -c -p (reads class files; no mod code is run) on the mod jars of the pinned server pack zip (SHA-256 90642fd5...f5205), extracted to a scratch folder outside the repo, 2026-11-02. Scope: every modded living entity whose class does not implement IMob (317 in the second dump). For each, the entity class and its mod superclasses were scanned for a targeting AI task (class name containing 'Target') whose constructor receives EntityPlayer.class; tasks that target EntityLivingBase with a predicate were reviewed by reading the predicate's apply(). EntityAIHurtByTarget (retaliation) is not counted. Conditions (added after the PR #62 review): for each entry, every branch instruction (if*, goto, *switch) before the task's `new` in the same method was checked for a jump target past the task, and the method's callers were checked: initEntityAI is called by EntityLiving's constructor; Undead Rising's func_175456_n is called from initEntityAI with no branch before the call; the death worm's task is in its own constructor. Only the grove sprite (onUpdate branch) is conditional among the marked entries.",
  "confidence": {
   "verified": "The bytecode shows players are targeted (an EntityPlayer target class without a predicate, or a predicate read and found to accept players).",
   "task": "A targeting task with EntityPlayer or EntityLivingBase as its target class; its predicate or shouldExecute was not inspected.",
@@ -8,174 +8,6 @@
  },
  "alreadyHostileViaIMob": "iceandfire:cyclops, iceandfire:if_hydra, iceandfire:gorgon, iceandfire:if_troll, iceandfire:stymphalianbird and iceandfire:siren implement IMob, so the dump already marks them hostile; they need no override.",
  "entities": {
-  "animania:buck_chinchilla": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:buck_cottontail": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:buck_dutch": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:buck_havana": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:buck_jack": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:buck_lop": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:buck_new_zealand": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:buck_rex": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:doe_chinchilla": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:doe_cottontail": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:doe_dutch": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:doe_havana": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:doe_jack": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:doe_lop": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:doe_new_zealand": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:doe_rex": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:kit_chinchilla": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:kit_cottontail": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:kit_dutch": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:kit_havana": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:kit_jack": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:kit_lop": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:kit_new_zealand": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
-  "animania:kit_rex": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "verified",
-   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
-   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
-  },
   "betteranimalsplus:eel_freshwater": {
    "targetsPlayers": true,
    "dangerous": false,
@@ -262,14 +94,38 @@
   }
  },
  "reviewedNotMarked": {
-  "iceandfire:myrmex_worker": "EntityAINearestAttackableTarget(EntityLiving.class, EntityMyrmexWorker$1): EntityPlayer is not an EntityLiving, so players are not targeted; only EntityAIHurtByTarget (retaliation).",
-  "iceandfire:myrmex_soldier": "EntityAINearestAttackableTarget(EntityLiving.class, ...): players are not EntityLiving; retaliates (EntityAIHurtByTarget).",
-  "iceandfire:myrmex_sentinel": "Same pattern as the soldier (EntityLiving target class); retaliates.",
-  "iceandfire:myrmex_royal": "Same pattern (EntityLiving target class); retaliates.",
-  "iceandfire:myrmex_queen": "Same pattern (EntityLiving target class); retaliates.",
-  "iceandfire:hippogryph": "HippogryphAITarget(EntityLivingBase.class); its shouldExecute references both EntityPlayer and EntityAnimal, and the branch was not resolved. Not marked; check in a harness scenario.",
+  "animania:buck_chinchilla": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:buck_cottontail": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:buck_dutch": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:buck_havana": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:buck_jack": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:buck_lop": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:buck_new_zealand": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:buck_rex": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:doe_chinchilla": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:doe_cottontail": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:doe_dutch": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:doe_havana": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:doe_jack": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:doe_lop": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:doe_new_zealand": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:doe_rex": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:kit_chinchilla": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:kit_cottontail": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:kit_dutch": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:kit_havana": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:kit_jack": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:kit_lop": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:kit_new_zealand": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
+  "animania:kit_rex": "animania-1.12.2-1.7.3.jar: passive. EntityAnimaniaRabbit's constructor adds EntityAINearestAttackableTarget(EntityPlayer.class) and sets max health 50 only when the custom name is \"Killer\": bytecode 105-113 is func_95999_t().equals(\"Killer\") -> ifne 331, and the normal path jumps over that block (331-467) with goto 470 at 328. resetAI's only callers call it after \"Killer\".equals() too. It is the Monty Python killer-rabbit easter egg; a rabbit named \"Killer\" would be hostile. (PR #62 review: an earlier version wrongly marked these.)",
   "iceandfire:amphithere": "Only owner and hurt-by targeting (AmphithereAIHurtByTarget) plus item targeting; retaliates.",
   "iceandfire:dread_horse": "No targeting task in its own classes.",
+  "iceandfire:hippogryph": "HippogryphAITarget(EntityLivingBase.class); its shouldExecute references both EntityPlayer and EntityAnimal, and the branch was not resolved. Not marked; check in a harness scenario.",
+  "iceandfire:myrmex_queen": "Same pattern (EntityLiving target class); retaliates.",
+  "iceandfire:myrmex_royal": "Same pattern (EntityLiving target class); retaliates.",
+  "iceandfire:myrmex_sentinel": "Same pattern as the soldier (EntityLiving target class); retaliates.",
+  "iceandfire:myrmex_soldier": "EntityAINearestAttackableTarget(EntityLiving.class, ...): players are not EntityLiving; retaliates (EntityAIHurtByTarget).",
+  "iceandfire:myrmex_worker": "EntityAINearestAttackableTarget(EntityLiving.class, EntityMyrmexWorker$1): EntityPlayer is not an EntityLiving, so players are not targeted; only EntityAIHurtByTarget (retaliation).",
   "mod_lavacow:mimic": "Targets EntityItem only (EntityAITargetItem); retaliates (EntityAIHurtByTarget)."
  }
 }
