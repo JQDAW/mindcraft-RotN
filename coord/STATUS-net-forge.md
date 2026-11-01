@@ -96,9 +96,16 @@ The review findings on PR #10, numbered as in the review comment:
   - The README now says the bot keeps polling until the code expires (about 15 min).
   - `npm test` passes 200/200; lint 259.
 
+## Done: stricter DEBUG guard (branch `agent/net-forge/debug-guard-strict`, from develop 506301d; PR #16 merged)
+
+- Lead decision: refuse when any enabled `DEBUG` pattern starts with `prismarine-auth` (for example `prismarine-auth:*`) or is a glob that could reach such a name. Only a plain prefix skip (`-prismarine-auth*`, `-prismarine*`, `-*`) clears it; `*,-prismarine-auth` is now refused.
+- The live `debug` instance is checked under the same rule.
+- Tests: the table now has sub-namespace and skip cases, plus a live-instance test with `debug.enable('prismarine-auth:*')`, where `debug.enabled('prismarine-auth')` is false.
+- `npm test` passes 203/203; lint 259.
+
 ## Doing
 
-- PR #16 (initBot auth guard) open. Waiting for the preflight (a scheduled sweeper run within 120 min), then Batch A, then Batch B+C on one server.
+- PR for the stricter DEBUG guard open. Waiting for a scheduled sweeper run within 120 min, then Batch A, then Batch B+C on one server.
 
 ## Next
 
@@ -160,4 +167,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15 merged as 74b23ed.) #16: initBot auth guard + PR #15 nits, on `agent/net-forge/initbot-auth-guard`. `npm test` 193/193; lint 259.
+- (#15 merged as 74b23ed; #16 merged.) New PR: stricter DEBUG guard, on `agent/net-forge/debug-guard-strict`. `npm test` 203/203; lint 259.

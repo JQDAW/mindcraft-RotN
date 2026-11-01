@@ -12,7 +12,11 @@ With `auth: "microsoft"`, `initBot` refuses to start (it throws before any bot o
 
 - `MINDCRAFT_PROFILES_FOLDER` is unset. nmp would otherwise use its shared default cache.
 - The folder is inside a git work tree, as given or at its real path. This check is read-only.
-- `DEBUG` enables the `prismarine-auth` namespace (`prismarine-auth`, `*`, `prismarine*` and so on, by the `debug` package's own rules), or the loaded `debug` instance already has it on. That output prints access and refresh tokens, and `main.js` cannot clear `DEBUG` before its imports load. Unset `DEBUG` or narrow it, for example `DEBUG=minecraft-protocol`.
+- `DEBUG` could enable prismarine-auth's output. That output prints access and refresh tokens, and `main.js` cannot clear `DEBUG` before its imports load. The rule is deliberately strict, so a future sub-namespace cannot print tokens either:
+  - It refuses if any enabled pattern starts with `prismarine-auth` (`prismarine-auth`, `prismarine-auth:*`, `prismarine-auth:live`) or is a glob that could reach such a name (`*`, `prismarine*`, `*auth`).
+  - Only a plain prefix skip turns it off: `-prismarine-auth*`, `-prismarine*` or `-*`. An exact skip such as `*,-prismarine-auth` is still refused, because it leaves sub-namespaces on.
+  - The same rule is applied to the live `debug` instance that prismarine-auth resolves.
+  - To fix a refusal: unset `DEBUG`, narrow it (for example `DEBUG=minecraft-protocol`), or add `-prismarine-auth*`.
 
 It never shows a device code. The default `onMsaCode` (`quietMsaCodeHandler`) logs only `device-code login needed, see coord/NEEDS-HUMAN.md`, never the code, message or URL. prismarine-auth then **keeps polling until the code expires (about 15 min) and the login fails with an error**. The fix is the human's login (`tools/msa-login.mjs`). A caller can pass its own handler instead (`initBot(name, { onMsaCode })`): g1-driver exits 3 at once.
 
