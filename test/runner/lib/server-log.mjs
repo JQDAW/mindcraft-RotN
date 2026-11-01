@@ -86,9 +86,15 @@ export function playerEvents(lines, name) {
 }
 
 /**
+ * `say` speakers that are the server, not a player: the console ([Server]), RCON ([Rcon]) and an
+ * unnamed command block ([@]). Each can `say` any text, including "<NAME> ...".
+ */
+const SERVER_SPEAKERS = new Set(['Server', 'Rcon', '@']);
+
+/**
  * Chat lines said by NAME: vanilla "<NAME> text", anchored at the start of the message. One bracketed
- * chat-mod prefix is tolerated ("[G] <NAME> text"), but never "[Server] <NAME> ..." (the console can
- * `say` anything) and never another player's line that quotes "<NAME>" (PR #9 review finding 2).
+ * chat-mod prefix is tolerated ("[G] <NAME> text"), but never a SERVER_SPEAKERS prefix such as
+ * "[Server] <NAME> ..." and never another player's line that quotes "<NAME>" (PR #9 review finding 2).
  */
 export function chatLines(lines, name) {
     const re = new RegExp(`^(?:\\[([^\\]<>]*)\\] )?<${esc(name)}> (.*)$`);
@@ -97,7 +103,7 @@ export function chatLines(lines, name) {
         const p = parseLine(line);
         if (!p) return;
         const m = re.exec(p.msg);
-        if (m && m[1] !== 'Server') out.push({ time: p.time, text: m[2], at });
+        if (m && !SERVER_SPEAKERS.has(m[1])) out.push({ time: p.time, text: m[2], at });
     });
     return out;
 }

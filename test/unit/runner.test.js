@@ -24,7 +24,9 @@ const DS = 'net.minecraft.server.dedicated.DedicatedServer';
 
 /**
  * A simulated RotN server plus bot driver on a virtual clock.
- * behaviour: { uuid, loginMs, kick, exitBeforeJoin, hello, echo, walk, dropAtMs }
+ * behaviour: { uuid, loginMs, kick, exitBeforeJoin, hello, echo, walk, dropAtMs, loseSays }
+ * loseSays: how many `say` commands vanish (reply and log) before one lands.
+ * quietSay: a `say` lands in the log, but the console reply does not show it (a short --wait).
  */
 function sim(behaviour = {}) {
     const b = { uuid: UUID_V4, loginMs: 20000, hello: true, echo: true, walk: 6, ...behaviour };
@@ -37,6 +39,8 @@ function sim(behaviour = {}) {
     let online = false;
     let pos = [10.5, 64, -3.5];
     let env = {};
+    let started = false;
+    let says = 0;
     const hms = () => new Date(Date.UTC(2026, 10, 1, 12) + t).toISOString().slice(11, 19);
     const add = (msg, thread = 'Server thread', logger = DS) => log.push(`[${hms()}] [${thread}/INFO] [${logger}]: ${msg}`);
     const at = (ms, fn) => queue.push({ when: t + ms, fn });
@@ -65,7 +69,7 @@ function sim(behaviour = {}) {
         console(cmd, waitS = 3) {
             const before = log.length;
             let m;
-            if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
+            if ((m = /^say (.*)$/.exec(cmd))) { if (++says > (b.loseSays ?? 0)) add(`[Server] ${m[1]}`); }
             else if ((m = /^tell (\S+) scenario-echo (\S+)$/.exec(cmd)) && online && b.echo) at(1500, () => online && add(`<${name}> echo ${m[2]}`));
             else if ((m = /^tell (\S+) scenario-walk (\d+)$/.exec(cmd)) && online && b.walk) {
                 at(8000, () => {
@@ -78,6 +82,7 @@ function sim(behaviour = {}) {
                 add(online ? name : '');
             }
             advance(waitS * 1000);
+            if (b.quietSay && /^say /.test(cmd)) return [];
             return log.slice(before);
         },
         log: (n) => log.slice(-n),
@@ -85,6 +90,7 @@ function sim(behaviour = {}) {
     const bot = {
         start(e) {
             env = e;
+            started = true;
             alive = true;
             if (b.exitBeforeJoin) return at(3000, () => { alive = false; exitCode = 3; });
             at(b.loginMs, () => {
@@ -118,7 +124,7 @@ function sim(behaviour = {}) {
         },
     };
     const clock = { now: () => t, sleep: (ms) => Promise.resolve(advance(ms)) };
-    return { server, bot, clock, lines: log, env: () => env };
+    return { server, bot, clock, lines: log, env: () => env, started: () => started, says: () => says };
 }
 
 const byName = (r) => Object.fromEntries(r.checks.map((c) => [c.check, c]));
@@ -225,6 +231,29 @@ describe('G1 scenario on a simulated server', () => {
         assert.match(c.stay_10min.detail, /^after (59\d|6\d\d)s: list=\[FRCFLD\]/);
     });
 
+    test('a lost marker `say` is said again and confirmed before the driver starts', async () => {
+        const s = sim({ loseSays: 2 });
+        const r = await runG1(s);
+        assert.equal(r.pass, true, JSON.stringify(r.checks));
+        assert.equal(s.says(), 3);
+    });
+
+    test('a marker missing from the console reply but in the log tail counts, without a second say', async () => {
+        const s = sim({ quietSay: true });
+        const r = await runG1(s);
+        assert.equal(r.pass, true, JSON.stringify(r.checks));
+        assert.equal(s.says(), 1);
+    });
+
+    test('a marker that never lands fails the run, and the driver is never started', async () => {
+        const s = sim({ loseSays: 3 });
+        const r = await runG1(s);
+        assert.equal(r.pass, false);
+        assert.match(r.error, /marker never appeared in the server log after 3 'say' attempts/);
+        assert.equal(s.started(), false);
+        assert.equal(s.says(), 3);
+    });
+
     test('a scenario that throws fails every check it did not reach and records the error', async () => {
         const s = sim();
         s.server.console = () => { throw new Error('ssh: connection refused'); };
@@ -303,8 +332,9 @@ describe('server-log parsers', () => {
             line('<FRCFLD> echo tok'), line('[G] <FRCFLD> hello'), line('<JQDAW> <FRCFLD> fake'),
             line('<JQDAW> lol <FRCFLD> echo tok'), line('[Server] <FRCFLD> echo tok'), line('[Server] scenario-echo tok'),
             line('<FRCFLD2> no'), line('[a] [b] <FRCFLD> two prefixes'),
+            line('[Rcon] <FRCFLD> echo tok'), line('[@] <FRCFLD> echo tok'),
         ], 'FRCFLD');
-        assert.deepEqual(c.map((x) => x.text), ['echo tok', 'hello'], 'anchored: quotes, [Server] and other players never count (finding 2)');
+        assert.deepEqual(c.map((x) => x.text), ['echo tok', 'hello'], 'anchored: quotes, [Server], [Rcon], [@] and other players never count');
     });
 
     test('online players from list, inline or on the next line', () => {
