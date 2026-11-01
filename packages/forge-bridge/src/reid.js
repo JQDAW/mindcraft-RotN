@@ -39,7 +39,8 @@ function fieldOf(container, name) {
 
 /**
  * Wire formats of the mod entity-metadata serializers in RotN 3.3.4, by name
- * (javap on each mod's DataSerializer.write in the pinned pack; scratch only).
+ * (javap on each mod's DataSerializer write() and read() in the pinned pack, on the
+ * classes rotn-data's dump names; scratch only).
  * Vanilla 1.12 defines serializer ids 0-13. Mods that call vanilla
  * DataSerializers.registerSerializer get the next ids (14, 15, ...) in call
  * order; Forge-registry serializers (minecraft:dataserializers) start at 256 and
@@ -50,8 +51,9 @@ export const METADATA_SERIALIZER_TYPES = Object.freeze({
     'aquaacrobatics:pose': 'varint',
     // base 3.14.0 ResourceLocationDataSerializer: namespace string, path string.
     'base:resource_location': ['container', [{ name: 'namespace', type: 'string' }, { name: 'path', type: 'string' }]],
-    // Charset-Lib 0.5.6.6 DataSerializersCharset QUATERNION: 4 floats.
-    'charset:quaternion': ['container', [{ name: 'x', type: 'f32' }, { name: 'y', type: 'f32' }, { name: 'z', type: 'f32' }, { name: 'w', type: 'f32' }]],
+    // Charset-Lib 0.5.6.6 DataSerializersCharset$1: 4 floats, in the order w, x, y, z
+    // (write() reads fields w, x, y, z; read() calls Quaternion(w, x, y, z)).
+    'charset:quaternion': ['container', [{ name: 'w', type: 'f32' }, { name: 'x', type: 'f32' }, { name: 'y', type: 'f32' }, { name: 'z', type: 'f32' }]],
     // Mowzie's Mobs 1.5.8 OPTIONAL_TRADE: input stack; an empty input means "no trade",
     // otherwise output stack and an int weight follow.
     'mowziesmobs:optional_trade': ['container', [
@@ -67,21 +69,48 @@ export const METADATA_SERIALIZER_TYPES = Object.freeze({
 });
 
 /**
- * Ids whose serializer is inferred, not read from the server: the bridge logs the
- * first value it decodes with each, until rotn-data's dumper confirms them.
+ * The DataSerializer class that rotn-data's dump (serializers.json) names for each
+ * id, mapped to its format above. Each was checked against the class's write() and
+ * read() with javap.
  */
-export const INFERRED_METADATA_SERIALIZERS = Object.freeze({ 14: 'aquaacrobatics:pose' });
+export const METADATA_SERIALIZER_CLASSES = Object.freeze({
+    'com.fuzs.aquaacrobatics.network.datasync.PoseSerializer$1': 'aquaacrobatics:pose',
+    'com.teamacronymcoders.base.entities.dataserializers.ResourceLocationDataSerializer': 'base:resource_location',
+    'com.bobmowzie.mowziesmobs.server.ServerProxy$1': 'mowziesmobs:optional_trade',
+    'pl.asie.charset.lib.utils.DataSerializersCharset$1': 'charset:quaternion',
+    'requious.util.ExtraSerializers$1': 'requious:spark_effect',
+    'doggytalents.serializers.TalentListSerializer': 'doggytalents:talent_level_list',
+    'doggytalents.serializers.OptionalTextComponentSerializer': 'doggytalents:optional_text_component',
+});
 
 /**
- * Serializer ids for RotN 3.3.4, from the ModList:
- * - 14 = aquaacrobatics:pose, INFERRED BY FIT, to be confirmed with rotn-data's
- *   dumper. G1 Batch B/C: a player's key 17 has type 14 with a one-byte value that
- *   ends exactly at the next key; of the five vanilla-id mod serializers only a
- *   VarInt fits (two strings, an int, 4 floats or a stack do not).
+ * The bridge's `metadataSerializers` from rotn-data's dumped serializer table
+ * (its catalog's serializers(): { serializers: [{ id, class, vanilla }] }).
+ * Vanilla ids are skipped. A mod class with no known format goes in `unknown`:
+ * metadata of that type cannot be parsed, so the caller should log it.
+ * @returns {{ map: Record<number, string>, unknown: { id: number, class: string }[] }}
+ */
+export function metadataSerializersFromDump(dump) {
+    const map = {};
+    const unknown = [];
+    for (const s of dump?.serializers ?? []) {
+        if (s.vanilla || !Number.isInteger(s.id) || s.id < 14) continue;
+        const name = METADATA_SERIALIZER_CLASSES[s.class];
+        if (name) map[s.id] = name;
+        else unknown.push({ id: s.id, class: s.class });
+    }
+    return { map, unknown };
+}
+
+/**
+ * Serializer ids for RotN 3.3.4 that the bridge assumes from the ModList alone:
+ * - 14 = aquaacrobatics:pose. Confirmed by rotn-data's dump (PoseSerializer$1),
+ *   after G1 Batch B/C had inferred it by fit.
  * - 256, 257 = the DoggyTalents Forge-registry serializers (synced ids in Batch A;
  *   checked against RegistryData at every login).
- * Ids 15-18 (base, Charset, Mowzie's Mobs, Requious, in an unknown order) come
- * from rotn-data's dumper; pass them as `metadataSerializers`.
+ * Ids 15-18 (base, Mowzie's Mobs, Charset, Requious) are vanilla-registry ids in mod
+ * call order, so they come only from the dump: initBot passes
+ * metadataSerializersFromDump(...).map as `metadataSerializers`.
  */
 export function rotnMetadataSerializers(modList = []) {
     const has = (id) => modList.some((m) => m.modid === id);

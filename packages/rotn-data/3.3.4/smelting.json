@@ -2909,18 +2909,6 @@
   {
    "input": {
     "name": "minecraft:stained_hardened_clay",
-    "meta": 1
-   },
-   "output": {
-    "name": "minecraft:orange_glazed_terracotta",
-    "meta": 0,
-    "count": 1
-   },
-   "xp": 0.1
-  },
-  {
-   "input": {
-    "name": "minecraft:stained_hardened_clay",
     "meta": 10
    },
    "output": {
@@ -2985,6 +2973,18 @@
    },
    "output": {
     "name": "minecraft:black_glazed_terracotta",
+    "meta": 0,
+    "count": 1
+   },
+   "xp": 0.1
+  },
+  {
+   "input": {
+    "name": "minecraft:stained_hardened_clay",
+    "meta": 1
+   },
+   "output": {
+    "name": "minecraft:orange_glazed_terracotta",
     "meta": 0,
     "count": 1
    },
@@ -17132,7 +17132,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 10,
-    "nbt": "{OreItem:{id:\"osv:emerald_ore_undergroundbiomes_igneous_stone_5\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:emerald\",Count:2,Damage:0s}}"
+    "nbt": "{OreItem:{id:\"osv:emerald_ore_pyrotech_limestone\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:emerald\",Count:2,Damage:0s}}"
    },
    "output": {
     "name": "minecraft:emerald",
@@ -17158,7 +17158,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 12,
-    "nbt": "{OreItem:{id:\"osv:gold_ore_undergroundbiomes_metamorphic_stone_6\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:gold_ingot\",Count:2,Damage:0s}}"
+    "nbt": "{OreItem:{id:\"osv:gold_ore_undergroundbiomes_metamorphic_stone_5\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:gold_ingot\",Count:2,Damage:0s}}"
    },
    "output": {
     "name": "minecraft:gold_ingot",
@@ -17171,7 +17171,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 13,
-    "nbt": "{OreItem:{id:\"osv:iron_ore_undergroundbiomes_metamorphic_stone_7\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:iron_ingot\",Count:2,Damage:0s}}"
+    "nbt": "{OreItem:{id:\"osv:iron_ore_quark_biome_cobblestone_1\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:iron_ingot\",Count:2,Damage:0s}}"
    },
    "output": {
     "name": "minecraft:iron_ingot",
@@ -17184,7 +17184,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 14,
-    "nbt": "{OreItem:{id:\"osv:lapis_ore_undergroundbiomes_igneous_stone_7\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:dye\",Count:2,Damage:4s}}"
+    "nbt": "{OreItem:{id:\"osv:lapis_ore_undergroundbiomes_metamorphic_stone_5\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:dye\",Count:2,Damage:4s}}"
    },
    "output": {
     "name": "minecraft:dye",
@@ -17197,7 +17197,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 15,
-    "nbt": "{OreItem:{id:\"osv:simpleores_mythril_ore_undergroundbiomes_igneous_stone_1\",Count:1,Damage:1s},IngotItem:{id:\"simpleores:mythril_ingot\",Count:2,Damage:0s}}"
+    "nbt": "{OreItem:{id:\"osv:simpleores_mythril_ore_undergroundbiomes_igneous_stone_5\",Count:1,Damage:1s},IngotItem:{id:\"simpleores:mythril_ingot\",Count:2,Damage:0s}}"
    },
    "output": {
     "name": "simpleores:mythril_ingot",
@@ -17223,7 +17223,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 17,
-    "nbt": "{OreItem:{id:\"osv:biomesoplenty_peridot_ore_undergroundbiomes_metamorphic_stone_6\",Count:1,Damage:1s},IngotItem:{id:\"biomesoplenty:gem\",Count:2,Damage:2s}}"
+    "nbt": "{OreItem:{id:\"osv:biomesoplenty_peridot_ore_undergroundbiomes_sedimentary_stone_2\",Count:1,Damage:1s},IngotItem:{id:\"biomesoplenty:gem\",Count:2,Damage:2s}}"
    },
    "output": {
     "name": "biomesoplenty:gem",
@@ -17249,7 +17249,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 19,
-    "nbt": "{OreItem:{id:\"osv:biomesoplenty_ruby_ore_undergroundbiomes_metamorphic_stone_3\",Count:1,Damage:1s},IngotItem:{id:\"biomesoplenty:gem\",Count:2,Damage:1s}}"
+    "nbt": "{OreItem:{id:\"osv:biomesoplenty_ruby_ore_quark_elder_prismarine\",Count:1,Damage:1s},IngotItem:{id:\"biomesoplenty:gem\",Count:2,Damage:1s}}"
    },
    "output": {
     "name": "biomesoplenty:gem",
@@ -17275,7 +17275,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 20,
-    "nbt": "{OreItem:{id:\"osv:biomesoplenty_sapphire_ore_undergroundbiomes_igneous_stone\",Count:1,Damage:1s},IngotItem:{id:\"biomesoplenty:gem\",Count:2,Damage:6s}}"
+    "nbt": "{OreItem:{id:\"osv:biomesoplenty_sapphire_ore_undergroundbiomes_sedimentary_stone_1\",Count:1,Damage:1s},IngotItem:{id:\"biomesoplenty:gem\",Count:2,Damage:6s}}"
    },
    "output": {
     "name": "biomesoplenty:gem",
@@ -17288,7 +17288,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 21,
-    "nbt": "{OreItem:{id:\"osv:iceandfire_silver_ore_undergroundbiomes_metamorphic_stone_5\",Count:1,Damage:1s},IngotItem:{id:\"iceandfire:silver_ingot\",Count:2,Damage:0s}}"
+    "nbt": "{OreItem:{id:\"osv:iceandfire_silver_ore_undergroundbiomes_igneous_stone_4\",Count:1,Damage:1s},IngotItem:{id:\"iceandfire:silver_ingot\",Count:2,Damage:0s}}"
    },
    "output": {
     "name": "iceandfire:silver_ingot",
@@ -17301,7 +17301,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 22,
-    "nbt": "{OreItem:{id:\"osv:simpleores_tin_ore_quark_biome_cobblestone_1\",Count:1,Damage:1s},IngotItem:{id:\"simpleores:tin_ingot\",Count:2,Damage:0s}}"
+    "nbt": "{OreItem:{id:\"osv:simpleores_tin_ore_undergroundbiomes_metamorphic_stone_7\",Count:1,Damage:1s},IngotItem:{id:\"simpleores:tin_ingot\",Count:2,Damage:0s}}"
    },
    "output": {
     "name": "simpleores:tin_ingot",
@@ -17470,7 +17470,7 @@
    "input": {
     "name": "rats:rat_nugget_ore",
     "meta": 9,
-    "nbt": "{OreItem:{id:\"osv:diamond_ore_undergroundbiomes_igneous_stone_3\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:diamond\",Count:2,Damage:0s}}"
+    "nbt": "{OreItem:{id:\"osv:diamond_ore_undergroundbiomes_metamorphic_stone_3\",Count:1,Damage:1s},IngotItem:{id:\"minecraft:diamond\",Count:2,Damage:0s}}"
    },
    "output": {
     "name": "minecraft:diamond",

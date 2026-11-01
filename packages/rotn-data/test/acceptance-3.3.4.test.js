@@ -42,8 +42,8 @@ test("harvestInfo('stone') reports RotN's tool and level from the dump", { skip 
     const h = pack.harvestInfo('stone');
     assert.equal(h.block, 'minecraft:stone');
     assert.equal(h.tool, 'pickaxe');
-    assert.ok(Number.isInteger(h.level) && h.level >= 0, `level ${h.level}`);
-    assert.equal(typeof h.levelName, 'string');
+    assert.equal(h.level, 0); // Tool Progression level 0 (Crude): a stone pickaxe is enough (PR #47 review)
+    assert.equal(h.levelName, 'Crude');
 });
 
 test('harvestInfo is defined for every block state in the dump, apart from the pinned known gaps', { skip }, () => {
@@ -81,6 +81,22 @@ test('common surface blocks near spawn have full harvest info', { skip }, () => 
         assert.equal(typeof h.hardness, 'number', block);
     }
     assert.equal(pack.harvestInfo('pyrotech:rock').tool, null);
+});
+
+test('serializers(): the real DataSerializer table from the second dump (net-forge)', { skip }, () => {
+    const t = pack.serializers();
+    assert.ok(t, 'no serializers.json in the 3.3.4 dump');
+    const byId = Object.fromEntries(t.serializers.map(s => [s.id, s]));
+    for (let id = 0; id <= 13; id++) assert.equal(byId[id]?.vanilla, true, `id ${id}`);
+    assert.equal(byId[14].class, 'com.fuzs.aquaacrobatics.network.datasync.PoseSerializer$1');
+    assert.equal(byId[16].class, 'com.bobmowzie.mowziesmobs.server.ServerProxy$1');
+    assert.equal(byId[18].class, 'requious.util.ExtraSerializers$1');
+    assert.equal(byId[256].class, 'doggytalents.serializers.TalentListSerializer');
+    for (const id of [14, 15, 16, 17, 18, 256, 257]) assert.equal(byId[id].vanilla, false, `id ${id}`);
+    const dog = t.usage['doggytalents:dog'];
+    assert.deepEqual(dog.find(u => u.index === 21), { index: 21, serializerId: 256, class: 'doggytalents.serializers.TalentListSerializer' });
+    assert.equal(dog.find(u => u.index === 30).serializerId, 257);
+    assert.equal(t.usage['mowziesmobs:barakoaya'][0].serializerId, 16);
 });
 
 test('the mod-local entity table covers every modded entity the server syncs', { skip }, () => {
