@@ -10,6 +10,10 @@ node test/runner/run.mjs --list
 deploy/test-server.sh run --yes -- \
   node test/runner/run.mjs --scenario g1-login-chat-walk -- node <driver.mjs>
 
+# G2 (see DRIVER.md, G2): g2-blocks-named, g2-mobs-named, g2-items-roundtrip; one bot session each
+deploy/test-server.sh run --yes -- \
+  node test/runner/run.mjs --scenario g2-blocks-named -- node <driver.mjs>
+
 # Against a server that is already up (deploy/test-server.sh up), with a short stay: a smoke run
 # (exit 4 if every check passes), never a G1 pass
 eval "$(deploy/test-server.sh env)"

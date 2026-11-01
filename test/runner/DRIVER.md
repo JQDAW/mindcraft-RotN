@@ -45,3 +45,42 @@ Exit codes follow ADR 0003 decision 5: `0` clean stop, `1` transient (disconnect
 A run with weaker parameters than the gate allows (a shorter `stayMs`, `walkBlocks` or `minWalkBlocks`, or another `bot`) is a **smoke run**. Its result has `pass: false` and `verdict: "SMOKE-PASS (not a gate pass)"`, and `run.mjs` exits 4.
 
 Every disconnect is recorded in `result.json` under `notes.kicks`, with its reason and class (`handshake`, `timeout`, `whitelist`, `server-exception`, `client-quit`, `other`; `docs/research/fml-spec.md` section 4).
+
+## G2: naming what the bot sees
+
+Three scenarios in `test/scenarios/g2/`. Each logs in first (`login_online`, as in G1). The bot only reports names; every verdict comes from the server's own commands on the test server.
+
+A driver gets G2 by calling `attachG2(bot, { names })` from `scenario-protocol.mjs` next to `attachScenario(bot)`.
+- `names` is the naming adapter. A RotN driver builds it from rotn-data (`packages/rotn-data/index.js`):
+  ```js
+  { blockName: (b) => ({ name: registryName(b), meta: b.metadata }),
+    entityName: (e) => registryName(e),
+    itemName: (i) => ({ name: registryName(i), meta: i.metadata }),
+    toNew, toOld }
+  ```
+- The default (`stockNames`) uses stock mineflayer names and has no 1.13+ translation, so `g2-items-roundtrip` fails with it by design.
+- A name the adapter cannot give is reported as `null`. The driver never guesses.
+
+| Whisper from the console | The bot says (paged) |
+| --- | --- |
+| `scenario-blocks TOKEN R N` | `blocks TOKEN i/n name meta count x y z; ...`: the N most common block types in the cube of radius R around the bot, each with one sample position |
+| `scenario-blockat TOKEN x,y,z x,y,z ...` (at most 16) | `blockat TOKEN i/n x y z name meta; ...` |
+| `scenario-entities TOKEN R` | `entities TOKEN i/n name x y z; ...`: every non-player entity within R |
+| `scenario-items TOKEN` | `items TOKEN i/n slot oldName oldMeta newName backName backMeta; ...`: per inventory slot, the 1.12 name and meta, `toNew` of it, and `toOld` of that |
+
+- **Paging.** Replies are split into chat lines of about 200 characters. They go out **at most one every 1.2 s** (`pageDelayMs`), because vanilla kicks a non-op player who chats about ten times in quick succession.
+- **One request at a time.** Requests are answered in order, never interleaved.
+- **Names.** Names are full registry names (`minecraft:stone`, `pyrotech:rock`). Entity names are the 1.12 ones (`minecraft:zombie_pigman`, `minecraft:villager_golem`).
+
+| Scenario | Check | Pass condition (server side) |
+| --- | --- | --- |
+| `g2-blocks-named` | `blocks_named` | The top list (radius 16, N = 50) has between `minTypes` (10) and 50 entries, every name is a registry name (nothing `unknown`/`null`/numeric), and every sample lies in the cube. |
+| | `blocks_confirmed` | `testforblock x y z name meta` succeeds for every entry. |
+| | `blocks_spotcheck` | At 40 random positions the runner picks (seeded; the seed is in `notes.spotSeed`), the bot's names are registry names and `testforblock` confirms them. This catches a bot that reports only the blocks it can name. |
+| `g2-mobs-named` | `mobs_named` | The console summons the common mobs (default: vanilla zombie, skeleton, spider, creeper, cow, pig, sheep, chicken). Each is NoAI, invulnerable, tagged with the run id, and killed at the end. The bot reports each with exactly its registry name, within 3 blocks. `--param extraMobs=specialmobs:firecreeper` adds modded mobs. |
+| | `mobs_confirmed` | Every reported entity has a registry name, and `testfor @e[type=name,x=,y=,z=,r=3]` finds it. |
+| `g2-items-roundtrip` | `items_read` | The console gives 30 vanilla items by 1.12 name and meta (after `clear`). The bot reports each with exactly that name and meta. |
+| | `items_named` | Each new name equals the expected 1.21-style name (`dye:1` gives `red_dye`). `null` or `unknown` fails. |
+| | `items_roundtrip` | `toOld(toNew(old))` gives back exactly the 1.12 name and meta. |
+
+Lowering `radius`, `topN`, `minTypes` or `spotChecks`, or changing `bot`, `mobs` or `items`, makes a smoke run, never a G2 pass. The 1.12 command replies parsed (`Successfully found the block at x,y,z.`, `Found <name>`, `Object successfully summoned`, `Given [...] * 1 to NAME`) are the server's en_us strings; the first real run confirms them.

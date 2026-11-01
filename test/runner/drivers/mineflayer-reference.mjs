@@ -15,7 +15,7 @@
 // Exit codes (ADR 0003 decision 5): 0 clean stop (SIGTERM), 1 transient disconnect, 3 fatal.
 import process from 'node:process';
 import mineflayer from 'mineflayer';
-import { attachScenario, event } from './scenario-protocol.mjs';
+import { attachScenario, attachG2, event } from './scenario-protocol.mjs';
 import { classifyKick, FATAL_KICKS } from '../lib/server-log.mjs';
 
 const host = process.env.TEST_SERVER_HOST;
@@ -44,6 +44,9 @@ const bot = mineflayer.createBot({
     hideErrors: false,
 });
 attachScenario(bot);
+// G2 with stock mineflayer names and no 1.13+ translation: the items checks fail by design here; a RotN
+// driver passes rotn-data's naming adapter (scenario-protocol.mjs, attachG2).
+attachG2(bot);
 
 let stopping = false;
 let fatal = null;
