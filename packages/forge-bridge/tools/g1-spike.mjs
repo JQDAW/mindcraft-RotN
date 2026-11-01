@@ -88,6 +88,21 @@ async function main() {
 
     function bridge() { return bot.forge?.bridge ?? null; }
 
+    // Modded blocks have no name in bot.registry yet (brief item 4): prismarine
+    // reports '' and an empty bounding box. Record the Forge registry name next
+    // to it so the evidence says what the bot actually stood and walked on.
+    function blockInfo(pos) {
+        const b = bot.blockAt(pos);
+        if (!b) return null;
+        return {
+            pos: [b.position.x, b.position.y, b.position.z],
+            id: b.type, meta: b.metadata,
+            name: b.name || null,
+            registryName: bridge()?.registries?.nameOf('minecraft:blocks', b.type) ?? null,
+            boundingBox: b.boundingBox,
+        };
+    }
+
     async function waitFor(pred, ms, every = 250) {
         const end = Date.now() + ms;
         while (Date.now() < end) {
@@ -100,6 +115,7 @@ async function main() {
 
     async function finish(code) {
         const b = bridge();
+        result.scope = 'G1 spike: login, handshake, chat, walk, stay. It does not exercise reconnects or the ADR 0003 exit codes: src/process/agent_process.js does not consume classifyKick yet (brief item 8). The process exit code here is only pass (0) or fail (1).';
         result.endedAt = new Date().toISOString();
         result.elapsedS = secs();
         result.end = ended;
@@ -141,7 +157,8 @@ async function main() {
     log(`spawned at ${p0.toString()} after ${spawnedAt}s, dimension ${bot.game.dimension}`);
     result.spawn = { atS: spawnedAt, position: p0.toArray().map(v => Math.round(v * 10) / 10), dimension: bot.game.dimension, gameMode: bot.game.gameMode };
     await sleep(3000);
-    result.spawn.blockBelow = bot.blockAt(p0.offset(0, -1, 0))?.name ?? null;
+    result.spawn.blockBelow = blockInfo(p0.offset(0, -1, 0));
+    result.spawn.blockAtFeet = blockInfo(p0);
     result.spawn.inventory = bot.inventory.items().map(i => `${i.name ?? '?'}#${i.type}x${i.count}`);
     result.spawn.nearbyEntities = Object.values(bot.entities).filter(e => e !== bot.entity).slice(0, 20).map(e => e.name ?? e.type);
 
@@ -160,8 +177,15 @@ async function main() {
     }
     log(`chat sent=${result.checks.chatSent} received=${result.checks.chatReceived}`);
 
-    // 4. Walk a few blocks
+    // 4. Walk a few blocks, sampling the block under the bot along the way
     let walked = 0;
+    const walkBlocks = [];
+    const seenBlocks = new Set();
+    const sampler = setInterval(() => {
+        const info = blockInfo(bot.entity.position.offset(0, -1, 0));
+        const key = info && info.pos.join(',');
+        if (info && !seenBlocks.has(key) && walkBlocks.length < 50) { seenBlocks.add(key); walkBlocks.push(info); }
+    }, 200);
     try {
         const { Movements, goals } = require('mineflayer-pathfinder');
         bot.pathfinder.setMovements(new Movements(bot));
@@ -177,8 +201,11 @@ async function main() {
         result.walkMethod = 'forward-control';
     }
     await sleep(1000);
+    clearInterval(sampler);
     walked = bot.entity.position.distanceTo(p0);
     result.walkedBlocks = Math.round(walked * 10) / 10;
+    result.walkBlocks = walkBlocks;
+    result.walkEnd = { position: bot.entity.position.toArray().map(v => Math.round(v * 10) / 10), blockBelow: blockInfo(bot.entity.position.offset(0, -1, 0)) };
     result.checks.walk = walked >= 3;
     log(`walked ${result.walkedBlocks} blocks (${result.walkMethod})`);
 

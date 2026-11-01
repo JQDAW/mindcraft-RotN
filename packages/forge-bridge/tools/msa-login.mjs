@@ -2,40 +2,43 @@
 // One-time Microsoft device-code login for a bot account, run by the human.
 //
 //   MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa \
-//     node packages/forge-bridge/tools/msa-login.mjs FRCFLD
+//     node packages/forge-bridge/tools/msa-login.mjs FRCFLD [--check]
 //
 // It prints Microsoft's own instructions (open microsoft.com/link, type a code).
 // You type the account's email and password only on Microsoft's page. The token
-// cache goes to MINDCRAFT_PROFILES_FOLDER (must be outside the repo) and is
-// written by prismarine-auth with the same options node-minecraft-protocol
-// uses, so the bot reuses it. This script never prints or reads any token: it
-// prints only the Minecraft profile name it signed in as.
+// cache goes to MINDCRAFT_PROFILES_FOLDER, which must be outside every git work
+// tree and is created with mode 0700. It is written by prismarine-auth with the
+// same options node-minecraft-protocol uses, so the bot reuses it. This script
+// never prints or reads any token: it prints only the Minecraft profile name it
+// signed in as.
 
 import process from 'node:process';
-import path from 'node:path';
-import fs from 'node:fs';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { prepareSecretFolder } from '../src/secret-folder.js';
+
+// prismarine-auth logs HTTP details through the `debug` package when DEBUG
+// matches. Clear it before the library loads.
+delete process.env.DEBUG;
 
 const require = createRequire(import.meta.url);
 const { Authflow, Titles } = require('prismarine-auth');
 
 const botName = process.argv[2];
+// --check: confirm an existing cache still signs in. Never starts a device-code
+// prompt; if the cache needs one, it fails so a human can run the login again.
+const checkOnly = process.argv.slice(3).includes('--check');
 const folder = process.env.MINDCRAFT_PROFILES_FOLDER;
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 function fail(msg) { console.error(`msa-login: ${msg}`); process.exit(2); }
 
 if (!botName || !/^[A-Za-z0-9_]{3,16}$/.test(botName)) fail('usage: msa-login.mjs <BotName>  (the bot profile name, e.g. FRCFLD)');
-if (!folder) fail('set MINDCRAFT_PROFILES_FOLDER to a folder outside the repo, e.g. C:/Users/admin/.mindcraft-rotn/FRCFLD/msa');
-const abs = path.resolve(folder);
-if (abs.toLowerCase().startsWith(repoRoot.toLowerCase() + path.sep) || abs.toLowerCase() === repoRoot.toLowerCase()) {
-    fail(`MINDCRAFT_PROFILES_FOLDER (${abs}) is inside the repo; choose a folder outside it`);
-}
-fs.mkdirSync(abs, { recursive: true });
+if (!folder) fail('set MINDCRAFT_PROFILES_FOLDER to a folder outside every git repository, e.g. C:/Users/admin/.mindcraft-rotn/FRCFLD/msa');
+let abs;
+try { abs = prepareSecretFolder(folder); } catch (e) { fail(`MINDCRAFT_PROFILES_FOLDER: ${e.message}`); }
 
 // Same options as minecraft-protocol/src/client/microsoftAuth.js validateOptions().
 const flow = new Authflow(botName, abs, { authTitle: Titles.MinecraftNintendoSwitch, deviceType: 'Nintendo', flow: 'live' }, (res) => {
+    if (checkOnly) fail('the token cache needs a new device-code login (not started in --check mode); ask the human to run the login again');
     console.log('\n' + (res.message ?? `Open ${res.verification_uri} and enter the code ${res.user_code}`) + '\n');
 });
 

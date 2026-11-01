@@ -4,7 +4,7 @@ Updated: 2026-11-01
 
 Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Done (offline, step 1 of the G1 spike)
+## Done (offline, step 1 of the G1 spike; PR #10, merged as 26a0b5e)
 
 - **`packages/forge-bridge`**: a fresh nmp client plugin per ADR 0003. Details are in `packages/forge-bridge/README.md`.
   - `tagHost = '\0FML\0'`, set before connect. It never uses `fakeHost`.
@@ -52,59 +52,80 @@ Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mind
   6. **Info:** chunk bit widths for local writes. Documented under README "Known limits".
 - **Lint:** `npm run lint` gives 259 errors, the baseline. My files add none, and `mcdata.js` stays at its own baseline of 13.
 
+## Done since PR #10 merged (branch `agent/net-forge/g1-review-fixes`, from develop 26a0b5e)
+
+The review findings on PR #10, numbered as in the review comment:
+
+- **2 (medium) kicks:** `Failed to verify username` and `Invalid session` are now transient with `retryCap: 3`. The ban rule only matches `You are banned`, `Your IP address is banned` and `multiplayer.disconnect.banned*` at the start of the reason. "No Minecraft licence" stays fatal as its own category.
+  - New `createRestartPolicy()` implements the ADR 0003 backoff (10 s doubling to 5 min, reset after 10 min connected) and the caps. It is not wired in yet; that is `agent_process.js`, brief item 8.
+- **3 msa-login:** refuses any folder inside any git work tree. It walks up looking for `.git`, a folder or a worktree's file, and creates nothing on refusal. It creates the folder with mode 0700 and chmods it on POSIX. The check lives in `src/secret-folder.js` and has tests.
+- **4:** `delete process.env.DEBUG` runs before prismarine-auth loads. A test checks that order and that the tool refuses a folder inside this repo.
+- New: `msa-login.mjs FRCFLD --check` confirms the cache without ever starting a device-code prompt. If the cache needs a new login, it fails.
+- **5 chunk widths:** a section now widens its data array when a written state id needs more bits. A section that leaves its palette uses the width of its widest id. `new Chunk({maxBitsPerBlock})` can seed the width. Local `block_change` writes of 20-bit ids are tested. README line 109 is corrected.
+- **6:** `test/golden.test.js` holds hand-written hex vectors for ModList, RegistryData (1-, 2- and 3-byte VarInt ids), FML EntitySpawn (metadata, thrower velocity, spawn data) and FML|MP (PART_SIZE 1048496, 2 parts). The layouts come from `javap` on Forge 14.23.5.2860's own classes in the pinned pack's Forge jar, extracted to scratch and never run. Our decoders read each vector, and our encoders reproduce it byte for byte.
+- **7:** `ChunkColumn.dump()` writes REID VarInt biomes back, or switches to them for any id over 255. Two tests show that a dump reloads. The viewer stays off (`render_bot_view: false`).
+- **8:** the README documents that nmp's `merge` mutates the shared minecraft-data 1.12.2 protocol object. I confirmed this in a node session: `createSerializer` with customPackets changes `mcData('1.12.2').protocol.types.slot`.
+- **10:** `g1-spike` `summary.json` records `walkMethod`, plus the blocks under the bot at spawn and along the walk, each with the Forge registry name next to prismarine's name.
+- **9:** `summary.json` gets a `scope` field saying the spike does not test reconnects or exit codes. G1 evidence will make no such claim.
+- **11:** capture limits per direction and channel (default 2000; the handshake, REGISTER and FORGE are never capped), a 1 MiB per-payload byte cap, a 256 MiB file cap with one `capture_full` event, and C2S packets capped per name. The closing summary records per-channel counts and drops.
+- **Tests:** `npm test` passes 175/175, all offline. The chunk patch: reversing it fails all 9 chunk tests. `npm run lint` gives 259, the baseline; `packages/forge-bridge` has 0 errors.
+- **FRCFLD login (done by the human, verified by the lead).** I ran the permitted check: `MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa node packages/forge-bridge/tools/msa-login.mjs FRCFLD --check`, with `DEBUG` unset. It printed `Signed in. Minecraft profile: FRCFLD`. Nothing in the folder was read, printed or copied by me.
+
 ## Doing
 
-- PR #10 open; waiting for independent-reviewer, batch approval and the FRCFLD login.
+- Opening the PR for the review fixes; Batch A once the preflight passes; then the runner driver for Batch C.
 
 ## Next
 
-1. **Paid batches**, after the lead's written approval and once a scheduled sweeper run has been seen. See "Planned real batches".
-2. Captured fixtures: the real handshake, RegistryData, `window_items`/`set_slot`, chunks, `entity_effect`, and `jeid`. Then the handshake-sequence test against real captured server messages, which the brief requires.
-3. Classify every kick seen, confirm the chunk bits per block, and confirm the REID formats on the wire.
-4. Later brief items: `bot.registry` extension (item 4), then FML EntitySpawn into `bot.entities` (6), then backoff and exit codes in `agent_process.js` (8).
+1. **G1 batches** (below), after the lead's written approval and a scheduled sweeper run within 120 min (PR #12).
+2. Captured fixtures: real handshake, RegistryData, `window_items`/`set_slot`, chunks, `entity_effect`, `jeid`. Then the handshake test against real captured server messages; real Run A bytes become extra golden vectors.
+3. Classify every kick seen, confirm chunk bits per block and the REID formats on the wire, and record walk blocks.
+4. Brief items 4 (`bot.registry` extension), 6 (EntitySpawn into `bot.entities`) and 8 (`agent_process.js` consumes `createRestartPolicy`).
 
-## Planned real batches (waiting for lead approval; nothing run yet)
+## G1 batches (approved by the lead 2026-11-01 11:40 UTC in STATUS-rotn-lead.md; nothing run yet)
 
-Both run on the disposable test server only, never the live server, with `deploy/test-server.sh` used unchanged: CPX42, nbg1, `--ttl-hours 2`, at EUR 0.138/h. Each batch is deleted by the `run` EXIT trap, with the sweeper as backup.
+**Approval:** A as written. B as a spike only, not G1 gate evidence. C is the G1 gate evidence: harness-ops' runner (`test/runner/run.mjs` + `test/scenarios/g1/g1-login-chat-walk.mjs`) with a forge-bridge driver per `test/runner/DRIVER.md`, kept in `packages/forge-bridge/`. B and C may share one server run. **Conditions:** one server at a time, in order; `test-server.sh` unchanged with its preflight passing (no `--skip-sweeper-check`); stop and delete past 1.5x the expected time (A: 30 min, B: 53 min); after each batch, confirm `hcloud server list` and `hcloud primary-ip list` are empty and record the real times and cost here; never the live server.
 
-- **Batch A (spec Run A, handshake capture).** Expected about 20 min, 1 billed hour. Maximum (TTL + 1) is 3 h, about EUR 0.42, plus one Primary IPv4-hour.
+The setup for both batches:
 
-  ```bash
-  deploy/test-server.sh run --yes --capture --ttl-hours 2 -- bash -c \
-    'node packages/forge-bridge/tools/g1-spike.mjs --mode handshake --out captures/raw/g1-runA; s=$?; bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g1-runA/server; exit $s'
-  ```
+- **Where things run.** Disposable test server only, never the live server. `deploy/test-server.sh` is used unchanged: CPX42 in nbg1 with `--ttl-hours 2`, EUR 0.138/h. Each server is deleted by the `run` EXIT trap, with the watchdog and the sweeper as backup.
+- **The bot runs on this PC.** `test-server.sh run` executes the command locally, with `TEST_SERVER_HOST`/`PORT`/`CTL` set. The bot connects from here to the test server's IP.
+- **Login cache.** It is set only in this PC's environment: `MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa`. Nothing from that folder is uploaded or sent to the test server; the server only checks the session with Mojang as usual.
+- **Whitelist.** FRCFLD is in the default whitelist (`ROTN_TEST_WHITELIST` default `FRCFLD JQDAW`), written before the first start.
+- **Code.** Batch A runs from this branch: develop 26a0b5e plus the review fixes, with tests passing. Batch B and C run after the driver exists.
+- **Before each batch:** `msa-login.mjs FRCFLD --check` must print the profile name. If it asks for a new login, stop and put the request in NEEDS-HUMAN.
 
-- **Batch B (spec Run B, G1 proper).** Login online, stay 11 minutes, chat both ways (the `say` check goes through the test-server console), walk. Expected about 35 min, 1 billed hour. Maximum 3 h, about EUR 0.42, plus one Primary IPv4-hour.
+1. **Batch A (spec Run A, handshake capture).** Expected about 20 min, so 1 billed hour. Worst case (TTL + 1 h) 3 h, about EUR 0.42, plus Primary IPv4 hours.
 
-  ```bash
-  deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c \
-    'node packages/forge-bridge/tools/g1-spike.mjs --minutes 11 --out captures/raw/g1-runB; s=$?; bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g1-runB/server; exit $s'
-  ```
+   ```bash
+   deploy/test-server.sh run --yes --capture --ttl-hours 2 -- bash -c \
+     'node packages/forge-bridge/tools/g1-spike.mjs --mode handshake --out captures/raw/g1-runA; s=$?; bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g1-runA/server; exit $s'
+   ```
 
-- Both batches run with `MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa` set. Expected total EUR 0.28; maximum EUR 0.84.
-- Raw output stays in `captures/raw/` (git-ignored). Only sanitized excerpts go into `packages/forge-bridge/test/fixtures/` and `test/evidence/g1/`.
+2. **Batch B (spec Run B, G1 proper).** Online login, stay 11 minutes, chat both ways (the `say` check goes through the test-server console), walk. Expected about 35 min, 1 billed hour. Worst case 3 h, about EUR 0.42.
+
+   ```bash
+   deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c \
+     'node packages/forge-bridge/tools/g1-spike.mjs --minutes 11 --out captures/raw/g1-runB; s=$?; bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g1-runB/server; exit $s'
+   ```
+
+- **Totals:** expected EUR 0.28; maximum EUR 0.84.
+- **Outputs:** raw files stay in `captures/raw/` (git-ignored). Only sanitized excerpts go to `packages/forge-bridge/test/fixtures/` and `test/evidence/g1/`.
+- **G1 evidence will claim only:** login, handshake, spawn, chat both ways, walking (with `walkMethod` and block names) and 10+ minutes connected. No reconnect or exit-code claims.
 
 ## Blocked
 
-- Paid batches: waiting for lead approval and the observed scheduled sweeper run (since 2026-11-01).
-- Batch B: waiting for the human's FRCFLD login (below). Batch A also logs in online, so it needs the login too.
+- Batch A: approved; waiting only for the preflight (a scheduled sweeper run within 120 min; PR #12 in review).
+- Batch C: needs the forge-bridge runner driver (next).
 
 ## Requests to other agents or the lead
 
-1. **Human, via the lead (NEEDS-HUMAN): one-time device-code login for FRCFLD.** Please run it in your own terminal, not through this chat, so the code never lands in an agent's context:
-
-   ```powershell
-   cd C:\Users\admin\orca\workspaces\mindcraft-RotN\net-forge-g1
-   $env:MINDCRAFT_PROFILES_FOLDER = "C:/Users/admin/.mindcraft-rotn/FRCFLD/msa"
-   node packages/forge-bridge/tools/msa-login.mjs FRCFLD
-   ```
-
-   - It prints Microsoft's instruction: open microsoft.com/link and type the code. Sign in there with the bot account; enter credentials only on Microsoft's page.
-   - At the end it prints `Signed in. Minecraft profile: FRCFLD`. Please confirm that the name matches. No agent reads or prints the cache.
-2. **Lead (`settings.js` / profile, your files):** for RotN runs, set `"minecraft_version": "1.12.2"` and `"auth": "microsoft"`. Until then, `initBot` still attaches the bridge in `auto` mode whenever the ping reports FML, and `g1-spike.mjs` sets these itself.
-3. **Lead (`package.json`, optional):** forge-bridge depends on packages the root `package.json` does not declare: `minecraft-protocol` (via mineflayer), and `protodef`, `prismarine-nbt`, `lodash.merge` and `prismarine-auth` (via minecraft-protocol). The lockfile pins them, so nothing is needed now. Making them direct dependencies would protect against hoisting changes.
-4. **skills-rotn (later, through the lead):** `bot.forge.bridge.lastKick` carries `{category, fatal, exitCode}` for the `agent.js` kick handler (ADR 0003 decision 5).
+1. ~~Human: FRCFLD device-code login.~~ Done; verified by the lead and by `--check`.
+2. **Lead (`settings.js` / profile, your files):** for RotN runs, set `"minecraft_version": "1.12.2"` and `"auth": "microsoft"`. Until then, `g1-spike.mjs` sets these itself.
+3. **Lead (`package.json`, optional; review item 12):** make the transitive dependencies forge-bridge imports direct ones: `minecraft-protocol`, `protodef`, `prismarine-nbt`, `lodash.merge`, `prismarine-auth`. The lockfile pins them today.
+4. **Lead (`docs/research/fml-spec.md`, optional):** the Forge 14.23.5.2860 layouts confirmed by `javap` are listed at the top of `packages/forge-bridge/test/golden.test.js`, if you want them in the spec.
+5. **skills-rotn (later, through the lead):** `bot.forge.bridge.lastKick` carries `{category, fatal, exitCode, retryCap?}` for the `agent.js` kick handler.
 
 ## Open PRs
 
-- #10 G1 spike (offline part): forge-bridge, initBot fixes, REID patches (G1; brief deliverables 1 offline, 2, part of 5). npm test 101/101, lint 259 baseline. Verifier: PASS WITH ISSUES, all fixed.
+- (opening now) PR #10 review fixes, on `agent/net-forge/g1-review-fixes`. G1, brief items 2, 5 and 7. `npm test` 175/175; lint 259 (baseline).

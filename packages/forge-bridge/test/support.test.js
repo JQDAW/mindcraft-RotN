@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyKick, chatToText, classifySocketError, EXIT } from '../src/kicks.js';
+import { classifyKick, chatToText, classifySocketError, createRestartPolicy, EXIT } from '../src/kicks.js';
 import { CaptureWriter, readCapture, redactBuffer } from '../src/capture.js';
 import { throttleMovement, mergeMovement } from '../src/movement-throttle.js';
 import { tmpFile } from './helpers.js';
@@ -21,7 +21,12 @@ test('kicks are classified per fml-spec section 4 and the ADR 0003 exit codes', 
         ['This is modded. No modded response received. Bye!', 'vanilla_client_rejected', true],
         ['You are not white-listed on this server!', 'not_whitelisted', true],
         ['You are banned from this server.', 'banned', true],
-        ['Failed to verify username!', 'auth', true],
+        ['{"translate":"multiplayer.disconnect.banned.reason","with":["griefing"]}', 'banned', true],
+        ['Your IP address is banned from this server.', 'banned', true],
+        ['Banned items in your inventory: bedrock', 'other', false],
+        ['3 players were banned today, you were kicked to make room', 'other', false],
+        ['Failed to verify username!', 'auth', false],
+        ['Invalid session (Try restarting your game)', 'auth', false],
         ['Server is still starting! Please wait before reconnecting.', 'server_starting', false],
         ['Server closed', 'server_stopping', false],
         ['You logged in from another location', 'duplicate_login', false],
@@ -36,6 +41,31 @@ test('kicks are classified per fml-spec section 4 and the ADR 0003 exit codes', 
         assert.equal(c.exitCode, fatal ? EXIT.FATAL : EXIT.TRANSIENT, reason);
     }
     assert.equal(classifySocketError({ code: 'ECONNRESET', message: 'read ECONNRESET' }).exitCode, EXIT.TRANSIENT);
+});
+
+test('auth kicks are transient up to a retry cap, then fatal', () => {
+    const p = createRestartPolicy();
+    const auth = classifyKick('Failed to verify username!');
+    assert.equal(auth.retryCap, 3);
+    assert.deepEqual([p.next(auth), p.next(auth)].map(r => [r.restart, r.delayMs]), [[true, 10000], [true, 20000]]);
+    const third = p.next(auth);
+    assert.equal(third.restart, false);
+    assert.equal(third.exitCode, EXIT.FATAL);
+    // A different kick in between resets the streak; a long session resets everything.
+    const q = createRestartPolicy();
+    q.next(auth); q.next(auth); q.next(classifyKick('Timed out'));
+    assert.equal(q.next(auth).restart, true);
+    assert.equal(q.next(auth, 11 * 60_000).delayMs, 10000);
+});
+
+test('restart backoff doubles from 10 s, caps at 5 min, and never restarts fatal or clean exits', () => {
+    const p = createRestartPolicy();
+    const t = classifyKick('Timed out');
+    const delays = Array.from({ length: 8 }, () => p.next(t).delayMs);
+    assert.deepEqual(delays, [10000, 20000, 40000, 80000, 160000, 300000, 300000, 300000]);
+    assert.equal(p.next(t, 600_000).delayMs, 10000);
+    assert.equal(p.next(classifyKick('You are banned from this server.')).restart, false);
+    assert.equal(p.next({ category: 'clean', fatal: false, exitCode: EXIT.CLEAN }).restart, false);
 });
 
 test('redaction replaces username and UUID forms with same-length placeholders', () => {

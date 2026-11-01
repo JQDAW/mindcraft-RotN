@@ -9,7 +9,7 @@ export * as channels from './src/channels.js';
 export { RegistrySnapshot } from './src/registries.js';
 export { modListFromPing, loadModListFile, hasReid, findMod, diffModLists, REID_MODID } from './src/modlist.js';
 export { buildCustomPackets, createTypeReader, reidEffectIdFromTail } from './src/reid.js';
-export { classifyKick, classifySocketError, chatToText, EXIT } from './src/kicks.js';
+export { classifyKick, classifySocketError, chatToText, createRestartPolicy, EXIT } from './src/kicks.js';
 export { CaptureWriter, readCapture, redactBuffer } from './src/capture.js';
 export { throttleMovement, mergeMovement } from './src/movement-throttle.js';
 export { forgeOptionsFromEnv } from './src/env.js';
