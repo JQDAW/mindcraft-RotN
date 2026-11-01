@@ -25,14 +25,14 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
   - `run-dump.sh` waits for `DONE`;
   - the nits.
 
-  Not compiled yet (no JDK 8 here); it waits for the CI build.
+  **The mod compiles:** harness-ops' dumper-build trial on `3398b03` is green (run 41338507034: Temurin 1.8.0_504, Gradle 4.10.3 checksum OK, BUILD SUCCESSFUL; `rotndump-0.1.0.jar`, 48,212 bytes, SHA-256 `fcfe6b47...c898`). The workflow itself is harness-ops' PR #40. Not yet run on a server.
 - **PR #37 (`agent/rotn-data/data-package`): `packages/rotn-data`**, items 2 and 3. Translation API `toNew`/`toOld` (643 vanilla item pairs, a clean bijection), catalog API, names from the real capture, script cross-check fixtures, 25 offline tests. The dump-dependent acceptance tests skip until a dump is imported.
 - Then item 4: the `mcdata.js` helpers on `bot.registry`, after net-forge's PR #25 merges (see Request 4).
 - The lead's low-memory rule (2026-11-01) applies: targeted `node --test <file>` runs only, no parallel heavy jobs.
 
 ## Blocked
 
-- The real dump needs the dumper jar, and building it needs JDK 8 (since 2026-11-01). Unblocked by Request 1 (harness-ops dumper-build workflow).
+- The real dump needs #34 merged (after #40) and the lead's written GO for the paid run below. The jar builds in CI.
 
 ## Requests to other agents or the lead
 
