@@ -1446,5 +1446,19 @@
   "version": "3.3.4",
   "zipSha256": "90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205"
  },
- "importedFrom": "tools/dumper via deploy/test-server.sh --fetch rotn-dump"
+ "importedFrom": "tools/dumper via deploy/test-server.sh --fetch rotn-dump",
+ "import": {
+  "expectedJarSha256": "2d32ee409612f78195ff5b7fffbf2695cc37582499945e28268f9eca3190b94c",
+  "rawSha256": {
+   "DONE": "80938652fe6fed0e7ec0d263132ec4fabb0867351f8d2f90aab715abf593ca99",
+   "blocks.json": "7c0887aad5d27b0928d78f16c2ea454e6530bb7e22dd17b7d86eb7efc76c46af",
+   "entities.json": "0fc31780218c3d6d0f8fb799cc99f981575ecb54a6ac98dd6c2745a07599b5e1",
+   "items.json": "040d997e2f58b6a7932e1afdd38ca773d65433606e5ae1cde1db89fe4d97c4d9",
+   "manifest.json": "e2982f9ba94a6802a76598fb35c4e68e08ba1ad479c8ee03ddc649a87fe0f275",
+   "oredict.json": "9ece1885c2cd1760acdc8ae9d4170a564edd8dcf42ed29ae685ee09532178f45",
+   "recipes.json": "8223f6211df9ddff209cfa9a827a7dee4410f9aed5792b942a1768112bc03c56",
+   "smelting.json": "38ae6421a003a4156d77774fe63ad03fdf83a61ef4ae8b7784048de6b4f1fd17",
+   "spawns.json": "127c62f18d4c107f641ad2ad3a931350bfc7c05251b83f64ca68c919a1bc8ce9"
+  }
+ }
 }

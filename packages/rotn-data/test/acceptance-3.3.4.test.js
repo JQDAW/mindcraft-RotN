@@ -42,8 +42,8 @@ test("harvestInfo('stone') reports RotN's tool and level from the dump", { skip 
     const h = pack.harvestInfo('stone');
     assert.equal(h.block, 'minecraft:stone');
     assert.equal(h.tool, 'pickaxe');
-    assert.ok(Number.isInteger(h.level) && h.level >= 0, `level ${h.level}`);
-    assert.equal(typeof h.levelName, 'string');
+    assert.equal(h.level, 0); // Tool Progression level 0 (Crude): a stone pickaxe is enough (PR #47 review)
+    assert.equal(h.levelName, 'Crude');
 });
 
 test('harvestInfo is defined for every block state in the dump, apart from the pinned known gaps', { skip }, () => {

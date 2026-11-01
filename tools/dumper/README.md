@@ -71,7 +71,7 @@ Paid runs need a plan in `coord/STATUS-rotn-data.md` and the lead's written GO f
 ```sh
 timeout 3600 deploy/test-server.sh run --ttl-hours 2 --yes \
   --extra-mod "$JAR" -- tools/dumper/run-dump.sh "$OUT"
-node packages/rotn-data/tools/import-dump.mjs "$OUT/rotn-dump"
+node packages/rotn-data/tools/import-dump.mjs "$OUT/rotn-dump" --jar-sha256 "$JAR_SHA256"
 ```
 
 - `run-dump.sh` uses only `deploy/test-server.sh`'s own `ssh`, `console` and `fetch` subcommands. It creates `rotn-dump.enable` and types `rotndump`. It then waits until `rotn-dump/DONE` exists (20 min limit) and fetches `rotn-dump/` and `logs/latest.log` into `$OUT`.

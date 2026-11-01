@@ -2,23 +2,27 @@
 // into packages/rotn-data/<version>/ (ADR 0004).
 //
 // Checks, in order (any failure stops the import and writes nothing):
+//   0. the dumper jar that ran is the expected one: manifest.dumperJar.sha256 must equal
+//      --jar-sha256 (the hash recorded from the dumper-build artifact before the batch);
 //   1. the DONE marker exists (the dumper writes it last) and the manifest is rotn-dump/1
 //      with no errors and Forge 14.23.5.2860;
 //   2. every block, item and entity name in the dump is in the server's RegistryData
 //      capture (registry-names.json) and the other way round;
 //   3. every early-game recipe in test/fixtures/scripts-<version>-early-recipes.json is
 //      found in the dump (the CraftTweaker scripts cross-check).
-// It then adds the pack pin (version, zip SHA-256) to the manifest and writes each file
-// as sorted JSON (.json, or .json.br when larger than 4 MiB).
+// It then adds the pack pin (version, zip SHA-256) and the SHA-256 of every raw fetched file
+// (manifest.import.rawSha256) to the manifest and writes each file as sorted JSON (.json, or
+// .json.br when larger than 1 MiB).
 //
-// Usage: node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir> [--version 3.3.4]
-//        [--allow-errors] [--dry-run]
+// Usage: node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir> --jar-sha256 <hex>
+//        [--version 3.3.4] [--allow-errors] [--dry-run]
 import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import process from 'node:process';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { RotnData, DUMP_FORMAT, DUMP_FILES } from '../src/catalog.js';
 import { recipeMatches } from '../src/crosscheck.js';
@@ -29,7 +33,7 @@ const ROOT = path.join(HERE, '..');
 export const PACK_PINS = {
     '3.3.4': { zipSha256: '90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205', forge: '14.23.5.2860' },
 };
-const BROTLI_ABOVE = 4 << 20;
+const BROTLI_ABOVE = 1 << 20; // 1 MiB (PR #47 review: was 4 MiB)
 
 const SECTIONS = { blocks: 'blocks', items: 'items', entities: 'entities' };
 
@@ -45,12 +49,23 @@ function sortKeys(obj) {
     return Object.fromEntries(Object.keys(obj).sort().map(k => [k, obj[k]]));
 }
 
+const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+
+/** SHA-256 of every raw file in the fetched folder (DONE and the *.json files), sorted by name. */
+export function rawHashes(src) {
+    const out = {};
+    for (const f of fs.readdirSync(src).filter(n => n === 'DONE' || n.endsWith('.json')).sort()) {
+        out[f] = sha256(fs.readFileSync(path.join(src, f)));
+    }
+    return out;
+}
+
 /**
- * @param {{ src: string, outDir?: string, version?: string, allowErrors?: boolean, dryRun?: boolean,
- *           registryDir?: string, expectedRecipes?: object[] }} opts
+ * @param {{ src: string, jarSha256: string, outDir?: string, version?: string, allowErrors?: boolean,
+ *           dryRun?: boolean, registryDir?: string, expectedRecipes?: object[] }} opts
  * @returns {{ written: string[], problems: string[], crosscheck: Array<{key: string, ok: boolean}> }}
  */
-export function importDump({ src, version = '3.3.4', outDir, allowErrors = false, dryRun = false, registryDir, expectedRecipes } = {}) {
+export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErrors = false, dryRun = false, registryDir, expectedRecipes } = {}) {
     outDir ??= path.join(ROOT, version);
     registryDir ??= outDir;
     const pin = PACK_PINS[version];
@@ -59,6 +74,10 @@ export function importDump({ src, version = '3.3.4', outDir, allowErrors = false
     const files = {};
     for (const f of DUMP_FILES) files[f] = readDumpFile(src, f);
     const m = files.manifest;
+    // 0. the jar that ran (PR #47 review): required, and it must match.
+    const ranSha = m.dumperJar?.sha256 ?? null;
+    if (!/^[0-9a-f]{64}$/.test(jarSha256 ?? '')) problems.push('no expected jar SHA-256 given (--jar-sha256 <64 hex>)');
+    else if (ranSha !== jarSha256) problems.push(`manifest.dumperJar.sha256 ${ranSha} is not the expected ${jarSha256}`);
     if (m.errors?.length && !allowErrors) problems.push(`manifest lists ${m.errors.length} errors: ${m.errors.join('; ').slice(0, 400)}`);
     if (pin && m.forge !== pin.forge) problems.push(`Forge ${m.forge}, expected ${pin.forge}`);
 
@@ -89,7 +108,12 @@ export function importDump({ src, version = '3.3.4', outDir, allowErrors = false
     if (problems.length) return { written: [], problems, crosscheck };
 
     // write
-    files.manifest = { ...m, pack: { version, zipSha256: pin?.zipSha256 ?? null }, importedFrom: 'tools/dumper via deploy/test-server.sh --fetch rotn-dump' };
+    files.manifest = {
+        ...m,
+        pack: { version, zipSha256: pin?.zipSha256 ?? null },
+        importedFrom: 'tools/dumper via deploy/test-server.sh --fetch rotn-dump',
+        import: { expectedJarSha256: jarSha256, rawSha256: rawHashes(src) },
+    };
     files.blocks.blocks = sortKeys(files.blocks.blocks);
     files.items.items = sortKeys(files.items.items);
     files.entities.entities = sortKeys(files.entities.entities);
@@ -113,10 +137,10 @@ export function importDump({ src, version = '3.3.4', outDir, allowErrors = false
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     const args = process.argv.slice(2);
-    const src = args.find(a => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--version');
-    if (!src) { console.error('usage: import-dump.mjs <rotn-dump dir> [--version 3.3.4] [--allow-errors] [--dry-run]'); process.exit(2); }
-    const vi = args.indexOf('--version');
-    const res = importDump({ src, version: vi >= 0 ? args[vi + 1] : '3.3.4', allowErrors: args.includes('--allow-errors'), dryRun: args.includes('--dry-run') });
+    const valueOf = (flag) => { const i = args.indexOf(flag); return i >= 0 ? args[i + 1] : undefined; };
+    const src = args.find((a, i) => !a.startsWith('--') && !['--version', '--jar-sha256'].includes(args[i - 1]));
+    if (!src) { console.error('usage: import-dump.mjs <rotn-dump dir> --jar-sha256 <hex> [--version 3.3.4] [--allow-errors] [--dry-run]'); process.exit(2); }
+    const res = importDump({ src, jarSha256: valueOf('--jar-sha256'), version: valueOf('--version') ?? '3.3.4', allowErrors: args.includes('--allow-errors'), dryRun: args.includes('--dry-run') });
     for (const c of res.crosscheck) console.log(`cross-check ${c.ok ? 'ok  ' : 'FAIL'} ${c.key}`);
     if (res.problems.length) { for (const p of res.problems) console.error(`problem: ${p}`); process.exit(1); }
     for (const w of res.written) console.log(`wrote ${w}`);

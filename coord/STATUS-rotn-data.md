@@ -8,7 +8,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 
 - **#34 merged** (`3158776`): the dumper mod, `tools/dumper/`. It is opt-in, writes in batches of at most 500 entries per tick with `.tmp` + rename and `DONE` last, and builds with ForgeGradle 3.0.197 (the lead accepted it and writes the ADR 0004 addendum).
 - **#37 merged** (`441020b`): `packages/rotn-data`, with translation, catalog, importer and the scripts cross-check fixture.
-- **First RotN 3.3.4 dump batch: PASS** (lead's written GO, 2026-11-01 about 19:35 UTC; record below). Imported in PR "rotn-data: first RotN 3.3.4 dump" (branch `agent/rotn-data/dump-3.3.4`).
+- **First RotN 3.3.4 dump batch: PASS** (lead's written GO, 2026-11-01 about 19:24 UTC, before the server was created at 19:25:54; record below). Imported in PR #47.
 - Re-checked against the pinned 3.3.4 zip (`unzip -p` into a scratch folder outside the repo; nothing run): the early recipes (file:line in `packages/rotn-data/test/fixtures/scripts-3.3.4-early-recipes.json`), the mining level names, and the section-4 names. Stone Kiln is `pyrotech:stone_kiln`; the bundle is `bundles:bundle`.
 
 ## Dump batch record (2026-11-01)
@@ -60,7 +60,7 @@ None is a natural surface block. 20 recipes do not match their own sample grid (
 - **3** (PR #37 review): the meaning of names valid in both versions. Resolved in #44 by `resolveName`: 1.12 meaning by default (`grass`, `stone_slab`, `snow`, `melon`, `nether_brick`), and `prefer: 'new'` for names the LLM wrote. skills-rotn: Mindcraft's `'grass'` in `skills.js:706` means the plant (`tallgrass` in 1.12).
 - **4, 5, 6**: in PR #43.
 - **#34 review follow-ups 1-3**: a later dumper PR.
-- **#47 review follow-ups** (later PR): record each raw dump file's SHA-256 in the import, and make the importer reject an unexpected `dumperJar.sha256`; consider a lower brotli threshold; assert `harvestInfo('stone').level === 0` directly.
+- **#47 review follow-ups**: done in PR "rotn-data: import follow-ups" (raw file SHA-256s in `manifest.import.rawSha256`; `--jar-sha256` required and checked; brotli above 1 MiB; `harvestInfo('stone').level === 0`). The first dump was re-imported from the raw files: the data content is identical, only the manifest changed and `spawns.json` became `spawns.json.br`.
 
 ## Blocked
 
