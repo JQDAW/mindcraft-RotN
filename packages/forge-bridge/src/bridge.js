@@ -9,7 +9,7 @@ import { HS_CHANNEL, decodeHandshake } from './fml-hs.js';
 import { ClientHandshake, CORE_CHANNELS } from './handshake.js';
 import { decodeRegister, decodeFml, decodeForge, decodeJeid, MultipartAssembler } from './channels.js';
 import { hasReid, findMod, REID_MODID } from './modlist.js';
-import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, MC_VERSION } from './reid.js';
+import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, rotnMetadataSerializers, MC_VERSION } from './reid.js';
 import { classifyKick, classifySocketError } from './kicks.js';
 
 const require = createRequire(import.meta.url);
@@ -41,6 +41,9 @@ export function attachForgeBridge(client, opts) {
         version = MC_VERSION,
         capturedPackets = DEFAULT_CAPTURED_PACKETS,
         capturedC2S = DEFAULT_CAPTURED_C2S,
+        // Extra entity-metadata serializer ids, { id: name } (reid.js METADATA_SERIALIZER_TYPES),
+        // e.g. 15-18 from rotn-data's dumper. Merged over rotnMetadataSerializers(modList).
+        metadataSerializers: extraSerializers = {},
     } = opts;
     if (!Array.isArray(modList) || modList.length === 0) throw new Error('attachForgeBridge: modList is required');
 
@@ -49,6 +52,7 @@ export function attachForgeBridge(client, opts) {
     bridge.reid = reid ? findMod(modList, REID_MODID) : null;
     // Triumph's ExtendedDisplayInfo changes play.advancements (reid.js triumphTypes).
     bridge.triumph = findMod(modList, 'triumph') ?? null;
+    bridge.metadataSerializers = { ...rotnMetadataSerializers(modList), ...extraSerializers };
     bridge.modList = modList;
     bridge.serverChannels = [];
     bridge.serverMods = null;
@@ -65,8 +69,8 @@ export function attachForgeBridge(client, opts) {
 
     // 1. Handshake marker and protocol overrides (must precede Login Success).
     client.tagHost = FML_TAG;
-    client.customPackets = mergeCustom(client.customPackets, buildCustomPackets({ reid, triumph: !!bridge.triumph, version }));
-    const typeReader = createTypeReader({ reid, version });
+    client.customPackets = mergeCustom(client.customPackets, buildCustomPackets({ reid, triumph: !!bridge.triumph, version, metadataSerializers: bridge.metadataSerializers }));
+    const typeReader = createTypeReader({ reid, version, metadataSerializers: bridge.metadataSerializers });
     log(`attached; ${modList.length} mods; REID ${reid ? bridge.reid.version : 'absent'}; Triumph ${bridge.triumph ? bridge.triumph.version : 'absent'}`);
     capture?.event('bridge_attached', { mods: modList.length, reid: bridge.reid, triumph: bridge.triumph, version });
 
@@ -99,6 +103,16 @@ export function attachForgeBridge(client, opts) {
         capture?.event('server_modlist', { count: mods.length, diff });
     });
     handshake.on('registries', (snap) => {
+        // The Forge-registry serializer ids (>= 256) were fixed before the protocol was
+        // compiled; check them against what the server synced and say so if they differ.
+        for (const [id, name] of Object.entries(bridge.metadataSerializers)) {
+            if (Number(id) < 256) continue;
+            const synced = snap.nameOf('minecraft:dataserializers', Number(id));
+            if (synced !== name) {
+                log(`entity-metadata serializer ${id}: expected ${name}, server synced ${synced ?? 'nothing'}; metadata of that type will misparse`);
+                capture?.event('metadata_serializer_mismatch', { id: Number(id), expected: name, synced: synced ?? null });
+            }
+        }
         bridge.registries = snap;
         const sizes = snap.sizes();
         log(`registries: ${Object.entries(sizes).map(([k, v]) => `${k}=${v}`).join(' ')}`);

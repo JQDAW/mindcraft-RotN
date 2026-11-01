@@ -109,6 +109,7 @@ export function initBot(username, { onMsaCode } = {}) {
                 // After the last RegistryData: modded names in bot.registry (brief item 4).
                 bridge.on('registries', (snap) => {
                     forge.registryReport = extendRegistry(bot.registry, snap, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                    mcdata = bot.registry; // the helpers see the extended maps (same object, refreshed for clarity)
                     bot.emit('forge_registry', forge.registryReport);
                 });
                 // Mod entities spawned with FML EntitySpawn go into bot.entities (brief item 6).
@@ -166,7 +167,9 @@ export function initBot(username, { onMsaCode } = {}) {
 
     bot.once('login', () => {
         mc_version = bot.version;
-        mcdata = minecraftData(mc_version);
+        // The name helpers read bot.registry, which forge-bridge extends with the server's
+        // modded ids (rotn-data request 4). Same API as minecraftData(); vanilla stays vanilla.
+        mcdata = bot.registry ?? minecraftData(mc_version);
         Item = prismarine_items(mc_version);
     });
 

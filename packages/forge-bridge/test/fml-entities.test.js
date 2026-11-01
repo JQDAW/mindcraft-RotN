@@ -65,7 +65,7 @@ test('without the table the name is a clear placeholder (TODO rotn-data)', () =>
     const e = spawnFmlEntity(fakeBot(), SPAWN);
     assert.equal(e.name, 'iceandfire:entity_7');
     assert.equal(e.displayName, 'iceandfire:entity_7');
-    assert.equal(e.kind, 'Modded');
+    assert.equal(e.kind, 'unknown', 'like mineflayer for an unknown entity (PR #38 nit)');
     assert.equal(e.forge.nameKnown, false);
     assert.equal(e.type, 'other');
     assert.deepEqual([e.width, e.height], [0, 0], 'size unknown without rotn-data: prismarine-entity defaults');
