@@ -35,7 +35,7 @@ Batch B passed all its own checks too: handshake, spawn, chat both ways, a 6-blo
 
 - **Did advancements stay opaque?** Yes. Triumph 3.19.2 was detected in both sessions (`bridge_attached.triumph`), and there was no advancements parse error.
 - **Did the safety net drop anything?** No: `droppedPackets` is `{}` in B's end-of-session stats.
-  - Correction (PR #31 review): an earlier version also cited the absence of "(dropped, allowlisted)" log lines. That string did not exist in the code that ran (it was added later, in PR #25), so its absence proves nothing.
+  - Correction (PR #31 review): an earlier version also cited the absence of "(dropped, allowlisted)" log lines. That string did not exist in the code that ran (it was added later, in commit 56b8aa0 of PR #25), so its absence proves nothing.
   - The only parse errors in both sessions were PartialReadErrors (`entity_metadata`, below). protodef drops those itself; the safety net never handles them.
 - **Kicks?** None. The runner's `notes.kicks` is `[]`.
   - B ended with its own `disconnect.quitting`.
@@ -45,7 +45,7 @@ Batch B passed all its own checks too: handshake, spawn, chat both ways, a 6-blo
 
 ## Server-side crash report (not caused by the bot)
 
-At 17:30:59 the server logged a FATAL "Ticking entity" crash report (`server.log` lines 42-815). The cause was `java.lang.NullPointerException` at `com.p1ut0nium.roughmobsrevamped.ai.combat.RoughAIBatTarget.func_75250_a(RoughAIBatTarget.java:51)`, a Rough Mobs Revamped bat AI. The server survived it: the bot stayed connected, and `stay_10min` passed.
+At 17:30:59 the server logged a FATAL "Ticking entity" crash report (`server.log` lines 43-815). The cause was `java.lang.NullPointerException` at `com.p1ut0nium.roughmobsrevamped.ai.combat.RoughAIBatTarget.func_75250_a(RoughAIBatTarget.java:51)`, a Rough Mobs Revamped bat AI. The server survived it: the bot stayed connected, and `stay_10min` passed.
 
 ## One new finding (not a G1 blocker)
 

@@ -49,6 +49,8 @@ const port = Number(process.env.TEST_SERVER_PORT ?? 25565);
 const name = process.env.ROTN_SCENARIO_BOT ?? 'FRCFLD';
 const auth = process.env.ROTN_DRIVER_AUTH ?? 'microsoft';
 const chunkWaitRaw = process.env.ROTN_DRIVER_CHUNK_WAIT_MS;
+// scenario-protocol's own attachG2 default (#57), used when ROTN_DRIVER_CHUNK_WAIT_MS is unset.
+const SCENARIO_CHUNK_WAIT_MS = 30000;
 const chunkWaitMs = chunkWaitRaw === undefined || chunkWaitRaw === '' ? undefined : Number(chunkWaitRaw);
 
 function fatalSetup(reason) {
@@ -113,9 +115,13 @@ async function main() {
     // loadAgentNames never rejects: it returns null when mcdata.js cannot be imported, so the
     // fallback is logged explicitly. The catch is for attachG2 itself throwing.
     loadAgentNames(REPO_ROOT).then((m) => {
-        if (m) event('g2_adapter', { source: m.source, translation: m.translation });
-        else event('g2_adapter', { source: 'fallback', names: 'stockNames', reason: 'src/utils/mcdata.js could not be imported', translation: false });
-        attachG2(bot, { names: m?.names ?? stockNames, ...(chunkWaitMs === undefined ? {} : { chunkWaitMs }) });
+        // The chunk wait is always passed explicitly, so the logged value is the one attachG2 uses.
+        const chunkWait = chunkWaitMs === undefined
+            ? { chunkWaitMs: SCENARIO_CHUNK_WAIT_MS, chunkWaitSource: 'default' }
+            : { chunkWaitMs, chunkWaitSource: 'ROTN_DRIVER_CHUNK_WAIT_MS' };
+        if (m) event('g2_adapter', { source: m.source, translation: m.translation, ...chunkWait });
+        else event('g2_adapter', { source: 'fallback', names: 'stockNames', reason: 'src/utils/mcdata.js could not be imported', translation: false, ...chunkWait });
+        attachG2(bot, { names: m?.names ?? stockNames, chunkWaitMs: chunkWait.chunkWaitMs });
     }).catch((err) => event('g2_adapter_error', { message: String(err?.message ?? err) }));
 
 
