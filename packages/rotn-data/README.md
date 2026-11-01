@@ -45,7 +45,7 @@ RotN 3.3.4 facts (ADR 0005) and two-way name translation between Minecraft 1.12.
 | `manifest.json`, `blocks.json`, `items.json`, `recipes.json`, `smelting.json`, `oredict.json`, `entities.json`, `spawns.json` | the dump (ADR 0004, `tools/dumper/README.md`): the first RotN 3.3.4 dump, 2026-11-01, dumper jar SHA-256 in `manifest.json`. `blocks`, `items` and `recipes` are stored as `.json.br`. Known harvest gaps are pinned in `test/fixtures/harvest-known-gaps-3.3.4.json`. |
 | `common-mobs.json` | mobs most likely met in the overworld, from `spawns.json` (`tools/build-common-mobs.mjs`); harness-ops' G2 mob scenario reads `mobs[].name` |
 
-Import a fetched dump with `node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir>`. It refuses a dump without its `DONE` marker, with dumper errors, with another Forge build, with names that differ from the registry capture, or without the early-game recipes from the pack's scripts (`test/fixtures/scripts-3.3.4-early-recipes.json`, transcribed from the zip with file and line).
+Import a fetched dump with `node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir>`. It refuses a dump without its `DONE` marker, without one of the dump files (`serializers.json` included, so the first 3.3.4 dump cannot be re-imported as is), with dumper errors or dropped entries (`manifest.entryErrors`; `--allow-errors` overrides both), with another Forge build, with names that differ from the registry capture, or without the early-game recipes from the pack's scripts (`test/fixtures/scripts-3.3.4-early-recipes.json`, transcribed from the zip with file and line).
 
 ## Tests
 
