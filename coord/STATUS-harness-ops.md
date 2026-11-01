@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (04:05 UTC)
+Updated: 2026-11-01 (11:10 UTC)
 
 ## Done
 
@@ -63,15 +63,13 @@ Updated: 2026-11-01 (04:05 UTC)
 
 - PR #7 (G0 follow-ups: sweeper preflight, name check, `--allow-from`, label alerts, watchdog attribution) merged as bbcb0ef.
 - PR #8 (CI: `npm ci`, `npm test` and the lint gate on every PR) merged as a04ea22. Its own CI run passed: 55/55 tests, lint 259/259.
+- PR #9 (scenario runner plus the G1 scenario, brief deliverable 2) merged as f1aefab after re-review: all 12 findings fixed, APPROVE WITH NITS.
+  - `test/runner/` holds the engine, the server-log parsers, the adapters, the CLI and the driver contract (`DRIVER.md`), plus a stock-mineflayer reference driver. The scenario is `test/scenarios/g1/g1-login-chat-walk.mjs`.
+  - No paid run yet. The first real G1 run needs net-forge's driver, the bot's token cache (NEEDS-HUMAN), the lead's approval and an observed scheduled sweeper run.
 
 ## Doing
 
-- **PR C**, `agent/harness-ops/scenario-runner`: the scenario runner plus the G1 scenario (brief deliverable 2).
-  - `test/runner/` holds the engine, the server-log parsers, the adapters, the CLI and the driver contract (`DRIVER.md`), plus a stock-mineflayer reference driver.
-  - The scenario is `test/scenarios/g1/g1-login-chat-walk.mjs`.
-  - Offline tests pass on a simulated server and clock and end to end with the real adapters. They were mutation-checked.
-  - No paid run yet. The first real G1 run needs net-forge's driver, the bot's token cache (NEEDS-HUMAN), the lead's approval and an observed scheduled sweeper run.
-  - Review (REQUEST CHANGES): findings 1-12 fixed in 98e9539 and answered on the PR. CI passes (101/101 tests, lint 259/259). Waiting for re-review.
+- PR #9 re-review nits, on `agent/harness-ops/g1-nits` (none can cause a false pass): confirm the `say` marker before `bot.start`, or retry; reject `[Rcon]` and `[@]` chat prefixes as well as `[Server]`.
 
 ## Doing: PR #11, `agent/harness-ops/gate-followups` (PR #7 and PR #8 review findings)
 
@@ -118,10 +116,11 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
    - Options, all reversible. The repo settings belong to the lead or human, so I have not touched them:
      1. Human, in the GitHub UI: Actions tab → `test-server-sweeper` → look for a "scheduled workflows are disabled" banner and enable it, then check Settings → Actions → General.
      2. Lead: `gh workflow disable test-server-sweeper.yml` followed by `gh workflow enable test-server-sweeper.yml`. That usually re-registers the cron.
-     3. Me: a one-line comment PR to the workflow file. When merged, it registers the schedule again. Say if you want it.
-   - After any of these, I restart the watch. `test-server.sh up` passes its preflight once a scheduled run has succeeded within 120 min.
+     3. Me: a one-line comment PR to the workflow file. When merged, it registers the schedule again. Only if the lead asks: the lead's rule is no cron or workflow changes without a request.
+   - **Routed:** the lead asked the human (NEEDS-HUMAN) to re-enable or re-register the workflow in the Actions tab.
+   - **Update (lead):** the schedule fired once, at 06:30:54 UTC (success). That is the only scheduled run in about 10 h, so the cron is registered but GitHub drops almost every run at the busy :00/:15/:30/:45 marks. The preflight correctly refuses today: its 120-min window stays as it is.
+   - **Authorized fix:** a separate PR from develop moves the cron to the off-peak minutes `7,22,37,52 * * * *`. Merging it also re-registers the schedule. After the merge I watch for 2 h and record the scheduled-run cadence here. `test-server.sh up` passes its preflight once a scheduled run has succeeded within 120 min.
 
 ## Open PRs
 
-- #9, PR C (`agent/harness-ops/scenario-runner`): scenario runner plus G1. Review fixes pushed (98e9539), CI passes; waiting for re-review.
-- #11, PR D (`agent/harness-ops/gate-followups`): the PR #7 and PR #8 review findings. CI passes; waiting for review. Merge it after #9 (this status file builds on #9's version).
+- #11 (`agent/harness-ops/gate-followups`): the PR #7 and PR #8 review findings. Under independent review. develop (with #9) is merged in, and the only conflict was this file.
