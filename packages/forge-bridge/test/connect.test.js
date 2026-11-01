@@ -76,3 +76,12 @@ test('env switches', () => {
     assert.equal(forgeOptionsFromEnv('b', { FORGE_BRIDGE: 'bogus', FORGE_CAPTURE: '0' }).mode, 'auto');
     assert.equal(forgeOptionsFromEnv('b', { FORGE_CAPTURE: 'C:/tmp/c.jsonl' }).captureFile, 'C:/tmp/c.jsonl');
 });
+
+test('SRV lookup follows nmp: only for port 25565 and a non-IP hostname', async () => {
+    const { srvTarget } = await import('../src/connect.js');
+    const srv = () => Promise.resolve([{ name: 'mc.example.net', port: 25570 }]);
+    assert.deepEqual(await srvTarget('example.net', 25565, srv), { host: 'mc.example.net', port: 25570 });
+    assert.deepEqual(await srvTarget('example.net', 25566, srv), { host: 'example.net', port: 25566 });
+    assert.deepEqual(await srvTarget('203.0.113.5', 25565, srv), { host: '203.0.113.5', port: 25565 });
+    assert.deepEqual(await srvTarget('example.net', 25565, () => Promise.reject(new Error('ENODATA'))), { host: 'example.net', port: 25565 });
+});

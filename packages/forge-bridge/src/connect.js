@@ -4,6 +4,7 @@
 // never delays the Microsoft login and tagHost is set before the handshake.
 
 import net from 'node:net';
+import dns from 'node:dns';
 import { createRequire } from 'node:module';
 import { attachForgeBridge } from './bridge.js';
 import { modListFromPing, loadModListFile } from './modlist.js';
@@ -29,6 +30,7 @@ export function createForgeConnect(o) {
         ping = (opts) => require('minecraft-protocol').ping(opts),
         bridgeOptions = {},
         socket = (p, h) => net.connect(p, h),
+        resolveSrv = (name) => dns.promises.resolveSrv(name),
     } = o;
 
     return function connect(client) {
@@ -61,7 +63,19 @@ export function createForgeConnect(o) {
                 if (mode !== 'off') log('server is not Forge (no FML modinfo); connecting as vanilla');
                 capture?.close();
             }
-            client.setSocket(socket(port, host));
+            const target = await srvTarget(host, port, resolveSrv);
+            client.setSocket(socket(target.port, target.host));
         })().catch((e) => client.emit('error', e));
     };
+}
+
+// Same rule as nmp's tcp_dns.js: try an SRV record only for the default port
+// and a hostname that is not an IP or localhost.
+export async function srvTarget(host, port, resolveSrv) {
+    if (port !== 25565 || net.isIP(host) !== 0 || host === 'localhost') return { host, port };
+    try {
+        const records = await resolveSrv(`_minecraft._tcp.${host}`);
+        if (records?.length) return { host: records[0].name, port: records[0].port };
+    } catch { /* no SRV record: connect directly */ }
+    return { host, port };
 }

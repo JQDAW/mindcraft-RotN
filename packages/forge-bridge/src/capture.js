@@ -75,7 +75,9 @@ export class CaptureWriter {
     record(entry) {
         if (this.closed) return;
         const line = { t: Date.now() - this.start, ...entry };
-        const json = redactString(JSON.stringify(line, jsonReplacer), this.redact);
+        // Buffers anywhere in the entry are redacted before base64 (jsonReplacer),
+        // and the JSON text is redacted again for plain-string identities.
+        const json = redactString(JSON.stringify(line, jsonReplacer(this.redact)), this.redact);
         fs.writeSync(this.fd, json + '\n');
         this.lines++;
     }
@@ -108,6 +110,12 @@ export class CaptureWriter {
 
     event(name, data = {}) { this.record({ kind: 'event', name, ...data }); }
 
+    /** Redacted base64 of raw bytes, for records built by callers. */
+    b64(buf, maxLen = 65536) {
+        if (!buf || buf.length > maxLen) return null;
+        return redactBuffer(buf, this.redact).toString('base64');
+    }
+
     close() {
         if (this.closed) return;
         this.event('capture_closed', { lines: this.lines, packetCounts: this.counts });
@@ -116,12 +124,19 @@ export class CaptureWriter {
     }
 }
 
-function jsonReplacer(_key, value) {
-    if (typeof value === 'bigint') return value.toString();
-    if (value && value.type === 'Buffer' && Array.isArray(value.data)) return { b64: Buffer.from(value.data).toString('base64') };
-    if (value instanceof Map) return Object.fromEntries(value);
-    if (value instanceof Set) return [...value];
-    return value;
+function jsonReplacer(redact) {
+    // `this[key]` is the value before Buffer#toJSON runs.
+    return function (key, value) {
+        const orig = this[key];
+        if (Buffer.isBuffer(orig)) return { b64: redactBuffer(orig, redact).toString('base64') };
+        // Base64 handed in by callers is re-redacted too (redaction is idempotent).
+        if (key === 'b64' && typeof value === 'string') return redactBuffer(Buffer.from(value, 'base64'), redact).toString('base64');
+        if (typeof value === 'bigint') return value.toString();
+        if (value && value.type === 'Buffer' && Array.isArray(value.data)) return { b64: redactBuffer(Buffer.from(value.data), redact).toString('base64') };
+        if (value instanceof Map) return Object.fromEntries(value);
+        if (value instanceof Set) return [...value];
+        return value;
+    };
 }
 
 /** Read a capture back (tests, fixture tools). */

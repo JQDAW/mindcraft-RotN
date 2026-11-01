@@ -38,14 +38,23 @@ Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mind
   - `msa-login.mjs`: the human's device-code login. It prints only the profile name.
   - `g1-spike.mjs`: the spike runner, using the real `initBot`.
   - `capture-summary.mjs`.
-- **Tests:** `npm test` passes 96/96. All of it is offline, using synthetic fixtures plus the pinned ping.
+- **Tests:** `npm test` passes 101/101. All of it is offline, using synthetic fixtures plus the pinned ping.
   - This includes `e2e-initbot.test.js`: the real `initBot` against an in-process fake Forge server on 127.0.0.1. It covers the ping, tagHost, the handshake, a REID chunk, inventory and effect, chat both ways, walking and the capture.
   - Reversing the patches makes the chunk tests fail, so they really test the patch.
+- **Verifier pass (adaptive-agents:verifier) on PR #10: PASS WITH ISSUES.** All findings are addressed in a follow-up commit:
+  1. **Medium: a capture leak, reproduced by the verifier.** Parse-error and partial-packet records, and raw buffers inside decoded payloads, were base64-encoded before redaction.
+     - Every Buffer, and every `b64` string, is now redacted inside the JSON replacer.
+     - `test/bridge.test.js` covers each path.
+  2. **Low:** `bot.partialReadErrors` never counted deserializer drops. It now includes the bridge's count.
+  3. **Low:** reassembled FML|MP payloads are now re-emitted as `custom_payload` (spec 1.6). A length mismatch is logged.
+  4. **Low:** the connect wrapper now does nmp's SRV lookup.
+  5. **Low:** undeclared dependencies. See request 3, now listing minecraft-protocol and prismarine-auth too.
+  6. **Info:** chunk bit widths for local writes. Documented under README "Known limits".
 - **Lint:** `npm run lint` gives 259 errors, the baseline. My files add none, and `mcdata.js` stays at its own baseline of 13.
 
 ## Doing
 
-- PR #10 open; verifier pass in progress. Then waiting for batch approval and the FRCFLD login.
+- PR #10 open; waiting for independent-reviewer, batch approval and the FRCFLD login.
 
 ## Next
 
@@ -93,9 +102,9 @@ Both run on the disposable test server only, never the live server, with `deploy
    - It prints Microsoft's instruction: open microsoft.com/link and type the code. Sign in there with the bot account; enter credentials only on Microsoft's page.
    - At the end it prints `Signed in. Minecraft profile: FRCFLD`. Please confirm that the name matches. No agent reads or prints the cache.
 2. **Lead (`settings.js` / profile, your files):** for RotN runs, set `"minecraft_version": "1.12.2"` and `"auth": "microsoft"`. Until then, `initBot` still attaches the bridge in `auto` mode whenever the ping reports FML, and `g1-spike.mjs` sets these itself.
-3. **Lead (`package.json`, optional):** forge-bridge imports three transitive packages of minecraft-protocol: `lodash.merge`, `protodef` and `prismarine-nbt`. The lockfile pins them, so nothing is needed now. Making them direct dependencies would protect against hoisting changes.
+3. **Lead (`package.json`, optional):** forge-bridge depends on packages the root `package.json` does not declare: `minecraft-protocol` (via mineflayer), and `protodef`, `prismarine-nbt`, `lodash.merge` and `prismarine-auth` (via minecraft-protocol). The lockfile pins them, so nothing is needed now. Making them direct dependencies would protect against hoisting changes.
 4. **skills-rotn (later, through the lead):** `bot.forge.bridge.lastKick` carries `{category, fatal, exitCode}` for the `agent.js` kick handler (ADR 0003 decision 5).
 
 ## Open PRs
 
-- #10 G1 spike (offline part): forge-bridge, initBot fixes, REID patches (G1; brief deliverables 1 offline, 2, part of 5). npm test 96/96, lint 259 baseline. Independent verifier pass running.
+- #10 G1 spike (offline part): forge-bridge, initBot fixes, REID patches (G1; brief deliverables 1 offline, 2, part of 5). npm test 101/101, lint 259 baseline. Verifier: PASS WITH ISSUES, all fixed.

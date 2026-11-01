@@ -104,18 +104,23 @@ export function initBot(username) {
     bot._client.write = throttleMovement(bot._client.write.bind(bot._client), { intervalMs: 50 });
 
     // PartialReadError used to be swallowed silently. It is still not fatal, but it
-    // is counted and logged, and forge-bridge keeps the packet in its capture.
+    // is counted and logged. protodef drops packets it cannot read without an
+    // 'error' event, so those are counted by forge-bridge's deserializer hook
+    // (and kept in its capture); 'error' events here come from plugin channels.
     // (protodef's own "partial packet" line: PROTODEF_LOG_PARTIAL=1.)
-    bot.partialReadErrors = 0;
+    let clientPartialReadErrors = 0;
+    Object.defineProperty(bot, 'partialReadErrors', {
+        get: () => clientPartialReadErrors + (forge.bridge?.stats.partialReadErrors ?? 0),
+    });
     const originalEmit = bot._client.emit.bind(bot._client);
     bot._client.emit = function(event, ...args) {
         if (event === 'error' && args[0]) {
             const err = args[0];
             const errStr = err instanceof Error ? err.message : String(err);
             if (errStr.includes('PartialReadError')) {
-                bot.partialReadErrors++;
-                console.warn(`[mcdata] PartialReadError #${bot.partialReadErrors} (not fatal):`, errStr.substring(0, 300));
-                forge.capture?.event('client_partial_read_error', { n: bot.partialReadErrors, message: errStr.substring(0, 300) });
+                clientPartialReadErrors++;
+                console.warn(`[mcdata] PartialReadError #${clientPartialReadErrors} (not fatal):`, errStr.substring(0, 300));
+                forge.capture?.event('client_partial_read_error', { n: clientPartialReadErrors, message: errStr.substring(0, 300) });
                 return true;
             }
         }

@@ -153,8 +153,11 @@ export function attachForgeBridge(client, opts) {
                 const done = multipart.accept(data);
                 decoded = { multipart: done ? 'complete' : 'part', inner: done?.channel };
                 if (done) {
-                    capture?.payload('S2C', `${done.channel}<-FML|MP`, done.data, { reassembled: true });
+                    if (done.filled !== done.data.length) log(`FML|MP ${done.channel}: ${done.filled} bytes received, header said ${done.data.length}`);
+                    capture?.payload('S2C', `${done.channel}<-FML|MP`, done.data, { reassembled: true, filled: done.filled });
                     handlePayload(done.channel, done.data, true);
+                    // Re-emit on the inner channel (spec 1.6) for mineflayer or mod handlers.
+                    client.emit('custom_payload', { channel: done.channel, data: done.data, viaMultipart: true });
                 }
                 break;
             }
@@ -309,7 +312,7 @@ function instrumentDeserializers(client, bridge, capture, log, version) {
                 if (e.partialReadError) bridge.stats.partialReadErrors++;
                 else bridge.stats.parseErrors++;
                 log(`${e.partialReadError ? 'PartialReadError' : 'parse error'} in ${state}.${pname} (${buf.length} bytes): ${String(e.message).slice(0, 160)}`);
-                capture?.record({ kind: 'parse_error', state, name: pname, partial: !!e.partialReadError, message: String(e.message).slice(0, 300), len: buf.length, b64: buf.length <= 65536 ? buf.toString('base64') : null });
+                capture?.record({ kind: 'parse_error', state, name: pname, partial: !!e.partialReadError, message: String(e.message).slice(0, 300), len: buf.length, b64: capture.b64(buf) });
                 bridge.emit('parseError', { state, name: pname, error: e });
                 throw e;
             }
@@ -318,7 +321,7 @@ function instrumentDeserializers(client, bridge, capture, log, version) {
                 const n = (bridge.stats.partialPackets[pname] ?? 0) + 1;
                 bridge.stats.partialPackets[pname] = n;
                 if (n <= 3) log(`partial packet ${state}.${pname}: read ${p.metadata.size} of ${buf.length} bytes`);
-                if (n <= 20) capture?.record({ kind: 'partial_packet', state, name: pname, read: p.metadata.size, len: buf.length, b64: buf.length <= 65536 ? buf.toString('base64') : null });
+                if (n <= 20) capture?.record({ kind: 'partial_packet', state, name: pname, read: p.metadata.size, len: buf.length, b64: capture.b64(buf) });
             }
             return p;
         };

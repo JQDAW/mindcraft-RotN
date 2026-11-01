@@ -106,4 +106,5 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - **nmp protocol cache.** nmp caches compiled protocols by state, direction and version only. The first play-state client for 1.12.2 in a process fixes the overrides for that process. That is fine with one bot per process, which is how Mindcraft runs.
 - **Registry extension.** `bot.registry` is not yet extended (brief item 4). Modded blocks get prismarine-block's fallback: name `''`, bounding box `empty`. Modded items get no name.
 - **FML EntitySpawn** is decoded and emitted, but not yet injected into `bot.entities` (brief item 6).
+- **Chunk bit widths.** A global-palette section is read at the width the packet states. The column's `maxBitsPerBlock` only grows. Reads are correct. Local writes of block ids wider than a section's packet width are untested, but the bot never writes blocks locally.
 - **Book channels.** mineflayer's `MC|BEdit`/`MC|BSign` plugin channels still use the vanilla `slot` type. That only matters for writing books.
