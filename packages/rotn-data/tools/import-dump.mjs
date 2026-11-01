@@ -5,7 +5,8 @@
 //   0. the dumper jar that ran is the expected one: manifest.dumperJar.sha256 must equal
 //      --jar-sha256 (the hash recorded from the dumper-build artifact before the batch);
 //   1. the DONE marker exists (the dumper writes it last) and the manifest is rotn-dump/1
-//      with no errors and Forge 14.23.5.2860;
+//      with no errors, no dropped entries (entryErrors) and Forge 14.23.5.2860; every file in
+//      DUMP_FILES, serializers.json included, is present;
 //   2. every block, item and entity name in the dump is in the server's RegistryData
 //      capture (registry-names.json) and the other way round;
 //   3. every early-game recipe in test/fixtures/scripts-<version>-early-recipes.json is
@@ -79,6 +80,11 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     if (!/^[0-9a-f]{64}$/.test(jarSha256 ?? '')) problems.push('no expected jar SHA-256 given (--jar-sha256 <64 hex>)');
     else if (ranSha !== jarSha256) problems.push(`manifest.dumperJar.sha256 ${ranSha} is not the expected ${jarSha256}`);
     if (m.errors?.length && !allowErrors) problems.push(`manifest lists ${m.errors.length} errors: ${m.errors.join('; ').slice(0, 400)}`);
+    // Entries the dumper dropped inside a part (PR #48): blocking like errors, unless --allow-errors.
+    const dropped = Object.entries(m.entryErrors ?? {}).filter(([, v]) => (v?.count ?? 0) > 0);
+    if (dropped.length && !allowErrors) {
+        problems.push(`manifest lists dropped entries: ${dropped.map(([p, v]) => `${p} ${v.count} (first: ${v.first})`).join('; ').slice(0, 400)}`);
+    }
     if (pin && m.forge !== pin.forge) problems.push(`Forge ${m.forge}, expected ${pin.forge}`);
 
     // 2. names agree with the registry capture
@@ -119,6 +125,7 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     files.entities.entities = sortKeys(files.entities.entities);
     files.oredict.ores = sortKeys(files.oredict.ores);
     files.spawns.biomes = sortKeys(files.spawns.biomes);
+    files.serializers.usage = sortKeys(files.serializers.usage ?? {});
     files.recipes.recipes = [...files.recipes.recipes].sort((a, b) => String(a.id).localeCompare(String(b.id)));
     const written = [];
     for (const f of DUMP_FILES) {

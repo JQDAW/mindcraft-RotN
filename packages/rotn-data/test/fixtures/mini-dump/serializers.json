@@ -1,0 +1,24 @@
+{
+ "format": "rotn-dump/1",
+ "serializers": [
+  {
+   "id": 0,
+   "class": "net.minecraft.network.datasync.DataSerializers$1",
+   "vanilla": true
+  },
+  {
+   "id": 15,
+   "class": "example.ModSerializer",
+   "vanilla": false
+  }
+ ],
+ "usage": {
+  "specialmobs:firecreeper": [
+   {
+    "index": 13,
+    "serializerId": 15,
+    "class": "example.ModSerializer"
+   }
+  ]
+ }
+}

@@ -4,6 +4,13 @@ Agents add items here when they need something only the human can do. The human 
 
 ## Open
 
+- [ ] **CX23 root login:** enter it in Orca's SSH settings for the CX23 (once, for bootstrap). An SSH key is preferred over a password.
+- [ ] **OpenRouter key for the bot:** create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
+- [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
+- [ ] **Whitelist the bot** on the live server when the lead asks (after G3).
+
+## Done
+
 - [x] **Set up an external cron job that triggers the sweeper every 15 min** (rotn-lead, 2026-11-01 13:55 UTC; you chose this option).
   - **Why.** GitHub does not run scheduled workflows on your account at all. The non-fork helper repo also missed 13:18, 13:33 and 13:48, while manual and API dispatch always work. GitHub's status page shows no incident.
   - **About 10 minutes:**
@@ -28,7 +35,6 @@ Agents add items here when they need something only the human can do. The human 
     3. **Test run.** Use cron-job.org's "Test run"; GitHub answers **204** (no content). Within a minute a new `workflow_dispatch` run appears in mindcraft-RotN, Actions, test-server-sweeper.
   - Then tick this box. harness-ops changes the preflight so it accepts a steady cadence: **at least 3 successful dispatched sweeper runs on develop in the last 50 min, roughly 15 min apart**, as well as the sweeper's own scheduled runs. The lead checks the cadence before approving any paid batch.
   - The helper repo `rotn-sweeper-cron` can stay; it costs nothing. If GitHub scheduling recovers, it becomes a second trigger. You may also delete it and revoke its token.
-
 - [x] **Helper repo set up by the human (2026-11-01, about 13:08 UTC).** The lead verified through the API:
   - `JQDAW/rotn-sweeper-cron` is public and not a fork; its secret `SWEEPER_DISPATCH_TOKEN` exists (name only).
   - `dispatch-sweeper` is active, with the expected content.
@@ -70,8 +76,7 @@ Agents add items here when they need something only the human can do. The human 
     5. **Test it once.** In `rotn-sweeper-cron`, Actions, dispatch-sweeper, **Run workflow**. Within a minute a new `workflow_dispatch` run should appear in mindcraft-RotN, Actions, test-server-sweeper.
   - Then tick this box. The lead checks that the helper's scheduled runs fire. harness-ops changes the preflight so it accepts "a successful scheduled run of the helper within 40 min, followed by a sweeper run", in addition to the sweeper's own scheduled runs.
   - Note: GitHub turns off schedules in public repos after 60 days without activity. harness-ops will add a monthly keep-alive or a reminder.
-
-- [ ] **The off-PC sweeper runs far too rarely on its schedule** (rotn-lead, 2026-11-01 02:05 UTC; updated 11:15 UTC).
+- [x] **The off-PC sweeper runs far too rarely on its schedule** (rotn-lead, 2026-11-01 02:05 UTC; updated 11:15 UTC). **Resolved 2026-11-01:** the human set up the cron-job.org dispatch (every 15 min), which the preflight now accepts (PR #21).
   - **Update, 11:15 UTC:** one scheduled run did happen, at 06:30:54 UTC (success). That is the only one in about 10 h on a `*/15` cron, so the schedule is registered but GitHub drops almost every run.
   - The lead has authorized harness-ops to move the cron to off-peak minutes (`7,22,37,52 * * * *`) in a small reviewed PR. Busy :00/:15/:30/:45 marks are a known cause of dropped runs, and merging the change also re-registers the schedule.
   - Steps 1-2 below are still worth a look if you have a minute. If you check the Actions tab, please note here what it shows.
@@ -134,18 +139,11 @@ Agents add items here when they need something only the human can do. The human 
 - [x] **hcloud context**: the human created `mindcraft-rotn-test` (2026-11-01). The lead verified it is active and that `hcloud server list` succeeds with `HCLOUD_TOKEN` unset (the project is empty). Orca terminals do not get the `HCLOUD_TOKEN` user variable; the context replaces it. The token lives in `%APPDATA%\hcloud\cli.toml`, which agents never read.
 - [x] **Orca skip-permissions launch option turned off** by the human (2026-11-01). Earlier, `orca worktree create --agent claude` had added `--dangerously-skip-permissions`; the lead declined that prompt, so nothing ran in bypass mode. The lead still checks each new agent's launch screen.
 - [x] **CPX42 `mindcraft-test-env`**: the human chose to delete it (2026-11-01). The lead deleted server 173843514. Its IPv4 and IPv6 Primary IPs went with it (auto-delete), and the test project is empty.
-- [ ] **Bot Microsoft account: sign in once on this PC** (rotn-lead, 2026-11-01, from the PR #2 review). The test server runs in online mode, so net-forge's G1 spike needs the bot's own Microsoft/Minecraft account signed in on the machine where it runs.
+- [x] **Bot Microsoft account: sign in once on this PC** (rotn-lead, 2026-11-01, from the PR #2 review). The test server runs in online mode, so net-forge's G1 spike needs the bot's own Microsoft/Minecraft account signed in on the machine where it runs. **Done 2026-11-01** (see the FRCFLD device-code item).
   - **Nobody needs your credentials.** You have the bot account's login and rightly keep it out of the repo and the chat. A device-code login means you type the email and password only on Microsoft's own page (microsoft.com/link), never in a terminal, file or chat.
   - **Bot player name: `FRCFLD`** (given by the human, 2026-11-01). harness-ops whitelists FRCFLD and JQDAW on the test server. The bot profile's name must equal `FRCFLD` (PLAN, multi-bot readiness).
   - When net-forge is ready, it will ask you to run a one-time device-code login: open a URL and type a code. The token cache will be written to a folder outside the repo, e.g. `C:\Users\admin\.mindcraft-rotn\<bot>\msa`.
   - Never paste a code or password in chat or in this file.
-- [ ] **CX23 root login:** enter it in Orca's SSH settings for the CX23 (once, for bootstrap). An SSH key is preferred over a password.
-- [ ] **OpenRouter key for the bot:** create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
-- [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
-- [ ] **Whitelist the bot** on the live server when the lead asks (after G3).
-
-## Done
-
 - [x] **GitHub CLI login** on this PC: logged in as JQDAW (verified 2026-10-31). `gh` now defaults to `JQDAW/mindcraft-RotN`.
 - [x] **Node 22 on this PC**: v22.23.4 via nvm-windows (verified 2026-11-01). ADR 0002.
 - [x] **hcloud CLI**: 1.70.2 via winget (verified 2026-11-01).

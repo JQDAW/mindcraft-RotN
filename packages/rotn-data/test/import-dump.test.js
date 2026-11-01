@@ -68,6 +68,20 @@ test('the dumper jar must be the expected one (PR #47 review)', () => {
     }
 });
 
+test('dropped entries (manifest.entryErrors) block the import unless allowErrors', () => {
+    const { root, src, pack } = fakeFetch({ mutate: (f) => { f.manifest.entryErrors = { items: { count: 2, first: 'entry 7: java.lang.NullPointerException' } }; } });
+    try {
+        const res = importDump({ src, jarSha256: JAR, outDir: pack });
+        assert.deepEqual(res.written, []);
+        assert.match(res.problems.join('\n'), /dropped entries: items 2 \(first: entry 7/);
+        const ok = importDump({ src, jarSha256: JAR, outDir: pack, allowErrors: true });
+        assert.deepEqual(ok.problems, []);
+        assert.ok(ok.written.some(p => p.endsWith('serializers.json')));
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('the manifest records the SHA-256 of every raw file', () => {
     const { root, src, pack } = fakeFetch();
     try {
@@ -75,8 +89,18 @@ test('the manifest records the SHA-256 of every raw file', () => {
         assert.deepEqual(res.problems, []);
         const m = JSON.parse(fs.readFileSync(path.join(pack, 'manifest.json'), 'utf8'));
         assert.equal(m.import.expectedJarSha256, JAR);
-        assert.ok(m.import.rawSha256.DONE && m.import.rawSha256['blocks.json']);
+        assert.ok(m.import.rawSha256.DONE && m.import.rawSha256['blocks.json'] && m.import.rawSha256['serializers.json']);
         assert.match(m.import.rawSha256['blocks.json'], /^[0-9a-f]{64}$/);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a dump without serializers.json is refused', () => {
+    const { root, src, pack } = fakeFetch();
+    try {
+        fs.rmSync(path.join(src, 'serializers.json'));
+        assert.throws(() => importDump({ src, jarSha256: JAR, outDir: pack }), /missing serializers\.json/);
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }

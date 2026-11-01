@@ -35,8 +35,13 @@ final class SpawnDumper extends Part<Biome> {
     }
 
     @Override
+    protected String key(Biome b) {
+        return b.getRegistryName().toString();
+    }
+
+    @Override
     protected boolean entry(JsonWriter w, Biome b) throws IOException {
-        w.name(b.getRegistryName().toString()).beginObject();
+        w.beginObject();
         for (EnumCreatureType type : EnumCreatureType.values()) {
             w.name(type.name().toLowerCase(Locale.ROOT)).beginArray();
             List<Biome.SpawnListEntry> list = J.get(() -> new ArrayList<>(b.getSpawnableList(type)));

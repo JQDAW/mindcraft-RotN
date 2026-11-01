@@ -106,8 +106,12 @@ final class BlockDumper extends Part<Block> {
     }
 
     @Override
+    protected String key(Block b) {
+        return b.getRegistryName().toString();
+    }
+
+    @Override
     protected boolean entry(JsonWriter w, Block b) throws IOException {
-        w.name(b.getRegistryName().toString());
         writeBlock(w, b);
         return true;
     }

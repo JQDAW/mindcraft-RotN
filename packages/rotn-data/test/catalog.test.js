@@ -102,6 +102,8 @@ test('smelting and entities', () => {
     assert.equal(mini.entityByModId('specialmobs', 7).name, 'specialmobs:firecreeper');
     assert.equal(mini.entityByModId('specialmobs', 8), null);
     assert.deepEqual(mini.modEntityTable(), { specialmobs: { 7: 'specialmobs:firecreeper' } });
+    assert.equal(mini.serializers().serializers.find(s => s.id === 15).vanilla, false);
+    assert.equal(mini.serializers().usage['specialmobs:firecreeper'][0].serializerId, 15);
     assert.equal(mini.entity('nope:nope'), null);
 });
 

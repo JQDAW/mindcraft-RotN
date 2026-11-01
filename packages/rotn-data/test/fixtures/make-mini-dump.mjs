@@ -75,6 +75,9 @@ const files = {
     'smelting.json': { format: 'rotn-dump/1', smelting: [
         { input: st('contenttweaker:raw_iron'), output: { name: 'minecraft:iron_ingot', meta: 0, count: 1 }, xp: 0.7 },
     ] },
+    'serializers.json': { format: 'rotn-dump/1',
+        serializers: [{ id: 0, class: 'net.minecraft.network.datasync.DataSerializers$1', vanilla: true }, { id: 15, class: 'example.ModSerializer', vanilla: false }],
+        usage: { 'specialmobs:firecreeper': [{ index: 13, serializerId: 15, class: 'example.ModSerializer' }] } },
     'spawns.json': { format: 'rotn-dump/1', biomes: {
         'minecraft:plains': { monster: [{ entity: 'minecraft:zombie', weight: 95, min: 4, max: 4 }], creature: [{ entity: 'minecraft:cow', weight: 8, min: 4, max: 4 }], ambient: [], water_creature: [] },
     } },

@@ -6,9 +6,14 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 
 ## Done
 
-- **#34 merged** (`3158776`): the dumper mod, `tools/dumper/`. It is opt-in, writes in batches of at most 500 entries per tick with `.tmp` + rename and `DONE` last, and builds with ForgeGradle 3.0.197 (the lead accepted it and writes the ADR 0004 addendum).
+- **#34 merged** (`3158776`): the dumper mod, `tools/dumper/`. It is opt-in, writes in batches with `.tmp` + rename and `DONE` last, and builds with ForgeGradle 3.0.197 (the lead accepted it and writes the ADR 0004 addendum).
 - **#37 merged** (`441020b`): `packages/rotn-data`, with translation, catalog, importer and the scripts cross-check fixture.
-- **First RotN 3.3.4 dump batch: PASS** (lead's written GO, 2026-11-01 about 19:24 UTC, before the server was created at 19:25:54; record below). Imported in PR #47.
+- **#43 merged**: translation follow-ups 4-6 (reverse coverage, strict block metas, the export-contract test).
+- **#44 merged**: brief item 4. The `mcdata.js` helpers read `bot.registry` (via #46's `mcdata = bot.registry`); `toNew`/`toOld` are the agent's naming API; `resolveName` handles the names that mean different things in 1.12 and 1.21. Lint baseline 255.
+- **#47 merged** (`7978d27`): the first dump import, `common-mobs.json`, acceptance tests on.
+- **#48 merged** (`7f0feef`): the dumper's per-tick time cap, per-entry isolation and `serializers.json`; the importer requires `serializers.json` and blocks on `entryErrors`.
+- **First RotN 3.3.4 dump batch: PASS** (lead's written GO, 2026-11-01 about 19:24 UTC, before the server was created at 19:25:54; record below).
+- **Second dump batch (serializers): PASS** (lead's written GO 21:23 UTC; record below). It is imported in PR #55, which replaces the first dump.
 - Re-checked against the pinned 3.3.4 zip (`unzip -p` into a scratch folder outside the repo; nothing run): the early recipes (file:line in `packages/rotn-data/test/fixtures/scripts-3.3.4-early-recipes.json`), the mining level names, and the section-4 names. Stone Kiln is `pyrotech:stone_kiln`; the bundle is `bundles:bundle`.
 
 ## Dump batch record (2026-11-01)
@@ -49,18 +54,65 @@ Known gaps, pinned in `packages/rotn-data/test/fixtures/harvest-known-gaps-3.3.4
 
 None is a natural surface block. 20 recipes do not match their own sample grid (`matchesSample: false`); they are for skills-rotn to check if one matters.
 
+## Second dump batch record (serializers dump, 2026-11-01)
+
+| Item | Value |
+| --- | --- |
+| GO | lead's written GO, 21:23 UTC (second dump batch, the same plan with the new jar) |
+| Checkout | separate scratch worktree, detached at origin/develop `7f0feef` (#48); removed afterwards |
+| Jar | dumper-build push run **41351598338** (develop `7f0feef`, success), `rotndump-0.1.0.jar`, 58,632 bytes, SHA-256 `438b3ce64107f680ea7eefe6d143234b12eb140f89f4fd12d3ca3e72e8a47d33`, recorded at 21:23:27, before the batch |
+| Command | `timeout -s TERM -k 120 2700 deploy/test-server.sh run --type cpx42 --location nbg1 --ttl-hours 2 --yes --extra-mod <jar> -- bash tools/dumper/run-dump.sh <scratch out>`; `deploy/test-server.sh` unchanged |
+| Preflight | passed on its own: "sweeper OK: scheduled run 41351011439 on JQDAW/mindcraft-RotN succeeded 8 min ago (limit 120 min)". No `--skip-sweeper-check`. |
+| Before (21:23:27) | server, Primary IP and labelled SSH key lists empty |
+| Times (UTC) | command start 21:23:43; create `mcr-test-20261101-212345` (id 174032053, CPX42, nbg1) 21:23:50; jar uploaded 21:25:01; ready 21:26:57; `rotndump` scheduled 21:26:59; `DONE` about 21:27:04 (5,300 ms after scheduling); delete started 21:27:29; server, Primary IPv4 and SSH key verified gone 21:27:46 |
+| Duration and cost | 4 min 3 s; 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. Primary IPv4); maximum was EUR 0.28 + IPv4 |
+| After (21:27:56) | server, Primary IP and labelled SSH key lists all empty |
+| Manifest | `dumperJar.sha256` = `438b3ce6...7d33`, **matches**; Forge 14.23.5.2860; 347 mods; **0 errors, 0 entryErrors** |
+| Raw output | `rotn-dump/` and `latest.log` in my scratchpad, out of git |
+
+`manifest.timing` (batch 500, tick budget 40 ms). The dumper records total ms and ticks per part, **not the max of a single tick**, so the average per tick is shown. A tick can exceed 40 ms by at most the time of one entry, because the cap is checked after each entry; serializers averaged 45 ms. A per-part `maxTickMs` is a dumper follow-up.
+
+| Part | Entries | ms | Ticks | Avg ms/tick |
+| --- | --- | --- | --- | --- |
+| oredict | 2347 | 36 | 5 | 7 |
+| blocks | 4896 | 523 | 14 | 37 |
+| items | 9710 | 745 | 27 | 28 |
+| recipes | 6089 | 531 | 24 | 22 |
+| smelting | 1530 | 38 | 4 | 10 |
+| entities | 971 | 43 | 2 | 22 |
+| spawns | 175 | 41 | 1 | 41 |
+| serializers | 3 entities with modded keys (971 constructed) | 1168 | 26 | 45 |
+
+**DataSerializer ids** (`serializers.json`, for net-forge):
+
+| Id | Class | Mod |
+| --- | --- | --- |
+| 14 | `com.fuzs.aquaacrobatics.network.datasync.PoseSerializer$1` | AquaAcrobatics (pose) |
+| 15 | `com.teamacronymcoders.base.entities.dataserializers.ResourceLocationDataSerializer` | Base (teamacronymcoders) |
+| 16 | `com.bobmowzie.mowziesmobs.server.ServerProxy$1` | Mowzie's Mobs |
+| 17 | `pl.asie.charset.lib.utils.DataSerializersCharset$1` | Charset |
+| 18 | `requious.util.ExtraSerializers$1` | Requious |
+| 256 | `doggytalents.serializers.TalentListSerializer` | Doggy Talents (Forge registry) |
+| 257 | `doggytalents.serializers.OptionalTextComponentSerializer` | Doggy Talents (Forge registry) |
+
+Ids 0-13 are vanilla. Registered entities that use a modded serializer: `doggytalents:dog` (index 21 → 256, index 30 → 257), `mowziesmobs:barakoaya` (index 16 → 16), `requious:spear` (index 8 → 18). No registered entity uses 14, 15 or 17. Players are not in the entity registry, so AquaAcrobatics' 14 (the player pose) does not show up in `usage`.
+
+**First vs second dump:** the same names, counts, cross-checks and known harvest gaps. The differences are almost all list order: mods that keep ore lists, ingredient stacks, MultiMob spawn lists and rats-nugget furnace recipes in hash sets, so their order changes on every server start. The spawn lists are identical once each list is sorted. Two values really differ, both world- or random-dependent: `betterwithaddons:world_scale_ore` hardness (225 vs 15) and `randomthings:spectrecoil_number`. An importer follow-up will sort those lists, so dumps diff cleanly.
+
 ## Doing
 
-- PR #43: translation follow-ups 4, 5 and 6.
-- PR #44: brief item 4, the `mcdata.js` helpers (`useBotRegistry`, `resolveName`; follow-up 3 documented there). It needs Request 4 and the lint baseline decision (Request 6).
-- Next, in a later PR: the #34 review follow-ups 1-3 (from the lead), and the dumper gaps above (default-state fallback, item-based hardness).
+- **PR #55**: the second dump's import (replaces the first; adds `serializers.json`), plus the #47 review follow-ups (the `--jar-sha256` check, raw file SHA-256s, brotli above 1 MiB, `harvestInfo('stone').level === 0`) and the GO-time correction.
 
-## Follow-ups
+## Follow-ups (later PRs)
 
-- **3** (PR #37 review): the meaning of names valid in both versions. Resolved in #44 by `resolveName`: 1.12 meaning by default (`grass`, `stone_slab`, `snow`, `melon`, `nether_brick`), and `prefer: 'new'` for names the LLM wrote. skills-rotn: Mindcraft's `'grass'` in `skills.js:706` means the plant (`tallgrass` in 1.12).
-- **4, 5, 6**: in PR #43.
-- **#34 review follow-ups 1-3**: a later dumper PR.
-- **#47 review follow-ups**: done in PR "rotn-data: import follow-ups" (raw file SHA-256s in `manifest.import.rawSha256`; `--jar-sha256` required and checked; brotli above 1 MiB; `harvestInfo('stone').level === 0`). The first dump was re-imported from the raw files: the data content is identical, only the manifest changed and `spawns.json` became `spawns.json.br`.
+- **Importer:** sort order-unstable lists (ore stacks, ingredient stacks, spawn lists, furnace recipes) so two dumps diff cleanly.
+- **Dumper:**
+  - record `maxTickMs` per part;
+  - default-state fallback for the 9 blocks without a metadata-consistent state;
+  - item-based hardness for the 30 null-hardness tile-entity states (5 blocks).
+- **#34 review follow-up 3:** expand the wildcard meta 32767 in recipe stacks at import.
+- **net-forge:** the `extendRegistry`/`applyProperties` properties from the dump (Request 2).
+- **skills-rotn:** Mindcraft's `'grass'` in `skills.js:706` means the plant (`tallgrass` in 1.12). `resolveName(name, kind, { prefer: 'new' })` is for names the LLM wrote.
 
 ## Blocked
 
@@ -69,14 +121,17 @@ None is a natural surface block. 20 recipes do not match their own sample grid (
 ## Requests to other agents or the lead
 
 1. ~~harness-ops: dumper-build workflow~~: done (#40).
-2. **net-forge: properties for `extendRegistry`.** The dump now exists. I will build `properties` (blocks: `hardness`, `resistance`, `material` mapped to prismarine strings, `diggable`, `boundingBox`, `harvestTools`; items: `stackSize`, `maxDurability`; entities: `type`) keyed by full registry name. `harvestTools` needs bot.registry item ids, so it is built after your extension: a second `extendRegistry(..., { properties })` call, or an `applyProperties(registry, properties)` from you. Which do you prefer? `modEntityTable()` from `packages/rotn-data` gives `{modId: {modEntityTypeId: name}}`, and every modded entity in the dump has one.
-3. ~~harness-ops: G2 naming adapter~~: agreed and adopted (PR #36). `common-mobs.json` now exists (`mobs[].name`; 12 of the first 12 are real entities, with modded mobs among them).
-4. **net-forge or skills-rotn: one line, `useBotRegistry(bot)`**, after `initBot` (in `initBot`'s `login` handler, or in `agent.js` right after `initBot`). It makes the `mcdata.js` helpers read `bot.registry` (PR #44). Until then they read vanilla data.
+2. **net-forge: properties for `bot.registry`.** The dump exists. I can build `properties` for your `applyProperties` (#46), keyed by full registry name:
+   - blocks: `hardness`, `resistance`, `material` mapped to prismarine strings, `diggable`, `boundingBox`, `harvestTools`;
+   - items: `stackSize`, `maxDurability`;
+   - entities: `type`.
+
+   Tell me the exact field set you want. `modEntityTable()` gives `{modId: {modEntityTypeId: name}}`. `serializers()` gives the DataSerializer table (ids 14-18 and 256/257 are in the second-dump record above).
+3. ~~harness-ops: G2 naming adapter~~: done (PR #36). `common-mobs.json` exists.
+4. ~~net-forge: initBot uses bot.registry~~: done (#46).
 5. ~~Lead: ADR 0004 addendum (FG3)~~: accepted; the lead writes it.
-6. **Lead: lint baseline for #44.** #44 removes 2 upstream errors in `mcdata.js` (257 to 255). The ratchet needs `test/lint-baseline.json` lowered, and that file is harness-ops'. May I commit the `--update` (lowering only), or will you?
+6. ~~Lead: lint baseline for #44~~: approved and done (255).
 
 ## Open PRs
 
-- "rotn-data: first RotN 3.3.4 dump" (the dump import, `common-mobs.json`, acceptance tests on).
-- #43 translation follow-ups 4-6.
-- #44 `mcdata.js` helpers on `bot.registry` (brief item 4).
+- #55: the second dump's import, plus the #47 follow-ups and the GO-time fix.
