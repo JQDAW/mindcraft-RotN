@@ -24,7 +24,7 @@ All files are redacted with the merged `test/tools/redact-evidence.mjs`, and `te
   - Deleted by the EXIT trap and verified gone at 23:39:57: up 9 min (hard stop 56).
 - **Cost:** 1 billed hour, about EUR 0.14 (EUR 0.1381 excl. Primary IPv4).
 - **Afterwards:** at 23:40:12 UTC, `hcloud server list`, `hcloud primary-ip list` and the labelled `ssh-key list` were all empty.
-- **Console:** `gamerule doDaylightCycle false` once, `time set day` before each of the three scenarios, then the runner's scenario commands. Test server only, no difficulty change.
+- **Console:** `gamerule doDaylightCycle false` once, `time set day` before each of the three scenarios, then the runner's scenario commands. The `time set day` lines are only in the raw server log (not committed): each `server.log` here starts at its scenario's begin marker. Test server only, no difficulty change.
 - **World seed:** 3236084396548950896.
 
 | Scenario | Time (UTC) | Verdict | Checks |
