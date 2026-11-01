@@ -171,7 +171,7 @@ The review findings on PR #10, numbered as in the review comment:
 
 ## Doing
 
-- PR for brief item 4 (registry extension) open. **Batch A waits for the lead's written go-ahead** (the last blocker is PR #21, the preflight fix; the external sweeper cron is live).
+- PR #25 (brief item 4, registry extension) open. **Batch A waits for the lead's written go-ahead** (the last blocker is PR #21, the preflight fix; the external sweeper cron is live).
 
 ## Next
 
@@ -236,4 +236,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15, #16, #18, #19, #23 and #24 merged.) New PR: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. `npm test` 239/239; lint 257.
+- (#15, #16, #18, #19, #23 and #24 merged.) #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. `npm test` 239/239; lint 257.
