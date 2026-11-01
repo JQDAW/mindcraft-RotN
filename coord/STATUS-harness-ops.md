@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (22:30 UTC)
+Updated: 2026-11-01 (22:31 UTC, from `date -u`)
 
 ## Done
 
@@ -90,13 +90,66 @@ Updated: 2026-11-01 (22:30 UTC)
 
 ## Doing
 
-- **G2 batch plan** (below, under "Planned real batches"): reviewed (APPROVE WITH NITS), amended with the review's five points. Not to be run without the lead's written GO, once every precondition is met.
-- **Small follow-ups PR:** the `agentNaming` child process gets a minimal environment (lead, after #36); `walk()` returns `method: 'forward+jump+turn'` (net-forge's request; their test accepts it since #38).
-- **Next, before the first real CX23 run (lead, PR #30 re-review):** check-env allowlists the variable NAMES allowed in the per-bot env file and refuses any other (e.g. `NODE_TLS_REJECT_UNAUTHORIZED`, `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`, `LD_PRELOAD`, `NODE_EXTRA_CA_CERTS`).
+- **G2 batch 1 ran on the lead's GO (22:03 UTC) and FAILED; the server is deleted.** Details are under "Real G2 batches" below. Items passed. Blocks failed on a reply-parser bug (fixed in #64) plus Dynamic Trees state drift. Mobs failed on three mob-list and scenario issues. A re-run needs #64, the lead's decisions on findings 2-5, and a new written GO.
+- **G2 evidence PR:** the redaction tool and its CI check over `test/evidence/g2/**` are drafted and tested. Addresses are redacted only in log context, and the version strings are allowlisted, both tested. On the real logs no leftovers remain and the mod lists stay intact.
+- **#58 (check-env-names):** the review fix is at a713e50 and CI is green. It fails closed on a missing or unreadable file, and PROFILES and port values are validated.
 
 ## Watching
 
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
+
+## Real G2 batches
+
+### G2 batch 1 (2026-11-01): FAIL; the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 22:03 UTC.
+- **Code:** a clean detached checkout of develop at 36d7ee8, after `npm ci`. All three `result.json` show `git.dirty: false` and `untracked: 0`.
+- **Checks right before the create, all passed:**
+  - `agentNaming('.')`: `wired: true`, all 643 entries round-trip.
+  - `msa-login FRCFLD --check`: OK. Its output is not recorded.
+  - The preflight on its own (`up --dry-run`): sweeper OK via path (a), a scheduled run 54 min old; no leftover labelled resources.
+- **Command:** the planned one, unchanged (one CPX42, nbg1, `--ttl-hours 2`). No `--skip-sweeper-check`.
+- **Console:** only `time set day` and `gamerule doDaylightCycle false`, plus the runner's scenario commands. Nothing on the live server.
+
+**Real times (UTC)**
+
+| Event | Time |
+| --- | --- |
+| Batch start | 22:10:12 |
+| Server created | 22:10:20 |
+| Ready | 22:13:02 |
+| `g2-blocks-named` | 22:13:10 to 22:20:18 (425 s) |
+| `g2-mobs-named` | 22:20:18 to 22:22:07 (106 s) |
+| `g2-items-roundtrip` | 22:22:07 to 22:23:58 (108 s) |
+| EXIT-trap teardown | started 22:24:07; "verified gone" 22:24:20 |
+
+- **Server up:** 14 min (plan about 37, hard stop 56).
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. IPv4), plus 1 Primary IPv4-hour.
+- **Afterwards:** at 22:24:37 UTC, `hcloud server list`, `hcloud primary-ip list` and the labelled `ssh-key list` were all empty.
+
+**Results** (`captures/raw/g2-*/result.json`). Every run had `gateValid: true`, `weakenedParams: []`, no `notGate` reasons and no kicks.
+
+| Scenario | Verdict | Checks |
+| --- | --- | --- |
+| `g2-items-roundtrip` | **PASS** | all 5 passed. `items_table`: 643/643. `items_read`, `items_named`, `items_roundtrip`: 30/30. |
+| `g2-blocks-named` | FAIL | `login_online` and `blocks_named` passed (50 non-air types). `blocks_confirmed` failed (0/150). `blocks_spotcheck` failed (0 of 40; it stopped after 16 positions and 10 failures). |
+| `g2-mobs-named` | FAIL | `login_online` passed. `mobs_named` failed (9/12). `mobs_confirmed` failed (10/12). |
+
+**Findings**
+1. **Parser bug, fixed in #64.** The server prints `Successfully found the block at -38, 72, -58`: commas with spaces, no full stop. The parser expected the lang form `x,y,z.`, so every confirmation counted as a failure. This was a false fail, never a false pass. The server log has 158 success lines out of 166 `testforblock` calls.
+2. **Dynamic Trees state drift** (needs a decision). The other 8 replies were `had the data value of N (expected: M)`, all on `dynamictrees`/`dynamictreesbop` leaves and branches.
+   - In every case the name was right; only the meta differed (for example 14 against 6, the 8 bit).
+   - These blocks change state over time, and the samples were checked 2-5 min after the census.
+   - So even with #64, `blocks_confirmed` would be 142/150 and still fail under the exact rule.
+   - **Proposal:** re-ask the bot for each sample position right before its `testforblock`, and require (a) the fresh answer to equal the server exactly and (b) the fresh name to equal the census name. Every verdict stays the server's, comparing the same moment.
+3. **Vanilla animals that can't exist in RotN** (needs a decision). The server refused to summon `minecraft:chicken` and `minecraft:pig` (`Unable to summon object`); Animania probably replaces vanilla animals as they join. They come from `common-mobs.json` (rotn-data, built from spawn lists). **Proposal:** either rotn-data drops mobs that can't be summoned, or the scenario replaces a refused summon with the next mob in rank and notes it. A refusal is the server's, not the bot's.
+4. **`charm:spectre`** (needs a decision). It was summoned but was gone before the bot looked (`kill` didn't find it either). It probably vanishes in daylight. **Proposal:** right before asking the bot, `testfor` each summoned entity; any the server no longer has are replaced and noted, and the bot must report all the rest.
+5. **`mobs_confirmed` checked ambient mobs** (needs a decision). It ran `testfor` on every entity the bot reported, including two untagged, never-summoned Animania animals (`cow_angus`, `calf_angus`) that had walked out of the 3-block radius by then. **Proposal:** confirm only the summoned, run-tagged entities (`@e[tag=<run tag>,type=...]`); other reports go to notes.
+6. **Time Shall Not Pass re-enables the daylight cycle on each player connect** (FYI). It logged "Daylight Cycle Module: The daylight cycle has been enabled" at each join, so `gamerule doDaylightCycle false` did not hold. **Proposal:** approve `time set day` before each scenario for the re-run (test server only).
+7. **A pack mod runs commands as the player on join** (FYI, not ours). The log shows `[FRCFLD: Game rule commandBlockOutput/sendCommandFeedback has been updated to false]`, and on the first join also `Given [Bread]` / `Given [Bundle]`. `git grep` finds neither gamerule in this repo. The runner's console replies were unaffected.
+
+**Evidence:** raw output is in `captures/raw/g2*` (git-ignored). The redacted `test/evidence/g2/` comes in the evidence PR.
 
 ## Planned real batches
 
@@ -193,7 +246,7 @@ Nothing about crafting, survival or reconnects.
 
 ## Blocked
 
-- Nothing. The G2 batch waits for #47, the driver agreement and the lead's GO.
+- **G2 re-run:** waits for #64, the lead's decisions on findings 2-6 of G2 batch 1, and a new written GO.
 
 ## Requests to other agents or the lead
 
@@ -216,6 +269,7 @@ Nothing about crafting, survival or reconnects.
 
 ## Open PRs
 
-- This status update with the G2 batch plan (`agent/harness-ops/status-g2-plan`).
-- #53 (`agent/harness-ops/g2-followups`): the minimal environment for `agentNaming`, and `walk()` `method`.
-- #57 (`agent/harness-ops/g2-unloaded`): the census waits for the cube's chunks; unloaded positions are counted apart, never as a block type.
+- This status update with the G2 batch 1 report (`agent/harness-ops/status-g2-batch1`).
+- #58 (`agent/harness-ops/check-env-names`): the env file's variable names allowlisted as root, and the deny list in check-env. The review fix is at a713e50; CI is green.
+- #64 (`agent/harness-ops/g2-reply-formats`): parse `testforblock` replies in the real server's form.
+- Merged since the last update: #51 (the G2 plan), #53, #57.
