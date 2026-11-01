@@ -8,10 +8,56 @@ import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
 import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry } from '../../packages/forge-bridge/index.js';
+import { toOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
 let Item = null;
+
+// rotn-data brief item 4: the name and registry helpers read the bot's own registry
+// (bot.registry, which forge-bridge extends with the Forge-synced modded ids, ADR 0003
+// decision 4) once useBotRegistry(bot) has been called, and minecraft-data's vanilla copy
+// before that. The registry is read lazily: mineflayer creates bot.registry at login.
+let registryBot = null;
+const reg = () => registryBot?.registry ?? mcdata;
+
+/** Make the helpers below read `bot.registry` (call once after initBot). */
+export function useBotRegistry(bot) {
+    registryBot = bot ?? null;
+}
+
+/**
+ * Resolve a block or item name to the name the bot's registry uses, plus metadata.
+ * Accepts 1.12 names ("log", "log:1", "minecraft:log"), modded names ("pyrotech:rock",
+ * "pyrotech:rock:6") and 1.21-style names ("oak_log", "short_grass"), via rotn-data.
+ *
+ * Order (rotn-data follow-up 3): with prefer 'old' (the default), a name the registry has as is
+ * wins, so a name valid in both versions keeps its 1.12 meaning: grass (the grass block, not the
+ * plant), stone_slab (the smooth slab), snow (the snow block), melon (the slice), nether_brick
+ * (the block). Otherwise the 1.21 name is translated. prefer 'new' translates first; the command
+ * boundary uses it for names the LLM wrote (skills-rotn).
+ * @param {string} name
+ * @param {'items'|'blocks'} [kind]
+ * @param {{prefer?: 'old'|'new'}} [opts]
+ * @returns {{name: string, meta: number|null}|null} meta is null when the name carried none
+ */
+export function resolveName(name, kind = 'items', { prefer = 'old' } = {}) {
+    const byName = reg()?.[`${kind}ByName`];
+    if (!byName || typeof name !== 'string') return null;
+    const direct = () => {
+        const p = parseOld(name);
+        const n = p && botName(p.name);
+        return n && byName[n] ? { name: n, meta: p.meta } : null;
+    };
+    const translated = () => {
+        const t = kind === 'blocks' ? blockToOld(name)[0] : toOld(name);
+        const n = t && botName(t.name);
+        return n && byName[n] ? { name: n, meta: t.meta } : null;
+    };
+    return prefer === 'new' ? (translated() ?? direct()) : (direct() ?? translated());
+}
+
+const idOf = (v) => (v !== null && typeof v === 'object' ? v.id : v);
 
 /**
  * @typedef {string} ItemName
@@ -193,15 +239,13 @@ export function mustCollectManually(blockName) {
 }
 
 export function getItemId(itemName) {
-    let item = mcdata.itemsByName[itemName];
-    if (item) {
-        return item.id;
-    }
-    return null;
+    const r = resolveName(itemName, 'items');
+    return r ? reg().itemsByName[r.name].id : null;
 }
 
+// Also takes a 1.12 recipe ingredient object {id, metadata} (seam map: those dropped out).
 export function getItemName(itemId) {
-    let item = mcdata.items[itemId]
+    let item = reg().items[idOf(itemId)];
     if (item) {
         return item.name;
     }
@@ -209,15 +253,12 @@ export function getItemName(itemId) {
 }
 
 export function getBlockId(blockName) {
-    let block = mcdata.blocksByName[blockName];
-    if (block) {
-        return block.id;
-    }
-    return null;
+    const r = resolveName(blockName, 'blocks');
+    return r ? reg().blocksByName[r.name].id : null;
 }
 
 export function getBlockName(blockId) {
-    let block = mcdata.blocks[blockId]
+    let block = reg().blocks[idOf(blockId)];
     if (block) {
         return block.name;
     }
@@ -225,7 +266,9 @@ export function getBlockName(blockId) {
 }
 
 export function getEntityId(entityName) {
-    let entity = mcdata.entitiesByName[entityName];
+    if (typeof entityName !== 'string') return null;
+    const p = parseOld(entityName);
+    let entity = reg().entitiesByName[entityName] ?? (p && reg().entitiesByName[botName(p.name)]);
     if (entity) {
         return entity.id;
     }
@@ -237,8 +280,9 @@ export function getAllItems(ignore) {
         ignore = [];
     }
     let items = []
-    for (const itemId in mcdata.items) {
-        const item = mcdata.items[itemId];
+    const all = reg().items;
+    for (const itemId in all) {
+        const item = all[itemId];
         if (!ignore.includes(item.name)) {
             items.push(item);
         }
@@ -260,8 +304,9 @@ export function getAllBlocks(ignore) {
         ignore = [];
     }
     let blocks = []
-    for (const blockId in mcdata.blocks) {
-        const block = mcdata.blocks[blockId];
+    const all = reg().blocks;
+    for (const blockId in all) {
+        const block = all[blockId];
         if (!ignore.includes(block.name)) {
             blocks.push(block);
         }
@@ -279,17 +324,18 @@ export function getAllBlockIds(ignore) {
 }
 
 export function getAllBiomes() {
-    return mcdata.biomes;
+    return reg().biomes;
 }
 
 export function getItemCraftingRecipes(itemName) {
     let itemId = getItemId(itemName);
-    if (!mcdata.recipes[itemId]) {
+    const allRecipes = reg().recipes ?? {};
+    if (!allRecipes[itemId]) {
         return null;
     }
 
     let recipes = [];
-    for (let r of mcdata.recipes[itemId]) {
+    for (let r of allRecipes[itemId]) {
         let recipe = {};
         let ingredients = [];
         if (r.ingredients) {
@@ -393,7 +439,8 @@ export function getItemAnimalSource(itemName) {
 }
 
 export function getBlockTool(blockName) {
-    let block = mcdata.blocksByName[blockName];
+    const r = resolveName(blockName, 'blocks');
+    let block = r ? reg().blocksByName[r.name] : null;
     if (!block || !block.harvestTools) {
         return null;
     }
@@ -401,7 +448,8 @@ export function getBlockTool(blockName) {
 }
 
 export function makeItem(name, amount=1) {
-    return new Item(getItemId(name), amount);
+    const r = resolveName(name, 'items');
+    return new Item(r ? reg().itemsByName[r.name].id : null, amount, r?.meta ?? 0);
 }
 
 /**
