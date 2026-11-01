@@ -48,11 +48,19 @@ export async function awaitReply(ctx, sinceMarker, bot, kind, token, timeoutMs) 
 const msgs = (lines) => lines.map((l) => parseLine(l)?.msg ?? l);
 const firstOther = (lines) => msgs(lines).find(Boolean) ?? 'no answer from the server';
 
+// The coordinates as the server prints them. The first real G2 run (RotN 3.3.4, 2026-11-01) printed
+// "Successfully found the block at -38, 72, -58" and "The block at -59, 88, -77 had the data value of 6
+// (expected: 14)": ", " between the numbers and no final full stop, unlike the en_us lang key
+// ("%s,%s,%s."). Both forms are accepted; the numbers must be exactly these.
+const at = (x, y, z) => `${x}, ?${y}, ?${z}`;
+
 /** testforblock X Y Z NAME META: {ok, detail}. ok only on the exact success line for these coordinates. */
 export function testforblockVerdict(lines, [x, y, z]) {
+    const found = new RegExp(`^Successfully found the block at ${at(x, y, z)}\\.?$`);
+    const other = new RegExp(`^The block at ${at(x, y, z)} `);
     for (const m of msgs(lines)) {
-        if (m === `Successfully found the block at ${x},${y},${z}.`) return { ok: true, detail: 'found' };
-        if (m.startsWith(`The block at ${x},${y},${z} `)) return { ok: false, detail: m };
+        if (found.test(m)) return { ok: true, detail: 'found' };
+        if (other.test(m)) return { ok: false, detail: m };
     }
     return { ok: false, detail: firstOther(lines) };
 }

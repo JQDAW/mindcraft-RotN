@@ -94,9 +94,10 @@ function sim(opt = {}) {
                 const [x, y, z] = [m[1], m[2], m[3]].map(Number);
                 const b = blockAtWorld(x, y, z);
                 const want = m[4].includes(':') ? m[4] : `minecraft:${m[4]}`;
-                if (b.name !== want) add(`The block at ${x},${y},${z} is ${b.name} (expected: ${want}).`);
-                else if (b.meta !== Number(m[5])) add(`The block at ${x},${y},${z} had the data value of ${b.meta} (expected: ${m[5]}).`);
-                else add(`Successfully found the block at ${x},${y},${z}.`);
+                // The forms the real RotN 3.3.4 server printed in the first G2 run (", ", no full stop).
+                if (b.name !== want) add(`The block at ${x}, ${y}, ${z} is ${b.name} (expected: ${want})`);
+                else if (b.meta !== Number(m[5])) add(`The block at ${x}, ${y}, ${z} had the data value of ${b.meta} (expected: ${m[5]})`);
+                else add(`Successfully found the block at ${x}, ${y}, ${z}`);
             } else if ((m = /^testfor @e\[type=([^,]+),x=(-?\d+),y=(-?\d+),z=(-?\d+),r=(\d+)\]$/.exec(cmd))) {
                 const c = new Vec3(Number(m[2]), Number(m[3]), Number(m[4]));
                 const e = entities.find((x) => x.reg === m[1] && x.position.distanceTo(c) <= Number(m[5]));
@@ -213,6 +214,15 @@ describe('G2 helpers', () => {
         assert.equal(testforblockVerdict([l('Successfully found the block at 1,64,-3.')], [1, 64, -3]).ok, true);
         assert.equal(testforblockVerdict([l('Successfully found the block at 1,64,-4.')], [1, 64, -3]).ok, false, 'other coordinates');
         assert.match(testforblockVerdict([l('The block at 1,64,-3 had the data value of 2 (expected: 0).')], [1, 64, -3]).detail, /data value/);
+        // The real server's lines from the first G2 run (latest.log 2026-11-01 22:14:55 and 22:17:12).
+        const real = (m) => `[22:14:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: ${m}`;
+        assert.equal(testforblockVerdict([real('Successfully found the block at -38, 72, -58')], [-38, 72, -58]).ok, true);
+        assert.equal(testforblockVerdict([real('Successfully found the block at -38, 72, -58')], [-38, 72, -5]).ok, false, 'a prefix of the coordinates is not a match');
+        assert.equal(testforblockVerdict([real('Successfully found the block at -38, 72, -581')], [-38, 72, -58]).ok, false);
+        assert.equal(testforblockVerdict([real('Successfully found the block at 38, 72, -58')], [-38, 72, -58]).ok, false, 'the sign counts');
+        const mis = testforblockVerdict([real('The block at -59, 88, -77 had the data value of 6 (expected: 14)')], [-59, 88, -77]);
+        assert.equal(mis.ok, false);
+        assert.match(mis.detail, /had the data value of 6 \(expected: 14\)/);
         assert.equal(testforblockVerdict([], [1, 64, -3]).detail, 'no answer from the server');
         assert.equal(testforVerdict([l('Found Zombie')]).ok, true);
         assert.equal(testforVerdict([l('Selector \'@e\' found nothing')]).ok, false);
