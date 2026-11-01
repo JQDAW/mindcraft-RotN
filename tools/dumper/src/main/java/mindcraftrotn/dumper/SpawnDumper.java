@@ -3,12 +3,12 @@ package mindcraftrotn.dumper;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import com.google.gson.stream.JsonWriter;
 
 import net.minecraft.entity.EnumCreatureType;
 import net.minecraft.world.biome.Biome;
-import net.minecraftforge.fml.common.registry.EntityEntry;
 import net.minecraftforge.fml.common.registry.EntityRegistry;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
@@ -24,26 +24,25 @@ final class SpawnDumper {
         biomes.sort((a, b) -> String.valueOf(a.getRegistryName()).compareTo(String.valueOf(b.getRegistryName())));
         int n = 0;
         w.beginObject();
-        w.name("format").value(RotnDump.FORMAT);
+        J.str(w, "format", RotnDump.FORMAT);
         w.name("biomes").beginObject();
         for (Biome b : biomes) {
             if (b.getRegistryName() == null) continue;
             w.name(b.getRegistryName().toString()).beginObject();
             for (EnumCreatureType type : EnumCreatureType.values()) {
-                w.name(type.name().toLowerCase()).beginArray();
-                try {
-                    for (Biome.SpawnListEntry e : b.getSpawnableList(type)) {
-                        EntityEntry entry = EntityRegistry.getEntry(e.entityClass);
+                w.name(type.name().toLowerCase(Locale.ROOT)).beginArray();
+                List<Biome.SpawnListEntry> list = J.get(() -> new ArrayList<>(b.getSpawnableList(type)));
+                if (list != null) {
+                    for (Biome.SpawnListEntry e : list) {
+                        String entity = J.get(() -> EntityRegistry.getEntry(e.entityClass).getRegistryName().toString());
                         w.beginObject();
-                        w.name("entity").value(entry != null && entry.getRegistryName() != null ? entry.getRegistryName().toString() : null);
-                        w.name("class").value(e.entityClass.getName());
-                        w.name("weight").value(e.itemWeight);
-                        w.name("min").value(e.minGroupCount);
-                        w.name("max").value(e.maxGroupCount);
+                        J.str(w, "entity", entity);
+                        J.str(w, "class", e.entityClass == null ? null : e.entityClass.getName());
+                        J.num(w, "weight", e.itemWeight);
+                        J.num(w, "min", e.minGroupCount);
+                        J.num(w, "max", e.maxGroupCount);
                         w.endObject();
                     }
-                } catch (Throwable t) {
-                    // leave the list short
                 }
                 w.endArray();
             }

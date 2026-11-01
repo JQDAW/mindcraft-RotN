@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import com.google.gson.stream.JsonWriter;
@@ -19,16 +20,19 @@ import net.minecraft.world.World;
 import net.minecraftforge.common.crafting.IShapedRecipe;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 import net.minecraftforge.oredict.OreDictionary;
+import net.minecraftforge.oredict.OreIngredient;
 
 /**
- * recipes.json: {"format", "recipes": [recipe...]} for every crafting-grid IRecipe in
+ * recipes.json: {"format", "recipes": [recipe...], "skippedEmpty"} for every crafting-grid IRecipe in
  * ForgeRegistries.RECIPES after CraftTweaker. Recipes with an empty output (CraftTweaker's
  * removals leave dummies) are skipped and counted in "skippedEmpty".
- * recipe = {id, class, type: shaped|shapeless, group, dynamic, width, height, mirrored,
- *           requiresTable, result {name, meta, count}, slots (shaped, row-major, null = empty) |
- *           ingredients (shapeless), remaining (per slot, from getRemainingItems on a filled grid,
- *           null when unknown), matchesSample}
- * ingredient = {stacks: [{name, meta}] (32767 = any meta), ore: key when the stacks are exactly one ore}
+ * recipe = {id, class, type: shaped|shapeless, group, dynamic, mirrored (the recipe's own flag, if
+ *           it has one), requiresTable (!canFit(2, 2)), result {name, meta, count},
+ *           width + height + slots (shaped, row-major, null = empty) | ingredients (shapeless),
+ *           matchesSample, mirroredTested, remaining, remainingError}
+ * ingredient = {stacks: [{name, meta}] (32767 = any meta), ore: the key when the ingredient is
+ *              exactly one ore (its stacks are then the ore's own list, as in oredict.json),
+ *              ores: every ore key it includes (e.g. ["rock"] for <ore:rock>|<minecraft:flint>)}
  */
 final class RecipeDumper {
     private final Names names;
@@ -45,15 +49,10 @@ final class RecipeDumper {
         int n = 0;
         int empty = 0;
         w.beginObject();
-        w.name("format").value(RotnDump.FORMAT);
+        J.str(w, "format", RotnDump.FORMAT);
         w.name("recipes").beginArray();
         for (IRecipe r : recipes) {
-            ItemStack out;
-            try {
-                out = r.getRecipeOutput();
-            } catch (Throwable t) {
-                out = ItemStack.EMPTY;
-            }
+            ItemStack out = J.get(r::getRecipeOutput);
             if (out == null || out.isEmpty()) {
                 empty++;
                 continue;
@@ -62,91 +61,117 @@ final class RecipeDumper {
             n++;
         }
         w.endArray();
-        w.name("skippedEmpty").value(empty);
+        J.num(w, "skippedEmpty", empty);
         w.endObject();
         return n;
     }
 
+    /** One ingredient, computed before writing. */
+    private final class Ing {
+        final List<ItemStack> stacks;
+        final String ore;
+        final List<String> ores;
+
+        Ing(Ingredient ing) {
+            List<ItemStack> matching = stacks(ing);
+            String exact = J.get(() -> names.exactOre(ing, matching));
+            List<ItemStack> own = null;
+            if (exact != null) own = J.get(() -> new ArrayList<>(OreDictionary.getOres(exact, false)));
+            this.ore = exact;
+            this.stacks = own != null && !own.isEmpty() ? own : matching;
+            List<String> all = J.get(() -> names.oresIn(ing, matching));
+            this.ores = all == null ? Collections.emptyList() : all;
+        }
+
+        boolean empty() {
+            return stacks.isEmpty();
+        }
+    }
+
     private void writeRecipe(JsonWriter w, IRecipe r, ItemStack out) throws IOException {
-        NonNullList<Ingredient> ings;
-        try {
-            ings = r.getIngredients();
-        } catch (Throwable t) {
-            ings = NonNullList.create();
-        }
+        NonNullList<Ingredient> list = J.get(r::getIngredients);
+        List<Ingredient> ings = list == null ? new ArrayList<>() : list;
         boolean shaped = r instanceof IShapedRecipe;
-        int width = 0;
-        int height = 0;
-        if (shaped) {
-            IShapedRecipe s = (IShapedRecipe) r;
-            width = s.getRecipeWidth();
-            height = s.getRecipeHeight();
-            if (width * height != ings.size()) shaped = false; // inconsistent; treat as a list
-        }
-        w.beginObject();
-        w.name("id").value(String.valueOf(r.getRegistryName()));
-        w.name("class").value(r.getClass().getName());
-        w.name("type").value(shaped ? "shaped" : "shapeless");
-        try {
-            w.name("group").value(r.getGroup());
-        } catch (Throwable t) {
-            w.name("group").nullValue();
-        }
-        try {
-            w.name("dynamic").value(r.isDynamic());
-        } catch (Throwable t) {
-            // skip
-        }
+        Integer width = shaped ? J.get(() -> ((IShapedRecipe) r).getRecipeWidth()) : null;
+        Integer height = shaped ? J.get(() -> ((IShapedRecipe) r).getRecipeHeight()) : null;
+        if (shaped && (width == null || height == null || width * height != ings.size())) shaped = false; // treat as a list
+        final boolean isShaped = shaped;
+        List<Ing> parsed = new ArrayList<>();
+        for (Ingredient i : ings) parsed.add(new Ing(i));
+        String group = J.get(r::getGroup);
+        Boolean dynamic = J.get(r::isDynamic);
         Boolean mirrored = mirrored(r);
-        if (mirrored != null) w.name("mirrored").value(mirrored);
-        boolean fits2x2;
-        try {
-            fits2x2 = r.canFit(2, 2);
-        } catch (Throwable t) {
-            fits2x2 = shaped ? width <= 2 && height <= 2 : ings.size() <= 4;
-        }
-        w.name("requiresTable").value(!fits2x2);
+        Boolean fits = J.get(() -> r.canFit(2, 2));
+        boolean requiresTable = fits != null ? !fits : isShaped ? width > 2 || height > 2 : ings.size() > 4;
+        Sample sample = sample(r, ings, isShaped, isShaped ? width : 0, isShaped ? height : 0);
+
+        w.beginObject();
+        J.str(w, "id", String.valueOf(r.getRegistryName()));
+        J.str(w, "class", r.getClass().getName());
+        J.str(w, "type", isShaped ? "shaped" : "shapeless");
+        J.str(w, "group", group);
+        J.bool(w, "dynamic", dynamic);
+        if (mirrored != null) J.bool(w, "mirrored", mirrored);
+        J.bool(w, "requiresTable", requiresTable);
         w.name("result");
         Names.stack(w, out, true);
-        if (shaped) {
-            w.name("width").value(width);
-            w.name("height").value(height);
+        if (isShaped) {
+            J.num(w, "width", width);
+            J.num(w, "height", height);
             w.name("slots");
         } else {
             w.name("ingredients");
         }
         w.beginArray();
-        for (Ingredient ing : ings) {
-            if (!shaped && (ing == null || ing == Ingredient.EMPTY || stacks(ing).isEmpty())) continue;
-            writeIngredient(w, ing);
+        for (Ing i : parsed) {
+            if (i.empty()) {
+                if (isShaped) w.nullValue();
+                continue;
+            }
+            w.beginObject();
+            if (i.ore != null) J.str(w, "ore", i.ore);
+            if (!i.ores.isEmpty()) {
+                w.name("ores").beginArray();
+                for (String o : i.ores) w.value(o);
+                w.endArray();
+            }
+            w.name("stacks").beginArray();
+            for (ItemStack s : i.stacks) Names.stack(w, s, false);
+            w.endArray();
+            w.endObject();
         }
         w.endArray();
-        writeRemaining(w, r, ings, shaped, width, height);
+        J.bool(w, "matchesSample", sample.matches);
+        if (sample.mirrorMatches != null) J.bool(w, "mirroredTested", sample.mirrorMatches);
+        w.name("remaining");
+        if (sample.remaining == null) {
+            w.nullValue();
+        } else {
+            w.beginArray();
+            for (ItemStack s : sample.remaining) Names.stack(w, s, false);
+            w.endArray();
+        }
+        if (sample.error != null) J.str(w, "remainingError", sample.error);
         w.endObject();
     }
 
     private static List<ItemStack> stacks(Ingredient ing) {
         if (ing == null) return new ArrayList<>();
-        try {
-            return new ArrayList<>(Arrays.asList(ing.getMatchingStacks()));
-        } catch (Throwable t) {
-            return new ArrayList<>();
+        List<ItemStack> out = J.get(() -> new ArrayList<>(Arrays.asList(ing.getMatchingStacks())));
+        if ((out == null || out.isEmpty()) && ing instanceof OreIngredient) {
+            // getMatchingStacks expands wildcards through getSubItems, which may fail on a server.
+            out = J.get(() -> new ArrayList<>(Names.oreList((OreIngredient) ing)));
         }
+        if (out == null) return new ArrayList<>();
+        out.removeIf(s -> s == null || s.isEmpty());
+        return out;
     }
 
-    private void writeIngredient(JsonWriter w, Ingredient ing) throws IOException {
-        List<ItemStack> list = stacks(ing);
-        if (list.isEmpty()) {
-            w.nullValue();
-            return;
-        }
-        w.beginObject();
-        String ore = names.oreFor(list);
-        if (ore != null) w.name("ore").value(ore);
-        w.name("stacks").beginArray();
-        for (ItemStack s : list) Names.stack(w, s, false);
-        w.endArray();
-        w.endObject();
+    private static final class Sample {
+        Boolean matches;
+        Boolean mirrorMatches;
+        List<ItemStack> remaining;
+        String error;
     }
 
     /** A grid filled with the first stack of each ingredient (mirrored left-right on request), or null. */
@@ -180,64 +205,48 @@ final class RecipeDumper {
     }
 
     /**
-     * matchesSample: the recipe accepts the sample grid. mirroredTested: a shaped recipe also
-     * accepts the left-right mirrored grid (vanilla 1.12 shaped recipes always do).
-     * remaining: what getRemainingItems leaves per filled slot (e.g. a reused or damaged tool).
+     * matches: the recipe accepts the sample grid. mirrorMatches: a shaped recipe also accepts the
+     * left-right mirrored grid (vanilla 1.12 shaped recipes always do). remaining: what
+     * getRemainingItems leaves per filled slot (e.g. a reused or damaged tool), null if nothing.
      */
-    private void writeRemaining(JsonWriter w, IRecipe r, List<Ingredient> ings, boolean shaped, int width, int height) throws IOException {
-        Boolean matches = null;
-        Boolean mirrorMatches = null;
-        List<ItemStack> remaining = null;
-        String error = null;
+    private Sample sample(IRecipe r, List<Ingredient> ings, boolean shaped, int width, int height) {
+        Sample out = new Sample();
         try {
             InventoryCrafting inv = sampleGrid(ings, shaped, width, height, false);
-            if (inv != null) {
-                matches = r.matches(inv, world);
-                if (matches) {
-                    NonNullList<ItemStack> rem = r.getRemainingItems(inv);
-                    boolean any = false;
-                    for (ItemStack s : rem) if (s != null && !s.isEmpty()) any = true;
-                    if (any) {
-                        remaining = new ArrayList<>();
-                        for (int i = 0; i < inv.getSizeInventory(); i++) {
-                            if (inv.getStackInSlot(i).isEmpty()) continue;
-                            remaining.add(i < rem.size() ? rem.get(i) : ItemStack.EMPTY);
-                        }
+            if (inv == null) return out;
+            out.matches = r.matches(inv, world);
+            if (out.matches) {
+                NonNullList<ItemStack> rem = r.getRemainingItems(inv);
+                boolean any = false;
+                for (ItemStack s : rem) if (s != null && !s.isEmpty()) any = true;
+                if (any) {
+                    List<ItemStack> list = new ArrayList<>();
+                    for (int i = 0; i < inv.getSizeInventory(); i++) {
+                        if (inv.getStackInSlot(i).isEmpty()) continue;
+                        list.add(i < rem.size() ? rem.get(i) : ItemStack.EMPTY);
                     }
-                }
-                if (shaped && width > 1) {
-                    InventoryCrafting m = sampleGrid(ings, true, width, height, true);
-                    if (m != null) mirrorMatches = r.matches(m, world);
+                    out.remaining = list;
                 }
             }
+            if (shaped && width > 1) {
+                InventoryCrafting m = sampleGrid(ings, true, width, height, true);
+                if (m != null) out.mirrorMatches = r.matches(m, world);
+            }
         } catch (Throwable t) {
-            error = String.valueOf(t);
+            out.error = String.valueOf(t);
         }
-        w.name("matchesSample");
-        if (matches == null) w.nullValue();
-        else w.value(matches);
-        if (mirrorMatches != null) w.name("mirroredTested").value(mirrorMatches);
-        w.name("remaining");
-        if (remaining == null) {
-            w.nullValue();
-        } else {
-            w.beginArray();
-            for (ItemStack s : remaining) Names.stack(w, s, false);
-            w.endArray();
-        }
-        if (error != null) w.name("remainingError").value(error);
+        return out;
     }
 
     /** isMirrored()/getMirrored() via reflection on mod classes (CraftTweaker, ShapedOreRecipe). */
     private static Boolean mirrored(IRecipe r) {
         for (String m : new String[] {"isMirrored", "getMirrored", "isMirror"}) {
-            try {
+            Boolean v = J.get(() -> {
                 Method meth = r.getClass().getMethod(m);
-                Object v = meth.invoke(r);
-                if (v instanceof Boolean) return (Boolean) v;
-            } catch (Throwable t) {
-                // try the next name
-            }
+                Object o = meth.invoke(r);
+                return o instanceof Boolean ? (Boolean) o : null;
+            });
+            if (v != null) return v;
         }
         return null;
     }
