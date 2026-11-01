@@ -130,7 +130,7 @@ describe('check-env (ExecStartPre)', () => {
             envf, pf, map,
             env: { FAKE_OUT_id: 'mindcraft-rotn', MINDCRAFT_SINGLE_BOT_SERVICE: '1', MINDCRAFT_PROFILES_FOLDER: pf,
                 OPENROUTER_API_KEY: 'sk-or-v1-SECRET-VALUE-123', SETTINGS_JSON: '{"host":"mc.example.invalid","port":25565,"auth":"microsoft","auto_open_ui":false}',
-                NODE_OPTIONS: '--max-old-space-size=768',
+                NODE_OPTIONS: '--max-old-space-size=768', PROFILES: '["./profiles/rotn-bot.json"]', MINECRAFT_PORT: '25565', MINDSERVER_PORT: '8080',
                 INSECURE_CODING: undefined, BLOCKED_ACTIONS: undefined, DEBUG: undefined, NODE_PATH: undefined },
         };
     };
@@ -188,6 +188,17 @@ describe('check-env (ExecStartPre)', () => {
             // check-env-names tests cover it in the env file.
             [{ NODE_EXTRA_CA_CERTS: '/tmp/ca.pem' }, /NODE_EXTRA_CA_CERTS is set/],
             [{ NODE_PATH: '/tmp/mods' }, /NODE_PATH is set/],
+            // Values of the other allowlisted names (PR #58 review follow-up).
+            [{ PROFILES: '["/etc/passwd"]' }, /PROFILES must be a non-empty JSON array of "\.\/profiles\/<name>\.json" paths/],
+            [{ PROFILES: '["./profiles/../settings.json"]' }, /PROFILES must be/],
+            [{ PROFILES: '["./andy.json"]' }, /PROFILES must be/],
+            [{ PROFILES: '[]' }, /PROFILES must be/],
+            [{ PROFILES: '"./profiles/x.json"' }, /PROFILES must be/],
+            [{ PROFILES: '[./profiles/x.json' }, /PROFILES is not valid JSON/],
+            [{ MINECRAFT_PORT: '0' }, /MINECRAFT_PORT must be a port number 1\.\.65535/],
+            [{ MINECRAFT_PORT: '70000' }, /MINECRAFT_PORT must be a port/],
+            [{ MINDSERVER_PORT: '80a' }, /MINDSERVER_PORT must be a port/],
+            [{ MINDSERVER_PORT: '' }, /MINDSERVER_PORT must be a port/],
         ]) {
             const r = check(g, over);
             assert.equal(r.code, 1, JSON.stringify(over));
@@ -275,6 +286,29 @@ describe('check-env-names (root, the env file\'s variable names; PR #30 re-revie
             assert.match(r.stderr, new RegExp(`line \\d+ sets ${name}, which is not allowed in a bot env file`), line);
             assert.ok(!r.all.includes('SECRET-VALUE'), 'values are never printed');
         }
+    });
+
+    test('a missing or unreadable env file refuses (fails closed; PR #58 review)', (t) => {
+        const missing = run(path.join(CX, 'check-env-names.sh'), [fwd(path.join(tmp, 'missing.env'))]);
+        assert.equal(missing.code, 1);
+        assert.match(missing.stderr, /a regular file/);
+        const src = fs.readFileSync(path.join(CX, 'check-env-names.sh'), 'utf8');
+        assert.match(src, /\[\[ -r \$file \]\] \|\| \{ echo "check-env-names: cannot read the env file; refusing to start" >&2; exit 1; \}/);
+        assert.match(src, /done < "\$file" \|\| \{ echo "check-env-names: reading the env file failed; refusing to start" >&2; exit 1; \}/);
+        // A real unreadable file where the OS enforces it (Linux CI, non-root); Windows and root cannot.
+        const f = path.join(tmp, 'locked.env');
+        fs.writeFileSync(f, 'PROFILES=["./profiles/x.json"]\n');
+        fs.chmodSync(f, 0o000);
+        const probe = spawnSync(BASH, ['-c', '[[ -r "$1" ]]', '_', fwd(f)]);
+        if (probe.status === 0) {
+            fs.chmodSync(f, 0o600);
+            t.skip('this platform or user can still read a mode-000 file');
+            return;
+        }
+        const r = run(path.join(CX, 'check-env-names.sh'), [fwd(f)]);
+        fs.chmodSync(f, 0o600);
+        assert.equal(r.code, 1, r.all);
+        assert.match(r.stderr, /cannot read the env file; refusing to start/);
     });
 
     test('export, a line continuation, leading spaces or a malformed line refuse', () => {

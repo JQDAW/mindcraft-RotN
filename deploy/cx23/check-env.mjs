@@ -76,6 +76,23 @@ if (has('CHECK_ENV_NODE_OPTIONS')) {
     if (!parts.every((p) => /^--max-old-space-size=\d{2,5}$/.test(p))) bad('NODE_OPTIONS may only hold --max-old-space-size=N');
 }
 
+// 3b. The values of the other allowlisted names (PR #58 review follow-up): profiles only from the
+// repo's profiles/ folder, ports in range.
+if (has('PROFILES')) {
+    let list;
+    try {
+        list = JSON.parse(env.PROFILES);
+    } catch {
+        bad('PROFILES is not valid JSON');
+    }
+    if (list !== undefined && !(Array.isArray(list) && list.length > 0 && list.every((x) => typeof x === 'string' && /^\.\/profiles\/[A-Za-z0-9_-]+\.json$/.test(x)))) {
+        bad('PROFILES must be a non-empty JSON array of "./profiles/<name>.json" paths');
+    }
+}
+for (const k of ['MINECRAFT_PORT', 'MINDSERVER_PORT']) {
+    if (has(k) && !(/^\d{1,5}$/.test(env[k]) && Number(env[k]) >= 1 && Number(env[k]) <= 65535)) bad(`${k} must be a port number 1..65535`);
+}
+
 // 4. The rest of the contract.
 if (env.MINDCRAFT_SINGLE_BOT_SERVICE !== '1') bad('MINDCRAFT_SINGLE_BOT_SERVICE must be 1 (set by the unit; do not override it in the env file)');
 const key = env.OPENROUTER_API_KEY ?? '';

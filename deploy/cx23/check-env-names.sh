@@ -16,6 +16,9 @@ PATH=/usr/sbin:/usr/bin:/sbin:/bin
 readonly ALLOWED=' MINDCRAFT_PROFILES_FOLDER OPENROUTER_API_KEY PROFILES SETTINGS_JSON MINECRAFT_PORT MINDSERVER_PORT NODE_OPTIONS '
 file=${1:-}
 [[ -n $file && -f $file && ! -L $file ]] || { echo "check-env-names: usage: check-env-names /etc/mindcraft-rotn/<bot>.env (a regular file)" >&2; exit 1; }
+# Fail closed on a file that cannot be read: otherwise the loop below would never run and the check
+# would pass (PR #58 review).
+[[ -r $file ]] || { echo "check-env-names: cannot read the env file; refusing to start" >&2; exit 1; }
 
 problems=0
 n=0
@@ -33,7 +36,12 @@ while IFS= read -r line || [[ -n $line ]]; do
   if [[ $ALLOWED != *" $name "* ]]; then
     echo "check-env-names: line $n sets $name, which is not allowed in a bot env file" >&2; problems=$((problems + 1))
   fi
-done < "$file"
+done < "$file" || { echo "check-env-names: reading the env file failed; refusing to start" >&2; exit 1; }
+# A non-empty file that yielded no line at all was not really read: refuse rather than pass.
+if [[ -s $file ]] && (( n == 0 )); then
+  echo "check-env-names: read nothing from a non-empty env file; refusing to start" >&2
+  exit 1
+fi
 
 if (( problems )); then
   echo "check-env-names: refusing to start ($problems problem(s))" >&2
