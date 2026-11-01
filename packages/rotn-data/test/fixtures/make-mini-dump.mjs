@@ -75,6 +75,9 @@ const files = {
     'smelting.json': { format: 'rotn-dump/1', smelting: [
         { input: st('contenttweaker:raw_iron'), output: { name: 'minecraft:iron_ingot', meta: 0, count: 1 }, xp: 0.7 },
     ] },
+    'spawns.json': { format: 'rotn-dump/1', biomes: {
+        'minecraft:plains': { monster: [{ entity: 'minecraft:zombie', weight: 95, min: 4, max: 4 }], creature: [{ entity: 'minecraft:cow', weight: 8, min: 4, max: 4 }], ambient: [], water_creature: [] },
+    } },
     'entities.json': { format: 'rotn-dump/1', entities: {
         'minecraft:zombie': { modId: 'minecraft', modEntityTypeId: null, hostile: true, kinds: ['living', 'monster'], displayName: 'Zombie' },
         'minecraft:cow': { modId: 'minecraft', modEntityTypeId: null, hostile: false, kinds: ['living', 'animal'] },

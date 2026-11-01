@@ -178,7 +178,9 @@ export class RotnData {
             const rows = [];
             for (let y = 0; y < x.height; y++) rows.push(x.slots.slice(y * x.width, (y + 1) * x.width));
             out.inShape = rows;
-            if (x.mirrored != null) out.mirrored = x.mirrored;
+            // The dumper reports the recipe's own flag when it has one, and always tests a mirrored grid.
+            const mirrored = x.mirroredTested ?? x.mirrored;
+            if (mirrored != null) out.mirrored = mirrored;
         } else {
             out.ingredients = x.ingredients;
         }

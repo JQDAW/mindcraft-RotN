@@ -7,6 +7,7 @@
 // Usage: node packages/rotn-data/tools/registry-from-capture.mjs [--check]
 //   --check  exit 1 if the committed file differs from what would be written.
 import fs from 'node:fs';
+import process from 'node:process';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
