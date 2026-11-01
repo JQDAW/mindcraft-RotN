@@ -17,3 +17,4 @@ export { assertMicrosoftAuthSafe, quietMsaCodeHandler, debugValueEnables, patter
 export { assertOutsideGitWorkTrees, prepareSecretFolder, findGitWorkTree, realLocation } from './src/secret-folder.js';
 export { decideAgentExit, readExitReason, writeExitReason, recordAgentExit, createRequestedRestartGuard, REQUESTED_RESTART } from './src/exit-contract.js';
 export { extendRegistry } from './src/registry-extension.js';
+export { spawnFmlEntity, attachFmlEntities, fmlEntityName } from './src/fml-entities.js';

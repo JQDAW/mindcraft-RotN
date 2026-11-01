@@ -90,7 +90,8 @@ test('g1-driver: hello, echo, walk and a clean SIGTERM stop through forge-bridge
     assert.equal(server.state.chats.filter(c => c === 'hello-nonce-1234').length, 1, 'hello said exactly once');
 
     const walked = await until(() => events().find(e => e.type === 'walked'), 15000, 'walked event');
-    assert.equal(walked.walkMethod, 'scenario-protocol walk()', 'the method comes from the scenario, not the driver');
+    // walk() may report its own method (harness-ops adds 'forward+jump+turn'); the driver passes it on, else names the function.
+    assert.equal(walked.walkMethod, walked.method ?? 'scenario-protocol walk()', 'the method comes from the scenario, not the driver');
     assert.equal(walked.blockBelow?.registryName, 'minecraft:stone');
     const forge = events().find(e => e.type === 'forge');
     assert.equal(forge.handshakeDone, true);
