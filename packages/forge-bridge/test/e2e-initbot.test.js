@@ -14,6 +14,7 @@ import { startFakeForgeServer } from './fake-forge-server.js';
 import { pinnedModList, syntheticRegistries, tmpFile, PING_FIXTURE } from './helpers.js';
 import { readCapture } from '../src/capture.js';
 import { joinFakeWorld, MODDED } from './fake-world.js';
+import { encodeEntitySpawn } from '../src/channels.js';
 
 // Race a promise against a timeout that is always cleared (no lingering timer).
 function within(ms, promise, what) {
@@ -42,7 +43,7 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
 
     const { setSettings } = await import('../../../src/agent/settings.js');
     setSettings({ host: '127.0.0.1', port: server.port, auth: 'offline', minecraft_version: '1.12.2' });
-    const { initBot, getBlockId, getBlockName, getItemId, getItemName } = await import('../../../src/utils/mcdata.js');
+    const { initBot, getBlockId, getBlockName, getItemId, getItemName, isHostile } = await import('../../../src/utils/mcdata.js');
 
     // One retry of the whole login: under heavy load a loopback connect can fail
     // at once with ETIMEDOUT, which says nothing about the protocol path under test.
@@ -70,6 +71,9 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.equal(server.state.hsState, 'DONE');
     assert.equal(bridge.handshakeDone, true);
     assert.equal(bridge.reid.version, '2.2.2');
+    // initBot passes rotn-data's dumped entity-metadata serializer ids (15-18) to the bridge.
+    assert.deepEqual([15, 16, 17, 18].map((id) => bridge.metadataSerializers[id]),
+        ['base:resource_location', 'mowziesmobs:optional_trade', 'charset:quaternion', 'requious:spark_effect']);
     const hsOut = server.state.fromClient.filter(p => p.channel === 'FML|HS' || p.channel === 'REGISTER').map(p => `${p.channel}:${p.data[0]}`);
     assert.deepEqual(hsOut.slice(0, 7), ['REGISTER:70', 'FML|HS:1', 'FML|HS:2', 'FML|HS:255', 'FML|HS:255', 'FML|HS:255', 'FML|HS:255']);
     const acks = server.state.fromClient.filter(p => p.channel === 'FML|HS' && p.data[0] === 0xff).map(p => p.data[1]);
@@ -106,10 +110,10 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     // Brief item 6: the FML-spawned mod mob is in bot.entities, and mineflayer tracks it from there.
     const mob = bot.entities[77];
     assert.ok(mob, 'FML EntitySpawn reached bot.entities');
-    assert.equal(mob.name, 'iceandfire:entity_4', 'placeholder name until rotn-data\'s mod-local table exists');
+    assert.equal(mob.name, 'iceandfire:entity_4', 'iceandfire #4 is not in rotn-data\'s table: placeholder name');
     assert.equal(mob.forge.modId, 'iceandfire');
     assert.deepEqual([mob.position.x, mob.position.y, mob.position.z], [10, 65, 10]);
-    assert.equal(mob.type, 'other', 'not "mob" without rotn-data\'s table, so Mindcraft does not treat it as hostile');
+    assert.equal(mob.type, 'other', 'not "mob" without a table entry, so Mindcraft does not treat it as hostile');
     // Vanilla packets for the FML entity's id update it through mineflayer's own handlers.
     let mobMoved = once(bot, 'entityMoved');
     server.state.client.write('entity_teleport', { entityId: 77, x: 20, y: 66, z: 21, yaw: 0, pitch: 0, onGround: true });
@@ -123,6 +127,21 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     server.state.client.write('entity_destroy', { entityIds: [77] });
     await within(10000, gone, 'entityGone');
     assert.equal(bot.entities[77], undefined, 'mineflayer\'s own entity_destroy removed it');
+    // The G2 prerequisite: initBot gives rotn-data's real mod-local entity table to the bridge,
+    // so an FML-spawned mob from the dump gets its registry name, type and category.
+    const spawned = once(bot, 'entitySpawn');
+    server.state.client.write('custom_payload', {
+        channel: 'FML',
+        data: encodeEntitySpawn({
+            entityId: 78, modId: 'aether_legacy', modEntityTypeId: 7, uuid: '00000000-0000-0000-0000-00000000004e',
+            x: 12, y: 65, z: 12, yaw: 0, pitch: 0, headYaw: 0,
+        }),
+    });
+    await within(10000, spawned, 'entitySpawn (aether_legacy #7)');
+    const cockatrice = bot.entities[78];
+    assert.deepEqual([cockatrice.name, cockatrice.displayName, cockatrice.type, cockatrice.kind], ['aether_legacy:cockatrice', 'Cockatrice', 'hostile', 'Hostile mobs']);
+    assert.equal(isHostile(cockatrice), true, 'Mindcraft\'s isHostile sees the hostile modded mob');
+    assert.equal(bridge.stats.entitySpawns, 2);
     assert.equal(bridge.stats.jeidMessages, 1);
     assert.equal(bridge.stats.parseErrors, 0);
     assert.equal(bridge.stats.partialReadErrors, 0);

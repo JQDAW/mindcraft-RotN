@@ -7,7 +7,8 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump } from '../../packages/forge-bridge/index.js';
+import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
@@ -154,7 +155,18 @@ export function initBot(username, { onMsaCode } = {}) {
             forge.capture = new CaptureWriter({ file: env.captureFile, redact: { username } });
             console.log(`[mcdata] forge-bridge capture: ${env.captureFile}`);
         }
+        // Mod entity-metadata serializer ids (15-18 and the rest) from rotn-data's dump,
+        // through its catalog API. Without them, metadata using ids 15-18 is dropped.
+        let metadataSerializers = {};
+        try {
+            const { map, unknown } = metadataSerializersFromDump(loadRotnData(PACK_VERSION).serializers());
+            metadataSerializers = map;
+            for (const u of unknown) console.warn(`[forge-bridge] entity-metadata serializer ${u.id} (${u.class}) has no known wire format`);
+        } catch (e) {
+            console.warn(`[forge-bridge] rotn-data serializer table unavailable: ${e.message}`);
+        }
         options.connect = createForgeConnect({
+            bridgeOptions: { metadataSerializers },
             host: options.host,
             port: options.port,
             mode: forge.mode,
@@ -171,7 +183,15 @@ export function initBot(username, { onMsaCode } = {}) {
                     bot.emit('forge_registry', forge.registryReport);
                 });
                 // Mod entities spawned with FML EntitySpawn go into bot.entities (brief item 6).
-                attachFmlEntities(bot, bridge, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                // Names, type and category from rotn-data's mod-local entity table (its catalog
+                // API). Without a dump, or if rotn-data fails, FML mobs keep placeholder names.
+                let modEntityTable = null;
+                try {
+                    modEntityTable = fmlEntityTable({ modEntityTable: rdModEntityTable, entityByModId: rdEntityByModId });
+                } catch (e) {
+                    console.warn(`[forge-bridge] rotn-data mod entity table unavailable: ${e.message}`);
+                }
+                attachFmlEntities(bot, bridge, { log: (m) => console.log(`[forge-bridge] ${m}`), modEntityTable });
             },
         });
     }
