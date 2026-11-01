@@ -35,7 +35,7 @@ export class Agent {
         const nameCheck = validateNameFormat(this.name);
         if (!nameCheck.success) {
             log(this.name, nameCheck.msg);
-            process.exit(1);
+            process.exit(3); // fatal: a restart cannot fix the name (ADR 0003 decision 5)
             return;
         }
         
@@ -74,7 +74,8 @@ export class Agent {
             // handleDisconnection handles logging to console and server
             const { type } = handleDisconnection(this.name, reason);
      
-            process.exit(1);
+            // The kick's exit code (3 for fatal, else 1), with the reason for the main process.
+            process.exit(this.bot?.forge?.recordExit?.({ event, reason }) ?? 1);
         };
         
         // Bind events
@@ -139,7 +140,7 @@ export class Agent {
 
             } catch (error) {
                 console.error('Error in spawn event:', error);
-                process.exit(0);
+                process.exit(this.bot?.forge?.recordExit?.({ error }) ?? 1); // 1, or 3 if fatal; never 0
             }
         });
     }
@@ -532,7 +533,9 @@ export class Agent {
         this.history.add('system', msg);
         this.bot.chat(code > 1 ? 'Restarting.': 'Exiting.');
         this.history.save();
-        process.exit(code);
+        // Exit 1 here is a deliberate restart (requested_restart). If the Minecraft
+        // connection is already gone, recordExit reports the disconnect or kick instead.
+        process.exit(code === 1 ? (this.bot?.forge?.recordExit?.({ requestedRestart: true }) ?? code) : code);
     }
     async checkTaskDone() {
         if (this.task.data) {

@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit } from '../../packages/forge-bridge/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -101,6 +101,7 @@ export function initBot(username, { onMsaCode } = {}) {
             port: options.port,
             mode: forge.mode,
             modListFile: env.modListFile,
+            pingTimeoutMs: env.pingTimeoutMs,
             capture: forge.capture,
             onAttach: (bridge) => { forge.bridge = bridge; options.brand = 'fml,forge'; },
         });
@@ -108,6 +109,12 @@ export function initBot(username, { onMsaCode } = {}) {
 
     const bot = createBot(options);
     bot.forge = forge;
+    // ADR 0003 decision 5, agent side: agent.js calls this on its exit paths. It
+    // writes the reason for the main process (MINDCRAFT_EXIT_REASON_FILE) and
+    // returns the exit code: the kick's (3 for fatal), or 1.
+    forge.recordExit = (o = {}) => recordAgentExit({
+        ...o, kick: forge.bridge?.lastKick ?? null, clientEnded: bot._client?.ended !== false,
+    });
 
     // Throttle position packets to avoid kicks on Paper/Spigot servers. Inside each
     // 50 ms window the newest position and look are kept and merged, so the server

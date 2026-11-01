@@ -48,10 +48,25 @@ test('auto: a vanilla ping connects without the bridge', async () => {
     assert.equal(client.tagHost, undefined);
 });
 
-test('a failed ping falls back to the pinned mod list file', async () => {
-    const { attached, logs } = await run({ ping: () => Promise.reject(new Error('ECONNREFUSED')), modListFile: PING_FIXTURE });
+test('a failed ping is retried once, then falls back to the pinned mod list file', async () => {
+    let pings = 0;
+    const { attached, logs } = await run({ ping: () => { pings++; return Promise.reject(new Error('ECONNREFUSED')); }, modListFile: PING_FIXTURE });
     assert.equal(attached, 'file');
-    assert.ok(logs.some(l => l.includes('status ping failed')));
+    assert.equal(pings, 2);
+    assert.ok(logs.some(l => l.includes('status ping attempt 2 failed')));
+});
+
+test('a ping that fails once and then answers uses the live mod list', async () => {
+    let pings = 0;
+    const { attached } = await run({ ping: (o) => { pings++; assert.equal(o.closeTimeout, 15000); return pings === 1 ? Promise.reject(new Error('ETIMEDOUT')) : Promise.resolve(fmlPing); }, modListFile: PING_FIXTURE });
+    assert.equal(attached, 'ping');
+    assert.equal(pings, 2);
+});
+
+test('a vanilla answer is final: no second ping', async () => {
+    let pings = 0;
+    await run({ ping: () => { pings++; return Promise.resolve(vanillaPing); } });
+    assert.equal(pings, 1);
 });
 
 test('on: no mod list at all is an error, not a vanilla login', async () => {
@@ -70,9 +85,10 @@ test('off: no ping, no bridge', async () => {
 
 test('env switches', () => {
     const now = new Date('2026-11-01T02:03:04.567Z');
-    assert.deepEqual(forgeOptionsFromEnv('FRCFLD', {}, now), { mode: 'auto', captureFile: null, modListFile: null, profilesFolder: null });
-    const e = forgeOptionsFromEnv('FRCFLD', { FORGE_BRIDGE: 'on', FORGE_CAPTURE: '1', FORGE_MODLIST_FILE: 'p.json', MINDCRAFT_PROFILES_FOLDER: 'C:/x/msa' }, now);
-    assert.deepEqual(e, { mode: 'on', captureFile: 'captures/raw/FRCFLD-2026-11-01T02-03-04-567Z.jsonl', modListFile: 'p.json', profilesFolder: 'C:/x/msa' });
+    assert.deepEqual(forgeOptionsFromEnv('FRCFLD', {}, now), { mode: 'auto', captureFile: null, modListFile: null, profilesFolder: null, pingTimeoutMs: null });
+    const e = forgeOptionsFromEnv('FRCFLD', { FORGE_BRIDGE: 'on', FORGE_CAPTURE: '1', FORGE_MODLIST_FILE: 'p.json', MINDCRAFT_PROFILES_FOLDER: 'C:/x/msa', FORGE_PING_TIMEOUT_MS: '60000' }, now);
+    assert.deepEqual(e, { mode: 'on', captureFile: 'captures/raw/FRCFLD-2026-11-01T02-03-04-567Z.jsonl', modListFile: 'p.json', profilesFolder: 'C:/x/msa', pingTimeoutMs: 60000 });
+    assert.equal(forgeOptionsFromEnv('b', { FORGE_PING_TIMEOUT_MS: 'nope' }).pingTimeoutMs, null);
     assert.equal(forgeOptionsFromEnv('b', { FORGE_BRIDGE: 'bogus', FORGE_CAPTURE: '0' }).mode, 'auto');
     assert.equal(forgeOptionsFromEnv('b', { FORGE_CAPTURE: 'C:/tmp/c.jsonl' }).captureFile, 'C:/tmp/c.jsonl');
 });

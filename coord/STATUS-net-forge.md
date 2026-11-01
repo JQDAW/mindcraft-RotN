@@ -44,7 +44,7 @@ Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mind
 - **Verifier pass (adaptive-agents:verifier) on PR #10: PASS WITH ISSUES.** All findings are addressed in a follow-up commit:
   1. **Medium: a capture leak, reproduced by the verifier.** Parse-error and partial-packet records, and raw buffers inside decoded payloads, were base64-encoded before redaction.
      - Every Buffer, and every `b64` string, is now redacted inside the JSON replacer.
-     - `test/bridge.test.js` covers each path.
+     - `packages/forge-bridge/test/bridge.test.js` covers each path.
   2. **Low:** `bot.partialReadErrors` never counted deserializer drops. It now includes the bridge's count.
   3. **Low:** reassembled FML|MP payloads are now re-emitted as `custom_payload` (spec 1.6). A length mismatch is logged.
   4. **Low:** the connect wrapper now does nmp's SRV lookup.
@@ -62,7 +62,7 @@ The review findings on PR #10, numbered as in the review comment:
 - **4:** `delete process.env.DEBUG` runs before prismarine-auth loads. A test checks that order and that the tool refuses a folder inside this repo.
 - New: `msa-login.mjs FRCFLD --check` confirms the cache without ever starting a device-code prompt. If the cache needs a new login, it fails.
 - **5 chunk widths:** a section now widens its data array when a written state id needs more bits. A section that leaves its palette uses the width of its widest id. `new Chunk({maxBitsPerBlock})` can seed the width. Local `block_change` writes of 20-bit ids are tested. README line 109 is corrected.
-- **6:** `test/golden.test.js` holds hand-written hex vectors for ModList, RegistryData (1-, 2- and 3-byte VarInt ids), FML EntitySpawn (metadata, thrower velocity, spawn data) and FML|MP (PART_SIZE 1048496, 2 parts). The layouts come from `javap` on Forge 14.23.5.2860's own classes in the pinned pack's Forge jar, extracted to scratch and never run. Our decoders read each vector, and our encoders reproduce it byte for byte.
+- **6:** `packages/forge-bridge/test/golden.test.js` holds hand-written hex vectors for ModList, RegistryData (1-, 2- and 3-byte VarInt ids), FML EntitySpawn (metadata, thrower velocity, spawn data) and FML|MP (PART_SIZE 1048496, 2 parts). The layouts come from `javap` on Forge 14.23.5.2860's own classes in the pinned pack's Forge jar, extracted to scratch and never run. Our decoders read each vector, and our encoders reproduce it byte for byte.
 - **7:** `ChunkColumn.dump()` writes REID VarInt biomes back, or switches to them for any id over 255. Two tests show that a dump reloads. The viewer stays off (`render_bot_view: false`).
 - **8:** the README documents that nmp's `merge` mutates the shared minecraft-data 1.12.2 protocol object. I confirmed this in a node session: `createSerializer` with customPackets changes `mcData('1.12.2').protocol.types.slot`.
 - **10:** `g1-spike` `summary.json` records `walkMethod`, plus the blocks under the bot at spawn and along the walk, each with the Forge registry name next to prismarine's name.
@@ -77,7 +77,7 @@ The review findings on PR #10, numbered as in the review comment:
 - It exits 3 without `MINDCRAFT_PROFILES_FOLDER` or host. It never starts a device-code login: `initBot` gained an optional `{ onMsaCode }`, a 5-line diff inside `initBot`.
 - Kicks exit 3 when the runner's `FATAL_KICKS` or our `classifyKick` says fatal.
 - It records the handshake result, registry sizes, `walkMethod` and block registry names as `DRIVER` lines.
-- **Test:** `test/g1-driver.test.js` runs the driver as a subprocess against the fake Forge server, with the runner's allowlisted env.
+- **Test:** `packages/forge-bridge/test/g1-driver.test.js` runs the driver as a subprocess against the fake Forge server, with the runner's allowlisted env.
 - The shared fake world moved to `test/fake-world.js`.
 - `npm test` passes 178/178; lint 259.
 
@@ -114,11 +114,46 @@ The review findings on PR #10, numbered as in the review comment:
 - New, optional exit-reason file. The agent may write `{category, exitCode, retryCap?}` to `MINDCRAFT_EXIT_REASON_FILE` before it exits. Then a fatal kick is fatal even with exit 1, and auth kicks become fatal at their cap of 3.
 - `assertMicrosoftAuthSafe` errors carry `exitCode: 3`.
 - **Behaviour change from upstream:** a quick crash (under 10 s) used to be left dead. It is now restarted with backoff, per the ADR. Fatal setup errors need exit 3 to stop that loop (request 9).
-- **Tests:** `test/agent-process.test.js`, 9 tests with a fake spawn, timers and exit. `npm test` passes 212/212. Lint is 257: `agent_process.js` went from 2 errors to 0.
+- **Tests:** `packages/forge-bridge/test/agent-process.test.js`, 9 tests with a fake spawn, timers and exit. `npm test` passes 212/212. Lint is 257: `agent_process.js` went from 2 errors to 0.
+
+## Done: PR #19 review follow-ups (branch `agent/net-forge/exit-contract-followups`, from develop 976ea48; PR #19 merged)
+
+- **Lead-approved ownership exception:** only the exit lines in `src/agent/agent.js`, plus `src/process/init_agent.js:52`.
+  - Invalid name: exit 3.
+  - `onDisconnect`: `process.exit(bot.forge.recordExit({event, reason}))`. It writes the reason file and exits with the kick's code.
+  - Spawn-handler catch: exits 1, or 3 if fatal; never 0.
+  - `cleanKill`: `requested_restart` while still connected. After a kick it reports the kick instead, so kicks keep the backoff.
+  - `init_agent.js`: `process.exit(error?.exitCode === 3 ? 3 : 1)`.
+- **The contract moved to forge-bridge** (`src/exit-contract.js`): `decideAgentExit`, `readExitReason`, `writeExitReason` and `recordAgentExit`. `initBot` adds `bot.forge.recordExit`.
+- **`requested_restart`** restarts at once without touching the backoff. A guard falls back to the backoff after 5 requested restarts in 10 min (my addition, against login loops).
+- **Single-bot service:** a requested stop ends the main process with 0. `forceRestart` is never a stop.
+- **Findings 3-8:**
+  - comment that "connected" is measured from spawn;
+  - the reason file sits in a private mkdtemp folder;
+  - multi-bot exit-3 orphaning documented;
+  - new tests for `forceRestart`, the auth cap and the reset through `AgentProcess`, and stop-then-code;
+  - `kicks.js` comment fixed;
+  - STATUS test paths fixed.
+- **Lint ratchet:** `test/lint-baseline.json` updated to 257 with `node test/tools/lint-baseline.mjs --update` (the same value as lead PR #20).
+- `npm test` passes 224/224; the lint ratchet passes (257, baseline 257).
+
+## Done: PR #23 review (REQUEST CHANGES) fixes, on the same branch
+
+1. A `requested_restart` applies the 10-minute reset (`policy.noteSession`) but still adds nothing to the streak. Test: 2 auth kicks, a 5 h session ended by `!restart`, then 1 auth kick gives a 10 s restart, not fatal.
+2. Single-bot service: `stop()` while a backoff restart is pending calls `exit(0)`.
+3. `readExitReason` ignores files over 4 KB (or not a file), checked with `statSync` before reading.
+4. (Nit) The mkdtemp folders are removed when the main process exits. The constructor no longer throws: without a folder, the contract runs on exit codes only.
+5. (Nit) The `cleanKill` exit comment in `agent.js` is reworded.
+6. New end-to-end test: a real child process classifies a ban and calls `recordAgentExit`, which writes the reason file; `AgentProcess` then calls `exit(3)` with "FATAL (banned)".
+7. **Flaky loopback tests.** Under heavy load, a loopback connect on this Windows machine can fail at once with `ETIMEDOUT` (in about 300 ms).
+   - forge-bridge: the status ping is now tried twice, 1 s apart. Its timeout is configurable (`FORGE_PING_TIMEOUT_MS`, and `ROTN_DRIVER_PING_TIMEOUT_MS` for the driver).
+   - Tests: generous budgets. e2e-initbot gets the pinned mod-list fallback and one login retry. The g1-driver test restarts the driver once if it exits before hello. initbot-auth uses a local hang-up server and accepts a connect error to that port as proof of start.
+   - **Load check:** 3 full `npm test` runs at once on this PC. All forge-bridge tests passed in all 3 runs, and the ping retry was used 3 times. Before the fixes the same check failed 2 tests per run.
+- `npm test` (single run): 231/231. Lint ratchet: 257, unchanged.
 
 ## Doing
 
-- PR #19 (brief item 8, `agent_process.js`) open. Waiting for a scheduled sweeper run within 120 min, then Batch A, then Batch B+C on one server.
+- PR #23 (PR #19 follow-ups) open. The G1 batches wait for the preflight (harness-ops is adapting it to the rotn-sweeper-cron helper repo).
 
 ## Next
 
@@ -176,14 +211,11 @@ The setup for both batches:
 4. **Lead (`docs/research/fml-spec.md`, optional):** the Forge 14.23.5.2860 layouts confirmed by `javap` are listed at the top of `packages/forge-bridge/test/golden.test.js`, if you want them in the spec.
 5. **harness-ops (optional):** have `walk()` in `test/runner/drivers/scenario-protocol.mjs` return a `method` field (for example `forward+jump+turn`). g1-driver then reports it as `walkMethod`.
 6. **harness-ops / lead (`TRY_IT.md`, `main.js` docs):** with `auth: "microsoft"` (develop's default), `initBot` now refuses to start without `MINDCRAFT_PROFILES_FOLDER`. Please mention this where the run steps are.
-8. **skills-rotn (`src/agent/agent.js`), for brief item 8:** in `onDisconnect`, take `bot.forge?.bridge?.lastKick` (`{category, fatal, exitCode, retryCap?}`) and do two things:
-   - write `{category, exitCode, retryCap}` as JSON to `process.env.MINDCRAFT_EXIT_REASON_FILE`, if it is set;
-   - exit with `lastKick.exitCode` (3 for fatal) instead of always 1.
-
-   The main process then stops restarting after a ban or mod rejection, and caps auth retries.
-9. **Lead (`src/process/init_agent.js`):** in the start `catch`, use `process.exit(error?.exitCode === 3 ? 3 : 1)`. `initBot`'s setup refusals (no token folder, a folder in a repo, prismarine-auth `DEBUG`) carry `exitCode: 3`, so they stop instead of restarting every 5 min.
+8. ~~skills-rotn (`agent.js` exit lines).~~ Done by net-forge under the lead-approved exception (PR #19 follow-ups).
+9. ~~Lead (`init_agent.js` exit 3).~~ Done by net-forge under the same exception.
+11. **harness-ops (`test/unit/status-ping.test.js`):** under heavy load (3 `npm test` runs at once), "ping talks to a fake server and reassembles a large, chunked response" failed with an immediate `connect ETIMEDOUT 127.0.0.1:<port>` in 7 of the 9 loaded runs I did today (my changes do not touch that test). The same loopback symptom is fixed in forge-bridge's tests by retrying the connect once after 1 s.
 10. **harness-ops (systemd unit `mindcraft-rotn@<bot>`):** set `Environment=MINDCRAFT_SINGLE_BOT_SERVICE=1`, so a clean agent stop ends the main process with 0, and `RestartPreventExitStatus=0 3` (ADR 0003).
 
 ## Open PRs
 
-- (#15, #16 and #18 merged.) #19: brief item 8, `agent_process.js` exit-code contract, on `agent/net-forge/agent-process-restart`. `npm test` 212/212; lint 257.
+- (#15, #16, #18 and #19 merged.) #23: PR #19 follow-ups (agent-side exit codes, requested restarts, service stop), on `agent/net-forge/exit-contract-followups`. `npm test` 224/224; lint 257.

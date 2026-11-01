@@ -5,79 +5,73 @@ import os from 'os';
 import path from 'path';
 import process from 'process';
 import { logoutAgent } from '../mindcraft/mindserver.js';
-import { createRestartPolicy, EXIT } from '../../packages/forge-bridge/index.js';
+import {
+    createRestartPolicy, createRequestedRestartGuard, decideAgentExit, readExitReason, EXIT,
+} from '../../packages/forge-bridge/index.js';
+
+// The contract itself (codes, decisions, the exit-reason file) lives in
+// packages/forge-bridge/src/exit-contract.js; these are re-exported for callers.
+export { decideAgentExit, readExitReason };
 
 const init_agent_path = fileURLToPath(new URL('./init_agent.js', import.meta.url));
 
-// Exit-code contract, ADR 0003 decision 5 (net-forge brief item 8):
-//   0  clean stop. Not restarted. A single-bot service (MINDCRAFT_SINGLE_BOT_SERVICE=1,
-//      set by the mindcraft-rotn@<bot> unit) ends the main process with 0 too.
-//   1  transient. Restarted in-process with backoff: 10 s doubling to 5 min, reset
-//      after 10 min connected (createRestartPolicy in packages/forge-bridge).
-//   3  fatal. Not restarted; the main process ends with 3 and logs a line for the human.
-//   2, 4  reserved for Mindcraft's task framework: the main process ends with that code.
-// The agent may also write {category, exitCode, retryCap?} as JSON to the file named
-// by MINDCRAFT_EXIT_REASON_FILE before it exits (for example from
-// bot.forge.bridge.lastKick). Then a fatal kick is fatal even if the process exit
-// code was 1, and a capped category (auth) becomes fatal at its cap.
+// One private mkdtemp folder per AgentProcess, removed when the main process exits.
+const reasonDirs = new Set();
+let reasonCleanupHooked = false;
+function makeReasonFile(base, log) {
+    try {
+        const dir = fs.mkdtempSync(path.join(base, 'mindcraft-exit-'));
+        reasonDirs.add(dir);
+        if (!reasonCleanupHooked) {
+            reasonCleanupHooked = true;
+            process.once('exit', () => {
+                for (const d of reasonDirs) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* best effort */ } }
+            });
+        }
+        return path.join(dir, 'reason.json');
+    } catch (err) {
+        // Without the file the contract still works on exit codes alone.
+        log.error(`[agent_process] no exit-reason folder (${err.message}); using exit codes only`);
+        return null;
+    }
+}
 const TASK_CODES = new Set([2, 4]);
-const REQUESTED_STOP_SIGNALS = new Set(['SIGINT', 'SIGTERM']);
 
-/** Reads and validates the agent's exit-reason file; null if absent or malformed. */
-export function readExitReason(file, { readFile = fs.readFileSync } = {}) {
-    if (!file) return null;
-    let raw;
-    try { raw = readFile(file, 'utf8'); } catch { return null; }
-    let r;
-    try { r = JSON.parse(raw); } catch { return null; }
-    if (!r || typeof r !== 'object') return null;
-    const category = typeof r.category === 'string' ? r.category.slice(0, 64) : null;
-    const exitCode = [EXIT.CLEAN, EXIT.TRANSIENT, EXIT.FATAL].includes(r.exitCode) ? r.exitCode : null;
-    if (!category || exitCode === null) return null;
-    const out = { category, exitCode, fatal: exitCode === EXIT.FATAL };
-    if (Number.isInteger(r.retryCap) && r.retryCap > 0) out.retryCap = r.retryCap;
-    return out;
-}
-
-/**
- * What the main process does when an agent process ends. Pure, so it is unit-tested.
- * @returns {{action: 'none'|'exit'|'restart', code?: number, delayMs?: number, reason: string}}
- */
-export function decideAgentExit({ code, signal, requestedStop = false, singleBotService = false, connectedMs = 0, reason = null }, policy) {
-    if (requestedStop || REQUESTED_STOP_SIGNALS.has(signal)) return { action: 'none', reason: 'stop requested' };
-    if (code === EXIT.FATAL || (code === EXIT.TRANSIENT && reason?.fatal)) {
-        return { action: 'exit', code: EXIT.FATAL, reason: reason?.category ?? 'fatal (exit 3)' };
-    }
-    if (TASK_CODES.has(code)) return { action: 'exit', code, reason: 'task ended' };
-    if (code === EXIT.CLEAN) {
-        return singleBotService ? { action: 'exit', code: EXIT.CLEAN, reason: 'clean stop (single-bot service)' } : { action: 'none', reason: 'clean stop' };
-    }
-    if (typeof code === 'number' && code > EXIT.FATAL) return { action: 'exit', code, reason: `exit ${code}` };
-    // 1, or killed by a signal we did not send: transient.
-    const c = reason && !reason.fatal ? reason : { category: code === null ? `signal ${signal}` : 'transient', fatal: false, exitCode: EXIT.TRANSIENT };
-    const next = policy.next({ ...c, exitCode: EXIT.TRANSIENT }, connectedMs);
-    if (!next.restart) return { action: 'exit', code: EXIT.FATAL, reason: next.reason };
-    return { action: 'restart', delayMs: next.delayMs, reason: next.reason };
-}
-
+// Exit-code contract, ADR 0003 decision 5 (net-forge brief item 8):
+//   0  clean stop: not restarted. A single-bot service (MINDCRAFT_SINGLE_BOT_SERVICE=1,
+//      set by the mindcraft-rotn@<bot> unit) ends the main process with 0, also after
+//      a requested stop (mindserver stopAgent/destroyAgent), so systemd sees the stop.
+//   1  transient: restarted in-process with backoff. A deliberate restart
+//      (requested_restart) restarts at once without touching the backoff.
+//   3  fatal: not restarted; the main process ends with 3 and logs a line for the human.
+//      In multi-bot mode (one main process, several agents) this ends the main
+//      process and so stops the sibling agents too, as upstream's "code > 1" did:
+//      run each bot as its own single-bot service if one bot must not stop the others.
+//   2, 4  reserved for Mindcraft's task framework: the main process ends with that code.
+// The agent writes {category, exitCode, retryCap?} to MINDCRAFT_EXIT_REASON_FILE
+// before it exits (bot.forge.recordExit). The file sits in a private mkdtemp folder
+// per agent, so its path is not predictable.
 export class AgentProcess {
     /**
      * @param {string} name
      * @param {number} port
-     * @param {object} [deps] injected for tests: spawn, exit, setTimer, clearTimer, now, env, policy, log, logout, reasonDir
+     * @param {object} [deps] injected for tests: spawn, exit, setTimer, clearTimer, now, env, policy, guard, log, logout, reasonBase
      */
     constructor(name, port, deps = {}) {
         this.name = name;
         this.port = port;
         this.deps = {
             spawn, exit: (c) => process.exit(c), setTimer: setTimeout, clearTimer: clearTimeout, now: Date.now,
-            env: process.env, log: console, logout: logoutAgent, reasonDir: os.tmpdir(),
+            env: process.env, log: console, logout: logoutAgent, reasonBase: os.tmpdir(),
             ...deps,
         };
         this.policy = this.deps.policy ?? createRestartPolicy();
+        this.guard = this.deps.guard ?? createRequestedRestartGuard();
         this.singleBotService = this.deps.env.MINDCRAFT_SINGLE_BOT_SERVICE === '1';
+        this.reasonFile = makeReasonFile(this.deps.reasonBase, this.deps.log);
         this.restartTimer = null;
         this.stopRequested = false;
+        this.restartRequested = false;
     }
 
     start(load_memory=false, init_message=null, count_id=0) {
@@ -85,6 +79,7 @@ export class AgentProcess {
         this.count_id = count_id;
         this.running = true;
         this.stopRequested = false;
+        this.restartRequested = false;
         this.restartTimer = null;
 
         let args = [init_agent_path, this.name];
@@ -96,14 +91,15 @@ export class AgentProcess {
             args.push('-m', init_message);
         args.push('-p', this.port);
 
-        const reasonFile = path.join(d.reasonDir, `mindcraft-exit-${this.name.replace(/[^A-Za-z0-9_-]/g, '_')}-${process.pid}.json`);
-        try { fs.rmSync(reasonFile, { force: true }); } catch { /* not there */ }
+        const reasonFile = this.reasonFile;
+        if (reasonFile) { try { fs.rmSync(reasonFile, { force: true }); } catch { /* not there */ } }
 
         const agentProcess = d.spawn(process.execPath, args, {
             stdio: 'inherit',
             stderr: 'inherit',
-            env: { ...d.env, MINDCRAFT_EXIT_REASON_FILE: reasonFile },
+            env: reasonFile ? { ...d.env, MINDCRAFT_EXIT_REASON_FILE: reasonFile } : { ...d.env },
         });
+        // "Connected" time for the backoff reset is measured from spawn.
         const startedAt = d.now();
 
         agentProcess.on('exit', (code, signal) => {
@@ -111,12 +107,12 @@ export class AgentProcess {
             this.running = false;
             d.logout(this.name);
             const reason = readExitReason(reasonFile);
-            try { fs.rmSync(reasonFile, { force: true }); } catch { /* not there */ }
+            if (reasonFile) { try { fs.rmSync(reasonFile, { force: true }); } catch { /* not there */ } }
 
             const decision = decideAgentExit({
-                code, signal, requestedStop: this.stopRequested, singleBotService: this.singleBotService,
-                connectedMs: d.now() - startedAt, reason,
-            }, this.policy);
+                code, signal, requestedStop: this.stopRequested, restartRequested: this.restartRequested,
+                singleBotService: this.singleBotService, connectedMs: d.now() - startedAt, reason, now: d.now(),
+            }, this.policy, this.guard);
             this.lastDecision = decision;
 
             if (decision.action === 'exit') {
@@ -153,7 +149,11 @@ export class AgentProcess {
 
     stop() {
         this.cancelPendingRestart();
-        if (!this.running) return;
+        if (!this.running) {
+            // A single-bot service waiting out a backoff: the stop ends the main process (systemd sees it).
+            if (this.singleBotService) this.deps.exit(EXIT.CLEAN);
+            return;
+        }
         this.stopRequested = true;
         this.process.kill('SIGINT');
     }
@@ -172,6 +172,7 @@ export class AgentProcess {
                  console.log(`Stopped hanging agent ${this.name}. Now restarting.`);
                  this.start(true, 'Agent process restarted.', this.count_id);
             });
+            this.restartRequested = true; // not a stop: the once('exit') above restarts it
             this.stop(); // sends SIGINT
         } else {
              this.start(true, 'Agent process restarted.', this.count_id);
