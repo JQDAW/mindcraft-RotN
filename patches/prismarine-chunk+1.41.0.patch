@@ -1,0 +1,67 @@
+diff --git a/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js b/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js
+index 1de1a3c..831f634 100644
+--- a/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js
++++ b/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js
+@@ -224,9 +224,12 @@ module.exports = (Block, mcData) => {
+           palette = null
+         }
+ 
++        // Forge: the packet's bitsPerBlock is authoritative for the global palette too
++        // (modded servers send more than vanilla's 13 bits). mindcraft-rotn forge-bridge.
++        if (bitsPerBlock > this.maxBitsPerBlock) this.maxBitsPerBlock = bitsPerBlock
+         // number of items in data array
+         const dataArray = new BitArray({
+-          bitsPerValue: bitsPerBlock > constants.MAX_BITS_PER_BLOCK ? this.maxBitsPerBlock : bitsPerBlock,
++          bitsPerValue: bitsPerBlock,
+           capacity: 4096
+         }).readBuffer(reader, varInt.read(reader) * 2)
+ 
+@@ -255,16 +258,45 @@ module.exports = (Block, mcData) => {
+       // read biomes
+       if (fullChunk) {
+         const p = { x: 0, y: 0, z: 0 }
+-        for (p.z = 0; p.z < constants.SECTION_WIDTH; p.z++) {
+-          for (p.x = 0; p.x < constants.SECTION_WIDTH; p.x++) {
+-            this.setBiome(p, reader.readUInt8())
++        const start = reader.readOffset
++        // RoughlyEnoughIDs (mod id jeid) 2.2.2 MixinSPacketChunkData replaces the
++        // 256 biome bytes with a VarInt length plus VarInt biome ids. mindcraft-rotn forge-bridge.
++        const intBiomes = data.length - start !== 256 ? readVarIntBiomes(reader, data.length) : null
++        if (intBiomes) {
++          this.biomesFormat = 'varint'
++          for (p.z = 0; p.z < constants.SECTION_WIDTH; p.z++) {
++            for (p.x = 0; p.x < constants.SECTION_WIDTH; p.x++) {
++              this.setBiome(p, intBiomes[(p.z << 4) | p.x])
++            }
++          }
++        } else if (data.length - start >= 256) {
++          reader.readOffset = start
++          this.biomesFormat = 'byte'
++          for (p.z = 0; p.z < constants.SECTION_WIDTH; p.z++) {
++            for (p.x = 0; p.x < constants.SECTION_WIDTH; p.x++) {
++              this.setBiome(p, reader.readUInt8())
++            }
+           }
++        } else {
++          this.biomesFormat = 'missing'
+         }
+       }
+     }
+   }
+ }
+ 
++function readVarIntBiomes (reader, end) {
++  try {
++    const n = varInt.read(reader)
++    if (n !== 256) return null
++    const out = new Array(n)
++    for (let i = 0; i < n; i++) out[i] = varInt.read(reader)
++    return reader.readOffset === end ? out : null
++  } catch (e) {
++    return null
++  }
++}
++
+ function getBiomeIndex (pos) {
+   return (pos.z * 16) | pos.x
+ }

@@ -7,6 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv } from '../../packages/forge-bridge/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -53,62 +54,74 @@ export const WOOL_COLORS = [
 
 
 export function initBot(username) {
+    // Read the version here, not at module load: settings are empty until
+    // setSettings() runs, which is after this module is imported (seam-map A).
+    const configuredVersion = settings.minecraft_version;
     const options = {
         username: username,
         host: settings.host,
         port: settings.port,
         auth: settings.auth,
-        version: mc_version,
+        version: configuredVersion,
         checkTimeoutInterval: 60000,  // 60s keep-alive check (default 30s) — reduces disconnects on slow servers
     }
-    if (!mc_version || mc_version === "auto") {
+    if (!configuredVersion || configuredVersion === "auto") {
         delete options.version;
+    }
+    // Env switches (FORGE_BRIDGE, FORGE_CAPTURE, FORGE_MODLIST_FILE,
+    // MINDCRAFT_PROFILES_FOLDER) are documented in packages/forge-bridge/src/env.js.
+    const env = forgeOptionsFromEnv(username);
+    // Per-bot Microsoft token cache, outside the repo (docs/research/ops.md section 1).
+    if (env.profilesFolder) {
+        options.profilesFolder = env.profilesFolder;
+    }
+
+    // Forge 1.12.2 (RotN): ping first, then attach forge-bridge with the server's
+    // ModList before the socket opens (ADR 0003). FORGE_BRIDGE=auto attaches only
+    // when the ping reports FML.
+    const forge = { bridge: null, capture: null, mode: env.mode };
+    if (forge.mode !== 'off') {
+        if (env.captureFile) {
+            forge.capture = new CaptureWriter({ file: env.captureFile, redact: { username } });
+            console.log(`[mcdata] forge-bridge capture: ${env.captureFile}`);
+        }
+        options.connect = createForgeConnect({
+            host: options.host,
+            port: options.port,
+            mode: forge.mode,
+            modListFile: env.modListFile,
+            capture: forge.capture,
+            onAttach: (bridge) => { forge.bridge = bridge; options.brand = 'fml,forge'; },
+        });
     }
 
     const bot = createBot(options);
+    bot.forge = forge;
 
-    // Throttle position packets to avoid kicks on Paper/Spigot servers
-    // Paper enforces stricter packet rate limits than vanilla, causing ECONNRESET
-    // when mineflayer sends position updates faster than 50ms apart
-    let lastPositionUpdate = 0;
-    let pendingPositionPacket = null;
-    const POSITION_THROTTLE_MS = 50;
-    const originalWrite = bot._client.write.bind(bot._client);
-    bot._client.write = function(name, data) {
-        if (name === 'position' || name === 'position_look' || name === 'look') {
-            const now = Date.now();
-            if (now - lastPositionUpdate < POSITION_THROTTLE_MS) {
-                // Queue this packet so the last position update is never lost
-                if (!pendingPositionPacket) {
-                    pendingPositionPacket = setTimeout(() => {
-                        pendingPositionPacket = null;
-                        lastPositionUpdate = Date.now();
-                        originalWrite(name, data);
-                    }, POSITION_THROTTLE_MS - (now - lastPositionUpdate));
-                }
-                return;
-            }
-            lastPositionUpdate = now;
-            if (pendingPositionPacket) {
-                clearTimeout(pendingPositionPacket);
-                pendingPositionPacket = null;
-            }
-        }
-        return originalWrite(name, data);
-    };
+    // Throttle position packets to avoid kicks on Paper/Spigot servers. Inside each
+    // 50 ms window the newest position and look are kept and merged, so the server
+    // always gets the latest state (upstream sent the oldest and dropped the rest).
+    bot._client.write = throttleMovement(bot._client.write.bind(bot._client), { intervalMs: 50 });
 
-    // Suppress PartialReadError for non-critical packets
-    // Paper servers sometimes send packets that node-minecraft-protocol
-    // can't fully parse (scoreboard, resource_pack, custom_payload, etc.)
-    // These errors crash the bot but the packets aren't needed for gameplay
+    // PartialReadError used to be swallowed silently. It is still not fatal, but it
+    // is counted and logged. protodef drops packets it cannot read without an
+    // 'error' event, so those are counted by forge-bridge's deserializer hook
+    // (and kept in its capture); 'error' events here come from plugin channels.
+    // (protodef's own "partial packet" line: PROTODEF_LOG_PARTIAL=1.)
+    let clientPartialReadErrors = 0;
+    Object.defineProperty(bot, 'partialReadErrors', {
+        get: () => clientPartialReadErrors + (forge.bridge?.stats.partialReadErrors ?? 0),
+    });
     const originalEmit = bot._client.emit.bind(bot._client);
     bot._client.emit = function(event, ...args) {
         if (event === 'error' && args[0]) {
             const err = args[0];
             const errStr = err instanceof Error ? err.message : String(err);
             if (errStr.includes('PartialReadError')) {
-                console.warn('[mcdata] Suppressed PartialReadError:', errStr.substring(0, 120));
-                return true; // Swallow the error
+                clientPartialReadErrors++;
+                console.warn(`[mcdata] PartialReadError #${clientPartialReadErrors} (not fatal):`, errStr.substring(0, 300));
+                forge.capture?.event('client_partial_read_error', { n: clientPartialReadErrors, message: errStr.substring(0, 300) });
+                return true;
             }
         }
         return originalEmit(event, ...args);

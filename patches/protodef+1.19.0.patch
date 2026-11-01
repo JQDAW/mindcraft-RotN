@@ -1,15 +1,14 @@
 diff --git a/node_modules/protodef/src/serializer.js b/node_modules/protodef/src/serializer.js
-index 8b52e95..884426b 100644
+index 8b52e95..08a87a3 100644
 --- a/node_modules/protodef/src/serializer.js
 +++ b/node_modules/protodef/src/serializer.js
-@@ -73,8 +73,8 @@ class FullPacketParser extends Transform {
+@@ -72,7 +72,8 @@ class FullPacketParser extends Transform {
+     let packet
      try {
        packet = this.parsePacketBuffer(chunk)
-       if (packet.metadata.size !== chunk.length && !this.noErrorLogging) {
--        console.log('Chunk size is ' + chunk.length + ' but only ' + packet.metadata.size + ' was read ; partial packet : ' +
--          JSON.stringify(packet.data) + '; buffer :' + chunk.toString('hex'))
-+        // console.log('Chunk size is ' + chunk.length + ' but only ' + packet.metadata.size + ' was read ; partial packet : ' +
-+        //   JSON.stringify(packet.data) + '; buffer :' + chunk.toString('hex'))
+-      if (packet.metadata.size !== chunk.length && !this.noErrorLogging) {
++      // Silenced by default (Mindcraft); set PROTODEF_LOG_PARTIAL=1 to log partial packets again.
++      if (packet.metadata.size !== chunk.length && !this.noErrorLogging && process.env.PROTODEF_LOG_PARTIAL === '1') {
+         console.log('Chunk size is ' + chunk.length + ' but only ' + packet.metadata.size + ' was read ; partial packet : ' +
+           JSON.stringify(packet.data) + '; buffer :' + chunk.toString('hex'))
        }
-     } catch (e) {
-       if (e.partialReadError) {
