@@ -119,7 +119,7 @@ public class RotnDump {
         private final long t0 = System.currentTimeMillis();
         private final Names names = new Names();
         private final Map<String, Object> counts = new LinkedHashMap<>();
-        private final Map<String, long[]> timing = new LinkedHashMap<>(); // name -> {ms, ticks}
+        private final Map<String, long[]> timing = new LinkedHashMap<>(); // name -> {ms, ticks, maxTickMs}
         private final Map<String, Object[]> entryErrors = new LinkedHashMap<>(); // name -> {count, first}
         private final List<String> errors = new ArrayList<>();
         private final Deque<String> todo = new ArrayDeque<>();
@@ -133,6 +133,7 @@ public class RotnDump {
         private int written;
         private long partMs;
         private long partTicks;
+        private long partMaxTickMs; // the longest single tick of the part (PR #55 review)
 
         Job(File dir) {
             this.dir = dir;
@@ -160,7 +161,9 @@ public class RotnDump {
                     if (msSince(t) >= TICK_BUDGET_MS) break;
                 }
                 partTicks++;
-                partMs += msSince(t);
+                long tickMs = msSince(t);
+                partMs += tickMs;
+                if (tickMs > partMaxTickMs) partMaxTickMs = tickMs;
                 if (next >= part.size()) close();
             } catch (Throwable e) {
                 fail(e);
@@ -188,6 +191,7 @@ public class RotnDump {
             next = 0;
             written = 0;
             partTicks = 0;
+            partMaxTickMs = 0;
             out = new OutputStreamWriter(new FileOutputStream(new File(dir, p + ".json.tmp")), StandardCharsets.UTF_8);
             w = new JsonWriter(out);
             w.setIndent("");
@@ -204,12 +208,12 @@ public class RotnDump {
             move(new File(dir, name + ".json.tmp"), new File(dir, name + ".json"));
             partMs += msSince(t);
             counts.put(name, written);
-            timing.put(name, new long[] {partMs, partTicks});
+            timing.put(name, new long[] {partMs, partTicks, partMaxTickMs});
             if (part.entryErrors > 0) {
                 entryErrors.put(name, new Object[] {part.entryErrors, part.firstEntryError});
                 LOG.warn("[rotndump] {}: {} entries dropped, first: {}", name, part.entryErrors, part.firstEntryError);
             }
-            LOG.info("[rotndump] {}: {} entries in {} ms over {} ticks", name, written, partMs, partTicks);
+            LOG.info("[rotndump] {}: {} entries in {} ms over {} ticks (longest tick {} ms)", name, written, partMs, partTicks, partMaxTickMs);
             part = null;
         }
 
@@ -311,6 +315,7 @@ public class RotnDump {
                 j.name(e.getKey()).beginObject();
                 J.num(j, "ms", e.getValue()[0]);
                 J.num(j, "ticks", e.getValue()[1]);
+                J.num(j, "maxTickMs", e.getValue()[2]);
                 j.endObject();
             }
             j.endObject();

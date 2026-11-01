@@ -186,6 +186,24 @@ final class RecipeDumper extends Part<IRecipe> {
         String error;
     }
 
+    private static ItemStack firstSorted(List<ItemStack> list) {
+        ItemStack best = list.get(0);
+        String bestKey = sortKey(best);
+        for (ItemStack s : list) {
+            String k = sortKey(s);
+            if (k.compareTo(bestKey) < 0) {
+                best = s;
+                bestKey = k;
+            }
+        }
+        return best;
+    }
+
+    private static String sortKey(ItemStack s) {
+        String nbt = J.get(() -> s.hasTagCompound() ? String.valueOf(s.getTagCompound()) : "");
+        return Names.stackKey(s) + "#" + (nbt == null ? "" : nbt);
+    }
+
     /** A grid filled with the first stack of each ingredient (mirrored left-right on request), or null. */
     private static InventoryCrafting sampleGrid(List<Ingredient> ings, boolean shaped, int width, int height, boolean mirror) {
         int gw = shaped ? Math.max(width, 1) : 3;
@@ -202,7 +220,9 @@ final class RecipeDumper extends Part<IRecipe> {
             List<ItemStack> list = stacks(ing);
             if (!shaped && list.isEmpty()) continue;
             if (i >= gw * gh) return null;
-            ItemStack s = list.isEmpty() ? ItemStack.EMPTY : list.get(0).copy();
+            // The first stack in sorted order, not in the mod's (hash-set) order, so the sample and
+            // its `remaining` are the same on every server start (PR #55 review: hammersmashing).
+            ItemStack s = list.isEmpty() ? ItemStack.EMPTY : firstSorted(list).copy();
             if (!s.isEmpty()) {
                 if (s.getItemDamage() == OreDictionary.WILDCARD_VALUE) s.setItemDamage(0);
                 s.setCount(1);

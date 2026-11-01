@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { importDump } from '../tools/import-dump.mjs';
+import zlib from 'node:zlib';
+import { importDump, canonicalize } from '../tools/import-dump.mjs';
 import { RotnData, DUMP_FILES } from '../src/catalog.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -104,6 +105,53 @@ test('a dump without serializers.json is refused', () => {
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
+});
+
+test('files over 1 MiB are written as .json.br, smaller ones as .json (PR #55 review)', () => {
+    const { root, src, pack } = fakeFetch();
+    try {
+        // Pad one item so items.json is over 1 MiB; the other files stay small.
+        const items = JSON.parse(fs.readFileSync(path.join(src, 'items.json'), 'utf8'));
+        items.items['pyrotech:crude_axe'].padding = 'x'.repeat((1 << 20) + 1000);
+        fs.writeFileSync(path.join(src, 'items.json'), JSON.stringify(items));
+        const res = importDump({ src, jarSha256: JAR, outDir: pack });
+        assert.deepEqual(res.problems, []);
+        assert.ok(fs.existsSync(path.join(pack, 'items.json.br')) && !fs.existsSync(path.join(pack, 'items.json')));
+        assert.ok(fs.existsSync(path.join(pack, 'smelting.json')) && !fs.existsSync(path.join(pack, 'smelting.json.br')));
+        const back = JSON.parse(zlib.brotliDecompressSync(fs.readFileSync(path.join(pack, 'items.json.br'))).toString('utf8'));
+        assert.equal(back.items['pyrotech:crude_axe'].padding.length, (1 << 20) + 1000);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('the jar SHA-256 is compared case-insensitively (PR #55 review)', () => {
+    const { root, src, pack } = fakeFetch();
+    try {
+        assert.deepEqual(importDump({ src, jarSha256: JAR.toUpperCase(), outDir: pack }).problems, []);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('canonicalize sorts hash-set lists but keeps positional ones', () => {
+    const st = (name, meta = 0, nbt) => (nbt ? { name, meta, nbt } : { name, meta });
+    const files = {
+        oredict: { ores: { rock: [st('z:z'), st('a:a', 6), st('a:a', 0)] } },
+        recipes: { recipes: [{ id: 'x', type: 'shapeless', ingredients: [{ stacks: [st('b:b'), st('a:a')], ores: ['z', 'a'] }, null], remaining: [st('b:b'), null] },
+            { id: 'y', type: 'shaped', slots: [null, { stacks: [st('m:m', 0, '{b}'), st('m:m', 0, '{a}')] }] }] },
+        spawns: { biomes: { 'minecraft:plains': { monster: [{ entity: 'minecraft:zombie', weight: 95, min: 4, max: 4, class: 'Z' }, { entity: 'minecraft:creeper', weight: 100, min: 4, max: 4, class: 'C' }] } } },
+        smelting: { smelting: [{ input: st('r:n', 10, '{b}'), output: st('o:o') }, { input: st('r:n', 10, '{a}'), output: st('o:o') }] },
+    };
+    canonicalize(files);
+    assert.deepEqual(files.oredict.ores.rock, [st('a:a', 0), st('a:a', 6), st('z:z')]);
+    assert.deepEqual(files.recipes.recipes[0].ingredients[0], { stacks: [st('a:a'), st('b:b')], ores: ['a', 'z'] });
+    assert.equal(files.recipes.recipes[0].ingredients[1], null); // positions kept
+    assert.deepEqual(files.recipes.recipes[0].remaining, [st('b:b'), null]);
+    assert.equal(files.recipes.recipes[1].slots[0], null);
+    assert.deepEqual(files.recipes.recipes[1].slots[1].stacks.map(s => s.nbt), ['{a}', '{b}']);
+    assert.deepEqual(files.spawns.biomes['minecraft:plains'].monster.map(e => e.entity), ['minecraft:creeper', 'minecraft:zombie']);
+    assert.deepEqual(files.smelting.smelting.map(s => s.input.nbt), ['{a}', '{b}']);
 });
 
 test('no DONE marker: refused', () => {

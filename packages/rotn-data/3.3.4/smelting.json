@@ -2909,18 +2909,6 @@
   {
    "input": {
     "name": "minecraft:stained_hardened_clay",
-    "meta": 1
-   },
-   "output": {
-    "name": "minecraft:orange_glazed_terracotta",
-    "meta": 0,
-    "count": 1
-   },
-   "xp": 0.1
-  },
-  {
-   "input": {
-    "name": "minecraft:stained_hardened_clay",
     "meta": 10
    },
    "output": {
@@ -2985,6 +2973,18 @@
    },
    "output": {
     "name": "minecraft:black_glazed_terracotta",
+    "meta": 0,
+    "count": 1
+   },
+   "xp": 0.1
+  },
+  {
+   "input": {
+    "name": "minecraft:stained_hardened_clay",
+    "meta": 1
+   },
+   "output": {
+    "name": "minecraft:orange_glazed_terracotta",
     "meta": 0,
     "count": 1
    },
