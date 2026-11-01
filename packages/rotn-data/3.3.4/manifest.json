@@ -3,13 +3,14 @@
  "dumper": "0.1.0",
  "dumperJar": {
   "file": "rotndump-0.1.0.jar",
-  "bytes": 53939,
-  "sha256": "2d32ee409612f78195ff5b7fffbf2695cc37582499945e28268f9eca3190b94c"
+  "bytes": 58632,
+  "sha256": "438b3ce64107f680ea7eefe6d143234b12eb140f89f4fd12d3ca3e72e8a47d33"
  },
  "minecraft": "1.12.2",
  "forge": "14.23.5.2860",
- "dumpedAt": "2026-11-01T19:29:34Z",
+ "dumpedAt": "2026-11-01T21:26:59Z",
  "batch": 500,
+ "tickBudgetMs": 40,
  "modCount": 347,
  "modListSha256": "7ca372b7677ef55d14471b8e0421e14113a0a5c58df7453f8fbe786ee5cd7392",
  "mods": [
@@ -1409,42 +1410,63 @@
   "recipes": 6089,
   "smelting": 1530,
   "entities": 971,
-  "spawns": 175
+  "spawns": 175,
+  "serializers": 3
  },
  "timing": {
   "oredict": {
-   "ms": 53,
+   "ms": 36,
    "ticks": 5
   },
   "blocks": {
-   "ms": 738,
-   "ticks": 10
+   "ms": 523,
+   "ticks": 14
   },
   "items": {
-   "ms": 790,
-   "ticks": 20
+   "ms": 745,
+   "ticks": 27
   },
   "recipes": {
-   "ms": 574,
-   "ticks": 22
+   "ms": 531,
+   "ticks": 24
   },
   "smelting": {
-   "ms": 53,
+   "ms": 38,
    "ticks": 4
   },
   "entities": {
-   "ms": 54,
+   "ms": 43,
    "ticks": 2
   },
   "spawns": {
-   "ms": 63,
+   "ms": 41,
    "ticks": 1
+  },
+  "serializers": {
+   "ms": 1168,
+   "ticks": 26
   }
  },
+ "entryErrors": {},
  "errors": [],
  "pack": {
   "version": "3.3.4",
   "zipSha256": "90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205"
  },
- "importedFrom": "tools/dumper via deploy/test-server.sh --fetch rotn-dump"
+ "importedFrom": "tools/dumper via deploy/test-server.sh --fetch rotn-dump",
+ "import": {
+  "expectedJarSha256": "438b3ce64107f680ea7eefe6d143234b12eb140f89f4fd12d3ca3e72e8a47d33",
+  "rawSha256": {
+   "DONE": "5e1ad5331fb41dcfa3c7259085ad48224431817b07f195a3f89ec67dcd2ae576",
+   "blocks.json": "a996121d341ec25a6090d7eaf66900f21c052f2b10a46febf54c6ca078b9ad92",
+   "entities.json": "0fc31780218c3d6d0f8fb799cc99f981575ecb54a6ac98dd6c2745a07599b5e1",
+   "items.json": "e1b0eb2d91cdbee154299d6f84f59126af6b1b6185c1f243201b9b0349ed7219",
+   "manifest.json": "da641c2206c58d33782a9937b2769ad0bf7ae7ae42841426adca4a459d293080",
+   "oredict.json": "77b9f998e879805b93bfe8f5b9e550c7bb6937f34f0c3f1e7e8a0c28d1a1daed",
+   "recipes.json": "accd6c2363f5dc3736e3f5935d8af83e022f9c18ad418453ba525f18547ea78e",
+   "serializers.json": "df31e18914b16f4f0af8679120dfd044dd578d68d0c039236baba3b917b55319",
+   "smelting.json": "bc5cca44abae0be7a514fea0de8441e1ad05c5e90700c1e02d56def1a6d7b08f",
+   "spawns.json": "00194287985de3fc490c8f4ef39ab3e74ff854d98c0d183fbf04f36478460be8"
+  }
+ }
 }

@@ -54,6 +54,8 @@ test('g1-driver: hello, echo, walk and a clean SIGTERM stop through forge-bridge
                 TEST_SERVER_HOST: '127.0.0.1', TEST_SERVER_PORT: String(server.port),
                 ROTN_SCENARIO_BOT: 'FRCFLD', ROTN_SCENARIO_HELLO: 'hello-nonce-1234', ROTN_SCENARIO_RUN: 'test',
                 ROTN_DRIVER_AUTH: 'offline', ROTN_DRIVER_CAPTURE: captureFile, ROTN_DRIVER_PING_TIMEOUT_MS: '60000',
+                // The fake world has one chunk: don't wait 30 s for the rest of the census cube.
+                ROTN_DRIVER_CHUNK_WAIT_MS: '0',
             }),
             stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -97,6 +99,49 @@ test('g1-driver: hello, echo, walk and a clean SIGTERM stop through forge-bridge
     assert.equal(forge.handshakeDone, true);
     assert.deepEqual(forge.blockNamespaces, { minecraft: 3, pyrotech: 2 });
 
+    // G2 scenario protocol (DRIVER.md), through the agent's own naming path on Mindcraft's real initBot.
+    const adapter = await until(() => events().find(e => e.type === 'g2_adapter'), 15000, 'g2_adapter event');
+    assert.match(adapter.source, /src\/utils\/mcdata\.js/);
+    assert.equal(adapter.translation, true, 'mcdata.js exports toNew/toOld (rotn-data #44)');
+    const reply = async (kind, token) => {
+        const lines = await until(() => {
+            const got = server.state.chats.filter(c => c.startsWith(`${kind} ${token} `));
+            const total = got.length ? Number(/ \d+\/(\d+)/.exec(got[0])[1]) : 0;
+            return got.length && got.length === total ? got : null;
+        }, 60000, `${kind} reply`);
+        return lines.join(' ');
+    };
+    say('[Server] whispers: scenario-blocks aaaaaa01 16 50 2');
+    const census = await reply('blocks', 'aaaaaa01');
+    assert.match(census, /minecraft:stone 0 \d+/, census);
+    assert.match(census, /pyrotech:rock 3 1 0,64,0/, 'the modded block is named from bot.registry (forge-bridge extension)');
+    // The fake world has one chunk, so most of the radius-16 cube is unloaded. Since harness-ops' #57
+    // the census counts those positions apart, in a first "#unloaded U T" entry, never as a type.
+    // Before #57 they were a "null" type. Entries starting with "#" are not block types.
+    const entries = census.split(/(?:^| )blocks aaaaaa01 \d+\/\d+ ?/).filter(Boolean).join('; ').split('; ');
+    const types = entries.map((e) => e.split(' ')[0]);
+    assert.deepEqual(types.filter((t) => !t.startsWith('#') && t !== 'null').sort(), ['minecraft:stone', 'pyrotech:rock']);
+    const unloaded = entries.find((e) => e.startsWith('#unloaded '));
+    if (unloaded) {
+        // #57's protocol: assert the new behaviour (the lead's #54 nit: no "null" type).
+        const [, u, t] = unloaded.split(' ').map(Number);
+        assert.equal(t, 33 ** 3, unloaded);
+        assert.ok(u > 0 && u < t, `some positions are unloaded in the fake world: ${unloaded}`);
+        assert.ok(!types.includes('null'), 'unloaded positions are never a "null" type');
+    }
+    assert.doesNotMatch(census, /minecraft:air|unknown/);
+    say('[Server] whispers: scenario-blockat bbbbbb02 0,64,0 5,64,5');
+    const at = await reply('blockat', 'bbbbbb02');
+    assert.match(at, /0 64 0 pyrotech:rock 3/);
+    assert.match(at, /5 64 5 minecraft:stone 0/);
+    say('[Server] whispers: scenario-entities cccccc03 32');
+    const ents = await reply('entities', 'cccccc03');
+    assert.match(ents, /iceandfire:entity_4 10(\.0+)? 65(\.0+)? 10(\.0+)?/, 'the FML-spawned mob is reported (placeholder name until rotn-data\'s table)');
+    say('[Server] whispers: scenario-items dddddd04');
+    const items = await reply('items', 'dddddd04');
+    assert.match(items, /36 minecraft:stone 0 /, items);
+    assert.match(items, /pyrotech:crude_axe/);
+
     child.kill('SIGTERM');
     const { code, signal } = await exited;
     // Windows has no SIGTERM handler delivery: kill() terminates the process.
@@ -118,4 +163,13 @@ test('g1-driver exits 3 without a token-cache folder, before connecting anywhere
 test('g1-driver exits 3 without TEST_SERVER_HOST', () => {
     const r = spawnSync(process.execPath, [DRIVER], { env: driverEnv({ ROTN_DRIVER_AUTH: 'offline' }), encoding: 'utf8', timeout: 120000 });
     assert.equal(r.status, 3);
+});
+
+test('g1-driver exits 3 on a bad ROTN_DRIVER_CHUNK_WAIT_MS, before connecting anywhere', () => {
+    const r = spawnSync(process.execPath, [DRIVER], {
+        env: driverEnv({ TEST_SERVER_HOST: '127.0.0.1', TEST_SERVER_PORT: '1', ROTN_DRIVER_AUTH: 'offline', ROTN_DRIVER_CHUNK_WAIT_MS: '-5' }),
+        encoding: 'utf8', timeout: 120000,
+    });
+    assert.equal(r.status, 3, r.stderr);
+    assert.match(r.stdout, /DRIVER .*"type":"fatal".*ROTN_DRIVER_CHUNK_WAIT_MS must be a whole number/);
 });

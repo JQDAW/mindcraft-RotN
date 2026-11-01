@@ -1,0 +1,138 @@
+{
+ "format": "rotn-dump/1",
+ "serializers": [
+  {
+   "id": 0,
+   "class": "net.minecraft.network.datasync.DataSerializers$1",
+   "vanilla": true
+  },
+  {
+   "id": 1,
+   "class": "net.minecraft.network.datasync.DataSerializers$2",
+   "vanilla": true
+  },
+  {
+   "id": 2,
+   "class": "net.minecraft.network.datasync.DataSerializers$3",
+   "vanilla": true
+  },
+  {
+   "id": 3,
+   "class": "net.minecraft.network.datasync.DataSerializers$4",
+   "vanilla": true
+  },
+  {
+   "id": 4,
+   "class": "net.minecraft.network.datasync.DataSerializers$5",
+   "vanilla": true
+  },
+  {
+   "id": 5,
+   "class": "net.minecraft.network.datasync.DataSerializers$6",
+   "vanilla": true
+  },
+  {
+   "id": 6,
+   "class": "net.minecraft.network.datasync.DataSerializers$8",
+   "vanilla": true
+  },
+  {
+   "id": 7,
+   "class": "net.minecraft.network.datasync.DataSerializers$9",
+   "vanilla": true
+  },
+  {
+   "id": 8,
+   "class": "net.minecraft.network.datasync.DataSerializers$10",
+   "vanilla": true
+  },
+  {
+   "id": 9,
+   "class": "net.minecraft.network.datasync.DataSerializers$11",
+   "vanilla": true
+  },
+  {
+   "id": 10,
+   "class": "net.minecraft.network.datasync.DataSerializers$12",
+   "vanilla": true
+  },
+  {
+   "id": 11,
+   "class": "net.minecraft.network.datasync.DataSerializers$13",
+   "vanilla": true
+  },
+  {
+   "id": 12,
+   "class": "net.minecraft.network.datasync.DataSerializers$7",
+   "vanilla": true
+  },
+  {
+   "id": 13,
+   "class": "net.minecraft.network.datasync.DataSerializers$14",
+   "vanilla": true
+  },
+  {
+   "id": 14,
+   "class": "com.fuzs.aquaacrobatics.network.datasync.PoseSerializer$1",
+   "vanilla": false
+  },
+  {
+   "id": 15,
+   "class": "com.teamacronymcoders.base.entities.dataserializers.ResourceLocationDataSerializer",
+   "vanilla": false
+  },
+  {
+   "id": 16,
+   "class": "com.bobmowzie.mowziesmobs.server.ServerProxy$1",
+   "vanilla": false
+  },
+  {
+   "id": 17,
+   "class": "pl.asie.charset.lib.utils.DataSerializersCharset$1",
+   "vanilla": false
+  },
+  {
+   "id": 18,
+   "class": "requious.util.ExtraSerializers$1",
+   "vanilla": false
+  },
+  {
+   "id": 256,
+   "class": "doggytalents.serializers.TalentListSerializer",
+   "vanilla": false
+  },
+  {
+   "id": 257,
+   "class": "doggytalents.serializers.OptionalTextComponentSerializer",
+   "vanilla": false
+  }
+ ],
+ "usage": {
+  "doggytalents:dog": [
+   {
+    "index": 21,
+    "serializerId": 256,
+    "class": "doggytalents.serializers.TalentListSerializer"
+   },
+   {
+    "index": 30,
+    "serializerId": 257,
+    "class": "doggytalents.serializers.OptionalTextComponentSerializer"
+   }
+  ],
+  "mowziesmobs:barakoaya": [
+   {
+    "index": 16,
+    "serializerId": 16,
+    "class": "com.bobmowzie.mowziesmobs.server.ServerProxy$1"
+   }
+  ],
+  "requious:spear": [
+   {
+    "index": 8,
+    "serializerId": 18,
+    "class": "requious.util.ExtraSerializers$1"
+   }
+  ]
+ }
+}
