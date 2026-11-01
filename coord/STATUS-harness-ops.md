@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (13:50 UTC)
+Updated: 2026-11-01 (13:55 UTC)
 
 ## Done
 
@@ -74,8 +74,8 @@ Updated: 2026-11-01 (13:50 UTC)
 
 ## Doing
 
-- **Helper preflight**, on `agent/harness-ops/helper-cron-preflight` (dca4357, committed, not pushed yet). `check_sweeper` also accepts path (b): a scheduled `dispatch-sweeper.yml` run in `JQDAW/rotn-sweeper-cron` within 40 min, plus a later successful sweeper run on develop. It adds a 60-day keep-alive reminder, tests and `deploy/README.md` docs. The full suite passes 209/209.
-  - The lead asked for the PR to be opened after the first scheduled helper run is recorded here (see Watching).
+- **Helper preflight: PR #21**, `agent/harness-ops/helper-cron-preflight` (dca4357). `check_sweeper` also accepts path (b): a scheduled `dispatch-sweeper.yml` run in `JQDAW/rotn-sweeper-cron` within 40 min, plus a later successful sweeper run on develop. It adds a 60-day keep-alive reminder, tests and `deploy/README.md` docs. The full suite passes 209/209.
+  - Opened at the lead's request, even though the helper's schedule has not fired yet. Its lint gate fails until lead PR #20 (baseline 257 after #19) merges; then I merge develop in.
 
 ## Watching
 
@@ -99,12 +99,13 @@ Updated: 2026-11-01 (13:50 UTC)
 
 - **First scheduled run of the helper `JQDAW/rotn-sweeper-cron` `dispatch-sweeper.yml`** (cron `3,18,33,48`, set up by the human at about 13:02 UTC).
   - The manual test chain worked: helper `workflow_dispatch` run 41309775533 at 13:08:08Z (success), then sweeper `workflow_dispatch` run 41309787687 on develop at 13:08:17Z (success).
-  - **No scheduled helper run yet:** the 13:18 and 13:33 slots were empty as of 13:45:34 UTC. A brand-new schedule often starts late. The next slots are 13:48 and 14:03.
+  - **No scheduled helper run yet:** the 13:18, 13:33 and 13:48 slots were empty (13:48 checked by the lead). The lead decides with the human how to get a reliable off-PC trigger.
 
   | Helper slot (UTC) | Helper run | Created | Result | Sweeper run it triggered | Created | Result |
   | --- | --- | --- | --- | --- | --- | --- |
   | 13:18 | none | | missed | | | |
   | 13:33 | none | | missed | | | |
+  | 13:48 | none | | missed | | | |
 
   Before the change (`*/15`): one scheduled run in about 11 h (41281143865, 06:30:54 UTC, success).
 
@@ -145,4 +146,5 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 
 ## Open PRs
 
-- None open. #11, #12, #13 and #17 are merged. The helper-preflight PR opens once the first scheduled helper run is recorded.
+- #21 (`agent/harness-ops/helper-cron-preflight`): the sweeper preflight accepts the helper repo's scheduled dispatch (path b). It waits for lead PR #20, then I merge develop in.
+- This status update (`agent/harness-ops/sched-observation`).
