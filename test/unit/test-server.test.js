@@ -753,6 +753,36 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         refusesCadence([a, { ...b, repo: HELPER }, c], /only 2 successful/);
     });
 
+    test('an empty or "null" pushed_at warns as unreadable instead of counting as today (PR #21 finding 6)', () => {
+        const runs = [helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 500) })];
+        for (const [i, pushed] of ['', 'null'].entries()) {
+            seed({ servers: [], primary_ips: [], ssh_keys: [] });
+            ghRuns(runs, { [HELPER]: { pushed_at: pushed } });
+            const r = run(['up', '--yes', '--name', `mcr-test-pa${i}`]);
+            assert.equal(r.code, 0, r.all);
+            assert.match(r.stderr, /WARNING: could not read the last push of JQDAW\/rotn-sweeper-cron/, JSON.stringify(pushed));
+        }
+    });
+
+    test('run ages use GitHub\'s clock (Date header), not this PC\'s (PR #21 finding 3)', () => {
+        // GitHub says 3 h later: the same run is stale, whatever this PC's clock says.
+        refuses(run(['up', '--yes', '--name', 'mcr-test-clk2'], { ROTN_TEST_NOW: '', FAKE_GH_DATE: String(NOW + 3 * 3600) }),
+            /the last successful scheduled sweeper run \(1001\) is 190 min old/);
+        // The default seed: a scheduled run created 10 min before NOW.
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        const r = run(['up', '--yes', '--name', 'mcr-test-clk1'], { ROTN_TEST_NOW: '', FAKE_GH_DATE: String(NOW) });
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, /sweeper OK: scheduled run 1001 on JQDAW\/mindcraft-RotN succeeded 10 min ago/);
+        assert.match(r.stderr, /WARNING: this PC's clock is -?\d+ s off GitHub's; run ages use GitHub's clock/, 'the test PC is not at NOW');
+        assert.ok(readJsonl(env.FAKE_GH_LOG).some((a) => a.join(' ') === 'api -X GET -i rate_limit'), 'one read-only GET');
+    });
+
+    test('without GitHub\'s Date header the preflight warns and uses this PC\'s clock', () => {
+        const r = run(['up', '--yes', '--dry-run', '--name', 'mcr-test-clk3'], { ROTN_TEST_NOW: '' });
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, /WARNING: could not read GitHub's clock \(Date header\); run ages use this PC's clock/);
+    });
+
     test('helper path: gh failing only on the helper repo refuses, with every path\'s reason (review nit 4)', () => {
         ghRuns([sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) })]);
         refuses(run(upArgs, { FAKE_GH_FAIL_REPO: HELPER }),

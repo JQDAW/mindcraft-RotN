@@ -8,6 +8,33 @@ import {
     encodeVarInt, decodeVarInt, buildHandshake, parseStatusResponse, summarize, ping, PROTOCOL_1_12_2,
 } from '../tools/status-ping.mjs';
 
+// A loopback connect can fail at the OS level when the machine is saturated: a reviewer saw
+// `connect ETIMEDOUT` once in 231 runs under heavy load. That says nothing about ping's own code, so
+// connect-level errors are retried, with a generous timeout. Protocol errors are never retried.
+const CONNECT_ERRORS = new Set(['ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET']);
+async function pingLocal(port, { tries = 3, timeout = 30000, pingFn = ping } = {}) {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await pingFn({ host: '127.0.0.1', port, timeout });
+        } catch (e) {
+            if (!CONNECT_ERRORS.has(e.code) || attempt >= tries) throw e;
+        }
+    }
+}
+
+test('pingLocal retries only connect-level errors, and at most `tries` times', async () => {
+    const flaky = (codes) => {
+        let n = 0;
+        return () => {
+            const code = codes[n++];
+            return code ? Promise.reject(Object.assign(new Error(`connect ${code}`), { code })) : Promise.resolve('ok');
+        };
+    };
+    assert.equal(await pingLocal(1, { pingFn: flaky(['ETIMEDOUT', 'ECONNRESET']) }), 'ok');
+    await assert.rejects(pingLocal(1, { pingFn: flaky(['ETIMEDOUT', 'ETIMEDOUT', 'ETIMEDOUT']) }), /connect ETIMEDOUT/);
+    await assert.rejects(pingLocal(1, { pingFn: () => Promise.reject(new Error('bad VarInt')) }), /bad VarInt/, 'no retry for a protocol error');
+});
+
 test('VarInt round-trips, including multi-byte and negative values', () => {
     for (const v of [0, 1, 127, 128, 255, 25565, 2097151, 2147483647, -1]) {
         const enc = encodeVarInt(v);
@@ -80,7 +107,7 @@ test('ping talks to a fake server and reassembles a large, chunked response', as
     });
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     try {
-        const status = await ping({ host: '127.0.0.1', port: server.address().port, timeout: 5000 });
+        const status = await pingLocal(server.address().port);
         assert.equal(summarize(status).jeid, '2.2.2');
         assert.ok(JSON.stringify(status).length > 10000);
     } finally {
@@ -89,10 +116,11 @@ test('ping talks to a fake server and reassembles a large, chunked response', as
 });
 
 test('ping rejects when the server closes without answering', async () => {
-    const server = net.createServer((sock) => sock.end());
+    // A hang-up server: it reads the request, then closes cleanly (FIN, not RST).
+    const server = net.createServer((sock) => sock.once('data', () => sock.end()));
     await new Promise((r) => server.listen(0, '127.0.0.1', r));
     try {
-        await assert.rejects(ping({ host: '127.0.0.1', port: server.address().port, timeout: 5000 }));
+        await assert.rejects(pingLocal(server.address().port), /connection closed before a status response/);
     } finally {
         server.close();
     }
