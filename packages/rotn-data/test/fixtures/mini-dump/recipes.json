@@ -1,0 +1,503 @@
+{
+ "format": "rotn-dump/1",
+ "recipes": [
+  {
+   "id": "crafttweaker:pyro_crude_axe",
+   "type": "shaped",
+   "width": 2,
+   "height": 2,
+   "requiresTable": false,
+   "result": {
+    "name": "pyrotech:crude_axe",
+    "meta": 0,
+    "count": 1
+   },
+   "slots": [
+    {
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      },
+      {
+       "name": "minecraft:flint",
+       "meta": 0
+      }
+     ]
+    },
+    {
+     "ore": "stickWood",
+     "stacks": [
+      {
+       "name": "minecraft:stick",
+       "meta": 0
+      }
+     ]
+    },
+    {
+     "ore": "stickWood",
+     "stacks": [
+      {
+       "name": "minecraft:stick",
+       "meta": 0
+      }
+     ]
+    },
+    null
+   ]
+  },
+  {
+   "id": "crafttweaker:crafting_tools",
+   "type": "shapeless",
+   "requiresTable": false,
+   "result": {
+    "name": "contenttweaker:crafting_tools",
+    "meta": 0,
+    "count": 1
+   },
+   "ingredients": [
+    {
+     "stacks": [
+      {
+       "name": "pyrotech:crude_axe",
+       "meta": 32767
+      },
+      {
+       "name": "minecraft:stone_axe",
+       "meta": 32767
+      }
+     ]
+    },
+    {
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      },
+      {
+       "name": "minecraft:flint",
+       "meta": 0
+      }
+     ]
+    },
+    {
+     "ore": "stickWood",
+     "stacks": [
+      {
+       "name": "minecraft:stick",
+       "meta": 0
+      }
+     ]
+    }
+   ],
+   "remaining": [
+    {
+     "name": "pyrotech:crude_axe",
+     "meta": 1
+    },
+    null,
+    null
+   ]
+  },
+  {
+   "id": "crafttweaker:crafting_table",
+   "type": "shapeless",
+   "requiresTable": false,
+   "result": {
+    "name": "minecraft:crafting_table",
+    "meta": 0,
+    "count": 1
+   },
+   "ingredients": [
+    {
+     "ore": "stickMat",
+     "stacks": [
+      {
+       "name": "minecraft:planks",
+       "meta": 32767
+      }
+     ]
+    },
+    {
+     "stacks": [
+      {
+       "name": "contenttweaker:crafting_tools",
+       "meta": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "crafttweaker:cobble",
+   "type": "shapeless",
+   "requiresTable": false,
+   "result": {
+    "name": "minecraft:cobblestone",
+    "meta": 0,
+    "count": 1
+   },
+   "ingredients": [
+    {
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      }
+     ]
+    },
+    {
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      }
+     ]
+    },
+    {
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      }
+     ]
+    },
+    {
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "crafttweaker:stone_axe",
+   "type": "shaped",
+   "width": 2,
+   "height": 3,
+   "mirrored": true,
+   "requiresTable": true,
+   "result": {
+    "name": "minecraft:stone_axe",
+    "meta": 0,
+    "count": 1
+   },
+   "slots": [
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "stickWood",
+     "stacks": [
+      {
+       "name": "minecraft:stick",
+       "meta": 0
+      }
+     ]
+    },
+    null,
+    {
+     "ore": "stickWood",
+     "stacks": [
+      {
+       "name": "minecraft:stick",
+       "meta": 0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "crafttweaker:stone_pickaxe",
+   "type": "shaped",
+   "width": 3,
+   "height": 3,
+   "requiresTable": true,
+   "result": {
+    "name": "minecraft:stone_pickaxe",
+    "meta": 0,
+    "count": 1
+   },
+   "slots": [
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    null,
+    {
+     "ore": "stickWood",
+     "stacks": [
+      {
+       "name": "minecraft:stick",
+       "meta": 0
+      }
+     ]
+    },
+    null,
+    null,
+    {
+     "ore": "stickWood",
+     "stacks": [
+      {
+       "name": "minecraft:stick",
+       "meta": 0
+      }
+     ]
+    },
+    null
+   ]
+  },
+  {
+   "id": "crafttweaker:stick",
+   "type": "shaped",
+   "width": 1,
+   "height": 2,
+   "requiresTable": false,
+   "result": {
+    "name": "minecraft:stick",
+    "meta": 0,
+    "count": 4
+   },
+   "slots": [
+    {
+     "ore": "stickMat",
+     "stacks": [
+      {
+       "name": "minecraft:planks",
+       "meta": 32767
+      }
+     ]
+    },
+    {
+     "ore": "stickMat",
+     "stacks": [
+      {
+       "name": "minecraft:planks",
+       "meta": 32767
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "crafttweaker:furnace",
+   "type": "shaped",
+   "width": 3,
+   "height": 3,
+   "requiresTable": true,
+   "result": {
+    "name": "minecraft:furnace",
+    "meta": 0,
+    "count": 1
+   },
+   "slots": [
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    null,
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    },
+    {
+     "ore": "rock",
+     "stacks": [
+      {
+       "name": "pyrotech:rock",
+       "meta": 0
+      },
+      {
+       "name": "pyrotech:rock",
+       "meta": 6
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "test:charcoal_by_hand",
+   "type": "shapeless",
+   "requiresTable": false,
+   "result": {
+    "name": "minecraft:coal",
+    "meta": 1,
+    "count": 1
+   },
+   "ingredients": [
+    {
+     "stacks": [
+      {
+       "name": "minecraft:log",
+       "meta": 32767
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
