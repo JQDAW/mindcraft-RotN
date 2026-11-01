@@ -183,6 +183,7 @@ setup_files() {
   dir_owned 0750 "root:$SVC_USER" /etc/mindcraft-rotn
   dir_owned 0755 root:root /usr/local/lib/mindcraft-rotn
   file_owned 0755 root:root /usr/local/lib/mindcraft-rotn/check-env < "$HERE/check-env.sh"
+  file_owned 0755 root:root /usr/local/lib/mindcraft-rotn/check-env-names < "$HERE/check-env-names.sh"
   file_owned 0644 root:root /usr/local/lib/mindcraft-rotn/check-env.mjs < "$HERE/check-env.mjs"
   file_owned 0755 root:root /usr/local/sbin/mindcraft-rotn-ctl < "$HERE/mindcraft-rotn-ctl.sh"
   file_owned 0644 root:root /etc/systemd/system/mindcraft-rotn@.service < "$HERE/mindcraft-rotn@.service"

@@ -18,6 +18,13 @@ const problems = [];
 const bad = (m) => problems.push(m);
 const has = (k) => Object.prototype.hasOwnProperty.call(env, k);
 
+// 0. Names that change how node talks to the network or loads code, whatever set them (the env file's
+//    names are allowlisted by check-env-names as root; this is the second layer, on the effective env).
+const DENY = ['NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_EXTRA_CA_CERTS', 'NODE_PATH', 'LD_PRELOAD', 'LD_LIBRARY_PATH', 'LD_AUDIT',
+    'HTTPS_PROXY', 'HTTP_PROXY', 'ALL_PROXY', 'NO_PROXY', 'https_proxy', 'http_proxy', 'all_proxy', 'no_proxy', 'NODE_DEBUG', 'UV_THREADPOOL_SIZE'];
+for (const k of DENY) if (has(k)) bad(`${k} is set: not allowed for a bot`);
+if (has('CHECK_ENV_NODE_PATH')) bad('NODE_PATH is set: not allowed for a bot');
+
 // 1. Settings that could turn on insecure coding or unblock actions.
 if (has('INSECURE_CODING')) bad('INSECURE_CODING is set (to anything, even empty): not allowed on the CX23');
 if (has('BLOCKED_ACTIONS')) bad('BLOCKED_ACTIONS is set: it would replace settings.js blocked_actions; not allowed');

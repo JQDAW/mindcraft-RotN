@@ -8,6 +8,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
 | --- | --- | --- |
 | `bootstrap.sh` | (run from a copy of this folder) | One-time setup as root: `setup`, `add-bot`, `lockdown`. |
 | `mindcraft-rotn@.service` | `/etc/systemd/system/` | The unit template, one instance per bot (`mindcraft-rotn@<bot>`). |
+| `check-env-names.sh` | `/usr/local/lib/mindcraft-rotn/check-env-names` | First `ExecStartPre`, **as root** (`+`; the env file is `root:root` 0600): only allowlisted variable names in the env file. |
 | `check-env.sh`, `check-env.mjs` | `/usr/local/lib/mindcraft-rotn/check-env`, `check-env.mjs` | `ExecStartPre`: refuses to start a bot on an unsafe environment. |
 | `mindcraft-rotn-ctl.sh` | `/usr/local/sbin/mindcraft-rotn-ctl` | The only command `deploy` may run with sudo: start/stop/restart/status of one bot unit. |
 | `bot.env.example` | `/etc/mindcraft-rotn/<bot>.env` (via `add-bot`) | Per-bot settings: token-cache folder, OpenRouter key placeholder, profile, ports. |
@@ -73,6 +74,8 @@ bash deploy.sh status
   - `NODE_OPTIONS` may hold only `--max-old-space-size=N`, and the checker itself runs without the env file's `NODE_OPTIONS` and `NODE_PATH`.
   - The checker's tool paths are fixed or given as flags, never taken from the environment.
   - `deploy.sh` refuses a release whose `settings.js` does not evaluate to `allow_insecure_coding === false`.
+- **Only allowlisted names in the env file.** `check-env-names` runs as root and reads only the env file. Every line must be a comment, blank, or `NAME=value` with NAME one of `MINDCRAFT_PROFILES_FOLDER`, `OPENROUTER_API_KEY`, `PROFILES`, `SETTINGS_JSON`, `MINECRAFT_PORT`, `MINDSERVER_PORT` or `NODE_OPTIONS` (the names in `bot.env.example`). Anything else refuses, including `NODE_TLS_REJECT_UNAUTHORIZED`, the proxy variables, `LD_PRELOAD`, `NODE_EXTRA_CA_CERTS`, `export NAME=` and line continuations. It prints names and line numbers, never values.
+  - A second layer: `check-env.mjs` also refuses those names in the bot's **effective** environment, whatever their source: `NODE_TLS_REJECT_UNAUTHORIZED`, `NODE_EXTRA_CA_CERTS`, `NODE_PATH`, the `LD_*` loader variables, every `*_PROXY` (either case) and `NODE_DEBUG`.
 - **Token cache.** `check-env` refuses if `MINDCRAFT_PROFILES_FOLDER` is unset, relative, not a directory, not 0700, or not owned by `mindcraft-rotn`.
 - **Env file.** It must be root-owned and 0600 (or 0400). A placeholder or empty OpenRouter key refuses. `check-env` never prints a variable's value.
 - **Single-bot service.** The unit sets `MINDCRAFT_SINGLE_BOT_SERVICE=1`, and `check-env` refuses an env file that changes it. So a clean stop ends the process with 0 (ADR 0003 decision 5).

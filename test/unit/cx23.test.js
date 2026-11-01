@@ -84,8 +84,14 @@ describe('mindcraft-rotn@.service', () => {
         assert.ok(!svc.some((l) => l.startsWith('StartLimit')), 'StartLimit* belongs in [Unit]');
     });
 
+    test('the root-run name check comes before the service-user check', () => {
+        assert.ok(svc.indexOf('ExecStartPre=+/usr/local/lib/mindcraft-rotn/check-env-names /etc/mindcraft-rotn/%i.env')
+            < svc.indexOf('ExecStartPre=/usr/local/lib/mindcraft-rotn/check-env /etc/mindcraft-rotn/%i.env'));
+    });
+
     test('single-bot service, per-bot env file, env check before start, non-root user, umask 0077', () => {
         for (const kv of ['Environment=MINDCRAFT_SINGLE_BOT_SERVICE=1', 'EnvironmentFile=/etc/mindcraft-rotn/%i.env',
+            'ExecStartPre=+/usr/local/lib/mindcraft-rotn/check-env-names /etc/mindcraft-rotn/%i.env',
             'ExecStartPre=/usr/local/lib/mindcraft-rotn/check-env /etc/mindcraft-rotn/%i.env',
             'ExecStart=/usr/bin/node /opt/mindcraft-rotn/current/main.js', 'WorkingDirectory=/opt/mindcraft-rotn/current',
             'User=mindcraft-rotn', 'Group=mindcraft-rotn', 'UMask=0077']) assert.ok(has(svc, kv), kv);
@@ -174,6 +180,14 @@ describe('check-env (ExecStartPre)', () => {
             [{ DEBUG: 'minecraft-protocol prismarine-*' }, /DEBUG could enable prismarine-auth/],
             [{ NODE_OPTIONS: '--max-old-space-size=768 --require /tmp/x.js' }, /NODE_OPTIONS may only hold --max-old-space-size/],
             [{ NODE_OPTIONS: '--import=data:text/javascript,0' }, /NODE_OPTIONS may only hold/],
+            [{ NODE_TLS_REJECT_UNAUTHORIZED: '0' }, /NODE_TLS_REJECT_UNAUTHORIZED is set: not allowed/],
+            [{ HTTPS_PROXY: 'http://proxy.example.invalid:3128' }, /HTTPS_PROXY is set/],
+            [{ https_proxy: 'http://proxy.example.invalid:3128' }, /https_proxy is set/],
+            [{ ALL_PROXY: 'socks5://x.invalid' }, /ALL_PROXY is set/],
+            // LD_PRELOAD is in the deny list too, but setting it here would affect the test's own bash; the
+            // check-env-names tests cover it in the env file.
+            [{ NODE_EXTRA_CA_CERTS: '/tmp/ca.pem' }, /NODE_EXTRA_CA_CERTS is set/],
+            [{ NODE_PATH: '/tmp/mods' }, /NODE_PATH is set/],
         ]) {
             const r = check(g, over);
             assert.equal(r.code, 1, JSON.stringify(over));
@@ -237,6 +251,42 @@ describe('check-env (ExecStartPre)', () => {
 });
 
 // ---------------------------------------------------------------- mindcraft-rotn-ctl
+describe('check-env-names (root, the env file\'s variable names; PR #30 re-review)', () => {
+    const names = (content) => {
+        const f = path.join(tmp, 'bot.env');
+        fs.writeFileSync(f, content);
+        return run(path.join(CX, 'check-env-names.sh'), [fwd(f)]);
+    };
+    const example = fs.readFileSync(path.join(CX, 'bot.env.example'), 'utf8')
+        .replace(/__BOT__/g, 'rotn-bot').replace(/__MINDSERVER_PORT__/g, '8080').replace('<set-by-human-never-in-repo>', 'sk-or-v1-SECRET-VALUE-9');
+
+    test('the env file from bot.env.example passes, also with CRLF line ends', () => {
+        assert.equal(names(example).code, 0, names(example).all);
+        assert.equal(names(example.replace(/\n/g, '\r\n')).code, 0);
+    });
+
+    test('any name outside the allowlist refuses, with its line number and never a value', () => {
+        for (const line of ['NODE_TLS_REJECT_UNAUTHORIZED=0', 'HTTPS_PROXY=http://proxy.example.invalid:3128', 'https_proxy=http://p.invalid',
+            'ALL_PROXY=socks5://x.invalid', 'LD_PRELOAD=/tmp/x.so', 'NODE_EXTRA_CA_CERTS=/tmp/ca.pem', 'INSECURE_CODING=1', 'BLOCKED_ACTIONS=[]',
+            'NODE_PATH=/tmp/x', 'MINDCRAFT_SINGLE_BOT_SERVICE=0', 'DEBUG=*']) {
+            const r = names(`${example}${line}\n`);
+            const name = line.split('=')[0];
+            assert.equal(r.code, 1, line);
+            assert.match(r.stderr, new RegExp(`line \\d+ sets ${name}, which is not allowed in a bot env file`), line);
+            assert.ok(!r.all.includes('SECRET-VALUE'), 'values are never printed');
+        }
+    });
+
+    test('export, a line continuation, leading spaces or a malformed line refuse', () => {
+        assert.match(names(`${example}export OPENROUTER_API_KEY=x\n`).stderr, /line \d+ is not NAME=value/);
+        assert.match(names(`${example}PROFILES=["a"] \\\nLD_PRELOAD=/x\n`).stderr, /continues onto the next line/);
+        assert.match(names(`${example}  NODE_OPTIONS=--max-old-space-size=512\n`).stderr, /is not NAME=value/);
+        assert.match(names(`${example}just text\n`).stderr, /is not NAME=value/);
+        assert.equal(names(`# comment\n; also a comment\n\nPROFILES=["./profiles/x.json"]\n`).code, 0);
+        assert.equal(run(path.join(CX, 'check-env-names.sh'), [fwd(path.join(tmp, 'missing.env'))]).code, 1);
+    });
+});
+
 describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
     // The wrapper's paths are fixed (root runs it). The tests run a copy with exactly those two lines
     // pointed at the fake systemctl and a temp /etc; everything else is the real file.
@@ -338,6 +388,8 @@ describe('bootstrap.sh', () => {
         assert.equal(read('usr/local/lib/mindcraft-rotn/check-env'), lf('check-env.sh'));
         assert.equal(read('usr/local/sbin/mindcraft-rotn-ctl'), lf('mindcraft-rotn-ctl.sh'));
         assert.equal(read('usr/local/lib/mindcraft-rotn/check-env.mjs'), lf('check-env.mjs'), 'the parser next to check-env');
+        assert.equal(read('usr/local/lib/mindcraft-rotn/check-env-names'), lf('check-env-names.sh'), 'the root-run name check');
+        assert.ok(called('chmod').some((c) => c[1] === '0755' && c[2].includes('/usr/local/lib/mindcraft-rotn/check-env-names')));
         assert.match(read('etc/mindcraft-rotn/.setup-epoch'), /^\d{10}\n$/, 'lockdown looks for a key login after this');
         for (const f of ['usr/local/lib/mindcraft-rotn/check-env', 'usr/local/sbin/mindcraft-rotn-ctl', 'etc/mindcraft-rotn/bot.env.example'])
             assert.ok(!read(f).includes('\r'), `${f} has no CR`);
