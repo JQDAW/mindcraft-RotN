@@ -105,8 +105,8 @@ const indexOfCall = (pred) => hcloudCalls().findIndex(pred);
 const flagValues = (argv, flag) => argv.flatMap((a, i) => (a === flag ? [argv[i + 1]] : []));
 
 const isoZ = (epoch) => new Date(epoch * 1000).toISOString().replace('.000Z', 'Z');
-function ghRuns(runs) {
-    fs.writeFileSync(env.FAKE_GH_STATE, JSON.stringify({ runs }));
+function ghRuns(runs, repos = {}) {
+    fs.writeFileSync(env.FAKE_GH_STATE, JSON.stringify({ runs, repos }));
 }
 
 function seed(st) {
@@ -552,6 +552,107 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         const bad = run(upArgs, { ROTN_GH_REPO: 'not a repo' });
         assert.notEqual(bad.code, 0);
         assert.match(bad.stderr, /bad ROTN_GH_REPO/);
+    });
+
+    // (b): the helper repo's scheduled dispatch, then a sweeper run on develop (lead, 2026-11-01).
+    const HELPER = 'JQDAW/rotn-sweeper-cron';
+    const helperRun = (o) => ({ repo: HELPER, workflow: 'dispatch-sweeper.yml', headBranch: 'main', event: 'schedule',
+        status: 'completed', conclusion: 'success', ...o });
+    const sweepRun = (o) => ({ event: 'workflow_dispatch', status: 'completed', conclusion: 'success', headBranch: 'develop', ...o });
+
+    test('helper path: a scheduled helper run within 40 min plus a later sweeper run lets up proceed', () => {
+        ghRuns([
+            { databaseId: 11, event: 'schedule', status: 'completed', conclusion: 'success', createdAt: isoZ(NOW - 5 * 3600), headBranch: 'develop' },
+            helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) }),
+            sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 591) }),
+        ]);
+        const r = run(upArgs);
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, /sweeper OK \(via helper\): helper scheduled run 2001 on JQDAW\/rotn-sweeper-cron succeeded 10 min ago \(limit 40 min\), then sweeper run 3001 \(workflow_dispatch\) on develop succeeded/);
+        const calls = readJsonl(env.FAKE_GH_LOG);
+        for (const a of calls) {
+            if (a[0] === 'api') {
+                assert.deepEqual(a, ['api', '-X', 'GET', `repos/${HELPER}`, '--jq', '.pushed_at'], 'the keep-alive reminder is one read-only GET');
+                continue;
+            }
+            assert.deepEqual(a.slice(0, 2), ['run', 'list'], `read-only calls only: ${a.join(' ')}`);
+            assert.ok(['JQDAW/mindcraft-RotN', HELPER].includes(a.at(-1)) && a.at(-2) === '--repo', a.join(' '));
+        }
+        const helperCall = calls.find((a) => a.at(-1) === HELPER);
+        assert.deepEqual([flagValues(helperCall, '--workflow')[0], flagValues(helperCall, '--event')[0]], ['dispatch-sweeper.yml', 'schedule']);
+    });
+
+    test('helper path: GH_REPO and GH_HOST cannot redirect the helper call', () => {
+        ghRuns([helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 500) })]);
+        const r = run(upArgs, { GH_REPO: 'evil/repo', GH_HOST: 'evil.example' });
+        assert.equal(r.code, 0, r.all);
+        assert.ok(readJsonl(env.FAKE_GH_LOG).some((a) => a.at(-1) === HELPER));
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        const bad = run(upArgs, { ROTN_SWEEPER_HELPER_REPO: 'not a repo' });
+        assert.notEqual(bad.code, 0);
+        assert.match(bad.stderr, /bad ROTN_SWEEPER_HELPER_REPO/);
+    });
+
+    test('helper path: a plain dispatch run without a scheduled helper run never counts', () => {
+        ghRuns([sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) })]);
+        refuses(run(upArgs), /no successful scheduled run of test-server-sweeper.yml on develop yet; and via the helper: no successful scheduled run of dispatch-sweeper.yml in JQDAW\/rotn-sweeper-cron/);
+    });
+
+    test('helper path: the helper\'s own manual, failed or wrong-repo runs do not count', () => {
+        const later = sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) });
+        for (const h of [
+            helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600), event: 'workflow_dispatch' }),
+            helperRun({ databaseId: 2002, createdAt: isoZ(NOW - 600), conclusion: 'failure' }),
+            helperRun({ databaseId: 2003, createdAt: isoZ(NOW - 600), status: 'in_progress', conclusion: '' }),
+            helperRun({ databaseId: 2004, createdAt: isoZ(NOW - 600), repo: 'JQDAW/mindcraft-RotN' }),
+            helperRun({ databaseId: 2005, createdAt: isoZ(NOW - 600), workflow: 'other.yml' }),
+        ]) {
+            ghRuns([h, later]);
+            refuses(run(upArgs), /via the helper: no successful scheduled run of dispatch-sweeper.yml/);
+        }
+    });
+
+    test('helper path: a helper run older than 40 min refuses; 40 min still passes', () => {
+        ghRuns([helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 41 * 60) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) })]);
+        refuses(run(upArgs), /via the helper: the last successful scheduled helper run \(2001\) is 41 min old \(limit 40\)/);
+        ghRuns([helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 40 * 60) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) })]);
+        assert.equal(run(upArgs).code, 0);
+    });
+
+    test('helper path: the sweeper run must succeed on develop and be created after the helper run', () => {
+        const h = helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) });
+        for (const s of [
+            sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 601) }),
+            sweepRun({ databaseId: 3002, createdAt: isoZ(NOW - 600) }),
+            sweepRun({ databaseId: 3003, createdAt: isoZ(NOW - 300), conclusion: 'failure' }),
+            sweepRun({ databaseId: 3004, createdAt: isoZ(NOW - 300), status: 'in_progress', conclusion: '' }),
+            sweepRun({ databaseId: 3005, createdAt: isoZ(NOW - 300), headBranch: 'agent/x' }),
+        ]) {
+            ghRuns([h, s]);
+            refuses(run(upArgs), /via the helper: no successful test-server-sweeper.yml run on develop after helper run 2001/);
+        }
+    });
+
+    test('helper path: keep-alive reminder from day 45 of no pushes to the helper repo; it never refuses', () => {
+        const runs = [helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 500) })];
+        ghRuns(runs, { [HELPER]: { pushed_at: isoZ(NOW - 44 * 86400) } });
+        const fresh = run(['up', '--yes', '--name', 'mcr-test-ka1']);
+        assert.equal(fresh.code, 0, fresh.all);
+        assert.doesNotMatch(fresh.stderr, /last pushed/);
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        ghRuns(runs, { [HELPER]: { pushed_at: isoZ(NOW - 50 * 86400) } });
+        const idle = run(['up', '--yes', '--name', 'mcr-test-ka2']);
+        assert.equal(idle.code, 0, idle.all);
+        assert.match(idle.stderr, /WARNING: JQDAW\/rotn-sweeper-cron was last pushed 50 days ago; GitHub disables its scheduled workflow after 60 days without activity\. Push any small commit/);
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        ghRuns(runs);
+        const unknown = run(['up', '--yes', '--name', 'mcr-test-ka3']);
+        assert.equal(unknown.code, 0, unknown.all);
+        assert.match(unknown.stderr, /WARNING: could not read the last push of JQDAW\/rotn-sweeper-cron/);
+    });
+
+    test('helper path: gh failing on the helper repo refuses', () => {
+        refuses(run(upArgs, { FAKE_GH_FAIL: '1' }), /'gh run list' failed \(not logged in\?\); and via the helper: 'gh run list' on JQDAW\/rotn-sweeper-cron failed/);
     });
 
     test('the refusal points at ALERT lines (a persistent ALERT keeps refusing on purpose)', () => {

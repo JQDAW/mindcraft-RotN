@@ -1,8 +1,11 @@
 // Fake of the parts of the gh CLI that deploy/test-server.sh and test/scenarios/g0-watchdog.sh use.
-// State: $FAKE_GH_STATE (JSON {runs: [{databaseId, event, status, conclusion, createdAt, headBranch, log}]}).
+// State: $FAKE_GH_STATE (JSON {runs: [{databaseId, event, status, conclusion, createdAt, headBranch, log,
+// repo, workflow}]}). repo defaults to JQDAW/mindcraft-RotN and workflow to test-server-sweeper.yml, so
+// a run of the helper repo (JQDAW/rotn-sweeper-cron, dispatch-sweeper.yml) must say so.
 // Every call is appended to $FAKE_GH_LOG (JSONL).
 //
-//   run list [--workflow W] [--branch B] [--event E] [--limit N] --json FIELDS
+//   run list [--workflow W] [--branch B] [--event E] [--limit N] --json FIELDS --repo R
+//   api -X GET repos/OWNER/REPO --jq .pushed_at   from $FAKE_GH_STATE repos[OWNER/REPO].pushed_at
 //   run view ID --log | --json FIELDS
 //   workflow run W --ref B     runs $FAKE_GH_DISPATCH_CMD (bash -c) as the "sweeper" and records
 //                              its output, GitHub-style ("sweep\tStep\t<ts> <line>"), as the run log.
@@ -30,9 +33,14 @@ const pick = (run, fields) => Object.fromEntries(fields.split(',').map((f) => [f
 
 const [group, verb] = argv;
 const st = load();
+const DEFAULT_REPO = 'JQDAW/mindcraft-RotN';
+const repoOf = (r) => r.repo ?? DEFAULT_REPO;
+const workflowOf = (r) => r.workflow ?? 'test-server-sweeper.yml';
 
 if (group === 'run' && verb === 'list') {
     let runs = [...st.runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    runs = runs.filter((r) => repoOf(r) === (flag('--repo') ?? DEFAULT_REPO));
+    if (flag('--workflow')) runs = runs.filter((r) => workflowOf(r) === flag('--workflow'));
     if (flag('--event')) runs = runs.filter((r) => r.event === flag('--event'));
     if (flag('--branch')) runs = runs.filter((r) => r.headBranch === flag('--branch'));
     runs = runs.slice(0, Number(flag('--limit') ?? 20));
@@ -45,6 +53,14 @@ if (group === 'run' && verb === 'list') {
     }
     if (argv.includes('--log')) process.stdout.write(run.log ?? '');
     else process.stdout.write(JSON.stringify(pick(run, flag('--json') ?? 'status')) + '\n');
+} else if (group === 'api' && argv.includes('GET') && flag('--jq') === '.pushed_at') {
+    const repo = argv.find((a) => a.startsWith('repos/'))?.slice('repos/'.length);
+    const pushed = st.repos?.[repo]?.pushed_at;
+    if (!pushed) {
+        process.stderr.write('gh: Not Found (HTTP 404)\n');
+        process.exit(1);
+    }
+    process.stdout.write(`${pushed}\n`);
 } else if (group === 'workflow' && verb === 'run') {
     const id = 90000000 + st.runs.length + 1;
     const cmd = process.env.FAKE_GH_DISPATCH_CMD ?? 'true';
@@ -54,7 +70,7 @@ if (group === 'run' && verb === 'list') {
         .map((l) => `sweep\tSweep expired labelled test resources\t${ts} ${l}\n`).join('');
     st.runs.push({ databaseId: id, event: 'workflow_dispatch', status: 'completed',
         conclusion: r.status === 0 ? 'success' : 'failure', createdAt: ts.replace(/\.\d+Z$/, 'Z'),
-        headBranch: flag('--ref') ?? 'develop', log });
+        headBranch: flag('--ref') ?? 'develop', log, repo: flag('--repo') ?? DEFAULT_REPO, workflow: argv[2] });
     save(st);
     process.stdout.write(`https://github.com/example/repo/actions/runs/${id}\n`);
 } else {
