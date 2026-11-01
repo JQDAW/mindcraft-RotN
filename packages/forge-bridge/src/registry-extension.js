@@ -87,12 +87,20 @@ function registerShapes(registry, blocks) {
  * @returns {{ added: object, rebound: object, total: object, rebinds: Array<{kind:string, name:string, from:number, to:number}>, entityIdsKept: number, entityIdsTaken: number }}
  */
 export function extendRegistry(registry, snapshot, { properties = {}, log = () => {} } = {}) {
-    const report = { added: {}, rebound: {}, total: {}, rebinds: [], entityIdsKept: 0, entityIdsTaken: 0 };
+    const report = { added: {}, rebound: {}, total: {}, rebinds: [], aliases: [], entityIdsKept: 0, entityIdsTaken: 0 };
     const entitiesByForgeId = {};
     for (const [kind, section] of Object.entries(SECTION)) {
         const synced = snapshot.get(section);
         const byId = { ...(registry[kind] ?? {}) };
         const staticByName = registry[`${kind}ByName`] ?? {};
+        const staticArray = registry[`${kind}Array`] ?? [];
+        // 1.12 names of vanilla entries that minecraft-data spells the 1.13 way
+        // (minecraft:silver_shulker_box, minecraft:beaches, ...), aliased in *ByName.
+        const aliases = new Map();
+        const alias = (vName, regName, entry, id) => {
+            aliases.set(vName, entry);
+            report.aliases.push({ kind, name: regName, as: entry.name, id });
+        };
         let added = 0;
         let rebound = 0;
         if (synced) {
@@ -103,7 +111,13 @@ export function extendRegistry(registry, snapshot, { properties = {}, log = () =
                 if (kind === 'entities') {
                     // Never rebind or delete a vanilla entity entry (object ids differ from EntityList ids).
                     if (base) { entitiesByForgeId[id] = base; if (base.id !== id) report.entityIdsKept++; continue; }
-                    const entry = applyProps({ ...DEFAULTS.entities(id, regName), registryName: regName, forge: { modded: true, propertiesKnown: false } }, properties.entities?.[regName], id);
+                    if (vName) {
+                        // A vanilla mob under its 1.12 name: minecraft-data's internalId is the EntityList id.
+                        const byInternal = staticArray.filter(e => e.internalId === id);
+                        const found = byInternal.find(e => e.type === 'mob') ?? byInternal[0];
+                        if (found) { entitiesByForgeId[id] = found; alias(vName, regName, found, id); continue; }
+                    }
+                    const entry = applyProps({ ...DEFAULTS.entities(id, regName), registryName: regName, forge: { modded: !vName, propertiesKnown: false } }, properties.entities?.[regName], id);
                     entitiesByForgeId[id] = entry;
                     if (byId[id] === undefined) { byId[id] = entry; added++; } else report.entityIdsTaken++;
                     continue;
@@ -119,8 +133,13 @@ export function extendRegistry(registry, snapshot, { properties = {}, log = () =
                         log(`registry rebind: ${kind} ${regName} ${base.id} -> ${id}`);
                         if (byId[base.id] === base) delete byId[base.id]; // the old slot is no longer this name's
                     }
+                } else if (vName && byId[id] && !byId[id].forge) {
+                    // A vanilla entry minecraft-data names differently: keep it, alias the 1.12 name.
+                    entry = byId[id];
+                    alias(vName, regName, entry, id);
                 } else {
-                    entry = { ...DEFAULTS[kind](id, regName), registryName: regName, forge: { modded: true, propertiesKnown: false } };
+                    // forge.modded only for non-minecraft: names (a vanilla name with no vanilla entry gets defaults).
+                    entry = { ...DEFAULTS[kind](id, regName), registryName: regName, forge: { modded: !vName, propertiesKnown: false } };
                     added++;
                 }
                 entry = applyProps(entry, properties[kind]?.[regName], id);
@@ -130,7 +149,9 @@ export function extendRegistry(registry, snapshot, { properties = {}, log = () =
         const array = Object.values(byId);
         registry[kind] = byId;
         registry[`${kind}Array`] = array;
-        registry[`${kind}ByName`] = Object.fromEntries(array.map(e => [e.name, e]));
+        const byName = Object.fromEntries(array.map(e => [e.name, e]));
+        for (const [n, e] of aliases) if (!(n in byName)) byName[n] = e;
+        registry[`${kind}ByName`] = byName;
         if (kind === 'blocks') {
             const byState = {};
             for (const b of array) {

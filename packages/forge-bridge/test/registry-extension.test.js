@@ -185,3 +185,35 @@ test('every rebind is reported and logged with its old and new id', () => {
     assert.deepEqual(report.rebinds, [{ kind: 'blocks', name: 'minecraft:dirt', from: 3, to: 3000 }]);
     assert.deepEqual(logs, ['registry rebind: blocks minecraft:dirt 3 -> 3000']);
 });
+
+// PR #25 re-review A and C: vanilla entries that minecraft-data names the 1.13 way.
+test('real RotN ids: vanilla entries under their 1.12 names are kept and aliased, never replaced', () => {
+    const vanilla = freshRegistry();
+    const registry = freshRegistry();
+    const report = extendRegistry(registry, realSnapshot());
+    for (const [name, id] of [['silver_shulker_box', 227], ['silver_glazed_terracotta', 243]]) {
+        assert.equal(registry.blocks[id], vanilla.blocks[id], `${name}: block ${id} keeps minecraft-data's entry`);
+        assert.equal(registry.blocksByName[name], vanilla.blocks[id], `${name} is an alias`);
+    }
+    for (const [name, id] of [['beaches', 16], ['void', 127], ['mutated_mesa', 165]]) {
+        assert.equal(registry.biomes[id], vanilla.biomes[id], `${name}: biome ${id} keeps minecraft-data's entry`);
+        assert.equal(registry.biomesByName[name], vanilla.biomes[id]);
+    }
+    const count = (kind) => report.aliases.filter(a => a.kind === kind).length;
+    assert.equal(count('blocks'), 2);
+    assert.equal(count('biomes'), 45);
+    assert.ok(report.aliases.every(a => a.name.startsWith('minecraft:')));
+});
+
+test('real RotN ids: no minecraft: entry is flagged forge.modded (re-review C)', () => {
+    const registry = freshRegistry();
+    extendRegistry(registry, realSnapshot());
+    for (const kind of ['blocks', 'items', 'entities', 'biomes']) {
+        const bad = registry[`${kind}Array`].filter(e => e.registryName?.startsWith('minecraft:') && e.forge?.modded);
+        assert.deepEqual(bad.map(e => e.registryName), [], kind);
+    }
+    const badForge = Object.values(registry.entitiesByForgeId).filter(e => e.registryName?.startsWith('minecraft:') && e.forge?.modded);
+    assert.deepEqual(badForge.map(e => e.registryName), []);
+    // ...and the modded ones still are.
+    assert.ok(registry.blocksArray.some(b => b.registryName?.startsWith('pyrotech:') && b.forge?.modded));
+});
