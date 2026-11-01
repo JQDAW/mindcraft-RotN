@@ -146,9 +146,22 @@ out({
 });
 `;
 
+/**
+ * The child's environment: only what node needs to start on Linux and Windows, plus ROTN_G2_ROOT. No
+ * credentials, no TEST_SERVER_* and no NODE_OPTIONS/NODE_PATH can reach the code it imports (lead
+ * follow-up after #36).
+ */
+export function namingCheckEnv(parent, repoRoot) {
+    const keep = ['PATH', 'Path', 'SYSTEMROOT', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE', 'LANG'];
+    const env = {};
+    for (const k of keep) if (parent[k] !== undefined) env[k] = parent[k];
+    env.ROTN_G2_ROOT = repoRoot;
+    return env;
+}
+
 export function agentNaming(repoRoot, { timeoutMs = 180000, run = spawnSync, node = process.execPath } = {}) {
     const r = run(node, ['--input-type=module', '-e', AGENT_NAMING_SCRIPT], {
-        cwd: repoRoot, env: { ...process.env, ROTN_G2_ROOT: repoRoot, NODE_OPTIONS: '' }, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024,
+        cwd: repoRoot, env: namingCheckEnv(process.env, repoRoot), encoding: 'utf8', timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024,
     });
     const line = String(r.stdout ?? '').split('\n').reverse().find((l) => l.startsWith('G2NAMING '));
     if (!line) {
