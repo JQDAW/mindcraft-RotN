@@ -1,0 +1,215 @@
+{
+  "scenario": "g2-mobs-named",
+  "gate": "G2",
+  "title": "Common mobs near the bot carry registry names the server confirms",
+  "runId": "20261101t222018-1b0821",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "FAIL",
+  "passed": 1,
+  "failed": 2,
+  "durationS": 106,
+  "params": {
+    "bot": "<bot>",
+    "mobs": "",
+    "mobsFile": "packages/rotn-data/3.3.4/common-mobs.json",
+    "dataRoot": "",
+    "maxMobs": 12,
+    "extraMobs": "",
+    "radius": 12,
+    "ring": 4,
+    "loginTimeoutMs": 240000,
+    "settleMs": 20000,
+    "seeMs": 10000,
+    "replyTimeoutMs": 120000,
+    "pollMs": 3000,
+    "logTail": 40000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the service makes the bot log in with its own account"
+    },
+    {
+      "check": "mobs_named",
+      "pass": false,
+      "detail": "9/12 summoned mobs reported by registry name; charm:spectre at -48.5,80,-67.5: not reported; minecraft:chicken: the server could not summon it (Unable to summon object); minecraft:pig: the server could not summon it (Unable to summon object)",
+      "readyToTry": "Nearby mobs show RotN names (each summoned mob, by its registry name)"
+    },
+    {
+      "check": "mobs_confirmed",
+      "pass": false,
+      "detail": "10/12 reported entities confirmed by testfor; first: animania:cow_angus -47.3 80.0 -64.3: Selector '@e[type=animania:cow_angus,x=-48,y=80,z=-65,r=3]' found nothing",
+      "readyToTry": "Nearby mobs show RotN names (no unknown names; the server confirms each)"
+    }
+  ],
+  "notes": {
+    "mobSource": "packages/rotn-data/3.3.4/common-mobs.json",
+    "worldSeed": "4200657588867313809",
+    "naming": {
+      "wired": true,
+      "why": "mcdata.js exports toNew and toOld; all 643 table entries round-trip through them",
+      "entries": 643,
+      "failureCount": 0
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "summoned": [
+      {
+        "name": "minecraft:slime",
+        "pos": [
+          -49.5,
+          80,
+          -63.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "butterflies:butterfly",
+        "pos": [
+          -49.5,
+          80,
+          -65.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "charm:spectre",
+        "pos": [
+          -48.5,
+          80,
+          -67.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "animania:toad",
+        "pos": [
+          -46.5,
+          80,
+          -68.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "minecraft:creeper",
+        "pos": [
+          -44.5,
+          80,
+          -68.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "minecraft:sheep",
+        "pos": [
+          -42.5,
+          80,
+          -67.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "minecraft:spider",
+        "pos": [
+          -41.5,
+          80,
+          -65.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "minecraft:chicken",
+        "pos": [
+          -41.5,
+          80,
+          -63.5
+        ],
+        "ok": false,
+        "detail": "Unable to summon object"
+      },
+      {
+        "name": "minecraft:skeleton",
+        "pos": [
+          -42.5,
+          80,
+          -61.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "betteranimalsplus:deer",
+        "pos": [
+          -44.5,
+          80,
+          -60.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "minecraft:zombie",
+        "pos": [
+          -46.5,
+          80,
+          -60.5
+        ],
+        "ok": true,
+        "detail": "summoned"
+      },
+      {
+        "name": "minecraft:pig",
+        "pos": [
+          -48.5,
+          80,
+          -61.5
+        ],
+        "ok": false,
+        "detail": "Unable to summon object"
+      }
+    ],
+    "seen": [
+      "animania:cow_angus -47.3 80.0 -64.3",
+      "animania:calf_angus -45.9 80.0 -65.6",
+      "animania:peahen_blue -35.6 80.0 -70.0",
+      "minecraft:slime -49.5 80.0 -63.5",
+      "butterflies:butterfly -49.5 80.0 -65.5",
+      "animania:toad -46.5 80.0 -68.5",
+      "minecraft:creeper -44.5 80.0 -68.5",
+      "minecraft:sheep -42.5 80.0 -67.5",
+      "minecraft:spider -41.5 80.0 -65.5",
+      "minecraft:skeleton -42.5 80.0 -61.5",
+      "betteranimalsplus:deer -44.5 80.0 -60.5",
+      "minecraft:zombie -46.5 80.0 -60.5"
+    ],
+    "notConfirmed": {
+      "count": 2,
+      "first": [
+        "animania:cow_angus -47.3 80.0 -64.3: Selector '@e[type=animania:cow_angus,x=-48,y=80,z=-65,r=3]' found nothing",
+        "animania:calf_angus -45.9 80.0 -65.6: Selector '@e[type=animania:calf_angus,x=-46,y=80,z=-66,r=3]' found nothing"
+      ]
+    }
+  },
+  "botExitCode": 128,
+  "error": null,
+  "git": {
+    "sha": "36d7ee8fc72718f288f4e0fbdbf919c3212992ce",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261101-221014",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}

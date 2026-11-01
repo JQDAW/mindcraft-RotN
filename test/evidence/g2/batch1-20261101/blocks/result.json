@@ -1,0 +1,206 @@
+{
+  "scenario": "g2-blocks-named",
+  "gate": "G2",
+  "title": "The 50 most common blocks near spawn have registry names the server confirms",
+  "runId": "20261101t221310-d9601e",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "FAIL",
+  "passed": 2,
+  "failed": 2,
+  "durationS": 425,
+  "params": {
+    "bot": "<bot>",
+    "radius": 16,
+    "topN": 50,
+    "minTypes": 10,
+    "candidates": 8,
+    "samplesPerType": 3,
+    "spotChecks": 40,
+    "spotMaxPositions": 400,
+    "absentHits": 4,
+    "maxShareGap": 0.25,
+    "maxUnloadedShare": 0.01,
+    "seed": 0,
+    "dataRoot": "",
+    "loginTimeoutMs": 240000,
+    "settleMs": 20000,
+    "replyTimeoutMs": 180000,
+    "pollMs": 3000,
+    "logTail": 40000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the service makes the bot log in with its own account"
+    },
+    {
+      "check": "blocks_named",
+      "pass": true,
+      "detail": "50 non-air block types (need 10..50)",
+      "readyToTry": "Blocks show RotN names; none of the 50 most common blocks near spawn shows as unknown"
+    },
+    {
+      "check": "blocks_confirmed",
+      "pass": false,
+      "detail": "0/150 runner-picked samples (3 per type) confirmed by testforblock; first: undergroundbiomes:sedimentary_stone 5 at -38,72,-58: Successfully found the block at -38, 72, -58",
+      "readyToTry": "Blocks show RotN names (each name is the block the server has there)"
+    },
+    {
+      "check": "blocks_spotcheck",
+      "pass": false,
+      "detail": "0 confirmed non-air answers of 40 needed (16 positions asked, 0 unloaded, seed 356803860); wrong: -54,84,-70 dynamictrees:oakbranch 1: Successfully found the block at -54, 84, -70; census inconsistent: undergroundbiomes:sedimentary_stone 5: census share 0.62 but no spot hit",
+      "readyToTry": "Blocks show RotN names (at positions the runner picks, consistent with the census)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "4200657588867313809",
+    "naming": {
+      "wired": true,
+      "why": "mcdata.js exports toNew and toOld; all 643 table entries round-trip through them",
+      "entries": 643,
+      "failureCount": 0
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "center": [
+      -46,
+      80,
+      -65
+    ],
+    "cube": {
+      "center": [
+        -46,
+        80,
+        -65
+      ],
+      "radius": 16
+    },
+    "spotSeed": 356803860,
+    "census": [
+      "undergroundbiomes:sedimentary_stone 5 12939",
+      "minecraft:dirt 0 3396",
+      "minecraft:grass 0 1081",
+      "dynamictrees:leaves0 0 658",
+      "dynamictreesbop:leaves_flowering 0 370",
+      "dynamictrees:leaves0 2 204",
+      "dynamictrees:leaves0 3 180",
+      "osv:coal_ore_undergroundbiomes_sedimentary_stone_5 0 173",
+      "undergroundbiomes:sedimentary_monster_stone 5 153",
+      "dynamictrees:leaves0 1 145",
+      "dynamictrees:oakbranch 0 116",
+      "dynamictreesbop:leaves_flowering 3 111",
+      "dynamictreesbop:leaves_flowering 2 111",
+      "dynamictreesbop:leaves_flowering 12 111",
+      "undergroundbiomes:igneous_stone 5 111",
+      "dynamictrees:oakbranch 1 109",
+      "dynamictrees:leaves0 12 96",
+      "minecraft:tallgrass 2 89",
+      "dynamictreesbop:leaves_flowering 1 76",
+      "biomesoplenty:plant_0 1 51",
+      "minecraft:tallgrass 1 44",
+      "dynamictrees:oakbranch 2 44",
+      "osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone_5 0 42",
+      "biomesoplenty:plant_0 0 37",
+      "dynamictreesbop:leaves_flowering 14 36",
+      "dynamictreesbop:leaves_flowering 15 29",
+      "dynamictrees:leaves0 14 28",
+      "dynamictrees:oakbranch 3 27",
+      "minecraft:leaves 3 27",
+      "biomesoplenty:flower_0 5 24",
+      "dynamictreesbop:leaves_flowering 13 23",
+      "dynamictrees:oakbranch 7 18",
+      "dynamictrees:leaves0 13 18",
+      "dynamictrees:oakbranch 4 17",
+      "dynamictrees:junglebranch 7 16",
+      "dynamictrees:leaves0 15 15",
+      "osv:simpleores_tin_ore_undergroundbiomes_sedimentary_stone_5 0 14",
+      "minecraft:vine 2 12",
+      "dynamictreesbop:leaves_flowering 8 11",
+      "dynamictreesbop:leaves_flowering 9 11",
+      "biomesoplenty:plant_0 11 11",
+      "dynamictrees:oakbranch 5 9",
+      "dynamictreesbop:leaves_flowering 7 8",
+      "dynamictreesbop:leaves_flowering 6 7",
+      "pyrotech_compat:rock_igneous 2 7",
+      "minecraft:red_flower 1 7",
+      "pyrotech_compat:rock_sedimentary 3 6",
+      "dynamictrees:oakbranch 6 6",
+      "dynamictreesbop:leaves_flowering 10 6",
+      "biomesoplenty:flower_0 6 6"
+    ],
+    "blocksWrong": {
+      "count": 150,
+      "first": [
+        "undergroundbiomes:sedimentary_stone 5 at -38,72,-58: Successfully found the block at -38, 72, -58",
+        "undergroundbiomes:sedimentary_stone 5 at -56,64,-65: Successfully found the block at -56, 64, -65",
+        "undergroundbiomes:sedimentary_stone 5 at -35,67,-75: Successfully found the block at -35, 67, -75",
+        "minecraft:dirt 0 at -61,75,-70: Successfully found the block at -61, 75, -70",
+        "minecraft:dirt 0 at -53,78,-58: Successfully found the block at -53, 78, -58",
+        "minecraft:dirt 0 at -33,77,-79: Successfully found the block at -33, 77, -79",
+        "minecraft:grass 0 at -49,78,-68: Successfully found the block at -49, 78, -68",
+        "minecraft:grass 0 at -43,80,-66: Successfully found the block at -43, 80, -66",
+        "minecraft:grass 0 at -41,81,-62: Successfully found the block at -41, 81, -62",
+        "dynamictrees:leaves0 0 at -30,91,-68: Successfully found the block at -30, 91, -68",
+        "dynamictrees:leaves0 0 at -33,87,-72: Successfully found the block at -33, 87, -72",
+        "dynamictrees:leaves0 0 at -49,82,-67: Successfully found the block at -49, 82, -67",
+        "dynamictreesbop:leaves_flowering 0 at -47,91,-59: Successfully found the block at -47, 91, -59",
+        "dynamictreesbop:leaves_flowering 0 at -58,87,-57: Successfully found the block at -58, 87, -57",
+        "dynamictreesbop:leaves_flowering 0 at -58,86,-75: Successfully found the block at -58, 86, -75",
+        "dynamictrees:leaves0 2 at -39,87,-73: Successfully found the block at -39, 87, -73",
+        "dynamictrees:leaves0 2 at -46,85,-70: Successfully found the block at -46, 85, -70",
+        "dynamictrees:leaves0 2 at -48,82,-81: Successfully found the block at -48, 82, -81",
+        "dynamictrees:leaves0 3 at -43,84,-79: Successfully found the block at -43, 84, -79",
+        "dynamictrees:leaves0 3 at -43,86,-79: Successfully found the block at -43, 86, -79"
+      ]
+    },
+    "spotDistribution": {},
+    "spotFailures": {
+      "count": 16,
+      "first": [
+        "-54,84,-70 dynamictrees:oakbranch 1: Successfully found the block at -54, 84, -70",
+        "-48,76,-54 undergroundbiomes:sedimentary_stone 5: Successfully found the block at -48, 76, -54",
+        "-44,82,-80 minecraft:air 0: Successfully found the block at -44, 82, -80",
+        "-56,88,-63 dynamictreesbop:leaves_flowering 12: Successfully found the block at -56, 88, -63",
+        "-42,91,-80 minecraft:air 0: Successfully found the block at -42, 91, -80",
+        "-37,90,-78 minecraft:air 0: Successfully found the block at -37, 90, -78",
+        "-45,72,-66 undergroundbiomes:sedimentary_stone 5: Successfully found the block at -45, 72, -66",
+        "-49,73,-58 osv:coal_ore_undergroundbiomes_sedimentary_stone_5 0: Successfully found the block at -49, 73, -58",
+        "-52,87,-49 dynamictrees:leaves0 12: Successfully found the block at -52, 87, -49",
+        "-34,90,-69 minecraft:air 0: Successfully found the block at -34, 90, -69",
+        "-50,81,-55 minecraft:air 0: Successfully found the block at -50, 81, -55",
+        "-36,96,-60 minecraft:air 0: Successfully found the block at -36, 96, -60",
+        "-58,68,-50 undergroundbiomes:sedimentary_stone 5: Successfully found the block at -58, 68, -50",
+        "-33,85,-64 minecraft:air 0: Successfully found the block at -33, 85, -64",
+        "-36,95,-49 minecraft:air 0: Successfully found the block at -36, 95, -49",
+        "-47,96,-60 minecraft:air 0: Successfully found the block at -47, 96, -60"
+      ]
+    },
+    "spotSkew": [
+      "undergroundbiomes:sedimentary_stone 5: census share 0.62 but no spot hit"
+    ],
+    "unloaded": {
+      "census": 0,
+      "cube": 35937,
+      "censusShare": 0,
+      "spot": 0,
+      "spotAsked": 16,
+      "spotShare": 0,
+      "maxShare": 0.01
+    }
+  },
+  "botExitCode": 128,
+  "error": null,
+  "git": {
+    "sha": "36d7ee8fc72718f288f4e0fbdbf919c3212992ce",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261101-221014",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}
