@@ -159,16 +159,26 @@ The review findings on PR #10, numbered as in the review comment:
 - `e2e-initbot` asserts `modListSource === 'ping'` again when the first login attempt succeeds. `file` is allowed only after a retried login.
 - `npm test` passes 233/233; lint 257, unchanged.
 
+## Done: brief item 4, `bot.registry` extension (branch `agent/net-forge/registry-extension`, from develop 1cbe6a8; PR #24 merged)
+
+- `extendRegistry(bot.registry, snapshot, {properties})` (`src/registry-extension.js`) runs in `initBot` after the last RegistryData. It covers blocks, items, entities and biomes; block states are `id << 4 | meta`.
+  - Modded entries carry full registry names and safe defaults: a solid full cube, diggable, hardness `null`.
+  - Vanilla names keep minecraft-data's objects; a moved vanilla id is rebound and dummied entries are skipped.
+  - The shared minecraft-data object stays vanilla.
+- **Contract for rotn-data:** feed properties keyed by full registry name (`minecraft:stone`, `pyrotech:rock`). Properties cannot rename an entry. See the README section "Registry extension".
+- **Tests:** `registry-extension.test.js` (6, with the real prismarine-registry, prismarine-block and prismarine-item). `e2e-initbot` now checks that `blockAt` gives `pyrotech:rock` and that the inventory gives `pyrotech:crude_axe`.
+- `npm test` passes 239/239; lint 257, unchanged.
+
 ## Doing
 
-- PR #24 (status-ping budget) open. **Batch A waits for the lead's written go-ahead** (the last blocker is PR #21, the preflight fix; the external sweeper cron is live).
+- PR for brief item 4 (registry extension) open. **Batch A waits for the lead's written go-ahead** (the last blocker is PR #21, the preflight fix; the external sweeper cron is live).
 
 ## Next
 
 1. **G1 batches** (below), after the lead's written approval and a scheduled sweeper run within 120 min (PR #12).
 2. Captured fixtures: real handshake, RegistryData, `window_items`/`set_slot`, chunks, `entity_effect`, `jeid`. Then the handshake test against real captured server messages; real Run A bytes become extra golden vectors.
 3. Classify every kick seen, confirm chunk bits per block and the REID formats on the wire, and record walk blocks.
-4. Brief items 4 (`bot.registry` extension), 6 (EntitySpawn into `bot.entities`) and 8 (`agent_process.js` consumes `createRestartPolicy`).
+4. Brief item 6 (FML EntitySpawn into `bot.entities`). Items 4 and 8 are done.
 
 ## G1 batches (approved by the lead 2026-11-01 11:40 UTC in STATUS-rotn-lead.md; nothing run yet)
 
@@ -226,4 +236,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15, #16, #18, #19 and #23 merged.) #24: status-ping budget, on `agent/net-forge/ping-budget`. `npm test` 233/233; lint 257.
+- (#15, #16, #18, #19, #23 and #24 merged.) New PR: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. `npm test` 239/239; lint 257.

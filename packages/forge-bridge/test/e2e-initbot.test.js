@@ -82,10 +82,16 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.equal(bot.blockAt(bot.entity.position.offset(0, -1, 0)).name, 'stone');
     const modded = bot.world.getBlockStateId({ x: 0, y: 64, z: 0 });
     assert.equal(modded, MODDED);
+    // Brief item 4: bot.registry carries the synced modded names.
+    const moddedBlock = bot.blockAt(bot.entity.position.floored().offset(-8, -1, -8));
+    assert.equal(moddedBlock.name, 'pyrotech:rock');
+    assert.equal(moddedBlock.boundingBox, 'block');
+    assert.deepEqual(bot.forge.registryReport.added, { blocks: 2, items: 2, entities: 1, biomes: 1 });
     assert.equal(bot.inventory.slots[36].name, 'stone');
     assert.equal(bot.inventory.slots[36].count, 64);
     assert.equal(bot.inventory.slots[37].name, 'stick');
     assert.equal(bot.inventory.slots[38].type, 5003);
+    assert.equal(bot.inventory.slots[38].name, 'pyrotech:crude_axe');
     assert.equal(bot.inventory.slots[39].type, 40000);
     assert.equal(bot.inventory.slots[39].count, 2);
     assert.equal(bot.entity.effects[300]?.amplifier, 1, 'REID effect id from the VarInt tail');

@@ -77,6 +77,22 @@ The lead's section R lists these. net-forge confirmed each one with `javap -c -p
 
 These still need a real capture to confirm them on the wire (G1 Run B).
 
+## Registry extension (brief item 4)
+
+After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snapshot)` (`src/registry-extension.js`). It then sets `bot.forge.registryReport` (`{added, rebound, total}` per kind) and emits `forge_registry`. This is the shared-registry contract of ADR 0003 decision 4:
+
+- **Blocks, items, entities and biomes** get the synced ids.
+  - Vanilla entries keep minecraft-data's object and unprefixed name (`stone`). A vanilla name the server moved to another id gets a copy at the new id, and its old slot is freed.
+  - Modded entries are named by their **full registry name** (`pyrotech:rock`), with `registryName` and `forge: { modded: true, propertiesKnown }`.
+- **Block states** are `id << 4 | meta`, so `blocksByStateId` holds 16 states per block. `bot.blockAt()`, `Block.fromStateId()` and `new Item(id)` therefore return modded names.
+- **Defaults without rotn-data's properties:**
+  - A block is a solid full cube (`boundingBox: 'block'`, so the bot never falls through a modded floor), diggable, with hardness `null` and no drops.
+  - An item stacks to 64. An entity is a `mob`. A biome is a neutral overworld biome.
+- **Properties.** `extendRegistry(registry, snapshot, { properties: { blocks: { 'pyrotech:rock': {...} } } })` fills in or overrides fields, keyed by full registry name; vanilla names use `minecraft:stone`. rotn-data's dump (ADR 0004) is meant to feed this. Properties cannot rename an entry.
+- **Isolation.** Dummied entries are skipped. Only `bot.registry`'s own maps and its `blockCollisionShapes` are replaced; prismarine-registry copies minecraft-data only shallowly, so the maps are copied first. The process-wide `minecraft-data` object stays vanilla.
+- **Shapes.** Each modded block is registered in the copied collision-shape table, so a Block class made later keeps its shapes (prismarine-block resets shapes by name).
+- **Not covered:** FML EntitySpawn uses the mod-local entity table (`modId` + `modEntityTypeId`), not `minecraft:entities`; that is brief item 6.
+
 ## Other protocol changes
 
 - **Entity metadata type ids** are VarInts. minecraft-data 1.12.2 says `i8`, but Forge mod serializers start at 256. This override applies on every Forge connection, as a customPackets override rather than a minecraft-data patch. An unknown serializer id throws instead of misreading. The FML EntitySpawn decoder then keeps the rest of the message raw.
@@ -127,7 +143,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - It clears `DEBUG` before prismarine-auth loads, so the `debug` package cannot log HTTP details.
 - `tools/g1-spike.mjs`: the G1 spike. It uses Mindcraft's real `initBot` against a disposable test server, normally inside `deploy/test-server.sh run ... --`. It logs in, stays `--minutes`, chats both ways (the `say` check uses the server console), walks, and writes `capture.jsonl`, `registries.json` and `summary.json`.
   - `--mode handshake` is Run A. It is for a server started with `--capture`, which closes the connection right after the handshake.
-  - `summary.json` records `walkMethod` (`pathfinder` or the `forward-control` fallback) and the blocks under the bot at spawn and along the walk, with the Forge registry name next to prismarine's (empty for modded blocks until brief item 4). Its `scope` field says that the spike does not test reconnects or exit codes.
+  - `summary.json` records `walkMethod` (`pathfinder` or the `forward-control` fallback) and the blocks under the bot at spawn and along the walk, with the synced Forge registry name next to `bot.registry`'s, as a cross-check. Its `scope` field says that the spike does not test reconnects or exit codes.
 
 - `tools/g1-driver.mjs`: the G1 **gate** driver for harness-ops' runner (`test/runner/DRIVER.md`). It is Mindcraft's real `initBot` with forge-bridge on, plus the runner's scenario protocol (`attachScenario`: hello once, echo the whispered token, walk on request, stay until SIGTERM). The runner decides pass or fail from the server log.
   - It needs `MINDCRAFT_PROFILES_FOLDER` and never starts a device-code login: `initBot(name, { onMsaCode })` makes a stale cache exit 3.
@@ -146,6 +162,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - REID `window_items`, `set_slot`, `window_click`, `entity_effect` and `remove_entity_effect`, through nmp's real compiled 1.12.2 protocol.
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
 - `agent-process.test.js`: `agent_process.js` with a fake spawn, timers and exit. It covers the ADR 0003 table, the backoff and its reset, the exit-reason file (a fatal kick reported with exit 1, auth capped at 3 and reset after 10 min), requested restarts and their loop guard, single-bot stops and clean exits, `forceRestart`, a stop cancelling a pending restart, a child exiting with a code after `stop()`, the task codes, and the private reason-file folder.
+- `registry-extension.test.js`: the extension against the real prismarine-registry, prismarine-block and prismarine-item for 1.12.2. It covers modded names, 16 states and the solid default, items, entities and biomes, an untouched shared minecraft-data, dummied and rebound entries, properties, and Block classes made before and after the extension. `e2e-initbot.test.js` checks the same through `initBot`: `blockAt` gives `pyrotech:rock`, and the inventory gives `pyrotech:crude_axe`.
 - `exit-contract.test.js`: the agent side (`recordAgentExit`): kicks with and without a bridge, `cleanKill` before and after a kick, startup errors, and no reason file.
 - `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
@@ -157,7 +174,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - **nmp protocol cache and shared protocol object.** One bot per process, which is how Mindcraft runs, is fine. Two effects follow from nmp 1.x internals:
   - nmp caches compiled protocols by state, direction and version only, not by `customPackets`. The first play-state client for 1.12.2 in a process fixes the overrides for that process.
   - nmp's `createProtocol` calls lodash `merge(mcData.protocol, customPackets['1.12'])`. That **mutates the shared `minecraft-data` 1.12.2 protocol object in place**, and every `require('minecraft-data')('1.12.2')` in the process returns that same object. After the first Forge connection, `bot.registry.protocol` and any later vanilla or non-REID 1.12.2 client in the same process see the Forge and REID types. A process that needs both must run them in separate processes.
-- **Registry extension.** `bot.registry` is not yet extended (brief item 4). Modded blocks get prismarine-block's fallback: name `''`, bounding box `empty`. Modded items get no name.
+- **Registry properties.** Modded blocks, items, entities and biomes have names but default properties (below) until rotn-data's dump supplies them through `extendRegistry(..., { properties })`. Until then, for example, a modded plant is solid to the bot, and a modded block's hardness and drops are unknown.
 - **FML EntitySpawn** is decoded and emitted, but not yet injected into `bot.entities` (brief item 6).
 - **Chunk bit widths.** Handled by `patches/prismarine-chunk+1.41.0.patch`:
   - Reads: a global-palette section is read at the width the packet states.

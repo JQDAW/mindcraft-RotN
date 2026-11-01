@@ -75,7 +75,7 @@ async function main() {
     });
     const bridge = () => bot.forge?.bridge ?? null;
 
-    // Modded blocks have no name in bot.registry yet (brief item 4); add the Forge registry name.
+    // bot.registry has modded names (brief item 4); the synced Forge name is added as a cross-check.
     function blockBelow() {
         if (!bot.entity) return null;
         const b = bot.blockAt(bot.entity.position.offset(0, -1, 0));
