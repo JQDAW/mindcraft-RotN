@@ -1,0 +1,6 @@
+{
+ "description": "G1 Batch B retry: a play.entity_metadata packet (full packet bytes, hex) the RotN 3.3.4 test server sent for a player. Key 17 uses serializer type 14, which AquaAcrobatics 1.15.4 registers with vanilla DataSerializers.registerSerializer (PoseSerializer: an enum written as a VarInt ordinal). protodef does not know type 14, so the packet is dropped as a PartialReadError. No player identity in the bytes.",
+ "capturedAt": "2026-11-01T17:12:51Z",
+ "hex": "3c9c020000000101ac02020300030600040600050600060000070241a000000801ba8ae5040906000a01000b02000000000c01000d007f0e00010f0d0a000000100d0a000000110e00120600ff",
+ "sha256": "29aa418c8cab1534c9fe832c7d5b5c8e48842b34d58474e1c491af628cb5bd52"
+}
