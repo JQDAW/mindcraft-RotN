@@ -220,10 +220,25 @@ export class RotnData {
         if (!this._entitiesByModId) {
             this._entitiesByModId = new Map();
             for (const [name, e] of Object.entries(this.dump.entities?.entities ?? {})) {
-                if (e.modEntityTypeId != null) this._entitiesByModId.set(`${e.modId}#${e.modEntityTypeId}`, { name, ...e });
+                if (e.modSpawn !== false && e.modEntityTypeId != null) this._entitiesByModId.set(`${e.modId}#${e.modEntityTypeId}`, { name, ...e });
             }
         }
         return this._entitiesByModId.get(`${modId}#${modEntityTypeId}`) ?? null;
+    }
+
+    /**
+     * net-forge's mod-local entity table shape: { [modId]: { [modEntityTypeId]: registryName } },
+     * from every dumped entity with an FML mod spawn (modSpawn !== false) and an integer type id.
+     * Entities with usesVanillaSpawning arrive in vanilla spawn packets and are named through
+     * bot.registry.entitiesByForgeId instead, but they are listed here too.
+     */
+    modEntityTable() {
+        const out = {};
+        for (const [name, e] of Object.entries(this.dump.entities?.entities ?? {})) {
+            if (e.modSpawn === false || !Number.isInteger(e.modEntityTypeId) || !e.modId) continue;
+            (out[e.modId] ??= {})[e.modEntityTypeId] = name;
+        }
+        return out;
     }
 
     // ---- fuzzy lookup (for !lookup) ----------------------------------------

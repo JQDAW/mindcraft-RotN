@@ -2,6 +2,7 @@
  "format": "rotn-dump/1",
  "entities": {
   "minecraft:zombie": {
+   "modSpawn": false,
    "modId": "minecraft",
    "modEntityTypeId": null,
    "hostile": true,
@@ -21,6 +22,8 @@
    ]
   },
   "specialmobs:firecreeper": {
+   "modSpawn": true,
+   "usesVanillaSpawning": false,
    "modId": "specialmobs",
    "modEntityTypeId": 7,
    "hostile": true,

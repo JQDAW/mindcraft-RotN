@@ -26,3 +26,4 @@ export const harvestInfo = (block, meta) => pack().harvestInfo(block, meta);
 export const lookup = (query, opts) => pack().lookup(query, opts);
 export const entity = (name) => pack().entity(name);
 export const entityByModId = (modId, typeId) => pack().entityByModId(modId, typeId);
+export const modEntityTable = () => pack().modEntityTable();

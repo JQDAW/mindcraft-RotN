@@ -101,6 +101,7 @@ test('smelting and entities', () => {
     assert.equal(mini.entity({ name: 'cow' }).hostile, false);
     assert.equal(mini.entityByModId('specialmobs', 7).name, 'specialmobs:firecreeper');
     assert.equal(mini.entityByModId('specialmobs', 8), null);
+    assert.deepEqual(mini.modEntityTable(), { specialmobs: { 7: 'specialmobs:firecreeper' } });
     assert.equal(mini.entity('nope:nope'), null);
 });
 

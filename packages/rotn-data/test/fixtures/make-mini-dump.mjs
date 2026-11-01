@@ -79,9 +79,9 @@ const files = {
         'minecraft:plains': { monster: [{ entity: 'minecraft:zombie', weight: 95, min: 4, max: 4 }], creature: [{ entity: 'minecraft:cow', weight: 8, min: 4, max: 4 }], ambient: [], water_creature: [] },
     } },
     'entities.json': { format: 'rotn-dump/1', entities: {
-        'minecraft:zombie': { modId: 'minecraft', modEntityTypeId: null, hostile: true, kinds: ['living', 'monster'], displayName: 'Zombie' },
+        'minecraft:zombie': { modSpawn: false, modId: 'minecraft', modEntityTypeId: null, hostile: true, kinds: ['living', 'monster'], displayName: 'Zombie' },
         'minecraft:cow': { modId: 'minecraft', modEntityTypeId: null, hostile: false, kinds: ['living', 'animal'] },
-        'specialmobs:firecreeper': { modId: 'specialmobs', modEntityTypeId: 7, hostile: true, kinds: ['living', 'monster'], displayName: 'Fire Creeper' },
+        'specialmobs:firecreeper': { modSpawn: true, usesVanillaSpawning: false, modId: 'specialmobs', modEntityTypeId: 7, hostile: true, kinds: ['living', 'monster'], displayName: 'Fire Creeper' },
     } },
 };
 for (const r of files['recipes.json'].recipes) r.result.count ??= 1;

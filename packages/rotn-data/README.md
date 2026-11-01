@@ -30,7 +30,7 @@ RotN 3.3.4 facts (ADR 0005) and two-way name translation between Minecraft 1.12.
 | `harvestInfo(block, meta?)` | `{ block, meta, hardness, tool, level, levelName, toolRequired, material }`; `levelName` is Tool Progression's (`0` Crude, `1` Sturdy, ...); `null` without a dump |
 | `recipesFor(item, { meta })` | crafting-grid recipes after CraftTweaker, shaped like prismarine-recipe but keyed by names: `{ id, type, result {name, meta, count}, requiresTable, inShape \| ingredients, mirrored?, remaining? }`, ingredient = `{ stacks: [{name, meta}], ore? }` (ore dictionary expanded; meta `32767` = any) |
 | `smeltingFor(item)`, `smeltingOf(input)` | furnace recipes by output or by input |
-| `entity(name)`, `entityByModId(modId, typeId)` | entity facts; the mod-local table maps FML EntitySpawn ids to registry names |
+| `entity(name)`, `entityByModId(modId, typeId)`, `modEntityTable()` | entity facts; the mod-local table maps FML EntitySpawn ids to registry names. `modEntityTable()` gives net-forge's shape `{ [modId]: { [modEntityTypeId]: registryName } }` (entries with `modSpawn: true`) |
 | `lookup(query, { limit, kind })` | fuzzy search over registry names, 1.21 aliases and display names, for `!lookup` |
 
 ## Data (`3.3.4/`)
