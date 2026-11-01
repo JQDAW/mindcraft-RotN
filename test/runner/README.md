@@ -20,7 +20,7 @@ The driver gets an allowlisted environment (see `DRIVER.md`). Use `--pass-env NA
 
 Output, in `--out` (default `$TEST_SERVER_STATE_DIR/scenarios/<scenario>-<runId>/`):
 
-- `result.json`: one entry per check, each with its ready-to-try item, plus `notes` (kicks, UUID version, walk positions) and the driver's exit code. A check the scenario never reached is a FAIL ("not reached").
+- `result.json`: one entry per check, each with its ready-to-try item, plus `notes` (kicks, UUID version, walk positions, chat-mod prefixes seen on the bot's lines) and the driver's exit code. A check the scenario never reached is a FAIL ("not reached").
 - `server.log`: the server log from the scenario's marker line on.
 - `driver.log`: the driver's stdout and stderr.
 

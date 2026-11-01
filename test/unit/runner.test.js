@@ -27,6 +27,7 @@ const DS = 'net.minecraft.server.dedicated.DedicatedServer';
  * behaviour: { uuid, loginMs, kick, exitBeforeJoin, hello, echo, walk, dropAtMs, loseSays }
  * loseSays: how many `say` commands vanish (reply and log) before one lands.
  * quietSay: a `say` lands in the log, but the console reply does not show it (a short --wait).
+ * sayFormat: how a landed `say` is logged (default "[Server] TEXT").
  */
 function sim(behaviour = {}) {
     const b = { uuid: UUID_V4, loginMs: 20000, hello: true, echo: true, walk: 6, ...behaviour };
@@ -41,6 +42,7 @@ function sim(behaviour = {}) {
     let env = {};
     let started = false;
     let says = 0;
+    const sayTimes = [];
     const hms = () => new Date(Date.UTC(2026, 10, 1, 12) + t).toISOString().slice(11, 19);
     const add = (msg, thread = 'Server thread', logger = DS) => log.push(`[${hms()}] [${thread}/INFO] [${logger}]: ${msg}`);
     const at = (ms, fn) => queue.push({ when: t + ms, fn });
@@ -69,7 +71,10 @@ function sim(behaviour = {}) {
         console(cmd, waitS = 3) {
             const before = log.length;
             let m;
-            if ((m = /^say (.*)$/.exec(cmd))) { if (++says > (b.loseSays ?? 0)) add(`[Server] ${m[1]}`); }
+            if ((m = /^say (.*)$/.exec(cmd))) {
+                sayTimes.push(t);
+                if (++says > (b.loseSays ?? 0)) add(b.sayFormat ? b.sayFormat(m[1]) : `[Server] ${m[1]}`);
+            }
             else if ((m = /^tell (\S+) scenario-echo (\S+)$/.exec(cmd)) && online && b.echo) at(1500, () => online && add(`<${name}> echo ${m[2]}`));
             else if ((m = /^tell (\S+) scenario-walk (\d+)$/.exec(cmd)) && online && b.walk) {
                 at(8000, () => {
@@ -124,7 +129,7 @@ function sim(behaviour = {}) {
         },
     };
     const clock = { now: () => t, sleep: (ms) => Promise.resolve(advance(ms)) };
-    return { server, bot, clock, lines: log, env: () => env, started: () => started, says: () => says };
+    return { server, bot, clock, lines: log, env: () => env, started: () => started, says: () => says, sayTimes: () => sayTimes };
 }
 
 const byName = (r) => Object.fromEntries(r.checks.map((c) => [c.check, c]));
@@ -145,6 +150,7 @@ describe('G1 scenario on a simulated server', () => {
         assert.match(c.stay_10min.detail, /still online after \d+s, no disconnects/);
         for (const x of r.checks) assert.ok(x.readyToTry.length > 0);
         assert.deepEqual(r.notes.walk.before, [10.5, 64, -3.5]);
+        assert.deepEqual(r.notes.chatPrefixes, [''], 'no chat-mod prefix on the bot\'s lines (PR #13 nit 3)');
         assert.equal(r.botExitCode, 0, 'the runner stops the driver at the end');
     });
 
@@ -236,10 +242,19 @@ describe('G1 scenario on a simulated server', () => {
         const r = await runG1(s);
         assert.equal(r.pass, true, JSON.stringify(r.checks));
         assert.equal(s.says(), 3);
+        const [t0, t1, t2] = s.sayTimes();
+        assert.ok(t1 - t0 >= 4000 && t2 - t1 >= 4000, `retries wait consoleWaitS (3 s) after the 1 s reply: ${s.sayTimes()} (PR #13 nit 2)`);
     });
 
     test('a marker missing from the console reply but in the log tail counts, without a second say', async () => {
         const s = sim({ quietSay: true });
+        const r = await runG1(s);
+        assert.equal(r.pass, true, JSON.stringify(r.checks));
+        assert.equal(s.says(), 1);
+    });
+
+    test('the marker is found in any log format that contains it, as linesAfter finds it (PR #13 nit 1)', async () => {
+        const s = sim({ sayFormat: (text) => `[Server] \u00a7d${text}` });
         const r = await runG1(s);
         assert.equal(r.pass, true, JSON.stringify(r.checks));
         assert.equal(s.says(), 1);
@@ -335,6 +350,7 @@ describe('server-log parsers', () => {
             line('[Rcon] <FRCFLD> echo tok'), line('[@] <FRCFLD> echo tok'),
         ], 'FRCFLD');
         assert.deepEqual(c.map((x) => x.text), ['echo tok', 'hello'], 'anchored: quotes, [Server], [Rcon], [@] and other players never count');
+        assert.deepEqual(c.map((x) => x.prefix), [null, 'G'], 'the chat-mod prefix is kept for the chatPrefixes note');
     });
 
     test('online players from list, inline or on the next line', () => {

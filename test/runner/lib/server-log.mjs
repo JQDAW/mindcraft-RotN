@@ -103,7 +103,7 @@ export function chatLines(lines, name) {
         const p = parseLine(line);
         if (!p) return;
         const m = re.exec(p.msg);
-        if (m && !SERVER_SPEAKERS.has(m[1])) out.push({ time: p.time, text: m[2], at });
+        if (m && !SERVER_SPEAKERS.has(m[1])) out.push({ time: p.time, text: m[2], at, prefix: m[1] ?? null });
     });
     return out;
 }

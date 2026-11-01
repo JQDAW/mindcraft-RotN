@@ -4,7 +4,7 @@
 //
 // Steps
 //   1. Write a marker to the server log (`say`) and confirm it from the console reply or the log
-//      tail, saying it again up to MARKER_TRIES times; only then start the driver.
+//      tail, saying it again up to MARKER_TRIES times, consoleWaitS apart; only then start the driver.
 //   2. login_online: the server logs "NAME joined the game", and "UUID of player NAME is U" (logged
 //      only in online mode) with a version-4 UUID (a Mojang account; offline mode would give version 3).
 //      Any kick is recorded and classified (fml-spec.md section 4).
@@ -19,7 +19,7 @@
 // A run with weaker parameters than gateParams allows (shorter stay, shorter walk, another bot) can
 // pass its checks, but it is a smoke run and never a G1 pass (PR #9 review finding 1).
 import crypto from 'node:crypto';
-import { parseLine, linesAfter, loginUuid, uuidVersion, playerEvents, chatLines, onlinePlayers, lastTeleport, horizontal, classifyKick } from '../../runner/lib/server-log.mjs';
+import { linesAfter, loginUuid, uuidVersion, playerEvents, chatLines, onlinePlayers, lastTeleport, horizontal, classifyKick } from '../../runner/lib/server-log.mjs';
 
 const MS = 1000;
 const MARKER_TRIES = 3;
@@ -60,9 +60,12 @@ export default {
 
         // Confirm the marker before the bot starts (PR #9 re-review nit): without it every later read
         // of the log would fail, after the driver had already been started for nothing.
-        const markerSeen = (lines) => lines.some((l) => parseLine(l)?.msg === `[Server] ${marker}`);
+        // Matched with includes, exactly as linesAfter finds it later, so the two can never disagree
+        // about the line's format (PR #13 nit 1).
+        const markerSeen = (lines) => lines.some((l) => l.includes(marker));
         let markerOk = false;
         for (let i = 0; i < MARKER_TRIES && !markerOk; i++) {
+            if (i) await clock.sleep(p.consoleWaitS * MS); // give a slow server time before saying it again
             markerOk = markerSeen(server.console(`say ${marker}`, 1)) || markerSeen(server.log(p.logTail));
         }
         if (!markerOk) throw new Error(`the scenario marker never appeared in the server log after ${MARKER_TRIES} 'say' attempts`);
@@ -111,6 +114,10 @@ export default {
         const b = lastTeleport(server.console(`tp ${name} ~ ~ ~`, p.consoleWaitS), name);
         const d = a && b ? horizontal(a, b) : null;
         ctx.note('walk', { before: a, after: b, distance: d, botReport: walked?.text ?? null });
+        // Chat-mod prefixes seen on the bot's lines. SERVER_SPEAKERS is a denylist on purpose: an
+        // allowlist would turn an unknown RotN chat prefix into a false FAIL. Recording what was
+        // seen lets a real run show whether an allowlist is worth it (PR #13 nit 3).
+        ctx.note('chatPrefixes', [...new Set(chatLines(sinceMarker(), name).map((c) => c.prefix ?? ''))]);
         ctx.check('walk', d !== null && d >= p.minWalkBlocks,
             d === null ? `no position from "tp ${name} ~ ~ ~" (before ${JSON.stringify(a)}, after ${JSON.stringify(b)})`
                 : `moved ${d.toFixed(1)} blocks horizontally (min ${p.minWalkBlocks}); bot said "${walked?.text ?? 'nothing'}"`);
