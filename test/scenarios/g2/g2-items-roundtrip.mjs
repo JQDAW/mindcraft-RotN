@@ -8,9 +8,15 @@
 //   items_named:     each new name equals the expected 1.13+ name (Mindcraft's 1.21-style names, as
 //                    rotn-data's toNew gives them); null or "unknown" fails
 //   items_roundtrip: toOld(new) gives back exactly the 1.12 name and meta
-// The full table (every vanilla item) is rotn-data's unit test; this scenario proves the chain in a
-// live bot. The default sample must stay a subset of packages/rotn-data/vanilla/flattening-items.json.
+//   items_table:     the FULL vanilla table gates G2 too (PR #36 review finding 4): the runner imports
+//                    Mindcraft's own toNew/toOld (packages/rotn-data/index.js) and checks every entry of
+//                    packages/rotn-data/vanilla/flattening-items.json (every vanilla 1.12 item with
+//                    a 1.13+ name) both ways, and that the in-game sample is a subset of the table.
+//                    Without the table or the module this check fails.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { startSession } from '../../runner/lib/session.mjs';
 import { awaitReply, giveVerdict, ints, isRegistryName, sample } from '../../runner/lib/g2.mjs';
 
@@ -36,6 +42,52 @@ export function parseItems(spec) {
         return { name: m[1], meta: Number(m[2]), expected: m[3] ?? null };
     });
 }
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+export const TABLE_FILE = 'packages/rotn-data/vanilla/flattening-items.json';
+export const NAMES_MODULE = 'packages/rotn-data/index.js';
+
+/**
+ * The full-table check, run by the runner (no bot): {ok, detail, failures}. Every table entry must give
+ * toNew(old, meta) === new and toOld(new) == {name: old, meta}; every sample item must be in the table
+ * with the same new name.
+ */
+export async function checkFullTable(sampleItems, { repo = REPO, tableFile = TABLE_FILE, moduleFile = NAMES_MODULE } = {}) {
+    let table;
+    let mod;
+    try {
+        table = JSON.parse(fs.readFileSync(path.join(repo, tableFile), 'utf8'));
+    } catch (e) {
+        return { ok: false, detail: `${tableFile} not available (${e.code ?? e.message}); rotn-data PR #37`, failures: [] };
+    }
+    try {
+        mod = await import(pathToFileURL(path.join(repo, moduleFile)).href);
+    } catch (e) {
+        return { ok: false, detail: `${moduleFile} not importable (${e.code ?? e.message}); rotn-data PR #37`, failures: [] };
+    }
+    const entries = Array.isArray(table?.entries) ? table.entries : null;
+    if (!entries || entries.length === 0 || typeof mod.toNew !== 'function' || typeof mod.toOld !== 'function') {
+        return { ok: false, detail: 'the table has no entries, or the module has no toNew/toOld', failures: [] };
+    }
+    const failures = [];
+    for (const e of entries) {
+        let next;
+        let back;
+        try { next = mod.toNew(e.old, e.meta); } catch { next = 'threw'; }
+        try { back = mod.toOld(e.new); } catch { back = 'threw'; }
+        if (next !== e.new) failures.push(`toNew(${e.old}, ${e.meta}) = ${JSON.stringify(next)}, table says ${e.new}`);
+        if (!back || back.name !== e.old || back.meta !== e.meta) failures.push(`toOld(${e.new}) = ${JSON.stringify(back)}, table says ${e.old}:${e.meta}`);
+    }
+    const byOld = new Map(entries.map((e) => [`${e.old}:${e.meta}`, e.new]));
+    const notInTable = sampleItems.filter((it) => byOld.get(`${it.name}:${it.meta}`) !== it.expected)
+        .map((it) => `sample ${it.name}:${it.meta}=${it.expected} not in the table${byOld.has(`${it.name}:${it.meta}`) ? ` (table: ${byOld.get(`${it.name}:${it.meta}`)})` : ''}`);
+    failures.push(...notInTable);
+    return {
+        ok: failures.length === 0,
+        detail: `${entries.length} table entries both ways, ${sampleItems.length} sample items in the table: ${failures.length ? `${failures.length} failure(s), first: ${failures[0]}` : 'all correct'}`,
+        failures,
+    };
+}
+
 const bare = (n) => (n?.startsWith('minecraft:') ? n.slice('minecraft:'.length) : n);
 
 export default {
@@ -47,10 +99,12 @@ export default {
         items_read: 'Items and inventory show RotN names (the bot reads what the server gave it)',
         items_named: 'Items show readable 1.13+ names (old/new names round-trip)',
         items_roundtrip: 'Old/new names round-trip',
+        items_table: 'Old/new names round-trip (every vanilla 1.12 item with a 1.13+ name, through Mindcraft\'s own toNew/toOld)',
     },
     defaults: {
         bot: 'FRCFLD',
         items: VANILLA_SAMPLE,
+        dataRoot: '',              // '' = this repo; tests point it at fixture data (never a gate run)
         loginTimeoutMs: 240 * MS,
         settleMs: 10 * MS,
         seeMs: 5 * MS,
@@ -59,13 +113,17 @@ export default {
         logTail: 40000,
         consoleWaitS: 1,
     },
-    gateParams: { bot: 'equal', items: 'equal' },
+    gateParams: { bot: 'equal', items: 'equal', dataRoot: 'equal' },
 
     async run(ctx) {
         const { server, clock, params: p } = ctx;
         const name = p.bot;
         const items = parseItems(p.items);
         if (items.length > 36) throw new Error(`${items.length} items do not fit one inventory (36)`);
+        // The full table first: it needs no server, and it is recorded even if the login fails.
+        const full = await checkFullTable(items, { repo: p.dataRoot || REPO });
+        ctx.note('tableFailures', sample(full.failures));
+        ctx.check('items_table', full.ok, full.detail);
         const s = await startSession(ctx, { name });
         ctx.check('login_online', s.ok, s.why);
         if (!s.ok) return;

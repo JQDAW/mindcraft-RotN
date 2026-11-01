@@ -28,6 +28,9 @@ export async function startSession(ctx, { name, env = {} }) {
     };
     const events = () => playerEvents(sinceMarker(), name);
     const gone = (e) => ['lost', 'left', 'kicked'].includes(e.type);
+    // The world the evidence is about (PR #36 review finding 5). 1.12 prints "Seed: N" (later versions "Seed: [N]").
+    const seedLine = server.console('seed', p.consoleWaitS).map((l) => /Seed: \[?(-?\d+)\]?\s*$/.exec(l)).find(Boolean);
+    ctx.note('worldSeed', seedLine ? seedLine[1] : null);
 
     bot.start({ ROTN_SCENARIO_BOT: name, ROTN_SCENARIO_RUN: runId, ...env });
     const first = await ctx.waitFor(() => events().find((e) => e.type === 'joined' || gone(e))

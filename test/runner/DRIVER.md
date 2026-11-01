@@ -48,39 +48,42 @@ Every disconnect is recorded in `result.json` under `notes.kicks`, with its reas
 
 ## G2: naming what the bot sees
 
-Three scenarios in `test/scenarios/g2/`. Each logs in first (`login_online`, as in G1). The bot only reports names; every verdict comes from the server's own commands on the test server.
+There are three scenarios in `test/scenarios/g2/`. Each logs in first (`login_online`, as in G1), and records the world seed (`seed`) in `notes.worldSeed`. The bot only reports names. Every verdict comes from the server's own commands on the test server.
 
-A driver gets G2 by calling `attachG2(bot, { names })` from `scenario-protocol.mjs` next to `attachScenario(bot)`.
-- `names` is the naming adapter. A RotN driver builds it from rotn-data (`packages/rotn-data/index.js`):
-  ```js
-  { blockName: (b) => ({ name: registryName(b), meta: b.metadata }),
-    entityName: (e) => registryName(e),
-    itemName: (i) => ({ name: registryName(i), meta: i.metadata }),
-    toNew, toOld }
-  ```
-- The default (`stockNames`) uses stock mineflayer names and has no 1.13+ translation, so `g2-items-roundtrip` fails with it by design.
+**The naming must be Mindcraft's own.** A G2 run is evidence only if the driver's naming adapter is built from the exact functions Mindcraft uses, imported from rotn-data's package (`packages/rotn-data/index.js`: `registryName`, `toNew`, `toOld`), which `src/utils/mcdata.js` uses at the command boundary. A driver-local mapping doesn't count.
+- `mindcraftNames(repoRoot)` in `scenario-protocol.mjs` builds that adapter. The driver passes it as `attachG2(bot, { names })` next to `attachScenario(bot)`, and logs a `g2_adapter` event naming its source.
+- If `src/utils/mcdata.js` later exports its own naming helpers, the adapter imports those instead.
+- `stockNames` (stock mineflayer names, no 1.13+ translation) is only for trying the protocol. With it, `g2-items-roundtrip` fails by design.
 - A name the adapter cannot give is reported as `null`. The driver never guesses.
 
 | Whisper from the console | The bot says (paged) |
 | --- | --- |
-| `scenario-blocks TOKEN R N` | `blocks TOKEN i/n name meta count x y z; ...`: the N most common block types in the cube of radius R around the bot, each with one sample position |
+| `scenario-blocks TOKEN R N K` | `blocks TOKEN i/n name meta count x,y,z x,y,z ...; ...`: its census of the N most common **non-air** block types in the cube of radius R around it. Each type has up to K candidate positions, drawn uniformly from all blocks of that type. |
 | `scenario-blockat TOKEN x,y,z x,y,z ...` (at most 16) | `blockat TOKEN i/n x y z name meta; ...` |
 | `scenario-entities TOKEN R` | `entities TOKEN i/n name x y z; ...`: every non-player entity within R |
 | `scenario-items TOKEN` | `items TOKEN i/n slot oldName oldMeta newName backName backMeta; ...`: per inventory slot, the 1.12 name and meta, `toNew` of it, and `toOld` of that |
 
-- **Paging.** Replies are split into chat lines of about 200 characters. They go out **at most one every 1.2 s** (`pageDelayMs`), because vanilla kicks a non-op player who chats about ten times in quick succession.
-- **One request at a time.** Requests are answered in order, never interleaved.
-- **Names.** Names are full registry names (`minecraft:stone`, `pyrotech:rock`). Entity names are the 1.12 ones (`minecraft:zombie_pigman`, `minecraft:villager_golem`).
+- **Paging.** Replies are split into chat lines of about 200 characters, sent **at most one every 1.2 s** (`pageDelayMs`). Vanilla kicks a non-op player who chats about ten times in quick succession.
+- **Order.** Requests are answered one at a time, never interleaved.
+- **Names** are full registry names (`minecraft:stone`, `pyrotech:rock`). Entity names are the 1.12 ones (`minecraft:zombie_pigman`, `minecraft:villager_golem`).
 
 | Scenario | Check | Pass condition (server side) |
 | --- | --- | --- |
-| `g2-blocks-named` | `blocks_named` | The top list (radius 16, N = 50) has between `minTypes` (10) and 50 entries, every name is a registry name (nothing `unknown`/`null`/numeric), and every sample lies in the cube. |
-| | `blocks_confirmed` | `testforblock x y z name meta` succeeds for every entry. |
-| | `blocks_spotcheck` | At 40 random positions the runner picks (seeded; the seed is in `notes.spotSeed`), the bot's names are registry names and `testforblock` confirms them. This catches a bot that reports only the blocks it can name. |
-| `g2-mobs-named` | `mobs_named` | The console summons the common mobs (default: vanilla zombie, skeleton, spider, creeper, cow, pig, sheep, chicken). Each is NoAI, invulnerable, tagged with the run id, and killed at the end. The bot reports each with exactly its registry name, within 3 blocks. `--param extraMobs=specialmobs:firecreeper` adds modded mobs. |
+| `g2-blocks-named` | `blocks_named` | The census (radius 16, N = 50, K = 8) has 10..50 non-air types. Every name is a registry name: nothing `unknown`, `null` or numeric. Each type has min(count, K) distinct candidates inside the cube. Air is left out even if a bot reports it. |
+| | `blocks_confirmed` | For every type, **the runner** picks 3 of the candidates at random, and `testforblock x y z name meta` succeeds at each. A census that merges two blocks under one name fails here. |
+| | `blocks_spotcheck` | The runner picks random positions in the cube (seeded; `notes.spotSeed`) and the bot names each, until **40 non-air answers** are confirmed by `testforblock`. Air answers are checked too but don't count. Then the answers are **weighed against the census**: a type with at least 4 spot hits that is missing from the census fails, and so does a type whose spot share and census share differ by more than 0.25 (either way). The cube's centre and radius are in `notes.cube`. |
+| `g2-mobs-named` | `mobs_named` | The mob list comes **from data**: the first 12 of rotn-data's `packages/rotn-data/3.3.4/common-mobs.json` (`{mobs: [{name, ...}]}`, from the dump's overworld spawn lists), which must include a modded mob. The console summons each one: NoAI, invulnerable, tagged with the run id, killed at the end. The bot reports each by exactly its registry name, within 3 blocks. **Until that file exists**, the vanilla eight are used and the run is **not gate-valid**. A hand-given `mobs` list is never gate-valid. `extraMobs` adds mobs. |
 | | `mobs_confirmed` | Every reported entity has a registry name, and `testfor @e[type=name,x=,y=,z=,r=3]` finds it. |
-| `g2-items-roundtrip` | `items_read` | The console gives 30 vanilla items by 1.12 name and meta (after `clear`). The bot reports each with exactly that name and meta. |
+| `g2-items-roundtrip` | `items_table` | Run by the runner, no bot: every entry of rotn-data's **full** `packages/rotn-data/vanilla/flattening-items.json` (every vanilla 1.12 item with a 1.13+ name) goes both ways through Mindcraft's own `toNew`/`toOld`, and the in-game sample is a subset of the table. **Without the table or the module this check fails**, so G2 can't pass on the sample alone. |
+| | `items_read` | The console gives 30 vanilla items by 1.12 name and meta (after `clear`). The bot reports each with exactly that name and meta. |
 | | `items_named` | Each new name equals the expected 1.21-style name (`dye:1` gives `red_dye`). `null` or `unknown` fails. |
 | | `items_roundtrip` | `toOld(toNew(old))` gives back exactly the 1.12 name and meta. |
 
-Lowering `radius`, `topN`, `minTypes` or `spotChecks`, or changing `bot`, `mobs` or `items`, makes a smoke run, never a G2 pass. The 1.12 command replies parsed (`Successfully found the block at x,y,z.`, `Found <name>`, `Object successfully summoned`, `Given [...] * 1 to NAME`) are the server's en_us strings; the first real run confirms them.
+Some changes make a run a smoke run, never a G2 pass:
+- lowering `radius`, `topN`, `minTypes`, `candidates`, `samplesPerType`, `spotChecks` or `maxMobs`;
+- changing the weighting thresholds, `bot`, `mobs`, `mobsFile`, `items` or `dataRoot`;
+- missing gate data.
+
+The run's `weakenedParams` says why.
+
+The 1.12 command replies parsed (`Successfully found the block at x,y,z.`, `Found <name>`, `Object successfully summoned`, `Given [...] * 1 to NAME`, `Seed: N`) are the server's en_us strings; the first real run confirms them.

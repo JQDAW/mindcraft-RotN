@@ -15,7 +15,9 @@
 // Exit codes (ADR 0003 decision 5): 0 clean stop (SIGTERM), 1 transient disconnect, 3 fatal.
 import process from 'node:process';
 import mineflayer from 'mineflayer';
-import { attachScenario, attachG2, event } from './scenario-protocol.mjs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { attachScenario, attachG2, mindcraftNames, stockNames, event } from './scenario-protocol.mjs';
 import { classifyKick, FATAL_KICKS } from '../lib/server-log.mjs';
 
 const host = process.env.TEST_SERVER_HOST;
@@ -44,9 +46,13 @@ const bot = mineflayer.createBot({
     hideErrors: false,
 });
 attachScenario(bot);
-// G2 with stock mineflayer names and no 1.13+ translation: the items checks fail by design here; a RotN
-// driver passes rotn-data's naming adapter (scenario-protocol.mjs, attachG2).
-attachG2(bot);
+// G2 with Mindcraft's own naming path (rotn-data's package) when it is there; otherwise stock mineflayer
+// names, said in the driver log, and the G2 items checks fail by design.
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+mindcraftNames(repoRoot).then((m) => {
+    event('g2_adapter', { source: m?.source ?? 'stockNames (rotn-data package not found)' });
+    attachG2(bot, { names: m?.names ?? stockNames });
+}, (err) => event('g2_adapter_error', { message: String(err?.message ?? err) }));
 
 let stopping = false;
 let fatal = null;

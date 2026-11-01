@@ -8,6 +8,8 @@
 import process from 'node:process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { Vec3 } from 'vec3';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 /** One JSON line per driver event on stdout, prefixed "DRIVER ". Never pass secrets in here. */
 export const event = (type, data = {}) => process.stdout.write(`DRIVER ${JSON.stringify({ t: new Date().toISOString(), type, ...data })}\n`);
@@ -97,18 +99,19 @@ export async function walk(bot, n, timeoutMs, stepMs = 250) {
 // ---------------------------------------------------------------------------------------------
 // G2: the bot names what it sees; the runner has the server check every name (DRIVER.md, G2).
 //
-//   "scenario-blocks TOKEN R N"          -> the N most common block types in the cube of radius R
-//                                           around the bot: "name meta count x y z" (one sample each)
+//   "scenario-blocks TOKEN R N K"        -> the N most common non-air block types in the cube of radius R
+//                                           around the bot: "name meta count x,y,z x,y,z ..." with up to K
+//                                           candidate positions per type, drawn uniformly from its blocks
 //   "scenario-blockat TOKEN x,y,z ..."    -> "x y z name meta" for each position
 //   "scenario-entities TOKEN R"           -> "name x y z" for each non-player entity within R
 //   "scenario-items TOKEN"                -> "slot oldName oldMeta newName backName backMeta" per slot
 // Replies are paged chat lines "KIND TOKEN PAGE/PAGES entry; entry; ...", at most one every
 // pageDelayMs: vanilla kicks a non-op player who chats about ten times in quick succession.
 //
-// `names` is the naming adapter. The default reads stock mineflayer data and has no 1.13+ translation;
-// a RotN driver passes rotn-data's (packages/rotn-data/index.js):
-//   { blockName: (b) => ({ name: registryName(b), meta: b.metadata }), entityName: (e) => registryName(e),
-//     itemName: (i) => ({ name: registryName(i), meta: i.metadata }), toNew, toOld }
+// `names` is the naming adapter. For G2 evidence it MUST be Mindcraft's own naming path (PR #36 review
+// finding 3): mindcraftNames() below builds it from the exports Mindcraft itself uses
+// (packages/rotn-data/index.js: registryName, toNew, toOld). The default, stockNames, reads stock
+// mineflayer data with no 1.13+ translation; it is only for trying the protocol.
 // A name the adapter cannot give is reported as "null" (the runner fails it); the driver never guesses.
 
 const ns = (n) => (typeof n === 'string' && n ? (n.includes(':') ? n : `minecraft:${n}`) : null);
@@ -119,6 +122,31 @@ export const stockNames = {
     toNew: null,
     toOld: null,
 };
+
+/**
+ * The adapter from Mindcraft's own naming functions (rotn-data's package, which src/utils/mcdata.js
+ * uses at the command boundary). Returns {names, source} or null if the package or an export is missing;
+ * a driver then falls back to stockNames and says so (its G2 items checks will fail).
+ */
+export async function mindcraftNames(repoRoot) {
+    try {
+        const mod = await import(pathToFileURL(path.join(repoRoot, 'packages', 'rotn-data', 'index.js')).href);
+        const { registryName, toNew, toOld } = mod;
+        if (![registryName, toNew, toOld].every((f) => typeof f === 'function')) return null;
+        return {
+            source: 'packages/rotn-data/index.js (registryName, toNew, toOld)',
+            names: {
+                blockName: (b) => (b ? { name: registryName(b), meta: b.metadata ?? 0 } : null),
+                entityName: (e) => registryName(e),
+                itemName: (i) => ({ name: registryName(i), meta: i?.metadata ?? 0 }),
+                toNew,
+                toOld,
+            },
+        };
+    } catch {
+        return null;
+    }
+}
 
 const PAGE_CHARS = 200;
 
@@ -136,7 +164,7 @@ export function pages(kind, token, entries) {
     return chunks.map((c, i) => `${kind} ${token} ${i + 1}/${chunks.length}${c.length ? ` ${c.join('; ')}` : ''}`);
 }
 
-export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = event } = {}) {
+export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = event, random = Math.random } = {}) {
     let queue = Promise.resolve();
     // One request at a time, so two replies never interleave and the chat rate stays under the spam limit.
     const serial = (fn) => { queue = queue.then(fn).catch((err) => emit('g2_error', { message: String(err?.message ?? err) })); return queue; };
@@ -155,23 +183,27 @@ export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = e
 
     bot.on('messagestr', (msg) => {
         let m;
-        if ((m = /scenario-blocks ([0-9a-f]{6,32}) (\d{1,2}) (\d{1,3})\b/.exec(msg))) {
-            const [token, r, n] = [m[1], Number(m[2]), Number(m[3])];
+        if ((m = /scenario-blocks ([0-9a-f]{6,32}) (\d{1,2}) (\d{1,3}) (\d{1,2})\b/.exec(msg))) {
+            const [token, r, n, k] = [m[1], Number(m[2]), Number(m[3]), Number(m[4])];
             serial(async () => {
                 const c = here();
+                // Census without air; per type, k candidate positions drawn uniformly (reservoir sampling)
+                // from all of its blocks, so the runner's pick among them is a fair sample of the type.
                 const hist = new Map();
                 for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) for (let dz = -r; dz <= r; dz++) {
                     const p = c.offset(dx, dy, dz);
                     const nm = names.blockName(bot.blockAt(p));
+                    if (nm?.name === 'minecraft:air') continue;
                     const key = `${show(nm?.name)} ${nm?.meta ?? 0}`;
-                    const d = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
-                    const h = hist.get(key);
-                    if (!h) hist.set(key, { count: 1, d, p });
-                    else { h.count++; if (d < h.d) { h.d = d; h.p = p; } }
+                    const h = hist.get(key) ?? { count: 0, picks: [] };
+                    h.count++;
+                    if (h.picks.length < k) h.picks.push(p);
+                    else { const j = Math.floor(random() * h.count); if (j < k) h.picks[j] = p; }
+                    hist.set(key, h);
                 }
                 const top = [...hist.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, n);
                 emit('g2_blocks', { types: hist.size, reported: top.length });
-                await sayPages(pages('blocks', token, top.map(([k, h]) => `${k} ${h.count} ${h.p.x} ${h.p.y} ${h.p.z}`)));
+                await sayPages(pages('blocks', token, top.map(([key, h]) => `${key} ${h.count} ${h.picks.map((p) => `${p.x},${p.y},${p.z}`).join(' ')}`)));
             });
         } else if ((m = /scenario-blockat ([0-9a-f]{6,32}) ((?:-?\d+,-?\d+,-?\d+ ?){1,16})/.exec(msg))) {
             const [token, list] = [m[1], m[2].trim().split(/\s+/).map((s) => s.split(',').map(Number))];

@@ -7,15 +7,56 @@
 //                   name, within 3 blocks of where it was summoned.
 //   mobs_confirmed: every entity the bot reports has a registry name (nothing unknown), and
 //                   `testfor @e[type=NAME,x=,y=,z=,r=3]` finds it. Naturally spawned mobs count too.
-// Default mobs: the vanilla eight common near spawn; all exist as minecraft:* in RotN 3.3.4's entity
-// registry (rotn-data). packages/rotn-data/3.3.4/common-mobs.json replaces the list once the dump
-// has spawn lists; `--param extraMobs=specialmobs:firecreeper,...` adds modded ones meanwhile.
+// The mob list comes from DATA (PR #36 review finding 1): rotn-data's
+// packages/rotn-data/3.3.4/common-mobs.json ({mobs: [{name: "ns:path", ...}]}, overworld spawn lists
+// ranked by spawn weight, from the dump), the first maxMobs of it. It must contain at least one modded
+// (non-minecraft) mob. Until that file exists the scenario falls back to the vanilla eight and the run
+// is NOT gate-valid; a hand-given `mobs` list is never gate-valid either. `extraMobs` adds mobs.
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { startSession } from '../../runner/lib/session.mjs';
 import { lastTeleport } from '../../runner/lib/server-log.mjs';
 import { awaitReply, isRegistryName, prng, sample, summonVerdict, testforVerdict } from '../../runner/lib/g2.mjs';
 
 const MS = 1000;
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+export const COMMON_MOBS_FILE = 'packages/rotn-data/3.3.4/common-mobs.json';
+
+/** Names from common-mobs.json: {mobs: [{name}]}, or an array of names or {name} objects. null if unreadable. */
+export function readCommonMobs(file) {
+    let data;
+    try {
+        data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+        return null;
+    }
+    const list = Array.isArray(data) ? data : Array.isArray(data?.mobs) ? data.mobs : null;
+    if (!list) return null;
+    return list.map((m) => (typeof m === 'string' ? m : m?.name)).filter((n) => typeof n === 'string');
+}
+
+/**
+ * The mobs to summon and why the run cannot be a gate run (null if it can).
+ * {mobs, source, notGate}
+ */
+export function chooseMobs(p, repo = REPO) {
+    const extra = p.extraMobs.split(',').map((m) => m.trim()).filter(Boolean);
+    if (p.mobs) {
+        return { mobs: [...p.mobs.split(',').map((m) => m.trim()).filter(Boolean), ...extra], source: 'the mobs parameter',
+            notGate: 'the mob list was given by hand (--param mobs), not read from rotn-data\'s common-mobs.json' };
+    }
+    const fromData = readCommonMobs(path.resolve(repo, p.mobsFile));
+    if (!fromData || fromData.length === 0) {
+        return { mobs: [...VANILLA_COMMON_MOBS.split(','), ...extra], source: 'the vanilla fallback',
+            notGate: `${p.mobsFile} is not available yet (rotn-data, after the first dump): fell back to the vanilla eight` };
+    }
+    const mobs = [...fromData.slice(0, p.maxMobs), ...extra];
+    const modded = mobs.filter((m) => !m.startsWith('minecraft:'));
+    return { mobs, source: p.mobsFile, notGate: modded.length ? null : `${p.mobsFile} lists no modded mob in its first ${p.maxMobs}` };
+}
+
 export const VANILLA_COMMON_MOBS = 'minecraft:zombie,minecraft:skeleton,minecraft:spider,minecraft:creeper,minecraft:cow,minecraft:pig,minecraft:sheep,minecraft:chicken';
 
 export default {
@@ -29,7 +70,10 @@ export default {
     },
     defaults: {
         bot: 'FRCFLD',
-        mobs: VANILLA_COMMON_MOBS,
+        mobs: '',                  // '' = from mobsFile (gate); a list here is a smoke run
+        mobsFile: COMMON_MOBS_FILE,
+        dataRoot: '',              // '' = this repo; tests point it at fixture data (never a gate run)
+        maxMobs: 12,
         extraMobs: '',
         radius: 12,
         ring: 4,                   // summon distance from the bot
@@ -41,13 +85,16 @@ export default {
         logTail: 40000,
         consoleWaitS: 1,
     },
-    gateParams: { bot: 'equal', mobs: 'equal', radius: 'min' },
+    gateParams: { bot: 'equal', mobs: 'equal', mobsFile: 'equal', dataRoot: 'equal', maxMobs: 'min', radius: 'min' },
 
     async run(ctx) {
         const { server, clock, params: p, runId } = ctx;
         const name = p.bot;
-        const mobs = `${p.mobs},${p.extraMobs}`.split(',').map((m) => m.trim()).filter(Boolean);
+        const chosen = chooseMobs(p, p.dataRoot || REPO);
+        const mobs = [...new Set(chosen.mobs)];
         for (const m of mobs) if (!isRegistryName(m)) throw new Error(`mob '${m}' is not a registry name`);
+        ctx.note('mobSource', chosen.source);
+        if (chosen.notGate) ctx.notGate(chosen.notGate);
         const s = await startSession(ctx, { name });
         ctx.check('login_online', s.ok, s.why);
         if (!s.ok) return;
