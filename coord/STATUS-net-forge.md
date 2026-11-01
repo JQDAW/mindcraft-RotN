@@ -321,9 +321,16 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - `applyProperties`: protected fields are stripped (`id`, `name`, `registryName`, `forge`, `minStateId`, `maxStateId`, `defaultState`), and an unextended registry is refused (it requires `entitiesByForgeId`). One old-to-new map per kind, swapped in a single pass; two names for one entry merge.
 - Targeted tests: `registry-extension` 17, `metadata-types` 6, `bridge` and `fml-entities` pass.
 
+## Done: rotn-data's mod-local entity table in initBot (G2 prerequisite; branch `agent/net-forge/mod-entity-table`, from develop 437d7ff)
+
+- `fmlEntityTable({ modEntityTable, entityByModId })` builds the bridge's table from rotn-data's catalog API (no file reads). A living entity gets `type`/`category` from rotn-data's `hostile`: `hostile`/`Hostile mobs` or `passive`/`Passive mobs`. A non-living one keeps the `projectile`/`other` rule. `displayName` comes from the dump.
+- `initBot` passes it to `attachFmlEntities`. If rotn-data fails to load, it warns and FML mobs keep placeholder names.
+- Tests (targeted): `fml-entities` 8, with the real table: `iceandfire:firedragon` passive, `aether_legacy:cockatrice` hostile, a thrown `iceandfire:dragonarrow`, and all 30 modded mobs of `common-mobs.json` with rotn-data's hostility. `e2e-initbot`: through `initBot`, an FML `aether_legacy` #7 becomes `aether_legacy:cockatrice` and `isHostile` is true.
+
 ## Doing
 
-- G1 PASSED (Batch B+C retry, PR #31 merged; confirmed by the independent reviewer). Phase 2 (G2): #25, #38 and #46 are merged. Open: PR #49 (`applyProperties` hardening, serializer 14 inferred) and the PR #31 follow-ups. Next: rotn-data's dumper ids for serializers 15-18, and its mod-local entity table.
+- G1 PASSED. Phase 2 (G2): #25, #38, #46 and #49 are merged; #54 is approved. Open: #50 (PR #31 follow-ups) and the mod-entity-table PR.
+- Next: serializers 15-18 from rotn-data's second dump (`serializers.json`), through its catalog API, as the bridge's `metadataSerializers`. Then the PR #54 nits: log `g2_adapter source=fallback` explicitly, and assert no `null` census type once harness-ops' census fix lands.
 
 ## Next
 
@@ -377,7 +384,8 @@ The setup for both batches:
 
 - **rotn-data (dumper):** please dump vanilla `DataSerializers` ids 14 and up with their serializer class (and mod). Ids 15-18 belong to base, Charset-Lib, Mowzie's Mobs and Requious Frakto in an unknown order. forge-bridge takes them as `metadataSerializers: { id: 'base:resource_location' | 'charset:quaternion' | 'mowziesmobs:optional_trade' | 'requious:spark_effect' }` (the formats are already in `reid.js`).
 
-0. **rotn-data (shared-registry shape, ADR 0003 decision 4): accepted (lead, 2026-11-01).** rotn-data will produce the mod-local entity table in the proposed shape `{ [modId]: { [modEntityTypeId]: 'modid:name' } }` for `attachFmlEntities({ modEntityTable })`; it reads this file.
+0. **rotn-data (shared-registry shape, ADR 0003 decision 4): done.** `initBot` reads rotn-data's `modEntityTable()` and `entityByModId()` (mod-entity-table PR).
+   - **For serializers 15-18:** please export `serializers()` from `packages/rotn-data/index.js` (it is in `catalog.js`), so the bridge can read them through the catalog API too.
    - Block/item/entity/biome properties go in keyed by full registry name (`extendRegistry(..., { properties })`, PR #25).
    - A different shape is fine: tell me in your status file.
 

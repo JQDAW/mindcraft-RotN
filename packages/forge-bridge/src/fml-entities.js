@@ -37,9 +37,9 @@ export function fmlEntityName(msg, modEntityTable = null) {
     const info = typeof fromTable === 'string' ? { name: fromTable } : fromTable;
     if (info?.name) {
         const name = info.name.includes(':') ? info.name : `${msg.modId}:${info.name}`;
-        return { name, known: true, type: info.type ?? null, category: info.category ?? null, width: info.width ?? null, height: info.height ?? null };
+        return { name, known: true, type: info.type ?? null, category: info.category ?? null, width: info.width ?? null, height: info.height ?? null, displayName: info.displayName ?? null };
     }
-    return { name: `${msg.modId}:entity_${msg.modEntityTypeId}`, known: false, type: null, category: null, width: null, height: null };
+    return { name: `${msg.modId}:entity_${msg.modEntityTypeId}`, known: false, type: null, category: null, width: null, height: null, displayName: null };
 }
 
 /**
@@ -69,7 +69,7 @@ export function spawnFmlEntity(bot, msg, { modEntityTable = null, Entity = null,
         entity.type = info.type ?? (msg.throwerId ? 'projectile' : 'other');
         entity.uuid = msg.uuid;
         entity.name = name;
-        entity.displayName = entry?.displayName ?? name;
+        entity.displayName = info.displayName ?? entry?.displayName ?? name;
         // Like mineflayer for an unknown entity: kind "unknown" until the name is known.
         entity.kind = info.category ?? (known ? 'Modded' : 'unknown');
         entity.entityType = entry?.id ?? null;
@@ -104,4 +104,35 @@ export function attachFmlEntities(bot, bridge, opts = {}) {
         }
     });
     return { get spawned() { return count; } };
+}
+
+/**
+ * The mod-local entity table for attachFmlEntities, built through rotn-data's
+ * catalog API (its modEntityTable() and entityByModId(); never its files):
+ * { [modId]: { [modEntityTypeId]: { name, displayName, type?, category? } } }.
+ *
+ * Type, from rotn-data's dumped entity facts (`hostile`, `kinds`): 'hostile' for a
+ * hostile mob, 'passive' for any other living entity. These are the 1.13+ mineflayer
+ * types Mindcraft's isHostile distinguishes ('mob' would make every animal hostile).
+ * A non-living entity gets no type, so spawnFmlEntity's rule applies ('projectile'
+ * when thrown, else 'other').
+ *
+ * @param {{ modEntityTable: () => object, entityByModId: (modId: string, id: number) => object|null }} api
+ */
+export function fmlEntityTable({ modEntityTable, entityByModId } = {}) {
+    const names = typeof modEntityTable === 'function' ? (modEntityTable() ?? {}) : {};
+    const out = {};
+    for (const [modId, byId] of Object.entries(names)) {
+        for (const [id, name] of Object.entries(byId)) {
+            const facts = typeof entityByModId === 'function' ? entityByModId(modId, Number(id)) : null;
+            const living = Array.isArray(facts?.kinds) && facts.kinds.includes('living');
+            const entry = { name, displayName: facts?.displayName ?? null };
+            if (living) {
+                entry.type = facts.hostile ? 'hostile' : 'passive';
+                entry.category = facts.hostile ? 'Hostile mobs' : 'Passive mobs';
+            }
+            (out[modId] ??= {})[id] = entry;
+        }
+    }
+    return out;
 }

@@ -7,7 +7,8 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable } from '../../packages/forge-bridge/index.js';
+import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
@@ -171,7 +172,15 @@ export function initBot(username, { onMsaCode } = {}) {
                     bot.emit('forge_registry', forge.registryReport);
                 });
                 // Mod entities spawned with FML EntitySpawn go into bot.entities (brief item 6).
-                attachFmlEntities(bot, bridge, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                // Names, type and category from rotn-data's mod-local entity table (its catalog
+                // API). Without a dump, or if rotn-data fails, FML mobs keep placeholder names.
+                let modEntityTable = null;
+                try {
+                    modEntityTable = fmlEntityTable({ modEntityTable: rdModEntityTable, entityByModId: rdEntityByModId });
+                } catch (e) {
+                    console.warn(`[forge-bridge] rotn-data mod entity table unavailable: ${e.message}`);
+                }
+                attachFmlEntities(bot, bridge, { log: (m) => console.log(`[forge-bridge] ${m}`), modEntityTable });
             },
         });
     }

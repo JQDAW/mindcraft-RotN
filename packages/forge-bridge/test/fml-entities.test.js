@@ -6,7 +6,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { createRequire } from 'node:module';
-import { spawnFmlEntity, attachFmlEntities, fmlEntityName } from '../src/fml-entities.js';
+import { spawnFmlEntity, attachFmlEntities, fmlEntityName, fmlEntityTable } from '../src/fml-entities.js';
+import * as rotnData from '../../rotn-data/index.js';
 import { extendRegistry } from '../src/registry-extension.js';
 import { RegistrySnapshot } from '../src/registries.js';
 import { syntheticRegistries, FIXTURES } from './helpers.js';
@@ -60,8 +61,8 @@ test('with a mod-local entity table the entity gets its registry name and regist
 });
 
 test('without the table the name is a clear placeholder (TODO rotn-data)', () => {
-    assert.deepEqual(fmlEntityName(SPAWN), { name: 'iceandfire:entity_7', known: false, type: null, category: null, width: null, height: null });
-    assert.deepEqual(fmlEntityName(SPAWN, { iceandfire: { 7: 'iceandfire:dragon' } }), { name: 'iceandfire:dragon', known: true, type: null, category: null, width: null, height: null });
+    assert.deepEqual(fmlEntityName(SPAWN), { name: 'iceandfire:entity_7', known: false, type: null, category: null, width: null, height: null, displayName: null });
+    assert.deepEqual(fmlEntityName(SPAWN, { iceandfire: { 7: 'iceandfire:dragon' } }), { name: 'iceandfire:dragon', known: true, type: null, category: null, width: null, height: null, displayName: null });
     const e = spawnFmlEntity(fakeBot(), SPAWN);
     assert.equal(e.name, 'iceandfire:entity_7');
     assert.equal(e.displayName, 'iceandfire:entity_7');
@@ -121,4 +122,47 @@ test('attachFmlEntities applies every bridge entitySpawn and never throws into t
     assert.ok(bot.entities[4242]);
     assert.match(logs[0], /FML EntitySpawn iceandfire#7 \(entity 5\) not applied/);
     assert.equal(5 in bot.entities, false, 'no half-made entity is left behind');
+});
+
+// The lead's G2 prerequisite: rotn-data's real mod-local entity table (the RotN 3.3.4
+// dump on develop), through its catalog API exactly as initBot passes it.
+test('the real rotn-data table: FML mobs get their registry names, type and category', async () => {
+    const { isHostile } = await import('../../../src/utils/mcdata.js');
+    const table = fmlEntityTable({ modEntityTable: rotnData.modEntityTable, entityByModId: rotnData.entityByModId });
+    assert.ok(Object.keys(table).length >= 50, `a table for the pack's mods (${Object.keys(table).length})`);
+    const spawn = (modId, modEntityTypeId, extra = {}) => spawnFmlEntity(fakeBot(), { ...SPAWN, modId, modEntityTypeId, ...extra }, { modEntityTable: table });
+
+    const dragon = spawn('iceandfire', 905);
+    assert.deepEqual([dragon.name, dragon.displayName, dragon.type, dragon.kind], ['iceandfire:firedragon', 'Fire Dragon', 'passive', 'Passive mobs']);
+    assert.equal(dragon.forge.nameKnown, true);
+    assert.equal(isHostile(dragon), false, 'rotn-data says the fire dragon is not hostile');
+
+    const cockatrice = spawn('aether_legacy', 7);
+    assert.deepEqual([cockatrice.name, cockatrice.type, cockatrice.kind], ['aether_legacy:cockatrice', 'hostile', 'Hostile mobs']);
+    assert.equal(isHostile(cockatrice), true, "Mindcraft's isHostile sees a hostile modded mob");
+
+    const arrow = spawn('iceandfire', 902, { throwerId: 4243 });
+    assert.equal(arrow.name, 'iceandfire:dragonarrow');
+    assert.equal(arrow.type, 'projectile', 'not living: no type from the table, so the thrower rule applies');
+    assert.equal(isHostile(arrow), false);
+
+    const unknown = spawn('iceandfire', 4);
+    assert.deepEqual([unknown.name, unknown.type, unknown.kind], ['iceandfire:entity_4', 'other', 'unknown'], 'an id the dump lacks keeps the placeholder');
+
+    // Every modded mob in rotn-data's common-mobs.json (G2's mobs_named list, which the
+    // console summons) spawns with its registry name and rotn-data's hostility.
+    const common = JSON.parse(fs.readFileSync(new URL('../../rotn-data/3.3.4/common-mobs.json', import.meta.url), 'utf8')).mobs;
+    const modded = common.filter((m) => m.modded);
+    assert.ok(modded.length >= 10, `common-mobs.json has modded mobs (${modded.length})`);
+    for (const m of modded) {
+        const { modId, modEntityTypeId } = rotnData.entity(m.name);
+        const e = spawn(modId, modEntityTypeId);
+        assert.deepEqual([e.name, isHostile(e)], [m.name, m.hostile], `${m.name} (${modId} #${modEntityTypeId})`);
+    }
+});
+
+test('fmlEntityTable tolerates a missing or empty catalog', () => {
+    assert.deepEqual(fmlEntityTable(), {});
+    assert.deepEqual(fmlEntityTable({ modEntityTable: () => null, entityByModId: () => null }), {});
+    assert.deepEqual(fmlEntityTable({ modEntityTable: () => ({ m: { 3: 'm:thing' } }) }), { m: { 3: { name: 'm:thing', displayName: null } } });
 });
