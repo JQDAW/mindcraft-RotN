@@ -45,7 +45,7 @@ Updated: 2026-11-01 (about 22:05 UTC)
 ## Requests for skills-rotn (route when it is spawned)
 
 - From PR #55's review: never key on CraftTweaker-generated recipe ids (e.g. `crafttweaker:rustic_chair_N`); they are rebound between dumps. Match recipes by output and ingredients.
-- From PR #56's review: rotn-data's entity table types mobs by `IMob`, so Ice and Fire dragons show as passive. rotn-data is adding a documented `dangerous` override list. Danger and avoid logic must use it, not `type` alone.
+- From PR #56's review: rotn-data's entity table types mobs by `IMob`, so the Ice and Fire fire dragon shows as passive (other large modded threats may too). The lead **requested** (22:00 UTC, terminal message, not yet agreed or recorded by rotn-data) a documented `dangerous` override list with a source for each entry. Danger and avoid logic must not rely on `type` alone.
 
 - From PR #44's review: with `prefer: 'old'`, `grass`, `stone_slab`, `snow`, `melon` and `nether_brick` keep their 1.12 meaning. `src/agent/library/skills.js:706` (`empty_blocks`) uses `'grass'` for the plant, so it would treat grass blocks as empty. Review every 1.21 block or item name in skills, modes and prompts against `mcdata.resolveName`.
 - From PR #44's review: `getItemId('spruce_log')` returns the shared 1.12 `log` id, dropping the meta, so inventory counts by id lump all logs together. Use `resolveName(...).meta` for counts and crafting checks.
@@ -195,7 +195,8 @@ Updated: 2026-11-01 (about 22:05 UTC)
   - One CPX42 in nbg1, TTL 2 h, `timeout 15m` per scenario. Hard stop at 56 min; worst case about EUR 0.42 + IPv4. No concurrent batch.
   - Console commands only on the test server, only those the plan lists: `time set day` and `gamerule doDaylightCycle false`, no peaceful.
   - Afterwards: the project empty; real times and cost recorded; raw output in `captures/raw/`.
-  - The evidence PR redacts IPs and UUIDs, with a CI check. Each scenario's pass, gateValid and notGate reasons are reported honestly. A failure needs a new written GO.
+  - The FRCFLD token cache is used only from this PC. The driver gets only the runner's allowlisted env: no cloud credentials and no `TEST_SERVER_CTL`.
+  - The evidence PR redacts every IP (including the `FRCFLD[/IP:port] logged in` line), every UUID and local paths, with a CI check. Each scenario's pass, gateValid and notGate reasons are reported honestly. A failure needs a new written GO.
 
 ## Notes for dev agents
 
