@@ -121,6 +121,22 @@ If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge
   - Spend: about EUR 0.16 for the servers. Primary IPv4 hours come on top, and the CX23 share is estimated, because the watchdog scenario writes no ledger entry. The project was empty afterwards.
   - **Pending:** no `event=schedule` sweeper run has been seen yet. One observed scheduled run is a precondition for the next real paid batch. If none appears by about 02:00 UTC, the lead investigates (cron delay on a new default-branch workflow is common) and raises it in NEEDS-HUMAN if needed.
 - Phase 1 may start: net-forge's FML login spike (G1). harness-ops builds the G1 scenarios and CI meanwhile.
+- 2026-11-01, the off-PC watchdog is fixed. GitHub ran almost no scheduled workflows on this account, so cron-job.org now dispatches `test-server-sweeper` every 15 min (human set it up). The preflight (PR #21/#27) accepts that cadence, refuses on a newer failed run, and refuses when GitHub's clock cannot be read.
+- 2026-11-01, **G1 passed** (PR #31, `b554547`; independent reviewer: G1 PASS CONFIRMED). The harness runner `g1-login-chat-walk` with forge-bridge's driver and default gate params gave 5/5:
+  - online login (Mojang UUID v4);
+  - chat send;
+  - chat receive (whispered random token echoed);
+  - walk (8.57 blocks, server-side tp positions);
+  - stay 609 s with no drop.
+  Run from develop `62ec6f1` on a disposable CPX42, up 24.8 min, about EUR 0.14; the project was empty afterwards.
+  - Path to it: Batch A (handshake, PR #26) passed. The first B+C failed on Triumph's non-vanilla advancements packet, fixed in PR #28 (opaque packet plus a cosmetic-packet safety net).
+  - Known non-blockers:
+    - an AquaAcrobatics `entity_metadata` serializer (type 14) is not decoded yet;
+    - a RoughMobsRevamped bat-AI NPE showed up in the server log (the server survived).
+- **Phase 2 (G2: see the world) starts:**
+  - net-forge: registry extension (PR #25), mod entities (FML EntitySpawn into `bot.entities`), the entity-metadata serializers;
+  - rotn-data is spawned: dumper mod on the test server, data package, name translation, `mcdata.js` helpers reading `bot.registry`;
+  - harness-ops: G2 scenarios (top 50 blocks near spawn named, common mobs named, old/new names round-trip), then CX23 work.
 
 ## Open items
 
