@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (22:48 UTC, from `date -u`)
+Updated: 2026-11-01 (23:42 UTC, from `date -u`)
 
 ## Done
 
@@ -90,16 +90,67 @@ Updated: 2026-11-01 (22:48 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 1 ran on the lead's GO (22:03 UTC) and FAILED; the server is deleted.** Details are under "Real G2 batches" below. Items passed. Blocks failed on a reply-parser bug (fixed in #64) plus Dynamic Trees state drift. Mobs failed on three mob-list and scenario issues.
-- **The lead's decisions on findings 2-6** (comment on #65) are implemented in #67. Finding 6, `time set day` before each scenario, is in the plan below. The re-run plan is updated under "Planned real batches"; it needs #64, #66 and #67 merged and a new written GO.
-- **G2 evidence PR:** the redaction tool and its CI check over `test/evidence/g2/**` are drafted and tested. Addresses are redacted only in log context, and the version strings are allowlisted, both tested. On the real logs no leftovers remain and the mod lists stay intact.
-- **#58 (check-env-names):** the review fix is at a713e50 and CI is green. It fails closed on a missing or unreadable file, and PROFILES and port values are validated.
+- **G2 batch 2 ran on the lead's GO (23:28 UTC) and FAILED; the server is deleted.** Mobs and items PASSED as valid gate runs. Blocks did not run: the bot's Microsoft profile fetch failed before it connected (transient; see "Real G2 batches"). I stopped as the GO says; a blocks run needs a new written GO.
+- G2 batch 1 (22:10 UTC) FAILED, and the lead's decisions on its findings went into #64, #66 and #67 (all merged).
+- **Follow-up (lead, not blocking):** in `g2-mobs-named`, require a run-tagged entity within 1 block of a matched mob report.
 
 ## Watching
 
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
 ## Real G2 batches
+
+### G2 batch 2 (2026-11-01): FAIL (mobs PASS, items PASS, blocks did not run); the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 23:28 UTC.
+- **Code:** a clean detached checkout of develop at 53a1d5e, after `npm ci`. Every `result.json` has `git.dirty: false` and `untracked: 0`.
+- **Checks right before the create, all passed:**
+  - `agentNaming('.')`: wired, 643/643.
+  - `msa-login FRCFLD --check`: OK; its output is not recorded.
+  - The preflight on its own: cadence path, 3 dispatch runs, gaps 15.4 and 14.5 min; no leftovers.
+- **Command:** the planned one, unchanged. No `--skip-sweeper-check`.
+- **Console:** `gamerule doDaylightCycle false` once, `time set day` before each scenario (3 in the server log), then the runner's scenario commands. No difficulty change; nothing on the live server.
+- **Batch 1 raw files** were moved to `captures/raw/batch1-20261101/` first.
+
+**Real times (UTC)**
+
+| Event | Time |
+| --- | --- |
+| Batch start | 23:31:00 |
+| Server created | 23:31:07 |
+| Ready | 23:34:14 |
+| `g2-blocks-named` | 23:34:20 to 23:34:41 (19 s) |
+| `g2-mobs-named` | 23:34:44 to 23:37:36 (169 s) |
+| `g2-items-roundtrip` | 23:37:39 to 23:39:34 (112 s) |
+| EXIT-trap teardown | started 23:39:44; "verified gone" 23:39:57 |
+
+- **Server up:** 9 min.
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. IPv4), plus 1 Primary IPv4-hour.
+- **Afterwards:** at 23:40:12 UTC, `hcloud server list`, `hcloud primary-ip list` and the labelled `ssh-key list` were all empty.
+
+**Results.** Every run had `gateValid: true`, `weakenedParams: []`, no `notGate` reasons and no kicks.
+
+| Scenario | Verdict | Details |
+| --- | --- | --- |
+| `g2-mobs-named` | **PASS** | 12/12 named, 12/12 confirmed by run tag, 7 of them modded. **Replaced 1 of 12** (cap 3): `charm:spectre` vanished, replaced by `quark:stoneling`. `otherSeen` is empty; no placeholder names. |
+| `g2-items-roundtrip` | **PASS** | `items_table` 643/643; `items_read`, `items_named` and `items_roundtrip` 30/30 each. |
+| `g2-blocks-named` | FAIL | `login_online` FAIL ("driver exited with code 0 before joining"); the other three checks not reached. No census, so no `metaDrift` or samples. |
+
+**Why blocks did not run.** `driver.log`: `Failed to obtain profile data for FRCFLD, does the account own minecraft?` (minecraft-protocol `microsoftAuth.js:31`), 1 s after the driver started.
+- prismarine-auth swallows any error from the profile fetch (`fetchProfile(...).catch(debug)`), and minecraft-protocol then throws this generic message, so the real cause is not logged.
+- It was transient: the same cache passed `--check` at about 23:30 and logged in normally for mobs (23:34:52) and items (23:37:46).
+- The server log shows no join attempt for the blocks session.
+- Not to be investigated with `DEBUG=prismarine-auth`: that prints tokens.
+
+**Proposals (the lead decides):**
+1. **Batch 3, blocks only:** the same command with only the `g2-blocks-named` line, on a new written GO. About 15 min and EUR 0.14.
+2. **One login retry in the runner** (`test/runner/lib/session.mjs`, mine): if the driver exits before joining with exactly this profile-fetch error, start it once more and record the retry in notes. `login_online` would still pass only if the bot joins. This would hide a single transient failure, so it needs your approval.
+3. **net-forge:** log the profile fetch's HTTP status (no tokens, no body), so the next failure says why.
+
+**Whether G2 can combine batches is your call:** mobs and items from batch 2 plus blocks from a batch 3, or all three in one batch.
+
+**Evidence:** `test/evidence/g2/batch2-20261101/` (this PR), redacted with the merged tool; the CI leak check passes.
 
 ### G2 batch 1 (2026-11-01): FAIL; the server is deleted
 
@@ -262,7 +313,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 re-run:** waits for #64, #66 and #67 to merge, then a new written GO.
+- **G2 blocks:** a new written GO, and the lead's choice on proposals 1-3 under G2 batch 2.
 
 ## Requests to other agents or the lead
 
@@ -285,9 +336,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This status update with the G2 batch 1 report (`agent/harness-ops/status-g2-batch1`).
-- #58 (`agent/harness-ops/check-env-names`): the env file's variable names allowlisted as root, and the deny list in check-env. The review fix is at a713e50; CI is green.
-- #64 (`agent/harness-ops/g2-reply-formats`): parse `testforblock` replies in the real server's form.
-- #66 (`agent/harness-ops/g2-evidence-batch1`): the batch 1 evidence (FAIL), plus the redaction tool and CI leak check.
-- #67 (`agent/harness-ops/g2-scenario-fixes`, stacked on #64): findings 2-5 as the lead decided.
-- Merged since the last update: #51 (the G2 plan), #53, #57.
+- This PR: G2 batch 2 evidence and this status update (`agent/harness-ops/g2-batch2-evidence`).
+- Merged since the last update: #58, #64, #65, #66, #67.

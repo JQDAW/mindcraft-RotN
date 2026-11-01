@@ -1,0 +1,81 @@
+{
+  "scenario": "g2-blocks-named",
+  "gate": "G2",
+  "title": "The 50 most common blocks near spawn have registry names the server confirms",
+  "runId": "20261101t233420-0caad2",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "FAIL",
+  "passed": 0,
+  "failed": 4,
+  "durationS": 19,
+  "params": {
+    "bot": "<bot>",
+    "radius": 16,
+    "topN": 50,
+    "minTypes": 10,
+    "candidates": 8,
+    "samplesPerType": 3,
+    "spotChecks": 40,
+    "spotMaxPositions": 400,
+    "absentHits": 4,
+    "maxShareGap": 0.25,
+    "maxUnloadedShare": 0.01,
+    "seed": 0,
+    "dataRoot": "",
+    "loginTimeoutMs": 240000,
+    "settleMs": 20000,
+    "replyTimeoutMs": 180000,
+    "pollMs": 3000,
+    "logTail": 40000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": false,
+      "detail": "driver exited with code 0 before joining",
+      "readyToTry": "Starting the service makes the bot log in with its own account"
+    },
+    {
+      "check": "blocks_named",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "Blocks show RotN names; none of the 50 most common blocks near spawn shows as unknown"
+    },
+    {
+      "check": "blocks_confirmed",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "Blocks show RotN names (each name is the block the server has there)"
+    },
+    {
+      "check": "blocks_spotcheck",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "Blocks show RotN names (at positions the runner picks, consistent with the census)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "3236084396548950896",
+    "naming": {
+      "wired": true,
+      "why": "mcdata.js exports toNew and toOld; all 643 table entries round-trip through them",
+      "entries": 643,
+      "failureCount": 0
+    },
+    "kicks": [],
+    "uuidVersion": null
+  },
+  "botExitCode": 0,
+  "error": null,
+  "git": {
+    "sha": "53a1d5ea78c11d503ef47e758a8fac6c47590122",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261101-233101",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}
