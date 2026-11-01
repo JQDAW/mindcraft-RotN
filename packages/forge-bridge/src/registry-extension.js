@@ -5,12 +5,19 @@
 //
 // The shared-registry contract (for rotn-data and Mindcraft's helpers):
 // - Vanilla entries keep minecraft-data's object and unprefixed name ("stone").
-//   If the server moved a vanilla name to another id, a copy with the new id is used.
+//   If the server moved a vanilla block, item or biome to another id, a copy with
+//   the new id is used, and every such rebind is reported and logged.
+// - Entities are different: minecraft:entities holds EntityList ids, but 1.12's
+//   spawn_entity uses *object* ids (item 2, arrow 60, boat 1), which is what
+//   minecraft-data's entities map holds for objects. Vanilla entity entries are
+//   therefore never rebound or deleted. Modded entities are added only where the id
+//   is free, and entitiesByForgeId maps every synced EntityList id to its entry.
 // - Modded entries are new objects named by their full registry name
 //   ("pyrotech:rock"), with `registryName` and `forge: { modded: true,
 //   propertiesKnown }`. Without rotn-data's properties they get safe defaults:
 //   a block is a solid full cube (so physics never falls through a modded floor),
-//   diggable, hardness null, no drops; an item stacks to 64; an entity is a mob.
+//   diggable with a conservative hardness of 1.5 (stone's, so digTime is > 0),
+//   no drops; an item stacks to 64; an entity is a mob.
 // - Block states are `id << 4 | meta`, so blocksByStateId gets 16 states per block.
 // - `properties` (rotn-data's dump, ADR 0004) can fill in or override any field,
 //   keyed by full registry name.
@@ -21,6 +28,9 @@
 
 const SECTION = { blocks: 'minecraft:blocks', items: 'minecraft:items', entities: 'minecraft:entities', biomes: 'minecraft:biomes' };
 const FULL_CUBE = [[0, 0, 0, 1, 1, 1]];
+// Stone's hardness. With hardness null and diggable true, prismarine-block's digTime
+// is 0, so pathfinder plans through modded blocks and bot.dig loops (PR #25 review).
+export const DEFAULT_BLOCK_HARDNESS = 1.5;
 
 function displayNameOf(registryName) {
     const path = registryName.includes(':') ? registryName.split(':')[1] : registryName;
@@ -31,7 +41,7 @@ const vanillaName = (registryName) => (registryName.startsWith('minecraft:') ? r
 
 const DEFAULTS = {
     blocks: (id, name) => ({
-        id, name, displayName: displayNameOf(name), hardness: null, resistance: null, stackSize: 64,
+        id, name, displayName: displayNameOf(name), hardness: DEFAULT_BLOCK_HARDNESS, resistance: null, stackSize: 64,
         diggable: true, boundingBox: 'block', shapes: FULL_CUBE, material: undefined, harvestTools: undefined,
         drops: [], transparent: false, emitLight: 0, filterLight: 15,
         minStateId: id << 4, maxStateId: (id << 4) | 15, defaultState: id << 4,
@@ -41,10 +51,16 @@ const DEFAULTS = {
     biomes: (id, name) => ({ id, name, displayName: displayNameOf(name), category: 'none', temperature: 0.5, precipitation: 'rain', rainfall: 0.5, depth: 0, dimension: 'overworld', color: 0 }),
 };
 
+function applyProps(entry, props, id) {
+    if (!props) return entry;
+    const e = { ...entry, ...props, id, name: entry.name };
+    if (e.forge) e.forge = { ...e.forge, propertiesKnown: true };
+    return e;
+}
+
 function rebind(kind, base, id) {
     const e = { ...base, id };
     if (kind === 'blocks') Object.assign(e, { minStateId: id << 4, maxStateId: (id << 4) | 15, defaultState: id << 4 });
-    if (kind === 'entities') e.internalId = id;
     return e;
 }
 
@@ -67,11 +83,12 @@ function registerShapes(registry, blocks) {
 /**
  * @param {object} registry  bot.registry (mutated: its maps for blocks, items, entities and biomes are replaced)
  * @param {import('./registries.js').RegistrySnapshot} snapshot  the synced Forge registries
- * @param {{ properties?: { blocks?: object, items?: object, entities?: object, biomes?: object } }} [opts]
- * @returns {{ added: object, rebound: object, total: object }} counts per kind
+ * @param {{ properties?: { blocks?: object, items?: object, entities?: object, biomes?: object }, log?: (msg: string) => void }} [opts]
+ * @returns {{ added: object, rebound: object, total: object, rebinds: Array<{kind:string, name:string, from:number, to:number}>, entityIdsKept: number, entityIdsTaken: number }}
  */
-export function extendRegistry(registry, snapshot, { properties = {} } = {}) {
-    const report = { added: {}, rebound: {}, total: {} };
+export function extendRegistry(registry, snapshot, { properties = {}, log = () => {} } = {}) {
+    const report = { added: {}, rebound: {}, total: {}, rebinds: [], entityIdsKept: 0, entityIdsTaken: 0 };
+    const entitiesByForgeId = {};
     for (const [kind, section] of Object.entries(SECTION)) {
         const synced = snapshot.get(section);
         const byId = { ...(registry[kind] ?? {}) };
@@ -83,6 +100,14 @@ export function extendRegistry(registry, snapshot, { properties = {} } = {}) {
                 if (synced.dummied?.has(regName)) continue;
                 const vName = vanillaName(regName);
                 const base = vName ? staticByName[vName] : null;
+                if (kind === 'entities') {
+                    // Never rebind or delete a vanilla entity entry (object ids differ from EntityList ids).
+                    if (base) { entitiesByForgeId[id] = base; if (base.id !== id) report.entityIdsKept++; continue; }
+                    const entry = applyProps({ ...DEFAULTS.entities(id, regName), registryName: regName, forge: { modded: true, propertiesKnown: false } }, properties.entities?.[regName], id);
+                    entitiesByForgeId[id] = entry;
+                    if (byId[id] === undefined) { byId[id] = entry; added++; } else report.entityIdsTaken++;
+                    continue;
+                }
                 let entry;
                 if (base && base.id === id && !properties[kind]?.[regName]) {
                     entry = base; // unchanged vanilla object
@@ -90,17 +115,15 @@ export function extendRegistry(registry, snapshot, { properties = {} } = {}) {
                     entry = rebind(kind, base, id);
                     if (base.id !== id) {
                         rebound++;
+                        report.rebinds.push({ kind, name: regName, from: base.id, to: id });
+                        log(`registry rebind: ${kind} ${regName} ${base.id} -> ${id}`);
                         if (byId[base.id] === base) delete byId[base.id]; // the old slot is no longer this name's
                     }
                 } else {
                     entry = { ...DEFAULTS[kind](id, regName), registryName: regName, forge: { modded: true, propertiesKnown: false } };
                     added++;
                 }
-                const props = properties[kind]?.[regName];
-                if (props) {
-                    entry = { ...entry, ...props, id, name: entry.name };
-                    if (entry.forge) entry.forge = { ...entry.forge, propertiesKnown: true };
-                }
+                entry = applyProps(entry, properties[kind]?.[regName], id);
                 byId[id] = entry;
             }
         }
@@ -118,6 +141,7 @@ export function extendRegistry(registry, snapshot, { properties = {} } = {}) {
             registry.blocksByStateId = byState;
             registerShapes(registry, array.filter(b => b.forge || properties.blocks?.[b.registryName ?? `minecraft:${b.name}`]?.shapes));
         }
+        if (kind === 'entities') registry.entitiesByForgeId = entitiesByForgeId;
         report.added[kind] = added;
         report.rebound[kind] = rebound;
         report.total[kind] = array.length;

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { RegistrySnapshot } from '../src/registries.js';
 import { extendRegistry } from '../src/registry-extension.js';
+import { decodeHandshake } from '../src/fml-hs.js';
 import { syntheticRegistries } from './helpers.js';
 
 const require = createRequire(import.meta.url);
@@ -110,4 +111,77 @@ test('a Block class made before the extension (as mineflayer does) also sees mod
     assert.deepEqual(b.shapes, [[0, 0, 0, 1, 1, 1]]);
     // ...and a class made later keeps the shapes too (prismarine-block resets them by name).
     assert.deepEqual(require('prismarine-block')(registry).fromStateId(4002 << 4, 1).shapes, [[0, 0, 0, 1, 1, 1]]);
+});
+
+// PR #25 review: real ids from G1 Batch A (test/fixtures/rotn-3.3.4/handshake-runA.*).
+function realSnapshot() {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const zlib = require('node:zlib');
+    const dir = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), 'fixtures', 'rotn-3.3.4');
+    const index = JSON.parse(fs.readFileSync(path.join(dir, 'handshake-runA.json'), 'utf8'));
+    const raw = zlib.brotliDecompressSync(fs.readFileSync(path.join(dir, 'handshake-runA.bin.br')));
+    const snap = new RegistrySnapshot();
+    let off = 0;
+    for (const r of index.records) {
+        const data = raw.subarray(off, off + r.len);
+        off += r.len;
+        if (r.dir === 'S2C' && r.channel === 'FML|HS' && data[0] === 3) snap.add(decodeHandshake(data));
+    }
+    return snap;
+}
+
+test('real RotN ids: vanilla entity entries (object ids) are never rebound; entitiesByForgeId has the EntityList ids', () => {
+    const vanilla = freshRegistry();
+    const registry = freshRegistry();
+    const snap = realSnapshot();
+    const report = extendRegistry(registry, snap);
+    // spawn_entity uses object ids: these must stay as minecraft-data has them.
+    for (const [id, e] of Object.entries(vanilla.entities)) assert.equal(registry.entities[id], e, `entity id ${id} keeps minecraft-data's entry`);
+    assert.equal(registry.entities[2].name, 'item', 'object id 2 is a dropped item, never xp_orb');
+    assert.equal(registry.entities[60].name, 'arrow', 'object id 60 is an arrow, never silverfish');
+    assert.equal(registry.entities[1].name, 'boat');
+    // Forge's minecraft:entities registry uses EntityList ids.
+    const forgeId = (n) => snap.idOf('minecraft:entities', n);
+    assert.equal(forgeId('minecraft:item'), 1);
+    assert.equal(forgeId('minecraft:xp_orb'), 2);
+    assert.equal(forgeId('minecraft:arrow'), 10);
+    assert.equal(forgeId('minecraft:silverfish'), 60);
+    assert.equal(registry.entitiesByForgeId[1].name, 'item');
+    assert.equal(registry.entitiesByForgeId[60].name, 'silverfish');
+    assert.ok(report.entityIdsKept > 0, 'vanilla entities whose EntityList id differs from the object id were kept');
+    const modded = [...snap.get('minecraft:entities').byName].find(([n]) => !n.startsWith('minecraft:'));
+    assert.equal(registry.entitiesByForgeId[modded[1]].name, modded[0]);
+});
+
+test('real RotN ids: blocks and items golden checks, and nothing is rebound', () => {
+    const registry = freshRegistry();
+    const logs = [];
+    const report = extendRegistry(registry, realSnapshot(), { log: (m) => logs.push(m) });
+    assert.deepEqual(report.rebinds, [], 'RotN keeps every vanilla block, item and biome id');
+    assert.deepEqual(logs, []);
+    assert.equal(registry.blocks[1].name, 'stone');
+    assert.equal(registry.items[1].name, 'stone');
+    assert.equal(registry.items[280].name, 'stick');
+    assert.ok(registry.items[13394]?.name.includes(':'), 'the highest synced item id (13394) is a named modded item');
+    assert.ok(registry.blocks[4895]?.name.includes(':'), 'the highest synced block id (4895) is a named modded block');
+});
+
+test('a modded block digs in a finite, non-zero time (PR #25 review)', () => {
+    const registry = freshRegistry();
+    extendRegistry(registry, snapshotOf(syntheticRegistries()));
+    const Block = require('prismarine-block')(registry);
+    const rock = Block.fromStateId(4001 << 4, 1);
+    assert.equal(rock.hardness, 1.5);
+    const t = rock.digTime(null, false, false, false, [], {});
+    assert.ok(Number.isFinite(t) && t > 0, `digTime ${t}`);
+});
+
+test('every rebind is reported and logged with its old and new id', () => {
+    const registry = freshRegistry();
+    const logs = [];
+    const regs = [{ name: 'minecraft:blocks', ids: [['minecraft:dirt', 3000]], dummied: [], overrides: [] }];
+    const report = extendRegistry(registry, snapshotOf(regs), { log: (m) => logs.push(m) });
+    assert.deepEqual(report.rebinds, [{ kind: 'blocks', name: 'minecraft:dirt', from: 3, to: 3000 }]);
+    assert.deepEqual(logs, ['registry rebind: blocks minecraft:dirt 3 -> 3000']);
 });

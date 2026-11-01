@@ -82,11 +82,12 @@ These still need a real capture to confirm them on the wire (G1 Run B).
 After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snapshot)` (`src/registry-extension.js`). It then sets `bot.forge.registryReport` (`{added, rebound, total}` per kind) and emits `forge_registry`. This is the shared-registry contract of ADR 0003 decision 4:
 
 - **Blocks, items, entities and biomes** get the synced ids.
-  - Vanilla entries keep minecraft-data's object and unprefixed name (`stone`). A vanilla name the server moved to another id gets a copy at the new id, and its old slot is freed.
+  - Vanilla entries keep minecraft-data's object and unprefixed name (`stone`). A vanilla block, item or biome the server moved to another id gets a copy at the new id, and its old slot is freed. Every such rebind is in `registryReport.rebinds` and logged as `registry rebind: <kind> <name> <old> -> <new>`; RotN 3.3.4 has none.
+  - **Entities are never rebound.** Forge's `minecraft:entities` holds EntityList ids (item 1, xp_orb 2, arrow 10, silverfish 60), but 1.12's `spawn_entity` uses *object* ids (item 2, arrow 60), which is what minecraft-data's `entities` map holds. Rebinding would make dropped items `xp_orb` and arrows `silverfish`. So vanilla entity entries are left alone, modded entities are added only into free ids, and `registry.entitiesByForgeId` maps every synced EntityList id to its entry.
   - Modded entries are named by their **full registry name** (`pyrotech:rock`), with `registryName` and `forge: { modded: true, propertiesKnown }`.
 - **Block states** are `id << 4 | meta`, so `blocksByStateId` holds 16 states per block. `bot.blockAt()`, `Block.fromStateId()` and `new Item(id)` therefore return modded names.
 - **Defaults without rotn-data's properties:**
-  - A block is a solid full cube (`boundingBox: 'block'`, so the bot never falls through a modded floor), diggable, with hardness `null` and no drops.
+  - A block is a solid full cube (`boundingBox: 'block'`, so the bot never falls through a modded floor), diggable, with a conservative hardness of 1.5 (stone's), so `digTime` is finite and above 0, and no drops.
   - An item stacks to 64. An entity is a `mob`. A biome is a neutral overworld biome.
 - **Properties.** `extendRegistry(registry, snapshot, { properties: { blocks: { 'pyrotech:rock': {...} } } })` fills in or overrides fields, keyed by full registry name; vanilla names use `minecraft:stone`. rotn-data's dump (ADR 0004) is meant to feed this. Properties cannot rename an entry.
 - **Isolation.** Dummied entries are skipped. Only `bot.registry`'s own maps and its `blockCollisionShapes` are replaced; prismarine-registry copies minecraft-data only shallowly, so the maps are copied first. The process-wide `minecraft-data` object stays vanilla.

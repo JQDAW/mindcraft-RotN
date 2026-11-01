@@ -108,7 +108,7 @@ export function initBot(username, { onMsaCode } = {}) {
                 options.brand = 'fml,forge';
                 // After the last RegistryData: modded names in bot.registry (brief item 4).
                 bridge.on('registries', (snap) => {
-                    forge.registryReport = extendRegistry(bot.registry, snap);
+                    forge.registryReport = extendRegistry(bot.registry, snap, { log: (m) => console.log(`[forge-bridge] ${m}`) });
                     bot.emit('forge_registry', forge.registryReport);
                 });
             },
