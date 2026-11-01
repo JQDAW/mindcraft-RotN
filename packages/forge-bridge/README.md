@@ -102,6 +102,12 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - `--mode handshake` is Run A. It is for a server started with `--capture`, which closes the connection right after the handshake.
   - `summary.json` records `walkMethod` (`pathfinder` or the `forward-control` fallback) and the blocks under the bot at spawn and along the walk, with the Forge registry name next to prismarine's (empty for modded blocks until brief item 4). Its `scope` field says that the spike does not test reconnects or exit codes.
 
+- `tools/g1-driver.mjs`: the G1 **gate** driver for harness-ops' runner (`test/runner/DRIVER.md`). It is Mindcraft's real `initBot` with forge-bridge on, plus the runner's scenario protocol (`attachScenario`: hello once, echo the whispered token, walk on request, stay until SIGTERM). The runner decides pass or fail from the server log.
+  - It needs `MINDCRAFT_PROFILES_FOLDER` and never starts a device-code login: `initBot(name, { onMsaCode })` makes a stale cache exit 3.
+  - Kicks: exit 3 when the runner's `FATAL_KICKS` or forge-bridge's `classifyKick` says fatal, otherwise 1. SIGTERM exits 0.
+  - Switches: `ROTN_DRIVER_AUTH` (`offline` for loopback tests only), `ROTN_DRIVER_FORGE_BRIDGE` (default `on`), `ROTN_DRIVER_CAPTURE` (default `1`, `captures/raw/`), `ROTN_DRIVER_MODLIST_FILE`.
+  - Its `DRIVER {json}` lines add the handshake result, registry sizes, `walkMethod` and the block under the bot with its Forge registry name.
+
 ## Tests
 
 `npm test` covers `packages/forge-bridge/test/*.test.js`. Everything is offline.
@@ -113,6 +119,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - REID `window_items`, `set_slot`, `window_click`, `entity_effect` and `remove_entity_effect`, through nmp's real compiled 1.12.2 protocol.
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
+- `g1-driver.test.js`: the driver as a subprocess against the fake Forge server, with the runner's allowlisted environment: hello exactly once, echo, a 3-block walk, a clean stop, a redacted capture, and exit 3 without a token-cache folder or host.
 - `e2e-initbot.test.js`: Mindcraft's real `initBot` against an in-process fake Forge server on 127.0.0.1. The run covers the status ping, tagHost, the handshake, Join Game, a REID chunk, inventory and effects, chat both ways, walking, and the capture.
 
 ## Known limits (next brief items)

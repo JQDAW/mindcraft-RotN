@@ -71,9 +71,19 @@ The review findings on PR #10, numbered as in the review comment:
 - **Tests:** `npm test` passes 175/175, all offline. The chunk patch: reversing it fails all 9 chunk tests. `npm run lint` gives 259, the baseline; `packages/forge-bridge` has 0 errors.
 - **FRCFLD login (done by the human, verified by the lead).** I ran the permitted check: `MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa node packages/forge-bridge/tools/msa-login.mjs FRCFLD --check`, with `DEBUG` unset. It printed `Signed in. Minecraft profile: FRCFLD`. Nothing in the folder was read, printed or copied by me.
 
+## Done: G1 gate driver for Batch C
+
+- `packages/forge-bridge/tools/g1-driver.mjs` implements `test/runner/DRIVER.md`. It uses Mindcraft's real `initBot` with forge-bridge `on`, and harness-ops' `attachScenario` for hello, echo, walk and SIGTERM.
+- It exits 3 without `MINDCRAFT_PROFILES_FOLDER` or host. It never starts a device-code login: `initBot` gained an optional `{ onMsaCode }`, a 5-line diff inside `initBot`.
+- Kicks exit 3 when the runner's `FATAL_KICKS` or our `classifyKick` says fatal.
+- It records the handshake result, registry sizes, `walkMethod` and block registry names as `DRIVER` lines.
+- **Test:** `test/g1-driver.test.js` runs the driver as a subprocess against the fake Forge server, with the runner's allowlisted env.
+- The shared fake world moved to `test/fake-world.js`.
+- `npm test` passes 178/178; lint 259.
+
 ## Doing
 
-- Opening the PR for the review fixes; Batch A once the preflight passes; then the runner driver for Batch C.
+- PR #15 open (review fixes + G1 driver). Waiting for the preflight to pass, then Batch A, then Batch B+C.
 
 ## Next
 
@@ -102,21 +112,26 @@ The setup for both batches:
      'node packages/forge-bridge/tools/g1-spike.mjs --mode handshake --out captures/raw/g1-runA; s=$?; bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g1-runA/server; exit $s'
    ```
 
-2. **Batch B (spec Run B, G1 proper).** Online login, stay 11 minutes, chat both ways (the `say` check goes through the test-server console), walk. Expected about 35 min, 1 billed hour. Worst case 3 h, about EUR 0.42.
+2. **Batch B+C on one server run.** B is the spike only, not gate evidence: 11 minutes, chat both ways, walk, capture. C is the **G1 gate evidence**: harness-ops' runner with `g1-login-chat-walk` and `g1-driver.mjs`, at the gate parameters (no `--param` overrides).
+   - Expected time: about 15 min of server boot, about 13 min for B, and about 13 min for C. That is about 45 min, 1 billed hour, about EUR 0.14. Stop and delete past 68 min (1.5x). Worst case 3 h, about EUR 0.42.
 
    ```bash
    deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c \
-     'node packages/forge-bridge/tools/g1-spike.mjs --minutes 11 --out captures/raw/g1-runB; s=$?; bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g1-runB/server; exit $s'
+     'node packages/forge-bridge/tools/g1-spike.mjs --minutes 11 --out captures/raw/g1-runB; b=$?;
+      node test/runner/run.mjs --scenario g1-login-chat-walk --out captures/raw/g1-runC -- node packages/forge-bridge/tools/g1-driver.mjs; c=$?;
+      bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g1-runBC/server; echo "B=$b C=$c"; exit $c'
    ```
 
-- **Totals:** expected EUR 0.28; maximum EUR 0.84.
+   The runner gives the driver only its allowlisted environment: `TEST_SERVER_HOST`/`PORT`, `MINDCRAFT_PROFILES_FOLDER` and the `ROTN_*` variables. It never gets `TEST_SERVER_CTL` or cloud credentials.
+
+- **Totals:** expected EUR 0.28 for two server runs (A, then B+C); maximum EUR 0.84.
 - **Outputs:** raw files stay in `captures/raw/` (git-ignored). Only sanitized excerpts go to `packages/forge-bridge/test/fixtures/` and `test/evidence/g1/`.
 - **G1 evidence will claim only:** login, handshake, spawn, chat both ways, walking (with `walkMethod` and block names) and 10+ minutes connected. No reconnect or exit-code claims.
 
 ## Blocked
 
 - Batch A: approved; waiting only for the preflight (a scheduled sweeper run within 120 min; PR #12 in review).
-- Batch C: needs the forge-bridge runner driver (next).
+- Batch B+C: approved; the driver is ready (below). Runs after Batch A, with the same preflight condition.
 
 ## Requests to other agents or the lead
 
@@ -128,4 +143,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (opening now) PR #10 review fixes, on `agent/net-forge/g1-review-fixes`. G1, brief items 2, 5 and 7. `npm test` 175/175; lint 259 (baseline).
+- #15 PR #10 review fixes + G1 gate driver, on `agent/net-forge/g1-review-fixes`. G1, brief items 2, 5 and 7. `npm test` 178/178; lint 259 (baseline).
