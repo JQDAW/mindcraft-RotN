@@ -1,7 +1,12 @@
 // The start of a scenario that needs a logged-in bot: write a marker to the server log, confirm it,
 // start the driver and wait for the join. G2 scenarios use it; G1 keeps its own copy of the same
 // steps (it was gate evidence as it is).
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { linesAfter, loginUuid, uuidVersion, playerEvents, classifyKick } from './server-log.mjs';
+import { mcdataWiring } from './g2.mjs';
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 const MS = 1000;
 const MARKER_TRIES = 3;
@@ -31,6 +36,11 @@ export async function startSession(ctx, { name, env = {} }) {
     // The world the evidence is about (PR #36 review finding 5). 1.12 prints "Seed: N" (later versions "Seed: [N]").
     const seedLine = server.console('seed', p.consoleWaitS).map((l) => /Seed: \[?(-?\d+)\]?\s*$/.exec(l)).find(Boolean);
     ctx.note('worldSeed', seedLine ? seedLine[1] : null);
+    if (!seedLine) ctx.notGate('no world seed from the console "seed" command: the seed is part of the G2 evidence');
+    // G2 is about the agent's own naming: no run counts until mcdata.js is wired to rotn-data.
+    const naming = mcdataWiring(p.dataRoot || REPO);
+    ctx.note('naming', naming);
+    if (!naming.wired) ctx.notGate(`mcdata.js not wired to rotn-data: ${naming.why}`);
 
     bot.start({ ROTN_SCENARIO_BOT: name, ROTN_SCENARIO_RUN: runId, ...env });
     const first = await ctx.waitFor(() => events().find((e) => e.type === 'joined' || gone(e))

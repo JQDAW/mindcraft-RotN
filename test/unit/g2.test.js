@@ -9,11 +9,12 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 import { setImmediate } from 'node:timers';
 import { Vec3 } from 'vec3';
 import { runScenario } from '../runner/lib/runner.mjs';
-import { attachG2, pages, stockNames } from '../runner/drivers/scenario-protocol.mjs';
-import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng } from '../runner/lib/g2.mjs';
+import { attachG2, pages, stockNames, agentNames } from '../runner/drivers/scenario-protocol.mjs';
+import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, mcdataWiring } from '../runner/lib/g2.mjs';
 import blocks from '../scenarios/g2/g2-blocks-named.mjs';
 import mobs, { VANILLA_COMMON_MOBS, chooseMobs, readCommonMobs } from '../scenarios/g2/g2-mobs-named.mjs';
 import items, { VANILLA_SAMPLE, parseItems, checkFullTable } from '../scenarios/g2/g2-items-roundtrip.mjs';
@@ -74,7 +75,7 @@ function sim(opt = {}) {
             const before = log.length;
             let m;
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
-            else if (cmd === 'seed') add('Seed: -4172144997902289642');
+            else if (cmd === 'seed') add(opt.noSeed ? 'Unknown command. Try /help for a list of commands' : 'Seed: -4172144997902289642');
             else if (cmd === `tp ${NAME} ~ ~ ~`) add(online ? `Teleported ${NAME} to ${pos.x}, ${pos.y}, ${pos.z}` : 'Player not found');
             else if ((m = /^tell (\S+) (.*)$/.exec(cmd)) && online) fake.emit('messagestr', `Server whispers to you: ${m[2]}`);
             else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) (\S+) (\d+)$/.exec(cmd))) {
@@ -145,7 +146,10 @@ const truthNames = {
 
 // Fixture gate data: a dataRoot with rotn-data's table, module and common-mobs.json.
 let DATA;
-function writeData(root, { mobsList, tableEntries, moduleBody } = {}) {
+const WIRED_MCDATA = "// the agent's mcdata.js, wired to rotn-data (brief item 4)\nexport { toNew, toOld } from '../../packages/rotn-data/index.js';\n";
+function writeData(root, { mobsList, tableEntries, moduleBody, mcdataBody = WIRED_MCDATA } = {}) {
+    fs.mkdirSync(path.join(root, 'src', 'utils'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'utils', 'mcdata.js'), mcdataBody);
     fs.mkdirSync(path.join(root, 'packages', 'rotn-data', 'vanilla'), { recursive: true });
     fs.mkdirSync(path.join(root, 'packages', 'rotn-data', '3.3.4'), { recursive: true });
     fs.writeFileSync(path.join(root, 'package.json'), '{"type":"module"}\n');
@@ -208,11 +212,52 @@ describe('G2 helpers', () => {
     });
 });
 
+describe('the agent\'s naming path (PR #36 re-review item 3)', () => {
+    const at = (body) => writeData(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-mc-')), { mcdataBody: body });
+    test('mcdataWiring: wired only if mcdata.js imports packages/rotn-data AND exports toNew and toOld', () => {
+        assert.deepEqual(mcdataWiring(DATA), { wired: true, why: 'src/utils/mcdata.js imports packages/rotn-data and exports toNew and toOld' });
+        assert.equal(mcdataWiring(at("import { toNew, toOld } from '../../packages/rotn-data/index.js';\nexport function toNew2() {}\nexport { toNew, toOld };\n")).wired, true);
+        assert.equal(mcdataWiring(at("import * as rd from '../../packages/rotn-data/index.js';\nexport function toNew(o, m) { return rd.toNew(o, m); }\nexport const toOld = (n) => rd.toOld(n);\n")).wired, true);
+        assert.match(mcdataWiring(at('export function getBlockName() {}\n')).why, /does not import packages\/rotn-data/);
+        assert.match(mcdataWiring(at("import { toNew } from '../../packages/rotn-data/index.js';\nexport { toNew };\n")).why, /does not export toOld/);
+        assert.match(mcdataWiring(at("// import { toNew, toOld } from '../../packages/rotn-data/index.js';\n/* export { toNew, toOld }; */\n")).why, /does not import/, 'comments do not count');
+        assert.match(mcdataWiring(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-g2-nomc-'))).why, /not readable/);
+        assert.equal(typeof mcdataWiring(process.cwd()).wired, 'boolean', 'the real repo is checked the same way');
+    });
+
+    test('a run on an unwired naming path, or without a world seed, is never a gate run', async () => {
+        const unwired = at('export function getBlockName() {}\n');
+        const r = await run(blocks, sim(), { seed: 7, dataRoot: unwired });
+        assert.equal(r.checksPassed, true, JSON.stringify(r.checks, null, 1));
+        assert.ok(r.weakenedParams.some((w) => /^mcdata\.js not wired to rotn-data: src\/utils\/mcdata\.js does not import packages\/rotn-data$/.test(w)), JSON.stringify(r.weakenedParams));
+        assert.deepEqual(r.notes.naming, { wired: false, why: 'src/utils/mcdata.js does not import packages/rotn-data' });
+        const r2 = await run(blocks, sim({ noSeed: true }), { seed: 7, dataRoot: DATA });
+        assert.equal(r2.notes.worldSeed, null);
+        assert.ok(r2.weakenedParams.some((w) => /no world seed/.test(w)), JSON.stringify(r2.weakenedParams));
+    });
+
+    test('agentNames: names as world.js reads them; translation only from mcdata.js exports', () => {
+        const without = agentNames({ getBlockName: () => 'x' });
+        assert.equal(without.translation, false);
+        assert.equal(without.names.toNew, null);
+        assert.match(without.source, /translation: none exported yet/);
+        assert.deepEqual(without.names.blockName({ name: 'stone', metadata: 3 }), { name: 'minecraft:stone', meta: 3 });
+        assert.deepEqual(without.names.blockName({ name: 'pyrotech:rock', metadata: 6 }), { name: 'pyrotech:rock', meta: 6 });
+        assert.equal(without.names.entityName({ name: 'zombie' }), 'minecraft:zombie');
+        const mc = { toNew: (o, m) => (o === 'minecraft:coal' && m === 1 ? 'charcoal' : null), toOld: () => ({ name: 'minecraft:coal', meta: 1 }) };
+        const withT = agentNames(mc);
+        assert.equal(withT.translation, true);
+        assert.equal(withT.names.toNew('minecraft:coal', 1), 'charcoal');
+        assert.equal(withT.names.toOld, mc.toOld, 'the agent\'s own function, not a copy');
+    });
+});
+
 describe('g2-blocks-named on a simulated server', () => {
     test('a bot with correct names passes: census without air, runner-picked samples, 40 non-air spot checks, consistent shares', async () => {
         const s = sim();
-        const r = await run(blocks, s, { seed: 7 });
-        assert.equal(r.pass, true, JSON.stringify(r.checks, null, 1));
+        const r = await run(blocks, s, { seed: 7, dataRoot: DATA });
+        assert.equal(r.checksPassed, true, JSON.stringify(r.checks, null, 1));
+        assert.deepEqual(r.weakenedParams, [`dataRoot=${DATA} (gate needs = )`], 'with a wired mcdata.js and a seed, only the fixture dataRoot keeps it from counting');
         const c = byName(r);
         // Exactly min(count, candidates, samplesPerType) samples per type, all confirmed.
         const want = r.notes.census.reduce((a, line) => a + Math.min(Number(line.split(' ')[2]), 8, 3), 0);

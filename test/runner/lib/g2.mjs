@@ -6,6 +6,8 @@
 //   <BOT> KIND TOKEN PAGE/PAGES field field ...; field field ...; ...
 // The 1.12.2 en_us strings parsed below are the server's own (lang keys commands.testforblock.*,
 // commands.testfor.success, commands.summon.*, commands.give.*); a real run confirms them.
+import fs from 'node:fs';
+import path from 'node:path';
 import { chatLines, parseLine } from './server-log.mjs';
 
 /** A full registry name, "namespace:path". Anything else (null, a number, "unknown") is not a name. */
@@ -91,3 +93,25 @@ export function prng(seed) {
 
 /** Keep notes small: the first n items and how many there were. */
 export const sample = (arr, n = 20) => ({ count: arr.length, first: arr.slice(0, n) });
+
+/**
+ * Is the agent's naming path wired to rotn-data (rotn-data brief item 4)? G2 asks whether the AGENT
+ * sees correct names, so until src/utils/mcdata.js itself imports rotn-data's package and exports
+ * toNew and toOld, no G2 run counts (PR #36 re-review, item 3). Read statically on purpose: importing
+ * mcdata.js would load mineflayer and every plugin into the runner. Returns {wired, why}.
+ */
+export function mcdataWiring(repoRoot) {
+    let src;
+    try {
+        src = fs.readFileSync(path.join(repoRoot, 'src', 'utils', 'mcdata.js'), 'utf8');
+    } catch (e) {
+        return { wired: false, why: `src/utils/mcdata.js not readable (${e.code ?? e.message})` };
+    }
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const imports = /\bfrom\s+['"][^'"]*packages\/rotn-data(?:\/[^'"]*)?['"]/.test(code) || /\bimport\(\s*['"][^'"]*packages\/rotn-data/.test(code);
+    const exported = (n) => new RegExp(String.raw`export\s+(?:async\s+)?function\s+${n}\b|export\s+(?:const|let|var)\s+${n}\b|export\s*\{[^}]*\b${n}\b[^}]*\}`).test(code);
+    const missing = ['toNew', 'toOld'].filter((n) => !exported(n));
+    if (!imports) return { wired: false, why: 'src/utils/mcdata.js does not import packages/rotn-data' };
+    if (missing.length) return { wired: false, why: `src/utils/mcdata.js does not export ${missing.join(' and ')}` };
+    return { wired: true, why: 'src/utils/mcdata.js imports packages/rotn-data and exports toNew and toOld' };
+}

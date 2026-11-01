@@ -3,7 +3,8 @@
 // the block really there. The bot driver must follow test/runner/DRIVER.md (G2 section).
 //
 // Steps
-//   1. login_online, as in G1. The world seed (`seed`) and the cube centre are recorded in notes.
+//   1. login_online, as in G1. The world seed (`seed`) and the cube centre are recorded in notes; no seed,
+//      or an agent naming path not yet wired to rotn-data (mcdata.js), makes the run not a gate run.
 //   2. After settleMs, `tp NAME ~ ~ ~` gives the bot's position: the centre of the cube.
 //   3. The console whispers "scenario-blocks TOKEN R N K". The bot reports its census of the N most
 //      common NON-AIR block types in the cube (radius R): "name meta count x,y,z ..." with up to K
@@ -49,6 +50,7 @@ export default {
         absentHits: 4,             // a type hit this often in spot checks must be in the census
         maxShareGap: 0.25,         // |spot share - census share| allowed per type
         seed: 0,                   // 0 = random; the seed used is recorded in notes
+        dataRoot: '',              // '' = this repo (its mcdata.js wiring decides gate validity); tests use fixtures
         loginTimeoutMs: 240 * MS,
         settleMs: 20 * MS,         // chunks around spawn arrive after the join
         replyTimeoutMs: 180 * MS,
@@ -58,7 +60,7 @@ export default {
     },
     gateParams: {
         bot: 'equal', radius: 'min', topN: 'min', minTypes: 'min', candidates: 'min', samplesPerType: 'min',
-        spotChecks: 'min', absentHits: 'equal', maxShareGap: 'equal',
+        spotChecks: 'min', absentHits: 'equal', maxShareGap: 'equal', dataRoot: 'equal',
     },
 
     async run(ctx) {

@@ -48,12 +48,17 @@ Every disconnect is recorded in `result.json` under `notes.kicks`, with its reas
 
 ## G2: naming what the bot sees
 
-There are three scenarios in `test/scenarios/g2/`. Each logs in first (`login_online`, as in G1), and records the world seed (`seed`) in `notes.worldSeed`. The bot only reports names. Every verdict comes from the server's own commands on the test server.
+There are three scenarios in `test/scenarios/g2/`. Each logs in first (`login_online`, as in G1), and records the world seed (`seed`) in `notes.worldSeed`; without a seed the run is not gate-valid. The bot only reports names. Every verdict comes from the server's own commands on the test server.
 
-**The naming must be Mindcraft's own.** A G2 run is evidence only if the driver's naming adapter is built from the exact functions Mindcraft uses, imported from rotn-data's package (`packages/rotn-data/index.js`: `registryName`, `toNew`, `toOld`), which `src/utils/mcdata.js` uses at the command boundary. A driver-local mapping doesn't count.
-- `mindcraftNames(repoRoot)` in `scenario-protocol.mjs` builds that adapter. The driver passes it as `attachG2(bot, { names })` next to `attachScenario(bot)`, and logs a `g2_adapter` event naming its source.
-- If `src/utils/mcdata.js` later exports its own naming helpers, the adapter imports those instead.
-- `stockNames` (stock mineflayer names, no 1.13+ translation) is only for trying the protocol. With it, `g2-items-roundtrip` fails by design.
+**The naming must be the agent's own.** G2 asks whether the agent sees correct names, so a G2 run is evidence only if the driver names things through the code the agent runs:
+- **Names:** block, entity and item names come from `bot.registry`, as forge-bridge extends it, read the way `src/agent/library/world.js` reads them (`block.name`, `entity.name`, inventory `slot.name`).
+- **Translation:** the 1.12 to 1.13+ translation comes **only** from `src/utils/mcdata.js` (its `toNew`/`toOld` exports). rotn-data's brief item 4 wires those to rotn-data's package.
+- **No local mapping:** the driver imports no naming code of its own. The one change is the `minecraft:` namespace that mineflayer leaves off vanilla names, which `testforblock`/`testfor` need.
+
+How it fits together:
+- `agentNames(mc)` and `loadAgentNames(repoRoot)` in `scenario-protocol.mjs` build that adapter from the agent's `src/utils/mcdata.js` module. The driver passes it as `attachG2(bot, { names })` next to `attachScenario(bot)`, and logs a `g2_adapter` event naming its source and whether translation is available.
+- **Until `src/utils/mcdata.js` imports `packages/rotn-data` and exports `toNew` and `toOld`, no G2 run counts.** The runner checks the source on every run (`mcdataWiring` in `lib/g2.mjs`; `notes.naming`) and calls `notGate` with the reason.
+- `stockNames` is the same naming without translation, and is only for trying the protocol.
 - A name the adapter cannot give is reported as `null`. The driver never guesses.
 
 | Whisper from the console | The bot says (paged) |

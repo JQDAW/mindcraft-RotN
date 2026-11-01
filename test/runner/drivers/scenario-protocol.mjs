@@ -108,10 +108,15 @@ export async function walk(bot, n, timeoutMs, stepMs = 250) {
 // Replies are paged chat lines "KIND TOKEN PAGE/PAGES entry; entry; ...", at most one every
 // pageDelayMs: vanilla kicks a non-op player who chats about ten times in quick succession.
 //
-// `names` is the naming adapter. For G2 evidence it MUST be Mindcraft's own naming path (PR #36 review
-// finding 3): mindcraftNames() below builds it from the exports Mindcraft itself uses
-// (packages/rotn-data/index.js: registryName, toNew, toOld). The default, stockNames, reads stock
-// mineflayer data with no 1.13+ translation; it is only for trying the protocol.
+// `names` is the naming adapter. For G2 evidence it MUST be the agent's own naming path (PR #36
+// review finding 3): agentNames(mc) below takes block, entity and item names exactly as the agent reads
+// them (src/agent/library/world.js uses block.name, entity.name and inventory slot.name, all from
+// bot.registry as forge-bridge extends it) and the 1.12 <-> 1.13+ translation only from
+// src/utils/mcdata.js (its toNew/toOld exports; rotn-data's brief item 4 wires them). It imports no
+// naming code of its own. The one change it makes is the "minecraft:" namespace that vanilla names lack
+// in mineflayer, which the server's testforblock/testfor need. Until mcdata.js exports toNew/toOld the
+// translation is null, and the runner marks the run "not a gate run" (mcdataWiring in lib/g2.mjs).
+// stockNames is the same without translation, only for trying the protocol.
 // A name the adapter cannot give is reported as "null" (the runner fails it); the driver never guesses.
 
 const ns = (n) => (typeof n === 'string' && n ? (n.includes(':') ? n : `minecraft:${n}`) : null);
@@ -124,25 +129,24 @@ export const stockNames = {
 };
 
 /**
- * The adapter from Mindcraft's own naming functions (rotn-data's package, which src/utils/mcdata.js
- * uses at the command boundary). Returns {names, source} or null if the package or an export is missing;
- * a driver then falls back to stockNames and says so (its G2 items checks will fail).
+ * The agent's naming path, from the src/utils/mcdata.js module object `mc`:
+ * names as world.js reads them, translation from mc.toNew / mc.toOld when mcdata.js exports them.
+ * Returns {names, source, translation: bool}.
  */
-export async function mindcraftNames(repoRoot) {
+export function agentNames(mc) {
+    const toNew = typeof mc?.toNew === 'function' ? mc.toNew : null;
+    const toOld = typeof mc?.toOld === 'function' ? mc.toOld : null;
+    return {
+        source: `src/utils/mcdata.js (names via bot.registry as world.js reads them; translation: ${toNew && toOld ? 'mcdata toNew/toOld' : 'none exported yet'})`,
+        translation: Boolean(toNew && toOld),
+        names: { ...stockNames, toNew, toOld },
+    };
+}
+
+/** Import the agent's src/utils/mcdata.js from repoRoot and build agentNames from it. null if it cannot be imported. */
+export async function loadAgentNames(repoRoot) {
     try {
-        const mod = await import(pathToFileURL(path.join(repoRoot, 'packages', 'rotn-data', 'index.js')).href);
-        const { registryName, toNew, toOld } = mod;
-        if (![registryName, toNew, toOld].every((f) => typeof f === 'function')) return null;
-        return {
-            source: 'packages/rotn-data/index.js (registryName, toNew, toOld)',
-            names: {
-                blockName: (b) => (b ? { name: registryName(b), meta: b.metadata ?? 0 } : null),
-                entityName: (e) => registryName(e),
-                itemName: (i) => ({ name: registryName(i), meta: i?.metadata ?? 0 }),
-                toNew,
-                toOld,
-            },
-        };
+        return agentNames(await import(pathToFileURL(path.join(repoRoot, 'src', 'utils', 'mcdata.js')).href));
     } catch {
         return null;
     }
