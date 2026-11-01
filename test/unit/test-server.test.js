@@ -71,6 +71,7 @@ beforeEach(() => {
         ROTN_TEST_STATE_DIR: fwd(path.join(tmp, 'state')),
         ROTN_TEST_POLL_SECONDS: '0',
         ROTN_TEST_NOW: String(NOW),
+        ROTN_TEST_MODE: '1', // ROTN_TEST_NOW is honoured only in test mode (PR #27 review)
         TEST_SERVER_NAME: '',
         HCLOUD_CONTEXT: '',
         ROTN_TEST_WHITELIST: '',
@@ -777,10 +778,22 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         assert.ok(readJsonl(env.FAKE_GH_LOG).some((a) => a.join(' ') === 'api -X GET -i rate_limit'), 'one read-only GET');
     });
 
-    test('without GitHub\'s Date header the preflight warns and uses this PC\'s clock', () => {
-        const r = run(['up', '--yes', '--dry-run', '--name', 'mcr-test-clk3'], { ROTN_TEST_NOW: '' });
-        assert.equal(r.code, 0, r.all);
-        assert.match(r.stderr, /WARNING: could not read GitHub's clock \(Date header\); run ages use this PC's clock/);
+    test('without a readable GitHub Date header the preflight refuses; it never uses this PC\'s clock (PR #27 finding 1)', () => {
+        refuses(run(['up', '--yes', '--name', 'mcr-test-clk3'], { ROTN_TEST_NOW: '' }),
+            /could not read GitHub's clock \(the Date header of 'gh api -X GET -i rate_limit'\), so run ages cannot be measured/);
+        refuses(run(['up', '--yes', '--name', 'mcr-test-clk4'], { ROTN_TEST_NOW: '', FAKE_GH_DATE: 'garbage' }),
+            /could not read GitHub's clock .* was 'Invalid Date'\), so run ages cannot be measured/);
+        refuses(run(['up', '--yes', '--name', 'mcr-test-clk5'], { ROTN_TEST_NOW: '', FAKE_GH_FAIL: '1' }), /could not read GitHub's clock/);
+        assert.ok(!readJsonl(env.FAKE_GH_LOG).some((a) => a[0] === 'run'), 'no run list is read without a clock');
+    });
+
+    test('ROTN_TEST_NOW is ignored with a warning unless ROTN_TEST_MODE=1 (PR #27 finding 2)', () => {
+        // The run is 10 min before the test's NOW; GitHub says 3 h later. Without test mode, GitHub's clock rules.
+        refuses(run(['up', '--yes', '--name', 'mcr-test-tm1'], { ROTN_TEST_MODE: '', FAKE_GH_DATE: String(NOW + 3 * 3600) }),
+            /the last successful scheduled sweeper run \(1001\) is 190 min old/);
+        const r = run(['up', '--yes', '--dry-run', '--name', 'mcr-test-tm2'], { ROTN_TEST_MODE: '0', FAKE_GH_DATE: String(NOW) });
+        assert.match(r.stderr, /WARNING: ignoring ROTN_TEST_NOW: it is honoured only with ROTN_TEST_MODE=1/);
+        assert.ok(readJsonl(env.FAKE_GH_LOG).some((a) => a.join(' ') === 'api -X GET -i rate_limit'), 'GitHub\'s clock was asked');
     });
 
     test('helper path: gh failing only on the helper repo refuses, with every path\'s reason (review nit 4)', () => {
