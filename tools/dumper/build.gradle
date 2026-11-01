@@ -1,0 +1,53 @@
+// RotN data dumper: a server-side Forge 1.12.2 mod (ADR 0004). Test server only.
+//
+// Toolchain (pinned; see README.md "Build"):
+//   JDK 8, Gradle 4.10.3 (build.sh downloads it and checks its SHA-256),
+//   ForgeGradle 2.3 as anatawa12's maintained fork 2.3-1.0.8 (Maven Central). The
+//   original net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT still fetches MCP
+//   metadata from the retired export.mcpbot.bspk.rs; pass -Pfg=official to try it.
+//   Forge 14.23.5.2860 (the pack's build), MCP mappings stable_39.
+buildscript {
+    repositories {
+        mavenCentral()
+        maven { url = 'https://maven.minecraftforge.net/' }
+    }
+    dependencies {
+        if (project.findProperty('fg') == 'official') {
+            classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
+        } else {
+            classpath 'com.anatawa12.forge:ForgeGradle:2.3-1.0.8'
+        }
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle.forge'
+
+version = '0.1.0'
+group = 'mindcraftrotn.dumper'
+archivesBaseName = 'rotndump'
+
+sourceCompatibility = targetCompatibility = '1.8'
+compileJava {
+    sourceCompatibility = targetCompatibility = '1.8'
+    options.encoding = 'UTF-8'
+}
+
+minecraft {
+    version = '1.12.2-14.23.5.2860'
+    runDir = 'run'
+    mappings = 'stable_39'
+    makeObfSourceJar = false
+    replace '@VERSION@', project.version
+    replaceIn 'RotnDump.java'
+}
+
+processResources {
+    inputs.property 'version', project.version
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+        expand 'version': project.version
+    }
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
+}
