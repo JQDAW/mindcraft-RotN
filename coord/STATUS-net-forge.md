@@ -257,6 +257,44 @@ The lead's GO was recorded at 15:55 UTC. The batch ran from a clean branch at or
   2. Then PR #25's requested changes.
   3. A re-run of B+C needs a new GO.
 
+## Batch B+C retry result (G1): **PASS**
+
+The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from a clean branch at origin/develop 62ec6f1 (`agent/net-forge/g1-batch-bc2`), without PR #25, on one server: B = the 11-minute spike, then C = the runner's `g1-login-chat-walk` with `g1-driver.mjs` at default params. It had a 55-minute TERM guard.
+
+- **Before:** `msa-login --check` printed FRCFLD, and the project was empty.
+- **Preflight:** passed on its own (cadence: gaps 14.7 and 15.4 min, newest 9 min old).
+- **Times (UTC):**
+
+  | Event | Time |
+  | --- | --- |
+  | Command start | 17:09:50 |
+  | Server created (CPX42, nbg1, TTL 2 h) | 17:09:58 |
+  | Server ready | 17:12:42 |
+  | B | 17:12:44 to 17:23:55 |
+  | C | 17:23:55 to 17:34:24 |
+  | EXIT trap deleted everything, verified gone | 17:34:44 |
+
+  - Up 1486 s (24.8 min), against an expected ~35 min and a 55 min cap.
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. Primary IPv4).
+- **After (17:35:19 UTC):** server, Primary IP and labelled SSH-key lists all empty.
+- **C, `result.json`:** `pass: true`, `gateValid: true`, `weakenedParams: []`, verdict PASS, 5/5:
+  - `login_online`: v4 UUID.
+  - `chat_send`.
+  - `chat_receive`: token echoed.
+  - `walk`: 8.6 blocks, minimum 6.
+  - `stay_10min`: 608 s, no disconnects.
+- **B (spike):** every check passed: handshake, spawn, chat both ways, a 6-block pathfinder walk, and an 11-minute stay.
+- **Advancements opaque:** yes. Triumph 3.19.2 was detected in both sessions, with no advancements parse error.
+- **Safety net:** dropped nothing (`droppedPackets` `{}`, no "(dropped, allowlisted)" lines).
+- **Kicks:** none (runner `kicks: []`). B ended with its own `disconnect.quitting`. The 17:34:22 "Internal Exception" disconnect is the teardown after `stay_10min` passed (SIGTERM on Windows).
+- **`OBFUSCATE|HS` and `dimstack`:** no answer was needed, with no kick over 11 and 10 minutes. The JustEnoughDimensions error occurred 0 times.
+- **New finding (not a blocker):** one `entity_metadata` PartialReadError per session (a player's, 77 and 78 bytes), dropped by protodef.
+  - Key 17 uses serializer **type 14**, AquaAcrobatics 1.15.4's `PoseSerializer` (an enum as a VarInt ordinal), registered via vanilla `DataSerializers.registerSerializer` (`javap`).
+  - base, Charset-Lib, Mowzie's Mobs and Requious Frakto also call that method, so ids from 15 up are unknown.
+  - Fixture: `packages/forge-bridge/test/fixtures/rotn-3.3.4/entity-metadata-aqua-pose.json`. The follow-up needs the registration order.
+- **Evidence:** `test/evidence/g1/batch-bc2-20261101/` holds the sanitized `result.json`, `server.log` and `driver.log`, plus a README.
+  - Raw files stay in `captures/raw/` (`g1-runB2`, `g1-runC2`, `g1-runBC2`, and the driver capture).
+
 ## Doing
 
 - Batch B+C done: FAIL, root cause found (above). PR #28 (B+C evidence + fix) is open. **The next paid batch needs a new written GO after review.** Queued: PR #25 fixes, then the STATUS-line corrections from #26.

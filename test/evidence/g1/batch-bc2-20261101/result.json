@@ -1,0 +1,83 @@
+{
+  "scenario": "g1-login-chat-walk",
+  "gate": "G1",
+  "title": "Bot logs in online, chats, walks and stays 10 minutes",
+  "runId": "20261101t172355-7eae26",
+  "pass": true,
+  "checksPassed": true,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "PASS",
+  "passed": 5,
+  "failed": 0,
+  "durationS": 627,
+  "params": {
+    "bot": "<bot>",
+    "loginTimeoutMs": 240000,
+    "chatTimeoutMs": 60000,
+    "walkTimeoutMs": 90000,
+    "walkBlocks": 8,
+    "minWalkBlocks": 6,
+    "stayMs": 600000,
+    "pollMs": 5000,
+    "logTail": 20000,
+    "consoleWaitS": 3
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid> (version 4, Mojang account)",
+      "readyToTry": "Starting the service makes the bot log in with its own account"
+    },
+    {
+      "check": "chat_send",
+      "pass": true,
+      "detail": "server logged <<bot>> hello-20261101t172355-7eae26",
+      "readyToTry": "It answers in chat"
+    },
+    {
+      "check": "chat_receive",
+      "pass": true,
+      "detail": "whispered token echoed: <<bot>> echo 9e85b76f542d923e",
+      "readyToTry": "It answers in chat"
+    },
+    {
+      "check": "walk",
+      "pass": true,
+      "detail": "moved 8.6 blocks horizontally (min 6); bot said \"walked 139.8 66.0 -254.5\"",
+      "readyToTry": "It follows a player, comes when called (movement)"
+    },
+    {
+      "check": "stay_10min",
+      "pass": true,
+      "detail": "still online after 608s, no disconnects",
+      "readyToTry": "Starting the service makes the bot log in (stays connected)"
+    }
+  ],
+  "notes": {
+    "kicks": [],
+    "uuidVersion": 4,
+    "walk": {
+      "before": [
+        131.44447482414952,
+        65,
+        -254.50000000000065
+      ],
+      "after": [
+        140.01524170983546,
+        66,
+        -254.50000000000065
+      ],
+      "distance": 8.570766885685941,
+      "botReport": "walked 139.8 66.0 -254.5"
+    },
+    "chatPrefixes": [
+      ""
+    ]
+  },
+  "botExitCode": 128,
+  "error": null,
+  "server": "mcr-test-20261101-170951",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}
