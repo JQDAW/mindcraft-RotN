@@ -1,0 +1,14 @@
+{
+ "description": "G1 Batch C: the two play.advancements packets (packet id 0x4d, full packet bytes) that the RotN 3.3.4 test server sent; they contain Triumph 3.19.2 ExtendedDisplayInfo. Concatenated in advancements-triumph.bin.br (brotli). Server data only: advancement names and texts, no player identity.",
+ "capturedAt": "2026-11-01T15:58:31Z",
+ "packets": [
+  {
+   "len": 42006,
+   "sha256": "a9bbec6484c1a2367dba76546e583c5c92fa621d70aa670b758741aa74240389"
+  },
+  {
+   "len": 50547,
+   "sha256": "fccb023094ba1b080ec40f3da082cb547d5cd59c33a146bd2135e9dd8035f86f"
+  }
+ ]
+}
