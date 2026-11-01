@@ -20,6 +20,17 @@ With `auth: "microsoft"`, `initBot` refuses to start (it throws before any bot o
 
 It never shows a device code. The default `onMsaCode` (`quietMsaCodeHandler`) logs only `device-code login needed, see coord/NEEDS-HUMAN.md`, never the code, message or URL. prismarine-auth then **keeps polling until the code expires (about 15 min) and the login fails with an error**. The fix is the human's login (`tools/msa-login.mjs`). A caller can pass its own handler instead (`initBot(name, { onMsaCode })`): g1-driver exits 3 at once.
 
+**Profile-fetch diagnostics** (`src/auth-diagnostics.js`, G2 batch 2). prismarine-auth swallows a failed Minecraft profile fetch: it reports the cause only through `debug('prismarine-auth')`, which the guard forbids. nmp then throws "Failed to obtain profile data" with no cause. So `initBot` wraps prismarine-auth's `fetchProfile` (the copy nmp loads), and a failure logs one line:
+
+```
+[forge-bridge] Minecraft profile fetch failed after 812 ms: HTTP 429 Too Many Requests (Error)
+[forge-bridge] Minecraft profile fetch failed after 20013 ms: no HTTP response (TypeError; cause Error ETIMEDOUT)
+```
+
+- **What it logs:** the status number, its standard name (from `node:http`), the error class, a network cause's class and code, and the time taken.
+- **What it never logs:** the error message (prismarine-auth puts the response body in it), bodies, headers, the token, or the profiles folder. Names and codes must match a strict identifier pattern before they are logged.
+- **Behaviour is unchanged:** the error is rethrown as it was.
+
 `initBot` in `src/utils/mcdata.js` passes `createForgeConnect(...)` as nmp's `connect` option. nmp calls it after authentication. It then:
 
 1. Pings the server. If the status response has `modinfo.type == "FML"`, it uses that mod list. If the ping fails, it falls back to `FORGE_MODLIST_FILE`.
@@ -205,6 +216,10 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - `tools/g1-driver.mjs`: the G1 **gate** driver for harness-ops' runner (`test/runner/DRIVER.md`). It is Mindcraft's real `initBot` with forge-bridge on, plus the runner's scenario protocol (`attachScenario`: hello once, echo the whispered token, walk on request, stay until SIGTERM). The runner decides pass or fail from the server log.
   - It needs `MINDCRAFT_PROFILES_FOLDER` and never starts a device-code login: `initBot(name, { onMsaCode })` makes a stale cache exit 3.
   - Kicks: exit 3 when the runner's `FATAL_KICKS` or forge-bridge's `classifyKick` says fatal, otherwise 1. SIGTERM exits 0.
+  - **Before join** (`tools/driver-exit.mjs`): exits 1, or 3 after a fatal kick, never 0.
+    - A login that fails before the bot joins (G2 batch 2's auth failure, which nmp reports only as an `error`) exits at once, with no `end` needed.
+    - So does an event loop that drains without a stop.
+    - The `end` event carries `joined` and `beforeJoin`, and setup `fatal` events carry `beforeJoin: true`, so the runner can tell "exited before join".
   - Switches: `ROTN_DRIVER_AUTH` (`offline` for loopback tests only), `ROTN_DRIVER_FORGE_BRIDGE` (default `on`), `ROTN_DRIVER_CAPTURE` (default `1`, `captures/raw/`), `ROTN_DRIVER_MODLIST_FILE`.
   - **G2:** it also answers the G2 protocol (`scenario-blocks`, `-blockat`, `-entities`, `-items`) through `attachG2` with `loadAgentNames`, the agent's own naming path. Names come from `bot.registry` as forge-bridge extends it, and translation from `src/utils/mcdata.js` `toNew`/`toOld`. It logs a `g2_adapter` event: its `source` is the mcdata.js module, or `fallback` (stock names, no translation) when mcdata.js cannot be imported. `ROTN_DRIVER_CHUNK_WAIT_MS` sets how long the census waits for the cube's chunks (scenario-protocol's default, 30 s, when unset). The effective value is logged in `g2_adapter` as `chunkWaitMs`, with `chunkWaitSource`. harness-ops' reference driver uses stock mineflayer, which a Forge server rejects at the handshake, so this is the driver for real G2 runs.
   - Its `DRIVER {json}` lines add the handshake result, registry sizes, `walkMethod` and the block under the bot with its Forge registry name. `walkMethod` is the scenario's: its `method` field if `walk()` reports one, otherwise `scenario-protocol walk()`.
@@ -232,9 +247,11 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - A spawn whose metadata uses AquaAcrobatics' unknown serializer 14 (`entity-metadata-aqua-pose.json`) is applied with `forge.metadataError`.
   - `e2e-initbot` checks through `initBot` that the fake server's FML spawn reaches `bot.entities` as `other`, that vanilla `entity_teleport` and `rel_entity_move` update it, and that `entity_destroy` removes it.
 - `exit-contract.test.js`: the agent side (`recordAgentExit`): kicks with and without a bridge, `cleanKill` before and after a kick, startup errors, and no reason file.
+- `auth-diagnostics.test.js`: the real `fetchProfile` with a stubbed fetch (429, a network error, a 2xx with `error`). The line has the status and class, and nothing token-like, no body text and no address; the error is rethrown unchanged.
+- `driver-exit.test.js`: the exit decision. An error before join (nmp's batch-2 message) or a drained loop exits 1, also in a real process. A fatal kick exits 3, a stop exits 0, and after join an error waits for `end`.
 - `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
-- `g1-driver.test.js`: the driver as a subprocess against the fake Forge server, with the runner's allowlisted environment: hello exactly once, echo, a 3-block walk, a clean stop, a redacted capture, and exit 3 without a token-cache folder or host.
+- `g1-driver.test.js`: the driver as a subprocess against the fake Forge server, with the runner's allowlisted environment: hello exactly once, echo, a 3-block walk, a clean stop, a redacted capture, exit 3 without a token-cache folder or host, and exit 1 with `beforeJoin` when the connect is refused.
 - `e2e-initbot.test.js`: Mindcraft's real `initBot` against an in-process fake Forge server on 127.0.0.1. The run covers the status ping, tagHost, the handshake, Join Game, a REID chunk, inventory and effects, chat both ways, walking, and the capture.
 
 ## Known limits (next brief items)
