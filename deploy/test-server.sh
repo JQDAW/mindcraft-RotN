@@ -126,6 +126,14 @@ log()  { printf '[test-server %s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 warn() { log "WARNING: $*"; }
 die()  { log "ERROR: $*"; exit 1; }
 now()  { if [[ -n ${ROTN_TEST_NOW:-} ]]; then echo "$ROTN_TEST_NOW"; else date -u +%s; fi; }
+
+# ROTN_TEST_NOW (a fixed clock) is for the offline unit tests only, and only together with
+# ROTN_TEST_MODE=1. A stray ROTN_TEST_NOW in a real shell could otherwise make a stale sweeper run
+# look fresh or set wrong delete-after labels, so it is ignored with a warning (PR #27 review).
+if [[ -n ${ROTN_TEST_NOW:-} && ${ROTN_TEST_MODE:-} != 1 ]]; then
+  warn "ignoring ROTN_TEST_NOW: it is honoured only with ROTN_TEST_MODE=1 (offline tests)"
+  unset ROTN_TEST_NOW
+fi
 iso()  { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
 jqr()  { jq "$@" | tr -d '\r'; }
 
@@ -427,8 +435,27 @@ count_batch() {  # count_batch KIND NAME -> number of labelled resources of KIND
 gh_at() { local repo=$1; shift; env -u GH_REPO -u GH_HOST "$GH_BIN" "$@" --repo "$repo"; }
 gh_() { gh_at "$GH_REPO_NAME" "$@"; }
 
-# iso_epoch TIME -> unix epoch, or fail
-iso_epoch() { date -u -d "$1" +%s 2>/dev/null; }
+# iso_epoch TIME -> unix epoch, or fail. Only ISO-8601 date-times: `date -d ""` would mean "today".
+iso_epoch() { [[ $1 =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8} ]] && date -u -d "$1" +%s 2>/dev/null; }
+
+# SWEEPER_NOW: the clock that run ages are measured against: GitHub's own clock (the Date header of one
+# read-only `gh api -X GET -i rate_limit`), so a PC clock that is minutes off cannot make a stale run
+# look fresh (PR #21 review finding 3). Without a readable Date header the preflight refuses; it never
+# falls back to this PC's clock (PR #27 review finding 1). ROTN_TEST_NOW applies only in test mode.
+SWEEPER_NOW=''
+sweeper_clock() {
+  local d g l
+  if [[ -n ${ROTN_TEST_NOW:-} ]]; then SWEEPER_NOW=$ROTN_TEST_NOW; return 0; fi   # ROTN_TEST_MODE=1 only, see above
+  d=$(env -u GH_REPO -u GH_HOST "$GH_BIN" api -X GET -i rate_limit 2>/dev/null | tr -d '\r' | sed -n 's/^[Dd]ate: //p' | head -n 1)
+  if [[ -z $d ]] || ! g=$(date -u -d "$d" +%s 2>/dev/null); then
+    sweeper_refuse "could not read GitHub's clock (the Date header of 'gh api -X GET -i rate_limit'${d:+ was '$d'}), so run ages cannot be measured"
+    return 1
+  fi
+  SWEEPER_NOW=$g
+  l=$(date -u +%s)
+  (( l - g > 60 || g - l > 60 )) && warn "this PC's clock is $(( l - g )) s off GitHub's; run ages use GitHub's clock"
+  return 0
+}
 
 # sweeper_scheduled_ok: (a). Prints "OK <message>" or "NO <reason>".
 sweeper_scheduled_ok() {
@@ -440,7 +467,7 @@ sweeper_scheduled_ok() {
                    | sort_by(.createdAt) | last // empty | "\(.databaseId) \(.createdAt)"' <<< "$runs")
   [[ -n $latest ]] || { echo "NO no successful scheduled run of $SWEEPER_WORKFLOW on develop yet"; return; }
   t=$(iso_epoch "${latest#* }") || { echo "NO unreadable run time '${latest#* }'"; return; }
-  age=$(( ($(now) - t) / 60 ))
+  age=$(( (SWEEPER_NOW - t) / 60 ))
   (( age <= 10#$SWEEPER_MAX_AGE_MIN )) \
     || { echo "NO the last successful scheduled sweeper run (${latest% *}) is ${age} min old (limit $SWEEPER_MAX_AGE_MIN)"; return; }
   echo "OK scheduled run ${latest% *} on $GH_REPO_NAME succeeded ${age} min ago (limit $SWEEPER_MAX_AGE_MIN min)"
@@ -456,7 +483,7 @@ sweeper_helper_ok() {
                    | sort_by(.createdAt) | last // empty | "\(.databaseId) \(.createdAt)"' <<< "$runs")
   [[ -n $helper ]] || { echo "NO no successful scheduled run of $SWEEPER_HELPER_WORKFLOW in $SWEEPER_HELPER_REPO"; return; }
   th=$(iso_epoch "${helper#* }") || { echo "NO unreadable helper run time '${helper#* }'"; return; }
-  age=$(( ($(now) - th) / 60 ))
+  age=$(( (SWEEPER_NOW - th) / 60 ))
   (( age <= SWEEPER_HELPER_MAX_AGE_MIN )) \
     || { echo "NO the last successful scheduled helper run (${helper% *}) is ${age} min old (limit $SWEEPER_HELPER_MAX_AGE_MIN)"; return; }
   sweeps=$(gh_ run list --workflow "$SWEEPER_WORKFLOW" --branch develop \
@@ -497,7 +524,7 @@ sweeper_cadence_ok() {
   runs=$(gh_ run list --workflow "$SWEEPER_WORKFLOW" --branch develop --event workflow_dispatch \
            --limit 30 --json databaseId,status,conclusion,createdAt 2>/dev/null) \
     || { echo "NO 'gh run list' failed (not logged in?)"; return; }
-  jqr -r --argjson now "$(now)" --argjson win "$(( CADENCE_WINDOW_MIN * 60 ))" --argjson n "$CADENCE_MIN_RUNS" \
+  jqr -r --argjson now "$SWEEPER_NOW" --argjson win "$(( CADENCE_WINDOW_MIN * 60 ))" --argjson n "$CADENCE_MIN_RUNS" \
          --argjson gmin "$(( CADENCE_GAP_MIN * 60 ))" --argjson gmax "$(( CADENCE_GAP_MAX * 60 ))" \
          --argjson newest "$(( CADENCE_NEWEST_MAX * 60 ))" '
     def m: (. / 60 * 10 | floor) / 10;
@@ -526,7 +553,7 @@ helper_idle_reminder() {
   pushed=$(env -u GH_REPO -u GH_HOST "$GH_BIN" api -X GET "repos/$SWEEPER_HELPER_REPO" --jq .pushed_at 2>/dev/null | tr -d '\r') \
     && t=$(iso_epoch "$pushed") \
     || { warn "could not read the last push of $SWEEPER_HELPER_REPO (its schedule stops after 60 days without activity)"; return 0; }
-  days=$(( ($(now) - t) / 86400 ))
+  days=$(( (SWEEPER_NOW - t) / 86400 ))
   if (( days >= SWEEPER_HELPER_IDLE_WARN_DAYS )); then
     warn "$SWEEPER_HELPER_REPO was last pushed $days days ago; GitHub disables its scheduled workflow after 60 days without activity. Push any small commit to it (e.g. its README) now; if it is already disabled, re-enable dispatch-sweeper under its Actions tab."
   fi
@@ -544,6 +571,7 @@ check_sweeper() {
   [[ $SWEEPER_MAX_AGE_MIN =~ ^[0-9]{1,4}$ ]] && (( 10#$SWEEPER_MAX_AGE_MIN >= 15 && 10#$SWEEPER_MAX_AGE_MIN <= SWEEPER_MAX_AGE_CAP )) \
     || die "ROTN_SWEEPER_MAX_AGE_MIN must be 15..$SWEEPER_MAX_AGE_CAP (got '$SWEEPER_MAX_AGE_MIN')"
   command -v "$GH_BIN" > /dev/null 2>&1 || { sweeper_refuse "the gh CLI ('$GH_BIN') is not available"; return 0; }
+  sweeper_clock || return 0   # refused (or, with --dry-run, warned)
   f=$(sweeper_newest_ok)
   [[ $f == OK ]] || { sweeper_refuse "${f#NO }"; return 0; }
   a=$(sweeper_scheduled_ok)
