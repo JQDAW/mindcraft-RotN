@@ -52,8 +52,12 @@ final class EntityDumper extends Part<EntityEntry> {
     }
 
     @Override
+    protected String key(EntityEntry e) {
+        return e.getRegistryName().toString();
+    }
+
+    @Override
     protected boolean entry(JsonWriter w, EntityEntry e) throws IOException {
-        w.name(e.getRegistryName().toString());
         writeEntity(w, e);
         return true;
     }

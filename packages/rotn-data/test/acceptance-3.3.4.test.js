@@ -42,20 +42,45 @@ test("harvestInfo('stone') reports RotN's tool and level from the dump", { skip 
     const h = pack.harvestInfo('stone');
     assert.equal(h.block, 'minecraft:stone');
     assert.equal(h.tool, 'pickaxe');
-    assert.ok(Number.isInteger(h.level) && h.level >= 0, `level ${h.level}`);
-    assert.equal(typeof h.levelName, 'string');
+    assert.equal(h.level, 0); // Tool Progression level 0 (Crude): a stone pickaxe is enough (PR #47 review)
+    assert.equal(h.levelName, 'Crude');
 });
 
-test('harvestInfo is defined for every block state in the dump (so for the 50 most common near spawn)', { skip }, () => {
-    const bad = [];
+test('harvestInfo is defined for every block state in the dump, apart from the pinned known gaps', { skip }, () => {
+    // The brief asks for the 50 most common blocks near spawn; this checks every state, and the
+    // few exceptions are pinned exactly (test/fixtures/harvest-known-gaps-3.3.4.json).
+    const known = require('./fixtures/harvest-known-gaps-3.3.4.json');
+    const nullHardness = {};
+    const noState = [];
+    let states = 0;
     for (const name of Object.keys(pack.dump.blocks.blocks)) {
         const b = pack.dump.blocks.blocks[name];
+        if (b.states.length === 0) { noState.push(name); continue; }
         for (const s of b.states) {
+            states++;
             const h = pack.harvestInfo(name, s.meta);
-            if (!h || typeof h.hardness !== 'number' || !Number.isInteger(h.level)) bad.push(`${name}:${s.meta}`);
+            assert.ok(h && Number.isInteger(h.level), `${name}:${s.meta} has no harvest level`);
+            if (typeof h.hardness !== 'number') (nullHardness[name] ??= []).push(s.meta);
         }
     }
-    assert.deepEqual(bad.slice(0, 20), [], `${bad.length} states without harvest info`);
+    assert.ok(states > 20000, `only ${states} states`);
+    assert.deepEqual(nullHardness, known.nullHardness.states);
+    assert.deepEqual(noState.sort(), known.noMetaState.blocks);
+});
+
+test('common surface blocks near spawn have full harvest info', { skip }, () => {
+    // Re-checked facts for G2/G3 (Tool Progression levels: 0 Crude, 1 Sturdy).
+    const expect = {
+        stone: ['pickaxe', 0], cobblestone: ['pickaxe', 0], dirt: ['shovel', 0], grass: ['shovel', 0], sand: ['shovel', 0],
+        gravel: ['shovel', 0], log: ['axe', 0], iron_ore: ['pickaxe', 0], coal_ore: ['pickaxe', 0],
+    };
+    for (const [block, [tool, level]] of Object.entries(expect)) {
+        const h = pack.harvestInfo(block);
+        assert.equal(h.tool, tool, block);
+        assert.equal(h.level, level, block);
+        assert.equal(typeof h.hardness, 'number', block);
+    }
+    assert.equal(pack.harvestInfo('pyrotech:rock').tool, null);
 });
 
 test('the mod-local entity table covers every modded entity the server syncs', { skip }, () => {
@@ -67,4 +92,15 @@ test('the mod-local entity table covers every modded entity the server syncs', {
         assert.equal(pack.entityByModId(e.modId, e.modEntityTypeId).name, n);
     }
     assert.deepEqual(missing, []);
+});
+
+test('common-mobs.json is up to date, names real entities, and has modded mobs (harness-ops G2)', { skip }, async () => {
+    const { buildCommonMobs } = await import('../tools/build-common-mobs.mjs');
+    const committed = require('../3.3.4/common-mobs.json');
+    assert.deepEqual(committed, JSON.parse(buildCommonMobs()));
+    const first12 = committed.mobs.slice(0, 12).map(m => m.name);
+    assert.equal(first12.length, 12);
+    assert.ok(first12.some(n => !n.startsWith('minecraft:')), 'no modded mob among the first 12');
+    for (const m of committed.mobs) assert.ok(pack.names.entities.has(m.name), m.name);
+    assert.ok(first12.includes('minecraft:zombie') && first12.includes('minecraft:sheep'));
 });

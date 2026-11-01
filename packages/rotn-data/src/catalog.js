@@ -6,7 +6,8 @@
 //   server synced (net-forge's G1 RegistryData capture). Always present.
 // - the dump (ADR 0004; tools/dumper, format "rotn-dump/1", see README.md):
 //   blocks.json, items.json, recipes.json, smelting.json, entities.json,
-//   oredict.json, spawns.json, manifest.json. Present once a dump has been run on
+//   oredict.json, spawns.json, serializers.json (dumper 0.1.0 after PR #48; the first 3.3.4 dump
+//   predates it), manifest.json. Present once a dump has been run on
 //   the test server and imported. Until then, property queries return null and
 //   `hasDump` is false; nothing is guessed.
 //
@@ -23,7 +24,7 @@ import { parseOld, registryName, WILDCARD_META } from './names.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const PACKAGE_ROOT = path.join(HERE, '..');
 export const DUMP_FORMAT = 'rotn-dump/1';
-export const DUMP_FILES = ['manifest', 'blocks', 'items', 'recipes', 'smelting', 'entities', 'oredict', 'spawns'];
+export const DUMP_FILES = ['manifest', 'blocks', 'items', 'recipes', 'smelting', 'entities', 'oredict', 'spawns', 'serializers'];
 
 function readJson(dir, base) {
     for (const [ext, decode] of [['.json', (b) => b], ['.json.br', (b) => zlib.brotliDecompressSync(b)]]) {
@@ -204,6 +205,16 @@ export class RotnData {
     }
 
     oreDict(key) { return this.dump.oredict?.ores?.[key] ?? null; }
+
+    /**
+     * The entity-metadata DataSerializer table (serializers.json, for forge-bridge):
+     * { serializers: [{id, class, vanilla}], usage: { [entity]: [{index, serializerId, class}] } },
+     * or null for a dump made before the dumper wrote it.
+     */
+    serializers() {
+        const s = this.dump.serializers;
+        return s ? { serializers: s.serializers ?? [], usage: s.usage ?? {} } : null;
+    }
 
     // ---- entities ----------------------------------------------------------
 

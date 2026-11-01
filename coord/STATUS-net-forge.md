@@ -285,7 +285,7 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
   - `stay_10min`: 608 s, no disconnects.
 - **B (spike):** every check passed: handshake, spawn, chat both ways, a 6-block pathfinder walk, and an 11-minute stay.
 - **Advancements opaque:** yes. Triumph 3.19.2 was detected in both sessions, with no advancements parse error.
-- **Safety net:** dropped nothing (`droppedPackets` `{}`, no "(dropped, allowlisted)" lines).
+- **Safety net:** dropped nothing (`droppedPackets` `{}`). The only parse errors were PartialReadErrors, which protodef drops itself. (Corrected: the "(dropped, allowlisted)" log string did not exist yet in that code, so its absence was no evidence.)
 - **Kicks:** none (runner `kicks: []`). B ended with its own `disconnect.quitting`. The 17:34:22 "Internal Exception" disconnect is the teardown after `stay_10min` passed (SIGTERM on Windows).
 - **`OBFUSCATE|HS` and `dimstack`:** no answer was needed, with no kick over 11 and 10 minutes. The JustEnoughDimensions error occurred 0 times.
 - **New finding (not a blocker):** one `entity_metadata` PartialReadError per session (a player's, 77 and 78 bytes), dropped by protodef.
@@ -321,9 +321,22 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - `applyProperties`: protected fields are stripped (`id`, `name`, `registryName`, `forge`, `minStateId`, `maxStateId`, `defaultState`), and an unextended registry is refused (it requires `entitiesByForgeId`). One old-to-new map per kind, swapped in a single pass; two names for one entry merge.
 - Targeted tests: `registry-extension` 17, `metadata-types` 6, `bridge` and `fml-entities` pass.
 
+## Done: g1-driver answers the G2 scenario protocol (branch `agent/net-forge/g2-driver-check`, from develop eedab96)
+
+- **Finding:** the reference driver (`test/runner/drivers/mineflayer-reference.mjs`) uses stock `mineflayer.createBot` without forge-bridge, so a Forge server rejects it at the handshake (its own header calls it the negative control). It also cannot give forge-bridge's names. G2 on the real server needs this driver.
+- `g1-driver.mjs` now calls `attachG2(bot, { names })` with `loadAgentNames(repoRoot)`: the same `mcdata.js` module `initBot` used, so `bot.registry` (extended) and `toNew`/`toOld`.
+- **Offline test** (`g1-driver.test.js`, against the fake Forge server):
+  - census: `minecraft:stone` and `pyrotech:rock`;
+  - `blockat`: `0 64 0 pyrotech:rock 3`;
+  - `entities`: the FML mob;
+  - `items`: slot 36 `minecraft:stone` and `pyrotech:crude_axe`, with translation on.
+- **Open for G2:**
+  - Modded mobs spawned with FML carry placeholder names until rotn-data's mod-local entity table exists and `initBot` passes it to `attachFmlEntities`, so `mobs_named` fails for a modded mob until then. `common-mobs.json` is not in `packages/rotn-data/3.3.4` yet.
+  - The census counts unloaded positions (`bot.blockAt` null) as a `null` type, which the runner fails (see requests).
+
 ## Doing
 
-- Batch A done (above); PR #26 merged. PR #25 (registry extension) is being reworked for its review (vanilla entities, modded-block hardness, rebind logs), together with the PR #28 nits. **The next paid batch needs a new written GO.**
+- G1 PASSED (Batch B+C retry, PR #31 merged; confirmed by the independent reviewer). Phase 2 (G2): #25, #38 and #46 are merged. Open: PR #49 (`applyProperties` hardening, serializer 14 inferred) and the PR #31 follow-ups. Next: rotn-data's dumper ids for serializers 15-18, and its mod-local entity table.
 
 ## Next
 
@@ -374,6 +387,9 @@ The setup for both batches:
 - Batch B+C: approved; the driver is ready (below). Runs after Batch A, with the same preflight condition.
 
 ## Requests to other agents or the lead
+
+- **harness-ops (`test/runner/drivers/scenario-protocol.mjs`):** the `scenario-blocks` census counts positions where `bot.blockAt()` returns null (unloaded chunks) as a type named `null`; the fake world shows `null 0 27489`. On a real server the cube's edge chunks may not be loaded yet, and the runner fails any `null` name. Skip null blocks, or wait for the cube's chunks first.
+- **rotn-data:** the mod-local entity table (shape agreed) and `common-mobs.json`. When it exists, `initBot` passes the table to `attachFmlEntities` (a one-line net-forge change).
 
 - **rotn-data (dumper):** please dump vanilla `DataSerializers` ids 14 and up with their serializer class (and mod). Ids 15-18 belong to base, Charset-Lib, Mowzie's Mobs and Requious Frakto in an unknown order. forge-bridge takes them as `metadataSerializers: { id: 'base:resource_location' | 'charset:quaternion' | 'mowziesmobs:optional_trade' | 'requious:spark_effect' }` (the formats are already in `reid.js`).
 

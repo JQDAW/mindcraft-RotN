@@ -48,7 +48,8 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
  * "rotndump" (permission level 4) schedules another.
  *
  * A dump writes format "rotn-dump/1" files to ./rotn-dump/ (oredict, blocks, items, recipes,
- * smelting, entities, spawns, then manifest), at most BATCH entries per server tick, each file
+ * smelting, entities, spawns, serializers, then manifest), at most BATCH entries and about
+ * TICK_BUDGET_MS per server tick, each file
  * written to NAME.json.tmp and renamed into place, and the DONE marker last. A reader must wait
  * for DONE.
  * It only reads game state. acceptableRemoteVersions = "*": clients without the mod can join.
@@ -106,6 +107,8 @@ public class RotnDump {
 
     /** Entries written per server tick, at most (PR #34 review: about 500). */
     static final int BATCH = 500;
+    /** Time per server tick, at most: a batch stops early once it has used this (PR #34 follow-up 1). */
+    static final long TICK_BUDGET_MS = 40;
 
     /**
      * One dump: parts in order, each written in batches of at most BATCH entries per server tick.
@@ -117,6 +120,7 @@ public class RotnDump {
         private final Names names = new Names();
         private final Map<String, Object> counts = new LinkedHashMap<>();
         private final Map<String, long[]> timing = new LinkedHashMap<>(); // name -> {ms, ticks}
+        private final Map<String, Object[]> entryErrors = new LinkedHashMap<>(); // name -> {count, first}
         private final List<String> errors = new ArrayList<>();
         private final Deque<String> todo = new ArrayDeque<>();
 
@@ -132,13 +136,13 @@ public class RotnDump {
 
         Job(File dir) {
             this.dir = dir;
-            for (String p : new String[] {"oredict", "blocks", "items", "recipes", "smelting", "entities", "spawns", "manifest"}) todo.add(p);
+            for (String p : new String[] {"oredict", "blocks", "items", "recipes", "smelting", "entities", "spawns", "serializers", "manifest"}) todo.add(p);
         }
 
         @SubscribeEvent
         public void onTick(TickEvent.ServerTickEvent event) {
             if (event.phase != TickEvent.Phase.END) return;
-            long t = System.currentTimeMillis();
+            long t = System.nanoTime(); // durations use nanoTime (monotonic); PR #48 review
             try {
                 if (part == null) {
                     String p = todo.poll();
@@ -149,9 +153,14 @@ public class RotnDump {
                     open(p);
                 }
                 int stop = Math.min(part.size(), next + BATCH);
-                for (; next < stop; next++) if (part.write(w, next)) written++;
+                // At least one entry per tick (if any are left), then stop at BATCH entries or TICK_BUDGET_MS.
+                while (next < stop) {
+                    if (part.write(w, next)) written++;
+                    next++;
+                    if (msSince(t) >= TICK_BUDGET_MS) break;
+                }
                 partTicks++;
-                partMs += System.currentTimeMillis() - t;
+                partMs += msSince(t);
                 if (next >= part.size()) close();
             } catch (Throwable e) {
                 fail(e);
@@ -167,12 +176,13 @@ public class RotnDump {
                 case "smelting": return new SmeltingDumper();
                 case "entities": return new EntityDumper();
                 case "spawns": return new SpawnDumper();
+                case "serializers": return new SerializerDumper(DimensionManager.getWorld(0));
                 default: return new ManifestPart();
             }
         }
 
         private void open(String p) throws IOException {
-            long t = System.currentTimeMillis();
+            long t = System.nanoTime();
             name = p;
             part = partFor(p);
             next = 0;
@@ -183,18 +193,22 @@ public class RotnDump {
             w.setIndent("");
             w.setSerializeNulls(true);
             part.begin(w);
-            partMs = System.currentTimeMillis() - t;
+            partMs = msSince(t);
         }
 
         private void close() throws IOException {
-            long t = System.currentTimeMillis();
+            long t = System.nanoTime();
             part.end(w);
             w.flush();
             out.close();
             move(new File(dir, name + ".json.tmp"), new File(dir, name + ".json"));
-            partMs += System.currentTimeMillis() - t;
+            partMs += msSince(t);
             counts.put(name, written);
             timing.put(name, new long[] {partMs, partTicks});
+            if (part.entryErrors > 0) {
+                entryErrors.put(name, new Object[] {part.entryErrors, part.firstEntryError});
+                LOG.warn("[rotndump] {}: {} entries dropped, first: {}", name, part.entryErrors, part.firstEntryError);
+            }
             LOG.info("[rotndump] {}: {} entries in {} ms over {} ticks", name, written, partMs, partTicks);
             part = null;
         }
@@ -275,6 +289,7 @@ public class RotnDump {
             J.str(j, "forge", ForgeVersion.getVersion());
             J.str(j, "dumpedAt", iso.format(new Date(t0)));
             J.num(j, "batch", BATCH);
+            J.num(j, "tickBudgetMs", TICK_BUDGET_MS);
             J.num(j, "modCount", mods.size());
             J.str(j, "modListSha256", sha256(modList.toString().getBytes(StandardCharsets.UTF_8)));
             j.name("mods").beginArray();
@@ -299,11 +314,25 @@ public class RotnDump {
                 j.endObject();
             }
             j.endObject();
+            // Entries dropped inside a part (the rest of the part was written).
+            j.name("entryErrors").beginObject();
+            for (Map.Entry<String, Object[]> e : entryErrors.entrySet()) {
+                j.name(e.getKey()).beginObject();
+                J.num(j, "count", (Integer) e.getValue()[0]);
+                J.str(j, "first", (String) e.getValue()[1]);
+                j.endObject();
+            }
+            j.endObject();
             j.name("errors").beginArray();
             for (String e : errors) j.value(e);
             j.endArray();
             j.endObject();
         }
+    }
+
+    /** Whole milliseconds since a System.nanoTime() reading. */
+    static long msSince(long nanoStart) {
+        return (System.nanoTime() - nanoStart) / 1_000_000L;
     }
 
     private static void move(File from, File to) throws IOException {

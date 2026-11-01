@@ -2,12 +2,12 @@
 
 net-forge ran this batch on the lead's GO, recorded in `coord/STATUS-rotn-lead.md` at 17:05 UTC, after PR #28 (Triumph advancements opaque, parse safety net) was merged.
 
-Files in this folder are committed under the lead-approved `test/evidence/g1/` exception: the harness runner's result files for Batch C, sanitized. The bot name is `<bot>`, and the UUIDs, the player's IP:port and local paths are replaced. No tokens appear in them; the only "token" is the runner's per-run echo nonce, which is said in public chat.
+Files in this folder are committed under the lead-approved `test/evidence/g1/` exception: the harness runner's result files for Batch C, sanitized. The bot name is `<bot>`, player UUIDs are `<uuid-v4>` (all are version-4 Mojang UUIDs), and the player's IP:port and local paths are replaced. No tokens appear in them; the only "token" is the runner's per-run echo nonce, which is said in public chat.
 
 | File | What |
 | --- | --- |
 | `result.json` | The runner's verdict for `g1-login-chat-walk`: default gate parameters, `gateValid: true`, `weakenedParams: []`, **`pass: true`**. |
-| `server.log` | The test server's log from the scenario's marker line on. |
+| `server.log` | The test server's log, starting at the marker line the runner writes when the scenario begins. |
 | `driver.log` | stdout and stderr of `packages/forge-bridge/tools/g1-driver.mjs`. |
 
 ## Run
@@ -34,15 +34,22 @@ Batch B passed all its own checks too: handshake, spawn, chat both ways, a 6-blo
 ## The lead's questions
 
 - **Did advancements stay opaque?** Yes. Triumph 3.19.2 was detected in both sessions (`bridge_attached.triumph`), and there was no advancements parse error.
-- **Did the safety net drop anything?** No. `droppedPackets` is `{}` (B, end-of-session stats), and no "(dropped, allowlisted)" line appears in either session.
+- **Did the safety net drop anything?** No: `droppedPackets` is `{}` in B's end-of-session stats.
+  - Correction (PR #31 review): an earlier version also cited the absence of "(dropped, allowlisted)" log lines. That string did not exist in the code that ran (it was added later, in PR #25), so its absence proves nothing.
+  - The only parse errors in both sessions were PartialReadErrors (`entity_metadata`, below). protodef drops those itself; the safety net never handles them.
 - **Kicks?** None. The runner's `notes.kicks` is `[]`.
   - B ended with its own `disconnect.quitting`.
   - The server's last "lost connection: Internal Exception: NativeIoException" at 17:34:22 is the teardown, right after `stay_10min` passed: on Windows the runner's SIGTERM ends the driver at once.
 - **`OBFUSCATE|HS` and `dimstack`:** neither got an answer, and there was no kick over 11 and 10 minutes, so neither needs one.
 - **JustEnoughDimensions error:** 0 occurrences.
 
+## Server-side crash report (not caused by the bot)
+
+At 17:30:59 the server logged a FATAL "Ticking entity" crash report (`server.log` lines 42-815). The cause was `java.lang.NullPointerException` at `com.p1ut0nium.roughmobsrevamped.ai.combat.RoughAIBatTarget.func_75250_a(RoughAIBatTarget.java:51)`, a Rough Mobs Revamped bat AI. The server survived it: the bot stayed connected, and `stay_10min` passed.
+
 ## One new finding (not a G1 blocker)
 
 - **What:** each session had one `entity_metadata` PartialReadError (77 and 78 bytes, a player's metadata), dropped by protodef as upstream does.
 - **Cause:** key 17 uses serializer type 14. AquaAcrobatics 1.15.4 registers its `PoseSerializer` (an enum written as a VarInt ordinal) with vanilla `DataSerializers.registerSerializer`, so it takes the next vanilla id after 13 (`javap`). Four more mods call that method (base, Charset-Lib, Mowzie's Mobs, Requious Frakto), so the ids from 15 upward are not yet known.
-- **Fixture:** the packet is in `packages/forge-bridge/test/fixtures/rotn-3.3.4/entity-metadata-aqua-pose.json` for a follow-up.
+- **Fixture:** the packet is in `packages/forge-bridge/test/fixtures/rotn-3.3.4/entity-metadata-aqua-pose.json`.
+- **Tracked and fixed:** since PR #46 it parses (serializer 14 = AquaAcrobatics pose). The id is inferred by fit, so since PR #49 the bridge logs its first decode until rotn-data's dumper confirms the serializer ids.
