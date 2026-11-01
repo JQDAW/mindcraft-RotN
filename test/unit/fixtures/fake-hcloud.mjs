@@ -8,6 +8,7 @@
 //      ROTN_TEST_NOW (epoch used for created timestamps).
 import fs from 'node:fs';
 import process from 'node:process';
+import { writeAtomic, readJsonRetry } from './atomic-write.mjs';
 
 const statePath = process.env.FAKE_HCLOUD_STATE;
 const logPath = process.env.FAKE_HCLOUD_LOG;
@@ -49,12 +50,12 @@ if (process.env.FAKE_HCLOUD_NOAUTH === '1') fail('no active context or token (se
 const [kind, verb, target] = pos;
 if (process.env.FAKE_HCLOUD_FAIL && process.env.FAKE_HCLOUD_FAIL === `${kind} ${verb}`) fail(`injected failure for ${kind} ${verb}`);
 
-const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : {};
+const state = readJsonRetry(statePath, {});
 state.next_id ??= 1000;
 state.servers ??= [];
 state.primary_ips ??= [];
 state.ssh_keys ??= [];
-const save = () => fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+const save = () => writeAtomic(statePath, JSON.stringify(state, null, 2)); // readers never see a half-written file
 
 const nowEpoch = Number(process.env.ROTN_TEST_NOW || Math.floor(Date.now() / 1000));
 const created = new Date(nowEpoch * 1000).toISOString().replace('.000Z', '+00:00');

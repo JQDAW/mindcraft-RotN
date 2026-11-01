@@ -4,6 +4,31 @@ Agents add items here when they need something only the human can do. The human 
 
 ## Open
 
+- [x] **Set up an external cron job that triggers the sweeper every 15 min** (rotn-lead, 2026-11-01 13:55 UTC; you chose this option).
+  - **Why.** GitHub does not run scheduled workflows on your account at all. The non-fork helper repo also missed 13:18, 13:33 and 13:48, while manual and API dispatch always work. GitHub's status page shows no incident.
+  - **About 10 minutes:**
+    1. **Create a second fine-grained token** at https://github.com/settings/personal-access-tokens/new:
+       - Name `rotn-sweeper-cronjob`, expiration 90 days (calendar reminder).
+       - Resource owner JQDAW, **Only select repositories: mindcraft-RotN**.
+       - Repository permissions: **Actions: Read and write**, nothing else.
+       - Copy it; paste it only in step 2c below.
+    2. **Create a cron job** at https://cron-job.org (free account), "Create cronjob":
+       a. Title `rotn test-server-sweeper`. URL:
+          `https://api.github.com/repos/JQDAW/mindcraft-RotN/actions/workflows/test-server-sweeper.yml/dispatches`
+       b. Schedule: **every 15 minutes**.
+       c. Advanced:
+          - Request method **POST**.
+          - Headers:
+            - `Accept: application/vnd.github+json`
+            - `Authorization: Bearer <the token from step 1>`
+            - `X-GitHub-Api-Version: 2022-11-28`
+            - `Content-Type: application/json`
+          - Request body: `{"ref":"develop"}`
+       d. Notifications: turn on "notify me when execution fails", so a failing call reaches your email.
+    3. **Test run.** Use cron-job.org's "Test run"; GitHub answers **204** (no content). Within a minute a new `workflow_dispatch` run appears in mindcraft-RotN, Actions, test-server-sweeper.
+  - Then tick this box. harness-ops changes the preflight so it accepts a steady cadence: **at least 3 successful dispatched sweeper runs on develop in the last 50 min, roughly 15 min apart**, as well as the sweeper's own scheduled runs. The lead checks the cadence before approving any paid batch.
+  - The helper repo `rotn-sweeper-cron` can stay; it costs nothing. If GitHub scheduling recovers, it becomes a second trigger. You may also delete it and revoke its token.
+
 - [x] **Helper repo set up by the human (2026-11-01, about 13:08 UTC).** The lead verified through the API:
   - `JQDAW/rotn-sweeper-cron` is public and not a fork; its secret `SWEEPER_DISPATCH_TOKEN` exists (name only).
   - `dispatch-sweeper` is active, with the expected content.

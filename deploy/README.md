@@ -70,6 +70,37 @@ The script's cleanup deletes only the IDs its own creates returned.
 
 GitHub disables scheduled workflows in a public repository after 60 days without repository activity. If the sweeper's run history stops, re-enable it under Actions -> test-server-sweeper.
 
+### What fires the sweeper, and the preflight
+
+On 2026-11-01, GitHub ran almost no scheduled workflows for this account:
+- `test-server-sweeper.yml` here (a fork) fired once in about 11 h with `*/15`, and 0 of 8 slots at the off-peak minutes `7,22,37,52`.
+- The non-fork helper repo **`JQDAW/rotn-sweeper-cron`** (`dispatch-sweeper.yml`, cron `3,18,33,48`, runs `gh workflow run test-server-sweeper.yml --repo JQDAW/mindcraft-RotN --ref develop` with its own fine-grained token) fired in none of its first three slots.
+- githubstatus showed no incident.
+
+So the human set up an **external cron service** (cron-job.org). Every 15 min it POSTs to `/repos/JQDAW/mindcraft-RotN/actions/workflows/test-server-sweeper.yml/dispatches` with body `{"ref":"develop"}`, using a separate fine-grained token. Its runs show up here as `workflow_dispatch` runs by JQDAW. The sweeper's own cron and the helper stay as extra sources.
+
+Before any create, `up` and `run` (which calls `up`) require **one** of these:
+
+| Path | Evidence (read-only `gh run list --repo ...`) |
+| --- | --- |
+| (a) own schedule | A successful `event=schedule` run of `test-server-sweeper.yml` on `develop`, at most `ROTN_SWEEPER_MAX_AGE_MIN` old (default 120, allowed 15..240). |
+| (b) helper | A successful `event=schedule` run of `dispatch-sweeper.yml` in `ROTN_SWEEPER_HELPER_REPO` (default `JQDAW/rotn-sweeper-cron`), at most 40 min old, **and** a successful `test-server-sweeper.yml` run (any event) on `develop` created after it. |
+| (c) cadence | At least **3** successful `workflow_dispatch` runs of `test-server-sweeper.yml` on `develop` in the last **50 min**; **every** gap between consecutive ones is **10..20 min**; the newest is **under 20 min** old. This is what the external cron service produces. |
+
+- A one-off `workflow_dispatch` run of the sweeper never counts. Neither does a manual run of the helper. Both prove that the token and the logic work, not that anything fires on a schedule.
+- In (c), every successful dispatch run in the window counts. An extra manual run between two cron runs therefore makes a gap under 10 min, and (c) refuses for up to 50 min. A missed or failed cron run makes a gap over 20 min.
+- Every `gh` call names its repo with `--repo`, and `GH_REPO` and `GH_HOST` are stripped. The preflight never handles a token: `gh` uses the local login.
+- The OK line says which path passed, e.g. `sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15, 15 min, newest ... 1 min ago`. A refusal gives the reason for every path.
+
+> **Rule: agents never dispatch `test-server-sweeper.yml` to make a cadence**, by any means: `gh workflow run`, the REST API, or a loop or timer on this PC. Path (c) trusts that its `workflow_dispatch` runs come from the external cron service, which runs off this PC. A cadence an agent makes on this PC proves nothing when this PC is asleep or crashed, which is exactly when the sweeper matters. The one exception is `test/scenarios/g0-watchdog.sh --mode dispatch` in a lead-approved watchdog proof. Its single extra run breaks the cadence, so (c) refuses for up to 50 min afterwards; that is fail-safe.
+>
+> The external service's token and job belong to the human. Agents never handle them.
+
+**Keep-alive.** GitHub also disables the **helper's** schedule after 60 days without activity in the helper repo, and from then on path (b) refuses.
+- When path (b) passes, the preflight reads the helper repo's last push with one read-only `gh api -X GET repos/JQDAW/rotn-sweeper-cron`. From day 45 it prints a warning: push any small commit to the helper repo, for example to its README. If the schedule is already disabled, re-enable `dispatch-sweeper` under the helper repo's Actions tab.
+- The warning never blocks a batch.
+- The fine-grained token also expires. When it does, the helper's runs fail, path (b) refuses, and the refusal points at the helper repo's Actions tab. The human then renews the token and updates the secret.
+
 ### Local state and cost log
 
 Local state lives outside the repo, in `~/.mindcraft-rotn/test-server/` (override with `ROTN_TEST_STATE_DIR`):

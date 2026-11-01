@@ -157,7 +157,8 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 
 - Codecs: VarInt, strings, every FML|HS message, and the pinned 346-entry ModList.
 - `golden.test.js`: hand-written hex vectors for ModList, RegistryData, FML EntitySpawn and FML|MP. Each is built from Forge 14.23.5.2860's own serializers (`javap` on the pinned server pack's Forge jar), not from this package's encoders. Our decoders must read each vector, and our encoders must reproduce it byte for byte.
-- The exact outgoing handshake sequence, using synthetic server messages built from the pinned mod list. A test against real captured server messages follows after Run B.
+- The exact outgoing handshake sequence, using synthetic server messages built from the pinned mod list.
+- `real-handshake.test.js`: **the real RotN 3.3.4 handshake** from G1 Batch A (`test/fixtures/rotn-3.3.4/handshake-runA.{json,bin.br}`, all 67 plugin-channel payloads, sanitized). The real server messages are replayed into `attachForgeBridge`, and the bridge must answer with exactly the bytes it really sent. It also checks the ServerHello, the 346-mod ModList (same entries as the pinned ping), all 52 RegistryData read to the last byte (`minecraft:blocks` 4896, ids above 4095), and the FORGE FluidIdMap.
 - FML, FORGE, `jeid` and FML|MP decoders.
 - REID `window_items`, `set_slot`, `window_click`, `entity_effect` and `remove_entity_effect`, through nmp's real compiled 1.12.2 protocol.
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.

@@ -9,6 +9,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { writeAtomic, readJsonRetry } from './fixtures/atomic-write.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
@@ -97,7 +98,7 @@ function run(args, extraEnv = {}, prependPath = null) {
 const readJsonl = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
 const hcloudCalls = () => readJsonl(env.FAKE_HCLOUD_LOG);
 const sshCalls = () => readJsonl(env.FAKE_SSH_LOG);
-const state = () => JSON.parse(fs.readFileSync(env.FAKE_HCLOUD_STATE, 'utf8'));
+const state = () => readJsonRetry(env.FAKE_HCLOUD_STATE);
 const withoutContext = (argv) => (argv[0] === '--context' ? argv.slice(2) : argv);
 const verbOf = (argv) => withoutContext(argv).filter((a) => !a.startsWith('-')).slice(0, 2).join(' ');
 const mutating = () => hcloudCalls().filter((a) => /^(\S+) (create|delete)$/.test(verbOf(a)));
@@ -105,12 +106,12 @@ const indexOfCall = (pred) => hcloudCalls().findIndex(pred);
 const flagValues = (argv, flag) => argv.flatMap((a, i) => (a === flag ? [argv[i + 1]] : []));
 
 const isoZ = (epoch) => new Date(epoch * 1000).toISOString().replace('.000Z', 'Z');
-function ghRuns(runs) {
-    fs.writeFileSync(env.FAKE_GH_STATE, JSON.stringify({ runs }));
+function ghRuns(runs, repos = {}) {
+    writeAtomic(env.FAKE_GH_STATE, JSON.stringify({ runs, repos }));
 }
 
 function seed(st) {
-    fs.writeFileSync(env.FAKE_HCLOUD_STATE, JSON.stringify(st));
+    writeAtomic(env.FAKE_HCLOUD_STATE, JSON.stringify(st));
 }
 
 function decodeWriteFiles(userData) {
@@ -508,7 +509,7 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         const r = run(upArgs);
         assert.equal(r.code, 0, r.all);
         assert.match(r.stderr, /sweeper OK: scheduled run 1001 on JQDAW\/mindcraft-RotN succeeded 10 min ago \(limit 120 min\)/);
-        const list = readJsonl(env.FAKE_GH_LOG).find((a) => a[0] === 'run' && a[1] === 'list');
+        const list = readJsonl(env.FAKE_GH_LOG).find((a) => a[0] === 'run' && a[1] === 'list' && flagValues(a, '--event').length);
         assert.deepEqual([flagValues(list, '--event')[0], flagValues(list, '--branch')[0], flagValues(list, '--workflow')[0]],
             ['schedule', 'develop', 'test-server-sweeper.yml']);
     });
@@ -523,6 +524,7 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
             { databaseId: 8, event: 'schedule', status: 'completed', conclusion: 'failure', createdAt: isoZ(NOW - 60), headBranch: 'develop' },
             { databaseId: 9, event: 'schedule', status: 'in_progress', conclusion: '', createdAt: isoZ(NOW - 30), headBranch: 'develop' },
             { databaseId: 10, event: 'schedule', status: 'completed', conclusion: 'success', createdAt: isoZ(NOW - 30), headBranch: 'agent/x' },
+            { databaseId: 12, event: 'workflow_dispatch', status: 'completed', conclusion: 'success', createdAt: isoZ(NOW - 40), headBranch: 'develop' },
         ]);
         refuses(run(upArgs), /no successful scheduled run/);
     });
@@ -552,6 +554,214 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         const bad = run(upArgs, { ROTN_GH_REPO: 'not a repo' });
         assert.notEqual(bad.code, 0);
         assert.match(bad.stderr, /bad ROTN_GH_REPO/);
+    });
+
+    // (b): the helper repo's scheduled dispatch, then a sweeper run on develop (lead, 2026-11-01).
+    const HELPER = 'JQDAW/rotn-sweeper-cron';
+    const helperRun = (o) => ({ repo: HELPER, workflow: 'dispatch-sweeper.yml', headBranch: 'main', event: 'schedule',
+        status: 'completed', conclusion: 'success', ...o });
+    const sweepRun = (o) => ({ event: 'workflow_dispatch', status: 'completed', conclusion: 'success', headBranch: 'develop', ...o });
+
+    test('helper path: a scheduled helper run within 40 min plus a later sweeper run lets up proceed', () => {
+        ghRuns([
+            { databaseId: 11, event: 'schedule', status: 'completed', conclusion: 'success', createdAt: isoZ(NOW - 5 * 3600), headBranch: 'develop' },
+            helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) }),
+            sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 591) }),
+        ]);
+        const r = run(upArgs);
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, /sweeper OK \(via helper\): helper scheduled run 2001 on JQDAW\/rotn-sweeper-cron succeeded 10 min ago \(limit 40 min\), then sweeper run 3001 \(workflow_dispatch\) on develop succeeded/);
+        const calls = readJsonl(env.FAKE_GH_LOG);
+        for (const a of calls) {
+            if (a[0] === 'api') {
+                assert.deepEqual(a, ['api', '-X', 'GET', `repos/${HELPER}`, '--jq', '.pushed_at'], 'the keep-alive reminder is one read-only GET');
+                continue;
+            }
+            assert.deepEqual(a.slice(0, 2), ['run', 'list'], `read-only calls only: ${a.join(' ')}`);
+            assert.ok(['JQDAW/mindcraft-RotN', HELPER].includes(a.at(-1)) && a.at(-2) === '--repo', a.join(' '));
+        }
+        const helperCall = calls.find((a) => a.at(-1) === HELPER);
+        assert.deepEqual([flagValues(helperCall, '--workflow')[0], flagValues(helperCall, '--event')[0]], ['dispatch-sweeper.yml', 'schedule']);
+    });
+
+    test('helper path: GH_REPO and GH_HOST cannot redirect the helper call', () => {
+        ghRuns([helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 500) })]);
+        const r = run(upArgs, { GH_REPO: 'evil/repo', GH_HOST: 'evil.example' });
+        assert.equal(r.code, 0, r.all);
+        assert.ok(readJsonl(env.FAKE_GH_LOG).some((a) => a.at(-1) === HELPER));
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        const bad = run(upArgs, { ROTN_SWEEPER_HELPER_REPO: 'not a repo' });
+        assert.notEqual(bad.code, 0);
+        assert.match(bad.stderr, /bad ROTN_SWEEPER_HELPER_REPO/);
+    });
+
+    test('helper path: a plain dispatch run without a scheduled helper run never counts', () => {
+        ghRuns([sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) })]);
+        refuses(run(upArgs), /no successful scheduled run of test-server-sweeper.yml on develop yet; and via the helper: no successful scheduled run of dispatch-sweeper.yml in JQDAW\/rotn-sweeper-cron/);
+    });
+
+    test('helper path: the helper\'s own manual, failed or wrong-repo runs do not count', () => {
+        const later = sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) });
+        for (const h of [
+            helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600), event: 'workflow_dispatch' }),
+            helperRun({ databaseId: 2002, createdAt: isoZ(NOW - 600), conclusion: 'failure' }),
+            helperRun({ databaseId: 2003, createdAt: isoZ(NOW - 600), status: 'in_progress', conclusion: '' }),
+            helperRun({ databaseId: 2004, createdAt: isoZ(NOW - 600), repo: 'JQDAW/mindcraft-RotN' }),
+            helperRun({ databaseId: 2005, createdAt: isoZ(NOW - 600), workflow: 'other.yml' }),
+        ]) {
+            ghRuns([h, later]);
+            refuses(run(upArgs), /via the helper: no successful scheduled run of dispatch-sweeper.yml/);
+        }
+    });
+
+    test('helper path: a helper run older than 40 min refuses; 40 min still passes', () => {
+        ghRuns([helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 41 * 60) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) })]);
+        refuses(run(upArgs), /via the helper: the last successful scheduled helper run \(2001\) is 41 min old \(limit 40\)/);
+        ghRuns([helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 40 * 60) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) })]);
+        assert.equal(run(upArgs).code, 0);
+    });
+
+    test('helper path: the sweeper run must succeed on develop and be created after the helper run', () => {
+        const h = helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) });
+        for (const s of [
+            sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 601) }),
+            sweepRun({ databaseId: 3002, createdAt: isoZ(NOW - 600) }),
+            sweepRun({ databaseId: 3004, createdAt: isoZ(NOW - 300), status: 'in_progress', conclusion: '' }),
+            sweepRun({ databaseId: 3005, createdAt: isoZ(NOW - 300), headBranch: 'agent/x' }),
+        ]) {
+            ghRuns([h, s]);
+            refuses(run(upArgs), /via the helper: no successful test-server-sweeper.yml run on develop after helper run 2001/);
+        }
+    });
+
+    test('helper path: keep-alive reminder from day 45 of no pushes to the helper repo; it never refuses', () => {
+        const runs = [helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 500) })];
+        ghRuns(runs, { [HELPER]: { pushed_at: isoZ(NOW - 44 * 86400) } });
+        const fresh = run(['up', '--yes', '--name', 'mcr-test-ka1']);
+        assert.equal(fresh.code, 0, fresh.all);
+        assert.doesNotMatch(fresh.stderr, /last pushed/);
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        ghRuns(runs, { [HELPER]: { pushed_at: isoZ(NOW - 50 * 86400) } });
+        const idle = run(['up', '--yes', '--name', 'mcr-test-ka2']);
+        assert.equal(idle.code, 0, idle.all);
+        assert.match(idle.stderr, /WARNING: JQDAW\/rotn-sweeper-cron was last pushed 50 days ago; GitHub disables its scheduled workflow after 60 days without activity\. Push any small commit/);
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        ghRuns(runs);
+        const unknown = run(['up', '--yes', '--name', 'mcr-test-ka3']);
+        assert.equal(unknown.code, 0, unknown.all);
+        assert.match(unknown.stderr, /WARNING: could not read the last push of JQDAW\/rotn-sweeper-cron/);
+    });
+
+    // (c): an external cron service dispatches the sweeper every 15 min (lead and human, 2026-11-01).
+    const cadence = (...agesS) => agesS.map((a, i) => sweepRun({ databaseId: 4000 + i, createdAt: isoZ(NOW - a) }));
+    const refusesCadence = (runs, re) => {
+        ghRuns(runs);
+        refuses(run(upArgs), new RegExp(`; and via the cadence: ${re.source}`));
+    };
+
+    test('cadence path: 3 dispatch runs 15 min apart, newest 1 min old, lets up proceed', () => {
+        ghRuns(cadence(60, 960, 1860));
+        const r = run(upArgs);
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, /sweeper OK \(via cadence\): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15, 15 min, newest 4000 1 min ago/);
+        const calls = readJsonl(env.FAKE_GH_LOG);
+        for (const a of calls) {
+            assert.deepEqual(a.slice(0, 2), ['run', 'list'], `read-only calls only: ${a.join(' ')}`);
+            assert.equal(a.at(-2), '--repo', a.join(' '));
+        }
+        const c = calls.find((a) => flagValues(a, '--event')[0] === 'workflow_dispatch');
+        assert.deepEqual([flagValues(c, '--workflow')[0], flagValues(c, '--branch')[0], c.at(-1)], ['test-server-sweeper.yml', 'develop', 'JQDAW/mindcraft-RotN']);
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        ghRuns(cadence(300, 1200, 2100, 3000));
+        assert.equal(run(['up', '--yes', '--name', 'mcr-test-cad4']).code, 0, '4 runs, newest 5 min, oldest exactly 50 min');
+    });
+
+    test('cadence path: gaps too short (an extra dispatch) or too long (a missed one) refuse', () => {
+        refusesCadence(cadence(60, 300, 960, 1860), /dispatch-run gaps 15, 11, 4 min are not all 10\.\.20 min/);
+        refusesCadence(cadence(60, 960, 2400), /dispatch-run gaps 24, 15 min are not all 10\.\.20 min/);
+        refusesCadence(cadence(60, 120, 180), /dispatch-run gaps 1, 1 min are not all 10\.\.20 min/);
+    });
+
+    test('cadence path: too few runs, including a one-off manual dispatch, refuse', () => {
+        refusesCadence(cadence(60), /only 1 successful dispatch runs on develop in the last 50 min \(need 3\)/);
+        refusesCadence(cadence(60, 960), /only 2 successful/);
+        refusesCadence(cadence(60, 960, 3060), /only 2 successful/);
+    });
+
+    test('cadence path: boundaries pinned, the passing side (PR #21 review finding 2)', () => {
+        for (const [name, ages] of [
+            ['mcr-test-b600', [60, 660, 1260]], // gaps of exactly 600 s
+            ['mcr-test-b1200', [60, 1260, 2460]], // gaps of exactly 1200 s
+            ['mcr-test-bwin', [1140, 2100, 3000]], // the oldest exactly 50 min old is inside the window
+            ['mcr-test-bnew', [1194, 2094, 2994]], // newest 19.9 min
+        ]) {
+            seed({ servers: [], primary_ips: [], ssh_keys: [] });
+            ghRuns(cadence(...ages));
+            const r = run(['up', '--yes', '--name', name]);
+            assert.equal(r.code, 0, `${ages}: ${r.all}`);
+            assert.match(r.stderr, /sweeper OK \(via cadence\)/);
+        }
+    });
+
+    test('cadence path: boundaries pinned, the refusing side (PR #21 review finding 2)', () => {
+        refusesCadence(cadence(60, 654, 1254), /dispatch-run gaps 10, 9\.9 min are not all 10\.\.20 min/); // 594 s (gaps listed oldest first)
+        refusesCadence(cadence(60, 1266, 2466), /dispatch-run gaps 20, 20\.1 min are not all 10\.\.20 min/); // 1206 s
+        refusesCadence(cadence(1140, 2100, 3006), /only 2 successful dispatch runs on develop in the last 50 min/); // 50 min 6 s
+        refusesCadence(cadence(1200, 2100, 3000), /the newest dispatch run \(4000\) is 20 min old \(limit 20\)/);
+    });
+
+    test('a newest completed sweeper run that failed blocks every path (PR #21 review finding 1)', () => {
+        const failed = (event, o = {}) => ({ databaseId: 5000, event, status: 'completed', conclusion: 'failure', createdAt: isoZ(NOW - 60), headBranch: 'develop', ...o });
+        const okSched = { databaseId: 1001, event: 'schedule', status: 'completed', conclusion: 'success', createdAt: isoZ(NOW - 600), headBranch: 'develop' };
+        // (a) would pass on its own:
+        ghRuns([okSched, failed('schedule')]);
+        refuses(run(upArgs), /the newest completed schedule sweeper run on develop \(5000, \S+\) concluded failure/);
+        // (b) would pass on its own:
+        ghRuns([helperRun({ databaseId: 2001, createdAt: isoZ(NOW - 600) }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 500) }), failed('workflow_dispatch')]);
+        refuses(run(upArgs), /newest completed workflow_dispatch sweeper run on develop \(5000, \S+\) concluded failure/);
+        // (c) would pass on its own (the reviewer's case: successes 16, 31 and 46 min ago, a failure 1 min ago):
+        ghRuns([...cadence(960, 1860, 2760), failed('workflow_dispatch')]);
+        refuses(run(upArgs), /concluded failure/);
+        for (const conclusion of ['timed_out', 'startup_failure']) {
+            ghRuns([okSched, failed('workflow_dispatch', { conclusion })]);
+            refuses(run(upArgs), new RegExp(`concluded ${conclusion}`));
+        }
+        // An older failure, a failure on another branch, a cancelled or an unfinished newer run do not block.
+        for (const [i, extra] of [
+            failed('schedule', { createdAt: isoZ(NOW - 900) }),
+            failed('schedule', { headBranch: 'agent/x' }),
+            failed('workflow_dispatch', { conclusion: 'cancelled' }),
+            failed('workflow_dispatch', { status: 'in_progress', conclusion: '' }),
+        ].entries()) {
+            seed({ servers: [], primary_ips: [], ssh_keys: [] });
+            ghRuns([okSched, extra]);
+            const r = run(['up', '--yes', '--name', `mcr-test-nf${i}`]);
+            assert.equal(r.code, 0, `${JSON.stringify(extra)}: ${r.all}`);
+        }
+    });
+
+    test('cadence path: a stale cadence refuses (newest must be under 20 min)', () => {
+        refusesCadence(cadence(1200, 2100, 3000), /the newest dispatch run \(4000\) is 20 min old \(limit 20\)/);
+    });
+
+    test('cadence path: failed, unfinished, scheduled or other-branch runs do not count', () => {
+        const [a, b, c] = cadence(60, 960, 1860);
+        refusesCadence([a, { ...b, conclusion: 'failure' }, c], /only 2 successful/);
+        refusesCadence([a, { ...b, status: 'in_progress', conclusion: '' }, c], /only 2 successful/);
+        refusesCadence([a, { ...b, headBranch: 'agent/x' }, c], /only 2 successful/);
+        refusesCadence([a, { ...b, event: 'push' }, c], /only 2 successful/);
+        refusesCadence([a, { ...b, repo: HELPER }, c], /only 2 successful/);
+    });
+
+    test('helper path: gh failing only on the helper repo refuses, with every path\'s reason (review nit 4)', () => {
+        ghRuns([sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) })]);
+        refuses(run(upArgs, { FAKE_GH_FAIL_REPO: HELPER }),
+            /no successful scheduled run of test-server-sweeper.yml on develop yet; and via the helper: 'gh run list' on JQDAW\/rotn-sweeper-cron failed; and via the cadence: only 1 successful/);
+        assert.ok(readJsonl(env.FAKE_GH_LOG).some((a) => a.at(-1) === HELPER), 'the helper repo was asked');
+    });
+
+    test('gh failing refuses before any path is tried', () => {
+        refuses(run(upArgs, { FAKE_GH_FAIL: '1' }), /ERROR: 'gh run list' failed \(not logged in\?\)\. Refusing/);
     });
 
     test('the refusal points at ALERT lines (a persistent ALERT keeps refusing on purpose)', () => {
@@ -677,7 +887,13 @@ describe('g0-watchdog.sh sweeper attribution (PR #5 review nit 3)', () => {
             child.stderr.on('data', (d) => { stderr += d; });
             let swept = false;
             const poll = setInterval(() => {
-                if (swept || !fs.existsSync(env.FAKE_HCLOUD_STATE) || state().servers.length < 2) return;
+                let servers;
+                try {
+                    servers = state()?.servers ?? [];
+                } catch {
+                    return; // being replaced right now: look again on the next tick
+                }
+                if (swept || servers.length < 2) return;
                 swept = true;
                 const sw = spawnSync(BASH, [fwd(script), 'sweep'], { env: { ...env, ROTN_TEST_NOW: '', HCLOUD_CONTEXT: 'mindcraft-rotn-test' }, encoding: 'utf8' });
                 const ts = new Date().toISOString();
