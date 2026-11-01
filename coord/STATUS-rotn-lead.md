@@ -1,8 +1,34 @@
 # Status: rotn-lead
 
-Updated: 2026-11-01 (about 19:40 UTC)
+Updated: 2026-11-01 (about 21:25 UTC)
 
-## Current snapshot (19:40 UTC)
+## Current snapshot (21:25 UTC)
+
+- **The G2 code is all on develop:**
+  - #43 translation follow-ups (`c9b1855`);
+  - #46 mod metadata serializers, `applyProperties`, `mcdata = bot.registry` (`c2ae301`);
+  - #44 mcdata.js naming API, `toNew`/`toOld` (`c047d29`);
+  - #49 applyProperties hardening (`6fb1fd4`);
+  - #36 G2 scenarios (`eedab96`);
+  - #47 first RotN 3.3.4 dump plus common-mobs.json (`7978d27`).
+
+  #48 (dumper follow-ups and serializers.json) and #50 (G1 evidence follow-ups) are merging CI-gated.
+- **Combined check** (reviewer, #36 + #44 merged together): harness-ops' `agentNaming` against the real `mcdata.js` reports wired, with 643 of 643 entries round-tripping.
+- **First dump batch result:** PASS, within the GO.
+  - CPX42 created 19:25:54, deleted 19:30:18 UTC; about EUR 0.14 + IPv4. The project was empty afterwards.
+  - The jar SHA-256 `2d32ee40…b94c` (run 41341359100) equals `manifest.dumperJar.sha256`. 0 errors.
+  - The brief's recipe and harvest acceptance now runs against the real dump: 15/15 pass.
+  - Hetzner spend for agent batches so far: about EUR 0.72 + IPv4-hours.
+- **G2 not passed yet:** it needs a real G2 batch. harness-ops is writing the plan, and the driver choice is being settled with net-forge. That batch needs a written GO.
+- **Next paid batch:** the serializers dump (rotn-data), with a written GO only after #48 merges.
+- **Lint baseline** is now 255 (#44); CLAUDE.md updated.
+
+## Requests for skills-rotn (route when it is spawned)
+
+- From PR #44's review: with `prefer: 'old'`, `grass`, `stone_slab`, `snow`, `melon` and `nether_brick` keep their 1.12 meaning. `src/agent/library/skills.js:706` (`empty_blocks`) uses `'grass'` for the plant, so it would treat grass blocks as empty. Review every 1.21 block or item name in skills, modes and prompts against `mcdata.resolveName`.
+- From PR #44's review: `getItemId('spruce_log')` returns the shared 1.12 `log` id, dropping the meta, so inventory counts by id lump all logs together. Use `resolveName(...).meta` for counts and crafting checks.
+
+## Earlier snapshot (19:40 UTC)
 
 - **Phase 2 (G2) under way.** G0 and G1 passed. Three dev agents are running (harness-ops, net-forge, rotn-data), the maximum.
 - **Merged today since G1:**
@@ -128,7 +154,7 @@ Updated: 2026-11-01 (about 19:40 UTC)
 
 - **rotn-data spawned 2026-11-01 about 18:00 UTC** for Phase 2 (G2). Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`, branch `agent/rotn-data/g2-dumper`, terminal `term_ea9c811e-debc-4b19-8707-aefda537172d`, auto mode (launch screen checked). Three dev agents now run (the maximum).
 
-- **2026-11-01 about 19:35 UTC: GO for rotn-data's first RotN 3.3.4 dump batch**, the "Paid test-server plan" in `coord/STATUS-rotn-data.md`.
+- **2026-11-01 about 19:24 UTC (corrected; first recorded as 19:35): GO for rotn-data's first RotN 3.3.4 dump batch** (given in writing as an Orca terminal message to rotn-data, right after dumper-build run 41341359100 succeeded; recorded here in PR #45, committed 19:28:49 UTC, after the server was created), the "Paid test-server plan" in `coord/STATUS-rotn-data.md`.
   - Run it from a clean, separate checkout of origin/develop at `3158776` or later.
   - The jar is the dumper-build artifact of push run 41341359100 (develop `3158776`, success). Record its SHA-256 before the batch and match it against `manifest.dumperJar.sha256` afterwards.
   - Disposable test server only, never the live RotN server.
