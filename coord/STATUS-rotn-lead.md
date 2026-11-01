@@ -17,7 +17,7 @@ Updated: 2026-11-01 23:30 UTC (from `date -u`)
   - #62 entity threat overrides (the Animania rabbits were a misread, reverted) and the Animania-replaced vanilla animals;
   - #63, #68, #69.
 - **G2 batch 2: GO given at 23:28 UTC** (below). G2 is not passed until its evidence PR is reviewed and merged.
-- Hetzner spend for agent batches: about EUR 1.00 + IPv4-hours.
+- Hetzner spend for agent batches, an estimate from the batch records: about EUR 1.00 + IPv4-hours. That is G0 0.16, G1 batches 3 × 0.14, dumps 2 × 0.14 and G2 batch 1 0.14, each 1 billed CPX42 hour at EUR 0.1381 (G0 includes two CX23s).
 - Since 22:25 UTC every *new* independent-reviewer subagent runs at medium effort (the human's instruction).
 - For skills-rotn: a pack mod sets `commandBlockOutput`/`sendCommandFeedback` to false for the player on join (G2 batch 1 finding 7).
 
@@ -218,7 +218,7 @@ Updated: 2026-11-01 23:30 UTC (from `date -u`)
   - The FRCFLD token cache is used only from this PC. The driver gets only the runner's allowlisted env: no cloud credentials and no `TEST_SERVER_CTL`.
   - The evidence PR redacts every IP (including the `FRCFLD[/IP:port] logged in` line), every UUID and local paths, with a CI check. Each scenario's pass, gateValid and notGate reasons are reported honestly. A failure needs a new written GO.
 
-- **2026-11-01 23:28 UTC: GO for G2 batch 2**, the re-run, exactly as planned in `coord/STATUS-harness-ops.md` "Planned real batches":
+- **2026-11-01 23:28 UTC: GO for G2 batch 2**, the re-run, exactly as planned in `coord/STATUS-harness-ops.md` "Planned real batches" (console list and command at about lines 107-124; redaction rules in the same section):
   - `gamerule doDaylightCycle false` once, then `time set day` and `timeout 15m` before each scenario;
   - develop `53a1d5e` or later, clean;
   - the same conditions as batch 1: runtime preconditions just before the create, no `--skip-sweeper-check`, one CPX42, TTL 2 h, a hard stop at 56 min, worst case about EUR 0.42 + IPv4, test server only, the FRCFLD cache only from this PC, the project empty afterwards, and evidence through the merged redaction tool with the CI leak check;
