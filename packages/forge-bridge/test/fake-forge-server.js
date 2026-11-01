@@ -20,7 +20,9 @@ export async function startFakeForgeServer({ modList, registries, reid = true, o
         host: '127.0.0.1',
         port: 0,
         version: '1.12.2',
-        customPackets: buildCustomPackets({ reid }),
+        // Same overrides as the bot: nmp caches compiled protocols per state, direction and
+        // version only, so in one process the server and the bot share them.
+        customPackets: buildCustomPackets({ reid, triumph: true }),
         keepAlive: false,
         hideErrors: true,
         motd: 'fake forge',

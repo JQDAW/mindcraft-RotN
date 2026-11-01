@@ -248,14 +248,18 @@ The lead's GO was recorded at 15:55 UTC. The batch ran from a clean branch at or
 - **Evidence:** `test/evidence/g1/batch-bc-20261101/` holds the sanitized `result.json`, `server.log` and `driver.log`, plus a README (the lead-approved exception).
   - Fixture: `packages/forge-bridge/test/fixtures/rotn-3.3.4/advancements-triumph.{json,bin.br}`, the two real packets.
   - Raw files stay in `captures/raw/`.
-- **Next:**
+- **Fix done (lead direction):**
+  - With `triumph` in the ModList, `advancements` is an opaque buffer; `triumphTypes()` stays as an offline decoder.
+  - Safety net: a parse error in an allowlisted cosmetic packet (advancements, statistics, unlock_recipes and others) is logged and captured in full, and the packet dropped; essential packets still fail loudly.
+  - Tests replay the two real packets through nmp's real deserializer stream. `npm test` passes 258/258.
+- **Next (superseded):**
   1. A fix PR: a Triumph-aware `advancements` type, gated on ModList `triumph`. Also an unparseable play packet should be dropped and counted rather than ending the stream, and parse-error captures should keep larger packets in full.
   2. Then PR #25's requested changes.
   3. A re-run of B+C needs a new GO.
 
 ## Doing
 
-- Batch B+C done: FAIL, root cause found (above). Next: the Triumph fix PR, then PR #25's changes; a re-run needs a new GO.
+- Batch B+C done: FAIL, root cause found (above). The fix PR with the B+C evidence is open. **The next paid batch needs a new written GO after review.** Queued: PR #25 fixes, then the STATUS-line corrections from #26.
 
 ## Next
 

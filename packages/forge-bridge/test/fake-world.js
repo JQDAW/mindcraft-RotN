@@ -6,6 +6,10 @@ import { Buffer } from 'node:buffer';
 import { createRequire } from 'node:module';
 import { Writer, encodeVarInt } from '../src/wire.js';
 import { encodeEntitySpawn } from '../src/channels.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const BitArray = require('prismarine-chunk/src/pc/common/BitArray');
@@ -28,6 +32,15 @@ function chunkData() {
     return w.toBuffer();
 }
 
+// The two real play.advancements packets from G1 Batch C (Triumph ExtendedDisplayInfo).
+export function realAdvancementsPackets() {
+    const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'rotn-3.3.4');
+    const index = JSON.parse(fs.readFileSync(path.join(dir, 'advancements-triumph.json'), 'utf8'));
+    const raw = zlib.brotliDecompressSync(fs.readFileSync(path.join(dir, 'advancements-triumph.bin.br')));
+    let off = 0;
+    return index.packets.map((p) => { const b = raw.subarray(off, off + p.len); off += p.len; return b; });
+}
+
 export function joinFakeWorld(client) {
     client.write('login', { entityId: 1, gameMode: 0, dimension: 0, difficulty: 2, maxPlayers: 10, levelType: 'default', reducedDebugInfo: false });
     client.write('map_chunk', { x: 0, z: 0, groundUp: true, bitMap: 1 << 4, chunkData: chunkData(), blockEntities: [] });
@@ -48,5 +61,7 @@ export function joinFakeWorld(client) {
         }),
     });
     client.write('custom_payload', { channel: 'jeid', data: new Writer().u8(1).varint(-5).varint(7).varint(300).toBuffer() });
+    // What the RotN server sends right after spawn; it broke G1 Batch B+C before the Triumph override.
+    for (const pkt of realAdvancementsPackets()) client.writeRaw(pkt);
 }
 
