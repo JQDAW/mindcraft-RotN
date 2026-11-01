@@ -26,6 +26,8 @@
 //   ROTN_DRIVER_CAPTURE                  1 (default: captures/raw/<bot>-<time>.jsonl) | a path | 0
 //   ROTN_DRIVER_MODLIST_FILE             ping JSON fallback (default: the pinned RotN 3.3.4 fixture)
 //   ROTN_DRIVER_PING_TIMEOUT_MS          total status-ping budget -> FORGE_PING_TIMEOUT_MS
+//   ROTN_DRIVER_CHUNK_WAIT_MS            G2 census: how long attachG2 waits for the cube's chunks
+//                                        (default: scenario-protocol's, 30 s; 0 in loopback tests)
 //
 // Exit codes (ADR 0003 decision 5, DRIVER.md): 0 clean stop on SIGTERM/SIGINT,
 // 1 transient disconnect, 3 fatal (setup error, or a kick that the runner's
@@ -46,6 +48,8 @@ const host = process.env.TEST_SERVER_HOST;
 const port = Number(process.env.TEST_SERVER_PORT ?? 25565);
 const name = process.env.ROTN_SCENARIO_BOT ?? 'FRCFLD';
 const auth = process.env.ROTN_DRIVER_AUTH ?? 'microsoft';
+const chunkWaitRaw = process.env.ROTN_DRIVER_CHUNK_WAIT_MS;
+const chunkWaitMs = chunkWaitRaw === undefined || chunkWaitRaw === '' ? undefined : Number(chunkWaitRaw);
 
 function fatalSetup(reason) {
     event('fatal', { reason });
@@ -55,6 +59,7 @@ function fatalSetup(reason) {
 
 if (!host) fatalSetup('TEST_SERVER_HOST is not set');
 if (!['microsoft', 'offline'].includes(auth)) fatalSetup(`ROTN_DRIVER_AUTH must be microsoft or offline, not ${auth}`);
+if (chunkWaitMs !== undefined && !(Number.isInteger(chunkWaitMs) && chunkWaitMs >= 0)) fatalSetup(`ROTN_DRIVER_CHUNK_WAIT_MS must be a whole number of ms >= 0, not ${chunkWaitRaw}`);
 if (auth === 'microsoft' && !process.env.MINDCRAFT_PROFILES_FOLDER) {
     fatalSetup('MINDCRAFT_PROFILES_FOLDER is not set: the bot account needs its own token cache folder');
 }
@@ -105,10 +110,13 @@ async function main() {
     // names come from bot.registry as forge-bridge extends it, and translation from its
     // toNew/toOld. Stock names (no translation) only if mcdata.js cannot be imported; the
     // runner then fails the G2 items checks.
+    // loadAgentNames never rejects: it returns null when mcdata.js cannot be imported, so the
+    // fallback is logged explicitly. The catch is for attachG2 itself throwing.
     loadAgentNames(REPO_ROOT).then((m) => {
-        event('g2_adapter', { source: m?.source ?? 'stockNames (src/utils/mcdata.js could not be imported)', translation: m?.translation ?? false });
-        attachG2(bot, { names: m?.names ?? stockNames });
-    }, (err) => event('g2_adapter_error', { message: String(err?.message ?? err) }));
+        if (m) event('g2_adapter', { source: m.source, translation: m.translation });
+        else event('g2_adapter', { source: 'fallback', names: 'stockNames', reason: 'src/utils/mcdata.js could not be imported', translation: false });
+        attachG2(bot, { names: m?.names ?? stockNames, ...(chunkWaitMs === undefined ? {} : { chunkWaitMs }) });
+    }).catch((err) => event('g2_adapter_error', { message: String(err?.message ?? err) }));
 
 
     let stopping = false;

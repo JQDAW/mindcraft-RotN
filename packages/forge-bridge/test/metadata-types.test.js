@@ -10,7 +10,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
-import { buildCustomPackets, createTypeReader, forgeTypes, rotnMetadataSerializers, METADATA_SERIALIZER_TYPES } from '../src/reid.js';
+import { buildCustomPackets, createTypeReader, forgeTypes, rotnMetadataSerializers, metadataSerializersFromDump, METADATA_SERIALIZER_TYPES, METADATA_SERIALIZER_CLASSES } from '../src/reid.js';
+import { loadRotnData, PACK_VERSION } from '../../rotn-data/index.js';
 import { attachForgeBridge } from '../src/bridge.js';
 import { FIXTURES, pinnedModList } from './helpers.js';
 
@@ -52,9 +53,9 @@ function readOne(id, name, valueHex) {
 test('golden bytes for every mod serializer format (from each write() in the pack)', () => {
     assert.equal(readOne(14, 'aquaacrobatics:pose', '03'), 3);
     assert.deepEqual(readOne(15, 'base:resource_location', '09 6d696e656372616674 05 73746f6e65'), { namespace: 'minecraft', path: 'stone' });
-    assert.deepEqual(readOne(16, 'charset:quaternion', '3f800000 00000000 00000000 bf800000'), { x: 1, y: 0, z: 0, w: -1 });
-    assert.deepEqual(readOne(17, 'mowziesmobs:optional_trade', 'ffffffff0f'), { input: { blockId: -1 } }, 'no trade: an empty input stack only');
-    const trade = readOne(17, 'mowziesmobs:optional_trade', '01 02 0000 00   b802 01 0000 00   0000000a');
+    assert.deepEqual(readOne(17, 'charset:quaternion', '3f800000 00000000 00000000 bf800000'), { w: 1, x: 0, y: 0, z: -1 }, 'w first, as DataSerializersCharset$1 writes it');
+    assert.deepEqual(readOne(16, 'mowziesmobs:optional_trade', 'ffffffff0f'), { input: { blockId: -1 } }, 'no trade: an empty input stack only');
+    const trade = readOne(16, 'mowziesmobs:optional_trade', '01 02 0000 00   b802 01 0000 00   0000000a');
     assert.equal(trade.input.blockId, 1);
     assert.equal(trade.output.blockId, 312);
     assert.equal(trade.weight, 10);
@@ -99,25 +100,45 @@ test('the Forge-registry serializer ids match what the real server synced; a wro
     assert.equal(bad.logs.filter((l) => /entity-metadata serializer 25[67]: expected .* server synced doggytalents:/.test(l)).length, 2);
 });
 
-test('serializer 14 is marked inferred, and the bridge logs its first decode once (until the dumper confirms it)', async () => {
-    const { INFERRED_METADATA_SERIALIZERS } = await import('../src/reid.js');
-    assert.deepEqual(INFERRED_METADATA_SERIALIZERS, { 14: 'aquaacrobatics:pose' });
-    const mk = (opts) => {
-        const client = new EventEmitter();
-        client.write = () => true;
-        client.setSerializer = () => {};
-        const logs = [];
-        attachForgeBridge(client, { modList: pinnedModList(), log: (m) => logs.push(m), ...opts });
-        const meta = (entityId) => client.emit('packet', { entityId, metadata: [{ key: 17, type: 14, value: 0 }, { key: 18, type: 6, value: false }] }, { name: 'entity_metadata', state: 'play' }, null, null);
-        return { logs, meta };
-    };
-    const a = mk({});
-    a.meta(284);
-    a.meta(285);
-    const lines = a.logs.filter((l) => /inferred\) first decoded/.test(l));
-    assert.deepEqual(lines, ['entity-metadata serializer 14 (aquaacrobatics:pose, inferred) first decoded in entity_metadata: entity 284 key 17 value 0']);
-    // Once the dumper supplies id 14 explicitly, it is no longer an inference: no log.
-    const b = mk({ metadataSerializers: { 14: 'aquaacrobatics:pose' } });
-    b.meta(284);
-    assert.equal(b.logs.filter((l) => /inferred/.test(l)).length, 0);
+test("the ids come from rotn-data's dump (catalog serializers()): 14-18 and 256/257, each with a known format", () => {
+    const dump = loadRotnData(PACK_VERSION).serializers();
+    assert.ok(dump, 'rotn-data has the 3.3.4 serializer table');
+    const { map, unknown } = metadataSerializersFromDump(dump);
+    assert.deepEqual(unknown, [], 'every mod serializer class in the pack has a format');
+    assert.deepEqual(map, {
+        14: 'aquaacrobatics:pose', 15: 'base:resource_location', 16: 'mowziesmobs:optional_trade',
+        17: 'charset:quaternion', 18: 'requious:spark_effect',
+        256: 'doggytalents:talent_level_list', 257: 'doggytalents:optional_text_component',
+    });
+    for (const name of Object.values(METADATA_SERIALIZER_CLASSES)) assert.ok(METADATA_SERIALIZER_TYPES[name], name);
+    // 14 is confirmed: the dump agrees with the ModList defaults (G1's inference by fit).
+    for (const [id, name] of Object.entries(rotnMetadataSerializers(pinnedModList()))) assert.equal(map[id], name, `id ${id}`);
+    // The dump's usage: which entity uses which serializer, at which key.
+    const used = Object.fromEntries(Object.entries(dump.usage).map(([e, us]) => [e, us.map((u) => `${u.index}:${map[u.serializerId]}`)]));
+    assert.deepEqual(used, {
+        'doggytalents:dog': ['21:doggytalents:talent_level_list', '30:doggytalents:optional_text_component'],
+        'mowziesmobs:barakoaya': ['16:mowziesmobs:optional_trade'],
+        'requious:spear': ['8:requious:spark_effect'],
+    });
+});
+
+test('metadataSerializersFromDump skips vanilla ids and reports an unknown class', () => {
+    const { map, unknown } = metadataSerializersFromDump({ serializers: [
+        { id: 3, class: 'net.minecraft.network.datasync.DataSerializers$4', vanilla: true },
+        { id: 15, class: 'com.teamacronymcoders.base.entities.dataserializers.ResourceLocationDataSerializer', vanilla: false },
+        { id: 19, class: 'some.mod.NewSerializer', vanilla: false },
+    ] });
+    assert.deepEqual(map, { 15: 'base:resource_location' });
+    assert.deepEqual(unknown, [{ id: 19, class: 'some.mod.NewSerializer' }]);
+    assert.deepEqual(metadataSerializersFromDump(null), { map: {}, unknown: [] });
+});
+
+test("a requious:spear metadata entry at key 8 (serializer 18) parses with the dump's ids", () => {
+    const { map } = metadataSerializersFromDump(loadRotnData(PACK_VERSION).serializers());
+    const reader = createTypeReader({ reid: true, metadataSerializers: map });
+    // key 8, type 18, int ordinal 1; key 16, type 16, an empty trade (no trade); terminator.
+    const buf = hex('08 12 00000001   10 10 ffffffff0f   ff');
+    const r = reader.readMetadata(buf, 0);
+    assert.equal(r.size, buf.length);
+    assert.deepEqual(r.value, [{ key: 8, type: 18, value: 1 }, { key: 16, type: 16, value: { input: { blockId: -1 } } }]);
 });
