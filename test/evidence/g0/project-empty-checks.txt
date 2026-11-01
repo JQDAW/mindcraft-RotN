@@ -1,0 +1,27 @@
+# Project-wide checks of the Hetzner test project (hcloud context mindcraft-rotn-test).
+# Checks 1 and 2 were run by hand in the agent session right after each batch; their output is
+# transcribed here verbatim from that session (the date line came from the same command).
+# Check 3 was captured straight into this file by the command shown.
+# The one SSH key left is the human's own unlabelled key; its name is redacted here.
+
+## Check 1, after the G0 build batch
+$ date -u; hcloud server list; hcloud primary-ip list; hcloud ssh-key list -o columns=id,name,labels
+--- check 00:36:21Z
+ID   NAME   STATUS   IPV4   IPV6   PRIVATE NET   LOCATION   AGE
+ID   TYPE   NAME   IP   ASSIGNEE   DNS   AUTO DELETE   AGE
+ID          NAME                    LABELS
+132031924   <human key name redacted>
+
+## Check 2, after the watchdog batch
+--- check 00:38:24Z
+ID   NAME   STATUS   IPV4   IPV6   PRIVATE NET   LOCATION   AGE
+ID   TYPE   NAME   IP   ASSIGNEE   DNS   AUTO DELETE   AGE
+ID          NAME                    LABELS
+132031924   <human key name redacted>
+
+## Check 3, captured into this file
+--- check 2026-11-01T00:43:41Z
+ID   NAME   STATUS   IPV4   IPV6   PRIVATE NET   LOCATION   AGE
+ID   TYPE   NAME   IP   ASSIGNEE   DNS   AUTO DELETE   AGE
+ID          NAME                    LABELS
+132031924   <human key name redacted>

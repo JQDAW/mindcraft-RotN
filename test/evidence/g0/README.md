@@ -15,7 +15,7 @@ Command: `deploy/test-server.sh run --yes -- test/scenarios/g0-test-server.sh`
 | Server | Java `1.8.0_504`, Forge `14.23.5.2860`, RoughlyEnoughIDs 2.2.2, 338 mod jars, `online-mode=true`, whitelist on (FRCFLD, JQDAW), "Done (17.914s)", heap `-Xms4G -Xmx8G`, Java RSS 4194 MB of 15608 MB |
 | From outside | Status ping: 1.12.2 / protocol 340, `modinfo.type=FML`, 346 mods incl. `forge` 14.23.5.2860 and `jeid` 2.2.2 (`status-ping.json` has the full mod list) |
 | Console | `list` round-trip works ("There are 0/10 players online") |
-| Teardown | EXIT trap deleted the server, then its Primary IPv4, then its SSH key, and verified all three gone. `hcloud server list` / `primary-ip list` were empty at 00:36:21 |
+| Teardown | EXIT trap deleted the server, then its Primary IPv4, then its SSH key, and verified all three gone. Project-wide `hcloud server list` / `primary-ip list` were empty at 00:36:21 (`project-empty-checks.txt`) |
 | Cost | 212 s run, 1 billed hour x EUR 0.138136 (gross, `hcloud server-type describe cpx42`, nbg1) = **EUR 0.14**, plus the Primary IPv4 for 1 hour (its price is not exposed by `server-type describe`; it is a small fraction of the server price) |
 
 ## 2. Watchdog acceptance test: off-PC sweeper deletes by label only
@@ -30,8 +30,8 @@ Command: `test/scenarios/g0-watchdog.sh --yes --mode dispatch` (dispatches `test
 | Control | server 173873069 (`cx23`, IPv6 only), the same expired `delete-after`, but `purpose=mindcraft-rotn-watchdog-control` instead of the test label |
 | Sweeper | GitHub Actions run [41257552258](https://github.com/JQDAW/mindcraft-RotN/actions/runs/41257552258) (`workflow_dispatch`, develop, Environment `hetzner-test-sweeper`): deleted the target server, then its Primary IP, then its SSH key: "3 deletion(s), status 0" (`sweeper-run-41257552258.log`) |
 | Result | **PASS**: target, Primary IPv4 and SSH key gone **34 s** after creation (limit: one 15-min interval + 5 min); control untouched by the sweeper, then deleted by the script's own cleanup by ID (`watchdog-result.json`) |
-| Teardown | `hcloud server list` / `primary-ip list` empty at 00:38:24; only the human's unlabelled SSH key remains |
-| Cost | 2 x `cx23`, 1 billed hour each x EUR 0.010912 = **EUR 0.02**, plus the target's Primary IPv4 for 1 hour |
+| Teardown | Project-wide `hcloud server list` / `primary-ip list` empty at 00:38:24; only the human's unlabelled SSH key remains (`project-empty-checks.txt`) |
+| Cost | 2 x `cx23`, 1 billed hour each x EUR 0.010912 (`hcloud server-type describe cx23`, nbg1) = **EUR 0.02**, plus the target's Primary IPv4 for 1 hour. Calculated by hand: `g0-watchdog.sh` does not write to the cost ledger |
 
 An earlier dry-run dispatch, [41257157372](https://github.com/JQDAW/mindcraft-RotN/actions/runs/41257157372) at 00:32:00, confirmed the Environment token works before anything was created ("0 deletion(s)").
 
@@ -47,6 +47,7 @@ Both batches: about **EUR 0.16** plus two Primary IPv4-hours, against a stated m
 | `g0-result.json`, `verify.txt` | Scenario checks and the on-server facts they read |
 | `status-ping.json` | 1.12.2 status response with the FML mod list (346 mods) |
 | `watchdog-result.json`, `sweeper-run-41257552258.log` | Watchdog verdict and the sweeper's own log lines |
-| `cost-ledger.jsonl` | The script's per-batch ledger (start, stop, run seconds, billed hours, estimate) |
+| `cost-ledger.jsonl` | `deploy/test-server.sh`'s ledger for the G0 build batch (start, stop, run seconds, billed hours, estimate) |
+| `project-empty-checks.txt` | Project-wide server, Primary IP and SSH key listings after each batch |
 
 The IP addresses in these logs belonged to deleted test servers. No tokens, keys or passwords are in these files.

@@ -37,7 +37,7 @@ Updated: 2026-11-01 (00:40 UTC)
 
   Unit tests cover 1, 2 and 4 (plus 3 and 6). Part of finding 5 is done as well: the cost wording now says TTL + 1 billed hours.
 
-## Done (2026-11-01, branch `agent/harness-ops/g0-evidence`)
+### Real G0 batches (2026-11-01, branch `agent/harness-ops/g0-evidence`)
 
 - PR #4 merged into develop as 70c5c3a; the sweeper is active on develop.
 - Re-review nits (commit 31cefa0):
@@ -57,7 +57,7 @@ Updated: 2026-11-01 (00:40 UTC)
   - **Cost: 2 x cx23 x 1 billed hour x EUR 0.010912 = EUR 0.02**, plus 1 Primary IPv4-hour.
 - After each batch, `hcloud server list` and `primary-ip list` were empty (00:36:21 and 00:38:24). The only thing left in the project is the human's unlabelled SSH key.
 - Total for both batches: about **EUR 0.16** plus 2 Primary IPv4-hours. The stated maximum was about EUR 1.29.
-- Evidence is in `test/evidence/g0/`.
+- Evidence is in `test/evidence/g0/`. An independent verifier pass gave PASS. Its should-fix (capture the project-wide empty checks) and nits are applied.
 
 ## Doing
 
@@ -65,7 +65,7 @@ Updated: 2026-11-01 (00:40 UTC)
 
 ## Planned real batches
 
-Both planned batches ran on 2026-11-01 and passed (see Done). The next real batch is net-forge's capture run (`--capture`), once G1 needs it.
+Both planned batches ran on 2026-11-01 and passed (see Done). The plan as written before the runs is in this file at commit 70c5c3a. The next real batch is net-forge's capture run (`--capture`), once G1 needs it.
 
 ## Blocked
 
