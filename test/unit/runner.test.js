@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { runScenario, waitFor } from '../runner/lib/runner.mjs';
 import * as L from '../runner/lib/server-log.mjs';
 import { parseArgs, loadScenarios } from '../runner/run.mjs';
+import { driverEnv, ctlServer } from '../runner/lib/adapters.mjs';
 import { attachScenario } from '../runner/drivers/scenario-protocol.mjs';
 import g1 from '../scenarios/g1/g1-login-chat-walk.mjs';
 
@@ -98,6 +99,8 @@ function sim(behaviour = {}) {
                 add(`${name}[/203.0.113.7:51234] logged in with entity id 312 at (${pos.join(', ')})`, 'Server thread', 'net.minecraft.server.management.PlayerList');
                 add(`${name} joined the game`);
                 if (b.hello) at(2000, () => add(`<${name}> ${env.ROTN_SCENARIO_HELLO}`));
+                // A cheating driver: "echoes" a token guessed from its environment without hearing it.
+                if (b.echoGuess) at(3000, () => add(`<${name}> echo tok-${env.ROTN_SCENARIO_RUN}`));
                 if (b.dropAtMs) at(b.dropAtMs, () => { drop('Timed out'); alive = false; exitCode = 1; });
                 if (b.rejoinAtMs) {
                     // The driver reconnects by itself: same process, back online 20 s later.
@@ -177,9 +180,24 @@ describe('G1 scenario on a simulated server', () => {
         assert.equal(c.stay_10min.pass, true);
     });
 
-    test('walking less than minWalkBlocks fails', async () => {
-        assert.equal(byName(await runG1(sim({ walk: 2 }))).walk.pass, false);
-        assert.equal(byName(await runG1(sim({ walk: 3 }))).walk.pass, true);
+    test('walking less than minWalkBlocks (0.75 x walkBlocks = 6) fails (PR #9 review finding 9)', async () => {
+        assert.equal(byName(await runG1(sim({ walk: 5 }))).walk.pass, false);
+        assert.equal(byName(await runG1(sim({ walk: 6 }))).walk.pass, true);
+    });
+
+    test('an echo the driver could guess without hearing the whisper fails (finding 4)', async () => {
+        const s = sim({ echo: false, echoGuess: true });
+        const r = await runG1(s);
+        assert.equal(byName(r).chat_receive.pass, false);
+        assert.ok(!Object.values(s.env()).some((v) => /^[0-9a-f]{16}$/.test(v)), 'the token is never in the driver env');
+        assert.ok(s.lines.some((l) => /<FRCFLD> echo tok-r1$/.test(l)), 'the guess was made');
+    });
+
+    test('a marker that scrolled out of the log tail fails the run instead of hiding disconnects (finding 3)', async () => {
+        const r = await runG1(sim(), { logTail: 2 });
+        assert.equal(r.pass, false);
+        assert.match(r.error, /scenario marker not in the last 2 log lines/);
+        assert.ok(r.checks.every((x) => !x.pass));
     });
 
     test('a drop after 5 minutes fails stay_10min with the reason, without waiting the full 10 minutes', async () => {
@@ -216,10 +234,23 @@ describe('G1 scenario on a simulated server', () => {
         assert.ok(r.checks.every((x) => !x.pass && /not reached \(scenario error\)/.test(x.detail)));
     });
 
-    test('params override defaults (shorter stay for smoke runs)', async () => {
-        const r = await runG1(sim(), { stayMs: 60000 });
-        assert.equal(r.pass, true);
-        assert.ok(r.durationS < 200);
+    test('weakened params can pass their checks but are never a G1 pass (finding 1)', async () => {
+        for (const params of [{ stayMs: 60000 }, { minWalkBlocks: 0 }, { walkBlocks: 2, minWalkBlocks: 1 }, { bot: 'OTHER' }]) {
+            const r = await runG1(sim(), params);
+            assert.equal(r.pass, false, JSON.stringify(params));
+            assert.equal(r.gateValid, false);
+            assert.ok(r.weakenedParams.length > 0);
+            if (!params.bot) {
+                assert.equal(r.checksPassed, true, JSON.stringify(params));
+                assert.equal(r.verdict, 'SMOKE-PASS (not a gate pass)');
+            }
+        }
+        const stronger = await runG1(sim({ walk: 9 }), { stayMs: 700000, walkBlocks: 9, minWalkBlocks: 7, chatTimeoutMs: 120000 });
+        assert.equal(stronger.pass, true, 'stricter or neutral params still count');
+        assert.equal(stronger.verdict, 'PASS');
+        const shortStay = await runG1(sim(), { stayMs: 60000 });
+        assert.ok(shortStay.durationS < 200);
+        assert.deepEqual(shortStay.weakenedParams, ['stayMs=60000 (gate needs >= 600000)']);
     });
 
     test('a check name the scenario did not declare is a programming error', async () => {
@@ -237,7 +268,7 @@ describe('server-log parsers', () => {
         assert.equal(L.parseLine('\tat net.minecraft.Foo.bar(Foo.java:1)'), null);
         assert.equal(L.parseLine('[12:00:00] [main/INFO]: no logger')?.msg, 'no logger');
         assert.deepEqual(L.linesAfter(['a', 'x MARK', 'b', 'c'], 'MARK'), ['b', 'c']);
-        assert.deepEqual(L.linesAfter(['a'], 'MARK'), []);
+        assert.equal(L.linesAfter(['a'], 'MARK'), null, 'a missing marker is not "no lines"');
     });
 
     test('UUID and its version', () => {
@@ -270,9 +301,10 @@ describe('server-log parsers', () => {
     test('chat lines: own chat only, chat-mod prefixes tolerated, whispers and other players ignored', () => {
         const c = L.chatLines([
             line('<FRCFLD> echo tok'), line('[G] <FRCFLD> hello'), line('<JQDAW> <FRCFLD> fake'),
-            line('[Server] scenario-echo tok'), line('<FRCFLD2> no'),
+            line('<JQDAW> lol <FRCFLD> echo tok'), line('[Server] <FRCFLD> echo tok'), line('[Server] scenario-echo tok'),
+            line('<FRCFLD2> no'), line('[a] [b] <FRCFLD> two prefixes'),
         ], 'FRCFLD');
-        assert.deepEqual(c.map((x) => x.text), ['echo tok', 'hello', 'fake']);
+        assert.deepEqual(c.map((x) => x.text), ['echo tok', 'hello'], 'anchored: quotes, [Server] and other players never count (finding 2)');
     });
 
     test('online players from list, inline or on the next line', () => {
@@ -290,6 +322,8 @@ describe('server-log parsers', () => {
         assert.equal(L.classifyKick('Internal Exception: java.io.IOException: Error while read(...)'), 'server-exception');
         assert.equal(L.classifyKick('Disconnected'), 'client-quit');
         assert.equal(L.classifyKick('Flying is not enabled'), 'other');
+        assert.equal(L.classifyKick('You are banned from this server.'), 'banned');
+        assert.deepEqual([...L.FATAL_KICKS].sort(), ['banned', 'handshake', 'whitelist']);
         assert.equal(L.horizontal([0, 64, 0], [3, 70, 4]), 5);
     });
 });
@@ -308,7 +342,8 @@ describe('waitFor', () => {
 describe('run.mjs', () => {
     test('parseArgs', () => {
         assert.deepEqual(parseArgs(['--scenario', 'g1', '--param', 'stayMs=60000', '--param', 'bot=X=Y', '--', 'node', 'd.mjs', '--x']),
-            { params: { stayMs: 60000, bot: 'X=Y' }, driver: ['node', 'd.mjs', '--x'], list: false, scenario: 'g1', out: null });
+            { params: { stayMs: 60000, bot: 'X=Y' }, driver: ['node', 'd.mjs', '--x'], list: false, scenario: 'g1', out: null, passEnv: [] });
+        assert.deepEqual(parseArgs(['--pass-env', 'OPENROUTER_API_KEY', '--', 'x']).passEnv, ['OPENROUTER_API_KEY']);
         assert.throws(() => parseArgs(['--param', 'nope']), /key=value/);
         assert.throws(() => parseArgs(['--bogus']), /unknown argument/);
     });
@@ -335,24 +370,63 @@ describe('run.mjs', () => {
 });
 
 describe('run.mjs end to end with its real adapters (fake test-server CLI and fake driver)', () => {
-    test('writes result.json, server.log and driver.log; exit 0 when all checks pass', () => {
+    test('writes result.json, server.log and driver.log; a shortened stay exits 4 (smoke); the driver never sees the ctl', () => {
         const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-runner-'));
-        const fwd = (p) => p.replace(/\\/g, '/');
-        const ctl = path.join(tmp, 'ctl.sh');
-        fs.writeFileSync(ctl, `#!/usr/bin/env bash\nexec "${fwd(process.execPath)}" "${fwd(path.join(repo, 'test/unit/fixtures/fake-ctl.mjs'))}" "$@"\n`, { mode: 0o755 });
-        const out = path.join(tmp, 'out');
-        const r = spawnSync(process.execPath, [path.join(repo, 'test/runner/run.mjs'), '--scenario', 'g1-login-chat-walk',
-            '--param', 'stayMs=3000', '--param', 'pollMs=200', '--param', 'consoleWaitS=0', '--out', out,
-            '--', process.execPath, path.join(repo, 'test/unit/fixtures/fake-driver.mjs')],
-        { encoding: 'utf8', timeout: 60000, env: { ...process.env, TEST_SERVER_CTL: fwd(ctl), FAKE_CTL_DIR: tmp, TEST_SERVER_NAME: 'mcr-test-x' } });
-        const res = JSON.parse(fs.readFileSync(path.join(out, 'result.json'), 'utf8'));
-        assert.equal(r.status, 0, `${r.stderr}\n${JSON.stringify(res.checks, null, 1)}`);
-        assert.equal(res.passed, 5);
-        assert.equal(res.server, 'mcr-test-x');
-        assert.match(fs.readFileSync(path.join(out, 'server.log'), 'utf8'), /^.*FRCFLD joined the game$/m);
-        assert.doesNotMatch(fs.readFileSync(path.join(out, 'server.log'), 'utf8'), /scenario-.*-begin/, 'starts after the marker');
-        assert.match(fs.readFileSync(path.join(out, 'driver.log'), 'utf8'), /DRIVER \{"type":"spawn","bot":"FRCFLD"\}/);
-        assert.match(r.stderr, /g1-login-chat-walk: 5 passed, 0 failed/);
+        try {
+            const fwd = (p) => p.replace(/\\/g, '/');
+            const ctl = path.join(tmp, 'ctl.sh');
+            fs.writeFileSync(ctl, `#!/usr/bin/env bash\nexec "${fwd(process.execPath)}" "${fwd(path.join(repo, 'test/unit/fixtures/fake-ctl.mjs'))}" "$@"\n`, { mode: 0o755 });
+            const out = path.join(tmp, 'out');
+            const r = spawnSync(process.execPath, [path.join(repo, 'test/runner/run.mjs'), '--scenario', 'g1-login-chat-walk',
+                '--param', 'stayMs=3000', '--param', 'pollMs=200', '--param', 'consoleWaitS=0', '--out', out, '--pass-env', 'FAKE_CTL_DIR',
+                '--', process.execPath, path.join(repo, 'test/unit/fixtures/fake-driver.mjs')],
+            { encoding: 'utf8', timeout: 60000, env: { ...process.env, TEST_SERVER_CTL: fwd(ctl), FAKE_CTL_DIR: tmp, TEST_SERVER_NAME: 'mcr-test-x',
+                TEST_SERVER_STATE_DIR: fwd(tmp), HCLOUD_TOKEN: 'not-a-real-token', ROTN_SCENARIO_EXTRA: 'kept' } });
+            const res = JSON.parse(fs.readFileSync(path.join(out, 'result.json'), 'utf8'));
+            assert.equal(r.status, 4, `${r.stderr}\n${JSON.stringify(res.checks, null, 1)}`);
+            assert.equal(res.passed, 5);
+            assert.equal(res.pass, false);
+            assert.equal(res.verdict, 'SMOKE-PASS (not a gate pass)');
+            assert.equal(res.server, 'mcr-test-x');
+            const serverLog = fs.readFileSync(path.join(out, 'server.log'), 'utf8');
+            assert.match(serverLog, /^.*FRCFLD joined the game$/m);
+            assert.doesNotMatch(serverLog, /scenario-.*-begin/, 'starts after the marker');
+            const driverLog = fs.readFileSync(path.join(out, 'driver.log'), 'utf8');
+            assert.match(driverLog, /DRIVER \{"type":"spawn","bot":"FRCFLD"\}/);
+            assert.match(driverLog, /DRIVER \{"type":"env","ctl":false,"stateDir":false,"hcloud":false,"extra":"kept"\}/, 'finding 5');
+            assert.match(r.stderr, /SMOKE run, not a G1 pass: stayMs=3000/);
+        } finally {
+            fs.rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('adapters', () => {
+    test('driverEnv is an allowlist; credentials and test-server control never reach the driver (finding 5)', () => {
+        const parent = {
+            PATH: '/bin', HOME: '/h', TEST_SERVER_HOST: '203.0.113.7', TEST_SERVER_PORT: '25565', MINDCRAFT_PROFILES_FOLDER: '/p',
+            TEST_SERVER_CTL: '/ctl', TEST_SERVER_STATE_DIR: '/s', ROTN_TEST_STATE_DIR: '/s2', HCLOUD_TOKEN: 'x', GH_TOKEN: 'x',
+            GITHUB_TOKEN: 'x', OPENROUTER_API_KEY: 'x', ROTN_SCENARIO_X: '1', ROTN_DRIVER_AUTH: 'microsoft', RANDOM_VAR: 'y',
+        };
+        const env = driverEnv(parent, { ROTN_SCENARIO_HELLO: 'h' });
+        assert.deepEqual(Object.keys(env).sort(), ['HOME', 'MINDCRAFT_PROFILES_FOLDER', 'PATH', 'ROTN_DRIVER_AUTH', 'ROTN_SCENARIO_HELLO',
+            'ROTN_SCENARIO_X', 'TEST_SERVER_HOST', 'TEST_SERVER_PORT']);
+        assert.equal(driverEnv(parent, {}, ['OPENROUTER_API_KEY']).OPENROUTER_API_KEY, 'x', 'only when asked for');
+        for (const bad of ['TEST_SERVER_CTL', 'TEST_SERVER_STATE_DIR', 'ROTN_TEST_STATE_DIR', 'HCLOUD_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN']) {
+            assert.throws(() => driverEnv(parent, {}, [bad]), /must never get/, bad);
+        }
+    });
+
+    test('ctlServer retries a failed call twice with 2 s and 4 s backoff (finding 10)', () => {
+        const pauses = [];
+        let calls = 0;
+        const flaky = (fails) => () => (++calls <= fails ? { status: 255, stderr: 'ssh: connection reset' } : { status: 0, stdout: 'a\r\nb\n' });
+        const ok = ctlServer('/ctl', { spawn: flaky(2), pause: (ms) => pauses.push(ms) });
+        assert.deepEqual(ok.log(5), ['a', 'b']);
+        assert.deepEqual(pauses, [2000, 4000]);
+        calls = 0;
+        const bad = ctlServer('/ctl', { spawn: flaky(3), pause: () => {} });
+        assert.throws(() => bad.console('list'), /console failed \(255\): ssh: connection reset \(after 3 attempts\)/);
     });
 });
 
@@ -392,6 +466,29 @@ describe('driver side (scenario-protocol.mjs) on a fake mineflayer bot', () => {
             assert.ok(events.some(([t]) => t === 'walked'));
         } finally {
             clearInterval(bot.timer);
+        }
+    });
+
+    test('errors in the handlers are reported as events, never as unhandled rejections (finding 8)', async () => {
+        const bot = fakeBot();
+        clearInterval(bot.timer);
+        const events = [];
+        const unhandled = [];
+        const onUnhandled = (e) => unhandled.push(e);
+        process.on('unhandledRejection', onUnhandled);
+        try {
+            bot.entity = null; // not spawned yet
+            bot.chat = () => { throw new Error('not connected'); };
+            attachScenario(bot, { hello: 'h', helloDelayMs: 1, walkTimeoutMs: 100, emit: (t, d) => events.push([t, d]) });
+            bot.emit('messagestr', 'scenario-walk 3');
+            bot.emit('messagestr', 'scenario-echo t1');
+            bot.emit('spawn');
+            await tick(30);
+            assert.deepEqual(events.map(([t]) => t).sort(), ['chat_error', 'chat_error', 'heard', 'spawn', 'walk_error']);
+            assert.match(events.find(([t]) => t === 'walk_error')[1].message, /no position yet/);
+            assert.deepEqual(unhandled, []);
+        } finally {
+            process.off('unhandledRejection', onUnhandled);
         }
     });
 });

@@ -12,7 +12,11 @@
 // DRIVER is the bot under test; it must follow test/runner/DRIVER.md. The verdict comes from the
 // server's log and console. Writes result.json, server.log (the log since the scenario's marker)
 // and driver.log to --out (default $TEST_SERVER_STATE_DIR/scenarios/<scenario>-<runId>).
-// Exit code: 0 all checks passed, 1 a check failed, 2 usage or setup error.
+// The driver gets an allowlisted environment (see driverEnv in lib/adapters.mjs); --pass-env NAME
+// adds one more variable, e.g. OPENROUTER_API_KEY for a Mindcraft driver. Test-server and cloud
+// credentials can never be passed.
+// Exit code: 0 gate pass, 1 a check failed, 2 usage or setup error, 4 all checks passed but with
+// parameters weaker than the gate allows (a smoke run, never a gate pass).
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
@@ -39,13 +43,14 @@ export async function loadScenarios(dir = SCENARIO_DIR) {
 
 /** --param key=value: numbers stay numbers, everything else is a string. */
 export function parseArgs(argv) {
-    const o = { params: {}, driver: [], list: false, scenario: null, out: null };
+    const o = { params: {}, driver: [], list: false, scenario: null, out: null, passEnv: [] };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--') { o.driver = argv.slice(i + 1); break; }
         if (a === '--list') o.list = true;
         else if (a === '--scenario') o.scenario = argv[++i];
         else if (a === '--out') o.out = argv[++i];
+        else if (a === '--pass-env') o.passEnv.push(argv[++i]);
         else if (a === '--param') {
             const [k, ...v] = (argv[++i] ?? '').split('=');
             if (!k || !v.length) throw new Error(`--param needs key=value, got '${argv[i]}'`);
@@ -88,19 +93,27 @@ async function main(argv) {
         console.error(e.message);
         return 2;
     }
-    const bot = driverProcess(o.driver, path.join(outDir, 'driver.log'));
+    let bot;
+    try {
+        bot = driverProcess(o.driver, path.join(outDir, 'driver.log'), { passEnv: o.passEnv });
+    } catch (e) {
+        console.error(e.message);
+        return 2;
+    }
     log(`${scenario.id} (${scenario.gate}) run ${runId}; driver: ${o.driver.join(' ')}; out: ${outDir}`);
     const result = await runScenario(scenario, { server, bot, clock: wallClock, params: o.params, runId, log });
     result.server = process.env.TEST_SERVER_NAME ?? null;
     result.driver = o.driver.join(' ');
     try {
-        fs.writeFileSync(path.join(outDir, 'server.log'), linesAfter(server.log(result.params.logTail), `scenario-${runId}-begin`).join('\n') + '\n');
+        const since = linesAfter(server.log(result.params.logTail), `scenario-${runId}-begin`);
+        fs.writeFileSync(path.join(outDir, 'server.log'), since === null ? '(scenario marker not in the fetched log tail)\n' : since.join('\n') + '\n');
     } catch (e) {
         log(`could not save the server log: ${e.message}`);
     }
     fs.writeFileSync(path.join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n');
-    log(`${scenario.id}: ${result.passed} passed, ${result.failed} failed (${outDir}/result.json)`);
-    return result.pass ? 0 : 1;
+    log(`${scenario.id}: ${result.verdict}; ${result.passed} passed, ${result.failed} failed (${outDir}/result.json)`);
+    if (result.pass) return 0;
+    return result.checksPassed ? 4 : 1;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

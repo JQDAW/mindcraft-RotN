@@ -10,10 +10,13 @@ node test/runner/run.mjs --list
 deploy/test-server.sh run --yes -- \
   node test/runner/run.mjs --scenario g1-login-chat-walk -- node <driver.mjs>
 
-# Against a server that is already up (deploy/test-server.sh up), with shorter waits for a smoke run
+# Against a server that is already up (deploy/test-server.sh up), with a short stay: a smoke run
+# (exit 4 if every check passes), never a G1 pass
 eval "$(deploy/test-server.sh env)"
 node test/runner/run.mjs --scenario g1-login-chat-walk --param stayMs=60000 -- node test/runner/drivers/mineflayer-reference.mjs
 ```
+
+The driver gets an allowlisted environment (see `DRIVER.md`). Use `--pass-env NAME` for anything else it needs, such as `OPENROUTER_API_KEY` for a Mindcraft driver. Test-server and cloud credentials are refused.
 
 Output, in `--out` (default `$TEST_SERVER_STATE_DIR/scenarios/<scenario>-<runId>/`):
 
@@ -21,7 +24,14 @@ Output, in `--out` (default `$TEST_SERVER_STATE_DIR/scenarios/<scenario>-<runId>
 - `server.log`: the server log from the scenario's marker line on.
 - `driver.log`: the driver's stdout and stderr.
 
-Exit code: 0 if every check passed, 1 if any failed, 2 for a usage or setup error.
+Exit codes:
+
+- `0`: a gate pass.
+- `1`: a check failed.
+- `2`: a usage or setup error.
+- `4`: every check passed, but the parameters were weaker than the gate allows (`gateParams`), so it is a smoke run.
+
+`result.json` has `pass`, `checksPassed`, `gateValid`, `weakenedParams` and `verdict`.
 
 ## Layout
 

@@ -21,9 +21,9 @@ if (cmd === 'log') {
     let m;
     if ((m = /^say (.*)$/.exec(line))) add(`[Server] ${m[1]}`);
     else if ((m = /^tell FRCFLD scenario-echo (\S+)$/.exec(line)) && online()) add(`<FRCFLD> echo ${m[1]}`);
-    else if (/^tell FRCFLD scenario-walk (\d+)$/.test(line) && online()) {
+    else if ((m = /^tell FRCFLD scenario-walk (\d+)$/.exec(line)) && online()) {
         const p = pos();
-        p[2] += 5;
+        p[2] += Number(m[1]);
         fs.writeFileSync(posFile, JSON.stringify(p));
         add(`<FRCFLD> walked ${p.join(' ')}`);
     } else if (line === 'tp FRCFLD ~ ~ ~') add(`Teleported FRCFLD to ${pos().join(', ')}`);

@@ -4,15 +4,20 @@
 //
 // Steps
 //   1. Write a marker to the server log (`say`), then start the driver.
-//   2. login_online: the server logs "NAME joined the game", and "UUID of player NAME is U" with a
-//      version-4 UUID (Mojang account; an offline-mode login would get a version-3 UUID).
+//   2. login_online: the server logs "NAME joined the game", and "UUID of player NAME is U" (logged
+//      only in online mode) with a version-4 UUID (a Mojang account; offline mode would give version 3).
 //      Any kick is recorded and classified (fml-spec.md section 4).
 //   3. chat_send: the server logs "<NAME> HELLO", where HELLO is a nonce the runner gave the driver.
-//   4. chat_receive: the console whispers "scenario-echo TOKEN"; the server logs "<NAME> echo TOKEN".
+//   4. chat_receive: the console whispers "scenario-echo TOKEN", with TOKEN fresh random bytes that
+//      the driver can only learn by hearing the whisper; the server logs "<NAME> echo TOKEN".
 //   5. walk: `tp NAME ~ ~ ~` (moves nothing, prints the position) before and after the console
-//      whispers "scenario-walk N"; the horizontal distance must be at least minWalkBlocks.
+//      whispers "scenario-walk N"; the horizontal distance must be at least minWalkBlocks (0.75 N).
 //   6. stay_10min: at join + 10 min, `list` shows NAME, the log shows no disconnect for NAME since
 //      the join, and the driver process is still running.
+//
+// A run with weaker parameters than gateParams allows (shorter stay, shorter walk, another bot) can
+// pass its checks, but it is a smoke run and never a G1 pass (PR #9 review finding 1).
+import crypto from 'node:crypto';
 import { linesAfter, loginUuid, uuidVersion, playerEvents, chatLines, onlinePlayers, lastTeleport, horizontal, classifyKick } from '../../runner/lib/server-log.mjs';
 
 const MS = 1000;
@@ -34,22 +39,30 @@ export default {
         chatTimeoutMs: 60 * MS,
         walkTimeoutMs: 90 * MS,
         walkBlocks: 8,
-        minWalkBlocks: 3,
+        minWalkBlocks: 6,           // 0.75 x walkBlocks, so idle drift or a nudge cannot pass
         stayMs: 600 * MS,
         pollMs: 5 * MS,
         logTail: 20000,
         consoleWaitS: 3,
     },
+    // How each parameter may differ from its default in a run that counts for the gate:
+    // 'min' = not lower, 'equal' = unchanged. Others (timeouts, polling) may change freely.
+    gateParams: { bot: 'equal', walkBlocks: 'min', minWalkBlocks: 'min', stayMs: 'min' },
 
     async run(ctx) {
         const { server, bot, clock, params: p, runId } = ctx;
         const name = p.bot;
         const marker = `scenario-${runId}-begin`;
         const hello = `hello-${runId}`;
-        const token = `tok-${runId}`;
+        if (p.minWalkBlocks > p.walkBlocks) throw new Error(`minWalkBlocks ${p.minWalkBlocks} is above walkBlocks ${p.walkBlocks}`);
 
         server.console(`say ${marker}`, 1);
-        const sinceMarker = () => linesAfter(server.log(p.logTail), marker);
+        // The marker must stay inside the fetched tail: losing it would hide disconnects.
+        const sinceMarker = () => {
+            const lines = linesAfter(server.log(p.logTail), marker);
+            if (lines === null) throw new Error(`scenario marker not in the last ${p.logTail} log lines; raise logTail`);
+            return lines;
+        };
         const events = () => playerEvents(sinceMarker(), name);
         const gone = (e) => ['lost', 'left', 'kicked'].includes(e.type);
 
@@ -76,7 +89,8 @@ export default {
         const said = await ctx.waitFor(() => chatLines(sinceMarker(), name).find((c) => c.text.trim() === hello), p.chatTimeoutMs);
         ctx.check('chat_send', said, said ? `server logged <${name}> ${hello}` : `no "<${name}> ${hello}" within ${p.chatTimeoutMs / MS}s`);
 
-        // 4. chat in, proven by the echo
+        // 4. chat in, proven by the echo of a token that exists nowhere but in this whisper
+        const token = crypto.randomBytes(8).toString('hex');
         server.console(`tell ${name} scenario-echo ${token}`, 1);
         const echoed = await ctx.waitFor(() => chatLines(sinceMarker(), name).find((c) => c.text.trim() === `echo ${token}`), p.chatTimeoutMs);
         ctx.check('chat_receive', echoed, echoed ? `whispered token echoed: <${name}> echo ${token}` : `no "<${name}> echo ${token}" within ${p.chatTimeoutMs / MS}s`);

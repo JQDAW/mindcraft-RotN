@@ -13,12 +13,22 @@ export const event = (type, data = {}) => process.stdout.write(`DRIVER ${JSON.st
 export function attachScenario(bot, { hello = process.env.ROTN_SCENARIO_HELLO, helloDelayMs = 2000, walkTimeoutMs = 30000, emit = event } = {}) {
     const echoed = new Set();
     let walking = false;
+    // Every async handler catches its own errors: an event handler's rejection would otherwise be
+    // unhandled (PR #9 review finding 8).
+    const say = (text) => {
+        try {
+            bot.chat(text);
+            return true;
+        } catch (err) {
+            emit('chat_error', { message: String(err?.message ?? err) });
+            return false;
+        }
+    };
     bot.once('spawn', async () => {
         emit('spawn', { pos: pos(bot) });
         if (hello) {
             await sleep(helloDelayMs);
-            bot.chat(hello);
-            emit('said', { text: hello });
+            if (say(hello)) emit('said', { text: hello });
         }
     });
     bot.on('messagestr', async (msg) => {
@@ -26,15 +36,18 @@ export function attachScenario(bot, { hello = process.env.ROTN_SCENARIO_HELLO, h
         if (e && !echoed.has(e[1])) {
             echoed.add(e[1]);
             emit('heard', { text: msg });
-            bot.chat(`echo ${e[1]}`);
+            say(`echo ${e[1]}`);
         }
         const w = /scenario-walk (\d+)/.exec(msg);
         if (w && !walking) {
             walking = true;
             try {
+                if (pos(bot) === null) throw new Error('no position yet (not spawned)');
                 const r = await walk(bot, Number(w[1]), walkTimeoutMs);
                 emit('walked', r);
-                bot.chat(`walked ${r.to.map((v) => v.toFixed(1)).join(' ')}`);
+                say(`walked ${r.to.map((v) => v.toFixed(1)).join(' ')}`);
+            } catch (err) {
+                emit('walk_error', { message: String(err?.message ?? err) });
             } finally {
                 walking = false;
             }

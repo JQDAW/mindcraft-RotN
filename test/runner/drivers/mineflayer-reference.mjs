@@ -16,6 +16,7 @@
 import process from 'node:process';
 import mineflayer from 'mineflayer';
 import { attachScenario, event } from './scenario-protocol.mjs';
+import { classifyKick, FATAL_KICKS } from '../lib/server-log.mjs';
 
 const host = process.env.TEST_SERVER_HOST;
 const port = Number(process.env.TEST_SERVER_PORT ?? 25565);
@@ -25,6 +26,12 @@ if (!host) {
     console.error('TEST_SERVER_HOST is not set');
     process.exit(3);
 }
+// Without a folder, prismarine-auth would fall back to the shared default nmp-cache (PR #9 review finding 6).
+if (auth === 'microsoft' && !process.env.MINDCRAFT_PROFILES_FOLDER) {
+    console.error('MINDCRAFT_PROFILES_FOLDER is not set: the bot account needs its own token cache folder');
+    process.exit(3);
+}
+process.on('unhandledRejection', (e) => event('error', { message: `unhandled rejection: ${String(e?.message ?? e).slice(0, 2000)}` }));
 
 const bot = mineflayer.createBot({
     host, port, username, auth, version: '1.12.2',
@@ -39,15 +46,21 @@ const bot = mineflayer.createBot({
 attachScenario(bot);
 
 let stopping = false;
+let fatal = null;
 bot.on('login', () => event('login', { username: bot.username }));
+// A mod rejection, a whitelist refusal or a ban will not go away on a retry: exit 3 (ADR 0003
+// decision 5), not 1 (PR #9 review finding 7).
 bot.on('kicked', (reason) => {
     const text = typeof reason === 'string' ? reason : JSON.stringify(reason);
-    event('kicked', { reason: text.slice(0, 2000) });
+    const cls = classifyKick(text);
+    if (FATAL_KICKS.has(cls)) fatal = cls;
+    event('kicked', { reason: text.slice(0, 2000), class: cls, fatal: FATAL_KICKS.has(cls) });
 });
 bot.on('error', (e) => event('error', { message: String(e?.message ?? e).slice(0, 2000) }));
 bot.on('end', (why) => {
-    event('end', { reason: String(why ?? '') });
-    process.exit(stopping ? 0 : 1);
+    const code = stopping ? 0 : fatal ? 3 : 1;
+    event('end', { reason: String(why ?? ''), exitCode: code });
+    process.exit(code);
 });
 const stop = () => {
     stopping = true;

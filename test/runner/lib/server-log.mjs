@@ -18,16 +18,23 @@ export function parseLine(line) {
     return m ? { time: m[1], thread: m[2], level: m[3], logger: m[4] ?? '', msg: m[5] } : null;
 }
 
-/** Log lines from the first line that contains marker (exclusive) to the end. Empty if not found. */
+/**
+ * Log lines after the first line that contains marker, or null when the marker is not in `lines`
+ * (e.g. it scrolled out of the fetched tail). Callers must treat null as an error: an empty result
+ * would hide every disconnect (PR #9 review finding 3).
+ */
 export function linesAfter(lines, marker) {
     const i = lines.findIndex((l) => l.includes(marker));
-    return i < 0 ? [] : lines.slice(i + 1);
+    return i < 0 ? null : lines.slice(i + 1);
 }
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const msgs = (lines) => lines.map(parseLine).filter(Boolean);
 
-/** "UUID of player NAME is UUID" (online and offline mode both log it). */
+/**
+ * "UUID of player NAME is UUID". Vanilla 1.12.2 logs this only in online mode, after Mojang's session
+ * server confirmed the player; the version-4 check in uuidVersion is a second, independent proof.
+ */
 export function loginUuid(lines, name) {
     const re = new RegExp(`^UUID of player ${esc(name)} is ([0-9a-fA-F-]{32,36})$`);
     for (const p of msgs(lines)) {
@@ -38,8 +45,8 @@ export function loginUuid(lines, name) {
 }
 
 /**
- * Version nibble of a UUID. Mojang (online-mode) accounts are version 4; an offline-mode server
- * derives version 3 UUIDs from the name. So 4 here proves the session was authenticated online.
+ * Version nibble of a UUID. Mojang accounts are version 4; an offline-mode server derives version 3
+ * UUIDs from the name (it would also not log the line above).
  */
 export function uuidVersion(uuid) {
     const hex = (uuid ?? '').replace(/-/g, '');
@@ -79,17 +86,18 @@ export function playerEvents(lines, name) {
 }
 
 /**
- * Chat lines said by NAME: vanilla "<NAME> text". Tolerates a chat mod's prefix before the name
- * (e.g. "[G] <NAME> text") but never matches server or whisper lines.
+ * Chat lines said by NAME: vanilla "<NAME> text", anchored at the start of the message. One bracketed
+ * chat-mod prefix is tolerated ("[G] <NAME> text"), but never "[Server] <NAME> ..." (the console can
+ * `say` anything) and never another player's line that quotes "<NAME>" (PR #9 review finding 2).
  */
 export function chatLines(lines, name) {
-    const re = new RegExp(`(?:^|\\s)<${esc(name)}> (.*)$`);
+    const re = new RegExp(`^(?:\\[([^\\]<>]*)\\] )?<${esc(name)}> (.*)$`);
     const out = [];
     lines.forEach((line, at) => {
         const p = parseLine(line);
         if (!p) return;
         const m = re.exec(p.msg);
-        if (m) out.push({ time: p.time, text: m[1], at });
+        if (m && m[1] !== 'Server') out.push({ time: p.time, text: m[2], at });
     });
     return out;
 }
@@ -117,14 +125,18 @@ export const horizontal = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
 
 /**
  * Classify a disconnect reason as in docs/research/fml-spec.md section 4:
- * handshake | timeout | whitelist | server-exception | other.
+ * handshake | timeout | whitelist | banned | server-exception | client-quit | other.
  */
 export function classifyKick(reason) {
     const r = reason ?? '';
     if (/Server Mod rejections|No modded response|Mod rejections|missing mods|FML/i.test(r)) return 'handshake';
     if (/Timed out|timeout/i.test(r)) return 'timeout';
     if (/not white-listed/i.test(r)) return 'whitelist';
+    if (/banned/i.test(r)) return 'banned';
     if (/Internal Exception|Exception/i.test(r)) return 'server-exception';
     if (/^Disconnected$|quitting/i.test(r)) return 'client-quit';
     return 'other';
 }
+
+/** Kick classes that a restart cannot fix: the driver exits 3 (ADR 0003 decision 5). */
+export const FATAL_KICKS = new Set(['handshake', 'whitelist', 'banned']);

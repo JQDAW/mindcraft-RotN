@@ -1,5 +1,6 @@
 // Scenario engine. A scenario is a module exporting
-//   { id, gate, title, checks: {name: readyToTryItem}, defaults: {...params}, async run(ctx) }
+//   { id, gate, title, checks: {name: readyToTryItem}, defaults: {...params},
+//     gateParams: {param: 'min' | 'equal'}, async run(ctx) }
 // run(ctx) drives a test server and a bot and calls ctx.check(name, pass, detail) for each check.
 // The engine is I/O-free: the server, bot and clock are injected, so unit tests can run a
 // 10-minute scenario on a fake clock in milliseconds.
@@ -17,6 +18,20 @@ export async function waitFor(clock, fn, timeoutMs, pollMs) {
         if (clock.now() >= end) return null;
         await clock.sleep(Math.min(pollMs, Math.max(1, end - clock.now())));
     }
+}
+
+/**
+ * Parameters that make a run weaker than the gate allows: lower than the default for 'min',
+ * different for 'equal'. A weakened run can pass its checks but is never a gate pass.
+ */
+export function weakenedParams(scenario, params) {
+    const out = [];
+    for (const [k, rule] of Object.entries(scenario.gateParams ?? {})) {
+        const d = scenario.defaults[k];
+        const v = params[k] ?? d;
+        if ((rule === 'min' && !(v >= d)) || (rule === 'equal' && v !== d)) out.push(`${k}=${v} (gate needs ${rule === 'min' ? '>=' : '='} ${d})`);
+    }
+    return out;
 }
 
 /**
@@ -53,9 +68,16 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
         readyToTry,
     }));
     const passed = checks.filter((c) => c.pass).length;
+    const checksPassed = !error && passed === checks.length;
+    const weakened = weakenedParams(scenario, p);
+    const gateValid = weakened.length === 0;
+    if (!gateValid) log(`SMOKE run, not a ${scenario.gate} pass: ${weakened.join(', ')}`);
     return {
         scenario: scenario.id, gate: scenario.gate, title: scenario.title, runId,
-        pass: !error && passed === checks.length, passed, failed: checks.length - passed,
+        // pass means "counts for the gate"; a weakened run never does (PR #9 review finding 1).
+        pass: checksPassed && gateValid, checksPassed, gateValid, weakenedParams: weakened,
+        verdict: checksPassed ? (gateValid ? 'PASS' : 'SMOKE-PASS (not a gate pass)') : 'FAIL',
+        passed, failed: checks.length - passed,
         durationS: Math.round((clock.now() - started) / 1000), params: p, checks, notes,
         botExitCode: bot.exitCode(), error,
     };
