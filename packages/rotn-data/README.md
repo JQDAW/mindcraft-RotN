@@ -41,7 +41,7 @@ RotN 3.3.4 facts (ADR 0005) and two-way name translation between Minecraft 1.12.
 | `mining-levels.json` | `config/tool_progression/mining_level_names.cfg` from the pinned zip |
 | `manifest.json`, `blocks.json`, `items.json`, `recipes.json`, `smelting.json`, `oredict.json`, `entities.json`, `spawns.json` | the dump (ADR 0004, `tools/dumper/README.md`), **not yet present**: it needs a test-server run. Large files are stored as `.json.br`. |
 
-Import a fetched dump with `node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir>`. It refuses a dump without its `DONE` marker, with dumper errors, with another Forge build, with names that differ from the registry capture, or without the early-game recipes from the pack's scripts (`test/fixtures/scripts-3.3.4-early-recipes.json`, transcribed from the zip with file and line).
+Import a fetched dump with `node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir>`. It refuses a dump without its `DONE` marker, without one of the dump files (`serializers.json` included, so the first 3.3.4 dump cannot be re-imported as is), with dumper errors or dropped entries (`manifest.entryErrors`; `--allow-errors` overrides both), with another Forge build, with names that differ from the registry capture, or without the early-game recipes from the pack's scripts (`test/fixtures/scripts-3.3.4-early-recipes.json`, transcribed from the zip with file and line).
 
 ## Tests
 

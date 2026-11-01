@@ -13,7 +13,8 @@ import com.google.gson.stream.JsonWriter;
  * renamed into place after end().
  *
  * Each entry is rendered into its own buffer first (PR #34 follow-up 2): if it throws, only that
- * entry is dropped and counted in entryErrors, never the whole file. Object-style parts return
+ * entry is dropped and counted in entryErrors, never the whole file. The writers are strict (not
+ * lenient), so a NaN or infinite double makes its entry throw and be dropped, never invalid JSON. Object-style parts return
  * the entry's key from key(); array-style parts return null.
  */
 abstract class Part<T> {
@@ -54,7 +55,6 @@ abstract class Part<T> {
         try {
             StringWriter sw = new StringWriter();
             JsonWriter bw = new JsonWriter(sw);
-            bw.setLenient(true);
             bw.setSerializeNulls(true);
             if (!entry(bw, e)) return false;
             bw.flush();

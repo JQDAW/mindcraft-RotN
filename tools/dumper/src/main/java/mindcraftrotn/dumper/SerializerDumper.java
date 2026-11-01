@@ -24,8 +24,10 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
  *  "usage": {"<entity>": [{index, serializerId, class}]}}  only keys with a non-vanilla serializer,
  *                                                read from a freshly constructed (never spawned)
  *                                                entity's EntityDataManager.
- * vanilla = the serializer's class is in net.minecraft. Constructing an entity can fail for some
- * mods; such entities are counted in entryErrors and skipped.
+ * vanilla = the serializer's class is in net.minecraft. Constructing an entity runs the mod's
+ * entity constructor and Forge's capability-attach events (the entity is never spawned or added to
+ * the world). Constructors that throw are caught (Throwable), counted in manifest.entryErrors and
+ * skipped; check that count after each batch (PR #48 review follow-up 4).
  */
 final class SerializerDumper extends Part<EntityEntry> {
     private static final int MAX_ID = 1023;

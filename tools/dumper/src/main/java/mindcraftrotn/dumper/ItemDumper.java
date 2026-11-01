@@ -71,8 +71,8 @@ final class ItemDumper extends Part<Item> {
     @Override
     protected boolean entry(JsonWriter w, Item item) throws IOException {
         Set<Integer> metas = variantMetas(item, known.get(item));
-        names.setVariants(item, metas);
         writeItem(w, item, metas);
+        names.setVariants(item, metas); // only once the entry rendered (PR #48 review follow-up 5)
         return true;
     }
 

@@ -142,7 +142,7 @@ public class RotnDump {
         @SubscribeEvent
         public void onTick(TickEvent.ServerTickEvent event) {
             if (event.phase != TickEvent.Phase.END) return;
-            long t = System.currentTimeMillis();
+            long t = System.nanoTime(); // durations use nanoTime (monotonic); PR #48 review
             try {
                 if (part == null) {
                     String p = todo.poll();
@@ -157,10 +157,10 @@ public class RotnDump {
                 while (next < stop) {
                     if (part.write(w, next)) written++;
                     next++;
-                    if (System.currentTimeMillis() - t >= TICK_BUDGET_MS) break;
+                    if (msSince(t) >= TICK_BUDGET_MS) break;
                 }
                 partTicks++;
-                partMs += System.currentTimeMillis() - t;
+                partMs += msSince(t);
                 if (next >= part.size()) close();
             } catch (Throwable e) {
                 fail(e);
@@ -182,7 +182,7 @@ public class RotnDump {
         }
 
         private void open(String p) throws IOException {
-            long t = System.currentTimeMillis();
+            long t = System.nanoTime();
             name = p;
             part = partFor(p);
             next = 0;
@@ -190,20 +190,19 @@ public class RotnDump {
             partTicks = 0;
             out = new OutputStreamWriter(new FileOutputStream(new File(dir, p + ".json.tmp")), StandardCharsets.UTF_8);
             w = new JsonWriter(out);
-            w.setLenient(true); // entries arrive pre-rendered through jsonValue (Part.write)
             w.setIndent("");
             w.setSerializeNulls(true);
             part.begin(w);
-            partMs = System.currentTimeMillis() - t;
+            partMs = msSince(t);
         }
 
         private void close() throws IOException {
-            long t = System.currentTimeMillis();
+            long t = System.nanoTime();
             part.end(w);
             w.flush();
             out.close();
             move(new File(dir, name + ".json.tmp"), new File(dir, name + ".json"));
-            partMs += System.currentTimeMillis() - t;
+            partMs += msSince(t);
             counts.put(name, written);
             timing.put(name, new long[] {partMs, partTicks});
             if (part.entryErrors > 0) {
@@ -329,6 +328,11 @@ public class RotnDump {
             j.endArray();
             j.endObject();
         }
+    }
+
+    /** Whole milliseconds since a System.nanoTime() reading. */
+    static long msSince(long nanoStart) {
+        return (System.nanoTime() - nanoStart) / 1_000_000L;
     }
 
     private static void move(File from, File to) throws IOException {
