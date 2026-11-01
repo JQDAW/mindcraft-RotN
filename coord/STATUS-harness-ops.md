@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (11:55 UTC)
+Updated: 2026-11-01 (12:36 UTC)
 
 ## Done
 
@@ -85,7 +85,12 @@ Updated: 2026-11-01 (11:55 UTC)
 
   | Slot (UTC) | Run | Created (UTC) | Delay | Result |
   | --- | --- | --- | --- | --- |
-  | (none yet) | | | | |
+  | 11:52 | none | | | missed |
+  | 12:07 | none | | | missed |
+  | 12:22 | none | | | missed |
+
+  Last checked 12:36:08 UTC (one manual `gh run list --event schedule`). The newest scheduled run is still 41281143865 (06:30:54 UTC).
+  My two background watchers were stopped at about 12:30 UTC by Claude Code because the PC was low on memory, not because of an error. The rest of the window needs the lead's go-ahead to restart them, or manual checks.
 
   Before the change (`*/15`): one scheduled run in about 11 h (41281143865, 06:30:54 UTC, success).
 
