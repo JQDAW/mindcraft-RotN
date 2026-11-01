@@ -91,7 +91,7 @@ The review findings on PR #10, numbered as in the review comment:
 
 ## Doing
 
-- PR for the initBot auth guard open. Waiting for the preflight (a scheduled sweeper run within 120 min), then Batch A, then Batch B+C on one server.
+- PR #16 (initBot auth guard) open. Waiting for the preflight (a scheduled sweeper run within 120 min), then Batch A, then Batch B+C on one server.
 
 ## Next
 
@@ -153,4 +153,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15 merged as 74b23ed.) New PR: initBot auth guard + PR #15 nits, on `agent/net-forge/initbot-auth-guard`. `npm test` 193/193; lint 259.
+- (#15 merged as 74b23ed.) #16: initBot auth guard + PR #15 nits, on `agent/net-forge/initbot-auth-guard`. `npm test` 193/193; lint 259.
