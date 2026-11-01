@@ -42,8 +42,14 @@
 #   --pack-source auto|url|upload (auto: CurseForge download if its SHA-256 matches, else upload)
 #   --pack-zip PATH               local zip for upload (default: $ROTN_PACK_ZIP)
 #   --ready-timeout MIN (120, restarts after a pack upload)  --yes (no cost prompt)  --allow-multiple  --keep-on-failure
+#   --allow-from CIDR             open 22 and 25565 only to CIDR (repeatable; default: $ROTN_TEST_ALLOW_FROM, else
+#                                 the whole internet). Include this PC's public address, or SSH and the tests fail.
+#   --skip-sweeper-check          create even without a recent successful *scheduled* sweeper run on develop.
+#                                 Only with the lead's approval: without the sweeper a crashed batch bills open-ended.
 #   --dry-run                     print mutating hcloud commands instead of running them
 # Global: --name NAME (or $TEST_SERVER_NAME), --out DIR
+#   Before any create, up/run require a successful event=schedule run of test-server-sweeper.yml on
+#   develop within the last $ROTN_SWEEPER_MAX_AGE_MIN minutes (default 120), read with `gh run list`.
 #   hcloud always runs with --context mindcraft-rotn-test (the test project); any other
 #   --context / $HCLOUD_CONTEXT is refused. ROTN_HCLOUD_AUTH=env-token (HCLOUD_TOKEN, no context)
 #   is accepted only inside GitHub Actions, for the sweeper.
@@ -74,6 +80,9 @@ HCLOUD_BIN=${HCLOUD_BIN:-hcloud}
 SSH_BIN=${SSH_BIN:-ssh}
 SCP_BIN=${SCP_BIN:-scp}
 SSH_KEYGEN_BIN=${SSH_KEYGEN_BIN:-ssh-keygen}
+GH_BIN=${GH_BIN:-gh}
+SWEEPER_WORKFLOW=test-server-sweeper.yml
+SWEEPER_MAX_AGE_MIN=${ROTN_SWEEPER_MAX_AGE_MIN:-120}
 STATUS_PING_CMD=${STATUS_PING_CMD:-node $REPO_ROOT/test/tools/status-ping.mjs}
 POLL_SECONDS=${ROTN_TEST_POLL_SECONDS:-15}
 MOJANG_PROFILE_URL=${MOJANG_PROFILE_URL:-https://api.mojang.com/users/profiles/minecraft}
@@ -83,11 +92,11 @@ STATE_ROOT=${ROTN_TEST_STATE_DIR:-$HOME/.mindcraft-rotn/test-server}
 TYPE=cpx42 LOCATION=nbg1 IMAGE=ubuntu-24.04 NAME=${TEST_SERVER_NAME:-}
 TTL_HOURS=$DEFAULT_TTL_HOURS CAPTURE=0 SEED='' HEAP_MIN=4G HEAP_MAX=8G
 PACK_SOURCE=auto PACK_ZIP=${ROTN_PACK_ZIP:-C:/Users/admin/source/RotN 3.3.4 Server Pack.zip}
-READY_TIMEOUT_MIN=120 YES=0 ALLOW_MULTIPLE=0 KEEP_ON_FAILURE=0 DRY_RUN=0 OUT_DIR='' WAIT_S=5
+READY_TIMEOUT_MIN=120 YES=0 ALLOW_MULTIPLE=0 KEEP_ON_FAILURE=0 DRY_RUN=0 OUT_DIR='' WAIT_S=5 SKIP_SWEEPER_CHECK=0
 CONTEXT=${HCLOUD_CONTEXT:-$TEST_CONTEXT}
 # hcloud auth: "context" (PC, default) or "env-token" (the GitHub sweeper only; see check_context).
 HCLOUD_AUTH=${ROTN_HCLOUD_AUTH:-context}
-EXTRA_MODS=() CONSOLE_CMDS=() FETCH_PATHS=() WHITELIST=() WHITELIST_ENTRIES=() ARGS=()
+EXTRA_MODS=() CONSOLE_CMDS=() FETCH_PATHS=() WHITELIST=() WHITELIST_ENTRIES=() ARGS=() ALLOW_FROM=()
 
 # ---- Teardown state for the EXIT trap ----
 CLEANUP_NAME='' UP_OK=0 KEEP_ON_SUCCESS=0
@@ -169,6 +178,8 @@ parse_opts() {
       --yes|-y) YES=1; shift ;;
       --allow-multiple) ALLOW_MULTIPLE=1; shift ;;
       --keep-on-failure) KEEP_ON_FAILURE=1; shift ;;
+      --allow-from) ALLOW_FROM+=("$2"); shift 2 ;;
+      --skip-sweeper-check) SKIP_SWEEPER_CHECK=1; shift ;;
       --dry-run) DRY_RUN=1; shift ;;
       --) shift; ARGS+=("$@"); break ;;
       -h|--help) usage; exit 0 ;;
@@ -199,8 +210,29 @@ validate_up_opts() {
   done
   local p
   for p in "${FETCH_PATHS[@]}"; do valid_rel_path "$p" || die "--fetch: bad path '$p'"; done
+  if (( ${#ALLOW_FROM[@]} == 0 )) && [[ -n ${ROTN_TEST_ALLOW_FROM:-} ]]; then
+    read -r -a ALLOW_FROM <<< "$ROTN_TEST_ALLOW_FROM"
+  fi
+  local c
+  for c in "${ALLOW_FROM[@]}"; do valid_cidr "$c" || die "--allow-from: bad CIDR '$c' (e.g. 203.0.113.7/32)"; done
   if [[ -z $NAME ]]; then NAME="mcr-test-$(date -u -d "@$(now)" +%Y%m%d-%H%M%S)"; fi
-  [[ $NAME =~ ^[a-z0-9][a-z0-9-]{2,62}$ ]] || die "bad --name '$NAME'"
+  check_name
+}
+
+# One name rule for every command, whether the name comes from --name, $TEST_SERVER_NAME or the
+# state directory (review finding 7).
+check_name() { [[ $NAME =~ ^[a-z0-9][a-z0-9-]{2,62}$ ]] || die "bad --name '$NAME'"; }
+
+# valid_cidr CIDR: IPv4 a.b.c.d/0-32 or IPv6 (hex and colons)/0-128. Nothing else reaches ufw.
+valid_cidr() {
+  local ip=${1%/*} len=${1##*/} o
+  [[ $1 == */* && $len =~ ^[0-9]{1,3}$ ]] || return 1
+  if [[ $ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+    (( 10#$len <= 32 )) || return 1
+    for o in ${ip//./ }; do (( 10#$o <= 255 )) || return 1; done
+    return 0
+  fi
+  [[ $ip =~ ^[0-9A-Fa-f:]+$ && $ip == *:*:* ]] && (( 10#$len <= 128 ))
 }
 
 # resolve_whitelist: WHITELIST (NAME or NAME:UUID) -> WHITELIST_ENTRIES (Name:dashed-uuid).
@@ -254,7 +286,8 @@ render_config_env() {
     HOLD_WAIT_SECONDS 3600 \
     START_TIMEOUT_SECONDS 2400 \
     LEVEL_SEED "$SEED" \
-    WHITELIST_ENTRIES "${WHITELIST_ENTRIES[*]}"
+    WHITELIST_ENTRIES "${WHITELIST_ENTRIES[*]}" \
+    ALLOW_FROM "${ALLOW_FROM[*]}"
 }
 
 render_user_data() {
@@ -300,13 +333,14 @@ EOF
 state_dir() { echo "$STATE_ROOT/active/$1"; }
 
 resolve_name() {
-  if [[ -n $NAME ]]; then return 0; fi
+  if [[ -n $NAME ]]; then check_name; return 0; fi
   local dirs=()
   if [[ -d $STATE_ROOT/active ]]; then
     mapfile -t dirs < <(find "$STATE_ROOT/active" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null)
   fi
   (( ${#dirs[@]} == 1 )) || die "pass --name (active servers here: ${dirs[*]:-none})"
   NAME=${dirs[0]}
+  check_name
 }
 
 load_meta() {
@@ -354,6 +388,36 @@ hourly_price() {
 
 count_batch() {  # count_batch KIND NAME -> number of labelled resources of KIND for the batch
   hc "$1" list -l "$(selector "$2")" -o json | jqr 'length'
+}
+
+# ---------------------------------------------------------------- sweeper preflight (finding 5)
+# The off-PC sweeper is what bounds the cost of a crashed batch. Before any create, require a
+# successful *scheduled* run of it on develop within SWEEPER_MAX_AGE_MIN (lead's rule, 2026-11-01:
+# one observed event=schedule run is a precondition for every paid batch). Dispatch runs do not count:
+# they prove the token and the logic, not that the cron fires.
+check_sweeper() {
+  local runs latest age t
+  if (( SKIP_SWEEPER_CHECK )); then
+    warn "--skip-sweeper-check: not checking the scheduled sweeper (needs the lead's approval)"
+    return 0
+  fi
+  command -v "$GH_BIN" > /dev/null 2>&1 || { sweeper_refuse "the gh CLI ('$GH_BIN') is not available"; return 0; }
+  runs=$(cd "$REPO_ROOT" && "$GH_BIN" run list --workflow "$SWEEPER_WORKFLOW" --branch develop --event schedule \
+           --limit 20 --json databaseId,status,conclusion,createdAt 2>/dev/null) \
+    || { sweeper_refuse "'gh run list' failed (not logged in?)"; return 0; }
+  latest=$(jqr -r '[.[] | select(.status == "completed" and .conclusion == "success")]
+                   | sort_by(.createdAt) | last // empty | "\(.databaseId) \(.createdAt)"' <<< "$runs")
+  [[ -n $latest ]] || { sweeper_refuse "no successful scheduled run of $SWEEPER_WORKFLOW on develop yet"; return 0; }
+  t=$(date -u -d "${latest#* }" +%s 2>/dev/null) || { sweeper_refuse "unreadable run time '${latest#* }'"; return 0; }
+  age=$(( ($(now) - t) / 60 ))
+  (( age <= SWEEPER_MAX_AGE_MIN )) \
+    || { sweeper_refuse "the last successful scheduled sweeper run (${latest% *}) is ${age} min old (limit $SWEEPER_MAX_AGE_MIN)"; return 0; }
+  log "sweeper OK: scheduled run ${latest% *} succeeded ${age} min ago"
+}
+
+sweeper_refuse() {
+  if (( DRY_RUN )); then warn "sweeper check would refuse: $1"; return 0; fi
+  die "$1. Refusing to create anything: without the off-PC sweeper a crashed batch bills until someone notices. Check the Actions tab, or pass --skip-sweeper-check with the lead's approval."
 }
 
 # ---------------------------------------------------------------- up
@@ -471,6 +535,7 @@ do_up() {
   if [[ -n $existing ]] && (( !ALLOW_MULTIPLE )); then
     die "labelled test resources already exist:$existing run 'down' (or wait for the sweeper), or pass --allow-multiple"
   fi
+  check_sweeper
 
   local price
   price=$(hourly_price "$TYPE" "$LOCATION")
@@ -626,6 +691,10 @@ do_down() {
 # A missing or unparsable expiry label falls back to created + default TTL. An unparsable creation
 # time as well counts as expired at once (fail-safe: these are disposable by label). No expiry label
 # keeps a resource alive past created + MAX_TTL_HOURS + SWEEP_GRACE_SECONDS.
+# Decision on review finding 10 (2026-11-01): keep these fallbacks, and also alert. do_sweep reports
+# every such resource with bad_label_report and exits non-zero, so the GitHub job fails and notifies
+# someone, but the resource is deleted on the fallback schedule, not at once (unless its creation
+# time is unreadable too).
 expired_filter() {
   local purpose=$LABEL_PURPOSE label=delete-after grace=0 ttl=$(( DEFAULT_TTL_HOURS * 3600 ))
   if [[ ${2:-} == control ]]; then
@@ -643,12 +712,37 @@ expired_filter() {
         | "\(.id)\t\(.name)\t\(.assignee_id // "")"'
 }
 
+# bad_label_report LABEL PURPOSE: reads a JSON array, prints "kind id name" for each resource with
+# that purpose whose LABEL is missing or not a plain epoch.
+bad_label_report() {
+  jqr -r --arg label "$1" --arg purpose "$2" '
+    .[] | select((.labels // {}).purpose == $purpose)
+        | select(((.labels // {})[$label] // "") | test("^[0-9]+$") | not) | "\(.id) \(.name)"'
+}
+
+# Log line formats below ("expired server NAME (ID): deleting", "expired Primary IP ...",
+# "expired SSH key ...") are a contract: test/scenarios/g0-watchdog.sh reads them from the
+# sweeper's run log to prove the sweeper, not something else, deleted its resources.
 do_sweep() {
   require_auth
   local t sel line id name assignee rc=0 deleted=0
   t=$(now)
   sel=$(selector)
   log "sweep at $(iso "$t"), selector $sel$( (( DRY_RUN )) && echo ' (dry run)')"
+
+  local kind
+  for kind in server primary-ip ssh-key; do
+    while read -r id name; do
+      [[ -n $id ]] || continue
+      warn "ALERT: labelled $kind $name ($id) has no valid delete-after label; it is deleted on the fallback schedule (created + ${DEFAULT_TTL_HOURS}h)"
+      rc=1
+    done < <(hc "$kind" list -l "$sel" -o json | bad_label_report delete-after "$LABEL_PURPOSE")
+  done
+  while read -r id name; do
+    [[ -n $id ]] || continue
+    warn "ALERT: watchdog-control server $name ($id) has no valid control-expires label; it is deleted on the fallback schedule"
+    rc=1
+  done < <(hc server list -l "purpose=$LABEL_CONTROL" -o json | bad_label_report control-expires "$LABEL_CONTROL")
 
   local labelled_servers
   labelled_servers=$(hc server list -l "$sel" -o json)

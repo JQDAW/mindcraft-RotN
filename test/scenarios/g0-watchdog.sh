@@ -10,7 +10,10 @@
 #   local      run `deploy/test-server.sh sweep` from this PC (proves the logic, not the off-PC part)
 #
 # PASS needs the target gone within one sweeper interval (15 min) plus 5 min for the run itself,
-# and the control still present. GitHub may start scheduled runs late; that shows as a FAIL.
+# the control still present, and proof that the sweeper did it: its log (the local sweep's output,
+# or `gh run view --log` of the sweeper runs started since the create) must contain
+# "expired server/Primary IP/SSH key ... (<ID>): deleting" for each of the target's three IDs, and
+# never the control's ID. GitHub may start scheduled runs late; that shows as a FAIL.
 #
 # Creates two CX23s (EUR 0.0109/h each) in the hcloud context mindcraft-rotn-test only:
 #   target   purpose=mindcraft-rotn-test, delete-after=<now-60>, batch=<name>; its own Primary IPv4
@@ -61,7 +64,10 @@ WORK=$STATE_ROOT/watchdog/$NAME
 mkdir -p "$WORK"
 chmod 700 "$WORK"
 NOW=$(date -u +%s)
-KEY_ID='' IP_ID='' SRV_ID='' CTL_ID=''
+KEY_ID='' IP_ID='' SRV_ID='' CTL_ID='' DISPATCH_RUN=''
+SWEEP_LOG=$WORK/sweeper.log   # what the sweeper said: local output, or the run logs fetched with gh
+: > "$SWEEP_LOG"
+RUN_LOOKBACK_S=300            # a run created up to 5 min before the create may still sweep after it
 
 cleanup() {
   local rc=$?
@@ -107,10 +113,43 @@ T0=$(date -u +%s)
 log "created at $(date -u -d "@$T0" +%H:%M:%SZ): key $KEY_ID, ip $IP_ID, target $SRV_ID, control $CTL_ID; mode=$MODE"
 
 case $MODE in
-  local) HCLOUD_CONTEXT=$CONTEXT "$REPO_ROOT/deploy/test-server.sh" sweep || log "local sweep reported a problem" ;;
-  dispatch) "$GH_BIN" workflow run test-server-sweeper.yml --ref develop ;;
+  local)
+    HCLOUD_CONTEXT=$CONTEXT "$REPO_ROOT/deploy/test-server.sh" sweep > "$SWEEP_LOG" 2>&1 || log "local sweep reported a problem"
+    cat "$SWEEP_LOG" >&2 ;;
+  dispatch)
+    out=$("$GH_BIN" workflow run test-server-sweeper.yml --ref develop 2>&1) || { log "gh workflow run failed: $out"; exit 1; }
+    printf '%s\n' "$out" >&2
+    DISPATCH_RUN=$(grep -oE 'actions/runs/[0-9]+' <<< "$out" | head -1 | cut -d/ -f3 || true) ;;
   scheduled) log "waiting for the scheduled sweeper (every 15 min; GitHub may start it late)" ;;
 esac
+
+# swept_by_log: did the sweeper's log delete all three target IDs and leave the control alone?
+swept_by_log() {
+  grep -qE "expired server [^ ]+ \($SRV_ID\): deleting" "$SWEEP_LOG" \
+    && grep -qE "expired Primary IP [^ ]+ \($IP_ID\): deleting" "$SWEEP_LOG" \
+    && grep -qE "expired SSH key [^ ]+ \($KEY_ID\): deleting" "$SWEEP_LOG" \
+    && ! grep -qE "\($CTL_ID\): deleting" "$SWEEP_LOG"
+}
+
+# fetch_sweeper_logs: append the logs of completed sweeper runs created since T0 - RUN_LOOKBACK_S
+# (plus the dispatched run) that were not fetched yet. Prints nothing; updates FETCHED.
+FETCHED=' '
+fetch_sweeper_logs() {
+  local since ids id st
+  since=$(( T0 - RUN_LOOKBACK_S ))
+  ids=$("$GH_BIN" run list --workflow test-server-sweeper.yml --branch develop --limit 20 \
+          --json databaseId,status,createdAt 2>/dev/null \
+        | jq -r --argjson since "$since" '.[] | select(.status == "completed")
+                 | select((.createdAt | fromdateiso8601) >= $since) | .databaseId' | tr -d '\r' || true)
+  if [[ -n $DISPATCH_RUN ]]; then
+    st=$("$GH_BIN" run view "$DISPATCH_RUN" --json status 2>/dev/null | jq -r '.status // empty' | tr -d '\r' || true)
+    [[ $st == completed ]] && ids+=$'\n'"$DISPATCH_RUN"
+  fi
+  for id in $ids; do
+    [[ $FETCHED == *" $id "* ]] && continue
+    if "$GH_BIN" run view "$id" --log >> "$SWEEP_LOG" 2>/dev/null; then FETCHED+="$id "; fi
+  done
+}
 
 deadline=$(( T0 + TIMEOUT_MIN * 60 ))
 gone_at=''
@@ -123,13 +162,28 @@ while :; do
   sleep "$POLL_SECONDS"
 done
 
+# Who deleted it? (PR #5 review nit 3.) Remote modes: read the sweeper's run logs once its runs complete.
+swept=false
+if [[ -n $gone_at ]]; then
+  if [[ $MODE != local ]]; then
+    attr_deadline=$(( $(date -u +%s) + ${WATCHDOG_ATTRIBUTION_WAIT_S:-$RUN_SLACK_S} ))
+    while :; do
+      fetch_sweeper_logs
+      swept_by_log && break
+      (( $(date -u +%s) < attr_deadline )) || break
+      sleep "$POLL_SECONDS"
+    done
+  fi
+  if swept_by_log; then swept=true; fi
+fi
+
 control_ok=false
-if exists_id server "$CTL_ID"; then control_ok=true; fi
+if exists_id server "$CTL_ID" && ! grep -qE "\($CTL_ID\): deleting" "$SWEEP_LOG"; then control_ok=true; fi
 elapsed=$([[ -n $gone_at ]] && echo $(( gone_at - T0 )) || echo null)
 in_interval=false
 if [[ -n $gone_at ]] && (( gone_at - T0 <= INTERVAL_S + RUN_SLACK_S )); then in_interval=true; fi
 pass=false
-[[ $in_interval == true && $control_ok == true ]] && pass=true
+[[ $in_interval == true && $control_ok == true && $swept == true ]] && pass=true
 runs='[]'
 if [[ $MODE != local ]]; then
   runs=$("$GH_BIN" run list --workflow test-server-sweeper.yml --limit 5 \
@@ -137,12 +191,14 @@ if [[ $MODE != local ]]; then
 fi
 jq -n --arg b "$NAME" --arg m "$MODE" --argjson pass "$pass" --argjson e "$elapsed" --argjson c "$control_ok" \
   --argjson w "$in_interval" --arg t0 "$(date -u -d "@$T0" +%Y-%m-%dT%H:%M:%SZ)" --argjson runs "$runs" \
+  --argjson s "$swept" --arg logs "$FETCHED" \
   '{scenario:"g0-watchdog", batch:$b, mode:$m, pass:$pass, created:$t0, seconds_until_gone:$e,
-    within_one_interval:$w, control_untouched:$c, recent_sweeper_runs:$runs}' | tee "$WORK/result.json"
+    within_one_interval:$w, control_untouched:$c, deleted_by_sweeper_log:$s,
+    sweeper_logs_read:($logs | split(" ") | map(select(. != ""))), recent_sweeper_runs:$runs}' | tee "$WORK/result.json"
 
 if [[ $pass == true ]]; then
-  log "PASS: target server, Primary IPv4 and SSH key deleted by the sweeper after ${elapsed}s; control (same expired delete-after, no test label) untouched"
+  log "PASS: target server, Primary IPv4 and SSH key deleted by the sweeper after ${elapsed}s (IDs $SRV_ID, $IP_ID, $KEY_ID in its log $SWEEP_LOG); control (same expired delete-after, no test label) untouched"
 else
-  log "FAIL: seconds_until_gone=$elapsed (limit $(( INTERVAL_S + RUN_SLACK_S ))) control_untouched=$control_ok"
+  log "FAIL: seconds_until_gone=$elapsed (limit $(( INTERVAL_S + RUN_SLACK_S ))) control_untouched=$control_ok deleted_by_sweeper_log=$swept"
   exit 1
 fi

@@ -33,6 +33,24 @@ fail() {
   exit 1
 }
 
+# setup_firewall: SSH (22) and Minecraft (25565) only. With ALLOW_FROM ("CIDR ...", validated on
+# the PC) both ports are open to those sources only; without it, to everyone (review finding 8).
+# ufw's default policy denies all other incoming traffic.
+setup_firewall() {
+  local ufw=${UFW_BIN:-ufw} c port
+  if [[ -z ${ALLOW_FROM:-} ]]; then
+    "$ufw" allow 22/tcp
+    "$ufw" allow 25565/tcp
+  else
+    for c in $ALLOW_FROM; do
+      for port in 22 25565; do "$ufw" allow proto tcp from "$c" to any port "$port"; done
+    done
+  fi
+  "$ufw" --force enable
+  printf '%s
+' "${ALLOW_FROM:-any}" > "$STATE/firewall-allow-from"
+}
+
 # set_prop FILE KEY VALUE: replace KEY=... in a Java properties file, or append it.
 set_prop() {
   local file=$1 key=$2 value=$3 tmp
@@ -187,9 +205,7 @@ main() {
   done
   java -version 2>&1 | head -1 | tee "$STATE/java-version"
   grep -q 'version "1\.8' "$STATE/java-version" || fail "java is not version 8"
-  ufw allow 22/tcp
-  ufw allow 25565/tcp
-  ufw --force enable
+  setup_firewall
   id minecraft > /dev/null 2>&1 || useradd --system --home-dir "$ROOT" --shell /bin/bash minecraft
   install -d -o minecraft -g minecraft "$ROOT"
 

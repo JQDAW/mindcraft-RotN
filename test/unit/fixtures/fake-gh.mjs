@@ -1,0 +1,63 @@
+// Fake of the parts of the gh CLI that deploy/test-server.sh and test/scenarios/g0-watchdog.sh use.
+// State: $FAKE_GH_STATE (JSON {runs: [{databaseId, event, status, conclusion, createdAt, headBranch, log}]}).
+// Every call is appended to $FAKE_GH_LOG (JSONL).
+//
+//   run list [--workflow W] [--branch B] [--event E] [--limit N] --json FIELDS
+//   run view ID --log | --json FIELDS
+//   workflow run W --ref B     runs $FAKE_GH_DISPATCH_CMD (bash -c) as the "sweeper" and records
+//                              its output, GitHub-style ("sweep\tStep\t<ts> <line>"), as the run log.
+//
+// Env: FAKE_GH_FAIL=1 (every call fails, like a logged-out gh).
+import fs from 'node:fs';
+import process from 'node:process';
+import { spawnSync } from 'node:child_process';
+
+const argv = process.argv.slice(2);
+const statePath = process.env.FAKE_GH_STATE;
+if (process.env.FAKE_GH_LOG) fs.appendFileSync(process.env.FAKE_GH_LOG, JSON.stringify(argv) + '\n');
+if (process.env.FAKE_GH_FAIL === '1') {
+    process.stderr.write('To get started with GitHub CLI, please run:  gh auth login\n');
+    process.exit(4);
+}
+
+const load = () => (statePath && fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : { runs: [] });
+const save = (st) => fs.writeFileSync(statePath, JSON.stringify(st));
+const flag = (name) => {
+    const i = argv.indexOf(name);
+    return i >= 0 ? argv[i + 1] : undefined;
+};
+const pick = (run, fields) => Object.fromEntries(fields.split(',').map((f) => [f, run[f]]));
+
+const [group, verb] = argv;
+const st = load();
+
+if (group === 'run' && verb === 'list') {
+    let runs = [...st.runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (flag('--event')) runs = runs.filter((r) => r.event === flag('--event'));
+    if (flag('--branch')) runs = runs.filter((r) => r.headBranch === flag('--branch'));
+    runs = runs.slice(0, Number(flag('--limit') ?? 20));
+    process.stdout.write(JSON.stringify(runs.map((r) => pick(r, flag('--json') ?? 'databaseId'))) + '\n');
+} else if (group === 'run' && verb === 'view') {
+    const run = st.runs.find((r) => String(r.databaseId) === argv[2]);
+    if (!run) {
+        process.stderr.write(`could not find any workflow run with ID ${argv[2]}\n`);
+        process.exit(1);
+    }
+    if (argv.includes('--log')) process.stdout.write(run.log ?? '');
+    else process.stdout.write(JSON.stringify(pick(run, flag('--json') ?? 'status')) + '\n');
+} else if (group === 'workflow' && verb === 'run') {
+    const id = 90000000 + st.runs.length + 1;
+    const cmd = process.env.FAKE_GH_DISPATCH_CMD ?? 'true';
+    const r = spawnSync(process.env.FAKE_GH_BASH ?? 'bash', ['-c', cmd], { encoding: 'utf8', env: process.env });
+    const ts = new Date().toISOString();
+    const log = `${r.stdout ?? ''}${r.stderr ?? ''}`.split('\n').filter(Boolean)
+        .map((l) => `sweep\tSweep expired labelled test resources\t${ts} ${l}\n`).join('');
+    st.runs.push({ databaseId: id, event: 'workflow_dispatch', status: 'completed',
+        conclusion: r.status === 0 ? 'success' : 'failure', createdAt: ts.replace(/\.\d+Z$/, 'Z'),
+        headBranch: flag('--ref') ?? 'develop', log });
+    save(st);
+    process.stdout.write(`https://github.com/example/repo/actions/runs/${id}\n`);
+} else {
+    process.stderr.write(`fake gh: unsupported command ${argv.join(' ')}\n`);
+    process.exit(2);
+}

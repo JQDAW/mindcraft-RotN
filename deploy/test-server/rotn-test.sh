@@ -61,6 +61,7 @@ case $cmd in
     echo "online_mode=$(prop online-mode)"
     echo "white_list=$(prop white-list)"
     echo "network_compression_threshold=$(prop network-compression-threshold)"
+    echo "firewall_allow_from=$(state firewall-allow-from)"
     echo "eula=$(grep -E '^eula=' "$SERVER/eula.txt" 2>/dev/null | cut -d= -f2 | tr -d '\r')"
     echo "whitelist_names=$(jq -r '[.[].name] | join(",")' "$SERVER/whitelist.json" 2>/dev/null || true)"
     echo "whitelist_missing=$(tr '\n' ',' < "$STATE/whitelist-missing" 2>/dev/null | sed 's/,$//' || true)"

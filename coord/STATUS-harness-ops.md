@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (00:40 UTC)
+Updated: 2026-11-01 (01:10 UTC)
 
 ## Done
 
@@ -59,32 +59,50 @@ Updated: 2026-11-01 (00:40 UTC)
 - Total for both batches: about **EUR 0.16** plus 2 Primary IPv4-hours. The stated maximum was about EUR 1.29.
 - Evidence is in `test/evidence/g0/`. An independent verifier pass gave PASS. Its should-fix (capture the project-wide empty checks) and nits are applied.
 
+- PR #5 (G0 evidence) merged as 65792f3: **G0 test-server half passed, "schedule pending"**.
+
 ## Doing
 
-- Evidence PR for gate G0 against develop.
+Lead's assignment of 2026-11-01, as three PRs, each on its own branch from develop:
+
+1. **PR A**, `agent/harness-ops/g0-followups`: PR #5 review nits 2-5 and deferred findings 5, 7, 8 and 10 (see below). Code done, `npm test` passes 62/62; PR opened.
+2. **PR B**, CI (brief deliverable 3): `npm ci`, `npm test` and lint on every PR. Lint must not raise the baseline of 259. No secrets in `pull_request` jobs.
+3. **PR C**, the scenario runner plus the G1 scenarios (log in online, stay 10 min, chat, walk), brief deliverable 2.
+
+No paid batches for any of these unless the lead approves.
+
+## Watching
+
+- The first `event=schedule` run of `test-server-sweeper.yml` (active on develop since 00:25 UTC). By the lead's rule it is a **precondition for the next paid batch**, and `test-server.sh up` now enforces it.
+  - Still none at 01:05 UTC; only the two dispatch runs exist.
+  - I keep checking until about 04:00 UTC. If none appears by then, I write it under Requests.
 
 ## Planned real batches
 
-Both planned batches ran on 2026-11-01 and passed (see Done). The plan as written before the runs is in this file at commit 70c5c3a. The next real batch is net-forge's capture run (`--capture`), once G1 needs it.
+None planned. The next real batch is net-forge's capture run (`--capture`), once G1 needs it. It needs the lead's approval and an observed scheduled sweeper run. Both earlier batches passed (see Done); the plan as written before them is in this file at commit 70c5c3a.
 
 ## Blocked
 
 - Nothing.
 
-## Deferred review findings (PR #4; the lead allowed them in a later PR)
+## Review findings (deferred from PR #4, plus PR #5 nits): fixed in PR A
 
-- **5.** Preflight check for a recent successful sweeper run before `up` (`gh run list --workflow test-server-sweeper.yml`), refusing or warning if there is none. The cost wording is already fixed.
-- **7.** `resolve_name` does not validate `--name` for the non-`up` commands (`down`, `console`, ...). Not exploitable, because selectors are ANDed, but it should use the same regex as `up`.
-- **8.** The firewall opens 22 and 25565 to the whole internet. Add an optional `--allow-from CIDR` (ufw) or a labelled Hetzner Cloud Firewall.
-- **10.** `expired_filter` treats a missing or unparsable expiry as expired at once (fail-safe for disposable labelled resources). This is now documented in the code comment. Still to decide: alert instead of deleting in that case.
+- **5. Sweeper preflight.**
+  - `up`/`run` refuse to create anything unless `gh run list` shows a **successful `event=schedule`** sweeper run on develop in the last `ROTN_SWEEPER_MAX_AGE_MIN` minutes (default 120). Dispatch runs do not count.
+  - `--dry-run` only warns. `--skip-sweeper-check` needs the lead's approval.
+- **7. Name check.** One `check_name` rule for `--name`, `$TEST_SERVER_NAME` and the name found in the state directory, for every command.
+- **8. Firewall.** `--allow-from CIDR` (repeatable, or `ROTN_TEST_ALLOW_FROM`) opens 22 and 25565 only to those CIDRs (ufw). The default stays open, because this PC's address changes. `verify` reports `firewall_allow_from`.
+- **10. Decision: keep the fallbacks and add an alert.** A labelled resource with a missing or unparsable `delete-after` (or a control with no `control-expires`) is logged as `ALERT` and makes the sweep exit non-zero, so the GitHub job fails and notifies someone. Deletion still follows the fallback (created + 8 h; at once only if the creation time is also unreadable).
+- **PR #5 nit 3.** `g0-watchdog.sh` now PASSes only if the sweeper's own log (local output, or `gh run view --log` of the runs since the create) has "expired ... (ID): deleting" for all three target IDs and never names the control's ID.
+- **PR #5 nits 2, 4, 5.** `project-empty-checks.txt` wording and check-3 command, the 338-vs-346 note, and the timestamp.
 
 ## Requests to other agents or the lead
 
 1. ~~Lead: re-review and merge PR #4~~ **Done** (70c5c3a).
 2. ~~Human: GitHub Environment `hetzner-test-sweeper`~~ **Done** (the lead verified it via the GitHub API on 2026-11-01): deployment branches `develop` only, environment secret `HCLOUD_TOKEN`, no repository-level secrets.
-3. **Lead (info only):** my unit tests use `"test/unit/**/*.test.js"`, which `npm test` already covers. CI (brief deliverable 3) comes in a later PR.
-4. **Lead:** review and merge the G0 evidence PR, then mark G0's test-server half as passed in `docs/PLAN.md`. The human half (brief approval) is already done.
+3. **Lead (info only):** my unit tests use `"test/unit/**/*.test.js"`, which `npm test` already covers.
+4. ~~Lead: merge the G0 evidence PR~~ **Done** (#5, 65792f3).
 
 ## Open PRs
 
-- G0 evidence PR (this branch): re-review nits plus `test/evidence/g0/`. Both real batches passed.
+- PR A (`agent/harness-ops/g0-followups`): see Doing.
