@@ -4,7 +4,7 @@ A small **server-side** Forge 1.12.2 mod (ADR 0004). It runs **only on the dispo
 
 - **Strictly opt-in.** It does nothing unless the file `rotn-dump.enable` exists in the server folder. The test-server batch creates it (`run-dump.sh`). A copy of the jar anywhere else stays idle and logs one line.
 - With the marker present, a dump is scheduled once the server has started, and the console command `rotndump` (permission level 4) schedules another.
-- A dump writes its parts in order (oredict, blocks, items, recipes, smelting, entities, spawns, then the manifest), **at most 500 entries per server tick** (`RotnDump.BATCH`), so no single tick holds much work. Each part's duration and tick count go to the log and to `manifest.json` `timing`. Each file is written as `NAME.json.tmp` and renamed into place, and `DONE` is written last. **A reader must wait for `DONE`.**
+- A dump writes its parts in order (oredict, blocks, items, recipes, smelting, entities, spawns, then the manifest), **at most 500 entries and about 40 ms per server tick** (`RotnDump.BATCH`, `TICK_BUDGET_MS`), so no single tick holds much work. Each entry is rendered into its own buffer first: an entry that throws is dropped and counted in `manifest.entryErrors`, never the whole file. Each part's duration and tick count go to the log and to `manifest.json` `timing`. Each file is written as `NAME.json.tmp` and renamed into place, and `DONE` is written last. **A reader must wait for `DONE`.**
 - It only reads game state. `acceptableRemoteVersions = "*"` and `serverSideOnly = true`: clients that lack the mod can still join.
 - Every value is computed before it is written. A game call that throws gives `null` for that one value, never a truncated file.
 
@@ -21,6 +21,7 @@ Every key is a registry name plus metadata, never a numeric id (numeric ids diff
 | `smelting.json` | vanilla furnace recipes (`FurnaceRecipes`, after CraftTweaker's `furnace.*`): `input`, `output`, `xp` |
 | `oredict.json` | every ore dictionary key and its stacks |
 | `entities.json` | per entity: `modSpawn` (FML has a mod spawn registration), `modId` + `modEntityTypeId` (the **mod-local id** in FML EntitySpawn; `null` without a mod spawn), `usesVanillaSpawning` (such a mod entity arrives in a vanilla spawn packet with its `minecraft:entities` id instead), `class`, `entityName`, `displayName`, `hostile` (`IMob`), `kinds`, tracking settings |
+| `serializers.json` | the entity-metadata **DataSerializer table**: every id `DataSerializers.getSerializer` knows (0-1023, so Forge's 256+ ids too) with its class and `vanilla` flag, and `usage`: for each entity, the data keys (`index`) that use a modded serializer, read from a constructed, never spawned entity. For net-forge's metadata decoding (ids 15-18) |
 | `spawns.json` | per biome and creature type: natural spawn list entries (`entity`, `weight`, `min`, `max`) |
 | `DONE` | one summary line, written last |
 

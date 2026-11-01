@@ -64,10 +64,14 @@ final class ItemDumper extends Part<Item> {
     }
 
     @Override
+    protected String key(Item item) {
+        return Names.name(item);
+    }
+
+    @Override
     protected boolean entry(JsonWriter w, Item item) throws IOException {
         Set<Integer> metas = variantMetas(item, known.get(item));
         names.setVariants(item, metas);
-        w.name(Names.name(item));
         writeItem(w, item, metas);
         return true;
     }
