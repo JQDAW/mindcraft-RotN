@@ -1,0 +1,83 @@
+# Builds rotn-data's dumper mod (tools/dumper, ADR 0004) on every change to it (harness-ops; requested
+# by rotn-data, approved by the lead). Based on rotn-data's tools/dumper/ci/dumper-build.yml.proposed.
+#
+# - JDK 8 (Temurin) and tools/dumper/build.sh, which downloads Gradle 4.10.3 and checks its SHA-256
+#   (8626cbf2...186e, the value services.gradle.org publishes), then builds with ForgeGradle
+#   2.3-1.0.8 and Forge 14.23.5.2860.
+# - The jar is a workflow artifact for 7 days and is never committed; the job fails if any jar is
+#   tracked under tools/dumper. A failing build fails the check.
+# - No secrets, no environment, a read-only token: a pull_request job can run the PR's own code
+#   safely. Every action is pinned by commit SHA.
+name: dumper-build
+
+on:
+  pull_request:
+    paths:
+      - 'tools/dumper/**'
+      - '.github/workflows/dumper-build.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'tools/dumper/**'
+      - '.github/workflows/dumper-build.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dumper-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Until rotn-data's dumper is on the branch (PR #34), there is nothing to build: only a run
+      # triggered by this workflow file itself can see no tools/dumper at all. If the folder exists,
+      # the build runs, and a missing build.sh or any build failure fails the job.
+      - name: Is there a dumper to build?
+        id: present
+        run: |
+          if [ -d tools/dumper ]; then echo "build=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::tools/dumper is not in this tree yet (PR #34); nothing to build"; echo "build=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: No jar is committed (ADR 0004)
+        if: steps.present.outputs.build == 'true'
+        run: |
+          if git ls-files -- 'tools/dumper' | grep -E '\.jar$'; then
+            echo "::error::a jar is tracked under tools/dumper; build outputs are never committed"; exit 1
+          fi
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        if: steps.present.outputs.build == 'true'
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.present.outputs.build == 'true'
+        with:
+          path: |
+            ~/.cache/rotndump
+            ~/.gradle/caches
+          key: rotndump-${{ runner.os }}-${{ hashFiles('tools/dumper/build.gradle', 'tools/dumper/build.sh', 'tools/dumper/gradle.properties') }}
+
+      - name: Build the dumper (JDK 8, Gradle 4.10.3 checksum-verified, ForgeGradle 2.3-1.0.8)
+        if: steps.present.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          java -version 2>&1 | head -1
+          bash tools/dumper/build.sh
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.present.outputs.build == 'true'
+        with:
+          name: rotndump-jar
+          path: tools/dumper/build/libs/rotndump-*.jar
+          retention-days: 7
+          if-no-files-found: error
