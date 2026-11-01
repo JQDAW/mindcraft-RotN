@@ -13,5 +13,5 @@ export { classifyKick, classifySocketError, chatToText, createRestartPolicy, EXI
 export { CaptureWriter, readCapture, redactBuffer } from './src/capture.js';
 export { throttleMovement, mergeMovement } from './src/movement-throttle.js';
 export { forgeOptionsFromEnv } from './src/env.js';
-export { assertMicrosoftAuthSafe, quietMsaCodeHandler, debugValueEnables, PRISMARINE_AUTH_DEBUG_NAMESPACE } from './src/auth-guard.js';
+export { assertMicrosoftAuthSafe, quietMsaCodeHandler, debugValueEnables, patternMayEnablePrefix, PRISMARINE_AUTH_DEBUG_NAMESPACE } from './src/auth-guard.js';
 export { assertOutsideGitWorkTrees, prepareSecretFolder, findGitWorkTree, realLocation } from './src/secret-folder.js';
