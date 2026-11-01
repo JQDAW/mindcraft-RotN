@@ -285,7 +285,7 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
   - `stay_10min`: 608 s, no disconnects.
 - **B (spike):** every check passed: handshake, spawn, chat both ways, a 6-block pathfinder walk, and an 11-minute stay.
 - **Advancements opaque:** yes. Triumph 3.19.2 was detected in both sessions, with no advancements parse error.
-- **Safety net:** dropped nothing (`droppedPackets` `{}`, no "(dropped, allowlisted)" lines).
+- **Safety net:** dropped nothing (`droppedPackets` `{}`). The only parse errors were PartialReadErrors, which protodef drops itself. (Corrected: the "(dropped, allowlisted)" log string did not exist yet in that code, so its absence was no evidence.)
 - **Kicks:** none (runner `kicks: []`). B ended with its own `disconnect.quitting`. The 17:34:22 "Internal Exception" disconnect is the teardown after `stay_10min` passed (SIGTERM on Windows).
 - **`OBFUSCATE|HS` and `dimstack`:** no answer was needed, with no kick over 11 and 10 minutes. The JustEnoughDimensions error occurred 0 times.
 - **New finding (not a blocker):** one `entity_metadata` PartialReadError per session (a player's, 77 and 78 bytes), dropped by protodef.
@@ -336,7 +336,7 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 
 ## Doing
 
-- Batch A done (above); PR #26 merged. PR #25 (registry extension) is being reworked for its review (vanilla entities, modded-block hardness, rebind logs), together with the PR #28 nits. **The next paid batch needs a new written GO.**
+- G1 PASSED (Batch B+C retry, PR #31 merged; confirmed by the independent reviewer). Phase 2 (G2): #25, #38 and #46 are merged. Open: PR #49 (`applyProperties` hardening, serializer 14 inferred) and the PR #31 follow-ups. Next: rotn-data's dumper ids for serializers 15-18, and its mod-local entity table.
 
 ## Next
 

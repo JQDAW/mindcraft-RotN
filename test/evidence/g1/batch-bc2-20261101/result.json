@@ -27,7 +27,7 @@
     {
       "check": "login_online",
       "pass": true,
-      "detail": "<bot> joined; UUID <uuid> (version 4, Mojang account)",
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
       "readyToTry": "Starting the service makes the bot log in with its own account"
     },
     {
