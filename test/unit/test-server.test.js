@@ -651,6 +651,55 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         assert.match(unknown.stderr, /WARNING: could not read the last push of JQDAW\/rotn-sweeper-cron/);
     });
 
+    // (c): an external cron service dispatches the sweeper every 15 min (lead and human, 2026-11-01).
+    const cadence = (...agesS) => agesS.map((a, i) => sweepRun({ databaseId: 4000 + i, createdAt: isoZ(NOW - a) }));
+    const refusesCadence = (runs, re) => {
+        ghRuns(runs);
+        refuses(run(upArgs), new RegExp(`; and via the cadence: ${re.source}`));
+    };
+
+    test('cadence path: 3 dispatch runs 15 min apart, newest 1 min old, lets up proceed', () => {
+        ghRuns(cadence(60, 960, 1860));
+        const r = run(upArgs);
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, /sweeper OK \(via cadence\): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15, 15 min, newest 4000 1 min ago/);
+        const calls = readJsonl(env.FAKE_GH_LOG);
+        for (const a of calls) {
+            assert.deepEqual(a.slice(0, 2), ['run', 'list'], `read-only calls only: ${a.join(' ')}`);
+            assert.equal(a.at(-2), '--repo', a.join(' '));
+        }
+        const c = calls.find((a) => flagValues(a, '--event')[0] === 'workflow_dispatch');
+        assert.deepEqual([flagValues(c, '--workflow')[0], flagValues(c, '--branch')[0], c.at(-1)], ['test-server-sweeper.yml', 'develop', 'JQDAW/mindcraft-RotN']);
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        ghRuns(cadence(300, 1200, 2100, 3000));
+        assert.equal(run(['up', '--yes', '--name', 'mcr-test-cad4']).code, 0, '4 runs, newest 5 min, oldest exactly 50 min');
+    });
+
+    test('cadence path: gaps too short (an extra dispatch) or too long (a missed one) refuse', () => {
+        refusesCadence(cadence(60, 300, 960, 1860), /dispatch-run gaps 15, 11, 4 min are not all 10\.\.20 min/);
+        refusesCadence(cadence(60, 960, 2400), /dispatch-run gaps 24, 15 min are not all 10\.\.20 min/);
+        refusesCadence(cadence(60, 120, 180), /dispatch-run gaps 1, 1 min are not all 10\.\.20 min/);
+    });
+
+    test('cadence path: too few runs, including a one-off manual dispatch, refuse', () => {
+        refusesCadence(cadence(60), /only 1 successful dispatch runs on develop in the last 50 min \(need 3\)/);
+        refusesCadence(cadence(60, 960), /only 2 successful/);
+        refusesCadence(cadence(60, 960, 3060), /only 2 successful/);
+    });
+
+    test('cadence path: a stale cadence refuses (newest must be under 20 min)', () => {
+        refusesCadence(cadence(1200, 2100, 3000), /the newest dispatch run \(4000\) is 20 min old \(limit 20\)/);
+    });
+
+    test('cadence path: failed, unfinished, scheduled or other-branch runs do not count', () => {
+        const [a, b, c] = cadence(60, 960, 1860);
+        refusesCadence([a, { ...b, conclusion: 'failure' }, c], /only 2 successful/);
+        refusesCadence([a, { ...b, status: 'in_progress', conclusion: '' }, c], /only 2 successful/);
+        refusesCadence([a, { ...b, headBranch: 'agent/x' }, c], /only 2 successful/);
+        refusesCadence([a, { ...b, event: 'push' }, c], /only 2 successful/);
+        refusesCadence([a, { ...b, repo: HELPER }, c], /only 2 successful/);
+    });
+
     test('helper path: gh failing on the helper repo refuses', () => {
         refuses(run(upArgs, { FAKE_GH_FAIL: '1' }), /'gh run list' failed \(not logged in\?\); and via the helper: 'gh run list' on JQDAW\/rotn-sweeper-cron failed/);
     });

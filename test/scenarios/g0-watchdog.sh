@@ -6,7 +6,9 @@
 #   test/scenarios/g0-watchdog.sh --yes [--mode scheduled|dispatch|local] [--timeout MIN]
 #
 #   scheduled  (default) wait for the 15-minute cron run of .github/workflows/test-server-sweeper.yml
-#   dispatch   trigger that workflow on develop now with `gh workflow run`
+#   dispatch   trigger that workflow on develop now with `gh workflow run`. Lead-approved proofs only:
+#              this extra run breaks the cadence evidence of the sweeper preflight (path c in
+#              deploy/README.md), so `test-server.sh up` may refuse for up to 50 min afterwards.
 #   local      run `deploy/test-server.sh sweep` from this PC (proves the logic, not the off-PC part)
 #
 # PASS needs the target gone within one sweeper interval (15 min) plus 5 min for the run itself,
@@ -122,6 +124,7 @@ case $MODE in
     HCLOUD_CONTEXT=$CONTEXT "$REPO_ROOT/deploy/test-server.sh" sweep > "$SWEEP_LOG" 2>&1 || log "local sweep reported a problem"
     cat "$SWEEP_LOG" >&2 ;;
   dispatch)
+    log "dispatching the sweeper once (lead-approved proof); the preflight's cadence path may refuse for up to 50 min"
     out=$(gh_ workflow run test-server-sweeper.yml --ref develop 2>&1) || { log "gh workflow run failed: $out"; exit 1; }
     printf '%s\n' "$out" >&2
     DISPATCH_RUN=$(grep -oE 'actions/runs/[0-9]+' <<< "$out" | head -1 | cut -d/ -f3 || true) ;;

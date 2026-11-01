@@ -54,8 +54,12 @@
 #       JQDAW/mindcraft-RotN), or
 #   (b) a successful event=schedule run of dispatch-sweeper.yml in the helper repo
 #       $ROTN_SWEEPER_HELPER_REPO (default JQDAW/rotn-sweeper-cron) within the last 40 minutes, AND a
-#       successful test-server-sweeper.yml run (any event) on develop created after it.
-#   Read-only `gh run list --repo ...` calls only. A plain dispatch run without (b)'s helper run never counts.
+#       successful test-server-sweeper.yml run (any event) on develop created after it, or
+#   (c) a cadence: at least 3 successful workflow_dispatch runs of test-server-sweeper.yml on develop
+#       in the last 50 minutes, every gap between consecutive ones 10..20 minutes, the newest under
+#       20 minutes old (the external cron service dispatches every 15 min).
+#   Read-only `gh run list --repo ...` calls only. A one-off manual dispatch never counts. Agents must
+#   never dispatch the sweeper to fake a cadence (deploy/README.md).
 #   hcloud always runs with --context mindcraft-rotn-test (the test project); any other
 #   --context / $HCLOUD_CONTEXT is refused. ROTN_HCLOUD_AUTH=env-token (HCLOUD_TOKEN, no context)
 #   is accepted only inside GitHub Actions, for the sweeper.
@@ -98,6 +102,8 @@ readonly SWEEPER_HELPER_WORKFLOW=dispatch-sweeper.yml
 readonly SWEEPER_HELPER_MAX_AGE_MIN=40
 # GitHub disables a public repo's scheduled workflows after 60 days without activity. Warn from day 45.
 readonly SWEEPER_HELPER_IDLE_WARN_DAYS=45
+# (c): an external cron service (cron-job.org, set up by the human) dispatches the sweeper every 15 min.
+readonly CADENCE_WINDOW_MIN=50 CADENCE_MIN_RUNS=3 CADENCE_GAP_MIN=10 CADENCE_GAP_MAX=20 CADENCE_NEWEST_MAX=20
 STATUS_PING_CMD=${STATUS_PING_CMD:-node $REPO_ROOT/test/tools/status-ping.mjs}
 POLL_SECONDS=${ROTN_TEST_POLL_SECONDS:-15}
 MOJANG_PROFILE_URL=${MOJANG_PROFILE_URL:-https://api.mojang.com/users/profiles/minecraft}
@@ -409,9 +415,13 @@ count_batch() {  # count_batch KIND NAME -> number of labelled resources of KIND
 # precondition for every paid batch):
 #   (a) its own event=schedule run on develop within SWEEPER_MAX_AGE_MIN, or
 #   (b) an event=schedule run of the helper repo's dispatch workflow within SWEEPER_HELPER_MAX_AGE_MIN,
-#       followed by a successful sweeper run (any event) on develop created after it.
-# A dispatch run alone never counts: it proves the token and the logic, not that a schedule fires.
-# The helper's own workflow_dispatch runs do not count either.
+#       followed by a successful sweeper run (any event) on develop created after it, or
+#   (c) a cadence of workflow_dispatch sweeper runs on develop, as an external cron service makes them
+#       (lead and human, 2026-11-01, after GitHub ran no scheduled workflow on this account at all).
+# A one-off dispatch run never counts: it proves the token and the logic, not that anything fires on a
+# schedule. The helper's own workflow_dispatch runs do not count either. Agents never dispatch the
+# sweeper to fake (c); g0-watchdog.sh --mode dispatch is a lead-approved exception, and its extra run
+# breaks the cadence (a gap under 10 min), so (c) refuses for up to 50 min afterwards.
 # gh_ / gh_at: every gh call names the repository explicitly, and GH_REPO / GH_HOST in the environment
 # cannot redirect it (PR #7 review). Only read-only `gh run list` calls are made here.
 gh_at() { local repo=$1; shift; env -u GH_REPO -u GH_HOST "$GH_BIN" "$@" --repo "$repo"; }
@@ -462,6 +472,35 @@ sweeper_helper_ok() {
   echo "OK helper scheduled run ${helper% *} on $SWEEPER_HELPER_REPO succeeded ${age} min ago (limit $SWEEPER_HELPER_MAX_AGE_MIN min), then sweeper run ${sweep% *} (${sweep#* }) on develop succeeded"
 }
 
+# sweeper_cadence_ok: (c). Prints "OK <message>" or "NO <reason>". Every successful workflow_dispatch
+# sweeper run on develop in the window counts, so an extra manual run between two cron runs makes a
+# short gap and fails the check: it never helps.
+sweeper_cadence_ok() {
+  local runs
+  runs=$(gh_ run list --workflow "$SWEEPER_WORKFLOW" --branch develop --event workflow_dispatch \
+           --limit 30 --json databaseId,status,conclusion,createdAt 2>/dev/null) \
+    || { echo "NO 'gh run list' failed (not logged in?)"; return; }
+  jqr -r --argjson now "$(now)" --argjson win "$(( CADENCE_WINDOW_MIN * 60 ))" --argjson n "$CADENCE_MIN_RUNS" \
+         --argjson gmin "$(( CADENCE_GAP_MIN * 60 ))" --argjson gmax "$(( CADENCE_GAP_MAX * 60 ))" \
+         --argjson newest "$(( CADENCE_NEWEST_MAX * 60 ))" '
+    def m: (. / 60 * 10 | floor) / 10;
+    [.[] | select(.status == "completed" and .conclusion == "success")
+         | {id: .databaseId, t: (.createdAt | fromdateiso8601)} | select($now - .t <= $win and .t <= $now)]
+    | sort_by(.t) as $r
+    | ($r | length) as $len
+    | if $len < $n then "NO only \($len) successful dispatch runs on develop in the last \($win / 60) min (need \($n))"
+      else
+        ([range(1; $len) as $i | $r[$i].t - $r[$i - 1].t]) as $gaps
+        | ($now - $r[-1].t) as $age
+        | ($gaps | map(m | tostring) | join(", ")) as $g
+        | if any($gaps[]; . < $gmin or . > $gmax) then
+            "NO dispatch-run gaps \($g) min are not all \($gmin / 60)..\($gmax / 60) min (one-off or missed dispatches)"
+          elif $age >= $newest then "NO the newest dispatch run (\($r[-1].id)) is \($age | m) min old (limit \($newest / 60))"
+          else "OK cadence of \($len) dispatch runs on develop in the last \($win / 60) min, gaps \($g) min, newest \($r[-1].id) \($age | m) min ago"
+          end
+      end' <<< "$runs" || echo "NO unreadable sweeper run list"
+}
+
 # helper_idle_reminder: keep-alive reminder for the helper repo. GitHub disables the scheduled
 # workflows of a public repo after 60 days without activity, and then this preflight refuses. Reads the
 # repo's last push (read-only GET); warns, never refuses.
@@ -477,7 +516,7 @@ helper_idle_reminder() {
 }
 
 check_sweeper() {
-  local a b
+  local a b c
   if (( SKIP_SWEEPER_CHECK )); then
     warn "--skip-sweeper-check: not checking the scheduled sweeper (needs the lead's approval)"
     return 0
@@ -492,12 +531,14 @@ check_sweeper() {
   if [[ $a == OK\ * ]]; then log "sweeper OK: ${a#OK }"; return 0; fi
   b=$(sweeper_helper_ok)
   if [[ $b == OK\ * ]]; then log "sweeper OK (via helper): ${b#OK }"; helper_idle_reminder; return 0; fi
-  sweeper_refuse "${a#NO }; and via the helper: ${b#NO }"
+  c=$(sweeper_cadence_ok)
+  if [[ $c == OK\ * ]]; then log "sweeper OK (via cadence): ${c#OK }"; return 0; fi
+  sweeper_refuse "${a#NO }; and via the helper: ${b#NO }; and via the cadence: ${c#NO }"
 }
 
 sweeper_refuse() {
   if (( DRY_RUN )); then warn "sweeper check would refuse: $1"; return 0; fi
-  die "$1. Refusing to create anything: without the off-PC sweeper a crashed batch bills until someone notices. Check the Actions tab of $GH_REPO_NAME and of $SWEEPER_HELPER_REPO (a sweep that logs ALERT lines fails on purpose until the badly labelled resource is gone), or pass --skip-sweeper-check with the lead's approval."
+  die "$1. Refusing to create anything: without the off-PC sweeper a crashed batch bills until someone notices. Check the Actions tab of $GH_REPO_NAME (and the external cron service) and of $SWEEPER_HELPER_REPO (a sweep that logs ALERT lines fails on purpose until the badly labelled resource is gone), or pass --skip-sweeper-check with the lead's approval."
 }
 
 # ---------------------------------------------------------------- up
