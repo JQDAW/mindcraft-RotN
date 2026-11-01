@@ -1,8 +1,28 @@
 # Status: rotn-lead
 
-Updated: 2026-11-01 (about 22:05 UTC)
+Updated: 2026-11-01 23:30 UTC (from `date -u`)
 
-## Current snapshot (22:05 UTC)
+## Current snapshot (23:30 UTC)
+
+- **G2 batch 1** (GO 22:03): an honest **FAIL**; the server was deleted at 22:24:20, about EUR 0.14.
+  - Items passed fully (643/643).
+  - Blocks failed on a reply-parser bug (#64) and Dynamic Trees state drift.
+  - Mobs failed on summons the server refused (Animania replaces vanilla animals), a spectre that vanished in daylight, and untagged confirms.
+  - The report is in #65 and the evidence in #66.
+  - Lead decisions on findings 2-7 are in the #65 comment.
+- **Fixed and merged since:**
+  - #64 parser;
+  - #66 evidence redaction and CI leak check (three review rounds, IPv6 evasions closed);
+  - #67 re-asked samples, the 0..15 meta bound (the 1.12 `-1` wildcard), metaDrift, mob replacements (max 3 of 12), tagged confirms, placeholder names fail;
+  - #62 entity threat overrides (the Animania rabbits were a misread, reverted) and the Animania-replaced vanilla animals;
+  - #63, #68, #69.
+- **G2 batch 2: GO given at 23:28 UTC** (below). G2 is not passed until its evidence PR is reviewed and merged.
+- Hetzner spend for agent batches: about EUR 1.00 + IPv4-hours.
+- Since 22:25 UTC every *new* independent-reviewer subagent runs at medium effort (the human's instruction).
+- For skills-rotn: a pack mod sets `commandBlockOutput`/`sendCommandFeedback` to false for the player on join (G2 batch 1 finding 7).
+
+## Earlier snapshot (22:05 UTC)
+
 
 - **Every G2 precondition is merged** (develop `36d7ee8`):
   - #51 the G2 batch plan;
@@ -197,6 +217,12 @@ Updated: 2026-11-01 (about 22:05 UTC)
   - Afterwards: the project empty; real times and cost recorded; raw output in `captures/raw/`.
   - The FRCFLD token cache is used only from this PC. The driver gets only the runner's allowlisted env: no cloud credentials and no `TEST_SERVER_CTL`.
   - The evidence PR redacts every IP (including the `FRCFLD[/IP:port] logged in` line), every UUID and local paths, with a CI check. Each scenario's pass, gateValid and notGate reasons are reported honestly. A failure needs a new written GO.
+
+- **2026-11-01 23:28 UTC: GO for G2 batch 2**, the re-run, exactly as planned in `coord/STATUS-harness-ops.md` "Planned real batches":
+  - `gamerule doDaylightCycle false` once, then `time set day` and `timeout 15m` before each scenario;
+  - develop `53a1d5e` or later, clean;
+  - the same conditions as batch 1: runtime preconditions just before the create, no `--skip-sweeper-check`, one CPX42, TTL 2 h, a hard stop at 56 min, worst case about EUR 0.42 + IPv4, test server only, the FRCFLD cache only from this PC, the project empty afterwards, and evidence through the merged redaction tool with the CI leak check;
+  - an honest report of pass, gateValid, notGate, replacements and metaDrift.
 
 ## Notes for dev agents
 
