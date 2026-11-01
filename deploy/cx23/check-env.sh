@@ -58,7 +58,8 @@ fi
 # The value checks, in node. NODE_OPTIONS and NODE_PATH from the env file must not change how this
 # checker runs; the bot's NODE_OPTIONS is passed along to be checked instead.
 opts=()
-[[ -n ${NODE_OPTIONS+x} ]] && opts=(CHECK_ENV_NODE_OPTIONS="$NODE_OPTIONS")
+[[ -n ${NODE_OPTIONS+x} ]] && opts+=(CHECK_ENV_NODE_OPTIONS="$NODE_OPTIONS")
+[[ -n ${NODE_PATH+x} ]] && opts+=(CHECK_ENV_NODE_PATH=1)
 if ! env -u NODE_OPTIONS -u NODE_PATH "${opts[@]}" "$NODE_BIN" "$HERE/check-env.mjs" "$RELEASE"; then
   problems=$((problems + 1))
 fi

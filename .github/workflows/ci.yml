@@ -67,11 +67,13 @@ jobs:
         run: |
           set -euo pipefail
           shellcheck --version | sed -n 2p
-          shellcheck -S warning deploy/cx23/bootstrap.sh deploy/cx23/deploy.sh deploy/cx23/check-env.sh deploy/cx23/mindcraft-rotn-ctl.sh
+          shellcheck -S warning deploy/cx23/bootstrap.sh deploy/cx23/deploy.sh deploy/cx23/check-env.sh deploy/cx23/check-env-names.sh deploy/cx23/mindcraft-rotn-ctl.sh
           d=$(mktemp -d)
           printf '#!/bin/sh\nexit 0\n' > "$d/check-env"
-          chmod +x "$d/check-env"
-          sed -e "s#^ExecStartPre=/usr/local/lib/mindcraft-rotn/check-env#ExecStartPre=$d/check-env#" \
+          cp "$d/check-env" "$d/check-env-names"
+          chmod +x "$d/check-env" "$d/check-env-names"
+          sed -e "s#^ExecStartPre=+/usr/local/lib/mindcraft-rotn/check-env-names#ExecStartPre=+$d/check-env-names#" \
+              -e "s#^ExecStartPre=/usr/local/lib/mindcraft-rotn/check-env#ExecStartPre=$d/check-env#" \
               -e "s#^ExecStart=/usr/bin/node #ExecStart=$(command -v node) #" \
               deploy/cx23/mindcraft-rotn@.service > "$d/mindcraft-rotn@ci.service"
           systemd-analyze --version | head -1

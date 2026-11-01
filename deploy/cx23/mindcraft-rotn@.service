@@ -23,6 +23,8 @@ Environment=MINDCRAFT_SINGLE_BOT_SERVICE=1
 # Refuses to start on an unsafe environment (deploy/cx23/check-env.sh and check-env.mjs): INSECURE_CODING
 # or BLOCKED_ACTIONS set, SETTINGS_JSON keys outside an allowlist, a DEBUG reaching prismarine-auth, a
 # token-cache folder that is not 0700 and ours, an env file that is not 0600 root.
+# First, as root ("+": the env file is root:root 0600): only allowlisted variable NAMES in the env file.
+ExecStartPre=+/usr/local/lib/mindcraft-rotn/check-env-names /etc/mindcraft-rotn/%i.env
 ExecStartPre=/usr/local/lib/mindcraft-rotn/check-env /etc/mindcraft-rotn/%i.env
 ExecStart=/usr/bin/node /opt/mindcraft-rotn/current/main.js
 # always: a bot that exits on a transient problem comes back. Exit 0 (requested stop) and
