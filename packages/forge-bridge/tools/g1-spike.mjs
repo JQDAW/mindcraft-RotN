@@ -88,9 +88,9 @@ async function main() {
 
     function bridge() { return bot.forge?.bridge ?? null; }
 
-    // Modded blocks have no name in bot.registry yet (brief item 4): prismarine
-    // reports '' and an empty bounding box. Record the Forge registry name next
-    // to it so the evidence says what the bot actually stood and walked on.
+    // bot.registry carries modded names since brief item 4 (extendRegistry). Record
+    // the synced Forge registry name next to it anyway, so the evidence can show
+    // the two agree on what the bot stood and walked on.
     function blockInfo(pos) {
         const b = bot.blockAt(pos);
         if (!b) return null;
