@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (21:30 UTC)
+Updated: 2026-11-01 (22:30 UTC)
 
 ## Done
 
@@ -77,30 +77,127 @@ Updated: 2026-11-01 (21:30 UTC)
 - PR #27 (small queued items: status-ping flake, PR #21 findings 3/4/6, PR #17 nits; then the sweeper preflight refuses without GitHub's Date header, and ROTN_TEST_NOW needs ROTN_TEST_MODE=1) merged as 62ec6f1.
 - PR #30 (CX23 runtime, offline: bootstrap, unit template, check-env, ctl wrapper, tag deploy and rollback) merged as 501c490 after re-review: APPROVE WITH NITS. The lead cross-checked the pinned NodeSource fingerprint on keyserver.ubuntu.com.
 - **G1 PASSED** (PR #31, b554547), with this runner and the G1 scenario as the gate evidence.
+- PR #33 (runner: `git: {sha, dirty, untracked}` in result.json) merged as a42fb26.
+- PR #40 (CI: `dumper-build` workflow for rotn-data's dumper; JDK 8, Gradle 4.10.3 checksum-verified, SHA-pinned actions) merged as 063c0a4. It was proven on PR #34's code in a throwaway trial PR (#39, closed). The first run failed red on the old ForgeGradle 2 userdev jar; after rotn-data moved to ForgeGradle 3, it went green. #42 (wording) merged as 0fb6deb.
+- **PR #36 (G2 scenarios) merged as eedab96** after three review rounds:
+  - **Scenarios:** `g2-blocks-named`, `g2-mobs-named` and `g2-items-roundtrip`. The bot only reports names; the server confirms each with `testforblock`, `testfor`, `summon` and `give`.
+  - **Blocks:** the census leaves out air; the runner picks samples per type; 40 non-air spot checks are weighed against the census.
+  - **Mobs:** the list comes from rotn-data's `common-mobs.json`, and needs a modded mob.
+  - **Items:** the full table round-trips through the agent's naming.
+  - **Agent naming:** `agentNaming` imports `src/utils/mcdata.js` in a child process. Its `toNew`/`toOld` must be functions and pass the full table both ways; otherwise every run is `notGate`.
+  - **Evidence:** the world seed is required.
+  - **Naming wired:** rotn-data's #44 merged on develop. My `agentNaming` check confirms all 643 table entries round-trip through `mcdata.js` (21:45 UTC).
 
 ## Doing
 
-- **PR #33** (`agent/harness-ops/runner-git-sha`): result.json records `git: {sha, dirty, untracked}`. In review.
-- **G2 scenarios** (`agent/harness-ops/g2-scenarios`), offline-tested:
-  - `g2-blocks-named`, `g2-mobs-named` and `g2-items-roundtrip`, the driver-side `attachG2` with a naming adapter, and the G2 section of `test/runner/DRIVER.md`.
-  - Every name the bot gives is checked by the server: `testforblock`, `testfor`, summon and give.
-  - rotn-data agreed the adapter: `registryName`, `toNew` and `toOld` in `packages/rotn-data/index.js`; `null` for anything unmappable; `vanilla/flattening-items.json` as the expected-name table; `common-mobs.json` after the first dump.
-  - net-forge's `walk()` `method` request: held out of this PR. Their `g1-driver.test.js:93` asserts the fallback text, so the one-line change and their test update have to land together; I sent net-forge the diff.
+- **G2 batch plan** (below, under "Planned real batches"): reviewed (APPROVE WITH NITS), amended with the review's five points. Not to be run without the lead's written GO, once every precondition is met.
+- **Small follow-ups PR:** the `agentNaming` child process gets a minimal environment (lead, after #36); `walk()` returns `method: 'forward+jump+turn'` (net-forge's request; their test accepts it since #38).
 - **Next, before the first real CX23 run (lead, PR #30 re-review):** check-env allowlists the variable NAMES allowed in the per-bot env file and refuses any other (e.g. `NODE_TLS_REJECT_UNAUTHORIZED`, `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`, `LD_PRELOAD`, `NODE_EXTRA_CA_CERTS`).
 
 ## Watching
 
-- Nothing.
+- rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
 ## Planned real batches
 
-None planned. The first real G2 run needs net-forge's and rotn-data's naming in the driver, plus the lead's approval. The sweeper preflight passes on the cron-job.org cadence.
+### G2 batch (not approved yet; needs the lead's review and written GO, after #47 merges)
+
+**Goal:** G2 gate evidence. All three G2 scenarios at the gate parameters (no `--param` overrides, so the default `dataRoot`), with the agent's own naming, on one disposable test server.
+
+**Preconditions, all checked right before the run:**
+1. The lead's written GO in `coord/STATUS-rotn-lead.md`.
+2. #47 merged: `packages/rotn-data/3.3.4/common-mobs.json` is on develop and lists at least one modded mob. Otherwise `g2-mobs-named` is `notGate` by design, and the batch would only be a smoke run.
+3. The naming path is wired. The runner's own check (`agentNaming`) must report "all N table entries round-trip", with no failures. On develop at eedab96 it reports `wired: true`, all **643** entries (checked 2026-11-01 21:45 UTC). I check it again offline before creating the server:
+
+   ```bash
+   node --input-type=module -e "import { agentNaming } from './test/runner/lib/g2.mjs'; console.log(agentNaming('.'))"
+   ```
+4. **#54 merged:** the driver (net-forge's `g1-driver.mjs` answering the G2 protocol). See "Driver" below.
+5. `msa-login.mjs FRCFLD --check` prints the profile name. If it asks for a new login, stop and add a NEEDS-HUMAN entry. Its output **never** goes into evidence or any committed file.
+6. `test-server.sh`'s sweeper preflight passes unchanged; no `--skip-sweeper-check`.
+7. The code is the develop head, with no local changes. `result.json` records `git.sha` and `git.dirty`, and a dirty run doesn't count.
+8. **net-forge's mod-entity-table wiring merged**, so modded mobs carry their real registry names (not placeholders).
+9. **rotn-data's second dump import merged.**
+10. **#57 merged:** the census waits for the cube's chunks and counts unloaded positions apart; more than 1% unloaded makes the run `notGate`.
+11. **#53 merged** (the minimal environment for the naming check), and `agentNaming('.')` (precondition 3) **rerun on develop under that reduced environment**: `wired: true`, all entries round-trip.
+
+**Driver (agreed: net-forge's #54).**
+- **The driver:** net-forge's `packages/forge-bridge/tools/g1-driver.mjs`. It already builds the bot with the real `initBot` (`src/utils/mcdata.js`) with forge-bridge attached, and speaks the G1 protocol through `attachScenario`. The G2 extension is about three lines in **their** file:
+
+  ```js
+  import { attachG2, agentNames } from '../../../test/runner/drivers/scenario-protocol.mjs';
+  const mc = await import('../../../src/utils/mcdata.js');
+  attachG2(bot, { names: agentNames(mc).names }); // logs nothing secret; names via bot.registry + mcdata toNew/toOld
+  ```
+
+  So the bot names things through the agent's own code: `bot.registry`, as forge-bridge extends it and `world.js` reads it, plus `mcdata.js`'s `toNew`/`toOld`.
+- **Not proposed:** the stock `mineflayer-reference.mjs`. It has no forge-bridge, so it can't join a Forge 1.12.2 server with RotN's mod list.
+
+**Where things run.**
+- **Server:** `deploy/test-server.sh run`, unchanged. CPX42 in nbg1, `--ttl-hours 2`, EUR 0.138/h. The `run` EXIT trap deletes the server, with the watchdog and the sweeper as backup.
+- **The bot runs on this PC.** The runner gives the driver only its allowlisted environment: `TEST_SERVER_HOST`/`PORT`, `MINDCRAFT_PROFILES_FOLDER` and the `ROTN_*` variables. It never gets `TEST_SERVER_CTL` or cloud credentials.
+- **Login cache:** `MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa` exists only in this PC's environment, as for G1.
+- **Whitelist:** FRCFLD and JQDAW (the default).
+- **Console use (test server only, never the live server):**
+  - **Before the first scenario**, approved by the lead on the disposable test server only: `time set day` and `gamerule doDaylightCycle false`, so the bot isn't attacked at night during the run. **No** peaceful difficulty.
+  - **During the scenarios**, through the runner: `say`, `seed`, `tp`, `tell`, `testforblock`, `testfor`, `summon`, `kill @e[tag=<run tag>]`, `clear` and `give`.
+
+**Command** (one server, three scenarios in sequence, each with its own bot session):
+
+```bash
+deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c '
+  C() { bash "$TEST_SERVER_CTL" console --wait 2 -- "$@"; };
+  C time set day; C gamerule doDaylightCycle false;
+  D="node packages/forge-bridge/tools/g1-driver.mjs";
+  timeout 15m node test/runner/run.mjs --scenario g2-blocks-named    --out captures/raw/g2-blocks -- $D; b=$?;
+  timeout 15m node test/runner/run.mjs --scenario g2-mobs-named      --out captures/raw/g2-mobs   -- $D; m=$?;
+  timeout 15m node test/runner/run.mjs --scenario g2-items-roundtrip --out captures/raw/g2-items  -- $D; i=$?;
+  bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g2/server;
+  echo "blocks=$b mobs=$m items=$i"; [ "$b$m$i" = 000 ]'
+```
+
+- **Timeout:** each `run.mjs` is wrapped in `timeout 15m` (exit 124 if hit). A hung scenario can't stop the log fetch, and the server is deleted by the `run` EXIT trap either way.
+
+**Time and cost.**
+
+| Step | Expected |
+| --- | --- |
+| Server build and boot (as in G1) | about 15 min |
+| `g2-blocks-named`: login 1-4 min, settle 20 s, census about 40 chat pages at 1.2 s, about 150 runner-picked `testforblock`, and about 100 spot positions with their `testforblock` | about 12 min |
+| `g2-mobs-named`: login, 12 summons, about 15 `testfor` | about 5 min |
+| `g2-items-roundtrip`: the full-table check (a few seconds), login, `clear`, 30 `give`, one reply | about 5 min |
+| **Total** | **about 37 min**: 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour |
+
+- **Hard stop:** past **56 min (1.5x)** I stop and delete the server.
+- **Worst case** if everything else fails: TTL + 1 h = 3 h, about **EUR 0.42** plus IPv4.
+
+**After the run.**
+- Confirm `hcloud server list` and `hcloud primary-ip list` are empty, and record the real start and stop times and the cost here.
+- Raw files stay in `captures/raw/` (git-ignored). Sanitized evidence goes to `test/evidence/g2/` in a PR: each `result.json`, plus `server.log` excerpts with the world seed and cube centre.
+- **Redaction**, in every committed `server.log` excerpt and in `result.json` (`notes` included), following the G1 evidence's conventions:
+  - the 1.12 log's `FRCFLD[/IP:port] logged in`, which is this PC's public IP, becomes `<ip>:<port>`;
+  - **every** IPv4 and IPv6 address becomes `<ip>`;
+  - every player UUID becomes `<uuid-v4>`;
+  - local paths are replaced.
+- **A check that fails the evidence PR:** a unit test over `test/evidence/g2/**` fails if any IPv4 address (four dotted octets 0..255) or IPv6 address, or any unredacted UUID, is left. It goes in with the evidence PR, so CI enforces it.
+- The `msa-login --check` output is never part of the evidence.
+
+**What the G2 evidence will claim.** Only the checks of the three scenarios:
+- the 50 most common non-air blocks near spawn named, server-confirmed and consistent with spot checks;
+- the common mobs from `common-mobs.json`, modded included, named and confirmed;
+- 30 vanilla items read and named, with the full table round-tripping through the agent's `mcdata.js`.
+
+Nothing about crafting, survival or reconnects.
+
+**Known risk.** The 1.12 command-reply strings the runner parses haven't been seen on a real server yet: `Successfully found the block at …`, `Found <name>`, `Object successfully summoned`, `Given [...] * 1 to NAME`, `Seed: N`. If one differs, the affected checks fail; they don't pass falsely. I'd then fix the parser in a PR, cite the real lines, and ask for a re-run. The gate isn't weakened.
 
 ## Blocked
 
-- Nothing.
+- Nothing. The G2 batch waits for #47, the driver agreement and the lead's GO.
 
 ## Requests to other agents or the lead
+
+0. ~~Lead, routed to net-forge: the G2 driver~~ **Agreed:** net-forge's `g1-driver.mjs` with the G2 protocol, in #54.
 
 1. ~~Lead: re-review and merge PR #4~~ **Done** (70c5c3a).
 2. ~~Human: GitHub Environment `hetzner-test-sweeper`~~ **Done** (the lead verified it via the GitHub API on 2026-11-01): deployment branches `develop` only, environment secret `HCLOUD_TOKEN`, no repository-level secrets.
@@ -119,5 +216,6 @@ None planned. The first real G2 run needs net-forge's and rotn-data's naming in 
 
 ## Open PRs
 
-- #33 (`agent/harness-ops/runner-git-sha`): the git SHA, dirty flag and untracked count in result.json.
-- The G2 scenarios PR (`agent/harness-ops/g2-scenarios`), opened with this update.
+- This status update with the G2 batch plan (`agent/harness-ops/status-g2-plan`).
+- #53 (`agent/harness-ops/g2-followups`): the minimal environment for `agentNaming`, and `walk()` `method`.
+- #57 (`agent/harness-ops/g2-unloaded`): the census waits for the cube's chunks; unloaded positions are counted apart, never as a block type.
