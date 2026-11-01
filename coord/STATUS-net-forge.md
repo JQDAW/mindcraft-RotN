@@ -259,7 +259,7 @@ The lead's GO was recorded at 15:55 UTC. The batch ran from a clean branch at or
 
 ## Doing
 
-- Batch B+C done: FAIL, root cause found (above). The fix PR with the B+C evidence is open. **The next paid batch needs a new written GO after review.** Queued: PR #25 fixes, then the STATUS-line corrections from #26.
+- Batch B+C done: FAIL, root cause found (above). PR #28 (B+C evidence + fix) is open. **The next paid batch needs a new written GO after review.** Queued: PR #25 fixes, then the STATUS-line corrections from #26.
 
 ## Next
 
