@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (11:10 UTC)
+Updated: 2026-11-01 (13:55 UTC)
 
 ## Done
 
@@ -67,32 +67,47 @@ Updated: 2026-11-01 (11:10 UTC)
   - `test/runner/` holds the engine, the server-log parsers, the adapters, the CLI and the driver contract (`DRIVER.md`), plus a stock-mineflayer reference driver. The scenario is `test/scenarios/g1/g1-login-chat-walk.mjs`.
   - No paid run yet. The first real G1 run needs net-forge's driver, the bot's token cache (NEEDS-HUMAN), the lead's approval and an observed scheduled sweeper run.
 
+- PR #11 (review follow-ups: scheduled-only watchdog evidence, `gh --repo`, lint ratchet that fails closed) merged as e3c1732: APPROVE, lint gate proven end to end. Its review findings 1 and 3 and nits 4 and 5 were fixed in 5296086.
+- PR #12 (sweeper cron at the off-peak minutes `7,22,37,52 * * * *`) merged as 971262f at 11:45:11 UTC: APPROVE.
+- PR #13 (PR #9 re-review nits: confirm the `say` marker before `bot.start`; reject `[Rcon]` and `[@]`) merged as 04b57c3: APPROVE WITH NITS.
+- PR #17 (low-priority nits from the #11, #12 and #13 reviews) merged as 032da12 at 12:16:28 UTC.
+
 ## Doing
 
-- PR #9 re-review nits, on `agent/harness-ops/g1-nits` (none can cause a false pass): confirm the `say` marker before `bot.start`, or retry; reject `[Rcon]` and `[@]` chat prefixes as well as `[Server]`.
-
-## Doing: PR #11, `agent/harness-ops/gate-followups` (PR #7 and PR #8 review findings)
-
-Code done; `npm test` passes 80/80 and the lint gate reports 259/259.
-
-- **PR #7 finding 1 (the important one):** in `--mode scheduled`, `g0-watchdog.sh` reads logs only from `event == schedule` runs. In dispatch mode it reads only the dispatched run. `result.json` records `evidence_event` and `sweeper_logs_read` as `{id, event}`. Tested with the real sweep recorded as a schedule run (PASS) and as a dispatch run (FAIL); mutation-checked.
-- **PR #7 findings 2-7:**
-  - `--repo` (`ROTN_GH_REPO`, default `JQDAW/mindcraft-RotN`) on every `gh` call, with `GH_REPO` and `GH_HOST` stripped.
-  - `ROTN_SWEEPER_MAX_AGE_MIN` must be 15..240, and the limit is printed on the OK line.
-  - `valid_cidr` accepts IPv4 only.
-  - `build.sh` uses `printf '%s\n'`.
-  - The `project-empty-checks.txt` header says what was copied, reformatted and reconstructed.
-  - The refusal text mentions ALERT lines.
-- **PR #8 lint gate:**
-  1. `readBaselineAt` fails closed with exit 2. The exceptions are a file missing in the ref, and `--allow-missing-base` for an unknown ref.
-  2. and 3. The ratchet is on the total: higher fails, lower fails until `--update`, and per-file counts may move. A raise needs `--allow-raise`, which CI passes only for a PR labelled `lint-raise-approved`. Even then the raised total must be committed in the PR's own `test/lint-baseline.json`, and `MAX_TOTAL` stays a hard ceiling (review finding 1, fixed). `readBaselineAt` detects a missing file with `git ls-tree`, and a git failure is a setup error (finding 3, fixed). Nits 4 and 5 are fixed too.
-  5. Only `git ls-files` `*.js`, `*.mjs` and `*.cjs` are linted.
-  7. A targeted depth-1 fetch of the base branch replaces `fetch-depth: 0`.
-  4. and 6. are the lead's and net-forge's.
+- **Helper preflight: PR #21**, `agent/harness-ops/helper-cron-preflight` (dca4357). `check_sweeper` also accepts path (b): a scheduled `dispatch-sweeper.yml` run in `JQDAW/rotn-sweeper-cron` within 40 min, plus a later successful sweeper run on develop. It adds a 60-day keep-alive reminder, tests and `deploy/README.md` docs. The full suite passes 209/209.
+  - Opened at the lead's request, even though the helper's schedule has not fired yet. Its lint gate fails until lead PR #20 (baseline 257 after #19) merges; then I merge develop in.
 
 ## Watching
 
-- The first `event=schedule` run of `test-server-sweeper.yml`. **None by 04:00 UTC**, see Request 5.
+- **Scheduled runs of `test-server-sweeper.yml` after the cron change.** Window: 11:45:11 to 13:45:11 UTC. Cron `7,22,37,52`, so 8 slots are expected (11:52 through 13:37).
+
+  | Slot (UTC) | Run | Created (UTC) | Delay | Result |
+  | --- | --- | --- | --- | --- |
+  | 11:52 | none | | | missed |
+  | 12:07 | none | | | missed |
+  | 12:22 | none | | | missed |
+  | 12:37 | none | | | missed |
+  | 12:52 | none | | | missed |
+  | 13:07 | none | | | missed |
+  | 13:22 | none | | | missed |
+  | 13:37 | none | | | missed |
+
+  **Result: 0 of 8 slots fired.** Checked 13:45:34 UTC with one manual `gh run list --branch develop`. The newest scheduled run is still 41281143865 (06:30:54 UTC).
+  - The off-peak minutes did not help. GitHub's scheduling for this fork is simply not reliable.
+  - Caveat: #17 changed a comment in the workflow file and merged at 12:16:28 UTC, inside the window, which may have re-registered the schedule. Neither part of the window fired a run.
+  - Background watchers were stopped twice by Claude Code because the PC was low on memory (about 12:30 and about 13:40 UTC), not because of an error. The table comes from manual checks.
+
+- **First scheduled run of the helper `JQDAW/rotn-sweeper-cron` `dispatch-sweeper.yml`** (cron `3,18,33,48`, set up by the human at about 13:02 UTC).
+  - The manual test chain worked: helper `workflow_dispatch` run 41309775533 at 13:08:08Z (success), then sweeper `workflow_dispatch` run 41309787687 on develop at 13:08:17Z (success).
+  - **No scheduled helper run yet:** the 13:18, 13:33 and 13:48 slots were empty (13:48 checked by the lead). The lead decides with the human how to get a reliable off-PC trigger.
+
+  | Helper slot (UTC) | Helper run | Created | Result | Sweeper run it triggered | Created | Result |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | 13:18 | none | | missed | | | |
+  | 13:33 | none | | missed | | | |
+  | 13:48 | none | | missed | | | |
+
+  Before the change (`*/15`): one scheduled run in about 11 h (41281143865, 06:30:54 UTC, success).
 
 ## Planned real batches
 
@@ -100,7 +115,7 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 
 ## Blocked
 
-- Every paid batch: no scheduled sweeper run has been observed yet (Request 5). Code work is not blocked.
+- Every paid batch, until a scheduled sweeper run succeeds and is under 120 min old (Request 5). Code work is not blocked.
 
 ## Requests to other agents or the lead
 
@@ -120,7 +135,16 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
    - **Routed:** the lead asked the human (NEEDS-HUMAN) to re-enable or re-register the workflow in the Actions tab.
    - **Update (lead):** the schedule fired once, at 06:30:54 UTC (success). That is the only scheduled run in about 10 h, so the cron is registered but GitHub drops almost every run at the busy :00/:15/:30/:45 marks. The preflight correctly refuses today: its 120-min window stays as it is.
    - **Authorized fix:** a separate PR from develop moves the cron to the off-peak minutes `7,22,37,52 * * * *`. Merging it also re-registers the schedule. After the merge I watch for 2 h and record the scheduled-run cadence here. `test-server.sh up` passes its preflight once a scheduled run has succeeded within 120 min.
+   - **Done:** #12 merged at 11:45:11 UTC. Result: 0 of 8 off-peak slots fired (see Watching).
+   - **Next fix (lead and human):** the helper repo `JQDAW/rotn-sweeper-cron` dispatches the sweeper every 15 min. My preflight change (path b) accepts its scheduled runs as evidence. Waiting for the first scheduled helper run.
+6. **Lead: review notes on the helper workflow `dispatch-sweeper.yml`** (read from the public repo):
+   1. Every line of the committed file starts with one space (checked in the raw bytes). The YAML is still valid and GitHub accepted it, but an edit that adds a line at column 0 would break the file. Remove the leading spaces.
+   2. The fine-grained token expires. When it lapses, helper runs fail (GitHub emails the owner) and path (b) refuses. Note its expiry date.
+   3. Brand-new schedules often start late: the 13:18 and 13:33 slots were missed. Path (b)'s 40-min window tolerates about two missed slots.
+   4. The rest looks right: `permissions: {}`, no checkout, no third-party actions, the secret is scoped to one step, the timeout is 3 min. `ubuntu-latest` instead of a pinned image is a minor point.
+   5. GitHub disables the helper's schedule after 60 days without activity in the helper repo. The preflight warns from day 45; a small commit to the helper repo resets the clock.
 
 ## Open PRs
 
-- #11 (`agent/harness-ops/gate-followups`): the PR #7 and PR #8 review findings. Under independent review. develop (with #9) is merged in, and the only conflict was this file.
+- #21 (`agent/harness-ops/helper-cron-preflight`): the sweeper preflight accepts the helper repo's scheduled dispatch (path b). It waits for lead PR #20, then I merge develop in.
+- This status update (`agent/harness-ops/sched-observation`).
