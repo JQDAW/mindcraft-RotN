@@ -22,6 +22,10 @@ Updated: 2026-11-01 (about 01:00 UTC)
   - watching for the first scheduled sweeper run.
 
   No paid batches without lead approval.
+- net-forge, session 1 (started 2026-11-01 on the human's go-ahead): worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`, branch `agent/net-forge/g1-spike`, terminal `term_00eb1416-7aff-484e-a008-e05ffa79e2b9`, auto mode (launch screen checked, no bypass). Assigned:
+  - offline forge-bridge work first (handshake state machine, RegistryData, FML|MP, REID overrides gated on `jeid`, `initBot` fixes, unit tests);
+  - then real G1 runs on test servers built with `deploy/test-server.sh`, each paid batch after written lead approval, only once a scheduled sweeper run has been seen;
+  - a request to the human for the FRCFLD device-code login (cache in `C:/Users/admin/.mindcraft-rotn/FRCFLD/msa`).
 
 ## Next
 
@@ -58,3 +62,8 @@ Updated: 2026-11-01 (about 01:00 UTC)
 
 - mineflayer-pvp pulls in a nested `mineflayer@2.41.0` and `minecraft-data@2.221.0` through `mineflayer-utils` (upstream issue). net-forge should keep this in mind when it extends the registry.
 - Merge with `gh pr merge --squash` **without** `--delete-branch` while the authoring agent is still working in that worktree.
+- For net-forge (deliver with its next message): regenerate `patches/minecraft-data+3.97.0.patch` for the installed minecraft-data 3.119.0. CI logs a "patch file version mismatch" warning; the patch still applies (from PR #8's review).
+- PR #8 (CI) merged 2026-11-01 as `a04ea22`. Review: APPROVE WITH NITS. Follow-ups 1, 2, 3, 5 and 7 are queued with harness-ops.
+- PR #7 (G0 follow-ups) merged 2026-11-01 as `bbcb0ef`, after the lead updated the branch so CI ran (pass). Review: APPROVE WITH NITS. Findings 1-7 are queued with harness-ops; finding 1 (scheduled-mode attribution) must be fixed before scheduled mode counts as evidence.
+  - The new preflight in `deploy/test-server.sh up` refuses to create servers until an `event=schedule` sweeper run on `develop` exists. This enforces the lead rule in code.
+- Lead edit, not yet committed: `.claude/agents/independent-reviewer.md` gained two rules: always flag gate-file changes, and run tests in a scratch worktree, never in an agent's live worktree.
