@@ -154,7 +154,7 @@ Updated: 2026-11-01 (about 21:25 UTC)
 
 - **rotn-data spawned 2026-11-01 about 18:00 UTC** for Phase 2 (G2). Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`, branch `agent/rotn-data/g2-dumper`, terminal `term_ea9c811e-debc-4b19-8707-aefda537172d`, auto mode (launch screen checked). Three dev agents now run (the maximum).
 
-- **2026-11-01 about 19:24 UTC (corrected; first recorded as 19:35): GO for rotn-data's first RotN 3.3.4 dump batch**, the "Paid test-server plan" in `coord/STATUS-rotn-data.md`.
+- **2026-11-01 about 19:24 UTC (corrected; first recorded as 19:35): GO for rotn-data's first RotN 3.3.4 dump batch** (given in writing as an Orca terminal message to rotn-data, right after dumper-build run 41341359100 succeeded; recorded here in PR #45, committed 19:28:49 UTC, after the server was created), the "Paid test-server plan" in `coord/STATUS-rotn-data.md`.
   - Run it from a clean, separate checkout of origin/develop at `3158776` or later.
   - The jar is the dumper-build artifact of push run 41341359100 (develop `3158776`, success). Record its SHA-256 before the batch and match it against `manifest.dumperJar.sha256` afterwards.
   - Disposable test server only, never the live RotN server.
