@@ -9,7 +9,7 @@
 #
 # Check 3 (00:43 UTC): the output was written into this file by the command, with a date in a different
 # format (+%Y-%m-%dT%H:%M:%SZ). The command line shown under check 3 is reconstructed. The real one wrote
-# this header and the transcribed checks 1-2 first, all in one `{ ...; } > file`. The key name was then
+# an earlier version of this header and the transcribed checks 1-2 first, all in one `{ ...; } > file`. The key name was then
 # redacted with sed.
 #
 # The one SSH key left is the human's own unlabelled key; its name is redacted here.

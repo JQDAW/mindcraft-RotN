@@ -226,7 +226,7 @@ validate_up_opts() {
 # state directory (review finding 7).
 check_name() { [[ $NAME =~ ^[a-z0-9][a-z0-9-]{2,62}$ ]] || die "bad --name '$NAME'"; }
 
-# valid_cidr CIDR: IPv4 a.b.c.d/0-32 or IPv6 (hex and colons)/0-128. Nothing else reaches ufw.
+# valid_cidr CIDR: IPv4 a.b.c.d/0-32. Nothing else reaches ufw.
 # IPv4 only: test servers are created --without-ipv6, so an IPv6 rule could never match (PR #7 review).
 valid_cidr() {
   local ip=${1%/*} len=${1##*/} o

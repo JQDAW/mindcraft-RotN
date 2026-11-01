@@ -5,7 +5,9 @@
 # JavaScript files (259 on develop, from upstream Mindcraft). A higher total fails, a lower total
 # fails until test/lint-baseline.json is lowered, per-file counts may move, and the PR's baseline may
 # not raise the base branch's total. Only a PR labelled `lint-raise-approved` runs the gate with
-# --allow-raise; the lead applies that label, and the PR body must cite the lead's approval.
+# --allow-raise; the lead applies that label, and the PR body must cite the lead's approval. Even
+# then the PR must commit the raised total in test/lint-baseline.json, and MAX_TOTAL in
+# lint-baseline.mjs stays a hard ceiling.
 #
 # Secrets: none. This workflow uses no GitHub Environment and reads no secrets. The Hetzner token
 # lives only in the Environment "hetzner-test-sweeper", which only test-server-sweeper.yml on

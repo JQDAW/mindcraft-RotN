@@ -8,7 +8,11 @@
 //   - per-file counts may move (renames, upstream merges), as long as the total does not rise;
 //   - the total can never pass MAX_TOTAL.
 // A PR may raise the total only with --allow-raise, which CI passes only for a PR labelled
-// `lint-raise-approved`, and only with a lead approval cited in the PR body.
+// `lint-raise-approved`, and only with a lead approval cited in the PR body. Even then the raise must
+// be recorded: the current total must equal the PR's own baseline total (run --update and commit it),
+// so it shows in the diff and develop's next run passes. --allow-raise only lets that baseline sit
+// above the base branch's; it never lifts MAX_TOTAL, which only an edit to the constant can raise
+// (PR #11 review finding 1).
 //
 //   node test/tools/lint-baseline.mjs                     check the working tree against the baseline
 //   node test/tools/lint-baseline.mjs --base-ref REF      also refuse a baseline whose total is above REF's
@@ -24,7 +28,7 @@ import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const MAX_TOTAL = 259; // develop on 2026-11-01; only an ADR may raise it (or --allow-raise)
+export const MAX_TOTAL = 259; // develop on 2026-11-01; a hard ceiling: only an ADR and an edit here may raise it
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BASELINE = 'test/lint-baseline.json';
 
@@ -54,18 +58,25 @@ export function compare(baseline, current, { maxTotal = MAX_TOTAL, allowRaise = 
         const now = current[file] ?? 0;
         if (now !== was) moved.push(`${file}: ${was} -> ${now}`);
     }
-    if (total > baseline.total && !allowRaise) problems.push(`total ${total} errors, baseline ${baseline.total} (+${total - baseline.total}): new lint errors`);
+    if (total > baseline.total) {
+        problems.push(allowRaise
+            ? `total ${total} errors, baseline ${baseline.total}: --allow-raise needs the raise recorded; run \`node test/tools/lint-baseline.mjs --update\` and commit ${BASELINE}`
+            : `total ${total} errors, baseline ${baseline.total} (+${total - baseline.total}): new lint errors`);
+    }
     if (total < baseline.total) problems.push(`total ${total} errors is below the baseline ${baseline.total}: lock the fix in with \`node test/tools/lint-baseline.mjs --update\` and commit ${BASELINE}`);
-    if (total > maxTotal && !allowRaise) problems.push(`total ${total} errors is above the ceiling ${maxTotal}`);
+    if (total > maxTotal) problems.push(`total ${total} errors is above the ceiling ${maxTotal}`);
     return { ok: problems.length === 0, total, problems, moved };
 }
 
-/** A PR's baseline must be self-consistent and must not raise the base branch's total. */
+/**
+ * A PR's baseline must be self-consistent, within MAX_TOTAL, and must not raise the base branch's
+ * total unless allowRaise (a lead-approved raise, which compare() then holds to this baseline).
+ */
 export function compareBaselines(base, head, { maxTotal = MAX_TOTAL, allowRaise = false } = {}) {
     const problems = [];
     if (sum(head.files) !== head.total) problems.push(`baseline total ${head.total} is not the sum of its files (${sum(head.files)})`);
     if (base && head.total > base.total && !allowRaise) problems.push(`baseline raises the total from ${base.total} to ${head.total}`);
-    if (head.total > maxTotal && !allowRaise) problems.push(`baseline total ${head.total} is above the ceiling ${maxTotal}`);
+    if (head.total > maxTotal) problems.push(`baseline total ${head.total} is above the ceiling ${maxTotal}`);
     return { ok: problems.length === 0, problems };
 }
 
@@ -83,11 +94,15 @@ export function readBaselineAt(ref, { allowMissingBase = false, run = git } = {}
         if (allowMissingBase) return null;
         throw new SetupError(`base ref '${ref}' is not available (fetch it, or pass --allow-missing-base)`);
     }
+    // Only an empty ls-tree answer means "no such file in REF"; a failing git (e.g. a broken object
+    // store) is a setup error, never "no baseline" (PR #11 review finding 3).
+    let listed;
     try {
-        run(['cat-file', '-e', `${ref}:${BASELINE}`]);
-    } catch {
-        return null; // the file does not exist in REF
+        listed = run(['ls-tree', '--name-only', ref, '--', BASELINE]);
+    } catch (e) {
+        throw new SetupError(`git ls-tree ${ref} -- ${BASELINE} failed: ${String(e.stderr ?? e.message).trim()}`);
     }
+    if (!listed.trim()) return null; // the base predates the gate
     let text;
     try {
         text = run(['show', `${ref}:${BASELINE}`]);

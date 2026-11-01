@@ -85,7 +85,7 @@ Code done; `npm test` passes 80/80 and the lint gate reports 259/259.
   - The refusal text mentions ALERT lines.
 - **PR #8 lint gate:**
   1. `readBaselineAt` fails closed with exit 2. The exceptions are a file missing in the ref, and `--allow-missing-base` for an unknown ref.
-  2. and 3. The ratchet is on the total: higher fails, lower fails until `--update`, and per-file counts may move. A raise needs `--allow-raise`, which CI passes only for a PR labelled `lint-raise-approved`.
+  2. and 3. The ratchet is on the total: higher fails, lower fails until `--update`, and per-file counts may move. A raise needs `--allow-raise`, which CI passes only for a PR labelled `lint-raise-approved`. Even then the raised total must be committed in the PR's own `test/lint-baseline.json`, and `MAX_TOTAL` stays a hard ceiling (review finding 1, fixed). `readBaselineAt` detects a missing file with `git ls-tree`, and a git failure is a setup error (finding 3, fixed). Nits 4 and 5 are fixed too.
   5. Only `git ls-files` `*.js`, `*.mjs` and `*.cjs` are linted.
   7. A targeted depth-1 fetch of the base branch replaces `fetch-depth: 0`.
   4. and 6. are the lead's and net-forge's.
