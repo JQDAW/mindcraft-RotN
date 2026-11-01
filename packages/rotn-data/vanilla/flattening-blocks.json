@@ -4,7 +4,7 @@
   "minecraft-data pc/common/legacy.json",
   "minecraft-data pc/1.12.2",
   "packages/rotn-data/3.3.4/registry-names.json (names checked)",
-  "RENAMES, BLOCK_NAME_FIXES and NBT_VARIANTS in build-flattening.mjs"
+  "RENAMES, BLOCK_NAME_FIXES, NBT_VARIANTS and ITEM_ADDITIONS in build-flattening.mjs"
  ],
  "minecraftData": "3.119.0",
  "count": 1682,

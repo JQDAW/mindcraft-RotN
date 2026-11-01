@@ -35,14 +35,16 @@ export function createTranslator({ isKnownModded = () => true, items, blocks } =
     const itemTable = indexTable(items ?? require('../vanilla/flattening-items.json').entries);
     const blockTable = indexTable(blocks ?? require('../vanilla/flattening-blocks.json').entries);
 
-    function lookupOld(table, name, meta) {
+    // damage: the metadata may be a damage value (items only). Blocks never take the fallback,
+    // so an invalid block meta is null (follow-up 5).
+    function lookupOld(table, name, meta, { damage = false } = {}) {
         const metas = table.byOld.get(name);
         if (!metas) return undefined; // name not in this table
         const e = metas.get(meta);
         if (e) return e;
         // Damageable items (tools, armour) carry damage in the metadata field and
         // have exactly one entry at meta 0.
-        if (metas.size === 1 && metas.has(0)) return metas.get(0);
+        if (damage && metas.size === 1 && metas.has(0)) return metas.get(0);
         return null; // known name, unknown variant
     }
 
@@ -56,7 +58,7 @@ export function createTranslator({ isKnownModded = () => true, items, blocks } =
         if (!p) return null;
         const m = p.meta ?? (Number.isInteger(meta) ? meta : 0);
         if (!p.name.startsWith('minecraft:')) return modded(p, m);
-        const it = lookupOld(itemTable, p.name, m);
+        const it = lookupOld(itemTable, p.name, m, { damage: true });
         if (it !== undefined) return it ? it.new : null;
         const bl = lookupOld(blockTable, p.name, m);
         return bl ? bl.new : null;
@@ -67,6 +69,8 @@ export function createTranslator({ isKnownModded = () => true, items, blocks } =
         if (!p) return null;
         const m = p.meta ?? (Number.isInteger(meta) ? meta : 0);
         if (!p.name.startsWith('minecraft:')) return modded(p, m);
+        // A name with block states answers from the block table only; the item table is a
+        // fallback just for names that have no block entry at all.
         const bl = lookupOld(blockTable, p.name, m);
         if (bl !== undefined) return bl ? bl.new : null;
         const it = lookupOld(itemTable, p.name, m);
