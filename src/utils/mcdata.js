@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry } from '../../packages/forge-bridge/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -103,7 +103,15 @@ export function initBot(username, { onMsaCode } = {}) {
             modListFile: env.modListFile,
             pingTimeoutMs: env.pingTimeoutMs,
             capture: forge.capture,
-            onAttach: (bridge) => { forge.bridge = bridge; options.brand = 'fml,forge'; },
+            onAttach: (bridge) => {
+                forge.bridge = bridge;
+                options.brand = 'fml,forge';
+                // After the last RegistryData: modded names in bot.registry (brief item 4).
+                bridge.on('registries', (snap) => {
+                    forge.registryReport = extendRegistry(bot.registry, snap, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                    bot.emit('forge_registry', forge.registryReport);
+                });
+            },
         });
     }
 

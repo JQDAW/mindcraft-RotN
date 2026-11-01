@@ -159,7 +159,7 @@ The review findings on PR #10, numbered as in the review comment:
 - `e2e-initbot` asserts `modListSource === 'ping'` again when the first login attempt succeeds. `file` is allowed only after a retried login.
 - `npm test` passes 233/233; lint 257, unchanged.
 
-## Done: brief item 4, `bot.registry` extension (branch `agent/net-forge/registry-extension`, from develop 1cbe6a8; PR #24 merged)
+## In review: brief item 4, `bot.registry` extension (PR #25, branch `agent/net-forge/registry-extension`, started from develop 1cbe6a8 after PR #24 merged)
 
 - `extendRegistry(bot.registry, snapshot, {properties})` (`src/registry-extension.js`) runs in `initBot` after the last RegistryData. It covers blocks, items, entities and biomes; block states are `id << 4 | meta`.
   - Modded entries carry full registry names and safe defaults: a solid full cube, diggable, hardness `null`.
@@ -297,16 +297,16 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 
 ## Doing
 
-- Batch B+C done: FAIL, root cause found (above). PR #28 (B+C evidence + fix) is open. **The next paid batch needs a new written GO after review.** Queued: PR #25 fixes, then the STATUS-line corrections from #26.
+- Batch A done (above); PR #26 merged. PR #25 (registry extension) is being reworked for its review (vanilla entities, modded-block hardness, rebind logs), together with the PR #28 nits. **The next paid batch needs a new written GO.**
 
 ## Next
 
 1. **G1 batches** (below), after the lead's written approval and a scheduled sweeper run within 120 min (PR #12).
 2. Captured fixtures: real handshake, RegistryData, `window_items`/`set_slot`, chunks, `entity_effect`, `jeid`. Then the handshake test against real captured server messages; real Run A bytes become extra golden vectors.
 3. Classify every kick seen, confirm chunk bits per block and the REID formats on the wire, and record walk blocks.
-4. Brief item 6 (FML EntitySpawn into `bot.entities`). Items 4 and 8 are done.
+4. Brief item 6 (FML EntitySpawn into `bot.entities`). Item 8 is done (#19, #23). Item 4 is in review (#25).
 
-## G1 batches (approved by the lead 2026-11-01 11:40 UTC in STATUS-rotn-lead.md; nothing run yet)
+## G1 batches (approved by the lead 2026-11-01 11:40 UTC in STATUS-rotn-lead.md; Batch A ran 15:36 UTC, PASS; Batch B+C ran 15:53 UTC, FAIL, see below)
 
 **Approval:** A as written. B as a spike only, not G1 gate evidence. C is the G1 gate evidence: harness-ops' runner (`test/runner/run.mjs` + `test/scenarios/g1/g1-login-chat-walk.mjs`) with a forge-bridge driver per `test/runner/DRIVER.md`, kept in `packages/forge-bridge/`. B and C may share one server run. **Conditions:** one server at a time, in order; `test-server.sh` unchanged with its preflight passing (no `--skip-sweeper-check`); stop and delete past 1.5x the expected time (A: 30 min, B: 53 min); after each batch, confirm `hcloud server list` and `hcloud primary-ip list` are empty and record the real times and cost here; never the live server.
 
@@ -362,4 +362,6 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15, #16, #18, #19, #23 and #24 merged.) #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. `npm test` 239/239; lint 257.
+- Merged: #15, #16, #18, #19, #23, #24 and #26 (G1 Batch A: real handshake fixture and replay test).
+- #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. Being updated for its REQUEST CHANGES review, plus the PR #28 nits.
+- #28: G1 Batch B+C FAIL evidence plus the fix (Triumph advancements opaque, parse safety net), on `agent/net-forge/g1-batch-bc`. APPROVE WITH NITS; develop merged in; CI green.

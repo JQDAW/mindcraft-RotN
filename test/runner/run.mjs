@@ -21,6 +21,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runScenario } from './lib/runner.mjs';
 import { ctlServer, driverProcess, wallClock } from './lib/adapters.mjs';
@@ -39,6 +40,23 @@ export async function loadScenarios(dir = SCENARIO_DIR) {
         }
     }
     return out;
+}
+
+/**
+ * The repo state a run tested, for result.json: {sha, dirty, untracked}. sha is HEAD's commit,
+ * dirty is true if tracked files differ from it (staged or not), untracked counts files git does not
+ * track (an untracked scenario module would be loaded too). All null if git cannot answer.
+ */
+export function gitInfo(cwd = path.join(here, '..', '..'), exec = execFileSync) {
+    const git = (args) => exec('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    try {
+        const sha = git(['rev-parse', '--verify', 'HEAD']).trim();
+        if (!/^[0-9a-f]{40,64}$/.test(sha)) throw new Error('bad sha');
+        const lines = git(['status', '--porcelain=v1', '--untracked-files=all']).split('\n').filter(Boolean);
+        return { sha, dirty: lines.some((l) => !l.startsWith('??')), untracked: lines.filter((l) => l.startsWith('??')).length };
+    } catch {
+        return { sha: null, dirty: null, untracked: null };
+    }
 }
 
 /** --param key=value: numbers stay numbers, everything else is a string. */
@@ -100,8 +118,11 @@ async function main(argv) {
         console.error(e.message);
         return 2;
     }
-    log(`${scenario.id} (${scenario.gate}) run ${runId}; driver: ${o.driver.join(' ')}; out: ${outDir}`);
+    // The code under test, read before the run starts: a dirty tree is not reproducible gate evidence.
+    const git = gitInfo();
+    log(`${scenario.id} (${scenario.gate}) run ${runId}; git ${git.sha ?? 'unknown'}${git.dirty ? ' (DIRTY: uncommitted changes)' : ''}; driver: ${o.driver.join(' ')}; out: ${outDir}`);
     const result = await runScenario(scenario, { server, bot, clock: wallClock, params: o.params, runId, log });
+    result.git = git;
     result.server = process.env.TEST_SERVER_NAME ?? null;
     result.driver = o.driver.join(' ');
     try {
