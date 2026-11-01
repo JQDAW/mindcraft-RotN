@@ -1,0 +1,275 @@
+{
+ "description": "Entity threat overrides for RotN 3.3.4, beyond the dump's `hostile` (= the class implements IMob). Read by catalog.entity(): `hostile` becomes true for every entry with targetsPlayers, and `dangerous` marks threats to avoid rather than fight. Every entry cites the mod's own bytecode.",
+ "method": "javap -c -p (reads class files; no mod code is run) on the mod jars of the pinned server pack zip (SHA-256 90642fd5...f5205), extracted to a scratch folder outside the repo, 2026-11-02. Scope: every modded living entity whose class does not implement IMob (317 in the second dump). For each, the entity class and its mod superclasses were scanned for a targeting AI task (class name containing 'Target') whose constructor receives EntityPlayer.class; tasks that target EntityLivingBase with a predicate were reviewed by reading the predicate's apply(). EntityAIHurtByTarget (retaliation) is not counted.",
+ "confidence": {
+  "verified": "The bytecode shows players are targeted (an EntityPlayer target class without a predicate, or a predicate read and found to accept players).",
+  "task": "A targeting task with EntityPlayer or EntityLivingBase as its target class; its predicate or shouldExecute was not inspected.",
+  "conditional": "The player-targeting task is only added in some state."
+ },
+ "alreadyHostileViaIMob": "iceandfire:cyclops, iceandfire:if_hydra, iceandfire:gorgon, iceandfire:if_troll, iceandfire:stymphalianbird and iceandfire:siren implement IMob, so the dump already marks them hostile; they need no override.",
+ "entities": {
+  "animania:buck_chinchilla": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:buck_cottontail": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:buck_dutch": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:buck_havana": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:buck_jack": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:buck_lop": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:buck_new_zealand": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:buck_rex": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:doe_chinchilla": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:doe_cottontail": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:doe_dutch": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:doe_havana": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:doe_jack": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:doe_lop": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:doe_new_zealand": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:doe_rex": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:kit_chinchilla": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:kit_cottontail": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:kit_dutch": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:kit_havana": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:kit_jack": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:kit_lop": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:kit_new_zealand": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "animania:kit_rex": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "animania-1.12.2-1.7.3.jar: the class extends EntityAnimaniaRabbit, whose constructor and resetAI add EntityAINearestAttackableTarget(EntityPlayer.class) with no branch before it (resetAI bytecode 116-124).",
+   "note": "Small; low threat. Marked so the bot is not surprised, not to be avoided."
+  },
+  "betteranimalsplus:eel_freshwater": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "betteranimalsplus-1.12.2-9.0.1.jar: EntityFreshwaterEel extends EntityEelBase; EntityEelBase.initEntityAI adds EntityAINearestAttackableTarget(EntityPlayer.class)."
+  },
+  "betteranimalsplus:eel_saltwater": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "betteranimalsplus-1.12.2-9.0.1.jar: EntitySaltwaterEel extends EntityEelBase; EntityEelBase.initEntityAI adds EntityAINearestAttackableTarget(EntityPlayer.class)."
+  },
+  "betteranimalsplus:moose": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "betteranimalsplus-1.12.2-9.0.1.jar: EntityMoose.initEntityAI adds EntityAINearestAttackableTarget(EntityPlayer.class) unconditionally.",
+   "note": "Large animal that attacks players on sight."
+  },
+  "iceandfire:deathworm": {
+   "targetsPlayers": true,
+   "dangerous": true,
+   "confidence": "verified",
+   "evidence": "IceAndFireRotN-1.9.1-1.2.1.jar: EntityDeathWorm constructor adds DeathWormAITarget(EntityLivingBase.class, EntityDeathWorm$1). EntityDeathWorm$1.apply: when not tamed (func_70909_n), the target must be an EntityAnimal or EntityPlayer (or anything, with config deathWormAttackMonsters), alive, and not the owner (func_152114_e).",
+   "note": "Desert sand worm; large variants are lethal early. Avoid deserts at first."
+  },
+  "iceandfire:firedragon": {
+   "targetsPlayers": true,
+   "dangerous": true,
+   "confidence": "verified",
+   "evidence": "IceAndFireRotN-1.9.1-1.2.1.jar: EntityFireDragon extends EntityDragonBase. EntityDragonBase.initEntityAI (func_184651_r) adds DragonAITargetNonTamed(EntityPlayer.class, EntityDragonBase$1), and EntityDragonBase$1.apply(player) = DragonUtils.canHostilesTarget(player) && !player.isCreative() (func_184812_l_). A second task, DragonAITarget(EntityLivingBase.class, EntityDragonBase$2), targets other living entities.",
+   "note": "Ice and Fire dragon: very large, flies and breathes fire/ice. Untamed dragons hunt players. Avoid; do not fight in the early game."
+  },
+  "iceandfire:icedragon": {
+   "targetsPlayers": true,
+   "dangerous": true,
+   "confidence": "verified",
+   "evidence": "IceAndFireRotN-1.9.1-1.2.1.jar: EntityIceDragon extends EntityDragonBase. EntityDragonBase.initEntityAI (func_184651_r) adds DragonAITargetNonTamed(EntityPlayer.class, EntityDragonBase$1), and EntityDragonBase$1.apply(player) = DragonUtils.canHostilesTarget(player) && !player.isCreative() (func_184812_l_). A second task, DragonAITarget(EntityLivingBase.class, EntityDragonBase$2), targets other living entities.",
+   "note": "Ice and Fire dragon: very large, flies and breathes fire/ice. Untamed dragons hunt players. Avoid; do not fight in the early game."
+  },
+  "iceandfire:if_cockatrice": {
+   "targetsPlayers": true,
+   "dangerous": true,
+   "confidence": "verified",
+   "evidence": "IceAndFireRotN-1.9.1-1.2.1.jar: EntityCockatrice.initEntityAI adds CockatriceAITarget(EntityLivingBase.class, EntityCockatrice$1). EntityCockatrice$1.apply returns true for an EntityPlayer (bytecode 38 -> 52 -> 59) unless it is an Animania chicken. CockatriceAITarget's own conditions were not inspected.",
+   "note": "Cockatrice: its stare petrifies or withers. Do not look at it or fight it early."
+  },
+  "iceandfire:seaserpent": {
+   "targetsPlayers": true,
+   "dangerous": true,
+   "confidence": "task",
+   "evidence": "IceAndFireRotN-1.9.1-1.2.1.jar: EntitySeaSerpent (extends EntityAnimal) initEntityAI adds FlyingAITarget(EntityLivingBase.class) with no predicate; EntityPlayer is an EntityLivingBase. FlyingAITarget's own shouldExecute was not inspected.",
+   "note": "Very large ocean serpent. Avoid deep ocean."
+  },
+  "mod_lavacow:salamander": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "task",
+   "evidence": "Fish's Undead Rising-1.3.2.jar: EntitySalamander.initEntityAI adds EntityAITargetNonTamed(EntityPlayer.class, EntitySalamander$1); the predicate was not inspected."
+  },
+  "mod_lavacow:scarecrow": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "task",
+   "evidence": "Fish's Undead Rising-1.3.2.jar: EntityScarecrow (func_175456_n, applyEntityAI) adds EntityAITargetNonTamed(EntityPlayer.class, EntityScarecrow$1); the predicate was not inspected."
+  },
+  "mod_lavacow:unburied": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "Fish's Undead Rising-1.3.2.jar: EntityUnburied (func_175456_n, applyEntityAI) adds EntityAINearestAttackableTarget(EntityPlayer.class) with no predicate."
+  },
+  "primitivemobs:grovesprite": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "conditional",
+   "evidence": "primitivemobs-1.2.3a.jar: EntityGroveSprite.onUpdate (func_70071_h_) adds EntityAINearestAttackableTarget(EntityPlayer.class) inside a branch after its tree-log handling (bytecode 436), i.e. only in some state; initEntityAI itself has only EntityAIHurtByTarget."
+  },
+  "primitivemobs:lily_lurker": {
+   "targetsPlayers": true,
+   "dangerous": false,
+   "confidence": "verified",
+   "evidence": "primitivemobs-1.2.3a.jar: EntityLilyLurker.initEntityAI adds EntityAINearestAttackableTarget(EntityPlayer.class) (and one for EntitySquid)."
+  }
+ },
+ "reviewedNotMarked": {
+  "iceandfire:myrmex_worker": "EntityAINearestAttackableTarget(EntityLiving.class, EntityMyrmexWorker$1): EntityPlayer is not an EntityLiving, so players are not targeted; only EntityAIHurtByTarget (retaliation).",
+  "iceandfire:myrmex_soldier": "EntityAINearestAttackableTarget(EntityLiving.class, ...): players are not EntityLiving; retaliates (EntityAIHurtByTarget).",
+  "iceandfire:myrmex_sentinel": "Same pattern as the soldier (EntityLiving target class); retaliates.",
+  "iceandfire:myrmex_royal": "Same pattern (EntityLiving target class); retaliates.",
+  "iceandfire:myrmex_queen": "Same pattern (EntityLiving target class); retaliates.",
+  "iceandfire:hippogryph": "HippogryphAITarget(EntityLivingBase.class); its shouldExecute references both EntityPlayer and EntityAnimal, and the branch was not resolved. Not marked; check in a harness scenario.",
+  "iceandfire:amphithere": "Only owner and hurt-by targeting (AmphithereAIHurtByTarget) plus item targeting; retaliates.",
+  "iceandfire:dread_horse": "No targeting task in its own classes.",
+  "mod_lavacow:mimic": "Targets EntityItem only (EntityAITargetItem); retaliates (EntityAIHurtByTarget)."
+ }
+}

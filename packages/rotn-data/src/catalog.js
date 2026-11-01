@@ -49,6 +49,8 @@ export class RotnData {
         const ids = (k) => new Set(Object.keys(names.registries[k]?.ids ?? {}));
         this.names = { blocks: ids('minecraft:blocks'), items: ids('minecraft:items'), entities: ids('minecraft:entities'), biomes: ids('minecraft:biomes') };
         this.miningLevels = readJson(dir, 'mining-levels')?.levels ?? {};
+        // Threat overrides beyond IMob, each citing the mod's bytecode (entity-overrides.json).
+        this.entityOverrides = readJson(dir, 'entity-overrides')?.entities ?? {};
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
@@ -223,7 +225,27 @@ export class RotnData {
         const n = registryName(input);
         if (!n || !this.names.entities.has(n)) return null;
         const e = this.dump.entities?.entities?.[n];
-        return e ? { name: n, propertiesKnown: true, ...e } : { name: n, propertiesKnown: false };
+        return e ? this._withThreat(n, { name: n, propertiesKnown: true, ...e }) : this._withThreat(n, { name: n, propertiesKnown: false });
+    }
+
+    /**
+     * Threat fields (entity-overrides.json). `imob` is the dump's fact (the class implements IMob);
+     * `targetsPlayers` is true only where the override cites bytecode that targets players;
+     * `hostile` = imob || targetsPlayers (what forge-bridge and isHostile read); `dangerous` marks
+     * threats to avoid rather than fight; `threat` carries the confidence and the bytecode evidence.
+     */
+    _withThreat(name, e) {
+        const o = this.entityOverrides[name];
+        const imob = e.hostile ?? null;
+        const out = { ...e, imob, targetsPlayers: !!o?.targetsPlayers, dangerous: !!o?.dangerous };
+        if (imob !== null || o) out.hostile = !!(imob || o?.targetsPlayers);
+        if (o) out.threat = { confidence: o.confidence, evidence: o.evidence, ...(o.note ? { note: o.note } : {}) };
+        return out;
+    }
+
+    /** True for entities to avoid rather than fight (Ice and Fire dragons, sea serpent, ...). */
+    isDangerous(input) {
+        return !!this.entity(input)?.dangerous;
     }
 
     /** Mod-local entity table (ADR 0004): FML EntitySpawn's (modId, modEntityTypeId) -> registry name. */
@@ -231,7 +253,7 @@ export class RotnData {
         if (!this._entitiesByModId) {
             this._entitiesByModId = new Map();
             for (const [name, e] of Object.entries(this.dump.entities?.entities ?? {})) {
-                if (e.modSpawn !== false && e.modEntityTypeId != null) this._entitiesByModId.set(`${e.modId}#${e.modEntityTypeId}`, { name, ...e });
+                if (e.modSpawn !== false && e.modEntityTypeId != null) this._entitiesByModId.set(`${e.modId}#${e.modEntityTypeId}`, this._withThreat(name, { name, ...e }));
             }
         }
         return this._entitiesByModId.get(`${modId}#${modEntityTypeId}`) ?? null;

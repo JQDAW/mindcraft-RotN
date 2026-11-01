@@ -292,7 +292,7 @@
    "score": 4.08,
    "biomeCount": 49,
    "modded": true,
-   "hostile": false,
+   "hostile": true,
    "displayName": "Cottontail Doe"
   },
   {
@@ -310,7 +310,7 @@
    "score": 4.08,
    "biomeCount": 49,
    "modded": true,
-   "hostile": false,
+   "hostile": true,
    "displayName": "New Zealand Doe"
   },
   {
