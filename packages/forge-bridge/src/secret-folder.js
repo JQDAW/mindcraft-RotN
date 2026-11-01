@@ -41,19 +41,27 @@ export function realLocation(dir) {
 }
 
 /**
+ * Read-only: throws if `dir`, as given or at its real location (a junction or
+ * symlink outside a repo can point into one), is inside a git work tree.
+ * Creates nothing. Returns the absolute path.
+ */
+export function assertOutsideGitWorkTrees(dir) {
+    const abs = path.resolve(dir);
+    for (const p of new Set([abs, realLocation(abs)])) {
+        const tree = findGitWorkTree(p);
+        if (tree) throw new Error(`${abs} is inside the git work tree ${tree}; choose a folder outside every repository`);
+    }
+    return abs;
+}
+
+/**
  * Creates `dir` for a token cache: refuses any folder inside a git work tree,
  * creates it (and missing parents) with mode 0700, and on POSIX chmods it to
  * 0700 in case it already existed. Windows ignores the mode; there the folder
  * inherits the user profile's ACL. Returns the absolute path.
  */
 export function prepareSecretFolder(dir, { platform = process.platform } = {}) {
-    const abs = path.resolve(dir);
-    // Check both the path as given and its real location: a junction or symlink
-    // outside a repo can point into one.
-    for (const p of new Set([abs, realLocation(abs)])) {
-        const tree = findGitWorkTree(p);
-        if (tree) throw new Error(`${abs} is inside the git work tree ${tree}; choose a folder outside every repository`);
-    }
+    const abs = assertOutsideGitWorkTrees(dir);
     fs.mkdirSync(abs, { recursive: true, mode: 0o700 });
     if (platform !== 'win32') fs.chmodSync(abs, 0o700);
     return abs;

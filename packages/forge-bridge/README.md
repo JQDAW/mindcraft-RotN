@@ -8,7 +8,13 @@ A Forge 1.12.2 (FML protocol 2) client plugin for node-minecraft-protocol (nmp),
 
 ## How Mindcraft uses it
 
-With `auth: "microsoft"`, `initBot` throws unless `MINDCRAFT_PROFILES_FOLDER` names the bot's own token cache, so it never falls back to nmp's shared default cache. It never shows a device code: the default `onMsaCode` logs only `device-code login needed, see coord/NEEDS-HUMAN.md`, and a caller can pass its own (`initBot(name, { onMsaCode })`).
+With `auth: "microsoft"`, `initBot` refuses to start (it throws before any bot or socket exists) in three cases (`src/auth-guard.js`):
+
+- `MINDCRAFT_PROFILES_FOLDER` is unset. nmp would otherwise use its shared default cache.
+- The folder is inside a git work tree, as given or at its real path. This check is read-only.
+- `DEBUG` enables the `prismarine-auth` namespace (`prismarine-auth`, `*`, `prismarine*` and so on, by the `debug` package's own rules), or the loaded `debug` instance already has it on. That output prints access and refresh tokens, and `main.js` cannot clear `DEBUG` before its imports load. Unset `DEBUG` or narrow it, for example `DEBUG=minecraft-protocol`.
+
+It never shows a device code. The default `onMsaCode` (`quietMsaCodeHandler`) logs only `device-code login needed, see coord/NEEDS-HUMAN.md`, never the code, message or URL. prismarine-auth then **keeps polling until the code expires (about 15 min) and the login fails with an error**. The fix is the human's login (`tools/msa-login.mjs`). A caller can pass its own handler instead (`initBot(name, { onMsaCode })`): g1-driver exits 3 at once.
 
 `initBot` in `src/utils/mcdata.js` passes `createForgeConnect(...)` as nmp's `connect` option. nmp calls it after authentication. It then:
 
@@ -120,6 +126,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - FML, FORGE, `jeid` and FML|MP decoders.
 - REID `window_items`, `set_slot`, `window_click`, `entity_effect` and `remove_entity_effect`, through nmp's real compiled 1.12.2 protocol.
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
+- `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
 - `g1-driver.test.js`: the driver as a subprocess against the fake Forge server, with the runner's allowlisted environment: hello exactly once, echo, a 3-block walk, a clean stop, a redacted capture, and exit 3 without a token-cache folder or host.
 - `e2e-initbot.test.js`: Mindcraft's real `initBot` against an in-process fake Forge server on 127.0.0.1. The run covers the status ping, tagHost, the handshake, Join Game, a REID chunk, inventory and effects, chat both ways, walking, and the capture.

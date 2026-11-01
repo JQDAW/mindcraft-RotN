@@ -88,6 +88,13 @@ The review findings on PR #10, numbered as in the review comment:
 - `g1-driver`: `walkMethod` comes from the scenario (its `method`, else `scenario-protocol walk()`).
 - Capture `maxFileBytes` is checked in UTF-8 bytes.
 - `npm test` passes 193/193; lint 259.
+- **PR #16 review (REQUEST CHANGES) fixed on the same branch:**
+  - The default `onMsaCode` is now `quietMsaCodeHandler` in `src/auth-guard.js`. A test feeds it a fake `{user_code, message, ...}` and checks that none of it appears in the output.
+  - `initBot` refuses Microsoft auth when `DEBUG` enables `prismarine-auth` (debug-package matching, plus the live `debug` state).
+  - `initBot` runs the read-only git-work-tree check (given and real path) on `MINDCRAFT_PROFILES_FOLDER`.
+  - New test: offline auth without a folder still starts.
+  - The README now says the bot keeps polling until the code expires (about 15 min).
+  - `npm test` passes 200/200; lint 259.
 
 ## Doing
 
