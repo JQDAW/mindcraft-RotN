@@ -15,9 +15,10 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 
 ## Doing
 
-- **PR (this branch, `agent/rotn-data/g2-dumper`): the dumper mod** (brief item 1, ADR 0004) in `tools/dumper/`. Source, pinned build script and docs; not compiled yet (no JDK 8 here). See "Requests" 1 and the run plan below.
-- **Next PR (`agent/rotn-data/data-package`): `packages/rotn-data`**, items 2 and 3. Translation API `toNew`/`toOld` (643 vanilla item pairs, a clean bijection), catalog API, names from the real capture, script cross-check fixtures, 21 offline tests. The dump-dependent acceptance tests skip until a dump is imported.
-- Then item 4: the `mcdata.js` helpers on `bot.registry`, after net-forge's PR #25 merges.
+- **PR #34 (`agent/rotn-data/g2-dumper`): the dumper mod** (brief item 1, ADR 0004) in `tools/dumper/`. Source, pinned build script and docs; not compiled yet (no JDK 8 here). See "Requests" 1 and the run plan below.
+- **PR #37 (`agent/rotn-data/data-package`): `packages/rotn-data`**, items 2 and 3. Translation API `toNew`/`toOld` (643 vanilla item pairs, a clean bijection), catalog API, names from the real capture, script cross-check fixtures, 25 offline tests. The dump-dependent acceptance tests skip until a dump is imported.
+- Then item 4: the `mcdata.js` helpers on `bot.registry`, after net-forge's PR #25 merges (see Request 4).
+- The lead's low-memory rule (2026-11-01) applies: targeted `node --test <file>` runs only, no parallel heavy jobs.
 
 ## Blocked
 
@@ -30,7 +31,9 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
    - blocks: `hardness`, `resistance`, `material` (prismarine material string, e.g. `rock`, `wood`, `plant`; modded materials as `modded:<class>`), `diggable` (hardness >= 0), `boundingBox` (`block` / `empty` from the collision box), `shapes`, `transparent`, `emitLight`, `filterLight`, and `harvestTools` as `{itemId: true}` built from item tool levels. The numbers need bot.registry's item ids, so I build them **after** your extension, through a second call `extendRegistry(bot.registry, snapshot, { properties })` or a small `applyProperties(registry, properties)` from you. Which do you prefer?
    - items: `stackSize`, `maxDurability`.
    - entities: `type` (`hostile` for `IMob`, `animal`, `water_creature`, `ambient`, else `mob`), plus `modId` / `modEntityTypeId` for your EntitySpawn naming (brief item 6). Please confirm that FML EntitySpawn gives you `modId` as the mod container id string; my table is keyed `(modId, modEntityTypeId)` from `EntityRegistry.lookupModSpawn`.
-3. **harness-ops: G2 naming adapter** (answered by message on 2026-11-01): `toNew`/`toOld` and `registryName` from `packages/rotn-data/index.js`; unmappable is `null`. `packages/rotn-data/vanilla/flattening-items.json` is the expected-name table. A `common-mobs.json` comes from the dump's spawn lists after the first dump run.
+3. **harness-ops: G2 naming adapter** (answered by message on 2026-11-01; adopted in their PR #36; their 30-pair `VANILLA_SAMPLE` matches my table and is pinned by a test in #37): `toNew`/`toOld` and `registryName` from `packages/rotn-data/index.js`; unmappable is `null`. `packages/rotn-data/vanilla/flattening-items.json` is the expected-name table. A `common-mobs.json` comes from the dump's spawn lists after the first dump run.
+
+4. **net-forge: one line in `initBot`** (yours) for item 4. The helpers in `mcdata.js` read the private `mcdata` set in `initBot`'s `login` handler (`mcdata = minecraftData(mc_version)`). Please make the module read `bot.registry` instead, after your extension (for example `mcdata = bot.registry` in that handler, refreshed on `forge_registry`). Or, if you prefer, I export `setRegistry(registry)` from the helper part and you call it there. I then change only the helper functions, keeping their signatures.
 
 ## Paid test-server plan (needs the lead's written GO; not started)
 
@@ -51,4 +54,5 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 
 ## Open PRs
 
-- (this branch) RotN dumper mod, brief item 1, ADR 0004.
+- #34 RotN dumper mod (brief item 1, ADR 0004).
+- #37 data package, name translation, catalog, dump importer (brief items 2-3).
