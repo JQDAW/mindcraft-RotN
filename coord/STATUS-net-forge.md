@@ -118,7 +118,7 @@ The review findings on PR #10, numbered as in the review comment:
 
 ## Doing
 
-- PR for brief item 8 (`agent_process.js`) open. Waiting for a scheduled sweeper run within 120 min, then Batch A, then Batch B+C on one server.
+- PR #19 (brief item 8, `agent_process.js`) open. Waiting for a scheduled sweeper run within 120 min, then Batch A, then Batch B+C on one server.
 
 ## Next
 
@@ -186,4 +186,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15, #16 and #18 merged.) New PR: brief item 8, `agent_process.js` exit-code contract, on `agent/net-forge/agent-process-restart`. `npm test` 212/212; lint 257.
+- (#15, #16 and #18 merged.) #19: brief item 8, `agent_process.js` exit-code contract, on `agent/net-forge/agent-process-restart`. `npm test` 212/212; lint 257.
