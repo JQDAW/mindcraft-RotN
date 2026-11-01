@@ -13,7 +13,7 @@ Command: `deploy/test-server.sh run --yes -- test/scenarios/g0-test-server.sh`
 | Result | **21 passed, 0 failed** (`g0-result.json`) |
 | Pack | CurseForge file 7564549 downloaded on the server; SHA-256 `90642fd5...f5205` matches the ADR 0005 pin (`pack_source=download`, so the upload fallback was not needed) |
 | Server | Java `1.8.0_504`, Forge `14.23.5.2860`, RoughlyEnoughIDs 2.2.2, 338 mod jars, `online-mode=true`, whitelist on (FRCFLD, JQDAW), "Done (17.914s)", heap `-Xms4G -Xmx8G`, Java RSS 4194 MB of 15608 MB |
-| From outside | Status ping: 1.12.2 / protocol 340, `modinfo.type=FML`, 346 mods incl. `forge` 14.23.5.2860 and `jeid` 2.2.2 (`status-ping.json` has the full mod list) |
+| From outside | Status ping: 1.12.2 / protocol 340, `modinfo.type=FML`, 346 mods incl. `forge` 14.23.5.2860 and `jeid` 2.2.2 (`status-ping.json` has the full mod list). 346 modids against 338 jars is expected: the list includes Forge's built-in entries (`minecraft`, `mcp`, `FML`, `forge`), and some jars declare more than one `@Mod` |
 | Console | `list` round-trip works ("There are 0/10 players online") |
 | Teardown | EXIT trap deleted the server, then its Primary IPv4, then its SSH key, and verified all three gone. Project-wide `hcloud server list` / `primary-ip list` were empty at 00:36:21 (`project-empty-checks.txt`) |
 | Cost | 212 s run, 1 billed hour x EUR 0.138136 (gross, `hcloud server-type describe cpx42`, nbg1) = **EUR 0.14**, plus the Primary IPv4 for 1 hour (its price is not exposed by `server-type describe`; it is a small fraction of the server price) |
