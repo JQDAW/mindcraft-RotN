@@ -9,6 +9,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { writeAtomic, readJsonRetry } from './fixtures/atomic-write.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
@@ -97,7 +98,7 @@ function run(args, extraEnv = {}, prependPath = null) {
 const readJsonl = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
 const hcloudCalls = () => readJsonl(env.FAKE_HCLOUD_LOG);
 const sshCalls = () => readJsonl(env.FAKE_SSH_LOG);
-const state = () => JSON.parse(fs.readFileSync(env.FAKE_HCLOUD_STATE, 'utf8'));
+const state = () => readJsonRetry(env.FAKE_HCLOUD_STATE);
 const withoutContext = (argv) => (argv[0] === '--context' ? argv.slice(2) : argv);
 const verbOf = (argv) => withoutContext(argv).filter((a) => !a.startsWith('-')).slice(0, 2).join(' ');
 const mutating = () => hcloudCalls().filter((a) => /^(\S+) (create|delete)$/.test(verbOf(a)));
@@ -106,11 +107,11 @@ const flagValues = (argv, flag) => argv.flatMap((a, i) => (a === flag ? [argv[i 
 
 const isoZ = (epoch) => new Date(epoch * 1000).toISOString().replace('.000Z', 'Z');
 function ghRuns(runs, repos = {}) {
-    fs.writeFileSync(env.FAKE_GH_STATE, JSON.stringify({ runs, repos }));
+    writeAtomic(env.FAKE_GH_STATE, JSON.stringify({ runs, repos }));
 }
 
 function seed(st) {
-    fs.writeFileSync(env.FAKE_HCLOUD_STATE, JSON.stringify(st));
+    writeAtomic(env.FAKE_HCLOUD_STATE, JSON.stringify(st));
 }
 
 function decodeWriteFiles(userData) {
@@ -752,6 +753,13 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         refusesCadence([a, { ...b, repo: HELPER }, c], /only 2 successful/);
     });
 
+    test('helper path: gh failing only on the helper repo refuses, with every path\'s reason (review nit 4)', () => {
+        ghRuns([sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 60) })]);
+        refuses(run(upArgs, { FAKE_GH_FAIL_REPO: HELPER }),
+            /no successful scheduled run of test-server-sweeper.yml on develop yet; and via the helper: 'gh run list' on JQDAW\/rotn-sweeper-cron failed; and via the cadence: only 1 successful/);
+        assert.ok(readJsonl(env.FAKE_GH_LOG).some((a) => a.at(-1) === HELPER), 'the helper repo was asked');
+    });
+
     test('gh failing refuses before any path is tried', () => {
         refuses(run(upArgs, { FAKE_GH_FAIL: '1' }), /ERROR: 'gh run list' failed \(not logged in\?\)\. Refusing/);
     });
@@ -879,7 +887,13 @@ describe('g0-watchdog.sh sweeper attribution (PR #5 review nit 3)', () => {
             child.stderr.on('data', (d) => { stderr += d; });
             let swept = false;
             const poll = setInterval(() => {
-                if (swept || !fs.existsSync(env.FAKE_HCLOUD_STATE) || state().servers.length < 2) return;
+                let servers;
+                try {
+                    servers = state()?.servers ?? [];
+                } catch {
+                    return; // being replaced right now: look again on the next tick
+                }
+                if (swept || servers.length < 2) return;
                 swept = true;
                 const sw = spawnSync(BASH, [fwd(script), 'sweep'], { env: { ...env, ROTN_TEST_NOW: '', HCLOUD_CONTEXT: 'mindcraft-rotn-test' }, encoding: 'utf8' });
                 const ts = new Date().toISOString();

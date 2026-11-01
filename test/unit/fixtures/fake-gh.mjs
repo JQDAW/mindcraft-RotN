@@ -10,21 +10,24 @@
 //   workflow run W --ref B     runs $FAKE_GH_DISPATCH_CMD (bash -c) as the "sweeper" and records
 //                              its output, GitHub-style ("sweep\tStep\t<ts> <line>"), as the run log.
 //
-// Env: FAKE_GH_FAIL=1 (every call fails, like a logged-out gh).
+// Env: FAKE_GH_FAIL=1 (every call fails, like a logged-out gh); FAKE_GH_FAIL_REPO=OWNER/REPO (only calls
+//      with --repo OWNER/REPO fail).
 import fs from 'node:fs';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
+import { writeAtomic, readJsonRetry } from './atomic-write.mjs';
 
 const argv = process.argv.slice(2);
 const statePath = process.env.FAKE_GH_STATE;
 if (process.env.FAKE_GH_LOG) fs.appendFileSync(process.env.FAKE_GH_LOG, JSON.stringify(argv) + '\n');
-if (process.env.FAKE_GH_FAIL === '1') {
+const repoArg = argv[argv.indexOf('--repo') + 1];
+if (process.env.FAKE_GH_FAIL === '1' || (process.env.FAKE_GH_FAIL_REPO && argv.includes('--repo') && repoArg === process.env.FAKE_GH_FAIL_REPO)) {
     process.stderr.write('To get started with GitHub CLI, please run:  gh auth login\n');
     process.exit(4);
 }
 
-const load = () => (statePath && fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : { runs: [] });
-const save = (st) => fs.writeFileSync(statePath, JSON.stringify(st));
+const load = () => (statePath ? readJsonRetry(statePath, { runs: [] }) : { runs: [] });
+const save = (st) => writeAtomic(statePath, JSON.stringify(st));
 const flag = (name) => {
     const i = argv.indexOf(name);
     return i >= 0 ? argv[i + 1] : undefined;
