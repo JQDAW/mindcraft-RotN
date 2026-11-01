@@ -1,0 +1,5 @@
+# Scenario scripts and test fakes run under bash; keep LF even on Windows checkouts.
+*.sh   text eol=lf
+*.mjs  text eol=lf
+*.js   text eol=lf
+fake-* text eol=lf

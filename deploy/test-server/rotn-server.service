@@ -1,0 +1,18 @@
+[Unit]
+Description=RotN 3.3.4 test server (disposable, mindcraft-rotn harness)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# tmux gives the Forge console a TTY so the harness can send commands (rotn-test console).
+# SIGTERM on stop reaches java, whose shutdown hook saves and stops the server.
+Type=forking
+User=minecraft
+Group=minecraft
+WorkingDirectory=/opt/rotn/server
+ExecStart=/usr/bin/tmux -S /opt/rotn/console.sock new-session -d -s rotn -x 220 -y 50 /opt/rotn/server/start-test.sh
+TimeoutStopSec=120
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
