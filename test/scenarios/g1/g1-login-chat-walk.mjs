@@ -3,7 +3,8 @@
 // console replies, not from the bot's claims. The bot driver must follow test/runner/DRIVER.md.
 //
 // Steps
-//   1. Write a marker to the server log (`say`), then start the driver.
+//   1. Write a marker to the server log (`say`) and confirm it from the console reply or the log
+//      tail, saying it again up to MARKER_TRIES times; only then start the driver.
 //   2. login_online: the server logs "NAME joined the game", and "UUID of player NAME is U" (logged
 //      only in online mode) with a version-4 UUID (a Mojang account; offline mode would give version 3).
 //      Any kick is recorded and classified (fml-spec.md section 4).
@@ -18,9 +19,10 @@
 // A run with weaker parameters than gateParams allows (shorter stay, shorter walk, another bot) can
 // pass its checks, but it is a smoke run and never a G1 pass (PR #9 review finding 1).
 import crypto from 'node:crypto';
-import { linesAfter, loginUuid, uuidVersion, playerEvents, chatLines, onlinePlayers, lastTeleport, horizontal, classifyKick } from '../../runner/lib/server-log.mjs';
+import { parseLine, linesAfter, loginUuid, uuidVersion, playerEvents, chatLines, onlinePlayers, lastTeleport, horizontal, classifyKick } from '../../runner/lib/server-log.mjs';
 
 const MS = 1000;
+const MARKER_TRIES = 3;
 
 export default {
     id: 'g1-login-chat-walk',
@@ -56,7 +58,14 @@ export default {
         const hello = `hello-${runId}`;
         if (p.minWalkBlocks > p.walkBlocks) throw new Error(`minWalkBlocks ${p.minWalkBlocks} is above walkBlocks ${p.walkBlocks}`);
 
-        server.console(`say ${marker}`, 1);
+        // Confirm the marker before the bot starts (PR #9 re-review nit): without it every later read
+        // of the log would fail, after the driver had already been started for nothing.
+        const markerSeen = (lines) => lines.some((l) => parseLine(l)?.msg === `[Server] ${marker}`);
+        let markerOk = false;
+        for (let i = 0; i < MARKER_TRIES && !markerOk; i++) {
+            markerOk = markerSeen(server.console(`say ${marker}`, 1)) || markerSeen(server.log(p.logTail));
+        }
+        if (!markerOk) throw new Error(`the scenario marker never appeared in the server log after ${MARKER_TRIES} 'say' attempts`);
         // The marker must stay inside the fetched tail: losing it would hide disconnects.
         const sinceMarker = () => {
             const lines = linesAfter(server.log(p.logTail), marker);
