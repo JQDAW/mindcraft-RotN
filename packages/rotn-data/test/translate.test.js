@@ -136,3 +136,15 @@ test('registryName adds the namespace that bot.registry drops for vanilla', () =
     assert.equal(registryName({ name: '' }), null);
     assert.equal(registryName(null), null);
 });
+
+// harness-ops' G2 sample (test/scenarios/g2/g2-items-roundtrip.mjs, VANILLA_SAMPLE in PR #36),
+// copied here so a change on either side shows up. Must be a subset of the table.
+const HARNESS_SAMPLE = 'minecraft:log:0=oak_log, minecraft:log:1=spruce_log, minecraft:log:2=birch_log, minecraft:log:3=jungle_log, minecraft:log2:0=acacia_log, minecraft:log2:1=dark_oak_log, minecraft:planks:0=oak_planks, minecraft:planks:5=dark_oak_planks, minecraft:sapling:0=oak_sapling, minecraft:stone:0=stone, minecraft:stone:1=granite, minecraft:stone:3=diorite, minecraft:cobblestone:0=cobblestone, minecraft:wool:0=white_wool, minecraft:wool:14=red_wool, minecraft:dye:1=red_dye, minecraft:dye:4=lapis_lazuli, minecraft:dye:15=bone_meal, minecraft:coal:0=coal, minecraft:coal:1=charcoal, minecraft:red_flower:0=poppy, minecraft:yellow_flower:0=dandelion, minecraft:stonebrick:0=stone_bricks, minecraft:crafting_table:0=crafting_table, minecraft:stick:0=stick, minecraft:wooden_pickaxe:0=wooden_pickaxe, minecraft:torch:0=torch, minecraft:bone:0=bone, minecraft:rotten_flesh:0=rotten_flesh, minecraft:wheat_seeds:0=wheat_seeds';
+
+test("harness-ops' G2 vanilla sample is a subset of flattening-items.json", () => {
+    const table = new Map(items.entries.map(e => [`${e.old}:${e.meta}`, e.new]));
+    for (const pair of HARNESS_SAMPLE.split(', ')) {
+        const [old, neu] = pair.split('=');
+        assert.equal(table.get(old), neu, old);
+    }
+});
