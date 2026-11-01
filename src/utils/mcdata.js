@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -136,6 +136,8 @@ export function initBot(username, { onMsaCode } = {}) {
     // prismarine-auth's output (it prints tokens). See forge-bridge src/auth-guard.js.
     if (options.auth === 'microsoft') {
         assertMicrosoftAuthSafe({ username, profilesFolder: env.profilesFolder });
+        // On a failed profile fetch, log its HTTP status and error class (never tokens or bodies).
+        instrumentProfileFetch({ log: (line) => console.warn(`[forge-bridge] ${line}`) });
     }
     if (env.profilesFolder) {
         options.profilesFolder = env.profilesFolder;

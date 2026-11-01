@@ -14,6 +14,7 @@ export { CaptureWriter, readCapture, redactBuffer } from './src/capture.js';
 export { throttleMovement, mergeMovement } from './src/movement-throttle.js';
 export { forgeOptionsFromEnv } from './src/env.js';
 export { assertMicrosoftAuthSafe, quietMsaCodeHandler, debugValueEnables, patternMayEnablePrefix, PRISMARINE_AUTH_DEBUG_NAMESPACE } from './src/auth-guard.js';
+export { instrumentProfileFetch, describeProfileFetchError, formatProfileFetchFailure } from './src/auth-diagnostics.js';
 export { assertOutsideGitWorkTrees, prepareSecretFolder, findGitWorkTree, realLocation } from './src/secret-folder.js';
 export { decideAgentExit, readExitReason, writeExitReason, recordAgentExit, createRequestedRestartGuard, REQUESTED_RESTART } from './src/exit-contract.js';
 export { extendRegistry, applyProperties } from './src/registry-extension.js';
