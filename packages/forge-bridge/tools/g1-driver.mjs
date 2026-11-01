@@ -84,8 +84,14 @@ async function main() {
         };
     }
 
+    // The walk itself is the scenario's (scenario-protocol.mjs walk()): report the
+    // method it gives, or name that function, rather than claiming one here.
     attachScenario(bot, {
-        emit: (type, data = {}) => event(type, type === 'walked' || type === 'spawn' ? { ...data, blockBelow: blockBelow(), walkMethod: 'forward-control' } : data),
+        emit: (type, data = {}) => {
+            if (type === 'walked') return event(type, { ...data, walkMethod: data.method ?? 'scenario-protocol walk()', blockBelow: blockBelow() });
+            if (type === 'spawn') return event(type, { ...data, blockBelow: blockBelow() });
+            return event(type, data);
+        },
     });
 
     let stopping = false;

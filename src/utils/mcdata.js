@@ -72,14 +72,21 @@ export function initBot(username, { onMsaCode } = {}) {
     // MINDCRAFT_PROFILES_FOLDER) are documented in packages/forge-bridge/src/env.js.
     const env = forgeOptionsFromEnv(username);
     // Per-bot Microsoft token cache, outside the repo (docs/research/ops.md section 1).
+    // Without it nmp would silently use its shared default cache: refuse instead.
+    if (options.auth === 'microsoft' && !env.profilesFolder) {
+        throw new Error(`initBot(${username}): auth is "microsoft" but MINDCRAFT_PROFILES_FOLDER is not set. `
+            + 'Set it to this bot\'s own token cache folder (outside every git repository); see coord/NEEDS-HUMAN.md.');
+    }
     if (env.profilesFolder) {
         options.profilesFolder = env.profilesFolder;
     }
-    // A caller that must never start an interactive device-code login (a harness
-    // driver) passes onMsaCode to fail fast instead.
-    if (onMsaCode) {
-        options.onMsaCode = onMsaCode;
-    }
+    // A bot never runs the interactive device-code login itself: that is the
+    // human's step (packages/forge-bridge/tools/msa-login.mjs). The default logs
+    // one line and never the code; a caller (a harness driver) can pass its own
+    // onMsaCode to fail fast.
+    options.onMsaCode = onMsaCode ?? (() => {
+        console.error(`[mcdata] ${username}: device-code login needed, see coord/NEEDS-HUMAN.md`);
+    });
 
     // Forge 1.12.2 (RotN): ping first, then attach forge-bridge with the server's
     // ModList before the socket opens (ADR 0003). FORGE_BRIDGE=auto attaches only

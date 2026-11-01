@@ -97,7 +97,7 @@ export class CaptureWriter {
         // Buffers anywhere in the entry are redacted before base64 (jsonReplacer),
         // and the JSON text is redacted again for plain-string identities.
         const json = redactString(JSON.stringify(line, jsonReplacer(this.redact)), this.redact) + '\n';
-        if (!force && this.bytes + json.length > this.maxFileBytes) {
+        if (!force && this.bytes + Buffer.byteLength(json) > this.maxFileBytes) {
             this.full = true;
             this.dropped.full++;
             this._write(JSON.stringify({ t: line.t, kind: 'event', name: 'capture_full', bytes: this.bytes, maxFileBytes: this.maxFileBytes }) + '\n');

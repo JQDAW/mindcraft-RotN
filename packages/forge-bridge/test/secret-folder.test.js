@@ -10,7 +10,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { findGitWorkTree, prepareSecretFolder } from '../src/secret-folder.js';
+import { findGitWorkTree, prepareSecretFolder, realLocation } from '../src/secret-folder.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TOOL = path.join(HERE, '..', 'tools', 'msa-login.mjs');
@@ -66,4 +66,17 @@ test('msa-login.mjs clears DEBUG before prismarine-auth loads', () => {
     const req = src.indexOf("require('prismarine-auth')");
     assert.ok(del > 0 && req > del, 'delete process.env.DEBUG must come before the prismarine-auth require');
     assert.ok(!/^import .*prismarine-auth/m.test(src), 'a static import would load before the delete runs');
+});
+
+test('a junction or symlink outside a repo that points into one is refused (realpath)', () => {
+    const root = sandbox();
+    const checkout = path.join(root, 'repo');
+    fs.mkdirSync(path.join(checkout, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(checkout, 'inner'));
+    const link = path.join(root, 'outside-link');
+    fs.symlinkSync(path.join(checkout, 'inner'), link, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.equal(findGitWorkTree(link), null, 'the link path itself is outside the repo');
+    assert.equal(realLocation(path.join(link, 'not', 'yet')), path.join(fs.realpathSync.native(path.join(checkout, 'inner')), 'not', 'yet'));
+    assert.throws(() => prepareSecretFolder(path.join(link, 'msa')), /inside the git work tree/);
+    assert.equal(fs.existsSync(path.join(checkout, 'inner', 'msa')), false);
 });

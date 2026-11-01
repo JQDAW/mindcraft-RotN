@@ -8,6 +8,8 @@ A Forge 1.12.2 (FML protocol 2) client plugin for node-minecraft-protocol (nmp),
 
 ## How Mindcraft uses it
 
+With `auth: "microsoft"`, `initBot` throws unless `MINDCRAFT_PROFILES_FOLDER` names the bot's own token cache, so it never falls back to nmp's shared default cache. It never shows a device code: the default `onMsaCode` logs only `device-code login needed, see coord/NEEDS-HUMAN.md`, and a caller can pass its own (`initBot(name, { onMsaCode })`).
+
 `initBot` in `src/utils/mcdata.js` passes `createForgeConnect(...)` as nmp's `connect` option. nmp calls it after authentication. It then:
 
 1. Pings the server. If the status response has `modinfo.type == "FML"`, it uses that mod list. If the ping fails, it falls back to `FORGE_MODLIST_FILE`.
@@ -96,7 +98,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 ## Tools
 
 - `tools/msa-login.mjs <Bot>`: the human's one-time device-code login. It prints only the Minecraft profile name, never a token.
-  - `MINDCRAFT_PROFILES_FOLDER` must be outside every git work tree: it walks up looking for `.git` (a folder, or a file in a worktree). It creates the folder with mode 0700, and chmods it on POSIX (`src/secret-folder.js`).
+  - `MINDCRAFT_PROFILES_FOLDER` must be outside every git work tree: it walks up looking for `.git` (a folder, or a file in a worktree), from both the given path and its real path, so a junction or symlink into a repo is refused too. It creates the folder with mode 0700, and chmods it on POSIX (`src/secret-folder.js`).
   - It clears `DEBUG` before prismarine-auth loads, so the `debug` package cannot log HTTP details.
 - `tools/g1-spike.mjs`: the G1 spike. It uses Mindcraft's real `initBot` against a disposable test server, normally inside `deploy/test-server.sh run ... --`. It logs in, stays `--minutes`, chats both ways (the `say` check uses the server console), walks, and writes `capture.jsonl`, `registries.json` and `summary.json`.
   - `--mode handshake` is Run A. It is for a server started with `--capture`, which closes the connection right after the handshake.
@@ -106,7 +108,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - It needs `MINDCRAFT_PROFILES_FOLDER` and never starts a device-code login: `initBot(name, { onMsaCode })` makes a stale cache exit 3.
   - Kicks: exit 3 when the runner's `FATAL_KICKS` or forge-bridge's `classifyKick` says fatal, otherwise 1. SIGTERM exits 0.
   - Switches: `ROTN_DRIVER_AUTH` (`offline` for loopback tests only), `ROTN_DRIVER_FORGE_BRIDGE` (default `on`), `ROTN_DRIVER_CAPTURE` (default `1`, `captures/raw/`), `ROTN_DRIVER_MODLIST_FILE`.
-  - Its `DRIVER {json}` lines add the handshake result, registry sizes, `walkMethod` and the block under the bot with its Forge registry name.
+  - Its `DRIVER {json}` lines add the handshake result, registry sizes, `walkMethod` and the block under the bot with its Forge registry name. `walkMethod` is the scenario's: its `method` field if `walk()` reports one, otherwise `scenario-protocol walk()`.
 
 ## Tests
 

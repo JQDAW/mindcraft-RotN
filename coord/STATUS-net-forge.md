@@ -81,9 +81,17 @@ The review findings on PR #10, numbered as in the review comment:
 - The shared fake world moved to `test/fake-world.js`.
 - `npm test` passes 178/178; lint 259.
 
+## Done: initBot auth guard and PR #15 nits (branch `agent/net-forge/initbot-auth-guard`, from develop 74b23ed)
+
+- `initBot` throws when `auth` is `microsoft` and `MINDCRAFT_PROFILES_FOLDER` is unset, so it never falls back to nmp's shared default cache. The default `onMsaCode` logs only `device-code login needed, see coord/NEEDS-HUMAN.md` and never the code; a caller can supply its own.
+- `msa-login`: the git-tree check also runs on the realpath (junctions, symlinks).
+- `g1-driver`: `walkMethod` comes from the scenario (its `method`, else `scenario-protocol walk()`).
+- Capture `maxFileBytes` is checked in UTF-8 bytes.
+- `npm test` passes 193/193; lint 259.
+
 ## Doing
 
-- PR #15 open (review fixes + G1 driver). Waiting for the preflight to pass, then Batch A, then Batch B+C.
+- PR for the initBot auth guard open. Waiting for the preflight (a scheduled sweeper run within 120 min), then Batch A, then Batch B+C on one server.
 
 ## Next
 
@@ -139,8 +147,10 @@ The setup for both batches:
 2. **Lead (`settings.js` / profile, your files):** for RotN runs, set `"minecraft_version": "1.12.2"` and `"auth": "microsoft"`. Until then, `g1-spike.mjs` sets these itself.
 3. **Lead (`package.json`, optional; review item 12):** make the transitive dependencies forge-bridge imports direct ones: `minecraft-protocol`, `protodef`, `prismarine-nbt`, `lodash.merge`, `prismarine-auth`. The lockfile pins them today.
 4. **Lead (`docs/research/fml-spec.md`, optional):** the Forge 14.23.5.2860 layouts confirmed by `javap` are listed at the top of `packages/forge-bridge/test/golden.test.js`, if you want them in the spec.
-5. **skills-rotn (later, through the lead):** `bot.forge.bridge.lastKick` carries `{category, fatal, exitCode, retryCap?}` for the `agent.js` kick handler.
+5. **harness-ops (optional):** have `walk()` in `test/runner/drivers/scenario-protocol.mjs` return a `method` field (for example `forward+jump+turn`). g1-driver then reports it as `walkMethod`.
+6. **harness-ops / lead (`TRY_IT.md`, `main.js` docs):** with `auth: "microsoft"` (develop's default), `initBot` now refuses to start without `MINDCRAFT_PROFILES_FOLDER`. Please mention this where the run steps are.
+7. **skills-rotn (later, through the lead):** `bot.forge.bridge.lastKick` carries `{category, fatal, exitCode, retryCap?}` for the `agent.js` kick handler.
 
 ## Open PRs
 
-- #15 PR #10 review fixes + G1 gate driver, on `agent/net-forge/g1-review-fixes`. G1, brief items 2, 5 and 7. `npm test` 178/178; lint 259 (baseline).
+- (#15 merged as 74b23ed.) New PR: initBot auth guard + PR #15 nits, on `agent/net-forge/initbot-auth-guard`. `npm test` 193/193; lint 259.
