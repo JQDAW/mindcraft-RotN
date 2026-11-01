@@ -1,5 +1,5 @@
 {
- "description": "Early-game RotN recipes transcribed from the pinned 3.3.4 server pack zip (SHA-256 90642fd5...f5205), scripts/ folder, read with unzip -p. Cross-check only (ADR 0004): the dump is the source of truth, and test/crosscheck.test.js asserts the dump contains each of these. Ingredient alternatives: 'ns:path[:meta|:*]' or 'ore:<key>'. Shapes are given as written; the matcher trims empty rows and columns and accepts a mirror when 'mirrored' is true.",
+ "description": "Early-game RotN recipes transcribed from the pinned 3.3.4 server pack zip (SHA-256 90642fd5...f5205), scripts/ folder, read with unzip -p. Cross-check only (ADR 0004): the dump is the source of truth, and test/acceptance-3.3.4.test.js asserts the imported dump contains each of these, and tools/import-dump.mjs refuses a dump that lacks one (src/crosscheck.js does the matching). Ingredient alternatives: 'ns:path[:meta|:*]' or 'ore:<key>'. Shapes are given as written; the matcher trims empty rows and columns and accepts a mirror when 'mirrored' is true.",
  "repoReference": "Rebirth-of-the-Night/Rebirth-of-the-Night@775cc6e7ca1e116f407e8f313bc1cd9069e9a93d",
  "recipes": [
   { "key": "crude_axe", "script": "scripts/pyrotech/pyrotech_recipes_craftingtable.zs:238-240 (rock = <ore:rock>, L117)",

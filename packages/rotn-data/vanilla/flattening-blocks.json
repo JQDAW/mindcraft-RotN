@@ -3,7 +3,8 @@
  "sources": [
   "minecraft-data pc/common/legacy.json",
   "minecraft-data pc/1.12.2",
-  "RENAMES in build-flattening.mjs"
+  "packages/rotn-data/3.3.4/registry-names.json (names checked)",
+  "RENAMES, BLOCK_NAME_FIXES and NBT_VARIANTS in build-flattening.mjs"
  ],
  "minecraftData": "3.119.0",
  "count": 1682,
@@ -4806,66 +4807,6 @@
    "state": "facing=east"
   },
   {
-   "old": "minecraft:light_gray_glazed_terracotta",
-   "meta": 0,
-   "new": "light_gray_glazed_terracotta",
-   "state": "facing=south"
-  },
-  {
-   "old": "minecraft:light_gray_glazed_terracotta",
-   "meta": 1,
-   "new": "light_gray_glazed_terracotta",
-   "state": "facing=west"
-  },
-  {
-   "old": "minecraft:light_gray_glazed_terracotta",
-   "meta": 2,
-   "new": "light_gray_glazed_terracotta",
-   "state": "facing=north"
-  },
-  {
-   "old": "minecraft:light_gray_glazed_terracotta",
-   "meta": 3,
-   "new": "light_gray_glazed_terracotta",
-   "state": "facing=east"
-  },
-  {
-   "old": "minecraft:light_gray_shulker_box",
-   "meta": 0,
-   "new": "light_gray_shulker_box",
-   "state": "facing=down"
-  },
-  {
-   "old": "minecraft:light_gray_shulker_box",
-   "meta": 1,
-   "new": "light_gray_shulker_box",
-   "state": "facing=up"
-  },
-  {
-   "old": "minecraft:light_gray_shulker_box",
-   "meta": 2,
-   "new": "light_gray_shulker_box",
-   "state": "facing=north"
-  },
-  {
-   "old": "minecraft:light_gray_shulker_box",
-   "meta": 3,
-   "new": "light_gray_shulker_box",
-   "state": "facing=south"
-  },
-  {
-   "old": "minecraft:light_gray_shulker_box",
-   "meta": 4,
-   "new": "light_gray_shulker_box",
-   "state": "facing=west"
-  },
-  {
-   "old": "minecraft:light_gray_shulker_box",
-   "meta": 5,
-   "new": "light_gray_shulker_box",
-   "state": "facing=east"
-  },
-  {
    "old": "minecraft:light_weighted_pressure_plate",
    "meta": 0,
    "new": "light_weighted_pressure_plate",
@@ -7334,6 +7275,66 @@
    "old": "minecraft:sea_lantern",
    "meta": 0,
    "new": "sea_lantern"
+  },
+  {
+   "old": "minecraft:silver_glazed_terracotta",
+   "meta": 0,
+   "new": "light_gray_glazed_terracotta",
+   "state": "facing=south"
+  },
+  {
+   "old": "minecraft:silver_glazed_terracotta",
+   "meta": 1,
+   "new": "light_gray_glazed_terracotta",
+   "state": "facing=west"
+  },
+  {
+   "old": "minecraft:silver_glazed_terracotta",
+   "meta": 2,
+   "new": "light_gray_glazed_terracotta",
+   "state": "facing=north"
+  },
+  {
+   "old": "minecraft:silver_glazed_terracotta",
+   "meta": 3,
+   "new": "light_gray_glazed_terracotta",
+   "state": "facing=east"
+  },
+  {
+   "old": "minecraft:silver_shulker_box",
+   "meta": 0,
+   "new": "light_gray_shulker_box",
+   "state": "facing=down"
+  },
+  {
+   "old": "minecraft:silver_shulker_box",
+   "meta": 1,
+   "new": "light_gray_shulker_box",
+   "state": "facing=up"
+  },
+  {
+   "old": "minecraft:silver_shulker_box",
+   "meta": 2,
+   "new": "light_gray_shulker_box",
+   "state": "facing=north"
+  },
+  {
+   "old": "minecraft:silver_shulker_box",
+   "meta": 3,
+   "new": "light_gray_shulker_box",
+   "state": "facing=south"
+  },
+  {
+   "old": "minecraft:silver_shulker_box",
+   "meta": 4,
+   "new": "light_gray_shulker_box",
+   "state": "facing=west"
+  },
+  {
+   "old": "minecraft:silver_shulker_box",
+   "meta": 5,
+   "new": "light_gray_shulker_box",
+   "state": "facing=east"
   },
   {
    "old": "minecraft:skull",

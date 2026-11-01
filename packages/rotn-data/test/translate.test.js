@@ -26,7 +26,7 @@ test('registry-names.json holds the real 3.3.4 capture sizes', () => {
 });
 
 test('every vanilla 1.12.2 item with a 1.13+ name round-trips both ways', () => {
-    assert.equal(items.entries.length, 643);
+    assert.equal(items.entries.length, 642); // 643 legacy pairs minus spawn_egg (NBT variant)
     for (const e of items.entries) {
         const neu = toNew(e.old, e.meta);
         assert.equal(neu, e.new, `${e.old}:${e.meta}`);
@@ -39,6 +39,21 @@ test('every vanilla 1.12.2 item with a 1.13+ name round-trips both ways', () => 
 test('every vanilla item in the table exists in the RotN 3.3.4 item registry', () => {
     const missing = [...new Set(items.entries.map(e => e.old))].filter(n => !pack.names.items.has(n));
     assert.deepEqual(missing, []);
+});
+
+test('every vanilla block in the table exists in the RotN 3.3.4 block registry', () => {
+    const missing = [...new Set(blocks.entries.map(e => e.old))].filter(n => !pack.names.blocks.has(n));
+    assert.deepEqual(missing, []);
+    // minecraft-data's light_gray_* names are silver_* on the 1.12.2 server.
+    assert.equal(blockToNew('silver_glazed_terracotta'), 'light_gray_glazed_terracotta');
+    assert.equal(blockToNew('silver_shulker_box'), 'light_gray_shulker_box');
+    assert.deepEqual(blockToOld('light_gray_shulker_box').map(s => s.name), Array(6).fill('minecraft:silver_shulker_box'));
+});
+
+test('spawn eggs are not guessed: the mob is in NBT in 1.12', () => {
+    assert.equal(toNew('spawn_egg'), null);
+    assert.equal(toNew('spawn_egg', 90), null);
+    assert.equal(toOld('pig_spawn_egg'), null);
 });
 
 test('well-known flattening pairs', () => {

@@ -17,7 +17,7 @@ RotN 3.3.4 facts (ADR 0005) and two-way name translation between Minecraft 1.12.
 - **Anything that cannot be mapped is `null`** (or `[]` for `blockToOld`): never a guess, a number or "unknown".
 - Modded names are checked against the names the 3.3.4 server syncs, so a typo gives `null`.
 - Damageable items keep their name whatever the damage: `toNew('stone_pickaxe', 17)` → `'stone_pickaxe'`.
-- Vanilla table: `vanilla/flattening-items.json` (643 item pairs, a bijection) and `vanilla/flattening-blocks.json` (1682 states). They come from minecraft-data's `pc/common/legacy.json` and `pc/1.12.2`, with the later renames carried forward to 1.21 (`rose_red` → `red_dye`, `sign` → `oak_sign`, `grass` → `short_grass`, `grass_path` → `dirt_path`, 1.13's `stone_slab` → `smooth_stone_slab`). Rebuild with `node packages/rotn-data/tools/build-flattening.mjs`.
+- Vanilla table: `vanilla/flattening-items.json` (642 item pairs, a bijection; `spawn_egg` is left out because its mob is in NBT) and `vanilla/flattening-blocks.json` (1682 states). They come from minecraft-data's `pc/common/legacy.json` and `pc/1.12.2`, with every 1.12 name checked against the 3.3.4 server's registry (minecraft-data's `light_gray_glazed_terracotta` and `light_gray_shulker_box` blocks are `silver_*` there), and the later renames carried forward to 1.21 (`rose_red` → `red_dye`, `sign` → `oak_sign`, `grass` → `short_grass`, `grass_path` → `dirt_path`, 1.13's `stone_slab` → `smooth_stone_slab`). Rebuild with `node packages/rotn-data/tools/build-flattening.mjs`.
 
 ### Catalog
 

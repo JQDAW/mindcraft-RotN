@@ -3,10 +3,11 @@
  "sources": [
   "minecraft-data pc/common/legacy.json",
   "minecraft-data pc/1.12.2",
-  "RENAMES in build-flattening.mjs"
+  "packages/rotn-data/3.3.4/registry-names.json (names checked)",
+  "RENAMES, BLOCK_NAME_FIXES and NBT_VARIANTS in build-flattening.mjs"
  ],
  "minecraftData": "3.119.0",
- "count": 643,
+ "count": 642,
  "entries": [
   {
    "old": "minecraft:acacia_boat",
@@ -2487,11 +2488,6 @@
    "old": "minecraft:soul_sand",
    "meta": 0,
    "new": "soul_sand"
-  },
-  {
-   "old": "minecraft:spawn_egg",
-   "meta": 0,
-   "new": "pig_spawn_egg"
   },
   {
    "old": "minecraft:speckled_melon",
