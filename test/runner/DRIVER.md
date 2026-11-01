@@ -48,7 +48,14 @@ Every disconnect is recorded in `result.json` under `notes.kicks`, with its reas
 
 ## G2: naming what the bot sees
 
-There are three scenarios in `test/scenarios/g2/`. Each logs in first (`login_online`, as in G1), and records the world seed (`seed`) in `notes.worldSeed`; without a seed the run is not gate-valid. The bot only reports names. Every verdict comes from the server's own commands on the test server.
+There are three scenarios in `test/scenarios/g2/`. Each logs in first (`login_online`, as in G1), and records the world seed (`seed`) in `notes.worldSeed`; without a seed the run is not gate-valid. **One login retry** (lead, #71, after G2 batch 2):
+- **When:** if the driver exits before joining, and its output since that start contains exactly `Error: Failed to obtain profile data for NAME, does the account own minecraft?` (or the same message as a `DRIVER` error event), the runner starts it once more after 10 s.
+- **Why:** minecraft-protocol throws that error whenever prismarine-auth's profile fetch fails, and the real cause is swallowed.
+- **What triggers it:** that error only, whatever the exit code. Any other error, a kick, or a second failure is a FAIL.
+- **Still required:** `login_online` needs a real join.
+- **Recorded in:** `notes.loginRetry`.
+
+The bot only reports names. Every verdict comes from the server's own commands on the test server.
 
 **The naming must be the agent's own.** G2 asks whether the agent sees correct names, so a G2 run is evidence only if the driver names things through the code the agent runs:
 - **Names:** block, entity and item names come from `bot.registry`, as forge-bridge extends it, read the way `src/agent/library/world.js` reads them (`block.name`, `entity.name`, inventory `slot.name`).

@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (23:42 UTC, from `date -u`)
+Updated: 2026-11-01 (23:58 UTC, from `date -u`)
 
 ## Done
 
@@ -110,7 +110,7 @@ Updated: 2026-11-01 (23:42 UTC, from `date -u`)
   - `msa-login FRCFLD --check`: OK; its output is not recorded.
   - The preflight on its own: cadence path, 3 dispatch runs, gaps 15.4 and 14.5 min; no leftovers.
 - **Command:** the planned one, unchanged. No `--skip-sweeper-check`.
-- **Console:** `gamerule doDaylightCycle false` once, `time set day` before each scenario (3 in the server log), then the runner's scenario commands. No difficulty change; nothing on the live server.
+- **Console:** `gamerule doDaylightCycle false` once, `time set day` before each scenario (3 lines in the raw `latest.log` in `captures/raw/`; the committed `server.log` excerpts start at each scenario's marker, so they do not show them), then the runner's scenario commands. No difficulty change; nothing on the live server.
 - **Batch 1 raw files** were moved to `captures/raw/batch1-20261101/` first.
 
 **Real times (UTC)**
@@ -283,6 +283,7 @@ deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c '
 - **Worst case** if everything else fails: TTL + 1 h = 3 h, about **EUR 0.42** plus IPv4.
 
 **After the run.**
+- If a scenario used the one login retry (`notes.loginRetry.retried`, approved by the lead on #71), the evidence README says so, for that scenario.
 - Confirm `hcloud server list` and `hcloud primary-ip list` are empty, and record the real start and stop times and the cost here.
 - Raw files stay in `captures/raw/` (git-ignored). Sanitized evidence goes to `test/evidence/g2/` in a PR: each `result.json`, plus `server.log` excerpts with the world seed and cube centre.
 - **Redaction**, in every committed `server.log` excerpt and in `result.json` (`notes` included), following the G1 evidence's conventions:
