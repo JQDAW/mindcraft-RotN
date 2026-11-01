@@ -15,7 +15,7 @@ import { Vec3 } from 'vec3';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { attachG2, pages, stockNames, agentNames } from '../runner/drivers/scenario-protocol.mjs';
 import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, agentNaming, namingCheckEnv } from '../runner/lib/g2.mjs';
-import blocks from '../scenarios/g2/g2-blocks-named.mjs';
+import blocks, { blockMeta } from '../scenarios/g2/g2-blocks-named.mjs';
 import mobs, { VANILLA_COMMON_MOBS, chooseMobs, readCommonMobs } from '../scenarios/g2/g2-mobs-named.mjs';
 import items, { VANILLA_SAMPLE, parseItems, checkFullTable } from '../scenarios/g2/g2-items-roundtrip.mjs';
 
@@ -148,7 +148,7 @@ function sim(opt = {}) {
         entities.push(e);
         fake.entities[e.id] = e;
     }
-    return { server, bot, clock, lines: log, entities, inventory };
+    return { server, bot, clock, lines: log, entities, inventory, fake };
 }
 
 // The correct adapter: full registry names (modded names keep their namespace), and the table.
@@ -313,7 +313,8 @@ describe('g2-blocks-named on a simulated server', () => {
         const want = r.notes.census.reduce((a, line) => a + Math.min(Number(line.split(' ')[2]), 8, 3), 0);
         assert.ok(c.blocks_confirmed.detail.startsWith(`${want}/${want} runner-picked samples (3 per type) re-asked and confirmed`), c.blocks_confirmed.detail);
         assert.equal(r.notes.samples.length, want, 'every sample is recorded');
-        assert.ok(r.notes.samples.every((x) => /^-?\d+,-?\d+,-?\d+ census \S+ \d+ fresh \S+ \d+: confirmed$/.test(x)), r.notes.samples[0]);
+        assert.ok(r.notes.samples.every((x) => /^-?\d+,-?\d+,-?\d+ census \S+ \d+ fresh \S+ \d+ server found: confirmed$/.test(x)), r.notes.samples[0]);
+        assert.deepEqual(r.notes.metaDrift, { count: 0, of: want, first: [] }, 'nothing changed since the census');
         assert.match(c.blocks_spotcheck.detail, /^4\d confirmed non-air answers of 40 needed/);
         assert.ok(r.notes.census.some((b) => b.startsWith('pyrotech:rock 6 ')), 'the modded block is in the census');
         assert.ok(!r.notes.census.some((b) => b.startsWith('minecraft:air')), 'no air in the census');
@@ -428,7 +429,7 @@ describe('g2-blocks-named on a simulated server', () => {
         // Since G2 batch 1 the samples are re-asked right before their check, so the re-ask already
         // catches it; the spot checks still do too.
         assert.equal(c.blocks_confirmed.pass, false);
-        assert.match(c.blocks_confirmed.detail, /minecraft:dirt \d+ at .*\(fresh: null 0\): "null 0" is not a registry name and meta/);
+        assert.match(c.blocks_confirmed.detail, /minecraft:dirt \d+ at .*\(fresh: null 0\): "null 0" is not a registry name and a meta 0\.\.15/);
         assert.equal(c.blocks_spotcheck.pass, false);
         assert.match(c.blocks_spotcheck.detail, /"null 0" is not a registry name/);
     });
@@ -450,7 +451,13 @@ describe('g2-blocks-named on a simulated server', () => {
         const c = byName(r);
         assert.equal(c.blocks_confirmed.pass, true, c.blocks_confirmed.detail);
         assert.ok(r.notes.census.some((x) => x.startsWith('minecraft:leaves 0 ')), 'the census saw meta 0');
-        assert.ok(r.notes.samples.some((x) => / census minecraft:leaves 0 fresh minecraft:leaves 8: confirmed$/.test(x)), 'both answers are recorded');
+        assert.ok(r.notes.samples.some((x) => / census minecraft:leaves 0 fresh minecraft:leaves 8 server found: confirmed$/.test(x)), 'census, fresh answer and server verdict are recorded');
+        // The drift is counted (lead, #67), not required to match.
+        const leaves = r.notes.samples.filter((x) => / census minecraft:leaves /.test(x)).length;
+        assert.ok(leaves > 0);
+        assert.equal(r.notes.metaDrift.count, leaves);
+        assert.equal(r.notes.metaDrift.of, r.notes.samples.length);
+        assert.match(r.notes.metaDrift.first[0], /^-?\d+,-?\d+,-?\d+ minecraft:leaves: census meta 0, server meta 8$/);
     });
 
     test('no meta tolerance: a bot whose fresh answer keeps the old meta fails', async () => {
@@ -460,6 +467,37 @@ describe('g2-blocks-named on a simulated server', () => {
         const c = byName(r);
         assert.equal(c.blocks_confirmed.pass, false);
         assert.match(r.notes.blocksWrong.first.join(' | '), /minecraft:leaves 0 at .*\(fresh: minecraft:leaves 0\): The block at .* had the data value of 8 \(expected: 0\)/);
+        assert.ok(r.notes.samples.some((x) => / census minecraft:leaves 0 fresh minecraft:leaves 0 server The block at .* had the data value of 8 \(expected: 0\): FAIL$/.test(x)), 'the server verdict is recorded');
+    });
+
+    test('a meta outside 0..15 never reaches the server: -1 (the 1.12 wildcard), 16 and non-integers fail (PR #67 review 1)', async () => {
+        assert.deepEqual(['0', '15', '7'].map(blockMeta), [0, 15, 7]);
+        assert.deepEqual(['-1', '16', '1.5', '', 'x', undefined].map(blockMeta), [undefined, undefined, undefined, undefined, undefined, undefined]);
+        for (const bad of [-1, 16, 1.5]) {
+            // A bot that answers this meta for every block, in the census and after it.
+            const names = { ...truthNames, blockName: (b) => (b ? { name: truthNames.blockName(b).name, meta: bad } : null) };
+            const s = sim({ names });
+            const cmds = [];
+            const orig = s.server.console;
+            s.server.console = (cmd, w) => { cmds.push(cmd); return orig(cmd, w); };
+            const c = byName(await run(blocks, s, { seed: 7 }));
+            assert.equal(c.blocks_named.pass, false, `census with meta ${bad}`);
+            assert.equal(c.blocks_spotcheck.pass, false, `spot checks with meta ${bad}`);
+            assert.match(c.blocks_spotcheck.detail, /is not a registry name and a meta 0\.\.15/);
+            assert.ok(!cmds.some((x) => /^testforblock .* (-1|16|1\.5)$/.test(x)), `meta ${bad} was never sent to testforblock`);
+        }
+        // A census that is fine, but a fresh answer of -1 at the re-ask (the wildcard would match anything).
+        let censusDone = false;
+        const names = { ...truthNames, blockName: (b) => (b && censusDone ? { name: truthNames.blockName(b).name, meta: -1 } : truthNames.blockName(b)) };
+        const s = sim({ names });
+        const orig = s.server.console;
+        s.server.console = (cmd, w) => { if (cmd.includes('scenario-blockat ')) censusDone = true; return orig(cmd, w); };
+        const r = await run(blocks, s, { seed: 7 });
+        const c = byName(r);
+        assert.equal(c.blocks_named.pass, true);
+        assert.equal(c.blocks_confirmed.pass, false);
+        assert.match(c.blocks_confirmed.detail, /\(fresh: \S+ -1\): "\S+ -1" is not a registry name and a meta 0\.\.15/);
+        assert.ok(r.notes.samples.every((x) => / server not asked: FAIL$/.test(x)), 'no -1 sample was sent to the server');
     });
 
     test('a fresh name that is not the census name fails, even when the server confirms the fresh answer', async () => {
@@ -467,7 +505,8 @@ describe('g2-blocks-named on a simulated server', () => {
         const c = byName(r);
         assert.equal(c.blocks_confirmed.pass, false);
         assert.match(r.notes.blocksWrong.first.join(' | '), /minecraft:leaves 0 at .*\(fresh: minecraft:air 0\): the server confirms "minecraft:air 0", but the census named this position minecraft:leaves/);
-        assert.ok(r.notes.samples.some((x) => / census minecraft:leaves 0 fresh minecraft:air 0: the server confirms/.test(x)));
+        assert.ok(r.notes.samples.some((x) => / census minecraft:leaves 0 fresh minecraft:air 0 server found: FAIL$/.test(x)));
+        assert.equal(r.notes.metaDrift.count, 0, 'a changed name is a failure, not meta drift');
     });
 
     test('weakened parameters are a smoke run, never a G2 pass', async () => {
@@ -584,6 +623,12 @@ describe('g2-mobs-named: refused or vanished mobs are replaced in rank order, at
         assert.equal(r.gateValid, false);
     });
 
+    test('raising maxReplaced (e.g. 10) makes the run a smoke run (PR #67 review 3)', async () => {
+        const r = await go({}, { maxReplaced: 10 });
+        assert.ok(r.weakenedParams.some((w) => /^maxReplaced=10 /.test(w)), JSON.stringify(r.weakenedParams));
+        assert.equal(r.gateValid, false);
+    });
+
     test('exactly 3 replacements still count', async () => {
         const r = await go({ cannotSummon: ['minecraft:chicken', 'minecraft:spider'], vanish: ['minecraft:skeleton'] });
         assert.equal(r.notes.replaced.length, 3);
@@ -608,6 +653,28 @@ describe('g2-mobs-named: refused or vanished mobs are replaced in rank order, at
         const testfors = cmds.filter((c) => c.startsWith('testfor '));
         assert.ok(testfors.length > 0 && testfors.every((c) => /^testfor @e\[tag=rotnscn\w+,type=/.test(c)), testfors.join('\n'));
         assert.ok(r.notes.otherSeen.some((e) => e.startsWith('minecraft:spider ')), 'the natural spider is noted, not judged');
+    });
+
+    test('a natural mob of the same kind next to a summon: the nearest report is matched, the other is noted', async () => {
+        // Summon slots are random on the ring, so put a natural zombie 1 block from wherever the zombie lands.
+        const s = sim();
+        const orig = s.server.console;
+        s.server.console = (cmd, w) => {
+            const out = orig(cmd, w);
+            const m = /^summon minecraft:zombie (\S+) (\S+) (\S+) /.exec(cmd);
+            if (m) {
+                const e = { id: 0, reg: 'minecraft:zombie', tag: null, type: 'mob', name: 'zombie', position: new Vec3(Number(m[1]) + 1, Number(m[2]), Number(m[3])) };
+                s.entities.unshift(e);
+                s.fake.entities[e.id] = e;   // id 0: the bot lists it before the summon, as a natural mob would be
+            }
+            return out;
+        };
+        const r = await run(mobs, s, { dataRoot: DATA2, maxMobs: 4 });
+        assert.equal(byName(r).mobs_named.pass, true, byName(r).mobs_named.detail);
+        const others = r.notes.otherSeen.filter((e) => e.startsWith('minecraft:zombie '));
+        assert.equal(others.length, 1);
+        const zx = r.notes.summoned.find((m) => m.name === 'minecraft:zombie').pos[0];
+        assert.equal(Number(others[0].split(' ')[1]), zx + 1, 'the natural zombie (1 block off) is the one noted; the summon itself is matched');
     });
 
     test('a placeholder name for any reported entity, tagged or not, fails mobs_named', async () => {

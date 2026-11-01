@@ -187,7 +187,9 @@ export default {
             // mobs_named: every summoned mob by its exact name near its spot; no placeholder name anywhere
             const hits = new Map();
             const missing = present.map((m) => {
-                const hit = seen.find((e) => e.name === m.name && e.pos && dist(e.pos, m.pos) <= 3);
+                // The nearest report of that name within 3 blocks (a natural mob of the same kind may be close by).
+                const hit = seen.filter((e) => e.name === m.name && e.pos && dist(e.pos, m.pos) <= 3 && ![...hits.values()].includes(e))
+                    .sort((a, b) => dist(a.pos, m.pos) - dist(b.pos, m.pos))[0];
                 if (hit) { hits.set(m, hit); return null; }
                 const near = seen.find((e) => e.pos && Math.hypot(e.pos[0] - m.pos[0], e.pos[2] - m.pos[2]) <= 1.5);
                 return `${m.name} at ${m.pos.join(',')}: ${near ? `reported as "${near.name}"` : 'not reported'}`;

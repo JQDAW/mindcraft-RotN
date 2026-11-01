@@ -35,6 +35,16 @@ const BATCH = 8;
 const AIR = 'minecraft:air';
 const UNLOADED = '#unloaded';   // scenario-protocol.mjs: a position without a loaded chunk
 
+/**
+ * A block meta from the bot: an integer 0..15, else undefined. In 1.12 `testforblock ... -1` is a wildcard
+ * that matches any data value, so a bot answering -1 (or 16, or 1.5) must never reach the server
+ * (PR #67 review finding 1).
+ */
+export function blockMeta(field) {
+    const m = ints([field])?.[0];
+    return m !== undefined && m >= 0 && m <= 15 ? m : undefined;
+}
+
 /** Ask the bot to name up to BATCH positions now: Map "x,y,z" -> its answer fields [x, y, z, name, meta]. */
 async function askBlockAt(ctx, sinceMarker, name, positions, timeoutMs) {
     const t = crypto.randomBytes(6).toString('hex');
@@ -140,9 +150,14 @@ export default {
         //    for that position (lead decision on G2 batch 1 finding 2: blocks such as Dynamic Trees
         //    leaves change state between the census and the check). A sample passes only if (a) the
         //    fresh answer is exactly what the server has there (name AND meta, no tolerance) and (b) the
-        //    fresh name is the census name. Both answers are recorded in notes.samples.
+        //    fresh name is the census name. notes.samples records, for every sample, the census answer
+        //    (name and meta), the fresh answer and the server's verdict on it. The census meta is NOT
+        //    required to match (Dynamic Trees drift); notes.metaDrift counts the samples where the server
+        //    confirmed the census name with a different meta than the census had (lead, #67).
         const wrong = [];
         const samples = [];
+        const drift = [];
+        let sameName = 0;
         const queue = [];
         for (const e of entries.filter((x) => isRegistryName(x.name) && x.cand.every((q) => q && q.length === 3))) {
             for (const q of pick(e.cand, p.samplesPerType)) queue.push({ e, q });
@@ -155,24 +170,31 @@ export default {
                 const census = `${e.name} ${e.meta}`;
                 let problem = null;
                 let now = 'no answer';
+                let verdict = 'not asked';
                 if (!f) problem = 'no fresh answer from the bot';
                 else {
                     now = `${f[3]} ${f[4]}`;
-                    const meta = ints([f[4]])?.[0];
+                    const meta = blockMeta(f[4]);
                     if (f[3] === UNLOADED) problem = 'unloaded at the re-ask';
-                    else if (!isRegistryName(f[3]) || meta === undefined) problem = `"${now}" is not a registry name and meta`;
+                    else if (!isRegistryName(f[3]) || meta === undefined) problem = `"${now}" is not a registry name and a meta 0..15`;
                     else {
                         const v = testforblockVerdict(server.console(`testforblock ${q.join(' ')} ${f[3]} ${meta}`, p.consoleWaitS), q);
+                        verdict = v.ok ? 'found' : v.detail;
                         if (!v.ok) problem = v.detail;
                         else if (f[3] !== e.name) problem = `the server confirms "${now}", but the census named this position ${e.name}`;
+                        if (v.ok && f[3] === e.name) {   // the server's meta here is the fresh meta
+                            sameName++;
+                            if (meta !== e.meta) drift.push(`${q.join(',')} ${e.name}: census meta ${e.meta}, server meta ${meta}`);
+                        }
                     }
                 }
-                samples.push(`${q.join(',')} census ${census} fresh ${now}: ${problem ?? 'confirmed'}`);
+                samples.push(`${q.join(',')} census ${census} fresh ${now} server ${verdict}: ${problem ? 'FAIL' : 'confirmed'}`);
                 if (problem) wrong.push(`${census} at ${q.join(',')} (fresh: ${now}): ${problem}`);
             }
         }
         const checked = queue.length;
         ctx.note('samples', samples);
+        ctx.note('metaDrift', { count: drift.length, of: sameName, first: drift.slice(0, 20) });
         ctx.note('blocksWrong', sample(wrong));
         ctx.check('blocks_confirmed', namedOk && checked > 0 && wrong.length === 0,
             `${checked - wrong.length}/${checked} runner-picked samples (${p.samplesPerType} per type) re-asked and confirmed by testforblock`
@@ -192,10 +214,10 @@ export default {
             const byPos = await askBlockAt(ctx, s.sinceMarker, name, batch, p.replyTimeoutMs);
             for (const q of batch) {
                 const f = byPos.get(q.join(','));
-                const meta = f ? ints([f[4]])?.[0] : undefined;
+                const meta = f ? blockMeta(f[4]) : undefined;
                 if (!f) { spotFail.push(`${q.join(',')}: no answer`); continue; }
                 if (f[3] === UNLOADED) { spotUnloaded++; continue; }   // counted apart; capped by maxUnloadedShare
-                if (!isRegistryName(f[3]) || meta === undefined) { spotFail.push(`${q.join(',')}: "${f.slice(3).join(' ')}" is not a registry name and meta`); continue; }
+                if (!isRegistryName(f[3]) || meta === undefined) { spotFail.push(`${q.join(',')}: "${f.slice(3).join(' ')}" is not a registry name and a meta 0..15`); continue; }
                 const v = testforblockVerdict(server.console(`testforblock ${q.join(' ')} ${f[3]} ${meta}`, p.consoleWaitS), q);
                 if (!v.ok) { spotFail.push(`${q.join(',')} ${f[3]} ${meta}: ${v.detail}`); continue; }
                 if (f[3] !== AIR) { nonAir++; hits.set(`${f[3]} ${meta}`, (hits.get(`${f[3]} ${meta}`) ?? 0) + 1); }
