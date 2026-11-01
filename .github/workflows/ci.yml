@@ -1,0 +1,50 @@
+# CI for every pull request and every push to develop (harness-ops, brief deliverable 3):
+# npm ci (with the patch-package postinstall), npm test (offline unit tests) and the lint gate.
+#
+# Lint gate: test/tools/lint-baseline.mjs. Upstream Mindcraft has 259 ESLint errors; a PR may not
+# add any (per file, per total, ceiling 259), and may not raise test/lint-baseline.json compared
+# with the PR's base branch.
+#
+# Secrets: none. This workflow uses no GitHub Environment and reads no secrets. The Hetzner token
+# lives only in the Environment "hetzner-test-sweeper", which only test-server-sweeper.yml on
+# develop can use. It runs on `pull_request` (never `pull_request_target`), so a PR's code runs
+# with a read-only GITHUB_TOKEN and, for forks, without any secrets.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0          # the lint gate reads the base branch's baseline with git show
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22        # ADR 0002
+          cache: npm
+
+      - name: npm ci
+        run: npm ci --no-audit --no-fund
+
+      - name: npm test (offline unit tests)
+        run: npm test
+
+      - name: Lint (no new errors over the 259 baseline)
+        env:
+          BASE_REF: ${{ github.base_ref || 'develop' }}
+        run: node test/tools/lint-baseline.mjs --base-ref "origin/$BASE_REF"
