@@ -9,7 +9,7 @@ import { HS_CHANNEL, decodeHandshake } from './fml-hs.js';
 import { ClientHandshake, CORE_CHANNELS } from './handshake.js';
 import { decodeRegister, decodeFml, decodeForge, decodeJeid, MultipartAssembler } from './channels.js';
 import { hasReid, findMod, REID_MODID } from './modlist.js';
-import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, rotnMetadataSerializers, MC_VERSION } from './reid.js';
+import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, rotnMetadataSerializers, INFERRED_METADATA_SERIALIZERS, MC_VERSION } from './reid.js';
 import { classifyKick, classifySocketError } from './kicks.js';
 
 const require = createRequire(import.meta.url);
@@ -53,6 +53,20 @@ export function attachForgeBridge(client, opts) {
     // Triumph's ExtendedDisplayInfo changes play.advancements (reid.js triumphTypes).
     bridge.triumph = findMod(modList, 'triumph') ?? null;
     bridge.metadataSerializers = { ...rotnMetadataSerializers(modList), ...extraSerializers };
+    // Log the first value decoded with each inferred serializer id (reid.js), so a
+    // real capture shows whether the inference holds until the dumper confirms it.
+    const inferredPending = new Set(Object.keys(INFERRED_METADATA_SERIALIZERS)
+        .filter((id) => !(id in extraSerializers) && bridge.metadataSerializers[id] === INFERRED_METADATA_SERIALIZERS[id]).map(Number));
+    const noteInferred = (where, entityId, metadata) => {
+        if (!inferredPending.size || !Array.isArray(metadata)) return;
+        for (const m of metadata) {
+            if (!inferredPending.has(m.type)) continue;
+            inferredPending.delete(m.type);
+            const name = bridge.metadataSerializers[m.type];
+            log(`entity-metadata serializer ${m.type} (${name}, inferred) first decoded in ${where}: entity ${entityId} key ${m.key} value ${JSON.stringify(m.value)}`);
+            capture?.event('inferred_serializer_decoded', { id: m.type, name, where, entityId, key: m.key, value: m.value });
+        }
+    };
     bridge.modList = modList;
     bridge.serverChannels = [];
     bridge.serverMods = null;
@@ -183,7 +197,7 @@ export function attachForgeBridge(client, opts) {
             case 'FML': {
                 const msg = decodeFml(data, { readMetadata: typeReader.readMetadata });
                 decoded = summarizeFml(msg);
-                if (msg.type === 'EntitySpawn') { bridge.stats.entitySpawns++; bridge.emit('entitySpawn', msg); }
+                if (msg.type === 'EntitySpawn') { bridge.stats.entitySpawns++; noteInferred('FML EntitySpawn', msg.entityId, msg.metadata); bridge.emit('entitySpawn', msg); }
                 if (msg.type === 'OpenGui') { bridge.stats.openGuis++; bridge.emit('openGui', msg); }
                 break;
             }
@@ -231,6 +245,7 @@ export function attachForgeBridge(client, opts) {
             if (id !== null) { data.effectId = id; bridge.stats.reidEffectTails++; }
         }
         if (meta.name === 'kick_disconnect') onKick(data.reason, 'play');
+        if (meta.name === 'entity_metadata') noteInferred('entity_metadata', data.entityId, data.metadata);
         if (capture && capturedPackets[meta.name] !== undefined) {
             capture.packet('S2C', meta.name, fullBuffer, meta.name === 'map_chunk'
                 ? { x: data.x, z: data.z, groundUp: data.groundUp, bitMap: data.bitMap, chunkDataLen: data.chunkData?.length }
