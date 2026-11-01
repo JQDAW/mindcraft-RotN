@@ -119,11 +119,28 @@ If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge
     The server was then deleted. Total time 00:32:37-00:36:16 UTC.
   - Watchdog proof: the off-PC sweeper (`workflow_dispatch` on `develop`) deleted an expired, labelled CX23 with its Primary IPv4 and SSH key, and left alone a control that was expired too but carried a different label (`purpose=mindcraft-rotn-watchdog-control`), which proves it selects by label.
   - Spend: about EUR 0.16 for the servers. Primary IPv4 hours come on top, and the CX23 share is estimated, because the watchdog scenario writes no ledger entry. The project was empty afterwards.
-  - **Pending:** no `event=schedule` sweeper run has been seen yet. One observed scheduled run is a precondition for the next real paid batch. If none appears by about 02:00 UTC, the lead investigates (cron delay on a new default-branch workflow is common) and raises it in NEEDS-HUMAN if needed.
-- Phase 1 may start: net-forge's FML login spike (G1). harness-ops builds the G1 scenarios and CI meanwhile.
+  - ~~Pending: no `event=schedule` sweeper run seen yet.~~ Superseded: GitHub scheduling failed on this account, and the cron-job.org cadence replaced it (see below).
+- Phase 1 started then (net-forge's FML login spike, harness-ops' G1 scenarios and CI). It is complete; see G1 below.
+- 2026-11-01, the off-PC watchdog is fixed. GitHub ran almost no scheduled workflows on this account, so cron-job.org now dispatches `test-server-sweeper` every 15 min (human set it up). The preflight (PR #21/#27) accepts that cadence, refuses on a newer failed run, and refuses when GitHub's clock cannot be read.
+- 2026-11-01, **G1 passed** (PR #31, `b554547`; independent reviewer: G1 PASS CONFIRMED). The harness runner `g1-login-chat-walk` with forge-bridge's driver and default gate params gave 5/5:
+  - online login (Mojang UUID v4);
+  - chat send;
+  - chat receive (whispered random token echoed);
+  - walk (8.57 blocks, server-side tp positions);
+  - stay 609 s with no drop.
+  Run from develop `62ec6f1` on a disposable CPX42, up 24.8 min, about EUR 0.14; the project was empty afterwards.
+  - Path to it: Batch A (handshake, PR #26) passed. The first B+C failed on Triumph's non-vanilla advancements packet, fixed in PR #28 (opaque packet plus a cosmetic-packet safety net).
+  - Known non-blockers:
+    - an AquaAcrobatics `entity_metadata` serializer (type 14) is not decoded yet;
+    - a FATAL "Ticking entity" NullPointerException from RoughMobsRevamped (`RoughAIBatTarget.java:51`) at 17:30:59, in `test/evidence/g1/batch-bc2-20261101/server.log:42-815`. The server survived. Watch it on the live server and in G3;
+    - the safety net's "(dropped, allowlisted)" log wording does not exist yet; drops are only counted and logged as "parse error". The follow-up is with net-forge.
+- **Phase 2 (G2: see the world) starts:**
+  - net-forge: registry extension (PR #25, still open, review changes pending), mod entities (FML EntitySpawn into `bot.entities`), the entity-metadata serializers;
+  - rotn-data is spawned: dumper mod on the test server, data package, name translation, `mcdata.js` helpers reading `bot.registry`;
+  - harness-ops: G2 scenarios (top 50 blocks near spawn named, common mobs named, old/new names round-trip), then CX23 work.
 
 ## Open items
 
 - Task givers: `JQDAW` (human, 2026-11-01); more later. skills-rotn reads the list from a setting.
-- The bot's own Microsoft account name and its first login on this PC (NEEDS-HUMAN), needed for the G1 spike.
+- ~~The bot's Microsoft account name and first login on this PC~~: done (FRCFLD, 2026-11-01).
 - Memory and hourly-cost targets for the soak test (lead sets them in an ADR after the first measurements).
