@@ -37,15 +37,78 @@ function fieldOf(container, name) {
     return f;
 }
 
-/** Overrides that apply to every Forge 1.12.2 server. */
-export function forgeTypes(version = MC_VERSION) {
+/**
+ * Wire formats of the mod entity-metadata serializers in RotN 3.3.4, by name
+ * (javap on each mod's DataSerializer.write in the pinned pack; scratch only).
+ * Vanilla 1.12 defines serializer ids 0-13. Mods that call vanilla
+ * DataSerializers.registerSerializer get the next ids (14, 15, ...) in call
+ * order; Forge-registry serializers (minecraft:dataserializers) start at 256 and
+ * are synced by name in RegistryData.
+ */
+export const METADATA_SERIALIZER_TYPES = Object.freeze({
+    // AquaAcrobatics 1.15.4 PoseSerializer: writeEnumValue (VarInt ordinal).
+    'aquaacrobatics:pose': 'varint',
+    // base 3.14.0 ResourceLocationDataSerializer: namespace string, path string.
+    'base:resource_location': ['container', [{ name: 'namespace', type: 'string' }, { name: 'path', type: 'string' }]],
+    // Charset-Lib 0.5.6.6 DataSerializersCharset QUATERNION: 4 floats.
+    'charset:quaternion': ['container', [{ name: 'x', type: 'f32' }, { name: 'y', type: 'f32' }, { name: 'z', type: 'f32' }, { name: 'w', type: 'f32' }]],
+    // Mowzie's Mobs 1.5.8 OPTIONAL_TRADE: input stack; an empty input means "no trade",
+    // otherwise output stack and an int weight follow.
+    'mowziesmobs:optional_trade': ['container', [
+        { name: 'input', type: 'slot' },
+        { anon: true, type: ['switch', { compareTo: 'input/blockId', fields: { '-1': 'void' }, default: ['container', [{ name: 'output', type: 'slot' }, { name: 'weight', type: 'i32' }]] }] },
+    ]],
+    // Requious Frakto 0.12 SPARK_EFFECT: enum ordinal as an int.
+    'requious:spark_effect': 'i32',
+    // DoggyTalents 1.15.1.6 (Forge registry): talent map (int count; talent ResourceLocation
+    // string, byte level each) and an optional text component (bool, then chat JSON).
+    'doggytalents:talent_level_list': ['array', { countType: 'i32', type: ['container', [{ name: 'talent', type: 'string' }, { name: 'level', type: 'i8' }]] }],
+    'doggytalents:optional_text_component': ['option', 'string'],
+});
+
+/**
+ * Serializer ids for RotN 3.3.4, from the ModList. Only ids that are proven:
+ * - 14 = aquaacrobatics:pose. G1 Batch B/C: a player's key 17 has type 14 with a
+ *   one-byte value that ends exactly at the next key; of the five vanilla-id mod
+ *   serializers only a VarInt fits (two strings, an int, 4 floats or a stack do not).
+ * - 256, 257 = the DoggyTalents Forge-registry serializers (synced ids in Batch A).
+ * Ids 15-18 (base, Charset, Mowzie's Mobs, Requious, in an unknown order) come
+ * from rotn-data's dumper; pass them as `metadataSerializers`.
+ */
+export function rotnMetadataSerializers(modList = []) {
+    const has = (id) => modList.some((m) => m.modid === id);
+    const out = {};
+    if (has('aquaacrobatics')) out[14] = 'aquaacrobatics:pose';
+    if (has('doggytalents')) Object.assign(out, { 256: 'doggytalents:talent_level_list', 257: 'doggytalents:optional_text_component' });
+    return out;
+}
+
+/**
+ * Overrides that apply to every Forge 1.12.2 server.
+ * @param {string} [version]
+ * @param {Record<number, string>} [metadataSerializers] extra entity-metadata serializer ids: { id: name in METADATA_SERIALIZER_TYPES }
+ */
+export function forgeTypes(version = MC_VERSION, metadataSerializers = {}) {
     const p = mcData(version).protocol;
     // Entity metadata type id is a VarInt in 1.12 (minecraft-data says i8).
     // Forge mod DataSerializers start at 256 and need two VarInt bytes.
     const meta = clone(p.types.entityMetadata);
     const keyType = meta[1].type[1][0].type[1];
     fieldOf(['container', keyType], 'type').type = 'varint';
-    return { entityMetadata: meta };
+    const out = { entityMetadata: meta };
+    const extra = Object.entries(metadataSerializers ?? {});
+    if (extra.length) {
+        // Only new keys: lodash.merge in nmp adds them to the vanilla 0-13 switch.
+        const item = clone(p.types.entityMetadataItem);
+        for (const [id, name] of extra) {
+            const t = METADATA_SERIALIZER_TYPES[name];
+            if (!t) throw new Error(`unknown entity-metadata serializer ${name} (id ${id})`);
+            if (Number(id) <= 13) throw new Error(`serializer id ${id} is vanilla`);
+            item[1].fields[String(id)] = t;
+        }
+        out.entityMetadataItem = item;
+    }
+    return out;
 }
 
 /** REID-only overrides. */
@@ -127,11 +190,11 @@ export const OPAQUE_PACKET_TYPE = 'forge_bridge_opaque_packet';
 
 /**
  * customPackets object for nmp's createClient / client.customPackets.
- * @param {{reid?: boolean, triumph?: boolean, version?: string}} opts
+ * @param {{reid?: boolean, triumph?: boolean, version?: string, metadataSerializers?: Record<number, string>}} opts
  */
-export function buildCustomPackets({ reid = false, triumph = false, version = MC_VERSION } = {}) {
+export function buildCustomPackets({ reid = false, triumph = false, version = MC_VERSION, metadataSerializers = {} } = {}) {
     const major = mcData(version).version.majorVersion;
-    const out = { types: { ...forgeTypes(version) } };
+    const out = { types: { ...forgeTypes(version, metadataSerializers) } };
     const toClient = {};
     if (reid) {
         const r = reidTypes(version);
@@ -162,13 +225,13 @@ export function reidEffectIdFromTail(tail) {
  * An interpreted ProtoDef that can read single types (entityMetadata, slot)
  * with the same overrides as the play protocol. Used for FML EntitySpawn.
  */
-export function createTypeReader({ reid = false, version = MC_VERSION } = {}) {
+export function createTypeReader({ reid = false, version = MC_VERSION, metadataSerializers = {} } = {}) {
     const { ProtoDef } = require('protodef');
     const minecraft = require('minecraft-protocol/src/datatypes/minecraft');
     const nbt = require('prismarine-nbt');
     const merge = require('lodash.merge');
     const md = mcData(version);
-    const custom = buildCustomPackets({ reid, version })[md.version.majorVersion];
+    const custom = buildCustomPackets({ reid, version, metadataSerializers })[md.version.majorVersion];
     const types = merge(clone(md.protocol.types), custom.types);
     const proto = new ProtoDef(false);
     nbt.addTypesToInterpreter('big', proto);

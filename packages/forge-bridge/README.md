@@ -77,6 +77,64 @@ The lead's section R lists these. net-forge confirmed each one with `javap -c -p
 
 These still need a real capture to confirm them on the wire (G1 Run B).
 
+## Registry extension (brief item 4)
+
+After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snapshot)` (`src/registry-extension.js`). It then sets `bot.forge.registryReport` (`{added, rebound, total}` per kind) and emits `forge_registry`. This is the shared-registry contract of ADR 0003 decision 4:
+
+- **Blocks, items, entities and biomes** get the synced ids.
+  - Vanilla entries keep minecraft-data's object and unprefixed name (`stone`). A vanilla block, item or biome the server moved to another id gets a copy at the new id, and its old slot is freed. Every such rebind is in `registryReport.rebinds` and logged as `registry rebind: <kind> <name> <old> -> <new>`; RotN 3.3.4 has none.
+  - **1.12 names of vanilla entries are aliased, not replaced.** minecraft-data spells some vanilla entries the 1.13 way. In RotN 3.3.4 that is 2 blocks (`minecraft:silver_shulker_box` 227, `minecraft:silver_glazed_terracotta` 243) and 45 biomes (`minecraft:beaches` 16, `minecraft:void` 127, `minecraft:mutated_mesa` 165, ...). Such an entry keeps minecraft-data's data at its id (as a copy, with `registryName` set to the 1.12 name), and both the 1.12 name and minecraft-data's name resolve to it in `*ByName` (`registryReport.aliases`). The 4 vanilla items minecraft-data has no entry for (`air`, `portal`, `end_portal`, `end_gateway`) get defaults under their unprefixed name. A vanilla mob under its 1.12 name is found by minecraft-data's `internalId` (EntityList id). `forge.modded` is set only for names outside `minecraft:`.
+  - **Entities are never rebound.** Forge's `minecraft:entities` holds EntityList ids (item 1, xp_orb 2, arrow 10, silverfish 60), but 1.12's `spawn_entity` uses *object* ids (item 2, arrow 60), which is what minecraft-data's `entities` map holds. Rebinding would make dropped items `xp_orb` and arrows `silverfish`. So vanilla entity entries are left alone, modded entities are added only into free ids, and `registry.entitiesByForgeId` maps every synced EntityList id to its entry.
+  - Modded entries are named by their **full registry name** (`pyrotech:rock`), with `registryName` and `forge: { modded: true, propertiesKnown }`.
+- **Block states** are `id << 4 | meta`, so `blocksByStateId` holds 16 states per block. `bot.blockAt()`, `Block.fromStateId()` and `new Item(id)` therefore return modded names.
+- **Defaults without rotn-data's properties:**
+  - A block is a solid full cube (`boundingBox: 'block'`, so the bot never falls through a modded floor), diggable, with a conservative hardness of 1.5 (stone's), so `digTime` is finite and above 0, and no drops.
+  - An item stacks to 64. An entity is a `mob`. A biome is a neutral overworld biome.
+- **Properties.** `extendRegistry(registry, snapshot, { properties: { blocks: { 'pyrotech:rock': {...} } } })` fills in or overrides fields, keyed by full registry name; vanilla names use `minecraft:stone`. rotn-data's dump (ADR 0004) is meant to feed this. Properties cannot rename an entry.
+- **Properties after the extension** (rotn-data's request 2). `applyProperties(registry, properties)` applies rotn-data's properties to an already-extended `bot.registry`, keyed by full registry name, so `harvestTools` can use its item ids. It updates every map that points at a changed entry (id map, array, all `*ByName` keys including aliases, `blocksByStateId`, `entitiesByForgeId`, and the collision-shape table when shapes change) and returns `{ applied, missing }`.
+- **Mindcraft's name helpers** (rotn-data's request 4). `initBot` sets `mcdata.js`'s `mcdata` to `bot.registry` at login, and again after the extension. `getBlockId`, `getItemName` and the rest therefore know the server's modded names; vanilla names are unchanged.
+- **Isolation.** Dummied entries are skipped. Only `bot.registry`'s own maps and its `blockCollisionShapes` are replaced; prismarine-registry copies minecraft-data only shallowly, so the maps are copied first. The process-wide `minecraft-data` object stays vanilla.
+- **Shapes.** Each modded block is registered in the copied collision-shape table, so a Block class made later keeps its shapes (prismarine-block resets shapes by name).
+- **Not covered:** FML EntitySpawn uses the mod-local entity table (`modId` + `modEntityTypeId`), not `minecraft:entities`; that is brief item 6.
+
+## FML EntitySpawn into `bot.entities` (brief item 6)
+
+Forge spawns most mod entities with an FML message (`FML` channel, disc 2), not a vanilla spawn packet, so stock mineflayer never sees them. `initBot` calls `attachFmlEntities(bot, bridge)` (`src/fml-entities.js`):
+
+- **Spawn.** Each decoded EntitySpawn becomes a mineflayer entity in `bot.entities[entityId]`, as mineflayer's `spawn_entity_living` would make it: uuid, position, yaw, pitch, headYaw, velocity (thrown entities), and metadata by key. Then `entitySpawn` is emitted.
+- **Tracking.** Later vanilla packets for that entity id (moves, teleports, metadata, `entity_destroy`) go through mineflayer's own `fetchEntity`, so it is tracked and removed like any other entity.
+- **Name.** The message has the mod id and a *mod-local* type id (`EntityRegistry.registerModEntity`'s id), which RegistryData does not map.
+  - With rotn-data's table (`{ [modId]: { [modEntityTypeId]: 'modid:name' } }`, passed as `modEntityTable`), the entity gets its registry name, and `displayName`, size and category come from `bot.registry.entitiesByName` (PR #25).
+  - **TODO(rotn-data):** until that table exists, the name is the placeholder `<modId>:entity_<n>`, with `entity.forge.nameKnown: false`.
+  - A table value can also be an object, `{ name, type?, category?, width?, height? }`. **The table must supply `type` explicitly** for an entity to be a `mob` (or anything else): `category` alone only sets `entity.kind`.
+- **Type.** It is never `mob` by default, because Mindcraft's `isHostile` treats every `mob` as hostile, and FML also spawns projectiles, vehicles and decorations. It is the table's `type` when given, else `projectile` for a thrown entity (`throwerId != 0`), else `other`. Hostility belongs to rotn-data's table and skills-rotn.
+- **Size.** `width` and `height` come from the table, or from `bot.registry` when rotn-data's properties are in. Without them they are prismarine-entity's defaults, **0 × 0**, which pvp aim and collision checks should treat as unknown.
+- **Debug info.** `entity.forge` has `{ modId, modEntityTypeId, nameKnown, throwerId, metadataError }`.
+- **Safety.** A message that cannot be applied is logged and leaves no half-made entity behind.
+
+## Mod entity-metadata serializers
+
+Vanilla 1.12 defines entity-metadata serializer ids 0-13. A protodef switch cannot skip an unknown type, so a packet using one is dropped as a PartialReadError (G1: a player's AquaAcrobatics pose, key 17). `reid.js` adds the mod ones to `entityMetadataItem`, for nmp's protocol and for the FML EntitySpawn reader alike:
+
+- **Formats.** `METADATA_SERIALIZER_TYPES` holds each mod serializer's wire format, from `javap` on its `write()` in the pinned pack:
+
+  | Serializer | Wire format |
+  | --- | --- |
+  | `aquaacrobatics:pose` | VarInt enum |
+  | `base:resource_location` | two strings |
+  | `charset:quaternion` | four floats |
+  | `mowziesmobs:optional_trade` | slot; then, unless empty, a slot and an int |
+  | `requious:spark_effect` | int |
+  | `doggytalents:talent_level_list` | an int count of (string, byte) |
+  | `doggytalents:optional_text_component` | an optional string |
+
+- **Ids.** Mods that call vanilla `DataSerializers.registerSerializer` get ids 14, 15, ... in call order. Forge-registry serializers start at 256 and are synced by name.
+- **Defaults** (`rotnMetadataSerializers(modList)`) contain only proven ids:
+  - 14 = `aquaacrobatics:pose`. G1's player packet has a one-byte value under type 14 that ends exactly at the next key; only the VarInt among the five candidates fits.
+  - 256 and 257 = the DoggyTalents pair (Batch A's synced registry).
+  - Ids 15-18 (base, Charset, Mowzie's Mobs, Requious, order unknown) come from rotn-data's dumper as the bridge option `metadataSerializers: { id: name }`.
+- **Check.** The protocol is compiled before RegistryData arrives. So after it, the bridge compares the >= 256 ids with the synced `minecraft:dataserializers` and logs (and captures) any mismatch.
+
 ## Other protocol changes
 
 - **Triumph advancements (G1 Batch B+C).** Triumph 3.19.2 (mod id `triumph`) writes `ExtendedDisplayInfo` into `play.advancements`. Flag bit 8 is set, and colours, line options, extra connections and a position are appended (`javap`, details in `reid.js` `triumphTypes`). minecraft-data's vanilla layout fails on it, and the parse error ended the packet stream.
@@ -84,7 +142,9 @@ These still need a real capture to confirm them on the wire (G1 Run B).
   - `triumphTypes()` is kept as an offline decoder. It reads both real packets to the last byte, but it is not used on the wire.
 - **Parse safety net.** A non-partial parse error makes protodef end nmp's packet stream: nothing arrives afterwards, and the keep-alive times out.
   - For a short allowlist of cosmetic clientbound packets (`DROPPABLE_ON_PARSE_ERROR` in `bridge.js`), the error is logged and captured with the full packet bytes, and the packet is dropped (`bridge.stats.droppedPackets`). The stream continues.
-  - The allowlist is `advancements`, `select_advancement_tab`, `statistics`, `unlock_recipes`, `craft_recipe_response`, `boss_bar`, `title`, `playerlist_header`, `world_particles`, `sound_effect` and `named_sound_effect`.
+  - The allowlist is `advancements`, `select_advancement_tab`, `statistics`, `unlock_recipes`, `craft_recipe_response`, `boss_bar`, `playerlist_header`, `sound_effect` and `named_sound_effect`. `world_particles` and `title` are left out on purpose: mineflayer's fishing waits for particles, and RotN may announce invasions in titles.
+  - Each drop is logged with "(dropped, allowlisted)". The first drop of each packet name emits a `droppedPacket` event (`{state, name, message}`) on the bridge.
+  - A **PartialReadError** (a read past the packet's end) is different: protodef itself drops that packet, for any packet including essential ones, and never ends the stream. That is upstream behaviour, not this safety net. The bridge logs it with "(dropped by protodef)", counts it in `stats.partialReadErrors`, captures its bytes and emits `parseError`, so a lost essential packet is visible.
   - Everything else (chunks, entities, slots, `keep_alive`, position, ...) still fails loudly, and so does any login-state error.
 - Parse-error and partial-packet capture records now keep packets up to 8 MiB in full; the old limit was 64 KB, which lost the first Batch B packet.
 
@@ -136,7 +196,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - It clears `DEBUG` before prismarine-auth loads, so the `debug` package cannot log HTTP details.
 - `tools/g1-spike.mjs`: the G1 spike. It uses Mindcraft's real `initBot` against a disposable test server, normally inside `deploy/test-server.sh run ... --`. It logs in, stays `--minutes`, chats both ways (the `say` check uses the server console), walks, and writes `capture.jsonl`, `registries.json` and `summary.json`.
   - `--mode handshake` is Run A. It is for a server started with `--capture`, which closes the connection right after the handshake.
-  - `summary.json` records `walkMethod` (`pathfinder` or the `forward-control` fallback) and the blocks under the bot at spawn and along the walk, with the Forge registry name next to prismarine's (empty for modded blocks until brief item 4). Its `scope` field says that the spike does not test reconnects or exit codes.
+  - `summary.json` records `walkMethod` (`pathfinder` or the `forward-control` fallback) and the blocks under the bot at spawn and along the walk, with the synced Forge registry name next to `bot.registry`'s, as a cross-check. Its `scope` field says that the spike does not test reconnects or exit codes.
 
 - `tools/g1-driver.mjs`: the G1 **gate** driver for harness-ops' runner (`test/runner/DRIVER.md`). It is Mindcraft's real `initBot` with forge-bridge on, plus the runner's scenario protocol (`attachScenario`: hello once, echo the whispered token, walk on request, stay until SIGTERM). The runner decides pass or fail from the server log.
   - It needs `MINDCRAFT_PROFILES_FOLDER` and never starts a device-code login: `initBot(name, { onMsaCode })` makes a stale cache exit 3.
@@ -161,6 +221,11 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - REID `window_items`, `set_slot`, `window_click`, `entity_effect` and `remove_entity_effect`, through nmp's real compiled 1.12.2 protocol.
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
 - `agent-process.test.js`: `agent_process.js` with a fake spawn, timers and exit. It covers the ADR 0003 table, the backoff and its reset, the exit-reason file (a fatal kick reported with exit 1, auth capped at 3 and reset after 10 min), requested restarts and their loop guard, single-bot stops and clean exits, `forceRestart`, a stop cancelling a pending restart, a child exiting with a code after `stop()`, the task codes, and the private reason-file folder.
+- `registry-extension.test.js`: the extension against the real prismarine-registry, prismarine-block and prismarine-item for 1.12.2. It covers modded names, 16 states and the solid default, items, entities and biomes, an untouched shared minecraft-data, dummied and rebound entries, properties, and Block classes made before and after the extension. `e2e-initbot.test.js` checks the same through `initBot`: `blockAt` gives `pyrotech:rock`, and the inventory gives `pyrotech:crude_axe`.
+- `fml-entities.test.js`: an FML-spawned entity, resolved through a mod-local table (string or object) and through the placeholder.
+  - It covers registry data, type (`other`, `projectile`, or the table's, checked with Mindcraft's real `isHostile`), size, angles, velocity and thrower, metadata, entity reuse, and failure cleanup.
+  - A spawn whose metadata uses AquaAcrobatics' unknown serializer 14 (`entity-metadata-aqua-pose.json`) is applied with `forge.metadataError`.
+  - `e2e-initbot` checks through `initBot` that the fake server's FML spawn reaches `bot.entities` as `other`, that vanilla `entity_teleport` and `rel_entity_move` update it, and that `entity_destroy` removes it.
 - `exit-contract.test.js`: the agent side (`recordAgentExit`): kicks with and without a bridge, `cleanKill` before and after a kick, startup errors, and no reason file.
 - `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
@@ -172,8 +237,8 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - **nmp protocol cache and shared protocol object.** One bot per process, which is how Mindcraft runs, is fine. Two effects follow from nmp 1.x internals:
   - nmp caches compiled protocols by state, direction and version only, not by `customPackets`. The first play-state client for 1.12.2 in a process fixes the overrides for that process.
   - nmp's `createProtocol` calls lodash `merge(mcData.protocol, customPackets['1.12'])`. That **mutates the shared `minecraft-data` 1.12.2 protocol object in place**, and every `require('minecraft-data')('1.12.2')` in the process returns that same object. After the first Forge connection, `bot.registry.protocol` and any later vanilla or non-REID 1.12.2 client in the same process see the Forge and REID types. A process that needs both must run them in separate processes.
-- **Registry extension.** `bot.registry` is not yet extended (brief item 4). Modded blocks get prismarine-block's fallback: name `''`, bounding box `empty`. Modded items get no name.
-- **FML EntitySpawn** is decoded and emitted, but not yet injected into `bot.entities` (brief item 6).
+- **Registry properties.** Modded blocks, items, entities and biomes have names but default properties (below) until rotn-data's dump supplies them through `extendRegistry(..., { properties })`. Until then, for example, a modded plant is solid to the bot, and a modded block's hardness and drops are unknown.
+- **FML EntitySpawn names.** Mod mobs spawned with FML EntitySpawn now go into `bot.entities` (below). Their names wait for rotn-data's mod-local entity table; until then they are placeholders.
 - **Chunk bit widths.** Handled by `patches/prismarine-chunk+1.41.0.patch`:
   - Reads: a global-palette section is read at the width the packet states.
   - Writes: mineflayer applies `block_change` and `multi_block_change` locally. A section widens its data array whenever a state id needs more bits, and a section that leaves its palette uses at least the width of its widest id, so wide ids are never cut to 13 bits.

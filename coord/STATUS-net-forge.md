@@ -159,7 +159,7 @@ The review findings on PR #10, numbered as in the review comment:
 - `e2e-initbot` asserts `modListSource === 'ping'` again when the first login attempt succeeds. `file` is allowed only after a retried login.
 - `npm test` passes 233/233; lint 257, unchanged.
 
-## Done: brief item 4, `bot.registry` extension (branch `agent/net-forge/registry-extension`, from develop 1cbe6a8; PR #24 merged)
+## In review: brief item 4, `bot.registry` extension (PR #25, branch `agent/net-forge/registry-extension`, started from develop 1cbe6a8 after PR #24 merged)
 
 - `extendRegistry(bot.registry, snapshot, {properties})` (`src/registry-extension.js`) runs in `initBot` after the last RegistryData. It covers blocks, items, entities and biomes; block states are `id << 4 | meta`.
   - Modded entries carry full registry names and safe defaults: a solid full cube, diggable, hardness `null`.
@@ -295,18 +295,38 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - **Evidence:** `test/evidence/g1/batch-bc2-20261101/` holds the sanitized `result.json`, `server.log` and `driver.log`, plus a README.
   - Raw files stay in `captures/raw/` (`g1-runB2`, `g1-runC2`, `g1-runBC2`, and the driver capture).
 
+## Done: brief item 6, FML EntitySpawn into `bot.entities` (branch `agent/net-forge/fml-entity-spawn`, stacked on PR #25)
+
+- `src/fml-entities.js` `attachFmlEntities(bot, bridge)`, wired in `initBot`'s `onAttach`, turns each FML EntitySpawn into a mineflayer entity and emits `entitySpawn`. Mineflayer's own handlers then track and remove it.
+- Names: rotn-data's mod-local entity table when given; until then the placeholder `<modId>:entity_<n>` (`forge.nameKnown: false`), marked TODO(rotn-data).
+- Tests: `fml-entities.test.js` (4), plus `e2e-initbot` (spawn into `bot.entities`, then `entity_destroy` removes it).
+
+## Decisions for rotn-data (its requests 2 and 4, relayed by the lead)
+
+- **Request 2, properties after the extension:** use the exported **`applyProperties(registry, properties)`**, not a second `extendRegistry` call. It applies to an already-extended `bot.registry`, keyed by full registry name, updates every map (aliases included), and returns `{ applied, missing }`.
+  - **Confirmed:** FML EntitySpawn's `modId` is the mod container id string (`ModContainer.getModId()`, `javap` on Forge 14.23.5.2860's `EntitySpawnMessage`), and `modEntityTypeId` is `EntityRegistration.getModEntityId()`. That is the same pair `EntityRegistry.lookupModSpawn` uses, so key the table by `(modId, modEntityTypeId)`.
+- **Request 4, name helpers:** `initBot` sets `mcdata = bot.registry` at login (falling back to `minecraftData()` without one), and again after the extension. No `setRegistry` is needed. This unblocks harness-ops' PR #36 checking names through `mcdata.js`.
+
+## Done: item 3, mod entity-metadata serializers; PR #38 nits (branch `agent/net-forge/metadata-types`, from develop a4720df)
+
+- `METADATA_SERIALIZER_TYPES` holds the wire formats of all 7 mod serializers in RotN 3.3.4, from `javap` on each `write()`. `rotnMetadataSerializers(modList)` gives the proven ids: 14 = AquaAcrobatics pose (by elimination on G1's bytes), 256/257 = DoggyTalents (synced).
+  - The real G1 player packet now parses to the last byte.
+  - After RegistryData, the bridge checks ids >= 256 against `minecraft:dataserializers`.
+- **PR #38 nits:** `entity.kind` is `unknown` when the name is unknown, and the README says the table must give `type` explicitly.
+- **Tests (targeted):** `metadata-types` 5, `registry-extension` 15 (`applyProperties` on real data), `fml-entities` 6, `e2e-initbot` (Mindcraft's `getBlockId`/`getItemName` see modded names).
+
 ## Doing
 
-- Batch B+C done: FAIL, root cause found (above). PR #28 (B+C evidence + fix) is open. **The next paid batch needs a new written GO after review.** Queued: PR #25 fixes, then the STATUS-line corrections from #26.
+- Batch A done (above); PR #26 merged. PR #25 (registry extension) is being reworked for its review (vanilla entities, modded-block hardness, rebind logs), together with the PR #28 nits. **The next paid batch needs a new written GO.**
 
 ## Next
 
 1. **G1 batches** (below), after the lead's written approval and a scheduled sweeper run within 120 min (PR #12).
 2. Captured fixtures: real handshake, RegistryData, `window_items`/`set_slot`, chunks, `entity_effect`, `jeid`. Then the handshake test against real captured server messages; real Run A bytes become extra golden vectors.
 3. Classify every kick seen, confirm chunk bits per block and the REID formats on the wire, and record walk blocks.
-4. Brief item 6 (FML EntitySpawn into `bot.entities`). Items 4 and 8 are done.
+4. Brief item 6 (FML EntitySpawn into `bot.entities`). Item 8 is done (#19, #23). Item 4 is in review (#25).
 
-## G1 batches (approved by the lead 2026-11-01 11:40 UTC in STATUS-rotn-lead.md; nothing run yet)
+## G1 batches (approved by the lead 2026-11-01 11:40 UTC in STATUS-rotn-lead.md; Batch A ran 15:36 UTC, PASS; Batch B+C ran 15:53 UTC, FAIL, see below)
 
 **Approval:** A as written. B as a spike only, not G1 gate evidence. C is the G1 gate evidence: harness-ops' runner (`test/runner/run.mjs` + `test/scenarios/g1/g1-login-chat-walk.mjs`) with a forge-bridge driver per `test/runner/DRIVER.md`, kept in `packages/forge-bridge/`. B and C may share one server run. **Conditions:** one server at a time, in order; `test-server.sh` unchanged with its preflight passing (no `--skip-sweeper-check`); stop and delete past 1.5x the expected time (A: 30 min, B: 53 min); after each batch, confirm `hcloud server list` and `hcloud primary-ip list` are empty and record the real times and cost here; never the live server.
 
@@ -349,11 +369,17 @@ The setup for both batches:
 
 ## Requests to other agents or the lead
 
+- **rotn-data (dumper):** please dump vanilla `DataSerializers` ids 14 and up with their serializer class (and mod). Ids 15-18 belong to base, Charset-Lib, Mowzie's Mobs and Requious Frakto in an unknown order. forge-bridge takes them as `metadataSerializers: { id: 'base:resource_location' | 'charset:quaternion' | 'mowziesmobs:optional_trade' | 'requious:spark_effect' }` (the formats are already in `reid.js`).
+
+0. **rotn-data (shared-registry shape, ADR 0003 decision 4): accepted (lead, 2026-11-01).** rotn-data will produce the mod-local entity table in the proposed shape `{ [modId]: { [modEntityTypeId]: 'modid:name' } }` for `attachFmlEntities({ modEntityTable })`; it reads this file.
+   - Block/item/entity/biome properties go in keyed by full registry name (`extendRegistry(..., { properties })`, PR #25).
+   - A different shape is fine: tell me in your status file.
+
 1. ~~Human: FRCFLD device-code login.~~ Done; verified by the lead and by `--check`.
-2. **Lead (`settings.js` / profile, your files):** for RotN runs, set `"minecraft_version": "1.12.2"` and `"auth": "microsoft"`. Until then, `g1-spike.mjs` sets these itself.
-3. **Lead (`package.json`, optional; review item 12):** make the transitive dependencies forge-bridge imports direct ones: `minecraft-protocol`, `protodef`, `prismarine-nbt`, `lodash.merge`, `prismarine-auth`. The lockfile pins them today.
-4. **Lead (`docs/research/fml-spec.md`, optional):** the Forge 14.23.5.2860 layouts confirmed by `javap` are listed at the top of `packages/forge-bridge/test/golden.test.js`, if you want them in the spec.
-5. **harness-ops (optional):** have `walk()` in `test/runner/drivers/scenario-protocol.mjs` return a `method` field (for example `forward+jump+turn`). g1-driver then reports it as `walkMethod`.
+2. ~~Lead (`settings.js`): `minecraft_version` 1.12.2 and `auth` microsoft.~~ Done since PR #14 (ff9e154).
+3. **Lead (`package.json`): accepted.** The lead adds `minecraft-protocol`, `protodef`, `prismarine-nbt`, `lodash.merge` and `prismarine-auth` as direct dependencies, pinned to the lockfile versions, in a lead PR.
+4. **Lead (`docs/research/fml-spec.md`): noted for the spec later.** The Forge 14.23.5.2860 layouts confirmed by `javap` are listed at the top of `packages/forge-bridge/test/golden.test.js`.
+5. **harness-ops: walk() `method`.** harness-ops adds `method: 'forward+jump+turn'` to `walk()`'s result. `g1-driver.test.js` now accepts the scenario's method when present and the fallback otherwise, so that one line can land on its own.
 6. **harness-ops / lead (`TRY_IT.md`, `main.js` docs):** with `auth: "microsoft"` (develop's default), `initBot` now refuses to start without `MINDCRAFT_PROFILES_FOLDER`. Please mention this where the run steps are.
 8. ~~skills-rotn (`agent.js` exit lines).~~ Done by net-forge under the lead-approved exception (PR #19 follow-ups).
 9. ~~Lead (`init_agent.js` exit 3).~~ Done by net-forge under the same exception.
@@ -362,4 +388,6 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15, #16, #18, #19, #23 and #24 merged.) #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. `npm test` 239/239; lint 257.
+- Merged: #15, #16, #18, #19, #23, #24 and #26 (G1 Batch A: real handshake fixture and replay test).
+- #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. Being updated for its REQUEST CHANGES review, plus the PR #28 nits.
+- #28: G1 Batch B+C FAIL evidence plus the fix (Triumph advancements opaque, parse safety net), on `agent/net-forge/g1-batch-bc`. APPROVE WITH NITS; develop merged in; CI green.

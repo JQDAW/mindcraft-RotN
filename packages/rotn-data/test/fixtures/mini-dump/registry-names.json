@@ -1,0 +1,46 @@
+{
+ "registries": {
+  "minecraft:blocks": {
+   "ids": {
+    "minecraft:stone": 1,
+    "minecraft:log": 2,
+    "minecraft:planks": 3,
+    "minecraft:crafting_table": 4,
+    "minecraft:cobblestone": 5,
+    "pyrotech:rock": 6
+   }
+  },
+  "minecraft:items": {
+   "ids": {
+    "minecraft:stone": 1,
+    "minecraft:log": 2,
+    "minecraft:planks": 3,
+    "minecraft:crafting_table": 4,
+    "minecraft:cobblestone": 5,
+    "pyrotech:rock": 6,
+    "minecraft:stick": 7,
+    "minecraft:flint": 8,
+    "minecraft:stone_axe": 9,
+    "minecraft:stone_pickaxe": 10,
+    "pyrotech:crude_axe": 11,
+    "contenttweaker:crafting_tools": 12,
+    "minecraft:coal": 13,
+    "minecraft:iron_ingot": 14,
+    "contenttweaker:raw_iron": 15,
+    "minecraft:furnace": 16
+   }
+  },
+  "minecraft:entities": {
+   "ids": {
+    "minecraft:zombie": 1,
+    "minecraft:cow": 2,
+    "specialmobs:firecreeper": 3
+   }
+  },
+  "minecraft:biomes": {
+   "ids": {
+    "minecraft:plains": 1
+   }
+  }
+ }
+}

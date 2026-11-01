@@ -9,7 +9,7 @@ import { HS_CHANNEL, decodeHandshake } from './fml-hs.js';
 import { ClientHandshake, CORE_CHANNELS } from './handshake.js';
 import { decodeRegister, decodeFml, decodeForge, decodeJeid, MultipartAssembler } from './channels.js';
 import { hasReid, findMod, REID_MODID } from './modlist.js';
-import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, MC_VERSION } from './reid.js';
+import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, rotnMetadataSerializers, MC_VERSION } from './reid.js';
 import { classifyKick, classifySocketError } from './kicks.js';
 
 const require = createRequire(import.meta.url);
@@ -41,6 +41,9 @@ export function attachForgeBridge(client, opts) {
         version = MC_VERSION,
         capturedPackets = DEFAULT_CAPTURED_PACKETS,
         capturedC2S = DEFAULT_CAPTURED_C2S,
+        // Extra entity-metadata serializer ids, { id: name } (reid.js METADATA_SERIALIZER_TYPES),
+        // e.g. 15-18 from rotn-data's dumper. Merged over rotnMetadataSerializers(modList).
+        metadataSerializers: extraSerializers = {},
     } = opts;
     if (!Array.isArray(modList) || modList.length === 0) throw new Error('attachForgeBridge: modList is required');
 
@@ -49,6 +52,7 @@ export function attachForgeBridge(client, opts) {
     bridge.reid = reid ? findMod(modList, REID_MODID) : null;
     // Triumph's ExtendedDisplayInfo changes play.advancements (reid.js triumphTypes).
     bridge.triumph = findMod(modList, 'triumph') ?? null;
+    bridge.metadataSerializers = { ...rotnMetadataSerializers(modList), ...extraSerializers };
     bridge.modList = modList;
     bridge.serverChannels = [];
     bridge.serverMods = null;
@@ -65,8 +69,8 @@ export function attachForgeBridge(client, opts) {
 
     // 1. Handshake marker and protocol overrides (must precede Login Success).
     client.tagHost = FML_TAG;
-    client.customPackets = mergeCustom(client.customPackets, buildCustomPackets({ reid, triumph: !!bridge.triumph, version }));
-    const typeReader = createTypeReader({ reid, version });
+    client.customPackets = mergeCustom(client.customPackets, buildCustomPackets({ reid, triumph: !!bridge.triumph, version, metadataSerializers: bridge.metadataSerializers }));
+    const typeReader = createTypeReader({ reid, version, metadataSerializers: bridge.metadataSerializers });
     log(`attached; ${modList.length} mods; REID ${reid ? bridge.reid.version : 'absent'}; Triumph ${bridge.triumph ? bridge.triumph.version : 'absent'}`);
     capture?.event('bridge_attached', { mods: modList.length, reid: bridge.reid, triumph: bridge.triumph, version });
 
@@ -99,6 +103,16 @@ export function attachForgeBridge(client, opts) {
         capture?.event('server_modlist', { count: mods.length, diff });
     });
     handshake.on('registries', (snap) => {
+        // The Forge-registry serializer ids (>= 256) were fixed before the protocol was
+        // compiled; check them against what the server synced and say so if they differ.
+        for (const [id, name] of Object.entries(bridge.metadataSerializers)) {
+            if (Number(id) < 256) continue;
+            const synced = snap.nameOf('minecraft:dataserializers', Number(id));
+            if (synced !== name) {
+                log(`entity-metadata serializer ${id}: expected ${name}, server synced ${synced ?? 'nothing'}; metadata of that type will misparse`);
+                capture?.event('metadata_serializer_mismatch', { id: Number(id), expected: name, synced: synced ?? null });
+            }
+        }
         bridge.registries = snap;
         const sizes = snap.sizes();
         log(`registries: ${Object.entries(sizes).map(([k, v]) => `${k}=${v}`).join(' ')}`);
@@ -302,10 +316,18 @@ function readPacketId(buf) {
 // Wrap each one so misparsed packets are counted and kept, not silently dropped
 // (protodef logs PartialReadError and drops the packet; trailing bytes are ignored).
 // Clientbound play packets the bot never needs: a parse failure in one of these
-// is logged and the packet dropped instead of ending the stream.
+// is logged and the packet dropped instead of ending the stream. Not here, on
+// purpose (PR #28 review): world_particles (mineflayer's fishing waits for the
+// bobber's particles) and title (RotN may announce invasions in titles).
+//
+// PartialReadError is different: protodef itself drops a packet whose read ran
+// past its end, for ANY packet, essential or not, and never ends the stream
+// (that is upstream behaviour, not this safety net). The bridge counts those in
+// stats.partialReadErrors, logs them, captures their bytes and emits
+// 'parseError', so an essential packet lost that way is visible, not silent.
 export const DROPPABLE_ON_PARSE_ERROR = new Set([
     'advancements', 'select_advancement_tab', 'statistics', 'unlock_recipes', 'craft_recipe_response',
-    'boss_bar', 'title', 'playerlist_header', 'world_particles', 'sound_effect', 'named_sound_effect',
+    'boss_bar', 'playerlist_header', 'sound_effect', 'named_sound_effect',
 ]);
 
 function instrumentDeserializers(client, bridge, capture, log, version) {
@@ -323,7 +345,11 @@ function instrumentDeserializers(client, bridge, capture, log, version) {
                 const pname = name(readPacketId(buf));
                 if (e.partialReadError) bridge.stats.partialReadErrors++;
                 else bridge.stats.parseErrors++;
-                log(`${e.partialReadError ? 'PartialReadError' : 'parse error'} in ${state}.${pname} (${buf.length} bytes): ${String(e.message).slice(0, 160)}`);
+                // See DROPPABLE_ON_PARSE_ERROR: a non-partial error would end nmp's packet
+                // stream; for allowlisted cosmetic packets it is dropped instead.
+                const drop = !e.partialReadError && state === 'play' && DROPPABLE_ON_PARSE_ERROR.has(pname);
+                const how = drop ? ' (dropped, allowlisted)' : e.partialReadError ? ' (dropped by protodef)' : '';
+                log(`${e.partialReadError ? 'PartialReadError' : 'parse error'} in ${state}.${pname} (${buf.length} bytes)${how}: ${String(e.message).slice(0, 160)}`);
                 // Keep the whole packet (up to 8 MiB): the bytes are what explains a parse error.
                 capture?.record({ kind: 'parse_error', state, name: pname, partial: !!e.partialReadError, message: String(e.message).slice(0, 300), len: buf.length, b64: capture.b64(buf, 8 << 20) });
                 bridge.emit('parseError', { state, name: pname, error: e });
@@ -333,8 +359,12 @@ function instrumentDeserializers(client, bridge, capture, log, version) {
                 // Only cosmetic packets the bot never needs are dropped (marked partial,
                 // so protodef drops them; counted and captured). Essential ones (chunks,
                 // entities, slots, keep_alive, position, ...) still fail loudly.
-                if (!e.partialReadError && state === 'play' && DROPPABLE_ON_PARSE_ERROR.has(pname)) {
-                    bridge.stats.droppedPackets[pname] = (bridge.stats.droppedPackets[pname] ?? 0) + 1;
+                if (drop) {
+                    const n = (bridge.stats.droppedPackets[pname] ?? 0) + 1;
+                    bridge.stats.droppedPackets[pname] = n;
+                    // Once per packet name, so a listener (skills, a harness) learns a kind of
+                    // packet is being lost without a flood.
+                    if (n === 1) bridge.emit('droppedPacket', { state, name: pname, message: String(e.message).slice(0, 300) });
                     e.partialReadError = true;
                     e.forgeBridgeDropped = true;
                 }

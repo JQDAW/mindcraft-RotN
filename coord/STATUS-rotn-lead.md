@@ -1,6 +1,27 @@
 # Status: rotn-lead
 
-Updated: 2026-11-01 (about 01:00 UTC)
+Updated: 2026-11-01 (about 19:40 UTC)
+
+## Current snapshot (19:40 UTC)
+
+- **Phase 2 (G2) under way.** G0 and G1 passed. Three dev agents are running (harness-ops, net-forge, rotn-data), the maximum.
+- **Merged today since G1:**
+  - #25 registry extension (`9ad3673`);
+  - #35 direct deps (`598bc8a`);
+  - #40 dumper-build CI (`063c0a4`);
+  - #41 ADR 0006, dumper on ForgeGradle 3 (`49aaad6`);
+  - #37 rotn-data package and name translation (`441020b`);
+  - #42 dumper-build wording (`0fb6deb`);
+  - #34 dumper mod (`3158776`);
+  - #38 FML EntitySpawn (`a4720df`).
+
+  Each had an independent-reviewer pass and was merged CI-gated at the reviewed head.
+- **Open:** #36, G2 scenarios (harness-ops). REQUEST CHANGES: names must be checked through `src/utils/mcdata.js`, the agent's own code, not rotn-data directly. Until mcdata.js is wired to rotn-data, every run is `notGate`; a null seed is also `notGate`.
+- **Routed:** rotn-data's Requests 2 and 4 (the properties call shape; mcdata reads `bot.registry` in `initBot`) went to net-forge.
+- **Follow-ups queued:**
+  - rotn-data: #37 items 3-5; #34 nits (per-tick time cap if `timing.items` is heavy, a try/catch per entry, the importer expanding meta 32767).
+  - net-forge: #38 nits (README must say the table supplies `type`; `kind` defaults to `'unknown'`).
+- **Brief acceptance not ticked:** rotn-data's `recipesFor` and harvest acceptance stays open until a real dump is imported.
 
 ## Done
 
@@ -104,6 +125,17 @@ Updated: 2026-11-01 (about 01:00 UTC)
 
 - **Batch B + C retry result: G1 PASS** (PR #31 `b554547`, confirmed by an independent reviewer). CPX42 17:09:58-17:34:44 UTC, about EUR 0.14; the project was empty at 17:35:19 (lead verified at about 17:48).
 - Hetzner spend for agent batches so far: G0 about EUR 0.16, Batch A about EUR 0.14, B+C about EUR 0.14, retry about EUR 0.14, so about EUR 0.58 + IPv4-hours.
+
+- **rotn-data spawned 2026-11-01 about 18:00 UTC** for Phase 2 (G2). Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`, branch `agent/rotn-data/g2-dumper`, terminal `term_ea9c811e-debc-4b19-8707-aefda537172d`, auto mode (launch screen checked). Three dev agents now run (the maximum).
+
+- **2026-11-01 about 19:35 UTC: GO for rotn-data's first RotN 3.3.4 dump batch**, the "Paid test-server plan" in `coord/STATUS-rotn-data.md`.
+  - Run it from a clean, separate checkout of origin/develop at `3158776` or later.
+  - The jar is the dumper-build artifact of push run 41341359100 (develop `3158776`, success). Record its SHA-256 before the batch and match it against `manifest.dumperJar.sha256` afterwards.
+  - Disposable test server only, never the live RotN server.
+  - `deploy/test-server.sh` unchanged, with its preflight passing on its own; no `--skip-sweeper-check`. One CPX42 in nbg1, TTL 2 h, `timeout 3600`. Stop and delete past 45 min. Maximum about EUR 0.28 + IPv4.
+  - Afterwards the project must be empty; record the real times and cost.
+  - Raw output stays out of git. Commit only the imported data and the manifest, in a PR.
+  - Report `manifest.timing` per part and the error count.
 
 ## Notes for dev agents
 

@@ -1,0 +1,130 @@
+// Builds vanilla/flattening-items.json and vanilla/flattening-blocks.json: the
+// two-way map between Minecraft 1.12.2 names + metadata and the 1.21-style
+// names Mindcraft uses (brief deliverable 3).
+//
+// Sources (both in node_modules, MIT): minecraft-data pc/common/legacy.json
+// ("<1.12 numeric id>:<meta>" -> 1.13 name) and pc/1.12.2 items/blocks (numeric id
+// -> 1.12 name). Vanilla numeric ids are fixed in 1.12.2, and RotN 3.3.4 moves
+// none of them (net-forge PR #25: "RotN 3.3.4 has none" rebinds).
+// Every 1.12 name is checked against the names the real 3.3.4 server syncs
+// (3.3.4/registry-names.json). minecraft-data 1.12.2 names two block families
+// light_gray_*; the server calls them silver_* (BLOCK_NAME_FIXES).
+// Items whose 1.12 variant is in NBT, not metadata, are left out (NBT_VARIANTS).
+// 1.13 names that were renamed later are carried forward to 1.21 (RENAMES).
+//
+// Usage: node packages/rotn-data/tools/build-flattening.mjs [--check]
+import fs from 'node:fs';
+import process from 'node:process';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const OUT_DIR = path.join(HERE, '../vanilla');
+
+// 1.13 name -> 1.21 name (renames in 1.14, 1.17 and 1.20.3).
+export const RENAMES = {
+    rose_red: 'red_dye',            // 1.14
+    cactus_green: 'green_dye',      // 1.14
+    dandelion_yellow: 'yellow_dye', // 1.14
+    sign: 'oak_sign',               // 1.14
+    wall_sign: 'oak_wall_sign',     // 1.14
+    grass_path: 'dirt_path',        // 1.17
+    grass: 'short_grass',           // 1.20.3 (1.13 "grass" is the plant; the block is grass_block)
+    // 1.14 renamed 1.13's stone_slab (the smooth one, 1.12 stone_slab:0) and reused the name
+    // for a new plain stone slab that 1.12 does not have.
+    stone_slab: 'smooth_stone_slab',
+};
+
+const strip = (n) => n.replace(/^minecraft:/, '');
+
+// minecraft-data 1.12.2 block name -> the name the 1.12.2 server registers (PR #37 review 1).
+export const BLOCK_NAME_FIXES = {
+    light_gray_glazed_terracotta: 'silver_glazed_terracotta',
+    light_gray_shulker_box: 'silver_shulker_box',
+};
+// 1.12 items whose variant lives in NBT: spawn_egg:0 is every mob's egg, not a pig egg (PR #37 review 2).
+export const NBT_VARIANTS = new Set(['minecraft:spawn_egg']);
+// Item variants legacy.json leaves out (follow-up 4). stone_slab:2 is the petrified oak slab item.
+// Known gap, kept null on purpose: tallgrass:0 (the "Shrub" item); its 1.13 name dead_bush is
+// already deadbush:0's, and a second 1.12 source would break the bijection.
+export const ITEM_ADDITIONS = [{ old: 'minecraft:stone_slab', meta: 2, new: 'petrified_oak_slab' }];
+export const KNOWN_ITEM_GAPS = ['minecraft:tallgrass:0'];
+
+export function buildFlattening() {
+    const legacy = require('minecraft-data/minecraft-data/data/pc/common/legacy.json');
+    const md = require('minecraft-data')('1.12.2');
+    const m21 = require('minecraft-data')('1.21.8');
+    const forward = (n) => RENAMES[n] ?? n;
+    const synced = JSON.parse(fs.readFileSync(path.join(HERE, '../3.3.4/registry-names.json'), 'utf8')).registries;
+    const syncedItems = synced['minecraft:items'].ids;
+    const syncedBlocks = synced['minecraft:blocks'].ids;
+
+    const items = [];
+    for (const [key, v] of Object.entries(legacy.items)) {
+        const [id, meta] = key.split(':').map(Number);
+        const it = md.items[id];
+        if (!it) continue; // 0:0 air has no item in 1.12.2
+        const neu = forward(strip(v));
+        if (!m21.itemsByName[neu]) throw new Error(`no 1.21 item ${neu} (from ${key})`);
+        const old = `minecraft:${it.name}`;
+        if (!(old in syncedItems)) throw new Error(`item ${old} (from ${key}) is not synced by the 3.3.4 server`);
+        if (NBT_VARIANTS.has(old)) continue;
+        items.push({ old, meta, new: neu });
+    }
+    for (const add of ITEM_ADDITIONS) {
+        if (!(add.old in syncedItems) || !m21.itemsByName[add.new]) throw new Error(`bad ITEM_ADDITIONS entry ${add.old}:${add.meta}`);
+        if (items.some(e => e.old === add.old && e.meta === add.meta)) throw new Error(`ITEM_ADDITIONS ${add.old}:${add.meta} is already in legacy.json`);
+        items.push({ ...add });
+    }
+    items.sort((a, b) => a.old.localeCompare(b.old) || a.meta - b.meta);
+    const seen = new Map();
+    for (const e of items) {
+        if (seen.has(e.new)) throw new Error(`item ${e.new} maps from ${seen.get(e.new)} and ${e.old}:${e.meta}`);
+        seen.set(e.new, `${e.old}:${e.meta}`);
+    }
+
+    const blocks = [];
+    for (const [key, v] of Object.entries(legacy.blocks)) {
+        const [id, meta] = key.split(':').map(Number);
+        const b = md.blocks[id];
+        if (!b) continue;
+        const m = /^minecraft:([^[]+)(?:\[(.*)\])?$/.exec(v);
+        const neu = forward(m[1]);
+        if (!m21.blocksByName[neu]) throw new Error(`no 1.21 block ${neu} (from ${key})`);
+        const old = `minecraft:${BLOCK_NAME_FIXES[b.name] ?? b.name}`;
+        if (!(old in syncedBlocks)) throw new Error(`block ${old} (from ${key}) is not synced by the 3.3.4 server`);
+        const e = { old, meta, new: neu };
+        if (m[2]) e.state = m[2];
+        blocks.push(e);
+    }
+    blocks.sort((a, b) => a.old.localeCompare(b.old) || a.meta - b.meta);
+
+    const header = {
+        description: 'Minecraft 1.12.2 name + metadata <-> 1.21-style name. Generated by packages/rotn-data/tools/build-flattening.mjs; do not edit.',
+        sources: ['minecraft-data pc/common/legacy.json', 'minecraft-data pc/1.12.2', 'packages/rotn-data/3.3.4/registry-names.json (names checked)',
+            'RENAMES, BLOCK_NAME_FIXES, NBT_VARIANTS and ITEM_ADDITIONS in build-flattening.mjs'],
+        minecraftData: require('minecraft-data/package.json').version,
+    };
+    return {
+        'flattening-items.json': JSON.stringify({ ...header, count: items.length, entries: items }, null, 1) + '\n',
+        'flattening-blocks.json': JSON.stringify({ ...header, count: blocks.length, entries: blocks }, null, 1) + '\n',
+    };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    const files = buildFlattening();
+    let stale = false;
+    for (const [name, text] of Object.entries(files)) {
+        const p = path.join(OUT_DIR, name);
+        if (process.argv.includes('--check')) {
+            if (!fs.existsSync(p) || fs.readFileSync(p, 'utf8') !== text) { console.error(`${name} is stale`); stale = true; }
+        } else {
+            fs.mkdirSync(OUT_DIR, { recursive: true });
+            fs.writeFileSync(p, text);
+            console.log(`wrote ${p}`);
+        }
+    }
+    if (stale) process.exit(1);
+}

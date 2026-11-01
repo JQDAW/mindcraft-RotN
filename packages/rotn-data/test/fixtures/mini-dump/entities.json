@@ -1,0 +1,37 @@
+{
+ "format": "rotn-dump/1",
+ "entities": {
+  "minecraft:zombie": {
+   "modSpawn": false,
+   "modId": "minecraft",
+   "modEntityTypeId": null,
+   "hostile": true,
+   "kinds": [
+    "living",
+    "monster"
+   ],
+   "displayName": "Zombie"
+  },
+  "minecraft:cow": {
+   "modId": "minecraft",
+   "modEntityTypeId": null,
+   "hostile": false,
+   "kinds": [
+    "living",
+    "animal"
+   ]
+  },
+  "specialmobs:firecreeper": {
+   "modSpawn": true,
+   "usesVanillaSpawning": false,
+   "modId": "specialmobs",
+   "modEntityTypeId": 7,
+   "hostile": true,
+   "kinds": [
+    "living",
+    "monster"
+   ],
+   "displayName": "Fire Creeper"
+  }
+ }
+}

@@ -1,0 +1,30 @@
+{
+ "description": "Early-game RotN recipes transcribed from the pinned 3.3.4 server pack zip (SHA-256 90642fd5...f5205), scripts/ folder, read with unzip -p. Cross-check only (ADR 0004): the dump is the source of truth, and test/acceptance-3.3.4.test.js asserts the imported dump contains each of these, and tools/import-dump.mjs refuses a dump that lacks one (src/crosscheck.js does the matching). Ingredient alternatives: 'ns:path[:meta|:*]' or 'ore:<key>'. Shapes are given as written; the matcher trims empty rows and columns and accepts a mirror when 'mirrored' is true.",
+ "repoReference": "Rebirth-of-the-Night/Rebirth-of-the-Night@775cc6e7ca1e116f407e8f313bc1cd9069e9a93d",
+ "recipes": [
+  { "key": "crude_axe", "script": "scripts/pyrotech/pyrotech_recipes_craftingtable.zs:238-240 (rock = <ore:rock>, L117)",
+    "type": "shaped", "result": { "name": "pyrotech:crude_axe", "count": 1 },
+    "shape": [[["ore:rock", "minecraft:flint"], ["ore:stickWood"]], [["ore:stickWood"], null]] },
+  { "key": "crafting_tools", "script": "scripts/crafting_tables.zs:9",
+    "type": "shapeless", "result": { "name": "contenttweaker:crafting_tools", "count": 1 },
+    "ingredients": [["pyrotech:crude_axe:*", "minecraft:stone_axe:*"], ["ore:rock", "minecraft:flint"], ["ore:stickWood"]] },
+  { "key": "crafting_table", "script": "scripts/crafting_tables.zs:14-15 (vanilla recipe removed at L14)",
+    "type": "shapeless", "result": { "name": "minecraft:crafting_table", "count": 1 },
+    "ingredients": [["ore:stickMat"], ["contenttweaker:crafting_tools"]], "only": true },
+  { "key": "rocks_to_cobblestone", "script": "scripts/minecraft_(max-file-size).zs:228 and 267-268",
+    "type": "shapeless", "result": { "name": "minecraft:cobblestone", "count": 1 },
+    "ingredients": [["pyrotech:rock"], ["pyrotech:rock"], ["pyrotech:rock"], ["pyrotech:rock"]] },
+  { "key": "stone_pickaxe", "script": "scripts/recipe_cohesion.zs:115-120 (stone = <ore:rock> L35, stick = <ore:stickWood> L73)",
+    "type": "shaped", "result": { "name": "minecraft:stone_pickaxe", "count": 1 },
+    "shape": [[["ore:rock"], ["ore:rock"], ["ore:rock"]], [null, ["ore:stickWood"], null], [null, ["ore:stickWood"], null]] },
+  { "key": "stone_axe", "script": "scripts/recipe_cohesion.zs:79-84 (addShapedMirrored)",
+    "type": "shaped", "mirrored": true, "result": { "name": "minecraft:stone_axe", "count": 1 },
+    "shape": [[["ore:rock"], ["ore:rock"], null], [["ore:rock"], ["ore:stickWood"], null], [null, ["ore:stickWood"], null]] },
+  { "key": "sticks", "script": "scripts/minecraft_(max-file-size).zs:1042-1046 (vanilla recipe removed at L1042)",
+    "type": "shaped", "result": { "name": "minecraft:stick", "count": 4 },
+    "shape": [[["ore:stickMat"]], [["ore:stickMat"]]] },
+  { "key": "furnace", "script": "scripts/minecraft_(max-file-size).zs:453-457",
+    "type": "shaped", "result": { "name": "minecraft:furnace", "count": 1 },
+    "shape": [[["ore:rock"], ["ore:rock"], ["ore:rock"]], [["ore:rock"], null, ["ore:rock"]], [["ore:rock"], ["ore:rock"], ["ore:rock"]]] }
+ ]
+}

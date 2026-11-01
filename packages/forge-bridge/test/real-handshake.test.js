@@ -102,6 +102,8 @@ test('the real registries decode: sizes from Batch A and REID-range ids', () => 
     assert.equal(snap.idOf('minecraft:blocks', 'minecraft:stone'), 1, 'vanilla ids are kept');
     const maxBlock = Math.max(...snap.get('minecraft:blocks').byId.keys());
     assert.ok(maxBlock > 4095, `block ids above 4095 need REID (max ${maxBlock})`);
+    assert.equal(maxBlock, 4895);
+    assert.equal(Math.max(...snap.get('minecraft:items').byId.keys()), 13394, 'the highest synced item id (PR #26 review)');
 
     const pyro = [...snap.get('minecraft:blocks').byName.keys()].filter(n => n.startsWith('pyrotech:'));
     assert.ok(pyro.length > 10, 'pyrotech blocks are synced');

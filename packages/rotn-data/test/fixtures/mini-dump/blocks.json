@@ -1,0 +1,79 @@
+{
+ "format": "rotn-dump/1",
+ "blocks": {
+  "minecraft:stone": {
+   "displayName": "Stone",
+   "defaultMeta": 0,
+   "states": [
+    {
+     "meta": 0,
+     "props": {
+      "variant": "stone"
+     },
+     "displayName": "Stone",
+     "hardness": 1.5,
+     "material": "rock",
+     "harvestTool": "pickaxe",
+     "harvestLevel": 0,
+     "toolRequired": true
+    },
+    {
+     "meta": 1,
+     "props": {
+      "variant": "granite"
+     },
+     "displayName": "Granite",
+     "hardness": 1.5,
+     "material": "rock",
+     "harvestTool": "pickaxe",
+     "harvestLevel": 1,
+     "toolRequired": true
+    }
+   ]
+  },
+  "minecraft:log": {
+   "displayName": "Oak Wood",
+   "defaultMeta": 0,
+   "states": [
+    {
+     "meta": 0,
+     "props": {
+      "axis": "y",
+      "variant": "oak"
+     },
+     "hardness": 2,
+     "material": "wood",
+     "harvestTool": "axe",
+     "harvestLevel": 0,
+     "toolRequired": true
+    },
+    {
+     "meta": 4,
+     "props": {
+      "axis": "x",
+      "variant": "oak"
+     },
+     "hardness": 2,
+     "material": "wood",
+     "harvestTool": "axe",
+     "harvestLevel": 0,
+     "toolRequired": true
+    }
+   ]
+  },
+  "pyrotech:rock": {
+   "displayName": "Rock",
+   "defaultMeta": 0,
+   "states": [
+    {
+     "meta": 0,
+     "hardness": 0,
+     "material": "circuits",
+     "harvestTool": null,
+     "harvestLevel": -1,
+     "toolRequired": false
+    }
+   ]
+  }
+ }
+}
