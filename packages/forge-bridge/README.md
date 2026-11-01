@@ -99,11 +99,14 @@ After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snaps
 
 Forge spawns most mod entities with an FML message (`FML` channel, disc 2), not a vanilla spawn packet, so stock mineflayer never sees them. `initBot` calls `attachFmlEntities(bot, bridge)` (`src/fml-entities.js`):
 
-- **Spawn.** Each decoded EntitySpawn becomes a mineflayer entity in `bot.entities[entityId]`, as mineflayer's `spawn_entity_living` would make it: type `mob`, uuid, position, yaw, pitch, headYaw, velocity (thrown entities), and metadata by key. Then `entitySpawn` is emitted.
+- **Spawn.** Each decoded EntitySpawn becomes a mineflayer entity in `bot.entities[entityId]`, as mineflayer's `spawn_entity_living` would make it: uuid, position, yaw, pitch, headYaw, velocity (thrown entities), and metadata by key. Then `entitySpawn` is emitted.
 - **Tracking.** Later vanilla packets for that entity id (moves, teleports, metadata, `entity_destroy`) go through mineflayer's own `fetchEntity`, so it is tracked and removed like any other entity.
 - **Name.** The message has the mod id and a *mod-local* type id (`EntityRegistry.registerModEntity`'s id), which RegistryData does not map.
   - With rotn-data's table (`{ [modId]: { [modEntityTypeId]: 'modid:name' } }`, passed as `modEntityTable`), the entity gets its registry name, and `displayName`, size and category come from `bot.registry.entitiesByName` (PR #25).
   - **TODO(rotn-data):** until that table exists, the name is the placeholder `<modId>:entity_<n>`, with `entity.forge.nameKnown: false`.
+  - A table value can also be an object, `{ name, type?, category?, width?, height? }`.
+- **Type.** It is never `mob` by default, because Mindcraft's `isHostile` treats every `mob` as hostile, and FML also spawns projectiles, vehicles and decorations. It is the table's `type` when given, else `projectile` for a thrown entity (`throwerId != 0`), else `other`. Hostility belongs to rotn-data's table and skills-rotn.
+- **Size.** `width` and `height` come from the table, or from `bot.registry` when rotn-data's properties are in. Without them they are prismarine-entity's defaults, **0 × 0**, which pvp aim and collision checks should treat as unknown.
 - **Debug info.** `entity.forge` has `{ modId, modEntityTypeId, nameKnown, throwerId, metadataError }`.
 - **Safety.** A message that cannot be applied is logged and leaves no half-made entity behind.
 
@@ -194,7 +197,10 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
 - `agent-process.test.js`: `agent_process.js` with a fake spawn, timers and exit. It covers the ADR 0003 table, the backoff and its reset, the exit-reason file (a fatal kick reported with exit 1, auth capped at 3 and reset after 10 min), requested restarts and their loop guard, single-bot stops and clean exits, `forceRestart`, a stop cancelling a pending restart, a child exiting with a code after `stop()`, the task codes, and the private reason-file folder.
 - `registry-extension.test.js`: the extension against the real prismarine-registry, prismarine-block and prismarine-item for 1.12.2. It covers modded names, 16 states and the solid default, items, entities and biomes, an untouched shared minecraft-data, dummied and rebound entries, properties, and Block classes made before and after the extension. `e2e-initbot.test.js` checks the same through `initBot`: `blockAt` gives `pyrotech:rock`, and the inventory gives `pyrotech:crude_axe`.
-- `fml-entities.test.js`: a FML-spawned mob, resolved through a mod-local table and through the placeholder. It covers registry data, angles, velocity and thrower, metadata, entity reuse, and failure cleanup. `e2e-initbot` checks through `initBot` that the fake server's FML spawn reaches `bot.entities` and that mineflayer's `entity_destroy` removes it.
+- `fml-entities.test.js`: an FML-spawned entity, resolved through a mod-local table (string or object) and through the placeholder.
+  - It covers registry data, type (`other`, `projectile`, or the table's, checked with Mindcraft's real `isHostile`), size, angles, velocity and thrower, metadata, entity reuse, and failure cleanup.
+  - A spawn whose metadata uses AquaAcrobatics' unknown serializer 14 (`entity-metadata-aqua-pose.json`) is applied with `forge.metadataError`.
+  - `e2e-initbot` checks through `initBot` that the fake server's FML spawn reaches `bot.entities` as `other`, that vanilla `entity_teleport` and `rel_entity_move` update it, and that `entity_destroy` removes it.
 - `exit-contract.test.js`: the agent side (`recordAgentExit`): kicks with and without a bridge, `cleanKill` before and after a kick, startup errors, and no reason file.
 - `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.

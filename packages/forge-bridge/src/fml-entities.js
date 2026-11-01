@@ -11,9 +11,18 @@
 // (EntityRegistry.registerModEntity's id), which RegistryData does not map to a
 // name. That table comes from rotn-data's dump (ADR 0004; rotn-data coordinates
 // the shape through coord/STATUS-rotn-data.md).
-// TODO(rotn-data): pass its mod-local entity table as `modEntityTable`
-//   ({ [modId]: { [modEntityTypeId]: 'modid:name' } }). Until then the name is the
-//   placeholder `<modId>:entity_<modEntityTypeId>` with forge.nameKnown false.
+// TODO(rotn-data): pass its mod-local entity table as `modEntityTable`:
+//   { [modId]: { [modEntityTypeId]: 'modid:name' | { name, type?, category?, width?, height? } } }.
+//   Until then the name is the placeholder `<modId>:entity_<modEntityTypeId>` with
+//   forge.nameKnown false.
+//
+// Type: not 'mob' by default, because Mindcraft's isHostile treats every 'mob' as
+// hostile, and FML also spawns projectiles, vehicles and decorations. It is the
+// table's `type` when given, else 'projectile' for a thrown entity (throwerId != 0),
+// else 'other'. Hostility belongs to rotn-data's table and skills-rotn.
+// Size: the table's (or bot.registry's) width and height when known; otherwise
+// prismarine-entity's defaults, 0 x 0, which pvp aim and collision checks should
+// treat as unknown.
 
 import { createRequire } from 'node:module';
 
@@ -25,8 +34,12 @@ const require = createRequire(import.meta.url);
  */
 export function fmlEntityName(msg, modEntityTable = null) {
     const fromTable = modEntityTable?.[msg.modId]?.[msg.modEntityTypeId];
-    if (fromTable) return { name: fromTable.includes(':') ? fromTable : `${msg.modId}:${fromTable}`, known: true };
-    return { name: `${msg.modId}:entity_${msg.modEntityTypeId}`, known: false };
+    const info = typeof fromTable === 'string' ? { name: fromTable } : fromTable;
+    if (info?.name) {
+        const name = info.name.includes(':') ? info.name : `${msg.modId}:${info.name}`;
+        return { name, known: true, type: info.type ?? null, category: info.category ?? null, width: info.width ?? null, height: info.height ?? null };
+    }
+    return { name: `${msg.modId}:entity_${msg.modEntityTypeId}`, known: false, type: null, category: null, width: null, height: null };
 }
 
 /**
@@ -50,16 +63,19 @@ export function spawnFmlEntity(bot, msg, { modEntityTable = null, Entity = null,
     return entity;
 
     function apply(entity) {
-        const { name, known } = fmlEntityName(msg, modEntityTable);
+        const info = fmlEntityName(msg, modEntityTable);
+        const { name, known } = info;
         const entry = bot.registry?.entitiesByName?.[name] ?? null;
-        entity.type = 'mob';
+        entity.type = info.type ?? (msg.throwerId ? 'projectile' : 'other');
         entity.uuid = msg.uuid;
         entity.name = name;
         entity.displayName = entry?.displayName ?? name;
-        entity.kind = entry?.category ?? 'Modded';
+        entity.kind = info.category ?? 'Modded';
         entity.entityType = entry?.id ?? null;
-        if (entry?.height != null) entity.height = entry.height;
-        if (entry?.width != null) entity.width = entry.width;
+        const height = info.height ?? entry?.height;
+        const width = info.width ?? entry?.width;
+        if (height != null) entity.height = height;
+        if (width != null) entity.width = width;
         entity.position.set(msg.x, msg.y, msg.z);
         entity.yaw = conv.fromNotchianYaw(msg.yaw);
         entity.pitch = conv.fromNotchianPitch(msg.pitch);

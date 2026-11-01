@@ -103,6 +103,16 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.equal(mob.name, 'iceandfire:entity_4', 'placeholder name until rotn-data\'s mod-local table exists');
     assert.equal(mob.forge.modId, 'iceandfire');
     assert.deepEqual([mob.position.x, mob.position.y, mob.position.z], [10, 65, 10]);
+    assert.equal(mob.type, 'other', 'not "mob" without rotn-data\'s table, so Mindcraft does not treat it as hostile');
+    // Vanilla packets for the FML entity's id update it through mineflayer's own handlers.
+    let mobMoved = once(bot, 'entityMoved');
+    server.state.client.write('entity_teleport', { entityId: 77, x: 20, y: 66, z: 21, yaw: 0, pitch: 0, onGround: true });
+    await within(10000, mobMoved, 'entityMoved (teleport)');
+    assert.deepEqual([mob.position.x, mob.position.y, mob.position.z], [20, 66, 21]);
+    mobMoved = once(bot, 'entityMoved');
+    server.state.client.write('rel_entity_move', { entityId: 77, dX: 4096, dY: 0, dZ: -2048, onGround: true }); // +1, 0, -0.5 blocks
+    await within(10000, mobMoved, 'entityMoved (relative)');
+    assert.deepEqual([mob.position.x, mob.position.y, mob.position.z], [21, 66, 20.5]);
     const gone = once(bot, 'entityGone');
     server.state.client.write('entity_destroy', { entityIds: [77] });
     await within(10000, gone, 'entityGone');

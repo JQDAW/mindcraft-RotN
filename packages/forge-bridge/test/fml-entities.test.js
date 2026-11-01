@@ -9,7 +9,12 @@ import { createRequire } from 'node:module';
 import { spawnFmlEntity, attachFmlEntities, fmlEntityName } from '../src/fml-entities.js';
 import { extendRegistry } from '../src/registry-extension.js';
 import { RegistrySnapshot } from '../src/registries.js';
-import { syntheticRegistries } from './helpers.js';
+import { syntheticRegistries, FIXTURES } from './helpers.js';
+import { decodeFml, encodeEntitySpawn } from '../src/channels.js';
+import { createTypeReader } from '../src/reid.js';
+import { Buffer } from 'node:buffer';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 const conv = require('mineflayer/lib/conversions');
@@ -44,7 +49,7 @@ test('with a mod-local entity table the entity gets its registry name and regist
     assert.equal(e.name, 'iceandfire:dragon');
     assert.equal(e.displayName, 'Dragon', 'from bot.registry (extended with the synced entities)');
     assert.equal(e.entityType, 300);
-    assert.equal(e.type, 'mob');
+    assert.equal(e.type, 'other', 'a name-only table entry gives no type: not "mob", so isHostile stays false');
     assert.equal(e.uuid, SPAWN.uuid);
     assert.deepEqual([e.position.x, e.position.y, e.position.z], [100.5, 64, -200.25]);
     assert.equal(e.yaw, conv.fromNotchianYaw(90));
@@ -55,13 +60,25 @@ test('with a mod-local entity table the entity gets its registry name and regist
 });
 
 test('without the table the name is a clear placeholder (TODO rotn-data)', () => {
-    assert.deepEqual(fmlEntityName(SPAWN), { name: 'iceandfire:entity_7', known: false });
-    assert.deepEqual(fmlEntityName(SPAWN, { iceandfire: { 7: 'iceandfire:dragon' } }), { name: 'iceandfire:dragon', known: true });
+    assert.deepEqual(fmlEntityName(SPAWN), { name: 'iceandfire:entity_7', known: false, type: null, category: null, width: null, height: null });
+    assert.deepEqual(fmlEntityName(SPAWN, { iceandfire: { 7: 'iceandfire:dragon' } }), { name: 'iceandfire:dragon', known: true, type: null, category: null, width: null, height: null });
     const e = spawnFmlEntity(fakeBot(), SPAWN);
     assert.equal(e.name, 'iceandfire:entity_7');
     assert.equal(e.displayName, 'iceandfire:entity_7');
     assert.equal(e.kind, 'Modded');
     assert.equal(e.forge.nameKnown, false);
+    assert.equal(e.type, 'other');
+    assert.deepEqual([e.width, e.height], [0, 0], 'size unknown without rotn-data: prismarine-entity defaults');
+});
+
+test('the table can supply type, category and size; only then is an FML entity a mob', async () => {
+    const { isHostile } = await import('../../../src/utils/mcdata.js');
+    const table = { iceandfire: { 7: { name: 'dragon', type: 'mob', category: 'Hostile mobs', width: 4, height: 3 } } };
+    const dragon = spawnFmlEntity(fakeBot(), SPAWN, { modEntityTable: table });
+    assert.deepEqual([dragon.type, dragon.kind, dragon.width, dragon.height], ['mob', 'Hostile mobs', 4, 3]);
+    assert.equal(isHostile(dragon), true);
+    const unknown = spawnFmlEntity(fakeBot(), SPAWN);
+    assert.equal(isHostile(unknown), false, 'Mindcraft does not attack an entity it knows nothing about');
 });
 
 test('thrown entities keep their velocity (blocks/tick) and thrower; an existing entity object is reused', () => {
@@ -72,6 +89,25 @@ test('thrown entities keep their velocity (blocks/tick) and thrower; an existing
     assert.equal(e, before);
     assert.deepEqual([e.velocity.x, e.velocity.y, e.velocity.z], [0.5, -0.25, 1]);
     assert.equal(e.forge.throwerId, 99);
+    assert.equal(e.type, 'projectile', 'thrown: a projectile, never a hostile mob');
+});
+
+test('an FML spawn whose metadata has an unknown serializer survives with metadataError (AquaAcrobatics type 14)', () => {
+    const fixture = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'rotn-3.3.4', 'entity-metadata-aqua-pose.json'), 'utf8'));
+    const pkt = Buffer.from(fixture.hex, 'hex');
+    // play.entity_metadata: packet id 0x3c, VarInt entity id (2 bytes here), then the metadata entries.
+    assert.equal(pkt[0], 0x3c);
+    const metadata = pkt.subarray(3);
+    const reader = createTypeReader({ reid: true });
+    const msg = decodeFml(encodeEntitySpawn({ ...SPAWN, throwerId: 0 }, metadata), { readMetadata: reader.readMetadata });
+    assert.equal(msg.type, 'EntitySpawn');
+    assert.ok(msg.metadataError, 'type 14 is unknown to the 1.12.2 metadata type');
+    assert.equal(msg.metadata, null);
+    const bot = fakeBot();
+    const e = spawnFmlEntity(bot, msg);
+    assert.equal(bot.entities[4242], e, 'the spawn is applied anyway');
+    assert.equal(e.forge.metadataError, msg.metadataError);
+    assert.deepEqual([e.position.x, e.position.y, e.position.z], [100.5, 64, -200.25]);
 });
 
 test('attachFmlEntities applies every bridge entitySpawn and never throws into the bridge', () => {
