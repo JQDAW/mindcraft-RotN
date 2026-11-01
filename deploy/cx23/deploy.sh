@@ -173,7 +173,11 @@ do_status() {
   echo "current=$(state_get current)"
   echo "previous=$(state_get previous)"
   echo "releases:"
-  ls -1t "$BASE/releases" 2> /dev/null | grep -v '^\.tmp-' | sed 's/^/  /' || true
+  local d
+  while IFS= read -r d; do
+    [[ -n $d && $d != .tmp-* ]] && echo "  $d"
+  done < <(ls -1t "$BASE/releases" 2> /dev/null)
+  return 0
 }
 
 [[ -d $BASE/releases ]] || die "$BASE/releases is missing (run bootstrap.sh setup first)"
