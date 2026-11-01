@@ -100,13 +100,15 @@ iso()  { date -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ; }
 jqr()  { jq "$@" | tr -d '\r'; }
 
 # Every hcloud call goes through hc. On the PC it always passes --context mindcraft-rotn-test and
-# removes HCLOUD_TOKEN / HCLOUD_CONTEXT from hcloud's environment, so a token for another project
-# in the environment cannot redirect a create (environment variables outrank the config file).
+# removes HCLOUD_TOKEN / HCLOUD_CONTEXT / HCLOUD_ENDPOINT / HCLOUD_CONFIG from hcloud's environment,
+# so a token for another project, another API endpoint or another config file (with its own
+# mindcraft-rotn-test context) in the environment cannot redirect a create (environment variables
+# outrank the config file).
 hc() {
   if [[ $HCLOUD_AUTH == env-token ]]; then
     "$HCLOUD_BIN" "$@"
   else
-    env -u HCLOUD_TOKEN -u HCLOUD_CONTEXT "$HCLOUD_BIN" --context "$CONTEXT" "$@"
+    env -u HCLOUD_TOKEN -u HCLOUD_CONTEXT -u HCLOUD_ENDPOINT -u HCLOUD_CONFIG "$HCLOUD_BIN" --context "$CONTEXT" "$@"
   fi
 }
 
@@ -120,6 +122,10 @@ check_context() {
       [[ $CONTEXT == "$TEST_CONTEXT" ]] \
         || die "refusing hcloud context '$CONTEXT': only '$TEST_CONTEXT' (the test project) is allowed" ;;
     env-token)
+      # Deliberate: GITHUB_ACTIONS=true is the only signal used, and inside Actions it forces
+      # env-token mode to be accepted. Anyone can set GITHUB_ACTIONS=true on the PC, so this is a
+      # guard against mistakes, not a security boundary; the boundary is that the only HCLOUD_TOKEN
+      # this mode is meant for lives in the develop-only Environment hetzner-test-sweeper.
       [[ ${GITHUB_ACTIONS:-} == true ]] \
         || die "ROTN_HCLOUD_AUTH=env-token is only for the GitHub sweeper (GITHUB_ACTIONS=true)" ;;
     *) die "ROTN_HCLOUD_AUTH must be 'context' or 'env-token'" ;;

@@ -73,7 +73,7 @@ beforeEach(() => {
         HCLOUD_CONTEXT: '',
         ROTN_TEST_WHITELIST: '',
     };
-    delete env.HCLOUD_TOKEN;
+    for (const k of ['HCLOUD_TOKEN', 'HCLOUD_ENDPOINT', 'HCLOUD_CONFIG']) delete env[k];
 });
 
 // prependPath: a directory of fake tools put in front of PATH inside bash (Git Bash puts /usr/bin
@@ -474,6 +474,15 @@ describe('hcloud context pin (review finding 1)', () => {
         assert.ok(!fs.existsSync(env.FAKE_HCLOUD_LOG + '.env'), 'HCLOUD_TOKEN/HCLOUD_CONTEXT stripped from hcloud env');
     });
 
+    test('HCLOUD_ENDPOINT and HCLOUD_CONFIG never reach hcloud (another API or config file cannot redirect a create)', () => {
+        const redirect = { HCLOUD_ENDPOINT: 'http://127.0.0.1:9/v1', HCLOUD_CONFIG: fwd(path.join(tmp, 'other-cli.toml')) };
+        const r = run(['run', '--yes', '--name', 'mcr-test-ep', '--', 'true'], redirect);
+        assert.equal(r.code, 0, r.all);
+        assert.ok(hcloudCalls().length > 5);
+        assert.ok(!fs.existsSync(env.FAKE_HCLOUD_LOG + '.env'),
+            `leaked to hcloud: ${fs.existsSync(env.FAKE_HCLOUD_LOG + '.env') ? fs.readFileSync(env.FAKE_HCLOUD_LOG + '.env', 'utf8') : ''}`);
+    });
+
     test('any other context is refused before the first hcloud call', () => {
         for (const args of [['up', '--yes'], ['sweep'], ['down', '--name', 'mcr-test-x'], ['list']]) {
             const r = run(args, { HCLOUD_CONTEXT: 'production' });
@@ -547,6 +556,15 @@ describe('g0-watchdog.sh against the fake API (review findings 1, 2, 4)', () => 
         assert.equal(st.primary_ips.length, 0, 'the IP this run created is cleaned up');
         assert.match(r.stderr, /cleanup verified/);
         for (const a of hcloudCalls().filter((x) => verbOf(x).endsWith('delete'))) assert.notEqual(a[a.length - 1], '77');
+    });
+
+    test('HCLOUD_TOKEN, HCLOUD_CONTEXT, HCLOUD_ENDPOINT and HCLOUD_CONFIG never reach hcloud', () => {
+        const r = runWd(['--yes', '--mode', 'local', '--timeout', '1'], {
+            HCLOUD_TOKEN: 'not-a-real-token', HCLOUD_CONTEXT: 'mindcraft-rotn-test',
+            HCLOUD_ENDPOINT: 'http://127.0.0.1:9/v1', HCLOUD_CONFIG: fwd(path.join(tmp, 'other-cli.toml')) });
+        assert.equal(r.code, 0, r.all);
+        assert.ok(hcloudCalls().length > 5);
+        assert.ok(!fs.existsSync(env.FAKE_HCLOUD_LOG + '.env'), 'redirecting HCLOUD_* variables stripped from hcloud env');
     });
 
     test('refuses any other context', () => {
