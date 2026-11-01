@@ -80,6 +80,8 @@ export function driverProcess(argv, outFile, { passEnv = [] } = {}) {
     const out = fs.createWriteStream(outFile, { flags: 'a' });
     return {
         start(env) {
+            // A second start (the one login retry, session.mjs) is a new process: forget the old exit code.
+            code = null;
             child = spawn(argv[0], argv.slice(1), { env: driverEnv(process.env, env, passEnv), stdio: ['ignore', 'pipe', 'pipe'] });
             const take = (buf) => {
                 out.write(buf);

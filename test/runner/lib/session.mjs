@@ -10,6 +10,27 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 
 const MS = 1000;
 const MARKER_TRIES = 3;
+const RETRY_DELAY_MS = 10 * MS;
+
+/**
+ * The one transient login failure the runner retries (lead decision on #71, after G2 batch 2):
+ * minecraft-protocol's "Failed to obtain profile data for NAME, does the account own minecraft?",
+ * thrown when prismarine-auth's profile fetch failed for any reason (it swallows the cause). Matched
+ * exactly, as the driver prints it (the thrown Error, or its DRIVER error event).
+ */
+export function isProfileFetchFailure(lines, name) {
+    const msg = `Failed to obtain profile data for ${name}, does the account own minecraft?`;
+    return lines.some((l) => {
+        if (l === `Error: ${msg}`) return true;
+        if (!l.startsWith('DRIVER ')) return false;
+        try {
+            const e = JSON.parse(l.slice(7));
+            return e?.type === 'error' && e.message === msg;
+        } catch {
+            return false;
+        }
+    });
+}
 
 /**
  * startSession(ctx, {name, env, naming}) -> {ok, why, sinceMarker, events, joinedAt, uuidVersion, naming}
@@ -44,9 +65,28 @@ export async function startSession(ctx, { name, env = {}, naming = null }) {
     ctx.note('naming', { wired: agent.wired, why: agent.why, entries: agent.entries, failureCount: agent.failureCount });
     if (!agent.wired) ctx.notGate(`mcdata.js not wired to rotn-data: ${agent.why}`);
 
-    bot.start({ ROTN_SCENARIO_BOT: name, ROTN_SCENARIO_RUN: runId, ...env });
-    const first = await ctx.waitFor(() => events().find((e) => e.type === 'joined' || gone(e))
-        || (!bot.alive() && { type: 'exited' }), p.loginTimeoutMs);
+    const output = () => (typeof bot.output === 'function' ? bot.output() : []);
+    const attempt = async () => {
+        const from = output().length;
+        bot.start({ ROTN_SCENARIO_BOT: name, ROTN_SCENARIO_RUN: runId, ...env });
+        const ev = await ctx.waitFor(() => events().find((e) => e.type === 'joined' || gone(e))
+            || (!bot.alive() && { type: 'exited' }), p.loginTimeoutMs);
+        if (ev?.type === 'exited') await clock.sleep(MS);   // a child's last stderr can arrive after its 'exit'
+        return { ev, lines: output().slice(from) };
+    };
+    // One retry, only for the profile-fetch failure, only if the driver exited before any join or kick
+    // (lead, #71). login_online still needs a real join; any other failure, or a second one, is a FAIL.
+    let { ev: first, lines } = await attempt();
+    const retry = { retried: false };
+    if (first?.type === 'exited' && isProfileFetchFailure(lines, name)) {
+        Object.assign(retry, { retried: true, reason: 'profile fetch failed before joining (minecraft-protocol: "Failed to obtain profile data")',
+            firstExitCode: bot.exitCode(), delayMs: RETRY_DELAY_MS });
+        await clock.sleep(RETRY_DELAY_MS);
+        ({ ev: first, lines } = await attempt());
+        retry.secondAttempt = first?.type === 'joined' ? 'joined' : first?.type === 'exited' && isProfileFetchFailure(lines, name)
+            ? 'the same profile-fetch failure' : (first?.type ?? 'no join');
+    }
+    ctx.note('loginRetry', retry);
     const joinedAt = clock.now();
     const uuid = loginUuid(sinceMarker(), name);
     ctx.note('kicks', events().filter(gone).map((e) => ({ ...e, class: classifyKick(e.reason) })));
@@ -55,8 +95,9 @@ export async function startSession(ctx, { name, env = {}, naming = null }) {
     if (first?.type !== 'joined') {
         const why = first?.type === 'exited' ? `driver exited with code ${bot.exitCode()} before joining`
             : first ? `${first.type}: ${first.reason ?? ''} (${classifyKick(first.reason)})` : `no join within ${p.loginTimeoutMs / MS}s`;
-        return { ...base, ok: false, why };
+        return { ...base, ok: false, why: retry.retried ? `${why} (after one login retry for a profile-fetch failure)` : why };
     }
     const online = uuidVersion(uuid) === 4;
-    return { ...base, ok: online, why: `${name} joined; UUID ${uuid ?? 'not logged'} (version ${uuidVersion(uuid) ?? '?'}${online ? ', Mojang account' : ', NOT an online-mode login'})` };
+    return { ...base, ok: online, why: `${name} joined; UUID ${uuid ?? 'not logged'} (version ${uuidVersion(uuid) ?? '?'}${online ? ', Mojang account' : ', NOT an online-mode login'})`
+        + `${retry.retried ? ' after one login retry (profile-fetch failure)' : ''}` };
 }

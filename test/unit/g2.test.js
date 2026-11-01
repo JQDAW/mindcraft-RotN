@@ -18,6 +18,7 @@ import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, 
 import blocks, { blockMeta } from '../scenarios/g2/g2-blocks-named.mjs';
 import mobs, { VANILLA_COMMON_MOBS, chooseMobs, readCommonMobs } from '../scenarios/g2/g2-mobs-named.mjs';
 import items, { VANILLA_SAMPLE, parseItems, checkFullTable } from '../scenarios/g2/g2-items-roundtrip.mjs';
+import { isProfileFetchFailure } from '../runner/lib/session.mjs';
 
 const NAME = 'FRCFLD';
 const UUID_V4 = '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d';
@@ -130,16 +131,25 @@ function sim(opt = {}) {
         log: (n) => log.slice(-n),
     };
     let alive = false;
+    const output = [];
+    let starts = 0;
+    let exit = 0;
     const bot = {
         start() {
+            // loginFails[i]: the driver output of start i when it exits before joining (null: a normal join).
+            const i = starts++;
+            const fail = opt.loginFails?.[i];
+            if (fail) { output.push(...fail); alive = false; exit = opt.failExitCode ?? 0; return; }
+            exit = 0;
             alive = true;
             add(`UUID of player ${NAME} is ${UUID_V4}`, 'User Authenticator #1', 'net.minecraft.server.network.NetHandlerLoginServer');
             online = true;
             add(`${NAME} joined the game`);
         },
+        starts: () => starts,
         alive: () => alive,
-        exitCode: () => (alive ? null : 0),
-        output: () => [],
+        exitCode: () => (alive ? null : exit),
+        output: () => output,
         stop() { alive = false; online = false; return Promise.resolve(); },
     };
     const clock = { now: () => t, sleep: async (ms) => { t += ms; for (let i = 0; i < 5; i++) await tick(); } };
@@ -684,6 +694,106 @@ describe('g2-mobs-named: refused or vanished mobs are replaced in rank order, at
             const c = byName(r);
             assert.equal(c.mobs_named.pass, false, String(bogus));
             assert.match(c.mobs_named.detail, /1 placeholder name\(s\); .*a placeholder, not a registry name/, String(bogus));
+        }
+    });
+});
+
+// The one login retry (lead decision on #71, after G2 batch 2): only the exact profile-fetch error,
+// only when the driver exits before joining, once per scenario; recorded in notes.loginRetry.
+describe('login retry: one, only for the profile-fetch failure', () => {
+    const PROFILE = [`Error: Failed to obtain profile data for ${NAME}, does the account own minecraft?`,
+        '    at Object.authenticate (node_modules/minecraft-protocol/src/client/microsoftAuth.js:31:40)'];
+    const PROFILE_EVENT = [`DRIVER {"t":"2026-11-01T23:34:26.534Z","type":"error","message":"Failed to obtain profile data for ${NAME}, does the account own minecraft?"}`];
+
+    test('isProfileFetchFailure matches exactly this message for this bot, as an Error line or a DRIVER event', () => {
+        assert.equal(isProfileFetchFailure(PROFILE, NAME), true);
+        assert.equal(isProfileFetchFailure(PROFILE_EVENT, NAME), true);
+        for (const other of [
+            ['Error: Failed to obtain profile data for OtherBot, does the account own minecraft?'],
+            [`Error: Failed to obtain profile data for ${NAME}, does the account own minecraft? (and more)`],
+            [`  Error: Failed to obtain profile data for ${NAME}, does the account own minecraft?`],
+            ['Error: getaddrinfo ENOTFOUND sessionserver.mojang.com'],
+            ['DRIVER {"type":"error","message":"Invalid session"}'],
+            ['DRIVER {not json'],
+            [],
+        ]) assert.equal(isProfileFetchFailure(other, NAME), false, JSON.stringify(other));
+    });
+
+    test('one profile-fetch failure: the driver is started once more, the bot joins, and the retry is recorded', async () => {
+        for (const first of [PROFILE, PROFILE_EVENT]) {
+            const s = sim({ loginFails: [first] });
+            const r = await run(items, s, { dataRoot: DATA });
+            const c = byName(r);
+            assert.equal(c.login_online.pass, true, c.login_online.detail);
+            assert.match(c.login_online.detail, /joined; UUID .* after one login retry \(profile-fetch failure\)$/);
+            assert.equal(s.bot.starts(), 2);
+            assert.equal(r.notes.loginRetry.retried, true);
+            assert.equal(r.notes.loginRetry.secondAttempt, 'joined');
+            assert.equal(r.notes.loginRetry.delayMs, 10000);
+        }
+    });
+
+    test('the exit code does not matter (net-forge makes the driver exit non-zero on a failed login)', async () => {
+        for (const code of [0, 1, 2]) {
+            const s = sim({ loginFails: [PROFILE], failExitCode: code });
+            const r = await run(items, s, { dataRoot: DATA });
+            assert.equal(byName(r).login_online.pass, true, `exit ${code}`);
+            assert.equal(r.notes.loginRetry.firstExitCode, code);
+            const s2 = sim({ loginFails: [['Error: Invalid session']], failExitCode: code });
+            const r2 = await run(items, s2, { dataRoot: DATA });
+            assert.equal(s2.bot.starts(), 1, `another error with exit ${code} is not retried`);
+            assert.equal(byName(r2).login_online.detail, `driver exited with code ${code} before joining`);
+        }
+    });
+
+    test('no failure: one start, and notes.loginRetry says no retry', async () => {
+        const s = sim();
+        const r = await run(items, s, { dataRoot: DATA });
+        assert.equal(s.bot.starts(), 1);
+        assert.deepEqual(r.notes.loginRetry, { retried: false });
+    });
+
+    test('a second profile-fetch failure is a FAIL (never a third start)', async () => {
+        const s = sim({ loginFails: [PROFILE, PROFILE] });
+        const r = await run(items, s, { dataRoot: DATA });
+        const c = byName(r);
+        assert.equal(c.login_online.pass, false);
+        assert.match(c.login_online.detail, /driver exited with code 0 before joining \(after one login retry for a profile-fetch failure\)/);
+        assert.equal(s.bot.starts(), 2);
+        assert.equal(r.notes.loginRetry.secondAttempt, 'the same profile-fetch failure');
+        assert.equal(r.pass, false);
+    });
+
+    test('any other failure is not retried: a different error, or the profile error from another bot', async () => {
+        for (const first of [['Error: getaddrinfo ENOTFOUND sessionserver.mojang.com'], ['Error: Failed to obtain profile data for OtherBot, does the account own minecraft?']]) {
+            const s = sim({ loginFails: [first] });
+            const r = await run(items, s, { dataRoot: DATA });
+            assert.equal(byName(r).login_online.pass, false);
+            assert.equal(byName(r).login_online.detail, 'driver exited with code 0 before joining');
+            assert.equal(s.bot.starts(), 1);
+            assert.deepEqual(r.notes.loginRetry, { retried: false });
+        }
+    });
+
+    test('a kick before joining is not retried, even with the profile error in the output', async () => {
+        const s = sim({ loginFails: [PROFILE] });
+        const orig = s.bot.start;
+        s.bot.start = (env) => {
+            orig(env);
+            s.lines.push(`[12:00:00] [Server thread/INFO] [net.minecraft.network.NetHandlerPlayServer]: ${NAME} lost connection: You are not white-listed on this server!`);
+        };
+        const r = await run(items, s, { dataRoot: DATA });
+        assert.equal(byName(r).login_online.pass, false);
+        assert.equal(s.bot.starts(), 1);
+        assert.deepEqual(r.notes.loginRetry, { retried: false });
+    });
+
+    test('blocks and mobs use the same session start, so they retry the same way', async () => {
+        for (const sc of [blocks, mobs]) {
+            const s = sim({ loginFails: [PROFILE] });
+            const r = await run(sc, s, sc === mobs ? { dataRoot: DATA } : { seed: 7 });
+            assert.equal(byName(r).login_online.pass, true, sc.id);
+            assert.equal(r.notes.loginRetry.retried, true, sc.id);
         }
     });
 });
