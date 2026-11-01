@@ -1,0 +1,89 @@
+{
+  "scenario": "g1-login-chat-walk",
+  "gate": "G1",
+  "title": "Bot logs in online, chats, walks and stays 10 minutes",
+  "runId": "20261101t155825-af1e0a",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "FAIL",
+  "passed": 2,
+  "failed": 3,
+  "durationS": 196,
+  "params": {
+    "bot": "<bot>",
+    "loginTimeoutMs": 240000,
+    "chatTimeoutMs": 60000,
+    "walkTimeoutMs": 90000,
+    "walkBlocks": 8,
+    "minWalkBlocks": 6,
+    "stayMs": 600000,
+    "pollMs": 5000,
+    "logTail": 20000,
+    "consoleWaitS": 3
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid> (version 4, Mojang account)",
+      "readyToTry": "Starting the service makes the bot log in with its own account"
+    },
+    {
+      "check": "chat_send",
+      "pass": true,
+      "detail": "server logged <<bot>> hello-20261101t155825-af1e0a",
+      "readyToTry": "It answers in chat"
+    },
+    {
+      "check": "chat_receive",
+      "pass": false,
+      "detail": "no \"<<bot>> echo 2b175bc69d500fee\" within 60s",
+      "readyToTry": "It answers in chat"
+    },
+    {
+      "check": "walk",
+      "pass": false,
+      "detail": "no position from \"tp <bot> ~ ~ ~\" (before null, after null)",
+      "readyToTry": "It follows a player, comes when called (movement)"
+    },
+    {
+      "check": "stay_10min",
+      "pass": false,
+      "detail": "after 185s: list=[], disconnects=[\"lost: Disconnected (client-quit)\",\"left:  (other)\"], driver exited 1",
+      "readyToTry": "Starting the service makes the bot log in (stays connected)"
+    }
+  ],
+  "notes": {
+    "kicks": [
+      {
+        "at": 29,
+        "time": "15:59:31",
+        "type": "lost",
+        "reason": "Disconnected",
+        "class": "client-quit"
+      },
+      {
+        "at": 30,
+        "time": "15:59:31",
+        "type": "left",
+        "class": "other"
+      }
+    ],
+    "uuidVersion": 4,
+    "walk": {
+      "before": null,
+      "after": null,
+      "distance": null,
+      "botReport": null
+    },
+    "chatPrefixes": [
+      ""
+    ]
+  },
+  "botExitCode": 1,
+  "error": null,
+  "server": "mcr-test-20261101-155321",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}

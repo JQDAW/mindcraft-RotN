@@ -96,6 +96,15 @@ After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snaps
 
 ## Other protocol changes
 
+- **Triumph advancements (G1 Batch B+C).** Triumph 3.19.2 (mod id `triumph`) writes `ExtendedDisplayInfo` into `play.advancements`. Flag bit 8 is set, and colours, line options, extra connections and a position are appended (`javap`, details in `reid.js` `triumphTypes`). minecraft-data's vanilla layout fails on it, and the parse error ended the packet stream.
+  - When the ModList has `triumph`, `advancements` is kept as an **opaque buffer** (`{ data: restBuffer }`); the bot never needs it.
+  - `triumphTypes()` is kept as an offline decoder. It reads both real packets to the last byte, but it is not used on the wire.
+- **Parse safety net.** A non-partial parse error makes protodef end nmp's packet stream: nothing arrives afterwards, and the keep-alive times out.
+  - For a short allowlist of cosmetic clientbound packets (`DROPPABLE_ON_PARSE_ERROR` in `bridge.js`), the error is logged and captured with the full packet bytes, and the packet is dropped (`bridge.stats.droppedPackets`). The stream continues.
+  - The allowlist is `advancements`, `select_advancement_tab`, `statistics`, `unlock_recipes`, `craft_recipe_response`, `boss_bar`, `title`, `playerlist_header`, `world_particles`, `sound_effect` and `named_sound_effect`.
+  - Everything else (chunks, entities, slots, `keep_alive`, position, ...) still fails loudly, and so does any login-state error.
+- Parse-error and partial-packet capture records now keep packets up to 8 MiB in full; the old limit was 64 KB, which lost the first Batch B packet.
+
 - **Entity metadata type ids** are VarInts. minecraft-data 1.12.2 says `i8`, but Forge mod serializers start at 256. This override applies on every Forge connection, as a customPackets override rather than a minecraft-data patch. An unknown serializer id throws instead of misreading. The FML EntitySpawn decoder then keeps the rest of the message raw.
 - **Parse errors.** Every deserializer nmp creates is wrapped. A PartialReadError, or a packet with unread trailing bytes, is counted in `bridge.stats` and logged, and the raw bytes go to the capture. Normally protodef drops these packets silently.
 - **Kick classification** (`src/kicks.js`) maps reasons to the ADR 0003 exit codes: 0 clean, 1 transient, 3 fatal.
@@ -157,6 +166,11 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 `npm test` covers `packages/forge-bridge/test/*.test.js`. Everything is offline.
 
 - Codecs: VarInt, strings, every FML|HS message, and the pinned 346-entry ModList.
+- `triumph.test.js` and `parse-safety-net.test.js`: the two real Batch C advancements packets (`test/fixtures/rotn-3.3.4/advancements-triumph.*`).
+  - minecraft-data's vanilla layout fails on them, and the Triumph decoder reads them to the last byte.
+  - Through nmp's real deserializer stream with the override, they are opaque and the next `keep_alive` arrives.
+  - Without the override, the safety net drops them and `keep_alive` still parses; a malformed `set_slot` still ends the stream.
+  - `e2e-initbot` and the g1-driver test send both packets during the session.
 - `golden.test.js`: hand-written hex vectors for ModList, RegistryData, FML EntitySpawn and FML|MP. Each is built from Forge 14.23.5.2860's own serializers (`javap` on the pinned server pack's Forge jar), not from this package's encoders. Our decoders must read each vector, and our encoders must reproduce it byte for byte.
 - The exact outgoing handshake sequence, using synthetic server messages built from the pinned mod list.
 - `real-handshake.test.js`: **the real RotN 3.3.4 handshake** from G1 Batch A (`test/fixtures/rotn-3.3.4/handshake-runA.{json,bin.br}`, all 67 plugin-channel payloads, sanitized). The real server messages are replayed into `attachForgeBridge`, and the bridge must answer with exactly the bytes it really sent. It also checks the ServerHello, the 346-mod ModList (same entries as the pinned ping), all 52 RegistryData read to the last byte (`minecraft:blocks` 4896, ids above 4095), and the FORGE FluidIdMap.
