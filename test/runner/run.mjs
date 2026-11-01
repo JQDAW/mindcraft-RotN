@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+// Scenario runner CLI (harness-ops, brief deliverable 2).
+//
+//   node test/runner/run.mjs --scenario g1-login-chat-walk [--param key=value ...] [--out DIR] -- DRIVER [ARGS...]
+//   node test/runner/run.mjs --list
+//
+// Run it on a disposable test server through the batch wrapper, which creates the server, sets
+// TEST_SERVER_* and deletes everything afterwards:
+//
+//   deploy/test-server.sh run --yes -- node test/runner/run.mjs --scenario g1-login-chat-walk -- node <driver>
+//
+// DRIVER is the bot under test; it must follow test/runner/DRIVER.md. The verdict comes from the
+// server's log and console. Writes result.json, server.log (the log since the scenario's marker)
+// and driver.log to --out (default $TEST_SERVER_STATE_DIR/scenarios/<scenario>-<runId>).
+// Exit code: 0 all checks passed, 1 a check failed, 2 usage or setup error.
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+import crypto from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { runScenario } from './lib/runner.mjs';
+import { ctlServer, driverProcess, wallClock } from './lib/adapters.mjs';
+import { linesAfter } from './lib/server-log.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const SCENARIO_DIR = path.join(here, '..', 'scenarios');
+
+/** Scenario modules: test/scenarios/<group>/<id>.mjs, keyed by their exported id. */
+export async function loadScenarios(dir = SCENARIO_DIR) {
+    const out = {};
+    for (const group of fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory())) {
+        for (const f of fs.readdirSync(path.join(dir, group.name)).filter((n) => n.endsWith('.mjs'))) {
+            const mod = (await import(pathToFileURL(path.join(dir, group.name, f)).href)).default;
+            if (mod?.id && typeof mod.run === 'function') out[mod.id] = mod;
+        }
+    }
+    return out;
+}
+
+/** --param key=value: numbers stay numbers, everything else is a string. */
+export function parseArgs(argv) {
+    const o = { params: {}, driver: [], list: false, scenario: null, out: null };
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i];
+        if (a === '--') { o.driver = argv.slice(i + 1); break; }
+        if (a === '--list') o.list = true;
+        else if (a === '--scenario') o.scenario = argv[++i];
+        else if (a === '--out') o.out = argv[++i];
+        else if (a === '--param') {
+            const [k, ...v] = (argv[++i] ?? '').split('=');
+            if (!k || !v.length) throw new Error(`--param needs key=value, got '${argv[i]}'`);
+            const s = v.join('=');
+            o.params[k] = /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : s;
+        } else throw new Error(`unknown argument '${a}'`);
+    }
+    return o;
+}
+
+async function main(argv) {
+    let o;
+    try {
+        o = parseArgs(argv);
+    } catch (e) {
+        console.error(e.message);
+        return 2;
+    }
+    const scenarios = await loadScenarios();
+    if (o.list) {
+        for (const s of Object.values(scenarios)) console.log(`${s.id}\t${s.gate}\t${s.title}\tchecks: ${Object.keys(s.checks).join(', ')}`);
+        return 0;
+    }
+    const scenario = scenarios[o.scenario];
+    if (!scenario) { console.error(`unknown --scenario '${o.scenario}' (try --list)`); return 2; }
+    if (!o.driver.length) { console.error('give the bot driver after --, e.g. -- node path/to/driver.mjs'); return 2; }
+    for (const k of Object.keys(o.params)) {
+        if (!(k in scenario.defaults)) { console.error(`scenario ${scenario.id} has no parameter '${k}'`); return 2; }
+    }
+
+    const runId = `${new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '')}-${crypto.randomBytes(3).toString('hex')}`.toLowerCase();
+    const outDir = o.out ?? path.join(process.env.TEST_SERVER_STATE_DIR ?? '.', 'scenarios', `${scenario.id}-${runId}`);
+    fs.mkdirSync(outDir, { recursive: true });
+    const log = (m) => console.error(`[scenario ${new Date().toISOString().slice(11, 19)}] ${m}`);
+
+    let server;
+    try {
+        server = ctlServer(process.env.TEST_SERVER_CTL);
+    } catch (e) {
+        console.error(e.message);
+        return 2;
+    }
+    const bot = driverProcess(o.driver, path.join(outDir, 'driver.log'));
+    log(`${scenario.id} (${scenario.gate}) run ${runId}; driver: ${o.driver.join(' ')}; out: ${outDir}`);
+    const result = await runScenario(scenario, { server, bot, clock: wallClock, params: o.params, runId, log });
+    result.server = process.env.TEST_SERVER_NAME ?? null;
+    result.driver = o.driver.join(' ');
+    try {
+        fs.writeFileSync(path.join(outDir, 'server.log'), linesAfter(server.log(result.params.logTail), `scenario-${runId}-begin`).join('\n') + '\n');
+    } catch (e) {
+        log(`could not save the server log: ${e.message}`);
+    }
+    fs.writeFileSync(path.join(outDir, 'result.json'), JSON.stringify(result, null, 2) + '\n');
+    log(`${scenario.id}: ${result.passed} passed, ${result.failed} failed (${outDir}/result.json)`);
+    return result.pass ? 0 : 1;
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    main(process.argv.slice(2)).then((c) => { process.exitCode = c; }, (e) => {
+        console.error(e);
+        process.exitCode = 2;
+    });
+}
