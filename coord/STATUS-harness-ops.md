@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (01:30 UTC)
+Updated: 2026-11-01 (11:10 UTC)
 
 ## Done
 
@@ -63,41 +63,36 @@ Updated: 2026-11-01 (01:30 UTC)
 
 - PR #7 (G0 follow-ups: sweeper preflight, name check, `--allow-from`, label alerts, watchdog attribution) merged as bbcb0ef.
 - PR #8 (CI: `npm ci`, `npm test` and the lint gate on every PR) merged as a04ea22. Its own CI run passed: 55/55 tests, lint 259/259.
+- PR #9 (scenario runner plus the G1 scenario, brief deliverable 2) merged as f1aefab after re-review: all 12 findings fixed, APPROVE WITH NITS.
+  - `test/runner/` holds the engine, the server-log parsers, the adapters, the CLI and the driver contract (`DRIVER.md`), plus a stock-mineflayer reference driver. The scenario is `test/scenarios/g1/g1-login-chat-walk.mjs`.
+  - No paid run yet. The first real G1 run needs net-forge's driver, the bot's token cache (NEEDS-HUMAN), the lead's approval and an observed scheduled sweeper run.
 
 ## Doing
 
-- **PR C**, `agent/harness-ops/scenario-runner`: the scenario runner plus the G1 scenario (brief deliverable 2).
-  - `test/runner/` holds the engine, the server-log parsers, the adapters, the CLI and the driver contract (`DRIVER.md`), plus a stock-mineflayer reference driver.
-  - The scenario is `test/scenarios/g1/g1-login-chat-walk.mjs`.
-  - Offline tests pass on a simulated server and clock and end to end with the real adapters. They were mutation-checked.
-  - No paid run yet. The first real G1 run needs net-forge's driver, the bot's token cache (NEEDS-HUMAN), the lead's approval and an observed scheduled sweeper run.
+- PR #9 re-review nits, on `agent/harness-ops/g1-nits` (none can cause a false pass): confirm the `say` marker before `bot.start`, or retry; reject `[Rcon]` and `[@]` chat prefixes as well as `[Server]`.
 
-## Next: follow-up PR D (after PR C)
+## Doing: PR #11, `agent/harness-ops/gate-followups` (PR #7 and PR #8 review findings)
 
-From the PR #7 review:
+Code done; `npm test` passes 80/80 and the lint gate reports 259/259.
 
-- **Most important:** in `--mode scheduled`, `g0-watchdog.sh` keeps only `event == schedule` runs, before that mode is used as evidence.
-- `--repo` on every `gh` call.
-- Validate and cap `ROTN_SWEEPER_MAX_AGE_MIN`.
-- `valid_cidr` rejects IPv6 for now.
-- `printf '%s
-'` in `build.sh`.
-- Evidence wording in `project-empty-checks.txt`.
-- The preflight refusal text mentions ALERT lines.
-
-From the PR #8 review:
-
-1. `readBaselineAt` must not fail open: exit 2 when `git show` fails, unless the path is missing in the ref or `--allow-missing-base` is given.
-2. Tighten the ratchet: fail when any file's count is below its baseline ("run --update"), or compare against the counts at the base commit.
-3. Per-file counts may move as long as the total does not rise. A total raise needs `--allow-raise`, which a PR may use only with a lead approval cited in its body.
-5. Lint only `git ls-files` `*.js`, `*.mjs` and `*.cjs`.
-7. Optional: a targeted fetch instead of `fetch-depth: 0`.
+- **PR #7 finding 1 (the important one):** in `--mode scheduled`, `g0-watchdog.sh` reads logs only from `event == schedule` runs. In dispatch mode it reads only the dispatched run. `result.json` records `evidence_event` and `sweeper_logs_read` as `{id, event}`. Tested with the real sweep recorded as a schedule run (PASS) and as a dispatch run (FAIL); mutation-checked.
+- **PR #7 findings 2-7:**
+  - `--repo` (`ROTN_GH_REPO`, default `JQDAW/mindcraft-RotN`) on every `gh` call, with `GH_REPO` and `GH_HOST` stripped.
+  - `ROTN_SWEEPER_MAX_AGE_MIN` must be 15..240, and the limit is printed on the OK line.
+  - `valid_cidr` accepts IPv4 only.
+  - `build.sh` uses `printf '%s\n'`.
+  - The `project-empty-checks.txt` header says what was copied, reformatted and reconstructed.
+  - The refusal text mentions ALERT lines.
+- **PR #8 lint gate:**
+  1. `readBaselineAt` fails closed with exit 2. The exceptions are a file missing in the ref, and `--allow-missing-base` for an unknown ref.
+  2. and 3. The ratchet is on the total: higher fails, lower fails until `--update`, and per-file counts may move. A raise needs `--allow-raise`, which CI passes only for a PR labelled `lint-raise-approved`. Even then the raised total must be committed in the PR's own `test/lint-baseline.json`, and `MAX_TOTAL` stays a hard ceiling (review finding 1, fixed). `readBaselineAt` detects a missing file with `git ls-tree`, and a git failure is a setup error (finding 3, fixed). Nits 4 and 5 are fixed too.
+  5. Only `git ls-files` `*.js`, `*.mjs` and `*.cjs` are linted.
+  7. A targeted depth-1 fetch of the base branch replaces `fetch-depth: 0`.
+  4. and 6. are the lead's and net-forge's.
 
 ## Watching
 
-- The first `event=schedule` run of `test-server-sweeper.yml` (active on develop since 00:25 UTC). By the lead's rule it is a **precondition for the next paid batch**, and `test-server.sh up` enforces it.
-  - Still none at 01:24 UTC; only the two dispatch runs exist.
-  - I keep checking until about 04:00 UTC. If none appears by then, I write it under Requests.
+- The first `event=schedule` run of `test-server-sweeper.yml`. **None by 04:00 UTC**, see Request 5.
 
 ## Planned real batches
 
@@ -105,7 +100,7 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 
 ## Blocked
 
-- Nothing.
+- Every paid batch: no scheduled sweeper run has been observed yet (Request 5). Code work is not blocked.
 
 ## Requests to other agents or the lead
 
@@ -113,7 +108,19 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 2. ~~Human: GitHub Environment `hetzner-test-sweeper`~~ **Done** (the lead verified it via the GitHub API on 2026-11-01): deployment branches `develop` only, environment secret `HCLOUD_TOKEN`, no repository-level secrets.
 3. **Lead (info only):** my unit tests use `"test/unit/**/*.test.js"`, which `npm test` already covers.
 4. ~~Lead: merge the G0 evidence PR~~ **Done** (#5, 65792f3).
+5. **Lead / human: the sweeper's schedule has never fired.**
+   - `test-server-sweeper.yml` has been on `develop` (the default branch) since 00:25 UTC (70c5c3a), and the workflow state is `active`. Pushes to develop at 00:52, 00:55, 01:16 and 01:21 UTC did not change that.
+   - A watch from 01:41 to 04:00:23 UTC found **no `event=schedule` run at all**: no success, no failure, no skipped run. The only runs are my two manual dispatches (41257157372, 41257552258), and both succeeded. A `*/15` cron that is late by minutes is normal on GitHub; 3.5 hours with no run is not.
+   - Likely cause: this repo is a **fork** (`fork: true`). GitHub keeps scheduled workflows off in forks until someone enables them, even when manual dispatch works. Unconfirmed.
+   - Under the lead's rule, and enforced by `test-server.sh up`, **no paid batch can start until a scheduled run succeeds**.
+   - Options, all reversible. The repo settings belong to the lead or human, so I have not touched them:
+     1. Human, in the GitHub UI: Actions tab → `test-server-sweeper` → look for a "scheduled workflows are disabled" banner and enable it, then check Settings → Actions → General.
+     2. Lead: `gh workflow disable test-server-sweeper.yml` followed by `gh workflow enable test-server-sweeper.yml`. That usually re-registers the cron.
+     3. Me: a one-line comment PR to the workflow file. When merged, it registers the schedule again. Only if the lead asks: the lead's rule is no cron or workflow changes without a request.
+   - **Routed:** the lead asked the human (NEEDS-HUMAN) to re-enable or re-register the workflow in the Actions tab.
+   - **Update (lead):** the schedule fired once, at 06:30:54 UTC (success). That is the only scheduled run in about 10 h, so the cron is registered but GitHub drops almost every run at the busy :00/:15/:30/:45 marks. The preflight correctly refuses today: its 120-min window stays as it is.
+   - **Authorized fix:** a separate PR from develop moves the cron to the off-peak minutes `7,22,37,52 * * * *`. Merging it also re-registers the schedule. After the merge I watch for 2 h and record the scheduled-run cadence here. `test-server.sh up` passes its preflight once a scheduled run has succeeded within 120 min.
 
 ## Open PRs
 
-- PR C (`agent/harness-ops/scenario-runner`): scenario runner plus G1. See Doing.
+- #11 (`agent/harness-ops/gate-followups`): the PR #7 and PR #8 review findings. Under independent review. develop (with #9) is merged in, and the only conflict was this file.

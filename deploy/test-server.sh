@@ -49,7 +49,8 @@
 #   --dry-run                     print mutating hcloud commands instead of running them
 # Global: --name NAME (or $TEST_SERVER_NAME), --out DIR
 #   Before any create, up/run require a successful event=schedule run of test-server-sweeper.yml on
-#   develop within the last $ROTN_SWEEPER_MAX_AGE_MIN minutes (default 120), read with `gh run list`.
+#   develop within the last $ROTN_SWEEPER_MAX_AGE_MIN minutes (default 120, 15..240), read with
+#   `gh run list --repo $ROTN_GH_REPO` (default JQDAW/mindcraft-RotN).
 #   hcloud always runs with --context mindcraft-rotn-test (the test project); any other
 #   --context / $HCLOUD_CONTEXT is refused. ROTN_HCLOUD_AUTH=env-token (HCLOUD_TOKEN, no context)
 #   is accepted only inside GitHub Actions, for the sweeper.
@@ -81,8 +82,10 @@ SSH_BIN=${SSH_BIN:-ssh}
 SCP_BIN=${SCP_BIN:-scp}
 SSH_KEYGEN_BIN=${SSH_KEYGEN_BIN:-ssh-keygen}
 GH_BIN=${GH_BIN:-gh}
+GH_REPO_NAME=${ROTN_GH_REPO:-JQDAW/mindcraft-RotN}
 SWEEPER_WORKFLOW=test-server-sweeper.yml
 SWEEPER_MAX_AGE_MIN=${ROTN_SWEEPER_MAX_AGE_MIN:-120}
+readonly SWEEPER_MAX_AGE_CAP=240
 STATUS_PING_CMD=${STATUS_PING_CMD:-node $REPO_ROOT/test/tools/status-ping.mjs}
 POLL_SECONDS=${ROTN_TEST_POLL_SECONDS:-15}
 MOJANG_PROFILE_URL=${MOJANG_PROFILE_URL:-https://api.mojang.com/users/profiles/minecraft}
@@ -223,16 +226,14 @@ validate_up_opts() {
 # state directory (review finding 7).
 check_name() { [[ $NAME =~ ^[a-z0-9][a-z0-9-]{2,62}$ ]] || die "bad --name '$NAME'"; }
 
-# valid_cidr CIDR: IPv4 a.b.c.d/0-32 or IPv6 (hex and colons)/0-128. Nothing else reaches ufw.
+# valid_cidr CIDR: IPv4 a.b.c.d/0-32. Nothing else reaches ufw.
+# IPv4 only: test servers are created --without-ipv6, so an IPv6 rule could never match (PR #7 review).
 valid_cidr() {
   local ip=${1%/*} len=${1##*/} o
-  [[ $1 == */* && $len =~ ^[0-9]{1,3}$ ]] || return 1
-  if [[ $ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
-    (( 10#$len <= 32 )) || return 1
-    for o in ${ip//./ }; do (( 10#$o <= 255 )) || return 1; done
-    return 0
-  fi
-  [[ $ip =~ ^[0-9A-Fa-f:]+$ && $ip == *:*:* ]] && (( 10#$len <= 128 ))
+  [[ $1 == */* && $len =~ ^[0-9]{1,2}$ ]] || return 1
+  [[ $ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+  (( 10#$len <= 32 )) || return 1
+  for o in ${ip//./ }; do (( 10#$o <= 255 )) || return 1; done
 }
 
 # resolve_whitelist: WHITELIST (NAME or NAME:UUID) -> WHITELIST_ENTRIES (Name:dashed-uuid).
@@ -395,14 +396,21 @@ count_batch() {  # count_batch KIND NAME -> number of labelled resources of KIND
 # successful *scheduled* run of it on develop within SWEEPER_MAX_AGE_MIN (lead's rule, 2026-11-01:
 # one observed event=schedule run is a precondition for every paid batch). Dispatch runs do not count:
 # they prove the token and the logic, not that the cron fires.
+# gh_: every gh call names the repository explicitly, and GH_REPO / GH_HOST in the environment
+# cannot redirect it (PR #7 review).
+gh_() { env -u GH_REPO -u GH_HOST "$GH_BIN" "$@" --repo "$GH_REPO_NAME"; }
+
 check_sweeper() {
   local runs latest age t
   if (( SKIP_SWEEPER_CHECK )); then
     warn "--skip-sweeper-check: not checking the scheduled sweeper (needs the lead's approval)"
     return 0
   fi
+  [[ $GH_REPO_NAME =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || die "bad ROTN_GH_REPO '$GH_REPO_NAME' (OWNER/REPO)"
+  [[ $SWEEPER_MAX_AGE_MIN =~ ^[0-9]{1,4}$ ]] && (( 10#$SWEEPER_MAX_AGE_MIN >= 15 && 10#$SWEEPER_MAX_AGE_MIN <= SWEEPER_MAX_AGE_CAP )) \
+    || die "ROTN_SWEEPER_MAX_AGE_MIN must be 15..$SWEEPER_MAX_AGE_CAP (got '$SWEEPER_MAX_AGE_MIN')"
   command -v "$GH_BIN" > /dev/null 2>&1 || { sweeper_refuse "the gh CLI ('$GH_BIN') is not available"; return 0; }
-  runs=$(cd "$REPO_ROOT" && "$GH_BIN" run list --workflow "$SWEEPER_WORKFLOW" --branch develop --event schedule \
+  runs=$(gh_ run list --workflow "$SWEEPER_WORKFLOW" --branch develop --event schedule \
            --limit 20 --json databaseId,status,conclusion,createdAt 2>/dev/null) \
     || { sweeper_refuse "'gh run list' failed (not logged in?)"; return 0; }
   latest=$(jqr -r '[.[] | select(.status == "completed" and .conclusion == "success")]
@@ -410,14 +418,14 @@ check_sweeper() {
   [[ -n $latest ]] || { sweeper_refuse "no successful scheduled run of $SWEEPER_WORKFLOW on develop yet"; return 0; }
   t=$(date -u -d "${latest#* }" +%s 2>/dev/null) || { sweeper_refuse "unreadable run time '${latest#* }'"; return 0; }
   age=$(( ($(now) - t) / 60 ))
-  (( age <= SWEEPER_MAX_AGE_MIN )) \
+  (( age <= 10#$SWEEPER_MAX_AGE_MIN )) \
     || { sweeper_refuse "the last successful scheduled sweeper run (${latest% *}) is ${age} min old (limit $SWEEPER_MAX_AGE_MIN)"; return 0; }
-  log "sweeper OK: scheduled run ${latest% *} succeeded ${age} min ago"
+  log "sweeper OK: scheduled run ${latest% *} on $GH_REPO_NAME succeeded ${age} min ago (limit $SWEEPER_MAX_AGE_MIN min)"
 }
 
 sweeper_refuse() {
   if (( DRY_RUN )); then warn "sweeper check would refuse: $1"; return 0; fi
-  die "$1. Refusing to create anything: without the off-PC sweeper a crashed batch bills until someone notices. Check the Actions tab, or pass --skip-sweeper-check with the lead's approval."
+  die "$1. Refusing to create anything: without the off-PC sweeper a crashed batch bills until someone notices. Check the Actions tab (a sweep that logs ALERT lines fails on purpose until the badly labelled resource is gone), or pass --skip-sweeper-check with the lead's approval."
 }
 
 # ---------------------------------------------------------------- up
