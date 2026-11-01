@@ -1,0 +1,64 @@
+# Mindcraft-RotN bot, one instance per bot: mindcraft-rotn@<bot>.service (harness-ops, brief deliverable 5).
+# Based on docs/research/ops.md section 2. Installed by deploy/cx23/bootstrap.sh setup to
+# /etc/systemd/system/mindcraft-rotn@.service. Per-bot values live in /etc/mindcraft-rotn/<bot>.env
+# (root:mindcraft-rotn, 0640), created by `bootstrap.sh add-bot <bot>`.
+[Unit]
+Description=Mindcraft-RotN bot %i
+After=network-online.target
+Wants=network-online.target
+# Restart rate limit (Restart= below is subject to it): at most 6 starts in 10 minutes.
+StartLimitIntervalSec=600
+StartLimitBurst=6
+
+[Service]
+Type=simple
+User=mindcraft-rotn
+Group=mindcraft-rotn
+# The deployed release; deploy/cx23/deploy.sh switches this symlink.
+WorkingDirectory=/opt/mindcraft-rotn/current
+EnvironmentFile=/etc/mindcraft-rotn/%i.env
+# agent_process.js ends the main process with 0 on a clean stop only in single-bot mode
+# (ADR 0003 decision 5). check-env refuses an env file that overrides it.
+Environment=MINDCRAFT_SINGLE_BOT_SERVICE=1
+# Refuses to start on an unsafe environment: INSECURE_CODING, allow_insecure_coding in
+# SETTINGS_JSON, a token-cache folder that is not 0700 and ours, a loose env file.
+ExecStartPre=/usr/local/lib/mindcraft-rotn/check-env /etc/mindcraft-rotn/%i.env
+ExecStart=/usr/bin/node /opt/mindcraft-rotn/current/main.js
+# always: a bot that exits on a transient problem comes back. Exit 0 (requested stop) and
+# 3 (fatal: mod rejection, ban, not whitelisted, auth needs a human) are never restarted
+# (ADR 0003 decision 5); exit 1 is handled in-process with backoff.
+Restart=always
+RestartPreventExitStatus=0 3
+RestartSec=20
+TimeoutStopSec=30
+UMask=0077
+
+# Resource caps (estimates from ops.md section 5; to be confirmed in the 2-hour soak)
+MemoryHigh=1G
+MemoryMax=1536M
+MemorySwapMax=0
+CPUQuota=100%
+TasksMax=256
+
+# Hardening. Never MemoryDenyWriteExecute: V8's JIT needs writable-executable memory.
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+# The bot's own state (token cache, logs) and Mindcraft's ./bots folder, which every release links
+# to /var/lib/mindcraft-rotn/bots so memories survive a deploy.
+ReadWritePaths=/var/lib/mindcraft-rotn/%i /var/lib/mindcraft-rotn/bots
+
+[Install]
+WantedBy=multi-user.target
