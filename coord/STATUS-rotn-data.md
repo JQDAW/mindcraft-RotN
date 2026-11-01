@@ -34,6 +34,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 
 - **3.** `toOld`'s old-name fallback gives a changed meaning for a few names: `toOld('stone_slab')` is the 1.12 smooth slab, and `toOld('grass')` is the grass block, while Mindcraft (`skills.js:706`) means the plant. Handle this at the command boundary in brief item 4 / with skills-rotn (prefer the 1.21 meaning for names Mindcraft uses).
 - **4.** A reverse-coverage test: every synced `minecraft:` item name maps (except `air`, `portal`, `end_portal`, `end_gateway`), plus per-meta gaps such as item `tallgrass:0`.
+- **6.** Add a test that pins the named exports `toNew`, `toOld` and `registryName` of `packages/rotn-data/index.js`. These are a contract: harness-ops' G2 driver helper `mindcraftNames()` imports exactly them (PR #36, DRIVER.md). Not added to #37, so its reviewed head stays unchanged.
 - **5.** `blockToNew` falls back to the item table and so accepts invalid block metas (e.g. `silver_glazed_terracotta:9`). Restrict the fallback to names that have no block entry.
 
 ## Blocked
