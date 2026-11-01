@@ -130,35 +130,63 @@ test('the real rotn-data table: FML mobs get their registry names, type and cate
     const { isHostile } = await import('../../../src/utils/mcdata.js');
     const table = fmlEntityTable({ modEntityTable: rotnData.modEntityTable, entityByModId: rotnData.entityByModId });
     assert.ok(Object.keys(table).length >= 50, `a table for the pack's mods (${Object.keys(table).length})`);
-    const spawn = (modId, modEntityTypeId, extra = {}) => spawnFmlEntity(fakeBot(), { ...SPAWN, modId, modEntityTypeId, ...extra }, { modEntityTable: table });
+    const bot = fakeBot();
+    let nextId = 10000;
+    const spawn = (modId, modEntityTypeId, extra = {}) => spawnFmlEntity(bot, { ...SPAWN, entityId: nextId++, modId, modEntityTypeId, ...extra }, { modEntityTable: table });
 
-    const dragon = spawn('iceandfire', 905);
-    assert.deepEqual([dragon.name, dragon.displayName, dragon.type, dragon.kind], ['iceandfire:firedragon', 'Fire Dragon', 'passive', 'Passive mobs']);
-    assert.equal(dragon.forge.nameKnown, true);
-    assert.equal(isHostile(dragon), false, 'rotn-data says the fire dragon is not hostile');
+    // What each entity must become, from rotn-data's catalog API: the same entityByModId
+    // facts (dump plus rotn-data's threat overrides) the bot's table is built from, not
+    // literals. A living entity is hostile or passive by rotn-data's `hostile`; anything
+    // else keeps the spawn rule (`other`, or `projectile` when thrown).
+    const expected = (modId, id) => {
+        const f = rotnData.entityByModId(modId, id);
+        const living = Array.isArray(f.kinds) && f.kinds.includes('living');
+        const hostile = living && !!f.hostile;
+        return {
+            name: f.name, displayName: f.displayName ?? f.name, hostile,
+            type: living ? (hostile ? 'hostile' : 'passive') : 'other',
+            kind: living ? (hostile ? 'Hostile mobs' : 'Passive mobs') : 'Modded',
+        };
+    };
+    const got = (e) => ({ name: e.name, displayName: e.displayName, hostile: isHostile(e), type: e.type, kind: e.kind });
 
-    const cockatrice = spawn('aether_legacy', 7);
-    assert.deepEqual([cockatrice.name, cockatrice.type, cockatrice.kind], ['aether_legacy:cockatrice', 'hostile', 'Hostile mobs']);
-    assert.equal(isHostile(cockatrice), true, "Mindcraft's isHostile sees a hostile modded mob");
-
-    const arrow = spawn('iceandfire', 902, { throwerId: 4243 });
-    assert.equal(arrow.name, 'iceandfire:dragonarrow');
-    assert.equal(arrow.type, 'projectile', 'not living: no type from the table, so the thrower rule applies');
-    assert.equal(isHostile(arrow), false);
-
-    const unknown = spawn('iceandfire', 4);
-    assert.deepEqual([unknown.name, unknown.type, unknown.kind], ['iceandfire:entity_4', 'other', 'unknown'], 'an id the dump lacks keeps the placeholder');
+    // Every entry of the mod-local table spawns as the catalog says.
+    let count = 0;
+    let hostileCount = 0;
+    for (const [modId, byId] of Object.entries(rotnData.modEntityTable())) {
+        for (const id of Object.keys(byId).map(Number)) {
+            const want = expected(modId, id);
+            const e = spawn(modId, id);
+            assert.deepEqual(got(e), want, `${modId} #${id}`);
+            assert.equal(e.forge.nameKnown, true);
+            count++;
+            if (want.hostile) hostileCount++;
+        }
+    }
+    assert.ok(count >= 500 && hostileCount >= 50 && count - hostileCount >= 100, `${count} entities, ${hostileCount} hostile`);
 
     // Every modded mob in rotn-data's common-mobs.json (G2's mobs_named list, which the
-    // console summons) spawns with its registry name and rotn-data's hostility.
+    // console summons) is in the table under its own registry name.
     const common = JSON.parse(fs.readFileSync(new URL('../../rotn-data/3.3.4/common-mobs.json', import.meta.url), 'utf8')).mobs;
     const modded = common.filter((m) => m.modded);
     assert.ok(modded.length >= 10, `common-mobs.json has modded mobs (${modded.length})`);
     for (const m of modded) {
         const { modId, modEntityTypeId } = rotnData.entity(m.name);
-        const e = spawn(modId, modEntityTypeId);
-        assert.deepEqual([e.name, isHostile(e)], [m.name, m.hostile], `${m.name} (${modId} #${modEntityTypeId})`);
+        assert.deepEqual(got(spawn(modId, modEntityTypeId)), expected(modId, modEntityTypeId), `${m.name} (${modId} #${modEntityTypeId})`);
     }
+
+    // Pinned: cases that must not drift whatever rotn-data's overrides say.
+    const dragon = spawn('iceandfire', 905);
+    assert.deepEqual([dragon.name, dragon.displayName], ['iceandfire:firedragon', 'Fire Dragon']);
+    assert.ok(['hostile', 'passive'].includes(dragon.type), 'a dragon is a living mob (its hostility is rotn-data\'s call)');
+    const cockatrice = spawn('aether_legacy', 7);
+    assert.deepEqual([cockatrice.name, cockatrice.type, cockatrice.kind, isHostile(cockatrice)], ['aether_legacy:cockatrice', 'hostile', 'Hostile mobs', true]);
+    const butterfly = spawn('butterflies', 0);
+    assert.deepEqual([butterfly.name, butterfly.type, isHostile(butterfly)], ['butterflies:butterfly', 'passive', false]);
+    const arrow = spawn('iceandfire', 902, { throwerId: 4243 });
+    assert.deepEqual([arrow.name, arrow.type, isHostile(arrow)], ['iceandfire:dragonarrow', 'projectile', false], 'not living: the thrower rule applies');
+    const unknown = spawn('iceandfire', 4);
+    assert.deepEqual([unknown.name, unknown.type, unknown.kind], ['iceandfire:entity_4', 'other', 'unknown'], 'an id the dump lacks keeps the placeholder');
 });
 
 test('fmlEntityTable tolerates a missing or empty catalog', () => {
