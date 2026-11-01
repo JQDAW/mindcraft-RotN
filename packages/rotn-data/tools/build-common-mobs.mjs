@@ -8,7 +8,8 @@
 // Score = sum of spawn weights over the overworld biomes / number of those biomes.
 // Monsters and passive creatures are ranked separately and interleaved (m1, c1, m2, ...),
 // so the first names cover both. Spawn-time rules (Mob Stages, light, invasions) are not
-// reflected (tools/dumper/README.md).
+// reflected (tools/dumper/README.md), except the vanilla animals Animania removes, which are
+// left out (packages/rotn-data/3.3.4/entity-overrides.json replacedByMod; G2 batch 1).
 //
 // Usage: node packages/rotn-data/tools/build-common-mobs.mjs [--check]
 import fs from 'node:fs';
@@ -41,7 +42,8 @@ export function buildCommonMobs({ limit = 40 } = {}) {
         const where = new Map();
         for (const [b, lists] of biomes) {
             for (const e of lists[type] ?? []) {
-                if (!e.entity) continue;
+                // Vanilla animals Animania removes are in the biome lists but never spawn (entity-overrides.json replacedByMod).
+                if (!e.entity || pack.isReplaced(e.entity)) continue;
                 score.set(e.entity, (score.get(e.entity) ?? 0) + e.weight);
                 if (!where.has(e.entity)) where.set(e.entity, []);
                 where.get(e.entity).push(b);

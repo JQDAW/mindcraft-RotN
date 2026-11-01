@@ -53,13 +53,13 @@
    "displayName": "Creeper"
   },
   {
-   "name": "minecraft:sheep",
+   "name": "betteranimalsplus:deer",
    "type": "creature",
-   "score": 7,
-   "biomeCount": 77,
-   "modded": false,
+   "score": 5.82,
+   "biomeCount": 48,
+   "modded": true,
    "hostile": false,
-   "displayName": "Sheep"
+   "displayName": "Deer"
   },
   {
    "name": "minecraft:spider",
@@ -71,13 +71,13 @@
    "displayName": "Spider"
   },
   {
-   "name": "minecraft:chicken",
+   "name": "animania:cow_holstein",
    "type": "creature",
-   "score": 6.14,
-   "biomeCount": 81,
-   "modded": false,
+   "score": 4.83,
+   "biomeCount": 49,
+   "modded": true,
    "hostile": false,
-   "displayName": "Chicken"
+   "displayName": "Holstein Cow"
   },
   {
    "name": "minecraft:skeleton",
@@ -89,13 +89,13 @@
    "displayName": "Skeleton"
   },
   {
-   "name": "betteranimalsplus:deer",
+   "name": "animania:hen_rhode_island_red",
    "type": "creature",
-   "score": 5.82,
-   "biomeCount": 48,
+   "score": 4.83,
+   "biomeCount": 49,
    "modded": true,
    "hostile": false,
-   "displayName": "Deer"
+   "displayName": "Rhode Island Red Hen"
   },
   {
    "name": "minecraft:zombie",
@@ -107,13 +107,13 @@
    "displayName": "Zombie"
   },
   {
-   "name": "minecraft:pig",
+   "name": "animania:hen_wyandotte",
    "type": "creature",
-   "score": 5.76,
-   "biomeCount": 76,
-   "modded": false,
+   "score": 4.83,
+   "biomeCount": 49,
+   "modded": true,
    "hostile": false,
-   "displayName": "Pig"
+   "displayName": "Wyandotte Hen"
   },
   {
    "name": "quark:stoneling",
@@ -125,13 +125,13 @@
    "displayName": "Stoneling"
   },
   {
-   "name": "animania:cow_holstein",
+   "name": "animania:sow_large_white",
    "type": "creature",
    "score": 4.83,
    "biomeCount": 49,
    "modded": true,
    "hostile": false,
-   "displayName": "Holstein Cow"
+   "displayName": "Large White Sow"
   },
   {
    "name": "iceandfire:if_troll",
@@ -143,13 +143,13 @@
    "displayName": "Troll"
   },
   {
-   "name": "animania:hen_rhode_island_red",
+   "name": "animania:sow_old_spot",
    "type": "creature",
    "score": 4.83,
    "biomeCount": 49,
    "modded": true,
    "hostile": false,
-   "displayName": "Rhode Island Red Hen"
+   "displayName": "Old Spot Sow"
   },
   {
    "name": "quark:ashen",
@@ -161,13 +161,13 @@
    "displayName": "Ashen"
   },
   {
-   "name": "animania:hen_wyandotte",
+   "name": "animania:ewe_jacob",
    "type": "creature",
-   "score": 4.83,
+   "score": 4.45,
    "biomeCount": 49,
    "modded": true,
    "hostile": false,
-   "displayName": "Wyandotte Hen"
+   "displayName": "Jacob Ewe"
   },
   {
    "name": "quark:dweller",
@@ -179,13 +179,13 @@
    "displayName": "Dweller"
   },
   {
-   "name": "animania:sow_large_white",
+   "name": "animania:sow_large_black",
    "type": "creature",
-   "score": 4.83,
-   "biomeCount": 49,
+   "score": 4.14,
+   "biomeCount": 42,
    "modded": true,
    "hostile": false,
-   "displayName": "Large White Sow"
+   "displayName": "Large Black Sow"
   },
   {
    "name": "ancientbeasts:bonepile",
@@ -197,13 +197,13 @@
    "displayName": "Bonepile"
   },
   {
-   "name": "animania:sow_old_spot",
+   "name": "ancientbeasts:frostash_fox",
    "type": "creature",
-   "score": 4.83,
-   "biomeCount": 49,
+   "score": 4.09,
+   "biomeCount": 9,
    "modded": true,
    "hostile": false,
-   "displayName": "Old Spot Sow"
+   "displayName": "Frostash Fox"
   },
   {
    "name": "ancientbeasts:boulderer",
@@ -215,13 +215,13 @@
    "displayName": "Bouldering Zombie"
   },
   {
-   "name": "minecraft:cow",
+   "name": "animania:doe_cottontail",
    "type": "creature",
-   "score": 4.61,
-   "biomeCount": 76,
-   "modded": false,
+   "score": 4.08,
+   "biomeCount": 49,
+   "modded": true,
    "hostile": false,
-   "displayName": "Cow"
+   "displayName": "Cottontail Doe"
   },
   {
    "name": "ancientbeasts:damcell",
@@ -233,13 +233,13 @@
    "displayName": "Damcell"
   },
   {
-   "name": "animania:ewe_jacob",
+   "name": "animania:doe_new_zealand",
    "type": "creature",
-   "score": 4.45,
+   "score": 4.08,
    "biomeCount": 49,
    "modded": true,
    "hostile": false,
-   "displayName": "Jacob Ewe"
+   "displayName": "New Zealand Doe"
   },
   {
    "name": "ancientbeasts:rifted_enderman",
@@ -251,13 +251,13 @@
    "displayName": "Rifted Enderman"
   },
   {
-   "name": "animania:sow_large_black",
+   "name": "animania:hedgehog",
    "type": "creature",
-   "score": 4.14,
-   "biomeCount": 42,
+   "score": 4.08,
+   "biomeCount": 49,
    "modded": true,
    "hostile": false,
-   "displayName": "Large Black Sow"
+   "displayName": "Hedgehog"
   },
   {
    "name": "trumpetskeleton:trumpet_skeleton",
@@ -269,13 +269,13 @@
    "displayName": "Trumpet Skeleton"
   },
   {
-   "name": "ancientbeasts:frostash_fox",
+   "name": "animania:cow_hereford",
    "type": "creature",
-   "score": 4.09,
-   "biomeCount": 9,
+   "score": 4.04,
+   "biomeCount": 41,
    "modded": true,
    "hostile": false,
-   "displayName": "Frostash Fox"
+   "displayName": "Hereford Cow"
   },
   {
    "name": "mod_lavacow:zombiemushroom",
@@ -287,13 +287,13 @@
    "displayName": "Mycosis"
   },
   {
-   "name": "animania:doe_cottontail",
+   "name": "animania:cow_highland",
    "type": "creature",
-   "score": 4.08,
-   "biomeCount": 49,
+   "score": 4.04,
+   "biomeCount": 41,
    "modded": true,
    "hostile": false,
-   "displayName": "Cottontail Doe"
+   "displayName": "Highland Cow"
   },
   {
    "name": "minecraft:enderman",
@@ -305,13 +305,13 @@
    "displayName": "Enderman"
   },
   {
-   "name": "animania:doe_new_zealand",
+   "name": "animania:sow_hampshire",
    "type": "creature",
-   "score": 4.08,
-   "biomeCount": 49,
+   "score": 4.04,
+   "biomeCount": 41,
    "modded": true,
    "hostile": false,
-   "displayName": "New Zealand Doe"
+   "displayName": "Hampshire Sow"
   },
   {
    "name": "mod_lavacow:mummy",
@@ -323,13 +323,13 @@
    "displayName": "Mummy"
   },
   {
-   "name": "animania:hedgehog",
+   "name": "betteranimalsplus:songbird",
    "type": "creature",
-   "score": 4.08,
-   "biomeCount": 49,
+   "score": 3.92,
+   "biomeCount": 47,
    "modded": true,
    "hostile": false,
-   "displayName": "Hedgehog"
+   "displayName": "Songbird"
   },
   {
    "name": "rats:illager_piper",
@@ -341,13 +341,13 @@
    "displayName": "Pied Piper"
   },
   {
-   "name": "animania:cow_hereford",
+   "name": "animania:doe_alpine",
    "type": "creature",
-   "score": 4.04,
+   "score": 3.73,
    "biomeCount": 41,
    "modded": true,
    "hostile": false,
-   "displayName": "Hereford Cow"
+   "displayName": "Alpine Doe"
   },
   {
    "name": "defiledlands:host",
@@ -359,13 +359,13 @@
    "displayName": "Host"
   },
   {
-   "name": "animania:cow_highland",
+   "name": "animania:doe_kiko",
    "type": "creature",
-   "score": 4.04,
+   "score": 3.73,
    "biomeCount": 41,
    "modded": true,
    "hostile": false,
-   "displayName": "Highland Cow"
+   "displayName": "Kiko Doe"
   }
  ]
 }
