@@ -1,11 +1,11 @@
 # G1 Batch B+C, 2026-11-01: FAIL (root cause found)
 
-net-forge ran this batch on the lead's GO, recorded in `coord/STATUS-rotn-lead.md` at 15:55 UTC. Files in this folder are committed under a lead-approved exception (`test/` is harness-ops'): the harness runner's result files for Batch C, sanitized. The bot name is `<bot>`, and the UUIDs, the player's IP:port and local paths are replaced. No tokens appear in them.
+net-forge ran this batch on the lead's GO, recorded in `coord/STATUS-rotn-lead.md` at 15:55 UTC. Files in this folder are committed under a lead-approved exception (`test/` is harness-ops'): the harness runner's result files for Batch C, sanitized. The bot name is `<bot>`, player UUIDs are `<uuid-v4>` (all are version-4 Mojang UUIDs), and the player's IP:port and local paths are replaced. No tokens appear in them.
 
 | File | What |
 | --- | --- |
 | `result.json` | The runner's verdict for `g1-login-chat-walk`, with default gate parameters (`gateValid: true`, `weakenedParams: []`). |
-| `server.log` | The test server's log from the scenario's marker line on. |
+| `server.log` | The test server's log, starting at the marker line the runner writes when the scenario begins. |
 | `driver.log` | stdout and stderr of `packages/forge-bridge/tools/g1-driver.mjs`. |
 
 ## Run
