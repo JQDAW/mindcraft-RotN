@@ -62,13 +62,25 @@ function sim(opt = {}) {
     const fake = new EventEmitter();
     fake.entity = { position: pos };
     fake.entities = {};
-    fake.blockAt = (v) => { const b = blockAtWorld(v.x, v.y, v.z); return { name: bare(b.name), metadata: b.meta, position: v }; };
+    let waited = false;
+    let loadedAt = Infinity;   // loadAfterMs: the chunks arrive that long (real time) after the first lookup that missed
+    fake.blockAt = (v) => {
+        const late = Date.now() >= loadedAt;
+        if (opt.unloaded && !(opt.loadOnWait && waited) && !late && opt.unloaded(v.x, v.y, v.z)) {
+            if (opt.loadAfterMs && loadedAt === Infinity) loadedAt = Date.now() + opt.loadAfterMs;
+            return null;   // no chunk there
+        }
+        const b = blockAtWorld(v.x, v.y, v.z);
+        return { name: bare(b.name), metadata: b.meta, position: v };
+    };
+    if (opt.loadOnWait) fake.waitForChunksToLoad = () => { waited = true; return Promise.resolve(); };
     fake.inventory = { items: () => inventory.slice() };
     fake.chat = (text) => {
         const said = opt.chatEdit ? opt.chatEdit(text) : text;
         if (online && said) add(`<${NAME}> ${said}`);
     };
-    attachG2(fake, { names: opt.names ?? truthNames, pageDelayMs: 0, emit: () => {}, random: prng(opt.driverSeed ?? 1) });
+    attachG2(fake, { names: opt.names ?? truthNames, pageDelayMs: 0, emit: () => {}, random: prng(opt.driverSeed ?? 1),
+        chunkWaitMs: opt.chunkWaitMs ?? 0, chunkPollMs: 1 });
 
     const server = {
         console(cmd, waitS = 1) {
@@ -285,6 +297,53 @@ describe('g2-blocks-named on a simulated server', () => {
         assert.equal(r.notes.worldSeed, '-4172144997902289642', 'the world seed is evidence (finding 5)');
         assert.deepEqual(r.notes.cube, { center: [10, 64, -4], radius: 16 });
         assert.equal(r.notes.spotSkew.length, 0);
+    });
+
+    test('a fully loaded cube: nothing unloaded, recorded in notes.unloaded', async () => {
+        const r = await run(blocks, sim(), { seed: 7, dataRoot: DATA });
+        assert.deepEqual(r.notes.unloaded, { census: 0, cube: 35937, censusShare: 0, spot: 0, spotAsked: r.notes.unloaded.spotAsked, spotShare: 0, maxShare: 0.01 });
+        assert.deepEqual(r.weakenedParams, [`dataRoot=${DATA} (gate needs = )`]);
+    });
+
+    test('unloaded positions are never a block type: a small unloaded edge (<1%) is recorded and the run still counts', async () => {
+        // One column at the cube's edge has no chunk: 33 of 35937 positions (0.09%).
+        const s = sim({ unloaded: (x, y, z) => x === 26 && z === 12 });
+        const r = await run(blocks, s, { seed: 7, dataRoot: DATA });
+        assert.equal(r.checksPassed, true, JSON.stringify(r.checks, null, 1));
+        assert.equal(r.notes.unloaded.census, 33);
+        assert.ok(!r.notes.census.some((b) => /^(null|#unloaded)/.test(b)), 'no null or #unloaded type in the census');
+        assert.deepEqual(r.weakenedParams, [`dataRoot=${DATA} (gate needs = )`], 'below 1%: still a gate run');
+    });
+
+    test('more than 1% unloaded (census or spot) makes the run not a gate run, with the counts in notes', async () => {
+        // Everything east of x = 15 has no chunk: a third of the cube.
+        const s = sim({ unloaded: (x) => x >= 16 });
+        const r = await run(blocks, s, { seed: 7, dataRoot: DATA });
+        assert.equal(byName(r).blocks_named.pass, true, byName(r).blocks_named.detail);
+        assert.ok(r.notes.unloaded.censusShare > 0.3 && r.notes.unloaded.spot > 0, JSON.stringify(r.notes.unloaded));
+        assert.ok(r.weakenedParams.some((w) => /% of the cube was unloaded in the census \(max 1%\)/.test(w)), JSON.stringify(r.weakenedParams));
+        assert.ok(r.weakenedParams.some((w) => /spot positions were unloaded \(max 1%\)/.test(w)), JSON.stringify(r.weakenedParams));
+        assert.match(byName(r).blocks_spotcheck.detail, /\(\d+ positions asked, \d+ unloaded, seed 7\)/);
+        assert.equal(r.gateValid, false);
+    });
+
+    test('the driver waits for the cube\'s chunks first (waitForChunksToLoad), so late chunks are not unloaded', async () => {
+        const r = await run(blocks, sim({ unloaded: (x) => x >= 16, loadOnWait: true, chunkWaitMs: 1000 }), { seed: 7, dataRoot: DATA });
+        assert.equal(r.notes.unloaded.census, 0);
+        assert.equal(r.checksPassed, true, JSON.stringify(r.checks, null, 1));
+    });
+
+    test('chunks that arrive a moment later, without waitForChunksToLoad, are found by polling the columns', async () => {
+        // The driver polls in real time; the scenario's virtual clock gets a long reply timeout to wait for it.
+        const r = await run(blocks, sim({ unloaded: (x) => x >= 16, loadAfterMs: 30, chunkWaitMs: 5000 }), { seed: 7, dataRoot: DATA, replyTimeoutMs: 3600000 });
+        assert.equal(r.notes.unloaded.census, 0, JSON.stringify(r.notes.unloaded));
+    });
+
+    test('a census without the "#unloaded U T" entry (an old driver) fails blocks_named', async () => {
+        const chatEdit = (text) => (text.startsWith('blocks ') ? text.replace(/#unloaded \d+ \d+(; )?/, '') : text);
+        const c = byName(await run(blocks, sim({ chatEdit }), { seed: 7, dataRoot: DATA }));
+        assert.equal(c.blocks_named.pass, false);
+        assert.match(c.blocks_named.detail, /no valid "#unloaded U 35937" entry/);
     });
 
     test('an unknown name fails blocks_named', async () => {

@@ -102,7 +102,9 @@ export async function walk(bot, n, timeoutMs, stepMs = 250) {
 //   "scenario-blocks TOKEN R N K"        -> the N most common non-air block types in the cube of radius R
 //                                           around the bot: "name meta count x,y,z x,y,z ..." with up to K
 //                                           candidate positions per type, drawn uniformly from its blocks
-//   "scenario-blockat TOKEN x,y,z ..."    -> "x y z name meta" for each position
+//                                           (the first entry is "#unloaded U T": U of the T positions had no
+//                                           loaded chunk after waiting for the cube; they are never named)
+//   "scenario-blockat TOKEN x,y,z ..."    -> "x y z name meta" for each position ("x y z #unloaded 0" if no chunk)
 //   "scenario-entities TOKEN R"           -> "name x y z" for each non-player entity within R
 //   "scenario-items TOKEN"                -> "slot oldName oldMeta newName backName backMeta" per slot
 // Replies are paged chat lines "KIND TOKEN PAGE/PAGES entry; entry; ...", at most one every
@@ -169,7 +171,10 @@ export function pages(kind, token, entries) {
     return chunks.map((c, i) => `${kind} ${token} ${i + 1}/${chunks.length}${c.length ? ` ${c.join('; ')}` : ''}`);
 }
 
-export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = event, random = Math.random } = {}) {
+/** A position the bot has no chunk for: counted apart, never named (a "null" name would fail the runner). */
+export const UNLOADED = '#unloaded';
+
+export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = event, random = Math.random, chunkWaitMs = 30000, chunkPollMs = 500 } = {}) {
     let queue = Promise.resolve();
     // One request at a time, so two replies never interleave and the chat rate stays under the spam limit.
     const serial = (fn) => { queue = queue.then(fn).catch((err) => emit('g2_error', { message: String(err?.message ?? err) })); return queue; };
@@ -185,6 +190,35 @@ export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = e
         if (!bot.entity) throw new Error('no position yet (not spawned)');
         return bot.entity.position.floored();
     };
+    // Chunk columns of the cube without a loaded chunk: blockAt answers null anywhere in such a column.
+    const columns = (c, r) => {
+        let missing = 0;
+        let total = 0;
+        for (let cx = (c.x - r) >> 4; cx <= (c.x + r) >> 4; cx++) {
+            for (let cz = (c.z - r) >> 4; cz <= (c.z + r) >> 4; cz++) {
+                total++;
+                if (!bot.blockAt(new Vec3(cx * 16 + 8, Math.min(255, Math.max(0, c.y)), cz * 16 + 8))) missing++;
+            }
+        }
+        return { missing, total };
+    };
+    // Wait (at most chunkWaitMs) for every chunk column of the cube: mineflayer's waitForChunksToLoad
+    // first, then poll the columns. Whatever is still missing is counted as unloaded, never as a block.
+    const waitForCube = async (c, r) => {
+        const end = Date.now() + chunkWaitMs;
+        if (typeof bot.waitForChunksToLoad === 'function' && chunkWaitMs > 0) {
+            try {
+                await Promise.race([bot.waitForChunksToLoad(), sleep(chunkWaitMs)]);
+            } catch { /* counted below */ }
+        }
+        let st = columns(c, r);
+        while (st.missing && Date.now() < end) {
+            await sleep(chunkPollMs);
+            st = columns(c, r);
+        }
+        emit('g2_chunks', st);
+        return st;
+    };
 
     bot.on('messagestr', (msg) => {
         let m;
@@ -192,12 +226,19 @@ export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = e
             const [token, r, n, k] = [m[1], Number(m[2]), Number(m[3]), Number(m[4])];
             serial(async () => {
                 const c = here();
+                await waitForCube(c, r);
                 // Census without air; per type, k candidate positions drawn uniformly (reservoir sampling)
                 // from all of its blocks, so the runner's pick among them is a fair sample of the type.
+                // Positions without a loaded chunk are counted apart and reported as "#unloaded U T".
                 const hist = new Map();
+                let unloaded = 0;
+                let total = 0;
                 for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) for (let dz = -r; dz <= r; dz++) {
                     const p = c.offset(dx, dy, dz);
-                    const nm = names.blockName(bot.blockAt(p));
+                    total++;
+                    const blk = bot.blockAt(p);
+                    if (!blk) { unloaded++; continue; }
+                    const nm = names.blockName(blk);
                     if (nm?.name === 'minecraft:air') continue;
                     const key = `${show(nm?.name)} ${nm?.meta ?? 0}`;
                     const h = hist.get(key) ?? { count: 0, picks: [] };
@@ -207,14 +248,17 @@ export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = e
                     hist.set(key, h);
                 }
                 const top = [...hist.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, n);
-                emit('g2_blocks', { types: hist.size, reported: top.length });
-                await sayPages(pages('blocks', token, top.map(([key, h]) => `${key} ${h.count} ${h.picks.map((p) => `${p.x},${p.y},${p.z}`).join(' ')}`)));
+                emit('g2_blocks', { types: hist.size, reported: top.length, unloaded, total });
+                await sayPages(pages('blocks', token, [`${UNLOADED} ${unloaded} ${total}`,
+                    ...top.map(([key, h]) => `${key} ${h.count} ${h.picks.map((p) => `${p.x},${p.y},${p.z}`).join(' ')}`)]));
             });
         } else if ((m = /scenario-blockat ([0-9a-f]{6,32}) ((?:-?\d+,-?\d+,-?\d+ ?){1,16})/.exec(msg))) {
             const [token, list] = [m[1], m[2].trim().split(/\s+/).map((s) => s.split(',').map(Number))];
             serial(async () => {
                 const out = list.map(([x, y, z]) => {
-                    const nm = names.blockName(bot.blockAt(new Vec3(x, y, z)));
+                    const blk = bot.blockAt(new Vec3(x, y, z));
+                    if (!blk) return `${x} ${y} ${z} ${UNLOADED} 0`;
+                    const nm = names.blockName(blk);
                     return `${x} ${y} ${z} ${show(nm?.name)} ${nm?.meta ?? 0}`;
                 });
                 await sayPages(pages('blockat', token, out));
