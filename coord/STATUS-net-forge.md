@@ -161,7 +161,7 @@ The review findings on PR #10, numbered as in the review comment:
 
 ## Doing
 
-- PR for the status-ping budget open. **Batch A waits for the lead's written go-ahead** (the last blocker is PR #21, the preflight fix; the external sweeper cron is live).
+- PR #24 (status-ping budget) open. **Batch A waits for the lead's written go-ahead** (the last blocker is PR #21, the preflight fix; the external sweeper cron is live).
 
 ## Next
 
@@ -226,4 +226,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15, #16, #18, #19 and #23 merged.) New PR: status-ping budget, on `agent/net-forge/ping-budget`. `npm test` 233/233; lint 257.
+- (#15, #16, #18, #19 and #23 merged.) #24: status-ping budget, on `agent/net-forge/ping-budget`. `npm test` 233/233; lint 257.
