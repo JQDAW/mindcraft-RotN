@@ -1,0 +1,33 @@
+{
+ "format": "rotn-dump/1",
+ "ores": {
+  "rock": [
+   {
+    "name": "pyrotech:rock",
+    "meta": 0
+   },
+   {
+    "name": "pyrotech:rock",
+    "meta": 6
+   }
+  ],
+  "stickWood": [
+   {
+    "name": "minecraft:stick",
+    "meta": 0
+   }
+  ],
+  "stickMat": [
+   {
+    "name": "minecraft:planks",
+    "meta": 32767
+   }
+  ],
+  "plankWood": [
+   {
+    "name": "minecraft:planks",
+    "meta": 32767
+   }
+  ]
+ }
+}

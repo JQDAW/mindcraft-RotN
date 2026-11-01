@@ -1,0 +1,17 @@
+{
+ "format": "rotn-dump/1",
+ "smelting": [
+  {
+   "input": {
+    "name": "contenttweaker:raw_iron",
+    "meta": 0
+   },
+   "output": {
+    "name": "minecraft:iron_ingot",
+    "meta": 0,
+    "count": 1
+   },
+   "xp": 0.7
+  }
+ ]
+}
