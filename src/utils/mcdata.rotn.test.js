@@ -1,4 +1,5 @@
-// rotn-data brief item 4: mcdata.js's name and registry helpers on the bot's registry.
+// rotn-data brief item 4: mcdata.js's name and registry helpers on the bot's registry, and the
+// agent's naming API toNew/toOld (lead decision for #44; harness-ops' G2 check imports it).
 // Offline: a real prismarine-registry for 1.12.2, extended by forge-bridge's extendRegistry
 // with the RegistryData ids the RotN 3.3.4 server synced (packages/rotn-data/3.3.4/registry-names.json).
 import { test } from 'node:test';
@@ -20,7 +21,7 @@ function rotnRegistry() {
 }
 
 const registry = rotnRegistry();
-mc.useBotRegistry({ registry });
+mc.__setRegistryForTest(registry); // what initBot does at login: mcdata = bot.registry (#46)
 
 test('1.12, modded and 1.21 item names all resolve to bot.registry ids', () => {
     assert.equal(mc.getItemId('log'), registry.itemsByName.log.id);
@@ -72,4 +73,20 @@ test('vanilla recipes still work through the registry (RotN recipes come from th
     const r = mc.getItemCraftingRecipes('crafting_table');
     assert.ok(Array.isArray(r) && r.length > 0);
     assert.deepEqual(Object.keys(r[0][0]), ['planks']);
+});
+
+test('the agent naming API: mcdata.toNew/toOld round-trip every vanilla table entry (harness-ops G2)', () => {
+    const table = require('../../packages/rotn-data/vanilla/flattening-items.json');
+    assert.equal(table.entries.length, table.count);
+    for (const e of table.entries) {
+        assert.equal(mc.toNew(e.old, e.meta), e.new, `${e.old}:${e.meta}`);
+        assert.deepEqual(mc.toOld(e.new), { name: e.old, meta: e.meta }, e.new);
+    }
+    // Same null semantics and modded passthrough as packages/rotn-data.
+    assert.equal(mc.toNew('spawn_egg'), null);
+    assert.equal(mc.toNew('nosuchmod:thing'), null);
+    assert.equal(mc.toNew('pyrotech:rock', 6), 'pyrotech:rock:6');
+    assert.deepEqual(mc.toOld('pyrotech:rock:6'), { name: 'pyrotech:rock', meta: 6 });
+    assert.equal(mc.toOld('netherite_ingot'), null);
+    assert.equal(mc.toNew.length, 1); // (name, meta = 0)
 });

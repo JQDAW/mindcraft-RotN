@@ -7,23 +7,35 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry } from '../../packages/forge-bridge/index.js';
-import { toOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities } from '../../packages/forge-bridge/index.js';
+import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
 let Item = null;
 
-// rotn-data brief item 4: the name and registry helpers read the bot's own registry
-// (bot.registry, which forge-bridge extends with the Forge-synced modded ids, ADR 0003
-// decision 4) once useBotRegistry(bot) has been called, and minecraft-data's vanilla copy
-// before that. The registry is read lazily: mineflayer creates bot.registry at login.
-let registryBot = null;
-const reg = () => registryBot?.registry ?? mcdata;
+// rotn-data brief item 4: the name and registry helpers below read `mcdata`, which initBot sets to
+// bot.registry at login (net-forge #46; forge-bridge extends it with the server's modded ids,
+// ADR 0003 decision 4). Before login it is null, as upstream.
+const reg = () => mcdata;
 
-/** Make the helpers below read `bot.registry` (call once after initBot). */
-export function useBotRegistry(bot) {
-    registryBot = bot ?? null;
+/** Test-only: point the helpers at a registry without a live bot (sets the same `mcdata`). */
+export function __setRegistryForTest(registry) {
+    mcdata = registry;
+}
+
+/**
+ * The agent's naming API (lead decision for #44; harness-ops' G2 check imports it).
+ * Same signatures and null semantics as packages/rotn-data's toNew/toOld:
+ * toNew('log', 1) / toNew('log:1') -> 'spruce_log'; toNew('pyrotech:rock', 6) -> 'pyrotech:rock:6';
+ * toOld('oak_log') -> { name: 'minecraft:log', meta: 0 }; anything unmappable -> null.
+ */
+export function toNew(name, meta = 0) {
+    return rdToNew(name, meta);
+}
+
+export function toOld(name) {
+    return rdToOld(name);
 }
 
 /**
@@ -50,7 +62,7 @@ export function resolveName(name, kind = 'items', { prefer = 'old' } = {}) {
         return n && byName[n] ? { name: n, meta: p.meta } : null;
     };
     const translated = () => {
-        const t = kind === 'blocks' ? blockToOld(name)[0] : toOld(name);
+        const t = kind === 'blocks' ? blockToOld(name)[0] : rdToOld(name);
         const n = t && botName(t.name);
         return n && byName[n] ? { name: n, meta: t.meta } : null;
     };
@@ -155,8 +167,11 @@ export function initBot(username, { onMsaCode } = {}) {
                 // After the last RegistryData: modded names in bot.registry (brief item 4).
                 bridge.on('registries', (snap) => {
                     forge.registryReport = extendRegistry(bot.registry, snap, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                    mcdata = bot.registry; // the helpers see the extended maps (same object, refreshed for clarity)
                     bot.emit('forge_registry', forge.registryReport);
                 });
+                // Mod entities spawned with FML EntitySpawn go into bot.entities (brief item 6).
+                attachFmlEntities(bot, bridge, { log: (m) => console.log(`[forge-bridge] ${m}`) });
             },
         });
     }
@@ -210,7 +225,9 @@ export function initBot(username, { onMsaCode } = {}) {
 
     bot.once('login', () => {
         mc_version = bot.version;
-        mcdata = minecraftData(mc_version);
+        // The name helpers read bot.registry, which forge-bridge extends with the server's
+        // modded ids (rotn-data request 4). Same API as minecraftData(); vanilla stays vanilla.
+        mcdata = bot.registry ?? minecraftData(mc_version);
         Item = prismarine_items(mc_version);
     });
 
