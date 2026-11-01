@@ -70,7 +70,7 @@ None is a natural surface block. 20 recipes do not match their own sample grid (
 | Manifest | `dumperJar.sha256` = `438b3ce6...7d33`, **matches**; Forge 14.23.5.2860; 347 mods; **0 errors, 0 entryErrors** |
 | Raw output | `rotn-dump/` and `latest.log` in my scratchpad, out of git |
 
-`manifest.timing` (batch 500, tick budget 40 ms). The dumper records total ms and ticks per part, **not the max of a single tick**, so the average per tick is shown. A tick can exceed 40 ms by at most the time of one entry, because the cap is checked after each entry; serializers averaged 45 ms. A per-part `maxTickMs` is a dumper follow-up.
+`manifest.timing` (batch 500, tick budget 40 ms). That dumper (0.1.0 at `7f0feef`) recorded total ms and ticks per part, **not the max of a single tick**, so the average per tick is shown. A tick can exceed 40 ms by at most the time of one entry, because the cap is checked after each entry; serializers averaged 45 ms. Since this PR the manifest records `timing.<part>.maxTickMs`; it shows from the next batch.
 
 | Part | Entries | ms | Ticks | Avg ms/tick |
 | --- | --- | --- | --- | --- |
@@ -97,7 +97,16 @@ None is a natural surface block. 20 recipes do not match their own sample grid (
 
 Ids 0-13 are vanilla. Registered entities that use a modded serializer: `doggytalents:dog` (index 21 → 256, index 30 → 257), `mowziesmobs:barakoaya` (index 16 → 16), `requious:spear` (index 8 → 18). No registered entity uses 14, 15 or 17. Players are not in the entity registry, so AquaAcrobatics' 14 (the player pose) does not show up in `usage`.
 
-**First vs second dump:** the same names, counts, cross-checks and known harvest gaps. The differences are almost all list order: mods that keep ore lists, ingredient stacks, MultiMob spawn lists and rats-nugget furnace recipes in hash sets, so their order changes on every server start. The spawn lists are identical once each list is sorted. Two values really differ, both world- or random-dependent: `betterwithaddons:world_scale_ore` hardness (225 vs 15) and `randomthings:spectrecoil_number`. An importer follow-up will sort those lists, so dumps diff cleanly.
+**First vs second dump** (corrected after the PR #55 review; my first text said "almost all list order", which overstated it).
+
+- **The same:** names and counts, all 8 cross-checks, the known harvest gaps, `entities.json` and the recipe id set.
+- **List order only** (mod hash sets): ore dictionary stacks, ingredient stacks, spawn lists (MultiMob's types), and the furnace list order. Since this PR the importer sorts these (`canonicalize`).
+- **Real differences between two starts of the same pack:**
+  - **CraftTweaker recipe ids are rebound.** 100 recipes keep their content but sit under different auto-generated ids, e.g. `crafttweaker:rustic_chair_0` made `rusticcompat:chair_cyan_stained` in the first dump and `chair_lime_stained` in the second. **Recipe ids from CraftTweaker are not stable keys**; match recipes by result and ingredients.
+  - **`hammersmashing*` `remaining`.** The sample grid used the first stack of an unsorted ore list, so the reused hammer was `pyrotech:diamond_hammer` in one dump and `spartancompat:hammer_onyx` in the other. Fixed in the dumper in this PR: it samples the first stack in sorted order. The next batch shows it.
+  - **The rat-nugget ore variant.** `ratPoop` ore entries and 11 `rats:rat_nugget_ore` furnace recipes carry a different `OreItem` in NBT.
+  - **`wards:enchanted_paper`.** Its enchanted-book ingredient stacks carry **numeric enchantment ids** in NBT, e.g. id 113 in one dump and 117 in the other, for 18 of 380 stacks. Numeric ids are per server, as ADR 0004 says.
+  - **World or random values:** `betterwithaddons:world_scale_ore` hardness (225 vs 15) and `randomthings:spectrecoil_number`.
 
 ## Doing
 
@@ -105,9 +114,9 @@ Ids 0-13 are vanilla. Registered entities that use a modded serializer: `doggyta
 
 ## Follow-ups (later PRs)
 
-- **Importer:** sort order-unstable lists (ore stacks, ingredient stacks, spawn lists, furnace recipes) so two dumps diff cleanly.
+- ~~Importer: sort order-unstable lists~~: done in this PR (`canonicalize`).
 - **Dumper:**
-  - record `maxTickMs` per part;
+  - ~~record `maxTickMs` per part~~: done in this PR (needs a batch to show);
   - default-state fallback for the 9 blocks without a metadata-consistent state;
   - item-based hardness for the 30 null-hardness tile-entity states (5 blocks).
 - **#34 review follow-up 3:** expand the wildcard meta 32767 in recipe stacks at import.

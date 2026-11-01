@@ -50,6 +50,36 @@ function sortKeys(obj) {
     return Object.fromEntries(Object.keys(obj).sort().map(k => [k, obj[k]]));
 }
 
+const stackKey = (s) => (s ? `${s.name}:${s.meta}${s.nbt ? `#${s.nbt}` : ''}` : '');
+const byKey = (f) => (a, b) => (f(a) < f(b) ? -1 : f(a) > f(b) ? 1 : 0);
+
+/**
+ * Sort the lists whose order comes from mod hash sets, so two dumps of the same pack diff
+ * cleanly (PR #55 review): ore dictionary stacks, the stacks (alternatives) and ore keys inside
+ * each recipe ingredient, every biome spawn list, and the furnace list. The ingredient lists
+ * themselves keep their order: `remaining` and shaped `slots` are positional.
+ */
+export function canonicalize(files) {
+    for (const k of Object.keys(files.oredict.ores)) files.oredict.ores[k] = [...files.oredict.ores[k]].sort(byKey(stackKey));
+    const ing = (i) => {
+        if (!i) return i;
+        const out = { ...i };
+        if (Array.isArray(i.stacks)) out.stacks = [...i.stacks].sort(byKey(stackKey));
+        if (Array.isArray(i.ores)) out.ores = [...i.ores].sort();
+        return out;
+    };
+    for (const r of files.recipes.recipes) {
+        if (r.slots) r.slots = r.slots.map(ing);
+        if (r.ingredients) r.ingredients = r.ingredients.map(ing);
+    }
+    const spawnKey = (e) => `${e.entity}|${String(e.weight).padStart(6, '0')}|${e.min}|${e.max}|${e.class}`;
+    for (const lists of Object.values(files.spawns.biomes)) {
+        for (const t of Object.keys(lists)) lists[t] = [...lists[t]].sort(byKey(spawnKey));
+    }
+    files.smelting.smelting = [...files.smelting.smelting].sort(byKey((s) => `${stackKey(s.input)}>${stackKey(s.output)}`));
+    return files;
+}
+
 const sha256 = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
 
 /** SHA-256 of every raw file in the fetched folder (DONE and the *.json files), sorted by name. */
@@ -76,7 +106,9 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     for (const f of DUMP_FILES) files[f] = readDumpFile(src, f);
     const m = files.manifest;
     // 0. the jar that ran (PR #47 review): required, and it must match.
-    const ranSha = m.dumperJar?.sha256 ?? null;
+    // Hex is compared case-insensitively (PR #55 review): both sides are lower-cased first.
+    jarSha256 = typeof jarSha256 === 'string' ? jarSha256.trim().toLowerCase() : jarSha256;
+    const ranSha = typeof m.dumperJar?.sha256 === 'string' ? m.dumperJar.sha256.toLowerCase() : null;
     if (!/^[0-9a-f]{64}$/.test(jarSha256 ?? '')) problems.push('no expected jar SHA-256 given (--jar-sha256 <64 hex>)');
     else if (ranSha !== jarSha256) problems.push(`manifest.dumperJar.sha256 ${ranSha} is not the expected ${jarSha256}`);
     if (m.errors?.length && !allowErrors) problems.push(`manifest lists ${m.errors.length} errors: ${m.errors.join('; ').slice(0, 400)}`);
@@ -127,6 +159,7 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     files.spawns.biomes = sortKeys(files.spawns.biomes);
     files.serializers.usage = sortKeys(files.serializers.usage ?? {});
     files.recipes.recipes = [...files.recipes.recipes].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    canonicalize(files);
     const written = [];
     for (const f of DUMP_FILES) {
         const text = JSON.stringify(files[f], null, 1) + '\n';
