@@ -472,6 +472,23 @@ sweeper_helper_ok() {
   echo "OK helper scheduled run ${helper% *} on $SWEEPER_HELPER_REPO succeeded ${age} min ago (limit $SWEEPER_HELPER_MAX_AGE_MIN min), then sweeper run ${sweep% *} (${sweep#* }) on develop succeeded"
 }
 
+# sweeper_newest_ok: whatever path passes, the newest completed sweeper run on develop (any event) must
+# not have concluded failure, timed_out or startup_failure. A sweeper that just broke (revoked token, a
+# persistent ALERT) blocks paid batches even though older runs succeeded (PR #21 review finding 1).
+# Prints "OK" or "NO <reason>". cancelled and skipped runs are not a verdict on the sweeper.
+sweeper_newest_ok() {
+  local runs
+  runs=$(gh_ run list --workflow "$SWEEPER_WORKFLOW" --branch develop \
+           --limit 20 --json databaseId,event,status,conclusion,createdAt 2>/dev/null) \
+    || { echo "NO 'gh run list' failed (not logged in?)"; return; }
+  jqr -r '[.[] | select(.status == "completed" and .conclusion != "cancelled" and .conclusion != "skipped")]
+          | sort_by(.createdAt) | last
+          | if . == null then "OK"
+            elif (.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "startup_failure")
+            then "NO the newest completed \(.event) sweeper run on develop (\(.databaseId), \(.createdAt)) concluded \(.conclusion)"
+            else "OK" end' <<< "$runs" || echo "NO unreadable sweeper run list"
+}
+
 # sweeper_cadence_ok: (c). Prints "OK <message>" or "NO <reason>". Every successful workflow_dispatch
 # sweeper run on develop in the window counts, so an extra manual run between two cron runs makes a
 # short gap and fails the check: it never helps.
@@ -516,7 +533,7 @@ helper_idle_reminder() {
 }
 
 check_sweeper() {
-  local a b c
+  local a b c f
   if (( SKIP_SWEEPER_CHECK )); then
     warn "--skip-sweeper-check: not checking the scheduled sweeper (needs the lead's approval)"
     return 0
@@ -527,6 +544,8 @@ check_sweeper() {
   [[ $SWEEPER_MAX_AGE_MIN =~ ^[0-9]{1,4}$ ]] && (( 10#$SWEEPER_MAX_AGE_MIN >= 15 && 10#$SWEEPER_MAX_AGE_MIN <= SWEEPER_MAX_AGE_CAP )) \
     || die "ROTN_SWEEPER_MAX_AGE_MIN must be 15..$SWEEPER_MAX_AGE_CAP (got '$SWEEPER_MAX_AGE_MIN')"
   command -v "$GH_BIN" > /dev/null 2>&1 || { sweeper_refuse "the gh CLI ('$GH_BIN') is not available"; return 0; }
+  f=$(sweeper_newest_ok)
+  [[ $f == OK ]] || { sweeper_refuse "${f#NO }"; return 0; }
   a=$(sweeper_scheduled_ok)
   if [[ $a == OK\ * ]]; then log "sweeper OK: ${a#OK }"; return 0; fi
   b=$(sweeper_helper_ok)
