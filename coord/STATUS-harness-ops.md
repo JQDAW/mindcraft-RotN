@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (01:45 UTC)
+Updated: 2026-11-01 (04:05 UTC)
 
 ## Done
 
@@ -71,8 +71,9 @@ Updated: 2026-11-01 (01:45 UTC)
   - The scenario is `test/scenarios/g1/g1-login-chat-walk.mjs`.
   - Offline tests pass on a simulated server and clock and end to end with the real adapters. They were mutation-checked.
   - No paid run yet. The first real G1 run needs net-forge's driver, the bot's token cache (NEEDS-HUMAN), the lead's approval and an observed scheduled sweeper run.
+  - Review (REQUEST CHANGES): findings 1-12 fixed in 98e9539 and answered on the PR. CI passes (101/101 tests, lint 259/259). Waiting for re-review.
 
-## Doing: PR D, `agent/harness-ops/gate-followups` (PR #7 and PR #8 review findings)
+## Doing: PR #11, `agent/harness-ops/gate-followups` (PR #7 and PR #8 review findings)
 
 Code done; `npm test` passes 80/80 and the lint gate reports 259/259.
 
@@ -81,8 +82,7 @@ Code done; `npm test` passes 80/80 and the lint gate reports 259/259.
   - `--repo` (`ROTN_GH_REPO`, default `JQDAW/mindcraft-RotN`) on every `gh` call, with `GH_REPO` and `GH_HOST` stripped.
   - `ROTN_SWEEPER_MAX_AGE_MIN` must be 15..240, and the limit is printed on the OK line.
   - `valid_cidr` accepts IPv4 only.
-  - `build.sh` uses `printf '%s
-'`.
+  - `build.sh` uses `printf '%s\n'`.
   - The `project-empty-checks.txt` header says what was copied, reformatted and reconstructed.
   - The refusal text mentions ALERT lines.
 - **PR #8 lint gate:**
@@ -94,9 +94,7 @@ Code done; `npm test` passes 80/80 and the lint gate reports 259/259.
 
 ## Watching
 
-- The first `event=schedule` run of `test-server-sweeper.yml` (active on develop since 00:25 UTC). By the lead's rule it is a **precondition for the next paid batch**, and `test-server.sh up` enforces it.
-  - Still none at 01:41 UTC; only the two dispatch runs exist.
-  - I keep checking until about 04:00 UTC. If none appears by then, I write it under Requests.
+- The first `event=schedule` run of `test-server-sweeper.yml`. **None by 04:00 UTC**, see Request 5.
 
 ## Planned real batches
 
@@ -104,7 +102,7 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 
 ## Blocked
 
-- Nothing.
+- Every paid batch: no scheduled sweeper run has been observed yet (Request 5). Code work is not blocked.
 
 ## Requests to other agents or the lead
 
@@ -112,8 +110,18 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 2. ~~Human: GitHub Environment `hetzner-test-sweeper`~~ **Done** (the lead verified it via the GitHub API on 2026-11-01): deployment branches `develop` only, environment secret `HCLOUD_TOKEN`, no repository-level secrets.
 3. **Lead (info only):** my unit tests use `"test/unit/**/*.test.js"`, which `npm test` already covers.
 4. ~~Lead: merge the G0 evidence PR~~ **Done** (#5, 65792f3).
+5. **Lead / human: the sweeper's schedule has never fired.**
+   - `test-server-sweeper.yml` has been on `develop` (the default branch) since 00:25 UTC (70c5c3a), and the workflow state is `active`. Pushes to develop at 00:52, 00:55, 01:16 and 01:21 UTC did not change that.
+   - A watch from 01:41 to 04:00:23 UTC found **no `event=schedule` run at all**: no success, no failure, no skipped run. The only runs are my two manual dispatches (41257157372, 41257552258), and both succeeded. A `*/15` cron that is late by minutes is normal on GitHub; 3.5 hours with no run is not.
+   - Likely cause: this repo is a **fork** (`fork: true`). GitHub keeps scheduled workflows off in forks until someone enables them, even when manual dispatch works. Unconfirmed.
+   - Under the lead's rule, and enforced by `test-server.sh up`, **no paid batch can start until a scheduled run succeeds**.
+   - Options, all reversible. The repo settings belong to the lead or human, so I have not touched them:
+     1. Human, in the GitHub UI: Actions tab → `test-server-sweeper` → look for a "scheduled workflows are disabled" banner and enable it, then check Settings → Actions → General.
+     2. Lead: `gh workflow disable test-server-sweeper.yml` followed by `gh workflow enable test-server-sweeper.yml`. That usually re-registers the cron.
+     3. Me: a one-line comment PR to the workflow file. When merged, it registers the schedule again. Say if you want it.
+   - After any of these, I restart the watch. `test-server.sh up` passes its preflight once a scheduled run has succeeded within 120 min.
 
 ## Open PRs
 
-- #9, PR C (`agent/harness-ops/scenario-runner`): scenario runner plus G1. CI passes; waiting for review.
-- PR D (`agent/harness-ops/gate-followups`): the PR #7 and PR #8 review findings. Opened after #9.
+- #9, PR C (`agent/harness-ops/scenario-runner`): scenario runner plus G1. Review fixes pushed (98e9539), CI passes; waiting for re-review.
+- #11, PR D (`agent/harness-ops/gate-followups`): the PR #7 and PR #8 review findings. CI passes; waiting for review. Merge it after #9 (this status file builds on #9's version).
