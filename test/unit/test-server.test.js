@@ -2,7 +2,7 @@
 // hcloud, ssh and scp are fakes (test/unit/fixtures/), driven through the real bash script.
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -507,7 +507,7 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
     test('a recent successful scheduled run lets up proceed and is logged', () => {
         const r = run(upArgs);
         assert.equal(r.code, 0, r.all);
-        assert.match(r.stderr, /sweeper OK: scheduled run 1001 succeeded 10 min ago/);
+        assert.match(r.stderr, /sweeper OK: scheduled run 1001 on JQDAW\/mindcraft-RotN succeeded 10 min ago \(limit 120 min\)/);
         const list = readJsonl(env.FAKE_GH_LOG).find((a) => a[0] === 'run' && a[1] === 'list');
         assert.deepEqual([flagValues(list, '--event')[0], flagValues(list, '--branch')[0], flagValues(list, '--workflow')[0]],
             ['schedule', 'develop', 'test-server-sweeper.yml']);
@@ -531,6 +531,32 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         ghRuns([{ databaseId: 11, event: 'schedule', status: 'completed', conclusion: 'success', createdAt: isoZ(NOW - 3 * 3600), headBranch: 'develop' }]);
         refuses(run(upArgs), /scheduled sweeper run \(11\) is 180 min old \(limit 120\)/);
         assert.equal(run(upArgs, { ROTN_SWEEPER_MAX_AGE_MIN: '240' }).code, 0);
+    });
+
+    test('ROTN_SWEEPER_MAX_AGE_MIN must be 15..240 (PR #7 review)', () => {
+        for (const bad of ['abc', '5', '241', '99999', '-1']) {
+            const r = run(upArgs, { ROTN_SWEEPER_MAX_AGE_MIN: bad });
+            assert.notEqual(r.code, 0, bad);
+            assert.match(r.stderr, /ROTN_SWEEPER_MAX_AGE_MIN must be 15\.\.240/, bad);
+        }
+        assert.equal(mutating().length, 0);
+    });
+
+    test('every gh call names the repo; GH_REPO and GH_HOST cannot redirect it (PR #7 review)', () => {
+        const r = run(upArgs, { GH_REPO: 'evil/repo', GH_HOST: 'evil.example' });
+        assert.equal(r.code, 0, r.all);
+        const calls = readJsonl(env.FAKE_GH_LOG);
+        assert.ok(calls.length > 0);
+        for (const a of calls) assert.deepEqual(a.slice(-2), ['--repo', 'JQDAW/mindcraft-RotN'], a.join(' '));
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        const bad = run(upArgs, { ROTN_GH_REPO: 'not a repo' });
+        assert.notEqual(bad.code, 0);
+        assert.match(bad.stderr, /bad ROTN_GH_REPO/);
+    });
+
+    test('the refusal points at ALERT lines (a persistent ALERT keeps refusing on purpose)', () => {
+        ghRuns([]);
+        assert.match(run(upArgs).stderr, /ALERT lines fails on purpose/);
     });
 
     test('gh failing (logged out) refuses', () => {
@@ -582,9 +608,9 @@ describe('--allow-from (finding 8)', () => {
     const wl = ['--whitelist', `FRCFLD:${UUID_FRCFLD}`];
 
     test('CIDRs reach config.env; ROTN_TEST_ALLOW_FROM is the default; none means open', () => {
-        let r = run(['render-user-data', ...wl, '--allow-from', '203.0.113.7/32', '--allow-from', '2001:db8::/48']);
+        let r = run(['render-user-data', ...wl, '--allow-from', '203.0.113.7/32', '--allow-from', '198.51.100.0/24']);
         assert.equal(r.code, 0, r.all);
-        assert.match(cfgOf(r.stdout), /^ALLOW_FROM=203\.0\.113\.7\/32\\ 2001:db8::\/48$/m);
+        assert.match(cfgOf(r.stdout), /^ALLOW_FROM=203\.0\.113\.7\/32\\ 198\.51\.100\.0\/24$/m);
         r = run(['render-user-data', ...wl], { ROTN_TEST_ALLOW_FROM: '198.51.100.0/24' });
         assert.match(cfgOf(r.stdout), /^ALLOW_FROM=198\.51\.100\.0\/24$/m);
         r = run(['render-user-data', ...wl]);
@@ -592,7 +618,9 @@ describe('--allow-from (finding 8)', () => {
     });
 
     test('bad CIDRs are refused', () => {
-        for (const c of ['1.2.3.4', '300.1.1.1/32', '1.2.3.4/33', 'any', '1.2.3.4/32;reboot', '::1/129', 'abc/8', '1.2.3.4/']) {
+        // IPv6 is refused for now: test servers are created --without-ipv6 (PR #7 review).
+        for (const c of ['1.2.3.4', '300.1.1.1/32', '1.2.3.4/33', 'any', '1.2.3.4/32;reboot', '::1/129', 'abc/8', '1.2.3.4/',
+            '2001:db8::/48', ':::::/64', '1.2.3.4/032']) {
             const r = run(['render-user-data', ...wl, '--allow-from', c]);
             assert.notEqual(r.code, 0, c);
             assert.match(r.stderr, /--allow-from: bad CIDR/, c);
@@ -619,7 +647,9 @@ describe('g0-watchdog.sh sweeper attribution (PR #5 review nit 3)', () => {
         assert.match(r.stderr, /PASS: .* deleted by the sweeper .*\(IDs \d+, \d+, \d+ in its log/);
         const res = result();
         assert.equal(res.deleted_by_sweeper_log, true);
-        assert.deepEqual(res.sweeper_logs_read, ['90000001']);
+        assert.deepEqual(res.sweeper_logs_read, [{ id: '90000001', event: 'workflow_dispatch' }]);
+        assert.equal(res.evidence_event, 'workflow_dispatch');
+        for (const a of readJsonl(env.FAKE_GH_LOG)) assert.deepEqual(a.slice(-2), ['--repo', 'JQDAW/mindcraft-RotN'], a.join(' '));
         assert.equal(res.control_untouched, true);
     });
 
@@ -631,6 +661,49 @@ describe('g0-watchdog.sh sweeper attribution (PR #5 review nit 3)', () => {
         assert.equal(r.code, 1, r.all);
         assert.match(r.stderr, /FAIL: .*deleted_by_sweeper_log=false/);
         assert.equal(result().deleted_by_sweeper_log, false);
+        const st = state();
+        assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0, 'cleanup still removes the control');
+    });
+
+    // Scheduled mode: the script dispatches nothing and waits. The test plays GitHub: once both servers
+    // exist it runs the real sweep and records it as a sweeper run with the given event.
+    function runScheduled(event) {
+        return new Promise((resolve) => {
+            const e = { ...env, WATCHDOG_TS: TS, WATCHDOG_POLL_SECONDS: '1', WATCHDOG_ATTRIBUTION_WAIT_S: '3' };
+            delete e.ROTN_TEST_NOW;
+            ghRuns([]);
+            const child = spawn(BASH, [wd, '--yes', '--mode', 'scheduled', '--timeout', '1'], { env: e });
+            let stderr = '';
+            child.stderr.on('data', (d) => { stderr += d; });
+            let swept = false;
+            const poll = setInterval(() => {
+                if (swept || !fs.existsSync(env.FAKE_HCLOUD_STATE) || state().servers.length < 2) return;
+                swept = true;
+                const sw = spawnSync(BASH, [fwd(script), 'sweep'], { env: { ...env, ROTN_TEST_NOW: '', HCLOUD_CONTEXT: 'mindcraft-rotn-test' }, encoding: 'utf8' });
+                const ts = new Date().toISOString();
+                const log = sw.stderr.split('\n').filter(Boolean).map((l) => `sweep\tSweep\t${ts} ${l}\n`).join('');
+                ghRuns([{ databaseId: 555, event, status: 'completed', conclusion: 'success', createdAt: ts.replace(/\.\d+Z$/, 'Z'), headBranch: 'develop', log }]);
+            }, 200);
+            child.on('exit', (code) => {
+                clearInterval(poll);
+                resolve({ code, stderr });
+            });
+        });
+    }
+
+    test('scheduled: a schedule-event sweeper run that deleted the IDs is a PASS', async () => {
+        const r = await runScheduled('schedule');
+        assert.equal(r.code, 0, r.stderr);
+        const res = result();
+        assert.equal(res.evidence_event, 'schedule');
+        assert.deepEqual(res.sweeper_logs_read, [{ id: '555', event: 'schedule' }]);
+    });
+
+    test('scheduled: the same deletion by a workflow_dispatch run is NOT evidence (PR #7 review finding 1)', async () => {
+        const r = await runScheduled('workflow_dispatch');
+        assert.equal(r.code, 1, r.stderr);
+        assert.match(r.stderr, /deleted_by_sweeper_log=false/);
+        assert.deepEqual(result().sweeper_logs_read, []);
         const st = state();
         assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0, 'cleanup still removes the control');
     });
@@ -794,10 +867,10 @@ describe('build.sh helpers (sourced)', () => {
         assert.equal(open.status, 0, open.stderr);
         assert.equal(open.stdout, 'allow 22/tcp\nallow 25565/tcp\n--force enable\n');
         assert.equal(fs.readFileSync(path.join(tmp, 'firewall-allow-from'), 'utf8'), 'any\n');
-        const only = bashFn(`STATE="${dir}"; UFW_BIN=echo; ALLOW_FROM="203.0.113.7/32 2001:db8::/48"; setup_firewall`);
+        const only = bashFn(`STATE="${dir}"; UFW_BIN=echo; ALLOW_FROM="203.0.113.7/32 198.51.100.0/24"; setup_firewall`);
         assert.equal(only.stdout, [
             'allow proto tcp from 203.0.113.7/32 to any port 22', 'allow proto tcp from 203.0.113.7/32 to any port 25565',
-            'allow proto tcp from 2001:db8::/48 to any port 22', 'allow proto tcp from 2001:db8::/48 to any port 25565',
+            'allow proto tcp from 198.51.100.0/24 to any port 22', 'allow proto tcp from 198.51.100.0/24 to any port 25565',
             '--force enable', ''].join('\n'));
         assert.doesNotMatch(only.stdout, /allow 22\/tcp/);
     });

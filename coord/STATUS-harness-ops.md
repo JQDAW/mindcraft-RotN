@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (01:10 UTC)
+Updated: 2026-11-01 (01:45 UTC)
 
 ## Done
 
@@ -61,40 +61,50 @@ Updated: 2026-11-01 (01:10 UTC)
 
 - PR #5 (G0 evidence) merged as 65792f3: **G0 test-server half passed, "schedule pending"**.
 
+- PR #7 (G0 follow-ups: sweeper preflight, name check, `--allow-from`, label alerts, watchdog attribution) merged as bbcb0ef.
+- PR #8 (CI: `npm ci`, `npm test` and the lint gate on every PR) merged as a04ea22. Its own CI run passed: 55/55 tests, lint 259/259.
+
 ## Doing
 
-Lead's assignment of 2026-11-01, as three PRs, each on its own branch from develop:
+- **PR C**, `agent/harness-ops/scenario-runner`: the scenario runner plus the G1 scenario (brief deliverable 2).
+  - `test/runner/` holds the engine, the server-log parsers, the adapters, the CLI and the driver contract (`DRIVER.md`), plus a stock-mineflayer reference driver.
+  - The scenario is `test/scenarios/g1/g1-login-chat-walk.mjs`.
+  - Offline tests pass on a simulated server and clock and end to end with the real adapters. They were mutation-checked.
+  - No paid run yet. The first real G1 run needs net-forge's driver, the bot's token cache (NEEDS-HUMAN), the lead's approval and an observed scheduled sweeper run.
 
-1. **PR A**, `agent/harness-ops/g0-followups`: PR #5 review nits 2-5 and deferred findings 5, 7, 8 and 10 (see below). Code done, `npm test` passes 62/62; PR opened.
-2. **PR B**, CI (brief deliverable 3): `npm ci`, `npm test` and lint on every PR. Lint must not raise the baseline of 259. No secrets in `pull_request` jobs.
-3. **PR C**, the scenario runner plus the G1 scenarios (log in online, stay 10 min, chat, walk), brief deliverable 2.
+## Doing: PR D, `agent/harness-ops/gate-followups` (PR #7 and PR #8 review findings)
 
-No paid batches for any of these unless the lead approves.
+Code done; `npm test` passes 80/80 and the lint gate reports 259/259.
+
+- **PR #7 finding 1 (the important one):** in `--mode scheduled`, `g0-watchdog.sh` reads logs only from `event == schedule` runs. In dispatch mode it reads only the dispatched run. `result.json` records `evidence_event` and `sweeper_logs_read` as `{id, event}`. Tested with the real sweep recorded as a schedule run (PASS) and as a dispatch run (FAIL); mutation-checked.
+- **PR #7 findings 2-7:**
+  - `--repo` (`ROTN_GH_REPO`, default `JQDAW/mindcraft-RotN`) on every `gh` call, with `GH_REPO` and `GH_HOST` stripped.
+  - `ROTN_SWEEPER_MAX_AGE_MIN` must be 15..240, and the limit is printed on the OK line.
+  - `valid_cidr` accepts IPv4 only.
+  - `build.sh` uses `printf '%s
+'`.
+  - The `project-empty-checks.txt` header says what was copied, reformatted and reconstructed.
+  - The refusal text mentions ALERT lines.
+- **PR #8 lint gate:**
+  1. `readBaselineAt` fails closed with exit 2. The exceptions are a file missing in the ref, and `--allow-missing-base` for an unknown ref.
+  2. and 3. The ratchet is on the total: higher fails, lower fails until `--update`, and per-file counts may move. A raise needs `--allow-raise`, which CI passes only for a PR labelled `lint-raise-approved`.
+  5. Only `git ls-files` `*.js`, `*.mjs` and `*.cjs` are linted.
+  7. A targeted depth-1 fetch of the base branch replaces `fetch-depth: 0`.
+  4. and 6. are the lead's and net-forge's.
 
 ## Watching
 
-- The first `event=schedule` run of `test-server-sweeper.yml` (active on develop since 00:25 UTC). By the lead's rule it is a **precondition for the next paid batch**, and `test-server.sh up` now enforces it.
-  - Still none at 01:05 UTC; only the two dispatch runs exist.
+- The first `event=schedule` run of `test-server-sweeper.yml` (active on develop since 00:25 UTC). By the lead's rule it is a **precondition for the next paid batch**, and `test-server.sh up` enforces it.
+  - Still none at 01:41 UTC; only the two dispatch runs exist.
   - I keep checking until about 04:00 UTC. If none appears by then, I write it under Requests.
 
 ## Planned real batches
 
-None planned. The next real batch is net-forge's capture run (`--capture`), once G1 needs it. It needs the lead's approval and an observed scheduled sweeper run. Both earlier batches passed (see Done); the plan as written before them is in this file at commit 70c5c3a.
+None planned. The next real batch is a G1 run or net-forge's capture run (`--capture`). Each needs the lead's approval and an observed scheduled sweeper run. The plan for the two G0 batches, as written before they ran, is in this file at commit 70c5c3a.
 
 ## Blocked
 
 - Nothing.
-
-## Review findings (deferred from PR #4, plus PR #5 nits): fixed in PR A
-
-- **5. Sweeper preflight.**
-  - `up`/`run` refuse to create anything unless `gh run list` shows a **successful `event=schedule`** sweeper run on develop in the last `ROTN_SWEEPER_MAX_AGE_MIN` minutes (default 120). Dispatch runs do not count.
-  - `--dry-run` only warns. `--skip-sweeper-check` needs the lead's approval.
-- **7. Name check.** One `check_name` rule for `--name`, `$TEST_SERVER_NAME` and the name found in the state directory, for every command.
-- **8. Firewall.** `--allow-from CIDR` (repeatable, or `ROTN_TEST_ALLOW_FROM`) opens 22 and 25565 only to those CIDRs (ufw). The default stays open, because this PC's address changes. `verify` reports `firewall_allow_from`.
-- **10. Decision: keep the fallbacks and add an alert.** A labelled resource with a missing or unparsable `delete-after` (or a control with no `control-expires`) is logged as `ALERT` and makes the sweep exit non-zero, so the GitHub job fails and notifies someone. Deletion still follows the fallback (created + 8 h; at once only if the creation time is also unreadable).
-- **PR #5 nit 3.** `g0-watchdog.sh` now PASSes only if the sweeper's own log (local output, or `gh run view --log` of the runs since the create) has "expired ... (ID): deleting" for all three target IDs and never names the control's ID.
-- **PR #5 nits 2, 4, 5.** `project-empty-checks.txt` wording and check-3 command, the 338-vs-346 note, and the timestamp.
 
 ## Requests to other agents or the lead
 
@@ -105,4 +115,5 @@ None planned. The next real batch is net-forge's capture run (`--capture`), once
 
 ## Open PRs
 
-- PR A (`agent/harness-ops/g0-followups`): see Doing.
+- #9, PR C (`agent/harness-ops/scenario-runner`): scenario runner plus G1. CI passes; waiting for review.
+- PR D (`agent/harness-ops/gate-followups`): the PR #7 and PR #8 review findings. Opened after #9.

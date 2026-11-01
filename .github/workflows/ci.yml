@@ -1,9 +1,11 @@
 # CI for every pull request and every push to develop (harness-ops, brief deliverable 3):
 # npm ci (with the patch-package postinstall), npm test (offline unit tests) and the lint gate.
 #
-# Lint gate: test/tools/lint-baseline.mjs. Upstream Mindcraft has 259 ESLint errors; a PR may not
-# add any (per file, per total, ceiling 259), and may not raise test/lint-baseline.json compared
-# with the PR's base branch.
+# Lint gate: test/tools/lint-baseline.mjs, a ratchet on the total ESLint error count of the tracked
+# JavaScript files (259 on develop, from upstream Mindcraft). A higher total fails, a lower total
+# fails until test/lint-baseline.json is lowered, per-file counts may move, and the PR's baseline may
+# not raise the base branch's total. Only a PR labelled `lint-raise-approved` runs the gate with
+# --allow-raise; the lead applies that label, and the PR body must cite the lead's approval.
 #
 # Secrets: none. This workflow uses no GitHub Environment and reads no secrets. The Hetzner token
 # lives only in the Environment "hetzner-test-sweeper", which only test-server-sweeper.yml on
@@ -13,6 +15,7 @@ name: ci
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [develop]
 
@@ -30,8 +33,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0          # the lint gate reads the base branch's baseline with git show
           persist-credentials: false
+
+      - name: Fetch the base branch tip (for the lint gate's baseline comparison)
+        env:
+          BASE_REF: ${{ github.base_ref || 'develop' }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: git fetch --no-tags --depth=1 "$REPO_URL" "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -44,7 +52,8 @@ jobs:
       - name: npm test (offline unit tests)
         run: npm test
 
-      - name: Lint (no new errors over the 259 baseline)
+      - name: Lint ratchet (total ESLint errors may not rise above the baseline)
         env:
           BASE_REF: ${{ github.base_ref || 'develop' }}
-        run: node test/tools/lint-baseline.mjs --base-ref "origin/$BASE_REF"
+          ALLOW_RAISE: ${{ contains(github.event.pull_request.labels.*.name, 'lint-raise-approved') && '--allow-raise' || '' }}
+        run: node test/tools/lint-baseline.mjs --base-ref "origin/$BASE_REF" $ALLOW_RAISE

@@ -47,8 +47,7 @@ setup_firewall() {
     done
   fi
   "$ufw" --force enable
-  printf '%s
-' "${ALLOW_FROM:-any}" > "$STATE/firewall-allow-from"
+  printf '%s\n' "${ALLOW_FROM:-any}" > "$STATE/firewall-allow-from"
 }
 
 # set_prop FILE KEY VALUE: replace KEY=... in a Java properties file, or append it.

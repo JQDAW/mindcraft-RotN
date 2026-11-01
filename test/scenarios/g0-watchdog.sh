@@ -27,6 +27,7 @@ set -Eeuo pipefail
 
 HCLOUD_BIN=${HCLOUD_BIN:-hcloud}
 GH_BIN=${GH_BIN:-gh}
+GH_REPO_NAME=${ROTN_GH_REPO:-JQDAW/mindcraft-RotN}
 readonly TEST_CONTEXT=mindcraft-rotn-test
 CONTEXT=${HCLOUD_CONTEXT:-$TEST_CONTEXT}
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -51,7 +52,11 @@ done
   || { echo "--timeout must be 1..$(( CONTROL_TTL_S / 60 - 1 )) min (the control must outlive the test)" >&2; exit 2; }
 (( YES )) || { echo "pass --yes: creates two $TYPE servers (about EUR 0.03 in total)" >&2; exit 2; }
 
+[[ $GH_REPO_NAME =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo "bad ROTN_GH_REPO '$GH_REPO_NAME'" >&2; exit 2; }
+
 log() { printf '[watchdog %s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
+# Every gh call names the repository; GH_REPO / GH_HOST in the environment cannot redirect it.
+gh_() { env -u GH_REPO -u GH_HOST "$GH_BIN" "$@" --repo "$GH_REPO_NAME"; }
 # Same rule as deploy/test-server.sh: always the test context, never a token from the environment.
 hc() { env -u HCLOUD_TOKEN -u HCLOUD_CONTEXT -u HCLOUD_ENDPOINT -u HCLOUD_CONFIG "$HCLOUD_BIN" --context "$CONTEXT" "$@"; }
 exists_id() { [[ -n $2 ]] && hc "$1" describe "$2" -o json > /dev/null 2>&1; }
@@ -117,7 +122,7 @@ case $MODE in
     HCLOUD_CONTEXT=$CONTEXT "$REPO_ROOT/deploy/test-server.sh" sweep > "$SWEEP_LOG" 2>&1 || log "local sweep reported a problem"
     cat "$SWEEP_LOG" >&2 ;;
   dispatch)
-    out=$("$GH_BIN" workflow run test-server-sweeper.yml --ref develop 2>&1) || { log "gh workflow run failed: $out"; exit 1; }
+    out=$(gh_ workflow run test-server-sweeper.yml --ref develop 2>&1) || { log "gh workflow run failed: $out"; exit 1; }
     printf '%s\n' "$out" >&2
     DISPATCH_RUN=$(grep -oE 'actions/runs/[0-9]+' <<< "$out" | head -1 | cut -d/ -f3 || true) ;;
   scheduled) log "waiting for the scheduled sweeper (every 15 min; GitHub may start it late)" ;;
@@ -131,24 +136,36 @@ swept_by_log() {
     && ! grep -qE "\($CTL_ID\): deleting" "$SWEEP_LOG"
 }
 
-# fetch_sweeper_logs: append the logs of completed sweeper runs created since T0 - RUN_LOOKBACK_S
-# (plus the dispatched run) that were not fetched yet. Prints nothing; updates FETCHED.
+# Which sweeper runs count as evidence (PR #7 review finding 1): in scheduled mode only
+# event=schedule runs, because proving the cron is the point of that mode; in dispatch mode only the
+# run this script dispatched (or, if its ID is unknown, workflow_dispatch runs).
+case $MODE in
+  scheduled) WANT_EVENT=schedule ;;
+  dispatch) WANT_EVENT=workflow_dispatch ;;
+  *) WANT_EVENT='' ;;
+esac
+
+# fetch_sweeper_logs: append the logs of completed sweeper runs of WANT_EVENT created since
+# T0 - RUN_LOOKBACK_S that were not fetched yet. Updates FETCHED ("id:event id:event ...").
 FETCHED=' '
 fetch_sweeper_logs() {
-  local since ids id st
+  local since rows id ev st
   since=$(( T0 - RUN_LOOKBACK_S ))
-  ids=$("$GH_BIN" run list --workflow test-server-sweeper.yml --branch develop --limit 20 \
-          --json databaseId,status,createdAt 2>/dev/null \
-        | jq -r --argjson since "$since" '.[] | select(.status == "completed")
-                 | select((.createdAt | fromdateiso8601) >= $since) | .databaseId' | tr -d '\r' || true)
+  rows=$(gh_ run list --workflow test-server-sweeper.yml --branch develop --limit 20 \
+          --json databaseId,event,status,createdAt 2>/dev/null \
+        | jq -r --argjson since "$since" --arg ev "$WANT_EVENT" --arg only "$DISPATCH_RUN" '
+            .[] | select(.status == "completed" and .event == $ev)
+                | select((.createdAt | fromdateiso8601) >= $since)
+                | select($only == "" or (.databaseId | tostring) == $only)
+                | "\(.databaseId) \(.event)"' | tr -d '\r' || true)
   if [[ -n $DISPATCH_RUN ]]; then
-    st=$("$GH_BIN" run view "$DISPATCH_RUN" --json status 2>/dev/null | jq -r '.status // empty' | tr -d '\r' || true)
-    [[ $st == completed ]] && ids+=$'\n'"$DISPATCH_RUN"
+    st=$(gh_ run view "$DISPATCH_RUN" --json status,event 2>/dev/null | jq -r '"\(.status) \(.event)"' | tr -d '\r' || true)
+    [[ $st == "completed workflow_dispatch" ]] && rows+=$'\n'"$DISPATCH_RUN workflow_dispatch"
   fi
-  for id in $ids; do
-    [[ $FETCHED == *" $id "* ]] && continue
-    if "$GH_BIN" run view "$id" --log >> "$SWEEP_LOG" 2>/dev/null; then FETCHED+="$id "; fi
-  done
+  while read -r id ev; do
+    [[ -n $id && $FETCHED != *" $id:"* ]] || continue
+    if gh_ run view "$id" --log >> "$SWEEP_LOG" 2>/dev/null; then FETCHED+="$id:$ev "; fi
+  done <<< "$rows"
 }
 
 deadline=$(( T0 + TIMEOUT_MIN * 60 ))
@@ -186,15 +203,17 @@ pass=false
 [[ $in_interval == true && $control_ok == true && $swept == true ]] && pass=true
 runs='[]'
 if [[ $MODE != local ]]; then
-  runs=$("$GH_BIN" run list --workflow test-server-sweeper.yml --limit 5 \
+  runs=$(gh_ run list --workflow test-server-sweeper.yml --limit 5 \
     --json databaseId,event,status,conclusion,createdAt 2>/dev/null || echo '[]')
 fi
 jq -n --arg b "$NAME" --arg m "$MODE" --argjson pass "$pass" --argjson e "$elapsed" --argjson c "$control_ok" \
   --argjson w "$in_interval" --arg t0 "$(date -u -d "@$T0" +%Y-%m-%dT%H:%M:%SZ)" --argjson runs "$runs" \
-  --argjson s "$swept" --arg logs "$FETCHED" \
+  --argjson s "$swept" --arg logs "$FETCHED" --arg want "$WANT_EVENT" \
   '{scenario:"g0-watchdog", batch:$b, mode:$m, pass:$pass, created:$t0, seconds_until_gone:$e,
     within_one_interval:$w, control_untouched:$c, deleted_by_sweeper_log:$s,
-    sweeper_logs_read:($logs | split(" ") | map(select(. != ""))), recent_sweeper_runs:$runs}' | tee "$WORK/result.json"
+    evidence_event:(if $want == "" then "local" else $want end),
+    sweeper_logs_read:($logs | split(" ") | map(select(. != "") | split(":") | {id: .[0], event: .[1]})),
+    recent_sweeper_runs:$runs}' | tee "$WORK/result.json"
 
 if [[ $pass == true ]]; then
   log "PASS: target server, Primary IPv4 and SSH key deleted by the sweeper after ${elapsed}s (IDs $SRV_ID, $IP_ID, $KEY_ID in its log $SWEEP_LOG); control (same expired delete-after, no test label) untouched"
