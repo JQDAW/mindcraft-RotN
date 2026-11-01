@@ -2,8 +2,8 @@
 # by rotn-data, approved by the lead). Based on rotn-data's tools/dumper/ci/dumper-build.yml.proposed.
 #
 # - JDK 8 (Temurin) and tools/dumper/build.sh, which downloads Gradle 4.10.3 and checks its SHA-256
-#   (8626cbf2...186e, the value services.gradle.org publishes), then builds with ForgeGradle
-#   2.3-1.0.8 and Forge 14.23.5.2860.
+#   (8626cbf2...186e, the value services.gradle.org publishes), then builds with the Gradle setup
+#   in tools/dumper/build.gradle (rotn-data: ForgeGradle 3, Forge 14.23.5.2860, reobfJar).
 # - The jar is a workflow artifact for 7 days and is never committed; the job fails if any jar is
 #   tracked under tools/dumper. A failing build fails the check.
 # - No secrets, no environment, a read-only token: a pull_request job can run the PR's own code
@@ -67,7 +67,7 @@ jobs:
             ~/.gradle/caches
           key: rotndump-${{ runner.os }}-${{ hashFiles('tools/dumper/build.gradle', 'tools/dumper/build.sh', 'tools/dumper/gradle.properties') }}
 
-      - name: Build the dumper (JDK 8, Gradle 4.10.3 checksum-verified, ForgeGradle 2.3-1.0.8)
+      - name: Build the dumper (JDK 8, Gradle 4.10.3 checksum-verified, ForgeGradle 3)
         if: steps.present.outputs.build == 'true'
         run: |
           set -euo pipefail
