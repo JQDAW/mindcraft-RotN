@@ -45,7 +45,7 @@ Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mind
 
 ## Doing
 
-- Opening the PR for this offline part (forge-bridge, `initBot` fixes, patches) once the WIP is pushed.
+- PR #10 open; verifier pass in progress. Then waiting for batch approval and the FRCFLD login.
 
 ## Next
 
@@ -98,4 +98,4 @@ Both run on the disposable test server only, never the live server, with `deploy
 
 ## Open PRs
 
-- (none yet; the PR follows the WIP push)
+- #10 G1 spike (offline part): forge-bridge, initBot fixes, REID patches (G1; brief deliverables 1 offline, 2, part of 5). npm test 96/96, lint 259 baseline. Independent verifier pass running.
