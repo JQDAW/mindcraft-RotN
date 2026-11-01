@@ -93,7 +93,7 @@ export async function walk(bot, n, timeoutMs, stepMs = 250) {
     } finally {
         bot.clearControlStates();
     }
-    return { from, to: pos(bot), distance: dist() };
+    return { from, to: pos(bot), distance: dist(), method: 'forward+jump+turn' };
 }
 
 // ---------------------------------------------------------------------------------------------

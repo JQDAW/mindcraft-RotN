@@ -527,7 +527,7 @@ describe('driver side (scenario-protocol.mjs) on a fake mineflayer bot', () => {
             assert.ok(w, `said: ${bot.said}`);
             assert.ok(bot.entity.position.x >= 3);
             assert.deepEqual(bot.controls, {}, 'controls released after the walk');
-            assert.ok(events.some(([t]) => t === 'walked'));
+            assert.ok(events.some(([t, d]) => t === 'walked' && d.method === 'forward+jump+turn'), 'walk reports its method (net-forge walkMethod)');
         } finally {
             clearInterval(bot.timer);
         }

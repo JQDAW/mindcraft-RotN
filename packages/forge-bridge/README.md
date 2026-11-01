@@ -205,6 +205,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - It needs `MINDCRAFT_PROFILES_FOLDER` and never starts a device-code login: `initBot(name, { onMsaCode })` makes a stale cache exit 3.
   - Kicks: exit 3 when the runner's `FATAL_KICKS` or forge-bridge's `classifyKick` says fatal, otherwise 1. SIGTERM exits 0.
   - Switches: `ROTN_DRIVER_AUTH` (`offline` for loopback tests only), `ROTN_DRIVER_FORGE_BRIDGE` (default `on`), `ROTN_DRIVER_CAPTURE` (default `1`, `captures/raw/`), `ROTN_DRIVER_MODLIST_FILE`.
+  - **G2:** it also answers the G2 protocol (`scenario-blocks`, `-blockat`, `-entities`, `-items`) through `attachG2` with `loadAgentNames`, the agent's own naming path. Names come from `bot.registry` as forge-bridge extends it, and translation from `src/utils/mcdata.js` `toNew`/`toOld`. It logs a `g2_adapter` event. harness-ops' reference driver uses stock mineflayer, which a Forge server rejects at the handshake, so this is the driver for real G2 runs.
   - Its `DRIVER {json}` lines add the handshake result, registry sizes, `walkMethod` and the block under the bot with its Forge registry name. `walkMethod` is the scenario's: its `method` field if `walk()` reports one, otherwise `scenario-protocol walk()`.
 
 ## Tests
