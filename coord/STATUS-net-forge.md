@@ -103,9 +103,22 @@ The review findings on PR #10, numbered as in the review comment:
 - Tests: the table now has sub-namespace and skip cases, plus a live-instance test with `debug.enable('prismarine-auth:*')`, where `debug.enabled('prismarine-auth')` is false.
 - `npm test` passes 203/203; lint 259.
 
+## Done: brief item 8, `agent_process.js` applies the exit-code contract (branch `agent/net-forge/agent-process-restart`, from develop a38e0e2; PR #18 merged)
+
+- `decideAgentExit()` implements the ADR 0003 decision 5 table:
+  - 1: restart in-process with backoff (forge-bridge `createRestartPolicy`).
+  - 3: end the main process with 3, plus a line for the human.
+  - 2 and 4: task codes, as upstream.
+  - 0: end with 0 when `MINDCRAFT_SINGLE_BOT_SERVICE=1`; otherwise stay up.
+  - A requested stop (SIGINT, SIGTERM, `stop()`) is never restarted, and `stop()` cancels a pending restart.
+- New, optional exit-reason file. The agent may write `{category, exitCode, retryCap?}` to `MINDCRAFT_EXIT_REASON_FILE` before it exits. Then a fatal kick is fatal even with exit 1, and auth kicks become fatal at their cap of 3.
+- `assertMicrosoftAuthSafe` errors carry `exitCode: 3`.
+- **Behaviour change from upstream:** a quick crash (under 10 s) used to be left dead. It is now restarted with backoff, per the ADR. Fatal setup errors need exit 3 to stop that loop (request 9).
+- **Tests:** `test/agent-process.test.js`, 9 tests with a fake spawn, timers and exit. `npm test` passes 212/212. Lint is 257: `agent_process.js` went from 2 errors to 0.
+
 ## Doing
 
-- PR #18 (stricter DEBUG guard) open. Waiting for a scheduled sweeper run within 120 min, then Batch A, then Batch B+C on one server.
+- PR for brief item 8 (`agent_process.js`) open. Waiting for a scheduled sweeper run within 120 min, then Batch A, then Batch B+C on one server.
 
 ## Next
 
@@ -163,8 +176,14 @@ The setup for both batches:
 4. **Lead (`docs/research/fml-spec.md`, optional):** the Forge 14.23.5.2860 layouts confirmed by `javap` are listed at the top of `packages/forge-bridge/test/golden.test.js`, if you want them in the spec.
 5. **harness-ops (optional):** have `walk()` in `test/runner/drivers/scenario-protocol.mjs` return a `method` field (for example `forward+jump+turn`). g1-driver then reports it as `walkMethod`.
 6. **harness-ops / lead (`TRY_IT.md`, `main.js` docs):** with `auth: "microsoft"` (develop's default), `initBot` now refuses to start without `MINDCRAFT_PROFILES_FOLDER`. Please mention this where the run steps are.
-7. **skills-rotn (later, through the lead):** `bot.forge.bridge.lastKick` carries `{category, fatal, exitCode, retryCap?}` for the `agent.js` kick handler.
+8. **skills-rotn (`src/agent/agent.js`), for brief item 8:** in `onDisconnect`, take `bot.forge?.bridge?.lastKick` (`{category, fatal, exitCode, retryCap?}`) and do two things:
+   - write `{category, exitCode, retryCap}` as JSON to `process.env.MINDCRAFT_EXIT_REASON_FILE`, if it is set;
+   - exit with `lastKick.exitCode` (3 for fatal) instead of always 1.
+
+   The main process then stops restarting after a ban or mod rejection, and caps auth retries.
+9. **Lead (`src/process/init_agent.js`):** in the start `catch`, use `process.exit(error?.exitCode === 3 ? 3 : 1)`. `initBot`'s setup refusals (no token folder, a folder in a repo, prismarine-auth `DEBUG`) carry `exitCode: 3`, so they stop instead of restarting every 5 min.
+10. **harness-ops (systemd unit `mindcraft-rotn@<bot>`):** set `Environment=MINDCRAFT_SINGLE_BOT_SERVICE=1`, so a clean agent stop ends the main process with 0, and `RestartPreventExitStatus=0 3` (ADR 0003).
 
 ## Open PRs
 
-- (#15 merged as 74b23ed; #16 merged.) #18: stricter DEBUG guard, on `agent/net-forge/debug-guard-strict`. `npm test` 203/203; lint 259.
+- (#15, #16 and #18 merged.) New PR: brief item 8, `agent_process.js` exit-code contract, on `agent/net-forge/agent-process-restart`. `npm test` 212/212; lint 257.

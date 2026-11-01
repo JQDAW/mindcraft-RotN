@@ -83,7 +83,14 @@ These still need a real capture to confirm them on the wire (G1 Run B).
 - **Kick classification** (`src/kicks.js`) maps reasons to the ADR 0003 exit codes: 0 clean, 1 transient, 3 fatal.
   - Fatal kicks: mod rejection, vanilla client rejected, not whitelisted, banned, no Minecraft licence, outdated client. The ban rule matches only the vanilla ban screens (`You are banned`, `Your IP address is banned`, `multiplayer.disconnect.banned*`), not any message containing "banned".
   - Auth kicks (`Failed to verify username`, `Invalid session`) are transient with `retryCap: 3`: the session server has hiccups, but three in a row means the login needs a human.
-  - `createRestartPolicy()` turns a classification into `{restart, delayMs, exitCode}`: 10 s doubling to 5 min, reset after 10 min connected, and a capped category becomes fatal at its cap. **Nothing calls it yet.** `src/process/agent_process.js` is unchanged until brief item 8, so no run so far shows reconnect or exit-code behaviour.
+  - `createRestartPolicy()` turns a classification into `{restart, delayMs, exitCode}`: 10 s doubling to 5 min, reset after 10 min connected, and a capped category becomes fatal at its cap. `src/process/agent_process.js` (Mindcraft's main process) uses it.
+  - Exit 1 restarts the agent in-process after the backoff. Exit 3 ends the main process with 3, plus a line for the human. Exit 2 and 4 stay task codes.
+  - Exit 0 ends the main process with 0 when `MINDCRAFT_SINGLE_BOT_SERVICE=1` (the `mindcraft-rotn@<bot>` unit); otherwise it stays up.
+  - A stop the main process asked for (`stop()`, SIGINT or SIGTERM) is never restarted.
+  - The agent can also write `{category, exitCode, retryCap?}` as JSON to the file named by `MINDCRAFT_EXIT_REASON_FILE` before it exits, for example from `bot.forge.bridge.lastKick`. Then a fatal kick is fatal even when the process exits 1, and auth kicks become fatal at their cap.
+  - `agent.js` does not write that file yet, and it exits 1 on every disconnect (a skills-rotn request). Until it does, every kick restarts with backoff.
+  - The `initBot` setup refusals carry `exitCode: 3` for `init_agent.js` to use (a lead request).
+  - No real run has shown reconnect or exit-code behaviour yet. The G1 spike and driver run without `agent_process.js`.
 
 ## Capture format
 
@@ -130,6 +137,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - FML, FORGE, `jeid` and FML|MP decoders.
 - REID `window_items`, `set_slot`, `window_click`, `entity_effect` and `remove_entity_effect`, through nmp's real compiled 1.12.2 protocol.
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
+- `agent-process.test.js`: `agent_process.js` with a fake spawn, timers and exit. It covers the ADR 0003 table, the backoff and its reset, the exit-reason file (a fatal kick reported with exit 1, auth capped at 3), single-bot clean exits, a stop cancelling a pending restart, and the task codes.
 - `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
 - `g1-driver.test.js`: the driver as a subprocess against the fake Forge server, with the runner's allowlisted environment: hello exactly once, echo, a 3-block walk, a clean stop, a redacted capture, and exit 3 without a token-cache folder or host.
