@@ -54,6 +54,30 @@ test('a complete, consistent dump imports and loads', () => {
     }
 });
 
+test('dropped entries (manifest.entryErrors) block the import unless allowErrors', () => {
+    const { root, src, pack } = fakeFetch({ mutate: (f) => { f.manifest.entryErrors = { items: { count: 2, first: 'entry 7: java.lang.NullPointerException' } }; } });
+    try {
+        const res = importDump({ src, outDir: pack });
+        assert.deepEqual(res.written, []);
+        assert.match(res.problems.join('\n'), /dropped entries: items 2 \(first: entry 7/);
+        const ok = importDump({ src, outDir: pack, allowErrors: true });
+        assert.deepEqual(ok.problems, []);
+        assert.ok(ok.written.some(p => p.endsWith('serializers.json')));
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('a dump without serializers.json is refused', () => {
+    const { root, src, pack } = fakeFetch();
+    try {
+        fs.rmSync(path.join(src, 'serializers.json'));
+        assert.throws(() => importDump({ src, outDir: pack }), /missing serializers\.json/);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
 test('no DONE marker: refused', () => {
     const { root, src, pack } = fakeFetch();
     try {
