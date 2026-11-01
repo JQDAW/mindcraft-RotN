@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (11:10 UTC)
+Updated: 2026-11-01 (11:55 UTC)
 
 ## Done
 
@@ -67,32 +67,27 @@ Updated: 2026-11-01 (11:10 UTC)
   - `test/runner/` holds the engine, the server-log parsers, the adapters, the CLI and the driver contract (`DRIVER.md`), plus a stock-mineflayer reference driver. The scenario is `test/scenarios/g1/g1-login-chat-walk.mjs`.
   - No paid run yet. The first real G1 run needs net-forge's driver, the bot's token cache (NEEDS-HUMAN), the lead's approval and an observed scheduled sweeper run.
 
+- PR #11 (review follow-ups: scheduled-only watchdog evidence, `gh --repo`, lint ratchet that fails closed) merged as e3c1732: APPROVE, lint gate proven end to end. Its review findings 1 and 3 and nits 4 and 5 were fixed in 5296086.
+- PR #12 (sweeper cron at the off-peak minutes `7,22,37,52 * * * *`) merged as 971262f at 11:45:11 UTC: APPROVE.
+- PR #13 (PR #9 re-review nits: confirm the `say` marker before `bot.start`; reject `[Rcon]` and `[@]`) merged as 04b57c3: APPROVE WITH NITS.
+
 ## Doing
 
-- PR #9 re-review nits, on `agent/harness-ops/g1-nits` (none can cause a false pass): confirm the `say` marker before `bot.start`, or retry; reject `[Rcon]` and `[@]` chat prefixes as well as `[Server]`.
-
-## Doing: PR #11, `agent/harness-ops/gate-followups` (PR #7 and PR #8 review findings)
-
-Code done; `npm test` passes 80/80 and the lint gate reports 259/259.
-
-- **PR #7 finding 1 (the important one):** in `--mode scheduled`, `g0-watchdog.sh` reads logs only from `event == schedule` runs. In dispatch mode it reads only the dispatched run. `result.json` records `evidence_event` and `sweeper_logs_read` as `{id, event}`. Tested with the real sweep recorded as a schedule run (PASS) and as a dispatch run (FAIL); mutation-checked.
-- **PR #7 findings 2-7:**
-  - `--repo` (`ROTN_GH_REPO`, default `JQDAW/mindcraft-RotN`) on every `gh` call, with `GH_REPO` and `GH_HOST` stripped.
-  - `ROTN_SWEEPER_MAX_AGE_MIN` must be 15..240, and the limit is printed on the OK line.
-  - `valid_cidr` accepts IPv4 only.
-  - `build.sh` uses `printf '%s\n'`.
-  - The `project-empty-checks.txt` header says what was copied, reformatted and reconstructed.
-  - The refusal text mentions ALERT lines.
-- **PR #8 lint gate:**
-  1. `readBaselineAt` fails closed with exit 2. The exceptions are a file missing in the ref, and `--allow-missing-base` for an unknown ref.
-  2. and 3. The ratchet is on the total: higher fails, lower fails until `--update`, and per-file counts may move. A raise needs `--allow-raise`, which CI passes only for a PR labelled `lint-raise-approved`. Even then the raised total must be committed in the PR's own `test/lint-baseline.json`, and `MAX_TOTAL` stays a hard ceiling (review finding 1, fixed). `readBaselineAt` detects a missing file with `git ls-tree`, and a git failure is a setup error (finding 3, fixed). Nits 4 and 5 are fixed too.
-  5. Only `git ls-files` `*.js`, `*.mjs` and `*.cjs` are linted.
-  7. A targeted depth-1 fetch of the base branch replaces `fetch-depth: 0`.
-  4. and 6. are the lead's and net-forge's.
+- **Observing the sweeper schedule** for 2 h after the cron change (see Watching). net-forge's batches wait for the first scheduled run.
+- Next, low priority, as one later PR:
+  - #13 nits: match the marker with `includes`; pause `consoleWaitS` between `say` retries; consider a chat-prefix allowlist.
+  - #12 nit: the cron comment should say both `up` and `run` enforce the check.
+  - #11 nit: the hint text under `--allow-raise`.
 
 ## Watching
 
-- The first `event=schedule` run of `test-server-sweeper.yml`. **None by 04:00 UTC**, see Request 5.
+- **Scheduled runs of `test-server-sweeper.yml` after the cron change.** Window: 11:45:11 to 13:45:11 UTC. Cron `7,22,37,52`, so 8 slots are expected (11:52 through 13:37).
+
+  | Slot (UTC) | Run | Created (UTC) | Delay | Result |
+  | --- | --- | --- | --- | --- |
+  | (none yet) | | | | |
+
+  Before the change (`*/15`): one scheduled run in about 11 h (41281143865, 06:30:54 UTC, success).
 
 ## Planned real batches
 
@@ -100,7 +95,7 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 
 ## Blocked
 
-- Every paid batch: no scheduled sweeper run has been observed yet (Request 5). Code work is not blocked.
+- Every paid batch, until a scheduled sweeper run succeeds and is under 120 min old (Request 5). Code work is not blocked.
 
 ## Requests to other agents or the lead
 
@@ -120,7 +115,8 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
    - **Routed:** the lead asked the human (NEEDS-HUMAN) to re-enable or re-register the workflow in the Actions tab.
    - **Update (lead):** the schedule fired once, at 06:30:54 UTC (success). That is the only scheduled run in about 10 h, so the cron is registered but GitHub drops almost every run at the busy :00/:15/:30/:45 marks. The preflight correctly refuses today: its 120-min window stays as it is.
    - **Authorized fix:** a separate PR from develop moves the cron to the off-peak minutes `7,22,37,52 * * * *`. Merging it also re-registers the schedule. After the merge I watch for 2 h and record the scheduled-run cadence here. `test-server.sh up` passes its preflight once a scheduled run has succeeded within 120 min.
+   - **Done:** #12 merged at 11:45:11 UTC. The cadence is recorded under Watching.
 
 ## Open PRs
 
-- #11 (`agent/harness-ops/gate-followups`): the PR #7 and PR #8 review findings. Under independent review. develop (with #9) is merged in, and the only conflict was this file.
+- None open. #11, #12 and #13 are merged.
