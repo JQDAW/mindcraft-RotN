@@ -73,24 +73,29 @@ function liveDebugEnables(prefix) {
     }
 }
 
+// A setup error a retry cannot fix: exit code 3 under ADR 0003 decision 5.
+function setupError(message) {
+    return Object.assign(new Error(message), { exitCode: 3, fatal: true, category: 'setup' });
+}
+
 /**
  * Throws a clear Error if a Microsoft-auth bot must not start: no token-cache
  * folder, a folder inside a git work tree, or prismarine-auth debug output on.
- * Creates nothing.
+ * The error has exitCode 3 (fatal, no restart). Creates nothing.
  */
 export function assertMicrosoftAuthSafe({ username, profilesFolder, env = process.env, liveDebug = liveDebugEnables }) {
     const who = `bot ${username}`;
     if (!profilesFolder) {
-        throw new Error(`${who}: auth is "microsoft" but MINDCRAFT_PROFILES_FOLDER is not set. `
+        throw setupError(`${who}: auth is "microsoft" but MINDCRAFT_PROFILES_FOLDER is not set. `
             + 'Set it to this bot\'s own token cache folder, outside every git repository; see coord/NEEDS-HUMAN.md.');
     }
     try {
         assertOutsideGitWorkTrees(profilesFolder);
     } catch (e) {
-        throw new Error(`${who}: MINDCRAFT_PROFILES_FOLDER: ${e.message}`);
+        throw setupError(`${who}: MINDCRAFT_PROFILES_FOLDER: ${e.message}`);
     }
     if (debugValueEnables(env.DEBUG) || liveDebug(PRISMARINE_AUTH_DEBUG_NAMESPACE)) {
-        throw new Error(`${who}: refusing Microsoft auth because DEBUG enables "${PRISMARINE_AUTH_DEBUG_NAMESPACE}" debug output `
+        throw setupError(`${who}: refusing Microsoft auth because DEBUG enables "${PRISMARINE_AUTH_DEBUG_NAMESPACE}" debug output `
             + '(or a pattern that could reach one of its namespaces), which prints access and refresh tokens. '
             + `Unset DEBUG, narrow it (for example DEBUG=minecraft-protocol), or add -${PRISMARINE_AUTH_DEBUG_NAMESPACE}*, and start again.`);
     }
