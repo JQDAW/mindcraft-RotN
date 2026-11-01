@@ -72,6 +72,31 @@ Updated: 2026-11-01 (about 01:00 UTC)
     - Raw captures stay in `captures/raw/`; only sanitized fixtures and evidence are committed.
     - Never the live server; the FRCFLD cache is used only from this PC.
 
+- **2026-11-01 15:35 UTC: GO for net-forge Batch A** (handshake capture), as approved above.
+  - Preconditions met:
+    - PR #21 merged (`2abdd3b`): the preflight accepts the external-cron cadence, and a newer failed run blocks it.
+    - The cadence is live: cron-job.org dispatches at 15:00:51, 15:15:25 and 15:30:40, all successful.
+    - The project was empty.
+  - Run it from a clean checkout of develop at `2abdd3b` or later, not from an unmerged branch.
+
+- **Batch A result (2026-11-01):** PASS.
+  - CPX42 created 15:36:30, ready 15:39:34, handshake done 15:39:44, deleted and verified 15:40:14 (224 s up).
+  - About EUR 0.14 + IPv4. The project was empty afterwards (lead verified).
+  - Evidence is in PR #26.
+- **2026-11-01 15:55 UTC: GO for net-forge Batch B + C on one server** (online spike + G1 runner scenario).
+  - Run from a clean checkout of origin/develop, **without** the unmerged PR #25.
+  - Expected about 35 min; stop and delete at 55 min; maximum about EUR 0.42 + IPv4.
+  - Same conditions as above, with the preflight on its own.
+  - Watch the JustEnoughDimensions login error and the `OBFUSCATE|HS` / `dimstack` channels.
+  - Lead-approved exception: net-forge may add **only** `test/evidence/g1/` (sanitized runner result files) in its evidence PR.
+
+- **Batch B + C result (2026-11-01, about 15:55-16:02 UTC): G1 NOT passed yet.**
+  - Passed: online login, spawn, chat send, walk.
+  - At spawn the 90 KB `advancements` packet failed to parse (NBT "unexpected tag end"). The client later timed out and disconnected, so the runner failed chat receive, walk and the 10-min stay.
+  - About EUR 0.14. The project was empty afterwards (lead verified 16:03).
+  - net-forge is diagnosing offline. The next batch needs a new written go-ahead.
+- PR #26 (Batch A evidence) merged as `c40856d`, APPROVE WITH NITS. The STATUS-line fixes are queued for net-forge.
+
 ## Notes for dev agents
 
 - mineflayer-pvp pulls in a nested `mineflayer@2.41.0` and `minecraft-data@2.221.0` through `mineflayer-utils` (upstream issue). net-forge should keep this in mind when it extends the registry.
