@@ -139,7 +139,7 @@ The review findings on PR #10, numbered as in the review comment:
 
 ## Doing
 
-- PR for the PR #19 follow-ups open. The G1 batches wait for the preflight (harness-ops is adapting it to the rotn-sweeper-cron helper repo).
+- PR #23 (PR #19 follow-ups) open. The G1 batches wait for the preflight (harness-ops is adapting it to the rotn-sweeper-cron helper repo).
 
 ## Next
 
@@ -203,4 +203,4 @@ The setup for both batches:
 
 ## Open PRs
 
-- (#15, #16, #18 and #19 merged.) New PR: PR #19 follow-ups (agent-side exit codes, requested restarts, service stop), on `agent/net-forge/exit-contract-followups`. `npm test` 224/224; lint 257.
+- (#15, #16, #18 and #19 merged.) #23: PR #19 follow-ups (agent-side exit codes, requested restarts, service stop), on `agent/net-forge/exit-contract-followups`. `npm test` 224/224; lint 257.
