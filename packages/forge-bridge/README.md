@@ -101,7 +101,9 @@ After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snaps
   - `triumphTypes()` is kept as an offline decoder. It reads both real packets to the last byte, but it is not used on the wire.
 - **Parse safety net.** A non-partial parse error makes protodef end nmp's packet stream: nothing arrives afterwards, and the keep-alive times out.
   - For a short allowlist of cosmetic clientbound packets (`DROPPABLE_ON_PARSE_ERROR` in `bridge.js`), the error is logged and captured with the full packet bytes, and the packet is dropped (`bridge.stats.droppedPackets`). The stream continues.
-  - The allowlist is `advancements`, `select_advancement_tab`, `statistics`, `unlock_recipes`, `craft_recipe_response`, `boss_bar`, `title`, `playerlist_header`, `world_particles`, `sound_effect` and `named_sound_effect`.
+  - The allowlist is `advancements`, `select_advancement_tab`, `statistics`, `unlock_recipes`, `craft_recipe_response`, `boss_bar`, `playerlist_header`, `sound_effect` and `named_sound_effect`. `world_particles` and `title` are left out on purpose: mineflayer's fishing waits for particles, and RotN may announce invasions in titles.
+  - Each drop is logged with "(dropped, allowlisted)". The first drop of each packet name emits a `droppedPacket` event (`{state, name, message}`) on the bridge.
+  - A **PartialReadError** (a read past the packet's end) is different: protodef itself drops that packet, for any packet including essential ones, and never ends the stream. That is upstream behaviour, not this safety net. The bridge logs it with "(dropped by protodef)", counts it in `stats.partialReadErrors`, captures its bytes and emits `parseError`, so a lost essential packet is visible.
   - Everything else (chunks, entities, slots, `keep_alive`, position, ...) still fails loudly, and so does any login-state error.
 - Parse-error and partial-packet capture records now keep packets up to 8 MiB in full; the old limit was 64 KB, which lost the first Batch B packet.
 

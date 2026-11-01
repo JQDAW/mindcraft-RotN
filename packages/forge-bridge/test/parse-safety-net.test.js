@@ -78,3 +78,36 @@ test('a malformed essential packet still fails loudly: the stream ends', async (
     assert.equal(s.bridge.stats.droppedPackets.set_slot, undefined);
     assert.deepEqual(s.seen, [], 'nothing after it is delivered');
 });
+
+// PR #28 review follow-ups.
+test('world_particles (fishing) and title (invasion warnings) are not droppable', () => {
+    assert.equal(DROPPABLE_ON_PARSE_ERROR.has('world_particles'), false);
+    assert.equal(DROPPABLE_ON_PARSE_ERROR.has('title'), false);
+});
+
+test('a drop is logged as "(dropped, allowlisted)" and emits droppedPacket once per packet name', async () => {
+    const s = bridgedStream(withoutTriumph());
+    const events = [];
+    s.bridge.on('droppedPacket', (e) => events.push(e));
+    const [, adv1] = realAdvancementsPackets();
+    await s.feed([adv1, adv1, adv1, KEEP_ALIVE]);
+    assert.equal(s.bridge.stats.droppedPackets.advancements, 3);
+    assert.equal(events.length, 1, 'once per name, not per packet');
+    assert.equal(events[0].name, 'advancements');
+    assert.match(events[0].message, /unexpected tag end/);
+    assert.ok(s.logs.some((l) => /parse error in play\.advancements \(\d+ bytes\) \(dropped, allowlisted\)/.test(l)));
+    assert.deepEqual(s.seen, ['keep_alive']);
+});
+
+test('documented: a PartialReadError on an essential packet is dropped by protodef, and the bridge makes it visible', async () => {
+    const s = bridgedStream(withoutTriumph());
+    const parseErrors = [];
+    s.bridge.on('parseError', (e) => parseErrors.push(e.name));
+    await s.feed([Buffer.from('1f0000', 'hex'), KEEP_ALIVE]); // keep_alive cut short, then a good one
+    assert.equal(s.error(), null, 'protodef drops partial reads; the stream continues');
+    assert.deepEqual(s.seen, ['keep_alive']);
+    assert.equal(s.bridge.stats.partialReadErrors, 1);
+    assert.deepEqual(parseErrors, ['keep_alive']);
+    assert.equal(s.bridge.stats.droppedPackets.keep_alive, undefined, 'not the safety net: protodef dropped it');
+    assert.ok(s.logs.some((l) => /PartialReadError in play\.keep_alive .*\(dropped by protodef\)/.test(l)));
+});
