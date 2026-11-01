@@ -53,7 +53,7 @@ export const WOOL_COLORS = [
 ]
 
 
-export function initBot(username) {
+export function initBot(username, { onMsaCode } = {}) {
     // Read the version here, not at module load: settings are empty until
     // setSettings() runs, which is after this module is imported (seam-map A).
     const configuredVersion = settings.minecraft_version;
@@ -74,6 +74,11 @@ export function initBot(username) {
     // Per-bot Microsoft token cache, outside the repo (docs/research/ops.md section 1).
     if (env.profilesFolder) {
         options.profilesFolder = env.profilesFolder;
+    }
+    // A caller that must never start an interactive device-code login (a harness
+    // driver) passes onMsaCode to fail fast instead.
+    if (onMsaCode) {
+        options.onMsaCode = onMsaCode;
     }
 
     // Forge 1.12.2 (RotN): ping first, then attach forge-bridge with the server's

@@ -68,7 +68,10 @@ export function attachForgeBridge(client, opts) {
     log(`attached; ${modList.length} mods; REID ${reid ? bridge.reid.version : 'absent'}`);
     capture?.event('bridge_attached', { mods: modList.length, reid: bridge.reid, version });
 
-    if (capture) Object.assign(capture.packetLimits, capturedPackets);
+    if (capture) {
+        Object.assign(capture.packetLimits, capturedPackets);
+        for (const [name, limit] of Object.entries(capturedC2S)) capture.packetLimits[`C2S:${name}`] = limit;
+    }
 
     const send = (channel, data) => client.write('custom_payload', { channel, data });
 
@@ -119,7 +122,7 @@ export function attachForgeBridge(client, opts) {
             bridge.stats.payloadsOut++;
             capture?.payload('C2S', params.channel, Buffer.isBuffer(params.data) ? params.data : Buffer.from([]));
         } else if (capture && capturedC2S[name] !== undefined) {
-            capture.record({ kind: 'packet', dir: 'C2S', name, params: summarize(params) });
+            capture.packet('C2S', name, null, { params: summarize(params) });
         }
         return origWrite(name, params);
     };
