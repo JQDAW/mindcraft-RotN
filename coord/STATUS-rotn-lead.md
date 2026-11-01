@@ -131,7 +131,8 @@ Updated: 2026-11-01 (about 19:40 UTC)
 - **2026-11-01 about 19:35 UTC: GO for rotn-data's first RotN 3.3.4 dump batch**, the "Paid test-server plan" in `coord/STATUS-rotn-data.md`.
   - Run it from a clean, separate checkout of origin/develop at `3158776` or later.
   - The jar is the dumper-build artifact of push run 41341359100 (develop `3158776`, success). Record its SHA-256 before the batch and match it against `manifest.dumperJar.sha256` afterwards.
-  - `deploy/test-server.sh` unchanged, with its preflight passing on its own. One CPX42 in nbg1, TTL 2 h, `timeout 3600`. Stop and delete past 45 min. Maximum about EUR 0.28 + IPv4.
+  - Disposable test server only, never the live RotN server.
+  - `deploy/test-server.sh` unchanged, with its preflight passing on its own; no `--skip-sweeper-check`. One CPX42 in nbg1, TTL 2 h, `timeout 3600`. Stop and delete past 45 min. Maximum about EUR 0.28 + IPv4.
   - Afterwards the project must be empty; record the real times and cost.
   - Raw output stays out of git. Commit only the imported data and the manifest, in a PR.
   - Report `manifest.timing` per part and the error count.
