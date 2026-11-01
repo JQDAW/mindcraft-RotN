@@ -1,5 +1,5 @@
 {
-  "total": 257,
+  "total": 255,
   "files": {
     "bots/execTemplate.js": 3,
     "bots/lintTemplate.js": 1,
@@ -54,7 +54,7 @@
     "src/process/init_agent.js": 4,
     "src/utils/examples.js": 1,
     "src/utils/keys.js": 2,
-    "src/utils/mcdata.js": 13,
+    "src/utils/mcdata.js": 11,
     "tasks/construction_tasks/get_blueprint.js": 3,
     "tasks/human_evaluation.js": 2
   }
