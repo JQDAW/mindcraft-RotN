@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { assertMicrosoftAuthSafe, debugValueEnables, patternMayEnablePrefix, quietMsaCodeHandler } from '../src/auth-guard.js';
 import { findGitWorkTree } from '../src/secret-folder.js';
 
@@ -56,6 +57,8 @@ test('DEBUG values that could enable prismarine-auth or any of its sub-namespace
         '*,-prismarine-auth', 'prismarine*,-prismarine-auth', 'prismarine-auth:*,-prismarine-auth',
         // a skip that is not the plain "<prefix>*" form does not count
         '*,-prismarine-auth:*', '*,-*auth*',
+        // an empty skip ("-" alone) has no star and skips nothing: debug 4.4.3 still enables prismarine-auth
+        '*,-', 'prismarine-auth,-', '* -',
     ];
     const off = [
         undefined, '', 'minecraft-protocol', 'mineflayer*', 'x*', 'prismarine', 'prismarine-au', '-*', '-prismarine-auth',
@@ -64,7 +67,23 @@ test('DEBUG values that could enable prismarine-auth or any of its sub-namespace
     ];
     for (const v of on) assert.equal(debugValueEnables(v), true, `DEBUG=${v} must be refused`);
     for (const v of off) assert.equal(debugValueEnables(v), false, `DEBUG=${v} is allowed`);
+    checkAgainstRealDebug([...on, ...off]);
 });
+
+// Never allow a value the real debug package would enable for prismarine-auth or a sub-namespace.
+function checkAgainstRealDebug(values) {
+    const debug = createRequire(createRequire(import.meta.url).resolve('prismarine-auth'))('debug');
+    const saved = debug.namespaces ?? '';
+    try {
+        for (const v of values) {
+            debug.enable(v ?? '');
+            const real = ['prismarine-auth', 'prismarine-auth:live', 'prismarine-auth:future:x'].some(n => debug.enabled(n));
+            if (real) assert.equal(debugValueEnables(v), true, `debug enables prismarine-auth for DEBUG=${JSON.stringify(v)}, so it must be refused`);
+        }
+    } finally {
+        debug.enable(saved);
+    }
+}
 
 test('patternMayEnablePrefix: a pattern counts if it starts with prismarine-auth or a glob can reach it', () => {
     for (const p of ['prismarine-auth', 'prismarine-auth:x', 'prismarine-auth*', '*', 'pr*x', 'prismarine-a*z']) assert.equal(patternMayEnablePrefix(p), true, p);

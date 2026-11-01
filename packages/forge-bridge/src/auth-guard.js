@@ -39,7 +39,7 @@ export function patternMayEnablePrefix(pattern, prefix = PRISMARINE_AUTH_DEBUG_N
 // An exact skip such as `-prismarine-auth` leaves sub-namespaces enabled.
 function skipCoversPrefix(skip, prefix = PRISMARINE_AUTH_DEBUG_NAMESPACE) {
     const star = skip.indexOf('*');
-    return star === skip.length - 1 && prefix.startsWith(skip.slice(0, star));
+    return star >= 0 && star === skip.length - 1 && prefix.startsWith(skip.slice(0, star));
 }
 
 /**
