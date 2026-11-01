@@ -1,0 +1,26 @@
+{
+  "scenario": "g0-watchdog",
+  "batch": "mcr-wd-20261101-003652",
+  "mode": "dispatch",
+  "pass": true,
+  "created": "2026-11-01T00:37:25Z",
+  "seconds_until_gone": 34,
+  "within_one_interval": true,
+  "control_untouched": true,
+  "recent_sweeper_runs": [
+    {
+      "conclusion": "success",
+      "createdAt": "2026-11-01T00:37:27Z",
+      "databaseId": 41257552258,
+      "event": "workflow_dispatch",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-11-01T00:32:00Z",
+      "databaseId": 41257157372,
+      "event": "workflow_dispatch",
+      "status": "completed"
+    }
+  ]
+}

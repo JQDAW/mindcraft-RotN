@@ -1,0 +1,113 @@
+{
+  "scenario": "g0-test-server",
+  "batch": "mcr-test-20261101-003243",
+  "passed": 21,
+  "failed": 0,
+  "checks": [
+    {
+      "check": "build_phase",
+      "pass": true,
+      "detail": "phase=ready"
+    },
+    {
+      "check": "java_8",
+      "pass": true,
+      "detail": "openjdk version \"1.8.0_504\""
+    },
+    {
+      "check": "pack_sha256",
+      "pass": true,
+      "detail": "verified=90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205 source=download"
+    },
+    {
+      "check": "forge_build",
+      "pass": true,
+      "detail": "forge-1.12.2-14.23.5.2860.jar"
+    },
+    {
+      "check": "reid_jar",
+      "pass": true,
+      "detail": "RoughlyEnoughIDs-2.2.2.jar"
+    },
+    {
+      "check": "mod_jars",
+      "pass": true,
+      "detail": "mods/*.jar=338"
+    },
+    {
+      "check": "eula",
+      "pass": true,
+      "detail": "eula=true"
+    },
+    {
+      "check": "online_mode",
+      "pass": true,
+      "detail": "online-mode=true"
+    },
+    {
+      "check": "white_list_on",
+      "pass": true,
+      "detail": "white-list=true"
+    },
+    {
+      "check": "whitelisted_FRCFLD",
+      "pass": true,
+      "detail": "whitelist=FRCFLD,JQDAW"
+    },
+    {
+      "check": "whitelisted_JQDAW",
+      "pass": true,
+      "detail": "whitelist=FRCFLD,JQDAW"
+    },
+    {
+      "check": "done_line",
+      "pass": true,
+      "detail": "[00:35:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Done (17.914s)! For help, type \"help\" or \"?\""
+    },
+    {
+      "check": "server_active",
+      "pass": true,
+      "detail": "systemd=active"
+    },
+    {
+      "check": "listening_25565",
+      "pass": true,
+      "detail": "listeners=1"
+    },
+    {
+      "check": "cloud_init_schema",
+      "pass": true,
+      "detail": "cloud-init schema --system: valid"
+    },
+    {
+      "check": "ping_version",
+      "pass": true,
+      "detail": "version=1.12.2 protocol=340"
+    },
+    {
+      "check": "ping_fml",
+      "pass": true,
+      "detail": "modinfo.type=FML"
+    },
+    {
+      "check": "ping_forge",
+      "pass": true,
+      "detail": "forge=14.23.5.2860"
+    },
+    {
+      "check": "ping_jeid",
+      "pass": true,
+      "detail": "jeid=2.2.2"
+    },
+    {
+      "check": "ping_mod_count",
+      "pass": true,
+      "detail": "modList=346"
+    },
+    {
+      "check": "console_list",
+      "pass": true,
+      "detail": " [net.minecraft.server.dedicated.DedicatedServer]: There are 0/10 players online:"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+START 2026-11-01T00:36:52Z
+[watchdog 00:36:53] creating target mcr-wd-20261101-003652 (expired, labelled), its Primary IPv4 (auto-delete off) and control mcr-wdctl-20261101-003652
+SSH Key 132037905 created
+Primary IP 159353814 created
+Waiting for create_server (server: 173873036, image: 161547269) ...
+Waiting for start_server (server: 173873036) ...
+Waiting for create_server (server: 173873036, image: 161547269) ... done
+Waiting for start_server (server: 173873036) ... done
+Server 173873036 created
+Waiting for create_server (server: 173873069, image: 161547269) ...
+Waiting for start_server (server: 173873069) ...
+Waiting for create_server (server: 173873069, image: 161547269) ... done
+Waiting for start_server (server: 173873069) ... done
+Server 173873069 created
+[watchdog 00:37:25] created at 00:37:25Z: key 132037905, ip 159353814, target 173873036, control 173873069; mode=dispatch
+https://github.com/JQDAW/mindcraft-RotN/actions/runs/41257552258
+{
+  "scenario": "g0-watchdog",
+  "batch": "mcr-wd-20261101-003652",
+  "mode": "dispatch",
+  "pass": true,
+  "created": "2026-11-01T00:37:25Z",
+  "seconds_until_gone": 34,
+  "within_one_interval": true,
+  "control_untouched": true,
+  "recent_sweeper_runs": [
+    {
+      "conclusion": "success",
+      "createdAt": "2026-11-01T00:37:27Z",
+      "databaseId": 41257552258,
+      "event": "workflow_dispatch",
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-11-01T00:32:00Z",
+      "databaseId": 41257157372,
+      "event": "workflow_dispatch",
+      "status": "completed"
+    }
+  ]
+}
+[watchdog 00:38:00] PASS: target server, Primary IPv4 and SSH key deleted by the sweeper after 34s; control (same expired delete-after, no test label) untouched
+[watchdog 00:38:00] cleanup: deleting what this run created (by ID)
+Waiting for delete_server (server: 173873069) ...
+Waiting for delete_server (server: 173873069) ... done
+[watchdog 00:38:18] cleanup verified
+END 2026-11-01T00:38:18Z rc=0

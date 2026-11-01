@@ -1,0 +1,49 @@
+START 2026-11-01T00:32:37Z
+[test-server 00:32:44] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 8h, sweeper deletes it) ~9 billed hours, EUR 1.24 plus Primary IPv4
+[test-server 00:32:45] creating mcr-test-20261101-003243: delete-after 2026-11-01T08:32:44Z (TTL 8h)
+Waiting for create_server (server: 173872455, image: 161547269) ...
+Waiting for start_server (server: 173872455) ...
+Waiting for create_server (server: 173872455, image: 161547269) ... done
+Waiting for start_server (server: 173872455) ... done
+Server 173872455 created
+[test-server 00:32:57] server mcr-test-20261101-003243 is at 2.31.4.15
+[test-server 00:32:57] waiting for SSH and the build (up to 120 min)
+[test-server 00:33:07] phase: unreachable
+[test-server 00:33:25] phase: booting:running
+[test-server 00:33:58] phase: unpack
+[test-server 00:34:14] phase: starting
+[test-server 00:35:50] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 00:35:52] READY: mcr-test-20261101-003243 at 2.31.4.15:25565 (delete-after 2026-11-01T08:32:44Z); state in /c/Users/admin/.mindcraft-rotn/test-server/active/mcr-test-20261101-003243
+[test-server 00:35:52] running: test/scenarios/g0-test-server.sh
+PASS build_phase: phase=ready
+PASS java_8: openjdk version "1.8.0_504"
+PASS pack_sha256: verified=90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205 source=download
+PASS forge_build: forge-1.12.2-14.23.5.2860.jar
+PASS reid_jar: RoughlyEnoughIDs-2.2.2.jar
+PASS mod_jars: mods/*.jar=338
+PASS eula: eula=true
+PASS online_mode: online-mode=true
+PASS white_list_on: white-list=true
+PASS whitelisted_FRCFLD: whitelist=FRCFLD,JQDAW
+PASS whitelisted_JQDAW: whitelist=FRCFLD,JQDAW
+PASS done_line: [00:35:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Done (17.914s)! For help, type "help" or "?"
+PASS server_active: systemd=active
+PASS listening_25565: listeners=1
+PASS cloud_init_schema: cloud-init schema --system: valid
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+PASS ping_version: version=1.12.2 protocol=340
+PASS ping_fml: modinfo.type=FML
+PASS ping_forge: forge=14.23.5.2860
+PASS ping_jeid: jeid=2.2.2
+PASS ping_mod_count: modList=346
+PASS console_list:  [net.minecraft.server.dedicated.DedicatedServer]: There are 0/10 players online:
+G0 test-server scenario: 21 passed, 0 failed (details: /c/Users/admin/.mindcraft-rotn/test-server/active/mcr-test-20261101-003243/g0-result.json)
+[test-server 00:36:00] command exited with 0
+[test-server 00:36:00] EXIT trap: tearing down mcr-test-20261101-003243
+[test-server 00:36:01] deleting batch mcr-test-20261101-003243 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261101-003243)
+Waiting for delete_server (server: 173872455) ...
+Waiting for delete_server (server: 173872455) ... done
+[test-server 00:36:16] batch mcr-test-20261101-003243: ran 3 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 00:36:16] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261101-003243
+END 2026-11-01T00:36:16Z rc=0

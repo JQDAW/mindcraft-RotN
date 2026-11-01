@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01
+Updated: 2026-11-01 (00:40 UTC)
 
 ## Done
 
@@ -37,33 +37,39 @@ Updated: 2026-11-01
 
   Unit tests cover 1, 2 and 4 (plus 3 and 6). Part of finding 5 is done as well: the cost wording now says TTL + 1 billed hours.
 
+### Real G0 batches (2026-11-01, branch `agent/harness-ops/g0-evidence`)
+
+- PR #4 merged into develop as 70c5c3a; the sweeper is active on develop.
+- Re-review nits (commit 31cefa0):
+  - `deploy/test-server.sh` and `g0-watchdog.sh` now also strip `HCLOUD_ENDPOINT` and `HCLOUD_CONFIG` from hcloud's environment.
+  - `check_context` has a comment explaining why `GITHUB_ACTIONS=true` forces env-token mode.
+  - Two new unit tests fail without the fix. `npm test` passes 46/46, and `npx eslint test/` is clean.
+- Sweeper dry-run dispatch [41257157372](https://github.com/JQDAW/mindcraft-RotN/actions/runs/41257157372) at 00:32:00 UTC, before any create: the token works, 0 deletions.
+- **Real batch 1, G0 build: PASS, 21/21 checks.**
+  - Batch `mcr-test-20261101-003243`: cpx42, nbg1.
+  - **Start 00:32:37 UTC** (create 00:32:44), ready 00:35:52, **stop 00:36:16** (deletion verified).
+  - The pack was downloaded from CurseForge, and its SHA-256 matches the pin. Java 8, Forge 14.23.5.2860, REID 2.2.2, 346 mods in the ping, online mode, whitelist FRCFLD and JQDAW, console OK.
+  - **Cost: 1 billed hour x EUR 0.138136 = EUR 0.14**, plus 1 Primary IPv4-hour.
+- **Real batch 2, watchdog proof (`--mode dispatch`): PASS.**
+  - Batch `mcr-wd-20261101-003652`.
+  - **Start 00:36:52, stop 00:38:18 UTC.**
+  - Sweeper run [41257552258](https://github.com/JQDAW/mindcraft-RotN/actions/runs/41257552258) deleted the target server, its Primary IPv4 (auto-delete off) and its SSH key 34 s after creation. The control (expired `delete-after`, no test label) was untouched, then deleted by the script's cleanup by ID.
+  - **Cost: 2 x cx23 x 1 billed hour x EUR 0.010912 = EUR 0.02**, plus 1 Primary IPv4-hour.
+- After each batch, `hcloud server list` and `primary-ip list` were empty (00:36:21 and 00:38:24). The only thing left in the project is the human's unlabelled SSH key.
+- Total for both batches: about **EUR 0.16** plus 2 Primary IPv4-hours. The stated maximum was about EUR 1.29.
+- Evidence is in `test/evidence/g0/`. An independent verifier pass gave PASS. Its should-fix (capture the project-wide empty checks) and nits are applied.
+
 ## Doing
 
-- PR #4 updated; waiting for the lead's re-review and merge.
+- Evidence PR for gate G0 against develop.
 
-## Planned real batches (written before any create, per the lead's rule)
+## Planned real batches
 
-All in the test project: hcloud context `mindcraft-rotn-test`, which the scripts now enforce. Every test resource carries `purpose=mindcraft-rotn-test`, `delete-after=<epoch>` and `batch=<name>`. Deletion runs server first, then the Primary IPv4, then the SSH key, and each is checked as gone.
-
-1. **G0 build batch.**
-   - Command: `deploy/test-server.sh run --yes -- test/scenarios/g0-test-server.sh`
-   - Server: type `cpx42`, image `ubuntu-24.04`, location `nbg1`, one labelled Primary IPv4, no IPv6, TTL 8 h.
-   - Expected runtime 30-60 min, so 1 billed hour: about **EUR 0.14**.
-   - **Max cost about EUR 1.24** (9 billed hours x 0.138136) plus the Primary IPv4 for the same hours. This is the case where the EXIT trap fails and the sweeper deletes the server after `delete-after`; the extra hour allows for the 15-min interval and late cron starts.
-2. **Watchdog acceptance test.**
-   - Command: `test/scenarios/g0-watchdog.sh --yes --mode dispatch`, with a fallback to `--mode scheduled`.
-   - Servers: two `cx23`, `ubuntu-24.04`, `nbg1`.
-     - The **target** carries the test labels with `delete-after = now - 60`, and its own labelled Primary IPv4 with auto-delete off.
-     - The **control** has the same expired `delete-after` and no test label (`purpose=mindcraft-rotn-watchdog-control`), plus `control-expires = now + 1 h`. It is IPv6-only.
-   - Expected: the test ends within 20 min, both servers are deleted, about **EUR 0.02**.
-   - **Max cost:**
-     - The target is deleted by the sweeper within 1 billed hour.
-     - The control is deleted by the script's own cleanup, or by the sweeper at `control-expires` + 30 min (about 1.75 h, 2 to 3 billed hours with cron latency).
-     - Total about **EUR 0.05**, plus the target's Primary IPv4 for 1 hour.
+Both planned batches ran on 2026-11-01 and passed (see Done). The plan as written before the runs is in this file at commit 70c5c3a. The next real batch is net-forge's capture run (`--capture`), once G1 needs it.
 
 ## Blocked
 
-- Both real batches (G0 build and watchdog proof), since 2026-11-01, by the lead's decision (option 1): no real server is created until the off-PC sweeper is live. Only the merge of PR #4 is left; then both batches run together.
+- Nothing.
 
 ## Deferred review findings (PR #4; the lead allowed them in a later PR)
 
@@ -74,10 +80,11 @@ All in the test project: hcloud context `mindcraft-rotn-test`, which the scripts
 
 ## Requests to other agents or the lead
 
-1. **Lead:** re-review and merge PR #4. The scheduled sweeper only runs from the default branch.
+1. ~~Lead: re-review and merge PR #4~~ **Done** (70c5c3a).
 2. ~~Human: GitHub Environment `hetzner-test-sweeper`~~ **Done** (the lead verified it via the GitHub API on 2026-11-01): deployment branches `develop` only, environment secret `HCLOUD_TOKEN`, no repository-level secrets.
 3. **Lead (info only):** my unit tests use `"test/unit/**/*.test.js"`, which `npm test` already covers. CI (brief deliverable 3) comes in a later PR.
+4. **Lead:** review and merge the G0 evidence PR, then mark G0's test-server half as passed in `docs/PLAN.md`. The human half (brief approval) is already done.
 
 ## Open PRs
 
-- #4 G0: disposable RotN 3.3.4 test server, cleanup and off-PC watchdog (gate G0, test-server half). Review findings 1, 2, 3, 4, 6 and 9 are fixed. Waiting for the lead's re-review and merge; then the G0 batch and the watchdog proof run together.
+- G0 evidence PR (this branch): re-review nits plus `test/evidence/g0/`. Both real batches passed.

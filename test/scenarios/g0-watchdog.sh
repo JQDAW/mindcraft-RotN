@@ -50,7 +50,7 @@ done
 
 log() { printf '[watchdog %s] %s\n' "$(date -u +%H:%M:%S)" "$*" >&2; }
 # Same rule as deploy/test-server.sh: always the test context, never a token from the environment.
-hc() { env -u HCLOUD_TOKEN -u HCLOUD_CONTEXT "$HCLOUD_BIN" --context "$CONTEXT" "$@"; }
+hc() { env -u HCLOUD_TOKEN -u HCLOUD_CONTEXT -u HCLOUD_ENDPOINT -u HCLOUD_CONFIG "$HCLOUD_BIN" --context "$CONTEXT" "$@"; }
 exists_id() { [[ -n $2 ]] && hc "$1" describe "$2" -o json > /dev/null 2>&1; }
 id_of() { jq -r "$1 // empty" | tr -d '\r'; }   # read the new resource's ID from `create -o json`
 
