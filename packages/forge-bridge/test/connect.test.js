@@ -48,19 +48,56 @@ test('auto: a vanilla ping connects without the bridge', async () => {
     assert.equal(client.tagHost, undefined);
 });
 
-test('a failed ping is retried once, then falls back to the pinned mod list file', async () => {
-    let pings = 0;
-    const { attached, logs } = await run({ ping: () => { pings++; return Promise.reject(new Error('ECONNREFUSED')); }, modListFile: PING_FIXTURE });
+// A fake clock: each ping "takes" the given time. The retry delay is real but short.
+function clockedPing(steps) {
+    let t = 0;
+    const calls = [];
+    return {
+        now: () => t,
+        calls,
+        ping: (o) => {
+            const step = steps[calls.length];
+            calls.push({ at: t, closeTimeout: o.closeTimeout });
+            t += step.ms;
+            return step.ok ? Promise.resolve(step.ok) : Promise.reject(new Error(step.err));
+        },
+        advance: (ms) => { t += ms; },
+    };
+}
+
+test('a fast ping failure is retried once within the budget, then falls back to the pinned mod list file', async () => {
+    const c = clockedPing([{ ms: 300, err: 'ECONNREFUSED' }, { ms: 300, err: 'ECONNREFUSED' }]);
+    const { attached, logs } = await run({ ping: c.ping, now: c.now, retryDelayMs: 5, modListFile: PING_FIXTURE });
     assert.equal(attached, 'file');
-    assert.equal(pings, 2);
+    assert.equal(c.calls.length, 2);
+    assert.equal(c.calls[0].closeTimeout, 15000);
+    assert.equal(c.calls[1].closeTimeout, 15000 - 300 - 5, 'the retry only gets what is left of the budget');
     assert.ok(logs.some(l => l.includes('status ping attempt 2 failed')));
 });
 
-test('a ping that fails once and then answers uses the live mod list', async () => {
-    let pings = 0;
-    const { attached } = await run({ ping: (o) => { pings++; assert.equal(o.closeTimeout, 15000); return pings === 1 ? Promise.reject(new Error('ETIMEDOUT')) : Promise.resolve(fmlPing); }, modListFile: PING_FIXTURE });
+test('a ping that fails fast once and then answers uses the live mod list', async () => {
+    const c = clockedPing([{ ms: 200, err: 'connect ETIMEDOUT' }, { ms: 50, ok: fmlPing }]);
+    const { attached } = await run({ ping: c.ping, now: c.now, retryDelayMs: 5, modListFile: PING_FIXTURE });
     assert.equal(attached, 'ping');
-    assert.equal(pings, 2);
+    assert.equal(c.calls.length, 2);
+});
+
+test('a ping that ran into its timeout is not retried: the file fallback comes within the budget', async () => {
+    // A server that drops pings: the first attempt uses the whole 15 s budget.
+    const c = clockedPing([{ ms: 15000, err: 'ETIMEDOUT' }]);
+    const { attached } = await run({ ping: c.ping, now: c.now, retryDelayMs: 5, modListFile: PING_FIXTURE });
+    assert.equal(attached, 'file');
+    assert.equal(c.calls.length, 1, 'no second 15 s ping: 15 + 1 + 15 s would pass spawn_timeout (30 s)');
+});
+
+test('the total ping time never exceeds the budget', async () => {
+    for (const first of [100, 2000, 2999, 3000, 9000]) {
+        const c = clockedPing([{ ms: first, err: 'x' }, { ms: 15000, err: 'ETIMEDOUT' }]);
+        await run({ ping: c.ping, now: c.now, retryDelayMs: 1000, modListFile: PING_FIXTURE, pingTimeoutMs: 15000 });
+        const total = c.calls.length === 1 ? first : first + 1000 + c.calls[1].closeTimeout;
+        assert.ok(total <= 15000, `first failure after ${first} ms: total ${total} ms`);
+        assert.equal(c.calls.length, first < 3000 ? 2 : 1, `first failure after ${first} ms`);
+    }
 });
 
 test('a vanilla answer is final: no second ping', async () => {

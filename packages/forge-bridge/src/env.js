@@ -4,7 +4,7 @@
 //   FORGE_BRIDGE               auto (default: attach when the ping reports FML) | on | off
 //   FORGE_CAPTURE              1 = captures/raw/<bot>-<time>.jsonl, or a file path
 //   FORGE_MODLIST_FILE         ping JSON used if the live status ping has no mod list
-//   FORGE_PING_TIMEOUT_MS      status-ping timeout per attempt (default 15000; two attempts)
+//   FORGE_PING_TIMEOUT_MS      total status-ping budget, retry included (default 15000)
 //   MINDCRAFT_PROFILES_FOLDER  per-bot Microsoft token cache folder (outside the repo)
 //   PROTODEF_LOG_PARTIAL=1     protodef's own "partial packet" log (patches/protodef)
 
