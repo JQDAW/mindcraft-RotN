@@ -1,0 +1,67 @@
+// A node-minecraft-protocol `connect` option that pings the server first, then
+// attaches the forge bridge with the server's own ModList, then opens the
+// socket. nmp calls options.connect(client) after authentication, so the ping
+// never delays the Microsoft login and tagHost is set before the handshake.
+
+import net from 'node:net';
+import { createRequire } from 'node:module';
+import { attachForgeBridge } from './bridge.js';
+import { modListFromPing, loadModListFile } from './modlist.js';
+
+const require = createRequire(import.meta.url);
+
+/**
+ * @param {object} o
+ * @param {string} o.host
+ * @param {number} o.port
+ * @param {'auto'|'on'|'off'} [o.mode='auto']  auto: attach if the ping says FML; on: require it
+ * @param {string} [o.modListFile]  ping JSON used when the live ping has no mod list
+ * @param {import('./capture.js').CaptureWriter} [o.capture]
+ * @param {(bridge:any, source:string) => void} [o.onAttach]
+ * @param {(msg:string) => void} [o.log]
+ * @param {(o:object) => Promise<object>} [o.ping]  injectable for tests
+ * @param {(port:number, host:string) => import('node:net').Socket} [o.socket]  injectable for tests
+ */
+export function createForgeConnect(o) {
+    const {
+        host = 'localhost', port = 25565, mode = 'auto', modListFile = null, capture = null, onAttach,
+        log = (m) => console.log(`[forge-bridge] ${m}`),
+        ping = (opts) => require('minecraft-protocol').ping(opts),
+        bridgeOptions = {},
+        socket = (p, h) => net.connect(p, h),
+    } = o;
+
+    return function connect(client) {
+        (async () => {
+            let modList = null;
+            let source = null;
+            if (mode !== 'off') {
+                try {
+                    const res = await ping({ host, port, version: '1.12.2', closeTimeout: 15000 });
+                    modList = modListFromPing(res);
+                    if (modList) source = 'ping';
+                    capture?.event('status_ping', { version: res?.version, modinfoType: res?.modinfo?.type ?? null, mods: modList?.length ?? 0 });
+                } catch (e) {
+                    log(`status ping failed: ${e.message}`);
+                    capture?.event('status_ping_failed', { message: e.message });
+                }
+                if (!modList && modListFile) {
+                    modList = loadModListFile(modListFile);
+                    source = 'file';
+                    log(`using pinned mod list ${modListFile}`);
+                }
+            }
+            if (modList) {
+                const bridge = attachForgeBridge(client, { modList, capture, log, ...bridgeOptions });
+                bridge.modListSource = source;
+                onAttach?.(bridge, source);
+            } else if (mode === 'on') {
+                throw new Error('forge-bridge: FORGE_BRIDGE=on but no FML mod list (ping and file both failed)');
+            } else {
+                if (mode !== 'off') log('server is not Forge (no FML modinfo); connecting as vanilla');
+                capture?.close();
+            }
+            client.setSocket(socket(port, host));
+        })().catch((e) => client.emit('error', e));
+    };
+}
