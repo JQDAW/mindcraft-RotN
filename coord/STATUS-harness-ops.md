@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (21:45 UTC)
+Updated: 2026-11-01 (22:30 UTC)
 
 ## Done
 
@@ -90,7 +90,7 @@ Updated: 2026-11-01 (21:45 UTC)
 
 ## Doing
 
-- **G2 batch plan** (below, under "Planned real batches"), for the lead's review. Not to be run without the lead's written GO, after #47 merges.
+- **G2 batch plan** (below, under "Planned real batches"): reviewed (APPROVE WITH NITS), amended with the review's five points. Not to be run without the lead's written GO, once every precondition is met.
 - **Small follow-ups PR:** the `agentNaming` child process gets a minimal environment (lead, after #36); `walk()` returns `method: 'forward+jump+turn'` (net-forge's request; their test accepts it since #38).
 - **Next, before the first real CX23 run (lead, PR #30 re-review):** check-env allowlists the variable NAMES allowed in the per-bot env file and refuses any other (e.g. `NODE_TLS_REJECT_UNAUTHORIZED`, `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY`, `LD_PRELOAD`, `NODE_EXTRA_CA_CERTS`).
 
@@ -112,13 +112,17 @@ Updated: 2026-11-01 (21:45 UTC)
    ```bash
    node --input-type=module -e "import { agentNaming } from './test/runner/lib/g2.mjs'; console.log(agentNaming('.'))"
    ```
-4. The driver is agreed with net-forge (through the lead). See "Driver" below.
-5. `msa-login.mjs FRCFLD --check` prints the profile name. If it asks for a new login, stop and add a NEEDS-HUMAN entry.
+4. **#54 merged:** the driver (net-forge's `g1-driver.mjs` answering the G2 protocol). See "Driver" below.
+5. `msa-login.mjs FRCFLD --check` prints the profile name. If it asks for a new login, stop and add a NEEDS-HUMAN entry. Its output **never** goes into evidence or any committed file.
 6. `test-server.sh`'s sweeper preflight passes unchanged; no `--skip-sweeper-check`.
 7. The code is the develop head, with no local changes. `result.json` records `git.sha` and `git.dirty`, and a dirty run doesn't count.
+8. **net-forge's mod-entity-table wiring merged**, so modded mobs carry their real registry names (not placeholders).
+9. **rotn-data's second dump import merged.**
+10. **#57 merged:** the census waits for the cube's chunks and counts unloaded positions apart; more than 1% unloaded makes the run `notGate`.
+11. **#53 merged** (the minimal environment for the naming check), and `agentNaming('.')` (precondition 3) **rerun on develop under that reduced environment**: `wired: true`, all entries round-trip.
 
-**Driver (to agree with net-forge through the lead).**
-- **Proposed:** net-forge's `packages/forge-bridge/tools/g1-driver.mjs`. It already builds the bot with the real `initBot` (`src/utils/mcdata.js`) with forge-bridge attached, and speaks the G1 protocol through `attachScenario`. The G2 extension is about three lines in **their** file:
+**Driver (agreed: net-forge's #54).**
+- **The driver:** net-forge's `packages/forge-bridge/tools/g1-driver.mjs`. It already builds the bot with the real `initBot` (`src/utils/mcdata.js`) with forge-bridge attached, and speaks the G1 protocol through `attachScenario`. The G2 extension is about three lines in **their** file:
 
   ```js
   import { attachG2, agentNames } from '../../../test/runner/drivers/scenario-protocol.mjs';
@@ -134,19 +138,25 @@ Updated: 2026-11-01 (21:45 UTC)
 - **The bot runs on this PC.** The runner gives the driver only its allowlisted environment: `TEST_SERVER_HOST`/`PORT`, `MINDCRAFT_PROFILES_FOLDER` and the `ROTN_*` variables. It never gets `TEST_SERVER_CTL` or cloud credentials.
 - **Login cache:** `MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa` exists only in this PC's environment, as for G1.
 - **Whitelist:** FRCFLD and JQDAW (the default).
-- **Console use:** the scenarios use only the test server's console (`say`, `seed`, `tp`, `tell`, `testforblock`, `testfor`, `summon`, `kill @e[tag=<run tag>]`, `clear`, `give`), through the runner. Never the live server.
+- **Console use (test server only, never the live server):**
+  - **Before the first scenario**, approved by the lead on the disposable test server only: `time set day` and `gamerule doDaylightCycle false`, so the bot isn't attacked at night during the run. **No** peaceful difficulty.
+  - **During the scenarios**, through the runner: `say`, `seed`, `tp`, `tell`, `testforblock`, `testfor`, `summon`, `kill @e[tag=<run tag>]`, `clear` and `give`.
 
 **Command** (one server, three scenarios in sequence, each with its own bot session):
 
 ```bash
 deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c '
+  C() { bash "$TEST_SERVER_CTL" console --wait 2 -- "$@"; };
+  C time set day; C gamerule doDaylightCycle false;
   D="node packages/forge-bridge/tools/g1-driver.mjs";
-  node test/runner/run.mjs --scenario g2-blocks-named    --out captures/raw/g2-blocks -- $D; b=$?;
-  node test/runner/run.mjs --scenario g2-mobs-named      --out captures/raw/g2-mobs   -- $D; m=$?;
-  node test/runner/run.mjs --scenario g2-items-roundtrip --out captures/raw/g2-items  -- $D; i=$?;
+  timeout 15m node test/runner/run.mjs --scenario g2-blocks-named    --out captures/raw/g2-blocks -- $D; b=$?;
+  timeout 15m node test/runner/run.mjs --scenario g2-mobs-named      --out captures/raw/g2-mobs   -- $D; m=$?;
+  timeout 15m node test/runner/run.mjs --scenario g2-items-roundtrip --out captures/raw/g2-items  -- $D; i=$?;
   bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g2/server;
   echo "blocks=$b mobs=$m items=$i"; [ "$b$m$i" = 000 ]'
 ```
+
+- **Timeout:** each `run.mjs` is wrapped in `timeout 15m` (exit 124 if hit). A hung scenario can't stop the log fetch, and the server is deleted by the `run` EXIT trap either way.
 
 **Time and cost.**
 
@@ -164,6 +174,13 @@ deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c '
 **After the run.**
 - Confirm `hcloud server list` and `hcloud primary-ip list` are empty, and record the real start and stop times and the cost here.
 - Raw files stay in `captures/raw/` (git-ignored). Sanitized evidence goes to `test/evidence/g2/` in a PR: each `result.json`, plus `server.log` excerpts with the world seed and cube centre.
+- **Redaction**, in every committed `server.log` excerpt and in `result.json` (`notes` included), following the G1 evidence's conventions:
+  - the 1.12 log's `FRCFLD[/IP:port] logged in`, which is this PC's public IP, becomes `<ip>:<port>`;
+  - **every** IPv4 and IPv6 address becomes `<ip>`;
+  - every player UUID becomes `<uuid-v4>`;
+  - local paths are replaced.
+- **A check that fails the evidence PR:** a unit test over `test/evidence/g2/**` fails if any IPv4 address (four dotted octets 0..255) or IPv6 address, or any unredacted UUID, is left. It goes in with the evidence PR, so CI enforces it.
+- The `msa-login --check` output is never part of the evidence.
 
 **What the G2 evidence will claim.** Only the checks of the three scenarios:
 - the 50 most common non-air blocks near spawn named, server-confirmed and consistent with spot checks;
@@ -180,7 +197,7 @@ Nothing about crafting, survival or reconnects.
 
 ## Requests to other agents or the lead
 
-0. **Lead, routed to net-forge: the G2 driver.** Please agree the G2 driver above: `g1-driver.mjs` plus `attachG2(bot, { names: agentNames(mc).names })`, in net-forge's file. Or name another driver that goes through `initBot` and forge-bridge.
+0. ~~Lead, routed to net-forge: the G2 driver~~ **Agreed:** net-forge's `g1-driver.mjs` with the G2 protocol, in #54.
 
 1. ~~Lead: re-review and merge PR #4~~ **Done** (70c5c3a).
 2. ~~Human: GitHub Environment `hetzner-test-sweeper`~~ **Done** (the lead verified it via the GitHub API on 2026-11-01): deployment branches `develop` only, environment secret `HCLOUD_TOKEN`, no repository-level secrets.
@@ -200,4 +217,5 @@ Nothing about crafting, survival or reconnects.
 ## Open PRs
 
 - This status update with the G2 batch plan (`agent/harness-ops/status-g2-plan`).
-- The small follow-ups PR (`agent/harness-ops/g2-followups`): the minimal environment for `agentNaming`, and `walk()` `method`.
+- #53 (`agent/harness-ops/g2-followups`): the minimal environment for `agentNaming`, and `walk()` `method`.
+- #57 (`agent/harness-ops/g2-unloaded`): the census waits for the cube's chunks; unloaded positions are counted apart, never as a block type.
