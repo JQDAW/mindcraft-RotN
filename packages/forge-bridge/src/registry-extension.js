@@ -183,3 +183,45 @@ export function extendRegistry(registry, snapshot, { properties = {}, log = () =
     }
     return report;
 }
+
+/**
+ * Applies rotn-data's properties to a registry that extendRegistry already
+ * extended (rotn-data's request 2: harvestTools need bot.registry's item ids,
+ * so properties come after the extension). Keyed by full registry name
+ * ("pyrotech:rock", "minecraft:stone"); an unprefixed vanilla name works too.
+ * Every map that points at a changed entry is updated: the id map, the array,
+ * every *ByName key (aliases included), blocksByStateId, entitiesByForgeId,
+ * and the collision-shape table when shapes change. Names and ids never change.
+ * @returns {{ applied: object, missing: string[] }}
+ */
+export function applyProperties(registry, properties = {}) {
+    const report = { applied: {}, missing: [] };
+    for (const kind of Object.keys(SECTION)) {
+        const props = properties[kind];
+        if (!props) continue;
+        let applied = 0;
+        const byName = registry[`${kind}ByName`] ?? {};
+        const reshaped = [];
+        for (const [regName, p] of Object.entries(props)) {
+            const old = byName[regName] ?? (regName.startsWith('minecraft:') ? byName[regName.slice('minecraft:'.length)] : undefined);
+            if (!old) { report.missing.push(`${kind}:${regName}`); continue; }
+            const next = applyProps(old, p, old.id);
+            const swap = (map) => { for (const k of Object.keys(map ?? {})) if (map[k] === old) map[k] = next; };
+            swap(registry[kind]);
+            swap(byName);
+            const arr = registry[`${kind}Array`];
+            if (arr) for (let i = 0; i < arr.length; i++) if (arr[i] === old) arr[i] = next;
+            if (kind === 'blocks') {
+                const min = old.minStateId ?? (old.id << 4);
+                const max = old.maxStateId ?? ((old.id << 4) | 15);
+                for (let s = min; s <= max; s++) if (registry.blocksByStateId?.[s] === old) registry.blocksByStateId[s] = next;
+                if (p.shapes) reshaped.push(next);
+            }
+            if (kind === 'entities') swap(registry.entitiesByForgeId);
+            applied++;
+        }
+        if (reshaped.length) registerShapes(registry, reshaped);
+        report.applied[kind] = applied;
+    }
+    return report;
+}

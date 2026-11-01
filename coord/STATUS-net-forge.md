@@ -301,6 +301,20 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - Names: rotn-data's mod-local entity table when given; until then the placeholder `<modId>:entity_<n>` (`forge.nameKnown: false`), marked TODO(rotn-data).
 - Tests: `fml-entities.test.js` (4), plus `e2e-initbot` (spawn into `bot.entities`, then `entity_destroy` removes it).
 
+## Decisions for rotn-data (its requests 2 and 4, relayed by the lead)
+
+- **Request 2, properties after the extension:** use the exported **`applyProperties(registry, properties)`**, not a second `extendRegistry` call. It applies to an already-extended `bot.registry`, keyed by full registry name, updates every map (aliases included), and returns `{ applied, missing }`.
+  - **Confirmed:** FML EntitySpawn's `modId` is the mod container id string (`ModContainer.getModId()`, `javap` on Forge 14.23.5.2860's `EntitySpawnMessage`), and `modEntityTypeId` is `EntityRegistration.getModEntityId()`. That is the same pair `EntityRegistry.lookupModSpawn` uses, so key the table by `(modId, modEntityTypeId)`.
+- **Request 4, name helpers:** `initBot` sets `mcdata = bot.registry` at login (falling back to `minecraftData()` without one), and again after the extension. No `setRegistry` is needed. This unblocks harness-ops' PR #36 checking names through `mcdata.js`.
+
+## Done: item 3, mod entity-metadata serializers; PR #38 nits (branch `agent/net-forge/metadata-types`, from develop a4720df)
+
+- `METADATA_SERIALIZER_TYPES` holds the wire formats of all 7 mod serializers in RotN 3.3.4, from `javap` on each `write()`. `rotnMetadataSerializers(modList)` gives the proven ids: 14 = AquaAcrobatics pose (by elimination on G1's bytes), 256/257 = DoggyTalents (synced).
+  - The real G1 player packet now parses to the last byte.
+  - After RegistryData, the bridge checks ids >= 256 against `minecraft:dataserializers`.
+- **PR #38 nits:** `entity.kind` is `unknown` when the name is unknown, and the README says the table must give `type` explicitly.
+- **Tests (targeted):** `metadata-types` 5, `registry-extension` 15 (`applyProperties` on real data), `fml-entities` 6, `e2e-initbot` (Mindcraft's `getBlockId`/`getItemName` see modded names).
+
 ## Doing
 
 - Batch A done (above); PR #26 merged. PR #25 (registry extension) is being reworked for its review (vanilla entities, modded-block hardness, rebind logs), together with the PR #28 nits. **The next paid batch needs a new written GO.**
@@ -354,6 +368,8 @@ The setup for both batches:
 - Batch B+C: approved; the driver is ready (below). Runs after Batch A, with the same preflight condition.
 
 ## Requests to other agents or the lead
+
+- **rotn-data (dumper):** please dump vanilla `DataSerializers` ids 14 and up with their serializer class (and mod). Ids 15-18 belong to base, Charset-Lib, Mowzie's Mobs and Requious Frakto in an unknown order. forge-bridge takes them as `metadataSerializers: { id: 'base:resource_location' | 'charset:quaternion' | 'mowziesmobs:optional_trade' | 'requious:spark_effect' }` (the formats are already in `reid.js`).
 
 0. **rotn-data (shared-registry shape, ADR 0003 decision 4): accepted (lead, 2026-11-01).** rotn-data will produce the mod-local entity table in the proposed shape `{ [modId]: { [modEntityTypeId]: 'modid:name' } }` for `attachFmlEntities({ modEntityTable })`; it reads this file.
    - Block/item/entity/biome properties go in keyed by full registry name (`extendRegistry(..., { properties })`, PR #25).
