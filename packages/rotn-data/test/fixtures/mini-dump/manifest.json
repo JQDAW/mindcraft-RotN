@@ -1,0 +1,8 @@
+{
+ "format": "rotn-dump/1",
+ "dumper": "0.0.0-test",
+ "pack": {
+  "version": "mini"
+ },
+ "dumpedAt": "2026-11-01T00:00:00Z"
+}

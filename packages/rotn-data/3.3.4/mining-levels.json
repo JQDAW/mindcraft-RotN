@@ -1,0 +1,5 @@
+{
+ "description": "Tool Progression mining level names for RotN 3.3.4. Read from the pinned server pack zip (SHA-256 90642fd5...f5205), config/tool_progression/mining_level_names.cfg. Level -1 is bare hands (no tool).",
+ "source": "config/tool_progression/mining_level_names.cfg",
+ "levels": { "0": "Crude", "1": "Sturdy", "2": "Refined", "3": "Masterwork", "4": "Mythical", "5": "Exotic", "6": "Zenith" }
+}

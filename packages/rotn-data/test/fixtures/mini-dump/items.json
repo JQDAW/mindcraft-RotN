@@ -1,0 +1,57 @@
+{
+ "format": "rotn-dump/1",
+ "items": {
+  "pyrotech:crude_axe": {
+   "stackSize": 1,
+   "maxDamage": 8,
+   "toolClasses": {
+    "axe": 0
+   },
+   "variants": [
+    {
+     "meta": 0,
+     "displayName": "Crude Axe"
+    }
+   ]
+  },
+  "pyrotech:rock": {
+   "stackSize": 64,
+   "hasSubtypes": true,
+   "variants": [
+    {
+     "meta": 0,
+     "displayName": "Stone Rock"
+    },
+    {
+     "meta": 6,
+     "displayName": "Sandstone Rock"
+    }
+   ]
+  },
+  "contenttweaker:crafting_tools": {
+   "stackSize": 1,
+   "variants": [
+    {
+     "meta": 0,
+     "displayName": "Crafting Tools"
+    }
+   ]
+  },
+  "minecraft:coal": {
+   "stackSize": 64,
+   "hasSubtypes": true,
+   "variants": [
+    {
+     "meta": 0,
+     "displayName": "Coal",
+     "burnTime": 1600
+    },
+    {
+     "meta": 1,
+     "displayName": "Charcoal",
+     "burnTime": 1600
+    }
+   ]
+  }
+ }
+}
