@@ -6,6 +6,8 @@
 //
 //   run list [--workflow W] [--branch B] [--event E] [--limit N] --json FIELDS --repo R
 //   api -X GET repos/OWNER/REPO --jq .pushed_at   from $FAKE_GH_STATE repos[OWNER/REPO].pushed_at
+//                                                 (a listed repo with no pushed_at prints an empty line)
+//   api -X GET -i rate_limit                      headers; "Date:" from $FAKE_GH_DATE (epoch), if set
 //   run view ID --log | --json FIELDS
 //   workflow run W --ref B     runs $FAKE_GH_DISPATCH_CMD (bash -c) as the "sweeper" and records
 //                              its output, GitHub-style ("sweep\tStep\t<ts> <line>"), as the run log.
@@ -56,14 +58,16 @@ if (group === 'run' && verb === 'list') {
     }
     if (argv.includes('--log')) process.stdout.write(run.log ?? '');
     else process.stdout.write(JSON.stringify(pick(run, flag('--json') ?? 'status')) + '\n');
+} else if (group === 'api' && argv.includes('GET') && argv.includes('-i') && argv.includes('rate_limit')) {
+    const date = process.env.FAKE_GH_DATE ? `Date: ${new Date(Number(process.env.FAKE_GH_DATE) * 1000).toUTCString()}\r\n` : '';
+    process.stdout.write(`HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n${date}\r\n{"resources":{}}\n`);
 } else if (group === 'api' && argv.includes('GET') && flag('--jq') === '.pushed_at') {
     const repo = argv.find((a) => a.startsWith('repos/'))?.slice('repos/'.length);
-    const pushed = st.repos?.[repo]?.pushed_at;
-    if (!pushed) {
+    if (!st.repos || !(repo in st.repos)) {
         process.stderr.write('gh: Not Found (HTTP 404)\n');
         process.exit(1);
     }
-    process.stdout.write(`${pushed}\n`);
+    process.stdout.write(`${st.repos[repo].pushed_at ?? ''}\n`);
 } else if (group === 'workflow' && verb === 'run') {
     const id = 90000000 + st.runs.length + 1;
     const cmd = process.env.FAKE_GH_DISPATCH_CMD ?? 'true';

@@ -114,13 +114,14 @@ export default {
         const b = lastTeleport(server.console(`tp ${name} ~ ~ ~`, p.consoleWaitS), name);
         const d = a && b ? horizontal(a, b) : null;
         ctx.note('walk', { before: a, after: b, distance: d, botReport: walked?.text ?? null });
-        // Chat-mod prefixes seen on the bot's lines. SERVER_SPEAKERS is a denylist on purpose: an
-        // allowlist would turn an unknown RotN chat prefix into a false FAIL. Recording what was
-        // seen lets a real run show whether an allowlist is worth it (PR #13 nit 3).
-        ctx.note('chatPrefixes', [...new Set(chatLines(sinceMarker(), name).map((c) => c.prefix ?? ''))]);
         ctx.check('walk', d !== null && d >= p.minWalkBlocks,
             d === null ? `no position from "tp ${name} ~ ~ ~" (before ${JSON.stringify(a)}, after ${JSON.stringify(b)})`
                 : `moved ${d.toFixed(1)} blocks horizontally (min ${p.minWalkBlocks}); bot said "${walked?.text ?? 'nothing'}"`);
+        // Chat-mod prefixes seen on the bot's lines. SERVER_SPEAKERS is a denylist on purpose: an
+        // allowlist would turn an unknown RotN chat prefix into a false FAIL. Recording what was
+        // seen lets a real run show whether an allowlist is worth it (PR #13 nit 3).
+        // After the walk check (PR #17 nit): if this read throws, the walk verdict is already recorded.
+        ctx.note('chatPrefixes', [...new Set(chatLines(sinceMarker(), name).map((c) => c.prefix ?? ''))]);
 
         // 6. stay connected until join + stayMs
         const left = joinedAt + p.stayMs - clock.now();

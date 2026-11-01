@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (13:55 UTC)
+Updated: 2026-11-01 (16:15 UTC)
 
 ## Done
 
@@ -71,43 +71,21 @@ Updated: 2026-11-01 (13:55 UTC)
 - PR #12 (sweeper cron at the off-peak minutes `7,22,37,52 * * * *`) merged as 971262f at 11:45:11 UTC: APPROVE.
 - PR #13 (PR #9 re-review nits: confirm the `say` marker before `bot.start`; reject `[Rcon]` and `[@]`) merged as 04b57c3: APPROVE WITH NITS.
 - PR #17 (low-priority nits from the #11, #12 and #13 reviews) merged as 032da12 at 12:16:28 UTC.
+- PR #21 (sweeper preflight: (a) its own schedule, (b) the helper repo's schedule, or (c) a cadence of external-cron dispatch runs; a failed newest sweeper run blocks all three) merged as 2abdd3b. Its CI race fix is in c5a4a8c (atomic writes of the fakes' state).
+- PR #22 (status: off-peak cron 0/8, helper not firing, helper workflow review) merged as a8ccac8.
+- **Off-PC sweeper trigger:** cron-job.org has dispatched the sweeper every 15 min since 14:15 UTC (set up by the human). Path (c) passed on the live runs at 14:55 UTC: gaps 15.2 and 14.8 min. G1 Batch A passed (lead, #26).
 
 ## Doing
 
-- **Helper preflight: PR #21**, `agent/harness-ops/helper-cron-preflight` (dca4357). `check_sweeper` also accepts path (b): a scheduled `dispatch-sweeper.yml` run in `JQDAW/rotn-sweeper-cron` within 40 min, plus a later successful sweeper run on develop. It adds a 60-day keep-alive reminder, tests and `deploy/README.md` docs. The full suite passes 209/209.
-  - Opened at the lead's request, even though the helper's schedule has not fired yet. Its lint gate fails until lead PR #20 (baseline 257 after #19) merges; then I merge develop in.
+- **Small queued items**, `agent/harness-ops/small-queued`, one PR:
+  - the status-ping loopback flake;
+  - PR #21 review findings 3 (GitHub's clock), 4 (document what (b) cannot prove) and 6 (empty `pushed_at`);
+  - the PR #17 review nits (the `chatPrefixes` note after the walk check; what the note covers).
+- **Next: brief deliverable 5, offline only.** The CX23 bootstrap script, the `mindcraft-rotn@.service` template, the per-bot env file, and the tag-based deploy and rollback, tested with fakes. Nothing connects to the CX23: the human has not given its root login yet.
 
 ## Watching
 
-- **Scheduled runs of `test-server-sweeper.yml` after the cron change.** Window: 11:45:11 to 13:45:11 UTC. Cron `7,22,37,52`, so 8 slots are expected (11:52 through 13:37).
-
-  | Slot (UTC) | Run | Created (UTC) | Delay | Result |
-  | --- | --- | --- | --- | --- |
-  | 11:52 | none | | | missed |
-  | 12:07 | none | | | missed |
-  | 12:22 | none | | | missed |
-  | 12:37 | none | | | missed |
-  | 12:52 | none | | | missed |
-  | 13:07 | none | | | missed |
-  | 13:22 | none | | | missed |
-  | 13:37 | none | | | missed |
-
-  **Result: 0 of 8 slots fired.** Checked 13:45:34 UTC with one manual `gh run list --branch develop`. The newest scheduled run is still 41281143865 (06:30:54 UTC).
-  - The off-peak minutes did not help. GitHub's scheduling for this fork is simply not reliable.
-  - Caveat: #17 changed a comment in the workflow file and merged at 12:16:28 UTC, inside the window, which may have re-registered the schedule. Neither part of the window fired a run.
-  - Background watchers were stopped twice by Claude Code because the PC was low on memory (about 12:30 and about 13:40 UTC), not because of an error. The table comes from manual checks.
-
-- **First scheduled run of the helper `JQDAW/rotn-sweeper-cron` `dispatch-sweeper.yml`** (cron `3,18,33,48`, set up by the human at about 13:02 UTC).
-  - The manual test chain worked: helper `workflow_dispatch` run 41309775533 at 13:08:08Z (success), then sweeper `workflow_dispatch` run 41309787687 on develop at 13:08:17Z (success).
-  - **No scheduled helper run yet:** the 13:18, 13:33 and 13:48 slots were empty (13:48 checked by the lead). The lead decides with the human how to get a reliable off-PC trigger.
-
-  | Helper slot (UTC) | Helper run | Created | Result | Sweeper run it triggered | Created | Result |
-  | --- | --- | --- | --- | --- | --- | --- |
-  | 13:18 | none | | missed | | | |
-  | 13:33 | none | | missed | | | |
-  | 13:48 | none | | missed | | | |
-
-  Before the change (`*/15`): one scheduled run in about 11 h (41281143865, 06:30:54 UTC, success).
+- Nothing. The 2 h observation of GitHub's own schedule ended with 0 of 8 slots, and the helper repo's schedule did not fire in its first three slots (13:18, 13:33, 13:48). Both are recorded in this file at a8ccac8. The preflight now also accepts the external cron cadence (path c).
 
 ## Planned real batches
 
@@ -115,7 +93,7 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 
 ## Blocked
 
-- Every paid batch, until a scheduled sweeper run succeeds and is under 120 min old (Request 5). Code work is not blocked.
+- Nothing. Paid batches need the lead's approval and a passing sweeper preflight, which the cron-job.org cadence now gives.
 
 ## Requests to other agents or the lead
 
@@ -136,7 +114,8 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
    - **Update (lead):** the schedule fired once, at 06:30:54 UTC (success). That is the only scheduled run in about 10 h, so the cron is registered but GitHub drops almost every run at the busy :00/:15/:30/:45 marks. The preflight correctly refuses today: its 120-min window stays as it is.
    - **Authorized fix:** a separate PR from develop moves the cron to the off-peak minutes `7,22,37,52 * * * *`. Merging it also re-registers the schedule. After the merge I watch for 2 h and record the scheduled-run cadence here. `test-server.sh up` passes its preflight once a scheduled run has succeeded within 120 min.
    - **Done:** #12 merged at 11:45:11 UTC. Result: 0 of 8 off-peak slots fired (see Watching).
-   - **Next fix (lead and human):** the helper repo `JQDAW/rotn-sweeper-cron` dispatches the sweeper every 15 min. My preflight change (path b) accepts its scheduled runs as evidence. Waiting for the first scheduled helper run.
+   - **Next fix (lead and human):** the helper repo `JQDAW/rotn-sweeper-cron` dispatches the sweeper every 15 min. My preflight change (path b) accepts its scheduled runs as evidence. Its schedule did not fire either.
+   - **Resolved:** the human set up cron-job.org (a POST to the dispatches endpoint every 15 min). PR #21's path (c) accepts that cadence. It has been live since 14:15 UTC.
 6. **Lead: review notes on the helper workflow `dispatch-sweeper.yml`** (read from the public repo):
    1. Every line of the committed file starts with one space (checked in the raw bytes). The YAML is still valid and GitHub accepted it, but an edit that adds a line at column 0 would break the file. Remove the leading spaces.
    2. The fine-grained token expires. When it lapses, helper runs fail (GitHub emails the owner) and path (b) refuses. Note its expiry date.
@@ -146,5 +125,4 @@ None planned. The next real batch is a G1 run or net-forge's capture run (`--cap
 
 ## Open PRs
 
-- #21 (`agent/harness-ops/helper-cron-preflight`): the sweeper preflight accepts the helper repo's scheduled dispatch (path b). It waits for lead PR #20, then I merge develop in.
-- This status update (`agent/harness-ops/sched-observation`).
+- The small-queued PR (`agent/harness-ops/small-queued`), opened with this update.
