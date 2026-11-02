@@ -11,7 +11,7 @@ Updated: 2026-11-02 20:26 UTC (from `date -u`)
   - rotn-data: #102 (RotN recipes in bot.registry), #107 (howToGet), #111 and #115 (first-night threats; creeper and skeleton variants, witch, stray and others), #112 and #114.
   - harness-ops: #101 (G3 and CX23 plan), #106 (S1 tooling), #113 (S1-A evidence).
 - **S1-A survey** (19:12-19:57 UTC, about EUR 0.14; the server was deleted):
-  - the G2 world has 203 surface rock-pile blocks within 46 blocks of spawn, and 2 dungeons (5 chests) underground;
+  - the G2 world has 203 rock-pile blocks within radius 48 of spawn (5 sampled, all on the surface, 19-46 blocks away), and 2 dungeons (5 chests) underground;
   - craft stats exist for all five G3 items;
   - the count-only `clear` removes nothing;
   - the console whisper sender is `Server`;
