@@ -33,7 +33,7 @@
 import crypto from 'node:crypto';
 import { startSession } from '../../runner/lib/session.mjs';
 import { lastTeleport } from '../../runner/lib/server-log.mjs';
-import { awaitReply, isRegistryName, ints, prng, sample, testforblockVerdict } from '../../runner/lib/g2.mjs';
+import { G2_WORLD_SEED, awaitReply, isRegistryName, ints, prng, sample, testforblockVerdict } from '../../runner/lib/g2.mjs';
 
 const MS = 1000;
 const BATCH = 8;
@@ -84,6 +84,7 @@ export default {
         maxWorldChangesPerType: 1, // world changes allowed in one census type; above, not a gate run
         seed: 0,                  // 0 = random; the seed used is recorded in notes
         dataRoot: '',              // '' = this repo (its mcdata.js wiring decides gate validity); tests use fixtures
+        worldSeed: G2_WORLD_SEED,  // the planned G2 world (deploy/test-server.sh run --seed); another seed is not a gate run
         loginTimeoutMs: 240 * MS,
         settleMs: 20 * MS,         // chunks around spawn arrive after the join
         replyTimeoutMs: 180 * MS,
@@ -94,7 +95,7 @@ export default {
     gateParams: {
         bot: 'equal', radius: 'min', topN: 'min', minTypes: 'min', candidates: 'min', samplesPerType: 'min',
         spotChecks: 'min', absentHits: 'equal', maxShareGap: 'equal', maxUnloadedShare: 'equal', dataRoot: 'equal',
-        maxWorldChangeShare: 'equal', maxWorldChangesPerType: 'equal',
+        maxWorldChangeShare: 'equal', maxWorldChangesPerType: 'equal', worldSeed: 'equal',
     },
 
     async run(ctx) {

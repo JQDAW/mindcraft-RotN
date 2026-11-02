@@ -10,6 +10,14 @@ import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { chatLines, parseLine } from './server-log.mjs';
 
+/**
+ * The world every G2 gate run uses (lead, after G2 batch 5): batch 4's world, whose spawn cube has double
+ * plants and Dynamic Trees blocks, so world coverage is fixed. Create the server with
+ * `deploy/test-server.sh run --seed <this>`; each G2 scenario's `worldSeed` gate param defaults to it, and a
+ * run whose recorded seed differs is not a gate run (session.mjs).
+ */
+export const G2_WORLD_SEED = '1880465901402976865';
+
 /** A full registry name, "namespace:path". Anything else (null, a number, "unknown") is not a name. */
 export const REGISTRY_NAME = /^[a-z][a-z0-9_.-]*:[a-z0-9_./-]*[a-z][a-z0-9_./-]*$/;   // "1:0" (an id) is not a name
 export const isRegistryName = (n) => typeof n === 'string' && REGISTRY_NAME.test(n) && !/(^|[:_/])unknown([_/]|$)/.test(n);

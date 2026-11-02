@@ -152,6 +152,7 @@ describe('G1 scenario on a simulated server', () => {
         assert.deepEqual(r.notes.walk.before, [10.5, 64, -3.5]);
         assert.deepEqual(r.notes.chatPrefixes, [''], 'no chat-mod prefix on the bot\'s lines (PR #13 nit 3)');
         assert.equal(r.botExitCode, 0, 'the runner stops the driver at the end');
+        assert.equal(r.botStoppedByRunner, true, 'and says so (G2 batch 5, lead question 3)');
     });
 
     test('an offline-mode UUID (version 3) fails login_online', async () => {
@@ -462,6 +463,23 @@ describe('run.mjs end to end with its real adapters (fake test-server CLI and fa
         } finally {
             fs.rmSync(tmp, { recursive: true, force: true });
         }
+    });
+});
+
+describe('driverProcess: the exit of a driver the runner stops (G2 batch 5: botExitCode 128)', () => {
+    test('stop() ends a running driver with SIGTERM: exit code 128 and exitSignal "SIGTERM"; a driver that exits by itself keeps its code', async () => {
+        const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-dp-')), 'driver.log');
+        const d = driverProcess([process.execPath, '-e', 'setTimeout(() => {}, 60000)'], out);
+        d.start({});
+        assert.equal(d.alive(), true);
+        await d.stop(5000);
+        assert.equal(d.exitCode(), 128, 'ended by a signal');
+        assert.equal(d.exitSignal(), 'SIGTERM');
+        const e = driverProcess([process.execPath, '-e', 'process.exit(3)'], out);
+        e.start({});
+        for (let i = 0; i < 200 && e.alive(); i++) await new Promise((r) => setTimeout(r, 25));
+        assert.equal(e.exitCode(), 3);
+        assert.equal(e.exitSignal(), null);
     });
 });
 
