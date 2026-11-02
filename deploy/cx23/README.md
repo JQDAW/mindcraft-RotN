@@ -31,7 +31,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
    Re-running `setup` is safe. It appends a missing key to `deploy`'s `authorized_keys` and never drops keys already there. With `--ssh-from`, it adds the narrow SSH rule and then removes an earlier open `22/tcp` rule.
 3. In a **second** terminal: `ssh deploy@<cx23>`. It must work.
 4. As root: `passwd deploy`. This is `deploy`'s own sudo password for admin work once root login is off.
-5. `bash /root/cx23/bootstrap.sh lockdown --i-tested-deploy-login`. This writes `/etc/ssh/sshd_config.d/00-mindcraft-rotn.conf` (no root login, no passwords, `AllowUsers deploy`). It checks the file with `sshd -t`, then reloads ssh. It refuses unless:
+5. **Optional, and not run on this project's CX23** (the human's decision on #101): the human keeps root SSH and instead swaps Orca's root target for a `deploy` target; see `coord/STATUS-harness-ops.md`, "CX23 first run". `bash /root/cx23/bootstrap.sh lockdown --i-tested-deploy-login`. This writes `/etc/ssh/sshd_config.d/00-mindcraft-rotn.conf` (no root login, no passwords, `AllowUsers deploy`). It checks the file with `sshd -t`, then reloads ssh. It refuses unless:
    - `deploy` has a key;
    - `deploy` has a sudo password;
    - the ssh journal shows an `Accepted publickey for deploy` line since setup. The flag alone is not enough: step 3 must really have happened.
