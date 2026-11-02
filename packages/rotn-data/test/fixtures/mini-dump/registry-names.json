@@ -7,7 +7,8 @@
     "minecraft:planks": 3,
     "minecraft:crafting_table": 4,
     "minecraft:cobblestone": 5,
-    "pyrotech:rock": 6
+    "pyrotech:rock": 6,
+    "minecraft:double_plant": 175
    }
   },
   "minecraft:items": {
@@ -18,16 +19,17 @@
     "minecraft:crafting_table": 4,
     "minecraft:cobblestone": 5,
     "pyrotech:rock": 6,
-    "minecraft:stick": 7,
-    "minecraft:flint": 8,
-    "minecraft:stone_axe": 9,
-    "minecraft:stone_pickaxe": 10,
-    "pyrotech:crude_axe": 11,
-    "contenttweaker:crafting_tools": 12,
-    "minecraft:coal": 13,
-    "minecraft:iron_ingot": 14,
-    "contenttweaker:raw_iron": 15,
-    "minecraft:furnace": 16
+    "minecraft:double_plant": 7,
+    "minecraft:stick": 8,
+    "minecraft:flint": 9,
+    "minecraft:stone_axe": 10,
+    "minecraft:stone_pickaxe": 11,
+    "pyrotech:crude_axe": 12,
+    "contenttweaker:crafting_tools": 13,
+    "minecraft:coal": 14,
+    "minecraft:iron_ingot": 15,
+    "contenttweaker:raw_iron": 16,
+    "minecraft:furnace": 17
    }
   },
   "minecraft:entities": {

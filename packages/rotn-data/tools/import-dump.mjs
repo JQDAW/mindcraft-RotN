@@ -8,7 +8,9 @@
 //      with no errors, no dropped entries (entryErrors) and Forge 14.23.5.2860; every file in
 //      DUMP_FILES, serializers.json included, is present;
 //   2. every block, item and entity name in the dump is in the server's RegistryData
-//      capture (registry-names.json) and the other way round;
+//      capture (registry-names.json) and the other way round; every state-meta-remap record is
+//      consistent (networkId = blockId << 4 | idMeta, a synced block) and its anomaly counts are 0
+//      (checkStateMetaRemap);
 //   3. every early-game recipe in test/fixtures/scripts-<version>-early-recipes.json is
 //      found in the dump (the CraftTweaker scripts cross-check).
 // It then adds the pack pin (version, zip SHA-256) and the SHA-256 of every raw fetched file
@@ -101,6 +103,7 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     registryDir ??= outDir;
     const pin = PACK_PINS[version];
     const problems = [];
+    const notes = [];
     if (!fs.existsSync(path.join(src, 'DONE'))) throw new Error(`${src}/DONE is missing: the dump did not finish (or was fetched mid-write)`);
     const files = {};
     for (const f of DUMP_FILES) files[f] = readDumpFile(src, f);
@@ -130,6 +133,9 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
         if (extra.length) problems.push(`${kind}: ${extra.length} dumped but not synced, e.g. ${extra.slice(0, 5).join(', ')}`);
     }
 
+    // 2b. the network block-state remap (state-meta-remap.json, dumper 0.2.0)
+    notes.push(...checkStateMetaRemap(files['state-meta-remap'], names['minecraft:blocks']?.ids ?? {}, { allowErrors, problems }));
+
     // 3. scripts cross-check, on a catalog over the fetched files
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-import-'));
     let crosscheck = [];
@@ -143,7 +149,7 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
     }
-    if (problems.length) return { written: [], problems, crosscheck };
+    if (problems.length) return { written: [], problems, notes, crosscheck };
 
     // write
     files.manifest = {
@@ -158,6 +164,7 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     files.oredict.ores = sortKeys(files.oredict.ores);
     files.spawns.biomes = sortKeys(files.spawns.biomes);
     files.serializers.usage = sortKeys(files.serializers.usage ?? {});
+    files['state-meta-remap'].remap = [...files['state-meta-remap'].remap].sort((a, b) => a.networkId - b.networkId);
     files.recipes.recipes = [...files.recipes.recipes].sort((a, b) => String(a.id).localeCompare(String(b.id)));
     canonicalize(files);
     const written = [];
@@ -172,7 +179,44 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
         }
         written.push(target);
     }
-    return { written, problems, crosscheck };
+    return { written, problems, notes, crosscheck };
+}
+
+/**
+ * Checks state-meta-remap.json; pushes blocking findings to `problems` and returns notes.
+ * Blocking: a missing remap list, no scanned ids, a record that is not internally consistent
+ * (networkId = blockId << 4 | idMeta, metas 0-15 and different, one record per networkId), a block
+ * the server does not sync, and (unless allowErrors) a non-zero anomaly count: the dumper's scan
+ * assumes the id << 4 | meta encoding, and an anomaly means it does not hold.
+ * A blockId that differs from the registry capture's id is only a note: the table is used by block
+ * name (catalog.networkRemap rebuilds ids from the connected server), and another world can number
+ * mod blocks differently.
+ */
+export function checkStateMetaRemap(r, syncedIds, { allowErrors = false, problems = [] } = {}) {
+    const notes = [];
+    const bad = (msg) => problems.push(`state-meta-remap: ${msg}`);
+    if (!Array.isArray(r?.remap)) { bad('no remap list'); return notes; }
+    if (r.encoding !== 'networkId = blockId << 4 | meta') bad(`encoding ${r.encoding}`);
+    if (!(r.scanned?.networkIds > 0)) bad('scanned.networkIds is not positive: nothing was scanned');
+    const a = r.anomalies ?? {};
+    if (((a.encodingMismatches ?? 1) !== 0 || (a.foreignStates ?? 1) !== 0) && !allowErrors) {
+        bad(`anomalies: ${a.encodingMismatches} encoding mismatches, ${a.foreignStates} foreign states (first: ${a.first})`);
+    }
+    const seen = new Set();
+    const isMeta = (m) => Number.isInteger(m) && m >= 0 && m <= 15;
+    const idDiffs = [];
+    for (const x of r.remap) {
+        const label = `networkId ${x.networkId} (${x.block})`;
+        if (!Number.isInteger(x.networkId) || !Number.isInteger(x.blockId) || !isMeta(x.idMeta) || !isMeta(x.stateMeta)) { bad(`${label}: bad fields`); continue; }
+        if (x.networkId !== (x.blockId << 4 | x.idMeta)) bad(`${label}: not blockId << 4 | idMeta`);
+        if (x.idMeta === x.stateMeta) bad(`${label}: idMeta equals stateMeta, so it is not a remap`);
+        if (seen.has(x.networkId)) bad(`${label}: duplicate`);
+        seen.add(x.networkId);
+        if (!Object.hasOwn(syncedIds, x.block)) bad(`${label}: block not synced by the server`);
+        else if (syncedIds[x.block] !== x.blockId) idDiffs.push(`${x.block} ${x.blockId} vs ${syncedIds[x.block]}`);
+    }
+    if (idDiffs.length) notes.push(`state-meta-remap: ${idDiffs.length} block ids differ from the registry capture (used by name only), e.g. ${[...new Set(idDiffs)].slice(0, 5).join(', ')}`);
+    return notes;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
@@ -182,6 +226,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (!src) { console.error('usage: import-dump.mjs <rotn-dump dir> --jar-sha256 <hex> [--version 3.3.4] [--allow-errors] [--dry-run]'); process.exit(2); }
     const res = importDump({ src, jarSha256: valueOf('--jar-sha256'), version: valueOf('--version') ?? '3.3.4', allowErrors: args.includes('--allow-errors'), dryRun: args.includes('--dry-run') });
     for (const c of res.crosscheck) console.log(`cross-check ${c.ok ? 'ok  ' : 'FAIL'} ${c.key}`);
+    for (const n of res.notes) console.log(`note: ${n}`);
     if (res.problems.length) { for (const p of res.problems) console.error(`problem: ${p}`); process.exit(1); }
     for (const w of res.written) console.log(`wrote ${w}`);
 }

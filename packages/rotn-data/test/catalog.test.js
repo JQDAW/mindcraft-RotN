@@ -2,6 +2,8 @@
 // (test/fixtures/mini-dump, made by make-mini-dump.mjs; values are not pack facts).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -127,4 +129,40 @@ test('the real 3.3.4 pack works before a dump: names yes, properties null', () =
     }
     assert.equal(pack.entity('specialmobs:firecreeper').name, 'specialmobs:firecreeper');
     assert.equal(pack.lookup('crude axe')[0].name, 'pyrotech:crude_axe');
+});
+
+// state-meta-remap.json (dumper 0.2.0; for forge-bridge after net-forge's G2 double-plant finding).
+test('stateMetaRemap, clientMeta and networkRemap on the mini dump stub', () => {
+    const r = mini.stateMetaRemap();
+    assert.equal(r.encoding, 'networkId = blockId << 4 | meta');
+    assert.equal(r.records.length, 3);
+    assert.deepEqual(r.byBlock, { 'minecraft:double_plant': { 8: 10, 9: 10, 11: 10 } });
+    assert.deepEqual(r.anomalies, { encodingMismatches: 0, foreignStates: 0, first: null });
+    // What the server sends for the upper half (175 << 4 | 11) is meta 10 on a Forge client.
+    assert.equal(mini.clientMeta('minecraft:double_plant', 11), 10);
+    assert.equal(mini.clientMeta('double_plant', 8), 10); // 1.12 short name
+    assert.equal(mini.clientMeta('minecraft:double_plant', 10), 10);
+    assert.equal(mini.clientMeta('minecraft:double_plant', 3), 3); // lower half: not remapped
+    assert.equal(mini.clientMeta('minecraft:stone', 1), 1);
+    assert.equal(mini.clientMeta('nomod:nothing', 1), null);
+    // Network ids from the connected server's block ids, not the dumped server's.
+    assert.deepEqual([...mini.networkRemap({ 'minecraft:double_plant': 175 })], [[2808, 10], [2809, 10], [2811, 10]]);
+    assert.deepEqual([...mini.networkRemap({ 'minecraft:double_plant': 200, 'minecraft:stone': 1 })], [[3208, 10], [3209, 10], [3211, 10]]);
+    assert.equal(mini.networkRemap({}).size, 0);
+});
+
+test('without state-meta-remap.json the remap API returns null (nothing is guessed)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-remap-'));
+    try {
+        for (const f of fs.readdirSync(path.join(HERE, 'fixtures/mini-dump'))) {
+            if (f !== 'state-meta-remap.json') fs.copyFileSync(path.join(HERE, 'fixtures/mini-dump', f), path.join(dir, f));
+        }
+        const old = new RotnData(dir, { version: 'mini' });
+        assert.equal(old.hasDump, true);
+        assert.equal(old.stateMetaRemap(), null);
+        assert.equal(old.clientMeta('minecraft:double_plant', 11), null);
+        assert.equal(old.networkRemap({ 'minecraft:double_plant': 175 }), null);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 });

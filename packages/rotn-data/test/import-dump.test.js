@@ -27,8 +27,12 @@ function fakeFetch({ mutate } = {}) {
     for (const [f, v] of Object.entries(files)) fs.writeFileSync(path.join(src, `${f}.json`), JSON.stringify(v));
     fs.writeFileSync(path.join(src, 'DONE'), '[rotndump] wrote {...}\n');
     const ids = (o) => Object.fromEntries(Object.keys(o).map((n, i) => [n, i]));
+    // Block ids as in the mini dump's capture where it has one (the double plant is 175, which
+    // state-meta-remap.json's network ids are built from).
+    const capturedBlockIds = read('registry-names.json').registries['minecraft:blocks'].ids;
+    const blockIds = Object.fromEntries(Object.keys(read('blocks.json').blocks).map((n, i) => [n, capturedBlockIds[n] ?? i]));
     const reg = { registries: {
-        'minecraft:blocks': { ids: ids(read('blocks.json').blocks) },
+        'minecraft:blocks': { ids: blockIds },
         'minecraft:items': { ids: ids(Object.fromEntries([...Object.keys(read('items.json').items), ...Object.keys(read('registry-names.json').registries['minecraft:items'].ids)].map(n => [n, 0]))) },
         'minecraft:entities': { ids: ids(read('entities.json').entities) },
     } };
@@ -180,6 +184,79 @@ test('names missing from the dump, dumper errors, wrong Forge or a lost recipe: 
         assert.match(text, /Forge 14\.23\.5\.2859/);
         assert.match(text, /no dumped recipe matches rocks_to_cobblestone/);
         assert.ok(!fs.existsSync(path.join(pack, 'blocks.json')));
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+// state-meta-remap.json (dumper 0.2.0; lead request after net-forge's G2 double-plant finding).
+test('state-meta-remap: imported sorted by networkId, with no notes when the ids match the capture', () => {
+    const { root, src, pack } = fakeFetch({ mutate: (f) => { f['state-meta-remap'].remap.reverse(); } });
+    try {
+        const res = importDump({ src, jarSha256: JAR, outDir: pack });
+        assert.deepEqual(res.problems, []);
+        assert.deepEqual(res.notes, []);
+        const back = JSON.parse(fs.readFileSync(path.join(pack, 'state-meta-remap.json'), 'utf8'));
+        assert.deepEqual(back.remap.map(x => x.networkId), [2808, 2809, 2811]);
+        assert.equal(new RotnData(pack, { version: '3.3.4' }).clientMeta('minecraft:double_plant', 11), 10);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('state-meta-remap: a dump without it is refused', () => {
+    const { root, src, pack } = fakeFetch();
+    try {
+        fs.rmSync(path.join(src, 'state-meta-remap.json'));
+        assert.throws(() => importDump({ src, jarSha256: JAR, outDir: pack }), /missing state-meta-remap\.json/);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('state-meta-remap: anomalies block the import unless allowErrors', () => {
+    const { root, src, pack } = fakeFetch({ mutate: (f) => {
+        f['state-meta-remap'].anomalies = { encodingMismatches: 3, foreignStates: 0, first: 'state x:y[a=b] of block id 4100 has network id 12' };
+    } });
+    try {
+        const res = importDump({ src, jarSha256: JAR, outDir: pack });
+        assert.deepEqual(res.written, []);
+        assert.match(res.problems.join('\n'), /state-meta-remap: anomalies: 3 encoding mismatches, 0 foreign states \(first: state x:y/);
+        assert.deepEqual(importDump({ src, jarSha256: JAR, outDir: pack, allowErrors: true }).problems, []);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('state-meta-remap: inconsistent records and unsynced blocks are refused', () => {
+    const { root, src, pack } = fakeFetch({ mutate: (f) => {
+        const r = f['state-meta-remap'].remap;
+        r[0].networkId = 2807; // not 175 << 4 | 8
+        r[1].stateMeta = r[1].idMeta; // not a remap
+        r.push({ ...r[2] }); // duplicate 2811
+        r.push({ networkId: 99 << 4 | 1, block: 'nomod:nothing', blockId: 99, idMeta: 1, stateMeta: 0, stateNetworkId: 99 << 4, state: 'nomod:nothing' });
+        f['state-meta-remap'].scanned.networkIds = 0;
+    } });
+    try {
+        const text = importDump({ src, jarSha256: JAR, outDir: pack }).problems.join('\n');
+        assert.match(text, /networkId 2807 \(minecraft:double_plant\): not blockId << 4 \| idMeta/);
+        assert.match(text, /networkId 2809 \(minecraft:double_plant\): idMeta equals stateMeta/);
+        assert.match(text, /networkId 2811 \(minecraft:double_plant\): duplicate/);
+        assert.match(text, /networkId 1585 \(nomod:nothing\): block not synced/);
+        assert.match(text, /scanned\.networkIds is not positive/);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('state-meta-remap: block ids that differ from the capture are a note, not a problem', () => {
+    const { root, src, pack } = fakeFetch({ mutate: (f) => {
+        for (const x of f['state-meta-remap'].remap) Object.assign(x, { blockId: 176, networkId: 176 << 4 | x.idMeta });
+    } });
+    try {
+        const res = importDump({ src, jarSha256: JAR, outDir: pack });
+        assert.deepEqual(res.problems, []);
+        assert.match(res.notes.join('\n'), /3 block ids differ from the registry capture \(used by name only\), e.g. minecraft:double_plant 176 vs 175/);
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }

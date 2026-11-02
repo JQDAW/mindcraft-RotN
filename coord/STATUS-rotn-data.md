@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-01T23:07Z (from `date -u`)
+Updated: 2026-11-02T02:16Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -15,6 +15,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#59 merged**: canonical list order in the importer, `maxTickMs` and the sorted recipe sample in the dumper, the corrected first-vs-second dump comparison.
 - **#62 merged** (`b47449e`): entity threat overrides beyond IMob, cited from the mods' bytecode (13 entries; dangerous: fire and ice dragons, sea serpent, death worm, cockatrice; 33 reviewed and not marked, among them the 24 Animania rabbits, whose player targeting is only for a rabbit named "Killer"). It also marks the vanilla animals Animania replaces (chicken, cow, pig, rabbit, sheep; `config/animania.cfg` lines 104-119; G2 batch 1) and leaves them out of `common-mobs.json`.
   - Correction to its PR description's condition table: the cockatrice's player-targeting task, `CockatriceAITarget(EntityLivingBase, EntityCockatrice$1)`, is at bytecode **253**. Offset 183 is `CockatriceAITargetItems` (item targeting), which my checker's name match also caught. Neither has a branch that skips it, so the classification stands. The offset is now in the `entity-overrides.json` evidence.
+- **#68 merged** (`7d33cee`): the cockatrice offset correction (above).
 - **#48 merged** (`7f0feef`): the dumper's per-tick time cap, per-entry isolation and `serializers.json`; the importer requires `serializers.json` and blocks on `entryErrors`.
 - **First RotN 3.3.4 dump batch: PASS** (lead's written GO, 2026-11-01 about 19:24 UTC, before the server was created at 19:25:54; record below).
 - **Second dump batch (serializers): PASS** (lead's written GO 21:23 UTC; record below). It is imported in PR #55, which replaces the first dump.
@@ -114,7 +115,10 @@ Ids 0-13 are vanilla. Registered entities that use a modded serializer: `doggyta
 
 ## Doing
 
-- Holding until G2 passes (lead, 2026-11-01). Then the next phase's work.
+- **G2 blocker (lead, 2026-11-02): `state-meta-remap`.** net-forge found that Forge's second `BLOCK_STATE_IDS` pass (`GameData$BlockCallbacks.onAdd`) sends the double plant's upper half as `175 << 4 | 11`, while a Forge client and `/testforblock` report meta 10. This PR:
+  - dumper 0.2.0: a read-only part `state-meta-remap.json`. For every block id and `m` in 0-15 it resolves `id << 4 | m` with `BLOCK_STATE_IDS.getByValue` and records `{networkId, block, blockId, idMeta, stateMeta, stateNetworkId, state}` where `idMeta != getMetaFromState`. Batched like the other parts (500 ids or 40 ms per tick), `J.get` guards, `.tmp` then rename, `DONE` last, opt-in marker. Guards: `anomalies.encodingMismatches` (a valid state whose id is not its block's `id << 4 | x`; REID raises the id limit, 4,896 blocks here) and `foreignStates`;
+  - rotn-data: `stateMetaRemap()`, `clientMeta(block, idMeta)` and `networkRemap(blockIds)` (null until a dump has the table); the importer requires the file and checks every record and the anomalies; a stub in `test/fixtures/mini-dump/state-meta-remap.json`.
+- **Plan for the third dump batch (needs the lead's written GO after this PR merges):** the same as the second batch. Separate scratch worktree detached at the merge commit; jar from the dumper-build push run on develop for that commit, SHA-256 recorded before the batch; `timeout -s TERM -k 120 2700 deploy/test-server.sh run --type cpx42 --location nbg1 --ttl-hours 2 --yes --extra-mod <jar> -- bash tools/dumper/run-dump.sh <scratch out>` with `deploy/test-server.sh` unchanged and its preflight passing on its own (no `--skip-sweeper-check`); CPX42 nbg1, TTL 2 h, stop at 45 min, at most about EUR 0.28 plus the Primary IPv4; project empty before and after; raw output out of git. Then import with `--jar-sha256` in a PR that turns on the remap acceptance test.
 
 ## Follow-ups (later PRs)
 
@@ -147,4 +151,4 @@ Ids 0-13 are vanilla. Registered entities that use a modded serializer: `doggyta
 
 ## Open PRs
 
-- This PR: the cockatrice offset correction (253, not 183) in `entity-overrides.json` and here.
+- This PR (`agent/rotn-data/state-meta-remap`): the `state-meta-remap` dumper part, catalog API and importer support.

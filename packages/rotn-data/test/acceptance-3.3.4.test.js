@@ -123,3 +123,16 @@ test('common-mobs.json is up to date, names real entities, and has modded mobs (
     for (const m of committed.mobs) assert.equal(pack.isReplaced(m.name), false, `${m.name} never spawns here`);
     assert.ok(first12.some(n => n.startsWith('animania:')));
 });
+
+// state-meta-remap.json: needs a dump from dumper 0.2.0 (lead request after net-forge's G2 finding).
+const remapSkip = pack.stateMetaRemap() ? false : 'the 3.3.4 dump has no state-meta-remap.json yet (dumper 0.2.0 batch)';
+test('stateMetaRemap(): the double plant upper half reports meta 10, and the scan is complete', { skip: remapSkip }, () => {
+    const r = pack.stateMetaRemap();
+    assert.deepEqual(r.anomalies, { encodingMismatches: 0, foreignStates: 0, first: null });
+    assert.equal(r.scanned.blocks, pack.names.blocks.size);
+    // Forge's second pass: getStateFromMeta(8..11) is one state, sent as 175 << 4 | 11.
+    assert.deepEqual(r.byBlock['minecraft:double_plant'], { 8: 10, 9: 10, 11: 10 });
+    const sent = r.records.find(x => x.networkId === (175 << 4 | 11));
+    assert.equal(sent.stateNetworkId, 175 << 4 | 11);
+    assert.equal(pack.clientMeta('minecraft:double_plant', 11), 10);
+});

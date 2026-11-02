@@ -7,7 +7,7 @@
 // - the dump (ADR 0004; tools/dumper, format "rotn-dump/1", see README.md):
 //   blocks.json, items.json, recipes.json, smelting.json, entities.json,
 //   oredict.json, spawns.json, serializers.json (dumper 0.1.0 after PR #48; the first 3.3.4 dump
-//   predates it), manifest.json. Present once a dump has been run on
+//   predates it), state-meta-remap.json (dumper 0.2.0), manifest.json. Present once a dump has been run on
 //   the test server and imported. Until then, property queries return null and
 //   `hasDump` is false; nothing is guessed.
 //
@@ -24,7 +24,7 @@ import { parseOld, registryName, WILDCARD_META } from './names.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const PACKAGE_ROOT = path.join(HERE, '..');
 export const DUMP_FORMAT = 'rotn-dump/1';
-export const DUMP_FILES = ['manifest', 'blocks', 'items', 'recipes', 'smelting', 'entities', 'oredict', 'spawns', 'serializers'];
+export const DUMP_FILES = ['manifest', 'blocks', 'items', 'recipes', 'smelting', 'entities', 'oredict', 'spawns', 'serializers', 'state-meta-remap'];
 
 function readJson(dir, base) {
     for (const [ext, decode] of [['.json', (b) => b], ['.json.br', (b) => zlib.brotliDecompressSync(b)]]) {
@@ -65,6 +65,7 @@ export class RotnData {
         this._recipesByResult = null;
         this._entitiesByModId = null;
         this._lookupIndex = null;
+        this._remapByBlock = null;
     }
 
     // ---- name resolution ---------------------------------------------------
@@ -219,6 +220,61 @@ export class RotnData {
     serializers() {
         const s = this.dump.serializers;
         return s ? { serializers: s.serializers ?? [], usage: s.usage ?? {} } : null;
+    }
+
+    // ---- network block-state ids (state-meta-remap.json, for forge-bridge) ----
+
+    /**
+     * Network block-state ids whose metadata is not (id & 15). Forge maps getStateFromMeta(m) to
+     * id << 4 | m in a second pass and the later put wins, so the double plant's upper half is
+     * sent as 175 << 4 | 11 while a Forge client reports meta 10 (tools/dumper/README.md).
+     * null for a dump made before dumper 0.2.0. Otherwise
+     * { encoding, records: [{networkId, block, blockId, idMeta, stateMeta, stateNetworkId, state}],
+     *   byBlock: { [block]: { [idMeta]: stateMeta } }, scanned, anomalies }.
+     * networkId and blockId are the dumped (test) server's ids; byBlock does not depend on them.
+     */
+    stateMetaRemap() {
+        const r = this.dump['state-meta-remap'];
+        if (!r) return null;
+        return { encoding: r.encoding, records: r.remap ?? [], byBlock: this._remapIndex(), scanned: r.scanned ?? null, anomalies: r.anomalies ?? null };
+    }
+
+    _remapIndex() {
+        if (!this._remapByBlock) {
+            const byBlock = {};
+            for (const x of this.dump['state-meta-remap']?.remap ?? []) (byBlock[x.block] ??= {})[x.idMeta] = x.stateMeta;
+            this._remapByBlock = byBlock;
+        }
+        return this._remapByBlock;
+    }
+
+    /**
+     * The metadata a Forge client reports for `block` received with metadata `idMeta`
+     * (networkId & 15): the remapped meta, else idMeta. null when the dump has no remap table
+     * (nothing is guessed) or the block is unknown.
+     */
+    clientMeta(block, idMeta) {
+        if (!this.dump['state-meta-remap']) return null;
+        const n = registryName(block);
+        if (!n || !this.names.blocks.has(n)) return null;
+        return this._remapIndex()[n]?.[idMeta] ?? idMeta;
+    }
+
+    /**
+     * networkId -> client meta for the remapped ids only, on a server whose block ids are
+     * `blockIds` ({ [registryName]: id }, e.g. forge-bridge's registry sync). Blocks missing from
+     * `blockIds` are left out. null when the dump has no remap table.
+     * @returns {Map<number, number>|null}
+     */
+    networkRemap(blockIds) {
+        if (!this.dump['state-meta-remap']) return null;
+        const out = new Map();
+        for (const [block, metas] of Object.entries(this._remapIndex())) {
+            const id = blockIds?.[block];
+            if (!Number.isInteger(id)) continue;
+            for (const [m, stateMeta] of Object.entries(metas)) out.set(id << 4 | Number(m), stateMeta);
+        }
+        return out;
     }
 
     // ---- entities ----------------------------------------------------------
