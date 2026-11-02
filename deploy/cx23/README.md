@@ -44,7 +44,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
 
    It never overwrites an existing env file.
 2. **Human:** put the bot's OpenRouter key into the env file on the server, and fill in the Minecraft host. The key never goes into the repo or a chat.
-3. **Human (NEEDS-HUMAN):** do the bot's first Microsoft device-code login into its `msa/` folder (`docs/research/ops.md` section 1). Agents never handle the code, the password or the token cache.
+3. **Human (NEEDS-HUMAN):** do the bot's first Microsoft device-code login into its `msa/` folder, with `msa-login.mjs` (the command is under "Not verified yet" below). It needs a deployed release. Agents never handle the code, the password or the token cache.
 4. `sudo mindcraft-rotn-ctl enable <bot>` and `sudo mindcraft-rotn-ctl start <bot>`.
 
 The MindServer web UI listens on `localhost` only (`src/mindcraft/mindserver.js`). Reach it with `ssh -L 8080:localhost:8080 deploy@<cx23>`.
@@ -98,4 +98,4 @@ That is the pin in `bootstrap.sh`.
 ## Not verified yet
 
 - **Resource caps** (`MemoryHigh=1G`, `MemoryMax=1536M`, `--max-old-space-size=768`) are ops.md estimates, to be confirmed in the 2-hour soak.
-- **The first device-code login** needs a helper (ops.md section 1 sketches `login-bot.mjs`). It is not written yet; it comes with the first real bot.
+- **The first device-code login** uses net-forge's `packages/forge-bridge/tools/msa-login.mjs`, the tool already used for the test bot's cache on the PC. It replaces the `login-bot.mjs` sketched in ops.md section 1. On the CX23, after the first deploy, as `deploy` (`ssh -t`): `sudo -u mindcraft-rotn env MINDCRAFT_PROFILES_FOLDER=/var/lib/mindcraft-rotn/<bot>/msa node /opt/mindcraft-rotn/current/packages/forge-bridge/tools/msa-login.mjs <MinecraftName>`, then the same with `--check`. It prints only Microsoft's instructions and the profile name, never a token. It has not been run on a CX23 yet.

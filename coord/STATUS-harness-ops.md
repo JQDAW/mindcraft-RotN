@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (16:46 UTC, from `date -u`)
+Updated: 2026-11-02 (17:15 UTC, from `date -u`)
 
 ## Done
 
@@ -90,7 +90,12 @@ Updated: 2026-11-02 (16:46 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 8 PASSED** (2026-11-02, develop 0bdb537): blocks, mobs and items all PASSED as gate runs in one batch, on the fixed world and the fixed cube. Batch 4's double-plant upper halves and Dynamic Trees blocks were in the census and server-confirmed. Net-forge's movement guard (#95) never had to act. The server is deleted. The evidence is in this PR. **The lead decides whether G2 is met.**
+- **Phase 3 (G3) started** (lead, 2026-11-02, after G2 PASSED on batch 8, #97/#98). This PR:
+  - the G3 scenario plan, under "Planned real batches";
+  - the G3 driver interface proposal for skills-rotn, routed through the lead;
+  - precise human requests for the first CX23 run (Requests item 8, rewritten) and a test OpenRouter key (item 12).
+  - Next: the offline runner parts for G3 (arbiters, fake server, the Mindcraft driver wrapper), in small PRs.
+- **G2 PASSED** on batch 8 (#97): blocks, mobs and items all gate-valid in one batch on the fixed world and cube.
 - **History:**
   - G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82.
   - Batch 5 PASSED (#83), but its world had no double plants, so the lead fixed the world (#85).
@@ -466,6 +471,169 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 
 ## Planned real batches
 
+### G3 batches (the plan; lead, 2026-11-02 after G2 PASSED. Nothing paid without the lead's written GO.)
+
+**Goal:** G3 gate evidence for the three PLAN items:
+- rocks to stone tools on a fresh spawn;
+- survive the first night;
+- a task preempts the agenda, which then resumes.
+
+The brief adds "the queue survives a restart", which is cheap to run in the same batch (4th scenario).
+
+**Same rules as G2.**
+- The server is the arbiter: every pass condition is read from the server log or the console, never from the bot's own word.
+- Gate parameters ('min' or 'equal'); a weakened run is never a gate pass.
+- The world seed is recorded and checked; `git.dirty: false`.
+- One batch must pass all scenarios on one SHA.
+- Evidence goes only through `test/tools/redact-evidence.mjs`, with the CI leak check.
+- Unit tests on a simulated server first, offline. Every new console command needs the lead's approval (listed below).
+
+**What changes from G2: the real agent.** The bot under test is the real Mindcraft agent (`main.js` with skills-rotn's profile, agenda and task queue), talking to OpenRouter, not `g1-driver.mjs` alone. So:
+- runs are slower and not deterministic;
+- each batch has an LLM cost on top of the server;
+- the runner never gives hints the human player would not. It whispers only what a task giver would type.
+
+#### World and start state
+
+- **A fresh spawn:** a new test server per batch, so the bot's player data is new. It holds only RotN's start kit (Scroll of New Life, Bundle, bread). At the start the runner confirms with `clear` in test mode (below) that the bot has none of the target items.
+- **The world:** a fixed seed, as in G2. Candidates:
+  - (a) the G2 world `1880465901402976865`: a forest at spawn, and trees are certain. Rock piles were not in its top-50 census, so their density is unknown.
+  - (b) batch 5's world `8796110535854059511`: had `pyrotech:rock` piles (metas 6 and 8) in its spawn cube, so **rocks do generate in the Overworld**, against `rotn-progression.md`'s config reading. But it had no trees in the cube.
+  - **Proposal:** decide with survey batch S1 (below), which measures rock piles, trees and exposed stone within 48 blocks of spawn in both worlds.
+- **Spawn stone is Underground Biomes stone** (`undergroundbiomes:*_stone` in every G2 census), not `minecraft:stone`. Its rocks are UB rock variants, so "4 rocks to cobblestone" may not give `minecraft:cobblestone`. The scenarios take the accepted outputs from rotn-data's recipe table (every output of a 4-same-rocks recipe), not from a hard-coded name.
+- **Difficulty:** the server default (no peaceful), daylight cycle on. `time set day` is used only where a scenario says so.
+
+#### Server-side arbiters (no op mods; 1.12 vanilla commands)
+
+1. **Inventory:** `clear <bot> <item> <meta> 0` in test mode. A maxCount of 0 removes nothing and prints "<bot> has N items that match the criteria". This is the main pass check: it counts what the bot really holds.
+2. **Statistics** (secondary, recorded, not gating until S1 verifies them for modded items): scoreboard objectives on stat criteria.
+   - `stat.craftItem.pyrotech.crude_axe`, `stat.craftItem.minecraft.crafting_table`, `stat.craftItem.minecraft.stone_pickaxe`, `stat.craftItem.minecraft.stone_axe`;
+   - `stat.mineBlock.<log blocks>`;
+   - `stat.deaths` and `stat.playOneMinute`.
+   - Read them with `scoreboard players list <bot>`.
+   - They prove that the bot itself crafted, which the inventory alone cannot (the crude axe may be used up by Crafting Tools).
+3. **Placed blocks:** `testforblock` (as in G2), for example the placed crafting table that the bot reports.
+4. **Position:** `tp <bot> ~ ~ ~` (as in G2).
+5. **Life:** the server log's join, leave and death lines for the bot (the vanilla death messages "<bot> was slain by", "<bot> died", and so on, and Corpse Complex's lines), plus `stat.deaths`.
+6. **No cheating:** the scenario fails if, during the run:
+   - the log shows a `Given [` line or a gamemode change for the bot;
+   - the bot runs any command (its chat is never a `/`-command reply);
+   - or the bot is op (`ops.json` empty, already true on the test server).
+   - The runner itself gives nothing in G3.
+
+**New console commands to approve (test server only):** `clear <bot> <item> <meta> 0` (test mode only, never a real clear), `scoreboard objectives add|remove` and `scoreboard players list <bot>`, and `time query daytime`. G2's list (`say`, `seed`, `tp`, `tell`, `testforblock`, `testfor`, `time set day`, `gamerule doDaylightCycle`) stays. Not `give`, `summon` or `kill` in G3, except S1.
+
+#### Scenario `g3-rocks-to-stone-tools` (ready-to-try item 4)
+
+- **Run:**
+  - Login, then the runner checks the start inventory, then the agent plays its agenda with no runner input.
+  - The scenario ends when the agent holds the targets, or at `maxMinutes` (default 25, 'min').
+- **Checks:**
+  - `login_online`.
+  - `fresh_start`: none of the target items at the start.
+  - `stone_tools`: `clear` test finds at least 1 `minecraft:stone_pickaxe` and 1 `minecraft:stone_axe`.
+  - `crafting_table`: one is placed (the bot reports its position; the server's `testforblock` confirms), or at least 1 is held.
+  - `cobblestone`: at least 1 of the rotn-data outputs of a 4-rocks recipe is held, or placed and confirmed.
+  - `crafted_by_bot` (after S1): the craft statistics for the crude axe, the table and both stone tools are each at least 1.
+  - `no_cheat`.
+- **Notes:** minutes to each milestone (from periodic `clear` tests every 60 s); deaths; position track every 60 s; the LLM call count and cost.
+- **Not claimed:** logs and planks are not separate checks. The table and the tools prove them, and the planks come from the debark interaction, which no stat counts.
+
+#### Scenario `g3-first-night` (ready-to-try item 5)
+
+- **Run:**
+  - Fresh spawn; the runner sets nothing about time, so the bot lives a real first day and night.
+  - The scenario ends at the first dawn after a full night, by `time query daytime`. The dawn bound is measured in S1, because Extended Days may change the cycle; `rotn-progression.md` says about 20 min of day in a 40 min cycle.
+- **Checks:**
+  - `login_online`;
+  - `survived_night`: no death line and `stat.deaths` 0 from login to dawn;
+  - `stayed_online`: no leave or kick line;
+  - `no_cheat`.
+- **Recorded, not gating (lead decides):** "in or near shelter".
+  - At the middle of the night the runner records the bot's position and `testforblock` results for its 6 neighbours and the block above its head.
+  - It also records the bot's hunger at dawn, if the bot reports it.
+  - The ready-to-try item says "in or near shelter"; I propose survival as the gate check and the shelter data as evidence.
+- **Length:** about 40-50 min. This scenario alone is longer than G2's whole batch.
+
+#### Scenario `g3-task-preempts-agenda` (ready-to-try item 10, task part)
+
+- **Run:**
+  - Login; the agent works its agenda for `warmMinutes` (5).
+  - Then a trusted task giver whispers a task with a server-checkable result: "go to the gold block at x y z and stand on it". The runner places the marker with `setblock` (a new command to approve), on the surface 20-30 blocks away.
+- **Checks:**
+  - `agenda_active`: a stat or inventory counter rises before the task (the bot is doing its agenda);
+  - `task_accepted`: the bot's chat acknowledges the task id within 60 s;
+  - `task_done`: the server sees the bot within 1.5 blocks of the marker within `taskMinutes` (5), and the bot reports done;
+  - `agenda_resumed`: a counter rises again within 5 min after done;
+  - `no_cheat`.
+- **Untrusted refusal (item 10's last sentence):** a separate short session, `g3-untrusted-refused`. It uses the production task-giver list, so the console whisperer is not on it. The bot's chat must show a polite refusal, and `!task list` must show no new task.
+
+#### Scenario `g3-queue-survives-restart` (ready-to-try item 11; brief acceptance test)
+
+- **Run:** a task is queued; the runner stops the agent (the driver's clean stop) and starts it again.
+- **Checks:**
+  - `!task list` in the bot's chat shows the same task id and status after the restart;
+  - the agenda resumes (a counter rises).
+- This is the runner's existing stop and start, with a second login, as in G2's login retry.
+
+#### Who gives tasks in a test (decision for the lead with skills-rotn)
+
+The runner can only whisper from the console, which the bot sees as the player `Server`. JQDAW is the human's account, and agents never use it. Options:
+1. **(Recommended)** A test-only task-giver list containing `Server`.
+   - Allowed only through the scenario's profile override, and recorded in the evidence.
+   - `g3-untrusted-refused` runs with the production list (JQDAW only), so it shows that `Server` is refused.
+   - On the live server, `Server` whispers can come only from its console.
+2. A second Microsoft account with Minecraft as a test task giver, driven by `g1-driver.mjs` (a human purchase). It is closer to real play, but it costs money and adds a NEEDS-HUMAN item.
+
+#### The G3 driver: the real Mindcraft agent (proposal for skills-rotn, through the lead)
+
+harness-ops writes `test/runner/drivers/mindcraft-driver.mjs` (in `test/`, mine). It keeps the runner's driver contract (`DRIVER.md`):
+- **Start:**
+  - `node main.js` with `MINDCRAFT_SINGLE_BOT_SERVICE=1`, `PROFILES=["<scenario profile>"]`, `SETTINGS_JSON={"host":..., "port":..., "auth":"microsoft", "auto_open_ui":false}`, a free `MINDSERVER_PORT`, and `MINDCRAFT_PROFILES_FOLDER` (the PC's FRCFLD cache).
+  - `OPENROUTER_API_KEY` comes through the runner's `--pass-env` and is never printed.
+  - It never sets `INSECURE_CODING` or `BLOCKED_ACTIONS`. The same checks as `deploy/cx23/check-env.mjs` run first.
+- **Stop:** on SIGTERM it stops the agent cleanly. On Windows it kills the whole process tree (`taskkill /T`), because `main.js` starts the agent as a child process, and a hard kill of the parent alone would leave the bot online.
+- **Exit codes:** 0, 1 and 3 pass through (ADR 0003 decision 5).
+
+What skills-rotn provides (to agree):
+1. **A G3 test profile** (`profiles/`) that is the production profile plus only the task-giver override above, the model, and an LLM budget.
+2. **The agenda at a fresh spawn:** the agent starts its RotN early-game agenda by itself on spawn, with no prompt from the runner.
+3. **Fixed chat formats** the runner can parse from the server log (`<FRCFLD> ...`). For example:
+   - `task <id> accepted: <text>`;
+   - `task <id> done` and `task <id> failed: <reason>`;
+   - `task refused: <giver> is not a task giver`;
+   - `!task list` lines as `task <id> <status> <priority> <giver>`;
+   - for the table, `placed crafting_table at x y z`.
+4. **Where the queue and agenda files live** (under the bot's folder), so a restart keeps them. The runner reads only chat, never the files.
+5. **Exit codes** as in ADR 0003 (already in `agent.js`).
+
+#### Batches (each needs a written GO)
+
+- **S1, survey and smoke (no LLM, `g1-driver.mjs`, about 30 min, about EUR 0.14):** two short servers, or one with `--seed` per run. It checks:
+  - (a) rock piles, trees and stone within 48 blocks of spawn, via the G2 census at radius 48;
+  - (b) the `clear`-test reply form and the stat criteria for modded items (`stat.craftItem.pyrotech.crude_axe` existing at all);
+  - (c) the day and night length with Extended Days, from `time query daytime` every minute over one full cycle (about 40 min);
+  - (d) whether a console `tell` reaches Mindcraft's `whisper` handler as `Server` (with the real `main.js` and no LLM call: an ignored message is fine).
+- **G3 batch:** all four scenarios plus `g3-untrusted-refused` on one server.
+  - About 25 + 45 + 15 + 10 + 5 = 100 min plus the build: about 2 h, so 2 billed hours, about **EUR 0.28** plus IPv4.
+  - A hard stop at 1.5 times the plan; `--ttl-hours 4`.
+  - Worst case 5 billed hours, about EUR 0.69, plus the LLM spend (capped by the test key's credit limit).
+- **Order of work:**
+  1. this plan;
+  2. the offline runner parts (arbiters, fake server, the driver wrapper with a fake `main.js`);
+  3. S1 (GO);
+  4. the scenarios against skills-rotn's agent as it lands;
+  5. a G3 smoke batch;
+  6. G3 batches.
+
+**Open questions for the lead:**
+1. The task-giver option (1 or 2).
+2. The world, after S1.
+3. Approval of the new console commands (`clear ... 0`, `scoreboard`, `time query`, `setblock` for the task marker).
+4. Survival as the night gate, with shelter as evidence.
+5. The model and the LLM budget per batch (and the test OpenRouter key, Requests item 12).
+6. Whether `g3-queue-survives-restart` belongs to G3 or waits for G4.
+
 ### G2 batch (the plan for every G2 gate batch; batches 1-7 ran on 2026-11-01/02. Each batch needs the lead's written GO.)
 
 **Goal:** G2 gate evidence. All three G2 scenarios at the gate parameters (no `--param` overrides, so the default `dataRoot`), with the agent's own naming, on one disposable test server.
@@ -585,7 +753,8 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- Nothing. G2 waits for the lead's decision on batch 8.
+- **G3 batches:** the lead's decisions on the G3 plan's open questions, skills-rotn's agent and profile, the test OpenRouter key (Requests item 12), and a written GO for each batch (S1 first).
+- **The first CX23 run:** the human's items in Requests item 8.
 
 ## Requests to other agents or the lead
 
@@ -604,7 +773,34 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
    5. GitHub disables the helper's schedule after 60 days without activity in the helper repo. The preflight warns from day 45; a small commit to the helper repo resets the clock.
 
 7. **Lead: a `.gitattributes`** with `*.sh text eol=lf` and `deploy/cx23/** text eol=lf`. Root files are yours. The stopgap is in place: the scripts are `.sh`, and bootstrap strips CRs.
-8. **Human, via the lead, for the first real CX23 run (later, after the lead's approval):** the CX23's root login and IP, the `deploy` user's public key, the bot's OpenRouter key (set on the server only), and the bot's first Microsoft device-code login. Steps: `deploy/cx23/README.md`.
+8. **Human, via the lead: the first CX23 run** (replaces the three short CX23 items in NEEDS-HUMAN). Steps follow `deploy/cx23/README.md`. Never paste a key, password, token or code into a chat, a file in the repo or a status file.
+   - **8a. Create the CX23** in your **own** Hetzner project (not `mindcraft-rotn-test`, so the test sweeper can never touch it).
+     - Type CX23, image Ubuntu 24.04, location nbg1 (near the test servers; any EU location works).
+     - Use your own SSH key for root. No labels are needed.
+     - Tell the lead its IPv4 address (not a secret). Cost: about EUR 6.81 per month (2026-11-01 price).
+   - **8b. The `deploy` key.** On this PC, in your own terminal:
+     - run `ssh-keygen -t ed25519 -f C:/Users/admin/.ssh/mindcraft-rotn-deploy -C deploy@mindcraft-rotn`, with a passphrase if you like;
+     - only the **public** file `mindcraft-rotn-deploy.pub` is used below. Agents never read the private key; they use it only through `ssh -i` if you allow deploys from this PC.
+   - **8c. Bootstrap as root** (once, about 15 min), from a terminal on this PC. Do steps 5 and 6 before `lockdown`, while root can still log in.
+     1. `scp -r deploy/cx23 root@<ip>:/root/cx23`
+     2. `scp C:/Users/admin/.ssh/mindcraft-rotn-deploy.pub root@<ip>:/root/deploy.pub`
+     3. `ssh root@<ip> bash /root/cx23/bootstrap.sh setup --deploy-key-file /root/deploy.pub --ssh-from <your public IP>/32`
+     4. In a second terminal: `ssh -i C:/Users/admin/.ssh/mindcraft-rotn-deploy deploy@<ip>`. It must work.
+     5. `ssh root@<ip> bash /root/cx23/bootstrap.sh add-bot frcfld`. Unit and folder names are lowercase; the Minecraft name stays FRCFLD in the profile.
+     6. The bot's OpenRouter key (8d) goes in now: `ssh -t root@<ip> nano /etc/mindcraft-rotn/frcfld.env`. The file stays `root:root` 0600, and `check-env` refuses a placeholder or empty key.
+     7. As root: `passwd deploy` (deploy's own sudo password; keep it in your password manager).
+     8. `ssh root@<ip> bash /root/cx23/bootstrap.sh lockdown --i-tested-deploy-login`. After this, root and password logins are off. Later admin work: `ssh -t -i ... deploy@<ip> sudo ...`.
+   - **8d. The bot's OpenRouter key** (production): create a key at https://openrouter.ai/settings/keys, named `mindcraft-rotn-frcfld-cx23`, with a **credit limit**. The lead sets the amount in the soak ADR; until then a small one, for example USD 5. Put it in the env file in step 8c.6, replacing the `OPENROUTER_API_KEY` placeholder. Fill in `SETTINGS_JSON`'s `host` there too, once 8f is decided.
+   - **8e. The bot's Microsoft login on the CX23**, after the lead's first release tag is deployed (`bash deploy.sh deploy <tag>` as deploy):
+     - `sudo -u mindcraft-rotn env MINDCRAFT_PROFILES_FOLDER=/var/lib/mindcraft-rotn/frcfld/msa node /opt/mindcraft-rotn/current/packages/forge-bridge/tools/msa-login.mjs FRCFLD`
+     - Follow Microsoft's own instructions (microsoft.com/link and the code it prints); type the account password only on Microsoft's page.
+     - Then run the same command with `--check`. It prints only the profile name.
+     - This is net-forge's `msa-login.mjs`, the same tool used for this PC's cache. The cache folder stays `mindcraft-rotn`-owned and 0700.
+   - **8f. Which server the first CX23 run joins** (decision for the lead and you):
+     - (recommended) first a disposable **test** server. harness-ops creates it with `--allow-from <cx23 ip>/32` plus this PC; it needs a GO.
+     - Later your live server. That needs FRCFLD whitelisted there (NEEDS-HUMAN "Whitelist the bot", after G3) and its host and port in the env file.
+   - **Agents never** log in as root, see the deploy private key, the OpenRouter key or the Microsoft code, or connect to your live server.
+
 9. ~~Lead: decide how G2 handles the cube after batch 6~~ **Decided** (#88 comment): P1 and P2 approved, P3 declined; done in #92. The original proposals, for the record:
    - **P1 (recommended): fix the cube too.** After login, the runner teleports the bot to batch 4's ground centre (-45 66 -66) with `tp`, which is already on the plan's console list. It then waits for chunks and takes the census there, so every G2 run sees the same cube (the one where batch 4 found double plants and Dynamic Trees blocks). The new gate parameter `cubeCentre` would be 'equal'.
    - **P2: keep partial results.** On SIGTERM (`timeout`), the runner writes `result.json` with the checks done so far, verdict FAIL and an "interrupted" error, so a kill no longer loses passed checks.
@@ -612,8 +808,13 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 10. ~~Lead (info): G0 evidence predates the redaction rules~~ **Done** (#94): G0 redacted with the tool, and the check runs over all evidence. The original note: `test/evidence/g0/g0-batch.log` lines 9 and 17 hold the G0 test server's public IPv4 (the "is at" and "READY ... at" forms). That server was deleted on 2026-11-01. The CI leak check covers only `test/evidence/g2/**`, so it never flagged them. Say if you want them redacted with the tool (a small PR of mine). The G1 `server.log`'s other flags are FML's pipe-table mod versions, a form G2 excerpts never contain.
 11. ~~Lead, routed to net-forge: batch 7's items kick~~ **Done:** net-forge's movement guard (#95). In batch 8 items joined at the same spot, passed, and the guard never had to act. The original request: 2 s after joining, the bot was kicked with `multiplayer.disconnect.invalid_player_movement` (server: "Invalid move player packet received"; 1.12 sends it for a non-finite or out-of-range position or rotation in a move packet). The raw capture is `captures/raw/batch7-20261102/FRCFLD-2026-11-02T15-31-20-713Z.jsonl` on this PC, and the evidence is in `test/evidence/g2/batch7-20261102/items/`. The capture logs no client position packets; it may need to.
+12. **Human, via the lead: a test OpenRouter key on this PC, for G3 batches** (the real agent calls the LLM).
+    - Create a **separate** key at https://openrouter.ai/settings/keys: name `mindcraft-rotn-test-pc`, credit limit set by the lead (proposal: USD 5).
+    - Set it as a **user environment variable** on this PC: `OPENROUTER_API_KEY` (Windows: Settings > System > About > Advanced system settings > Environment Variables > User variables). Then restart Orca, so new terminals see it.
+    - The runner passes it only to the agent (`--pass-env OPENROUTER_API_KEY`) and never prints or records it. Agents never read `keys.json`.
+    - Not needed for survey batch S1.
 
 ## Open PRs
 
-- This PR: G2 batch 8 evidence (PASS) and this record (`agent/harness-ops/g2-batch8-evidence`).
-- Merged since the last update: #95 (net-forge's movement guard), #96 (#94 nits).
+- This PR: the G3 plan, the G3 driver interface proposal, the CX23 human requests, and the CX23 README's login step (`agent/harness-ops/g3-plan`).
+- Merged since the last update: #97 (G2 batch 8 evidence).
