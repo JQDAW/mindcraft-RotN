@@ -104,6 +104,35 @@ The run's `weakenedParams` says why.
 
 The 1.12 command replies parsed are `Successfully found the block at x, y, z`, `Found <name>`, `Object successfully summoned`, `Given [...] * 1 to NAME` and `Seed: N`. The first real G2 run (2026-11-01) confirmed them on the RotN 3.3.4 server, except that `testforblock` prints `x, y, z` with spaces and no full stop, where the en_us lang key has `x,y,z.`. The parser accepts both forms.
 
+## G3: the real Mindcraft agent (`drivers/mindcraft-driver.mjs`)
+
+G3 runs the real agent (`main.js` with a RotN profile), not `g1-driver.mjs`:
+
+```bash
+node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY -- \
+  node test/runner/drivers/mindcraft-driver.mjs --profile profiles/<g3 test profile>.json
+```
+
+- **Refusals (exit 3, before anything starts).** The driver refuses:
+  - **any Mindcraft task file** (lead, 2026-11-02): `--task_path`, `--task_id` in any spelling, and any argument it does not know;
+  - `INSECURE_CODING` or `BLOCKED_ACTIONS` with any value;
+  - `SETTINGS_JSON` from outside;
+  - skills-rotn's test-only `MINDCRAFT_ROTN_ALLOW_TASK_FILES` (#110);
+  - a `DEBUG` that would make prismarine-auth print tokens;
+  - a `settings.js` whose `allow_insecure_coding` is not exactly `false`. The file checked is always the one next to `main.js`, which `main.js` imports; there is no option to check another, and `--settings` is refused;
+  - a profile that is not a JSON object (`null`, a number, a string or an array);
+  - a profile that is missing, has a task in it, or names another bot than `ROTN_SCENARIO_BOT`.
+- **What `main.js` gets:**
+  - `SETTINGS_JSON` with only `host`, `port` (from `TEST_SERVER_HOST`/`PORT`), `auth: "microsoft"` and `auto_open_ui: false`;
+  - `PROFILES=[the profile]`, `MINDCRAFT_SINGLE_BOT_SERVICE=1`, and a free local `MINDSERVER_PORT`;
+  - `OPENROUTER_API_KEY` only if the runner passed it with `--pass-env`. It is never printed.
+  - No arguments at all, so no task file can come in.
+- **Stopping leaves no process behind.** `main.js` starts the agent as a child process.
+  - **On POSIX,** `main.js` runs in its own process group. On SIGTERM the driver signals the group, then SIGKILLs it after `--grace-ms` (10 s), and exits 0.
+  - **On Windows,** the runner's stop is a TerminateProcess the driver cannot catch. libuv puts every non-detached child into a kill-on-close job object, so ending the driver ends `main.js`, and that ends the agent. `main.js` is therefore never detached there.
+  - `test/unit/mindcraft-driver.test.js` proves both with a fake `main.js` that starts an agent child. A mutation that detaches `main.js` fails those tests.
+- **Exit codes:** `main.js`'s own exit code passes through (0, 1, 3). The events are `DRIVER {"type":"mindcraft_start"|"mindcraft_exit"|"stopping"|"refused",...}`.
+
 ## S1: survey and smoke before G3
 
 S1 (`test/scenarios/s1/`) is a survey, not a gate. **Every S1 run is not gate-valid:** `run()` first records "S1 is a survey/smoke, never a gate pass" as a notGate reason, so its verdict is at best `SMOKE-PASS (not a gate pass)`. Its findings are data the lead uses to pin G3's world, dawn bound and arbiters (`coord/STATUS-harness-ops.md`, "G3 batches"). The driver is the G2 one (`g1-driver.mjs` with `attachScenario` and `attachG2`); S1 needs one more behaviour:
