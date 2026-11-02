@@ -40,6 +40,7 @@ import { attachScenario, attachG2, loadAgentNames, stockNames, event } from '../
 import { classifyKick as runnerClassifyKick, FATAL_KICKS } from '../../../test/runner/lib/server-log.mjs';
 import { classifyKick } from '../src/kicks.js';
 import { createExitTracker } from './driver-exit.mjs';
+import { lastProfileFetchFailure } from '../src/auth-diagnostics.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PINNED_MODLIST = path.join(HERE, '..', 'test', 'fixtures', 'rotn-3.3.4', 'ping.json');
@@ -76,7 +77,14 @@ if (capture === '0') delete process.env.FORGE_CAPTURE; else process.env.FORGE_CA
 process.env.FORGE_MODLIST_FILE = process.env.ROTN_DRIVER_MODLIST_FILE ?? PINNED_MODLIST;
 if (process.env.ROTN_DRIVER_PING_TIMEOUT_MS) process.env.FORGE_PING_TIMEOUT_MS = process.env.ROTN_DRIVER_PING_TIMEOUT_MS;
 
-process.on('unhandledRejection', (e) => event('error', { message: `unhandled rejection: ${String(e?.message ?? e).slice(0, 2000)}` }));
+// Error logging and the exit decision (driver-exit.mjs). Before join an error's
+// message is never logged (prismarine-auth puts HTTP response bodies in it); an
+// error or a drained event loop before join exits 1, or 3 for a permanent auth
+// failure (401/403/404), never 0 (G2 batch 2's auth failure exited 0).
+let closeCapture = () => {};
+const exitTracker = createExitTracker({ emit: event, onFinish: () => closeCapture(), profileFailure: () => lastProfileFetchFailure() });
+process.on('unhandledRejection', (e) => exitTracker.unhandledRejection(e));
+process.on('beforeExit', () => exitTracker.drained());
 
 async function main() {
     const { setSettings } = await import('../../../src/agent/settings.js');
@@ -126,13 +134,7 @@ async function main() {
     }).catch((err) => event('g2_adapter_error', { message: String(err?.message ?? err) }));
 
 
-    // The exit decision (driver-exit.mjs): an error or a drained event loop before the
-    // bot joins exits 1, never 0 (G2 batch 2's auth failure exited 0).
-    const exitTracker = createExitTracker({
-        emit: event,
-        onFinish: () => { try { bot.forge?.capture?.close(); } catch { /* already closed */ } },
-    });
-    process.on('beforeExit', () => exitTracker.drained());
+    closeCapture = () => { try { bot.forge?.capture?.close(); } catch { /* already closed */ } };
     bot.on('login', () => {
         exitTracker.joined();
         const b = bridge();
@@ -154,10 +156,7 @@ async function main() {
         if (isFatal) exitTracker.fatal(ours.fatal ? ours.category : runnerClass);
         event('kicked', { reason: text.slice(0, 2000), class: runnerClass, forgeCategory: ours.category, fatal: isFatal });
     });
-    bot.on('error', (e) => {
-        event('error', { message: String(e?.message ?? e).slice(0, 2000) });
-        exitTracker.error(e);
-    });
+    bot.on('error', (e) => exitTracker.botError(e));
     bot.on('end', (why) => {
         const b = bridge();
         exitTracker.end(why, { stats: b?.stats ?? null, partialReadErrors: bot.partialReadErrors ?? null });

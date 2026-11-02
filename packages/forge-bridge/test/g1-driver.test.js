@@ -186,4 +186,7 @@ test('g1-driver exits 1, not 0, when it cannot join, and says beforeJoin (G2 bat
     const end = r.stdout.split('\n').filter((l) => l.startsWith('DRIVER ')).map((l) => JSON.parse(l.slice(7))).find((e) => e.type === 'end');
     assert.ok(end, r.stdout);
     assert.deepEqual([end.exitCode, end.joined, end.beforeJoin], [1, false, true]);
+    // Before join the error is logged by class and code only, never by message (#72 review).
+    const error = r.stdout.split('\n').filter((l) => l.startsWith('DRIVER ')).map((l) => JSON.parse(l.slice(7))).find((e) => e.type === 'error');
+    assert.deepEqual([error.phase, error.code, error.kind, error.message], ['before_join', 'ECONNREFUSED', 'network', undefined]);
 });

@@ -75,7 +75,7 @@ export function instrumentProfileFetch({ log = (line) => console.warn(line), Tok
         return true;
     }
     const original = proto.fetchProfile;
-    const state = { log };
+    const state = { log, lastFailure: null };
     const say = (line) => { try { state.log(line); } catch { /* never mask the auth result */ } };
     const fetchProfile = async function (...args) {
         const start = now();
@@ -83,9 +83,13 @@ export function instrumentProfileFetch({ log = (line) => console.warn(line), Tok
         try {
             profile = await original.apply(this, args);
         } catch (err) {
-            say(formatProfileFetchFailure(describeProfileFetchError(err), now() - start));
+            const info = describeProfileFetchError(err);
+            const ms = now() - start;
+            state.lastFailure = { ...info, ms: Math.round(ms) };
+            say(formatProfileFetchFailure(info, ms));
             throw err;
         }
+        state.lastFailure = null;
         // A 2xx answer that nmp still rejects (`profile.error`): say so, without its value.
         if (profile && typeof profile === 'object' && profile.error !== undefined) {
             say(`Minecraft profile fetch answered after ${Math.round(now() - start)} ms with an error field (value not logged)`);
@@ -95,4 +99,64 @@ export function instrumentProfileFetch({ log = (line) => console.warn(line), Tok
     fetchProfile[WRAPPED] = state;
     proto.fetchProfile = fetchProfile;
     return true;
+}
+
+/**
+ * The facts about the last failed profile fetch in this process (status, class,
+ * code, ms), or null after a success or without instrumentProfileFetch. nmp's
+ * own error ("Failed to obtain profile data") carries no status; g1-driver
+ * classifies the failure from this.
+ */
+export function lastProfileFetchFailure(TokenManager) {
+    let Manager = TokenManager;
+    if (!Manager) {
+        try { Manager = loadJavaTokenManager(); } catch { return null; }
+    }
+    return Manager?.prototype?.fetchProfile?.[WRAPPED]?.lastFailure ?? null;
+}
+
+/** HTTP statuses that mean the login cannot succeed by retrying (ADR 0003 decision 5). */
+export const PERMANENT_AUTH_STATUSES = Object.freeze([401, 403, 404]);
+
+// Exit-code classes for a login that fails before the bot joins (ADR 0003 decision 5):
+// 401, 403 (the profile fetch or Xbox) and 404 (no Minecraft) are permanent (3);
+// network errors, timeouts, 5xx and other statuses are transient (1).
+const NMP_PROFILE_FAILURE = /^Failed to obtain profile data\b/;
+const NETWORK_CLASSES = new Set(['TypeError', 'AbortError', 'TimeoutError', 'FetchError']);
+
+/**
+ * Classify an error that ended a login before the bot joined. Reads the error's
+ * message only to find a leading status number and nmp's profile-failure prefix;
+ * the result never contains the message.
+ * @param {unknown} err
+ * @param {{ profileFailure?: { status: number|null } | null }} [opts] lastProfileFetchFailure()
+ * @returns {{ errorClass: string, code: string|null, status: number|null, statusSource: 'error'|'profile-fetch'|null, kind: string, fatal: boolean }}
+ */
+export function classifyBeforeJoinError(err, { profileFailure = null } = {}) {
+    const d = describeProfileFetchError(err);
+    const message = typeof err?.message === 'string' ? err.message : '';
+    const nmpProfile = NMP_PROFILE_FAILURE.test(message);
+    let status = d.status;
+    let statusSource = status !== null ? 'error' : null;
+    if (status === null && nmpProfile && Number.isInteger(profileFailure?.status)) {
+        status = profileFailure.status;
+        statusSource = 'profile-fetch';
+    }
+    const code = d.causeCode ?? (nmpProfile ? safeCode(profileFailure?.causeCode) : null);
+    let kind;
+    if (status !== null && PERMANENT_AUTH_STATUSES.includes(status)) kind = 'auth-permanent';
+    else if (status !== null && status >= 500) kind = 'http-5xx';
+    else if (status !== null) kind = 'http-other';
+    else if (code || NETWORK_CLASSES.has(d.errorClass)) kind = 'network';
+    else if (nmpProfile) kind = 'auth-unknown';
+    else kind = 'other';
+    return { errorClass: d.errorClass, code, status, statusSource, kind, fatal: kind === 'auth-permanent' };
+}
+
+/** One log line for an error before login: its classified facts, never its message. */
+export function formatBeforeJoinError(info) {
+    const parts = [info.errorClass];
+    if (info.code) parts.push(info.code);
+    if (info.status !== null) parts.push(`HTTP ${info.status}${info.statusSource === 'profile-fetch' ? ' (profile fetch)' : ''}`);
+    return `${parts.join(', ')}; ${info.kind} (message not logged)`;
 }
