@@ -5,6 +5,7 @@ import convoManager from '../conversation.js';
 import { checkLevelBlueprint, checkBlueprint } from '../tasks/construction_tasks.js';
 import { load } from 'cheerio';
 import { safeError } from '../safe_error.js';
+import * as names112 from '../library/names112.js';
 
 const pad = (str) => {
     return '\n' + str + '\n';
@@ -112,7 +113,7 @@ export const queryList = [
             
             for (let block of blocks) {
                 let details = block.name;
-                if (block.name === 'water' || block.name === 'lava') {
+                if (names112.isLiquid(block.name)) {
                     details += block.metadata === 0 ? ' (source)' : ' (flowing)';
                 }
                 block_details.add(details);
@@ -178,7 +179,7 @@ export const queryList = [
                 entityCounts[entity.name]++;
                 
                 if (entity.name === 'villager') {
-                    if (entity.metadata && entity.metadata[16] === 1) {
+                    if (names112.isBaby(entity)) {
                         babyVillagerIds.push(entity.id);
                     } else {
                         const profession = world.getVillagerProfession(entity);
