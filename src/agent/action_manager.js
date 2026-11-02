@@ -1,4 +1,5 @@
 import { safeStack } from './safe_error.js';
+import { clearReplan } from './replan.js';
 
 export class ActionManager {
     constructor(agent) {
@@ -93,6 +94,11 @@ export class ActionManager {
 
             // clear bot logs and reset interrupt code
             this.agent.clearBotLogs();
+
+            // A new player or LLM action is a fresh decision: a pending reflex re-plan
+            // request is stale and must not cause an extra LLM call later (A4b).
+            if (!String(actionLabel).startsWith('mode:'))
+                clearReplan(this.agent, `a new action started (${actionLabel})`);
 
             this.executing = true;
             this.currentActionLabel = actionLabel;

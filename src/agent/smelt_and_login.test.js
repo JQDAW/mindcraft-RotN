@@ -87,3 +87,27 @@ test('the login handler sends no /skin command, even with a skin in the profile'
     assert.deepEqual(chats, []);
     assert.equal(logins, 1, 'the MindServer is still told about the login');
 });
+
+test('the login wiring: a "login" event on the bot runs onLogin, which sends no /skin', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { EventEmitter } = await import('node:events');
+    const chats = [];
+    let logins = 0;
+    const bot = new EventEmitter();
+    bot.chat = (msg) => chats.push(msg);
+    const agent = Object.create(Agent.prototype);
+    Object.assign(agent, {
+        name: 'FRCFLD',
+        bot,
+        prompter: { profile: { skin: { model: 'classic', path: 'https://example.invalid/skin.png' } } },
+    });
+    // The real onLogin, with the MindServer proxy replaced (no socket in a test).
+    agent.onLogin = function () { return Agent.prototype.onLogin.call(this, { proxy: { login: () => { logins++; } } }); };
+
+    agent.bindLoginHandler();
+    assert.equal(bot.listenerCount('login'), 1);
+    bot.emit('login');
+
+    assert.equal(logins, 1);
+    assert.deepEqual(chats, []);
+});
