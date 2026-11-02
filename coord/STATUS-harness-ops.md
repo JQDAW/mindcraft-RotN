@@ -576,5 +576,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: G0/G1 redaction, the leak check over all evidence and the #92 follow-ups (`agent/harness-ops/evidence-all-redacted`).
+- This PR: G0/G1 redaction, the leak check over all evidence and the #92 follow-ups (`agent/harness-ops/evidence-all`).
 - Merged since the last update: #93 (batch 7 evidence).
