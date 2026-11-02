@@ -158,7 +158,7 @@ If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge
     - "Common mobs" are the top 12 of `packages/rotn-data/3.3.4/common-mobs.json`. `charm:spectre` (rank 3) vanishes in daylight and is unconfirmed, and naturally spawned mobs were not checked.
     - The in-game item round-trip covers vanilla items only; modded item names have no old/new rename.
     - Naming was checked through the harness driver (`g1-driver.mjs` with `initBot`, mcdata.js and forge-bridge). The full Mindcraft agent and its LLM command path must prove it at G3/G4.
-- **Phase 3 (G3: act in RotN) starts (2026-11-02):** skills-rotn starts at G2 (this plan, row 3). At most three dev agents run at once, so the human chose to **pause net-forge**: its G2 work is done, and its worktree is kept so it can be respawned for protocol issues. The Phase 3 team is skills-rotn, rotn-data and harness-ops.
+- **Phase 3 (G3: act in RotN) starts (2026-11-02):** skills-rotn starts at G2 (this plan, "Phases": "skills-rotn starts at G2"). At most three dev agents run at once, so the human chose to **pause net-forge**: its G2 work is done, and its worktree is kept so it can be respawned for protocol issues. The Phase 3 team is skills-rotn, rotn-data and harness-ops.
 
 ## Open items
 

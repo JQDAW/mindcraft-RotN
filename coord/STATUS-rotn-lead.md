@@ -6,7 +6,7 @@ Updated: 2026-11-02 17:07 UTC (from `date -u`)
 
 - **G2 passed** on G2 batch 8 (#97): strict review APPROVE, plus an independent verifier MET WITH CAVEATS. Details and caveats are in `docs/PLAN.md` Status.
 - **The path since the last snapshot:**
-  - G2 batches 2-7 failed honestly, and each failure fed a fix (#64-#96).
+  - G2 batches 1-4, 6 and 7 failed honestly, and each failure fed a fix (#64-#96); batch 5 passed but was not declared (#83: its world lacked the defect's blocks).
   - The double-plant defect was Forge's two-pass network ids, fixed via the dumper's state-meta-remap and client-view decoding.
   - G2 runs now use a fixed world seed and cube.
   - The movement guard (#95) stopped the items kick.
@@ -22,8 +22,6 @@ Updated: 2026-11-02 17:07 UTC (from `date -u`)
 - **Before the first CX23 run** (still open): skills-rotn's `src/agent/agent.js:87/456` print whole error objects.
 
 ## Earlier snapshot (2026-11-01 23:30 UTC)
-
-## Current snapshot (23:30 UTC)
 
 - **G2 batch 1** (GO 22:03): an honest **FAIL**; the server was deleted at 22:24:20, about EUR 0.14.
   - Items passed fully (643/643).
@@ -62,7 +60,7 @@ Updated: 2026-11-02 17:07 UTC (from `date -u`)
 - **G2 batch: GO given at 22:03 UTC** (below). G2 is not passed until its evidence PR is reviewed and merged.
 - Open: #58 (CX23 env-file name allowlist). REQUEST: the check fails open on an unreadable file, so it must fail closed.
 
-## Current snapshot (21:25 UTC)
+## Earlier snapshot (2026-11-01 21:25 UTC)
 
 - **The G2 code is all on develop:**
   - #43 translation follow-ups (`c9b1855`);
