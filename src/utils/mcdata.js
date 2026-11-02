@@ -9,7 +9,7 @@ import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
 import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
-import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
+import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -393,6 +393,18 @@ export function getAllBiomes() {
     return reg().biomes;
 }
 
+/**
+ * rotn-data brief item 4: put RotN 3.3.4's crafting recipes (the dump) into the registry, in place,
+ * so mineflayer's bot.recipesFor/bot.craft and getItemCraftingRecipes/getDetailedCraftingPlan use
+ * them instead of minecraft-data's vanilla 1.12.2 recipes. Call once after login, after
+ * forge-bridge's extendRegistry (it needs the server's modded item ids). Returns rotn-data's report.
+ * @param {object} [registry] defaults to the registry the helpers read (bot.registry after login)
+ */
+export function installRotnRecipes(registry = reg()) {
+    cycleCache.clear();
+    return rdInstallRecipes(registry);
+}
+
 export function getItemCraftingRecipes(itemName) {
     let itemId = getItemId(itemName);
     const allRecipes = reg().recipes ?? {};
@@ -616,6 +628,7 @@ export function initializeLoopingItems() {
  */
 export function getDetailedCraftingPlan(targetItem, count = 1, current_inventory = {}) {
     initializeLoopingItems();
+    cycleCache.clear(); // the registry's recipes may have changed since the last plan
     if (!targetItem || count <= 0 || !getItemId(targetItem)) {
         return "Invalid input. Please provide a valid item name and positive count.";
     }
@@ -633,7 +646,31 @@ export function getDetailedCraftingPlan(targetItem, count = 1, current_inventory
 }
 
 function isBaseItem(item) {
-    return loopingItems.has(item) || getItemCraftingRecipes(item) === null;
+    return loopingItems.has(item) || getItemCraftingRecipes(item) === null || inFirstRecipeCycle(item);
+}
+
+// RotN recipes loop (4 rocks -> cobblestone -> 4 rocks; ingots <-> nuggets and blocks), and
+// upstream's loopingItems lists only 1.21 names. An item whose first recipe leads back to it
+// through first recipes is gathered, not crafted (rotn-data brief item 4: the plan on RotN recipes).
+const cycleCache = new Map();
+// No depth limit (#102 review): `seen` ends the walk, which is iterative so a long chain cannot
+// overflow the stack.
+function inFirstRecipeCycle(item) {
+    if (cycleCache.has(item)) return cycleCache.get(item);
+    const first = (name) => Object.keys(getItemCraftingRecipes(name)?.[0]?.[0] ?? {});
+    let found = false;
+    const seen = new Set();
+    const todo = [item];
+    while (todo.length && !found) {
+        for (const next of first(todo.pop())) {
+            if (next === item) { found = true; break; }
+            if (seen.has(next)) continue;
+            seen.add(next);
+            todo.push(next);
+        }
+    }
+    cycleCache.set(item, found);
+    return found;
 }
 
 function craftItem(item, count, inventory, leftovers, crafted = { required: {}, steps: [], leftovers: {} }) {

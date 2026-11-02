@@ -4,13 +4,15 @@ Agents add items here when they need something only the human can do. The human 
 
 ## Open
 
-- [ ] **CX23 root login:** enter it in Orca's SSH settings for the CX23 (once, for bootstrap). An SSH key is preferred over a password.
-- [ ] **OpenRouter key for the bot:** create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
+- [ ] **CX23: swap the Orca targets after the bootstrap** (rotn-lead, 2026-11-02 18:12 UTC; the human's decision). The bootstrap creates the `deploy` user. When harness-ops reports that step done, add a new Orca SSH target for `deploy` (its key and sudo password are created and typed by you, never by agents), then **remove the root `cx23` target**. Root SSH stays enabled on the server (no lockdown), for you only.
+- [ ] **OpenRouter test key (USD 5 limit) for G3 batches:** you have it. Put it where harness-ops' plan says, typed by you only, when the first LLM batch is planned. The long-term production key comes later, for the CX23.
+- [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key above): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
 - [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
 - [ ] **Whitelist the bot** on the live server when the lead asks (after G3).
 
 ## Done
 
+- [x] **CX23 root access for setup:** the human added the Orca SSH target `cx23` (root via an SSH key on this PC; the IP is not in the repo), 2026-11-02 18:12 UTC. Replaces "CX23 root login".
 - [x] **Set up an external cron job that triggers the sweeper every 15 min** (rotn-lead, 2026-11-01 13:55 UTC; you chose this option).
   - **Why.** GitHub does not run scheduled workflows on your account at all. The non-fork helper repo also missed 13:18, 13:33 and 13:48, while manual and API dispatch always work. GitHub's status page shows no incident.
   - **About 10 minutes:**

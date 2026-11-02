@@ -1,8 +1,27 @@
 # Status: rotn-lead
 
-Updated: 2026-11-01 23:30 UTC (from `date -u`)
+Updated: 2026-11-02 18:14 UTC (from `date -u`)
 
-## Current snapshot (23:30 UTC)
+## Current snapshot (2026-11-02 17:07 UTC; decisions added 2026-11-02 18:14 UTC)
+
+- **G2 passed** on G2 batch 8 (#97): strict review APPROVE, plus an independent verifier MET WITH CAVEATS. Details and caveats are in `docs/PLAN.md` Status.
+- **The path since the last snapshot:**
+  - G2 batches 1-4, 6 and 7 failed honestly, and each failure fed a fix (#64-#96); batch 5 passed but was not declared (#83: its world lacked the defect's blocks).
+  - The double-plant defect was Forge's two-pass network ids, fixed via the dumper's state-meta-remap and client-view decoding.
+  - G2 runs now use a fixed world seed and cube.
+  - The movement guard (#95) stopped the items kick.
+  - Evidence is redacted by one tool, with a CI leak check over all of `test/evidence/**` (#94).
+- **Paid batches since the last snapshot** (each under a written GO, project empty afterwards):
+  - G2 batches 2-8, about EUR 0.14 each;
+  - dump 3 (state-meta-remap), about EUR 0.14.
+
+  The total so far is about EUR 2.12 plus IPv4-hours.
+- **Orca restart (2026-11-02, about 13:30 UTC):** the dev agents' sessions ended. With the human's approval they were respawned with a plain `claude` in their existing worktrees.
+- **New dev-agent rules recorded:** prismarine-auth is an approved net-forge patch (CLAUDE.md); new independent reviewers run at medium effort (the human's instruction).
+- **Phase 3 (G3) starts.** The human chose to pause net-forge (worktree kept, respawn for protocol issues). skills-rotn is spawned; the team is skills-rotn, rotn-data and harness-ops. skills-rotn's first inputs are this file's "Requests for skills-rotn" and the G2 caveats in PLAN.
+- **Before the first CX23 run** (still open): skills-rotn's `src/agent/agent.js:87/456` print whole error objects.
+
+## Earlier snapshot (2026-11-01 23:30 UTC)
 
 - **G2 batch 1** (GO 22:03): an honest **FAIL**; the server was deleted at 22:24:20, about EUR 0.14.
   - Items passed fully (643/643).
@@ -41,7 +60,7 @@ Updated: 2026-11-01 23:30 UTC (from `date -u`)
 - **G2 batch: GO given at 22:03 UTC** (below). G2 is not passed until its evidence PR is reviewed and merged.
 - Open: #58 (CX23 env-file name allowlist). REQUEST: the check fails open on an unreadable file, so it must fail closed.
 
-## Current snapshot (21:25 UTC)
+## Earlier snapshot (2026-11-01 21:25 UTC)
 
 - **The G2 code is all on develop:**
   - #43 translation follow-ups (`c9b1855`);
@@ -223,6 +242,22 @@ Updated: 2026-11-01 23:30 UTC (from `date -u`)
   - develop `53a1d5e` or later, clean;
   - the same conditions as batch 1: runtime preconditions just before the create, no `--skip-sweeper-check`, one CPX42, TTL 2 h, a hard stop at 56 min, worst case about EUR 0.42 + IPv4, test server only, the FRCFLD cache only from this PC, the project empty afterwards, and evidence through the merged redaction tool with the CI leak check;
   - an honest report of pass, gateValid, notGate, replacements and metaDrift.
+
+- **2026-11-02 18:12 UTC: the human's CX23 and LLM decisions (on harness-ops' plan #101):**
+  - **No lockdown:** root SSH stays enabled for the human. The bootstrap creates `deploy`; the human then adds a `deploy` Orca target and removes the root `cx23` target, so root steps (the probe and the bootstrap setup) run before that swap.
+  - Only the **test OpenRouter key** (USD 5 limit) for G3 batches for now; the long-term key comes later.
+  - The first CX23 start joins a **disposable test server**; the human supplies the CX23's IP for `--allow-from` at that GO.
+- **Lead decisions on #101:**
+  - maxMinutes is compared 'equal';
+  - the dawn bound, marker and agenda counter are pinned before gate batches;
+  - crafting must be proven by craft statistics if S1 shows they exist, plus S1 checks for no loot chests near the cube;
+  - LLM calls and cost are recorded per scenario, with a batch spend stop;
+  - on test servers only (never in production): `Server` as a test-only task giver, `clear … 0`, `scoreboard`, `time query`, and `setblock` for the marker only;
+  - `give` and `summon` stay out of G3 scenarios (S1 only);
+  - survival is the night gate (shelter is evidence);
+  - restarts are tested offline in G3 and for real in G4.
+- **Incident (2026-11-02, harness-ops):** plan text passed through a bash string executed backticked `ssh`, `scp` and `passwd deploy`. All failed locally; none used `cx23` or an address, and nothing reached the CX23. Rule: write markdown with the Write or Edit tools, never through shell strings (memory note added).
+- **Lead-owned exception for skills-rotn:** `src/models/openrouter.js:40,49` and `src/models/prompter.js:124-125,131-132,238`, which print whole errors or completions, may be changed to use `safeError` in one small PR.
 
 ## Notes for dev agents
 
