@@ -10,7 +10,8 @@ const __dirname = path.dirname(__filename);
 const apiMap = await (async () => {
     const map = {};
     const files = (await fs.readdir(__dirname))
-        .filter(f => f.endsWith('.js') && f !== '_model_map.js' && f !== 'prompter.js');
+        .filter(f => f.endsWith('.js') && !f.endsWith('.test.js') && f !== '_model_map.js' && f !== 'prompter.js');
+    // Never import test files into a running bot (PR #119: a test here overwrote OPENROUTER_API_KEY).
     for (const file of files) {
         try {
             const moduleUrl = pathToFileURL(path.join(__dirname, file)).href;
