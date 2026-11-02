@@ -251,9 +251,11 @@ export class RotnData {
     /**
      * The metadata a Forge client reports for `block` received with metadata `idMeta`
      * (networkId & 15): the remapped meta, else idMeta. null when the dump has no remap table
-     * (nothing is guessed) or the block is unknown.
+     * (nothing is guessed) or the block is unknown. Throws a RangeError unless idMeta is an
+     * integer 0-15 (#80 review).
      */
     clientMeta(block, idMeta) {
+        if (!Number.isInteger(idMeta) || idMeta < 0 || idMeta > 15) throw new RangeError(`rotn-data clientMeta: idMeta must be an integer 0-15, got ${idMeta}`);
         if (!this.dump['state-meta-remap']) return null;
         const n = registryName(block);
         if (!n || !this.names.blocks.has(n)) return null;

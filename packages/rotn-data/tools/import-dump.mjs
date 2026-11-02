@@ -185,7 +185,8 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
 /**
  * Checks state-meta-remap.json; pushes blocking findings to `problems` and returns notes.
  * Blocking: a missing remap list, no scanned ids, a record that is not internally consistent
- * (networkId = blockId << 4 | idMeta, metas 0-15 and different, one record per networkId), a block
+ * (networkId = blockId << 4 | idMeta, stateNetworkId >> 4 = blockId, metas 0-15 and different,
+ * one record per networkId), a block
  * the server does not sync, and (unless allowErrors) a non-zero anomaly count: the dumper's scan
  * assumes the id << 4 | meta encoding, and an anomaly means it does not hold.
  * A blockId that differs from the registry capture's id is only a note: the table is used by block
@@ -209,6 +210,8 @@ export function checkStateMetaRemap(r, syncedIds, { allowErrors = false, problem
         const label = `networkId ${x.networkId} (${x.block})`;
         if (!Number.isInteger(x.networkId) || !Number.isInteger(x.blockId) || !isMeta(x.idMeta) || !isMeta(x.stateMeta)) { bad(`${label}: bad fields`); continue; }
         if (x.networkId !== (x.blockId << 4 | x.idMeta)) bad(`${label}: not blockId << 4 | idMeta`);
+        // The id the server sends for the resolved state must be one of the same block's (#80 review).
+        if (!Number.isInteger(x.stateNetworkId) || x.stateNetworkId >> 4 !== x.blockId) bad(`${label}: stateNetworkId ${x.stateNetworkId} is not an id of block ${x.blockId}`);
         if (x.idMeta === x.stateMeta) bad(`${label}: idMeta equals stateMeta, so it is not a remap`);
         if (seen.has(x.networkId)) bad(`${label}: duplicate`);
         seen.add(x.networkId);
