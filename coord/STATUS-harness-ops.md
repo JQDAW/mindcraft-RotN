@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (23:44 UTC, from `date -u`)
+Updated: 2026-11-02 (23:51 UTC, from `date -u`)
 
 ## Done
 
@@ -1131,9 +1131,9 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
   1. the tree check reads every `*.json` under `test/evidence/`, whatever its name; a `batch.json` that is itself a G3 result fails it;
   2. a G3 result is found by its gate in any case or spacing, a `g3-` scenario in any case, or a scenario `loadScenarios` marks G3;
   3. DRIVER.md says gate reviews accept G3 evidence only from `test/evidence/g3/<batch>/`.
-- #135: the CI job on Ubuntu 26.04. It is APPROVED WITH NITS, and the load step for `canvas` and `gl` is done (both load).
 - #137: the bootstrap for 26.04. It is APPROVED WITH NITS, and the required fixes are done: `--ssh-from` must contain the client IP, and lockdown needs `--turn-off-root-ssh`.
 - Later:
+  - the #135 nits (a comment that the load step proves linking, not rendering; an explicit working directory);
   - the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from);
   - a research note on Java 8 packages on Ubuntu 26.04.
-- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), and the lead's #134 (ADR 0007).
+- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), #135 (the CI job on Ubuntu 26.04, 05b1a5b; `canvas` and `gl` load there), and the lead's #134 (ADR 0007).
