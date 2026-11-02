@@ -133,6 +133,21 @@ node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY 
   - `test/unit/mindcraft-driver.test.js` proves both with a fake `main.js` that starts an agent child. A mutation that detaches `main.js` fails those tests.
 - **Exit codes:** `main.js`'s own exit code passes through (0, 1, 3). The events are `DRIVER {"type":"mindcraft_start"|"mindcraft_exit"|"stopping"|"refused",...}`.
 
+### G3 batches: the spend stop (`test/runner/batch.mjs`)
+
+G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
+- **The marker.** Every scenario it starts gets `ROTN_G3_BATCH=<batch id>:<limit>`. A G3 run without that marker, or whose marker limit differs from its `maxBatchUsd`, is not gate-valid.
+- **G3 scenario requirements.** Every G3 scenario has `llm: true` and `maxBatchUsd` 2 compared 'equal' (a unit test checks this). The console allowlist applies whenever `llm` is true or the gate is G3.
+- **When the spend is checked.** The key's usage is read, numbers only, at the start (none: refuse, exit 2), before each scenario, and after the last one.
+  - Over `maxBatchUsd` stops the batch, or ends it with exit 5. A failed reading before a scenario stops it; a failed reading at the end exits 6.
+  - The logs are always fetched.
+- **Limits:**
+  - The spend is checked **between** scenarios, not during one, so a single scenario can run past the limit.
+  - OpenRouter's usage figure can lag a little behind the newest requests.
+  - The key's own credit limit (USD 5 for the test key) is the hard backstop.
+- **Records.** `result.json`'s `llm` (calls, the usage before and after, the cost) is in every record. Progress and killed records carry the calls so far.
+- **Test mode is for the offline tests only.** `ROTN_TEST_MODE`, `ROTN_OPENROUTER_USAGE_FILE` and `ROTN_BATCH_RUNNER` make `batch.mjs` refuse to start inside a real test-server run, and the usage read ignores the fake file there. `deploy/test-server.sh run` sets `TEST_SERVER_FAKE_CLOUD=1` only against the offline fakes. `BATCH` records `testMode`.
+
 ## S1: survey and smoke before G3
 
 S1 (`test/scenarios/s1/`) is a survey, not a gate. **Every S1 run is not gate-valid:** `run()` first records "S1 is a survey/smoke, never a gate pass" as a notGate reason, so its verdict is at best `SMOKE-PASS (not a gate pass)`. Its findings are data the lead uses to pin G3's world, dawn bound and arbiters (`coord/STATUS-harness-ops.md`, "G3 batches"). The driver is the G2 one (`g1-driver.mjs` with `attachScenario` and `attachG2`); S1 needs one more behaviour:

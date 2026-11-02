@@ -392,20 +392,33 @@ export function getNearbyBlockTypes(bot, distance=16) {
     return found;
 }
 
-export async function isClearPath(bot, target) {
+// isClearPath runs inside modes on every 300 ms tick, up to four times a tick,
+// and A* blocks the event loop while it searches. Bounds for the CX23 (skills-rotn
+// A4): the modes look for targets within 16 blocks, so a target farther than
+// maxDistance is "not clear" without a search; the search area and its time are
+// capped too (upstream: unlimited radius, 100 ms timeout, 40 ms per pass).
+export const CLEAR_PATH_LIMITS = { maxDistance: 20, searchRadius: 24, timeoutMs: 50 };
+
+export async function isClearPath(bot, target, limits = CLEAR_PATH_LIMITS) {
     /**
      * Check if there is a path to the target that requires no digging or placing blocks.
      * @param {Bot} bot - The bot to get the path for.
      * @param {Entity} target - The target to path to.
      * @returns {boolean} - True if there is a clear path, false otherwise.
      */
+    const { maxDistance, searchRadius, timeoutMs } = { ...CLEAR_PATH_LIMITS, ...limits };
+    if (!target?.position || !bot.entity?.position) return false;
+    if (bot.entity.position.distanceTo(target.position) > maxDistance) return false;
     let movements = new pf.Movements(bot)
     movements.canDig = false;
     movements.canPlaceOn = false;
     movements.canOpenDoors = false;
+    if (movements.updateLavaAvoidance) movements.updateLavaAvoidance(); // as getPathTo does (pathfinder patch)
     let goal = new pf.goals.GoalNear(target.position.x, target.position.y, target.position.z, 1);
-    let path = await bot.pathfinder.getPathTo(movements, goal, 100);
-    return path.status === 'success';
+    const search = bot.pathfinder.getPathFromTo(movements, bot.entity.position, goal,
+        { timeout: timeoutMs, tickTimeout: timeoutMs, searchRadius });
+    const { value } = await search.next();
+    return value?.result?.status === 'success';
 }
 
 export function shouldPlaceTorch(bot) {

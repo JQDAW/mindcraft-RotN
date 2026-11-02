@@ -37,6 +37,18 @@ export function weakenedParams(scenario, params) {
     return out;
 }
 
+/**
+ * Mark a finished result as not a gate run, after the fact (e.g. its LLM cost could not be read): the
+ * reason joins weakenedParams, and pass, gateValid and the verdict follow the same rule as in runScenario.
+ */
+export function addNotGate(result, reason) {
+    result.weakenedParams = [...(result.weakenedParams ?? []), String(reason)];
+    result.gateValid = false;
+    result.pass = false;
+    if (result.verdict === 'PASS') result.verdict = 'SMOKE-PASS (not a gate pass)';
+    return result;
+}
+
 /** notes.killed in a progress record (P2, lead after G2 batch 6). */
 export const KILLED_NOTE = 'the runner did not finish: it rewrites result.json after every check and replaces it when the run ends, '
     + 'so a file that still says this was left by a killed (e.g. `timeout`) or crashed runner. Never a pass.';

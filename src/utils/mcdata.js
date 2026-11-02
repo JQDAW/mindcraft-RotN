@@ -283,10 +283,32 @@ export function initBot(username, { onMsaCode } = {}) {
     return bot;
 }
 
+/**
+ * Entity metadata index of EntityAgeable's "is baby" flag (Boolean) on 1.12.2 (skills-rotn Request 9).
+ * Upstream read 16, the 1.21 index; on 1.12 index 16 is not the baby flag, so babies were hunted.
+ * 1.12 indices: Entity 0-5 (flags, air, custom name, name visible, silent, no gravity), Living 6-10
+ * (hand states, health, potion color, potion ambient, arrows), Insentient 11 (AI flags), Ageable 12.
+ * Source: wiki.vg "Entity metadata", revision of 18 May 2018 (the 1.12.2 era, before 1.13), Ageable:
+ * "12, Boolean, Is baby, false"; archived at
+ * https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata?oldid=2768639
+ */
+// 1.12.2 only (the pinned Minecraft version, CLAUDE.md): on 1.21 the same flag is index 16.
+export const BABY_METADATA_INDEX = 12;
+
+/**
+ * True if the entity's 1.12 metadata marks it as a baby (EntityAgeable index 12).
+ * Only valid for EntityAgeable subclasses (animals, villagers), as in isHuntable's list. On other
+ * entities index 12 belongs to their own class: a zombie's index 12 is its own "is child" flag, which
+ * looks right but is a different field, and other mobs use it for unrelated data (#125 review).
+ */
+export function isBaby(mob) {
+    return !!mob?.metadata?.[BABY_METADATA_INDEX];
+}
+
 export function isHuntable(mob) {
     if (!mob || !mob.name) return false;
     const animals = ['chicken', 'cow', 'llama', 'mooshroom', 'pig', 'rabbit', 'sheep'];
-    return animals.includes(mob.name.toLowerCase()) && !mob.metadata[16]; // metadata 16 is not baby
+    return animals.includes(mob.name.toLowerCase()) && !isBaby(mob);
 }
 
 export function isHostile(mob) {

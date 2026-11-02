@@ -48,8 +48,9 @@ test('threatOf: defaults from the threat level; dangerous always means avoid', (
     const dragon = pack.threatOf('iceandfire:firedragon');
     assert.deepEqual([dragon.level, dragon.reaction, dragon.source], ['dangerous', 'avoid', 'override']);
     assert.ok(dragon.evidence.some((e) => /jar/.test(e)), 'the override\'s bytecode evidence');
-    const spectre = pack.threatOf('charm:spectre');
-    assert.deepEqual([spectre.level, spectre.reaction, spectre.source, spectre.summary], ['hostile', 'fight', 'default', null]);
+    // A hostile mob without an entry or class rule (defiledlands:host) gets the default.
+    const host = pack.threatOf('defiledlands:host');
+    assert.deepEqual([host.level, host.reaction, host.source, host.summary], ['hostile', 'fight', 'default', null]);
     const cow = pack.threatOf('animania:cow_holstein');
     assert.deepEqual([cow.level, cow.reaction], ['none', 'ignore']);
     // The enderman is IMob (hostile) but neutral in vanilla; its entry says so and is marked vanilla.
@@ -137,7 +138,9 @@ test('cited follow-up: the mobs the lead listed, read from the mods bytecode (or
         'ancientbeasts:giant_zombie': ['avoid', false, 'verified'],
         'ancientbeasts:nekros': ['fight', false, 'verified'],
         'ancientbeasts:zealot': ['fight', false, 'verified'],
-        'ancientbeasts:sandy': ['avoid', false, 'verified'],
+        'ancientbeasts:sandy': ['avoid', true, 'verified'],
+        'minecraft:slime': ['fight', false, 'vanilla'],
+        'charm:spectre': ['fight', false, 'verified'],
     };
     for (const [n, [reaction, ranged, source]] of Object.entries(want)) {
         const t = pack.threatOf(n);
@@ -146,6 +149,16 @@ test('cited follow-up: the mobs the lead listed, read from the mods bytecode (or
     }
     // The troll's numbers are the pack's config, not Ice and Fire's defaults.
     assert.match(pack.threatOf('iceandfire:if_troll').evidence.join(' '), /ice_and_fire\.cfg.*Troll Attack Strength"=18\.0.*Troll Max Health"=200\.0/);
+    // Second cited follow-up: the lich's minions and staff, the ghost's possession, the spectre's pack config.
+    assert.match(pack.threatOf('iceandfire:dread_lich').summary, /up to 5 minions/);
+    assert.match(pack.threatOf('iceandfire:dread_lich').evidence.join(' '), /lich_staff.*getMinionCount\(\) < 5/);
+    assert.match(pack.threatOf('ancientbeasts:sandy').summary, /only while untamed/);
+    assert.doesNotMatch(pack.threatOf('ancientbeasts:ghost').summary, /not traced/);
+    assert.match(pack.threatOf('ancientbeasts:ghost').summary, /Possessed effect for 20 s and deals 4 damage/);
+    assert.match(pack.threatOf('charm:spectre').evidence.join(' '), /charm\.cfg.*"Apply curse"=true.*"Spawn depth"=24/);
+    // Slime and spectre were the two largest overworld defaults (about 10.5% of spawn weight each).
+    const defaults = pack.nightThreats({ limit: 1000 }).filter((t) => pack.threatOf(t.name).source === 'default');
+    assert.ok(defaults.every((t) => t.share < 0.02), `every remaining default is under 2%: ${defaults.map((t) => t.name).join(', ')}`);
     // No inferred entry is left (the lead's review remark is not evidence).
     assert.deepEqual(Object.entries(reactions.entities).filter(([, r]) => r.confidence === 'inferred').map(([n]) => n), []);
 });

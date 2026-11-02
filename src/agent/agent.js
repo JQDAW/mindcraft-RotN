@@ -93,12 +93,7 @@ export class Agent {
 
         initModes(this);
 
-        this.bot.on('login', () => {
-            console.log(this.name, 'logged in!');
-            serverProxy.login();
-            // Upstream sent "/skin set ..." or "/skin clear" here (Fabric Tailor).
-            // RotN is Forge and has no such command, so nothing is sent (skills-rotn A3).
-        });
+        this.bot.on('login', () => this.onLogin());
 		const spawnTimeoutDuration = settings.spawn_timeout;
         const spawnTimeout = setTimeout(() => {
             const msg = `Bot has not spawned after ${spawnTimeoutDuration} seconds. Exiting.`;
@@ -516,6 +511,14 @@ export class Agent {
         await this.bot.modes.update();
         this.self_prompter.update(delta);
         await this.checkTaskDone();
+    }
+
+    // Called on the bot's 'login' event. Upstream also sent "/skin set ..." or
+    // "/skin clear" here (Fabric Tailor); RotN is Forge and has no such command,
+    // so nothing is sent to the server chat (skills-rotn A3).
+    onLogin({ proxy = serverProxy } = {}) {
+        console.log(this.name, 'logged in!');
+        proxy.login();
     }
 
     isIdle() {
