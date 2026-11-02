@@ -24,6 +24,8 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#119 merged** (`0cac640`): the #104 regression fix; the OpenRouter test no longer runs inside the agent (guard test added). The lead added #121 (`_model_map.js` skips `*.test.js`), so request 7 is done.
 - **#123 merged** (`997da58`): A4, quiet reflexes (a re-plan flag instead of an LLM call per reflex), a safe `execute()`, unstuck re-plans instead of killing the agent, bounded `isClearPath`, behavioural `!smeltItem` and `/skin` tests.
 - **#124 merged** (`085dc3d`): B1, the 1.12 name fixes from the seam map (liquids, lit furnaces, grass, empty blocks, doors, world height, profession index 13, biome and door crash guards).
+- **#126 merged** (`a08e8c6`): A4b, a new action drops a stale re-plan request; the unstuck no-path wording; the login-wiring test.
+- **#133 merged** (`70cf3cb`): A4c, only `action:` labels drop a pending re-plan; the unstuck failure log names the real reason.
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -35,9 +37,9 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A4b `replan-clear` (branch `agent/skills-rotn/replan-clear`): #126 open. A new action drops a stale re-plan request; unstuck says "no path" on a fast failure; a login-wiring test.
 - B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): #131 open. Review REQUEST CHANGES (the variant form reached the LLM but collectBlock, placeBlock, equip, discard, chests, consume and the craft limit compared bare names); fixed with one shared resolver (findItem/itemMatches for items, blockMatcher for blocks) in every consuming skill, plus an end-to-end test per review scenario. This blocks G3, so it comes before B2. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
-- Next: the `mc.isBaby` switch (#125; ready locally on top of B1b), then B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2). The villager profession at index 13 (lead, #124 review) is already in #124.
+- `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`, stacked on #131): #132 open. All baby checks call `mc.isBaby` (#125); `names112.isBaby` is removed.
+- Next: B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
 
 ## G3 plan: small PRs, in order
 
@@ -132,5 +134,5 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- #126 A4b replan clear (branch `agent/skills-rotn/replan-clear`). Serves the lead's required follow-up on #123 (before any G3 batch).
 - #131 B1b names boundary (branch `agent/skills-rotn/names-boundary`). Serves Request 8 (accepted) and the G2 caveat "the full agent and its LLM command path must prove naming at G3".
+- #132 `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`, base #131 until it merges). Serves the lead's follow-up after #125.

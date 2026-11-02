@@ -5,6 +5,7 @@ import settings from './settings.js'
 import convoManager from './conversation.js';
 import * as names112 from './library/names112.js';
 import { createErrorReporter } from './update_loop.js';
+import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
 
 async function say(agent, message) {
@@ -132,13 +133,15 @@ const modes_list = [
                     // that is likely, and every restart is a full Forge relogin. Now the
                     // attempt is bounded, then the bot stops moving; execute() records the
                     // re-plan for the stuck action (A4).
-                    const freed = await moveAwayWithin(bot, 5, free_timeout_ms);
-                    if (freed) {
+                    const { outcome, error } = await moveAwayWithin(bot, 5, free_timeout_ms);
+                    if (outcome === 'freed') {
                         say(agent, 'I\'m free.');
                         return;
                     }
                     try { bot.pathfinder.stop(); } catch (err) { reportModeError('unstuck', err); }
-                    console.warn(`[reflex] unstuck: still stuck after ${free_timeout_ms / 1000} s; re-planning instead of a restart.`);
+                    console.warn(outcome === 'timeout'
+                        ? `[reflex] unstuck: still stuck after ${free_timeout_ms / 1000} s; re-planning instead of a restart.`
+                        : `[reflex] unstuck: could not move away (${safeError(error)}); re-planning instead of a restart.`);
                     say(agent, 'I\'m still stuck.');
                 });
             }
@@ -316,11 +319,12 @@ const modes_list = [
     }
 ];
 
-// True if skills.moveAway finished within timeoutMs, false if it timed out or failed.
+// { outcome: 'freed' } if skills.moveAway finished within timeoutMs, { outcome: 'timeout' }
+// if it did not, { outcome: 'failed', error } if it gave up first (no path, or anything else).
 async function moveAwayWithin(bot, distance, timeoutMs) {
     let timer;
-    const timedOut = new Promise((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); });
-    const moved = skills.moveAway(bot, distance).then(() => true, () => false);
+    const timedOut = new Promise((resolve) => { timer = setTimeout(() => resolve({ outcome: 'timeout' }), timeoutMs); });
+    const moved = skills.moveAway(bot, distance).then(() => ({ outcome: 'freed' }), (error) => ({ outcome: 'failed', error }));
     try {
         return await Promise.race([moved, timedOut]);
     } finally {

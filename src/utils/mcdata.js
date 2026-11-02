@@ -9,7 +9,7 @@ import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
 import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
-import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes } from '../../packages/rotn-data/index.js';
+import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -194,6 +194,8 @@ export function initBot(username, { onMsaCode } = {}) {
                     forge.registryReport = extendRegistry(bot.registry, snap, { log: (m) => console.log(`[forge-bridge] ${m}`) });
                     forge.stateIdRemap = attachStateIdRemap(bot.registry, stateIdTable, { log: (m) => console.log(`[forge-bridge] ${m}`) });
                     mcdata = bot.registry; // the helpers see the extended maps (same object, refreshed for clarity)
+                    // Lead exception (Request 7, this one line in net-forge's initBot; rotn-data): RotN crafting recipes.
+                    forge.rotnRecipes = installRotnRecipesOnce(bot.registry, { log: (m) => console.log(`[forge-bridge] ${m}`) });
                     bot.emit('forge_registry', forge.registryReport);
                 });
                 // Mod entities spawned with FML EntitySpawn go into bot.entities (brief item 6).
@@ -323,7 +325,38 @@ export function mustCollectManually(blockName) {
         'poppy', 'dandelion', 'blue_orchid', 'allium', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'lilac', 'wither_rose', 'lily_of_the_valley', 'wither_rose',
         'lever', 'redstone_wire', 'lantern']
     const partial_names = ['sapling', 'torch', 'button', 'carpet', 'pressure_plate', 'mushroom', 'tulip', 'bush', 'vines', 'fern']
-    return full_names.includes(blockName.toLowerCase()) || partial_names.some(partial => blockName.toLowerCase().includes(partial));
+    if (typeof blockName !== 'string') return false;
+    return full_names.includes(blockName.toLowerCase()) || partial_names.some(partial => blockName.toLowerCase().includes(partial))
+        || hasNoCollisionBox(blockName);
+}
+
+/**
+ * rotn-data brief item 4 (mustCollectManually on RotN): upstream's lists above use 1.21 names, so
+ * 1.12 plants (tallgrass, double_plant, red_flower, reeds), modded plants and Pyrotech's rock piles
+ * (pyrotech:rock, the first G3 resource) were sent to bot.collectBlock. A block state with no
+ * collision box in the dump (`collision: []`, not `null` = unknown) is what the upstream examples
+ * have in common (crops, flowers, saplings, torches, levers, grass): there is nothing to stand on or
+ * path into, so it is dug where it is and the drop picked up. Air and liquids are excluded (liquids are
+ * handled before this in collectBlock). Accepts 1.12, 1.21 and modded names (rotn-data's resolver).
+ *
+ * Only the block's default state is read (rotn-data's getBlock without a meta): 55 blocks in the dump
+ * change their collision box by state (e.g. betterwithaddons:rope_sideways). None is on the G3 path
+ * (#127 review).
+ *
+ * Also excluded (#127 review): materials that are not things to collect, NOT_COLLECTED_MATERIALS:
+ * portals, fire, structure void, and modded gas or "negative space" materials (adpother's gases, 9
+ * blocks; Recurrent Complex). Digging those means digging thin air. Rails and other circuits stay:
+ * they break into items.
+ */
+const NOT_COLLECTED_MATERIALS = new Set(['portal', 'fire', 'structure_void']);
+const NOT_COLLECTED_MODDED_MATERIAL = /Gas$|NegativeSpace$/;
+
+function hasNoCollisionBox(blockName) {
+    const b = rdGetBlock(blockName);
+    const s = b?.propertiesKnown ? b.state : null;
+    if (!s || s.liquid || s.material === 'air') return false;
+    if (NOT_COLLECTED_MATERIALS.has(s.material) || NOT_COLLECTED_MODDED_MATERIAL.test(s.material ?? '')) return false;
+    return Array.isArray(s.collision) && s.collision.length === 0;
 }
 
 export function getItemId(itemName) {
@@ -425,6 +458,39 @@ export function getAllBiomes() {
 export function installRotnRecipes(registry = reg()) {
     cycleCache.clear();
     return rdInstallRecipes(registry);
+}
+
+const ROTN_RECIPES_INSTALLED = Symbol.for('mindcraft-rotn.rotnRecipesInstalled');
+
+/**
+ * What initBot calls once per login, after forge-bridge's extendRegistry (lead exception, Request 7).
+ * Idempotent per registry (one login, one bot.registry): a second call returns the first report and
+ * installs nothing. Never throws: if the dump has no recipe data, or anything fails, it logs and
+ * leaves the registry's recipes as they are (vanilla), so login goes on.
+ * @param {object} [registry] bot.registry
+ * @param {{log?: (msg: string) => void, load?: () => object}} [opts] load: the rotn-data catalog (test seam)
+ * @returns {object|null} rotn-data's install report, or null if nothing was installed
+ */
+export function installRotnRecipesOnce(registry = reg(), { log = console.log, load = () => loadRotnData(PACK_VERSION) } = {}) {
+    if (!registry || typeof registry !== 'object') {
+        log('[rotn-data] no registry: RotN recipes not installed');
+        return null;
+    }
+    if (registry[ROTN_RECIPES_INSTALLED]) return registry[ROTN_RECIPES_INSTALLED];
+    try {
+        const count = load()?.dump?.recipes?.recipes?.length ?? 0;
+        if (!count) {
+            log('[rotn-data] the dump has no recipe data: bot.registry keeps its vanilla recipes');
+            return null;
+        }
+        const report = installRotnRecipes(registry);
+        Object.defineProperty(registry, ROTN_RECIPES_INSTALLED, { value: report, enumerable: false, configurable: true });
+        log(`[rotn-data] RotN recipes installed: ${report.recipes} recipes for ${report.results} items`);
+        return report;
+    } catch (e) {
+        log(`[rotn-data] RotN recipes not installed: ${e.message}`);
+        return null;
+    }
 }
 
 export function getItemCraftingRecipes(itemName) {
