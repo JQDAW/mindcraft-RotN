@@ -8,7 +8,11 @@
 #       `mindcraft-rotn` (no login) that runs the bots. Unattended security upgrades. ufw: SSH only.
 #       2 GB swap. Node 22 from NodeSource (key fingerprint pinned). git. The unit template, check-env,
 #       mindcraft-rotn-ctl, a sudoers rule that lets `deploy` run only mindcraft-rotn-ctl without a
-#       password, and the folders under /opt, /etc and /var/lib. Root and password login stay ON.
+#       password, and the folders under /opt, /etc and /var/lib.
+#       SSH password login OFF (the human's decision for GO 2): the drop-in
+#       /etc/ssh/sshd_config.d/10-mindcraft-rotn.conf, checked with `sshd -t` and verified with `sshd -T`
+#       before ssh is reloaded. Root keeps its key login (PermitRootLogin is not touched); deploy's
+#       password is for sudo only.
 #   bootstrap.sh add-bot BOT [--mindserver-port N]
 #       Per-bot folders (token cache 0700) and /etc/mindcraft-rotn/BOT.env (0600 root:root) from bot.env.example.
 #       Never overwrites an existing env file.
@@ -175,6 +179,47 @@ setup_firewall() {
   log "ufw: incoming SSH only${from:+ from $from}"
 }
 
+# SSH password login off (the human's decision for GO 2). cloud-init's 50-cloud-init.conf may say
+# PasswordAuthentication yes, and sshd keeps the FIRST value it reads, so this drop-in must sort before
+# 50-. Root login is not touched: root keeps its key login (prohibit-password).
+readonly SSHD_DROPIN=/etc/ssh/sshd_config.d/10-mindcraft-rotn.conf
+setup_sshd() {
+  local f bak=''
+  f=$(p "$SSHD_DROPIN")
+  if [[ -f $f ]]; then bak=$f.bak.$$; cp -p "$f" "$bak"; fi
+  # Put back what was there (or nothing) when the new config is rejected or does not take effect.
+  restore_dropin() { if [[ -n $bak ]]; then mv -f "$bak" "$f"; else rm -f "$f"; fi; }
+  file_owned 0644 root:root "$SSHD_DROPIN" <<'EOF'
+# mindcraft-rotn setup (deploy/cx23/bootstrap.sh): no SSH password login (the human's decision, GO 2).
+# Root keeps its key login (PermitRootLogin is not set here); deploy's password is for sudo only.
+# 10- sorts before cloud-init's 50-cloud-init.conf: sshd keeps the first value it reads.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+EOF
+  # sshd -t and -T need the privilege separation folder, which ssh.service creates only while it runs.
+  dir_owned 0755 root:root /run/sshd
+  if ! sshd -t; then
+    restore_dropin
+    die "sshd -t rejected the config; put back what was there, ssh not reloaded"
+  fi
+  local eff want
+  eff=$(sshd -T) || { restore_dropin; die "sshd -T failed; put back what was there, ssh not reloaded"; }
+  for want in 'passwordauthentication no' 'kbdinteractiveauthentication no'; do
+    if ! grep -qix -- "$want" <<< "$eff"; then
+      restore_dropin
+      die "sshd -T does not show '$want' (a file read before $SSHD_DROPIN sets it); put back what was there, ssh not reloaded"
+    fi
+  done
+  [[ -n $bak ]] && rm -f "$bak"
+  local root_login; root_login=$(awk 'tolower($1) == "permitrootlogin" { print $2; exit }' <<< "$eff")
+  if systemctl is-active --quiet ssh; then
+    systemctl reload ssh
+    log "sshd: password login off (verified with sshd -T); root login '${root_login:-unknown}' is unchanged; ssh reloaded"
+  else
+    log "sshd: password login off (verified with sshd -T); root login '${root_login:-unknown}' is unchanged; ssh.service is not running (socket activation), so the next connection reads it"
+  fi
+}
+
 setup_files() {
   dir_owned 0750 "$DEPLOY_USER:$SVC_USER" /opt/mindcraft-rotn
   dir_owned 0750 "$DEPLOY_USER:$SVC_USER" /opt/mindcraft-rotn/releases
@@ -222,11 +267,12 @@ do_setup() {
   setup_node
   setup_swap "$swap"
   setup_firewall "$from"
+  setup_sshd
   setup_files
-  log "setup done. Root and password login are still ON. Next, as the human:"
-  log "  1. in a second terminal: ssh deploy@<cx23>   (must work)"
-  log "  2. as root: passwd deploy   (deploy's sudo password)"
-  log "  3. bootstrap.sh lockdown --i-tested-deploy-login"
+  log "setup done. SSH password login is OFF; root keeps its key login. Next, as the human:"
+  log "  1. in a second terminal: ssh deploy@<cx23>   (key login; must work)"
+  log "  2. as root: passwd deploy   (deploy's sudo password; SSH never accepts it)"
+  log "  (lockdown, which also turns root login off, is not run on this project's CX23: the human's decision)"
 }
 
 # ---------------------------------------------------------------- add-bot

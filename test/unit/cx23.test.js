@@ -380,7 +380,7 @@ describe('bootstrap.sh', () => {
     const ok = { FAKE_OUT_id: '0', FAKE_RC_getent: '2', FAKE_OUT_gpg: `fpr:::::::::${FPR}:`, FAKE_OUT_node: 'v22.11.0', NODESOURCE_KEY_FPR: undefined };
     const boot = (args, extra = {}) => run(path.join(CX, 'bootstrap.sh'), args, { ...ok, ...extra });
 
-    test('setup: users, key, sudoers, upgrades, Node 22, swap, firewall, unit; root login stays on', () => {
+    test('setup: users, key, sudoers, upgrades, Node 22, swap, firewall, unit; password login off, root login stays on', () => {
         ubuntu();
         const r = boot(['setup', '--deploy-key-file', keyFile()]);
         assert.equal(r.code, 0, r.all);
@@ -429,10 +429,98 @@ describe('bootstrap.sh', () => {
             assert.ok(!read(f).includes('\r'), `${f} has no CR`);
         for (const d of ['opt/mindcraft-rotn/releases', 'var/lib/mindcraft-rotn/bots', 'etc/mindcraft-rotn']) assert.ok(exists(d), d);
         assert.ok(called('systemctl').some((c) => c[1] === 'daemon-reload'));
-        // root login and password login are NOT touched by setup
-        assert.ok(!exists('etc/ssh/sshd_config.d/00-mindcraft-rotn.conf'));
-        assert.equal(called('sshd').length, 0);
-        assert.match(r.stderr, /Root and password login are still ON/);
+        // password login off (the human's decision for GO 2); root login untouched; no lockdown drop-in
+        assert.ok(exists(SSHD_DROPIN));
+        assert.ok(!exists('etc/ssh/sshd_config.d/00-mindcraft-rotn.conf'), 'setup never writes the lockdown drop-in');
+        assert.match(r.stderr, /SSH password login is OFF; root keeps its key login/);
+        assert.ok(!/Root and password login are still ON/.test(r.stderr));
+    });
+
+    // ---- GO 2: SSH password login off (the human's decision), verified before ssh is reloaded
+    const SSHD_DROPIN = 'etc/ssh/sshd_config.d/10-mindcraft-rotn.conf';
+    const cloudInit = (value = 'yes') => {
+        fs.mkdirSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true });
+        fs.writeFileSync(rootFile('etc/ssh/sshd_config.d/50-cloud-init.conf'), `PasswordAuthentication ${value}\n`);
+    };
+    const setup = (extra = {}) => boot(['setup', '--deploy-key-file', keyFile()], extra);
+    const reloaded = () => called('systemctl').some((c) => c.join(' ') === 'systemctl reload ssh');
+
+    test('sshd: the drop-in turns password and keyboard-interactive login off and leaves PermitRootLogin alone', () => {
+        ubuntu();
+        cloudInit('yes');
+        const r = setup();
+        assert.equal(r.code, 0, r.all);
+        const lines = read(SSHD_DROPIN).split('\n').filter((l) => l && !l.startsWith('#'));
+        assert.deepEqual(lines, ['PasswordAuthentication no', 'KbdInteractiveAuthentication no']);
+        assert.ok(!/^\s*PermitRootLogin/im.test(read(SSHD_DROPIN)), 'root keeps its key login');
+        assert.equal(read('etc/ssh/sshd_config.d/50-cloud-init.conf'), 'PasswordAuthentication yes\n', 'cloud-init\'s file is not edited');
+        assert.ok(called('chmod').some((c) => c[1] === '0644' && c[2].includes('/etc/ssh/sshd_config.d/10-mindcraft-rotn.conf')));
+        assert.ok(called('chown').some((c) => c[1] === 'root:root' && c[2].includes('/etc/ssh/sshd_config.d/10-mindcraft-rotn.conf')));
+        assert.match(r.stderr, /password login off \(verified with sshd -T\); root login 'prohibit-password' is unchanged; ssh reloaded/);
+    });
+
+    test('sshd: the drop-in sorts before cloud-init\'s 50- file, because sshd keeps the first value it reads', () => {
+        assert.ok(path.basename(SSHD_DROPIN) < '50-cloud-init.conf');
+        assert.match(fs.readFileSync(path.join(CX, 'bootstrap.sh'), 'utf8'), /^readonly SSHD_DROPIN=\/etc\/ssh\/sshd_config\.d\/10-mindcraft-rotn\.conf$/m);
+        // The fake sshd -T keeps the first value too: a file that sorts earlier and says yes wins over ours.
+        ubuntu();
+        fs.mkdirSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true });
+        fs.writeFileSync(rootFile('etc/ssh/sshd_config.d/05-other.conf'), 'PasswordAuthentication yes\n');
+        const r = setup();
+        assert.equal(r.code, 1, r.all);
+        assert.match(r.stderr, /sshd -T does not show 'passwordauthentication no' \(a file read before \/etc\/ssh\/sshd_config\.d\/10-mindcraft-rotn\.conf sets it\); put back what was there, ssh not reloaded/);
+        assert.ok(!exists(SSHD_DROPIN), 'the ineffective drop-in is removed');
+        assert.ok(!reloaded());
+    });
+
+    test('sshd: sshd -t runs before sshd -T, and ssh is reloaded only after both pass', () => {
+        ubuntu();
+        cloudInit('yes');
+        assert.equal(setup().code, 0);
+        const t = callIndex((c) => c.join(' ') === 'sshd -t');
+        const T = callIndex((c) => c.join(' ') === 'sshd -T');
+        const reload = callIndex((c) => c.join(' ') === 'systemctl reload ssh');
+        assert.ok(t >= 0 && T > t && reload > T, `order: sshd -t ${t}, sshd -T ${T}, reload ${reload}`);
+        assert.ok(exists('run/sshd'), 'the privilege separation folder sshd -t needs');
+    });
+
+    test('sshd: a config sshd -t rejects is taken out again (or the earlier one put back), and ssh is not reloaded', () => {
+        ubuntu();
+        const r = setup({ FAKE_RC_sshd: '255' });
+        assert.equal(r.code, 1, r.all);
+        assert.match(r.stderr, /sshd -t rejected the config; put back what was there, ssh not reloaded/);
+        assert.ok(!exists(SSHD_DROPIN));
+        assert.ok(!called('sshd').some((c) => c[1] === '-T'), 'no -T after a failed -t');
+        assert.ok(!reloaded());
+        // An earlier drop-in of ours is restored as it was, with no backup left behind.
+        fs.writeFileSync(rootFile(SSHD_DROPIN), '# an earlier version\nPasswordAuthentication no\n');
+        assert.equal(setup({ FAKE_RC_sshd: '255' }).code, 1);
+        assert.equal(read(SSHD_DROPIN), '# an earlier version\nPasswordAuthentication no\n');
+        assert.deepEqual(fs.readdirSync(rootFile('etc/ssh/sshd_config.d')).filter((f) => f.includes('.bak')), []);
+    });
+
+    test('sshd: keyboard-interactive set to yes earlier also fails the sshd -T check', () => {
+        ubuntu();
+        fs.mkdirSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true });
+        fs.writeFileSync(rootFile('etc/ssh/sshd_config.d/01-x.conf'), 'KbdInteractiveAuthentication yes\n');
+        const r = setup();
+        assert.equal(r.code, 1);
+        assert.match(r.stderr, /sshd -T does not show 'kbdinteractiveauthentication no'/);
+        assert.ok(!reloaded());
+    });
+
+    test('sshd: a re-run is idempotent; with ssh.service inactive (socket activation) nothing is reloaded', () => {
+        ubuntu();
+        cloudInit('yes');
+        assert.equal(setup().code, 0);
+        const first = read(SSHD_DROPIN);
+        fs.writeFileSync(logFile, '');
+        const again = setup({ FAKE_RC_getent: '0', FAKE_SSH_INACTIVE: '1' });
+        assert.equal(again.code, 0, again.all);
+        assert.equal(read(SSHD_DROPIN), first);
+        assert.deepEqual(fs.readdirSync(rootFile('etc/ssh/sshd_config.d')).sort(), ['10-mindcraft-rotn.conf', '50-cloud-init.conf'], 'no backup left behind');
+        assert.ok(!reloaded());
+        assert.match(again.stderr, /ssh\.service is not running \(socket activation\), so the next connection reads it/);
     });
 
     test('setup refuses: not root, not Ubuntu 24.04, no or bad key; nothing is created', () => {

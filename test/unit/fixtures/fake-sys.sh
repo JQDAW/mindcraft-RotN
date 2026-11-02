@@ -9,6 +9,8 @@
 #   -o FILE   (curl and gpg only)     creates FILE
 #   ln -sfn TARGET LINK               writes TARGET into the file LINK (no symlinks needed on Windows)
 #   fallocate -l SIZE FILE            creates FILE
+#   sshd -T                           the effective config from the drop-ins under $ROOT (first value wins)
+#   systemctl is-active ...           3 if $FAKE_SSH_INACTIVE is set, else 0
 #   sudo -n /usr/local/sbin/mindcraft-rotn-ctl ACTION [BOT]
 #        list        prints $FAKE_BOTS (space-separated)
 #        is-enabled  0 if BOT is in $FAKE_ENABLED
@@ -32,6 +34,27 @@ case $name in
   fallocate)
     : > "${@: -1}"
     exit 0 ;;
+  sshd)
+    # sshd -T: the effective config like the real one. For each key, the FIRST value read wins: the
+    # drop-ins $ROOT/etc/ssh/sshd_config.d/*.conf in sorted order (Ubuntu's sshd_config includes them at
+    # its top), then the extra lines in $FAKE_SSHD_MAIN, then sshd's defaults. FAKE_RC_sshd still sets
+    # the exit code (also for -t).
+    if [[ ${1:-} == -T ]]; then
+      declare -A eff=()
+      take() { local k v; while read -r k v; do
+        [[ -z $k || $k == \#* ]] && continue
+        k=${k,,}; [[ -n ${eff[$k]+x} ]] || eff[$k]=${v,,}
+      done; }
+      shopt -s nullglob
+      for f in "${ROOT:-}"/etc/ssh/sshd_config.d/*.conf; do take < <(tr -d '\r' < "$f"); done
+      take <<< "${FAKE_SSHD_MAIN:-}"
+      take <<< $'port 22\npermitrootlogin prohibit-password\npubkeyauthentication yes\npasswordauthentication yes\nkbdinteractiveauthentication no'
+      for k in "${!eff[@]}"; do printf '%s %s\n' "$k" "${eff[$k]}"; done | sort
+    fi
+    exit "${!rc_var:-0}" ;;
+  systemctl)
+    # is-active: 3 (inactive) when FAKE_SSH_INACTIVE is set, else 0; everything else is generic.
+    if [[ ${1:-} == is-active ]]; then [[ -n ${FAKE_SSH_INACTIVE:-} ]] && exit 3; exit 0; fi ;;
   sudo)
     action=$3 bot=${4:-}
     case $action in
