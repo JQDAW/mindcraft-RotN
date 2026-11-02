@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-02T14:34Z
+Updated: 2026-11-02T16:02Z
 
 Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -377,11 +377,32 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - prismarine-chunk patch, `remapGlobalData`: a target too wide for the section is left as sent, counted in `stateIdRemap.skippedTooWide`, and the first one per map is logged. New test.
 - Tested: `node --test` on `state-remap.test.js` and `chunk.test.js`, 25/25 pass; ESLint is clean on the test file; the patch reverse-applies cleanly to the installed `node_modules`.
 
-## In review: #86 nits (branch `agent/net-forge/remap-readme-status`, from develop 7013155)
+## Done: #86 nits (PR #90, merged; branch `agent/net-forge/remap-readme-status`)
 
 - README: `skippedTooWide` lives on `bot.registry.stateIdRemap` (the live Map), not in the `bot.forge.stateIdRemap` login report.
 - This STATUS: the #86 entry no longer says "stacked on #84".
-- Then hold until G2 batch 7 (lead, 2026-11-02).
+
+## In review: G2 batch 7 blocker, the movement guard (branch `agent/net-forge/invalid-move-guard`, from develop c3163b1)
+
+- **Batch 7 items kick** (`invalid_player_movement`, about 2.2 s after spawn). Forge 1.12.2 sends it for a movement packet with a non-finite x, y, z, yaw or pitch, or with a coordinate whose absolute value is over 3.0E7.
+- **What the capture shows** (items vs. the mobs control):
+  - The kick came before the scenario's 10 s settle, so the console `clear`/`give` are not the cause.
+  - The driver never moves the bot. The throttle cannot make a NaN.
+  - Modded blocks get full-cube shapes.
+  - There were 0 parse errors.
+  - Effects, inventory and the first self metadata match the control session.
+  - **The one difference:** the server set the bot's on-fire flag (metadata key 0 = 1) at +3752 ms, 10 ms before the kick. The control session never shows it.
+- **Root cause: not proven.** The capture recorded neither the server's movement inputs (`position`, `explosion`, `entity_velocity`, mounts) nor the bot's movement packets. Its 40-chunk cap missed the bot's own chunk, so physics could not be replayed either.
+  - Reproduced offline instead: with mineflayer's real physics, one NaN explosion knockback makes it send `position x NaN`, and the state stays poisoned.
+  - An explosion or fire event would fit the on-fire flag, but this is a guess.
+- **Fix** (`src/movement-guard.js`, wired in `initBot` under the throttle):
+  - sanitize the server's `position` and explosion inputs;
+  - repair a poisoned state at every physics tick, and every 250 ms while physics is stalled;
+  - drop any movement packet the server would kick for;
+  - log each kind once;
+  - write a `movement_trace` (the last 80 movement inputs and outputs) to the capture on the first guard event or on a movement kick.
+- **What the next items run gives us:** if anything fires, there is one `[forge-bridge] movement guard: ...` line in the driver log, and the capture has `movement_trace` with the input that caused it. No extra capture settings are needed.
+- **Tested:** `movement-guard.test.js` (7), `e2e-initbot.test.js` and `support.test.js`: 16/16 pass. ESLint: the new files are clean, and `mcdata.js` stays at its baseline of 11.
 
 ## Doing
 
