@@ -15,7 +15,7 @@ Read `docs/PLAN.md` once at the start of every session. Read your own brief in `
 | Node.js | 22 LTS (ADR 0002; mineflayer 4.26+ needs >=22, Mindcraft warns that v24+ breaks native deps) |
 | Java on test server | 8 |
 | Integration branch | `develop` (this fork's default branch) |
-| Bot OS | Ubuntu 24.04 on the CX23 |
+| Bot OS | Ubuntu 26.04 LTS on the CX23 (ADR 0007) |
 
 ## Who does what
 
