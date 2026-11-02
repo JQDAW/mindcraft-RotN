@@ -10,7 +10,9 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { runScenario, waitFor } from '../runner/lib/runner.mjs';
+import { runScenario, waitFor, weakenedParams } from '../runner/lib/runner.mjs';
+import { G2_WORLD_SEED } from '../runner/lib/g2.mjs';
+import g2Blocks from '../scenarios/g2/g2-blocks-named.mjs';
 import * as L from '../runner/lib/server-log.mjs';
 import { parseArgs, loadScenarios, gitInfo } from '../runner/run.mjs';
 import { driverEnv, ctlServer, driverProcess } from '../runner/lib/adapters.mjs';
@@ -407,6 +409,20 @@ describe('run.mjs', () => {
         assert.deepEqual(parseArgs(['--pass-env', 'OPENROUTER_API_KEY', '--', 'x']).passEnv, ['OPENROUTER_API_KEY']);
         assert.throws(() => parseArgs(['--param', 'nope']), /key=value/);
         assert.throws(() => parseArgs(['--bogus']), /unknown argument/);
+    });
+
+    test('parseArgs keeps integers beyond Number.MAX_SAFE_INTEGER (19-digit seeds) as strings, digit for digit', () => {
+        const p = (v) => parseArgs(['--param', `x=${v}`]).params.x;
+        assert.equal(p('1880465901402976865'), '1880465901402976865');
+        assert.equal(p('-8796110535854059511'), '-8796110535854059511');
+        assert.equal(p('9007199254740992'), '9007199254740992');   // MAX_SAFE_INTEGER + 1
+        assert.equal(p('9007199254740991'), 9007199254740991);     // MAX_SAFE_INTEGER stays a number
+        assert.equal(p('-42'), -42);
+        assert.equal(p('2.5'), 2.5);
+        // The planned G2 seed given on the command line is the gate default, so the run is not weakened.
+        const params = parseArgs(['--param', `worldSeed=${G2_WORLD_SEED}`]).params;
+        assert.deepEqual(weakenedParams(g2Blocks, params), []);
+        assert.deepEqual(weakenedParams(g2Blocks, { worldSeed: Number(G2_WORLD_SEED) }).map((w) => w.split(' ')[0]), ['worldSeed=1880465901402976800']);
     });
 
     test('discovers the G1 scenario', async () => {

@@ -58,6 +58,9 @@ export async function startSession(ctx, { name, env = {}, naming = null }) {
     // The world the evidence is about (PR #36 review finding 5). 1.12 prints "Seed: N" (later versions "Seed: [N]").
     const seedLine = server.console('seed', p.consoleWaitS).map((l) => /Seed: \[?(-?\d+)\]?\s*$/.exec(l)).find(Boolean);
     ctx.note('worldSeed', seedLine ? seedLine[1] : null);
+    // G1 is deliberately exempt from the seed check: g1-login-chat-walk does not use startSession and
+    // has no worldSeed parameter, because logging in, chatting and walking do not depend on the world.
+    // Only scenarios that declare worldSeed (the G2 ones) are held to the planned world.
     if (!seedLine) ctx.notGate('no world seed from the console "seed" command: the seed is part of the G2 evidence');
     else if (p.worldSeed !== undefined && seedLine[1] !== String(p.worldSeed)) {
         // World coverage is fixed (lead, after G2 batch 5): a G2 gate run uses the planned world.
