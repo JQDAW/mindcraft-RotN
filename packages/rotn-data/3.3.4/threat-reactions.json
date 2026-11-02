@@ -1,78 +1,244 @@
 {
   "format": "rotn-threat-reactions/1",
   "pack": "3.3.4",
-  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'inferred' = a modded mob's behaviour as the lead's review describes it, not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source 'inferred'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
+  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source 'inferred'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
   "general": {
     "summary": "At night stay sealed in a cobblestone or stone shelter with light only inside; a dirt shack is not safe because mobs dig and pillar. Retreat if two or more hostiles come at once.",
     "confidence": "documented",
-    "evidence": ["docs/research/rotn-progression.md section 2 (Mobs break in, Light attracts mobs, Zombies): [W-Tips], [W-Getting_Started], [HB survival/shelter/shelter_early]"]
+    "evidence": [
+      "docs/research/rotn-progression.md section 2 (Mobs break in, Light attracts mobs, Zombies): [W-Tips], [W-Getting_Started], [HB survival/shelter/shelter_early]"
+    ]
   },
   "entities": {
     "minecraft:zombie": {
       "reaction": "fight",
       "summary": "Can carry pickaxes or axes, place weak scaffolding, break blocks and inflict hunger. Fight at a choke point with a shield, or stay sealed in. After killing one that carried a Parasite, move away. Retreat if two or more come at once.",
       "confidence": "documented",
-      "evidence": ["docs/research/rotn-progression.md section 2, Zombies: [W-Zombie], [W-Getting_Started]"]
+      "evidence": [
+        "docs/research/rotn-progression.md section 2, Zombies: [W-Zombie], [W-Getting_Started]"
+      ]
     },
     "minecraft:skeleton": {
       "reaction": "take-cover",
       "ranged": true,
       "summary": "Erratic movement and better aim than vanilla. Stay behind cover; do not strafe in open ground.",
       "confidence": "documented",
-      "evidence": ["docs/research/rotn-progression.md section 2, Skeletons: [W-Getting_Started]"]
+      "evidence": [
+        "docs/research/rotn-progression.md section 2, Skeletons: [W-Getting_Started]"
+      ]
     },
     "minecraft:spider": {
       "reaction": "fight",
       "summary": "Faster than vanilla, inflicts slowness, and other mobs ride it. Kill the spider first; avoid open ground.",
       "confidence": "documented",
-      "evidence": ["docs/research/rotn-progression.md section 2, Spiders: [W-Getting_Started]"]
+      "evidence": [
+        "docs/research/rotn-progression.md section 2, Spiders: [W-Getting_Started]"
+      ]
     },
     "minecraft:creeper": {
       "reaction": "keep-distance",
       "explodes": true,
       "summary": "Hisses and stands still next to you, then explodes. Back off at once. Do not fight near stored items or wooden walls.",
       "confidence": "documented",
-      "evidence": ["docs/research/rotn-progression.md section 2, Creepers and Fire Creepers: [W-Getting_Started], [W-Tips], [W-Progression_Stages]"]
+      "evidence": [
+        "docs/research/rotn-progression.md section 2, Creepers and Fire Creepers: [W-Getting_Started], [W-Tips], [W-Progression_Stages]"
+      ]
     },
     "specialmobs:firecreeper": {
       "reaction": "keep-distance",
       "explodes": true,
       "summary": "A Fire Creeper: explodes like a creeper and can burn dropped items. Back off at once; do not fight near stored items or wooden walls.",
       "confidence": "documented",
-      "evidence": ["docs/research/rotn-progression.md section 2, Creepers and Fire Creepers: [W-Tips] 'Fire Creepers explode and can burn dropped items', [W-Progression_Stages]; the dump's specialmobs:firecreeper has the display name 'Fire Creeper'"]
+      "evidence": [
+        "docs/research/rotn-progression.md section 2, Creepers and Fire Creepers: [W-Tips] 'Fire Creepers explode and can burn dropped items', [W-Progression_Stages]; the dump's specialmobs:firecreeper has the display name 'Fire Creeper'"
+      ]
     },
     "minecraft:witch": {
       "reaction": "take-cover",
       "ranged": true,
       "summary": "Throws harmful splash potions from range and drinks healing potions. Stay behind cover; do not stand in the open near it.",
       "confidence": "vanilla",
-      "evidence": ["Minecraft 1.12 EntityWitch behaviour (ranged potion attack); not in the RotN sources, unverified on this pack. #111 follow-up (lead)"]
+      "evidence": [
+        "Minecraft 1.12 EntityWitch behaviour (ranged potion attack); not in the RotN sources, unverified on this pack. #111 follow-up (lead)"
+      ]
     },
     "minecraft:illusion_illager": {
       "reaction": "take-cover",
       "ranged": true,
       "summary": "Shoots arrows, makes illusion copies of itself and casts blindness. Stay behind cover.",
       "confidence": "vanilla",
-      "evidence": ["Minecraft 1.12 EntityIllusionIllager behaviour (bow, illusions, blindness); not in the RotN sources, unverified on this pack. #111 follow-up (lead)"]
+      "evidence": [
+        "Minecraft 1.12 EntityIllusionIllager behaviour (bow, illusions, blindness); not in the RotN sources, unverified on this pack. #111 follow-up (lead)"
+      ]
     },
     "iceandfire:dread_lich": {
       "reaction": "take-cover",
       "ranged": true,
-      "summary": "A ranged caster. Stay behind cover; do not fight it in the open on the first night.",
-      "confidence": "inferred",
-      "evidence": ["the lead's #111 follow-up review ('a ranged caster'); not checked against Ice and Fire's code. The dump: class com.github.alexthe666.iceandfire.entity.EntityDreadLich, IMob"]
+      "summary": "A ranged caster: it shoots skulls and strafes, and also fights in melee. 50 health, armor 2. Stay behind cover.",
+      "confidence": "verified",
+      "evidence": [
+        "IceAndFireRotN-1.9.1-1.2.1.jar: EntityDreadLich implements IRangedAttackMob; attackEntityWithRangedAttack (func_82196_d) creates an EntityDreadLichSkull; initEntityAI (func_184651_r) adds DreadLichAIStrife and EntityAIAttackMelee; applyEntityAttributes (func_110147_ax): max health 50, armor 2"
+      ]
     },
     "iceandfire:if_troll": {
       "reaction": "avoid",
-      "summary": "A heavy hitter. Do not melee it on the first night; keep away, or stay sealed in.",
-      "confidence": "inferred",
-      "evidence": ["the lead's #111 follow-up review ('a heavy hitter'); not checked against Ice and Fire's code. The dump: class com.github.alexthe666.iceandfire.entity.EntityTroll, IMob; about 4% of overworld monster spawn weight"]
+      "summary": "A heavy melee hitter: 18 attack and 200 health on this pack (Ice and Fire's defaults are 10 and 50), armor 9. Do not fight it on the first night; stay sealed in. It flees the sun.",
+      "confidence": "verified",
+      "evidence": [
+        "IceAndFireRotN-1.9.1-1.2.1.jar: EntityTroll extends EntityMob; initEntityAI adds EntityAIAttackMelee and TrollAIFleeSun; applyEntityAttributes sets attack damage from IceAndFireConfig.trollAttackStrength, max health from trollMaxHealth, armor 9",
+        "the pinned pack's config/ice_and_fire.cfg lines 491-495: S:\"Troll Attack Strength\"=18.0, S:\"Troll Max Health\"=200.0"
+      ]
     },
     "minecraft:enderman": {
       "reaction": "ignore-unless-provoked",
       "summary": "Neutral until you look at its head or hit it. Do not look at it; do not attack it on the first night.",
       "confidence": "vanilla",
-      "evidence": ["Minecraft 1.12 EntityEnderman behaviour (the dump marks it IMob, so entity() calls it hostile); not in the RotN sources, unverified on this pack"]
+      "evidence": [
+        "Minecraft 1.12 EntityEnderman behaviour (the dump marks it IMob, so entity() calls it hostile); not in the RotN sources, unverified on this pack"
+      ]
+    },
+    "quark:ashen": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A skeleton whose arrows blind (Blindness, 2.5 s). Stay behind cover.",
+      "confidence": "verified",
+      "evidence": [
+        "QuarkRotN-r1.6-190.jar: EntityAshen extends EntitySkeleton (vanilla bow AI); setEquipmentBasedOnDifficulty (func_180481_a) puts a tipped arrow (Items.TIPPED_ARROW, field_185167_i) of Blindness (MobEffects field_76440_q, 50 ticks) in its off hand, which a skeleton shoots"
+      ]
+    },
+    "quark:dweller": {
+      "reaction": "fight",
+      "summary": "A zombie that is invisible from spawn until it attacks or takes damage; armor 3. Fight it like a zombie.",
+      "confidence": "verified",
+      "evidence": [
+        "QuarkRotN-r1.6-190.jar: EntityDweller extends EntityZombie; onInitialSpawn (func_180482_a) adds Invisibility (MobEffects field_76441_p) for 2147483647 ticks; attackEntityFrom (func_70097_a, damage > 0) and attackEntityAsMob (func_70652_k) remove it; applyEntityAttributes: armor 3"
+      ]
+    },
+    "iceologer:iceologer": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A spellcaster illager that summons ice blocks which fall on its target. 24 health. Stay under a roof or behind cover.",
+      "confidence": "verified",
+      "evidence": [
+        "Frozen-Fiend-1.5.3.jar (the mod that registers iceologer:iceologer): EntityIceologer extends EntitySpellcasterIllager; its AISummonIceBlock creates an EntityIceCube; applyEntityAttributes: max health 24"
+      ]
+    },
+    "mowziesmobs:naga": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A flying ranged attacker that circles its target. 30 health, 4 attack. Stay behind cover.",
+      "confidence": "verified",
+      "evidence": [
+        "mowziesmobs-1.5.8.jar: EntityNaga implements IRangedAttackMob; initEntityAI adds AIFlyAroundTarget and AIRandomFly; applyEntityAttributes: max health 30, attack 4, follow range 45"
+      ]
+    },
+    "rats:illager_piper": {
+      "reaction": "fight",
+      "summary": "Its ranged attack summons rats instead of shooting. Kill the piper first.",
+      "confidence": "verified",
+      "evidence": [
+        "rats-3.2.21-1.12.2.jar: EntityIllagerPiper extends AbstractIllager implements IRangedAttackMob; attackEntityWithRangedAttack (func_82196_d) calls summonRat(); initEntityAI adds PiperAIStrife and EntityAIAttackMelee"
+      ]
+    },
+    "ancientbeasts:bonepile": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A ranged attacker that strafes. 32 health. It shelters from the sun. Stay behind cover.",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntityBonepile extends EntityMob implements IRangedAttackMob; initEntityAI adds EntityAIAttackRangedStrafe, EntityAIRestrictSun and EntityAIFleeSun; applyEntityAttributes: max health 32"
+      ]
+    },
+    "ancientbeasts:boulderer": {
+      "reaction": "fight",
+      "summary": "A zombie that climbs walls and leaps up ladders, so a low wall does not stop it. It also uses Speed and Invisibility effects.",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntityBoulderer extends EntityZombie; uses PathNavigateClimber and EntityAILeapLadder; references Speed (field_76424_c) and Invisibility (field_76441_p) potion effects (when they apply was not traced)"
+      ]
+    },
+    "ancientbeasts:damcell": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A ranged attacker. 40 health. Stay behind cover.",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntityDamcell extends EntityMob implements IRangedAttackMob; initEntityAI adds EntityAIAttackRanged; applyEntityAttributes: max health 40"
+      ]
+    },
+    "ancientbeasts:rifted_enderman": {
+      "reaction": "ignore-unless-provoked",
+      "summary": "Like an enderman: it targets a player who looks at it, then teleports and hits for 6. 40 health. Do not look at it.",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntityRiftedEnderman; its AIFindPlayer calls shouldAttackPlayer(EntityPlayer) (the enderman's stare check) and teleportRandomly(); initEntityAI adds EntityAIAttackMelee, AITakeBlock and AIPlaceBlock; applyEntityAttributes: max health 40, attack 6"
+      ]
+    },
+    "ancientbeasts:frost_walker": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "Casts ice magic (ice crystals) from range and also fights in melee. 32 health, 4 attack, armor 2. Stay behind cover.",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntityFrostWalker extends EntityMob; initEntityAI adds EntityAICastIceMagic (creates EntityIceCrystal), AIFrostWalkerSlowMelee and AIFrostWalkerFastMelee; applyEntityAttributes: max health 32, attack 4, armor 2"
+      ]
+    },
+    "ancientbeasts:ghost": {
+      "reaction": "fight",
+      "summary": "A flying mob with 12 health. Its possession AI applies Strength, Speed and Absorption (to whom was not traced).",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntityGhost extends EntityMob; PathNavigateFlying; initEntityAI adds EntityAIPossession, which references EntityPlayer and the Strength (field_76420_g), Speed (field_76424_c) and Absorption (field_76444_x) effects; applyEntityAttributes: max health 12"
+      ]
+    },
+    "ancientbeasts:giant_zombie": {
+      "reaction": "avoid",
+      "summary": "A giant: 180 health, 15 attack, armor 4, knockback resistance 4. Do not fight it; stay sealed in.",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntityGiant extends EntityMob; initEntityAI adds EntityAIGiantMelee; applyEntityAttributes: max health 180, attack 15, armor 4, knockback resistance 4"
+      ]
+    },
+    "ancientbeasts:nekros": {
+      "reaction": "fight",
+      "summary": "A flying caster that summons a zombie and a skeleton and steals life. Only 12 health: kill it first.",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntityNekros extends EntityMob; UseDarkMagic creates an EntityZombie and an EntitySkeleton; LifeStealing damages its target (DamageSource.causeMobDamage) and heals itself (func_70691_i); applyEntityAttributes: max health 12"
+      ]
+    },
+    "ancientbeasts:zealot": {
+      "reaction": "fight",
+      "summary": "A spellcaster illager: its weakening spell gives Slowness and Weakness, its buff spell helps allies. 24 health. It flees the sun.",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntityZealot extends EntitySpellcasterIllager; AIWeakeningSpell applies Slowness (field_76421_d) and Weakness (field_76437_t); AIBuffSpell creates an EntityBeam; initEntityAI adds EntityAIFleeSun; applyEntityAttributes: max health 24"
+      ]
+    },
+    "ancientbeasts:sandy": {
+      "reaction": "avoid",
+      "summary": "A tameable beast that attacks when untamed: 80 health, 6 attack, armor 4. Do not fight it on the first night.",
+      "confidence": "verified",
+      "evidence": [
+        "ancientbeasts-1.9.99999.jar: EntitySandy extends EntityTameable; initEntityAI adds EntityAITargetNonTamed and EntityAIMeleeConditional; applyEntityAttributes: max health 80, attack 6, armor 4"
+      ]
+    },
+    "minecraft:guardian": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "Lives in ocean monuments and fires a laser beam. Stay out of the water near it and behind cover.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityGuardian behaviour (laser beam attack, ocean monuments); not in the RotN sources, unverified on this pack"
+      ]
+    },
+    "minecraft:vindication_illager": {
+      "reaction": "avoid",
+      "summary": "Swings an iron axe for heavy damage (13 on Normal in vanilla Java). Do not melee it on the first night; keep away or stay sealed in.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityVindicator behaviour (iron axe melee; Minecraft Wiki: 13 damage on Normal, Java Edition); not in the RotN sources, unverified on this pack"
+      ]
     }
   },
   "classRules": [
@@ -82,7 +248,9 @@
       "reaction": "keep-distance",
       "explodes": true,
       "summary": "A creeper variant (Special Mobs, Primitive Mobs, NetherEx, Better With Mods): treat it as a creeper. Back off at once; do not melee it.",
-      "evidence": ["the dump: the class's simple name contains 'Creeper' (fathertoast.specialmobs.entity.creeper.*, net.daveyx0.primitivemobs.entity.monster.Entity*Creeper, ...); the creeper reaction is documented in docs/research/rotn-progression.md section 2"],
+      "evidence": [
+        "the dump: the class's simple name contains 'Creeper' (fathertoast.specialmobs.entity.creeper.*, net.daveyx0.primitivemobs.entity.monster.Entity*Creeper, ...); the creeper reaction is documented in docs/research/rotn-progression.md section 2"
+      ],
       "note": "Inferred from the class name, not from each mod's code: a variant may not explode (Better With Mods' sheared creeper) or may explode differently (Primitive Mobs' rocket creeper). Keeping distance is the safe reaction either way."
     },
     {
@@ -92,7 +260,9 @@
       "reaction": "take-cover",
       "ranged": true,
       "summary": "A skeleton variant (Special Mobs, Primitive Mobs, ...): treat it as a skeleton. Stay behind cover; do not strafe in open ground.",
-      "evidence": ["the dump: the class's simple name contains 'Skeleton' or 'Stray' (fathertoast.specialmobs.entity.skeleton.*, net.minecraft.entity.monster.EntityStray, ...); the skeleton reaction is documented in docs/research/rotn-progression.md section 2"],
+      "evidence": [
+        "the dump: the class's simple name contains 'Skeleton' or 'Stray' (fathertoast.specialmobs.entity.skeleton.*, net.minecraft.entity.monster.EntityStray, ...); the skeleton reaction is documented in docs/research/rotn-progression.md section 2"
+      ],
       "note": "Inferred from the class name: some variants fight in melee (brute, knight, ninja). Wither skeletons and their Special Mobs variants (Nether mobs, mostly melee) are excluded and get the default."
     }
   ]
