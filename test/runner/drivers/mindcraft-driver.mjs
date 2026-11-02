@@ -34,6 +34,7 @@ import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { giverProblems } from '../lib/g3.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const EXIT_FATAL = 3;
@@ -97,7 +98,9 @@ export function profileProblems(file, bot) {
 export async function settingsProblems(file) {
     try {
         const s = (await import(pathToFileURL(path.resolve(file)).href)).default;
-        return s?.allow_insecure_coding === false ? [] : [`${file}: allow_insecure_coding is not false`];
+        const p = s?.allow_insecure_coding === false ? [] : [`${file}: allow_insecure_coding is not false`];
+        // The console sender `Server` is a test-only task giver; never in the production settings (#116 review).
+        return [...p, ...giverProblems(s).map((m) => `${file}: ${m}`)];
     } catch (e) {
         return [`${file}: cannot be imported (${e.message})`];
     }

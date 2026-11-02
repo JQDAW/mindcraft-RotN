@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (20:42 UTC, from `date -u`)
+Updated: 2026-11-02 (21:30 UTC, from `date -u`)
 
 ## Done
 
@@ -98,12 +98,24 @@ Updated: 2026-11-02 (20:42 UTC, from `date -u`)
     - **S1-B is cancelled**;
     - the dawn bound is provisional until the first G3 smoke batch;
     - memory: option 1 (Requests item 13).
-  - **This PR: the G3 driver** (`test/runner/drivers/mindcraft-driver.mjs`). It runs the real Mindcraft agent under the runner contract:
+  - **The G3 driver is merged (#116)** (`test/runner/drivers/mindcraft-driver.mjs`). It runs the real Mindcraft agent under the runner contract:
     - no task files, and it refuses skills-rotn's `MINDCRAFT_ROTN_ALLOW_TASK_FILES` too;
     - no insecure settings;
     - no process left behind on a stop.
     - It is tested offline with a fake `main.js`.
-  - **CX23 GO 1** (the read-only probe, lead 18:31 UTC): waiting for the human to open the `/root` folder workspace on `cx23` from Orca's desktop app (lead's option 1). Nothing has touched the CX23.
+  - **This PR, required before any G3 paid batch (lead, #116 review):**
+    - **`test/runner/batch.mjs`:** the batch spend stop at `maxBatchUsd` USD 2. It reads the key's usage before every scenario (numbers only), stops above the limit, always fetches the logs, and exits 5. Without a reading it refuses to start.
+    - **Per scenario:** LLM calls and cost recorded in `result.json` (`llm`). An unknown cost is notGate.
+    - **G3 console allowlist:** no `give`, `summon`, `kill` or op commands.
+    - **`Server` is test-only:** the driver refuses a production `settings.js` that lists it as a task giver.
+    - **#122 review fixes:**
+      - the end of a batch fails closed (over the limit exits 5, no reading exits 6);
+      - the test-mode overrides are refused inside a real test-server run, and `testMode` is recorded;
+      - every G3 scenario has `llm: true` and `maxBatchUsd` 2 'equal' (unit test), with the guard whenever `llm` is true;
+      - a G3 run without `batch.mjs`'s `ROTN_G3_BATCH` marker is notGate;
+      - `llm` is in progress and killed records;
+      - the spend is checked between scenarios only, as documented in DRIVER.md.
+  - **CX23 GO 1** (the read-only probe): the CLI could not create the `/root` workspace on `cx23`, and the approved `orca terminal create --environment cx23` needs a workspace ("Remote terminal create requires --worktree"). It waits for the human to open a folder workspace at `/root` on `cx23` from Orca's desktop app. Nothing has touched the CX23.
   - **Next:** the G3 arbiters library (inventory by count-only `clear`, the stat objectives with absent read as 0, deaths, leaves and no-cheat), then the scenarios once skills-rotn's chat formats are agreed.
 - **G2 PASSED** on batch 8 (#97): blocks, mobs and items all gate-valid in one batch on the fixed world and cube.
 - **History:**
@@ -1083,5 +1095,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the G3 driver for the real Mindcraft agent (`agent/harness-ops/g3-driver`).
-- Merged since the last update: #113 (S1-A evidence and findings).
+- This PR: the G3 spend stop, the console allowlist and the test-only giver check (`agent/harness-ops/g3-spend`; develop merged in after #116).
+- Merged since the last update: #113 (S1-A evidence and findings), #116 (the G3 driver).

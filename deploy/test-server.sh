@@ -1011,6 +1011,14 @@ main() {
       (( DRY_RUN )) && exit 0
       export TEST_SERVER_NAME=$NAME TEST_SERVER_HOST=$IP TEST_SERVER_PORT=25565
       export TEST_SERVER_STATE_DIR=$SDIR TEST_SERVER_CTL=$SELF
+      # TEST_SERVER_FAKE_CLOUD=1 only for the offline tests (test mode, a fake hcloud with its fake state);
+      # set here, never inherited. The G3 batch runner refuses its test-mode overrides (a fake key-usage
+      # file, a fake runner) unless this is 1, so they can never weaken a real batch (#122 review).
+      if [[ ${ROTN_TEST_MODE:-} == 1 && -n ${FAKE_HCLOUD_STATE:-} && $HCLOUD_BIN != hcloud ]]; then
+        export TEST_SERVER_FAKE_CLOUD=1
+      else
+        export TEST_SERVER_FAKE_CLOUD=0
+      fi
       log "running: ${run_cmd[*]}"
       local status=0
       "${run_cmd[@]}" || status=$?
