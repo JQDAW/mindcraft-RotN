@@ -1,0 +1,567 @@
+[03:05:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Seed: 8796110535854059511
+[03:05:22] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player <bot> is <uuid-v4>
+[03:05:22] [Netty Epoll Server IO #3/INFO] [FML]: Client protocol version 2
+[03:05:22] [Netty Epoll Server IO #3/INFO] [FML]: Client attempting to join with 346 mods : artisanintegrations@1.12.2-1.3.0,msunspirit@1.0.0,musictriggers@7.0.4,bnbgamingcore@0.12.0,sandro@1.3d,vanillaanvilrepair@1.1,theimpossiblelibrary@0.4.5,salt_lamps@1.12.2-1.1.0,nyx@1.6.1,rusticbopwoods@1.0,universaltweaks@1.9.0,chunkgenlimit@1.1,noarcher@1.0.0,betternether@0.1.9.4,contenttweaker@1.12.2-4.10.0,from_the_depths@1.3.0.1,craftstudioapi@1.0.0,bettercaves@1.12.2,forgeendertech@1.12.2-4.5.6.1,minerva@1.0.13,artisanworktables@1.12.2-1.24.2,exsartagine@${version},estop@1.12.1,hungertweaker@1.3.0,forgelin@1.8.4,randompatches@1.12.2-1.22.1.10,llibrary@1.7.20,scavenge@1.8,morpheus@1.12.2-3.5.106,hordes@1.1.7,normalasm@5.28,waila@1.8.26,minetraps@1.0.4,snowrealmagic@0.7.4,dynview@1.3,betterthanmending@1.1.2,mcmultipart@2.5.3,shetiphiancore@3.5.9,bundles@1.2.3,mysticallib@1.12.2-1.13.0,glaretorch@8.10,malisisdoors@1.12.2-7.3.0,enhanced_snowman@1.0,simpleores@1.11.2.2,ancientbeasts@1.9.99999,growthcraft_hops@4.2.2,betterwithlib@${version},totemexpansion@1.2.2,malisiscore@1.12.2-6.5.1-SNAPSHOT,rusticcompat@1.0,biomesoplenty@7.0.1.2445,controlledburn@1.12.2.024,redstoneflux@2.1.1,ironfurnaces@1.3.5,defiledlands@1.4.3,reccomplex@1.4.8.6,modtweaker@4.0.19,fairylights@2.1.10,corpsecomplex@1.0.12.0,potioncore@1.9_for_1.12.2,gamestages@2.0.123,aquaacrobatics@1.15.4,extendeddays@0.2.9,shadowmc@3.8.0,specialai@1.1.0_for_mc1.12.2,ceramics@1.12-1.3.7b,futurefireproof@1.2.2,triumph@3.19.2,nolavabuild@1.12.2-1.0.0,FML@8.0.99.99,obfuscate@0.4.2,atlaslib@1.1.6,multiblockmobs@1.6,zombie_players@1.12.1-1.2.7,globalxp@v1.4.10,hardcoredarkness@2.0,charm@1.4,dropt-bed@1.12.2-1.0.1,scalinghealth@1.3.37,bettermineshafts@1.12.2-2.2.1,dynamictrees@1.12.2-0.13.4,geckolib3@3.0.30,netherex@2.2.5,setbonus@1.12.2.040,dungpipe@1.0,advancedliftingmethods@1.0.0,justenoughdimensions@1.6.0-dev.20200416.184714,rockytweaks@@VERSION@,foundry@1.7.18,simplyhotsprings@${version},configanytime@3.0,quarkoddities@1,serenetweaks@0.0.1,cd4017be_lib@6.5.1,mowziesmobs@1.5.8,dynamictreesbop@1.12.2-9999.9999.9999z,jsonpaintings@1.4.0,rltweaker@0.7.4,timeshallnotpass@1.12.2-1.2.1,betterhorses@1.0,trumpetskeleton@1.12-1.0.2.1,bountifulbaubles@0.0.1,configmod@v1.0,hungeroverhaul@1.12.2-1.3.3.jenkins148,jei@4.27.3,bnbgaminglib@2.17.6,maleksinfinitygauntlet@1.0,lemonlib@1.3.0,copypaste@1.1,simplewoodenpipes@1.8,naturescompass@1.8.5,sereneseasons@1.2.18,basketcase@2.1.109,horsepower@2.6.4,noisethreader@1.1.0,vials@1.2.1.5,iceologer@1.5.3,inventorytweaks@1.63+release.109.220f184,redstoneplusplus@1.3e,athenaeum@1.12.2-1.19.6,betterhurttimer@1.12.2-1.5.0.3,iceandfire@1.9.1-1.2.1,bounceable@1.0.1,simple_paraglider@1.1.0,crafttweaker@4.1.20,rebind@2.7.5,forge@14.23.5.2860,paths@1.7.0,growthcraft_fishtrap@4.2.2,dynamictreesttf@1.12.2-1.2.3,dmgcontrol@1.3.17,eplus@5.1.0,antiqueatlas@4.6.3,cyclicmagic@1.20.12,enchcontrol@1.1.5,thiccentities@GRADLE:VERSION,minecraft@1.12.2,worldprimer@0.6.0-dev.20200122.211517,earthworks@1.3.4.3,fireresistancetiers@1.0,bettercombat@1.5.6,undergroundbiomes@1.3.14,behgameon@1.1.0,requious@1.0,demonic_scythe@1.4,growthcraft_milk@4.2.2,applecore@3.4.0,contentcreator@1.3.6-5,rustic@1.1.7,outfox@0.1.5,rotntweaker@0.1.0,fermiumbooter@1.4.1,astikorcarts@1.12.2-0.1.2.8,dropt@1.12.2-1.19.4,deadmanssatchel@1.12.2-1.0.0.20190226202924,ctintegration@1.8.0,spectral_edge@1.0,mantle@1.12-1.3.3.55,loottweaker@0.3.1,tnt_utilities@1.2.3,ftbbackups@1.1.0.1,rats@3.2.21,autoreglib@1.3-32,growthcraft_bees@4.2.2,libraryex@1.2.2,simplecore@1.7.3.4,trident@1.0.5,anvilpatch@1.1.1,biometweakercore@1.0.39,witherconfig@1.2.1,extrasounds@1.12.2-1.4.1,pyrotech_compat@@VERSION@,discordrpc@1.3.3,inworldcrafting@1.12.2-1.2.0,betterinvisibility@1.0.5,combatrefined@1.4.1,cosmeticarmorreworked@1.12.2-v5a,respawntimer@$version,well@1.0.1,arrowharvest@1.12.2-1.0.3,base@3.14.0,stygian@1.0.4,orestages@2.0.37,butterflies@1.12.2-1.0.3,roughmobsrevamped@2.3.23,chargethrower@1.0.1,rotn_blocks@1.0.0,animania@1.7.3,clipboard@@VERSION@,fantasticlib@1.12.2.068,dynamictreesquark@1.12.2-1.0.6,guilib@$version,villagenames@4.4.13,futuremc@0.2.6,doggytalents@1.15.1.6,incontrol@3.9.18,powerdrop@1.0,osv@5.14,growthcraft_bamboo@4.2.2,advancedmortars@1.12.2-1.7.1,netherchest@1.1.1,teamsmod@1.12.2-Rfinal,lttweaker@1.1.14,aggrotp@0.4.1,placebo@1.6.0,ometweaks@1.1.0,hitwithaxe@1.5.1,zombieawareness@1.12.1-1.11.16,arcaneworld@0.0.11,bookshelf@2.3.590,cofhworld@1.4.0,elegant_networking@3.16,xporbclump@2.3.6,letmesleep@1.2.2,adpother@1.12.2-1.2.25.0,aeble@1.4.2,carryon@1.12.3,eguilib@0.1.2,bblsom@1.1.2,biometweaker@3.2.369,twilightforest@3.14,growthcraft@4.2.2,redcore@0.6,dynamictreesphc@2.0.6,mcwbridges@1.0.6,charset@0.5.6.6,growthcraft_cellar@4.2.2,betterwithmods@1.12-2.3.24,rotm@1.1.4,crafttweakerjei@2.0.3,logimmune@0.1,aireducer@0.3.0,betterwithaddons@0.51,customdisc@1.3,mtlib@3.0.7,lifescroll@1.0,artisanworkstumps@1.12.2-1.1.4,msmlegacy@@VERSION@,livingenchantment@3.2.3,geographicraft@0.8.7,elenaidodge2@1.1.0,sasit@1.1.30,bountiful@2.2.3,dimstages@2.0.23,roguelike@1.8.0,patchouli@1.0-28,brigo@1.1.1,collective@3.0,mapgadgets@@VERSION@,betterbiomeblend@1.2.0,randomthings@4.2.7.4,qualitytools@1.0.7_for_1.12.2,endreborn@0.3.8,materialchanger@1.0,spartanfire@0.08,redstoneminusredstone@@VERSION@,dynamictreesdefiledlands@1.12.2-1.0.0,editableedibles@1.3.2,asmc@1.0.2,dpt@1.1.1,spartanweaponry@1.4.1,aesthetics@1.6.0.23,zenutils@1.26.14,growthcraft_grapes@4.2.2,tpp@1.0.1.1,vtt@0.6.4,atop@1.6,extraalchemy@0.5.4,epicsiegemod@13.169,aether_legacy_addon@1.12.2-v1.3.0,dynamictreestheaether@1.0.14,forgelin_continuous@2.1.20.0,extendedrenderer@v1.0,crafttweakerutils@0.7,dungeontactics@DT-0.16.9,zenrecipereloading@1.4.4,mixinbooter@10.7,trashslot@8.4.10,thirstybottles@2.0.1,chutes@1.0.0,ivtoolkit@1.3.3-1.12,gamblingstyle@1.1.3,esmtweaks@0.4.5,mcp@9.42,artifacts@1.12.2-1.2.4,cavegenerator@1.1,beneath@1.7.1,spartancompat@@VERSION@,betteranimalsplus@9.0.1,harvestcraft@1.12.2zb,harvestersnight@1.1.0,jeid@2.2.2,specialmobs@1.0.4_for_mc1.12.2,alfheim@1.5,rlmixins@1.3.18,pyrotech@1.12.2-1.5.25,soundphysics@1.1.13,randomportals@1.12.2-1.8.2.4,superflatcaves@1.3.1,growthcraft_rice@4.2.2,aarcaddon@1.0.1,recipestages@1.1.3,spartantwilight@1.2.0,mod_lavacow@1.3.2,primallib@{@version},orelib@3.6.0.1,bonemealtweaker@1.1.1,hooklib@3.16,inspirations@1.12.2-0.2.9,itlt@1.0.4,fxcontrol@0.1.14,weakerspiderwebs@2.0,randomenchantments@@VERSION@,toolbelt@1.9.14,stackup@0.2.5,silentlib@3.0.13,baubles@1.5.2,arcanearchives@0.2.0.25-mixins8,sbetterwatersplash@1.0,wards@1.3.1,vintagefix@0.6.2,growthcraft_apples@4.2.2,golems@7.1.9,betterslimes@1.3.4,quark@r1.6-190,pollutantpump@1.3.0,spartanshields@1.5.5,fastbench@1.7.4,harvestcrafttweaker@@VERSION@,multimob@1.0.5,mclogs@1.0.6,coroutil@1.12.1-1.2.37,toolprogression@1.12.2-1.6.12,hunterillager@1.2,magma_monsters@0.3.0,toroquest@1.12.2-5.3,dimstack@0.1.9,solcarrot@1.8.4,paintingselgui@$version,aether_legacy@1.5.3.2,advancedmotd@1.1.0,tnt_utilities_core@1.2.3,gbook_snapshot@2.9.1.s5,craftingcraft@6.1.3,aactadapter@1.12.2-0.1.0,primitivemobs@1.2.3a
+[03:05:22] [Netty Epoll Server IO #3/INFO] [dimstack]: Sending dimension stack configuration packet to <bot>
+[03:05:23] [Server thread/INFO] [FML]: [Server thread] Server side modded connection established
+[03:05:23] [Server thread/INFO] [gamestages]: Could not find legacy data for <uuid-v4>.
+[03:05:23] [Server thread/ERROR] [cyclicmagic]: Data not found for <bot>
+[03:05:23] [Server thread/INFO] [net.minecraft.server.management.PlayerList]: <bot>[/<ip>:55606] logged in with entity id 1186 at (-702.5, 65.0, -209.5)
+[03:05:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <bot> joined the game
+[03:05:23] [Server thread/INFO] [gamestages]: Syncing 0 stages for <bot>.
+[03:05:23] [Server thread/INFO] [Waila]: Player EntityPlayerMP['<bot>'/1186, l='world', x=-702.50, y=65.00, z=-209.50] connected. Sending ping
+[03:05:23] [Server thread/INFO] [Music Triggers]: Found joining player with UUID <uuid-v4>
+[03:05:23] [Server thread/INFO] [bountifulbaubles]: Attempting to sync config to player <bot>
+[03:05:23] [Server thread/INFO] [extraalchemy]: Asking client for config status
+[03:05:23] [Server thread/INFO] [antiqueatlas]: Sent custom biome data to player <bot>
+[03:05:23] [Server thread/INFO] [antiqueatlas]: Sent markers data #-1 to player <bot>
+[03:05:23] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: A non-excluded player has connected. The following modules have been toggled off: Daylight Cycle Module
+[03:05:23] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: Daylight Cycle Module: The daylight cycle has been enabled.
+[03:05:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule commandBlockOutput has been updated to false]
+[03:05:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule sendCommandFeedback has been updated to false]
+[03:05:23] [Server thread/INFO] [gamestages]: Syncing 1 stages for <bot>.
+[03:05:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Given    [Bread] * 1 to <bot>]
+[03:05:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Given    [Bundle] * 1 to <bot>]
+[03:05:23] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[03:05:23] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[03:05:23] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 10ms increasing chunk view distance to: 5
+[03:05:24] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class net.daveyx0.multimob.entity.EntityMMBird from class net.daveyx0.multimob.entity.EntityMMFlyingMob
+[03:05:24] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class magma_monsters.entities.EntityMagmaMonster from class magma_monsters.entities.EntityMagmaMonsterGrunt
+[03:05:24] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class magma_monsters.entities.EntityMagmaMonster from class magma_monsters.entities.EntityMagmaMonsterGrunt
+[03:05:24] [Server thread/INFO] [ASMUtil]: Transforming class funwayguy/epicsiegemod/ai/hooks/ChunkCacheFixed
+[03:05:24] [Server thread/INFO] [ASMUtil]: Transforming class funwayguy/epicsiegemod/ai/hooks/ChunkCacheFixed
+[03:05:28] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class com.github.alexthe666.iceandfire.entity.EntityDreadThrall from class com.github.alexthe666.iceandfire.entity.EntityDreadKnight
+[03:05:38] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:05:38] [Server thread/INFO] [antiqueatlas]: Saving local markers data to NBT
+[03:05:38] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 17ms increasing chunk view distance to: 6
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: java.lang.Exception
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at com.ferreusveritas.dynamictrees.util.Deprecatron.Complain(Deprecatron.java:13)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at com.ferreusveritas.dynamictrees.util.Deprecatron.Complain(Deprecatron.java:22)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at com.ferreusveritas.dynamictrees.api.TreeHelper.getExactSpecies(TreeHelper.java:200)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.daveyx0.primitivemobs.modint.PrimitiveMobsDTIntegration.searchDynamicTree(PrimitiveMobsDTIntegration.java:66)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.daveyx0.primitivemobs.entity.passive.EntityGroveSprite.determineLogAndLeaves(EntityGroveSprite.java:146)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.daveyx0.primitivemobs.entity.passive.EntityGroveSprite.func_180482_a(EntityGroveSprite.java:123)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.world.WorldEntitySpawner.func_77192_a(WorldEntitySpawner.java:155)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.world.WorldServer.func_72835_b(WorldServer.java:203)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.MinecraftServer.func_71190_q(MinecraftServer.java:756)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.dedicated.DedicatedServer.func_71190_q(DedicatedServer.java:397)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.MinecraftServer.func_71217_p(MinecraftServer.java:668)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.MinecraftServer.run(MinecraftServer.java:526)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at java.lang.Thread.run(Thread.java:750)
+[03:05:48] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:05:53] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 10ms increasing chunk view distance to: 7
+[03:05:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Teleported <bot> to -702.5, 65.0, -209.5
+[03:05:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blocks ec93bc45aaa6 16 50 8
+[03:05:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 1/15 #unloaded 0 35937 19231; undergroundbiomes:sedimentary_stone 0 7522 -700,60,-195 -696,51,-215 -719,53,-221 -692,53,-195 -698,53,-198 -708,59,-208 -714,52,-209 -688,52,-194
+[03:05:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 2/15 minecraft:sand 0 3128 -700,63,-194 -708,63,-201 -714,59,-226 -713,62,-198 -701,63,-206 -705,56,-216 -717,65,-201 -709,57,-219
+[03:05:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 3/15 minecraft:water 0 2312 -708,62,-217 -714,62,-224 -709,61,-226 -691,62,-212 -700,61,-220 -687,62,-215 -712,60,-223 -712,61,-222
+[03:06:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 4/15 minecraft:sandstone 0 1241 -690,59,-203 -718,60,-201 -716,60,-199 -695,61,-201 -718,60,-196 -715,57,-224 -701,61,-201 -691,58,-210
+[03:06:02] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 5/15 undergroundbiomes:igneous_stone 4 851 -687,52,-211 -696,49,-221 -701,50,-225 -707,55,-217 -703,49,-216 -706,52,-220 -704,51,-221 -706,49,-218
+[03:06:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 6/15 undergroundbiomes:metamorphic_stone 0 802 -692,49,-212 -688,50,-198 -689,50,-195 -705,50,-195 -690,50,-208 -687,49,-206 -687,51,-201 -689,49,-197
+[03:06:03] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:06:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 7/15 minecraft:dirt 0 435 -705,53,-220 -699,55,-219 -703,57,-218 -697,54,-220 -704,55,-219 -698,55,-219 -702,60,-213 -702,55,-218
+[03:06:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 8/15 contenttweaker:raw_wrought_iron 0 150 -715,51,-217 -714,49,-219 -715,50,-216 -717,51,-217 -715,49,-218 -719,49,-220 -719,51,-221 -718,49,-225
+[03:06:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 9/15 pyrotech:pile_slag 0 114 -717,51,-216 -712,51,-221 -717,52,-226 -714,50,-223 -712,50,-222 -716,49,-224 -719,52,-221 -718,50,-217
+[03:06:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 10/15 minecraft:gravel 0 91 -700,51,-225 -698,50,-226 -697,52,-223 -692,52,-221 -696,52,-223 -690,52,-221 -702,51,-226 -687,51,-221
+[03:06:08] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 10ms increasing chunk view distance to: 8
+[03:06:09] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 11/15 osv:coal_ore_undergroundbiomes_sedimentary_stone 0 30 -704,56,-199 -694,60,-201 -711,51,-220 -693,61,-202 -694,60,-202 -710,50,-222 -703,54,-202 -704,55,-200
+[03:06:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 12/15 osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0 12 -714,49,-207 -697,60,-200 -700,58,-199 -700,58,-198 -696,59,-201 -696,59,-200 -697,59,-200 -697,60,-201
+[03:06:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 13/15 pyrotech:rock 6 5 -716,66,-195 -716,66,-194 -700,64,-212 -699,65,-210 -697,66,-205; osv:coal_ore_sandstone 0 5 -695,60,-210 -694,60,-211 -694,60,-210 -694,61,-209 -694,61,-202
+[03:06:13] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 14/15 osv:simpleores_copper_ore_sandstone 0 2 -710,62,-194 -696,60,-200; minecraft:grass 0 2 -702,62,-213 -700,62,-214; osv:simpleores_tin_ore_sandstone 0 1 -710,61,-204
+[03:06:14] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blocks ec93bc45aaa6 15/15 osv:simpleores_tin_ore_undergroundbiomes_sedimentary_stone 0 1 -709,61,-203; contenttweaker:codex_junk 0 1 -698,65,-196; pyrotech:rock 8 1 -692,64,-206
+[03:06:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 0d1da8f5905c -698,53,-198 -719,53,-221 -696,51,-215 -701,63,-206 -717,65,-201 -713,62,-198 -708,62,-217 -700,61,-220
+[03:06:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 0d1da8f5905c 1/2 -698 53 -198 undergroundbiomes:sedimentary_stone 0; -719 53 -221 undergroundbiomes:sedimentary_stone 0; -696 51 -215 undergroundbiomes:sedimentary_stone 0; -701 63 -206 minecraft:sand 0
+[03:06:20] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 0d1da8f5905c 2/2 -717 65 -201 minecraft:sand 0; -713 62 -198 minecraft:sand 0; -708 62 -217 minecraft:water 0; -700 61 -220 minecraft:water 0
+[03:06:23] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:06:23] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 12ms increasing chunk view distance to: 9
+[03:06:23] [File IO Thread/ERROR] [Universal Tweaks]: Failed to save chunk
+java.lang.NullPointerException: null
+	at it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap$MapIterator.nextEntry(Object2ObjectOpenHashMap.java:564) ~[Object2ObjectOpenHashMap$MapIterator.class:?]
+	at it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap$KeyIterator.next(Object2ObjectOpenHashMap.java:751) ~[Object2ObjectOpenHashMap$KeyIterator.class:?]
+	at net.minecraft.nbt.NBTTagCompound.write(NBTTagCompound.java:32) ~[fy.class:?]
+	at net.minecraft.nbt.NBTTagCompound.writeEntry(NBTTagCompound.java:475) ~[fy.class:?]
+	at net.minecraft.nbt.NBTTagCompound.write(NBTTagCompound.java:35) ~[fy.class:?]
+	at net.minecraft.nbt.NBTTagList.write(NBTTagList.java:34) ~[ge.class:?]
+	at net.minecraft.nbt.NBTTagCompound.writeEntry(NBTTagCompound.java:475) ~[fy.class:?]
+	at net.minecraft.nbt.NBTTagCompound.write(NBTTagCompound.java:35) ~[fy.class:?]
+	at net.minecraft.nbt.NBTTagCompound.writeEntry(NBTTagCompound.java:475) ~[fy.class:?]
+	at net.minecraft.nbt.NBTTagCompound.write(NBTTagCompound.java:35) ~[fy.class:?]
+	at net.minecraft.nbt.CompressedStreamTools.writeTag(CompressedStreamTools.java:112) ~[gi.class:?]
+	at net.minecraft.nbt.CompressedStreamTools.write(CompressedStreamTools.java:102) ~[gi.class:?]
+	at net.minecraft.world.chunk.storage.AnvilChunkLoader.writeChunkData(AnvilChunkLoader.java:242) ~[aye.class:?]
+	at net.minecraft.world.chunk.storage.AnvilChunkLoader.handler$zgc000$universaltweaks$utOverrideWriteNextIO(AnvilChunkLoader.java:1320) [aye.class:?]
+	at net.minecraft.world.chunk.storage.AnvilChunkLoader.writeNextIO(AnvilChunkLoader.java) [aye.class:?]
+	at net.minecraft.world.storage.ThreadedFileIOBase.processQueue(SourceFile:37) [bgx.class:?]
+	at net.minecraft.world.storage.ThreadedFileIOBase.run(SourceFile:30) [bgx.class:?]
+	at java.lang.Thread.run(Thread.java:750) [?:1.8.0_504]
+[03:06:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -698, 53, -198
+[03:06:23] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:06:24] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[03:06:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -719, 53, -221
+[03:06:27] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -696, 51, -215
+[03:06:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -701, 63, -206
+[03:06:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -717, 65, -201
+[03:06:33] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -713, 62, -198
+[03:06:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -708, 62, -217
+[03:06:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -700, 61, -220
+[03:06:38] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 12ms increasing chunk view distance to: 10
+[03:06:38] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:06:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat c160b094c867 -714,62,-224 -718,60,-201 -690,59,-203 -691,58,-210 -687,52,-211 -707,55,-217 -706,52,-220 -705,50,-195
+[03:06:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat c160b094c867 1/2 -714 62 -224 minecraft:water 0; -718 60 -201 minecraft:sandstone 0; -690 59 -203 minecraft:sandstone 0; -691 58 -210 minecraft:sandstone 0; -687 52 -211 undergroundbiomes:igneous_stone 4
+[03:06:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat c160b094c867 2/2 -707 55 -217 undergroundbiomes:igneous_stone 4; -706 52 -220 undergroundbiomes:igneous_stone 4; -705 50 -195 undergroundbiomes:metamorphic_stone 0
+[03:06:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -714, 62, -224
+[03:06:43] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:06:43] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:06:43] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:06:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -718, 60, -201
+[03:06:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -690, 59, -203
+[03:06:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -691, 58, -210
+[03:06:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -687, 52, -211
+[03:06:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -707, 55, -217
+[03:06:53] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 12ms increasing chunk view distance to: 11
+[03:06:53] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:06:54] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -706, 52, -220
+[03:06:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -705, 50, -195
+[03:06:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat dc2e8b40d77d -690,50,-208 -689,50,-195 -697,54,-220 -702,55,-218 -703,57,-218 -719,49,-220 -718,49,-225 -714,49,-219
+[03:06:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat dc2e8b40d77d 1/2 -690 50 -208 undergroundbiomes:metamorphic_stone 0; -689 50 -195 undergroundbiomes:metamorphic_stone 0; -697 54 -220 minecraft:dirt 0; -702 55 -218 minecraft:dirt 0; -703 57 -218 minecraft:dirt 0
+[03:07:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat dc2e8b40d77d 2/2 -719 49 -220 contenttweaker:raw_wrought_iron 0; -718 49 -225 contenttweaker:raw_wrought_iron 0; -714 49 -219 contenttweaker:raw_wrought_iron 0
+[03:07:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -690, 50, -208
+[03:07:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -689, 50, -195
+[03:07:07] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -697, 54, -220
+[03:07:08] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:07:08] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 15ms increasing chunk view distance to: 12
+[03:07:09] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -702, 55, -218
+[03:07:09] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:07:09] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:07:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -703, 57, -218
+[03:07:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -719, 49, -220
+[03:07:14] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -718, 49, -225
+[03:07:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -714, 49, -219
+[03:07:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 4d5c23abca61 -717,51,-216 -717,52,-226 -712,51,-221 -692,52,-221 -687,51,-221 -698,50,-226 -704,56,-199 -694,60,-201
+[03:07:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 4d5c23abca61 1/2 -717 51 -216 pyrotech:pile_slag 0; -717 52 -226 pyrotech:pile_slag 0; -712 51 -221 pyrotech:pile_slag 0; -692 52 -221 minecraft:gravel 0; -687 51 -221 minecraft:gravel 0
+[03:07:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 4d5c23abca61 2/2 -698 50 -226 minecraft:gravel 0; -704 56 -199 osv:coal_ore_undergroundbiomes_sedimentary_stone 0; -694 60 -201 osv:coal_ore_undergroundbiomes_sedimentary_stone 0
+[03:07:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -717, 51, -216
+[03:07:23] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 13ms increasing chunk view distance to: 13
+[03:07:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-57, -15] in dimension 0 (overworld) while populating chunk [-57, -14], causing cascading worldgen lag.
+[03:07:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-58, -17] in dimension 0 (overworld) while populating chunk [-57, -17], causing cascading worldgen lag.
+[03:07:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:23] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:07:23] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[03:07:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, -17] in dimension 0 (overworld) while populating chunk [-32, -17], causing cascading worldgen lag.
+[03:07:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, -16] in dimension 0 (overworld) while populating chunk [-31, -17], causing cascading worldgen lag.
+[03:07:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-30, -17] in dimension 0 (overworld) while populating chunk [-31, -17], causing cascading worldgen lag.
+[03:07:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-30, -16] in dimension 0 (overworld) while populating chunk [-31, -17], causing cascading worldgen lag.
+[03:07:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -717, 52, -226
+[03:07:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-51, -27] in dimension 0 (overworld) while populating chunk [-50, -27], causing cascading worldgen lag.
+[03:07:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-58, -7] in dimension 0 (overworld) while populating chunk [-57, -7], causing cascading worldgen lag.
+[03:07:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-58, -8] in dimension 0 (overworld) while populating chunk [-57, -7], causing cascading worldgen lag.
+[03:07:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:26] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-32, -25] in dimension 0 (overworld) while populating chunk [-32, -24], causing cascading worldgen lag.
+[03:07:26] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:26] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-32, -26] in dimension 0 (overworld) while populating chunk [-32, -25], causing cascading worldgen lag.
+[03:07:26] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:26] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, -25] in dimension 0 (overworld) while populating chunk [-32, -24], causing cascading worldgen lag.
+[03:07:26] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:26] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, -24] in dimension 0 (overworld) while populating chunk [-32, -24], causing cascading worldgen lag.
+[03:07:26] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:26] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-30, -25] in dimension 0 (overworld) while populating chunk [-31, -24], causing cascading worldgen lag.
+[03:07:26] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:26] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-30, -24] in dimension 0 (overworld) while populating chunk [-31, -24], causing cascading worldgen lag.
+[03:07:26] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:26] [Server thread/INFO] [com.personthecat.cavegenerator.world.feature.StructureGenerator]: Spawning ironwoodsapling at BlockPos{x=-881, y=72, z=-412}
+[03:07:27] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -712, 51, -221
+[03:07:28] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -692, 52, -221
+[03:07:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -687, 51, -221
+[03:07:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -698, 50, -226
+[03:07:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -704, 56, -199
+[03:07:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -694, 60, -201
+[03:07:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 0cd7abdfb58b -693,61,-202 -696,59,-201 -696,59,-200 -714,49,-207 -697,66,-205 -699,65,-210 -716,66,-194 -694,60,-211
+[03:07:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 0cd7abdfb58b 1/3 -693 61 -202 osv:coal_ore_undergroundbiomes_sedimentary_stone 0; -696 59 -201 osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0
+[03:07:38] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 13ms increasing chunk view distance to: 14
+[03:07:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, -14] in dimension 0 (overworld) while populating chunk [-31, -15], causing cascading worldgen lag.
+[03:07:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-30, -15] in dimension 0 (overworld) while populating chunk [-31, -15], causing cascading worldgen lag.
+[03:07:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 0cd7abdfb58b 2/3 -696 59 -200 osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0; -714 49 -207 osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0; -697 66 -205 pyrotech:rock 6
+[03:07:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-30, -12] in dimension 0 (overworld) while populating chunk [-31, -12], causing cascading worldgen lag.
+[03:07:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:40] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-48, -29] in dimension 0 (overworld) while populating chunk [-48, -28], causing cascading worldgen lag.
+[03:07:40] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:40] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-47, -29] in dimension 0 (overworld) while populating chunk [-48, -28], causing cascading worldgen lag.
+[03:07:40] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:40] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-52, -1] in dimension 0 (overworld) while populating chunk [-51, -1], causing cascading worldgen lag.
+[03:07:40] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:40] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-51, 0] in dimension 0 (overworld) while populating chunk [-51, -1], causing cascading worldgen lag.
+[03:07:40] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 0cd7abdfb58b 3/3 -699 65 -210 pyrotech:rock 6; -716 66 -194 pyrotech:rock 6; -694 60 -211 osv:coal_ore_sandstone 0
+[03:07:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-35, 0] in dimension 0 (overworld) while populating chunk [-35, -1], causing cascading worldgen lag.
+[03:07:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-35, -29] in dimension 0 (overworld) while populating chunk [-35, -28], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-34, -28] in dimension 0 (overworld) while populating chunk [-35, -28], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-34, -29] in dimension 0 (overworld) while populating chunk [-35, -28], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-56, 0] in dimension 0 (overworld) while populating chunk [-56, -1], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-57, -29] in dimension 0 (overworld) while populating chunk [-57, -28], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-55, -29] in dimension 0 (overworld) while populating chunk [-57, -28], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-56, -29] in dimension 0 (overworld) while populating chunk [-57, -28], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, -28] in dimension 0 (overworld) while populating chunk [-31, -27], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-30, -26] in dimension 0 (overworld) while populating chunk [-31, -27], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-30, -27] in dimension 0 (overworld) while populating chunk [-31, -27], causing cascading worldgen lag.
+[03:07:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:43] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:07:48] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -693, 61, -202
+[03:07:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -696, 59, -201
+[03:07:52] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -696, 59, -200
+[03:07:53] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:07:53] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 17ms increasing chunk view distance to: 15
+[03:07:54] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:07:54] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -714, 49, -207
+[03:07:55] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-59, -7] in dimension 0 (overworld) while populating chunk [-59, -8], causing cascading worldgen lag.
+[03:07:55] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:56] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-53, 1] in dimension 0 (overworld) while populating chunk [-53, 0], causing cascading worldgen lag.
+[03:07:56] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:56] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -697, 66, -205
+[03:07:57] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-59, -2] in dimension 0 (overworld) while populating chunk [-59, -3], causing cascading worldgen lag.
+[03:07:57] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:07:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -699, 65, -210
+[03:08:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -716, 66, -194
+[03:08:02] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -694, 60, -211
+[03:08:03] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:08:04] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:08:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat f76c23eb53c4 -694,61,-202 -694,61,-209 -710,62,-194 -696,60,-200 -702,62,-213 -700,62,-214 -710,61,-204 -709,61,-203
+[03:08:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat f76c23eb53c4 1/2 -694 61 -202 osv:coal_ore_sandstone 0; -694 61 -209 osv:coal_ore_sandstone 0; -710 62 -194 osv:simpleores_copper_ore_sandstone 0; -696 60 -200 osv:simpleores_copper_ore_sandstone 0
+[03:08:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat f76c23eb53c4 2/2 -702 62 -213 minecraft:grass 0; -700 62 -214 minecraft:grass 0; -710 61 -204 osv:simpleores_tin_ore_sandstone 0; -709 61 -203 osv:simpleores_tin_ore_undergroundbiomes_sedimentary_stone 0
+[03:08:08] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 14ms increasing chunk view distance to: 16
+[03:08:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -694, 61, -202
+[03:08:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-29, -11] in dimension 0 (overworld) while populating chunk [-29, -12], causing cascading worldgen lag.
+[03:08:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -694, 61, -209
+[03:08:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-60, -6] in dimension 0 (overworld) while populating chunk [-60, -7], causing cascading worldgen lag.
+[03:08:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-51, 2] in dimension 0 (overworld) while populating chunk [-51, 1], causing cascading worldgen lag.
+[03:08:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-50, 2] in dimension 0 (overworld) while populating chunk [-51, 1], causing cascading worldgen lag.
+[03:08:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-61, -21] in dimension 0 (overworld) while populating chunk [-60, -21], causing cascading worldgen lag.
+[03:08:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-60, -22] in dimension 0 (overworld) while populating chunk [-60, -21], causing cascading worldgen lag.
+[03:08:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-61, -22] in dimension 0 (overworld) while populating chunk [-60, -21], causing cascading worldgen lag.
+[03:08:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-29, -8] in dimension 0 (overworld) while populating chunk [-29, -9], causing cascading worldgen lag.
+[03:08:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-28, -9] in dimension 0 (overworld) while populating chunk [-29, -9], causing cascading worldgen lag.
+[03:08:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-28, -8] in dimension 0 (overworld) while populating chunk [-29, -9], causing cascading worldgen lag.
+[03:08:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-52, -31] in dimension 0 (overworld) while populating chunk [-52, -30], causing cascading worldgen lag.
+[03:08:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-51, -31] in dimension 0 (overworld) while populating chunk [-52, -30], causing cascading worldgen lag.
+[03:08:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -710, 62, -194
+[03:08:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-57, 2] in dimension 0 (overworld) while populating chunk [-57, 1], causing cascading worldgen lag.
+[03:08:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-59, 1] in dimension 0 (overworld) while populating chunk [-60, 0], causing cascading worldgen lag.
+[03:08:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-60, 1] in dimension 0 (overworld) while populating chunk [-60, 0], causing cascading worldgen lag.
+[03:08:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:14] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -696, 60, -200
+[03:08:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -702, 62, -213
+[03:08:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -700, 62, -214
+[03:08:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -710, 61, -204
+[03:08:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -709, 61, -203
+[03:08:23] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 17ms increasing chunk view distance to: 17
+[03:08:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 5cb440053376 -698,65,-196 -692,64,-206
+[03:08:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 5cb440053376 1/1 -698 65 -196 contenttweaker:codex_junk 0; -692 64 -206 pyrotech:rock 8
+[03:08:23] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:08:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -14] in dimension 0 (overworld) while populating chunk [-61, -14], causing cascading worldgen lag.
+[03:08:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-61, -13] in dimension 0 (overworld) while populating chunk [-61, -14], causing cascading worldgen lag.
+[03:08:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -17] in dimension 0 (overworld) while populating chunk [-61, -17], causing cascading worldgen lag.
+[03:08:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-61, -18] in dimension 0 (overworld) while populating chunk [-61, -17], causing cascading worldgen lag.
+[03:08:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -18] in dimension 0 (overworld) while populating chunk [-61, -17], causing cascading worldgen lag.
+[03:08:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-27, -13] in dimension 0 (overworld) while populating chunk [-28, -12], causing cascading worldgen lag.
+[03:08:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-27, -12] in dimension 0 (overworld) while populating chunk [-28, -12], causing cascading worldgen lag.
+[03:08:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-28, -20] in dimension 0 (overworld) while populating chunk [-28, -19], causing cascading worldgen lag.
+[03:08:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-27, -19] in dimension 0 (overworld) while populating chunk [-28, -19], causing cascading worldgen lag.
+[03:08:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-27, -18] in dimension 0 (overworld) while populating chunk [-28, -19], causing cascading worldgen lag.
+[03:08:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:26] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -4] in dimension 0 (overworld) while populating chunk [-61, -4], causing cascading worldgen lag.
+[03:08:26] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:26] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -5] in dimension 0 (overworld) while populating chunk [-61, -4], causing cascading worldgen lag.
+[03:08:26] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:27] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-32, -32] in dimension 0 (overworld) while populating chunk [-32, -31], causing cascading worldgen lag.
+[03:08:27] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:27] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, -31] in dimension 0 (overworld) while populating chunk [-32, -31], causing cascading worldgen lag.
+[03:08:27] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:27] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, -32] in dimension 0 (overworld) while populating chunk [-32, -31], causing cascading worldgen lag.
+[03:08:27] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:28] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -29] in dimension 0 (overworld) while populating chunk [-61, -29], causing cascading worldgen lag.
+[03:08:28] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:28] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -30] in dimension 0 (overworld) while populating chunk [-61, -29], causing cascading worldgen lag.
+[03:08:28] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:28] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -698, 65, -196
+[03:08:28] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-60, 2] in dimension 0 (overworld) while populating chunk [-59, 2], causing cascading worldgen lag.
+[03:08:28] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:28] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-59, 3] in dimension 0 (overworld) while populating chunk [-59, 2], causing cascading worldgen lag.
+[03:08:28] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -692, 64, -206
+[03:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat b3e1755f287d -701,70,-221 -710,74,-219 -712,77,-223 -689,61,-214 -703,57,-226 -713,51,-200 -713,56,-207 -687,64,-203
+[03:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat b3e1755f287d 1/2 -701 70 -221 minecraft:air 0; -710 74 -219 minecraft:air 0; -712 77 -223 minecraft:air 0; -689 61 -214 minecraft:water 0; -703 57 -226 minecraft:water 0
+[03:08:33] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat b3e1755f287d 2/2 -713 51 -200 undergroundbiomes:sedimentary_stone 0; -713 56 -207 undergroundbiomes:sedimentary_stone 0; -687 64 -203 minecraft:air 0
+[03:08:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -701, 70, -221
+[03:08:38] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:08:38] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 19ms increasing chunk view distance to: 18
+[03:08:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -710, 74, -219
+[03:08:38] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-44, 3] in dimension 0 (overworld) while populating chunk [-45, 3], causing cascading worldgen lag.
+[03:08:38] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-63, -16] in dimension 0 (overworld) while populating chunk [-62, -16], causing cascading worldgen lag.
+[03:08:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-47, 3] in dimension 0 (overworld) while populating chunk [-46, 3], causing cascading worldgen lag.
+[03:08:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-48, 3] in dimension 0 (overworld) while populating chunk [-47, 3], causing cascading worldgen lag.
+[03:08:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-47, 4] in dimension 0 (overworld) while populating chunk [-46, 3], causing cascading worldgen lag.
+[03:08:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-45, 4] in dimension 0 (overworld) while populating chunk [-46, 3], causing cascading worldgen lag.
+[03:08:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-46, 4] in dimension 0 (overworld) while populating chunk [-46, 3], causing cascading worldgen lag.
+[03:08:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-63, -10] in dimension 0 (overworld) while populating chunk [-62, -10], causing cascading worldgen lag.
+[03:08:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:39] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -9] in dimension 0 (overworld) while populating chunk [-62, -10], causing cascading worldgen lag.
+[03:08:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -712, 77, -223
+[03:08:40] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-27, -8] in dimension 0 (overworld) while populating chunk [-27, -9], causing cascading worldgen lag.
+[03:08:40] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:40] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-26, -9] in dimension 0 (overworld) while populating chunk [-27, -9], causing cascading worldgen lag.
+[03:08:40] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:40] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-26, -8] in dimension 0 (overworld) while populating chunk [-27, -9], causing cascading worldgen lag.
+[03:08:40] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-53, -32] in dimension 0 (overworld) while populating chunk [-52, -32], causing cascading worldgen lag.
+[03:08:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-52, -33] in dimension 0 (overworld) while populating chunk [-52, -32], causing cascading worldgen lag.
+[03:08:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-35, -32] in dimension 0 (overworld) while populating chunk [-36, -32], causing cascading worldgen lag.
+[03:08:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-63, -25] in dimension 0 (overworld) while populating chunk [-62, -25], causing cascading worldgen lag.
+[03:08:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -26] in dimension 0 (overworld) while populating chunk [-62, -25], causing cascading worldgen lag.
+[03:08:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -27] in dimension 0 (overworld) while populating chunk [-62, -25], causing cascading worldgen lag.
+[03:08:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-62, -1] in dimension 0 (overworld) while populating chunk [-62, -2], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -689, 61, -214
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-27, -2] in dimension 0 (overworld) while populating chunk [-27, -3], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-26, -3] in dimension 0 (overworld) while populating chunk [-27, -3], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-32, 4] in dimension 0 (overworld) while populating chunk [-32, 3], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, 3] in dimension 0 (overworld) while populating chunk [-32, 4], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-31, 4] in dimension 0 (overworld) while populating chunk [-32, 4], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-27, 0] in dimension 0 (overworld) while populating chunk [-27, -1], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-26, -2] in dimension 0 (overworld) while populating chunk [-27, -1], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-26, -1] in dimension 0 (overworld) while populating chunk [-27, -1], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-26, 0] in dimension 0 (overworld) while populating chunk [-26, -1], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, -1] in dimension 0 (overworld) while populating chunk [-26, -1], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, 0] in dimension 0 (overworld) while populating chunk [-26, -1], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:42] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-29, 3] in dimension 0 (overworld) while populating chunk [-30, 3], causing cascading worldgen lag.
+[03:08:42] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -703, 57, -226
+[03:08:46] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -713, 51, -200
+[03:08:48] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -713, 56, -207
+[03:08:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -687, 64, -203
+[03:08:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat b74c375ec177 -705,55,-226 -695,61,-205 -709,74,-210 -705,52,-225 -708,66,-197 -712,76,-195 -705,52,-225 -701,74,-206
+[03:08:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat b74c375ec177 1/2 -705 55 -226 minecraft:water 0; -695 61 -205 minecraft:sandstone 0; -709 74 -210 minecraft:air 0; -705 52 -225 minecraft:gravel 0; -708 66 -197 minecraft:air 0; -712 76 -195 minecraft:air 0
+[03:08:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat b74c375ec177 2/2 -705 52 -225 minecraft:gravel 0; -701 74 -206 minecraft:air 0
+[03:08:53] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 16ms increasing chunk view distance to: 19
+[03:08:54] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-63, -21] in dimension 0 (overworld) while populating chunk [-63, -20], causing cascading worldgen lag.
+[03:08:54] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:56] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -705, 55, -226
+[03:08:56] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, -22] in dimension 0 (overworld) while populating chunk [-26, -22], causing cascading worldgen lag.
+[03:08:56] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:57] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-56, -34] in dimension 0 (overworld) while populating chunk [-56, -33], causing cascading worldgen lag.
+[03:08:57] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -695, 61, -205
+[03:08:58] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, -28] in dimension 0 (overworld) while populating chunk [-26, -28], causing cascading worldgen lag.
+[03:08:58] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:58] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, -27] in dimension 0 (overworld) while populating chunk [-26, -28], causing cascading worldgen lag.
+[03:08:58] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:58] [Server thread/WARN] [FML]: MalisisCore loaded a new chunk [-30, -34] in dimension 0 (overworld) while populating chunk [-28, -33], causing cascading worldgen lag.
+[03:08:58] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:08:58] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-29, -34] in dimension 0 (overworld) while populating chunk [-30, -34], causing cascading worldgen lag.
+[03:08:58] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -709, 74, -210
+[03:09:02] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -705, 52, -225
+[03:09:04] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[03:09:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -708, 66, -197
+[03:09:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -712, 76, -195
+[03:09:07] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -705, 52, -225
+[03:09:08] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 16ms increasing chunk view distance to: 20
+[03:09:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-64, -31] in dimension 0 (overworld) while populating chunk [-64, -32], causing cascading worldgen lag.
+[03:09:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:09] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -701, 74, -206
+[03:09:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-65, -7] in dimension 0 (overworld) while populating chunk [-64, -7], causing cascading worldgen lag.
+[03:09:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-65, -8] in dimension 0 (overworld) while populating chunk [-64, -7], causing cascading worldgen lag.
+[03:09:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-52, 6] in dimension 0 (overworld) while populating chunk [-52, 5], causing cascading worldgen lag.
+[03:09:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-51, 6] in dimension 0 (overworld) while populating chunk [-52, 5], causing cascading worldgen lag.
+[03:09:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, -20] in dimension 0 (overworld) while populating chunk [-25, -19], causing cascading worldgen lag.
+[03:09:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, -21] in dimension 0 (overworld) while populating chunk [-25, -19], causing cascading worldgen lag.
+[03:09:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 5d28db9f24f3 -699,58,-215 -689,74,-216 -712,56,-210 -719,61,-211 -701,54,-210 -709,64,-223 -701,72,-220 -708,72,-201
+[03:09:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 5d28db9f24f3 1/2 -699 58 -215 minecraft:dirt 0; -689 74 -216 minecraft:air 0; -712 56 -210 undergroundbiomes:sedimentary_stone 0; -719 61 -211 minecraft:sand 0; -701 54 -210 undergroundbiomes:sedimentary_stone 0
+[03:09:11] [Server thread/WARN] [FML]: LLibrary loaded a new chunk [-40, -35] in dimension 0 (overworld) while populating chunk [-38, -34], causing cascading worldgen lag.
+[03:09:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:11] [Server thread/WARN] [FML]: MalisisCore loaded a new chunk [-39, -35] in dimension 0 (overworld) while populating chunk [-38, -34], causing cascading worldgen lag.
+[03:09:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:12] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-38, -35] in dimension 0 (overworld) while populating chunk [-37, -34], causing cascading worldgen lag.
+[03:09:12] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:12] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-37, -35] in dimension 0 (overworld) while populating chunk [-37, -34], causing cascading worldgen lag.
+[03:09:12] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:12] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-65, -3] in dimension 0 (overworld) while populating chunk [-64, -3], causing cascading worldgen lag.
+[03:09:12] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 5d28db9f24f3 2/2 -709 64 -223 minecraft:air 0; -701 72 -220 minecraft:air 0; -708 72 -201 minecraft:air 0
+[03:09:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-59, 5] in dimension 0 (overworld) while populating chunk [-58, 5], causing cascading worldgen lag.
+[03:09:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:14] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:09:14] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-28, 5] in dimension 0 (overworld) while populating chunk [-29, 5], causing cascading worldgen lag.
+[03:09:14] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[03:09:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -699, 58, -215
+[03:09:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -689, 74, -216
+[03:09:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -712, 56, -210
+[03:09:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -719, 61, -211
+[03:09:23] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:09:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -701, 54, -210
+[03:09:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -709, 64, -223
+[03:09:27] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -701, 72, -220
+[03:09:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:09:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -708, 72, -201
+[03:09:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 2d12f71b87fa -697,54,-215 -687,50,-225 -689,54,-196 -711,64,-212 -690,66,-218 -690,75,-217 -691,51,-205 -688,71,-224
+[03:09:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 2d12f71b87fa 1/2 -697 54 -215 undergroundbiomes:sedimentary_stone 0; -687 50 -225 minecraft:gravel 0; -689 54 -196 undergroundbiomes:sedimentary_stone 0; -711 64 -212 minecraft:sand 0; -690 66 -218 minecraft:air 0
+[03:09:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 2d12f71b87fa 2/2 -690 75 -217 minecraft:air 0; -691 51 -205 undergroundbiomes:sedimentary_stone 0; -688 71 -224 minecraft:air 0
+[03:09:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -697, 54, -215
+[03:09:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -687, 50, -225
+[03:09:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -689, 54, -196
+[03:09:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -711, 64, -212
+[03:09:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -690, 66, -218
+[03:09:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -690, 75, -217
+[03:09:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -691, 51, -205
+[03:09:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -688, 71, -224
+[03:09:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat a72f8718f719 -705,59,-209 -718,74,-195 -719,56,-201 -715,57,-207 -717,58,-214 -693,60,-218 -710,51,-213 -701,52,-206
+[03:09:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat a72f8718f719 1/2 -705 59 -209 minecraft:sandstone 0; -718 74 -195 minecraft:air 0; -719 56 -201 undergroundbiomes:sedimentary_stone 0; -715 57 -207 undergroundbiomes:sedimentary_stone 0
+[03:09:52] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat a72f8718f719 2/2 -717 58 -214 undergroundbiomes:sedimentary_stone 0; -693 60 -218 minecraft:water 0; -710 51 -213 undergroundbiomes:sedimentary_stone 0; -701 52 -206 undergroundbiomes:sedimentary_stone 0
+[03:09:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -705, 59, -209
+[03:09:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -718, 74, -195
+[03:09:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -719, 56, -201
+[03:10:01] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -715, 57, -207
+[03:10:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -717, 58, -214
+[03:10:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -693, 60, -218
+[03:10:07] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -710, 51, -213
+[03:10:08] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:10:09] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -701, 52, -206
+[03:10:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 442e7e9d8115 -708,59,-205 -693,62,-203 -704,76,-195 -705,55,-203 -690,51,-218 -714,55,-196 -694,65,-194 -719,52,-222
+[03:10:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 442e7e9d8115 1/2 -708 59 -205 undergroundbiomes:sedimentary_stone 0; -693 62 -203 minecraft:sand 0; -704 76 -195 minecraft:air 0; -705 55 -203 undergroundbiomes:sedimentary_stone 0
+[03:10:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 442e7e9d8115 2/2 -690 51 -218 undergroundbiomes:igneous_stone 4; -714 55 -196 undergroundbiomes:sedimentary_stone 0; -694 65 -194 minecraft:air 0; -719 52 -222 contenttweaker:raw_wrought_iron 0
+[03:10:15] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -708, 59, -205
+[03:10:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -693, 62, -203
+[03:10:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -704, 76, -195
+[03:10:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -705, 55, -203
+[03:10:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -690, 51, -218
+[03:10:23] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:10:23] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:10:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -714, 55, -196
+[03:10:27] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -694, 65, -194
+[03:10:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -719, 52, -222
+[03:10:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 8f392cc03522 -704,56,-209 -706,52,-206 -700,80,-201 -719,73,-210 -699,71,-220 -699,81,-223 -695,66,-197 -694,57,-201
+[03:10:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 8f392cc03522 1/2 -704 56 -209 undergroundbiomes:sedimentary_stone 0; -706 52 -206 undergroundbiomes:sedimentary_stone 0; -700 80 -201 minecraft:air 0; -719 73 -210 minecraft:air 0; -699 71 -220 minecraft:air 0
+[03:10:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 8f392cc03522 2/2 -699 81 -223 minecraft:air 0; -695 66 -197 minecraft:air 0; -694 57 -201 undergroundbiomes:sedimentary_stone 0
+[03:10:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -704, 56, -209
+[03:10:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -706, 52, -206
+[03:10:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -700, 80, -201
+[03:10:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -719, 73, -210
+[03:10:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -699, 71, -220
+[03:10:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -699, 81, -223
+[03:10:46] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -695, 66, -197
+[03:10:48] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -694, 57, -201
+[03:10:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat e2bb5562346c -706,67,-216 -702,57,-211 -713,75,-216 -688,79,-226 -691,70,-219 -687,64,-199 -699,63,-198 -707,50,-197
+[03:10:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat e2bb5562346c 1/2 -706 67 -216 minecraft:air 0; -702 57 -211 undergroundbiomes:sedimentary_stone 0; -713 75 -216 minecraft:air 0; -688 79 -226 minecraft:air 0; -691 70 -219 minecraft:air 0
+[03:10:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat e2bb5562346c 2/2 -687 64 -199 minecraft:air 0; -699 63 -198 minecraft:sand 0; -707 50 -197 undergroundbiomes:metamorphic_stone 0
+[03:10:53] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:10:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -706, 67, -216
+[03:10:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -702, 57, -211
+[03:10:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -713, 75, -216
+[03:11:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -688, 79, -226
+[03:11:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -691, 70, -219
+[03:11:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -687, 64, -199
+[03:11:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -699, 63, -198
+[03:11:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -707, 50, -197
+[03:11:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 29fa442e95e6 -689,66,-222 -708,67,-225 -712,65,-223 -698,72,-197 -716,61,-206 -706,70,-210 -702,74,-194 -718,53,-202
+[03:11:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 29fa442e95e6 1/2 -689 66 -222 minecraft:air 0; -708 67 -225 minecraft:air 0; -712 65 -223 minecraft:air 0; -698 72 -197 minecraft:air 0; -716 61 -206 minecraft:sandstone 0; -706 70 -210 minecraft:air 0
+[03:11:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 29fa442e95e6 2/2 -702 74 -194 minecraft:air 0; -718 53 -202 undergroundbiomes:sedimentary_stone 0
+[03:11:15] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -689, 66, -222
+[03:11:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -708, 67, -225
+[03:11:18] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:11:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -712, 65, -223
+[03:11:18] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[03:11:20] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -698, 72, -197
+[03:11:22] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -716, 61, -206
+[03:11:24] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -706, 70, -210
+[03:11:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -702, 74, -194
+[03:11:28] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -718, 53, -202
+[03:11:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: scenario-blockat 8b43a86a5f69 -689,58,-211 -718,81,-218 -690,71,-201 -691,64,-210 -703,71,-217 -703,64,-209 -690,52,-205 -688,71,-197
+[03:11:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 8b43a86a5f69 1/2 -689 58 -211 minecraft:sand 0; -718 81 -218 minecraft:air 0; -690 71 -201 minecraft:air 0; -691 64 -210 minecraft:air 0; -703 71 -217 minecraft:air 0; -703 64 -209 minecraft:sand 0
+[03:11:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> blockat 8b43a86a5f69 2/2 -690 52 -205 undergroundbiomes:sedimentary_stone 0; -688 71 -197 minecraft:air 0
+[03:11:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -689, 58, -211
+[03:11:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -718, 81, -218
+[03:11:38] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:11:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -690, 71, -201
+[03:11:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -691, 64, -210
+[03:11:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -703, 71, -217
+[03:11:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -703, 64, -209
+[03:11:46] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -690, 52, -205
+[03:11:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -688, 71, -197
+[03:11:49] [Server thread/INFO] [net.minecraft.network.NetHandlerPlayServer]: <bot> lost connection: Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer
+[03:11:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <bot> left the game
+[03:11:49] [Server thread/INFO] [Music Triggers]: Found leaving player with UUID <uuid-v4>
+[03:11:49] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: All non-excluded players have disconnected. The following modules have been toggled on: Daylight Cycle Module
+[03:11:49] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: Daylight Cycle Module: The daylight cycle has been disabled.
+[03:11:49] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[03:11:49] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
