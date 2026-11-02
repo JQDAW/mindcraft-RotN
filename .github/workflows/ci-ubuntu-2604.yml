@@ -91,6 +91,27 @@ jobs:
       - name: npm ci (postinstall applies the patches; fails if one does not apply)
         run: runuser -u ci -- env HOME=/home/ci npm ci --no-audit --no-fund
 
+      # Installing is not loading: a prebuilt binary can still miss a system library at run time (#135
+      # review). With only the CX23's packages, each native module must load. A missing library is
+      # reported (ldd's "not found" lines) and fails the job; it is never installed here, because the
+      # CX23 would not have it either.
+      - name: The native modules load (canvas, gl) with only the CX23's packages
+        run: |
+          set -u
+          rc=0
+          for m in canvas gl; do
+            if runuser -u ci -- node -e "require('$m'); console.log('$m: loads')"; then
+              continue
+            fi
+            rc=1
+            echo "::error::$m does not load on Ubuntu 26.04 with only the CX23's packages"
+            find "node_modules/$m" -name '*.node' -type f | while read -r so; do
+              echo "ldd $so:"
+              ldd "$so" | grep 'not found' || echo "  (ldd finds no missing library)"
+            done
+          done
+          exit $rc
+
       - name: Test-only tool (jq, for the test-server tooling's tests; not on the CX23)
         run: apt-get install -y -q jq
 

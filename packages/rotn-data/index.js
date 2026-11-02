@@ -46,7 +46,8 @@ export const networkRemap = (blockIds) => pack().networkRemap(blockIds);
  * Replace bot.registry.recipes' contents, in place, with RotN's crafting recipes from the dump,
  * keyed by that registry's (the connected server's) item ids. See src/registry-recipes.js.
  * @param {object} registry bot.registry after forge-bridge's extendRegistry
- * @param {{maxVariants?: number}} [opts]
+ * @param {{recipes?: object[], maxVariants?: number}} [opts] recipes: the dump's recipe list to use
+ *        (default: the pinned pack's); mcdata.installRotnRecipesOnce passes its injected catalog's
  */
-export const installRecipes = (registry, opts) => installRecipesInto(registry, pack().dump.recipes?.recipes ?? [], opts);
-export { convertRecipe, choiceTuples, DEFAULT_MAX_VARIANTS } from './src/registry-recipes.js';
+export const installRecipes = (registry, { recipes, ...opts } = {}) => installRecipesInto(registry, recipes ?? pack().dump.recipes?.recipes ?? [], opts);
+export { convertRecipe, choiceTuples, DEFAULT_MAX_VARIANTS, snapshotRecipeTable, restoreRecipeTable } from './src/registry-recipes.js';

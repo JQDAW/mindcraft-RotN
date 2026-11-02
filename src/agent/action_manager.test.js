@@ -67,3 +67,16 @@ test('a new non-mode action clears a pending re-plan request; a mode action keep
     await manager.runAction('action:goToPlayer', () => Promise.resolve(), { timeout: 0 });
     assert.ok(!lines.some(l => l.includes('re-plan request dropped')), 'nothing to drop, nothing logged');
 });
+
+test('only player and LLM commands (action:) drop a pending re-plan; npc:, itemGoal: and BuildGoal keep it (#126 review)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const agent = fakeAgent();
+    const manager = new ActionManager(agent);
+    for (const label of ['npc:moveAway', 'itemGoal:next', 'BuildGoal', 'mode:self_defense']) {
+        agent.replan = { modes: { self_defense: 1 }, interrupted: 'action:collectBlocks', first_at: 0, last_at: 0 };
+        await manager.runAction(label, () => Promise.resolve(), { timeout: 0 });
+        assert.ok(agent.replan, `${label} keeps the request`);
+    }
+    await manager.runAction('action:collectBlocks', () => Promise.resolve(), { timeout: 0 });
+    assert.equal(agent.replan, null);
+});
