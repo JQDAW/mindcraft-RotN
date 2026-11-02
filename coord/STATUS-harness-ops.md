@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (18:14 UTC, from `date -u`)
+Updated: 2026-11-02 (18:55 UTC, from `date -u`)
 
 ## Done
 
@@ -90,12 +90,11 @@ Updated: 2026-11-02 (18:14 UTC, from `date -u`)
 
 ## Doing
 
-- **Phase 3 (G3) started** (lead, 2026-11-02, after G2 PASSED on batch 8, #97/#98). This PR:
-  - the G3 scenario plan, under "Planned real batches";
-  - the G3 driver interface proposal for skills-rotn, routed through the lead;
-  - **the CX23 plan** (lead, after the human added the Orca SSH target `cx23`): a read-only probe, the bootstrap with `deploy/cx23/` (no lockdown; the human swaps the root target for a `deploy` target instead), and the human items H1-H6 (Requests item 8). Nothing touches the CX23 before the lead's written GO;
-  - a test OpenRouter key for G3 batches (Requests item 12).
-  - Next: the offline runner parts for G3 (arbiters, fake server, the Mindcraft driver wrapper), in small PRs.
+- **Phase 3 (G3).**
+  - The G3 plan, the driver interface proposal, the CX23 plan and the human items H1-H6 are merged (#101).
+  - **This PR: the S1 runner tooling.** Three S1 scenarios, their reply parsers, a whisper probe in the driver protocol, and offline tests. S1's written GO follows its merge.
+  - **CX23 GO 1** (the read-only probe, lead 18:31 UTC): waiting for the human to open the `/root` folder workspace on `cx23` from Orca's desktop app (lead's option 1). Nothing has touched the CX23.
+  - Next: the offline G3 runner parts (arbiters, the Mindcraft driver wrapper with a fake `main.js`), in small PRs.
 - **G2 PASSED** on batch 8 (#97): blocks, mobs and items all gate-valid in one batch on the fixed world and cube.
 - **History:**
   - G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82.
@@ -736,12 +735,34 @@ What skills-rotn provides (to agree):
 
 #### Batches (each needs a written GO)
 
-- **S1, survey and smoke (no LLM, `g1-driver.mjs`, about 30 min, about EUR 0.14):** two short servers, or one with `--seed` per run. It checks:
-  - (a) rock piles, trees and stone within 48 blocks of spawn, via the G2 census at radius 48;
-  - (b) the `clear`-test reply form and the stat criteria for modded items (`stat.craftItem.pyrotech.crude_axe` existing at all);
-  - (c) the day and night length with Extended Days, from `time query daytime` every minute over one full cycle (about 40 min);
-  - (d) whether a console `tell` reaches Mindcraft's `whisper` handler as `Server` (with the real `main.js` and no LLM call: an ignored message is fine);
-  - (e) **no loot chests near the cube** (lead, #101): the census lists no `minecraft:chest`, `minecraft:trapped_chest` or other container blocks within 48 blocks of spawn. A looted stone tool would fool the inventory check, and the craft statistics are the second guard.
+- **S1, survey and smoke (no LLM, `g1-driver.mjs`).** The tooling is in `test/scenarios/s1/` (`s1-site-survey`, `s1-arbiters`, `s1-day-cycle`) and `test/runner/lib/s1.mjs`; see DRIVER.md "S1". It checks:
+  - (a) rock piles, trees and stone within 48 blocks of a fresh spawn: a G2 census around the bot (no teleport), radius 48, up to 400 types, with up to 5 positions per group confirmed by `testforblock`;
+  - (b) the `clear`-test reply form, and which stat criteria exist (the vanilla ones must; `stat.craftItem.pyrotech.crude_axe` and `contenttweaker.crafting_tools` are the finding);
+  - (c) the day length with Extended Days: `time query daytime` every minute for 45 min, with the bot online and the time untouched;
+  - (d) whether a console `tell` reaches mineflayer's `whisper` event, the one Mindcraft's agent listens to, and as which sender (`Server` expected). This is checked at the mineflayer level with `g1-driver.mjs`, so no LLM is needed;
+  - (e) **no loot containers near the cube** (lead, #101). The check fails closed (#106 review):
+    - a type is a container by its registry name, as a vanilla inventory block or spawner, or by its Java class in rotn-data's block dump;
+    - without the dump the check fails;
+    - every unclassified modded type in the radius is listed for the lead.
+    - A looted stone tool would fool the inventory check, and the craft statistics are the second guard.
+- **The S1 batches (each needs a written GO; S1 is a survey, so nothing in it is a gate pass):**
+  - **S1-A, the G2 world** (`--seed 1880465901402976865`): all three scenarios, the survey first (the fresh spawn).
+    ```bash
+    deploy/test-server.sh run --yes --ttl-hours 2 --seed 1880465901402976865 -- bash -c '
+      D="node packages/forge-bridge/tools/g1-driver.mjs";
+      timeout 15m node test/runner/run.mjs --scenario s1-site-survey --out captures/raw/s1-survey   -- $D; a=$?;
+      timeout 10m node test/runner/run.mjs --scenario s1-arbiters    --out captures/raw/s1-arbiters -- $D; b=$?;
+      timeout 55m node test/runner/run.mjs --scenario s1-day-cycle   --out captures/raw/s1-day      -- $D; c=$?;
+      bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/s1/server;
+      echo "survey=$a arbiters=$b day=$c"; [ "$a$b$c" = 444 ]'
+    ```
+    - **Exit codes:** every S1 run is not gate-valid, so a run whose checks all passed exits **4** ("smoke"), never 0. The batch line checks for 444; 1 means a check failed, and 124 means the timeout hit.
+    - **No time or gamerule changes in S1-A:** no `time set`, and no `gamerule` with a value. The day cycle is measured as it really runs.
+    - `s1-day-cycle` only **queries** the rule with `gamerule doDaylightCycle` without a value (read-only; 1.12 prints its current value), and records the reply.
+    - About 4 min build, 6 min survey, 2 min arbiters, 46 min day cycle: about 60 min, so 1-2 billed hours, about **EUR 0.14-0.28** plus IPv4.
+    - Hard stop at 90 min (1.5x).
+  - **S1-B, batch 5's world** (`--seed 8796110535854059511`): `s1-site-survey` only, with the same command minus the other two scenarios. About 15 min, 1 billed hour, about **EUR 0.14** plus IPv4. Hard stop at 25 min.
+  - **After both:** the evidence goes through the redaction tool into `test/evidence/s1/`, and the findings go into STATUS: the world proposal, the dawn bound, which RotN stats exist (so where `crafted_by_bot` gates), and the whisper sender.
 - **G3 batch:** `g3-rocks-to-stone-tools`, `g3-first-night`, `g3-task-preempts-agenda` and `g3-untrusted-refused` on one server (the restart check is offline in G3).
   - About 25 + 45 + 15 + 5 = 90 min plus the build: about 2 h, so 2 billed hours, about **EUR 0.28** plus IPv4.
   - A hard stop at 1.5 times the plan; `--ttl-hours 4`.
@@ -971,5 +992,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the G3 plan, the G3 driver interface proposal, the CX23 plan (probe, bootstrap, target swap, human items H1-H6), the test-key request, and the CX23 README's login step (`agent/harness-ops/g3-plan`).
-- Merged since the last update: #97 (G2 batch 8 evidence).
+- This PR: the S1 runner tooling (`agent/harness-ops/s1-tooling`).
+- Merged since the last update: #101 (the G3 plan and the CX23 plan).
