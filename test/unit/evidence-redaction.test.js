@@ -124,9 +124,9 @@ describe('UUIDs, the bot name and local paths', () => {
 });
 
 describe('committed evidence has no unredacted addresses, UUIDs or local paths', () => {
-    // G2 evidence and every later gate's. (G0 and G1 predate this check and are reviewed by hand.)
-    const dirs = ['g2'].map((d) => path.join(ROOT, 'test', 'evidence', d));
-    test('test/evidence/g2/** is clean', () => {
+    // All of it (lead, after #92): G0 and G1 predate the rules and were redacted with the tool then.
+    const dirs = [path.join(ROOT, 'test', 'evidence')];
+    test('test/evidence/** is clean', () => {
         const found = [];
         for (const dir of dirs) {
             for (const f of evidenceFiles(dir)) {
@@ -167,15 +167,70 @@ describe('one rule for the tool and the check (lead, after G2 batch 6: a bare ad
         assert.equal(redact(exempt), exempt);
     });
 
-    test('committed G2 evidence comes out of the tool: redacting it again changes nothing', () => {
-        const files = evidenceFiles(path.join(ROOT, 'test', 'evidence', 'g2'));
-        assert.ok(files.length > 0);
+    test('committed evidence comes out of the tool: redacting it again changes nothing', () => {
+        const files = evidenceFiles(path.join(ROOT, 'test', 'evidence'));
+        const inGate = (f, g) => f.split(/[\\/]/).includes(g);
+        assert.ok(files.some((f) => inGate(f, 'g0')) && files.some((f) => inGate(f, 'g1')) && files.some((f) => inGate(f, 'g2')));
         for (const f of files) {
             const t = fs.readFileSync(f, 'utf8');
-            // Logs and result.json come out of the tool with --bot; a README is prose that may name the bot
-            // account, so for it only addresses, UUIDs and local paths count.
-            const bot = path.basename(f) === 'README.md' ? undefined : 'FRCFLD';
-            assert.equal(redact(t, { bot }), t, `${path.relative(ROOT, f)}: the tool would still change it`);
+            // Addresses, UUIDs and local paths everywhere. G2's logs and result.json also went through --bot;
+            // a README is prose that may name the bot account, and G0/G1 kept the name.
+            assert.equal(redact(t), t, `${path.relative(ROOT, f)}: the tool would still change it`);
+            if (inGate(f, 'g2') && path.basename(f) !== 'README.md') {
+                assert.equal(redact(t, { bot: 'FRCFLD' }), t, `${path.relative(ROOT, f)}: the bot name is left`);
+            }
+        }
+    });
+
+    // The two table shapes of the pre-rule G0/G1 evidence, with made-up mods and versions.
+    const ROW = (modid, version, file, sig = 'None') => `\t| LCHIJA | ${modid.padEnd(24)} | ${version.padEnd(27)} | ${file.padEnd(57)} | ${sig.padEnd(40)} |`;
+    test("kept: FML's mod state table, only in the version cell and the .jar cell of an exact row", () => {
+        const kept = [
+            ROW('somemod', '1.2.3.4', 'somemod-1.2.3.4.jar'),
+            ROW('othermod', '1.12.2-1.2.3.4', 'othermod-1.12.2-1.2.3.4.jar'),
+            ROW('FML', '8.0.99.99', 'forge-1.12.2-14.23.5.2860.jar', 'e3c3d50c7c986df74c645c0ac54639741c90a557'),
+            ROW('vmod', '1.5.3.2', 'vmod-1.12.2-v1.5.4.0.jar'),
+            ROW('amod', '1.0.0', 'AMod-universal-1.0.1.95-mc1.12-alpha.jar'),
+        ].join('\n');
+        assert.deepEqual(findLeaks(kept), [], 'not flagged');
+        assert.equal(redact(kept), kept, 'not redacted');
+        assert.equal(redact(kept.replace(/\n/g, '\r\n')), kept.replace(/\n/g, '\r\n'), 'CRLF as well');
+    });
+
+    test('flagged and redacted: an address anywhere else in or near such a row', () => {
+        for (const t of [
+            ROW('203.0.113.7', '1.0', 'a.jar'),                    // the modid cell
+            ROW('a', '1.0', 'a.jar', '203.0.113.7'),               // the signature cell
+            ROW('a', '203.0.113.7', 'a.txt'),                      // not a .jar file cell
+            ROW('a', '203.0.113.7 x', 'a.jar'),                    // the version cell holds more than one token
+            ROW('a', '203.0.113.7', 'a.jar').slice(1),             // no leading tab
+            `${ROW('a', '203.0.113.7', 'a.jar')} extra`,           // more after the row
+            ROW('a', '203.0.113.7', 'a.jar', 'e3c3d50c'),          // the signature is not 40 hex digits
+        ]) {
+            assert.deepEqual(kinds(t), ['ipv4'], JSON.stringify(t));
+            assert.deepEqual(kinds(redact(t)), [], `${JSON.stringify(t)}: clean after redaction`);
+        }
+    });
+
+    test("kept: the status ping's mod list, a version line right after a modid line; flagged anywhere else", () => {
+        const kept = [
+            '      {', '        "modid": "somemod",', '        "version": "1.12.2-1.2.3.4"', '      },',
+            '      {', '        "modid": "FML",', '        "version": "8.0.99.99"', '      }',
+        ].join('\n');
+        assert.deepEqual(findLeaks(kept), [], 'not flagged');
+        assert.equal(redact(kept), kept, 'not redacted');
+        assert.equal(redact(kept.replace(/\n/g, '\r\n')), kept.replace(/\n/g, '\r\n'), 'CRLF as well');
+        for (const lines of [
+            ['        "version": "203.0.113.7"'],                                         // no modid line before it
+            ['        "name": "x",', '        "version": "203.0.113.7"'],                 // a different key before it
+            ['        "modid": "a",', '        "host": "203.0.113.7"'],                   // not the version key
+            ['        "modid": "a",', '        "version": "203.0.113.7", "x": "y"'],      // more on the line
+            ['        "modid": "a",', '', '        "version": "203.0.113.7"'],            // not RIGHT after it
+            ['{"event":"created","ip":"198.51.100.9"}'],                                  // the G0 cost ledger's shape
+        ]) {
+            const t = lines.join('\n');
+            assert.deepEqual(kinds(t), ['ipv4'], JSON.stringify(t));
+            assert.deepEqual(kinds(redact(t)), [], `${JSON.stringify(t)}: clean after redaction`);
         }
     });
 });
