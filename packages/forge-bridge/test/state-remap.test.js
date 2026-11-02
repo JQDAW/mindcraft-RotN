@@ -193,6 +193,28 @@ test('global-palette sections (more than 8 bits) are remapped too, and nothing e
     assert.equal(loaded.getBlockStateId(new Vec3(1, 0, 0)), (DOUBLE_PLANT << 4) | 9);
 });
 
+test('global-palette data: a target that does not fit the section bit width is left as sent, counted and logged once', (t) => {
+    const warn = t.mock.method(console, 'warn', () => {});
+    const registry = Registry('1.12.2');
+    const Plain = require('prismarine-chunk')(Registry('1.12.2'));
+    const source = new Plain();
+    for (let i = 0; i < 300; i++) source.setBlockStateId(new Vec3(i & 15, i >> 8, (i >> 4) & 15), 16 + i);
+    // Two positions hold 17, one holds 18 (index 0 is 16, index 1 is 17, index 2 is 18).
+    source.setBlockStateId(new Vec3(3, 0, 0), 17);
+    const bits = source.sections[0].data.getBitsPerValue();
+    assert.equal(source.sections[0].palette, null, 'the section uses the global palette');
+    // Hand-built: buildStateIdRemap only makes same-block entries, which always fit.
+    const tooWide = 2 ** bits;
+    registry.stateIdRemap = new Map([[17, tooWide], [18, 33]]);
+    const loaded = new (require('prismarine-chunk')(registry))();
+    loaded.load(source.dump(), source.getMask(), true, false);
+    const id = (x) => loaded.getBlockStateId(new Vec3(x, 0, 0));
+    assert.deepEqual([id(0), id(1), id(2), id(3)], [16, 17, 33, 17]);
+    assert.equal(registry.stateIdRemap.skippedTooWide, 2);
+    assert.equal(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], new RegExp(`target ${tooWide} \\(from 17\\) does not fit the section's ${bits} bits`));
+});
+
 test("buildStateIdRemap: rotn-data's table, by registry name, with the synced id", () => {
     const { map, blocks, unknownBlocks, invalid } = buildStateIdRemap(Registry('1.12.2'), STUB);
     assert.deepEqual([...map].sort((a, b) => a[0] - b[0]), [[2808, 2810], [2809, 2810], [2811, 2810]]);
@@ -344,12 +366,15 @@ test('pyrotech:worktable (0 -> 1, 1 -> 2, 2 -> 0) reads correctly through chunk 
     bot._client.emit('multi_block_change', { chunkX: 0, chunkZ: 0, records: [0, 1, 2].map((m, i) => ({ horizontalPos: (i << 4) | 1, y: 66, blockId: net(m) })) });
     assert.deepEqual([meta(0, 66, 1), meta(1, 66, 1), meta(2, 66, 1)], [1, 2, 0], 'multi_block_change');
 
-    // Nothing is remapped twice: the same network id again gives the same client id ...
+    // Network data sent again gives the same result. This is a consistency check only: it
+    // cannot catch a double remap, because block_change and load each decode fresh network
+    // bytes (load replaces the sections), so a stray remap would have nothing stale to act on.
     bot._client.emit('block_change', { location: { x: 0, y: 66, z: 0 }, type: net(0) });
     assert.equal(meta(0, 66), 1);
     sendChunk();
     assert.deepEqual([meta(0), meta(1), meta(2)], [1, 2, 0], 'the same chunk again');
-    // ... and local writes of client ids (mineflayer's digging and sign updates, pathfinder) are never remapped.
+    // The real double-remap test: local writes of client ids (mineflayer's digging and sign
+    // updates, pathfinder) must never be remapped.
     const column = bot.world.getColumn(0, 0);
     for (const x of [0, 1, 2]) {
         const p = new Vec3(x, 65, 0);
