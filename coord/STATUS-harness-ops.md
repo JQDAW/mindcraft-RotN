@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (01:36 UTC, from `date -u`)
+Updated: 2026-11-02 (03:19 UTC, from `date -u`)
 
 ## Done
 
@@ -90,12 +90,9 @@ Updated: 2026-11-02 (01:36 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 4 ran on the lead's GO (2026-11-02 01:11 UTC) and FAILED; the server is deleted.** Mobs and items PASSED. Blocks failed `blocks_confirmed` 147/150. All three were gate-valid, with no world changes, no meta drift and no login retry.
-  - **The 3 failures are one systematic bot/server disagreement:** every sampled upper half of a double plant. The bot says `minecraft:double_plant 11`, and the server's `testforblock` says data value 10.
-  - The census lists 24 `double_plant 11` blocks and no `double_plant 10`, so the bot reads all upper halves as 11.
-  - This is a plain fail by the rules. It needs an owner (net-forge or rotn-data), see "G2 batch 4" below.
-  - I stopped as the GO says.
-- G2 batches 1-3 FAILED. The lead's decisions went into #64, #66, #67, #73 and #77 (all merged).
+- **G2 batch 5 ran on the lead's GO (2026-11-02 02:59 UTC) and PASSED: all three scenarios are gate-valid PASS in one batch on 01a8193.** The server is deleted. Details are under "Real G2 batches". The lead decides whether G2 is met.
+  - **Caveat:** this world's cube (sand, stone and water, 20 types) had no double plants, so the batch 4 double-plant case was not exercised in game. The remap is active and its double-plant entries were not skipped.
+- G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82 (all merged).
 - **Follow-up (lead, not blocking):** in `g2-mobs-named`, require a run-tagged entity within 1 block of a matched mob report.
 
 ## Watching
@@ -103,6 +100,52 @@ Updated: 2026-11-02 (01:36 UTC, from `date -u`)
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
 ## Real G2 batches
+
+### G2 batch 5 (2026-11-02): PASS (blocks, mobs and items all PASS, gate-valid); the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 2026-11-02 02:59 UTC.
+- **Code:** a clean detached checkout of develop at 01a8193 (#79-#82), after `npm ci`, which applied #81's prismarine-chunk patch. Every `result.json` has `git.dirty: false` and `untracked: 0`.
+- **Checks right before the create, all passed:**
+  - `agentNaming('.')`: wired, 643/643.
+  - `msa-login FRCFLD --check`: OK; its output is not recorded.
+  - The preflight on its own: cadence path, 4 dispatch runs; no leftovers.
+- **Command:** the planned one, unchanged.
+- **Console:** `gamerule doDaylightCycle false` once and `time set day` before each scenario: 4 lines, in the raw `latest.log` only. Then the runner's commands. No difficulty change.
+- **Raw files:** batch 4's are in `captures/raw/batch4-20261102/`, including the capture net-forge used.
+
+**Real times (UTC, 2026-11-02)**
+
+| Event | Time |
+| --- | --- |
+| Batch start | 03:01:57 |
+| Server created | 03:02:06 |
+| Ready | 03:05:09 |
+| `g2-blocks-named` | 03:05:15 to 03:11:52 (394 s) |
+| `g2-mobs-named` | 03:11:55 to 03:14:44 (166 s) |
+| `g2-items-roundtrip` | 03:14:47 to 03:16:41 (112 s) |
+| EXIT-trap teardown | started 03:16:50; "verified gone" 03:17:05 |
+
+- **Server up:** 15 min.
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. IPv4), plus 1 Primary IPv4-hour.
+- **Afterwards:** at 03:17:20 UTC, `hcloud server list`, `hcloud primary-ip list` and the labelled `ssh-key list` were all empty.
+
+**Results.** Every run had `pass: true`, `gateValid: true`, `weakenedParams: []`, no `notGate` reasons, no kicks, and `notes.loginRetry` `{retried: false}`. The driver's remap line at login was the same in all three: `state-id remap active: 382 state ids in 94 of the table's 132 blocks`.
+
+| Scenario | Verdict | Details |
+| --- | --- | --- |
+| `g2-blocks-named` | **PASS** | 20 non-air types; census sum 16706 + air 19231 + unloaded 0 = 35937. `blocks_confirmed` 50/50; `worldChanges` none; `metaDrift` 0 of 50. `blocks_spotcheck` 41 of 40, 80 positions, 0 unloaded, no skew; every spot hit is a census type. |
+| `g2-mobs-named` | **PASS** | 12/12 named and confirmed by run tag, 7 of them modded. **Replaced 1 of 12:** `charm:spectre` vanished, replaced by `quark:stoneling`. |
+| `g2-items-roundtrip` | **PASS** | 643/643 table entries; 30/30 read, named and round-tripped. |
+
+**Caveats and notes**
+- **The double-plant case was not exercised.** The spawn cube (centre -703 65 -210, world seed 8796110535854059511) has sedimentary stone, sand, water and sandstone, and no double plants or Dynamic Trees blocks.
+  - The remap is active in all three sessions, and its `minecraft:double_plant` entries (upper-half ids map to meta 10) were not skipped.
+  - The 124 skipped entries are all modded blocks, skipped by forge-bridge as "cycle" (e.g. `animania:block_trough`, `artisanworkstumps:*`). None of them is in this cube.
+  - The lead decides whether G2 needs a double-plant world.
+- **A server-side error, not caused by the bot:** at 03:06:23 (during blocks), `[File IO Thread/ERROR] [Universal Tweaks]: Failed to save chunk` with a NullPointerException in NBT writing. It is a pack-side save error; all checks used the live world. Worth knowing for the live server.
+
+**Evidence:** `test/evidence/g2/batch5-20261102/` (this PR), redacted with the merged tool; the CI leak check passes.
 
 ### G2 batch 4 (2026-11-02): FAIL (blocks 147/150, mobs PASS, items PASS); the server is deleted
 
@@ -419,7 +462,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 batch 5:** the double-plant upper-half meta (bot 11, server 10) found and fixed by its owner (net-forge or rotn-data, the lead routes it), then a new written GO.
+- Nothing. G2 batch 5 passed; the lead decides whether G2 is met.
 
 ## Requests to other agents or the lead
 
@@ -442,5 +485,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: G2 batch 4 evidence and this status update (`agent/harness-ops/g2-batch4-evidence`).
-- Merged since the last update: #76, #77.
+- This PR: G2 batch 5 evidence and this status update (`agent/harness-ops/g2-batch5-evidence`).
+- Merged since the last update: #78, #79.
