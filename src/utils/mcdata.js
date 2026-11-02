@@ -338,11 +338,24 @@ export function mustCollectManually(blockName) {
  * have in common (crops, flowers, saplings, torches, levers, grass): there is nothing to stand on or
  * path into, so it is dug where it is and the drop picked up. Air and liquids are excluded (liquids are
  * handled before this in collectBlock). Accepts 1.12, 1.21 and modded names (rotn-data's resolver).
+ *
+ * Only the block's default state is read (rotn-data's getBlock without a meta): 55 blocks in the dump
+ * change their collision box by state (e.g. betterwithaddons:rope_sideways). None is on the G3 path
+ * (#127 review).
+ *
+ * Also excluded (#127 review): materials that are not things to collect, NOT_COLLECTED_MATERIALS:
+ * portals, fire, structure void, and modded gas or "negative space" materials (adpother's gases, 9
+ * blocks; Recurrent Complex). Digging those means digging thin air. Rails and other circuits stay:
+ * they break into items.
  */
+const NOT_COLLECTED_MATERIALS = new Set(['portal', 'fire', 'structure_void']);
+const NOT_COLLECTED_MODDED_MATERIAL = /Gas$|NegativeSpace$/;
+
 function hasNoCollisionBox(blockName) {
     const b = rdGetBlock(blockName);
     const s = b?.propertiesKnown ? b.state : null;
     if (!s || s.liquid || s.material === 'air') return false;
+    if (NOT_COLLECTED_MATERIALS.has(s.material) || NOT_COLLECTED_MODDED_MATERIAL.test(s.material ?? '')) return false;
     return Array.isArray(s.collision) && s.collision.length === 0;
 }
 
