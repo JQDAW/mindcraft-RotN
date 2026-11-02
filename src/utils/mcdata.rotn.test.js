@@ -121,6 +121,15 @@ test('installRotnRecipes: mineflayer\'s Recipe, bound before the install, sees R
     const table = Recipe.find(id('crafting_table'));
     assert.deepEqual(names(table[0]), [['planks', null, 1], ['contenttweaker:crafting_tools', 0, 1]]);
     assert.equal(table[0].requiresTable, false);
+    // #102 review follow-up: the vanilla recipe (4 planks, nothing else) is gone.
+    assert.ok(table.every((r) => names(r).some(([n]) => n === 'contenttweaker:crafting_tools')), 'every variant needs Crafting Tools');
+    assert.ok(!table.some((r) => names(r).every(([n]) => n === 'planks')), 'no planks-only variant');
+    // #102 review follow-up: sticks directly. 2 planks of one kind (any) in the 2x2 grid give 4.
+    const sticks = Recipe.find(id('stick'));
+    assert.deepEqual(names(sticks[0]), [['planks', null, 2]]);
+    assert.equal(sticks[0].result.count, 4);
+    assert.equal(sticks[0].requiresTable, false);
+    assert.ok(sticks.every((r) => r.delta.some((d) => d.count < 0)), 'every stick variant consumes something');
     assert.deepEqual(Recipe.find(id('wooden_pickaxe')), [], 'RotN has no wooden tools');
 
     // #102 review: results carry `meta`, so Recipe.find (bot.recipesFor) filters by metadata.
