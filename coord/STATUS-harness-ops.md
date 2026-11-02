@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (20:21 UTC, from `date -u`)
+Updated: 2026-11-02 (20:42 UTC, from `date -u`)
 
 ## Done
 
@@ -843,7 +843,7 @@ What skills-rotn provides (to agree):
   - The calls are counted from the agent's own log lines (one per request to OpenRouter).
   - The cost is the difference in the test key's `usage`, read from OpenRouter's key endpoint (`GET /api/v1/key`) before and after the scenario. The runner prints and records only the numbers, never the key.
 - **Batch spend stop:** before each scenario the batch script reads the key's usage. If the batch has spent more than `maxBatchUsd`, it stops the batch: no further scenarios, logs fetched, the server deleted as always.
-  - Proposal: USD 2 per batch, a gate parameter compared 'equal'.
+  - **Decided (lead, #116 review): `maxBatchUsd` is USD 2 per batch,** a gate parameter compared 'equal'.
   - The key's USD 5 credit limit is the hard cap behind it.
 - **Order of work:**
   1. this plan;
@@ -870,7 +870,14 @@ What skills-rotn provides (to agree):
 - **S1-B is cancelled.**
 - **The dawn bound, provisionally:** the wrap past 24000 after the night, about 40 min from the first join, limit 55 min. The first G3 smoke batch runs a full night and confirms it before it is pinned as an 'equal' parameter.
 
-**Still open:** the model (skills-rotn's profile) and `maxBatchUsd` (proposal: USD 2).
+**Decided (lead, #116 review):** `maxBatchUsd` is USD 2.
+
+**Required before any G3 paid batch (lead, #116 review; my next PR):**
+- the spend stop: `maxBatchUsd` as an 'equal' gate parameter; a numbers-only read of the key's usage (`GET /api/v1/key`); per-scenario LLM calls and cost; and a test that the batch stops, fetches the logs and deletes the server;
+- `Server` as a test-only task giver;
+- `give` and `summon` excluded from G3.
+
+**Still open:** the model (skills-rotn's profile).
 
 ### G2 batch (the plan for every G2 gate batch; batches 1-7 ran on 2026-11-01/02. Each batch needs the lead's written GO.)
 

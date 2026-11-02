@@ -13,7 +13,8 @@
 //         even "false"), nor SETTINGS_JSON (the driver writes its own), nor skills-rotn's test-only
 //         MINDCRAFT_ROTN_ALLOW_TASK_FILES (#110), nor a DEBUG that would make prismarine-auth print tokens
 //         (forge-bridge's own rule);
-//       * the repo's settings.js must evaluate to allow_insecure_coding === false, as deploy.sh checks;
+//       * the settings.js next to main.js (the file main.js really imports; there is no option to check
+//         another one) must evaluate to allow_insecure_coding === false, as deploy.sh checks;
 //       * the profile must exist, parse, carry no task, and be named as the runner's bot.
 //   - Starts `node main.js` with MINDCRAFT_SINGLE_BOT_SERVICE=1, PROFILES=[profile], a free local
 //     MINDSERVER_PORT, and SETTINGS_JSON={"host","port","auth":"microsoft","auto_open_ui":false} from the
@@ -38,21 +39,27 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 export const EXIT_FATAL = 3;
 const event = (type, data = {}) => console.log(`DRIVER ${JSON.stringify({ t: new Date().toISOString(), type, ...data })}`);
 
-/** --profile P [--main M] [--settings S] [--grace-ms N]; anything else (task arguments included) is refused. */
+/**
+ * The settings.js that main.js really imports: `./settings.js` next to it (#116 review finding 1). The
+ * driver checks exactly this file; there is no option to point the check anywhere else.
+ */
+export const settingsFileOf = (main) => path.join(path.dirname(path.resolve(main)), 'settings.js');
+
+/** --profile P [--main M] [--grace-ms N]; anything else (task arguments and --settings included) is refused. */
 export function parseDriverArgs(argv) {
-    const o = { profile: null, main: path.join(REPO, 'main.js'), settings: path.join(REPO, 'settings.js'), graceMs: 10000 };
+    const o = { profile: null, main: path.join(REPO, 'main.js'), graceMs: 10000 };
     const problems = [];
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (/^--task[_-]?(path|id)(=|$)/.test(a)) problems.push(`${a.split('=')[0]}: G3 never loads Mindcraft task files (they run op commands)`);
         else if (a === '--profile') o.profile = argv[++i] ?? null;
         else if (a === '--main') o.main = argv[++i];
-        else if (a === '--settings') o.settings = argv[++i];
         else if (a === '--grace-ms') o.graceMs = Number(argv[++i]);
         else problems.push(`unknown argument '${a}'`);
     }
     if (!o.profile) problems.push('--profile is required');
     if (!(o.graceMs >= 0)) problems.push('--grace-ms must be a number of milliseconds');
+    o.settings = settingsFileOf(o.main);
     return { options: o, problems };
 }
 
@@ -78,6 +85,8 @@ export function profileProblems(file, bot) {
     } catch (e) {
         return [`profile ${file}: ${e.code === 'ENOENT' ? 'not found' : 'not valid JSON'}`];
     }
+    // null, a number, a string or an array is valid JSON but no profile (#116 review finding 2).
+    if (prof === null || typeof prof !== 'object' || Array.isArray(prof)) return [`profile ${file}: not a JSON object`];
     const p = [];
     for (const k of ['task', 'task_path', 'task_id']) if (k in prof) p.push(`profile ${file}: has '${k}' (G3 never runs Mindcraft tasks)`);
     if (bot && prof.name !== bot) p.push(`profile ${file}: name '${prof.name}' is not the runner's bot '${bot}'`);
@@ -140,7 +149,8 @@ async function main(argv) {
         stdio: 'inherit',
         detached: posix,   // POSIX: its own process group, so a stop reaches the agent too; never on Windows (job object)
     });
-    event('mindcraft_start', { pid: child.pid, profile: o.profile, mindserverPort });
+    // The paths of what runs and of the settings file that was checked (the one main.js imports).
+    event('mindcraft_start', { pid: child.pid, main: path.resolve(o.main), settings: o.settings, profile: o.profile, mindserverPort });
 
     let stopping = false;
     const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));
@@ -158,7 +168,9 @@ async function main(argv) {
         const timer = new Promise((r) => setTimeout(() => r(null), o.graceMs));
         if ((await Promise.race([exited, timer])) === null) signalGroup('SIGKILL');
         await exited;
-        // The agent may outlive main.js for a moment; the group signal reached it too. Exit 0: a requested stop.
+        // POSIX: main.js has exited, but its agent may still be in the group; it must not outlive the stop
+        // (#116 review finding 3). On Windows the job object already ended it. Exit 0: a requested stop.
+        if (posix) signalGroup('SIGKILL');
         process.exit(0);
     };
     for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => stop(sig));

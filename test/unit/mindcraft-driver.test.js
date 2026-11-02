@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { parseDriverArgs, envProblems, profileProblems, settingsProblems, mindcraftEnv, freePort, EXIT_FATAL } from '../runner/drivers/mindcraft-driver.mjs';
+import { parseDriverArgs, envProblems, profileProblems, settingsProblems, settingsFileOf, mindcraftEnv, freePort, EXIT_FATAL } from '../runner/drivers/mindcraft-driver.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, '..', 'runner', 'drivers', 'mindcraft-driver.mjs');
@@ -30,6 +30,9 @@ describe('mindcraft-driver: checks before anything starts', () => {
             assert.ok(problems.some((p) => /never loads Mindcraft task files/.test(p)), `${a.join(' ')}: ${JSON.stringify(problems)}`);
         }
         assert.match(parseDriverArgs(['--profile', 'p.json', '--cheat']).problems[0], /unknown argument '--cheat'/);
+        assert.match(parseDriverArgs(['--profile', 'p.json', '--settings', 'other.js']).problems[0], /unknown argument '--settings'/, 'the check cannot be pointed elsewhere (#116 finding 1)');
+        assert.equal(parseDriverArgs(['--profile', 'p.json', '--main', path.join('app', 'main.js')]).options.settings, path.resolve('app', 'settings.js'));
+        assert.equal(settingsFileOf(path.join(HERE, '..', '..', 'main.js')), path.join(path.resolve(HERE, '..', '..'), 'settings.js'));
         assert.match(parseDriverArgs([]).problems[0], /--profile is required/);
         const ok = parseDriverArgs(['--profile', 'p.json', '--grace-ms', '500']);
         assert.deepEqual([ok.problems, ok.options.profile, ok.options.graceMs], [[], 'p.json', 500]);
@@ -55,6 +58,7 @@ describe('mindcraft-driver: checks before anything starts', () => {
         const f = (name, body) => { const p = path.join(dir, name); fs.writeFileSync(p, body); return p; };
         assert.match(profileProblems(path.join(dir, 'none.json'), 'FRCFLD')[0], /not found/);
         assert.match(profileProblems(f('bad.json', '{'), 'FRCFLD')[0], /not valid JSON/);
+        for (const body of ['null', '42', '"FRCFLD"', '[]']) assert.match(profileProblems(f('odd.json', body), 'FRCFLD')[0], /not a JSON object/, body);
         assert.match(profileProblems(f('task.json', '{"name":"FRCFLD","task":{"goal":"x"}}'), 'FRCFLD')[0], /has 'task'/);
         assert.match(profileProblems(f('other.json', '{"name":"Andy"}'), 'FRCFLD')[0], /name 'Andy' is not the runner's bot 'FRCFLD'/);
         assert.deepEqual(profileProblems(f('ok.json', '{"name":"FRCFLD"}'), 'FRCFLD'), []);
@@ -89,9 +93,15 @@ function startDriver({ env = {}, args = [], profileBody = '{"name":"FRCFLD"}', s
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcd-run-'));
     const profile = path.join(dir, 'profile.json');
     fs.writeFileSync(profile, profileBody);
+    // main.js imports ./settings.js, so the fake app has both side by side (#116 finding 1).
+    const app = path.join(dir, 'app');
+    fs.mkdirSync(app);
+    fs.writeFileSync(path.join(app, 'package.json'), '{"type":"module"}');
+    fs.copyFileSync(FAKE_MAIN, path.join(app, 'main.js'));
+    fs.copyFileSync(settings, path.join(app, 'settings.js'));
     const base = Object.fromEntries(['PATH', 'Path', 'PATHEXT', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'TEMP', 'TMP', 'HOME', 'USERPROFILE']
         .filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]));
-    const child = spawn(process.execPath, [DRIVER, '--profile', profile, '--main', FAKE_MAIN, '--settings', settings, '--grace-ms', '2000', ...args], {
+    const child = spawn(process.execPath, [DRIVER, '--profile', profile, '--main', path.join(app, 'main.js'), '--grace-ms', '2000', ...args], {
         env: { ...base, ...runnerEnv({ MINDCRAFT_PROFILES_FOLDER: dir, OPENROUTER_API_KEY: 'not-a-key' }), FAKE_DIR: dir, ...env },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -99,6 +109,7 @@ function startDriver({ env = {}, args = [], profileBody = '{"name":"FRCFLD"}', s
     child.stdout.on('data', (b) => { out += b; });
     child.stderr.on('data', (b) => { out += b; });
     const exited = new Promise((r) => child.on('exit', (code, signal) => r({ code, signal, out })));
+    const outNow = () => out;
     // After each test, even a failing one: close the pipes (a surviving main.js would hold them open and
     // hang the test run) and end any process this run recorded that is still alive.
     const cleanup = () => {
@@ -108,7 +119,7 @@ function startDriver({ env = {}, args = [], profileBody = '{"name":"FRCFLD"}', s
         const pids = readJson(path.join(dir, 'pids.json'));
         for (const pid of [pids?.main, pids?.agent]) if (pid && alive(pid)) { try { process.kill(pid, 'SIGKILL'); } catch { /* gone */ } }
     };
-    return { child, dir, exited, cleanup };
+    return { child, dir, app, exited, cleanup, out: outNow };
 }
 async function waitFor(fn, ms = 15000) {
     for (let t = 0; t < ms; t += 100) { const v = fn(); if (v) return v; await sleep(100); }
@@ -137,8 +148,18 @@ describe('mindcraft-driver end to end with a fake main.js', () => {
         assert.equal(fs.existsSync(path.join(dir, 'pids.json')), false);
     });
 
+    test('a null profile is refused with a reason, not a crash (#116 finding 2)', async (t) => {
+        const { dir, exited, cleanup } = startDriver({ profileBody: 'null' });
+        t.after(cleanup);
+        const r = await exited;
+        assert.equal(r.code, EXIT_FATAL);
+        assert.match(r.out, /refused: profile .*: not a JSON object/);
+        assert.doesNotMatch(r.out, /TypeError/);
+        assert.equal(fs.existsSync(path.join(dir, 'pids.json')), false);
+    });
+
     test('main.js starts with the driver\'s settings, and the runner\'s stop leaves no process behind', { timeout: 60000 }, async (t) => {
-        const { child, dir, exited, cleanup } = startDriver();
+        const { child, dir, app, exited, cleanup, out } = startDriver();
         t.after(cleanup);
         const pids = await waitFor(() => readJson(path.join(dir, 'pids.json')));
         assert.ok(pids, 'the fake main.js and its agent started');
@@ -149,6 +170,9 @@ describe('mindcraft-driver end to end with a fake main.js', () => {
         assert.equal(seen.argv.length, 0, 'no arguments for main.js: no task files');
         assert.deepEqual([seen.hasOpenRouterKey, seen.hasTestServerVars, seen.insecure], [true, false, false]);
         assert.ok(seen.mindserverPort > 0);
+        const start = JSON.parse(/DRIVER (\{.*"type":"mindcraft_start".*\})/.exec(await waitFor(() => (/mindcraft_start/.test(out()) ? out() : null)))[1]);
+        assert.equal(start.main, path.join(app, 'main.js'));
+        assert.equal(start.settings, path.join(app, 'settings.js'), 'the settings file main.js imports was the one checked');
         assert.ok(alive(pids.main) && alive(pids.agent));
         // The runner's stop: SIGTERM (on Windows node turns this into TerminateProcess of the driver alone).
         child.kill('SIGTERM');
