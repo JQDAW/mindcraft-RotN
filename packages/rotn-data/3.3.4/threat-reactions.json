@@ -74,10 +74,10 @@
     "iceandfire:dread_lich": {
       "reaction": "take-cover",
       "ranged": true,
-      "summary": "A ranged caster: it shoots skulls and strafes, and also fights in melee. 50 health, armor 2. Stay behind cover.",
+      "summary": "A ranged caster: it always spawns holding a lich staff, so it fights from range, shooting skulls and summoning up to 5 minions. 50 health, armor 2. Stay behind cover; deal with the minions first.",
       "confidence": "verified",
       "evidence": [
-        "IceAndFireRotN-1.9.1-1.2.1.jar: EntityDreadLich implements IRangedAttackMob; attackEntityWithRangedAttack (func_82196_d) creates an EntityDreadLichSkull; initEntityAI (func_184651_r) adds DreadLichAIStrife and EntityAIAttackMelee; applyEntityAttributes (func_110147_ax): max health 50, armor 2"
+        "IceAndFireRotN-1.9.1-1.2.1.jar: EntityDreadLich implements IRangedAttackMob; setEquipmentBasedOnDifficulty (func_180481_a) always puts IafItemRegistry.lich_staff in the main hand; setCombatTask adds the ranged DreadLichAIStrife (aiArrowAttack) when the main-hand item is lich_staff, else melee; attackEntityWithRangedAttack (func_82196_d) creates an EntityDreadLichSkull and, while getMinionCount() < 5, spawns getRandomNewMinion() and increments the count; applyEntityAttributes (func_110147_ax): max health 50, armor 2"
       ]
     },
     "iceandfire:if_troll": {
@@ -185,10 +185,11 @@
     },
     "ancientbeasts:ghost": {
       "reaction": "fight",
-      "summary": "A flying mob with 12 health. Its possession AI applies Strength, Speed and Absorption (to whom was not traced).",
+      "summary": "A flying mob with 12 health. Its possession spell buffs the mob it targets (Absorption, Speed, Strength); on a player not in creative mode it applies the mod's Possessed effect for 20 s and deals 4 damage. Fight it.",
       "confidence": "verified",
       "evidence": [
-        "ancientbeasts-1.9.99999.jar: EntityGhost extends EntityMob; PathNavigateFlying; initEntityAI adds EntityAIPossession, which references EntityPlayer and the Strength (field_76420_g), Speed (field_76424_c) and Absorption (field_76444_x) effects; applyEntityAttributes: max health 12"
+        "ancientbeasts-1.9.99999.jar: EntityGhost extends EntityMob; PathNavigateFlying; initEntityAI adds EntityAIPossession. Its useMagic: if the target is an EntityLiving and not a villager, EntityLiving.func_70690_d adds Absorption (field_76444_x), Speed (field_76424_c) and Strength (field_76420_g) to it; if the target is a player not in creative mode (PlayerCapabilities.isCreativeMode, field_75098_d) or a villager, it adds ModPotions.POSSESSED for 400 ticks and deals DamageSource.causeMobDamage 4.0 x AncientBeastsConfig.GlobalDamageMultiplier. Possessed is handled in ModEvents.oooSpuki (a LivingUpdateEvent handler), not traced further; applyEntityAttributes: max health 12",
+        "the pinned pack's config/ancientbeasts.cfg line 50: D:\"Global Damage Multiplier\"=1.0"
       ]
     },
     "ancientbeasts:giant_zombie": {
@@ -217,10 +218,11 @@
     },
     "ancientbeasts:sandy": {
       "reaction": "avoid",
-      "summary": "A tameable beast that attacks when untamed: 80 health, 6 attack, armor 4. Do not fight it on the first night.",
+      "ranged": true,
+      "summary": "A tameable beast with two ranged attacks (sand spit and a tornado) and melee: 80 health, 6 attack, armor 4. It targets players only while untamed. Do not fight it on the first night.",
       "confidence": "verified",
       "evidence": [
-        "ancientbeasts-1.9.99999.jar: EntitySandy extends EntityTameable; initEntityAI adds EntityAITargetNonTamed and EntityAIMeleeConditional; applyEntityAttributes: max health 80, attack 6, armor 4"
+        "ancientbeasts-1.9.99999.jar: EntitySandy extends EntityTameable; initEntityAI adds SummonSandShooter (creates EntitySandSpit), UseSandMagic (creates EntityTornado) and EntityAIMeleeConditional; its EntityAINearestAttackableTarget tasks target AbstractIllager, EntityVex and EntitySandy only, and it targets other living entities (players included) through two EntityAITargetNonTamed tasks, which run only while untamed (their predicate was not inspected); applyEntityAttributes: max health 80, attack 6, armor 4"
       ]
     },
     "minecraft:guardian": {
@@ -238,6 +240,23 @@
       "confidence": "vanilla",
       "evidence": [
         "Minecraft 1.12 EntityVindicator behaviour (iron axe melee; Minecraft Wiki: 13 damage on Normal, Java Edition); not in the RotN sources, unverified on this pack"
+      ]
+    },
+    "minecraft:slime": {
+      "reaction": "fight",
+      "summary": "Bounces and hits in melee; it splits into smaller slimes when killed (the smallest do no damage). Fight it, preferably not in a crowd.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntitySlime behaviour (melee by size, splits on death, the smallest size deals no damage; spawns in swamps at night and in slime chunks below Y 40); not in the RotN sources, unverified on this pack"
+      ]
+    },
+    "charm:spectre": {
+      "reaction": "fight",
+      "summary": "An underground ghost (spawns only at depth 24 or below, in darkness): 0.5 health and 0.01 attack, but on this pack its touch curses the player's armor or items. Kill it with one hit before it touches you; it disappears in light (level 8) and after 120 s.",
+      "confidence": "verified",
+      "evidence": [
+        "Charm-1.12.2-1.4.1.jar: EntitySpectre extends EntityMob; initEntityAI adds EntityAINearestAttackableTarget(EntityPlayer) and EntityAIAttackMelee; applyEntityAttributes reads svenhjol.charm.world.feature.Spectre (defaults: max health 0.5, attack 0.01, speed 0.19); attackEntityAsMob (func_70652_k) curses items when Spectre.applyCurse, else applies Weakness; getCanSpawnHere (func_70601_bi) requires the bounding box at or below Spectre.spawnDepth; onUpdate (func_70071_h_) despawns it at Spectre.despawnLight; attackEntityFrom (func_70097_a) ignores fall (field_76379_h) and in-wall (field_76368_d) damage",
+        "the pinned pack's config/charm.cfg lines 832-846 and 858: B:\"Apply curse\"=true, I:\"Despawn light level\"=8, I:\"Spawn depth\"=24, I:\"Spawn weight\"=100, I:\"Spectre lifetime\"=120"
       ]
     }
   },
