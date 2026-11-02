@@ -138,6 +138,27 @@ If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge
   - net-forge: registry extension (PR #25, still open, review changes pending), mod entities (FML EntitySpawn into `bot.entities`), the entity-metadata serializers;
   - rotn-data is spawned: dumper mod on the test server, data package, name translation, `mcdata.js` helpers reading `bot.registry`;
   - harness-ops: G2 scenarios (top 50 blocks near spawn named, common mobs named, old/new names round-trip), then CX23 work.
+- 2026-11-02, **G2 passed**, on G2 batch 8 (evidence PR #97, `test/evidence/g2/batch8-20261102/`). A strict independent review approved it, and an independent verifier judged it **MET WITH CAVEATS** (high confidence).
+  - **The run.** All three scenarios passed as gate runs in one batch on develop `0bdb537` (clean), with the default gate parameters:
+    - `g2-blocks-named`: 50 types; 150/150 runner-picked samples server-confirmed by `testforblock`; spot check 40/40; metaDrift 0; worldChanges none.
+    - `g2-mobs-named`: 12/12 named and confirmed by run tag, 7 of them modded, 1 replaced.
+    - `g2-items-roundtrip`: the 643-entry table and 30/30 in game round-trip, with no kick.
+
+    Names come from the agent's own naming path (`src/utils/mcdata.js` plus `bot.registry`).
+  - **World.** Fixed world seed `1880465901402976865` and fixed cube centre -45 66 -66; the bot's natural spawn lies inside that cube.
+  - **Defects found and fixed on the way:**
+    - **Double-plant upper halves:** Forge's two-pass network ids made the bot read meta 11 where the client and the server have 10. Fixed with the dumper's state-meta-remap (#80, #82) and client-view decoding (#81, #84, #86). Now 23 in the census and 3/3 upper-half samples confirmed.
+    - **Dynamic Trees state drift and world changes:** handled by the re-ask rule (#67, #77). 31 types, 93/93 confirmed.
+    - **Items kick** ("Invalid move player packet"): the movement guard (#95).
+    - **Login transient:** a narrow retry (#73).
+  - **Path to it.** Batches 1-4, 6 and 7 failed honestly. Batch 5 passed, but on a random world without the defect's blocks, so G2 was not declared on it (#83). Evidence is in `test/evidence/g2/batch1..8`.
+  - **Cost.** All agent test batches so far (G0-G2 plus three dump runs) cost about EUR 2.12 plus Primary IPv4-hours.
+  - **Caveats (carried into later gates):**
+    - "Near spawn" is one fixed world and cube, not a general result.
+    - "Common mobs" are the top 12 of `packages/rotn-data/3.3.4/common-mobs.json`. `charm:spectre` (rank 3) vanishes in daylight and is unconfirmed, and naturally spawned mobs were not checked.
+    - The in-game item round-trip covers vanilla items only; modded item names have no old/new rename.
+    - Naming was checked through the harness driver (`g1-driver.mjs` with `initBot`, mcdata.js and forge-bridge). The full Mindcraft agent and its LLM command path must prove it at G3/G4.
+- **Phase 3 (G3: act in RotN) starts (2026-11-02):** skills-rotn starts at G2 (this plan, row 3). At most three dev agents run at once, so the human chose to **pause net-forge**: its G2 work is done, and its worktree is kept so it can be respawned for protocol issues. The Phase 3 team is skills-rotn, rotn-data and harness-ops.
 
 ## Open items
 
