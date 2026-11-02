@@ -1,3 +1,5 @@
+import { takeReplanNote } from './replan.js';
+
 const STOPPED = 0
 const ACTIVE = 1
 const PAUSED = 2
@@ -7,6 +9,7 @@ export class SelfPrompter {
         this.state = STOPPED;
         this.loop_active = false;
         this.interrupt = false;
+        this.dropped_for_reflex = false;
         this.prompt = '';
         this.idle_time = 0;
         this.cooldown = 2000;
@@ -62,10 +65,24 @@ export class SelfPrompter {
         this.loop_active = true;
         let no_command_count = 0;
         const MAX_NO_COMMAND = 3;
+        let note = null;
         while (!this.interrupt) {
-            const msg = `You are self-prompting with the goal: '${this.prompt}'. Your next response MUST contain a command with this syntax: !commandName. Respond:`;
-            
+            // Reflexes no longer stop this loop (skills-rotn A4): wait while one runs,
+            // so the next command cannot cut a flee or a fight short.
+            while (!this.interrupt && this.reflexActive()) {
+                await new Promise(r => setTimeout(r, 500));
+            }
+            if (this.interrupt) break;
+            note = takeReplanNote(this.agent) ?? note; // a reflex's re-plan request, if any
+            let msg = `You are self-prompting with the goal: '${this.prompt}'. Your next response MUST contain a command with this syntax: !commandName. Respond:`;
+            if (note) msg = `${note} ${msg}`;
+
+            this.dropped_for_reflex = false;
             let used_command = await this.agent.handleMessage('system', msg, -1);
+            if (!used_command && this.dropped_for_reflex) {
+                continue; // a reflex started meanwhile; not the model's fault, and the note is kept
+            }
+            note = null;
             if (!used_command) {
                 no_command_count++;
                 if (no_command_count >= MAX_NO_COMMAND) {
@@ -132,7 +149,17 @@ export class SelfPrompter {
         this.state = PAUSED;
     }
 
+    // True while a mode's action (a reflex) runs (skills-rotn A4).
+    reflexActive() {
+        return !!this.agent.bot?.modes?.anyActive?.();
+    }
+
     shouldInterrupt(is_self_prompt) { // to be called from handleMessage
+        // A self-prompt reply that arrives while a reflex runs is dropped, not acted on (A4).
+        if (is_self_prompt && this.state === ACTIVE && this.loop_active && this.reflexActive()) {
+            this.dropped_for_reflex = true;
+            return true;
+        }
         return is_self_prompt && (this.state === ACTIVE || this.state === PAUSED) && this.interrupt;
     }
 

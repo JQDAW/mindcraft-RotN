@@ -3,7 +3,6 @@
 // Fake clock, fake agent and fake bot; no server, no LLM.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { runUpdateLoop, createErrorReporter } from './update_loop.js';
 import { initModes } from './modes.js';
 
@@ -109,20 +108,4 @@ test('ModeController.update survives throwing modes and still runs the later one
     assert.equal(lines.filter(l => l.startsWith('[modes] ')).length, first.length);
 });
 
-test('!smeltItem no longer restarts the process; only !restart calls cleanKill', () => {
-    const source = readFileSync(new URL('./commands/actions.js', import.meta.url), 'utf8');
-    const blocks = source.split(/\n\s*\{\s*\r?\n\s*name: /).slice(1);
-    const smelt = blocks.find(b => b.startsWith("'!smeltItem'"));
-    assert.ok(smelt, '!smeltItem found');
-    assert.ok(!smelt.includes('cleanKill'), '!smeltItem calls cleanKill');
-    const killers = blocks.filter(b => b.includes('cleanKill')).map(b => b.split(',')[0]);
-    assert.deepEqual(killers, ["'!restart'"]);
-});
-
-test('agent.js sends no /skin command at login', () => {
-    const source = readFileSync(new URL('./agent.js', import.meta.url), 'utf8');
-    assert.ok(!/bot\.chat\([^)]*\/skin/.test(source));
-    // The update loop goes through runUpdateLoop, not a bare while (true).
-    assert.ok(source.includes('runUpdateLoop('));
-    assert.ok(!/while\s*\(true\)\s*\{\s*\r?\n\s*let start = Date\.now\(\);/.test(source));
-});
+// The !smeltItem and /skin checks are behavioural tests in smelt_and_login.test.js (A4, #109 follow-up).
