@@ -17,25 +17,18 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadRotnData } from '../src/catalog.js';
+import { isOverworldBiome } from '../src/biomes.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, '../3.3.4/common-mobs.json');
 
-const OVERWORLD_NAMESPACES = ['minecraft', 'biomesoplenty', 'defiledlands'];
-const OVERWORLD_EXTRA = ['iceandfire:glacier'];
-const NOT_OVERWORLD = new Set([
-    'minecraft:hell', 'minecraft:sky', 'minecraft:void',
-    // Biomes O' Plenty's Nether biomes
-    'biomesoplenty:corrupted_sands', 'biomesoplenty:fungi_forest', 'biomesoplenty:phantasmagoric_inferno',
-    'biomesoplenty:polar_chasm', 'biomesoplenty:undergarden', 'biomesoplenty:visceral_heap',
-]);
 const TYPES = { monster: 'monster', creature: 'creature' };
 
 export function buildCommonMobs({ limit = 40 } = {}) {
     const pack = loadRotnData('3.3.4');
     if (!pack.hasDump) throw new Error('no 3.3.4 dump imported');
     const biomes = Object.entries(pack.dump.spawns.biomes)
-        .filter(([b]) => !NOT_OVERWORLD.has(b) && (OVERWORLD_NAMESPACES.includes(b.split(':')[0]) || OVERWORLD_EXTRA.includes(b)));
+        .filter(([b]) => isOverworldBiome(b));
     const ranked = {};
     for (const type of Object.keys(TYPES)) {
         const score = new Map();
