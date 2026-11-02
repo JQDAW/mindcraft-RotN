@@ -1,12 +1,13 @@
 // Request 7 (lead exception): initBot installs RotN recipes once per login, after forge-bridge's
 // extendRegistry. Offline: a real prismarine-registry for 1.12.2 extended with the RotN 3.3.4 synced
 // ids (as in mcdata.rotn.test.js), the committed dump, and a static check of initBot's one call.
-import { test } from 'node:test';
+import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { RegistrySnapshot, extendRegistry } from '../../packages/forge-bridge/index.js';
 import * as mc from './mcdata.js';
+import { snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 
 const require = createRequire(import.meta.url);
 const names = require('../../packages/rotn-data/3.3.4/registry-names.json').registries;
@@ -19,6 +20,13 @@ function rotnRegistry() {
     extendRegistry(registry, snap);
     return registry;
 }
+
+// Every prismarine-registry('1.12.2') shares minecraft-data's cached recipe table, and installs
+// change it in place. Put the vanilla table back after each test, so no test depends on the order
+// (#136 review).
+const SHARED_RECIPES = require('minecraft-data')('1.12.2').recipes;
+const VANILLA_RECIPES = snapshotRecipeTable(SHARED_RECIPES);
+afterEach(() => restoreRecipeTable(SHARED_RECIPES, VANILLA_RECIPES));
 
 const names12 = (registry, r) => r.ingredients
     ? r.ingredients.map((x) => registry.items[x.id ?? x]?.name)
