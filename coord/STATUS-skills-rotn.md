@@ -29,7 +29,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A2 `no-cheat` (branch `agent/skills-rotn/no-cheat`, on develop `aa4cead`): PR open, see Open PRs. Next: A3 `loop-and-restarts`, then A4 `quiet-reflexes`.
+- A2 `no-cheat` (branch `agent/skills-rotn/no-cheat`, on develop `aa4cead`): #108 open. Next: A3 `loop-and-restarts`, then A4 `quiet-reflexes`.
 
 ## G3 plan: small PRs, in order
 
@@ -120,4 +120,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- A2 no-cheat (branch `agent/skills-rotn/no-cheat`). Serves brief "Hard-disable cheat mode" and its acceptance test.
+- #108 A2 no-cheat (branch `agent/skills-rotn/no-cheat`). Serves brief "Hard-disable cheat mode" and its acceptance test.
