@@ -370,6 +370,21 @@ describe('the agent\'s naming path (PR #36 re-review item 3)', () => {
         assert.ok(near.weakenedParams.includes('the bot is at -44.5 66 -63 after the teleport, 2.5 blocks from the landing spot -44.5 66 -65.5 (max 2)'),
             JSON.stringify(near.weakenedParams));
         assert.equal(near.gateValid, false);
+        // Just over the limit: 2.004 blocks would round to 2 in the notes, but the check uses the exact
+        // distance (lead, #94 review), and the reported value is the rounded one.
+        const over = await run(blocks, sim({ tpLandsAt: [-44.5, 66, -63.496] }), { seed: 7 });
+        assert.equal(over.notes.cube.landingOffset, 2);
+        assert.ok(over.weakenedParams.includes('the bot is at -44.5 66 -63.496 after the teleport, 2 blocks from the landing spot -44.5 66 -65.5 (max 2)'),
+            JSON.stringify(over.weakenedParams));
+        assert.equal(over.gateValid, false);
+        // Exactly at the limit still counts.
+        const edge = await run(blocks, sim({ tpLandsAt: [-44.5, 66, -63.5] }), { seed: 7 });
+        assert.ok(!edge.weakenedParams.some((w) => /landing spot/.test(w)), JSON.stringify(edge.weakenedParams));
+        // A wider tolerance is itself a weakening (gate param 'equal').
+        const wide = await run(blocks, sim({ tpLandsAt: [-44.5, 66, -63] }), { seed: 7, maxLandingOffset: 3 });
+        assert.ok(wide.weakenedParams.includes('maxLandingOffset=3 (gate needs = 2)'), JSON.stringify(wide.weakenedParams));
+        assert.ok(!wide.weakenedParams.some((w) => /landing spot/.test(w)), '2.5 blocks is within 3');
+        assert.equal(wide.gateValid, false);
         // Lands 17 blocks above (batch 6's canopy was 17 above batch 4's ground): also outside the cube.
         const high = await run(blocks, sim({ tpLandsAt: [-44.5, 83, -65.5] }), { seed: 7 });
         assert.ok(high.weakenedParams.includes('the bot is at -44.5 83 -65.5, not in the cube (centre -45 66 -66, radius 16)'),

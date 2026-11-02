@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (15:53 UTC, from `date -u`)
+Updated: 2026-11-02 (16:11 UTC, from `date -u`)
 
 ## Done
 
@@ -91,7 +91,7 @@ Updated: 2026-11-02 (15:53 UTC, from `date -u`)
 ## Doing
 
 - **G2 batch 7 FAILED** (2026-11-02, develop 1bd66cd, the fixed world and the fixed cube): blocks and mobs PASSED as gate runs, items FAILED. The server kicked the bot 2 s after it joined ("Invalid move player packet received"). The server is deleted. Details are under "Real G2 batches"; the evidence is merged (#93). **I am waiting for the lead and a new written GO;** the kick is net-forge's to diagnose (Requests, item 11).
-- **This PR:** G0 and G1 evidence redacted with the tool, the CI leak check over all of `test/evidence/**` (two exact, tested exemptions for FML's mod table and the ping's mod list), and the #92 review follow-ups: a 2-block landing tolerance (`maxLandingOffset`), `gateValid: false` in killed records, and notes written through.
+- **This PR:** the #94 review nits: the landing offset is compared unrounded (rounded only in notes and messages), a test that `maxLandingOffset` 3 is weakened, comments on the table-cell exemptions in the redaction tool, and a G0 README note that its logs are now redacted. G0/G1 redaction, the leak check over all evidence and the #92 follow-ups are merged (#94).
 - **History:**
   - G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82.
   - Batch 5 PASSED (#83), but its world had no double plants, so the lead fixed the world (#85).
@@ -433,7 +433,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 
 **The world is fixed (lead, after G2 batch 5):** a G2 gate run must use batch 4's world, **seed `1880465901402976865`**.
 
-**The cube is fixed too (lead, after G2 batch 6):** `g2-blocks-named` teleports the bot to batch 4's ground centre **-45 66 -66** (`tp FRCFLD -45 66 -66`, test server only) after login and before the census, checks its real position with `tp FRCFLD ~ ~ ~`, and takes the census of that cube. The `cubeCentre` and `maxLandingOffset` gate parameters are compared 'equal'. A bot more than 2 blocks from the landing spot -44.5 66 -65.5 is notGate (lead, #92 review; this PR). Batch 6's spawn was on a canopy 17 blocks higher, and its cube was 90% air.
+**The cube is fixed too (lead, after G2 batch 6):** `g2-blocks-named` teleports the bot to batch 4's ground centre **-45 66 -66** (`tp FRCFLD -45 66 -66`, test server only) after login and before the census, checks its real position with `tp FRCFLD ~ ~ ~`, and takes the census of that cube. The `cubeCentre` and `maxLandingOffset` gate parameters are compared 'equal'. A bot more than 2 blocks from the landing spot -44.5 66 -65.5 is notGate (lead, #92 review; #94). Batch 6's spawn was on a canopy 17 blocks higher, and its cube was 90% air.
 - That world's spawn cube (centre -45 66 -66 in batch 4) has double plants and Dynamic Trees blocks, the cases batches 1-4 found.
 - The server is created with `--seed 1880465901402976865` (below).
 - The scenarios check it: the recorded seed must equal `G2_WORLD_SEED` (`test/runner/lib/g2.mjs`), otherwise the run is notGate. The spawn point may move by the spawn radius (about 10 blocks), so the cube is the same area, not necessarily the same centre.
@@ -546,7 +546,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 batch 8:** the lead's decision on batch 7's items kick (Requests, item 11; net-forge's area), then a new written GO.
+- **G2 batch 8:** net-forge's #95 (batch 7's items kick, Requests item 11) merged, then a new written GO.
 
 ## Requests to other agents or the lead
 
@@ -571,10 +571,10 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
    - **P2: keep partial results.** On SIGTERM (`timeout`), the runner writes `result.json` with the checks done so far, verdict FAIL and an "interrupted" error, so a kill no longer loses passed checks.
    - **P3 (optional): make the spot check faster or give it more time.** Either one SSH console call per batch of 8 `testforblock` commands (a `deploy/test-server.sh console` change), or `timeout 25m` for blocks with the hard stop adjusted. P1 alone should bring the spot check back to about 1-2 min (batch 4: 43 non-air in 72 positions).
 
-10. ~~Lead (info): G0 evidence predates the redaction rules~~ **Done in this PR:** G0 redacted with the tool, and the check runs over all evidence. The original note: `test/evidence/g0/g0-batch.log` lines 9 and 17 hold the G0 test server's public IPv4 (the "is at" and "READY ... at" forms). That server was deleted on 2026-11-01. The CI leak check covers only `test/evidence/g2/**`, so it never flagged them. Say if you want them redacted with the tool (a small PR of mine). The G1 `server.log`'s other flags are FML's pipe-table mod versions, a form G2 excerpts never contain.
+10. ~~Lead (info): G0 evidence predates the redaction rules~~ **Done** (#94): G0 redacted with the tool, and the check runs over all evidence. The original note: `test/evidence/g0/g0-batch.log` lines 9 and 17 hold the G0 test server's public IPv4 (the "is at" and "READY ... at" forms). That server was deleted on 2026-11-01. The CI leak check covers only `test/evidence/g2/**`, so it never flagged them. Say if you want them redacted with the tool (a small PR of mine). The G1 `server.log`'s other flags are FML's pipe-table mod versions, a form G2 excerpts never contain.
 11. **Lead, routed to net-forge: batch 7's items kick.** 2 s after joining, the bot was kicked with `multiplayer.disconnect.invalid_player_movement` (server: "Invalid move player packet received"; 1.12 sends it for a non-finite or out-of-range position or rotation in a move packet). The raw capture is `captures/raw/batch7-20261102/FRCFLD-2026-11-02T15-31-20-713Z.jsonl` on this PC, and the evidence is in `test/evidence/g2/batch7-20261102/items/`. The capture logs no client position packets; it may need to.
 
 ## Open PRs
 
-- This PR: G0/G1 redaction, the leak check over all evidence and the #92 follow-ups (`agent/harness-ops/evidence-all`).
-- Merged since the last update: #93 (batch 7 evidence).
+- This PR: #94 review nits (`agent/harness-ops/pr94-nits`).
+- Merged since the last update: #94.

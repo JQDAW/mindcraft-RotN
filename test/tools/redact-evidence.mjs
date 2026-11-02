@@ -97,19 +97,25 @@ function isVersionContext(text, index, match) {
     const after = text.slice(index + match.length, index + match.length + 40);
     if (before === '{' && after.startsWith('}')) return true;
     if (before === '-' && /[A-Za-z0-9.]/.test(text[index - 2] ?? '') && /^(?:-[A-Za-z0-9.]+)?\.jar(?![A-Za-z0-9_])/.test(after)) return true;
-    // FML's join list: the comma-separated entry holding the quad must be exactly "modid@version"
-    // (no spaces), with the quad inside the version: "a@1.2.3.4", "a@1.12.2-1.2.3.4", "a@1.2.3.4-mixins8".
     const { line, col } = lineAround(text, index);
-    // The quad lies wholly inside capture group g of an exact line shape.
+    // The quad lies wholly inside capture group g of an exact line shape (m from a regex with the 'd' flag,
+    // so m.indices[g] is the group's [start, end) on the line; a quad that only overlaps the group is not exempt).
     const inGroup = (m, g) => m?.indices[g] && col >= m.indices[g][0] && col + match.length <= m.indices[g][1];
+    // FML's mod state table (G1 evidence): the WHOLE line must be one table row (FML_TABLE_ROW is anchored at
+    // both ends), and only its version cell (group 1) and its .jar file cell (group 2) are exempt. The state,
+    // modid and signature cells, and any text before or after the row, are never exempt.
     const row = FML_TABLE_ROW.exec(line);
     if (inGroup(row, 1) || inGroup(row, 2)) return true;
+    // The status ping's mod list (G0 evidence): the whole line is exactly `"version": "x"` and the line
+    // RIGHT before it is exactly `"modid": "y",` (a blank line between them breaks the pair).
     const ver = PING_VERSION.exec(line);
     if (inGroup(ver, 1)) {
         const start = text.lastIndexOf('\n', index - 1);
         const prev = start > 0 ? lineAround(text, text.lastIndexOf('\n', start - 1) + 1).line : '';
         if (PING_MODID.test(prev)) return true;
     }
+    // FML's join list: the comma-separated entry holding the quad must be exactly "modid@version"
+    // (no spaces), with the quad inside the version: "a@1.2.3.4", "a@1.12.2-1.2.3.4", "a@1.2.3.4-mixins8".
     const fml = FML_JOIN.exec(line);
     if (!fml) return false;
     const listStart = fml.index + fml[0].length;
