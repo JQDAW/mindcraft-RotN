@@ -17,6 +17,8 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { buildStateIdRemap, attachStateIdRemap, stateIdRemapStatus } from '../src/state-remap.js';
 import { RotnData } from '../../rotn-data/index.js';
+import { RegistrySnapshot } from '../src/registries.js';
+import { extendRegistry } from '../src/registry-extension.js';
 
 const require = createRequire(import.meta.url);
 const Registry = require('prismarine-registry');
@@ -227,4 +229,40 @@ test("stateIdRemapStatus: the login line says whether the remap is active and wh
     assert.equal(stateIdRemapStatus(attachStateIdRemap(registry, null)), "state-id remap inactive: rotn-data's dump has no state-meta-remap table; block state ids are used as sent");
     assert.equal(stateIdRemapStatus(attachStateIdRemap(registry, { blocks: { 'a:b': { 1: 2 }, 'c:d': { 1: 2 } } })), "state-id remap inactive: none of the table's 2 blocks is in the synced registry; block state ids are used as sent");
     assert.equal(stateIdRemapStatus(undefined), 'state-id remap inactive: no Forge registry sync; block state ids are used as sent');
+});
+
+test('one rotn-data table, two servers with different synced ids for the same block: each remap uses its own server\'s ids (#82)', () => {
+    // #82: Quark's colored flowerpots are 1203-1218 on the test server but 1263-1278 in the
+    // registry capture. The table is keyed by name, so each connection must build its map
+    // from the ids its own server synced (here the flowerpot entry is illustrative).
+    const FLOWERPOT = 'quark:colored_flowerpot_white';
+    const table = { blocks: { ...STUB.blocks, [FLOWERPOT]: { 9: 1 } } };
+    const serverWith = (flowerpotId) => {
+        const registry = Registry('1.12.2');
+        const snap = new RegistrySnapshot();
+        snap.add({ name: 'minecraft:blocks', ids: [['minecraft:air', 0], ['minecraft:stone', 1], ['minecraft:double_plant', DOUBLE_PLANT], [FLOWERPOT, flowerpotId]], dummied: [], overrides: [], hasMore: false });
+        extendRegistry(registry, snap);
+        assert.equal(registry.blocksByName[FLOWERPOT].id, flowerpotId);
+        return registry;
+    };
+    const testServer = serverWith(1203);
+    const capture = serverWith(1263);
+    const a = attachStateIdRemap(testServer, table);
+    const b = attachStateIdRemap(capture, table);
+    assert.equal(a.size, 4);
+    assert.equal(b.size, 4);
+    const sorted = (m) => [...m].sort((x, y) => x[0] - y[0]);
+    assert.deepEqual(sorted(testServer.stateIdRemap), [[2808, 2810], [2809, 2810], [2811, 2810], [(1203 << 4) | 9, (1203 << 4) | 1]]);
+    assert.deepEqual(sorted(capture.stateIdRemap), [[2808, 2810], [2809, 2810], [2811, 2810], [(1263 << 4) | 9, (1263 << 4) | 1]]);
+    assert.ok(!testServer.stateIdRemap.has((1263 << 4) | 9), "the other server's id is not in this server's map");
+    assert.ok(!capture.stateIdRemap.has((1203 << 4) | 9));
+
+    // Through the patched chunk: each column remaps its own server's id and leaves the other's alone.
+    for (const [registry, own, other] of [[testServer, 1203, 1263], [capture, 1263, 1203]]) {
+        const column = new (require('prismarine-chunk')(registry))();
+        column.setBlockStateId(new Vec3(0, 64, 0), (own << 4) | 9);
+        column.setBlockStateId(new Vec3(1, 64, 0), (other << 4) | 9);
+        assert.equal(column.getBlockStateId(new Vec3(0, 64, 0)), (own << 4) | 1, `server with ${own}`);
+        assert.equal(column.getBlockStateId(new Vec3(1, 64, 0)), (other << 4) | 9, `server with ${own}: id ${other} is some other block here`);
+    }
 });
