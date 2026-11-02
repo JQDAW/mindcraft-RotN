@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T19:57Z (from `date -u`)
+Updated: 2026-11-02T20:34Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -20,6 +20,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#104 merged** (`aa4cead`): model-layer log hygiene under the lead-approved exception (`openrouter.js:40/49`, `prompter.js:124-125/131-132/238/327`). Log hygiene for the CX23 is done (lead, 2026-11-02).
 - **#108 merged** (`e3a2a31`): A2, cheat mode cannot be enabled (`!setMode`, profile, `setOn`/`loadJson`); the `/tp` and `/setblock` branches in `skills.js` cannot run.
 - **#109 merged** (`004cd38`): A3, the update loop and each mode survive a throw (rate-limited `[modes]`/`[update]` lines); no restart after `!smeltItem`; no `/skin` at login.
+- **#110 merged** (`32fb576`): A2b, Mindcraft task files are refused unless `MINDCRAFT_ROTN_ALLOW_TASK_FILES=1`, with a loud warning when they load.
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -31,8 +32,8 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A2b `no-task-files` (branch `agent/skills-rotn/no-task-files`, lead follow-up before the first G3 batch): #110 open. Mindcraft task files are refused unless `MINDCRAFT_ROTN_ALLOW_TASK_FILES=1` (test-only). Review APPROVE WITH NITS; both items fixed (a loud `[tasks] WARNING: TEST-ONLY TASK FILES ARE ENABLED ...` line when a task loads under the opt-in, and a test with the real env var).
-- Next: A4 `quiet-reflexes`, with the lead's follow-ups: (1) the unstuck mode no longer kills the agent after 10 s (`modes.js:127`) but recovers or logs a re-plan; (2) `execute(...)` at `modes.js:125` is awaited, so the per-mode catch covers it; (3) the `!smeltItem` and `/skin` tests become behavioural. Other exit paths (action_manager, mindserver_proxy, agent.js exit 4, `!restart`) are noted for G4.
+- **Fix (found during A4; regression from my #104):** `src/models/_model_map.js` imports every `.js` in `src/models/` at agent startup, so `src/models/openrouter.test.js` ran **inside the bot**, and its `before()` hook replaced `OPENROUTER_API_KEY` with the fake key (reproduced). The fix moves it to `src/agent/openrouter_logging.test.js` (restoring the env), with a guard test. Branch `agent/skills-rotn/move-openrouter-test`, #119 open. **Must merge before any run with an LLM.**
+- A4 `quiet-reflexes` (in progress, local; PR after the fix above), with the lead's follow-ups: (1) the unstuck mode no longer kills the agent after 10 s (`modes.js:127`) but recovers or logs a re-plan; (2) `execute(...)` at `modes.js:125` is awaited, so the per-mode catch covers it; (3) the `!smeltItem` and `/skin` tests become behavioural. Other exit paths (action_manager, mindserver_proxy, agent.js exit 4, `!restart`) are noted for G4.
 
 ## G3 plan: small PRs, in order
 
@@ -121,7 +122,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
    **Still open, for the lead to decide:**
    - The providers the bot does not use (claude, gpt, gemini, ollama, ...) still print `console.log(err)`. Only OpenRouter is used (PLAN).
 6. **Lead and harness-ops (A2b):** Mindcraft task files are now refused unless the env var `MINDCRAFT_ROTN_ALLOW_TASK_FILES` is exactly `1`. No `settings.js` key is needed. Please keep it out of the CX23 env file, and harness-ops: keep it out of the runner's env allowlist for G3 gate runs (a test-only batch may set it, and its evidence should then say so).
+7. **Lead (`src/models/_model_map.js`, lead-owned):** please make the model map skip `*.test.js` (and anything not a provider), so a test file in `src/models/` can never run inside the agent again. My guard test (`src/agent/model_map_no_tests.test.js`) catches it today, but only in CI.
 
 ## Open PRs
 
-- #110 A2b no task files (branch `agent/skills-rotn/no-task-files`). Serves the lead's follow-up on #108 (before the first G3 batch).
+- #119 Fix: openrouter test out of `src/models/` (branch `agent/skills-rotn/move-openrouter-test`). Serves log hygiene (#104) and the "Before the first CX23 run" line.

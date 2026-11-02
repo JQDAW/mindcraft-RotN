@@ -2,17 +2,27 @@
 // before the first CX23 run): the OpenRouter provider never logs a whole error
 // object or response body. The OpenAI client is a stub; no network, and the
 // key is a made-up placeholder.
-import { test, before } from 'node:test';
+//
+// This file must NOT live in src/models/: src/models/_model_map.js imports
+// every .js file there at agent startup, so a test file there ran inside the
+// bot and its before() hook replaced OPENROUTER_API_KEY with the fake key.
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import process from 'node:process';
 
 const FAKE_KEY = 'sk-or-v1-0123456789abcdefABCDEF0123456789abcdef';
+const KEY_BEFORE = process.env.OPENROUTER_API_KEY;
 let OpenRouter;
 
 before(async () => {
     // Set before the constructor's getKey() runs; no real key is ever used.
     process.env.OPENROUTER_API_KEY = FAKE_KEY;
-    ({ OpenRouter } = await import('./openrouter.js'));
+    ({ OpenRouter } = await import('../models/openrouter.js'));
+});
+
+after(() => {
+    if (KEY_BEFORE === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = KEY_BEFORE;
 });
 
 function modelWith(create) {

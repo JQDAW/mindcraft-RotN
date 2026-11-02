@@ -21,7 +21,9 @@ test('threat-reactions.json: well formed, cited, and every entity exists on the 
         assert.ok(pack.names.entities.has(name), `${name} is not synced`);
         assert.ok(pack.dump.entities.entities[name], `${name} is not in the dump`);
         assert.ok(REACTIONS.includes(r.reaction), `${name}: reaction ${r.reaction}`);
-        assert.ok(['documented', 'vanilla'].includes(r.confidence), `${name}: confidence`);
+        assert.ok(['documented', 'vanilla', 'verified', 'inferred'].includes(r.confidence), `${name}: confidence`);
+        if (r.confidence === 'verified') assert.ok(r.evidence.some((e) => /\.jar[ :(]/.test(e)), `${name}: verified cites a jar`);
+        if (r.confidence === 'inferred') assert.ok(r.evidence.some((e) => /not checked/.test(e)), `${name}: inferred says what was not checked`);
         assert.ok(r.summary && r.evidence?.length > 0, `${name}: summary and evidence`);
         if (r.confidence === 'documented') assert.ok(r.evidence.every((e) => e.includes('rotn-progression.md')), `${name}: documented means cited from the research`);
     }
@@ -94,6 +96,58 @@ test('#111 review: what threatOf and nightThreats do not reflect is stated', () 
     assert.ok(!pack.nightThreats({ limit: 1000 }).some((t) => t.name.startsWith('specialmobs:')));
     // The custom-name gap: a rabbit named "Killer" targets players, but threatOf takes no name.
     assert.equal(pack.threatOf('animania:buck_chinchilla').level, 'none');
+});
+
+test('#111 follow-up: overworld mobs that defaulted to fight', () => {
+    const want = {
+        'minecraft:stray': ['take-cover', true, 'inferred'],
+        'minecraft:witch': ['take-cover', true, 'vanilla'],
+        'minecraft:illusion_illager': ['take-cover', true, 'vanilla'],
+        'iceandfire:dread_lich': ['take-cover', true, 'verified'],
+        'iceandfire:if_troll': ['avoid', false, 'verified'],
+    };
+    for (const [n, [reaction, ranged, source]] of Object.entries(want)) {
+        const t = pack.threatOf(n);
+        assert.deepEqual([t.level, t.reaction, t.ranged, t.source], ['hostile', reaction, ranged, source], n);
+    }
+    assert.equal(pack.threatOf('minecraft:stray').rule, 'skeleton-variants');
+    // All five are overworld night threats, and none of them reads 'fight' there any more.
+    const night = new Map(pack.nightThreats({ limit: 1000 }).map((t) => [t.name, t]));
+    for (const n of Object.keys(want)) {
+        assert.ok(night.has(n), `${n} spawns in the overworld at night`);
+        assert.notEqual(night.get(n).reaction, 'fight', n);
+    }
+});
+
+test('cited follow-up: the mobs the lead listed, read from the mods bytecode (or vanilla)', () => {
+    const want = {
+        'quark:ashen': ['take-cover', true, 'verified'],
+        'quark:dweller': ['fight', false, 'verified'],
+        'minecraft:guardian': ['take-cover', true, 'vanilla'],
+        'minecraft:vindication_illager': ['avoid', false, 'vanilla'],
+        'iceologer:iceologer': ['take-cover', true, 'verified'],
+        'mowziesmobs:naga': ['take-cover', true, 'verified'],
+        'rats:illager_piper': ['fight', false, 'verified'],
+        'ancientbeasts:bonepile': ['take-cover', true, 'verified'],
+        'ancientbeasts:boulderer': ['fight', false, 'verified'],
+        'ancientbeasts:damcell': ['take-cover', true, 'verified'],
+        'ancientbeasts:rifted_enderman': ['ignore-unless-provoked', false, 'verified'],
+        'ancientbeasts:frost_walker': ['take-cover', true, 'verified'],
+        'ancientbeasts:ghost': ['fight', false, 'verified'],
+        'ancientbeasts:giant_zombie': ['avoid', false, 'verified'],
+        'ancientbeasts:nekros': ['fight', false, 'verified'],
+        'ancientbeasts:zealot': ['fight', false, 'verified'],
+        'ancientbeasts:sandy': ['avoid', false, 'verified'],
+    };
+    for (const [n, [reaction, ranged, source]] of Object.entries(want)) {
+        const t = pack.threatOf(n);
+        assert.deepEqual([t.reaction, t.ranged, t.source], [reaction, ranged, source], n);
+        assert.ok(t.summary && t.evidence.length > 0, `${n}: summary and evidence`);
+    }
+    // The troll's numbers are the pack's config, not Ice and Fire's defaults.
+    assert.match(pack.threatOf('iceandfire:if_troll').evidence.join(' '), /ice_and_fire\.cfg.*Troll Attack Strength"=18\.0.*Troll Max Health"=200\.0/);
+    // No inferred entry is left (the lead's review remark is not evidence).
+    assert.deepEqual(Object.entries(reactions.entities).filter(([, r]) => r.confidence === 'inferred').map(([n]) => n), []);
 });
 
 test('nightThreats: one biome, from its monster spawn list, hostile only, most likely first', () => {
