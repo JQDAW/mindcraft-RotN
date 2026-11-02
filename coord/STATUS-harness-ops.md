@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (16:11 UTC, from `date -u`)
+Updated: 2026-11-02 (16:46 UTC, from `date -u`)
 
 ## Done
 
@@ -90,12 +90,13 @@ Updated: 2026-11-02 (16:11 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 7 FAILED** (2026-11-02, develop 1bd66cd, the fixed world and the fixed cube): blocks and mobs PASSED as gate runs, items FAILED. The server kicked the bot 2 s after it joined ("Invalid move player packet received"). The server is deleted. Details are under "Real G2 batches"; the evidence is merged (#93). **I am waiting for the lead and a new written GO;** the kick is net-forge's to diagnose (Requests, item 11).
-- **This PR:** the #94 review nits: the landing offset is compared unrounded (rounded only in notes and messages), a test that `maxLandingOffset` 3 is weakened, comments on the table-cell exemptions in the redaction tool, and a G0 README note that its logs are now redacted. G0/G1 redaction, the leak check over all evidence and the #92 follow-ups are merged (#94).
+- **G2 batch 8 PASSED** (2026-11-02, develop 0bdb537): blocks, mobs and items all PASSED as gate runs in one batch, on the fixed world and the fixed cube. Batch 4's double-plant upper halves and Dynamic Trees blocks were in the census and server-confirmed. Net-forge's movement guard (#95) never had to act. The server is deleted. The evidence is in this PR. **The lead decides whether G2 is met.**
 - **History:**
   - G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82.
   - Batch 5 PASSED (#83), but its world had no double plants, so the lead fixed the world (#85).
-  - Batch 6 FAILED: its spawn on a canopy made the cube 90% air (#88). The lead then fixed the cube (#92: P1, P2, the redaction rule).
+  - Batch 6 FAILED: its spawn on a canopy made the cube 90% air (#88). The lead then fixed the cube (#92).
+  - Batch 7 FAILED: items was kicked for an invalid move packet (#93); net-forge's movement guard followed (#95).
+  - The redaction and runner follow-ups are in #94 and #96.
 - **Follow-up (lead, not blocking):** in `g2-mobs-named`, require a run-tagged entity within 1 block of a matched mob report.
 
 ## Watching
@@ -103,6 +104,44 @@ Updated: 2026-11-02 (16:11 UTC, from `date -u`)
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
 ## Real G2 batches
+
+### G2 batch 8 (2026-11-02): PASS (blocks, mobs and items all PASS, gate-valid, one batch, one SHA); the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 2026-11-02 16:24 UTC (relayed by the human).
+- **Code:** a clean detached checkout of develop at 0bdb537 (#84, #85, #92, #94, #95, #96), after `npm ci`. Every `result.json` has `git.dirty: false` and `untracked: 0`.
+- **Checks right before the create (16:25 UTC), all passed:**
+  - `agentNaming('.')`: wired, 643/643.
+  - `msa-login FRCFLD --check`: exit 0, output discarded.
+  - The preflight on its own: cadence path; no servers or Primary IPs.
+- **Command:** the planned one, unchanged.
+- **Console:** `gamerule doDaylightCycle false` once and `time set day` before each scenario. Then the runner's commands, including `tp <bot> -45 66 -66`.
+
+**Real times (UTC):**
+- start 16:26:11, created 16:26:28, ready 16:29:18;
+- blocks 16:29:26-16:40:05, mobs 16:40:08-16:42:52, items 16:42:55-16:44:44;
+- teardown "verified gone" at 16:45:06.
+
+Up 18 min, 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour. At 16:45:19 the server and primary-ip lists were empty; the only SSH key was the human's unlabelled one.
+
+**Results.** All three runs: `pass: true`, `gateValid: true`, `weakenedParams: []`, no notGate reasons, no kicks. Also in all three:
+- seed `1880465901402976865`;
+- `loginRetry` `{retried: false}`;
+- `botStoppedByRunner: true` (128, SIGTERM);
+- remap line `applied 506 state ids in 132 of the table's 132 blocks; conflicts 0 skipped`;
+- no movement-guard line, and no `movement_trace` in any capture.
+
+| Scenario | Verdict | Details |
+| --- | --- | --- |
+| `g2-blocks-named` | **PASS** | Cube centre -45 66 -66: teleport confirmed, checked position -44.5 66 -65.5, landing offset 0 (first spawn -51.5 65 -63.5). 50 types. `blocks_confirmed` 150/150, `metaDrift` 0 of 150, `worldChanges` none. Spot check 40 of 40 non-air in 72 positions, 0 unloaded, no skew. |
+| `g2-mobs-named` | **PASS** | 12/12 named and confirmed by run tag, 7 modded. Replaced 1 of 12 (`charm:spectre` vanished). |
+| `g2-items-roundtrip` | **PASS** | 643/643 table; 30/30 read, named and round-tripped. Joined at the batch 7 kick spot and stayed connected. |
+
+- **Double plants and Dynamic Trees (blocks):**
+  - census: `minecraft:double_plant 10` (upper halves) 23 blocks, `double_plant 3` 23 blocks, and 31 Dynamic Trees types;
+  - samples: 3 upper-half and 3 meta-3 double plants, plus 93 Dynamic Trees samples, **all server-confirmed**.
+
+**Evidence:** `test/evidence/g2/batch8-20261102/` (this PR). Every file came out of the merged tool; no hand edits. The CI leak check passes. Raw files, including all three captures: `captures/raw/batch8-20261102/`.
 
 ### G2 batch 7 (2026-11-02): FAIL (blocks PASS, mobs PASS, items FAIL: kicked for an invalid move packet); the server is deleted
 
@@ -461,7 +500,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
     - and a **new** written GO from the lead.
 13. **For batch 6 (lead, after batch 5):** net-forge's fix for the 124 remap entries skipped as "cycle" merged; the world-seed check (#85) merged; and a new written GO.
 14. **For batch 7 (lead, after batch 6):** #92 merged (the fixed cube, killed-run records, the redaction rule), and a new written GO.
-15. **For batch 8 (after batch 7):** the lead's decision on the items kick (Requests, item 11), and a new written GO.
+15. **For batch 8 (after batch 7):** net-forge's movement guard (#95) merged, and a new written GO (both done; batch 8 PASSED).
 
 **Driver (agreed: net-forge's #54).**
 - **The driver:** net-forge's `packages/forge-bridge/tools/g1-driver.mjs`. It already builds the bot with the real `initBot` (`src/utils/mcdata.js`) with forge-bridge attached, and speaks the G1 protocol through `attachScenario`. The G2 extension is about three lines in **their** file:
@@ -546,7 +585,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 batch 8:** net-forge's #95 (batch 7's items kick, Requests item 11) merged, then a new written GO.
+- Nothing. G2 waits for the lead's decision on batch 8.
 
 ## Requests to other agents or the lead
 
@@ -572,9 +611,9 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
    - **P3 (optional): make the spot check faster or give it more time.** Either one SSH console call per batch of 8 `testforblock` commands (a `deploy/test-server.sh console` change), or `timeout 25m` for blocks with the hard stop adjusted. P1 alone should bring the spot check back to about 1-2 min (batch 4: 43 non-air in 72 positions).
 
 10. ~~Lead (info): G0 evidence predates the redaction rules~~ **Done** (#94): G0 redacted with the tool, and the check runs over all evidence. The original note: `test/evidence/g0/g0-batch.log` lines 9 and 17 hold the G0 test server's public IPv4 (the "is at" and "READY ... at" forms). That server was deleted on 2026-11-01. The CI leak check covers only `test/evidence/g2/**`, so it never flagged them. Say if you want them redacted with the tool (a small PR of mine). The G1 `server.log`'s other flags are FML's pipe-table mod versions, a form G2 excerpts never contain.
-11. **Lead, routed to net-forge: batch 7's items kick.** 2 s after joining, the bot was kicked with `multiplayer.disconnect.invalid_player_movement` (server: "Invalid move player packet received"; 1.12 sends it for a non-finite or out-of-range position or rotation in a move packet). The raw capture is `captures/raw/batch7-20261102/FRCFLD-2026-11-02T15-31-20-713Z.jsonl` on this PC, and the evidence is in `test/evidence/g2/batch7-20261102/items/`. The capture logs no client position packets; it may need to.
+11. ~~Lead, routed to net-forge: batch 7's items kick~~ **Done:** net-forge's movement guard (#95). In batch 8 items joined at the same spot, passed, and the guard never had to act. The original request: 2 s after joining, the bot was kicked with `multiplayer.disconnect.invalid_player_movement` (server: "Invalid move player packet received"; 1.12 sends it for a non-finite or out-of-range position or rotation in a move packet). The raw capture is `captures/raw/batch7-20261102/FRCFLD-2026-11-02T15-31-20-713Z.jsonl` on this PC, and the evidence is in `test/evidence/g2/batch7-20261102/items/`. The capture logs no client position packets; it may need to.
 
 ## Open PRs
 
-- This PR: #94 review nits (`agent/harness-ops/pr94-nits`).
-- Merged since the last update: #94.
+- This PR: G2 batch 8 evidence (PASS) and this record (`agent/harness-ops/g2-batch8-evidence`).
+- Merged since the last update: #95 (net-forge's movement guard), #96 (#94 nits).
