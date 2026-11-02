@@ -95,9 +95,11 @@ export class ActionManager {
             // clear bot logs and reset interrupt code
             this.agent.clearBotLogs();
 
-            // A new player or LLM action is a fresh decision: a pending reflex re-plan
-            // request is stale and must not cause an extra LLM call later (A4b).
-            if (!String(actionLabel).startsWith('mode:'))
+            // A new player or LLM command ("action:...") is a fresh decision: a pending
+            // reflex re-plan request is stale and must not cause an extra LLM call later
+            // (A4b). Reflexes ("mode:") and the NPC subsystem ("npc:", "itemGoal:",
+            // "BuildGoal") keep it (A4c, #126 review).
+            if (String(actionLabel).startsWith('action:'))
                 clearReplan(this.agent, `a new action started (${actionLabel})`);
 
             this.executing = true;

@@ -153,7 +153,26 @@ export function convertRecipe(registry, r, { maxVariants = DEFAULT_MAX_VARIANTS 
 }
 
 /**
+ * The table's own properties (values or lazy getters), to put back with restoreRecipeTable.
+ * @param {object} table registry.recipes
+ */
+export function snapshotRecipeTable(table) {
+    return table && typeof table === 'object' ? Object.getOwnPropertyNames(table).map((k) => [k, Object.getOwnPropertyDescriptor(table, k)]) : [];
+}
+
+/** Put a snapshotRecipeTable result back into the same object (in place, see the file comment). */
+export function restoreRecipeTable(table, snapshot) {
+    for (const k of Object.getOwnPropertyNames(table)) delete table[k];
+    for (const [k, d] of snapshot) Object.defineProperty(table, k, d);
+}
+
+/**
  * Replace registry.recipes' contents (in place) with the dump's recipes, built lazily per result id.
+ *
+ * Atomic (#130 review): the per-result index is built before the table is touched, and if clearing
+ * or refilling it throws, the table's previous contents (vanilla) are put back before the error is
+ * rethrown. Fail-soft lazy build: a recipe whose conversion throws is skipped and counted
+ * (stats().errors, firstError), so reading registry.recipes[id] (bot.recipesFor) never throws.
  * @param {object} registry bot.registry (prismarine-registry, extended by forge-bridge)
  * @param {object[]} dumpRecipes the dump's recipes.json `recipes` list
  * @param {{maxVariants?: number}} [opts]
@@ -161,45 +180,71 @@ export function convertRecipe(registry, r, { maxVariants = DEFAULT_MAX_VARIANTS 
  */
 export function installRecipes(registry, dumpRecipes, { maxVariants = DEFAULT_MAX_VARIANTS } = {}) {
     if (!registry || typeof registry !== 'object') throw new TypeError('installRecipes: a registry is required');
-    if (!registry.recipes || typeof registry.recipes !== 'object') registry.recipes = {};
-    const target = registry.recipes;
-    for (const k of Object.keys(target)) delete target[k];
+    // 1. Index by result id first; nothing in the registry is changed yet.
     const byResult = new Map();
     let resultNotInRegistry = 0;
     for (const r of dumpRecipes ?? []) {
-        const id = itemId(registry, r.result?.name ?? '');
+        const id = itemId(registry, r?.result?.name ?? '');
         if (id === null) { resultNotInRegistry++; continue; }
         if (!byResult.has(id)) byResult.set(id, []);
         byResult.get(id).push(r);
     }
-    const built = { results: 0, variants: 0, skipped: {}, truncated: 0 };
-    for (const [id, list] of byResult) {
-        Object.defineProperty(target, id, {
-            enumerable: true,
-            configurable: true,
-            get() {
-                const variants = [];
-                // Likeliest first; on a tie metadata 0 (oak planks, not acacia), then the dump's order.
-                const ordered = list.map((r, i) => ({ r, i, s: recipeScore(r), m: r.result?.meta ? 1 : 0 }))
-                    .sort((a, b) => a.s - b.s || a.m - b.m || a.i - b.i).map((x) => x.r);
-                for (const r of ordered) {
-                    const c = convertRecipe(registry, r, { maxVariants });
-                    if (c.skipped) built.skipped[c.skipped] = (built.skipped[c.skipped] ?? 0) + 1;
-                    if (c.truncated) built.truncated++;
-                    variants.push(...c.variants);
-                }
-                built.results++;
-                built.variants += variants.length;
-                Object.defineProperty(target, id, { value: variants, enumerable: true, configurable: true, writable: true });
-                return variants;
-            },
-        });
+    if (!registry.recipes || typeof registry.recipes !== 'object') registry.recipes = {};
+    const target = registry.recipes;
+    const built = { results: 0, variants: 0, skipped: {}, truncated: 0, errors: 0, firstError: null };
+    const failed = (e, what) => {
+        built.errors++;
+        if (!built.firstError) built.firstError = `${what}: ${e?.message ?? e}`;
+    };
+    const buildFor = (id, list) => {
+        const variants = [];
+        // Likeliest first; on a tie metadata 0 (oak planks, not acacia), then the dump's order. A recipe
+        // whose score cannot be computed sorts last; its conversion below records the error once.
+        const score = (r) => { try { return recipeScore(r); } catch { return Infinity; } };
+        const ordered = list.map((r, i) => ({ r, i, s: score(r), m: r?.result?.meta ? 1 : 0 }))
+            .sort((a, b) => a.s - b.s || a.m - b.m || a.i - b.i).map((x) => x.r);
+        for (const r of ordered) {
+            try {
+                const c = convertRecipe(registry, r, { maxVariants });
+                if (c.skipped) built.skipped[c.skipped] = (built.skipped[c.skipped] ?? 0) + 1;
+                if (c.truncated) built.truncated++;
+                variants.push(...c.variants);
+            } catch (e) {
+                failed(e, `recipe ${r?.id ?? '?'}`);
+            }
+        }
+        return variants;
+    };
+    // 2. Swap the contents; on any error put the previous contents back.
+    const snapshot = snapshotRecipeTable(target);
+    try {
+        for (const k of Object.keys(target)) delete target[k];
+        for (const [id, list] of byResult) {
+            Object.defineProperty(target, id, {
+                enumerable: true,
+                configurable: true,
+                get() {
+                    const variants = buildFor(id, list);
+                    built.results++;
+                    built.variants += variants.length;
+                    try {
+                        Object.defineProperty(target, id, { value: variants, enumerable: true, configurable: true, writable: true });
+                    } catch (e) {
+                        failed(e, `caching item id ${id}`);
+                    }
+                    return variants;
+                },
+            });
+        }
+    } catch (e) {
+        restoreRecipeTable(target, snapshot);
+        throw e;
     }
     return {
         results: byResult.size,
         recipes: [...byResult.values()].reduce((a, l) => a + l.length, 0),
         resultNotInRegistry,
-        /** What lazy building has done so far. */
+        /** What lazy building has done so far (errors: recipes skipped because their conversion threw). */
         stats: () => ({ ...built, skipped: { ...built.skipped } }),
     };
 }
