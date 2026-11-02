@@ -9,7 +9,7 @@ import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
 import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
-import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock } from '../../packages/rotn-data/index.js';
+import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -455,9 +455,9 @@ export function getAllBiomes() {
  * forge-bridge's extendRegistry (it needs the server's modded item ids). Returns rotn-data's report.
  * @param {object} [registry] defaults to the registry the helpers read (bot.registry after login)
  */
-export function installRotnRecipes(registry = reg()) {
+export function installRotnRecipes(registry = reg(), { recipes } = {}) {
     cycleCache.clear();
-    return rdInstallRecipes(registry);
+    return rdInstallRecipes(registry, { recipes });
 }
 
 const ROTN_RECIPES_INSTALLED = Symbol.for('mindcraft-rotn.rotnRecipesInstalled');
@@ -466,29 +466,48 @@ const ROTN_RECIPES_INSTALLED = Symbol.for('mindcraft-rotn.rotnRecipesInstalled')
  * What initBot calls once per login, after forge-bridge's extendRegistry (lead exception, Request 7).
  * Idempotent per registry (one login, one bot.registry): a second call returns the first report and
  * installs nothing. Never throws: if the dump has no recipe data, or anything fails, it logs and
- * leaves the registry's recipes as they are (vanilla), so login goes on.
+ * leaves the registry's recipes as they were (vanilla): the table is snapshotted before the install
+ * and put back if it throws (#130 review), and rotn-data's lazy recipe build skips a recipe that
+ * fails to convert, so bot.recipesFor does not throw either.
+ * The recipes come from `load()` (the injected catalog; default the pinned 3.3.4 pack), so a test that
+ * injects a catalog installs that catalog's recipes, not the real dump (#130 review).
+ * Repeat calls are detected per registry, not per recipe table (#130 review): registry.recipes is
+ * minecraft-data's cached 1.12.2 object, shared by every registry in the process. With one bot per
+ * process that is harmless; a second registry re-fills the same table with the same recipes.
  * @param {object} [registry] bot.registry
- * @param {{log?: (msg: string) => void, load?: () => object}} [opts] load: the rotn-data catalog (test seam)
+ * @param {{log?: (msg: string) => void, load?: () => object}} [opts] log: messages without a prefix
+ *        (the default adds "[rotn-data] "); load: the rotn-data catalog (test seam)
  * @returns {object|null} rotn-data's install report, or null if nothing was installed
  */
-export function installRotnRecipesOnce(registry = reg(), { log = console.log, load = () => loadRotnData(PACK_VERSION) } = {}) {
+export function installRotnRecipesOnce(registry = reg(), { log = (m) => console.log(`[rotn-data] ${m}`), load = () => loadRotnData(PACK_VERSION) } = {}) {
     if (!registry || typeof registry !== 'object') {
-        log('[rotn-data] no registry: RotN recipes not installed');
+        log('no registry: RotN recipes not installed');
         return null;
     }
     if (registry[ROTN_RECIPES_INSTALLED]) return registry[ROTN_RECIPES_INSTALLED];
+    let snapshot = null;
     try {
-        const count = load()?.dump?.recipes?.recipes?.length ?? 0;
-        if (!count) {
-            log('[rotn-data] the dump has no recipe data: bot.registry keeps its vanilla recipes');
+        const recipes = load()?.dump?.recipes?.recipes;
+        if (!Array.isArray(recipes) || recipes.length === 0) {
+            log('the dump has no recipe data: bot.registry keeps its vanilla recipes');
             return null;
         }
-        const report = installRotnRecipes(registry);
+        snapshot = registry.recipes && typeof registry.recipes === 'object' ? snapshotRecipeTable(registry.recipes) : null;
+        const report = installRotnRecipes(registry, { recipes });
         Object.defineProperty(registry, ROTN_RECIPES_INSTALLED, { value: report, enumerable: false, configurable: true });
-        log(`[rotn-data] RotN recipes installed: ${report.recipes} recipes for ${report.results} items`);
+        log(`RotN recipes installed: ${report.recipes} recipes for ${report.results} items`);
         return report;
     } catch (e) {
-        log(`[rotn-data] RotN recipes not installed: ${e.message}`);
+        let restored = '';
+        if (snapshot) {
+            try {
+                restoreRecipeTable(registry.recipes, snapshot);
+                restored = '; the previous recipes were restored';
+            } catch (e2) {
+                restored = `; restoring the previous recipes also failed: ${e2.message}`;
+            }
+        }
+        log(`RotN recipes not installed: ${e.message}${restored}`);
         return null;
     }
 }

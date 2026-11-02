@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T22:34Z (from `date -u`)
+Updated: 2026-11-02T23:15Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -18,6 +18,8 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
 - **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
 - **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
+- **#136 merged** (`fedab3d`): atomic recipe install with restore, fail-soft lazy build, injected catalog used.
+- **#130 merged** (`8557060`): `initBot` installs RotN recipes once per login (lead exception, Request 7), with the #127 nits.
 - **#127 merged** (`f457642`): `mustCollectManually` on RotN names (no collision box: dug in place).
 - **#125 merged** (`0a94411`): `isHuntable` reads the 1.12 baby flag (metadata index 12, cited); `isBaby` exported.
 - **#111, #114, #115, #118, #120 merged**: first-night threats and their cited follow-ups (`threatOf`, `nightThreats`, `threat-reactions.json` with `verified` entries from the mods' bytecode; #120 is `f74db6b`).
@@ -187,7 +189,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- **Request 7 PR (`agent/rotn-data/initbot-recipes`, after #127):** the lead's one-line exception in net-forge's `initBot`: `installRotnRecipesOnce(bot.registry)` right after `mcdata = bot.registry`. The helper (rotn-data's part of `mcdata.js`) installs once per registry, and never throws: if the dump has no recipe data, or on any error, it logs and keeps the vanilla recipes. The #127 review nits ride with it: `hasNoCollisionBox` documents that it reads the default state only (55 blocks vary by state; none on the G3 path), gases (`adpother:*`), portals, fire, structure void and negative-space materials are no longer dug in place (rails still are), and the carpet box is asserted from the dump.
+- **#136 review nit (`agent/rotn-data/initbot-test-aftereach`):** `mcdata.initbot-recipes.test.js` snapshots minecraft-data's shared 1.12.2 recipe table and restores it after each test, so test order does not matter.
 - **After that: free** (lead, 2026-11-02). Lead decisions recorded:
   - Request 7: granted (above).
   - Request 9 (prismarine-recipe `outShape` patch): not now; revisit after G3.
@@ -247,4 +249,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/initbot-recipes`: Request 7, RotN recipes installed once per login in `initBot` (develop merged in after #127).
+- `agent/rotn-data/initbot-test-aftereach`: #136 review nit (see Doing).
