@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (03:19 UTC, from `date -u`)
+Updated: 2026-11-02 (03:31 UTC, from `date -u`)
 
 ## Done
 
@@ -90,8 +90,11 @@ Updated: 2026-11-02 (03:19 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 5 ran on the lead's GO (2026-11-02 02:59 UTC) and PASSED: all three scenarios are gate-valid PASS in one batch on 01a8193.** The server is deleted. Details are under "Real G2 batches". The lead decides whether G2 is met.
-  - **Caveat:** this world's cube (sand, stone and water, 20 types) had no double plants, so the batch 4 double-plant case was not exercised in game. The remap is active and its double-plant entries were not skipped.
+- **G2 batch 5 PASSED** (all three scenarios gate-valid in one batch on 01a8193), and it is merged as honest evidence (#83). **The lead is not declaring G2 on it**: that world's cube had no double plants or Dynamic Trees blocks, so batch 4's defect was never exercised.
+- **The lead's follow-ups, this PR:**
+  - the plan fixes the G2 world to batch 4's (seed `1880465901402976865`, `deploy/test-server.sh run --seed`);
+  - the scenarios now check the recorded seed against it (notGate if different);
+  - `botExitCode` 128 is explained and recorded: the runner's SIGTERM at the end of a session gives `botStoppedByRunner: true` and `botExitSignal: SIGTERM`.
 - G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82 (all merged).
 - **Follow-up (lead, not blocking):** in `g2-mobs-named`, require a run-tagged entity within 1 block of a matched mob report.
 
@@ -353,9 +356,14 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 
 ## Planned real batches
 
-### G2 batch (batch 1 ran on 2026-11-01 and FAILED; this is the re-run plan, updated after the lead's decisions on #65. It needs a new written GO.)
+### G2 batch (the plan for every G2 gate batch; batches 1-5 ran on 2026-11-01/02. Each batch needs the lead's written GO.)
 
 **Goal:** G2 gate evidence. All three G2 scenarios at the gate parameters (no `--param` overrides, so the default `dataRoot`), with the agent's own naming, on one disposable test server.
+
+**The world is fixed (lead, after G2 batch 5):** a G2 gate run must use batch 4's world, **seed `1880465901402976865`**.
+- That world's spawn cube (centre -45 66 -66 in batch 4) has double plants and Dynamic Trees blocks, the cases batches 1-4 found.
+- The server is created with `--seed 1880465901402976865` (below).
+- The scenarios check it: the recorded seed must equal `G2_WORLD_SEED` (`test/runner/lib/g2.mjs`), otherwise the run is notGate. The spawn point may move by the spawn radius (about 10 blocks), so the cube is the same area, not necessarily the same centre.
 
 **Preconditions, all checked right before the run:**
 1. The lead's written GO in `coord/STATUS-rotn-lead.md`.
@@ -378,6 +386,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
     - #67 merged: findings 2-5 (re-asked block samples, mob replacements capped at 3, tagged confirms, placeholder names fail);
     - #66 merged: the batch 1 evidence plus the redaction tool and CI leak check;
     - and a **new** written GO from the lead.
+13. **For batch 6 (lead, after batch 5):** net-forge's fix for the 124 remap entries skipped as "cycle" merged; this PR (the world-seed check) merged; and a new written GO.
 
 **Driver (agreed: net-forge's #54).**
 - **The driver:** net-forge's `packages/forge-bridge/tools/g1-driver.mjs`. It already builds the bot with the real `initBot` (`src/utils/mcdata.js`) with forge-bridge attached, and speaks the G1 protocol through `attachScenario`. The G2 extension is about three lines in **their** file:
@@ -392,7 +401,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 - **Not proposed:** the stock `mineflayer-reference.mjs`. It has no forge-bridge, so it can't join a Forge 1.12.2 server with RotN's mod list.
 
 **Where things run.**
-- **Server:** `deploy/test-server.sh run`, unchanged. CPX42 in nbg1, `--ttl-hours 2`, EUR 0.138/h. The `run` EXIT trap deletes the server, with the watchdog and the sweeper as backup.
+- **Server:** `deploy/test-server.sh run`, unchanged, with `--seed 1880465901402976865`. CPX42 in nbg1, `--ttl-hours 2`, EUR 0.138/h. The `run` EXIT trap deletes the server, with the watchdog and the sweeper as backup.
 - **The bot runs on this PC.** The runner gives the driver only its allowlisted environment: `TEST_SERVER_HOST`/`PORT`, `MINDCRAFT_PROFILES_FOLDER` and the `ROTN_*` variables. It never gets `TEST_SERVER_CTL` or cloud credentials.
 - **Login cache:** `MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa` exists only in this PC's environment, as for G1.
 - **Whitelist:** FRCFLD and JQDAW (the default).
@@ -404,7 +413,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 **Command** (one server, three scenarios in sequence, each with its own bot session):
 
 ```bash
-deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c '
+deploy/test-server.sh run --yes --ttl-hours 2 --seed 1880465901402976865 -- bash -c '
   C() { bash "$TEST_SERVER_CTL" console --wait 2 -- "$@"; };
   C gamerule doDaylightCycle false;
   D="node packages/forge-bridge/tools/g1-driver.mjs";
@@ -462,7 +471,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- Nothing. G2 batch 5 passed; the lead decides whether G2 is met.
+- **G2 batch 6:** net-forge's fix for the 124 remap entries skipped as "cycle", this PR (the world-seed check), then a new written GO. It runs in batch 4's world (`--seed 1880465901402976865`).
 
 ## Requests to other agents or the lead
 
@@ -485,5 +494,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: G2 batch 5 evidence and this status update (`agent/harness-ops/g2-batch5-evidence`).
-- Merged since the last update: #78, #79.
+- This PR: the G2 world-seed check, the `botExitCode` 128 explanation and the plan update (`agent/harness-ops/g2-world-seed`).
+- Merged since the last update: #83.

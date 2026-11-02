@@ -139,14 +139,23 @@ So a state that `getStateFromMeta` returns for several metas ends up with the hi
 **What the bot does.** It reports the meta a real Forge client would see:
 - **The table.** rotn-data's dumper (0.2.0, `state-meta-remap.json`) records the metas where the two differ. Its catalog's `stateMetaRemap().byBlock` is keyed by registry name and maps network meta → client meta: `{ "minecraft:double_plant": { "8": 10, "9": 10, "11": 10 } }`.
 - **The map.** After `extendRegistry`, `initBot` calls `attachStateIdRemap(bot.registry, { blocks: loadRotnData(PACK_VERSION).stateMetaRemap().byBlock })` (`src/state-remap.js`). That sets `bot.registry.stateIdRemap`, a `Map` from network state id to client state id, built with the server's synced block ids.
-  - Chains are resolved, so applying the map twice changes nothing.
-  - Unknown blocks, bad entries and cycles are skipped and logged.
-- **The patch.** `patches/prismarine-chunk+1.41.0.patch` applies the map in `ChunkColumn.load` (section palettes and global-palette data) and in `setBlockStateId` (`block_change` and `multi_block_change`). `blockAt`, `findBlocks` (which checks palettes first), `blockUpdate` events, `stateId`, `name` and `metadata` therefore all agree, and so do Mindcraft's `world.js` helpers, which read through them.
+  - **The table is taken literally.** Network meta `m` is client meta `table[m]`, so the map is a pure function, applied exactly once at decode time.
+    - Chains and cycles therefore need no special handling. The real 3.3.4 table has permutations, such as `pyrotech:worktable` and `worktable_stone` `0 → 1, 1 → 2, 2 → 0`; 125 of its 506 entries, in 39 blocks, have a target that is itself a source. All of them apply.
+    - (Before G2 batch 5's fix, these were wrongly dropped as cycles.)
+  - **Only true conflicts are skipped:** one network id given two different client ids. That can happen only when two table names resolve to one synced block (an alias). Such an id is left unmapped and logged.
+  - Unknown blocks and bad entries are skipped and logged.
+- **Applied once, at decode time only.**
+  - `patches/prismarine-chunk+1.41.0.patch` applies the map in `ChunkColumn.load`, to section palettes and global-palette data, treating its input as network data.
+  - `patches/mineflayer+4.33.0.patch` applies it in the `block_change` and `multi_block_change` handlers, before `updateBlockState`.
+  - **Local writes are never remapped.** `ChunkColumn.setBlockStateId`, `setBlock`, `setBlockType` and `setBlockData`, digging's `_updateBlockState`, the `update_sign` handler's `setBlock` and pathfinder's predictive writes all hold client ids already. Remapping them would apply a cycle twice.
+  - `blockAt`, `findBlocks` (which checks palettes first), `blockUpdate` events, `stateId`, `name` and `metadata` therefore all agree, and so do Mindcraft's `world.js` helpers, which read through them.
   - A section palette that held both 2810 and 2811 then holds 2810 twice. That is harmless: reads index the palette, and `setBlock`'s `indexOf` takes the first.
 - **Local view only.** A remapped state id (2810) **must never be sent back to the server**, whose own id for that state is 2811. 1.12 clients send positions and items, not block state ids, and nothing in forge-bridge sends one. Any future code that does must send the network id.
+- **Too wide (global palette).** A target that does not fit the section's bits per block is left as sent. It is counted in `bot.registry.stateIdRemap.skippedTooWide`, and the first one per map is logged with `console.warn`. A same-block target always fits (`2 ** bits` is a multiple of 16), so only a hand-built map that crosses blocks can hit this.
+- **Known gap: other server data with block states bypasses the map.** Only chunk data, `block_change` and `multi_block_change` are remapped. Anything else the server sends that names a block state is used as sent. Examples: falling-block `spawn_entity` object data, `world_event` 2001 (block break) data, block particle arguments, and mod plugin-channel payloads. Stock mineflayer reads none of them as block states today. Vanilla 1.12 builds the first three with `Block.getStateId` (`id + (meta << 12)`, meta from `getMetaFromState`), so they may not need the map at all, but this has not been checked with `javap`. Code that starts reading them must check before it relies on them.
 - **No table** (a dump made before dumper 0.2.0), or a block not in it: state ids are used as sent.
-- **Report.** `bot.forge.stateIdRemap` holds `{ tableBlocks, blocks, unknownBlocks, invalid, size }`.
-- **Login line.** At login on a Forge connection, `initBot` logs one line saying whether the remap is active and what it covers: `state-id remap active: 3 state ids in 1 of the table's 1 blocks`, or `state-id remap inactive: <reason>`.
+- **Report.** `bot.forge.stateIdRemap` holds `{ tableBlocks, blocks, unknownBlocks, invalid, conflicts, size }`.
+- **Login line.** At login on a Forge connection, `initBot` logs one line with the counts: `state-id remap active: applied 3 state ids in 1 of the table's 1 blocks; conflicts 0 skipped`, or `state-id remap inactive: <reason>`.
 
 ## FML EntitySpawn into `bot.entities` (brief item 6)
 
@@ -292,7 +301,12 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - Batch 4's three upper halves read as `double_plant` meta 11 without the table. With it they read as 10 in `blockAt`, `stateId`, `blocksByStateId`, the palette and `findBlocks`.
   - The 17 upper halves are the only blocks in the section that change. Lower halves are unchanged.
   - `block_change` and `multi_block_change` go through the table, including in a global-palette section. Doors, beds, tall grass and other blocks' meta 8-11 are unchanged.
-  - Table building covers unknown blocks, bad entries, chains and cycles.
+  - Table building takes chains and cycles literally. A true conflict (an alias with another target) is skipped and logged. Every entry of rotn-data's real 3.3.4 table applies, with no conflicts.
+  - **`pyrotech:worktable` (`0 → 1, 1 → 2, 2 → 0`):** network metas read as client metas 1, 2, 0 through chunk load, `block_change` and `multi_block_change`.
+    - The same network data sent again gives the same result. This is a consistency check only: chunk load and `block_change` decode fresh bytes, so it cannot catch a double remap. The local-write check below is the real test.
+    - The local write paths (digging's `_updateBlockState`, `update_sign`'s `setBlock`, `setBlockType`, `setBlockData`, pathfinder's `setBlockStateId`) leave a client id unchanged. This is checked after each write, because three stray remaps of a 3-cycle would hide the bug.
+    - Against develop's prismarine-chunk patch (remap in `setBlockStateId`) or mineflayer patch (no remap in `block_change`), 2 tests fail each.
+  - A global-palette target too wide for the section is left as sent, counted in `skippedTooWide` and logged once.
   - **Two servers, one table:** two registries sync the same block name at different ids (#82's Quark flowerpots, 1203 and 1263). Each built map, and each chunk, uses only its own server's ids.
   - The 4 chunk-path tests fail with the previous patch.
 - `agent-process.test.js`: `agent_process.js` with a fake spawn, timers and exit. It covers the ADR 0003 table, the backoff and its reset, the exit-reason file (a fatal kick reported with exit 1, auth capped at 3 and reset after 10 min), requested restarts and their loop guard, single-bot stops and clean exits, `forceRestart`, a stop cancelling a pending restart, a child exiting with a code after `stop()`, the task codes, and the private reason-file folder.

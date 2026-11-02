@@ -59,6 +59,10 @@ export async function startSession(ctx, { name, env = {}, naming = null }) {
     const seedLine = server.console('seed', p.consoleWaitS).map((l) => /Seed: \[?(-?\d+)\]?\s*$/.exec(l)).find(Boolean);
     ctx.note('worldSeed', seedLine ? seedLine[1] : null);
     if (!seedLine) ctx.notGate('no world seed from the console "seed" command: the seed is part of the G2 evidence');
+    else if (p.worldSeed !== undefined && seedLine[1] !== String(p.worldSeed)) {
+        // World coverage is fixed (lead, after G2 batch 5): a G2 gate run uses the planned world.
+        ctx.notGate(`the world seed is ${seedLine[1]}, not the planned ${p.worldSeed} (create the server with deploy/test-server.sh run --seed ${p.worldSeed})`);
+    }
     // G2 is about the agent's own naming API (mcdata.js toNew/toOld): no run counts until a child
     // process finds it and the full table round-trips through it.
     const agent = naming ?? agentNaming(p.dataRoot || REPO);

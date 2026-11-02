@@ -14,7 +14,7 @@ import { setImmediate } from 'node:timers';
 import { Vec3 } from 'vec3';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { attachG2, pages, stockNames, agentNames } from '../runner/drivers/scenario-protocol.mjs';
-import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, agentNaming, namingCheckEnv } from '../runner/lib/g2.mjs';
+import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, agentNaming, namingCheckEnv, G2_WORLD_SEED } from '../runner/lib/g2.mjs';
 import blocks, { blockMeta } from '../scenarios/g2/g2-blocks-named.mjs';
 import mobs, { VANILLA_COMMON_MOBS, chooseMobs, readCommonMobs } from '../scenarios/g2/g2-mobs-named.mjs';
 import items, { VANILLA_SAMPLE, parseItems, checkFullTable } from '../scenarios/g2/g2-items-roundtrip.mjs';
@@ -93,7 +93,7 @@ function sim(opt = {}) {
             const before = log.length;
             let m;
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
-            else if (cmd === 'seed') add(opt.noSeed ? 'Unknown command. Try /help for a list of commands' : 'Seed: -4172144997902289642');
+            else if (cmd === 'seed') add(opt.noSeed ? 'Unknown command. Try /help for a list of commands' : `Seed: ${opt.seed ?? G2_WORLD_SEED}`);
             else if (cmd === `tp ${NAME} ~ ~ ~`) add(online ? `Teleported ${NAME} to ${pos.x}, ${pos.y}, ${pos.z}` : 'Player not found');
             else if ((m = /^tell (\S+) (.*)$/.exec(cmd)) && online) fake.emit('messagestr', `Server whispers to you: ${m[2]}`);
             else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) (\S+) (\d+)$/.exec(cmd))) {
@@ -287,6 +287,31 @@ describe('the agent\'s naming path (PR #36 re-review item 3)', () => {
         assert.deepEqual(env, { PATH: '/bin', ROTN_G2_ROOT: '/r' });
     });
 
+    test('G2 runs in the planned world: another world seed is not a gate run (lead, after G2 batch 5)', async () => {
+        for (const [sc, params] of [[blocks, { seed: 7 }], [mobs, { dataRoot: DATA }], [items, { dataRoot: DATA }]]) {
+            const r = await run(sc, sim({ seed: '8796110535854059511' }), params);
+            assert.equal(r.notes.worldSeed, '8796110535854059511', sc.id);
+            assert.ok(r.weakenedParams.includes(`the world seed is 8796110535854059511, not the planned ${G2_WORLD_SEED} (create the server with deploy/test-server.sh run --seed ${G2_WORLD_SEED})`),
+                `${sc.id}: ${JSON.stringify(r.weakenedParams)}`);
+            assert.equal(r.gateValid, false, sc.id);
+            assert.equal(sc.defaults.worldSeed, G2_WORLD_SEED, sc.id);
+            assert.equal(sc.gateParams.worldSeed, 'equal', sc.id);
+            // The planned world: no seed reason.
+            const ok = await run(sc, sim(), params);
+            assert.ok(!ok.weakenedParams.some((w) => /world seed/.test(w)), `${sc.id}: ${JSON.stringify(ok.weakenedParams)}`);
+        }
+        // Changing the planned seed is itself a weakening.
+        const w = await run(blocks, sim({ seed: '123' }), { seed: 7, worldSeed: '123' });
+        assert.ok(w.weakenedParams.some((x) => x.startsWith('worldSeed=123')), JSON.stringify(w.weakenedParams));
+        assert.equal(w.gateValid, false);
+    });
+
+    test("the planned G2 seed is batch 4's world (the double-plant world), as recorded in its evidence", () => {
+        const b4 = JSON.parse(fs.readFileSync(new URL('../evidence/g2/batch4-20261102/blocks/result.json', import.meta.url), 'utf8'));
+        assert.equal(b4.notes.worldSeed, G2_WORLD_SEED);
+        assert.ok(b4.notes.census.some((x) => x.startsWith('minecraft:double_plant 11 ')), "that world's cube has double plant upper halves");
+    });
+
     test('a run on an unwired naming path, or without a world seed, is never a gate run', async () => {
         const unwired = at('export function getBlockName() {}\n');
         const r = await run(blocks, sim(), { seed: 7, dataRoot: unwired });
@@ -330,7 +355,7 @@ describe('g2-blocks-named on a simulated server', () => {
         assert.match(c.blocks_spotcheck.detail, /^4\d confirmed non-air answers of 40 needed/);
         assert.ok(r.notes.census.some((b) => b.startsWith('pyrotech:rock 6 ')), 'the modded block is in the census');
         assert.ok(!r.notes.census.some((b) => b.startsWith('minecraft:air')), 'no air in the census');
-        assert.equal(r.notes.worldSeed, '-4172144997902289642', 'the world seed is evidence (finding 5)');
+        assert.equal(r.notes.worldSeed, G2_WORLD_SEED, 'the world seed is evidence (finding 5)');
         assert.deepEqual(r.notes.cube, { center: [10, 64, -4], radius: 16 });
         assert.equal(r.notes.spotSkew.length, 0);
     });
