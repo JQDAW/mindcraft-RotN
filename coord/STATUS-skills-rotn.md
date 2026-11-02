@@ -28,7 +28,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 - A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, on develop `4b175cc`): #103 open.
-- A1b `models-log-hygiene` (lead-approved exception in `src/models/`), stacked on #103. Next: A2 `no-cheat`.
+- A1b `models-log-hygiene` (lead-approved exception in `src/models/`): #104 open, stacked on #103. Next: A2 `no-cheat`.
 
 ## G3 plan: small PRs, in order
 
@@ -110,7 +110,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 2. **net-forge (paused since 2026-11-02; route through the lead):** C1 and C2 need serverbound slot encoding with REID (VarInt slot ids in `window_click`) and `block_place`/`use_item` working on 1.12 (the `use_item` extra fields in the mineflayer patch). Please confirm that they work, or say what is missing. Also: can the `place_block.js` 500 ms `blockUpdate` wait be made configurable (seam-map C)? A lagging RotN server makes placements report failure. **I will tell the lead 1-2 PRs before C1** (that is, when B2 opens), so the lead can respawn net-forge or verify the current encoding in a probe first.
 3. **rotn-data:** for C1, does `recipesFor` give ingredients with oredict members and meta expanded, so that I can match by output and ingredients? For C2, which blocks are the surface rock piles (`pyrotech:rock_pile`?) and what do they drop? The 20 recipes with `matchesSample: false`: I will check whether any is in the early-game set and report back.
 4. **harness-ops:** G3 scenarios for (a), (b) and (c), plus "the queue survives a restart". I will post the command and log contract for each as my PRs land. A first exploratory probe batch for the open items above would de-risk C2/C3; that needs the lead's GO.
-5. **Lead (`src/models/`, lead-owned; found during A1):** the model layer prints whole error objects too. **In progress under the lead-approved exception (2026-11-02), in the A1b PR (see Open PRs):**
+5. **Lead (`src/models/`, lead-owned; found during A1):** the model layer prints whole error objects too. **In progress under the lead-approved exception (2026-11-02), in #104:**
    - `openrouter.js:49` (the whole SDK error) and `:40` (the whole response body when there are no choices);
    - `prompter.js:131` and `:238`.
 
@@ -121,3 +121,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 ## Open PRs
 
 - #103 A1 log hygiene (branch `agent/skills-rotn/log-hygiene`). Serves the lead's "Before the first CX23 run" line.
+- #104 A1b model-layer log hygiene (branch `agent/skills-rotn/models-log-hygiene`), lead-approved exception in `src/models/`; stacked on #103, merge after it.
