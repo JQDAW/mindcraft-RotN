@@ -430,16 +430,53 @@ describe('g2-blocks-named on a simulated server', () => {
     // Fewer non-air types in the cube than topN (batch 3: 39 < 50): the census claims to name them all,
     // so a block name it leaves out fails on one confirmed spot hit, not only on absentHits (4).
     // The bot leaves `omit` out of its census reply (and names it correctly everywhere else).
-    const omitting = (omit) => sim({
-        chatEdit: (text) => (/^blocks /.test(text) ? text.replace(new RegExp(`minecraft:${omit} [^;]*(; ?|$)`, 'g'), '') : text),
+    // coverAir: also add this many to the air count A in "#unloaded U T A", so the sums still add up (a careful liar).
+    const omitting = (omit, coverAir = 0) => sim({
+        chatEdit: (text) => (/^blocks /.test(text)
+            ? text.replace(new RegExp(`minecraft:${omit} [^;]*(; ?|$)`, 'g'), '').replace(/(#unloaded \d+ \d+) (\d+)/, (_m, h, a) => `${h} ${Number(a) + coverAir}`)
+            : text),
+    });
+
+    test('the census counts add up: types + air + unloaded = the cube when it lists fewer than topN types (#77 follow-up)', async () => {
+        const r = await run(blocks, sim(), { seed: 7 });
+        assert.equal(byName(r).blocks_named.pass, true);
+        const cs = r.notes.censusSum;
+        assert.equal(cs.cube, 35937);
+        assert.equal(cs.sum, 35937);
+        assert.equal(cs.types + cs.air + cs.unloaded, 35937);
+        assert.ok(cs.air > 0);
+        assert.match(r.notes.censusAt, /^\d{4}-\d\d-\d\dT.*Z$/);
+        // A type left out: the sum is short, and blocks_named fails.
+        const left = await run(blocks, omitting('coal_ore'), { seed: 7 });
+        assert.equal(byName(left).blocks_named.pass, false);
+        assert.match(byName(left).blocks_named.detail, /the census lists \d+ < 50 types \(so all of them\), but types \d+ \+ air \d+ \+ unloaded 0 = \d+, not the cube's 35937/);
+        // Counts inflated past the cube: fails even with a full top-N census.
+        const big = await run(blocks, sim({ chatEdit: (t) => (/^blocks /.test(t) ? t.replace(/(#unloaded \d+ \d+) (\d+)/, (_m, h, a) => `${h} ${Number(a) + 40000}`) : t) }), { seed: 7, topN: 5, minTypes: 3 });
+        assert.match(byName(big).blocks_named.detail, /more than the cube's 35937/);
+        // With exactly topN types the rest of the cube is other types: a short sum is fine.
+        const top5 = await run(blocks, sim(), { seed: 7, topN: 5, minTypes: 3 });
+        assert.equal(byName(top5).blocks_named.pass, true, byName(top5).blocks_named.detail);
+        assert.ok(top5.notes.censusSum.sum < 35937);
+    });
+
+    test('a census without a valid air count ("#unloaded U T A") fails blocks_named', async () => {
+        const a = (to) => (t) => t.replace(/(#unloaded \d+ \d+) \d+/, to === null ? '$1' : `$1 ${to}`);
+        for (const edit of [a(null), a('-5'), a('x'), a('1 2')]) {
+            const r = await run(blocks, sim({ chatEdit: (t) => (/^blocks /.test(t) ? edit(t) : t) }), { seed: 7 });
+            assert.equal(byName(r).blocks_named.pass, false);
+            assert.match(byName(r).blocks_named.detail, /no valid air count A in "#unloaded U T A"/);
+        }
     });
 
     test('a census of a cube with fewer than topN types must name every type: one spot hit of a left-out name fails', async () => {
-        // A type of about 2% (coal ore), left out of the census only. Find a seed where the spot checks hit it 1..3 times
+        // A type of about 2% (coal ore), left out of the census, with its count added to the air count A so the sums
+        // still add up (blocks_named cannot see it). Find a seed where the spot checks hit it 1..3 times
         // (under absentHits, so only the completeness rule can catch it).
+        const honest = await run(blocks, sim(), { seed: 7 });
+        const coal = Number(honest.notes.census.find((x) => x.startsWith('minecraft:coal_ore ')).split(' ')[2]);
         let found = null;
         for (let seed = 1; seed <= 80 && !found; seed++) {
-            const r = await run(blocks, omitting('coal_ore'), { seed });
+            const r = await run(blocks, omitting('coal_ore', coal), { seed });
             const n = Object.entries(r.notes.spotDistribution).filter(([k]) => k.startsWith('minecraft:coal_ore ')).reduce((a, [, v]) => a + v, 0);
             if (n >= 1 && n < 4) found = { r, n };
         }
@@ -447,7 +484,8 @@ describe('g2-blocks-named on a simulated server', () => {
         const { r, n } = found;
         const c = byName(r);
         assert.ok(r.notes.census.length < 50 && !r.notes.census.some((x) => x.startsWith('minecraft:coal_ore ')));
-        assert.equal(c.blocks_named.pass, true, 'the census alone looks complete');
+        assert.equal(c.blocks_named.pass, true, 'the census alone looks complete, sums included');
+        assert.equal(r.notes.censusSum.sum, 35937);
         assert.equal(c.blocks_spotcheck.pass, false);
         assert.ok(r.notes.spotSkew.some((x) => x === `minecraft:coal_ore: ${n} spot hit(s), but the census (${r.notes.census.length} < 50 types, so all of them) does not name it`), JSON.stringify(r.notes.spotSkew));
     });

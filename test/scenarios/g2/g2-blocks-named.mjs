@@ -124,9 +124,13 @@ export default {
         const token = crypto.randomBytes(6).toString('hex');
         server.console(`tell ${name} scenario-blocks ${token} ${p.radius} ${p.topN} ${p.candidates}`, 1);
         const rep = await awaitReply(ctx, s.sinceMarker, name, 'blocks', token, p.replyTimeoutMs);
-        // The "#unloaded U T" entry: positions without a loaded chunk, counted apart (never a block type).
+        const censusAt = new Date().toISOString();   // when the census reply was in (#77 follow-up)
+        ctx.note('censusAt', censusAt);
+        // The "#unloaded U T A" entry: positions without a loaded chunk, counted apart (never a block type).
         const unl = (rep?.entries ?? []).find((f) => f[0] === UNLOADED);
         const unloaded = unl ? ints(unl.slice(1, 3)) : null;
+        // Its 4th field A: loaded positions that are air (never a block type).
+        const airCount = unl && unl.length === 4 ? ints([unl[3]])?.[0] : undefined;
         const all = (rep?.entries ?? []).filter((f) => f[0] !== UNLOADED).map((f) => {
             const n = ints(f.slice(1, 3));
             const cand = f.slice(3).map((q) => ints(q.split(',')));
@@ -139,6 +143,19 @@ export default {
             bad.push(`no valid "${UNLOADED} U ${cubeSize}" entry (unloaded positions out of the cube's ${cubeSize})`);
         }
         const censusUnloaded = unloaded && unloaded[1] === cubeSize ? unloaded[0] : null;
+        if (rep?.complete && !(airCount >= 0 && airCount <= cubeSize)) bad.push(`no valid air count A in "${UNLOADED} U T A" (air positions in the cube)`);
+        // The counts must add up (#77 follow-up): types + air + unloaded = the cube when the census lists
+        // fewer than topN types (it then claims every type in the cube), and at most the cube otherwise.
+        const typeSum = entries.reduce((a, e) => a + (Number.isInteger(e.count) ? e.count : 0), 0);
+        const censusSum = censusUnloaded !== null && airCount !== undefined ? typeSum + airCount + censusUnloaded : null;
+        ctx.note('censusSum', { types: typeSum, air: airCount ?? null, unloaded: censusUnloaded, sum: censusSum, cube: cubeSize });
+        if (rep?.complete && censusSum !== null) {
+            if (entries.length < p.topN && censusSum !== cubeSize) {
+                bad.push(`the census lists ${entries.length} < ${p.topN} types (so all of them), but types ${typeSum} + air ${airCount} + unloaded ${censusUnloaded} = ${censusSum}, not the cube's ${cubeSize}`);
+            } else if (censusSum > cubeSize) {
+                bad.push(`types ${typeSum} + air ${airCount} + unloaded ${censusUnloaded} = ${censusSum}, more than the cube's ${cubeSize}`);
+            }
+        }
         for (const e of entries) {
             if (!isRegistryName(e.name)) bad.push(`unknown name "${e.name}"`);
             else if (e.meta === undefined || e.meta < 0 || e.meta > 15 || !(e.count >= 1)) bad.push(`${e.raw}: malformed`);
@@ -169,7 +186,6 @@ export default {
         //    normal rule. More than maxWorldChangeShare of the planned samples, or more than
         //    maxWorldChangesPerType for one type, makes the run not a gate run; no candidate left for the
         //    type fails blocks_confirmed. A fresh answer the server does not confirm is a plain fail.
-        const censusAt = new Date().toISOString();
         const wrong = [];
         const samples = [];
         const drift = [];
