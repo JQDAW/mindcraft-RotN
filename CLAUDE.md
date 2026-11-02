@@ -22,7 +22,7 @@ Read `docs/PLAN.md` once at the start of every session. Read your own brief in `
 | Agent | Kind | Owns (only it edits these) |
 | --- | --- | --- |
 | rotn-lead | Main Claude Code session, Orca main worktree | `docs/PLAN.md`, `docs/adr/`, `docs/research/`, `docs/briefs/`, `coord/`, `package.json` + lockfile, root `settings.js`, merges into `develop`, release tags |
-| net-forge | Dev agent, own Orca worktree | `packages/forge-bridge/`, `patches/` entries for mineflayer, minecraft-protocol, protodef, prismarine-chunk, minecraft-data, mineflayer-pathfinder, mineflayer-pvp and prismarine-viewer, the `initBot` part of `src/utils/mcdata.js`, `src/process/agent_process.js` |
+| net-forge | Dev agent, own Orca worktree | `packages/forge-bridge/`, `patches/` entries for mineflayer, minecraft-protocol, protodef, prismarine-chunk, minecraft-data, mineflayer-pathfinder, mineflayer-pvp, prismarine-viewer and prismarine-auth (output-only patch, lead-approved in PR #74), the `initBot` part of `src/utils/mcdata.js`, `src/process/agent_process.js` |
 | rotn-data | Dev agent, own Orca worktree | `packages/rotn-data/`, `tools/dumper/`, the name/registry helpers in `src/utils/mcdata.js` |
 | skills-rotn | Dev agent, own Orca worktree | `src/agent/` (skills, commands, modes, self_prompter, new task queue), `profiles/` |
 | harness-ops | Dev agent, own Orca worktree | `test/`, `deploy/`, `.github/workflows/`, `TRY_IT.md` |
