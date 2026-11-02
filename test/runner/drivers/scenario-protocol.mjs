@@ -57,6 +57,13 @@ export function attachScenario(bot, { hello = process.env.ROTN_SCENARIO_HELLO, h
             }
         }
     });
+    // S1 check (d): does a console `tell` reach mineflayer's 'whisper' event, and as which sender?
+    // Mindcraft's agent listens to that event (src/agent/agent.js), so this shows what G3's test-only
+    // task giver `Server` will look like to it. The token is fresh hex, so only the runner can send it.
+    bot.on('whisper', (username, message) => {
+        const m = /^s1-whisper-([0-9a-f]{6,32})$/.exec(String(message));
+        if (m) emit('whisper', { username, token: m[1] });
+    });
 }
 
 const pos = (bot) => (bot.entity ? [bot.entity.position.x, bot.entity.position.y, bot.entity.position.z] : null);
