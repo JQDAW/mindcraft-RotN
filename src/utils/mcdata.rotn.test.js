@@ -108,6 +108,22 @@ test('isHuntable and isBaby read the 1.12 baby flag (metadata index 12), not the
     assert.equal(mc.isHuntable(null), false);
 });
 
+// Brief item 4: mustCollectManually on RotN names (blocks with no collision box in the dump).
+test('mustCollectManually: 1.12, 1.21 and modded blocks with no collision box, plus the upstream names', () => {
+    for (const n of ['tallgrass', 'minecraft:tallgrass:1', 'short_grass', 'double_plant', 'red_flower', 'reeds', 'sapling', 'torch', 'wheat',
+        'pyrotech:rock', 'pyrotech:rock:6', 'biomesoplenty:flower_0', 'vine', 'web']) {
+        assert.equal(mc.mustCollectManually(n), true, n);
+    }
+    for (const n of ['stone', 'log', 'oak_log', 'dirt', 'grass', 'leaves', 'cobblestone', 'dynamictrees:oakbranch', 'pyrotech:chopping_block',
+        'air', 'water', 'lava', 'nosuchmod:block']) {
+        assert.equal(mc.mustCollectManually(n), false, n);
+    }
+    // Upstream's 1.21 names still count (carpet has a thin collision box, so only the name list catches it).
+    assert.equal(mc.mustCollectManually('lily_of_the_valley'), true);
+    assert.equal(mc.mustCollectManually('carpet'), true);
+    assert.equal(mc.mustCollectManually(undefined), false);
+});
+
 // ---- RotN recipes in the registry (rotn-data brief item 4; Phase 3). These run last: installing
 // changes the shared registry's recipes for the rest of this process.
 
