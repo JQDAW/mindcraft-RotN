@@ -367,9 +367,10 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
 
 // ---------------------------------------------------------------- bootstrap.sh
 describe('bootstrap.sh', () => {
-    const ubuntu = (version = '24.04') => {
-        fs.mkdirSync(rootFile('etc'), { recursive: true });
+    const ubuntu = (version = '26.04', sshdConfig = 'Include /etc/ssh/sshd_config.d/*.conf\n\nKbdInteractiveAuthentication no\nUsePAM yes\n') => {
+        fs.mkdirSync(rootFile('etc/ssh'), { recursive: true });
         fs.writeFileSync(rootFile('etc/os-release'), `NAME="Ubuntu"\nID=ubuntu\nVERSION_ID="${version}"\n`);
+        fs.writeFileSync(rootFile('etc/ssh/sshd_config'), sshdConfig);
     };
     let keyN = 0;
     const keyFile = (content = KEY) => {
@@ -468,8 +469,16 @@ describe('bootstrap.sh', () => {
         fs.writeFileSync(rootFile('etc/ssh/sshd_config.d/05-other.conf'), 'PasswordAuthentication yes\n');
         const r = setup();
         assert.equal(r.code, 1, r.all);
-        assert.match(r.stderr, /sshd -T does not show 'passwordauthentication no' \(a file read before \/etc\/ssh\/sshd_config\.d\/10-mindcraft-rotn\.conf sets it\); put back what was there, ssh not reloaded/);
+        assert.match(r.stderr, /sshd -T does not show 'passwordauthentication no' \(sshd_config or a file read before \/etc\/ssh\/sshd_config\.d\/10-mindcraft-rotn\.conf sets it\); put back what was there, ssh not reloaded/);
         assert.ok(!exists(SSHD_DROPIN), 'the ineffective drop-in is removed');
+        assert.ok(!reloaded());
+        // A value in sshd_config itself, above the Include line, is read first too.
+        fs.rmSync(rootFile('etc/ssh/sshd_config.d/05-other.conf'));
+        ubuntu('26.04', 'PasswordAuthentication yes\nInclude /etc/ssh/sshd_config.d/*.conf\n');
+        const main = setup();
+        assert.equal(main.code, 1);
+        assert.match(main.stderr, /sshd -T does not show 'passwordauthentication no'/);
+        assert.ok(!exists(SSHD_DROPIN));
         assert.ok(!reloaded());
     });
 
@@ -538,8 +547,67 @@ describe('bootstrap.sh', () => {
             assert.match(r.stderr, re);
         }
         ubuntu('22.04');
-        assert.match(boot(['setup', '--deploy-key-file', keyFile()]).stderr, /for Ubuntu 24.04/);
+        assert.match(boot(['setup', '--deploy-key-file', keyFile()]).stderr, /this is for Ubuntu 26\.04 \(ADR 0007\) or 24\.04/);
         assert.equal(called('useradd').length, 0);
+    });
+
+    test('Ubuntu 26.04 (ADR 0007) and 24.04 are accepted', () => {
+        for (const v of ['26.04', '24.04']) {
+            ubuntu(v);
+            const r = boot(['setup', '--deploy-key-file', keyFile()]);
+            assert.equal(r.code, 0, `${v}: ${r.all}`);
+        }
+        assert.match(fs.readFileSync(path.join(CX, 'bootstrap.sh'), 'utf8').split('\n')[1], /Ubuntu 26\.04, ADR 0007/);
+    });
+
+    // ---- ADR 0007: the system steps the CI container cannot test are checked on the server itself
+    test('preflight: no ssh.service unit, or an sshd_config without the drop-in Include, stops setup before any change', () => {
+        ubuntu();
+        const noUnit = boot(['setup', '--deploy-key-file', keyFile()], { FAKE_NO_SSH_UNIT: '1' });
+        assert.equal(noUnit.code, 1);
+        assert.match(noUnit.stderr, /there is no ssh\.service unit/);
+        assert.deepEqual(called('systemctl')[0], ['systemctl', 'cat', 'ssh.service']);
+        ubuntu('26.04', 'PasswordAuthentication no\nUsePAM yes\n');
+        const noInclude = boot(['setup', '--deploy-key-file', keyFile()]);
+        assert.equal(noInclude.code, 1);
+        assert.match(noInclude.stderr, /does not include \/etc\/ssh\/sshd_config\.d\/\*\.conf/);
+        assert.equal(called('useradd').length + called('apt-get').length + called('ufw').length + called('sshd').length, 0, 'nothing was changed');
+    });
+
+    test('sudo (sudo-rs on 26.04): a rule that sudo -l does not show is removed and setup stops, before ufw and sshd', () => {
+        ubuntu();
+        const r = boot(['setup', '--deploy-key-file', keyFile()], { FAKE_SUDO_IGNORES_DROPIN: '1' });
+        assert.equal(r.code, 1);
+        assert.match(r.stderr, /sudo \(sudo-rs 0\.2\.8\) does not show the rule for deploy after install \(sudo -l -U deploy\); removed it/);
+        assert.ok(!exists('etc/sudoers.d/mindcraft-rotn'));
+        assert.equal(called('ufw').length + called('sshd').length, 0, 'the firewall and sshd are untouched');
+        assert.ok(called('sudo').some((c) => c.join(' ') === 'sudo -l -U deploy'));
+        const ok = boot(['setup', '--deploy-key-file', keyFile()]);
+        assert.equal(ok.code, 0, ok.all);
+        assert.match(ok.stderr, /sudoers: deploy may run only mindcraft-rotn-ctl without a password \(sudo-rs 0\.2\.8\)/);
+    });
+
+    test('ufw: never enabled when the SSH rule did not take; an enable that does not take stops setup; sshd is untouched', () => {
+        ubuntu();
+        const noRule = boot(['setup', '--deploy-key-file', keyFile()], { FAKE_UFW_DROP_RULES: '1' });
+        assert.equal(noRule.code, 1);
+        assert.match(noRule.stderr, /ufw does not list the SSH rule \(ufw show added\); not enabling the firewall/);
+        assert.ok(!called('ufw').some((c) => c.includes('enable')), 'ufw was not enabled');
+        assert.equal(called('sshd').length, 0);
+        const noEnable = boot(['setup', '--deploy-key-file', keyFile()], { FAKE_UFW_NO_ENABLE: '1' });
+        assert.equal(noEnable.code, 1);
+        assert.match(noEnable.stderr, /ufw is not active after 'ufw --force enable' \(ufw status\)/);
+        assert.equal(called('sshd').length, 0);
+        assert.ok(!exists(SSHD_DROPIN));
+    });
+
+    test('ufw: with --ssh-from, the narrow rule is what must be listed before enabling', () => {
+        ubuntu();
+        const r = boot(['setup', '--deploy-key-file', keyFile(), '--ssh-from', '203.0.113.0/24']);
+        assert.equal(r.code, 0, r.all);
+        const show = callIndex((c) => c.join(' ') === 'ufw show added');
+        const enable = callIndex((c) => c.join(' ') === 'ufw --force enable');
+        assert.ok(show >= 0 && enable > show, 'checked, then enabled');
     });
 
     test('setup refuses a NodeSource key with another fingerprint, before adding the repo', () => {

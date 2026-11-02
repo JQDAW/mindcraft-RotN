@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# One-time bootstrap of the bot's CX23 (Ubuntu 24.04), run as root (harness-ops, brief deliverable 5).
+# One-time bootstrap of the bot's CX23 (Ubuntu 26.04, ADR 0007; 24.04 is still accepted), run as root
+# (harness-ops, brief deliverable 5).
 # Copy this folder (deploy/cx23/) to the server and run it there; it never connects anywhere except
 # the Ubuntu and NodeSource apt mirrors.
 #
@@ -62,8 +63,21 @@ file_owned() {
 require_root_ubuntu() {
   [[ $(id -u) == 0 ]] || die "run as root (sudo bash bootstrap.sh ...)"
   local osr; osr=$(p /etc/os-release)
-  [[ -f $osr ]] && grep -q '^ID=ubuntu$' "$osr" && grep -q '^VERSION_ID="24.04"$' "$osr" \
-    || die "this is for Ubuntu 24.04 (see /etc/os-release)"
+  [[ -f $osr ]] && grep -q '^ID=ubuntu$' "$osr" && grep -Eq '^VERSION_ID="(26\.04|24\.04)"$' "$osr" \
+    || die "this is for Ubuntu 26.04 (ADR 0007) or 24.04 (see /etc/os-release)"
+}
+
+# The system steps the CI container cannot test (ADR 0007), checked on the real server before setup
+# changes anything: stop on a mismatch rather than guess.
+preflight_system() {
+  # The ssh unit is ssh.service on Ubuntu 24.04 and 26.04 (the cx23 probe, test/evidence/cx23/): setup
+  # reloads it, and lockdown reads its journal.
+  systemctl cat ssh.service > /dev/null 2>&1 \
+    || die "there is no ssh.service unit; this bootstrap reloads ssh.service and reads its journal (check the unit name)"
+  command -v sshd > /dev/null || die "no sshd on PATH; the SSH steps need sshd -t and sshd -T"
+  # The password-login drop-in works only if sshd_config includes sshd_config.d/*.conf.
+  grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf[[:space:]]*$' "$(p /etc/ssh/sshd_config)" 2> /dev/null \
+    || die "/etc/ssh/sshd_config does not include /etc/ssh/sshd_config.d/*.conf; the password-login drop-in would not be read"
 }
 
 user_exists() { getent passwd "$1" > /dev/null 2>&1; }
@@ -110,6 +124,16 @@ EOF
   chown root:root "$tmp"; chmod 0440 "$tmp"
   visudo -c -f "$tmp" > /dev/null || { rm -f "$tmp"; die "visudo rejected the sudoers rule"; }
   mv -f "$tmp" "$f"
+  # Ubuntu 26.04 ships sudo-rs as sudo (ADR 0007): check that the rule really applies, not only that
+  # visudo accepts it (sudo-rs must read /etc/sudoers.d and grant exactly the wrapper without a password).
+  local which list
+  which=$(sudo --version 2> /dev/null | head -1) || true
+  list=$(sudo -l -U "$DEPLOY_USER" 2> /dev/null) || true
+  if ! grep -Eq "NOPASSWD:[[:space:]]*/usr/local/sbin/mindcraft-rotn-ctl([[:space:],]|$)" <<< "$list"; then
+    rm -f "$f"
+    die "sudo (${which:-unknown}) does not show the rule for $DEPLOY_USER after install (sudo -l -U $DEPLOY_USER); removed it"
+  fi
+  log "sudoers: $DEPLOY_USER may run only mindcraft-rotn-ctl without a password (${which:-sudo})"
 }
 
 setup_packages() {
@@ -175,7 +199,17 @@ setup_firewall() {
   else
     ufw allow 22/tcp > /dev/null
   fi
+  # Never enable a firewall whose SSH rule did not take (that would cut off the human's root login).
+  # `ufw show added` may print an extended rule in its own order, so both orders are accepted.
+  local want='ufw allow 22/tcp'
+  if [[ -n $from ]]; then
+    local f=${from//./\\.}
+    want="ufw allow (proto tcp from $f to any port 22|from $f to any port 22 proto tcp)"
+  fi
+  ufw show added 2> /dev/null | grep -Eqx -- "$want" \
+    || die "ufw does not list the SSH rule (ufw show added); not enabling the firewall"
   ufw --force enable > /dev/null
+  ufw status 2> /dev/null | grep -qx 'Status: active' || die "ufw is not active after 'ufw --force enable' (ufw status)"
   log "ufw: incoming SSH only${from:+ from $from}"
 }
 
@@ -207,7 +241,7 @@ EOF
   for want in 'passwordauthentication no' 'kbdinteractiveauthentication no'; do
     if ! grep -qix -- "$want" <<< "$eff"; then
       restore_dropin
-      die "sshd -T does not show '$want' (a file read before $SSHD_DROPIN sets it); put back what was there, ssh not reloaded"
+      die "sshd -T does not show '$want' (sshd_config or a file read before $SSHD_DROPIN sets it); put back what was there, ssh not reloaded"
     fi
   done
   [[ -n $bak ]] && rm -f "$bak"
@@ -261,6 +295,7 @@ do_setup() {
   [[ -z $from || $from =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]] || die "--ssh-from must be an IPv4 CIDR"
   [[ $swap =~ ^[1-9][0-9]*[MG]$ ]] || die "--swap-size like 2G"
   require_root_ubuntu
+  preflight_system
   setup_users "$keyfile"
   setup_sudoers
   setup_packages
@@ -320,7 +355,9 @@ do_lockdown() {
   local st; st=$(passwd --status "$DEPLOY_USER" | awk '{ print $2 }')
   [[ $st == P ]] || die "$DEPLOY_USER has no usable password (passwd --status says '$st'); set one with 'passwd $DEPLOY_USER' first, or nobody can sudo after lockdown"
   # Evidence, not just the flag: sshd must have logged a key login for deploy since setup
-  # (PR #30 review finding 3). Ubuntu 24.04 logs it under ssh.service; sshd.service is the alias.
+  # (PR #30 review finding 3). Ubuntu 24.04 and 26.04 log it under ssh.service (preflight_system checks
+  # that unit; on 26.04's OpenSSH the per-connection sshd-session process logs it in the same unit);
+  # sshd.service is the alias.
   local since ef; ef=$(p /etc/mindcraft-rotn/.setup-epoch)
   since=$(tr -d '\r' < "$ef" 2> /dev/null) && [[ $since =~ ^[0-9]{9,11}$ ]] || die "no setup timestamp in /etc/mindcraft-rotn/.setup-epoch (run setup first)"
   journalctl -u ssh -u sshd --since "@$since" --no-pager -o cat 2> /dev/null \
