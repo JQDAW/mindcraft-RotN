@@ -50,4 +50,4 @@ Both batches: about **EUR 0.16** plus two Primary IPv4-hours, against a stated m
 | `cost-ledger.jsonl` | `deploy/test-server.sh`'s ledger for the G0 build batch (start, stop, run seconds, billed hours, estimate) |
 | `project-empty-checks.txt` | Project-wide server, Primary IP and SSH key listings after each batch |
 
-The IP addresses in these logs belonged to deleted test servers. No tokens, keys or passwords are in these files.
+The test servers' IP addresses (all deleted servers) and this PC's local paths were redacted on 2026-11-02 with `test/tools/redact-evidence.mjs` (#94): they read `<ip>` and `<local>` in `g0-batch.log` and `cost-ledger.jsonl`. The four-number versions in `status-ping.json`'s mod list are versions, not addresses, and stay. The CI leak check now covers this folder. No tokens, keys or passwords are in these files.

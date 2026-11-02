@@ -130,13 +130,16 @@ export default {
         // Where 1.12's tp puts the bot (block-centred x and z), and how far from it the bot really is
         // (lead, #92 review: a fixed tolerance around the landing spot, not the whole cube radius).
         const landing = fixedCentre ? [fixedCentre[0] + 0.5, fixedCentre[1], fixedCentre[2] + 0.5] : null;
-        const offset = landing ? Math.round(Math.hypot(at[0] - landing[0], at[1] - landing[1], at[2] - landing[2]) * 100) / 100 : null;
+        // The check uses the exact distance; only the recorded and reported value is rounded (lead, #94 review:
+        // a rounded 2.004 would read 2 and pass).
+        const offset = landing ? Math.hypot(at[0] - landing[0], at[1] - landing[1], at[2] - landing[2]) : null;
+        const shown = offset === null ? null : Math.round(offset * 100) / 100;
         ctx.note('center', c);
         ctx.note('cube', { center: c, radius: p.radius, planned: fixedCentre ? p.cubeCentre : null, landing, teleportedTo, botPosition: at,
-            landingOffset: offset, maxLandingOffset: p.maxLandingOffset });
+            landingOffset: shown, maxLandingOffset: p.maxLandingOffset });
         if (fixedCentre && !teleportedTo) ctx.notGate(`no "Teleported" line for "tp ${name} ${fixedCentre.join(' ')}": the move to the fixed cube is unconfirmed`);
         if (landing && !(offset <= p.maxLandingOffset)) {
-            ctx.notGate(`the bot is at ${at.join(' ')} after the teleport, ${offset} blocks from the landing spot ${landing.join(' ')} (max ${p.maxLandingOffset})`);
+            ctx.notGate(`the bot is at ${at.join(' ')} after the teleport, ${shown} blocks from the landing spot ${landing.join(' ')} (max ${p.maxLandingOffset})`);
         }
         if (!inCube(botAt)) ctx.notGate(`the bot is at ${at.join(' ')}, not in the cube (centre ${c.join(' ')}, radius ${p.radius})`);
         const seed = p.seed || crypto.randomBytes(4).readUInt32LE(0);
