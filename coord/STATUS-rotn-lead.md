@@ -1,9 +1,32 @@
 # Status: rotn-lead
 
-Updated: 2026-11-02 20:26 UTC (from `date -u`)
+Updated: 2026-11-02 22:42 UTC (from `date -u`)
 
 
-## Current snapshot (2026-11-02 20:26 UTC): Phase 3 (G3)
+## Current snapshot (2026-11-02 22:42 UTC): Phase 3 (G3)
+
+- **Merged since 20:26 UTC:**
+  - harness-ops: #122 (G3 spend stop), #128 (CX23 read-only probe findings);
+  - skills-rotn: #123 (quiet reflexes), #124 (1.12 names), #126 (a new action clears a stale re-plan);
+  - rotn-data: #125 (isHuntable reads the 1.12 baby flag), #127 (mustCollectManually from the dump's collision boxes).
+- **In review:** #129 (harness-ops, #122 follow-up), REQUEST CHANGES:
+  - a G3 result.json with no batch.json still passes CI;
+  - the wiring test counts all scenarios, not G3 ones.
+
+  Both are required before the first G3 gate batch.
+- **CX23 (GO 1 done, PR #128):** the server runs Ubuntu 26.04.1 LTS with 3.8 GB RAM and no swap. Only SSH is public, there is no firewall, and sshd has `PasswordAuthentication yes`.
+- **Human decisions (2026-11-02, about 22:30 UTC):**
+  - the bot OS moves to Ubuntu 26.04 (ADR 0007), with a CI job on 26.04 before GO 2;
+  - the bootstrap turns SSH password login off (root keeps key-only login).
+- **Lead decisions for rotn-data:**
+  - Request 7 is granted as a one-off: one `mc.installRotnRecipes()` call in `initBot` (net-forge's part; net-forge is paused);
+  - Request 9 (prismarine-recipe outShape patch) is deferred until after G3;
+  - isHuntable keeps the vanilla animal list for G3;
+  - no GO for the Pyrotech machine-recipe dumper part.
+- **Routed to skills-rotn:** craftRecipe passes the resolved meta; the villager profession is index 13 on 1.12 (world.js).
+- **GO 2 (the bootstrap) waits on:** the 26.04 CI job, the bootstrap accepting 26.04 with password login off, and #129.
+
+## Earlier snapshot (2026-11-02 20:26 UTC): Phase 3 (G3)
 
 - **Team:** skills-rotn, rotn-data and harness-ops; net-forge is paused (#99).
 - **Merged in Phase 3 so far:**
