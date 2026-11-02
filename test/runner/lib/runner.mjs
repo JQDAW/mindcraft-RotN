@@ -46,8 +46,9 @@ export const KILLED_NOTE = 'the runner did not finish: it rewrites result.json a
  * Every declared check appears in the result: a check the scenario never reached is a FAIL with
  * detail "not reached", so a crash or early stop can never look like a pass.
  *
- * onProgress(record), if given, is called at the start and after every check and notGate with a
- * PROGRESS record: the checks done so far, `pass: false`, `verdict: 'FAIL (killed)'` and notes.killed.
+ * onProgress(record), if given, is called at the start and after every check, note and notGate with a
+ * PROGRESS record: the checks and notes so far, `pass: false`, `gateValid: false`, `verdict: 'FAIL (killed)'`
+ * and notes.killed.
  * run.mjs writes it as result.json, so a runner killed by `timeout` leaves the checks it had done
  * (G2 batch 6: on Windows `timeout` ends node with TerminateProcess, so no signal handler runs).
  * progress(killedBy) returns the same record on demand, with notes.killed naming the signal.
@@ -69,7 +70,8 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
         const passed = checks.filter((c) => c.pass).length;
         const checksPassed = !killed && !error && passed === checks.length;
         const weakened = [...weakenedParams(scenario, p), ...notGate];
-        const gateValid = weakened.length === 0;
+        // A killed run is never gate-valid either (lead, #92 review), whatever its parameters.
+        const gateValid = !killed && weakened.length === 0;
         return {
             scenario: scenario.id, gate: scenario.gate, title: scenario.title, runId,
             // pass means "counts for the gate"; a weakened run never does (PR #9 review finding 1).
@@ -93,7 +95,7 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
             log(`${pass ? 'PASS' : 'FAIL'} ${name}: ${detail ?? ''}`);
             report();
         },
-        note(key, value) { notes[key] = value; },
+        note(key, value) { notes[key] = value; report(); },
         // The run cannot count for the gate (e.g. its gate data is missing), whatever its checks say.
         notGate(reason) { notGate.push(String(reason)); log(`not a gate run: ${reason}`); report(); },
         waitFor: (fn, timeoutMs, pollMs = p.pollMs) => waitFor(clock, fn, timeoutMs, pollMs),

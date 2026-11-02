@@ -337,28 +337,42 @@ describe('the agent\'s naming path (PR #36 re-review item 3)', () => {
         const census = sent.findIndex((c) => /^tell FRCFLD scenario-blocks [0-9a-f]+ 16 50 8 -45,66,-66$/.test(c));
         assert.ok(tp > sent.indexOf('seed') && tp < census, sent.slice(0, 8).join(' | '));
         assert.ok(sent.slice(tp + 1, census).includes('tp FRCFLD ~ ~ ~'), 'the real position is read after the teleport');
-        assert.equal(r.notes.cube.botInCube, true);
-        assert.ok(!r.weakenedParams.some((w) => /cube|teleport/.test(w)), JSON.stringify(r.weakenedParams));
+        assert.deepEqual([r.notes.cube.landing, r.notes.cube.landingOffset, r.notes.cube.maxLandingOffset], [[-44.5, 66, -65.5], 0, 2]);
+        assert.ok(!r.weakenedParams.some((w) => /cube|teleport|landing/.test(w)), JSON.stringify(r.weakenedParams));
         assert.equal(byName(r).blocks_named.pass, true);
+        assert.equal(blocks.gateParams.maxLandingOffset, 'equal');
     });
 
-    test('the fixed cube: a bot that lands off-centre but in the cube still counts; the census stays on the fixed centre', async () => {
+    test('the fixed cube: a bot up to 2 blocks from the landing spot still counts; the census stays on the fixed centre', async () => {
+        // 1 block lower (it dropped into a dip) and 1.5 sideways: 1.8 blocks from -44.5 66 -65.5.
+        const r = await run(blocks, sim({ tpLandsAt: [-43, 65, -65.5] }), { seed: 7 });
+        assert.deepEqual(r.notes.cube.center, [-45, 66, -66]);
+        assert.deepEqual(r.notes.cube.botPosition, [-43, 65, -65.5]);
+        assert.equal(r.notes.cube.landingOffset, 1.8);
+        assert.ok(!r.weakenedParams.some((w) => /cube|teleport|landing/.test(w)), JSON.stringify(r.weakenedParams));
+        assert.equal(byName(r).blocks_named.pass, true, byName(r).blocks_named.detail);
+    });
+
+    test('the census is around the whispered centre, not around the bot (a driver that ignored it would fail blocks_named)', async () => {
+        // Far off (so not a gate run), but the census still covers the fixed cube: a census around the bot
+        // (-41,70,-61) would report candidates outside the fixed cube, which blocks_named fails.
         const r = await run(blocks, sim({ tpLandsAt: [-40.5, 70, -60.5] }), { seed: 7 });
         assert.deepEqual(r.notes.cube.center, [-45, 66, -66]);
-        assert.deepEqual(r.notes.cube.botPosition, [-40.5, 70, -60.5]);
-        assert.equal(r.notes.cube.botInCube, true);
-        assert.ok(!r.weakenedParams.some((w) => /cube|teleport/.test(w)), JSON.stringify(r.weakenedParams));
-        // The driver took the census around the whispered centre, not around itself (-41,70,-61): a census
-        // around the bot would report candidates outside the fixed cube, which blocks_named fails.
         assert.equal(byName(r).blocks_named.pass, true, byName(r).blocks_named.detail);
         assert.equal(byName(r).blocks_confirmed.pass, true, byName(r).blocks_confirmed.detail);
+        assert.equal(r.gateValid, false, 'more than 2 blocks from the landing spot');
     });
 
-    test('the fixed cube: a bot not in the cube after the teleport, or no "Teleported" line, is not a gate run', async () => {
-        // Lands 17 blocks above the centre (batch 6's canopy was 17 above batch 4's ground): outside the radius 16.
+    test('the fixed cube: a bot more than 2 blocks from the landing spot, or no "Teleported" line, is not a gate run', async () => {
+        // 2.5 blocks off: well inside the cube, but beyond the tolerance (lead, #92 review).
+        const near = await run(blocks, sim({ tpLandsAt: [-44.5, 66, -63] }), { seed: 7 });
+        assert.equal(near.notes.cube.landingOffset, 2.5);
+        assert.ok(near.weakenedParams.includes('the bot is at -44.5 66 -63 after the teleport, 2.5 blocks from the landing spot -44.5 66 -65.5 (max 2)'),
+            JSON.stringify(near.weakenedParams));
+        assert.equal(near.gateValid, false);
+        // Lands 17 blocks above (batch 6's canopy was 17 above batch 4's ground): also outside the cube.
         const high = await run(blocks, sim({ tpLandsAt: [-44.5, 83, -65.5] }), { seed: 7 });
-        assert.equal(high.notes.cube.botInCube, false);
-        assert.ok(high.weakenedParams.includes('the bot is at -44.5 83 -65.5 after the teleport, not in the cube (centre -45 66 -66, radius 16)'),
+        assert.ok(high.weakenedParams.includes('the bot is at -44.5 83 -65.5, not in the cube (centre -45 66 -66, radius 16)'),
             JSON.stringify(high.weakenedParams));
         assert.equal(high.gateValid, false);
         assert.equal(high.pass, false);
@@ -367,7 +381,7 @@ describe('the agent\'s naming path (PR #36 re-review item 3)', () => {
         assert.equal(silent.notes.cube.teleportedTo, null);
         assert.ok(silent.weakenedParams.includes('no "Teleported" line for "tp FRCFLD -45 66 -66": the move to the fixed cube is unconfirmed'),
             JSON.stringify(silent.weakenedParams));
-        assert.ok(silent.weakenedParams.some((w) => w.startsWith('the bot is at 10.5 64 -3.5 after the teleport, not in the cube')));
+        assert.ok(silent.weakenedParams.some((w) => w.startsWith('the bot is at 10.5 64 -3.5 after the teleport, ')));
         assert.equal(silent.gateValid, false);
     });
 
@@ -378,7 +392,8 @@ describe('the agent\'s naming path (PR #36 re-review item 3)', () => {
         s.server.console = (cmd, w) => { sent.push(cmd); return orig(cmd, w); };
         const r = await run(blocks, s, { seed: 7, cubeCentre: '' });
         assert.ok(!sent.some((c) => /^tp FRCFLD -?\d/.test(c)), 'no teleport');
-        assert.deepEqual(r.notes.cube, { center: [10, 64, -4], radius: 16, planned: null, teleportedTo: null, botPosition: [10.5, 64, -3.5], botInCube: true });
+        assert.deepEqual(r.notes.cube, { center: [10, 64, -4], radius: 16, planned: null, landing: null, teleportedTo: null, botPosition: [10.5, 64, -3.5],
+            landingOffset: null, maxLandingOffset: 2 });
         assert.ok(r.weakenedParams.includes(`cubeCentre= (gate needs = ${G2_CUBE_CENTRE})`), JSON.stringify(r.weakenedParams));
         const bad = await run(blocks, sim(), { seed: 7, cubeCentre: '-45 66 -66' });
         assert.match(bad.error, /cubeCentre '-45 66 -66' is not "x,y,z"/);
@@ -443,8 +458,8 @@ describe('g2-blocks-named on a simulated server', () => {
         assert.ok(!r.notes.census.some((b) => b.startsWith('minecraft:air')), 'no air in the census');
         assert.equal(r.notes.worldSeed, G2_WORLD_SEED, 'the world seed is evidence (finding 5)');
         // The fixed cube (lead, after G2 batch 6): teleported from its spawn (10.5 64 -3.5) to G2_CUBE_CENTRE.
-        assert.deepEqual(r.notes.cube, { center: [-45, 66, -66], radius: 16, planned: G2_CUBE_CENTRE, teleportedTo: [-44.5, 66, -65.5],
-            botPosition: [-44.5, 66, -65.5], botInCube: true });
+        assert.deepEqual(r.notes.cube, { center: [-45, 66, -66], radius: 16, planned: G2_CUBE_CENTRE, landing: [-44.5, 66, -65.5],
+            teleportedTo: [-44.5, 66, -65.5], botPosition: [-44.5, 66, -65.5], landingOffset: 0, maxLandingOffset: 2 });
         assert.ok(!r.weakenedParams.some((w) => /cube|teleport|cubeCentre/.test(w)), JSON.stringify(r.weakenedParams));
         assert.equal(r.notes.spotSkew.length, 0);
     });

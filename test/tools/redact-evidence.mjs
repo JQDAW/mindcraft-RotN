@@ -20,6 +20,12 @@
 //                               NOTE: so EVERY name@<IPv4> entry on that line is exempt, whatever the name.
 //                               Accepted (lead, PR #66 re-review): the line is FML's own list of the
 //                               client's mods and versions.
+//   and two exact table shapes from the pre-rule G0/G1 evidence (lead, when the check went to all of
+//   test/evidence/**):
+//     FML's mod state table     a line that is exactly "\t| STATE | modid | version | file.jar | sig |"
+//                               (sig: 40 hex digits or None); only the version cell and the .jar cell.
+//     the ping's mod list       a line that is exactly `"version": "x"` right after a line that is
+//                               exactly `"modid": "y",` (FML's modinfo.modList in the status ping JSON).
 //   It also flags any IPv6 address, any UUID, this PC's user paths, and partial leftovers next to
 //   <ip> (e.g. "<ip>.0.113.7"). Committed evidence comes out of this tool, never from hand edits: a form
 //   the check flags and the tool misses is fixed in the tool, with a test.
@@ -47,6 +53,12 @@ const LOCAL_PATH = /(?:[A-Za-z]:|\/[a-z])(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)[^\\/"
 const PARTIAL = /<ip>\.\d|\d\.<ip>|[0-9A-Fa-f]{1,4}:<ip>|<ip>:[0-9A-Fa-f]{1,4}:/g;
 
 const FML_JOIN = /Client attempting to join with \d+ mods : /;
+// FML's mod state table row (1.12 log), groups: the version cell, the file cell. The 'd' flag (group
+// offsets) goes through the constructor, as the lint parser does not know it in a literal.
+const FML_TABLE_ROW = new RegExp(String.raw`^\t\| [A-Z]+ +\| [A-Za-z0-9_.-]+ +\| ([A-Za-z0-9._+-]+) +\| ([A-Za-z0-9._+-]+\.jar) +\| (?:[0-9a-f]{40}|None) +\|$`, 'd');
+// The status ping's mod list (pretty JSON): the version line and the modid line right before it.
+const PING_VERSION = new RegExp(String.raw`^ *"version": "([A-Za-z0-9._+-]+)"$`, 'd');
+const PING_MODID = /^ *"modid": "[A-Za-z0-9_.-]+",$/;
 
 const HEX = /[0-9A-Fa-f]/;
 const isAddress6 = (s) => net.isIPv6(s) && s.split(':').filter(Boolean).length >= 2;   // not "::", "::1", "a::b"-short
@@ -88,6 +100,16 @@ function isVersionContext(text, index, match) {
     // FML's join list: the comma-separated entry holding the quad must be exactly "modid@version"
     // (no spaces), with the quad inside the version: "a@1.2.3.4", "a@1.12.2-1.2.3.4", "a@1.2.3.4-mixins8".
     const { line, col } = lineAround(text, index);
+    // The quad lies wholly inside capture group g of an exact line shape.
+    const inGroup = (m, g) => m?.indices[g] && col >= m.indices[g][0] && col + match.length <= m.indices[g][1];
+    const row = FML_TABLE_ROW.exec(line);
+    if (inGroup(row, 1) || inGroup(row, 2)) return true;
+    const ver = PING_VERSION.exec(line);
+    if (inGroup(ver, 1)) {
+        const start = text.lastIndexOf('\n', index - 1);
+        const prev = start > 0 ? lineAround(text, text.lastIndexOf('\n', start - 1) + 1).line : '';
+        if (PING_MODID.test(prev)) return true;
+    }
     const fml = FML_JOIN.exec(line);
     if (!fml) return false;
     const listStart = fml.index + fml[0].length;

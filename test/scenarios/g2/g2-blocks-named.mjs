@@ -7,9 +7,10 @@
 //      or an agent naming path not yet wired to rotn-data (mcdata.js), makes the run not a gate run.
 //   2. After settleMs the runner teleports the bot to the fixed cube centre (`cubeCentre`, G2_CUBE_CENTRE:
 //      batch 4's ground centre; lead, after G2 batch 6: the seed fixes the world, not the spawn), waits
-//      tpSettleMs, and reads the bot's real position from the server (`tp NAME ~ ~ ~`). A bot that is not
-//      inside the cube then makes the run not a gate run. notes.cube records the planned centre, the
-//      teleport and the position. With cubeCentre '' (a weakened run) the cube is centred on the bot.
+//      tpSettleMs, and reads the bot's real position from the server (`tp NAME ~ ~ ~`). A bot more than
+//      maxLandingOffset (2) blocks from the landing spot (the centre with x and z block-centred, as 1.12's
+//      tp puts it) makes the run not a gate run. notes.cube records the planned centre, the landing spot,
+//      the teleport, the position and its offset. With cubeCentre '' (a weakened run) the cube is centred on the bot.
 //   3. The console whispers "scenario-blocks TOKEN R N K X,Y,Z". The bot reports its census of the N most
 //      common NON-AIR block types in the cube (radius R) around X,Y,Z: "name meta count x,y,z ..." with up to K
 //      candidate positions per type, drawn uniformly from all blocks of that type.
@@ -90,6 +91,7 @@ export default {
         dataRoot: '',              // '' = this repo (its mcdata.js wiring decides gate validity); tests use fixtures
         worldSeed: G2_WORLD_SEED,  // the planned G2 world (deploy/test-server.sh run --seed); another seed is not a gate run
         cubeCentre: G2_CUBE_CENTRE, // "x,y,z": the bot is teleported here and the census covers this cube; '' = around the bot
+        maxLandingOffset: 2,       // blocks the bot may be from the landing spot after the teleport (lead, #92 review)
         loginTimeoutMs: 240 * MS,
         settleMs: 20 * MS,         // chunks around spawn arrive after the join
         tpSettleMs: 5 * MS,        // after the teleport to cubeCentre, before the position check
@@ -101,7 +103,7 @@ export default {
     gateParams: {
         bot: 'equal', radius: 'min', topN: 'min', minTypes: 'min', candidates: 'min', samplesPerType: 'min',
         spotChecks: 'min', absentHits: 'equal', maxShareGap: 'equal', maxUnloadedShare: 'equal', dataRoot: 'equal',
-        maxWorldChangeShare: 'equal', maxWorldChangesPerType: 'equal', worldSeed: 'equal', cubeCentre: 'equal',
+        maxWorldChangeShare: 'equal', maxWorldChangesPerType: 'equal', worldSeed: 'equal', cubeCentre: 'equal', maxLandingOffset: 'equal',
     },
 
     async run(ctx) {
@@ -125,10 +127,18 @@ export default {
         const botAt = at.map(Math.floor);
         const c = fixedCentre ?? botAt;
         const inCube = ([x, y, z]) => Math.abs(x - c[0]) <= p.radius && Math.abs(y - c[1]) <= p.radius && Math.abs(z - c[2]) <= p.radius;
+        // Where 1.12's tp puts the bot (block-centred x and z), and how far from it the bot really is
+        // (lead, #92 review: a fixed tolerance around the landing spot, not the whole cube radius).
+        const landing = fixedCentre ? [fixedCentre[0] + 0.5, fixedCentre[1], fixedCentre[2] + 0.5] : null;
+        const offset = landing ? Math.round(Math.hypot(at[0] - landing[0], at[1] - landing[1], at[2] - landing[2]) * 100) / 100 : null;
         ctx.note('center', c);
-        ctx.note('cube', { center: c, radius: p.radius, planned: fixedCentre ? p.cubeCentre : null, teleportedTo, botPosition: at, botInCube: inCube(botAt) });
+        ctx.note('cube', { center: c, radius: p.radius, planned: fixedCentre ? p.cubeCentre : null, landing, teleportedTo, botPosition: at,
+            landingOffset: offset, maxLandingOffset: p.maxLandingOffset });
         if (fixedCentre && !teleportedTo) ctx.notGate(`no "Teleported" line for "tp ${name} ${fixedCentre.join(' ')}": the move to the fixed cube is unconfirmed`);
-        if (!inCube(botAt)) ctx.notGate(`the bot is at ${at.join(' ')} after the teleport, not in the cube (centre ${c.join(' ')}, radius ${p.radius})`);
+        if (landing && !(offset <= p.maxLandingOffset)) {
+            ctx.notGate(`the bot is at ${at.join(' ')} after the teleport, ${offset} blocks from the landing spot ${landing.join(' ')} (max ${p.maxLandingOffset})`);
+        }
+        if (!inCube(botAt)) ctx.notGate(`the bot is at ${at.join(' ')}, not in the cube (centre ${c.join(' ')}, radius ${p.radius})`);
         const seed = p.seed || crypto.randomBytes(4).readUInt32LE(0);
         ctx.note('spotSeed', seed);
         const rnd = prng(seed);
