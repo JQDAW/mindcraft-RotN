@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (14:40 UTC, from `date -u`)
+Updated: 2026-11-02 (15:38 UTC, from `date -u`)
 
 ## Done
 
@@ -90,14 +90,12 @@ Updated: 2026-11-02 (14:40 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 6 FAILED** (2026-11-02, develop 2de68ec, the fixed world). `g2-blocks-named` was killed by its `timeout 15m` in the spot check, and I stopped the batch as the GO says. The server is deleted. Details are under "Real G2 batches". Evidence merged (#88).
-- **The lead's batch 6 decisions, this PR:** P1 (fixed cube centre) and P2 (a killed runner leaves its checks) approved, P3 declined (the timeout stays 15 min); the redaction tool now uses the check's own IPv4 rule. Batch 7 needs this PR merged and a new written GO.
-- **G2 batch 5 PASSED** (all three scenarios gate-valid in one batch on 01a8193), and it is merged as honest evidence (#83). **The lead is not declaring G2 on it**: that world's cube had no double plants or Dynamic Trees blocks, so batch 4's defect was never exercised.
-- **The lead's follow-ups, merged in #85:**
-  - the plan fixes the G2 world to batch 4's (seed `1880465901402976865`, `deploy/test-server.sh run --seed`);
-  - the scenarios now check the recorded seed against it (notGate if different);
-  - `botExitCode` 128 is explained and recorded: the runner's SIGTERM at the end of a session gives `botStoppedByRunner: true` and `botExitSignal: SIGTERM`.
-- G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82 (all merged).
+- **G2 batch 7 FAILED** (2026-11-02, develop 1bd66cd, the fixed world and the fixed cube): blocks and mobs PASSED as gate runs, items FAILED. The server kicked the bot 2 s after it joined ("Invalid move player packet received"). The server is deleted. Details are under "Real G2 batches"; the evidence is in this PR. **I am waiting for the lead and a new written GO;** the kick is net-forge's to diagnose (Requests, item 11).
+- **Next PR (after this one):** G0 and G1 evidence redacted with the tool, the CI leak check over all of `test/evidence/**`, and the #92 review follow-ups (a 2-block landing tolerance, `gateValid: false` in killed records, notes written through). Ready locally on `agent/harness-ops/evidence-all-redacted`.
+- **History:**
+  - G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82.
+  - Batch 5 PASSED (#83), but its world had no double plants, so the lead fixed the world (#85).
+  - Batch 6 FAILED: its spawn on a canopy made the cube 90% air (#88). The lead then fixed the cube (#92: P1, P2, the redaction rule).
 - **Follow-up (lead, not blocking):** in `g2-mobs-named`, require a run-tagged entity within 1 block of a matched mob report.
 
 ## Watching
@@ -105,6 +103,40 @@ Updated: 2026-11-02 (14:40 UTC, from `date -u`)
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
 ## Real G2 batches
+
+### G2 batch 7 (2026-11-02): FAIL (blocks PASS, mobs PASS, items FAIL: kicked for an invalid move packet); the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 2026-11-02 15:11 UTC (relayed by the human).
+- **Code:** a clean detached checkout of develop at 1bd66cd (#84, #85, #92), after `npm ci`. Every `result.json` has `git.dirty: false` and `untracked: 0`.
+- **Checks right before the create (15:13 UTC), all passed:**
+  - `agentNaming('.')`: wired, 643/643.
+  - `msa-login FRCFLD --check`: exit 0, output discarded.
+  - The preflight on its own: cadence path; no servers or Primary IPs.
+- **Command:** the planned one, unchanged.
+- **Console:** `gamerule doDaylightCycle false` once and `time set day` before each scenario. Then the runner's commands, including `tp <bot> -45 66 -66`.
+
+**Real times (UTC):**
+- start 15:14:02, created 15:14:26, ready 15:17:32;
+- blocks 15:17:40-15:28:28, mobs 15:28:31-15:31:12, items 15:31:15-15:34:52;
+- teardown "verified gone" at 15:35:15.
+
+Up 21 min, 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour. At 15:35:22 the server and primary-ip lists were empty; the only SSH key was the human's unlabelled one.
+
+**Results.** Seed `1880465901402976865` and `loginRetry` `{retried: false}` in all three runs. The remap line was the same in all three: `applied 506 state ids in 132 of the table's 132 blocks; conflicts 0 skipped`.
+
+| Scenario | Verdict | Details |
+| --- | --- | --- |
+| `g2-blocks-named` | **PASS**, gate-valid | Cube centre -45 66 -66: teleport confirmed, checked position -44.5 66 -65.5 (first spawn -43.5 66 -66.5). 50 types. `blocks_confirmed` 150/150, `metaDrift` 0 of 150, `worldChanges` none. Spot check 40 of 40 non-air in 80 positions, 0 unloaded, no skew. Runner-stopped (128, SIGTERM). |
+| `g2-mobs-named` | **PASS**, gate-valid | 12/12 named and confirmed by run tag, 7 modded. Replaced 1 of 12 (`charm:spectre` vanished). Runner-stopped. |
+| `g2-items-roundtrip` | **FAIL** (gate-valid parameters) | `items_table` 643/643 and `login_online` PASS. Kicked at 15:31:26, 2 s after the join: server "Invalid move player packet received", client `multiplayer.disconnect.invalid_player_movement`. So `items_read`, `items_named` and `items_roundtrip` got no reply (FAIL). Driver exit 1, not runner-stopped. |
+
+- **Double plants and Dynamic Trees (blocks):**
+  - census: `minecraft:double_plant 10` (upper halves) 20 blocks, `double_plant 3` 20 blocks, and 33 Dynamic Trees types;
+  - samples: 3 upper-half and 3 meta-3 double plants, plus 99 Dynamic Trees samples, **all server-confirmed**.
+- **The kick:** the mobs session had joined at the same position (-44.5 66 -65.5, on dirt) and played normally. The capture has no client position packets, so it cannot show the bad packet itself. Raw capture: `captures/raw/batch7-20261102/FRCFLD-2026-11-02T15-31-20-713Z.jsonl`.
+
+**Evidence:** `test/evidence/g2/batch7-20261102/` (this PR). Every file came out of the merged tool; no hand edits. The CI leak check passes. Raw files: `captures/raw/batch7-20261102/`.
 
 ### G2 batch 6 (2026-11-02): FAIL (blocks timed out in its spot check; batch stopped); the server is deleted
 
@@ -141,7 +173,7 @@ Up 18 min, 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour. At 14:12:
   - Reaching 40 needs about 400 positions (the `spotMaxPositions` cap), about 15 min more.
 - **Mobs:** login PASS; stopped before any summon. **Items:** did not run.
 
-**Evidence:** `test/evidence/g2/batch6-20261102/` (this PR), redacted with the merged tool, plus one manual redaction (the server address in `run.log`). The CI leak check passes. Raw files: `captures/raw/batch6-20261102/`.
+**Evidence:** `test/evidence/g2/batch6-20261102/` (#88), redacted with the merged tool, plus one manual redaction (the server address in `run.log`; since #92 the tool gives the same file). The CI leak check passes. Raw files: `captures/raw/batch6-20261102/`.
 
 ### G2 batch 5 (2026-11-02): PASS (blocks, mobs and items all PASS, gate-valid); the server is deleted
 
@@ -187,7 +219,7 @@ Up 18 min, 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour. At 14:12:
   - The lead decides whether G2 needs a double-plant world.
 - **A server-side error, not caused by the bot:** at 03:06:23 (during blocks), `[File IO Thread/ERROR] [Universal Tweaks]: Failed to save chunk` with a NullPointerException in NBT writing. It is a pack-side save error; all checks used the live world. Worth knowing for the live server.
 
-**Evidence:** `test/evidence/g2/batch5-20261102/` (this PR), redacted with the merged tool; the CI leak check passes.
+**Evidence:** `test/evidence/g2/batch5-20261102/` (#83), redacted with the merged tool; the CI leak check passes.
 
 ### G2 batch 4 (2026-11-02): FAIL (blocks 147/150, mobs PASS, items PASS); the server is deleted
 
@@ -235,7 +267,7 @@ Up 18 min, 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour. At 14:12:
 
 **Not related:** three `betterwithmods` `[EXPLOSION]` lines at (118, 6, -216), about 160 blocks away and underground, at 01:18. The `lost connection: Disconnected` at 01:30:36 is the driver's own quit.
 
-**Evidence:** `test/evidence/g2/batch4-20261102/` (this PR), redacted with the merged tool; the CI leak check passes.
+**Evidence:** `test/evidence/g2/batch4-20261102/` (#78), redacted with the merged tool; the CI leak check passes.
 
 ### G2 batch 3 (2026-11-02): FAIL (blocks 110/111, mobs PASS, items PASS); the server is deleted
 
@@ -288,7 +320,7 @@ Up 18 min, 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour. At 14:12:
 
 Nothing is tolerated on naming: each counted sample still needs census name = fresh name = the server's answer. The alternative is to keep the rule as it is and re-run: this happened to 1 of 111 samples.
 
-**Evidence:** `test/evidence/g2/batch3-20261102/` (this PR), redacted with the merged tool; the CI leak check passes.
+**Evidence:** `test/evidence/g2/batch3-20261102/` (#76), redacted with the merged tool; the CI leak check passes.
 
 ### G2 batch 2 (2026-11-01): FAIL (mobs PASS, items PASS, blocks did not run); the server is deleted
 
@@ -340,7 +372,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 
 **Whether G2 can combine batches is your call:** mobs and items from batch 2 plus blocks from a batch 3, or all three in one batch.
 
-**Evidence:** `test/evidence/g2/batch2-20261101/` (this PR), redacted with the merged tool; the CI leak check passes.
+**Evidence:** `test/evidence/g2/batch2-20261101/` (#71), redacted with the merged tool; the CI leak check passes.
 
 ### G2 batch 1 (2026-11-01): FAIL; the server is deleted
 
@@ -395,7 +427,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 
 ## Planned real batches
 
-### G2 batch (the plan for every G2 gate batch; batches 1-5 ran on 2026-11-01/02. Each batch needs the lead's written GO.)
+### G2 batch (the plan for every G2 gate batch; batches 1-7 ran on 2026-11-01/02. Each batch needs the lead's written GO.)
 
 **Goal:** G2 gate evidence. All three G2 scenarios at the gate parameters (no `--param` overrides, so the default `dataRoot`), with the agent's own naming, on one disposable test server.
 
@@ -428,7 +460,8 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
     - #66 merged: the batch 1 evidence plus the redaction tool and CI leak check;
     - and a **new** written GO from the lead.
 13. **For batch 6 (lead, after batch 5):** net-forge's fix for the 124 remap entries skipped as "cycle" merged; the world-seed check (#85) merged; and a new written GO.
-14. **For batch 7 (lead, after batch 6):** this PR merged (the fixed cube, killed-run records, the redaction rule), and a new written GO.
+14. **For batch 7 (lead, after batch 6):** #92 merged (the fixed cube, killed-run records, the redaction rule), and a new written GO.
+15. **For batch 8 (after batch 7):** the lead's decision on the items kick (Requests, item 11), and a new written GO.
 
 **Driver (agreed: net-forge's #54).**
 - **The driver:** net-forge's `packages/forge-bridge/tools/g1-driver.mjs`. It already builds the bot with the real `initBot` (`src/utils/mcdata.js`) with forge-bridge attached, and speaks the G1 protocol through `attachScenario`. The G2 extension is about three lines in **their** file:
@@ -513,7 +546,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 batch 7:** this PR (P1, P2, the redaction rule) reviewed and merged, then a new written GO.
+- **G2 batch 8:** the lead's decision on batch 7's items kick (Requests, item 11; net-forge's area), then a new written GO.
 
 ## Requests to other agents or the lead
 
@@ -532,16 +565,17 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
    5. GitHub disables the helper's schedule after 60 days without activity in the helper repo. The preflight warns from day 45; a small commit to the helper repo resets the clock.
 
 7. **Lead: a `.gitattributes`** with `*.sh text eol=lf` and `deploy/cx23/** text eol=lf`. Root files are yours. The stopgap is in place: the scripts are `.sh`, and bootstrap strips CRs.
-9. ~~Lead: decide how G2 handles the cube after batch 6~~ **Decided** (#88 comment): P1 and P2 approved, P3 declined; done in this PR. The original proposals, for the record:
+8. **Human, via the lead, for the first real CX23 run (later, after the lead's approval):** the CX23's root login and IP, the `deploy` user's public key, the bot's OpenRouter key (set on the server only), and the bot's first Microsoft device-code login. Steps: `deploy/cx23/README.md`.
+9. ~~Lead: decide how G2 handles the cube after batch 6~~ **Decided** (#88 comment): P1 and P2 approved, P3 declined; done in #92. The original proposals, for the record:
    - **P1 (recommended): fix the cube too.** After login, the runner teleports the bot to batch 4's ground centre (-45 66 -66) with `tp`, which is already on the plan's console list. It then waits for chunks and takes the census there, so every G2 run sees the same cube (the one where batch 4 found double plants and Dynamic Trees blocks). The new gate parameter `cubeCentre` would be 'equal'.
    - **P2: keep partial results.** On SIGTERM (`timeout`), the runner writes `result.json` with the checks done so far, verdict FAIL and an "interrupted" error, so a kill no longer loses passed checks.
    - **P3 (optional): make the spot check faster or give it more time.** Either one SSH console call per batch of 8 `testforblock` commands (a `deploy/test-server.sh console` change), or `timeout 25m` for blocks with the hard stop adjusted. P1 alone should bring the spot check back to about 1-2 min (batch 4: 43 non-air in 72 positions).
 
-10. **Lead (info): G0 evidence predates the redaction rules.** `test/evidence/g0/g0-batch.log` lines 9 and 17 hold the G0 test server's public IPv4 (the "is at" and "READY ... at" forms). That server was deleted on 2026-11-01. The CI leak check covers only `test/evidence/g2/**`, so it never flagged them. Say if you want them redacted with the tool (a small PR of mine). The G1 `server.log`'s other flags are FML's pipe-table mod versions, a form G2 excerpts never contain.
-
-8. **Human, via the lead, for the first real CX23 run (later, after the lead's approval):** the CX23's root login and IP, the `deploy` user's public key, the bot's OpenRouter key (set on the server only), and the bot's first Microsoft device-code login. Steps: `deploy/cx23/README.md`.
+10. ~~Lead (info): G0 evidence predates the redaction rules~~ **Decided:** redact G0 and G1 with the tool and extend the check to all evidence (my next PR). The original note: `test/evidence/g0/g0-batch.log` lines 9 and 17 hold the G0 test server's public IPv4 (the "is at" and "READY ... at" forms). That server was deleted on 2026-11-01. The CI leak check covers only `test/evidence/g2/**`, so it never flagged them. Say if you want them redacted with the tool (a small PR of mine). The G1 `server.log`'s other flags are FML's pipe-table mod versions, a form G2 excerpts never contain.
+11. **Lead, routed to net-forge: batch 7's items kick.** 2 s after joining, the bot was kicked with `multiplayer.disconnect.invalid_player_movement` (server: "Invalid move player packet received"; 1.12 sends it for a non-finite or out-of-range position or rotation in a move packet). The raw capture is `captures/raw/batch7-20261102/FRCFLD-2026-11-02T15-31-20-713Z.jsonl` on this PC, and the evidence is in `test/evidence/g2/batch7-20261102/items/`. The capture logs no client position packets; it may need to.
 
 ## Open PRs
 
-- This PR: the fixed G2 cube (P1), killed-run records (P2) and the redaction tool on the check's rule (`agent/harness-ops/g2-cube-centre`).
-- Merged since the last update: #88 (batch 6 evidence), #89 (#85 nits).
+- This PR: G2 batch 7 evidence (FAIL) and this record (`agent/harness-ops/g2-batch7-evidence`).
+- Next: G0/G1 redaction, the leak check over all evidence and the #92 follow-ups (`agent/harness-ops/evidence-all-redacted`).
+- Merged since the last update: #92.

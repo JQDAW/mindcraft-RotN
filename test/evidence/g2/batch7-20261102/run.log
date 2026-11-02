@@ -1,0 +1,59 @@
+BATCH START 15:14:02
+[test-server 15:14:17] sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 14.7, 15.5 min, newest 41467428224 13.2 min ago
+[test-server 15:14:17] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 15:14:18] creating mcr-test-20261102-151409: delete-after 2026-11-02T17:14:17Z (TTL 2h)
+Waiting for create_server (server: 174179939, image: 161547269) ...
+Waiting for start_server (server: 174179939) ...
+Waiting for create_server (server: 174179939, image: 161547269) ... done
+Waiting for start_server (server: 174179939) ... done
+Server 174179939 created
+[test-server 15:14:26] server mcr-test-20261102-151409 is at <ip>
+[test-server 15:14:26] waiting for SSH and the build (up to 120 min)
+[test-server 15:14:37] phase: unreachable
+[test-server 15:14:53] phase: booting:running
+[test-server 15:15:09] phase: unpack
+[test-server 15:15:25] phase: starting
+[test-server 15:17:32] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 15:17:34] READY: mcr-test-20261102-151409 at <ip>:25565 (delete-after 2026-11-02T17:14:17Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261102-151409
+[test-server 15:17:34] running: bash -c 
+  C() { bash "$TEST_SERVER_CTL" console --wait 2 -- "$@"; };
+  C gamerule doDaylightCycle false;
+  D="node packages/forge-bridge/tools/g1-driver.mjs";
+  C time set day; timeout 15m node test/runner/run.mjs --scenario g2-blocks-named    --out captures/raw/g2-blocks -- $D; b=$?;
+  C time set day; timeout 15m node test/runner/run.mjs --scenario g2-mobs-named      --out captures/raw/g2-mobs   -- $D; m=$?;
+  C time set day; timeout 15m node test/runner/run.mjs --scenario g2-items-roundtrip --out captures/raw/g2-items  -- $D; i=$?;
+  bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g2/server;
+  echo "blocks=$b mobs=$m items=$i"; [ "$b$m$i" = 000 ]
+[15:17:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Game rule doDaylightCycle has been updated to false
+[15:17:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Set the time to 1000
+[scenario 15:17:40] g2-blocks-named (G2) run 20261102t151740-69e510; git 1bd66cd63dbf1dd7056f432927d77fe4c2956a99; driver: node packages/forge-bridge/tools/g1-driver.mjs; out: captures/raw/g2-blocks
+[scenario 15:17:58] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 15:19:33] PASS blocks_named: 50 non-air block types (need 10..50)
+[scenario 15:25:21] PASS blocks_confirmed: 150/150 runner-picked samples (3 per type) re-asked and confirmed by testforblock
+[scenario 15:28:26] PASS blocks_spotcheck: 40 confirmed non-air answers of 40 needed (80 positions asked, 0 unloaded, seed 377468399)
+[scenario 15:28:28] g2-blocks-named: PASS; 4 passed, 0 failed (captures/raw/g2-blocks/result.json)
+[15:28:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Set the time to 1000
+[scenario 15:28:31] g2-mobs-named (G2) run 20261102t152831-26eb76; git 1bd66cd63dbf1dd7056f432927d77fe4c2956a99; driver: node packages/forge-bridge/tools/g1-driver.mjs; out: captures/raw/g2-mobs
+[scenario 15:28:49] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 15:30:47] PASS mobs_named: 12/12 summoned mobs reported by registry name (1 replaced)
+[scenario 15:31:08] PASS mobs_confirmed: 12/12 reported summons confirmed by testfor (run tag)
+[scenario 15:31:12] g2-mobs-named: PASS; 3 passed, 0 failed (captures/raw/g2-mobs/result.json)
+[15:31:13] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Set the time to 1000
+[scenario 15:31:15] g2-items-roundtrip (G2) run 20261102t153115-794469; git 1bd66cd63dbf1dd7056f432927d77fe4c2956a99; driver: node packages/forge-bridge/tools/g1-driver.mjs; out: captures/raw/g2-items
+[scenario 15:31:16] PASS items_table: agent naming (src/utils/mcdata.js toNew/toOld): mcdata.js exports toNew and toOld; all 643 table entries round-trip through them; sample: all 30 in the table
+[scenario 15:31:34] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 15:34:47] FAIL items_read: no "items 7e8b94995e45" reply within 120s
+[scenario 15:34:47] FAIL items_named: no "items 7e8b94995e45" reply within 120s
+[scenario 15:34:47] FAIL items_roundtrip: no "items 7e8b94995e45" reply within 120s
+[scenario 15:34:52] g2-items-roundtrip: FAIL; 2 passed, 3 failed (captures/raw/g2-items/result.json)
+captures/raw/g2/server
+blocks=0 mobs=0 items=1
+[test-server 15:35:02] command exited with 1
+[test-server 15:35:02] EXIT trap: tearing down mcr-test-20261102-151409
+[test-server 15:35:02] deleting batch mcr-test-20261102-151409 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261102-151409)
+Waiting for delete_server (server: 174179939) ...
+Waiting for delete_server (server: 174179939) ... done
+[test-server 15:35:15] batch mcr-test-20261102-151409: ran 20 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 15:35:15] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261102-151409
+BATCH EXIT 1 15:35:15
