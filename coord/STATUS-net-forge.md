@@ -382,7 +382,7 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - README: `skippedTooWide` lives on `bot.registry.stateIdRemap` (the live Map), not in the `bot.forge.stateIdRemap` login report.
 - This STATUS: the #86 entry no longer says "stacked on #84".
 
-## In review: G2 batch 7 blocker, the movement guard (branch `agent/net-forge/invalid-move-guard`, from develop c3163b1)
+## In review: G2 batch 7 blocker, the movement guard (PR #95; branch `agent/net-forge/invalid-move-guard`, from develop c3163b1)
 
 - **Batch 7 items kick** (`invalid_player_movement`, about 2.2 s after spawn). Forge 1.12.2 sends it for a movement packet with a non-finite x, y, z, yaw or pitch, or with a coordinate whose absolute value is over 3.0E7.
 - **What the capture shows** (items vs. the mobs control):
