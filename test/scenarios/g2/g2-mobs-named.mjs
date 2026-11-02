@@ -27,7 +27,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startSession } from '../../runner/lib/session.mjs';
 import { lastTeleport } from '../../runner/lib/server-log.mjs';
-import { awaitReply, isRegistryName, prng, summonVerdict, testforVerdict } from '../../runner/lib/g2.mjs';
+import { G2_WORLD_SEED, awaitReply, isRegistryName, prng, summonVerdict, testforVerdict } from '../../runner/lib/g2.mjs';
 
 const MS = 1000;
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -90,6 +90,7 @@ export default {
         mobs: '',                  // '' = from mobsFile (gate); a list here is a smoke run
         mobsFile: COMMON_MOBS_FILE,
         dataRoot: '',              // '' = this repo; tests point it at fixture data (never a gate run)
+        worldSeed: G2_WORLD_SEED,  // the planned G2 world (deploy/test-server.sh run --seed); another seed is not a gate run
         maxMobs: 12,
         maxReplaced: 3,            // refused + vanished mobs replaced from the list; above this, not a gate run
         verifyRounds: 4,           // rounds of "does the server still have every summoned mob?" before asking the bot
@@ -104,7 +105,7 @@ export default {
         logTail: 40000,
         consoleWaitS: 1,
     },
-    gateParams: { bot: 'equal', mobs: 'equal', mobsFile: 'equal', dataRoot: 'equal', maxMobs: 'min', maxReplaced: 'equal', radius: 'min' },
+    gateParams: { bot: 'equal', mobs: 'equal', mobsFile: 'equal', dataRoot: 'equal', maxMobs: 'min', maxReplaced: 'equal', radius: 'min', worldSeed: 'equal' },
 
     async run(ctx) {
         const { server, clock, params: p, runId } = ctx;

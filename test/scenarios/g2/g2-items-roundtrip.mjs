@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startSession } from '../../runner/lib/session.mjs';
-import { agentNaming, awaitReply, giveVerdict, ints, isRegistryName, sample } from '../../runner/lib/g2.mjs';
+import { G2_WORLD_SEED, agentNaming, awaitReply, giveVerdict, ints, isRegistryName, sample } from '../../runner/lib/g2.mjs';
 
 const MS = 1000;
 
@@ -89,6 +89,7 @@ export default {
         bot: 'FRCFLD',
         items: VANILLA_SAMPLE,
         dataRoot: '',              // '' = this repo; tests point it at fixture data (never a gate run)
+        worldSeed: G2_WORLD_SEED,  // the planned G2 world (deploy/test-server.sh run --seed); another seed is not a gate run
         loginTimeoutMs: 240 * MS,
         settleMs: 10 * MS,
         seeMs: 5 * MS,
@@ -97,7 +98,7 @@ export default {
         logTail: 40000,
         consoleWaitS: 1,
     },
-    gateParams: { bot: 'equal', items: 'equal', dataRoot: 'equal' },
+    gateParams: { bot: 'equal', items: 'equal', dataRoot: 'equal', worldSeed: 'equal' },
 
     async run(ctx) {
         const { server, clock, params: p } = ctx;

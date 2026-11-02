@@ -6,7 +6,10 @@
 // 10-minute scenario on a fake clock in milliseconds.
 //
 //   server: { console(cmd, waitS) -> string[] (new log lines), log(n) -> string[] (tail) }
-//   bot:    { start(env), stop() -> Promise, alive() -> bool, exitCode() -> number|null, output() -> string[] }
+//   bot:    { start(env), stop() -> Promise, alive() -> bool, exitCode() -> number|null, output() -> string[],
+//             exitSignal?() -> string|null }
+//   result.botExitCode: the driver's exit code; 128 means it ended by a signal (botExitSignal), which
+//   is what the runner's own SIGTERM at the end of every scenario gives (botStoppedByRunner: true).
 //   clock:  { now() -> ms, sleep(ms) -> Promise }
 
 /** Poll fn() every pollMs until it returns a truthy value or timeoutMs passes. Returns the value or null. */
@@ -58,13 +61,20 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
     };
     const started = clock.now();
     let error = null;
+    let botStoppedByRunner = false;
     try {
         await scenario.run(ctx);
     } catch (e) {
         error = e?.stack ?? String(e);
         log(`scenario error: ${error}`);
     } finally {
-        if (bot.alive()) await bot.stop();
+        // A driver still running at the end is stopped by the runner (SIGTERM). Its exit code is then
+        // 128 (adapters.mjs: "ended by a signal") with botExitSignal "SIGTERM" and botStoppedByRunner
+        // true: the normal end of a scenario, not a crash (G2 batch 5, lead question 3).
+        if (bot.alive()) {
+            botStoppedByRunner = true;
+            await bot.stop();
+        }
     }
     const checks = Object.entries(scenario.checks).map(([name, readyToTry]) => ({
         ...(results.get(name) ?? { check: name, pass: false, detail: error ? 'not reached (scenario error)' : 'not reached' }),
@@ -82,6 +92,6 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
         verdict: checksPassed ? (gateValid ? 'PASS' : 'SMOKE-PASS (not a gate pass)') : 'FAIL',
         passed, failed: checks.length - passed,
         durationS: Math.round((clock.now() - started) / 1000), params: p, checks, notes,
-        botExitCode: bot.exitCode(), error,
+        botExitCode: bot.exitCode(), botExitSignal: typeof bot.exitSignal === 'function' ? bot.exitSignal() : null, botStoppedByRunner, error,
     };
 }
