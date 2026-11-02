@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, lastProfileFetchFailure, classifyBeforeJoinError, formatBeforeJoinError } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -201,19 +201,13 @@ export function initBot(username, { onMsaCode } = {}) {
     // mineflayer's default error logger (logErrors) prints whole error objects. Before
     // login those can be auth errors whose message holds an HTTP response body
     // (prismarine-auth's checkStatus). Before login only the error's class, code and
-    // status are logged; after login errors print as mineflayer did.
+    // status are logged; after login errors print as mineflayer did. A listener is
+    // always attached (a no-op with hideErrors), so an 'error' never goes unhandled.
     const logErrors = options.logErrors ?? true;
     options.logErrors = false;
     const bot = createBot(options);
     bot.forge = forge;
-    if (logErrors && !options.hideErrors) {
-        let loggedIn = false;
-        bot.once('login', () => { loggedIn = true; });
-        bot.on('error', (err) => {
-            if (loggedIn) console.log(err);
-            else console.log(`[mcdata] bot error before login: ${formatBeforeJoinError(classifyBeforeJoinError(err, { profileFailure: lastProfileFetchFailure() }))}`);
-        });
-    }
+    attachBotErrorLogger(bot, { logErrors, hideErrors: !!options.hideErrors });
     // ADR 0003 decision 5, agent side: agent.js calls this on its exit paths. It
     // writes the reason for the main process (MINDCRAFT_EXIT_REASON_FILE) and
     // returns the exit code: the kick's (3 for fatal), or 1.

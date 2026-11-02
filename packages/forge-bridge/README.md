@@ -33,6 +33,12 @@ It never shows a device code. The default `onMsaCode` (`quietMsaCodeHandler`) lo
 - **Errors before login** (#72 review). mineflayer's default error logger (`logErrors`) prints whole error objects, and prismarine-auth's `checkStatus` puts the full HTTP response body in the message (Xbox user, device and title auth, Live refresh). So `initBot` turns that logger off.
   - **Before login** it logs only `classifyBeforeJoinError`'s facts: class, code, status and kind, never the message.
   - **After login** errors print as mineflayer printed them.
+  - A listener is always attached (`attachBotErrorLogger`), a no-op with `hideErrors`, so an `error` never throws as unhandled.
+- **prismarine-auth's own output** (`patches/prismarine-auth+3.1.1.patch`, lead-approved). The patch reduces it to status, class and code (`Util.errorSummary`):
+  - `Error refreshing token` (Live and MSA) no longer prints the error object;
+  - a non-200 Live device-code request prints its status, not its body;
+  - an MSA device-code failure no longer prints the serialized MSAL error;
+  - XSTS errors carry `err.xerr`, and an unknown XErr's message no longer includes the response JSON.
 
 `initBot` in `src/utils/mcdata.js` passes `createForgeConnect(...)` as nmp's `connect` option. nmp calls it after authentication. It then:
 
@@ -223,7 +229,8 @@ Redaction happens at write time. The bot's username and UUID become same-length 
     - A login that fails before the bot joins (G2 batch 2's auth failure, which nmp reports only as an `error`) exits at once, with no `end` needed.
     - **Exit code by HTTP status:** the error's own status, or for nmp's "Failed to obtain profile data" the one the profile-fetch diagnostics captured.
       - 401 and 403 (the profile fetch or Xbox) and 404 (does not own Minecraft) exit **3**.
-      - Network errors, timeouts, 5xx and other statuses exit **1**.
+      - So does a permanent XSTS XErr (`PERMANENT_XSTS_XERRS`, prismarine-auth's own `xboxLiveErrors` table: no Xbox profile 2148916233, ban, child account, terms, region, proof of age, playtime, under 18). The patched prismarine-auth attaches it as `err.xerr`.
+      - Network errors, timeouts, 5xx, other statuses and other XErrs exit **1**.
     - An event loop that drains without a stop also exits 1.
     - Before join the `error` event never has the message: it has `phase: before_join`, `errorClass`, `code` (for example `ECONNREFUSED`), `status`, `statusSource` and `kind`. The same goes for unhandled rejections.
     - The `end` event carries `joined` and `beforeJoin`, and setup `fatal` events carry `beforeJoin: true`, so the runner can tell "exited before join".
@@ -254,6 +261,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - A spawn whose metadata uses AquaAcrobatics' unknown serializer 14 (`entity-metadata-aqua-pose.json`) is applied with `forge.metadataError`.
   - `e2e-initbot` checks through `initBot` that the fake server's FML spawn reaches `bot.entities` as `other`, that vanilla `entity_teleport` and `rel_entity_move` update it, and that `entity_destroy` removes it.
 - `exit-contract.test.js`: the agent side (`recordAgentExit`): kicks with and without a bridge, `cleanKill` before and after a kick, startup errors, and no reason file.
+- `prismarine-auth-patch.test.js`: the real patched methods, with stubbed fetch, caches and MSAL, and fake tokens. Each reduced output is checked exactly and has nothing token-like. All 7 tests fail against stock 3.1.1.
 - `auth-diagnostics.test.js`: the real `fetchProfile` with a stubbed fetch (429, a network error, a 2xx with `error`). The line has the status and class, and nothing token-like, no body text and no address; the error is rethrown unchanged.
 - `driver-exit.test.js`: the exit decision and the logging before join.
   - One case per class: Xbox 401 and 403, profile 401 and 404 exit 3; 5xx, 429, network, timeout and connect refused exit 1.
