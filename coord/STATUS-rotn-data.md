@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T22:59Z (from `date -u`)
+Updated: 2026-11-02T23:15Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -18,6 +18,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
 - **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
 - **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
+- **#136 merged** (`fedab3d`): atomic recipe install with restore, fail-soft lazy build, injected catalog used.
 - **#130 merged** (`8557060`): `initBot` installs RotN recipes once per login (lead exception, Request 7), with the #127 nits.
 - **#127 merged** (`f457642`): `mustCollectManually` on RotN names (no collision box: dug in place).
 - **#125 merged** (`0a94411`): `isHuntable` reads the 1.12 baby flag (metadata index 12, cited); `isBaby` exported.
@@ -188,7 +189,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- **#130 follow-up (`agent/rotn-data/install-failsoft`; review findings 1-2 required, nits 3-4 taken):** the install is atomic (the vanilla table is snapshotted and put back if the install throws, in rotn-data and again in `installRotnRecipesOnce`); the lazy recipe build fails soft (a recipe whose conversion throws is skipped and counted in `stats().errors`, so `bot.recipesFor` cannot throw); the install uses the injected catalog's recipes; the shared minecraft-data table is documented; log lines have one prefix.
+- **#136 review nit (`agent/rotn-data/initbot-test-aftereach`):** `mcdata.initbot-recipes.test.js` snapshots minecraft-data's shared 1.12.2 recipe table and restores it after each test, so test order does not matter.
 - **After that: free** (lead, 2026-11-02). Lead decisions recorded:
   - Request 7: granted (above).
   - Request 9 (prismarine-recipe `outShape` patch): not now; revisit after G3.
@@ -248,4 +249,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/install-failsoft`: #130 review follow-up (see Doing).
+- `agent/rotn-data/initbot-test-aftereach`: #136 review nit (see Doing).

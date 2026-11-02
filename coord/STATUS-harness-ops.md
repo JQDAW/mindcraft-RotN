@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (23:15 UTC, from `date -u`)
+Updated: 2026-11-02 (23:45 UTC, from `date -u`)
 
 ## Done
 
@@ -1135,10 +1135,9 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
   - It checks the ufw rule before enabling, and the active status after.
   - **The required nits:**
     1. `--ssh-from` must contain the client IP from `SSH_CONNECTION`, and GO 2 runs without `--ssh-from`;
-    2. `lockdown` refuses without an extra explicit flag, and the README no longer shows the lockdown command.
-- #135: the CI job on Ubuntu 26.04 (APPROVED WITH NITS; the required load step for `canvas` and `gl` is added there).
-- Next: the #129 re-review nits 1-3 (scan every evidence JSON, a case-insensitive G3 test that also looks up the scenario, and a DRIVER.md line), required before the first G3 gate batch.
+    2. `lockdown` refuses without `--turn-off-root-ssh`, and the README no longer shows the lockdown command.
+- #139: the #129 re-review nits 1-3 (scan every evidence `*.json`, a case-insensitive G3 test that also looks up the scenario, and the DRIVER.md line), required before the first G3 gate batch.
 - Later:
   - the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from);
   - a research note on Java 8 packages on Ubuntu 26.04.
-- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), and the lead's #134 (ADR 0007).
+- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), #135 (the CI job on Ubuntu 26.04, 05b1a5b; `canvas` and `gl` load there), and the lead's #134 (ADR 0007).
