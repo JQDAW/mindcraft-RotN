@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (00:48 UTC, from `date -u`)
+Updated: 2026-11-02 (01:36 UTC, from `date -u`)
 
 ## Done
 
@@ -90,10 +90,12 @@ Updated: 2026-11-02 (00:48 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 3 ran on the lead's GO (2026-11-02 00:26 UTC) and FAILED by one sample; the server is deleted.** Mobs and items PASSED, and blocks passed everything except one sample in `blocks_confirmed` (110/111), so G2 does not count. All three were gate-valid; no login retry was used.
-  - The failed sample is a world change, not a naming error: a plant was removed between the census and the re-ask, and the server confirmed the bot's fresh "air".
-  - I stopped as the GO says. A batch 4 needs the lead's decision on the proposal under "G2 batch 3" and a new written GO.
-- G2 batches 1 and 2 (2026-11-01) FAILED. The lead's decisions went into #64, #66, #67 and #73 (all merged).
+- **G2 batch 4 ran on the lead's GO (2026-11-02 01:11 UTC) and FAILED; the server is deleted.** Mobs and items PASSED. Blocks failed `blocks_confirmed` 147/150. All three were gate-valid, with no world changes, no meta drift and no login retry.
+  - **The 3 failures are one systematic bot/server disagreement:** every sampled upper half of a double plant. The bot says `minecraft:double_plant 11`, and the server's `testforblock` says data value 10.
+  - The census lists 24 `double_plant 11` blocks and no `double_plant 10`, so the bot reads all upper halves as 11.
+  - This is a plain fail by the rules. It needs an owner (net-forge or rotn-data), see "G2 batch 4" below.
+  - I stopped as the GO says.
+- G2 batches 1-3 FAILED. The lead's decisions went into #64, #66, #67, #73 and #77 (all merged).
 - **Follow-up (lead, not blocking):** in `g2-mobs-named`, require a run-tagged entity within 1 block of a matched mob report.
 
 ## Watching
@@ -101,6 +103,54 @@ Updated: 2026-11-02 (00:48 UTC, from `date -u`)
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
 ## Real G2 batches
+
+### G2 batch 4 (2026-11-02): FAIL (blocks 147/150, mobs PASS, items PASS); the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 2026-11-02 01:11 UTC.
+- **Code:** a clean detached checkout of develop at 3102f6c (#72-#77), after `npm ci`, which applied #74's prismarine-auth patch. Every `result.json` has `git.dirty: false` and `untracked: 0`.
+- **Checks right before the create, all passed:**
+  - `agentNaming('.')`: wired, 643/643.
+  - `msa-login FRCFLD --check`: OK; its output is not recorded.
+  - The preflight on its own: a scheduled sweeper run 21 min old; no leftovers.
+- **Command:** the planned one, unchanged.
+- **Console:** `gamerule doDaylightCycle false` once and `time set day` before each scenario: 4 lines, in the raw `latest.log` only. Then the runner's commands. No difficulty change.
+- **Batch 3 raw files** were moved to `captures/raw/batch3-20261102/` first.
+
+**Real times (UTC, 2026-11-02)**
+
+| Event | Time |
+| --- | --- |
+| Batch start | 01:13:26 |
+| Server created | 01:13:32 |
+| Ready | 01:16:37 |
+| `g2-blocks-named` | 01:16:43 to 01:27:45 (660 s) |
+| `g2-mobs-named` | 01:27:48 to 01:30:39 (168 s) |
+| `g2-items-roundtrip` | 01:30:42 to 01:32:38 (113 s) |
+| EXIT-trap teardown | started 01:32:48; "verified gone" 01:33:04 |
+
+- **Server up:** 20 min.
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. IPv4), plus 1 Primary IPv4-hour.
+- **Afterwards:** at 01:33:44 UTC, `hcloud server list`, `hcloud primary-ip list` and the labelled `ssh-key list` were all empty.
+
+**Results.** Every run had `gateValid: true`, `weakenedParams: []`, no `notGate` reasons, no kicks, and `notes.loginRetry` `{retried: false}`.
+
+| Scenario | Verdict | Details |
+| --- | --- | --- |
+| `g2-blocks-named` | FAIL | 50 non-air types. `blocks_confirmed` **147/150**; `worldChanges` none; `metaDrift` 0 of 147. `blocks_spotcheck` PASS: 43 of 40 non-air, 72 positions, 0 unloaded, no skew. |
+| `g2-mobs-named` | **PASS** | 12/12 named and confirmed by run tag, 7 of them modded. **Replaced 1 of 12:** `charm:spectre` vanished, replaced by `quark:stoneling`. |
+| `g2-items-roundtrip` | **PASS** | 643/643 table entries; 30/30 read, named and round-tripped. |
+
+**The 3 failures: double plant upper halves (needs an owner).**
+- All three failures are double plant upper halves in chunk (-3, -4): -44,67,-58; -38,70,-50; -36,71,-50.
+- At each, the bot's census and fresh answers say `minecraft:double_plant 11`, and the server says data value 10.
+- The census has `double_plant 11` (24 blocks) and no `double_plant 10`. The lower halves (`double_plant 3`) were confirmed 3/3.
+- In 1.12 an upper half's meta is `8 | facing.getHorizontalIndex()`, and a generated plant gets the default NORTH (= 10). So the server's 10 is the expected value, and the bot's 11 suggests its decode of this block state differs (unverified).
+- **Data for whoever takes it:** the blocks session's forge-bridge capture holds the `map_chunk` for chunk (-3, -4). It is in `captures/raw/` on this PC and not committed. Decoding it offline shows whether the server sent 10 (a client-side decode bug) or 11 (a server-side mismatch between the chunk and `testforblock`).
+
+**Not related:** three `betterwithmods` `[EXPLOSION]` lines at (118, 6, -216), about 160 blocks away and underground, at 01:18. The `lost connection: Disconnected` at 01:30:36 is the driver's own quit.
+
+**Evidence:** `test/evidence/g2/batch4-20261102/` (this PR), redacted with the merged tool; the CI leak check passes.
 
 ### G2 batch 3 (2026-11-02): FAIL (blocks 110/111, mobs PASS, items PASS); the server is deleted
 
@@ -369,7 +419,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 batch 4:** the lead's decision on the "world changed" proposal under G2 batch 3, then a new written GO.
+- **G2 batch 5:** the double-plant upper-half meta (bot 11, server 10) found and fixed by its owner (net-forge or rotn-data, the lead routes it), then a new written GO.
 
 ## Requests to other agents or the lead
 
@@ -392,5 +442,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: G2 batch 3 evidence and this status update (`agent/harness-ops/g2-batch3-evidence`).
-- Merged since the last update: #71, #73.
+- This PR: G2 batch 4 evidence and this status update (`agent/harness-ops/g2-batch4-evidence`).
+- Merged since the last update: #76, #77.
