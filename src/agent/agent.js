@@ -122,13 +122,13 @@ export class Agent {
                 this.startEvents();
               
                 if (!load_mem) {
-                    if (settings.task) {
+                    if (this.task.data) { // a loaded task; a refused task file is null (task_guard.js)
                         this.task.initBotTask();
                         this.task.setAgentGoal();
                     }
                 } else {
                     // set the goal without initializing the rest of the task
-                    if (settings.task) {
+                    if (this.task.data) { // a loaded task; a refused task file is null (task_guard.js)
                         this.task.setAgentGoal();
                     }
                 }

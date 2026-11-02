@@ -20,6 +20,7 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { createTranslator } from './translate.js';
 import { howToGet, rockRecipes } from './howto.js';
+import { threatOf, nightThreats } from './threats.js';
 import { parseOld, registryName, WILDCARD_META } from './names.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -57,6 +58,8 @@ export class RotnData {
         this.replacedByMod = ov?.replacedByMod?.entities ?? {};
         // Non-recipe ways to get items, hand-written with evidence (world-sources.json, for howToGet).
         this.worldSources = readJson(dir, 'world-sources')?.sources ?? [];
+        // How to react to first-night mobs, hand-written with evidence (threat-reactions.json).
+        this.threatReactions = readJson(dir, 'threat-reactions') ?? null;
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
@@ -360,6 +363,18 @@ export class RotnData {
     /** The "4 identical rocks -> block" recipes: which block each rock type makes (src/howto.js). */
     rockRecipes() {
         return rockRecipes(this);
+    }
+
+    // ---- first-night threats (Phase 3) -------------------------------------
+
+    /** How to react to a mob: level, reaction, summary and evidence (src/threats.js). */
+    threatOf(input) {
+        return threatOf(this, input);
+    }
+
+    /** Hostile mobs a biome (default: the overworld) spawns at night, most likely first (src/threats.js). */
+    nightThreats(opts) {
+        return nightThreats(this, opts);
     }
 
     // ---- fuzzy lookup (for !lookup) ----------------------------------------
