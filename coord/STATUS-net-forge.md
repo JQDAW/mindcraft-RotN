@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-02T02:16Z
+Updated: 2026-11-02T02:31Z
 
 Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -354,9 +354,10 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
   - The cause is Forge's two-pass `BLOCK_STATE_IDS` (`GameData$BlockCallbacks.onAdd`, javap) combined with vanilla `BlockDoublePlant.getStateFromMeta` ignoring the facing bits.
   - Doors, beds and tallgrass round-trip. Details are in the forge-bridge README.
 - Lead decision, option 1: the bot reports the meta a real Forge client would see.
-  - `attachStateIdRemap` builds `bot.registry.stateIdRemap` from rotn-data's table (`stateIdRemap()`, not dumped yet).
+  - `attachStateIdRemap` builds `bot.registry.stateIdRemap` from rotn-data's `stateMetaRemap().byBlock` (#80; the 3.3.4 dump has no table yet). `initBot` logs at login whether it is active and how many blocks it covers.
   - The prismarine-chunk patch applies it at chunk load (palette and global data) and in `setBlockStateId`.
-- Tests: a sanitized fixture of section (-3,-4) y 64-79 and a stub table. The e2e-initbot run goes through initBot with a stubbed catalog method.
+- Tests: a sanitized fixture of section (-3,-4) y 64-79, and rotn-data's real catalog API over #80's mini-dump fixture (also through `initBot` in e2e-initbot, so an API-name mismatch fails CI).
+- PR #81: REQUEST CHANGES fixed (catalog API name, real-API e2e, login line, two nits). Stacked on #80 until it merges, then rebased onto develop.
 
 ## Doing
 
@@ -414,11 +415,7 @@ The setup for both batches:
 
 ## Requests to other agents or the lead
 
-- **rotn-data (through the lead): the state-id remap table.** The dumper should export the following (stub: `packages/forge-bridge/test/fixtures/rotn-3.3.4/state-remap-stub.json`):
-  - For every block and every meta `m` with `Block.BLOCK_STATE_IDS.getByValue(id << 4 | m) != null`: `clientMeta = block.getMetaFromState(that state)`.
-  - Only the entries where `clientMeta != m`, keyed by registry name.
-  - The shape: `{ "format": "rotn-dump/1", "blocks": { "minecraft:double_plant": { "8": 10, "9": 10, "11": 10 } } }`.
-  - The catalog should expose it as `loadRotnData(PACK_VERSION).stateIdRemap()`, returning `{ blocks }`, or null for a dump without it. `initBot` already calls it when present.
+- ~~**rotn-data: the state-id remap table.**~~ Done in #80 (`stateMetaRemap().byBlock`), which `initBot` uses. A dumper 0.2.0 run on the test server is still needed for the real 3.3.4 table; until then the remap is inactive and the login line says so.
 
 - **harness-ops (`test/runner/drivers/scenario-protocol.mjs`):** the `scenario-blocks` census counts positions where `bot.blockAt()` returns null (unloaded chunks) as a type named `null`; the fake world shows `null 0 27489`. On a real server the cube's edge chunks may not be loaded yet, and the runner fails any `null` name. Skip null blocks, or wait for the cube's chunks first.
 - **rotn-data:** the mod-local entity table (shape agreed) and `common-mobs.json`. When it exists, `initBot` passes the table to `attachFmlEntities` (a one-line net-forge change).

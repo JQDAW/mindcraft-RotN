@@ -8,12 +8,18 @@
 // while the server's own getMetaFromState (testforblock) says 10. A real Forge client
 // resolves 2811 with BLOCK_STATE_IDS.getByValue to that same state, i.e. meta 10.
 //
-// rotn-data's dumper exports, per block, the metas where the two differ:
-//   { blocks: { "minecraft:double_plant": { "8": 10, "9": 10, "11": 10 } } }
+// rotn-data's dumper (0.2.0, state-meta-remap.json) records, per block, the metas where
+// the two differ. Its catalog's stateMetaRemap().byBlock is
+//   { "minecraft:double_plant": { "8": 10, "9": 10, "11": 10 } }
 // keyed by registry name (numeric ids belong to a world's save), network meta -> the
-// meta of BLOCK_STATE_IDS.getByValue(id << 4 | meta) per getMetaFromState. This module
-// turns that into registry.stateIdRemap (Map network state id -> client state id), which
-// patches/prismarine-chunk+1.41.0.patch applies to every chunk load and block update.
+// meta of BLOCK_STATE_IDS.getByValue(id << 4 | meta) per getMetaFromState. initBot passes
+// it as { blocks: byBlock }. This module turns that into registry.stateIdRemap (Map
+// network state id -> client state id), which patches/prismarine-chunk+1.41.0.patch
+// applies to every chunk load and block update.
+//
+// The remapped ids are the bot's local view only. A remapped state id (2810) must never
+// be sent back to the server, whose own id for that state is 2811; 1.12 clients send
+// positions and items, not block state ids.
 
 const META = /^(?:[0-9]|1[0-5])$/;
 
@@ -75,6 +81,19 @@ export function attachStateIdRemap(registry, table, { log = () => {} } = {}) {
     else delete registry.stateIdRemap;
     for (const n of report.unknownBlocks) log(`state-id remap: ${n} is not in the synced registry; skipped`);
     for (const n of report.invalid) log(`state-id remap: invalid entry ${n}; skipped`);
-    log(`state-id remap: ${map.size} state ids in ${report.blocks.length} blocks`);
-    return { ...report, size: map.size };
+    const blocks = table?.blocks;
+    const tableBlocks = blocks && typeof blocks === 'object' ? Object.keys(blocks).length : null;
+    return { tableBlocks, ...report, size: map.size };
+}
+
+/**
+ * The one line initBot logs at login: whether the remap is active and what it covers.
+ * @param {object|null|undefined} report  attachStateIdRemap's result (undefined: the
+ *   server never sent a Forge registry)
+ */
+export function stateIdRemapStatus(report) {
+    if (!report) return 'state-id remap inactive: no Forge registry sync; block state ids are used as sent';
+    if (report.tableBlocks === null) return "state-id remap inactive: rotn-data's dump has no state-meta-remap table; block state ids are used as sent";
+    if (report.size === 0) return `state-id remap inactive: none of the table's ${report.tableBlocks} blocks is in the synced registry; block state ids are used as sent`;
+    return `state-id remap active: ${report.size} state ids in ${report.blocks.length} of the table's ${report.tableBlocks} blocks`;
 }

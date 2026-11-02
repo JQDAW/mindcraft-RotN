@@ -11,7 +11,9 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { startFakeForgeServer } from './fake-forge-server.js';
-import { pinnedModList, syntheticRegistries, tmpFile, PING_FIXTURE } from './helpers.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pinnedModList, syntheticRegistries, tmpFile, PING_FIXTURE, FIXTURES } from './helpers.js';
 import { readCapture } from '../src/capture.js';
 import { joinFakeWorld, MODDED } from './fake-world.js';
 import { encodeEntitySpawn } from '../src/channels.js';
@@ -31,7 +33,18 @@ after(async () => {
 });
 
 test('initBot logs in through forge-bridge to a fake Forge server and plays', { timeout: 240000 }, async () => {
-    server = await startFakeForgeServer({ modList: pinnedModList(), registries: syntheticRegistries(), reid: true, onJoin: joinFakeWorld });
+    // The synced registry also has minecraft:double_plant, and after the shared fake world the
+    // server sends G2 batch 4's real section (-3,-4) y 64-79 (double plant upper halves as
+    // network meta 11) and a block_change to an upper half sent as meta 11.
+    const registries = syntheticRegistries();
+    registries[0].ids.push(['minecraft:double_plant', 175]);
+    const section = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'rotn-3.3.4', 'chunk-m3-m4-section4.json'), 'utf8'));
+    const onJoin = (client) => {
+        joinFakeWorld(client);
+        client.write('map_chunk', { x: section.chunkX, z: section.chunkZ, groundUp: false, bitMap: section.bitMap, chunkData: Buffer.from(section.chunkData, 'base64'), blockEntities: [] });
+        client.write('block_change', { location: { x: 2, y: 65, z: 2 }, type: (175 << 4) | 11 });
+    };
+    server = await startFakeForgeServer({ modList: pinnedModList(), registries, reid: true, onJoin });
     const captureFile = tmpFile('capture.jsonl');
     process.env.FORGE_CAPTURE = captureFile;
     process.env.FORGE_BRIDGE = 'auto';
@@ -44,12 +57,18 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     const { setSettings } = await import('../../../src/agent/settings.js');
     setSettings({ host: '127.0.0.1', port: server.port, auth: 'offline', minecraft_version: '1.12.2' });
     const { initBot, getBlockId, getBlockName, getItemId, getItemName, isHostile } = await import('../../../src/utils/mcdata.js');
-    // rotn-data's state-id remap table (catalog stateIdRemap(), not dumped yet), stubbed on
-    // the cached catalog: the fake world's pyrotech:rock meta 3 is read as meta 6.
-    const { loadRotnData, PACK_VERSION } = await import('../../rotn-data/index.js');
+    // rotn-data's real catalog API on its mini-dump fixture (the 3.3.4 dump has no
+    // state-meta-remap table yet): initBot's loadRotnData(PACK_VERSION).stateMetaRemap()
+    // answers from a RotnData over that fixture, so a renamed method or field fails here.
+    const { loadRotnData, PACK_VERSION, RotnData } = await import('../../rotn-data/index.js');
+    const miniDump = new RotnData(path.join(FIXTURES, '..', '..', '..', 'rotn-data', 'test', 'fixtures', 'mini-dump'));
     const catalog = loadRotnData(PACK_VERSION);
-    catalog.stateIdRemap = () => ({ blocks: { 'pyrotech:rock': { 3: 6 }, 'nosuchmod:block': { 1: 2 } } });
-    after(() => { delete catalog.stateIdRemap; });
+    catalog.stateMetaRemap = () => miniDump.stateMetaRemap();
+    // The login line says whether the remap is active (captured here, still printed).
+    const remapLines = [];
+    const realLog = console.log;
+    console.log = (...a) => { if (typeof a[0] === 'string' && a[0].includes('state-id remap')) remapLines.push(a[0]); realLog(...a); };
+    after(() => { delete catalog.stateMetaRemap; console.log = realLog; });
 
     // One retry of the whole login: under heavy load a loopback connect can fail
     // at once with ETIMEDOUT, which says nothing about the protocol path under test.
@@ -84,19 +103,28 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.deepEqual(hsOut.slice(0, 7), ['REGISTER:70', 'FML|HS:1', 'FML|HS:2', 'FML|HS:255', 'FML|HS:255', 'FML|HS:255', 'FML|HS:255']);
     const acks = server.state.fromClient.filter(p => p.channel === 'FML|HS' && p.data[0] === 0xff).map(p => p.data[1]);
     assert.deepEqual(acks, [2, 3, 4, 5]);
-    assert.deepEqual(bridge.registries.namespaces('minecraft:blocks'), { minecraft: 3, pyrotech: 2 });
+    assert.deepEqual(bridge.registries.namespaces('minecraft:blocks'), { minecraft: 4, pyrotech: 2 });
     const brand = server.state.fromClient.find(p => p.channel === 'MC|Brand');
     assert.ok(brand && brand.data.toString().includes('fml,forge'), 'Forge client brand');
 
     // World, inventory and effects with REID formats
     assert.equal(bot.blockAt(bot.entity.position.offset(0, -1, 0)).name, 'stone');
-    // The REID chunk's 16-bit global-palette id, through initBot's state-id remap (stub above).
-    assert.deepEqual(bot.forge.stateIdRemap, { blocks: ['pyrotech:rock'], unknownBlocks: ['nosuchmod:block'], invalid: [], size: 1 });
-    assert.equal(bot.registry.stateIdRemap.get(MODDED), (4001 << 4) | 6);
     const modded = bot.world.getBlockStateId({ x: 0, y: 64, z: 0 });
-    assert.equal(modded, (4001 << 4) | 6, `the network id ${MODDED} as a Forge client sees it`);
-    const origin = bot.entity.position.floored();
-    assert.equal(bot.blockAt(origin.set(0, 64, 0)).metadata, 6);
+    assert.equal(modded, MODDED);
+    // Forge's two-pass state ids, through initBot and rotn-data's real stateMetaRemap().byBlock.
+    assert.deepEqual(bot.forge.stateIdRemap, { tableBlocks: 1, blocks: ['minecraft:double_plant'], unknownBlocks: [], invalid: [], size: 3 });
+    assert.equal(bot.registry.stateIdRemap.get((175 << 4) | 11), (175 << 4) | 10);
+    assert.deepEqual(remapLines.slice(-1), ["[forge-bridge] state-id remap active: 3 state ids in 1 of the table's 1 blocks"]);
+    assert.equal(remapLines.length, loginAttempt, 'one line per login');
+    const p = bot.entity.position.floored();
+    for (const [x, y, z] of [[-44, 67, -58], [-38, 70, -50], [-36, 71, -50]]) { // batch 4's failed samples
+        const upper = bot.blockAt(p.set(x, y, z));
+        assert.deepEqual([upper.name, upper.metadata, upper.stateId], ['double_plant', 10, (175 << 4) | 10], `chunk load ${x},${y},${z}`);
+        const lower = bot.blockAt(p.set(x, y - 1, z));
+        assert.deepEqual([lower.name, lower.metadata], ['double_plant', 3], 'lower half unchanged');
+    }
+    const changed = bot.blockAt(p.set(2, 65, 2));
+    assert.deepEqual([changed.name, changed.metadata, changed.stateId], ['double_plant', 10, (175 << 4) | 10], 'block_change');
     // Brief item 4: bot.registry carries the synced modded names.
     const moddedBlock = bot.blockAt(bot.entity.position.floored().offset(-8, -1, -8));
     assert.equal(moddedBlock.name, 'pyrotech:rock');

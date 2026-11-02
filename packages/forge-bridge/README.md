@@ -137,13 +137,16 @@ So a state that `getStateFromMeta` returns for several metas ends up with the hi
 - **Unaffected.** Doors (upper 8-11 hinge/powered, lower facing/open), beds (foot 0-3, head 8-15) and `minecraft:tallgrass` (0-2) all round-trip, so their network meta is the server's meta. The two-block tall grass and large fern are `double_plant` variants, so they have the upper-half issue too.
 
 **What the bot does.** It reports the meta a real Forge client would see:
-- **The table.** rotn-data's dumper exports the metas where the two differ, keyed by registry name, as network meta → client meta: `{ "blocks": { "minecraft:double_plant": { "8": 10, "9": 10, "11": 10 } } }`.
-- **The map.** After `extendRegistry`, `initBot` calls `attachStateIdRemap(bot.registry, rotnData.stateIdRemap())` (`src/state-remap.js`). That sets `bot.registry.stateIdRemap`, a `Map` from network state id to client state id, built with the server's synced block ids.
+- **The table.** rotn-data's dumper (0.2.0, `state-meta-remap.json`) records the metas where the two differ. Its catalog's `stateMetaRemap().byBlock` is keyed by registry name and maps network meta → client meta: `{ "minecraft:double_plant": { "8": 10, "9": 10, "11": 10 } }`.
+- **The map.** After `extendRegistry`, `initBot` calls `attachStateIdRemap(bot.registry, { blocks: loadRotnData(PACK_VERSION).stateMetaRemap().byBlock })` (`src/state-remap.js`). That sets `bot.registry.stateIdRemap`, a `Map` from network state id to client state id, built with the server's synced block ids.
   - Chains are resolved, so applying the map twice changes nothing.
   - Unknown blocks, bad entries and cycles are skipped and logged.
 - **The patch.** `patches/prismarine-chunk+1.41.0.patch` applies the map in `ChunkColumn.load` (section palettes and global-palette data) and in `setBlockStateId` (`block_change` and `multi_block_change`). `blockAt`, `findBlocks` (which checks palettes first), `blockUpdate` events, `stateId`, `name` and `metadata` therefore all agree, and so do Mindcraft's `world.js` helpers, which read through them.
-- **No table** (a dump made before the dumper exported it), or a block not in it: state ids are used as sent.
-- **Report.** `bot.forge.stateIdRemap` holds `{ blocks, unknownBlocks, invalid, size }`.
+  - A section palette that held both 2810 and 2811 then holds 2810 twice. That is harmless: reads index the palette, and `setBlock`'s `indexOf` takes the first.
+- **Local view only.** A remapped state id (2810) **must never be sent back to the server**, whose own id for that state is 2811. 1.12 clients send positions and items, not block state ids, and nothing in forge-bridge sends one. Any future code that does must send the network id.
+- **No table** (a dump made before dumper 0.2.0), or a block not in it: state ids are used as sent.
+- **Report.** `bot.forge.stateIdRemap` holds `{ tableBlocks, blocks, unknownBlocks, invalid, size }`.
+- **Login line.** At login on a Forge connection, `initBot` logs one line saying whether the remap is active and what it covers: `state-id remap active: 3 state ids in 1 of the table's 1 blocks`, or `state-id remap inactive: <reason>`.
 
 ## FML EntitySpawn into `bot.entities` (brief item 6)
 
@@ -283,7 +286,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
 - `state-remap.test.js`: Forge's two-pass state ids, with mineflayer's real blocks plugin on a fake bot. Inputs:
   - the real section (-3,-4) y 64-79 from G2 batch 4's capture (`test/fixtures/rotn-3.3.4/chunk-m3-m4-section4.json`; that section's block states and light only, cut with `tools/chunk-section-fixture.mjs`);
-  - a stub table in rotn-data's proposed shape (`state-remap-stub.json`).
+  - the table from rotn-data's real catalog API (`stateMetaRemap().byBlock`) over its mini-dump fixture.
 
   What it checks:
   - Batch 4's three upper halves read as `double_plant` meta 11 without the table. With it they read as 10 in `blockAt`, `stateId`, `blocksByStateId`, the palette and `findBlocks`.
@@ -307,7 +310,10 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
 - `g1-driver.test.js`: the driver as a subprocess against the fake Forge server, with the runner's allowlisted environment: hello exactly once, echo, a 3-block walk, a clean stop, a redacted capture, exit 3 without a token-cache folder or host, and exit 1 with `beforeJoin` when the connect is refused.
-- `e2e-initbot.test.js`: Mindcraft's real `initBot` against an in-process fake Forge server on 127.0.0.1. The run covers the status ping, tagHost, the handshake, Join Game, a REID chunk, inventory and effects, chat both ways, walking, and the capture. The REID chunk is read through initBot's state-id remap: rotn-data's `stateIdRemap()` is stubbed (pyrotech:rock 3 → 6) until the dump has it.
+- `e2e-initbot.test.js`: Mindcraft's real `initBot` against an in-process fake Forge server on 127.0.0.1. The run covers the status ping, tagHost, the handshake, Join Game, a REID chunk, inventory and effects, chat both ways, walking, and the capture. The state-id remap is tested through `initBot` with rotn-data's real `stateMetaRemap()` over its mini-dump fixture, because the 3.3.4 dump has no table yet. A renamed method or field therefore fails this test.
+  - The fake server also syncs `minecraft:double_plant` and sends G2 batch 4's real section and a `block_change`.
+  - Upper halves read as meta 10 through both the chunk-load and the block-update paths.
+  - The login line says `active`.
 
 ## Known limits (next brief items)
 

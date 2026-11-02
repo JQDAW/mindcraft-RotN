@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -167,14 +167,14 @@ export function initBot(username, { onMsaCode } = {}) {
         } catch (e) {
             console.warn(`[forge-bridge] rotn-data serializer table unavailable: ${e.message}`);
         }
-        // Forge's two-pass block-state ids: rotn-data's network-to-client state-id table
-        // (catalog stateIdRemap()), so blocks read as a Forge client sees them (double_plant's
+        // Forge's two-pass block-state ids: rotn-data's state-meta-remap table (catalog
+        // stateMetaRemap().byBlock), so blocks read as a Forge client sees them (double_plant's
         // upper half is meta 10, not 11). Without the table, state ids are used as sent.
+        // Whether it is active is logged once at login.
         let stateIdTable = null;
         try {
-            const rd = loadRotnData(PACK_VERSION);
-            stateIdTable = typeof rd.stateIdRemap === 'function' ? rd.stateIdRemap() : null;
-            if (!stateIdTable) console.warn('[forge-bridge] rotn-data state-id remap table unavailable; block state ids are used as sent');
+            const remap = loadRotnData(PACK_VERSION).stateMetaRemap();
+            stateIdTable = remap ? { blocks: remap.byBlock } : null;
         } catch (e) {
             console.warn(`[forge-bridge] rotn-data state-id remap table unavailable: ${e.message}`);
         }
@@ -219,6 +219,8 @@ export function initBot(username, { onMsaCode } = {}) {
     options.logErrors = false;
     const bot = createBot(options);
     bot.forge = forge;
+    // One line at login on a Forge connection: is the state-id remap active, and for how many blocks.
+    bot.once('login', () => { if (forge.bridge) console.log(`[forge-bridge] ${stateIdRemapStatus(forge.stateIdRemap)}`); });
     attachBotErrorLogger(bot, { logErrors, hideErrors: !!options.hideErrors });
     // ADR 0003 decision 5, agent side: agent.js calls this on its exit paths. It
     // writes the reason for the main process (MINDCRAFT_EXIT_REASON_FILE) and

@@ -4,7 +4,8 @@
 // prismarine-chunk patch stores the client's id, so blockAt, findBlocks, palettes and
 // block updates agree. Offline: mineflayer's real blocks plugin on a fake bot, the real
 // chunk section (-3, -4) y 64-79 from batch 4's capture (sanitized: that section's
-// block states and light only), and a stub table in rotn-data's proposed shape.
+// block states and light only), and the table from rotn-data's real catalog API
+// (stateMetaRemap().byBlock) over its mini-dump fixture.
 
 import { Buffer } from 'node:buffer';
 import { test } from 'node:test';
@@ -14,7 +15,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { buildStateIdRemap, attachStateIdRemap } from '../src/state-remap.js';
+import { buildStateIdRemap, attachStateIdRemap, stateIdRemapStatus } from '../src/state-remap.js';
+import { RotnData } from '../../rotn-data/index.js';
 
 const require = createRequire(import.meta.url);
 const Registry = require('prismarine-registry');
@@ -23,7 +25,9 @@ const { Vec3 } = require('vec3');
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'rotn-3.3.4');
 const SECTION = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'chunk-m3-m4-section4.json'), 'utf8'));
-const STUB = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'state-remap-stub.json'), 'utf8'));
+// The table as initBot builds it: { blocks: stateMetaRemap().byBlock }.
+const MINI_DUMP = path.join(FIXTURES, '..', '..', '..', '..', 'rotn-data', 'test', 'fixtures', 'mini-dump');
+const STUB = { blocks: new RotnData(MINI_DUMP).stateMetaRemap().byBlock };
 
 const DOUBLE_PLANT = 175;
 const UPPER = [[-44, 67, -58], [-38, 70, -50], [-36, 71, -50]]; // batch 4's three failed samples
@@ -173,7 +177,7 @@ test('global-palette sections (more than 8 bits) are remapped too, and nothing e
     assert.equal(loaded.getBlockStateId(new Vec3(1, 0, 0)), (DOUBLE_PLANT << 4) | 10);
 });
 
-test('buildStateIdRemap: the stub table, by registry name, with the synced id', () => {
+test("buildStateIdRemap: rotn-data's table, by registry name, with the synced id", () => {
     const { map, blocks, unknownBlocks, invalid } = buildStateIdRemap(Registry('1.12.2'), STUB);
     assert.deepEqual([...map].sort((a, b) => a[0] - b[0]), [[2808, 2810], [2809, 2810], [2811, 2810]]);
     assert.deepEqual([blocks, unknownBlocks, invalid], [['minecraft:double_plant'], [], []]);
@@ -199,13 +203,28 @@ test('buildStateIdRemap: unknown blocks and bad entries are skipped; chains reso
     for (const table of [null, undefined, {}, { blocks: null }]) assert.equal(buildStateIdRemap(registry, table).map.size, 0);
 });
 
-test('attachStateIdRemap sets registry.stateIdRemap, removes it for an empty table, and logs only counts and names', () => {
+test("rotn-data's mini-dump table is the double_plant entry", () => {
+    assert.deepEqual(STUB, { blocks: { 'minecraft:double_plant': { 8: 10, 9: 10, 11: 10 } } });
+});
+
+test('attachStateIdRemap sets registry.stateIdRemap, removes it for an empty table, and logs only skipped names', () => {
     const registry = Registry('1.12.2');
     const lines = [];
     const report = attachStateIdRemap(registry, STUB, { log: (l) => lines.push(l) });
     assert.equal(registry.stateIdRemap.get(2811), 2810);
-    assert.equal(report.size, 3);
-    assert.deepEqual(lines, ['state-id remap: 3 state ids in 1 blocks']);
+    assert.deepEqual(report, { tableBlocks: 1, blocks: ['minecraft:double_plant'], unknownBlocks: [], invalid: [], size: 3 });
+    assert.deepEqual(lines, []);
+    attachStateIdRemap(registry, { blocks: { 'nosuchmod:block': { 1: 2 } } }, { log: (l) => lines.push(l) });
+    assert.deepEqual(lines, ['state-id remap: nosuchmod:block is not in the synced registry; skipped']);
+    assert.equal('stateIdRemap' in registry, false);
     attachStateIdRemap(registry, null);
     assert.equal('stateIdRemap' in registry, false);
+});
+
+test("stateIdRemapStatus: the login line says whether the remap is active and what it covers", () => {
+    const registry = Registry('1.12.2');
+    assert.equal(stateIdRemapStatus(attachStateIdRemap(registry, STUB)), "state-id remap active: 3 state ids in 1 of the table's 1 blocks");
+    assert.equal(stateIdRemapStatus(attachStateIdRemap(registry, null)), "state-id remap inactive: rotn-data's dump has no state-meta-remap table; block state ids are used as sent");
+    assert.equal(stateIdRemapStatus(attachStateIdRemap(registry, { blocks: { 'a:b': { 1: 2 }, 'c:d': { 1: 2 } } })), "state-id remap inactive: none of the table's 2 blocks is in the synced registry; block state ids are used as sent");
+    assert.equal(stateIdRemapStatus(undefined), 'state-id remap inactive: no Forge registry sync; block state ids are used as sent');
 });

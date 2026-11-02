@@ -1,8 +1,0 @@
-{
- "format": "rotn-dump/1",
- "stub": "forge-bridge test stub in the proposed shape of rotn-data's state-id remap table, not dump data. Its one entry is derived from vanilla 1.12.2 BlockDoublePlant and Forge 14.23.5.2860 GameData$BlockCallbacks.onAdd bytecode (javap). rotn-data's dumper writes the real table.",
- "rule": "for each block and meta m with BLOCK_STATE_IDS.getByValue(id << 4 | m) != null: clientMeta = getMetaFromState(that state); listed only where clientMeta != m",
- "blocks": {
-  "minecraft:double_plant": { "8": 10, "9": 10, "11": 10 }
- }
-}
