@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T17:32Z (from `date -u`)
+Updated: 2026-11-02T18:20Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -27,7 +27,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, on develop `4b175cc`): #103 open. Next: A2 `no-cheat`.
+- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, on develop `4b175cc`): #103 open. Review APPROVE WITH NITS; nits 1-4 fixed at 18:20 UTC (connection_handler, path-safe blob rule, speak.js, queries.js, the agent-visible action error; documented contract and JSON cut). Lint baseline 255 -> 254. Next: A2 `no-cheat`.
 
 ## G3 plan: small PRs, in order
 

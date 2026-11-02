@@ -4,8 +4,20 @@
 // own properties: an HTTP client error carries its request config (headers
 // such as Authorization), its response (body, headers) and sometimes the
 // token it was sent with. These helpers print only a few known-safe fields,
-// redact anything that looks like a credential, and cap the length, so a
-// log line never holds a token or a request/response body.
+// so a log line never holds a request/response body or headers.
+//
+// What a caller gets (the contract):
+// - Fields: name, [code], (status N), the message, and one level of cause.
+//   No other property of the error is read for output.
+// - The message is cut at the first JSON object or array it contains
+//   ('400 {"error":...}' becomes '400 {...}'), because SDKs append bodies.
+// - Credential-looking text is redacted (see REDACTIONS): Bearer/Basic
+//   values, sk- keys, eyJ tokens, credential key=value pairs, and long opaque
+//   blobs. Redaction is best effort; the fixed field set and the JSON cut are
+//   the main protection.
+// - One line, capped at maxLength (default 300) characters; safeStack adds
+//   at most maxFrames (default 8) "at ..." frame lines, each capped too.
+// - It never throws.
 
 const MAX_LENGTH = 300;
 const MAX_FRAMES = 8;
@@ -24,13 +36,20 @@ const REDACTIONS = [
     [/[A-Za-z0-9+/_-]{40,}={0,2}/g, (match) => (looksLikeBlob(match) ? '[redacted-blob]' : match)],
 ];
 
-// A file path such as /home/deploy/mindcraft-rotn/src/agent also matches the
-// blob pattern. Tokens mix upper case, lower case and digits, and any '/'
-// inside base64 still leaves long runs; path segments are short.
+// A blob is a run of 40+ token characters that mixes upper case, lower case
+// and digits. A '/'-joined run is a file path (/home/Deploy1/mindcraft-RotN/
+// src/agent/...) and is kept, unless one of its '/' segments is itself 40+
+// characters long: a long base64 token has '/' only about once per 64
+// characters, so it still has such a segment, while path segments are short.
 function looksLikeBlob(text) {
     if (!/[0-9]/.test(text) || !/[A-Z]/.test(text) || !/[a-z]/.test(text)) return false;
-    const longestRun = Math.max(...text.split('/').map(s => s.length));
-    return longestRun >= 20;
+    return text.split('/').some(segment => segment.length >= 40);
+}
+
+// Cut a message at the first JSON object or array, where SDKs put bodies.
+function cutJson(text) {
+    const i = text.search(/[{[]\s*"/);
+    return i >= 0 ? text.slice(0, i) + '{...}' : text;
 }
 
 /** Redact credential-looking substrings and collapse the text to one line. */
@@ -61,7 +80,7 @@ function isShortScalar(value) {
 
 function summary(err, depth) {
     if (err === null || err === undefined) return 'unknown error';
-    if (typeof err !== 'object') return redact(err);
+    if (typeof err !== 'object') return redact(cutJson(String(err)));
 
     let name = read(err, 'name');
     if (typeof name !== 'string' || !name) {
@@ -77,7 +96,7 @@ function summary(err, depth) {
     let line = name;
     if (isShortScalar(code)) line += ` [${redact(code)}]`;
     if (Number.isInteger(status)) line += ` (status ${status})`;
-    if (typeof message === 'string' && message) line += `: ${redact(message)}`;
+    if (typeof message === 'string' && message) line += `: ${redact(cutJson(message))}`;
 
     const cause = read(err, 'cause');
     if (cause !== undefined && depth < 1) line += ` (cause: ${summary(cause, depth + 1)})`;

@@ -84,7 +84,7 @@ export class Agent {
         this.bot.once('end', (reason) => onDisconnect('Disconnected', reason));
         this.bot.on('error', (err) => {
             if (String(err).includes('Duplicate') || String(err).includes('ECONNREFUSED')) {
-                 onDisconnect('Error', err);
+                 onDisconnect('Error', safeError(err)); // a safe string, never the whole error
             } else {
                  log(this.name, `[LoginGuard] Connection Error: ${safeError(err)}`);
             }

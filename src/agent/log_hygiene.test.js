@@ -6,14 +6,17 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const FILES = ['agent.js', 'action_manager.js', 'mindserver_proxy.js'];
+const FILES = ['agent.js', 'action_manager.js', 'mindserver_proxy.js', 'connection_handler.js', 'speak.js', 'commands/queries.js'];
 const ERR_NAMES = '(?:err|error|e)';
 
-// console.x(..., err), console.x(err), console.x(err.stack), String(err) or
-// ${err} inside a log call, and JSON.stringify(err, ...).
+// console.x(..., err), console.x(err), console.x(err.stack), String(err) in a
+// log call, ${err} or ${err.stack} anywhere (logs and agent-visible text),
+// "+ err.stack" concatenation, and JSON.stringify(err, ...).
 const BAD = [
     new RegExp(`console\\.(?:error|log|warn|info)\\(([^)]*,\\s*)?${ERR_NAMES}(?:\\.stack)?\\s*\\)`),
-    new RegExp(`(?:log|console\\.(?:error|log|warn|info))\\(.*(?:String\\(${ERR_NAMES}\\)|\\$\\{${ERR_NAMES}\\})`),
+    new RegExp(`(?:log|console\\.(?:error|log|warn|info))\\(.*String\\(${ERR_NAMES}\\)`),
+    new RegExp(`\\$\\{${ERR_NAMES}(?:\\.stack)?\\}`),
+    new RegExp(`\\+\\s*${ERR_NAMES}\\.stack\\b`),
     new RegExp(`JSON\\.stringify\\(${ERR_NAMES}\\b`),
 ];
 
@@ -33,6 +36,9 @@ test('the guard itself catches the old patterns', () => {
         "console.error(err.stack);",
         "log(this.name, `[LoginGuard] Connection Error: ${String(err)}`);",
         "console.error('Error: ', JSON.stringify(error, Object.getOwnPropertyNames(error)));",
+        "return `The following error occurred: ${error}`",
+        "'Stack trace:\\n' + err.stack+'\\n';",
+        "console.error('[TTS] Audio error', e);",
     ];
     for (const line of old) assert.ok(BAD.some(re => re.test(line)), line);
     assert.ok(!BAD.some(re => re.test("console.error('Error event!', safeError(err));")));
