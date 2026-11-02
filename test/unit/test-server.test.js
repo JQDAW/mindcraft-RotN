@@ -271,6 +271,7 @@ describe('up / run / down', () => {
         assert.match(seen, /^TEST_SERVER_NAME=mcr-test-run$/m);
         assert.match(seen, /^TEST_SERVER_HOST=203\.0\.113\.\d+$/m);
         assert.match(seen, /^TEST_SERVER_PORT=25565$/m);
+        assert.match(seen, /^TEST_SERVER_FAKE_CLOUD=1$/m, 'the offline fake cloud: test-mode overrides allowed (#122 finding 2)');
 
         const ledger = readJsonl(path.join(env.ROTN_TEST_STATE_DIR, 'ledger.jsonl'));
         assert.deepEqual(ledger.map((e) => e.event), ['created', 'deleted']);

@@ -8,13 +8,23 @@ export const OPENROUTER_KEY_URL = 'https://openrouter.ai/api/v1/key';
 /** The line Mindcraft's OpenRouter model prints once per request (src/models/openrouter.js). */
 export const LLM_CALL_LINE = 'Awaiting openrouter api response...';
 
+/** The test-mode overrides of the spend machinery; never honoured in a real batch (#122 review). */
+export const TEST_OVERRIDES = ['ROTN_TEST_MODE', 'ROTN_OPENROUTER_USAGE_FILE', 'ROTN_BATCH_RUNNER'];
+
 /**
- * fetch for the key endpoint. Test mode only (ROTN_TEST_MODE=1): ROTN_OPENROUTER_USAGE_FILE holds the
+ * Are the test-mode overrides allowed? Only with ROTN_TEST_MODE=1, and only offline: either outside any
+ * test-server run (no TEST_SERVER_CTL), or inside one that runs against the fake cloud
+ * (TEST_SERVER_FAKE_CLOUD=1, which deploy/test-server.sh run sets itself, never inherited).
+ */
+export const testOverridesAllowed = (env) => env.ROTN_TEST_MODE === '1' && (!env.TEST_SERVER_CTL || env.TEST_SERVER_FAKE_CLOUD === '1');
+
+/**
+ * fetch for the key endpoint. Test mode only (testOverridesAllowed): ROTN_OPENROUTER_USAGE_FILE holds the
  * JSON response, read at each call, so offline tests (and fake runners that "spend") need no network.
- * Outside test mode the real endpoint is always used, so the key can never be sent anywhere else.
+ * Otherwise the real endpoint is always used, so the key can never be sent anywhere else.
  */
 export function keyFetch(env, realFetch = globalThis.fetch) {
-    if (env.ROTN_TEST_MODE === '1' && env.ROTN_OPENROUTER_USAGE_FILE) {
+    if (testOverridesAllowed(env) && env.ROTN_OPENROUTER_USAGE_FILE) {
         const file = env.ROTN_OPENROUTER_USAGE_FILE;
         return () => {
             const body = fs.readFileSync(file, 'utf8');

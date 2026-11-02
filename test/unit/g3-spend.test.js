@@ -10,10 +10,11 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, LLM_CALL_LINE, OPENROUTER_KEY_URL } from '../runner/lib/llm-spend.mjs';
-import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProblems } from '../runner/lib/g3.mjs';
+import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL } from '../runner/lib/llm-spend.mjs';
+import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProblems, g3Policy } from '../runner/lib/g3.mjs';
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
-import { parseBatchArgs, spendGate, EXIT_SPEND_STOP } from '../runner/batch.mjs';
+import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
+import { loadScenarios } from '../runner/run.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BATCH = path.join(HERE, '..', 'runner', 'batch.mjs');
@@ -59,6 +60,21 @@ describe('the key usage read: numbers only, the key never leaves the header', ()
         const fake = keyFetch({ ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: file }, real);
         assert.notEqual(fake, real);
         assert.deepEqual(await readKeyUsage({ key: KEY, fetchImpl: fake }), { ok: true, usage: 0.5, limit: null, remaining: null });
+        // Inside a real test-server run (TEST_SERVER_CTL set, no fake cloud) the real endpoint is used.
+        assert.equal(keyFetch({ ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: file, TEST_SERVER_CTL: '/x/test-server.sh' }, real), real);
+        assert.equal(keyFetch({ ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: file, TEST_SERVER_CTL: '/x/test-server.sh', TEST_SERVER_FAKE_CLOUD: '0' }, real), real);
+        assert.notEqual(keyFetch({ ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: file, TEST_SERVER_CTL: '/x/test-server.sh', TEST_SERVER_FAKE_CLOUD: '1' }, real), real);
+    });
+
+    test('test-mode overrides are refused inside a real test-server run (#122 finding 2)', () => {
+        const real = { TEST_SERVER_CTL: '/x/test-server.sh', TEST_SERVER_FAKE_CLOUD: '0' };
+        assert.equal(testOverridesAllowed({ ROTN_TEST_MODE: '1', ...real }), false);
+        assert.deepEqual(forbiddenOverrides({ ...real, ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: 'u', ROTN_BATCH_RUNNER: 'r' }),
+            ['ROTN_TEST_MODE', 'ROTN_OPENROUTER_USAGE_FILE', 'ROTN_BATCH_RUNNER']);
+        assert.deepEqual(forbiddenOverrides({ ...real, ROTN_OPENROUTER_USAGE_FILE: 'u' }), ['ROTN_OPENROUTER_USAGE_FILE'], 'even without test mode');
+        assert.deepEqual(forbiddenOverrides({ ...real }), []);
+        assert.deepEqual(forbiddenOverrides({ ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: 'u', TEST_SERVER_CTL: '/x', TEST_SERVER_FAKE_CLOUD: '1' }), [], 'the offline fake cloud');
+        assert.deepEqual(forbiddenOverrides({ ROTN_TEST_MODE: '1', ROTN_BATCH_RUNNER: 'r' }), [], 'no test-server run at all');
     });
 
     test('calls, cost and the per-scenario record', () => {
@@ -96,6 +112,37 @@ describe('maxBatchUsd: USD 2, an equal gate parameter of every G3 scenario', () 
         assert.match(spendGate(base, { ok: false, error: 'http 401' }, 2).reason, /usage cannot be read \(http 401\)/);
     });
 
+    test('the end of the batch fails closed: over the limit 5, no reading 6 (#122 finding 1)', () => {
+        const base = { ok: true, usage: 1 };
+        assert.deepEqual(endVerdict(base, { ok: true, usage: 2.5 }, 2, 0), { exit: 0, reason: null });
+        assert.deepEqual(endVerdict(base, { ok: true, usage: 2.5 }, 2, 1), { exit: 1, reason: null });
+        assert.equal(endVerdict(base, { ok: true, usage: 3.5 }, 2, 0).exit, EXIT_SPEND_STOP);
+        assert.match(endVerdict(base, { ok: true, usage: 3.5 }, 2, 0).reason, /spent USD 2.5 by the end of the batch, more than maxBatchUsd 2/);
+        assert.equal(endVerdict(base, { ok: false, error: 'network' }, 2, 0).exit, EXIT_SPEND_UNKNOWN);
+        assert.equal(endVerdict(base, null, 2, 0).exit, EXIT_SPEND_UNKNOWN);
+        assert.equal(endVerdict({ ok: false }, { ok: true, usage: 1 }, 2, 0).exit, EXIT_SPEND_UNKNOWN, 'a null spend');
+    });
+
+    test('g3Policy: the guard whenever the agent runs or the gate is G3; a G3 run needs batch.mjs\'s marker with the same limit', () => {
+        assert.deepEqual(g3Policy({ gate: 'G3', llm: true }, { ROTN_G3_BATCH: '20261102T2100-123:2' }, 2), { guard: true, notGate: null, batch: '20261102T2100-123:2' });
+        assert.match(g3Policy({ gate: 'G3', llm: true }, {}, 2).notGate, /a G3 run outside batch\.mjs has no spend stop/);
+        assert.match(g3Policy({ gate: 'G3', llm: true }, { ROTN_G3_BATCH: 'x' }, 2).notGate, /no ROTN_G3_BATCH marker/);
+        assert.match(g3Policy({ gate: 'G3', llm: true }, { ROTN_G3_BATCH: 'b-1:3' }, 2).notGate, /spend limit 3 is not this run's maxBatchUsd 2/);
+        assert.deepEqual(g3Policy({ gate: 'S1', llm: true }, {}, undefined), { guard: true, notGate: null, batch: null }, 'any real-agent run is guarded');
+        assert.deepEqual(g3Policy({ gate: 'G2' }, {}, undefined), { guard: false, notGate: null, batch: null });
+    });
+
+    test('every G3 scenario runs the real agent and carries maxBatchUsd 2 compared equal (#122 finding 3)', async () => {
+        const g3 = Object.values(await loadScenarios()).filter((sc) => sc.gate === 'G3');
+        for (const sc of g3) {
+            assert.equal(sc.llm, true, `${sc.id}: llm`);
+            assert.equal(sc.defaults?.maxBatchUsd, 2, `${sc.id}: default maxBatchUsd`);
+            assert.equal(sc.gateParams?.maxBatchUsd, 'equal', `${sc.id}: maxBatchUsd compared equal`);
+        }
+        // No G3 scenario exists yet; the rule holds for each one as it lands.
+        assert.ok(Array.isArray(g3));
+    });
+
     test('batch arguments', () => {
         const ok = parseBatchArgs(['--max-batch-usd', '2', '--logs-out', 'L', '--scenario', 'a', '--out', 'A', '--timeout-min', '55', '--scenario', 'b', '--out', 'B', '--', 'node', 'd.mjs']);
         assert.deepEqual(ok.problems, []);
@@ -109,7 +156,7 @@ describe('maxBatchUsd: USD 2, an equal gate parameter of every G3 scenario', () 
 });
 
 /** batch.mjs with the fake runner, a fake key-usage file and a fake TEST_SERVER_CTL that records the fetch. */
-function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b', 'c'], key = KEY, usageFile = true, runExit = '0' } = {}) {
+function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b', 'c'], key = KEY, usageFile = true, runExit = '0', fakeCloud = '1', breakUsage = '' } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-batch-'));
     const file = path.join(dir, 'usage.json');
     if (usageFile) fs.writeFileSync(file, JSON.stringify({ data: { usage, limit: 5, limit_remaining: 5 - usage } }));
@@ -119,7 +166,7 @@ function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b
     for (const s of scenarios) args.push('--scenario', s, '--out', path.join(dir, `out-${s}`));
     args.push('--', 'node', 'driver.mjs');
     const env = { ...process.env, ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: file, ROTN_BATCH_RUNNER: FAKE_RUNNER,
-        FAKE_DIR: dir, FAKE_SPEND: spend, FAKE_RUN_EXIT: runExit, TEST_SERVER_CTL: fwd(ctl), OPENROUTER_API_KEY: key };
+        FAKE_DIR: dir, FAKE_SPEND: spend, FAKE_RUN_EXIT: runExit, TEST_SERVER_CTL: fwd(ctl), TEST_SERVER_FAKE_CLOUD: fakeCloud, FAKE_BREAK_USAGE: breakUsage, OPENROUTER_API_KEY: key };
     if (!key) delete env.OPENROUTER_API_KEY;
     return new Promise((resolve) => {
         const child = spawn(process.execPath, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -137,7 +184,9 @@ describe('batch.mjs: the spend stop', () => {
     test('stops before the scenario that would start above the limit, still fetches the logs, exits 5', { timeout: 60000 }, async () => {
         const r = await runBatch({ spend: '1.5' });
         assert.equal(r.code, EXIT_SPEND_STOP, r.out);
-        assert.deepEqual(r.ran, ['a maxBatchUsd=2 key:set', 'b maxBatchUsd=2 key:set'], 'c never starts: USD 3 spent > 2');
+        assert.deepEqual(r.ran, ['a maxBatchUsd=2 key:set batch:set', 'b maxBatchUsd=2 key:set batch:set'], 'c never starts: USD 3 spent > 2; each run had the marker');
+        assert.equal(r.summary.testMode, true);
+        assert.match(r.summary.batchId, /^[0-9T]+-\d+$/);
         assert.match(r.ctl, /^fetch logs --out .*\/logs$/m, 'the logs are fetched');
         assert.match(r.out, /spend stop before c: spent USD 3 since the batch start, more than maxBatchUsd 2/);
         assert.equal(r.summary.stopped, 'before c: spent USD 3 since the batch start, more than maxBatchUsd 2');
@@ -152,6 +201,30 @@ describe('batch.mjs: the spend stop', () => {
         assert.equal(r.ran.length, 3);
         assert.equal(r.summary.stopped, null);
         assert.match(r.ctl, /fetch logs/);
+    });
+
+    test('spend over the limit by the end of the last scenario exits 5 (#122 finding 1)', { timeout: 60000 }, async () => {
+        const r = await runBatch({ spend: '1.5', scenarios: ['a', 'b'] });
+        assert.equal(r.code, EXIT_SPEND_STOP, r.out);
+        assert.equal(r.ran.length, 2, 'both ran: the spend was within the limit before each');
+        assert.equal(r.summary.stopped, 'after the last scenario: spent USD 3 by the end of the batch, more than maxBatchUsd 2');
+        assert.match(r.ctl, /fetch logs/);
+    });
+
+    test('a failed usage reading at the end exits 6 (#122 finding 1)', { timeout: 60000 }, async () => {
+        const r = await runBatch({ spend: '0.1', scenarios: ['a', 'b'], breakUsage: 'b' });
+        assert.equal(r.code, EXIT_SPEND_UNKNOWN, r.out);
+        assert.equal(r.ran.length, 2);
+        assert.equal(r.summary.usageAtEnd, null);
+        assert.match(r.summary.stopped, /after the last scenario: the key's usage cannot be read at the end/);
+        assert.match(r.ctl, /fetch logs/);
+    });
+
+    test('inside a real test-server run the test-mode overrides make it refuse to start (#122 finding 2)', { timeout: 60000 }, async () => {
+        const r = await runBatch({ fakeCloud: '0' });
+        assert.equal(r.code, 2, r.out);
+        assert.match(r.out, /refused: ROTN_TEST_MODE, ROTN_OPENROUTER_USAGE_FILE, ROTN_BATCH_RUNNER set inside a real test-server run/);
+        assert.deepEqual(r.ran, []);
     });
 
     test('a failing scenario does not stop the batch, but the batch exits 1', { timeout: 60000 }, async () => {

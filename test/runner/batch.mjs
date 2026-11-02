@@ -17,20 +17,48 @@
 //      of every G3 scenario, so a batch with another limit is never a gate pass) and --pass-env
 //      OPENROUTER_API_KEY, under that scenario's timeout (--timeout-min before it; exit 124 when hit).
 //   4. Always fetches the server logs at the end (TEST_SERVER_CTL fetch logs --out <logs-out>).
-//   5. Prints `BATCH {json}` (and writes it to --summary): per scenario its exit code and the spend before
-//      it; the totals; why it stopped. Never the key.
-//   Exit: 0 if every scenario exited 0 (gate pass), 5 if the spend stop fired, 2 if it could not start,
-//   else 1. The wrapper then deletes the server.
+//   5. After the last scenario, reads the usage once more: spend over the limit exits 5, and a failed
+//      reading exits 6 (the end of a batch fails closed too; #122 review).
+//   6. Prints `BATCH {json}` (and writes it to --summary): per scenario its exit code and the spend before
+//      it; the totals; why it stopped; testMode. Never the key.
+//   Exit: 0 if every scenario exited 0 (gate pass), 5 if the spend went over the limit (stop or end), 6 if
+//   the spend could not be read at the end, 2 if it could not start, else 1. The wrapper deletes the server.
+//
+// Limits (#122 review nits): the spend is checked BETWEEN scenarios, not during one, so a single scenario
+// can run past the limit; and OpenRouter's usage figure can lag behind the newest requests by a little.
+// The key's own credit limit (USD 5 for the test key) is the hard backstop behind the spend stop.
+//
+// The scenarios it starts carry ROTN_G3_BATCH (this batch's id and limit): a G3 run without it is not a
+// gate run (run.mjs), because only a run under this spend stop counts (#122 review finding 4).
+// Test mode (ROTN_TEST_MODE=1 with a fake key-usage file or a fake runner) is for the offline tests only:
+// inside a real test-server run (TEST_SERVER_CTL set, TEST_SERVER_FAKE_CLOUD not 1) any of those
+// variables makes it refuse to start (#122 review finding 2).
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { keyFetch, readKeyUsage, spent } from './lib/llm-spend.mjs';
+import { keyFetch, readKeyUsage, spent, testOverridesAllowed, TEST_OVERRIDES } from './lib/llm-spend.mjs';
 import { findBash } from './lib/adapters.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const EXIT_SPEND_STOP = 5;
+export const EXIT_SPEND_UNKNOWN = 6;
+
+/** Test-mode overrides that would weaken a real batch: their names, if any is set while not allowed. */
+export function forbiddenOverrides(env) {
+    if (testOverridesAllowed(env)) return [];
+    return TEST_OVERRIDES.filter((k) => Object.prototype.hasOwnProperty.call(env, k));
+}
+
+/** The end-of-batch decision: 5 over the limit, 6 without a reading, else the scenarios' exit code. */
+export function endVerdict(base, end, maxBatchUsd, exit) {
+    if (!end?.ok) return { exit: EXIT_SPEND_UNKNOWN, reason: `the key's usage cannot be read at the end (${end?.error ?? 'unknown'})` };
+    const s = spent(base, end);
+    if (s === null) return { exit: EXIT_SPEND_UNKNOWN, reason: 'the spend at the end is unknown' };
+    if (s > maxBatchUsd) return { exit: EXIT_SPEND_STOP, reason: `spent USD ${s} by the end of the batch, more than maxBatchUsd ${maxBatchUsd}` };
+    return { exit, reason: null };
+}
 const log = (m) => console.error(`[batch ${new Date().toISOString().slice(11, 19)}] ${m}`);
 
 /** Arguments: --max-batch-usd N --logs-out DIR [--summary FILE] ([--timeout-min M] --scenario ID --out DIR)+ -- DRIVER... */
@@ -73,7 +101,7 @@ export function spendGate(base, now, maxBatchUsd) {
 
 /** Run one scenario (the runner is run.mjs; tests may swap it in test mode). Resolves the exit code. */
 function runScenario(s, o, env) {
-    const runner = env.ROTN_TEST_MODE === '1' && env.ROTN_BATCH_RUNNER ? env.ROTN_BATCH_RUNNER : path.join(HERE, 'run.mjs');
+    const runner = testOverridesAllowed(env) && env.ROTN_BATCH_RUNNER ? env.ROTN_BATCH_RUNNER : path.join(HERE, 'run.mjs');
     const args = [runner, '--scenario', s.id, '--out', s.out, '--param', `maxBatchUsd=${o.maxBatchUsd}`, '--pass-env', 'OPENROUTER_API_KEY', '--', ...o.driver];
     return new Promise((resolve) => {
         const child = spawn(process.execPath, args, { stdio: 'inherit', env });
@@ -95,9 +123,17 @@ async function main(argv) {
         for (const p of problems) log(`refused: ${p}`);
         return 2;
     }
-    const env = process.env;
+    const forbidden = forbiddenOverrides(process.env);
+    if (forbidden.length) {
+        log(`refused: ${forbidden.join(', ')} set inside a real test-server run; test-mode overrides are for the offline tests only`);
+        return 2;
+    }
+    const testMode = testOverridesAllowed(process.env);
+    const batchId = `${new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15)}-${process.pid}`;
+    // The marker run.mjs requires for a gate-valid G3 run: this batch's id and its spend limit.
+    const env = { ...process.env, ROTN_G3_BATCH: `${batchId}:${o.maxBatchUsd}` };
     const read = () => readKeyUsage({ key: env.OPENROUTER_API_KEY, fetchImpl: keyFetch(env) });
-    const summary = { maxBatchUsd: o.maxBatchUsd, scenarios: [], stopped: null };
+    const summary = { batchId, testMode, maxBatchUsd: o.maxBatchUsd, scenarios: [], stopped: null };
     const base = await read();
     summary.usageAtStart = base.ok ? base.usage : null;
     if (!base.ok) {
@@ -123,8 +159,13 @@ async function main(argv) {
     const end = await read();
     summary.usageAtEnd = end.ok ? end.usage : null;
     summary.spentUsd = spent(base, end);
+    const verdict = endVerdict(base, end, o.maxBatchUsd, exit);
+    if (verdict.reason) {
+        log(`spend check at the end: ${verdict.reason}`);
+        summary.stopped ??= `after the last scenario: ${verdict.reason}`;
+    }
     finish(o, summary);
-    return exit;
+    return verdict.exit;
 }
 
 /** Always: fetch the server logs, then print and write the summary. */

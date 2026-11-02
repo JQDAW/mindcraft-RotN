@@ -29,6 +29,24 @@ export const G3_CONSOLE_ALLOW = [
     new RegExp(`^setblock ${N} ${N} ${N} minecraft:gold_block$`),          // the task marker only
 ];
 
+/**
+ * What run.mjs applies to a scenario (#122 review findings 3 and 4):
+ *   guard:   the console allowlist, for every G3 scenario and every scenario that runs the real agent;
+ *   notGate: a reason when a G3 run did not come from batch.mjs (no ROTN_G3_BATCH marker "<id>:<limit>"),
+ *            or the marker's limit is not the run's maxBatchUsd: such a run had no spend stop over it.
+ */
+export function g3Policy(scenario, env, maxBatchUsd) {
+    const guard = scenario.gate === 'G3' || scenario.llm === true;
+    const marker = env.ROTN_G3_BATCH ?? null;
+    let notGate = null;
+    if (scenario.gate === 'G3') {
+        const m = /^[0-9A-Za-z-]+:(\d+(?:\.\d+)?)$/.exec(marker ?? '');
+        if (!m) notGate = 'a G3 run outside batch.mjs has no spend stop (no ROTN_G3_BATCH marker)';
+        else if (Number(m[1]) !== Number(maxBatchUsd)) notGate = `the batch's spend limit ${m[1]} is not this run's maxBatchUsd ${maxBatchUsd}`;
+    }
+    return { guard, notGate, batch: marker };
+}
+
 /** The verb of a console command, for error messages (never the arguments). */
 const verb = (cmd) => String(cmd).trim().split(/\s+/)[0] || '(empty)';
 
