@@ -43,7 +43,7 @@ function classRule(catalog, e) {
  * @param {import('./catalog.js').RotnData} catalog
  * @param {string} input entity registry name ("minecraft:zombie", "charm:spectre")
  * @returns {{name: string, displayName: string|null, level: 'dangerous'|'hostile'|'none',
- *   reaction: string, source: 'override'|'documented'|'vanilla'|'inferred'|'default', rule?: string,
+ *   reaction: string, source: 'override'|'documented'|'vanilla'|'verified'|'inferred'|'default', rule?: string,
  *   summary: string|null, explodes: boolean, ranged: boolean, evidence: string[]}|null}
  *   null for an unknown entity
  */
