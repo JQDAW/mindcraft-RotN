@@ -1,3 +1,5 @@
+import { safeStack } from './safe_error.js';
+
 export class ActionManager {
     constructor(agent) {
         this.agent = agent;
@@ -129,9 +131,8 @@ export class ActionManager {
             this.currentActionFn = null;
             clearTimeout(TIMEOUT);
             this.cancelResume();
-            console.error("Code execution triggered catch:", err);
-            // Log the full stack trace
-            console.error(err.stack);
+            // A safe summary and the stack frames, never the whole error object.
+            console.error("Code execution triggered catch:", safeStack(err));
             await this.stop();
             err = err.toString();
 

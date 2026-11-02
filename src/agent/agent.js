@@ -17,6 +17,7 @@ import settings from './settings.js';
 import { Task } from './tasks/tasks.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
+import { safeError, safeStack } from './safe_error.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -85,7 +86,7 @@ export class Agent {
             if (String(err).includes('Duplicate') || String(err).includes('ECONNREFUSED')) {
                  onDisconnect('Error', err);
             } else {
-                 log(this.name, `[LoginGuard] Connection Error: ${String(err)}`);
+                 log(this.name, `[LoginGuard] Connection Error: ${safeError(err)}`);
             }
         });
 
@@ -139,7 +140,7 @@ export class Agent {
                 this.checkAllPlayersPresent();
 
             } catch (error) {
-                console.error('Error in spawn event:', error);
+                console.error('Error in spawn event:', safeStack(error));
                 process.exit(this.bot?.forge?.recordExit?.({ error }) ?? 1); // 1, or 3 if fatal; never 0
             }
         });
@@ -174,7 +175,7 @@ export class Agent {
                     this.handleMessage(username, translation);
                 }
             } catch (error) {
-                console.error('Error handling message:', error);
+                console.error('Error handling message:', safeStack(error));
             }
         }
 
@@ -454,7 +455,7 @@ export class Agent {
         });
         // Logging callbacks
         this.bot.on('error' , (err) => {
-            console.error('Error event!', err);
+            console.error('Error event!', safeError(err));
         });
         // Use connection handler for runtime disconnects
         this.bot.on('end', (reason) => {

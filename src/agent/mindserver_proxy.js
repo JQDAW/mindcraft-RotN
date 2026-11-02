@@ -2,6 +2,7 @@ import { io } from 'socket.io-client';
 import convoManager from './conversation.js';
 import { setSettings } from './settings.js';
 import { getFullState } from './library/full_state.js';
+import { safeError, safeStack } from './safe_error.js';
 
 // agent's individual connection to the mindserver
 // always connect to localhost
@@ -27,7 +28,7 @@ class MindServerProxy {
         await new Promise((resolve, reject) => {
             this.socket.on('connect', resolve);
             this.socket.on('connect_error', (err) => {
-                console.error('Connection failed:', err);
+                console.error('Connection failed:', safeError(err));
                 reject(err);
             });
         });
@@ -65,7 +66,7 @@ class MindServerProxy {
             try {
                 this.agent.respondFunc(data.from, data.message);
             } catch (error) {
-                console.error('Error: ', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+                console.error('Error: ', safeStack(error));
             }
         });
 
@@ -74,7 +75,7 @@ class MindServerProxy {
                 const state = getFullState(this.agent);
                 callback(state);
             } catch (error) {
-                console.error('Error getting full state:', error);
+                console.error('Error getting full state:', safeStack(error));
                 callback(null);
             }
         });
