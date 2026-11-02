@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T21:59Z (from `date -u`)
+Updated: 2026-11-02T22:34Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -18,6 +18,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
 - **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
 - **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
+- **#127 merged** (`f457642`): `mustCollectManually` on RotN names (no collision box: dug in place).
 - **#125 merged** (`0a94411`): `isHuntable` reads the 1.12 baby flag (metadata index 12, cited); `isBaby` exported.
 - **#111, #114, #115, #118, #120 merged**: first-night threats and their cited follow-ups (`threatOf`, `nightThreats`, `threat-reactions.json` with `verified` entries from the mods' bytecode; #120 is `f74db6b`).
 - **#112 merged**: #102 follow-ups (crafting table and sticks tests; the `outShape` note). Follow-up: the reviewer's nit on that comment.
@@ -186,13 +187,14 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- **Now (`agent/rotn-data/brief-helpers`):** brief item 4, `mustCollectManually` on RotN names. Blocks with no collision box in the dump (1.12 and modded plants, torches, Pyrotech's rock piles) are dug where they are instead of going to `bot.collectBlock`; upstream's 1.21 name lists stay.
-- **Left in my brief after that (item 4, `mcdata.js` helpers still on 1.21 data), in G3 order:**
-  1. `isHuntable`'s animal list: 1.21 vanilla names, but Animania replaces those animals on RotN. Needs the lead's choice (cited food-animal list, a loot-table dumper part with a batch GO, or leave it).
-  2. Smelting and fuel: `isSmeltable`, `getItemSmeltingIngredient` (from the dump's `smelting.json`), `getSmeltingFuel`/`getFuelSmeltOutput` (burn times are not in the dump; vanilla values or a dumper part). Not on the G3 path (no furnace needed for stone tools).
-  3. `WOOD_TYPES`, `MATCHING_WOOD_BLOCKS`, `WOOL_COLORS`, `getBlockTool`, `getItemBlockSources`, `getItemAnimalSource`: used only by `src/agent/npc/` (NPC mode).
-  4. Enchantment NBT ids as int or short (REID): no helper in `mcdata.js` reads enchantments yet.
-- **Waiting on the lead:** Request 7 (the `initBot` call for `installRotnRecipes`), Request 9 (prismarine-recipe patch for `outShape`), the `isHuntable` choice, the PR 4 GO (Pyrotech machine recipes).
+- **Request 7 PR (`agent/rotn-data/initbot-recipes`, after #127):** the lead's one-line exception in net-forge's `initBot`: `installRotnRecipesOnce(bot.registry)` right after `mcdata = bot.registry`. The helper (rotn-data's part of `mcdata.js`) installs once per registry, and never throws: if the dump has no recipe data, or on any error, it logs and keeps the vanilla recipes. The #127 review nits ride with it: `hasNoCollisionBox` documents that it reads the default state only (55 blocks vary by state; none on the G3 path), gases (`adpother:*`), portals, fire, structure void and negative-space materials are no longer dug in place (rails still are), and the carpet box is asserted from the dump.
+- **After that: free** (lead, 2026-11-02). Lead decisions recorded:
+  - Request 7: granted (above).
+  - Request 9 (prismarine-recipe `outShape` patch): not now; revisit after G3.
+  - `isHuntable`: keep the vanilla list for G3; a note follows, no code change.
+  - Pyrotech machine-recipe dumper part: no GO; not on the G3 path.
+  - Request 8 items: routed to skills-rotn by the lead.
+- **Note for a later `isHuntable` change (no code yet, per the lead):** on RotN the vanilla list (`cow`, `pig`, `chicken`, `sheep`, `rabbit`, ...) never matches a live animal. Animania replaces them all: `config/animania.cfg` lines 104 (chickens), 107 (cows), 113 (pigs), 116 (rabbits) and 119 (sheep) set `replaceVanilla*=true` in the pinned pack (`entity-overrides.json` `replacedByMod`; G2 batch 1: the server refused to summon vanilla chickens and pigs). `catalog.entity('minecraft:cow').replacedBy.replacements` lists them: 24 cattle, 18 pigs, 15 chickens, 18 sheep and 24 rabbits. Animania's loot tables (`animania-1.12.2-1.7.3.jar`, `assets/animania/loot_tables/`) drop vanilla meat: `cow_regular.json` beef and leather, `pig_regular.json` porkchop, `chicken_regular.json` chicken and feather, `sheep_regular.json` mutton and wool, `rabbit_regular.json` rabbit, hide and foot (`goat_regular.json`: `animania:raw_chevon`). Caveat: Animania's young are separate entities (`calf_*`, `piglet_*`, `chick_*`, `lamb_*`, `kit_*`), so leaving out babies there is by name, not by the metadata flag. Not checked: whether each young entity also sets the Ageable flag.
 
 Earlier Phase 3 plan (done):
 
@@ -245,4 +247,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/brief-helpers`: `mustCollectManually` on RotN names (see Doing).
+- `agent/rotn-data/initbot-recipes`: Request 7, RotN recipes installed once per login in `initBot` (develop merged in after #127).
