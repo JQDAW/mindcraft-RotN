@@ -10,9 +10,10 @@
 // packet, or anything that sets bot.entity.position, velocity, yaw or pitch) poisons every
 // later packet. This module:
 //   1. sanitizes the server inputs that mineflayer feeds into the bot's own motion (position,
-//      explosion knockback) before mineflayer's handlers see them;
+//      the bot's own entity_teleport, explosion knockback) before mineflayer's handlers see them;
 //   2. checks the bot's state every physics tick (and every 250 ms) and repairs a non-finite or out-of-range
-//      position, velocity or rotation from the last good state;
+//      position, velocity or rotation from the last good state (or, before there is one, the
+//      server's last absolute position);
 //   3. guards the wire: a movement packet that the server would kick for is never sent
 //      (dropped; the state is repaired, so the next tick sends a good one);
 //   4. keeps a short trace of movement inputs and outputs, and writes it to the capture (and
@@ -63,7 +64,14 @@ export function attachMovementGuard(bot, { log = () => {}, capture = () => null,
     const stats = { droppedPackets: 0, repairedStates: 0, sanitizedInputs: 0, movementKicks: 0, first: null };
     const trace = [];
     const logged = new Set();
-    let good = null; // { pos: Vec3 clone, yaw, pitch } from the last good state
+    // The last good state, recorded only after the server has placed the bot (mineflayer's
+    // first forcedMove): before that, bot.entity.position is prismarine-entity's (0, 0, 0)
+    // placeholder, and mineflayer sends no movement anyway.
+    let good = null; // { pos: Vec3 clone, yaw, pitch }
+    let spawned = false;
+    // Fallback while there is no good state yet: the last absolute, finite x, y, z the server
+    // sent (position or own entity_teleport).
+    let serverPos = null;
     let traceWritten = false;
 
     const record = (entry) => {
@@ -94,11 +102,13 @@ export function attachMovementGuard(bot, { log = () => {}, capture = () => null,
     // 1. Server inputs into the bot's own motion. Sanitized in place, then traced.
     on('position', (p) => {
         const bad = [];
+        const f = p.flags ?? 0;
         // 1.12 flags: 1 x, 2 y, 4 z, 8 yaw, 16 pitch are relative. A non-finite field becomes
         // "relative 0", i.e. keep the current value.
         [['x', 1], ['y', 2], ['z', 4], ['yaw', 8], ['pitch', 16]].forEach(([f, bit]) => {
             if (typeof p[f] === 'number' && !Number.isFinite(p[f])) { bad.push(`${f} ${p[f]}`); p[f] = 0; p.flags |= bit; }
         });
+        if (!(f & 7) && !badCoord(p.x) && !badCoord(p.y) && !badCoord(p.z)) serverPos = { x: p.x, y: p.y, z: p.z };
         record({ dir: 'S2C', name: 'position', ...pick(p, ['x', 'y', 'z', 'yaw', 'pitch', 'flags', 'teleportId']), ...(bad.length ? { sanitized: bad } : {}) });
         if (bad.length) { stats.sanitizedInputs++; once('input:position', `server position packet had ${bad.join(', ')}; kept the current value`); }
     });
@@ -110,9 +120,27 @@ export function attachMovementGuard(bot, { log = () => {}, capture = () => null,
         record({ dir: 'S2C', name: 'explosion', ...pick(p, ['x', 'y', 'z', 'radius', 'playerMotionX', 'playerMotionY', 'playerMotionZ']), blocks: p.affectedBlockOffsets?.length, ...(bad.length ? { sanitized: bad } : {}) });
         if (bad.length) { stats.sanitizedInputs++; once('input:explosion', `server explosion knockback had ${bad.join(', ')}; used 0`); }
     });
-    // Traced only (their fields cannot be non-finite on the wire), for self.
-    on('entity_velocity', (p) => { if (isSelf(p.entityId)) record({ dir: 'S2C', name: 'entity_velocity', ...pick(p, ['velocityX', 'velocityY', 'velocityZ']) }); });
-    for (const name of ['entity_teleport', 'rel_entity_move', 'entity_move_look', 'entity_look']) {
+    // entity_teleport carries doubles on 1.12, and mineflayer's entities plugin sets the bot's
+    // own position from it (entities.js, 'entity_teleport', doublePosition). For self, a
+    // non-finite or out-of-range coordinate keeps the current value, as for position.
+    on('entity_teleport', (p) => {
+        if (!isSelf(p.entityId)) return;
+        const bad = [];
+        const cur = bot.entity.position;
+        for (const k of ['x', 'y', 'z']) {
+            if (typeof p[k] === 'number' && badCoord(p[k])) {
+                bad.push(`${k} ${p[k]}`);
+                p[k] = goodPos(cur) ? cur[k] : (good?.pos ?? serverPos)?.[k] ?? 0;
+            }
+        }
+        if (!bad.length) serverPos = { x: p.x, y: p.y, z: p.z };
+        record({ dir: 'S2C', name: 'entity_teleport', ...pick(p, ['x', 'y', 'z', 'yaw', 'pitch']), ...(bad.length ? { sanitized: bad } : {}) });
+        if (bad.length) { stats.sanitizedInputs++; once('input:entity_teleport', `server entity_teleport for the bot had ${bad.join(', ')}; kept the current value`); }
+    });
+    // Traced only, for self: their fields are integers or bytes on the wire (velocity i16,
+    // relative moves i16, angles i8), so they cannot carry a non-finite value.
+    on('entity_velocity', (p) => { if (isSelf(p.entityId)) record({ dir: 'S2C', name: 'entity_velocity', ...pick(p, ['velocity', 'velocityX', 'velocityY', 'velocityZ']) }); });
+    for (const name of ['rel_entity_move', 'entity_move_look', 'entity_look']) {
         on(name, (p) => { if (isSelf(p.entityId)) record({ dir: 'S2C', name, ...pick(p, ['x', 'y', 'z', 'dX', 'dY', 'dZ', 'yaw', 'pitch']) }); });
     }
     on('attach_entity', (p) => { if (isSelf(p.entityId) || isSelf(p.vehicleId)) record({ dir: 'S2C', name: 'attach_entity', ...pick(p, ['entityId', 'vehicleId']) }); });
@@ -134,9 +162,16 @@ export function attachMovementGuard(bot, { log = () => {}, capture = () => null,
     });
 
     // 2. The bot's own state, every physics tick (after physics, before mineflayer sends).
+    // Position source: the last good state, else the server's last absolute position. With
+    // neither (the server never placed the bot validly), the position stays as it is and
+    // movement packets keep being dropped until the server sends one; that is logged once.
     const repair = (why) => {
         const e = bot.entity;
-        if (good && !goodPos(e.position)) e.position.set(good.pos.x, good.pos.y, good.pos.z);
+        const to = good?.pos ?? serverPos;
+        if (!goodPos(e.position)) {
+            if (to) e.position.set(to.x, to.y, to.z);
+            else once('no-good-state', 'no good position yet (the server has not placed the bot validly); movement packets are held back until it does');
+        }
         if (!finiteVec(e.velocity)) e.velocity.set(0, 0, 0);
         if (!Number.isFinite(e.yaw)) e.yaw = good?.yaw ?? 0;
         if (!Number.isFinite(e.pitch)) e.pitch = good?.pitch ?? 0;
@@ -152,7 +187,7 @@ export function attachMovementGuard(bot, { log = () => {}, capture = () => null,
         if (!Number.isFinite(e.yaw)) bad.push(`yaw ${e.yaw}`);
         if (!Number.isFinite(e.pitch)) bad.push(`pitch ${e.pitch}`);
         if (!bad.length) {
-            good = { pos: e.position.clone(), yaw: e.yaw, pitch: e.pitch };
+            if (spawned) good = { pos: e.position.clone(), yaw: e.yaw, pitch: e.pitch };
             return;
         }
         record({ name: 'bad_state', where, bad, state: state() });
@@ -160,7 +195,7 @@ export function attachMovementGuard(bot, { log = () => {}, capture = () => null,
         repair(where);
     };
     bot.on('physicsTick', () => checkState('physicsTick'));
-    bot.on('forcedMove', () => checkState('forcedMove'));
+    bot.on('forcedMove', () => { spawned = true; checkState('forcedMove'); });
     // mineflayer skips the physics tick (and physicsTick) while blockAt(position) is null, which
     // a non-finite or far-out position always is, so such a state would freeze the bot for good.
     const timer = setInterval(() => checkState('timer'), checkIntervalMs);

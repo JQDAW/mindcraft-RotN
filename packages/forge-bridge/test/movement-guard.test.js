@@ -53,6 +53,23 @@ async function standingBot({ guard = true } = {}) {
     return { bot, client, logs, events, guard: g, moves, bad, end: () => bot.emit('end', 'test') };
 }
 
+// Physics resumes: walk forward and return how far the bot got and what it sent meanwhile.
+async function walkAfter(s, ms = 600) {
+    const from = s.bot.entity.position.clone();
+    const sentBefore = s.moves().length;
+    s.bot.setControlState('forward', true);
+    await sleep(ms);
+    s.bot.setControlState('forward', false);
+    const sent = s.moves().slice(sentBefore);
+    return { moved: s.bot.entity.position.distanceTo(from), sent, bad: sent.map((w) => movementProblem(w.name, w.data)).filter(Boolean) };
+}
+const assertResumes = async (s) => {
+    const w = await walkAfter(s);
+    assert.ok(w.moved > 0.5, `physics resumes: moved ${w.moved.toFixed(2)} blocks`);
+    assert.ok(w.sent.filter((x) => x.name.startsWith('position')).length >= 3, `good movement packets keep coming (${w.sent.length})`);
+    assert.deepEqual(w.bad, []);
+};
+
 test('movementProblem: what Forge 1.12.2 kicks for (non-finite fields, |coordinate| > 3.0E7), and nothing else', () => {
     assert.equal(movementProblem('position', { x: 1, y: 65, z: -3e7, onGround: true }), null, '3.0E7 itself is allowed');
     assert.equal(movementProblem('position_look', { x: 1, y: 65, z: 2, yaw: 720, pitch: 95, onGround: true }), null, 'rotation is checked for finiteness only');
@@ -95,6 +112,7 @@ test('with the guard: a NaN explosion knockback is used as 0, nothing bad is sen
         assert.deepEqual(ex.sanitized, ['playerMotionX NaN', 'playerMotionY Infinity']);
         assert.ok(s.events[0].trace.some((e) => e.dir === 'C2S' && e.name.startsWith('position')), 'the trace has the bot\'s own packets');
         assert.doesNotThrow(() => JSON.stringify(s.events[0]));
+        await assertResumes(s);
     } finally { s.end(); }
 });
 
@@ -108,6 +126,24 @@ test('with the guard: a server position packet with a non-finite field keeps the
         assert.deepEqual([p.x, Math.round(p.y), p.z], [9.5, 65, 8.5]);
         assert.ok(Number.isFinite(s.bot.entity.yaw));
         assert.match(s.logs[0], /server position packet had y NaN, yaw NaN; kept the current value/);
+        await assertResumes(s);
+    } finally { s.end(); }
+});
+
+test("with the guard: the bot's own entity_teleport (doubles on 1.12) with a non-finite or out-of-range coordinate keeps the current value", async () => {
+    const s = await standingBot();
+    try {
+        const before = s.bot.entity.position.clone();
+        s.client.emit('entity_teleport', { entityId: 42, x: NaN, y: 66, z: 4e7, yaw: 0, pitch: 0, onGround: true });
+        await sleep(150);
+        assert.deepEqual(s.bad(), []);
+        assert.equal(s.bot.entity.position.x, before.x);
+        assert.equal(s.bot.entity.position.z, before.z);
+        assert.match(s.logs[0], /entity_teleport for the bot had x NaN, z 40000000; kept the current value/);
+        // Another entity's teleport is not ours to fix, and is left as sent.
+        s.client.emit('entity_teleport', { entityId: 99, x: NaN, y: 66, z: 0, yaw: 0, pitch: 0, onGround: true });
+        assert.equal(s.guard.stats.sanitizedInputs, 1);
+        await assertResumes(s);
     } finally { s.end(); }
 });
 
@@ -132,6 +168,7 @@ test('with the guard: a poisoned state from any other source is repaired (physic
         assert.deepEqual(s.bad(), []);
         assert.equal(s.bot.entity.position.x, before.x);
         assert.equal(s.logs.length, 1, 'still logged once');
+        await assertResumes(s);
     } finally { s.end(); }
 });
 
@@ -144,7 +181,7 @@ test('the wire guard: a bad packet is dropped (never written), the state is repa
     const logs = [];
     const g = attachMovementGuard(bot, { log: (m) => logs.push(m) });
     const write = g.guardWrite((name, data) => { written.push([name, data]); return true; });
-    bot.emit('physicsTick'); // records the good state
+    bot.emit('forcedMove'); // the server placed the bot: records the good state
     assert.equal(write('position', { x: 1, y: 65, z: 2, onGround: true }), true);
     bot.entity.position.y = NaN;
     assert.equal(write('position', { x: 1, y: NaN, z: 2, onGround: true }), false);
@@ -155,6 +192,57 @@ test('the wire guard: a bad packet is dropped (never written), the state is repa
     assert.equal(g.stats.droppedPackets, 2);
     assert.equal(logs.length, 1);
     assert.match(logs[0], /dropped position y NaN: the server kicks for it/);
+});
+
+function bareBot() {
+    const bot = new EventEmitter();
+    bot._client = new EventEmitter();
+    // prismarine-entity's placeholder before the server places the bot
+    bot.entity = { id: 1, position: new Vec3(0, 0, 0), velocity: new Vec3(0, 0, 0), yaw: 0, pitch: 0, onGround: false };
+    after(() => bot.emit('end'));
+    return bot;
+}
+
+test("before any good state: the repair uses the server's last absolute position, not the (0, 0, 0) placeholder", () => {
+    const bot = bareBot();
+    const logs = [];
+    const g = attachMovementGuard(bot, { log: (m) => logs.push(m) });
+    const written = [];
+    const write = g.guardWrite((name, data) => { written.push([name, { ...data }]); return true; });
+    bot.emit('physicsTick'); // not placed yet: (0, 0, 0) is not recorded as good
+    // The server places the bot, but its state is already poisoned when forcedMove fires.
+    bot._client.emit('position', { x: 8.5, y: 65, z: -3.5, yaw: 0, pitch: 0, flags: 0, teleportId: 1 });
+    bot.entity.position.set(NaN, 65, -3.5);
+    bot.emit('forcedMove');
+    assert.deepEqual([bot.entity.position.x, bot.entity.position.y, bot.entity.position.z], [8.5, 65, -3.5]);
+    assert.equal(write('position', { x: 8.5, y: 65, z: -3.5, onGround: false }), true);
+    assert.equal(written.length, 1);
+    assert.equal(logs.length, 1);
+    assert.match(logs[0], /bot state became invalid \(position NaN 65 -3\.5\) at forcedMove/);
+});
+
+test('with no good state and no server position: packets are held back (logged once) until the server places the bot', () => {
+    const bot = bareBot();
+    const logs = [];
+    const g = attachMovementGuard(bot, { log: (m) => logs.push(m) });
+    const written = [];
+    const write = g.guardWrite((name, data) => { written.push(name); return true; });
+    bot.entity.position.set(NaN, 0, 0);
+    assert.equal(write('position', { x: NaN, y: 0, z: 0, onGround: false }), false);
+    assert.equal(write('position', { x: NaN, y: 0, z: 0, onGround: false }), false);
+    assert.ok(Number.isNaN(bot.entity.position.x), 'nothing to restore from');
+    assert.deepEqual(written, []);
+    assert.equal(logs.filter((m) => /no good position yet/.test(m)).length, 1);
+    // A relative position packet gives no absolute fallback ...
+    bot._client.emit('position', { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, flags: 7, teleportId: 1 });
+    assert.equal(write('position', { x: NaN, y: 0, z: 0, onGround: false }), false);
+    // ... an absolute one does, and the next packet goes out.
+    bot._client.emit('position', { x: 1.5, y: 70, z: 2.5, yaw: 0, pitch: 0, flags: 0, teleportId: 2 });
+    assert.equal(write('position', { x: NaN, y: 0, z: 0, onGround: false }), false, 'this packet was already bad');
+    assert.deepEqual([bot.entity.position.x, bot.entity.position.y, bot.entity.position.z], [1.5, 70, 2.5]);
+    assert.equal(write('position', { x: 1.5, y: 70, z: 2.5, onGround: false }), true);
+    assert.deepEqual(written, ['position']);
+    assert.equal(g.stats.droppedPackets, 4);
 });
 
 test('a movement kick writes the trace to the capture (once), even when nothing was caught first', () => {

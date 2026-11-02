@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-02T16:02Z
+Updated: 2026-11-02T16:09Z
 
 Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -403,6 +403,11 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
   - write a `movement_trace` (the last 80 movement inputs and outputs) to the capture on the first guard event or on a movement kick.
 - **What the next items run gives us:** if anything fires, there is one `[forge-bridge] movement guard: ...` line in the driver log, and the capture has `movement_trace` with the input that caused it. No extra capture settings are needed.
 - **Tested:** `movement-guard.test.js` (7), `e2e-initbot.test.js` and `support.test.js`: 16/16 pass. ESLint: the new files are clean, and `mcdata.js` stays at its baseline of 11.
+- **Review (APPROVE WITH NITS), fixed:**
+  - The bot's own `entity_teleport` is sanitized like `position`, and the comment is corrected.
+  - Before the first good state, the repair falls back to the server's last absolute position. The (0, 0, 0) placeholder is never used. With no position at all, packets are held back (logged once). This is documented and tested.
+  - The tests now show physics resumes: displacement and good packets after every recovery, and 1.5+ blocks in the e2e test.
+  - Tested: 19/19 pass (the same three files); ESLint is clean.
 
 ## Doing
 
