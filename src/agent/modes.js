@@ -4,6 +4,7 @@ import * as mc from '../utils/mcdata.js';
 import settings from './settings.js'
 import convoManager from './conversation.js';
 import { createErrorReporter } from './update_loop.js';
+import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
 
 async function say(agent, message) {
     agent.bot.modes.behavior_log += message + '\n';
@@ -99,6 +100,7 @@ const modes_list = [
         stuck_time: 0,
         last_time: Date.now(),
         max_stuck_time: 20,
+        free_timeout_ms: 10_000,
         prev_dig_block: null,
         update: async function (agent) {
             if (agent.isIdle()) { 
@@ -123,11 +125,20 @@ const modes_list = [
             if (this.stuck_time > max_stuck_time) {
                 say(agent, 'I\'m stuck!');
                 this.stuck_time = 0;
+                const free_timeout_ms = this.free_timeout_ms;
                 execute(this, agent, async () => {
-                    const crashTimeout = setTimeout(() => { agent.cleanKill("Got stuck and couldn't get unstuck") }, 10000);
-                    await skills.moveAway(bot, 5);
-                    clearTimeout(crashTimeout);
-                    say(agent, 'I\'m free.');
+                    // Upstream killed the process if this took over 10 s; on RotN terrain
+                    // that is likely, and every restart is a full Forge relogin. Now the
+                    // attempt is bounded, then the bot stops moving; execute() records the
+                    // re-plan for the stuck action (A4).
+                    const freed = await moveAwayWithin(bot, 5, free_timeout_ms);
+                    if (freed) {
+                        say(agent, 'I\'m free.');
+                        return;
+                    }
+                    try { bot.pathfinder.stop(); } catch (err) { reportModeError('unstuck', err); }
+                    console.warn(`[reflex] unstuck: still stuck after ${free_timeout_ms / 1000} s; re-planning instead of a restart.`);
+                    say(agent, 'I\'m still stuck.');
                 });
             }
             this.last_time = Date.now();
@@ -304,29 +315,44 @@ const modes_list = [
     }
 ];
 
-async function execute(mode, agent, func, timeout=-1) {
-    if (agent.self_prompter.isActive())
-        agent.self_prompter.stopLoop();
-    let interrupted_action = agent.actions.currentActionLabel;
+// True if skills.moveAway finished within timeoutMs, false if it timed out or failed.
+async function moveAwayWithin(bot, distance, timeoutMs) {
+    let timer;
+    const timedOut = new Promise((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); });
+    const moved = skills.moveAway(bot, distance).then(() => true, () => false);
+    try {
+        return await Promise.race([moved, timedOut]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+// Runs a mode's action. Mode update() functions call it without await, so it
+// must never reject: errors are caught and reported here, and mode.active is
+// always reset (skills-rotn A4). It no longer stops the self-prompt loop or
+// prompts the LLM ("Respond accordingly") after each reflex; it records a
+// re-plan request instead (replan.js), which the LLM hears at its next
+// decision point.
+export async function execute(mode, agent, func, timeout=-1) {
+    let interrupted_action = '';
     mode.active = true;
-    let code_return = await agent.actions.runAction(`mode:${mode.name}`, async () => {
-        await func();
-    }, { timeout });
-    mode.active = false;
-    console.log(`Mode ${mode.name} finished executing, code_return: ${code_return.message}`);
+    try {
+        interrupted_action = agent.actions.currentActionLabel;
+        let code_return = await agent.actions.runAction(`mode:${mode.name}`, async () => {
+            await func();
+        }, { timeout });
+        console.log(`Mode ${mode.name} finished executing, code_return: ${code_return.message}`);
 
-    let should_reprompt = 
-        interrupted_action && // it interrupted a previous action
-        !agent.actions.resume_func && // there is no resume function
-        !agent.self_prompter.isActive() && // self prompting is not on
-        !code_return.interrupted; // this mode action was not interrupted by something else
-
-    if (should_reprompt) {
-        // auto prompt to respond to the interruption
-        let role = convoManager.inConversation() ? agent.last_sender : 'system';
-        let logs = agent.bot.modes.flushBehaviorLog();
-        agent.handleMessage(role, `(AUTO MESSAGE)Your previous action '${interrupted_action}' was interrupted by ${mode.name}.
-        Your behavior log: ${logs}\nRespond accordingly.`);
+        let should_replan =
+            interrupted_action && // it interrupted a previous action
+            !agent.actions.resume_func && // there is no resume function
+            !code_return.interrupted; // this mode action was not interrupted by something else
+        if (should_replan)
+            requestReplan(agent, mode.name, interrupted_action);
+    } catch (err) {
+        reportModeError(mode.name, err);
+    } finally {
+        mode.active = false;
     }
 }
 
@@ -343,6 +369,35 @@ const reportModeError = createErrorReporter('modes');
 const modes_map = {};
 for (let mode of modes_list) {
     modes_map[mode.name] = mode;
+}
+
+// Tests only: a mode object by name (modes.js keeps them module-private).
+export function __modeForTest(name) {
+    return modes_map[name];
+}
+
+// The one LLM call reflexes may cause (A4): when a reflex interrupted an action
+// and the bot is not self-prompting (the self-prompter carries the note
+// itself), send one coalesced re-plan prompt once things are quiet, at most
+// once per MIN_GAP_MS (replan.js).
+let last_replan_prompt_at = 0;
+function maybePromptReplan(controller, now = Date.now()) {
+    const agent = _agent;
+    if (!agent?.replan) return; // nothing requested (the common case, every tick)
+    const due = replanPromptDue(agent, {
+        now,
+        idle: agent.isIdle(),
+        reflexActive: controller.anyActive(),
+        selfPrompting: agent.self_prompter.isActive(),
+        lastPromptAt: last_replan_prompt_at,
+    });
+    if (!due) return;
+    last_replan_prompt_at = now;
+    const note = takeReplanNote(agent);
+    console.log(`[reflex] re-plan prompt: ${note}`);
+    const role = convoManager.inConversation() ? agent.last_sender : 'system';
+    Promise.resolve(agent.handleMessage(role, `(AUTO MESSAGE) ${note}`))
+        .catch(err => reportModeError('replan prompt', err));
 }
 
 class ModeController {
@@ -440,6 +495,11 @@ class ModeController {
             }
             if (mode.active) break;
         }
+        maybePromptReplan(this);
+    }
+
+    anyActive() {
+        return modes_list.some(mode => mode.active);
     }
 
     flushBehaviorLog() {
