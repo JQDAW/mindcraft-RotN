@@ -160,12 +160,16 @@ final class StateMetaRemapDumper extends Part<Integer> {
         }
     }
 
-    /** Ids in BLOCK_STATE_IDS that hold a state (the iterator skips empty slots); null if unreadable. */
+    /**
+     * Ids in BLOCK_STATE_IDS that hold a state (the iterator skips empty slots; null is skipped here
+     * too); null if unreadable. The loop variable is Object: this Forge build's iterator yields
+     * Object, so an IBlockState loop variable does not compile (PR #87 dumper-build).
+     */
     @SuppressWarnings("deprecation")
     private static Integer mapIds() {
         return J.get(() -> {
             int n = 0;
-            for (IBlockState s : Block.BLOCK_STATE_IDS) n++;
+            for (Object s : Block.BLOCK_STATE_IDS) if (s != null) n++;
             return n;
         });
     }
