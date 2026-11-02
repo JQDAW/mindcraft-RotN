@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (03:31 UTC, from `date -u`)
+Updated: 2026-11-02 (14:15 UTC, from `date -u`)
 
 ## Done
 
@@ -90,8 +90,9 @@ Updated: 2026-11-02 (03:31 UTC, from `date -u`)
 
 ## Doing
 
+- **G2 batch 6 FAILED** (2026-11-02, develop 2de68ec, the fixed world). `g2-blocks-named` was killed by its `timeout 15m` in the spot check, and I stopped the batch as the GO says. The server is deleted. Details are under "Real G2 batches". **I am waiting for the lead's decision on proposals P1-P3 (Requests, item 9) and a new written GO.**
 - **G2 batch 5 PASSED** (all three scenarios gate-valid in one batch on 01a8193), and it is merged as honest evidence (#83). **The lead is not declaring G2 on it**: that world's cube had no double plants or Dynamic Trees blocks, so batch 4's defect was never exercised.
-- **The lead's follow-ups, this PR:**
+- **The lead's follow-ups, merged in #85:**
   - the plan fixes the G2 world to batch 4's (seed `1880465901402976865`, `deploy/test-server.sh run --seed`);
   - the scenarios now check the recorded seed against it (notGate if different);
   - `botExitCode` 128 is explained and recorded: the runner's SIGTERM at the end of a session gives `botStoppedByRunner: true` and `botExitSignal: SIGTERM`.
@@ -103,6 +104,43 @@ Updated: 2026-11-02 (03:31 UTC, from `date -u`)
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
 ## Real G2 batches
+
+### G2 batch 6 (2026-11-02): FAIL (blocks timed out in its spot check; batch stopped); the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 2026-11-02 13:41 UTC (relayed by the human).
+- **Code:** a clean detached checkout of develop at 2de68ec (#84, #85), after `npm ci` (all patches applied). 0 changes in `git status`.
+- **Checks right before the create (13:52 UTC), all passed:**
+  - `agentNaming('.')`: wired, 643/643.
+  - `msa-login FRCFLD --check`: exit 0; its output was discarded.
+  - The preflight on its own: cadence path, 3 dispatch runs; no servers or Primary IPs in the project.
+- **Command:** the planned one, unchanged, with `--seed 1880465901402976865`.
+- **Console:** `gamerule doDaylightCycle false` once, then `time set day` before blocks and before mobs. Then the runner's commands.
+
+**Real times (UTC):**
+- start 13:53:11, created 13:53:32, ready 13:56:05;
+- blocks 13:56:12 until the timeout kill at 14:11:12;
+- mobs 14:11:15, stopped by me at 14:12:02 after its login (logs fetched by hand at 14:11:51 first);
+- teardown "verified gone" at 14:12:17.
+
+Up 18 min, 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour. At 14:12:33 the server and primary-ip lists were empty; the only SSH key was the human's unlabelled one.
+
+**Results**
+- **World seed** `1880465901402976865` (the planned world) in both sessions. **Remap line:** `applied 506 state ids in 132 of the table's 132 blocks; conflicts 0 skipped` (#84 works: batch 5 skipped 124).
+- **Blocks:**
+  - `login_online` PASS;
+  - `blocks_named` PASS: 50 of 87 non-air types; air 32360 of 35937; 0 unloaded;
+  - `blocks_confirmed` PASS: **150/150**, including the 38 Dynamic Trees types in the top 50, all server-confirmed;
+  - `blocks_spotcheck` not reached; no `result.json` (so no `metaDrift`, `worldChanges` or `botStoppedByRunner` fields).
+  - 342 `testforblock` confirmations and no mismatch.
+- **Double plants:** none in the top 50, the samples or any spot answer.
+- **Why blocks ran out of time:**
+  - The bot spawned on a Dynamic Trees canopy (y 83, standing on `dynamictrees:leaves0`); batch 4's centre in the same world was -45 66 -66, on the ground.
+  - The cube was therefore 90% air. The spot loop needs 40 confirmed non-air answers, and at about 18.5 s per batch of 8 it had 17 non-air of 192 positions after 7.4 min.
+  - Reaching 40 needs about 400 positions (the `spotMaxPositions` cap), about 15 min more.
+- **Mobs:** login PASS; stopped before any summon. **Items:** did not run.
+
+**Evidence:** `test/evidence/g2/batch6-20261102/` (this PR), redacted with the merged tool, plus one manual redaction (the server address in `run.log`). The CI leak check passes. Raw files: `captures/raw/batch6-20261102/`.
 
 ### G2 batch 5 (2026-11-02): PASS (blocks, mobs and items all PASS, gate-valid); the server is deleted
 
@@ -471,7 +509,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 batch 6:** net-forge's fix for the 124 remap entries skipped as "cycle", this PR (the world-seed check), then a new written GO. It runs in batch 4's world (`--seed 1880465901402976865`).
+- **G2 batch 7:** the lead's decision on P1-P3 (Requests, item 9), any harness change it needs merged, then a new written GO.
 
 ## Requests to other agents or the lead
 
@@ -490,9 +528,15 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
    5. GitHub disables the helper's schedule after 60 days without activity in the helper repo. The preflight warns from day 45; a small commit to the helper repo resets the clock.
 
 7. **Lead: a `.gitattributes`** with `*.sh text eol=lf` and `deploy/cx23/** text eol=lf`. Root files are yours. The stopgap is in place: the scripts are `.sh`, and bootstrap strips CRs.
+9. **Lead: decide how G2 handles the cube after batch 6.** The world is fixed, but the spawn radius moves the cube; this time it sat on a canopy and was 90% air.
+   - **P1 (recommended): fix the cube too.** After login, the runner teleports the bot to batch 4's ground centre (-45 66 -66) with `tp`, which is already on the plan's console list. It then waits for chunks and takes the census there, so every G2 run sees the same cube (the one where batch 4 found double plants and Dynamic Trees blocks). The new gate parameter `cubeCentre` would be 'equal'.
+   - **P2: keep partial results.** On SIGTERM (`timeout`), the runner writes `result.json` with the checks done so far, verdict FAIL and an "interrupted" error, so a kill no longer loses passed checks.
+   - **P3 (optional): make the spot check faster or give it more time.** Either one SSH console call per batch of 8 `testforblock` commands (a `deploy/test-server.sh console` change), or `timeout 25m` for blocks with the hard stop adjusted. P1 alone should bring the spot check back to about 1-2 min (batch 4: 43 non-air in 72 positions).
+
 8. **Human, via the lead, for the first real CX23 run (later, after the lead's approval):** the CX23's root login and IP, the `deploy` user's public key, the bot's OpenRouter key (set on the server only), and the bot's first Microsoft device-code login. Steps: `deploy/cx23/README.md`.
 
 ## Open PRs
 
-- This PR: the G2 world-seed check, the `botExitCode` 128 explanation and the plan update (`agent/harness-ops/g2-world-seed`).
-- Merged since the last update: #83.
+- This PR: G2 batch 6 evidence (FAIL) and this record (`agent/harness-ops/g2-batch6-evidence`).
+- Next: #85's review nits (19-digit `--param` values stay strings; DRIVER.md on SIGKILL after the grace period; the G1 seed-check exemption comment), on `agent/harness-ops/pr85-nits`.
+- Merged since the last update: #83, #85.
