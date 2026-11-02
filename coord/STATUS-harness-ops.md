@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (22:08 UTC, from `date -u`)
+Updated: 2026-11-02 (23:03 UTC, from `date -u`)
 
 ## Done
 
@@ -119,7 +119,7 @@ Updated: 2026-11-02 (22:08 UTC, from `date -u`)
     - **Where:** in the human's workspace `/tmp/mindcraft-RotN`. Only the approved read-only commands ran, with `ls -la /root` last. No installs or writes. Nothing under `/root/.ssh` was read.
     - **The human's other workspaces** were left alone: `/tmp/mindcraft` and `/root/orca/workspaces/mindcraft/tunicate`, plus their two terminals.
     - **Evidence:** `test/evidence/cx23/` (this PR). The findings table is in its README.
-    - **Ubuntu: 26.04.1 LTS, not the pinned 24.04.** `deploy/cx23/bootstrap.sh` refuses anything but 24.04, so **GO 2 cannot run as is**. This needs a decision (Requests item 14).
+    - **Ubuntu: 26.04.1 LTS.** The human chose to keep it (ADR 0007, #134). The bootstrap now accepts it (this PR), and the 26.04 CI job (#135) passes.
     - **RAM and swap:** 2 vCPU, 3,814 MB RAM, **no swap**.
     - **Disk:** 38 GB, 6% used.
     - **What setup will change:**
@@ -1033,7 +1033,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 - **The CX23** (Requests item 8):
   1. ~~GO 1, the read-only probe, through `cx23`~~ **done** (2026-11-02);
   2. H1, the deploy key;
-  3. GO 2, the bootstrap, through `cx23`: **blocked by the Ubuntu version** (Requests item 14);
+  3. GO 2, the bootstrap, through `cx23`: it needs the 26.04 CI job (#135) and this PR merged, then the lead's GO;
   4. H2, the deploy password, and H3, the target swap;
   5. GO 3, the first deploy, through `cx23-deploy`;
   6. later H4 and H5;
@@ -1111,7 +1111,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
       2. The human could start Claude Code with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`. That keeps supervision alive, but it does not add memory.
       3. Re-run S1-B and the missing day-cycle piece (0-3000 and the wrap) only after 1 is in place.
 
-14. **Lead (and the human): cx23 runs Ubuntu 26.04.1, not 24.04** (GO 1 probe, `test/evidence/cx23/`). CLAUDE.md pins 24.04, and `deploy/cx23/bootstrap.sh` refuses any other version. The options:
+14. ~~Lead (and the human): cx23 runs Ubuntu 26.04.1, not 24.04~~ **Decided (ADR 0007, #134):** keep 26.04 and turn SSH password login off in setup. This PR does the bootstrap part. The original note: (GO 1 probe, `test/evidence/cx23/`). CLAUDE.md pins 24.04, and `deploy/cx23/bootstrap.sh` refuses any other version. The options:
     1. **Rebuild cx23 from Hetzner's `ubuntu-24.04` image** (I propose this). It keeps the pin, ADR 0002's Node 22 checks and the bootstrap as reviewed. But it erases what is on cx23 now: the human's clones, the Orca server install and its workspaces. The human then re-adds the Orca SSH target, and I run GO 1 again before GO 2 (about one minute).
     2. **Keep 26.04 with an ADR**, plus a small bootstrap change that accepts it. NodeSource's `nodistro` line should work there, but Node 22 and the native dependencies are untested on 26.04 (kernel 7.0).
 
@@ -1119,6 +1119,14 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the CX23 GO 1 probe evidence (`agent/harness-ops/cx23-probe`).
-- Next: the #122 follow-up, nits 1-4 (`agent/harness-ops/g3-batch-check`).
-- Merged since the last update: #122 (the G3 spend stop, 2b30405).
+- This PR: the bootstrap for Ubuntu 26.04 (ADR 0007; `agent/harness-ops/cx23-sshd`).
+  - It accepts 26.04 (24.04 too).
+  - **SSH password login is turned off in setup:** the `10-mindcraft-rotn.conf` drop-in, then `sshd -t`, then `sshd -T`, then the reload. A failure puts back what was there.
+  - It checks the 26.04 system steps before any change (the `ssh.service` unit, sshd and the drop-in Include).
+  - It checks that sudo-rs really applies the rule (`sudo -l -U deploy`).
+  - It checks the ufw rule before enabling, and the active status after.
+  - The README is updated.
+- #135: the CI job on Ubuntu 26.04 (green: 767 pass, 0 fail; the native `canvas` and `gl` installed without build tools).
+- #129: the #122 review nits, with the review fixes (re-review asked).
+- Later: a research note on Java 8 packages on Ubuntu 26.04.
+- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), and the lead's #134 (ADR 0007).
