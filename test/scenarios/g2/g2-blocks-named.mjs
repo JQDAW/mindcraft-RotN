@@ -17,11 +17,16 @@
 //      must be the census name (G2 batch 1: Dynamic Trees leaves change meta within minutes; no meta
 //      tolerance). A type that merges two different blocks under one name still fails here (PR #36
 //      review finding 2). notes.samples records the census and the fresh answer for every sample.
+//      A server-confirmed fresh answer with a different NAME is a world change (G2 batch 3, lead on #76):
+//      recorded in notes.worldChanges, never a pass, replaced by another candidate of the same type that
+//      must pass; over 2% of samples or 1 per type is not a gate run; no candidate left fails.
 //   5. blocks_spotcheck: the runner picks random positions in the cube (seeded, recorded) and asks the
 //      bot to name each, until spotChecks NON-AIR answers are confirmed by testforblock (air answers
 //      are checked too but do not count). Every answer must be right. Then the spot checks are weighed
 //      against the census: a type hit at least absentHits times but missing from the census, or whose
 //      spot share differs from its census share by more than maxShareGap, fails (the census misreports).
+//      A census with fewer than topN types claims to name every non-air block in the cube, so then one
+//      confirmed spot hit of a block NAME it lacks fails (no pass by omission in a cube with < 50 types).
 //   Unloaded positions (no chunk at the bot after it waited for the cube) are never a block type: the
 //   census reports them as "#unloaded U T" and spot answers as "#unloaded"; notes.unloaded records both,
 //   and above maxUnloadedShare (1%) the run is not a gate run.
@@ -75,7 +80,9 @@ export default {
         absentHits: 4,             // a type hit this often in spot checks must be in the census
         maxShareGap: 0.25,         // |spot share - census share| allowed per type
         maxUnloadedShare: 0.01,    // above this share of unloaded positions (census or spot) the run is not a gate run
-        seed: 0,                   // 0 = random; the seed used is recorded in notes
+        maxWorldChangeShare: 0.02, // world changes allowed: floor(this x planned samples); above, not a gate run
+        maxWorldChangesPerType: 1, // world changes allowed in one census type; above, not a gate run
+        seed: 0,                  // 0 = random; the seed used is recorded in notes
         dataRoot: '',              // '' = this repo (its mcdata.js wiring decides gate validity); tests use fixtures
         loginTimeoutMs: 240 * MS,
         settleMs: 20 * MS,         // chunks around spawn arrive after the join
@@ -87,6 +94,7 @@ export default {
     gateParams: {
         bot: 'equal', radius: 'min', topN: 'min', minTypes: 'min', candidates: 'min', samplesPerType: 'min',
         spotChecks: 'min', absentHits: 'equal', maxShareGap: 'equal', maxUnloadedShare: 'equal', dataRoot: 'equal',
+        maxWorldChangeShare: 'equal', maxWorldChangesPerType: 'equal',
     },
 
     async run(ctx) {
@@ -154,21 +162,37 @@ export default {
         //    (name and meta), the fresh answer and the server's verdict on it. The census meta is NOT
         //    required to match (Dynamic Trees drift); notes.metaDrift counts the samples where the server
         //    confirmed the census name with a different meta than the census had (lead, #67).
+        //    World changes (lead decision on G2 batch 3, #76): a sample whose fresh answer the server confirms
+        //    EXACTLY but whose name is not the census name (a plant removed between census and re-ask) is a
+        //    world change. It is recorded in notes.worldChanges, never counted as a pass, and replaced by
+        //    another (runner-picked, not yet used) candidate of the same census type, which must pass the
+        //    normal rule. More than maxWorldChangeShare of the planned samples, or more than
+        //    maxWorldChangesPerType for one type, makes the run not a gate run; no candidate left for the
+        //    type fails blocks_confirmed. A fresh answer the server does not confirm is a plain fail.
+        const censusAt = new Date().toISOString();
         const wrong = [];
         const samples = [];
         const drift = [];
+        const worldChanges = [];
+        const changesPerType = new Map();
         let sameName = 0;
+        let confirmed = 0;
         const queue = [];
+        const spares = new Map();   // census entry -> its unpicked candidates, in the runner's random order
         for (const e of entries.filter((x) => isRegistryName(x.name) && x.cand.every((q) => q && q.length === 3))) {
-            for (const q of pick(e.cand, p.samplesPerType)) queue.push({ e, q });
+            const order = pick(e.cand, e.cand.length);
+            for (const q of order.slice(0, p.samplesPerType)) queue.push({ e, q });
+            spares.set(e, order.slice(p.samplesPerType));
         }
-        for (let i = 0; i < queue.length; i += BATCH) {
+        const planned = queue.length;
+        for (let i = 0; i < queue.length; i += BATCH) {   // replacements are appended to the queue
             const batch = queue.slice(i, i + BATCH);
             const fresh = await askBlockAt(ctx, s.sinceMarker, name, batch.map((b) => b.q), p.replyTimeoutMs);
-            for (const { e, q } of batch) {
+            for (const { e, q, replaces } of batch) {
                 const f = fresh.get(q.join(','));
                 const census = `${e.name} ${e.meta}`;
                 let problem = null;
+                let worldChanged = false;
                 let now = 'no answer';
                 let verdict = 'not asked';
                 if (!f) problem = 'no fresh answer from the bot';
@@ -180,24 +204,45 @@ export default {
                     else {
                         const v = testforblockVerdict(server.console(`testforblock ${q.join(' ')} ${f[3]} ${meta}`, p.consoleWaitS), q);
                         verdict = v.ok ? 'found' : v.detail;
-                        if (!v.ok) problem = v.detail;
-                        else if (f[3] !== e.name) problem = `the server confirms "${now}", but the census named this position ${e.name}`;
+                        if (!v.ok) problem = v.detail;   // the fresh answer disagrees with the server: a plain fail
+                        else if (f[3] !== e.name) worldChanged = true;
                         if (v.ok && f[3] === e.name) {   // the server's meta here is the fresh meta
                             sameName++;
                             if (meta !== e.meta) drift.push(`${q.join(',')} ${e.name}: census meta ${e.meta}, server meta ${meta}`);
                         }
                     }
                 }
-                samples.push(`${q.join(',')} census ${census} fresh ${now} server ${verdict}: ${problem ? 'FAIL' : 'confirmed'}`);
-                if (problem) wrong.push(`${census} at ${q.join(',')} (fresh: ${now}): ${problem}`);
+                const pos = q.join(',');
+                const via = replaces ? ` (replacing ${replaces})` : '';
+                if (worldChanged) {
+                    const n = (changesPerType.get(e) ?? 0) + 1;
+                    changesPerType.set(e, n);
+                    const next = spares.get(e).shift();
+                    worldChanges.push({ pos, census, fresh: now, server: verdict, censusAt, checkedAt: new Date().toISOString(),
+                        replacedBy: next ? next.join(',') : null });
+                    samples.push(`${pos} census ${census} fresh ${now} server ${verdict}: WORLD CHANGE${via}`);
+                    if (next) queue.push({ e, q: next, replaces: pos });
+                    else wrong.push(`${census} at ${pos} (fresh: ${now}): a world change, and no other candidate of this census type is left to verify it`);
+                    continue;
+                }
+                samples.push(`${pos} census ${census} fresh ${now} server ${verdict}: ${problem ? 'FAIL' : 'confirmed'}${via}`);
+                if (problem) wrong.push(`${census} at ${pos} (fresh: ${now}): ${problem}`);
+                else confirmed++;
             }
         }
-        const checked = queue.length;
+        const maxChanges = Math.floor(p.maxWorldChangeShare * planned);
+        if (worldChanges.length > maxChanges) {
+            ctx.notGate(`${worldChanges.length} world changes in ${planned} planned samples (max ${maxChanges}, ${100 * p.maxWorldChangeShare}%)`);
+        }
+        const overType = [...changesPerType].filter(([, n]) => n > p.maxWorldChangesPerType).map(([e, n]) => `${e.name} ${e.meta} (${n})`);
+        if (overType.length) ctx.notGate(`more than ${p.maxWorldChangesPerType} world change(s) in one census type: ${overType.join(', ')}`);
         ctx.note('samples', samples);
+        ctx.note('worldChanges', worldChanges);
         ctx.note('metaDrift', { count: drift.length, of: sameName, first: drift.slice(0, 20) });
         ctx.note('blocksWrong', sample(wrong));
-        ctx.check('blocks_confirmed', namedOk && checked > 0 && wrong.length === 0,
-            `${checked - wrong.length}/${checked} runner-picked samples (${p.samplesPerType} per type) re-asked and confirmed by testforblock`
+        ctx.check('blocks_confirmed', namedOk && planned > 0 && wrong.length === 0 && confirmed === planned,
+            `${confirmed}/${planned} runner-picked samples (${p.samplesPerType} per type) re-asked and confirmed by testforblock`
+            + `${worldChanges.length ? `; ${worldChanges.length} world change(s), each replaced by another candidate of the same type` : ''}`
             + `${wrong.length ? `; first: ${wrong[0]}` : ''}${namedOk ? '' : ' (blocks_named failed)'}`);
 
         // 5. spot checks until spotChecks non-air answers are confirmed, weighed against the census
@@ -227,9 +272,18 @@ export default {
         const censusTotal = entries.reduce((a, e) => a + (e.count || 0), 0);
         const census = new Map(entries.map((e) => [`${e.name} ${e.meta}`, (e.count || 0) / (censusTotal || 1)]));
         const skew = [];
+        // Completeness (lead, on the world-change PR): a census with fewer than topN types claims to list
+        // EVERY non-air block name in the cube, so a single confirmed spot hit of a name it lacks fails;
+        // a census of a cube with fewer types is never a pass by omission. By name, not name+meta: a
+        // Dynamic Trees block whose meta changed since the census is not an omitted type (the absentHits
+        // rule below still covers name+meta).
+        const censusNames = new Set(entries.map((e) => e.name));
+        const claimsAll = entries.length < p.topN;
         for (const [k, n] of hits) {
             const q = n / Math.max(1, nonAir);
-            if (!census.has(k) && n >= p.absentHits) skew.push(`${k}: ${n} spot hits but not in the census`);
+            const hitName = k.slice(0, k.lastIndexOf(' '));
+            if (claimsAll && !censusNames.has(hitName)) skew.push(`${hitName}: ${n} spot hit(s), but the census (${entries.length} < ${p.topN} types, so all of them) does not name it`);
+            else if (!census.has(k) && n >= p.absentHits) skew.push(`${k}: ${n} spot hits but not in the census`);
             else if (census.has(k) && Math.abs(q - census.get(k)) > p.maxShareGap) skew.push(`${k}: spot share ${q.toFixed(2)}, census share ${census.get(k).toFixed(2)}`);
         }
         for (const [k, share] of census) {
