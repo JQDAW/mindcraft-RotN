@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T13:52Z (from `date -u`)
+Updated: 2026-11-02T14:35Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -18,6 +18,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
 - **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
 - **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
+- **#87 merged** (`0710480`): the #80 Java dumper nits, dumper **0.2.1**. Map size vs ids scanned: `scanned.mapIds` and `anomalies.unscannedIds = mapIds - networkIds`; the importer blocks unless it is 0 (null or missing counts as non-zero; a 0.2.0 dump gets a note). The map's `size()` (distinct states) is not compared, because Forge never removes stale states from it. `checkEncoding` guards each state; an entry that throws rolls back the counters. The first push did not compile (the map's iterator yields `Object`), so the fix in `0a10569` loops over `Object`. CI built `rotndump-0.2.1.jar`, SHA-256 `232c3ad2de73191532f73435196c522eaafb2b7ff5751bbe3a3cf64fbcf04aba` (run 41458632441). No batch needed; it shows on the next dump.
 - **#68 merged** (`7d33cee`): the cockatrice offset correction (above).
 - **#48 merged** (`7f0feef`): the dumper's per-tick time cap, per-entry isolation and `serializers.json`; the importer requires `serializers.json` and blocks on `entryErrors`.
 - **First RotN 3.3.4 dump batch: PASS** (lead's written GO, 2026-11-01 about 19:24 UTC, before the server was created at 19:25:54; record below).
@@ -179,12 +180,9 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- Holding for the lead (G2 batch 6 is harness-ops', after net-forge's #84). Worktree on `agent/rotn-data/dumper-nits` from origin/develop `4b3d04e` (develop itself is checked out in the lead's worktree).
-- Optional small PR (`agent/rotn-data/dumper-nits`): the #80 Java dumper nits, dumper **0.2.1**:
-  - map size vs ids scanned: `scanned.mapIds` (ids in `BLOCK_STATE_IDS` that hold a state) and `anomalies.unscannedIds = mapIds - networkIds`. The importer blocks unless it is 0; null or missing counts as non-zero, except a 0.2.0 dump, which gets a note. The map's `size()` (distinct states) is deliberately not compared: Forge never removes a state from it, so a replaced block's stale states could block an import with no effect on what any id resolves to.
-  - `checkEncoding` guards each state (an unreadable id counts as an encoding mismatch); an entry that throws rolls back every counter and the first anomaly.
-  - Not yet built: `dumper-build` CI compiles it (no local Forge toolchain). It needs no batch; it shows on the next dump.
-- Per the lead (13:5x UTC): G2 batch 6 runs on this PC, so nothing heavy here (no full `npm test`) until the lead says the batch is done.
+- Holding until G2 is declared, then the next phase (lead, 14:3x UTC). G2 batch 6 is done, so the hold on heavy jobs is lifted.
+- Optional small PR (`agent/rotn-data/dumper-nits-2`): the #87 nits. A comment that `mapIds()` runs in `tail()`, outside the per-tick entry cap (its time shows in `timing.state-meta-remap.ms`, not in `maxTickMs`, because `close()` is timed after that), and the README row "dumper 0.2.0, extended in 0.2.1". Comments and docs only, so the jar's behaviour is unchanged.
+
 ## Follow-ups (later PRs)
 
 - ~~Importer: sort order-unstable lists~~: done in this PR (`canonicalize`).
@@ -216,4 +214,4 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Open PRs
 
-- `agent/rotn-data/dumper-nits`: the #80 Java dumper nits (dumper 0.2.1) plus the importer's `unscannedIds` check (see Doing).
+- `agent/rotn-data/dumper-nits-2`: the #87 nits (a comment and the README row; see Doing).
