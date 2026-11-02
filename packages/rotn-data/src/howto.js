@@ -9,6 +9,8 @@
 import { WILDCARD_META } from './names.js';
 
 const sameMeta = (want, have) => want == null || have == null || have === WILDCARD_META || want === WILDCARD_META || want === have;
+/** Does an item meta match what was asked: one meta, a set of metas (a bare rock name), or any. */
+const metaOk = (want, have) => (want.meta != null ? sameMeta(want.meta, have) : !want.metas || have == null || have === WILDCARD_META || want.metas.includes(have));
 const rank = (name) => (name.startsWith('pyrotech:') ? 0 : name.startsWith('minecraft:') ? 1 : 2);
 const MAX_CHOICES = 6;
 const MAX_DROP_BLOCKS = 10;
@@ -45,7 +47,7 @@ export function stonePairs(catalog, rule) {
 /** Every (block, item) pair a world rule produces. */
 function rulePairs(catalog, rule) {
     if (rule.stoneFamilies) return stonePairs(catalog, rule);
-    if (rule.pairs) return rule.pairs.map((p) => ({ block: p.block, item: p.item }));
+    if (rule.pairs) return rule.pairs.map((p) => ({ block: p.block, item: p.item, documented: p.documented === true }));
     const g = rule.gives;
     if (!g) return [];
     if (rule.action === 'start-kit') return [{ block: null, item: { name: g.name, meta: g.meta } }];
@@ -59,20 +61,25 @@ function worldWays(catalog, want) {
             if (p.item.name !== want.name) return false;
             // gives.meta 'block' with an unspecified block meta: each block meta gives its own item meta.
             if (rule.gives?.meta === 'block' && p.item.meta == null) return true;
-            return sameMeta(want.meta, p.item.meta);
+            return metaOk(want, p.item.meta);
         });
         if (!pairs.length) continue;
         const blocks = [];
         for (const p of pairs.filter((x) => x.block)) {
-            const meta = rule.gives?.meta === 'block' && p.block.meta == null ? want.meta : p.block.meta;
-            // A block meta the block does not have (pyrotech:rock:15) is no way at all.
+            // gives.meta 'block' on a block without a meta: the asked meta(s), else any.
+            const metas = rule.gives?.meta === 'block' && p.block.meta == null ? (want.meta != null ? [want.meta] : want.metas ?? [null]) : [p.block.meta];
             const states = catalog.dump.blocks?.blocks?.[p.block.name]?.states;
-            if (meta != null && states && !states.some((s) => s.meta === meta)) continue;
-            blocks.push(meta == null ? { name: p.block.name } : { name: p.block.name, meta });
+            for (const meta of metas) {
+                // A block meta the block does not have (pyrotech:rock:15) is no way at all.
+                if (meta != null && states && !states.some((s) => s.meta === meta)) continue;
+                blocks.push(meta == null ? { name: p.block.name } : { name: p.block.name, meta });
+            }
         }
         if (rule.action !== 'start-kit' && !blocks.length) continue;
-        // Stone rules: documented only for the pairs the sources name; otherwise the rule's own value.
-        const confidence = rule.stoneFamilies ? (pairs.some((p) => p.documented) ? 'documented' : 'inferred') : (rule.confidence ?? 'inferred');
+        // Rules with pairs (stone families, trees, debarking, planks): documented only if a matching
+        // pair is (#107 review); otherwise the rule's own value.
+        const perPair = !!(rule.stoneFamilies || rule.pairs);
+        const confidence = perPair ? (pairs.some((p) => p.documented) ? 'documented' : 'inferred') : (rule.confidence ?? 'inferred');
         const way = {
             kind: 'world',
             id: rule.id,
@@ -105,6 +112,7 @@ function choices(ing) {
 function craftWays(catalog, want) {
     const ways = [];
     for (const r of catalog.recipesFor(want.name, { meta: want.meta ?? undefined })) {
+        if (!metaOk(want, r.result.meta)) continue;
         const cells = (r.inShape ? r.inShape.flat() : r.ingredients ?? []).filter(Boolean);
         const groups = new Map();
         for (const c of cells) {
@@ -129,7 +137,7 @@ function craftWays(catalog, want) {
 }
 
 function smeltWays(catalog, want) {
-    return catalog.smeltingFor(want.meta == null ? want.name : `${want.name}:${want.meta}`).map((s) => ({
+    return catalog.smeltingFor(want.meta == null ? want.name : `${want.name}:${want.meta}`).filter((s) => metaOk(want, s.output.meta)).map((s) => ({
         kind: 'smelt', station: 'furnace', input: { name: s.input.name, meta: s.input.meta === WILDCARD_META ? null : s.input.meta }, gives: { ...s.output }, xp: s.xp,
     }));
 }
@@ -148,7 +156,7 @@ function dropIndex(catalog) {
 }
 
 function dropWays(catalog, want, worldBlocks) {
-    const hits = (dropIndex(catalog).get(want.name) ?? []).filter((d) => sameMeta(want.meta, d.itemMeta) && !worldBlocks.has(d.block));
+    const hits = (dropIndex(catalog).get(want.name) ?? []).filter((d) => metaOk(want, d.itemMeta) && !worldBlocks.has(d.block));
     const byBlock = new Map();
     for (const h of hits) {
         if (!byBlock.has(h.block)) byBlock.set(h.block, []);
@@ -172,12 +180,19 @@ function dropWays(catalog, want, worldBlocks) {
  * @param {string|{name: string, meta?: number}} input any accepted spelling ("stone_pickaxe",
  *        "pyrotech:rock:6", "oak_planks", "log:1")
  * @param {{meta?: number}} [opts] metadata, if the input has none
- * @returns {{item: {name: string, meta: number|null}, ways: object[]}|null} null for an unknown item
+ * @returns {{item: {name: string, meta: number|null, metas?: number[]}, ways: object[]}|null} null for an
+ *          unknown item; `metas` when a bare rock name was narrowed to its rock variants
  */
 export function howToGet(catalog, input, { meta } = {}) {
     const r = catalog.resolve(input, 'items');
     if (!r || !catalog.names.items.has(r.name)) return null;
     const want = { name: r.name, meta: meta ?? r.meta ?? null };
+    // A bare rock name ("pyrotech:rock") means the variants that are rocks (#107 review): the
+    // metas the 'rock' ore dictionary lists for it, not the dirt clump, sand pile or wood chips.
+    if (want.meta == null) {
+        const rockMetas = (catalog.oreDict('rock') ?? []).filter((s) => s.name === want.name).map((s) => s.meta);
+        if (rockMetas.length && !rockMetas.includes(WILDCARD_META)) want.metas = [...new Set(rockMetas)].sort((a, b) => a - b);
+    }
     const world = worldWays(catalog, want);
     const worldBlocks = new Set(world.flatMap((w) => w.blocks.map((b) => b.name)));
     return {

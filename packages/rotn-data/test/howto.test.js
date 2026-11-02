@@ -114,6 +114,37 @@ test('the G3 chain: crude axe, Crafting Tools, crafting table, stone tools, firs
     assert.deepEqual(pack.howToGet('stick').ways[0].id, 'sticks-from-leaves');
 });
 
+test('#107 review: confidence is never stronger than the source', () => {
+    // Per pair: the research names the oak debarked log and the oak plank only.
+    assert.equal(pack.howToGet('oak_planks').ways[0].confidence, 'documented');
+    assert.equal(pack.howToGet('spruce_planks').ways[0].confidence, 'inferred');
+    assert.equal(way(pack.howToGet('hitwithaxe:debarked_oak'), 'debark-log').confidence, 'documented');
+    assert.equal(way(pack.howToGet('hitwithaxe:debarked_spruce'), 'debark-log').confidence, 'inferred');
+    // Which log a tree drops is UNVERIFIED in the research, so every fell-tree pair is inferred.
+    assert.equal(way(pack.howToGet('oak_log'), 'fell-tree').confidence, 'inferred');
+    assert.equal(way(pack.howToGet('spruce_log'), 'fell-tree').confidence, 'inferred');
+    // Raw iron from the ore is UNVERIFIED in the research.
+    assert.equal(way(pack.howToGet('contenttweaker:raw_iron'), 'raw-iron').confidence, 'inferred');
+    // Flint tools are level 1 (Sturdy): the rocks rule does not offer them.
+    const rule = sources.sources.find((s) => s.id === 'mine-stone-for-rocks');
+    assert.doesNotMatch(rule.summary, /flint/);
+    assert.match(rule.note, /pyrotech:flint_pickaxe\) is level 1/);
+    assert.equal(pack.getItem('pyrotech:flint_pickaxe').toolClasses.pickaxe, 1);
+    for (const s of sources.sources) for (const p of s.pairs ?? []) assert.ok(p.documented === undefined || p.documented === true, `${s.id}: documented is true or absent`);
+});
+
+test('#107 nit: a bare rock name means its rock variants (the rock ore dictionary metas)', () => {
+    const r = pack.howToGet('pyrotech:rock');
+    const metas = pack.oreDict('rock').filter((s) => s.name === 'pyrotech:rock').map((s) => s.meta).sort((a, b) => a - b);
+    assert.deepEqual(r.item, { name: 'pyrotech:rock', meta: null, metas });
+    assert.ok(!metas.includes(4) && !metas.includes(5) && !metas.includes(7), 'no dirt clump, sand pile or wood chips');
+    assert.deepEqual(way(r, 'rock-pile').blocks, metas.map((m) => ({ name: 'pyrotech:rock', meta: m })));
+    for (const w of r.ways.filter((x) => x.kind === 'craft')) assert.ok(metas.includes(w.gives.meta), `craft gives meta ${w.gives.meta}`);
+    for (const b of way(r, 'mine-stone-for-rocks').blocks) assert.ok(b.name === 'minecraft:stone' || b.name === 'undergroundbiomes:sedimentary_stone');
+    // An explicit meta still works, rock or not.
+    assert.deepEqual(way(pack.howToGet('pyrotech:rock:4'), 'rock-pile').blocks, [{ name: 'pyrotech:rock', meta: 4 }]);
+});
+
 test('recipes that differ only in their id are listed once', () => {
     const crafts = pack.howToGet('oak_planks').ways.filter((w) => w.kind === 'craft');
     const keys = crafts.map((w) => JSON.stringify([w.requiresTable, w.gives, w.inputs]));
