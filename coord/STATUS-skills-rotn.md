@@ -32,7 +32,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- **Fix (found during A4; regression from my #104):** `src/models/_model_map.js` imports every `.js` in `src/models/` at agent startup, so `src/models/openrouter.test.js` ran **inside the bot**, and its `before()` hook replaced `OPENROUTER_API_KEY` with the fake key (reproduced). The fix moves it to `src/agent/openrouter_logging.test.js` (restoring the env), with a guard test. Branch `agent/skills-rotn/move-openrouter-test`, PR open, see Open PRs. **Must merge before any run with an LLM.**
+- **Fix (found during A4; regression from my #104):** `src/models/_model_map.js` imports every `.js` in `src/models/` at agent startup, so `src/models/openrouter.test.js` ran **inside the bot**, and its `before()` hook replaced `OPENROUTER_API_KEY` with the fake key (reproduced). The fix moves it to `src/agent/openrouter_logging.test.js` (restoring the env), with a guard test. Branch `agent/skills-rotn/move-openrouter-test`, #119 open. **Must merge before any run with an LLM.**
 - A4 `quiet-reflexes` (in progress, local; PR after the fix above), with the lead's follow-ups: (1) the unstuck mode no longer kills the agent after 10 s (`modes.js:127`) but recovers or logs a re-plan; (2) `execute(...)` at `modes.js:125` is awaited, so the per-mode catch covers it; (3) the `!smeltItem` and `/skin` tests become behavioural. Other exit paths (action_manager, mindserver_proxy, agent.js exit 4, `!restart`) are noted for G4.
 
 ## G3 plan: small PRs, in order
@@ -126,4 +126,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- Fix: openrouter test out of `src/models/` (branch `agent/skills-rotn/move-openrouter-test`). Serves log hygiene (#104) and the "Before the first CX23 run" line.
+- #119 Fix: openrouter test out of `src/models/` (branch `agent/skills-rotn/move-openrouter-test`). Serves log hygiene (#104) and the "Before the first CX23 run" line.
