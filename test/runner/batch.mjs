@@ -17,7 +17,8 @@
 //      of every G3 scenario, so a batch with another limit is never a gate pass) and --pass-env
 //      OPENROUTER_API_KEY, under that scenario's timeout (--timeout-min before it). A scenario stopped by that
 //      timeout is recorded as 124 whatever run.mjs exits with (143 on SIGTERM); one whose runner cannot start
-//      at all is recorded as 127. Each is recorded with its output folder, so the gate evidence check
+//      at all is recorded as 127. Each is recorded with its output folder and the runId from its
+//      result.json, so the gate evidence check
 //      (crossCheckBatch in lib/g3.mjs, test/tools/g3-batch-check.mjs) can tie every result to this batch.
 //   4. Always fetches the server logs at the end (TEST_SERVER_CTL fetch logs --out <logs-out>).
 //   5. After the last scenario, reads the usage once more: spend over the limit exits 5, and a failed
@@ -102,6 +103,16 @@ export function spendGate(base, now, maxBatchUsd) {
     return { go: true, spent: s };
 }
 
+/** The runId in a scenario's result.json (run.mjs writes it from the start), or null if there is none. */
+export function runIdOf(outDir) {
+    try {
+        const id = JSON.parse(fs.readFileSync(path.join(outDir, 'result.json'), 'utf8')).runId;
+        return typeof id === 'string' && id ? id : null;
+    } catch {
+        return null;
+    }
+}
+
 /** Run one scenario (the runner is run.mjs; tests may swap it in test mode). Resolves the exit code. */
 export function runOne(s, o, env, { spawnImpl = spawn } = {}) {
     const runner = testOverridesAllowed(env) && env.ROTN_BATCH_RUNNER ? env.ROTN_BATCH_RUNNER : path.join(HERE, 'run.mjs');
@@ -165,8 +176,9 @@ async function main(argv) {
         }
         log(`${s.id}: start (spent so far USD ${gate.spent} of ${o.maxBatchUsd})`);
         const code = await runOne(s, o, env);
-        // The output folder ties this batch to the result.json it wrote (crossCheckBatch, #122 nit 1).
-        summary.scenarios.push({ id: s.id, out: path.resolve(s.out), exit: code, spentBefore: gate.spent });
+        // The output folder and the run's own runId tie this batch to the result.json it wrote
+        // (crossCheckBatch; #122 nit 1, #129 review).
+        summary.scenarios.push({ id: s.id, out: path.resolve(s.out), runId: runIdOf(s.out), exit: code, spentBefore: gate.spent });
         if (code !== 0 && exit === 0) exit = 1;
     }
     const end = await read();

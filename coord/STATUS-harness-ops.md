@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (22:10 UTC, from `date -u`)
+Updated: 2026-11-02 (22:34 UTC, from `date -u`)
 
 ## Done
 
@@ -115,13 +115,33 @@ Updated: 2026-11-02 (22:10 UTC, from `date -u`)
       - a G3 run without `batch.mjs`'s `ROTN_G3_BATCH` marker is notGate;
       - `llm` is in progress and killed records;
       - the spend is checked between scenarios only, as documented in DRIVER.md.
-  - **CX23 GO 1** (the read-only probe): the CLI could not create the `/root` workspace on `cx23`, and the approved `orca terminal create --environment cx23` needs a workspace ("Remote terminal create requires --worktree"). It waits for the human to open a folder workspace at `/root` on `cx23` from Orca's desktop app. Nothing has touched the CX23.
-  - **This PR: the #122 review nits** (`agent/harness-ops/g3-batch-check`):
-    1. the G3 gate evidence is cross-checked against `batch.mjs`'s summary (`test/tools/g3-batch-check.mjs`), because the `ROTN_G3_BATCH` marker alone can be forged;
-    2. the wiring test asserts that G3 scenarios exist;
-    3. a timed-out scenario is recorded as 124, whatever run.mjs exits;
-    4. a runner that cannot start is recorded as 127, not left hanging.
-    - Nit 5 (a stricter fake-cloud check) is not done: `TEST_SERVER_FAKE_CLOUD=1` is already set only with `ROTN_TEST_MODE=1`, the fake state and a non-default hcloud binary.
+  - **CX23 GO 1, the read-only probe: DONE (#128, 8fcec45). The cx23 terminal is closed** (opened 22:05:21, closed 22:06:05 UTC on 2026-11-02, checked with `orca terminal list`).
+    - **Where:** in the human's workspace `/tmp/mindcraft-RotN`. Only the approved read-only commands ran, with `ls -la /root` last. No installs or writes. Nothing under `/root/.ssh` was read.
+    - **The human's other workspaces** were left alone: `/tmp/mindcraft` and `/root/orca/workspaces/mindcraft/tunicate`, plus their two terminals.
+    - **Evidence:** `test/evidence/cx23/`. The findings table is in its README.
+    - **Ubuntu: 26.04.1 LTS, not the pinned 24.04.** `deploy/cx23/bootstrap.sh` refuses anything but 24.04, so **GO 2 cannot run as is**. This needs a decision (Requests item 14).
+    - **RAM and swap:** 2 vCPU, 3,814 MB RAM, **no swap**.
+    - **Disk:** 38 GB, 6% used.
+    - **What setup will change:**
+      - turn on ufw (SSH only);
+      - add a 2 GB swapfile;
+      - install Node 22;
+      - create the `deploy` and `mindcraft-rotn` users, the unit, the scripts, the sudoers rule and the folders.
+      - Unattended upgrades are already on.
+    - **Unexpected or worth noting:**
+      - **no firewall is active** (ufw is inactive and the nft ruleset is empty);
+      - **sshd allows password logins** (`passwordauthentication yes`);
+      - **only SSH (port 22) is public.** Orca's server listens on loopback only.
+      - The users are root and nobody only. The running services are a standard cloud set. Nothing of ours is there yet.
+    - GO 2 waits on the human (Ubuntu 26.04 against the 24.04 pin, and sshd password logins); the lead is asking.
+  - **This PR: the #122 review nits** (`agent/harness-ops/g3-batch-check`), with the #129 review fixes:
+    1. **The G3 gate evidence is cross-checked against `batch.mjs`'s summary** (`test/tools/g3-batch-check.mjs`), because the `ROTN_G3_BATCH` marker alone can be forged.
+       - The check is forced: CI fails on any G3 `result.json` anywhere under `test/evidence/` that no `batch.json` in its own folder or a parent folder covers.
+       - Each result is bound to its batch by its `runId`, which `batch.mjs` reads back from the scenario's `result.json`. A second, hand-run result under a reused batch id therefore fails.
+    2. **The wiring test** checks the G3 scenarios only. While there are none, it is skipped visibly with "no G3 scenarios yet".
+    3. **Timeouts:** a timed-out scenario is recorded as 124, whatever run.mjs exits.
+    4. **Spawn errors:** a runner that cannot start is recorded as 127 instead of hanging the batch.
+    - **Nit 5 (a stricter fake-cloud check) is not done.** `TEST_SERVER_FAKE_CLOUD=1` is already set only with `ROTN_TEST_MODE=1`, the fake state and a non-default hcloud binary.
   - **Next:** the G3 arbiters library (inventory by count-only `clear`, the stat objectives with absent read as 0, deaths, leaves and no-cheat), then the scenarios once skills-rotn's chat formats are agreed.
 - **G2 PASSED** on batch 8 (#97): blocks, mobs and items all gate-valid in one batch on the fixed world and cube.
 - **History:**
@@ -1019,9 +1039,9 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 - **G3 batches:** the lead's decisions on the G3 plan's open questions and on S1-A's proposals, skills-rotn's agent and profile, the test OpenRouter key (Requests item 12), and a written GO for each batch.
 - **Any further paid batch:** a written GO. For batches over 20 min, I announce the batch window to the lead first (Requests item 13).
 - **The CX23** (Requests item 8):
-  1. GO 1, the read-only probe, through `cx23`;
+  1. ~~GO 1, the read-only probe, through `cx23`~~ **done** (2026-11-02);
   2. H1, the deploy key;
-  3. GO 2, the bootstrap, through `cx23`;
+  3. GO 2, the bootstrap, through `cx23`: **blocked by the Ubuntu version** (Requests item 14);
   4. H2, the deploy password, and H3, the target swap;
   5. GO 3, the first deploy, through `cx23-deploy`;
   6. later H4 and H5;
@@ -1099,8 +1119,14 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
       2. The human could start Claude Code with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`. That keeps supervision alive, but it does not add memory.
       3. Re-run S1-B and the missing day-cycle piece (0-3000 and the wrap) only after 1 is in place.
 
+14. **Lead (and the human): cx23 runs Ubuntu 26.04.1, not 24.04** (GO 1 probe, `test/evidence/cx23/`). CLAUDE.md pins 24.04, and `deploy/cx23/bootstrap.sh` refuses any other version. The options:
+    1. **Rebuild cx23 from Hetzner's `ubuntu-24.04` image** (I propose this). It keeps the pin, ADR 0002's Node 22 checks and the bootstrap as reviewed. But it erases what is on cx23 now: the human's clones, the Orca server install and its workspaces. The human then re-adds the Orca SSH target, and I run GO 1 again before GO 2 (about one minute).
+    2. **Keep 26.04 with an ADR**, plus a small bootstrap change that accepts it. NodeSource's `nodistro` line should work there, but Node 22 and the native dependencies are untested on 26.04 (kernel 7.0).
+
+    **A separate point for the human:** sshd allows password logins (`passwordauthentication yes`), and nothing filters the ports until GO 2 turns on ufw. With no lockdown (the human's decision), the `deploy` password from H2 will also work over SSH. Turning off `PasswordAuthentication` before H2 would close that. It is the human's call, and it is not part of my bootstrap.
+
 ## Open PRs
 
-- This PR: the #122 review nits (`agent/harness-ops/g3-batch-check`).
-- #128: the CX23 GO 1 probe evidence (`agent/harness-ops/cx23-probe`).
-- Merged since the last update: #122 (the G3 spend stop, 2b30405).
+- This PR: the #122 review nits, with the #129 review fixes (`agent/harness-ops/g3-batch-check`).
+- Next: the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from).
+- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45).

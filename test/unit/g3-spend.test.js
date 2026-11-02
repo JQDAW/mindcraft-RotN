@@ -15,10 +15,10 @@ import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProble
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
-import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
+import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
-import { crossCheckBatch } from '../runner/lib/g3.mjs';
-import { checkFiles, resultFilesUnder } from '../tools/g3-batch-check.mjs';
+import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
+import { checkFiles, resultFilesUnder, checkEvidenceTree } from '../tools/g3-batch-check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BATCH = path.join(HERE, '..', 'runner', 'batch.mjs');
@@ -136,17 +136,20 @@ describe('maxBatchUsd: USD 2, an equal gate parameter of every G3 scenario', () 
         assert.deepEqual(g3Policy({ gate: 'G2' }, {}, undefined), { guard: false, notGate: null, batch: null });
     });
 
-    test('every G3 scenario runs the real agent and carries maxBatchUsd 2 compared equal (#122 finding 3)', async () => {
+    test('every G3 scenario runs the real agent and carries maxBatchUsd 2 compared equal (#122 finding 3)', async (t) => {
         const all = Object.values(await loadScenarios());
-        assert.ok(all.length > 0, 'loadScenarios found scenarios at all (#122 nit 2)');
+        assert.ok(all.length > 0, 'loadScenarios found scenarios at all, so an empty G3 list below is real');
         const g3 = all.filter((sc) => sc.gate === 'G3');
+        // #122 nit 2, #129 review: never a silent pass over an empty list.
+        if (!g3.length) {
+            t.skip('no G3 scenarios yet');
+            return;
+        }
         for (const sc of g3) {
             assert.equal(sc.llm, true, `${sc.id}: llm`);
             assert.equal(sc.defaults?.maxBatchUsd, 2, `${sc.id}: default maxBatchUsd`);
             assert.equal(sc.gateParams?.maxBatchUsd, 'equal', `${sc.id}: maxBatchUsd compared equal`);
         }
-        // No G3 scenario exists yet; the rule holds for each one as it lands.
-        assert.ok(Array.isArray(g3));
     });
 
     test('batch arguments', () => {
@@ -265,16 +268,28 @@ describe('batch.mjs: timeouts, spawn errors and the summary (#122 nits 1, 3, 4)'
         assert.equal(code, 127);
     });
 
-    test('the summary records each scenario\'s output folder and the batch\'s exit', { timeout: 60000 }, async () => {
+    test('the summary records each scenario\'s output folder, its runId and the batch\'s exit', { timeout: 60000 }, async () => {
         const r = await runBatch({ spend: '0', scenarios: ['a'] });
         assert.equal(r.summary.exit, 0);
-        assert.ok(path.isAbsolute(r.summary.scenarios[0].out) && r.summary.scenarios[0].out.endsWith('out-a'));
+        const a = r.summary.scenarios[0];
+        assert.ok(path.isAbsolute(a.out) && a.out.endsWith('out-a'));
+        assert.equal(a.runId, JSON.parse(fs.readFileSync(path.join(a.out, 'result.json'), 'utf8')).runId, 'the runId read back from the run\'s result.json');
+        assert.match(a.runId, /^fake-a-\d+$/);
+    });
+
+    test('runIdOf: the runId from result.json, or null without one', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-runid-'));
+        assert.equal(runIdOf(dir), null);
+        fs.writeFileSync(path.join(dir, 'result.json'), '{');
+        assert.equal(runIdOf(dir), null);
+        fs.writeFileSync(path.join(dir, 'result.json'), JSON.stringify({ runId: 'r1' }));
+        assert.equal(runIdOf(dir), 'r1');
     });
 });
 
 describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 nit 1)', () => {
-    const summary = { batchId: '20261102T2200-42', testMode: false, maxBatchUsd: 2, scenarios: [{ id: 'g3-a', exit: 0 }, { id: 'g3-b', exit: 1 }], exit: 1 };
-    const res = (scenario, extra = {}) => ({ file: `${scenario}/result.json`, result: { scenario, gate: 'G3', pass: false, batch: '20261102T2200-42:2', ...extra } });
+    const summary = { batchId: '20261102T2200-42', testMode: false, maxBatchUsd: 2, scenarios: [{ id: 'g3-a', runId: 'run-a', exit: 0 }, { id: 'g3-b', runId: 'run-b', exit: 1 }], exit: 1 };
+    const res = (scenario, extra = {}) => ({ file: `${scenario}/result.json`, result: { scenario, gate: 'G3', pass: false, batch: '20261102T2200-42:2', runId: `run-${scenario.slice(3)}`, ...extra } });
 
     test('consistent results pass', () => {
         assert.deepEqual(crossCheckBatch(summary, [res('g3-a', { pass: true }), res('g3-b')]), []);
@@ -286,11 +301,25 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
         assert.match(crossCheckBatch(summary, [res('g3-b', { pass: true })])[0], /a passing result, but the batch recorded exit 1 for g3-b/);
         assert.match(crossCheckBatch({ ...summary, testMode: true }, [res('g3-a')])[0], /ran in test mode/);
         assert.match(crossCheckBatch({ ...summary, testMode: undefined }, [res('g3-a')])[0], /ran in test mode \(or does not say\)/);
-        const twice = { ...summary, scenarios: [...summary.scenarios, { id: 'g3-a', exit: 0 }] };
+        const twice = { ...summary, scenarios: [...summary.scenarios, { id: 'g3-a', runId: 'run-a2', exit: 0 }] };
         assert.match(crossCheckBatch(twice, [res('g3-a')])[0], /ran g3-a 2 time\(s\), not once/);
         assert.match(crossCheckBatch(null, [res('g3-a')])[0], /no batch summary/);
         assert.match(crossCheckBatch(summary, [])[0], /no G3 result\.json to check/);
         assert.deepEqual(crossCheckBatch(summary, [{ file: 'x', result: { gate: 'G2', scenario: 'g2-x' } }, res('g3-a')]), [], 'non-G3 results are not this check\'s business');
+    });
+
+    test('a second, hand-run result under a reused batch id fails on its runId (#129 review)', () => {
+        assert.match(crossCheckBatch(summary, [res('g3-a', { runId: 'hand-run' })])[0], /its runId 'hand-run' is not the run batch 20261102T2200-42 recorded for g3-a \('run-a'\)/);
+        assert.match(crossCheckBatch(summary, [res('g3-a', { runId: undefined })])[0], /its runId 'none'/);
+        const noRun = { ...summary, scenarios: [{ id: 'g3-a', runId: null, exit: 0 }] };
+        assert.match(crossCheckBatch(noRun, [res('g3-a')])[0], /recorded for g3-a \('none'\)/, 'a batch that recorded no runId vouches for nothing');
+    });
+
+    test('a g3- scenario without the gate field is still a G3 result', () => {
+        assert.equal(isG3Result({ gate: 'G3' }), true);
+        assert.equal(isG3Result({ scenario: 'g3-first-night' }), true);
+        assert.equal(isG3Result({ gate: 'G2', scenario: 'g2-blocks-named' }), false);
+        assert.match(crossCheckBatch(summary, [res('g3-a', { gate: undefined, batch: 'x-1:2' })])[0], /marker 'x-1:2'/);
     });
 
     test('the CLI helper reads the files; unreadable files are problems', () => {
@@ -304,12 +333,47 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
         assert.match(checkFiles(path.join(dir, 'none.json'), [])[0], /cannot be read as JSON \(ENOENT\)/);
     });
 
-    test('every committed G3 batch in test/evidence/g3/ passes the cross-check', () => {
-        const root = path.join(HERE, '..', 'evidence', 'g3');
-        const batches = fs.existsSync(root) ? fs.readdirSync(root).map((d) => path.join(root, d)).filter((d) => fs.existsSync(path.join(d, 'batch.json'))) : [];
-        for (const d of batches) assert.deepEqual(checkFiles(path.join(d, 'batch.json'), resultFilesUnder(d)), [], d);
-        // No G3 evidence exists yet; each batch is checked as it lands.
-        assert.ok(Array.isArray(batches));
+    test('the tree check: a G3 result no batch.json covers fails; a covered one passes; non-G3 results are ignored (#129 review)', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-tree-'));
+        const put = (rel, obj) => {
+            fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+            fs.writeFileSync(path.join(root, rel), typeof obj === 'string' ? obj : JSON.stringify(obj));
+        };
+        const all = () => checkEvidenceTree(root).join('\n');
+        put('g2/batch-8/blocks/result.json', { gate: 'G2', scenario: 'g2-blocks-named' });
+        assert.deepEqual(checkEvidenceTree(root), [], 'no G3 results: nothing to vouch for');
+        // The review's case: a forged marker, a G3 result.json, no batch.json anywhere above it.
+        put('g3/foo/result.json', res('g3-a', { batch: 'x-1:2' }).result);
+        assert.match(all(), /g3[\\/]foo[\\/]result\.json: a G3 result that no batch\.json covers/);
+        fs.rmSync(path.join(root, 'g3', 'foo'), { recursive: true });
+        // A real batch: batch.json at the batch folder, results nested below it.
+        put('g3/b1/batch.json', summary);
+        put('g3/b1/a/result.json', res('g3-a', { pass: true }).result);
+        put('g3/b1/b/result.json', res('g3-b').result);
+        assert.deepEqual(checkEvidenceTree(root), []);
+        // A G3 result outside any batch folder is not covered by b1's batch.json.
+        put('s1/stray/result.json', { scenario: 'g3-a', runId: 'run-a', batch: '20261102T2200-42:2' });
+        assert.match(all(), /s1[\\/]stray[\\/]result\.json: a G3 result that no batch\.json covers/);
+        fs.rmSync(path.join(root, 's1'), { recursive: true });
+        // A covered result that its batch does not vouch for, then an unreadable result.
+        put('g3/b1/c/result.json', res('g3-c').result);
+        assert.match(all(), /ran g3-c 0 time\(s\), not once/);
+        put('g3/b1/c/result.json', '{');
+        assert.match(all(), /cannot be read as JSON .* may hide a G3 result/);
+        assert.deepEqual(checkEvidenceTree(path.join(root, 'none')), []);
+    });
+
+    test('CI: every G3 result.json under test/evidence/ is covered and vouched for by its batch.json', (t) => {
+        const root = path.join(HERE, '..', 'evidence');
+        assert.deepEqual(checkEvidenceTree(root), []);
+        const g3 = resultFilesUnder(root).filter((f) => {
+            try {
+                return isG3Result(JSON.parse(fs.readFileSync(f, 'utf8')));
+            } catch {
+                return false;
+            }
+        });
+        t.diagnostic(`${g3.length} G3 result(s) under test/evidence/`);
     });
 });
 

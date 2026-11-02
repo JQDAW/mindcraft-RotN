@@ -146,9 +146,16 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
   - at least one G3 result is given;
   - every G3 result's `batch` is exactly `<that batch id>:<its maxBatchUsd>`;
   - the summary ran each of those scenarios exactly once;
+  - the result's `runId` is the one `batch.mjs` read back from that run's `result.json`, so a second, hand-run result under a reused batch id fails;
   - no passing result has a nonzero recorded exit in the summary.
 
-  The command exits 1 when a check fails or a file cannot be read as JSON, and 2 on a usage error. Results that are not G3 are ignored. CI checks every `test/evidence/g3/*/batch.json`, together with the `result.json` files under it, the same way.
+  A result is G3 if its gate is G3 or its scenario id starts with `g3-`. Results that are not G3 are ignored. The command exits 1 when a check fails or a file cannot be read as JSON, and 2 on a usage error.
+
+  **The check is compulsory for evidence** (#129 review). `node test/tools/g3-batch-check.mjs --tree test/evidence` makes two demands:
+  - every G3 `result.json` anywhere under `test/evidence/` has a `batch.json` in its own folder or a parent folder;
+  - the nearest such `batch.json` vouches for it.
+
+  A G3 result that no `batch.json` covers, or a `result.json` that cannot be read, fails the check. CI runs it on every PR (`test/unit/g3-spend.test.js`). So commit a G3 batch as `test/evidence/g3/<batch>/batch.json`, with its results in folders below it.
 - **G3 scenario requirements.** Every G3 scenario has `llm: true` and `maxBatchUsd` 2 compared 'equal' (a unit test checks this). The console allowlist applies whenever `llm` is true or the gate is G3.
 - **When the spend is checked.** The key's usage is read, numbers only, at the start (none: refuse, exit 2), before each scenario, and after the last one.
   - Over `maxBatchUsd` stops the batch, or ends it with exit 5. A failed reading before a scenario stops it; a failed reading at the end exits 6.

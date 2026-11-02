@@ -23,6 +23,18 @@ export function requestReplan(agent, modeName, interruptedAction, { now = Date.n
     log(`[reflex] ${modeName} interrupted '${interruptedAction || 'nothing'}'; re-plan requested (no LLM call now).`);
 }
 
+/**
+ * Drop a pending request because a new non-mode action started (A4b): that
+ * action is a fresh decision, so the request is stale and must not cause a
+ * re-plan prompt later.
+ */
+export function clearReplan(agent, reason, { log = (l) => console.log(l) } = {}) {
+    if (!agent.replan) return false;
+    agent.replan = null;
+    log(`[reflex] re-plan request dropped: ${reason}.`);
+    return true;
+}
+
 export function hasReplan(agent) {
     return !!agent.replan;
 }

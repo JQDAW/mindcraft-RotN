@@ -225,3 +225,42 @@ test('isClearPath is bounded: distance gate, search radius and time', async () =
     assert.equal(await isClearPath(partial, partial.target), false);
     assert.equal(await isClearPath(near, { position: null }), false);
 });
+
+test('unstuck: a fast no-path failure says so (not "after 10 s") and still never cleanKills', async (t) => {
+    const warnings = [];
+    t.mock.method(console, 'warn', (...a) => warnings.push(a.join(' ')));
+    t.mock.method(console, 'log', () => {});
+    const agent = fakeAgent();
+    agent.isIdle = () => false;
+    initModes(agent);
+    let stopped = 0;
+    const position = new Vec3(10, 64, 10);
+    Object.assign(agent.bot, {
+        registry: minecraftData('1.12.2'),
+        version: '1.12.2',
+        output: '',
+        entity: { position },
+        targetDigBlock: null,
+        pathfinder: {
+            setMovements() {},
+            getPathTo: () => ({ status: 'noPath', path: [] }),
+            goto: () => Promise.reject(new Error('NoPath')),
+            stop: () => { stopped++; },
+        },
+    });
+    const mode = __modeForTest('unstuck');
+    mode.free_timeout_ms = 5_000;
+    mode.prev_location = position.clone();
+    mode.stuck_time = mode.max_stuck_time + 1;
+    mode.last_time = Date.now();
+
+    const started = Date.now();
+    await mode.update(agent);
+    while (mode.active || Date.now() - started < 20) await new Promise(r => setTimeout(r, 10));
+
+    assert.ok(Date.now() - started < 1_000, 'it did not wait for the 5 s timeout');
+    assert.ok(warnings.includes('[reflex] unstuck: could not move away (no path); re-planning instead of a restart.'));
+    assert.ok(!warnings.some(w => w.includes('still stuck after')));
+    assert.equal(stopped, 1);
+    assert.deepEqual(agent.calls.cleanKill, []);
+});
