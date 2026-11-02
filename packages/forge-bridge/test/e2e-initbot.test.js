@@ -44,6 +44,12 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     const { setSettings } = await import('../../../src/agent/settings.js');
     setSettings({ host: '127.0.0.1', port: server.port, auth: 'offline', minecraft_version: '1.12.2' });
     const { initBot, getBlockId, getBlockName, getItemId, getItemName, isHostile } = await import('../../../src/utils/mcdata.js');
+    // rotn-data's state-id remap table (catalog stateIdRemap(), not dumped yet), stubbed on
+    // the cached catalog: the fake world's pyrotech:rock meta 3 is read as meta 6.
+    const { loadRotnData, PACK_VERSION } = await import('../../rotn-data/index.js');
+    const catalog = loadRotnData(PACK_VERSION);
+    catalog.stateIdRemap = () => ({ blocks: { 'pyrotech:rock': { 3: 6 }, 'nosuchmod:block': { 1: 2 } } });
+    after(() => { delete catalog.stateIdRemap; });
 
     // One retry of the whole login: under heavy load a loopback connect can fail
     // at once with ETIMEDOUT, which says nothing about the protocol path under test.
@@ -84,8 +90,13 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
 
     // World, inventory and effects with REID formats
     assert.equal(bot.blockAt(bot.entity.position.offset(0, -1, 0)).name, 'stone');
+    // The REID chunk's 16-bit global-palette id, through initBot's state-id remap (stub above).
+    assert.deepEqual(bot.forge.stateIdRemap, { blocks: ['pyrotech:rock'], unknownBlocks: ['nosuchmod:block'], invalid: [], size: 1 });
+    assert.equal(bot.registry.stateIdRemap.get(MODDED), (4001 << 4) | 6);
     const modded = bot.world.getBlockStateId({ x: 0, y: 64, z: 0 });
-    assert.equal(modded, MODDED);
+    assert.equal(modded, (4001 << 4) | 6, `the network id ${MODDED} as a Forge client sees it`);
+    const origin = bot.entity.position.floored();
+    assert.equal(bot.blockAt(origin.set(0, 64, 0)).metadata, 6);
     // Brief item 4: bot.registry carries the synced modded names.
     const moddedBlock = bot.blockAt(bot.entity.position.floored().offset(-8, -1, -8));
     assert.equal(moddedBlock.name, 'pyrotech:rock');

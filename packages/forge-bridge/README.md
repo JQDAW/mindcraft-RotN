@@ -120,6 +120,31 @@ After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snaps
 - **Shapes.** Each modded block is registered in the copied collision-shape table, so a Block class made later keeps its shapes (prismarine-block resets shapes by name).
 - **Not covered:** FML EntitySpawn uses the mod-local entity table (`modId` + `modEntityTypeId`), not `minecraft:entities`; that is brief item 6.
 
+## Forge's two-pass block-state ids (G2 batch 4)
+
+On a Forge 1.12 server, a block state's network id is not always `id << 4 | getMetaFromState(state)`. This was found in G2 batch 4: the bot read the upper half of every double plant as `minecraft:double_plant 11`, but the server's `testforblock` said 10. Offline decoding of that batch's capture showed the server really sends 11 (state 2811 in chunk (-3,-4)).
+
+**Why.** Forge 14.23.5.2860's `GameData$BlockCallbacks.onAdd` (checked with `javap` on the pinned pack's Forge jar) fills `Block.BLOCK_STATE_IDS` in two passes, and the last put wins:
+
+1. Every valid state gets `id << 4 | getMetaFromState(state)`.
+2. For each meta `m` that pass 1 used (Observers excepted), `getStateFromMeta(m)` gets `id << 4 | m` again.
+
+So a state that `getStateFromMeta` returns for several metas ends up with the highest of them.
+
+- **Double plants.** Vanilla `BlockDoublePlant.getStateFromMeta(8..11)` ignores the facing bits and returns the default upper half (SUNFLOWER, NORTH) for all four. That is exactly the state world generation places (`placeAt`), so every generated upper half is sent as meta **11**. Its `getMetaFromState`, which `testforblock` reports, is **10**.
+- **A real Forge client** resolves 2811 with `BLOCK_STATE_IDS.getByValue` to that same state, so it sees meta 10.
+- **Lossy.** An upper half facing EAST with another variant is also sent as 11. World generation never places one.
+- **Unaffected.** Doors (upper 8-11 hinge/powered, lower facing/open), beds (foot 0-3, head 8-15) and `minecraft:tallgrass` (0-2) all round-trip, so their network meta is the server's meta. The two-block tall grass and large fern are `double_plant` variants, so they have the upper-half issue too.
+
+**What the bot does.** It reports the meta a real Forge client would see:
+- **The table.** rotn-data's dumper exports the metas where the two differ, keyed by registry name, as network meta → client meta: `{ "blocks": { "minecraft:double_plant": { "8": 10, "9": 10, "11": 10 } } }`.
+- **The map.** After `extendRegistry`, `initBot` calls `attachStateIdRemap(bot.registry, rotnData.stateIdRemap())` (`src/state-remap.js`). That sets `bot.registry.stateIdRemap`, a `Map` from network state id to client state id, built with the server's synced block ids.
+  - Chains are resolved, so applying the map twice changes nothing.
+  - Unknown blocks, bad entries and cycles are skipped and logged.
+- **The patch.** `patches/prismarine-chunk+1.41.0.patch` applies the map in `ChunkColumn.load` (section palettes and global-palette data) and in `setBlockStateId` (`block_change` and `multi_block_change`). `blockAt`, `findBlocks` (which checks palettes first), `blockUpdate` events, `stateId`, `name` and `metadata` therefore all agree, and so do Mindcraft's `world.js` helpers, which read through them.
+- **No table** (a dump made before the dumper exported it), or a block not in it: state ids are used as sent.
+- **Report.** `bot.forge.stateIdRemap` holds `{ blocks, unknownBlocks, invalid, size }`.
+
 ## FML EntitySpawn into `bot.entities` (brief item 6)
 
 Forge spawns most mod entities with an FML message (`FML` channel, disc 2), not a vanilla spawn packet, so stock mineflayer never sees them. `initBot` calls `attachFmlEntities(bot, bridge, { modEntityTable })` (`src/fml-entities.js`), with the table from rotn-data (below):
@@ -223,6 +248,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - `--mode handshake` is Run A. It is for a server started with `--capture`, which closes the connection right after the handshake.
   - `summary.json` records `walkMethod` (`pathfinder` or the `forward-control` fallback) and the blocks under the bot at spawn and along the walk, with the synced Forge registry name next to `bot.registry`'s, as a cross-check. Its `scope` field says that the spike does not test reconnects or exit codes.
 
+- `tools/chunk-section-fixture.mjs <capture.jsonl> <chunkX> <chunkZ> <sectionY>`: cuts one chunk section out of a capture's `map_chunk` as a test fixture. It keeps only that section's bytes (block states and light): no biomes, no block entities, nothing else from the capture. Captures stay in `captures/raw/` and are never committed.
 - `tools/g1-driver.mjs`: the G1 **gate** driver for harness-ops' runner (`test/runner/DRIVER.md`). It is Mindcraft's real `initBot` with forge-bridge on, plus the runner's scenario protocol (`attachScenario`: hello once, echo the whispered token, walk on request, stay until SIGTERM). The runner decides pass or fail from the server log.
   - It needs `MINDCRAFT_PROFILES_FOLDER` and never starts a device-code login: `initBot(name, { onMsaCode })` makes a stale cache exit 3.
   - Kicks: exit 3 when the runner's `FATAL_KICKS` or forge-bridge's `classifyKick` says fatal, otherwise 1. SIGTERM exits 0.
@@ -255,6 +281,16 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - FML, FORGE, `jeid` and FML|MP decoders.
 - REID `window_items`, `set_slot`, `window_click`, `entity_effect` and `remove_entity_effect`, through nmp's real compiled 1.12.2 protocol.
 - The prismarine-chunk patch: a 16-bit global palette, VarInt biomes, local writes of 20-bit state ids, and `dump()` round trips with VarInt biomes. Reversing the patch fails all 9 chunk tests.
+- `state-remap.test.js`: Forge's two-pass state ids, with mineflayer's real blocks plugin on a fake bot. Inputs:
+  - the real section (-3,-4) y 64-79 from G2 batch 4's capture (`test/fixtures/rotn-3.3.4/chunk-m3-m4-section4.json`; that section's block states and light only, cut with `tools/chunk-section-fixture.mjs`);
+  - a stub table in rotn-data's proposed shape (`state-remap-stub.json`).
+
+  What it checks:
+  - Batch 4's three upper halves read as `double_plant` meta 11 without the table. With it they read as 10 in `blockAt`, `stateId`, `blocksByStateId`, the palette and `findBlocks`.
+  - The 17 upper halves are the only blocks in the section that change. Lower halves are unchanged.
+  - `block_change` and `multi_block_change` go through the table, including in a global-palette section. Doors, beds, tall grass and other blocks' meta 8-11 are unchanged.
+  - Table building covers unknown blocks, bad entries, chains and cycles.
+  - The 4 chunk-path tests fail with the previous patch.
 - `agent-process.test.js`: `agent_process.js` with a fake spawn, timers and exit. It covers the ADR 0003 table, the backoff and its reset, the exit-reason file (a fatal kick reported with exit 1, auth capped at 3 and reset after 10 min), requested restarts and their loop guard, single-bot stops and clean exits, `forceRestart`, a stop cancelling a pending restart, a child exiting with a code after `stop()`, the task codes, and the private reason-file folder.
 - `registry-extension.test.js`: the extension against the real prismarine-registry, prismarine-block and prismarine-item for 1.12.2. It covers modded names, 16 states and the solid default, items, entities and biomes, an untouched shared minecraft-data, dummied and rebound entries, properties, and Block classes made before and after the extension. `e2e-initbot.test.js` checks the same through `initBot`: `blockAt` gives `pyrotech:rock`, and the inventory gives `pyrotech:crude_axe`.
 - `fml-entities.test.js`: an FML-spawned entity, resolved through a mod-local table (string or object) and through the placeholder; with rotn-data's real table, `iceandfire:firedragon` (passive), `aether_legacy:cockatrice` (hostile), a thrown `iceandfire:dragonarrow`, and every modded mob in `common-mobs.json`.
@@ -271,7 +307,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
 - `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
 - `g1-driver.test.js`: the driver as a subprocess against the fake Forge server, with the runner's allowlisted environment: hello exactly once, echo, a 3-block walk, a clean stop, a redacted capture, exit 3 without a token-cache folder or host, and exit 1 with `beforeJoin` when the connect is refused.
-- `e2e-initbot.test.js`: Mindcraft's real `initBot` against an in-process fake Forge server on 127.0.0.1. The run covers the status ping, tagHost, the handshake, Join Game, a REID chunk, inventory and effects, chat both ways, walking, and the capture.
+- `e2e-initbot.test.js`: Mindcraft's real `initBot` against an in-process fake Forge server on 127.0.0.1. The run covers the status ping, tagHost, the handshake, Join Game, a REID chunk, inventory and effects, chat both ways, walking, and the capture. The REID chunk is read through initBot's state-id remap: rotn-data's `stateIdRemap()` is stubbed (pyrotech:rock 3 → 6) until the dump has it.
 
 ## Known limits (next brief items)
 
