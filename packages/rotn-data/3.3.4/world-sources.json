@@ -1,0 +1,159 @@
+{
+  "format": "rotn-world-sources/1",
+  "pack": "3.3.4",
+  "description": "Ways to get items that are not crafting or furnace recipes (breaking blocks, using a tool on a block, the start kit), for howToGet. Hand-written from docs/research/rotn-progression.md, which cites the RotN wiki ([W-...]), the in-game handbook ([HB ...]) and the pinned pack's scripts and configs ([R:...]). Every rule names its evidence. confidence: 'documented' = a cited source states it; 'inferred' = derived from dumped names or a documented rule applied to variants the source does not name. 'unverified' lists the parts no harness run has checked yet. The dump's own block drops (getItemDropped with a fixed seed) miss event-handler drops such as Pyrotech's stone-to-rocks, so these rules come first.",
+  "sources": [
+    {
+      "id": "rock-pile",
+      "action": "break",
+      "summary": "Break a rock pile on the ground by hand; it drops the rock of its own type (the item meta equals the block meta).",
+      "blocks": [{ "name": "pyrotech:rock" }],
+      "gives": { "name": "pyrotech:rock", "meta": "block", "count": 1 },
+      "tool": null,
+      "confidence": "documented",
+      "evidence": [
+        "docs/research/rotn-progression.md section 1 step 1: [W-Getting_Started] 'rocks from rock piles on the ground'",
+        "G2 batch 5 (coord/STATUS-harness-ops.md): pyrotech:rock piles with metas 6 and 8 near spawn, so rock piles generate in the Overworld",
+        "the dump: pyrotech:rock block states 0-10 and item variants 0-10 have the same names (Stone Rock, ..., Red Sandstone Rock)"
+      ],
+      "unverified": ["that breaking a pile by hand gives exactly one item of the same meta"],
+      "note": "Metas 4 (Dirt Clump), 5 (Sand Pile), 7 (Pile of Wood Chips) and 9 (Red Sand Pile) are not rocks: they are not in the 'rock' ore dictionary, so they do not work in rock recipes."
+    },
+    {
+      "id": "mine-stone-for-rocks",
+      "action": "break",
+      "summary": "Mine stone with a pickaxe below Sturdy (stone, flint or crude, mining level 0); it drops 4 rocks of the stone's type instead of cobblestone.",
+      "stoneFamilies": [
+        { "block": "minecraft:stone", "rocks": ["pyrotech:rock"], "documentedMetas": [0] },
+        { "block": "undergroundbiomes:igneous_stone", "rocks": ["pyrotech_compat:rock_igneous"] },
+        { "block": "undergroundbiomes:metamorphic_stone", "rocks": ["pyrotech_compat:rock_metamorphic"] },
+        { "block": "undergroundbiomes:sedimentary_stone", "rocks": ["pyrotech_compat:rock_sedimentary", "pyrotech:rock"] }
+      ],
+      "pairing": "A stone state pairs with the rock variant whose display name is the state's 'variant' or 'type' property followed by ' Rock' (red_granite -> 'Red Granite Rock'), compared without case, spaces or underscores (blueschist -> 'Blue Schist Rock'), within the family's rock items. States without such a rock (smooth stone, lignite) have no pair.",
+      "count": 4,
+      "tool": { "type": "pickaxe", "maxLevel": 0 },
+      "confidence": "documented",
+      "evidence": [
+        "docs/research/rotn-progression.md section 1 step 15 and section C: [W-Getting_Started], [W-Stone] 'any pickaxe below Sturdy drops rocks; Sturdy or better drops cobblestone'",
+        "coord/STATUS-harness-ops.md (G3 plan): spawn stone in every G2 census is Underground Biomes stone"
+      ],
+      "inferred": "Every pair except minecraft:stone meta 0: the sources name only stone; the pairs for granite, diorite, andesite and the Underground Biomes stones come from the dumped display names.",
+      "unverified": ["the Underground Biomes and vanilla variant pairs", "the count of 4 for variants other than stone", "whether breaking stone by hand drops anything"]
+    },
+    {
+      "id": "mine-stone-sturdy",
+      "action": "break",
+      "summary": "Mine stone with a Sturdy (level 1) or better pickaxe, such as iron; it drops cobblestone.",
+      "blocks": [{ "name": "minecraft:stone", "meta": 0 }],
+      "gives": { "name": "minecraft:cobblestone", "meta": 0, "count": 1 },
+      "tool": { "type": "pickaxe", "minLevel": 1 },
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section C: [W-Stone], [W-Getting_Started]"],
+      "unverified": ["the Underground Biomes stones' cobblestone with a Sturdy pickaxe"]
+    },
+    {
+      "id": "sticks-from-leaves",
+      "action": "break",
+      "summary": "Break leaves by hand; they can drop sticks.",
+      "blocks": [{ "name": "minecraft:leaves" }, { "name": "minecraft:leaves2" }, { "name": "dynamictrees:leaves0" }, { "name": "dynamictrees:leaves1" }],
+      "gives": { "name": "minecraft:stick", "meta": 0, "count": 1 },
+      "tool": null,
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 1 step 2: [W-Getting_Started] 'Get sticks: break leaves'"],
+      "unverified": ["the drop chance and count", "which leaves blocks the Dynamic Trees fork places (the dump has dynamictrees:leaves0 and leaves1)"]
+    },
+    {
+      "id": "fell-tree",
+      "action": "break",
+      "summary": "Chop a tree with an axe (a crude axe works); the tree falls in the chop direction and drops logs. Stand to the side.",
+      "pairs": [
+        { "block": { "name": "dynamictrees:oakbranch" }, "item": { "name": "minecraft:log", "meta": 0 } },
+        { "block": { "name": "dynamictrees:sprucebranch" }, "item": { "name": "minecraft:log", "meta": 1 } },
+        { "block": { "name": "dynamictrees:birchbranch" }, "item": { "name": "minecraft:log", "meta": 2 } },
+        { "block": { "name": "dynamictrees:junglebranch" }, "item": { "name": "minecraft:log", "meta": 3 } },
+        { "block": { "name": "dynamictrees:acaciabranch" }, "item": { "name": "minecraft:log2", "meta": 0 } },
+        { "block": { "name": "dynamictrees:darkoakbranch" }, "item": { "name": "minecraft:log2", "meta": 1 } }
+      ],
+      "count": null,
+      "tool": { "type": "axe", "minLevel": 0 },
+      "confidence": "documented",
+      "evidence": [
+        "docs/research/rotn-progression.md section 1 step 4: [W-Getting_Started], [W-Tips] (trees fall in the chop direction; Dynamic Trees fork)",
+        "the dump: Dynamic Trees branch blocks dynamictrees:<wood>branch"
+      ],
+      "inferred": "The branch-to-log pairs (by wood name).",
+      "unverified": ["which log item each tree drops, and how many", "that punching a tree drops nothing (the wiki says so since 3.0; the handbook disagrees)"]
+    },
+    {
+      "id": "debark-log",
+      "action": "use-tool-on-block",
+      "summary": "Place a log, then right-click it with the crude axe: it becomes a debarked log and drops bark.",
+      "pairs": [
+        { "block": { "name": "minecraft:log", "meta": 0 }, "item": { "name": "hitwithaxe:debarked_oak", "meta": 0 } },
+        { "block": { "name": "minecraft:log", "meta": 1 }, "item": { "name": "hitwithaxe:debarked_spruce", "meta": 0 } },
+        { "block": { "name": "minecraft:log", "meta": 2 }, "item": { "name": "hitwithaxe:debarked_birch", "meta": 0 } },
+        { "block": { "name": "minecraft:log", "meta": 3 }, "item": { "name": "hitwithaxe:debarked_jungle", "meta": 0 } },
+        { "block": { "name": "minecraft:log2", "meta": 0 }, "item": { "name": "hitwithaxe:debarked_acacia", "meta": 0 } },
+        { "block": { "name": "minecraft:log2", "meta": 1 }, "item": { "name": "hitwithaxe:debarked_dark_oak", "meta": 0 } }
+      ],
+      "count": 1,
+      "tool": { "item": "pyrotech:crude_axe" },
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 1 step 5: [W-Getting_Started] 'Right-click a placed log with the crude axe to strip it for bark', [R:scripts/wood_stripping_boards.zs]"],
+      "inferred": "The pairs for woods other than oak (by wood name).",
+      "unverified": ["whether a stone axe also debarks", "the bark item and meta per wood (oak is hitwithaxe:bark:15)"]
+    },
+    {
+      "id": "plank-from-debarked-log",
+      "action": "use-tool-on-block",
+      "summary": "Right-click the placed debarked log with the axe again: it gives a plank. This is how the first plank (for the crafting table) is made.",
+      "pairs": [
+        { "block": { "name": "hitwithaxe:debarked_oak" }, "item": { "name": "minecraft:planks", "meta": 0 } },
+        { "block": { "name": "hitwithaxe:debarked_spruce" }, "item": { "name": "minecraft:planks", "meta": 1 } },
+        { "block": { "name": "hitwithaxe:debarked_birch" }, "item": { "name": "minecraft:planks", "meta": 2 } },
+        { "block": { "name": "hitwithaxe:debarked_jungle" }, "item": { "name": "minecraft:planks", "meta": 3 } },
+        { "block": { "name": "hitwithaxe:debarked_acacia" }, "item": { "name": "minecraft:planks", "meta": 4 } },
+        { "block": { "name": "hitwithaxe:debarked_dark_oak" }, "item": { "name": "minecraft:planks", "meta": 5 } }
+      ],
+      "count": null,
+      "tool": { "item": "pyrotech:crude_axe" },
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 1 step 6: [W-Getting_Started], [HB newbeginning/wood] (the script maps debarked logs to planks)"],
+      "inferred": "The pairs for woods other than oak (by wood name).",
+      "unverified": ["planks per click (the wiki says 'a wooden plank')"]
+    },
+    {
+      "id": "raw-iron",
+      "action": "break",
+      "summary": "Mine iron ore with a pickaxe of level 0 or better (a stone pickaxe is enough).",
+      "blocks": [{ "name": "minecraft:iron_ore" }],
+      "gives": { "name": "contenttweaker:raw_iron", "meta": 0, "count": 1 },
+      "tool": { "type": "pickaxe", "minLevel": 0 },
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 1 step 20 and section C: [R:config/tool_progression/block_overwrites.cfg] (oreIron needs pickaxe level 0), [HB newbeginning/spelunking] (Raw Iron is contenttweaker:raw_iron)"],
+      "unverified": ["whether the ore block drops raw iron or itself (the dump's plain drop is the ore block)"]
+    },
+    {
+      "id": "coal",
+      "action": "break",
+      "summary": "Mine coal ore with a pickaxe of level 0 or better.",
+      "blocks": [{ "name": "minecraft:coal_ore" }],
+      "gives": { "name": "minecraft:coal", "meta": 0, "count": 1 },
+      "tool": { "type": "pickaxe", "minLevel": 0 },
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section C: [R:config/tool_progression/block_overwrites.cfg] (coal needs pickaxe level 0)", "the dump: minecraft:coal_ore's plain drop is minecraft:coal"],
+      "unverified": ["event-handler changes to the drop"]
+    },
+    {
+      "id": "start-kit",
+      "action": "start-kit",
+      "summary": "Given at the first spawn.",
+      "blocks": [],
+      "gives": { "name": "minecraft:bread", "meta": 0, "count": 1 },
+      "tool": null,
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 1 step 0: [W-Getting_Started], [HB newbeginning/new_world]"],
+      "unverified": ["the count; the Scroll of New Life and the Bundle ids are UNVERIFIED in the research and left out"]
+    }
+  ]
+}
