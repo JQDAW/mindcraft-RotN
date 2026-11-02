@@ -112,9 +112,9 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     const modded = bot.world.getBlockStateId({ x: 0, y: 64, z: 0 });
     assert.equal(modded, MODDED);
     // Forge's two-pass state ids, through initBot and rotn-data's real stateMetaRemap().byBlock.
-    assert.deepEqual(bot.forge.stateIdRemap, { tableBlocks: 1, blocks: ['minecraft:double_plant'], unknownBlocks: [], invalid: [], size: 3 });
+    assert.deepEqual(bot.forge.stateIdRemap, { tableBlocks: 1, blocks: ['minecraft:double_plant'], unknownBlocks: [], invalid: [], conflicts: [], size: 3 });
     assert.equal(bot.registry.stateIdRemap.get((175 << 4) | 11), (175 << 4) | 10);
-    assert.deepEqual(remapLines.slice(-1), ["[forge-bridge] state-id remap active: 3 state ids in 1 of the table's 1 blocks"]);
+    assert.deepEqual(remapLines.slice(-1), ["[forge-bridge] state-id remap active: applied 3 state ids in 1 of the table's 1 blocks; conflicts 0 skipped"]);
     assert.equal(remapLines.length, loginAttempt, 'one line per login');
     const p = bot.entity.position.floored();
     for (const [x, y, z] of [[-44, 67, -58], [-38, 70, -50], [-36, 71, -50]]) { // batch 4's failed samples

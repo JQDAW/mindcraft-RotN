@@ -1,5 +1,5 @@
 diff --git a/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js b/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js
-index 1de1a3c..eb8feb6 100644
+index 1de1a3c..eb3495d 100644
 --- a/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js
 +++ b/node_modules/prismarine-chunk/src/pc/1.9/ChunkColumn.js
 @@ -12,7 +12,7 @@ const exists = val => val !== undefined
@@ -21,16 +21,7 @@ index 1de1a3c..eb8feb6 100644
      }
  
      toJson () {
-@@ -116,6 +119,8 @@ module.exports = (Block, mcData) => {
-     }
- 
-     setBlockStateId (pos, stateId) {
-+      // Forge: store the state id a real Forge client would see (see remapStateId). mindcraft-rotn forge-bridge.
-+      stateId = remapStateId(mcData, stateId)
-       const sectionIndex = pos.y >> 4
-       if (sectionIndex < 0 || sectionIndex >= 16) return
- 
-@@ -178,10 +183,18 @@ module.exports = (Block, mcData) => {
+@@ -178,10 +181,18 @@ module.exports = (Block, mcData) => {
          }
        })
  
@@ -53,7 +44,7 @@ index 1de1a3c..eb8feb6 100644
  
        return smartBuffer.toBuffer()
      }
-@@ -215,7 +228,10 @@ module.exports = (Block, mcData) => {
+@@ -215,7 +226,10 @@ module.exports = (Block, mcData) => {
  
            // save each palette item
            for (let i = 0; i < numPaletteItems; ++i) {
@@ -65,7 +56,7 @@ index 1de1a3c..eb8feb6 100644
            }
          } else {
            // remove the 0 length signifying the missing palette array
-@@ -224,11 +240,16 @@ module.exports = (Block, mcData) => {
+@@ -224,11 +238,16 @@ module.exports = (Block, mcData) => {
            palette = null
          }
  
@@ -83,7 +74,7 @@ index 1de1a3c..eb8feb6 100644
  
          const blockLight = new BitArray({
            bitsPerValue: 4,
-@@ -255,16 +276,69 @@ module.exports = (Block, mcData) => {
+@@ -255,16 +274,72 @@ module.exports = (Block, mcData) => {
        // read biomes
        if (fullChunk) {
          const p = { x: 0, y: 0, z: 0 }
@@ -121,8 +112,11 @@ index 1de1a3c..eb8feb6 100644
 +// getMetaFromState (GameData.BlockCallbacks.onAdd's second pass; double_plant's upper
 +// half is sent as meta 11 but is meta 10). `registry.stateIdRemap` (a Map from network
 +// state id to the id a real Forge client resolves it to, same block, set by forge-bridge
-+// from rotn-data's table) makes every reader (blockAt, findBlocks, palettes, block
-+// updates) see the client's id. No map, or an id not in it: unchanged. mindcraft-rotn forge-bridge.
++// from rotn-data's table) makes every reader (blockAt, findBlocks, palettes) see the
++// client's id. No map, or an id not in it: unchanged. load() treats its input as network
++// data and remaps it exactly once; setBlockStateId is a local write and is never remapped
++// (mineflayer's patched block_change/multi_block_change remap network ids before it), so a
++// cycle in the table (0 -> 1, 1 -> 2, 2 -> 0) is safe. mindcraft-rotn forge-bridge.
 +function remapStateId (registry, stateId) {
 +  const remap = registry && registry.stateIdRemap
 +  if (!remap || remap.size === 0) return stateId

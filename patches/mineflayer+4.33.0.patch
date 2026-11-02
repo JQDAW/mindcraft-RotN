@@ -1,3 +1,42 @@
+diff --git a/node_modules/mineflayer/lib/plugins/blocks.js b/node_modules/mineflayer/lib/plugins/blocks.js
+index f128f71..0f3af20 100644
+--- a/node_modules/mineflayer/lib/plugins/blocks.js
++++ b/node_modules/mineflayer/lib/plugins/blocks.js
+@@ -380,18 +380,31 @@ function inject (bot, { version, storageBuilder, hideErrors }) {
+       pt = pt.scale(16).offset(blockX, blockY, blockZ)
+ 
+       if (bot.supportFeature('usesMultiblockSingleLong')) {
+-        updateBlockState(pt, record >> 12)
++        updateBlockState(pt, networkStateId(record >> 12))
+       } else {
+-        updateBlockState(pt, record.blockId)
++        updateBlockState(pt, networkStateId(record.blockId))
+       }
+     }
+   })
+ 
+   bot._client.on('block_change', (packet) => {
+     const pt = new Vec3(packet.location.x, packet.location.y, packet.location.z)
+-    updateBlockState(pt, packet.type)
++    updateBlockState(pt, networkStateId(packet.type))
+   })
+ 
++  // Forge 1.12 (mindcraft-rotn forge-bridge): a network block-state id becomes the id a
++  // real Forge client resolves it to, through bot.registry.stateIdRemap (built by
++  // forge-bridge from rotn-data's state-meta-remap table). Applied exactly once, here at
++  // decode time, as prismarine-chunk's patched load() does for chunk data. Local writes
++  // (updateBlockState from digging, sign updates, pathfinder) already hold client ids and
++  // are never remapped, so a cycle in the table (0 -> 1, 1 -> 2, 2 -> 0) is safe.
++  function networkStateId (stateId) {
++    const remap = bot.registry.stateIdRemap
++    if (!remap || remap.size === 0) return stateId
++    const to = remap.get(stateId)
++    return to === undefined ? stateId : to
++  }
++
+   bot._client.on('explosion', (packet) => {
+     // explosion
+     const p = new Vec3(packet.x, packet.y, packet.z)
 diff --git a/node_modules/mineflayer/lib/plugins/digging.js b/node_modules/mineflayer/lib/plugins/digging.js
 index 496cf63..813a667 100644
 --- a/node_modules/mineflayer/lib/plugins/digging.js
