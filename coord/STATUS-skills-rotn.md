@@ -31,7 +31,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 - A3 `loop-and-restarts` (branch `agent/skills-rotn/loop-and-restarts`): #109 open.
-- A2b `no-task-files` (branch `agent/skills-rotn/no-task-files`, lead follow-up before the first G3 batch): PR open, see Open PRs. Mindcraft task files are refused unless `MINDCRAFT_ROTN_ALLOW_TASK_FILES=1` (test-only). Next: A4 `quiet-reflexes`.
+- A2b `no-task-files` (branch `agent/skills-rotn/no-task-files`, lead follow-up before the first G3 batch): #110 open. Mindcraft task files are refused unless `MINDCRAFT_ROTN_ALLOW_TASK_FILES=1` (test-only). Next: A4 `quiet-reflexes`.
 
 ## G3 plan: small PRs, in order
 
@@ -124,4 +124,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 ## Open PRs
 
 - #109 A3 loop and restarts (branch `agent/skills-rotn/loop-and-restarts`).
-- A2b no task files (branch `agent/skills-rotn/no-task-files`). Serves the lead's follow-up on #108 (before the first G3 batch).
+- #110 A2b no task files (branch `agent/skills-rotn/no-task-files`). Serves the lead's follow-up on #108 (before the first G3 batch).
