@@ -329,6 +329,14 @@ async function execute(mode, agent, func, timeout=-1) {
     }
 }
 
+// RotN (skills-rotn A2): the bot has no operator rights on the server, so a
+// mode that sends op commands (/tp, /setblock) stays off whatever a profile,
+// !setMode or generated code asks. isOn() is the one check skills.js makes
+// before its /tp and /setblock branches, so those branches cannot run.
+const DISABLED_MODES = {
+    cheat: 'the bot has no operator rights on this server, so /tp and /setblock cannot work',
+};
+
 let _agent = null;
 const modes_map = {};
 for (let mode of modes_list) {
@@ -350,11 +358,26 @@ class ModeController {
         return modes_map[mode_name] != null;
     }
 
+    // Returns false when the request is refused (a disabled mode turned on).
     setOn(mode_name, on) {
+        if (on && this.isDisabled(mode_name)) {
+            console.warn(`[no-cheat] Refused to turn on mode ${mode_name}: ${DISABLED_MODES[mode_name]}.`);
+            return false;
+        }
         modes_map[mode_name].on = on;
+        return true;
+    }
+
+    isDisabled(mode_name) {
+        return DISABLED_MODES[mode_name] != null;
+    }
+
+    disabledReason(mode_name) {
+        return DISABLED_MODES[mode_name] ?? null;
     }
 
     isOn(mode_name) {
+        if (this.isDisabled(mode_name)) return false;
         return modes_map[mode_name].on;
     }
 
@@ -381,6 +404,7 @@ class ModeController {
     getMiniDocs() { // no descriptions
         let res = 'Agent Modes:';
         for (let mode of modes_list) {
+            if (this.isDisabled(mode.name)) continue; // not offered to the LLM
             let on = mode.on ? 'ON' : 'OFF';
             res += `\n- ${mode.name}(${on})`;
         }
@@ -390,6 +414,7 @@ class ModeController {
     getDocs() {
         let res = 'Agent Modes:';
         for (let mode of modes_list) {
+            if (this.isDisabled(mode.name)) continue; // not offered to the LLM
             let on = mode.on ? 'ON' : 'OFF';
             res += `\n- ${mode.name}(${on}): ${mode.description}`;
         }
@@ -426,6 +451,11 @@ class ModeController {
     loadJson(json) {
         for (let mode of modes_list) {
             if (json[mode.name] != undefined) {
+                if (json[mode.name] && this.isDisabled(mode.name)) {
+                    // e.g. profiles/defaults/god_mode.json sets cheat: true
+                    console.warn(`[no-cheat] Profile sets ${mode.name}: true; ignored (${DISABLED_MODES[mode.name]}).`);
+                    continue;
+                }
                 mode.on = json[mode.name];
             }
         }

@@ -25,6 +25,10 @@ export const recipesFor = (item, opts) => pack().recipesFor(item, opts);
 export const smeltingFor = (item) => pack().smeltingFor(item);
 export const harvestInfo = (block, meta) => pack().harvestInfo(block, meta);
 export const lookup = (query, opts) => pack().lookup(query, opts);
+// "How do I get X" (Phase 3): world rules (3.3.4/world-sources.json), recipes, smelting, plain drops.
+export const howToGet = (item, opts) => pack().howToGet(item, opts);
+export const rockRecipes = () => pack().rockRecipes();
+export { formatHowToGet } from './src/howto.js';
 export const entity = (name) => pack().entity(name);
 export const entityByModId = (modId, typeId) => pack().entityByModId(modId, typeId);
 export const isDangerous = (name) => pack().isDangerous(name);

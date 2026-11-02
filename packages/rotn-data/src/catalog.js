@@ -19,6 +19,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { createTranslator } from './translate.js';
+import { howToGet, rockRecipes } from './howto.js';
 import { parseOld, registryName, WILDCARD_META } from './names.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -54,6 +55,8 @@ export class RotnData {
         this.entityOverrides = ov?.entities ?? {};
         // Vanilla animals another mod removes on this pack (Animania: config/animania.cfg).
         this.replacedByMod = ov?.replacedByMod?.entities ?? {};
+        // Non-recipe ways to get items, hand-written with evidence (world-sources.json, for howToGet).
+        this.worldSources = readJson(dir, 'world-sources')?.sources ?? [];
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
@@ -345,6 +348,18 @@ export class RotnData {
             (out[e.modId] ??= {})[e.modEntityTypeId] = name;
         }
         return out;
+    }
+
+    // ---- how to get an item (Phase 3) --------------------------------------
+
+    /** Every way to get an item: world rules, crafting, smelting, plain block drops (src/howto.js). */
+    howToGet(input, opts) {
+        return howToGet(this, input, opts);
+    }
+
+    /** The "4 identical rocks -> block" recipes: which block each rock type makes (src/howto.js). */
+    rockRecipes() {
+        return rockRecipes(this);
     }
 
     // ---- fuzzy lookup (for !lookup) ----------------------------------------
