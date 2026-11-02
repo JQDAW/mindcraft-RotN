@@ -29,6 +29,9 @@ export const lookup = (query, opts) => pack().lookup(query, opts);
 export const howToGet = (item, opts) => pack().howToGet(item, opts);
 export const rockRecipes = () => pack().rockRecipes();
 export { formatHowToGet } from './src/howto.js';
+// First-night threats (Phase 3): reaction per mob (3.3.4/threat-reactions.json) and night spawns per biome.
+export const threatOf = (entityName) => pack().threatOf(entityName);
+export const nightThreats = (opts) => pack().nightThreats(opts);
 export const entity = (name) => pack().entity(name);
 export const entityByModId = (modId, typeId) => pack().entityByModId(modId, typeId);
 export const isDangerous = (name) => pack().isDangerous(name);

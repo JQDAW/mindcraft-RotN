@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T19:13Z (from `date -u`)
+Updated: 2026-11-02T19:38Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -18,6 +18,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
 - **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
 - **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
+- **#107 merged**: Phase 3 PR 2, `howToGet`, `rockRecipes`, `world-sources.json` (review fixes: no flint in the rocks rule, raw iron inferred, per-pair confidence, bare rock names narrowed).
 - **#102 merged** (`b5a21fa`): Phase 3 PR 1, RotN recipes in `bot.registry` (`installRecipes`, `mcdata.installRotnRecipes()`), results carry `meta`, plan cycle guard without a depth limit. Not called yet (Request 7).
 - **#91 merged**: the #87 nits (the `mapIds()` comment, README row).
 - **#87 merged** (`0710480`): the #80 Java dumper nits, dumper **0.2.1**. Map size vs ids scanned: `scanned.mapIds` and `anomalies.unscannedIds = mapIds - networkIds`; the importer blocks unless it is 0 (null or missing counts as non-zero; a 0.2.0 dump gets a note). The map's `size()` (distinct states) is not compared, because Forge never removes stale states from it. `checkEncoding` guards each state; an entry that throws rolls back the counters. The first push did not compile (the map's iterator yields `Object`), so the fix in `0a10569` loops over `Object`. CI built `rotndump-0.2.1.jar`, SHA-256 `232c3ad2de73191532f73435196c522eaafb2b7ff5751bbe3a3cf64fbcf04aba` (run 41458632441). No batch needed; it shows on the next dump.
@@ -186,7 +187,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 1. **RotN recipes in `bot.registry`** (this PR, `agent/rotn-data/g3-progression`). Finding: `bot.registry.recipes` is minecraft-data's vanilla 1.12.2 table, so mineflayer's `bot.recipesFor`/`bot.craft` and `getItemCraftingRecipes`/`getDetailedCraftingPlan` planned vanilla crafts that RotN removed (a stone pickaxe from cobblestone, wooden tools). `rotn-data.installRecipes(registry)` / `mcdata.installRotnRecipes()` refill that object in place from the dump (prismarine-recipe keeps a reference to it), keyed by the server's item ids. Ore dictionary slots become variants (likeliest first, capped at 256 per recipe, built lazily per result). `getDetailedCraftingPlan` gets a general cycle guard (rocks <-> cobblestone), since upstream's `loopingItems` lists only 1.21 names. Result: `stone_pickaxe` plans as 3 rocks + log -> planks -> sticks; the crafting table as crude axe -> Crafting Tools -> table. **Needs a call site** (Request 7). Review (#102): APPROVE WITH NITS; fixed: results carry `meta` so `Recipe.find(id, meta)` filters (spruce vs oak planks, tested), and the cycle guard has no depth limit (iterative, `seen` ends it; a 12-step cycle is tested).
 2. **"How do I get X"** (`howToGet(item)`; this PR, `agent/rotn-data/g3-howtoget`): dump crafting + furnace smelting + a cited table of non-recipe sources (rock piles, stone mined with a pickaxe below Sturdy gives 4 rocks, sticks from leaves, logs need an axe, the first plank from debarking, raw iron from iron ore). Each row is sourced from `rotn-progression.md` or the pinned zip, and marked verified or not. Done in this PR as `3.3.4/world-sources.json` (10 rules, each with evidence, `confidence` documented/inferred and an `unverified` list) plus `howToGet`, `formatHowToGet` and `rockRecipes` (the 35 "4 identical rocks -> block" recipes, for harness-ops' G3 cobblestone check: on the G3 spawn the stone is Underground Biomes stone and its rocks make UB cobble). Stone -> rock pairs come from dumped names; only `minecraft:stone:0` is documented, the rest `inferred`. Review (#107): APPROVE WITH NITS; fixed: flint dropped from the rocks rule (flint pickaxes are level 1, Sturdy), raw iron `inferred`, per-pair confidence for trees, debarking and planks (only the oak pairs are documented), and a bare `pyrotech:rock` means the rock ore dictionary metas.
-3. **First-night threats**: a threat level per mob (none, hostile = fight or avoid, dangerous = avoid) with a reaction hint (creepers explode: back off), and night spawns per biome from `spawns.json`. Plus `isHostile`/`isHuntable` for 1.12 (Animania animals, the 1.12 baby flag).
+3. **First-night threats** (this PR, `agent/rotn-data/g3-threats`): a threat level per mob (none, hostile = fight or avoid, dangerous = avoid) with a reaction hint (creepers explode: back off), and night spawns per biome from `spawns.json`. Done as `threatOf(entity)` (level, reaction, summary, evidence; `3.3.4/threat-reactions.json`: zombie, skeleton, spider, creeper documented from the research's hazard table, enderman `vanilla`, others a default from the level) and `nightThreats({biome})` (the `monster` spawn list only; MultiMob's lists have no biome filter). The overworld biome rule moved to `src/biomes.js`, shared with `build-common-mobs.mjs` (its `--check` is unchanged). `isHostile`/`isHuntable` for 1.12 (Animania animals, the 1.12 baby flag) is a later PR.
 4. **Pyrotech machine recipes** (kiln, pit kiln for charcoal, drying rack for tinder, chopping block, campfire): not in the dump. Needs a new dumper part and a paid batch: **only with the lead's written GO**.
 
 Findings for skills-rotn (via the lead): see Request 8.
@@ -229,4 +230,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/g3-howtoget`: Phase 3 PR 2, `howToGet` (see Doing).
+- `agent/rotn-data/g3-threats`: Phase 3 PR 3, first-night threats (see Doing).

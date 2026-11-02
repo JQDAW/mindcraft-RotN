@@ -1,0 +1,44 @@
+{
+  "format": "rotn-threat-reactions/1",
+  "pack": "3.3.4",
+  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack. Mobs not listed get a default from their threat level (entity(): hostile = IMob or bytecode-cited player targeting, dangerous = entity-overrides.json): dangerous -> avoid, hostile -> fight, otherwise ignore. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
+  "general": {
+    "summary": "At night stay sealed in a cobblestone or stone shelter with light only inside; a dirt shack is not safe because mobs dig and pillar. Retreat if two or more hostiles come at once.",
+    "confidence": "documented",
+    "evidence": ["docs/research/rotn-progression.md section 2 (Mobs break in, Light attracts mobs, Zombies): [W-Tips], [W-Getting_Started], [HB survival/shelter/shelter_early]"]
+  },
+  "entities": {
+    "minecraft:zombie": {
+      "reaction": "fight",
+      "summary": "Can carry pickaxes or axes, place weak scaffolding, break blocks and inflict hunger. Fight at a choke point with a shield, or stay sealed in. After killing one that carried a Parasite, move away. Retreat if two or more come at once.",
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 2, Zombies: [W-Zombie], [W-Getting_Started]"]
+    },
+    "minecraft:skeleton": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "Erratic movement and better aim than vanilla. Stay behind cover; do not strafe in open ground.",
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 2, Skeletons: [W-Getting_Started]"]
+    },
+    "minecraft:spider": {
+      "reaction": "fight",
+      "summary": "Faster than vanilla, inflicts slowness, and other mobs ride it. Kill the spider first; avoid open ground.",
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 2, Spiders: [W-Getting_Started]"]
+    },
+    "minecraft:creeper": {
+      "reaction": "keep-distance",
+      "explodes": true,
+      "summary": "Hisses and stands still next to you, then explodes. Back off at once. Do not fight near stored items or wooden walls.",
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 2, Creepers and Fire Creepers: [W-Getting_Started], [W-Tips], [W-Progression_Stages]"]
+    },
+    "minecraft:enderman": {
+      "reaction": "ignore-unless-provoked",
+      "summary": "Neutral until you look at its head or hit it. Do not look at it; do not attack it on the first night.",
+      "confidence": "vanilla",
+      "evidence": ["Minecraft 1.12 EntityEnderman behaviour (the dump marks it IMob, so entity() calls it hostile); not in the RotN sources, unverified on this pack"]
+    }
+  }
+}
