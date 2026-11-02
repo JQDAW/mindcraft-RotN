@@ -4,7 +4,8 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { instrumentProfileFetch, describeProfileFetchError, loadJavaTokenManager } from '../src/auth-diagnostics.js';
+import { EventEmitter } from 'node:events';
+import { instrumentProfileFetch, describeProfileFetchError, loadJavaTokenManager, attachBotErrorLogger } from '../src/auth-diagnostics.js';
 
 const TokenManager = loadJavaTokenManager();
 const realFetch = globalThis.fetch;
@@ -71,4 +72,37 @@ test('describeProfileFetchError never passes through odd names or codes', () => 
     const weird = Object.assign(new Error('x'), { name: 'Bearer eyJabc.def ghi', cause: { name: 'a b', code: 'token=abc' } });
     assert.deepEqual(describeProfileFetchError(weird), { status: null, statusName: null, errorClass: 'Error', causeClass: 'Object', causeCode: null });
     assert.deepEqual(describeProfileFetchError('a string'), { status: null, statusName: null, errorClass: 'String', causeClass: null, causeCode: null });
+});
+
+// initBot's bot error listener, in place of mineflayer's logErrors (#72 re-review nit).
+test('attachBotErrorLogger: before login only the classified facts, after login the error itself', () => {
+    const bot = new EventEmitter();
+    const lines = [];
+    attachBotErrorLogger(bot, { log: (x) => lines.push(x), profileFailure: () => ({ status: 404 }) });
+    bot.emit('error', new Error(`401 Unauthorized ${BODY}`));
+    bot.emit('error', Object.assign(new Error('Your account currently does not have an Xbox profile.'), { xerr: 2148916233 }));
+    bot.emit('error', new Error('Failed to obtain profile data for FRCFLD, does the account own minecraft?'));
+    assert.deepEqual(lines, [
+        '[mcdata] bot error before login: Error, HTTP 401; auth-permanent (message not logged)',
+        '[mcdata] bot error before login: Error, XErr 2148916233; auth-permanent (message not logged)',
+        '[mcdata] bot error before login: Error, HTTP 404 (profile fetch); auth-permanent (message not logged)',
+    ]);
+    assert.doesNotMatch(lines.join('\n'), TOKEN_LIKE);
+    bot.emit('login');
+    const late = new Error('while playing');
+    bot.emit('error', late);
+    assert.equal(lines.at(-1), late, 'after login: logged as mineflayer logged it');
+});
+
+test('attachBotErrorLogger with hideErrors (or logErrors off): a no-op listener, so an error never throws', () => {
+    for (const opts of [{ hideErrors: true }, { logErrors: false }]) {
+        const bot = new EventEmitter();
+        const lines = [];
+        attachBotErrorLogger(bot, { ...opts, log: (x) => lines.push(x) });
+        assert.equal(bot.listenerCount('error'), 1, JSON.stringify(opts));
+        assert.doesNotThrow(() => bot.emit('error', new Error(`401 Unauthorized ${BODY}`)));
+        bot.emit('login');
+        assert.doesNotThrow(() => bot.emit('error', new Error('later')));
+        assert.deepEqual(lines, []);
+    }
 });

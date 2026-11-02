@@ -1,0 +1,103 @@
+diff --git a/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js b/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js
+index e1899d0..45392e7 100644
+--- a/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js
++++ b/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js
+@@ -1,7 +1,7 @@
+ const debug = require('debug')('prismarine-auth')
+ 
+ const { Endpoints } = require('../common/Constants')
+-const { checkStatus } = require('../common/Util')
++const { checkStatus, errorSummary } = require('../common/Util')
+ 
+ class LiveTokenManager {
+   constructor (clientId, scopes, cache) {
+@@ -25,7 +25,7 @@ class LiveTokenManager {
+         await this.refreshTokens()
+         return true
+       } catch (e) {
+-        console.warn('Error refreshing token', e) // TODO: looks like an error happens here
++        console.warn(`Error refreshing token (${errorSummary(e)})`) // Mindcraft-RotN patch: no error object (its message holds the response body)
+         return false
+       }
+     }
+@@ -94,7 +94,7 @@ class LiveTokenManager {
+     const res = await fetch(Endpoints.live.deviceCodeRequest, codeRequest)
+       .then(res => {
+         if (res.status !== 200) {
+-          res.text().then(console.warn)
++          console.warn(`Failed to request live.com device code (HTTP ${res.status})`) // Mindcraft-RotN patch: no response body
+           throw Error('Failed to request live.com device code')
+         }
+         if (res.headers.get('set-cookie')) {
+diff --git a/node_modules/prismarine-auth/src/TokenManagers/MsaTokenManager.js b/node_modules/prismarine-auth/src/TokenManagers/MsaTokenManager.js
+index 568385d..42d279f 100644
+--- a/node_modules/prismarine-auth/src/TokenManagers/MsaTokenManager.js
++++ b/node_modules/prismarine-auth/src/TokenManagers/MsaTokenManager.js
+@@ -1,5 +1,6 @@
+ const msal = require('@azure/msal-node')
+ const debug = require('debug')('prismarine-auth')
++const { errorSummary } = require('../common/Util')
+ 
+ class MsaTokenManager {
+   constructor (msalConfig, scopes, cache) {
+@@ -99,7 +100,7 @@ class MsaTokenManager {
+         await this.refreshTokens()
+         return true
+       } catch (e) {
+-        console.warn('Error refreshing token', e) // TODO: looks like an error happens here
++        console.warn(`Error refreshing token (${errorSummary(e)})`) // Mindcraft-RotN patch: no error object (its message holds the response body)
+         return false
+       }
+     }
+@@ -128,7 +129,7 @@ class MsaTokenManager {
+           })
+       }).catch((error) => {
+         console.warn('[msa] Error getting device code. Ensure your supplied `authTitle` token (or clientId in your supplied MSAL config) is valid and that it has permission to do non-interactive code based auth.')
+-        console.debug(JSON.stringify(error))
++        console.debug(`[msa] device code error (${errorSummary(error)})`) // Mindcraft-RotN patch: not the serialized MSAL error
+         reject(error)
+       })
+     })
+diff --git a/node_modules/prismarine-auth/src/TokenManagers/XboxTokenManager.js b/node_modules/prismarine-auth/src/TokenManagers/XboxTokenManager.js
+index 8a5d972..12e4eaf 100644
+--- a/node_modules/prismarine-auth/src/TokenManagers/XboxTokenManager.js
++++ b/node_modules/prismarine-auth/src/TokenManagers/XboxTokenManager.js
+@@ -56,8 +56,13 @@ class XboxTokenManager {
+     // Because we do the full auth sequence like the official XAL, the issue with accounts under 18 (2148916238)
+     // should not happen through title auth. But the user must always have an xbox.com profile before being able
+     // to obtain a Minecraft or Xbox token.
+-    if (errorCode in xboxLiveErrors) throw new Error(xboxLiveErrors[errorCode])
+-    else throw new Error(`Xbox Live authentication failed to obtain a XSTS token. XErr: ${errorCode}\n${JSON.stringify(response)}`)
++    // Mindcraft-RotN patch: the XErr is attached as `err.xerr` (callers classify permanent
++    // account errors by it), and the unknown-code message no longer carries the response JSON.
++    const err = errorCode in xboxLiveErrors
++      ? new Error(xboxLiveErrors[errorCode])
++      : new Error(`Xbox Live authentication failed to obtain a XSTS token. XErr: ${errorCode}`)
++    if (Number.isSafeInteger(Number(errorCode))) err.xerr = Number(errorCode)
++    throw err
+   }
+ 
+   async getUserToken (accessToken, azure) {
+diff --git a/node_modules/prismarine-auth/src/common/Util.js b/node_modules/prismarine-auth/src/common/Util.js
+index e0fa135..0dc3b3b 100644
+--- a/node_modules/prismarine-auth/src/common/Util.js
++++ b/node_modules/prismarine-auth/src/common/Util.js
+@@ -30,4 +30,17 @@ function nextUUID () {
+   return globalThis.crypto.randomUUID()
+ }
+ 
+-module.exports = { checkStatus, checkStatusWithHelp, createHash, nextUUID }
++// Mindcraft-RotN patch: a loggable summary of an auth error, with a leading HTTP status,
++// the error class, a code and an Xbox XErr. Never the message (checkStatus puts the
++// response body in it), never a cause's message, never the error object.
++function errorSummary (e) {
++  const message = typeof e?.message === 'string' ? e.message : ''
++  const status = /^([1-5][0-9][0-9]) /.exec(message)
++  const name = typeof e?.name === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,40}$/.test(e.name) ? e.name : 'Error'
++  const pick = (c) => typeof c === 'string' && /^[A-Za-z][A-Za-z0-9_]{1,40}$/.test(c) ? c : null
++  const code = pick(e?.code) ?? pick(e?.cause?.code) ?? pick(e?.errorCode)
++  const xerr = Number.isSafeInteger(e?.xerr) ? `XErr ${e.xerr}` : null
++  return [status ? `HTTP ${status[1]}` : null, name, code, xerr].filter(Boolean).join(', ')
++}
++
++module.exports = { checkStatus, checkStatusWithHelp, createHash, nextUUID, errorSummary }

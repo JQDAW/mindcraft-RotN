@@ -52,6 +52,10 @@ const CLASSES = [
     { name: 'timeout: undici connect timeout', err: () => coded(TypeError, 'fetch failed', null, 'UND_ERR_CONNECT_TIMEOUT'), exit: 1, kind: 'network', status: null, code: 'UND_ERR_CONNECT_TIMEOUT' },
     { name: 'connect refused (the code stays visible)', err: () => coded(Error, 'connect ECONNREFUSED 127.0.0.1:25565', 'ECONNREFUSED'), exit: 1, kind: 'network', status: null, code: 'ECONNREFUSED' },
     { name: 'profile failure with no captured status', err: NMP_PROFILE, profile: null, exit: 1, kind: 'auth-unknown', status: null },
+    // XSTS (patched prismarine-auth attaches err.xerr; the message is its fixed description).
+    { name: 'XSTS XErr 2148916233 (no Xbox profile)', err: () => Object.assign(new Error('Your account currently does not have an Xbox profile.'), { xerr: 2148916233 }), exit: 3, kind: 'auth-permanent', status: null, xerr: 2148916233 },
+    { name: 'XSTS XErr 2148916238 (under 18, not in a family)', err: () => Object.assign(new Error('The account date of birth is under 18 years.'), { xerr: 2148916238 }), exit: 3, kind: 'auth-permanent', status: null, xerr: 2148916238 },
+    { name: 'XSTS with an unknown XErr', err: () => Object.assign(new Error('Xbox Live authentication failed to obtain a XSTS token. XErr: 2148916000'), { xerr: 2148916000 }), exit: 1, kind: 'xsts-other', status: null, xerr: 2148916000 },
 ];
 
 for (const c of CLASSES) {
@@ -66,6 +70,7 @@ for (const c of CLASSES) {
         assert.deepEqual([error.kind, error.status], [c.kind, c.status]);
         if (c.statusSource) assert.equal(error.statusSource, c.statusSource);
         if (c.code) assert.equal(error.code, c.code);
+        assert.equal(error.xerr, c.xerr ?? null);
         assert.deepEqual([end.type, end.reason, end.exitCode, end.joined, end.beforeJoin], ['end', 'error before join', c.exit, false, true]);
         assert.doesNotMatch(JSON.stringify(events), SECRET_LIKE);
     });
@@ -74,7 +79,7 @@ for (const c of CLASSES) {
 test('an HTTP body with an eyJ... value never reaches the output, from either handler', () => {
     const { t, events } = tracker();
     t.unhandledRejection(httpError(401, 'Unauthorized'));
-    assert.deepEqual(events, [{ type: 'error', phase: 'before_join', unhandledRejection: true, errorClass: 'Error', code: null, status: 401, statusSource: 'error', kind: 'auth-permanent' }]);
+    assert.deepEqual(events, [{ type: 'error', phase: 'before_join', unhandledRejection: true, errorClass: 'Error', code: null, status: 401, statusSource: 'error', xerr: null, kind: 'auth-permanent' }]);
     t.botError(httpError(400, 'Bad Request'));
     assert.doesNotMatch(JSON.stringify(events), SECRET_LIKE);
     assert.ok(!JSON.stringify(events).includes(FAKE_JWT));
@@ -158,7 +163,7 @@ function runDriver(env) {
     }
 }
 
-for (const [mode, exit, kind] of [['xbox401', 3, 'auth-permanent'], ['profile404', 3, 'auth-permanent'], ['xbox503', 1, 'http-5xx'], ['network', 1, 'network']]) {
+for (const [mode, exit, kind] of [['xbox401', 3, 'auth-permanent'], ['profile404', 3, 'auth-permanent'], ['xsts2148916233', 3, 'auth-permanent'], ['xbox503', 1, 'http-5xx'], ['network', 1, 'network']]) {
     test(`the real driver, auth failing with ${mode}: exit ${exit}, beforeJoin, and no token or body in any output`, () => {
         const { r, events, all } = runDriver({ FAKE_AUTH_FAILURE: mode });
         assert.equal(r.status, exit, all.slice(-3000));
@@ -167,7 +172,8 @@ for (const [mode, exit, kind] of [['xbox401', 3, 'auth-permanent'], ['profile404
         assert.deepEqual([error.phase, error.kind, error.message], ['before_join', kind, undefined]);
         assert.deepEqual([end.exitCode, end.joined, end.beforeJoin], [exit, false, true]);
         assert.ok(!all.includes(FAKE_JWT), 'the fake token never appears');
-        assert.doesNotMatch(all, /eyJ|XErr|203\.0\.113\.9/);
+        // The body's JSON never appears ("XErr": its key); an XErr code may be logged as a number.
+        assert.doesNotMatch(all, /eyJ|"XErr"|203\.0\.113\.9/);
     });
 }
 

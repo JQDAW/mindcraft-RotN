@@ -340,6 +340,14 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - `initBot` passes it to `attachFmlEntities`. If rotn-data fails to load, it warns and FML mobs keep placeholder names.
 - Tests (targeted): `fml-entities` 8, with the real table: `iceandfire:firedragon` passive, `aether_legacy:cockatrice` hostile, a thrown `iceandfire:dragonarrow`, and all 30 modded mobs of `common-mobs.json` with rotn-data's hostility. `e2e-initbot`: through `initBot`, an FML `aether_legacy` #7 becomes `aether_legacy:cockatrice` and `isHostile` is true.
 
+## Done: prismarine-auth patch (lead-approved patch-list addition), XSTS XErr exit 3, no-op error listener
+
+- `patches/prismarine-auth+3.1.1.patch`:
+  - `Error refreshing token` (Live and MSA), the Live device-code non-200 and the MSA device-code error now print only status, class and code;
+  - XSTS errors carry `err.xerr`;
+  - an unknown XErr's message has no response JSON.
+- A permanent XSTS XErr exits 3. A listener is always attached (a no-op with `hideErrors`).
+
 ## Doing
 
 - G1 PASSED. Phase 2 (G2): #25, #38, #46, #49 and #54 are merged. Open: #50 (PR #31 follow-ups) and #56 (mod-entity table).

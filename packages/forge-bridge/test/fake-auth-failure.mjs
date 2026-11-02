@@ -3,6 +3,7 @@
 // with fake values only (no network, no real token, nothing read from a cache).
 // FAKE_AUTH_FAILURE picks the failure:
 //   xbox401 / xbox403 / xbox503  checkStatus's Error("<status> <statusText> <body>")
+//   xsts<XErr>                   the real XboxTokenManager.checkTokenError (patched: err.xerr)
 //   network                      Node fetch's TypeError('fetch failed') with a coded cause
 //   profile404 / profile503      the real (instrumented) fetchProfile fails; prismarine-auth
 //                                swallows that, so nmp throws "Failed to obtain profile data"
@@ -18,6 +19,7 @@ const authIndex = createRequire(createRequire(import.meta.url).resolve('minecraf
 const requireAuth = createRequire(authIndex);
 const { Authflow } = requireAuth('./index.js');
 const JavaTokenManager = requireAuth('./src/TokenManagers/MinecraftJavaTokenManager.js');
+const XboxTokenManager = requireAuth('./src/TokenManagers/XboxTokenManager.js');
 
 const STATUS_TEXT = { 401: 'Unauthorized', 403: 'Forbidden', 404: 'Not Found', 503: 'Service Unavailable' };
 const mode = process.env.FAKE_AUTH_FAILURE ?? '';
@@ -25,6 +27,9 @@ const mode = process.env.FAKE_AUTH_FAILURE ?? '';
 Authflow.prototype.getMinecraftJavaToken = async function getMinecraftJavaToken() {
     const xbox = /^xbox(\d{3})$/.exec(mode);
     if (xbox) throw new Error(`${xbox[1]} ${STATUS_TEXT[xbox[1]]} ${BODY}`);
+    // The real (patched) XSTS error path: checkTokenError(XErr, response JSON).
+    const xsts = /^xsts(\d+)$/.exec(mode);
+    if (xsts) XboxTokenManager.prototype.checkTokenError.call({}, Number(xsts[1]), JSON.parse(BODY));
     if (mode === 'network') {
         throw new TypeError('fetch failed', { cause: Object.assign(new Error(`read ECONNRESET 203.0.113.9:443 ${FAKE_JWT}`), { code: 'ECONNRESET' }) });
     }

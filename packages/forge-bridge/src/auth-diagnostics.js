@@ -118,9 +118,29 @@ export function lastProfileFetchFailure(TokenManager) {
 /** HTTP statuses that mean the login cannot succeed by retrying (ADR 0003 decision 5). */
 export const PERMANENT_AUTH_STATUSES = Object.freeze([401, 403, 404]);
 
+/**
+ * XSTS XErr codes that are account states a retry cannot fix (no Xbox profile, a
+ * ban, a child account, terms not accepted, region, proof of age, playtime limit):
+ * prismarine-auth's own xboxLiveErrors table, from the copy nmp loads. Our patch
+ * (patches/prismarine-auth+3.1.1.patch) attaches the code to the error as `xerr`.
+ */
+export const PERMANENT_XSTS_XERRS = Object.freeze(loadXboxLiveErrorCodes());
+
+function loadXboxLiveErrorCodes() {
+    try {
+        const fromNmp = createRequire(createRequire(import.meta.url).resolve('minecraft-protocol'));
+        const { xboxLiveErrors } = createRequire(fromNmp.resolve('prismarine-auth'))('./src/common/Constants.js');
+        const codes = Object.keys(xboxLiveErrors ?? {}).map(Number).filter(Number.isSafeInteger);
+        if (codes.length) return codes;
+    } catch { /* fall through */ }
+    // prismarine-auth 3.1.1's table, if it cannot be read.
+    return [2148916227, 2148916229, 2148916233, 2148916234, 2148916235, 2148916236, 2148916237, 2148916238];
+}
+
 // Exit-code classes for a login that fails before the bot joins (ADR 0003 decision 5):
-// 401, 403 (the profile fetch or Xbox) and 404 (no Minecraft) are permanent (3);
-// network errors, timeouts, 5xx and other statuses are transient (1).
+// 401, 403 (the profile fetch or Xbox), 404 (no Minecraft) and a permanent XSTS XErr
+// are permanent (3); network errors, timeouts, 5xx, other statuses and other XErrs
+// are transient (1).
 const NMP_PROFILE_FAILURE = /^Failed to obtain profile data\b/;
 const NETWORK_CLASSES = new Set(['TypeError', 'AbortError', 'TimeoutError', 'FetchError']);
 
@@ -130,7 +150,7 @@ const NETWORK_CLASSES = new Set(['TypeError', 'AbortError', 'TimeoutError', 'Fet
  * the result never contains the message.
  * @param {unknown} err
  * @param {{ profileFailure?: { status: number|null } | null }} [opts] lastProfileFetchFailure()
- * @returns {{ errorClass: string, code: string|null, status: number|null, statusSource: 'error'|'profile-fetch'|null, kind: string, fatal: boolean }}
+ * @returns {{ errorClass: string, code: string|null, status: number|null, statusSource: 'error'|'profile-fetch'|null, xerr: number|null, kind: string, fatal: boolean }}
  */
 export function classifyBeforeJoinError(err, { profileFailure = null } = {}) {
     const d = describeProfileFetchError(err);
@@ -143,14 +163,16 @@ export function classifyBeforeJoinError(err, { profileFailure = null } = {}) {
         statusSource = 'profile-fetch';
     }
     const code = d.causeCode ?? (nmpProfile ? safeCode(profileFailure?.causeCode) : null);
+    const xerr = Number.isSafeInteger(err?.xerr) ? err.xerr : null;
     let kind;
-    if (status !== null && PERMANENT_AUTH_STATUSES.includes(status)) kind = 'auth-permanent';
+    if (xerr !== null) kind = PERMANENT_XSTS_XERRS.includes(xerr) ? 'auth-permanent' : 'xsts-other';
+    else if (status !== null && PERMANENT_AUTH_STATUSES.includes(status)) kind = 'auth-permanent';
     else if (status !== null && status >= 500) kind = 'http-5xx';
     else if (status !== null) kind = 'http-other';
     else if (code || NETWORK_CLASSES.has(d.errorClass)) kind = 'network';
     else if (nmpProfile) kind = 'auth-unknown';
     else kind = 'other';
-    return { errorClass: d.errorClass, code, status, statusSource, kind, fatal: kind === 'auth-permanent' };
+    return { errorClass: d.errorClass, code, status, statusSource, xerr, kind, fatal: kind === 'auth-permanent' };
 }
 
 /** One log line for an error before login: its classified facts, never its message. */
@@ -158,5 +180,29 @@ export function formatBeforeJoinError(info) {
     const parts = [info.errorClass];
     if (info.code) parts.push(info.code);
     if (info.status !== null) parts.push(`HTTP ${info.status}${info.statusSource === 'profile-fetch' ? ' (profile fetch)' : ''}`);
+    if (info.xerr !== null && info.xerr !== undefined) parts.push(`XErr ${info.xerr}`);
     return `${parts.join(', ')}; ${info.kind} (message not logged)`;
+}
+
+/**
+ * initBot's bot error listener, in place of mineflayer's `logErrors` (which prints
+ * whole error objects; before login those can hold HTTP response bodies). Always
+ * attaches a listener, so an 'error' never throws as an unhandled EventEmitter
+ * error, even with `hideErrors` (mineflayer's own listener is then a no-op too).
+ * Before login it logs formatBeforeJoinError's facts only; after login, the error
+ * as mineflayer logged it. Call it with mineflayer's logErrors turned off.
+ * @param {import('node:events').EventEmitter} bot
+ * @param {{ logErrors?: boolean, hideErrors?: boolean, log?: (...a: unknown[]) => void, profileFailure?: () => object|null }} [opts]
+ */
+export function attachBotErrorLogger(bot, { logErrors = true, hideErrors = false, log = (...a) => console.log(...a), profileFailure = () => lastProfileFetchFailure() } = {}) {
+    const quiet = !logErrors || hideErrors;
+    let loggedIn = false;
+    bot.once('login', () => { loggedIn = true; });
+    bot.on('error', (err) => {
+        if (quiet) return;
+        if (loggedIn) { log(err); return; }
+        let failure = null;
+        try { failure = profileFailure(); } catch { /* none */ }
+        log(`[mcdata] bot error before login: ${formatBeforeJoinError(classifyBeforeJoinError(err, { profileFailure: failure }))}`);
+    });
 }
