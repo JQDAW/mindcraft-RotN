@@ -1,6 +1,7 @@
 // @mindcraft-rotn/rotn-data: RotN 3.3.4 facts and 1.12 <-> 1.21 name translation
 // (rotn-data brief, deliverables 2 and 3). See README.md for the API and data format.
 import { loadRotnData, RotnData, DUMP_FORMAT } from './src/catalog.js';
+import { installRecipes as installRecipesInto } from './src/registry-recipes.js';
 
 export { loadRotnData, RotnData, DUMP_FORMAT };
 export { createTranslator } from './src/translate.js';
@@ -32,3 +33,12 @@ export const modEntityTable = () => pack().modEntityTable();
 export const stateMetaRemap = () => pack().stateMetaRemap();
 export const clientMeta = (block, idMeta) => pack().clientMeta(block, idMeta);
 export const networkRemap = (blockIds) => pack().networkRemap(blockIds);
+
+/**
+ * Replace bot.registry.recipes' contents, in place, with RotN's crafting recipes from the dump,
+ * keyed by that registry's (the connected server's) item ids. See src/registry-recipes.js.
+ * @param {object} registry bot.registry after forge-bridge's extendRegistry
+ * @param {{maxVariants?: number}} [opts]
+ */
+export const installRecipes = (registry, opts) => installRecipesInto(registry, pack().dump.recipes?.recipes ?? [], opts);
+export { convertRecipe, choiceTuples, DEFAULT_MAX_VARIANTS } from './src/registry-recipes.js';

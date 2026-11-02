@@ -90,3 +90,49 @@ test('the agent naming API: mcdata.toNew/toOld round-trip every vanilla table en
     assert.equal(mc.toOld('netherite_ingot'), null);
     assert.equal(mc.toNew.length, 1); // (name, meta = 0)
 });
+
+// ---- RotN recipes in the registry (rotn-data brief item 4; Phase 3). These run last: installing
+// changes the shared registry's recipes for the rest of this process.
+
+test('installRotnRecipes: mineflayer\'s Recipe, bound before the install, sees RotN recipes', () => {
+    // mineflayer's craft plugin does this when the bot is created, long before login.
+    const Recipe = require('prismarine-recipe')(registry).Recipe;
+    const before = registry.recipes;
+    const report = mc.installRotnRecipes();
+    assert.equal(registry.recipes, before, 'the same object');
+    assert.ok(report.results > 3000 && report.recipes === 6089 && report.resultNotInRegistry === 0, JSON.stringify(report));
+    const id = (n) => registry.itemsByName[n].id;
+    const names = (r) => r.delta.filter((d) => d.count < 0).map((d) => [mc.getItemName(d.id), d.metadata, -d.count]);
+
+    const axe = Recipe.find(id('pyrotech:crude_axe'));
+    assert.equal(axe[0].requiresTable, false, 'the crude axe is a 2x2 recipe');
+    assert.deepEqual(names(axe[0]), [['pyrotech:rock', 0, 1], ['stick', 0, 2]]);
+    assert.ok(axe.some((r) => names(r).some(([n]) => n === 'flint')), 'flint can replace the rock');
+
+    const pick = Recipe.find(id('stone_pickaxe'));
+    assert.equal(pick[0].requiresTable, true);
+    assert.deepEqual(names(pick[0]), [['pyrotech:rock', 0, 3], ['stick', 0, 2]]);
+    assert.ok(!pick.some((r) => names(r).some(([n]) => n === 'cobblestone')), 'not the vanilla cobblestone recipe');
+
+    assert.deepEqual(names(Recipe.find(id('stone_axe'))[0]), [['pyrotech:rock', 0, 3], ['stick', 0, 2]]);
+    assert.deepEqual(names(Recipe.find(id('cobblestone'))[0]), [['pyrotech:rock', 0, 4]]);
+    assert.deepEqual(names(Recipe.find(id('furnace'))[0]), [['pyrotech:rock', 0, 8]]);
+    assert.deepEqual(names(Recipe.find(id('contenttweaker:crafting_tools'))[0]), [['pyrotech:crude_axe', null, 1], ['pyrotech:rock', 0, 1], ['stick', 0, 1]]);
+    const table = Recipe.find(id('crafting_table'));
+    assert.deepEqual(names(table[0]), [['planks', null, 1], ['contenttweaker:crafting_tools', 0, 1]]);
+    assert.equal(table[0].requiresTable, false);
+    assert.deepEqual(Recipe.find(id('wooden_pickaxe')), [], 'RotN has no wooden tools');
+});
+
+test('getItemCraftingRecipes and getDetailedCraftingPlan follow RotN recipes', () => {
+    assert.deepEqual(mc.getItemCraftingRecipes('stone_pickaxe')[0], [{ 'pyrotech:rock': 3, stick: 2 }, { craftedCount: 1 }]);
+    assert.deepEqual(mc.getItemCraftingRecipes('crafting_table')[0], [{ planks: 1, 'contenttweaker:crafting_tools': 1 }, { craftedCount: 1 }]);
+    // Rocks and cobblestone make each other; both are gathered, not crafted (no endless recursion).
+    const pick = mc.getDetailedCraftingPlan('stone_pickaxe', 1, {});
+    assert.match(pick, /- 3 pyrotech:rock\n- 1 log\n/);
+    assert.match(pick, /Craft 1 log -> 3 planks\nCraft 2 planks -> 4 stick\nCraft 3 pyrotech:rock \+ 2 stick -> 1 stone_pickaxe/);
+    const table = mc.getDetailedCraftingPlan('crafting_table', 1, {});
+    assert.match(table, /Craft 1 pyrotech:rock \+ 2 stick -> 1 pyrotech:crude_axe\nCraft 1 pyrotech:crude_axe \+ 1 pyrotech:rock \+ 1 stick -> 1 contenttweaker:crafting_tools\nCraft 1 planks \+ 1 contenttweaker:crafting_tools -> 1 crafting_table/);
+    assert.equal(mc.getDetailedCraftingPlan('cobblestone', 1, {}), 'cobblestone is a base item, you need to find 1 more in the world');
+    assert.match(mc.getDetailedCraftingPlan('furnace', 1, { 'pyrotech:rock': 2 }), /- 6 pyrotech:rock/);
+});
