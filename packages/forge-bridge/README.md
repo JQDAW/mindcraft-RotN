@@ -197,6 +197,20 @@ Vanilla 1.12 defines entity-metadata serializer ids 0-13. A protodef switch cann
   - Ids 15-18 are vanilla-registry ids in mod call order, so they come only from the dump.
 - **Check.** The protocol is compiled before RegistryData arrives. So after it, the bridge compares the >= 256 ids with the synced `minecraft:dataserializers` and logs (and captures) any mismatch.
 
+## Movement guard (G2 batch 7)
+
+In G2 batch 7, the server kicked the items session about 2 s after join with `multiplayer.disconnect.invalid_player_movement`. Forge 1.12.2's `NetHandlerPlayServer.processPlayer` sends that for a client movement packet with a non-finite x, y, z, yaw or pitch, or with |x|, |y| or |z| above 3.0E7. `vehicle_move` gets the same check (`invalid_vehicle_movement`). Rotation range is not checked.
+
+- **The failure mode** (reproduced offline). mineflayer sends `bot.entity` as it is. One non-finite input into the bot's own motion, such as a NaN explosion knockback, makes it send `position x NaN`. After that the state stays poisoned, and physics stops ticking because `blockAt(NaN)` is null.
+- **The trigger in batch 7 is not known.** That capture recorded neither the server's movement inputs nor the bot's movement packets. The one difference from the control session is that the server set the bot's on-fire flag 10 ms before the kick.
+- **`src/movement-guard.js`.** `initBot` attaches it on every connection, under the movement throttle, so merged packets are checked too. It works in four layers:
+  1. **Inputs.** A server `position` packet with a non-finite field keeps the current value (relative 0). A non-finite explosion knockback is used as 0. This happens before mineflayer's handlers see the packet.
+  2. **State.** Every physics tick, and every 250 ms while physics is stalled, a non-finite or out-of-range position, velocity, yaw or pitch is restored from the last good state.
+  3. **Wire.** A movement packet the server would kick for is never written. It is dropped, the state is repaired, and the next tick sends a good packet.
+  4. **Trace.** A ring of the last 80 movement inputs and outputs: server `position`, `explosion`, the bot's own velocity, teleports, mounts and on-fire flag, `update_health`, `abilities`, and every movement packet the bot sends. It is written once to the capture as a `movement_trace` event, at the first guard event or at a movement kick.
+- **Logging.** Each kind of event is logged once (`[forge-bridge] movement guard: ...`). Counts are in `bot.forge.movementGuard`: `{ droppedPackets, repairedStates, sanitizedInputs, movementKicks, first }`.
+- **If it fires on the test server**, the driver log has the line, and the capture's `movement_trace` names the input that caused it.
+
 ## Other protocol changes
 
 - **Triumph advancements (G1 Batch B+C).** Triumph 3.19.2 (mod id `triumph`) writes `ExtendedDisplayInfo` into `play.advancements`. Flag bit 8 is set, and colours, line options, extra connections and a position are appended (`javap`, details in `reid.js` `triumphTypes`). minecraft-data's vanilla layout fails on it, and the parse error ended the packet stream.
@@ -323,6 +337,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - A body with an `eyJ…` value never reaches the output from either handler.
   - The real driver, with prismarine-auth failing offline through `test/fake-auth-failure.mjs`: no fake token, body or address in stdout or stderr, plus the right exit code. An auth-guard refusal exits 3.
 - `auth-guard.test.js` and `initbot-auth.test.js`: the default `onMsaCode` never prints a fake code or message; the `DEBUG` matching rules; each `initBot` refusal; and `auth: "offline"` without a folder still starts.
+- `movement-guard.test.js`: mineflayer's real plugins, physics included, on a fake 1.12.2 client, wired as `initBot` wires them. Without the guard, a NaN explosion knockback makes mineflayer send `position x NaN`. With it, the knockback is used as 0. A server position with a non-finite field keeps the current value. A poisoned state (NaN velocity, an Infinity or 4E7 coordinate, NaN pitch) is repaired, and nothing bad is sent. A bad packet is dropped, and each kind is logged once. A movement kick writes the trace once. `e2e-initbot.test.js` repeats the explosion case through the real `initBot`: the server never receives a non-finite position, and the capture has the `movement_trace`.
 - Capture redaction and limits, kick classification and the restart policy, the movement throttle, the token-folder checks, and the connect and env logic.
 - `g1-driver.test.js`: the driver as a subprocess against the fake Forge server, with the runner's allowlisted environment: hello exactly once, echo, a 3-block walk, a clean stop, a redacted capture, exit 3 without a token-cache folder or host, and exit 1 with `beforeJoin` when the connect is refused.
 - `e2e-initbot.test.js`: Mindcraft's real `initBot` against an in-process fake Forge server on 127.0.0.1. The run covers the status ping, tagHost, the handshake, Join Game, a REID chunk, inventory and effects, chat both ways, walking, and the capture. The state-id remap is tested through `initBot` with rotn-data's real `stateMetaRemap()` over its mini-dump fixture, because the 3.3.4 dump has no table yet. A renamed method or field therefore fails this test.

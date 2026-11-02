@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -232,7 +232,12 @@ export function initBot(username, { onMsaCode } = {}) {
     // Throttle position packets to avoid kicks on Paper/Spigot servers. Inside each
     // 50 ms window the newest position and look are kept and merged, so the server
     // always gets the latest state (upstream sent the oldest and dropped the rest).
-    bot._client.write = throttleMovement(bot._client.write.bind(bot._client), { intervalMs: 50 });
+    // Under the throttle, the movement guard (G2 batch 7's invalid_player_movement kick): a
+    // packet with a non-finite or out-of-range position or rotation is never sent, the bot's
+    // state is repaired, and the first such event is logged once with a trace in the capture.
+    const movementGuard = attachMovementGuard(bot, { log: (m) => console.warn(`[forge-bridge] ${m}`), capture: () => forge.capture });
+    forge.movementGuard = movementGuard.stats;
+    bot._client.write = throttleMovement(movementGuard.guardWrite(bot._client.write.bind(bot._client)), { intervalMs: 50 });
 
     // PartialReadError used to be swallowed silently. It is still not fatal, but it
     // is counted and logged. protodef drops packets it cannot read without an
