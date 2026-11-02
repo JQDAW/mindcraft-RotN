@@ -164,6 +164,11 @@ final class StateMetaRemapDumper extends Part<Integer> {
      * Ids in BLOCK_STATE_IDS that hold a state (the iterator skips empty slots; null is skipped here
      * too); null if unreadable. The loop variable is Object: this Forge build's iterator yields
      * Object, so an IBlockState loop variable does not compile (PR #87 dumper-build).
+     *
+     * Runs once, from tail(), so it is outside the per-tick entry cap (RotnDump.BATCH and
+     * TICK_BUDGET_MS bound entries only): one pass over the map's id slots, about 24,000 filled on
+     * RotN 3.3.4 (scanned.networkIds of the third dump). It runs in the part's last tick, but RotnDump's close() is timed after that tick's maxTickMs is taken, so
+     * its time shows in manifest timing.state-meta-remap.ms only, not in maxTickMs.
      */
     @SuppressWarnings("deprecation")
     private static Integer mapIds() {
