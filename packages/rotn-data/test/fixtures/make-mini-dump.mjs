@@ -17,13 +17,20 @@ const ORES = {
     plankWood: [st('minecraft:planks', W)],
 };
 const ids = (names) => Object.fromEntries(names.map((n, i) => [n, i + 1]));
-const blockNames = ['minecraft:stone', 'minecraft:log', 'minecraft:planks', 'minecraft:crafting_table', 'minecraft:cobblestone', 'pyrotech:rock'];
+const blockNames = ['minecraft:stone', 'minecraft:log', 'minecraft:planks', 'minecraft:crafting_table', 'minecraft:cobblestone', 'pyrotech:rock', 'minecraft:double_plant'];
+// The double plant keeps its vanilla id, 175, so the state-meta-remap stub below has real network ids.
+const blockIds = { ...ids(blockNames), 'minecraft:double_plant': 175 };
+// state-meta-remap.json: what Forge's two-pass BLOCK_STATE_IDS fill gives the double plant (worked out
+// from BlockDoublePlant's getStateFromMeta/getMetaFromState, not dumped): metas 8-11 all resolve to the
+// one upper-half state, which the server sends as 175 << 4 | 11 and whose meta is 8 | north (2) = 10.
+const upper = 'minecraft:double_plant[facing=north,half=upper,variant=sunflower]';
+const remap = (idMeta) => ({ networkId: 175 << 4 | idMeta, block: 'minecraft:double_plant', blockId: 175, idMeta, stateMeta: 10, stateNetworkId: 175 << 4 | 11, state: upper });
 const itemNames = [...blockNames, 'minecraft:stick', 'minecraft:flint', 'minecraft:stone_axe', 'minecraft:stone_pickaxe', 'pyrotech:crude_axe',
     'contenttweaker:crafting_tools', 'minecraft:coal', 'minecraft:iron_ingot', 'contenttweaker:raw_iron', 'minecraft:furnace'];
 const rockOrFlint = () => ({ stacks: [...ORES.rock, st('minecraft:flint')] });
 const files = {
     'registry-names.json': { registries: {
-        'minecraft:blocks': { ids: ids(blockNames) },
+        'minecraft:blocks': { ids: blockIds },
         'minecraft:items': { ids: ids(itemNames) },
         'minecraft:entities': { ids: ids(['minecraft:zombie', 'minecraft:cow', 'specialmobs:firecreeper']) },
         'minecraft:biomes': { ids: ids(['minecraft:plains']) },
@@ -41,6 +48,10 @@ const files = {
         ] },
         'pyrotech:rock': { displayName: 'Rock', defaultMeta: 0, states: [
             { meta: 0, hardness: 0, material: 'circuits', harvestTool: null, harvestLevel: -1, toolRequired: false },
+        ] },
+        'minecraft:double_plant': { displayName: 'Sunflower', defaultMeta: 0, states: [
+            { meta: 0, props: { facing: 'north', half: 'lower', variant: 'sunflower' }, hardness: 0, material: 'vine', harvestTool: null, harvestLevel: -1, toolRequired: false },
+            { meta: 10, props: { facing: 'north', half: 'upper', variant: 'sunflower' }, hardness: 0, material: 'vine', harvestTool: null, harvestLevel: -1, toolRequired: false },
         ] },
     } },
     'items.json': { format: 'rotn-dump/1', items: {
@@ -78,6 +89,10 @@ const files = {
     'serializers.json': { format: 'rotn-dump/1',
         serializers: [{ id: 0, class: 'net.minecraft.network.datasync.DataSerializers$1', vanilla: true }, { id: 15, class: 'example.ModSerializer', vanilla: false }],
         usage: { 'specialmobs:firecreeper': [{ index: 13, serializerId: 15, class: 'example.ModSerializer' }] } },
+    'state-meta-remap.json': { format: 'rotn-dump/1', encoding: 'networkId = blockId << 4 | meta',
+        remap: [8, 9, 11].map(remap),
+        scanned: { blocks: blockNames.length, networkIds: 40, validStates: 60 },
+        anomalies: { encodingMismatches: 0, foreignStates: 0, first: null } },
     'spawns.json': { format: 'rotn-dump/1', biomes: {
         'minecraft:plains': { monster: [{ entity: 'minecraft:zombie', weight: 95, min: 4, max: 4 }], creature: [{ entity: 'minecraft:cow', weight: 8, min: 4, max: 4 }], ambient: [], water_creature: [] },
     } },

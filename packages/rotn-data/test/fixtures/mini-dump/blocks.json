@@ -74,6 +74,38 @@
      "toolRequired": false
     }
    ]
+  },
+  "minecraft:double_plant": {
+   "displayName": "Sunflower",
+   "defaultMeta": 0,
+   "states": [
+    {
+     "meta": 0,
+     "props": {
+      "facing": "north",
+      "half": "lower",
+      "variant": "sunflower"
+     },
+     "hardness": 0,
+     "material": "vine",
+     "harvestTool": null,
+     "harvestLevel": -1,
+     "toolRequired": false
+    },
+    {
+     "meta": 10,
+     "props": {
+      "facing": "north",
+      "half": "upper",
+      "variant": "sunflower"
+     },
+     "hardness": 0,
+     "material": "vine",
+     "harvestTool": null,
+     "harvestLevel": -1,
+     "toolRequired": false
+    }
+   ]
   }
  }
 }

@@ -29,3 +29,6 @@ export const entityByModId = (modId, typeId) => pack().entityByModId(modId, type
 export const isDangerous = (name) => pack().isDangerous(name);
 export const isReplaced = (name) => pack().isReplaced(name);
 export const modEntityTable = () => pack().modEntityTable();
+export const stateMetaRemap = () => pack().stateMetaRemap();
+export const clientMeta = (block, idMeta) => pack().clientMeta(block, idMeta);
+export const networkRemap = (blockIds) => pack().networkRemap(blockIds);

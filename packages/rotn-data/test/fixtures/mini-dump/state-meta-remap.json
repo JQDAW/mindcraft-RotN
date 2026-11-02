@@ -1,0 +1,43 @@
+{
+ "format": "rotn-dump/1",
+ "encoding": "networkId = blockId << 4 | meta",
+ "remap": [
+  {
+   "networkId": 2808,
+   "block": "minecraft:double_plant",
+   "blockId": 175,
+   "idMeta": 8,
+   "stateMeta": 10,
+   "stateNetworkId": 2811,
+   "state": "minecraft:double_plant[facing=north,half=upper,variant=sunflower]"
+  },
+  {
+   "networkId": 2809,
+   "block": "minecraft:double_plant",
+   "blockId": 175,
+   "idMeta": 9,
+   "stateMeta": 10,
+   "stateNetworkId": 2811,
+   "state": "minecraft:double_plant[facing=north,half=upper,variant=sunflower]"
+  },
+  {
+   "networkId": 2811,
+   "block": "minecraft:double_plant",
+   "blockId": 175,
+   "idMeta": 11,
+   "stateMeta": 10,
+   "stateNetworkId": 2811,
+   "state": "minecraft:double_plant[facing=north,half=upper,variant=sunflower]"
+  }
+ ],
+ "scanned": {
+  "blocks": 7,
+  "networkIds": 40,
+  "validStates": 60
+ },
+ "anomalies": {
+  "encodingMismatches": 0,
+  "foreignStates": 0,
+  "first": null
+ }
+}

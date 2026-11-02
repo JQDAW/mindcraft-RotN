@@ -48,7 +48,7 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
  * "rotndump" (permission level 4) schedules another.
  *
  * A dump writes format "rotn-dump/1" files to ./rotn-dump/ (oredict, blocks, items, recipes,
- * smelting, entities, spawns, serializers, then manifest), at most BATCH entries and about
+ * smelting, entities, spawns, serializers, state-meta-remap, then manifest), at most BATCH entries and about
  * TICK_BUDGET_MS per server tick, each file
  * written to NAME.json.tmp and renamed into place, and the DONE marker last. A reader must wait
  * for DONE.
@@ -58,7 +58,7 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
         acceptableRemoteVersions = "*", serverSideOnly = true)
 public class RotnDump {
     public static final String MODID = "rotndump";
-    public static final String VERSION = "0.1.0"; // keep equal to build.gradle's version (build.sh checks)
+    public static final String VERSION = "0.2.0"; // keep equal to build.gradle's version (build.sh checks)
     public static final String FORMAT = "rotn-dump/1";
     public static final String ENABLE_MARKER = "rotn-dump.enable";
     static final Logger LOG = LogManager.getLogger(MODID);
@@ -137,7 +137,7 @@ public class RotnDump {
 
         Job(File dir) {
             this.dir = dir;
-            for (String p : new String[] {"oredict", "blocks", "items", "recipes", "smelting", "entities", "spawns", "serializers", "manifest"}) todo.add(p);
+            for (String p : new String[] {"oredict", "blocks", "items", "recipes", "smelting", "entities", "spawns", "serializers", "state-meta-remap", "manifest"}) todo.add(p);
         }
 
         @SubscribeEvent
@@ -180,6 +180,7 @@ public class RotnDump {
                 case "entities": return new EntityDumper();
                 case "spawns": return new SpawnDumper();
                 case "serializers": return new SerializerDumper(DimensionManager.getWorld(0));
+                case "state-meta-remap": return new StateMetaRemapDumper();
                 default: return new ManifestPart();
             }
         }
