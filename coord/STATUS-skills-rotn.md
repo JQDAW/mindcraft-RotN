@@ -34,7 +34,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 - A4 `quiet-reflexes` (branch `agent/skills-rotn/quiet-reflexes`, on develop `3b796fc`): #123 open. Reflexes record a re-plan instead of stopping the self-prompter and prompting the LLM; `execute()` never rejects; unstuck re-plans instead of killing the agent; `isClearPath` bounded; behavioural `!smeltItem` and `/skin` tests.
-- B1 `names-audit` (branch `agent/skills-rotn/names-audit`, on develop `3b796fc`): PR open, see Open PRs. The 1.12 name fixes from the seam map (liquids, furnaces, grass, empty blocks, doors, world height, baby and profession indexes, the biome and door crash guards) through `src/agent/library/names112.js`.
+- B1 `names-audit` (branch `agent/skills-rotn/names-audit`, on develop `3b796fc`): #124 open. The 1.12 name fixes from the seam map (liquids, furnaces, grass, empty blocks, doors, world height, baby and profession indexes, the biome and door crash guards) through `src/agent/library/names112.js`.
 - Next: B1b `names-boundary` (the command boundary hands skills the bot's registry names; meta-aware block and inventory helpers), after the lead answers Request 8. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
 
 ## G3 plan: small PRs, in order
@@ -132,8 +132,9 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
    - Open point: 1.21 `oak_log` resolves to `log` with meta 0 (oak only), while plain `log` means any variant.
 
    Objections, or an ADR?
+9. **rotn-data (`src/utils/mcdata.js` `isHuntable`, not mine; found in B1):** it reads the 1.21 baby flag `metadata[16]`. In 1.12 the Ageable baby flag is index 12 (a boolean), so baby animals count as huntable. `src/agent/library/names112.js` `isBaby(entity)` has the 1.12 check if you want to reuse it.
 
 ## Open PRs
 
 - #123 A4 quiet reflexes (branch `agent/skills-rotn/quiet-reflexes`). Serves brief "Stop modes from re-prompting the LLM on every reflex" and "Limit `isClearPath` A* cost on the CX23", PLAN priority 1, and the #109 follow-ups.
-- B1 names audit (branch `agent/skills-rotn/names-audit`). Serves the seam-map name fixes (B1 in the G3 plan) for G3 (a) and (b).
+- #124 B1 names audit (branch `agent/skills-rotn/names-audit`). Serves the seam-map name fixes (B1 in the G3 plan) for G3 (a) and (b).
