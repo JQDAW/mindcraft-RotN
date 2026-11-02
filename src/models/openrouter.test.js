@@ -1,0 +1,96 @@
+// Offline test (lead-approved exception to skills-rotn's ownership, log hygiene
+// before the first CX23 run): the OpenRouter provider never logs a whole error
+// object or response body. The OpenAI client is a stub; no network, and the
+// key is a made-up placeholder.
+import { test, before } from 'node:test';
+import assert from 'node:assert/strict';
+import process from 'node:process';
+
+const FAKE_KEY = 'sk-or-v1-0123456789abcdefABCDEF0123456789abcdef';
+let OpenRouter;
+
+before(async () => {
+    // Set before the constructor's getKey() runs; no real key is ever used.
+    process.env.OPENROUTER_API_KEY = FAKE_KEY;
+    ({ OpenRouter } = await import('./openrouter.js'));
+});
+
+function modelWith(create) {
+    const model = new OpenRouter('vendor/some-model');
+    model.openai = { chat: { completions: { create } } };
+    return model;
+}
+
+function captureErrors(t) {
+    const lines = [];
+    t.mock.method(console, 'error', (...args) => lines.push(args));
+    t.mock.method(console, 'log', () => {});
+    return lines;
+}
+
+const flat = (lines) => lines.map(args => args.map(a => (typeof a === 'string' ? a : `<${typeof a}>`)).join(' ')).join('\n');
+
+test('a thrown SDK error is logged as one safe line', async (t) => {
+    const lines = captureErrors(t);
+    const err = new Error('401 No auth credentials found');
+    err.status = 401;
+    err.headers = { authorization: `Bearer ${FAKE_KEY}`, 'set-cookie': 'session=abc' };
+    err.error = { message: 'No auth credentials found', body: 'secret response body' };
+    err.request = { headers: { Authorization: `Bearer ${FAKE_KEY}` }, body: '{"messages":"prompt text"}' };
+
+    const res = await modelWith(() => Promise.reject(err)).sendRequest([], 'system');
+
+    assert.equal(res, 'My brain disconnected, try again.');
+    assert.equal(lines.length, 1);
+    // Every logged argument is a string, never the error object itself.
+    assert.ok(lines[0].every(a => typeof a === 'string'));
+    const out = flat(lines);
+    assert.match(out, /Error while awaiting response: Error \(status 401\): 401 No auth credentials found/);
+    for (const leak of [FAKE_KEY, 'Bearer', 'session=abc', 'secret response body', 'prompt text']) {
+        assert.ok(!out.includes(leak), `leaked ${leak}`);
+    }
+});
+
+test('a response without choices logs its error summary, not the body', async (t) => {
+    const lines = captureErrors(t);
+    const completion = {
+        id: 'gen-1',
+        error: { code: 429, message: 'Rate limit exceeded', metadata: { raw: 'upstream body text', headers: { 'x-api-key': FAKE_KEY } } },
+    };
+
+    const res = await modelWith(() => Promise.resolve(completion)).sendRequest([], 'system');
+
+    assert.equal(res, 'No response received.');
+    assert.equal(lines.length, 1);
+    assert.ok(lines[0].every(a => typeof a === 'string'));
+    const out = flat(lines);
+    assert.match(out, /No completion or choices returned \(model vendor\/some-model\): Object \[429\]: Rate limit exceeded/);
+    for (const leak of [FAKE_KEY, 'upstream body text', 'gen-1']) {
+        assert.ok(!out.includes(leak), `leaked ${leak}`);
+    }
+});
+
+test('an empty response says so without printing it', async (t) => {
+    const lines = captureErrors(t);
+    const res = await modelWith(() => Promise.resolve({ choices: [], usage: { prompt_tokens: 5 } })).sendRequest([], 'system');
+    assert.equal(res, 'No response received.');
+    assert.equal(flat(lines), 'No completion or choices returned (model vendor/some-model): no choices in the response');
+});
+
+test('an error whose message embeds a JSON body is cut before the body', async (t) => {
+    const lines = captureErrors(t);
+    const err = new Error(`400 {"error":{"message":"Provider returned error","metadata":{"raw":"upstream body text","key":"${FAKE_KEY}"}}}`);
+    err.status = 400;
+
+    const res = await modelWith(() => Promise.reject(err)).sendRequest([], 'system');
+
+    assert.equal(res, 'My brain disconnected, try again.');
+    assert.equal(flat(lines), 'Error while awaiting response: Error (status 400): 400 {...}');
+});
+
+test('a normal response is unchanged', async (t) => {
+    const lines = captureErrors(t);
+    const res = await modelWith(() => Promise.resolve({ choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }] })).sendRequest([], 'system');
+    assert.equal(res, 'hi');
+    assert.equal(lines.length, 0);
+});

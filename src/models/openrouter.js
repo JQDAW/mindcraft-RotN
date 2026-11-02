@@ -1,6 +1,7 @@
 import OpenAIApi from 'openai';
 import { getKey, hasKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
+import { safeError } from '../agent/safe_error.js';
 
 export class OpenRouter {
     static prefix = 'openrouter';
@@ -37,7 +38,8 @@ export class OpenRouter {
             console.log('Awaiting openrouter api response...');
             let completion = await this.openai.chat.completions.create(pack);
             if (!completion?.choices?.[0]) {
-                console.error('No completion or choices returned:', completion);
+                // Never the whole response body; only its error summary, if any.
+                console.error(`No completion or choices returned (model ${this.model_name}):`, completion?.error ? safeError(completion.error) : 'no choices in the response');
                 return 'No response received.';
             }
             if (completion.choices[0].finish_reason === 'length') {
@@ -46,7 +48,8 @@ export class OpenRouter {
             console.log('Received.');
             res = completion.choices[0].message.content;
         } catch (err) {
-            console.error('Error while awaiting response:', err);
+            // A safe summary; the SDK error object carries request headers and the response body.
+            console.error('Error while awaiting response:', safeError(err));
             // If the error indicates a context-length problem, we can slice the turns array, etc.
             res = 'My brain disconnected, try again.';
         }
