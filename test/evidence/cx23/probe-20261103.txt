@@ -1,0 +1,269 @@
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== PROBE START $(date -u +%FT%TZ)"
+=== PROBE START 2026-11-02T22:05:37Z
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== os-release"; cat /etc/os-release
+=== os-release
+PRETTY_NAME="Ubuntu 26.04.1 LTS"
+NAME="Ubuntu"
+VERSION_ID="26.04"
+VERSION="26.04.1 LTS (Resolute Raccoon)"
+VERSION_CODENAME=resolute
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=resolute
+LOGO=ubuntu-logo
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== uname -r"; uname -r
+=== uname -r
+7.0.0-30-generic
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== nproc"; nproc
+=== nproc
+2
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== lscpu"; lscpu | head -20
+=== lscpu
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           40 bits physical, 48 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  2
+On-line CPU(s) list:                     0,1
+Vendor ID:                               GenuineIntel
+Model name:                              Intel Xeon Processor (Skylake, IBRS, no TSX)
+CPU family:                              6
+Model:                                   85
+Thread(s) per core:                      1
+Core(s) per socket:                      2
+Socket(s):                               1
+Stepping:                                4
+BogoMIPS:                                4589.12
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx pdpe1gb rdtscp lm rep_good nopl xtopology cpuid tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt tsc_deadline_timer aes xsave avx f16c rdrand hypervisor lahf_lm abm 3dnowprefetch cpuid_fault pti ssbd ibrs ibpb fsgsbase bmi1 avx2 smep bmi2 erms invpcid avx512f avx512dq rdseed adx smap clwb avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves arat pku ospke md_clear
+Hypervisor vendor:                       KVM
+Virtualization type:                     full
+L1d cache:                               64 KiB (2 instances)
+L1i cache:                               64 KiB (2 instances)
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== free -m"; free -m
+=== free -m
+               total        used        free      shared  buff/cache   available
+Mem:            3814         881        1751         124        1574        2933
+Swap:              0           0           0
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== swapon --show"; swapon --show
+=== swapon --show
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== df -h /"; df -h /
+=== df -h /
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        38G  2.1G   34G   6% /
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== lsblk"; lsblk -o NAME,SIZE,TYPE,MOUNTPOINT
+=== lsblk
+NAME     SIZE TYPE MOUNTPOINT
+sda     38.1G disk
+├─sda1  37.9G part /
+├─sda14    1M part
+└─sda15  256M part /boot/efi
+sr0     1024M rom
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== timedatectl"; timedatectl | cat
+=== timedatectl
+               Local time: Mon 2026-11-02 22:05:37 UTC
+           Universal time: Mon 2026-11-02 22:05:37 UTC
+                 RTC time: Mon 2026-11-02 22:05:37
+                Time zone: Etc/UTC (UTC, +0000)
+System clock synchronized: yes
+              NTP service: active
+          RTC in local TZ: no
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== ss -tulpn"; ss -tulpn
+=== ss -tulpn
+Netid       State        Recv-Q       Send-Q                  Local Address:Port                Peer Address:Port       Process
+udp         UNCONN       0            0                          <ip>:53                       <ip>:*           users:(("systemd-resolve",pid=47068,fd=19))
+udp         UNCONN       0            0                       <ip>%lo:53                       <ip>:*           users:(("systemd-resolve",pid=47068,fd=17))
+udp         UNCONN       0            0                    <ip>%eth0:68                       <ip>:*           users:(("systemd-network",pid=47098,fd=36))
+udp         UNCONN       0            0                           <ip>:323                      <ip>:*           users:(("chronyd",pid=39203,fd=4))
+udp         UNCONN       0            0                               [::1]:323                         [::]:*           users:(("chronyd",pid=39203,fd=5))
+tcp         LISTEN       0            4096                       <ip>:53                       <ip>:*           users:(("systemd-resolve",pid=47068,fd=20))
+tcp         LISTEN       0            511                         <ip>:6768                     <ip>:*           users:(("MainThread",pid=63104,fd=38))
+tcp         LISTEN       0            4096                          <ip>:22                       <ip>:*           users:(("sshd",pid=47070,fd=3),("systemd",pid=1,fd=286))
+tcp         LISTEN       0            511                         <ip>:37233                    <ip>:*           users:(("MainThread",pid=63104,fd=31))
+tcp         LISTEN       0            4096                    <ip>%lo:53                       <ip>:*           users:(("systemd-resolve",pid=47068,fd=18))
+tcp         LISTEN       0            4096                             [::]:22                          [::]:*           users:(("sshd",pid=47070,fd=4),("systemd",pid=1,fd=287))
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== ufw status verbose"; ufw status verbose 2>&1
+=== ufw status verbose
+
+Status: inactive
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== nft list ruleset"; nft list ruleset 2>&1 | head -50
+=== nft list ruleset
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== sshd -T"; sshd -T 2>&1 | grep -Ei '^(port|permitrootlogin|passwordauthentication|pubkeyauthentication|allowusers|kbdinteractiveauthentication) '
+=== sshd -T
+port 22
+permitrootlogin prohibit-password
+pubkeyauthentication yes
+passwordauthentication yes
+kbdinteractiveauthentication no
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== users (name uid shell)"; getent passwd | awk -F: '$3==0 || $3>=1000 {print $1, $3, $7}'
+=== users (name uid shell)
+root 0 /bin/bash
+nobody 65534 /usr/sbin/nologin
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== ls -ld /home/*"; ls -ld /home/* 2>&1
+=== ls -ld /home/*
+ls: cannot access '/home/*': No such file or directory
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== ls -l /etc/sudoers.d"; ls -l /etc/sudoers.d 2>&1
+=== ls -l /etc/sudoers.d
+total 8
+-r--r----- 1 root root 135 Oct 31 21:58 90-cloud-init-users
+-r--r----- 1 root root 863 Jan 14  2026 README
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== running services"; systemctl list-units --type=service --state=running --no-pager
+=== running services
+  UNIT                        LOAD   ACTIVE SUB     DESCRIPTION
+  atd.service                 loaded active running Deferred execution scheduler
+  chrony.service              loaded active running chrony, an NTP client/server
+  cron.service                loaded active running Regular background program processing daemon
+  dbus.service                loaded active running D-Bus System Message Bus
+  getty@tty1.service          loaded active running Getty on tty1
+  multipathd.service          loaded active running Device-Mapper Multipath Device Controller
+  networkd-dispatcher.service loaded active running Dispatcher daemon for systemd-networkd
+  polkit.service              loaded active running Authorization Manager
+  qemu-guest-agent.service    loaded active running QEMU Guest Agent
+  rsyslog.service             loaded active running System Logging Service
+  serial-getty@ttyS0.service  loaded active running Serial Getty on ttyS0
+  ssh.service                 loaded active running OpenBSD Secure Shell server
+  systemd-journald.service    loaded active running Journal Service
+  systemd-logind.service      loaded active running User Login Management
+  systemd-networkd.service    loaded active running Network Management
+  systemd-resolved.service    loaded active running Network Name Resolution
+  systemd-timedated.service   loaded active running Time & Date Service
+  systemd-udevd.service       loaded active running Rule-based Manager for Device Events and Files
+  unattended-upgrades.service loaded active running Unattended Upgrades Shutdown
+  user@0.service              loaded active running User Manager for UID 0
+
+Legend: LOAD   → Reflects whether the unit definition was properly loaded.
+        ACTIVE → The high-level unit activation state, i.e. generalization of SUB.
+        SUB    → The low-level unit activation state, values depend on unit type.
+
+20 loaded units listed.
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== enabled unit files"; systemctl list-unit-files --state=enabled --no-pager
+=== enabled unit files
+UNIT FILE                              STATE   PRESET
+acpid.path                             enabled enabled
+apport-autoreport.path                 enabled enabled
+tpm-udev.path                          enabled enabled
+apparmor.service                       enabled enabled
+apport.service                         enabled enabled
+atd.service                            enabled enabled
+blk-availability.service               enabled enabled
+chrony.service                         enabled enabled
+cloud-config.service                   enabled enabled
+cloud-final.service                    enabled enabled
+cloud-init-local.service               enabled enabled
+cloud-init-main.service                enabled enabled
+cloud-init-network.service             enabled enabled
+console-setup.service                  enabled enabled
+cron.service                           enabled enabled
+dmesg.service                          enabled enabled
+e2scrub_reap.service                   enabled enabled
+finalrd.service                        enabled enabled
+getty@.service                         enabled enabled
+gpu-manager.service                    enabled enabled
+grub-initrd-fallback.service           enabled enabled
+grub2-common.service                   enabled enabled
+keyboard-setup.service                 enabled enabled
+lvm2-monitor.service                   enabled enabled
+multipathd.service                     enabled enabled
+netplan-configure.service              enabled enabled
+networkd-dispatcher.service            enabled enabled
+open-iscsi.service                     enabled enabled
+open-vm-tools.service                  enabled enabled
+pollinate.service                      enabled enabled
+rsyslog.service                        enabled enabled
+secureboot-db.service                  enabled enabled
+setvtrgb.service                       enabled enabled
+snapd.apparmor.service                 enabled enabled
+snapd.autoimport.service               enabled enabled
+snapd.core-fixup.service               enabled enabled
+snapd.recovery-chooser-trigger.service enabled enabled
+snapd.seeded.service                   enabled enabled
+snapd.service                          enabled enabled
+snapd.system-shutdown.service          enabled enabled
+sshd-keygen.service                    enabled enabled
+sysstat.service                        enabledenabled
+systemd-networkd-wait-online.service   enabled enabled
+systemd-networkd.service               enabled enabled
+systemd-pstore.service                 enabled enabled
+systemd-resolved.service               enabled enabled
+ua-reboot-cmds.service                 enabled enabled
+ubuntu-advantage.service               enabled enabled
+ufw.service                            enabled enabled
+unattended-upgrades.service            enabled enabled
+vgauth.service                         enabled enabled
+system-xfs_scrub.slice                 enabled enabled
+acpid.socket                           enabled enabled
+apport-forward.socket                  enabled enabled
+cloud-init-hotplugd.socket             enabled enabled
+dm-event.socket                        enabled enabled
+iscsid.socket                          enabled enabled
+lvm2-lvmpolld.socket                   enabled enabled
+lxd-installer.socket                   enabled enabled
+polkit-agent-helper.socket             enabled enabled
+snapd.socket                           enabled enabled
+ssh.socket                             enabled enabled
+systemd-networkd.socket                enabled enabled
+systemd-resolved-monitor.socket        enabled enabled
+systemd-resolved-varlink.socket        enabled enabled
+uuidd.socket                           enabled enabled
+remote-fs.target                       enabled enabled
+apport-autoreport.timer                enabled enabled
+apt-daily-upgrade.timer                enabled enabled
+apt-daily.timer                        enabled enabled
+dpkg-db-backup.timer                   enabled enabled
+e2scrub_all.timer                      enabled enabled
+fstrim.timer                           enabled enabled
+logrotate.timer                        enabled enabled
+man-db.timer                           enabled enabled
+mdcheck_continue.timer                 enabled enabled
+mdcheck_start.timer                    enabled enabled
+mdmonitor-oneshot.timer                enabled enabled
+motd-news.timer                        enabled enabled
+snapd.snap-repair.timer                enabled enabled
+sysstat-collect.timer                  enabled enabled
+sysstat-rotate.timer                   enabled enabled
+sysstat-summary.timer                  enabled enabled
+ua-timer.timer                         enabled enabled
+update-notifier-download.timer         enabled enabled
+update-notifier-motd.timer             enabled enabled
+xfs_scrub_all.timer                    enabled enabled
+
+87 unit files listed.
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== packages"; dpkg -l nodejs git unattended-upgrades ufw 2>/dev/null | tail -n +6
+=== packages
+ii  git                 1:2.53.0-1ubuntu1.1 amd64        fast, scalable, distributed revision control system
+ii  ufw                 0.36.2-9build1      all          program for managing a Netfilter firewall
+ii  unattended-upgrades 2.12ubuntu9         all          automatic installation of security upgrades
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== command -v node git"; command -v node git
+=== command -v node git
+/usr/bin/git
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== 20auto-upgrades"; cat /etc/apt/apt.conf.d/20auto-upgrades 2>&1
+=== 20auto-upgrades
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== our footprint"; ls -ld /opt/mindcraft-rotn /var/lib/mindcraft-rotn /etc/mindcraft-rotn 2>&1; id deploy mindcraft-rotn 2>&1
+=== our footprint
+ls: cannot access '/opt/mindcraft-rotn': No such file or directory
+ls: cannot access '/var/lib/mindcraft-rotn': No such file or directory
+ls: cannot access '/etc/mindcraft-rotn': No such file or directory
+id: 'deploy': no such user
+id: 'mindcraft-rotn': no such user
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== ls -la /root"; ls -la /root
+=== ls -la /root
+total 44
+drwx------  9 root root 4096 Nov  2 21:59 .
+drwxr-xr-x 20 root root 4096 Oct 31 21:58 ..
+-rw-r--r--  1 root root 3106 Apr 20  2026 .bashrc
+drwx------  2 root root 4096 Aug 26 09:06 .cache
+drwxr-xr-x  2 root root 4096 Nov  2 20:48 .claude
+-rw-r--r--  1 root root    0 Aug 26 09:09 .cloud-locale-test.skip
+drwxr-xr-x  3 root root 4096 Nov  2 21:59 .config
+drwx------ 15 root root 4096 Nov  2 22:05 .orca
+drwx------  4 root root 4096 Nov  2 20:48 .orca-remote
+-rw-r--r--  1 root root  132 Apr 20  2026 .profile
+drwx------  2 root root 4096 Aug 26 09:06 .ssh
+drwxr-xr-x  3 root root 4096 Nov  2 21:58 orca
+root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== PROBE END"
+=== PROBE END
