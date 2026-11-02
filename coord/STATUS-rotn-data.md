@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T21:59Z (from `date -u`)
+Updated: 2026-11-02T22:21Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -186,13 +186,14 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- **Now (`agent/rotn-data/brief-helpers`):** brief item 4, `mustCollectManually` on RotN names. Blocks with no collision box in the dump (1.12 and modded plants, torches, Pyrotech's rock piles) are dug where they are instead of going to `bot.collectBlock`; upstream's 1.21 name lists stay.
-- **Left in my brief after that (item 4, `mcdata.js` helpers still on 1.21 data), in G3 order:**
-  1. `isHuntable`'s animal list: 1.21 vanilla names, but Animania replaces those animals on RotN. Needs the lead's choice (cited food-animal list, a loot-table dumper part with a batch GO, or leave it).
-  2. Smelting and fuel: `isSmeltable`, `getItemSmeltingIngredient` (from the dump's `smelting.json`), `getSmeltingFuel`/`getFuelSmeltOutput` (burn times are not in the dump; vanilla values or a dumper part). Not on the G3 path (no furnace needed for stone tools).
-  3. `WOOD_TYPES`, `MATCHING_WOOD_BLOCKS`, `WOOL_COLORS`, `getBlockTool`, `getItemBlockSources`, `getItemAnimalSource`: used only by `src/agent/npc/` (NPC mode).
-  4. Enchantment NBT ids as int or short (REID): no helper in `mcdata.js` reads enchantments yet.
-- **Waiting on the lead:** Request 7 (the `initBot` call for `installRotnRecipes`), Request 9 (prismarine-recipe patch for `outShape`), the `isHuntable` choice, the PR 4 GO (Pyrotech machine recipes).
+- **Request 7 PR (`agent/rotn-data/initbot-recipes`, after #127):** the lead's one-line exception in net-forge's `initBot`: `installRotnRecipesOnce(bot.registry)` right after `mcdata = bot.registry`. The helper (rotn-data's part of `mcdata.js`) installs once per registry, and never throws: if the dump has no recipe data, or on any error, it logs and keeps the vanilla recipes.
+- **After that: free** (lead, 2026-11-02). Lead decisions recorded:
+  - Request 7: granted (above).
+  - Request 9 (prismarine-recipe `outShape` patch): not now; revisit after G3.
+  - `isHuntable`: keep the vanilla list for G3; a note follows, no code change.
+  - Pyrotech machine-recipe dumper part: no GO; not on the G3 path.
+  - Request 8 items: routed to skills-rotn by the lead.
+- **Note for a later `isHuntable` change (no code yet, per the lead):** on RotN the vanilla list (`cow`, `pig`, `chicken`, `sheep`, `rabbit`, ...) never matches a live animal. Animania replaces them all: `config/animania.cfg` lines 104 (chickens), 107 (cows), 113 (pigs), 116 (rabbits) and 119 (sheep) set `replaceVanilla*=true` in the pinned pack (`entity-overrides.json` `replacedByMod`; G2 batch 1: the server refused to summon vanilla chickens and pigs). `catalog.entity('minecraft:cow').replacedBy.replacements` lists them: 24 cattle, 18 pigs, 15 chickens, 18 sheep and 24 rabbits. Animania's loot tables (`animania-1.12.2-1.7.3.jar`, `assets/animania/loot_tables/`) drop vanilla meat: `cow_regular.json` beef and leather, `pig_regular.json` porkchop, `chicken_regular.json` chicken and feather, `sheep_regular.json` mutton and wool, `rabbit_regular.json` rabbit, hide and foot (`goat_regular.json`: `animania:raw_chevon`). Caveat: Animania's young are separate entities (`calf_*`, `piglet_*`, `chick_*`, `lamb_*`, `kit_*`), so leaving out babies there is by name, not by the metadata flag. Not checked: whether each young entity also sets the Ageable flag.
 
 Earlier Phase 3 plan (done):
 
@@ -245,4 +246,5 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/brief-helpers`: `mustCollectManually` on RotN names (see Doing).
+- #127 `agent/rotn-data/brief-helpers`: `mustCollectManually` on RotN names.
+- `agent/rotn-data/initbot-recipes`: Request 7, RotN recipes installed once per login in `initBot` (based on #127's branch).
