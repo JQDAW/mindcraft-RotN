@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T21:58Z (from `date -u`)
+Updated: 2026-11-02T22:24Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -23,6 +23,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#110 merged** (`32fb576`): A2b, Mindcraft task files are refused unless `MINDCRAFT_ROTN_ALLOW_TASK_FILES=1`, with a loud warning when they load.
 - **#119 merged** (`0cac640`): the #104 regression fix; the OpenRouter test no longer runs inside the agent (guard test added). The lead added #121 (`_model_map.js` skips `*.test.js`), so request 7 is done.
 - **#123 merged** (`997da58`): A4, quiet reflexes (a re-plan flag instead of an LLM call per reflex), a safe `execute()`, unstuck re-plans instead of killing the agent, bounded `isClearPath`, behavioural `!smeltItem` and `/skin` tests.
+- **#124 merged** (`085dc3d`): B1, the 1.12 name fixes from the seam map (liquids, lit furnaces, grass, empty blocks, doors, world height, profession index 13, biome and door crash guards).
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -34,8 +35,9 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- B1 `names-audit` (branch `agent/skills-rotn/names-audit`): #124 open; develop `997da58` merged in (STATUS-only conflict).
-- Queued: A4b `replan-clear` (the lead's required fix: a new action drops a stale re-plan; the unstuck no-path wording; a login-wiring test), B1b `names-boundary` (accepted; Request 8), then the `mc.isBaby` switch (#125), then B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
+- A4b `replan-clear` (branch `agent/skills-rotn/replan-clear`): #126 open. A new action drops a stale re-plan request; unstuck says "no path" on a fast failure; a login-wiring test.
+- B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): PR open, see Open PRs. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
+- Next: the `mc.isBaby` switch (#125; ready locally on top of B1b), then B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2). The villager profession at index 13 (lead, #124 review) is already in #124.
 
 ## G3 plan: small PRs, in order
 
@@ -130,4 +132,5 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- #124 B1 names audit (branch `agent/skills-rotn/names-audit`). Serves the seam-map name fixes (B1 in the G3 plan) for G3 (a) and (b).
+- #126 A4b replan clear (branch `agent/skills-rotn/replan-clear`). Serves the lead's required follow-up on #123 (before any G3 batch).
+- B1b names boundary (branch `agent/skills-rotn/names-boundary`). Serves Request 8 (accepted) and the G2 caveat "the full agent and its LLM command path must prove naming at G3".

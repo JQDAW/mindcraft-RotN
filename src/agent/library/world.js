@@ -1,6 +1,7 @@
 import pf from 'mineflayer-pathfinder';
 import * as mc from '../../utils/mcdata.js';
 import { isBaby, VILLAGER_PROFESSIONS_112 } from './names112.js';
+import { inventoryKey, blockMetasFor, blockDisplayName } from './rotn_names.js';
 
 
 export function getNearestFreeSpace(bot, size=1, distance=8) {
@@ -88,7 +89,7 @@ export function getFirstBlockAboveHead(bot, ignore_types=null, distance=32) {
      **/
     // if ignore_types is not a list, make it a list.
     let ignore_blocks = []; 
-    if (ignore_types === null) ignore_blocks = ['air', 'cave_air'];
+    if (ignore_types === null) ignore_blocks = ['air']; // 1.12 has no cave_air (B1b)
     else {
         if (!Array.isArray(ignore_types))
             ignore_types = [ignore_types];
@@ -138,6 +139,19 @@ export function getNearestBlocks(bot, block_types=null, distance=8, count=10000)
         for(let block_type of block_types) {
             block_ids.push(mc.getBlockId(block_type));
         }
+    }
+    // A name with a variant ("log:1") matches only that variant's states (B1b).
+    const metas = block_types === null ? [] : block_types.map(t => blockMetasFor(t));
+    if (metas.some(m => m !== null)) {
+        const allowed = new Map();
+        block_ids.forEach((id, i) => {
+            if (id == null) return;
+            if (metas[i] === null) allowed.set(id, null);
+            else if (allowed.get(id) !== null) allowed.set(id, new Set([...(allowed.get(id) ?? []), ...metas[i]]));
+        });
+        const wanted = (block) => allowed.has(block.type) && (allowed.get(block.type) === null || allowed.get(block.type).has(block.metadata));
+        const candidates = getNearestBlocksWhere(bot, [...allowed.keys()], distance, Math.max(count, 64) * 8);
+        return candidates.filter(b => b && wanted(b)).slice(0, count);
     }
     return getNearestBlocksWhere(bot, block_ids, distance, count);  
 }
@@ -277,10 +291,12 @@ export function getInventoryCounts(bot) {
     let inventory = {};
     for (const slot of bot.inventory.slots) {
         if (slot != null && slot.name) {
-            if (inventory[slot.name] == null) {
-                inventory[slot.name] = 0;
+            // "log:1" for items with subtypes, plain names otherwise (rotn_names.js, B1b)
+            const key = inventoryKey(slot) ?? slot.name;
+            if (inventory[key] == null) {
+                inventory[key] = 0;
             }
-            inventory[slot.name] += slot.count;
+            inventory[key] += slot.count;
         }
     }
     return inventory;
@@ -385,8 +401,9 @@ export function getNearbyBlockTypes(bot, distance=16) {
     let blocks = getNearestBlocks(bot, null, distance);
     let found = [];
     for (let i = 0; i < blocks.length; i++) {
-        if (!found.includes(blocks[i].name)) {
-            found.push(blocks[i].name);
+        const name = blockDisplayName(blocks[i]) ?? blocks[i].name; // "log:1" for a spruce log (B1b)
+        if (name && !found.includes(name)) {
+            found.push(name);
         }
     }
     return found;
@@ -425,9 +442,8 @@ export function shouldPlaceTorch(bot) {
     if (!bot.modes.isOn('torch_placing') || bot.interrupt_code) return false;
     const pos = getPosition(bot);
     // TODO: check light level instead of nearby torches, block.light is broken
+    // 1.12 has one "torch" block for floor and wall torches (no wall_torch; B1b).
     let nearest_torch = getNearestBlock(bot, 'torch', 6);
-    if (!nearest_torch)
-        nearest_torch = getNearestBlock(bot, 'wall_torch', 6);
     if (!nearest_torch) {
         const block = bot.blockAt(pos);
         let has_torch = bot.inventory.findInventoryItem('torch');

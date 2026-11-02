@@ -1,6 +1,7 @@
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
+import { countItem, parseName } from "./rotn_names.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -44,6 +45,9 @@ export async function craftRecipe(bot, itemName, num=1) {
      * await skills.craftRecipe(bot, "stick");
      **/
     let placedTable = false;
+    // The variant to craft: "planks:1" asks for spruce planks; a bare "planks" any (B1b).
+    // A null meta would let bot.recipesFor return oak planks for spruce.
+    const craftMeta = mc.resolveName(itemName)?.meta ?? null;
 
     if (mc.getItemCraftingRecipes(itemName).length == 0) {
         log(bot, `${itemName} is either not an item, or it does not have a crafting recipe!`);
@@ -51,11 +55,11 @@ export async function craftRecipe(bot, itemName, num=1) {
     }
 
     // get recipes that don't require a crafting table
-    let recipes = bot.recipesFor(mc.getItemId(itemName), null, 1, null); 
+    let recipes = bot.recipesFor(mc.getItemId(itemName), craftMeta, 1, null); 
     let craftingTable = null;
     const craftingTableRange = 16;
     placeTable: if (!recipes || recipes.length === 0) {
-        recipes = bot.recipesFor(mc.getItemId(itemName), null, 1, true);
+        recipes = bot.recipesFor(mc.getItemId(itemName), craftMeta, 1, true);
         if(!recipes || recipes.length === 0) break placeTable; //Don't bother going to the table if we don't have the required resources.
 
         // Look for crafting table
@@ -69,7 +73,7 @@ export async function craftRecipe(bot, itemName, num=1) {
                 await placeBlock(bot, 'crafting_table', pos.x, pos.y, pos.z);
                 craftingTable = world.getNearestBlock(bot, 'crafting_table', craftingTableRange);
                 if (craftingTable) {
-                    recipes = bot.recipesFor(mc.getItemId(itemName), null, 1, craftingTable);
+                    recipes = bot.recipesFor(mc.getItemId(itemName), craftMeta, 1, craftingTable);
                     placedTable = true;
                 }
             }
@@ -79,7 +83,7 @@ export async function craftRecipe(bot, itemName, num=1) {
             }
         }
         else {
-            recipes = bot.recipesFor(mc.getItemId(itemName), null, 1, craftingTable);
+            recipes = bot.recipesFor(mc.getItemId(itemName), craftMeta, 1, craftingTable);
         }
     }
     if (!recipes || recipes.length === 0) {
@@ -103,7 +107,7 @@ export async function craftRecipe(bot, itemName, num=1) {
     
     await bot.craft(recipe, Math.min(craftLimit.num, num), craftingTable);
     if(craftLimit.num<num) log(bot, `Not enough ${craftLimit.limitingResource} to craft ${num}, crafted ${craftLimit.num}. You now have ${world.getInventoryCounts(bot)[itemName]} ${itemName}.`);
-    else log(bot, `Successfully crafted ${itemName}, you now have ${world.getInventoryCounts(bot)[itemName]} ${itemName}.`);
+    else log(bot, `Successfully crafted ${itemName}, you now have ${countItem(bot, itemName)} ${itemName}.`);
     if (placedTable) {
         await collectBlock(bot, 'crafting_table', 1);
     }
@@ -194,8 +198,7 @@ export async function smeltItem(bot, itemName, num=1) {
         return false;
     }
     // check if the bot has enough items to smelt
-    let inv_counts = world.getInventoryCounts(bot);
-    if (!inv_counts[itemName] || inv_counts[itemName] < num) {
+    if (countItem(bot, itemName) < num) { // "log" counts every log; "log:1" spruce only (B1b)
         log(bot, `You do not have enough ${itemName} to smelt.`);
         if (placedFurnace)
             await collectBlock(bot, 'furnace', 1);
@@ -226,7 +229,7 @@ export async function smeltItem(bot, itemName, num=1) {
         console.log(`Added ${put_fuel} ${mc.getItemName(fuel.type)} to furnace fuel.`)
     }
     // put the items in the furnace
-    await furnace.putInput(mc.getItemId(itemName), null, num);
+    await furnace.putInput(mc.getItemId(itemName), parseName(itemName)?.meta ?? null, num);
     // wait for the items to smelt
     let total = 0;
     let smelted_item = null;
@@ -433,8 +436,6 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     let blocktypes = [blockType];
     if (blockType === 'coal' || blockType === 'diamond' || blockType === 'emerald' || blockType === 'iron' || blockType === 'gold' || blockType === 'lapis_lazuli' || blockType === 'redstone')
         blocktypes.push(blockType+'_ore');
-    if (blockType.endsWith('ore'))
-        blocktypes.push('deepslate_'+blockType);
     if (blockType === 'dirt')
         blocktypes.push(names112.GRASS_BLOCK); // 1.12: the grass block drops dirt
     if (blockType === 'cobblestone')
@@ -644,8 +645,7 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn='bottom', dont
         // invert the facing direction
         let face = placeOn === 'north' ? 'south' : placeOn === 'south' ? 'north' : placeOn === 'east' ? 'west' : 'east';
         if (blockType.includes('torch') && placeOn !== 'bottom') {
-            // insert wall_ before torch
-            blockType = blockType.replace('torch', 'wall_torch');
+            // 1.12 has no wall_torch block (B1b); this cheat-only branch cannot run on RotN (A2)
             if (placeOn !== 'side' && placeOn !== 'top') {
                 blockType += `[facing=${face}]`;
             }
@@ -1936,7 +1936,7 @@ export async function digDown(bot, distance = 10) {
         const MAX_FALL_BLOCKS = 2;
         let num_fall_blocks = 0;
         for (let j = 0; j <= MAX_FALL_BLOCKS; j++) {
-            if (!belowBlock || (belowBlock.name !== 'air' && belowBlock.name !== 'cave_air')) {
+            if (!belowBlock || belowBlock.name !== 'air') {
                 break;
             }
             num_fall_blocks++;
@@ -1947,7 +1947,7 @@ export async function digDown(bot, distance = 10) {
             return false;
         }
 
-        if (targetBlock.name === 'air' || targetBlock.name === 'cave_air') {
+        if (targetBlock.name === 'air') { // 1.12 has no cave_air (B1b)
             log(bot, 'Skipping air block');
             console.log(targetBlock.position);
             continue;
@@ -1972,7 +1972,7 @@ export async function goToSurface(bot) {
     const pos = bot.entity.position;
     for (let y = names112.WORLD_MAX_Y; y >= names112.WORLD_MIN_Y; y--) { // 1.12 height (B1); probably not the best way to find the surface but it works
         const block = bot.blockAt(new Vec3(pos.x, y, pos.z));
-        if (!block || block.name === 'air' || block.name === 'cave_air') {
+        if (!block || block.name === 'air') { // 1.12 has no cave_air (B1b)
             continue;
         }
         await goToPosition(bot, block.position.x, block.position.y + 1, block.position.z, 0); // this will probably work most of the time but a custom mining and towering up implementation could be added if needed
