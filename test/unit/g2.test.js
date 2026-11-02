@@ -50,7 +50,9 @@ const ENTITY_DISPLAY = { 'minecraft:zombie': 'Zombie', 'minecraft:skeleton': 'Sk
  *   server read it, to model blocks that change state (G2 batch 1: Dynamic Trees leaves)
  */
 function sim(opt = {}) {
-    const world = (x, y, z) => (opt.world ? opt.world(x, y, z, blockAtWorld(x, y, z)) : blockAtWorld(x, y, z));
+    // opt.extra: {"x,y,z": block} placed into the static world (e.g. a type with only 2 blocks).
+    const base = (x, y, z) => opt.extra?.[`${x},${y},${z}`] ?? blockAtWorld(x, y, z);
+    const world = (x, y, z) => (opt.world ? opt.world(x, y, z, base(x, y, z)) : base(x, y, z));
     const log = [];
     let t = 0;
     let online = false;
@@ -425,6 +427,49 @@ describe('g2-blocks-named on a simulated server', () => {
         assert.match(r.notes.blocksWrong.first.join(' | '), /is minecraft:gravel \(expected: minecraft:sand\)/);
     });
 
+    // Fewer non-air types in the cube than topN (batch 3: 39 < 50): the census claims to name them all,
+    // so a block name it leaves out fails on one confirmed spot hit, not only on absentHits (4).
+    // The bot leaves `omit` out of its census reply (and names it correctly everywhere else).
+    const omitting = (omit) => sim({
+        chatEdit: (text) => (/^blocks /.test(text) ? text.replace(new RegExp(`minecraft:${omit} [^;]*(; ?|$)`, 'g'), '') : text),
+    });
+
+    test('a census of a cube with fewer than topN types must name every type: one spot hit of a left-out name fails', async () => {
+        // A type of about 2% (coal ore), left out of the census only. Find a seed where the spot checks hit it 1..3 times
+        // (under absentHits, so only the completeness rule can catch it).
+        let found = null;
+        for (let seed = 1; seed <= 80 && !found; seed++) {
+            const r = await run(blocks, omitting('coal_ore'), { seed });
+            const n = Object.entries(r.notes.spotDistribution).filter(([k]) => k.startsWith('minecraft:coal_ore ')).reduce((a, [, v]) => a + v, 0);
+            if (n >= 1 && n < 4) found = { r, n };
+        }
+        assert.ok(found, 'a seed with 1..3 coal_ore spot hits');
+        const { r, n } = found;
+        const c = byName(r);
+        assert.ok(r.notes.census.length < 50 && !r.notes.census.some((x) => x.startsWith('minecraft:coal_ore ')));
+        assert.equal(c.blocks_named.pass, true, 'the census alone looks complete');
+        assert.equal(c.blocks_spotcheck.pass, false);
+        assert.ok(r.notes.spotSkew.some((x) => x === `minecraft:coal_ore: ${n} spot hit(s), but the census (${r.notes.census.length} < 50 types, so all of them) does not name it`), JSON.stringify(r.notes.spotSkew));
+    });
+
+    test('completeness is by block name: a known block whose meta changed since the census (Dynamic Trees) is not an omission', async () => {
+        let found = null;
+        for (let seed = 1; seed <= 80 && !found; seed++) {
+            const r = await run(blocks, drifting((b) => ({ ...b, meta: 8 })), { seed });
+            if (r.notes.spotDistribution['minecraft:leaves 8'] > 0) found = r;
+        }
+        assert.ok(found, 'a seed whose spot checks hit the drifted leaves');
+        assert.ok(!found.notes.census.some((x) => x.startsWith('minecraft:leaves 8 ')), 'meta 8 is not a census type');
+        assert.ok(!found.notes.spotSkew.some((x) => /does not name it/.test(x)), JSON.stringify(found.notes.spotSkew));
+    });
+
+    test('a census of exactly topN types does not claim completeness: a type outside the top N may be hit', async () => {
+        // topN 5 (a smoke run): the cube has more types, so types beyond the top 5 are legitimately absent.
+        const r = await run(blocks, sim(), { seed: 7, topN: 5, minTypes: 3 });
+        assert.equal(r.notes.census.length, 5);
+        assert.ok(!r.notes.spotSkew.some((x) => /does not name it/.test(x)), JSON.stringify(r.notes.spotSkew));
+    });
+
     test('a selective bot (perfect census, but it cannot name dirt) is caught by the spot checks', async () => {
         let inCensus = false;
         const names = { ...truthNames, blockName: (b) => (b.name === 'dirt' && !inCensus ? null : truthNames.blockName(b)) };
@@ -510,13 +555,113 @@ describe('g2-blocks-named on a simulated server', () => {
         assert.ok(r.notes.samples.every((x) => / server not asked: FAIL$/.test(x)), 'no -1 sample was sent to the server');
     });
 
-    test('a fresh name that is not the census name fails, even when the server confirms the fresh answer', async () => {
-        const r = await run(blocks, drifting(() => ({ name: 'minecraft:air', meta: 0 })), { seed: 7 });
+    // G2 batch 3 (lead decision on #76): world changes. After the census, up to `limit` positions of one
+    // block type turn to air (the first ones read); bot and server agree on the new block.
+    const changing = (type, limit, opt = {}) => {
+        let drifted = false;
+        const changed = new Set();
+        const s = sim({ ...opt, world: (x, y, z, b) => {
+            if (!drifted || b.name !== type) return b;
+            const k = `${x},${y},${z}`;
+            if (!changed.has(k) && changed.size < limit) changed.add(k);
+            return changed.has(k) ? { name: 'minecraft:air', meta: 0 } : b;
+        } });
+        const orig = s.server.console;
+        s.server.console = (cmd, w) => {
+            if (cmd.includes('scenario-blockat ')) drifted = true;
+            return orig(cmd, w);
+        };
+        return { s, changed };
+    };
+    const reasons = (r) => r.weakenedParams.filter((w) => /world change/.test(w));
+    const planned = (r) => r.notes.samples.filter((x) => !/\(replacing /.test(x)).length;
+
+    test('a world change is recorded, never a pass, and replaced by another candidate of the same type that passes', async () => {
+        // samplesPerType 6 (raising it is never a weakening), so 2% of the planned samples allows one.
+        const { s, changed } = changing('minecraft:leaves', 1);
+        const r = await run(blocks, s, { seed: 7, samplesPerType: 6 });
+        const c = byName(r);
+        assert.ok(Math.floor(0.02 * planned(r)) >= 1, `planned ${planned(r)}`);
+        assert.equal(changed.size, 1);
+        assert.equal(c.blocks_confirmed.pass, true, c.blocks_confirmed.detail);
+        assert.match(c.blocks_confirmed.detail, /^(\d+)\/\1 runner-picked samples .*; 1 world change\(s\), each replaced by another candidate of the same type$/);
+        assert.equal(r.notes.worldChanges.length, 1);
+        const w = r.notes.worldChanges[0];
+        assert.equal(w.pos, [...changed][0]);
+        assert.equal(w.census, 'minecraft:leaves 0');
+        assert.equal(w.fresh, 'minecraft:air 0');
+        assert.equal(w.server, 'found');
+        assert.match(w.censusAt, /Z$/);
+        assert.match(w.checkedAt, /Z$/);
+        assert.ok(w.replacedBy && w.replacedBy !== w.pos);
+        assert.ok(r.notes.samples.some((x) => x === `${w.pos} census minecraft:leaves 0 fresh minecraft:air 0 server found: WORLD CHANGE`));
+        assert.ok(r.notes.samples.some((x) => x.startsWith(`${w.replacedBy} census minecraft:leaves 0 fresh minecraft:leaves 0 server found: confirmed (replacing ${w.pos})`)));
+        assert.deepEqual(reasons(r), [], 'within the cap: still a gate run');
+        assert.equal(r.notes.metaDrift.count, 0, 'a changed name is a world change, not meta drift');
+    });
+
+    test('over the 2% cap: not a gate run (with the default 3 samples per type, 2% of the plan allows none)', async () => {
+        const { s } = changing('minecraft:leaves', 1);
+        const r = await run(blocks, s, { seed: 7 });
+        assert.ok(Math.floor(0.02 * planned(r)) < 1);
+        assert.equal(byName(r).blocks_confirmed.pass, true, 'the replacement passed');
+        assert.ok(reasons(r).some((w) => new RegExp(`^1 world changes in ${planned(r)} planned samples \\(max 0, 2%\\)$`).test(w)), JSON.stringify(r.weakenedParams));
+        assert.equal(r.gateValid, false);
+    });
+
+    test('more than one world change in one census type: not a gate run', async () => {
+        const { s, changed } = changing('minecraft:leaves', 2);
+        const r = await run(blocks, s, { seed: 7, samplesPerType: 6 });
+        assert.equal(changed.size, 2);
+        assert.equal(r.notes.worldChanges.length, 2);
+        assert.ok(reasons(r).some((w) => /more than 1 world change\(s\) in one census type: minecraft:leaves 0 \(2\)/.test(w)), JSON.stringify(r.weakenedParams));
+        assert.equal(r.gateValid, false);
+    });
+
+    test('no candidate of the type left: blocks_confirmed fails', async () => {
+        const { s } = changing('minecraft:leaves', Infinity);
+        const r = await run(blocks, s, { seed: 7 });
         const c = byName(r);
         assert.equal(c.blocks_confirmed.pass, false);
-        assert.match(r.notes.blocksWrong.first.join(' | '), /minecraft:leaves 0 at .*\(fresh: minecraft:air 0\): the server confirms "minecraft:air 0", but the census named this position minecraft:leaves/);
-        assert.ok(r.notes.samples.some((x) => / census minecraft:leaves 0 fresh minecraft:air 0 server found: FAIL$/.test(x)));
-        assert.equal(r.notes.metaDrift.count, 0, 'a changed name is a failure, not meta drift');
+        assert.match(c.blocks_confirmed.detail, /a world change, and no other candidate of this census type is left to verify it/);
+        assert.ok(r.notes.worldChanges.some((w) => w.replacedBy === null));
+    });
+
+    test('a world change in a type with no unused candidate (count <= samples per type): blocks_confirmed fails', async () => {
+        // Batch 3 had 111 samples over 39 types, so some types had fewer candidates than samples.
+        // Two sponges: a census type with 2 blocks, so both are sampled and no candidate is left over.
+        const extra = { '12,66,-2': { name: 'minecraft:sponge', meta: 0 }, '13,66,-2': { name: 'minecraft:sponge', meta: 0 } };
+        const base = await run(blocks, sim({ extra }), { seed: 7 });
+        assert.ok(base.notes.census.includes('minecraft:sponge 0 2'), base.notes.census.join(' | '));
+        assert.equal(byName(base).blocks_confirmed.pass, true, 'without a world change the small type passes');
+        const { s } = changing('minecraft:sponge', 1, { extra });
+        const r = await run(blocks, s, { seed: 7 });
+        const c = byName(r);
+        assert.equal(c.blocks_confirmed.pass, false);
+        assert.match(c.blocks_confirmed.detail, /minecraft:sponge 0 at .*a world change, and no other candidate of this census type is left/);
+        assert.deepEqual(r.notes.worldChanges.map((w) => w.replacedBy), [null]);
+    });
+
+    test('a fresh answer the server does not confirm is a plain fail, never a world change', async () => {
+        // The bot reports air where the server still has leaves.
+        let censusDone = false;
+        const names = { ...truthNames, blockName: (b) => (b?.name === 'leaves' && censusDone ? { name: 'minecraft:air', meta: 0 } : truthNames.blockName(b)) };
+        const s = sim({ names });
+        const orig = s.server.console;
+        s.server.console = (cmd, w) => { if (cmd.includes('scenario-blockat ')) censusDone = true; return orig(cmd, w); };
+        const r = await run(blocks, s, { seed: 7, samplesPerType: 6 });
+        assert.equal(byName(r).blocks_confirmed.pass, false);
+        assert.deepEqual(r.notes.worldChanges, []);
+        assert.match(r.notes.blocksWrong.first.join(' | '), /minecraft:leaves 0 at .*\(fresh: minecraft:air 0\): The block at .* is minecraft:leaves \(expected: minecraft:air\)/);
+    });
+
+    test('loosening the world-change cap or the per-type limit is reported as weakened', async () => {
+        for (const params of [{ maxWorldChangeShare: 0.1 }, { maxWorldChangesPerType: 2 }, { maxWorldChangeShare: 0.01 }]) {
+            const r = await run(blocks, sim(), { seed: 7, ...params });
+            const k = Object.keys(params)[0];
+            assert.ok(r.weakenedParams.some((w) => w.startsWith(`${k}=`)), `${k}: ${JSON.stringify(r.weakenedParams)}`);
+            assert.equal(r.gateValid, false);
+        }
     });
 
     test('weakened parameters are a smoke run, never a G2 pass', async () => {
