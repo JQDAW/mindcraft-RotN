@@ -1,7 +1,7 @@
 import pf from 'mineflayer-pathfinder';
 import * as mc from '../../utils/mcdata.js';
 import { VILLAGER_PROFESSIONS_112 } from './names112.js';
-import { inventoryKey, blockMetasFor, blockDisplayName } from './rotn_names.js';
+import { inventoryKey, blockMetasFor, blockMatcher, blockDisplayName } from './rotn_names.js';
 
 
 export function getNearestFreeSpace(bot, size=1, distance=8) {
@@ -140,18 +140,12 @@ export function getNearestBlocks(bot, block_types=null, distance=8, count=10000)
             block_ids.push(mc.getBlockId(block_type));
         }
     }
-    // A name with a variant ("log:1") matches only that variant's states (B1b).
-    const metas = block_types === null ? [] : block_types.map(t => blockMetasFor(t));
-    if (metas.some(m => m !== null)) {
-        const allowed = new Map();
-        block_ids.forEach((id, i) => {
-            if (id == null) return;
-            if (metas[i] === null) allowed.set(id, null);
-            else if (allowed.get(id) !== null) allowed.set(id, new Set([...(allowed.get(id) ?? []), ...metas[i]]));
-        });
-        const wanted = (block) => allowed.has(block.type) && (allowed.get(block.type) === null || allowed.get(block.type).has(block.metadata));
-        const candidates = getNearestBlocksWhere(bot, [...allowed.keys()], distance, Math.max(count, 64) * 8);
-        return candidates.filter(b => b && wanted(b)).slice(0, count);
+    // A name with a variant ("log:1") matches only that variant's states, checked inside
+    // findBlocks by the shared matcher, so a dense forest of other variants cannot crowd
+    // the wanted one out of the result (B1b, #131 review).
+    if (block_types !== null && block_types.some(t => blockMetasFor(t) !== null)) {
+        const positions = bot.findBlocks({ matching: block_ids.filter(id => id != null), maxDistance: distance, count, useExtraInfo: blockMatcher(block_types) });
+        return positions.map(position => bot.blockAt(position));
     }
     return getNearestBlocksWhere(bot, block_ids, distance, count);  
 }

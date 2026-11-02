@@ -78,6 +78,21 @@ export function itemMatches(item, name) {
     return p.meta == null || !hasSubtypes(p.name) || (item.metadata ?? 0) === p.meta;
 }
 
+/** The first inventory stack that is the named item (any variant for a bare name), or null. */
+export function findItem(bot, name) {
+    return bot.inventory.items().find(item => itemMatches(item, name)) ?? null;
+}
+
+/**
+ * The metadata to pass to mineflayer's toss/deposit/withdraw for a name: the
+ * variant for "log:1", null (any) for a bare name or an item without subtypes
+ * (a tool's metadata is its damage, so it must not be pinned).
+ */
+export function variantMeta(name) {
+    const p = parseName(name);
+    return p && p.meta != null && hasSubtypes(p.name) ? p.meta : null;
+}
+
 /** How many of the named item the bot holds; a bare name counts every variant. */
 export function countItem(bot, name) {
     let n = 0;
@@ -99,6 +114,30 @@ export function blockMetasFor(name) {
     const newName = toNew(p.name, p.meta);
     const states = newName ? blockToOld(newName).filter(s => botName(s.name) === p.name) : [];
     return new Set(states.length ? states.map(s => s.meta) : [p.meta]);
+}
+
+/**
+ * One block predicate for a list of names, shared by every block search
+ * (#131 review): "log" matches any log, "log:1" spruce logs in any
+ * orientation, "dirt:0" plain dirt. Unknown names match nothing.
+ * @returns {(block) => boolean} with .names, the bare block names it can match
+ */
+export function blockMatcher(names) {
+    const wanted = new Map(); // bare name -> Set of metas, or null for any
+    for (const n of Array.isArray(names) ? names : [names]) {
+        const p = parseName(n);
+        if (!p) continue;
+        const metas = blockMetasFor(n);
+        if (metas === null || wanted.get(p.name) === null) wanted.set(p.name, null);
+        else wanted.set(p.name, new Set([...(wanted.get(p.name) ?? []), ...metas]));
+    }
+    const match = (block) => {
+        if (!block?.name || !wanted.has(block.name)) return false;
+        const metas = wanted.get(block.name);
+        return metas === null || metas.has(block.metadata);
+    };
+    match.names = [...wanted.keys()];
+    return match;
 }
 
 /** The canonical name of a placed block: a spruce log on its side ("log", 9) -> "log:1". */

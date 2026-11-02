@@ -1,7 +1,7 @@
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
-import { countItem, parseName } from "./rotn_names.js";
+import { countItem, parseName, findItem, itemMatches, blockMatcher, variantMeta } from "./rotn_names.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -101,12 +101,14 @@ export async function craftRecipe(bot, itemName, num=1) {
     const recipe = recipes[0];
     console.log('crafting...');
     //Check that the agent has sufficient items to use the recipe `num` times.
-    const inventory = world.getInventoryCounts(bot); //Items in the agents inventory
     const requiredIngredients = mc.ingredientsFromPrismarineRecipe(recipe); //Items required to use the recipe once.
+    // Count each ingredient by its name (every variant), not through the variant-keyed
+    // inventory counts, which never have a bare "planks" key (#131 review).
+    const inventory = Object.fromEntries(Object.keys(requiredIngredients).map(name => [name, countItem(bot, name)]));
     const craftLimit = mc.calculateLimitingResource(inventory, requiredIngredients);
     
     await bot.craft(recipe, Math.min(craftLimit.num, num), craftingTable);
-    if(craftLimit.num<num) log(bot, `Not enough ${craftLimit.limitingResource} to craft ${num}, crafted ${craftLimit.num}. You now have ${world.getInventoryCounts(bot)[itemName]} ${itemName}.`);
+    if(craftLimit.num<num) log(bot, `Not enough ${craftLimit.limitingResource} to craft ${num}, crafted ${craftLimit.num}. You now have ${countItem(bot, itemName)} ${itemName}.`);
     else log(bot, `Successfully crafted ${itemName}, you now have ${countItem(bot, itemName)} ${itemName}.`);
     if (placedTable) {
         await collectBlock(bot, 'crafting_table', 1);
@@ -433,14 +435,17 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         log(bot, `Invalid number of blocks to collect: ${num}.`);
         return false;
     }
+    // blockType is a canonical name ("log", "log:0", "dirt:0"); aliases key on its bare name (#131 review).
+    const baseType = parseName(blockType)?.name ?? blockType;
     let blocktypes = [blockType];
-    if (blockType === 'coal' || blockType === 'diamond' || blockType === 'emerald' || blockType === 'iron' || blockType === 'gold' || blockType === 'lapis_lazuli' || blockType === 'redstone')
-        blocktypes.push(blockType+'_ore');
-    if (blockType === 'dirt')
+    if (baseType === 'coal' || baseType === 'diamond' || baseType === 'emerald' || baseType === 'iron' || baseType === 'gold' || baseType === 'lapis_lazuli' || baseType === 'redstone')
+        blocktypes.push(baseType+'_ore');
+    if (baseType === 'dirt')
         blocktypes.push(names112.GRASS_BLOCK); // 1.12: the grass block drops dirt
     if (blockType === 'cobblestone')
         blocktypes.push('stone');
-    const isLiquid = blockType === 'lava' || blockType === 'water';
+    const isLiquid = baseType === 'lava' || baseType === 'water';
+    const isWanted = blockMatcher(blocktypes); // the shared resolver: names and variants (#131 review)
 
     let collected = 0;
 
@@ -453,7 +458,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
 
     for (let i=0; i<num; i++) {
         let blocks = world.getNearestBlocksWhere(bot, block => {
-            if (!blocktypes.includes(block.name)) {
+            if (!isWanted(block)) {
                 return false;
             }
             if (exclude) {
@@ -498,7 +503,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (isLiquid) {
                 success = await useToolOnBlock(bot, 'bucket', block);
             }
-            else if (mc.mustCollectManually(blockType)) {
+            else if (mc.mustCollectManually(baseType)) {
                 await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                 await bot.dig(block);
                 await pickupNearbyItems(bot);
@@ -635,7 +640,7 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn='bottom', dont
 
     if (bot.modes.isOn('cheat') && !dontCheat) {
         if (bot.restrict_to_inventory) {
-            let block = bot.inventory.findInventoryItem(blockType);
+            let block = findItem(bot, blockType);
             if (!block) {
                 log(bot, `Cannot place ${blockType}, you are restricted to your current inventory.`);
                 return false;
@@ -689,10 +694,10 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn='bottom', dont
     else if (item_name === 'lava') {
         item_name = 'lava_bucket';
     }
-    let block_item = bot.inventory.findInventoryItem(item_name);
+    let block_item = findItem(bot, item_name); // "planks:0" or "planks" (#131 review)
     if (!block_item && bot.game.gameMode === 'creative' && !bot.restrict_to_inventory) {
         await bot.creative.setInventorySlot(36, mc.makeItem(item_name, 1)); // 36 is first hotbar slot
-        block_item = bot.inventory.findInventoryItem(item_name);
+        block_item = findItem(bot, item_name);
     }
     if (!block_item) {
         log(bot, `Don't have any ${item_name} to place.`);
@@ -700,7 +705,7 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn='bottom', dont
     }
 
     const targetBlock = bot.blockAt(target_dest);
-    if (targetBlock.name === blockType || (targetBlock.name === names112.GRASS_BLOCK && blockType === 'dirt')) {
+    if (blockMatcher([blockType])(targetBlock) || (targetBlock.name === names112.GRASS_BLOCK && parseName(blockType)?.name === 'dirt')) {
         log(bot, `${blockType} already at ${targetBlock.position}.`);
         return false;
     }
@@ -803,11 +808,11 @@ export async function equip(bot, itemName) {
         log(bot, `Unequipped hand.`);
         return true;
     }
-    let item = bot.inventory.slots.find(slot => slot && slot.name === itemName);
+    let item = bot.inventory.slots.find(slot => slot && itemMatches(slot, itemName));
     if (!item) {
         if (bot.game.gameMode === "creative") {
             await bot.creative.setInventorySlot(36, mc.makeItem(itemName, 1));
-            item = bot.inventory.findInventoryItem(itemName);
+            item = findItem(bot, itemName);
         }
         else {
             log(bot, `You do not have any ${itemName} to equip.`);
@@ -848,12 +853,12 @@ export async function discard(bot, itemName, num=-1) {
      **/
     let discarded = 0;
     while (true) {
-        let item = bot.inventory.findInventoryItem(itemName);
+        let item = findItem(bot, itemName);
         if (!item) {
             break;
         }
         let to_discard = num === -1 ? item.count : Math.min(num - discarded, item.count);
-        await bot.toss(item.type, null, to_discard);
+        await bot.toss(item.type, variantMeta(itemName), to_discard);
         discarded += to_discard;
         if (num !== -1 && discarded >= num) {
             break;
@@ -882,7 +887,7 @@ export async function putInChest(bot, itemName, num=-1) {
         log(bot, `Could not find a chest nearby.`);
         return false;
     }
-    let item = bot.inventory.findInventoryItem(itemName);
+    let item = findItem(bot, itemName);
     if (!item) {
         log(bot, `You do not have any ${itemName} to put in the chest.`);
         return false;
@@ -890,7 +895,7 @@ export async function putInChest(bot, itemName, num=-1) {
     let to_put = num === -1 ? item.count : Math.min(num, item.count);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
     const chestContainer = await bot.openContainer(chest);
-    await chestContainer.deposit(item.type, null, to_put);
+    await chestContainer.deposit(item.type, variantMeta(itemName), to_put);
     await chestContainer.close();
     log(bot, `Successfully put ${to_put} ${itemName} in the chest.`);
     return true;
@@ -915,7 +920,7 @@ export async function takeFromChest(bot, itemName, num=-1) {
     const chestContainer = await bot.openContainer(chest);
     
     // Find all matching items in the chest
-    let matchingItems = chestContainer.containerItems().filter(item => item.name === itemName);
+    let matchingItems = chestContainer.containerItems().filter(item => itemMatches(item, itemName));
     if (matchingItems.length === 0) {
         log(bot, `Could not find any ${itemName} in the chest.`);
         await chestContainer.close();
@@ -931,7 +936,7 @@ export async function takeFromChest(bot, itemName, num=-1) {
         if (remaining <= 0) break;
         
         let toTakeFromSlot = Math.min(remaining, item.count);
-        await chestContainer.withdraw(item.type, null, toTakeFromSlot);
+        await chestContainer.withdraw(item.type, variantMeta(itemName), toTakeFromSlot);
         
         totalTaken += toTakeFromSlot;
         remaining -= toTakeFromSlot;
@@ -982,7 +987,7 @@ export async function consume(bot, itemName="") {
      **/
     let item, name;
     if (itemName) {
-        item = bot.inventory.findInventoryItem(itemName);
+        item = findItem(bot, itemName);
         name = itemName;
     }
     if (!item) {
@@ -1990,7 +1995,7 @@ export async function useToolOn(bot, toolName, targetName) {
      * @param {string} targetName - entity type, block type, or "nothing" for no target
      * @returns {Promise<boolean>} true if action succeeded
      */
-    if (!bot.inventory.slots.find(slot => slot && slot.name === toolName) && !bot.game.gameMode === 'creative') {
+    if (!bot.inventory.slots.find(slot => slot && itemMatches(slot, toolName)) && !bot.game.gameMode === 'creative') {
         log(bot, `You do not have any ${toolName} to use.`);
         return false;
     }
