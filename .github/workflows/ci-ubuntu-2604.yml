@@ -34,6 +34,9 @@ jobs:
     container:
       # ubuntu:26.04, multi-arch index digest from Docker Hub (2026-11-02).
       image: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+      # An init as PID 1 that reaps orphans, as systemd does on the CX23. Without it, a killed orphan
+      # stays a zombie, and the driver tests' "no process left behind" checks see it as alive.
+      options: --init
     env:
       DEBIAN_FRONTEND: noninteractive
     steps:
@@ -50,6 +53,10 @@ jobs:
           set -eu
           apt-get update -q
           apt-get install -y -q unattended-upgrades git ufw ca-certificates curl gnupg
+
+      # Test-only: jq, which the test-server tooling's unit tests need (deploy/test-server*; it runs on
+      # the PC and the test server, never on the CX23, and deploy/cx23/ does not use it). The
+      # ubuntu-24.04 runner image has it. Installed AFTER npm ci, so npm ci sees only the CX23's packages.
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -83,6 +90,9 @@ jobs:
 
       - name: npm ci (postinstall applies the patches; fails if one does not apply)
         run: runuser -u ci -- env HOME=/home/ci npm ci --no-audit --no-fund
+
+      - name: Test-only tool (jq, for the test-server tooling's tests; not on the CX23)
+        run: apt-get install -y -q jq
 
       - name: npm test (offline unit tests)
         run: runuser -u ci -- env HOME=/home/ci npm test
