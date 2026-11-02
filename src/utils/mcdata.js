@@ -9,7 +9,7 @@ import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
 import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
-import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes } from '../../packages/rotn-data/index.js';
+import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -323,7 +323,25 @@ export function mustCollectManually(blockName) {
         'poppy', 'dandelion', 'blue_orchid', 'allium', 'azure_bluet', 'oxeye_daisy', 'cornflower', 'lilac', 'wither_rose', 'lily_of_the_valley', 'wither_rose',
         'lever', 'redstone_wire', 'lantern']
     const partial_names = ['sapling', 'torch', 'button', 'carpet', 'pressure_plate', 'mushroom', 'tulip', 'bush', 'vines', 'fern']
-    return full_names.includes(blockName.toLowerCase()) || partial_names.some(partial => blockName.toLowerCase().includes(partial));
+    if (typeof blockName !== 'string') return false;
+    return full_names.includes(blockName.toLowerCase()) || partial_names.some(partial => blockName.toLowerCase().includes(partial))
+        || hasNoCollisionBox(blockName);
+}
+
+/**
+ * rotn-data brief item 4 (mustCollectManually on RotN): upstream's lists above use 1.21 names, so
+ * 1.12 plants (tallgrass, double_plant, red_flower, reeds), modded plants and Pyrotech's rock piles
+ * (pyrotech:rock, the first G3 resource) were sent to bot.collectBlock. A block state with no
+ * collision box in the dump (`collision: []`, not `null` = unknown) is what the upstream examples
+ * have in common (crops, flowers, saplings, torches, levers, grass): there is nothing to stand on or
+ * path into, so it is dug where it is and the drop picked up. Air and liquids are excluded (liquids are
+ * handled before this in collectBlock). Accepts 1.12, 1.21 and modded names (rotn-data's resolver).
+ */
+function hasNoCollisionBox(blockName) {
+    const b = rdGetBlock(blockName);
+    const s = b?.propertiesKnown ? b.state : null;
+    if (!s || s.liquid || s.material === 'air') return false;
+    return Array.isArray(s.collision) && s.collision.length === 0;
 }
 
 export function getItemId(itemName) {
