@@ -13,7 +13,7 @@ An autonomous LLM bot that joins the human's Rebirth of the Night 3.3.4 server (
 | Server | The human admins it. RotN 3.3.4 (ADR 0005), default server pack configs. Bot is whitelisted. Small server-side helper mods are allowed when they save real work. Agents never get admin access to the live server. |
 | Test server | Hetzner CPX42 (8 vCPU, 16 GB, 320 GB), EUR 0.138/h, EUR 86.17/month cap. Built from scratch for every test batch from the RotN 3.3.4 server pack zip (pinned SHA-256, ADR 0005) with Java 8, then deleted along with its IPv4. Delete-after watchdog, default 8 h. Nothing is copied from the live host. |
 | Data dump | Runs on the test server, which runs the same default pack as live. |
-| Bot VPS | Hetzner CX23, Ubuntu 24.04, Node 22 LTS (ADR 0002). Root SSH is used once to create a key-based `deploy` user; root and password login are then disabled. |
+| Bot VPS | Hetzner CX23, Ubuntu 26.04 LTS (ADR 0007), Node 22 LTS (ADR 0002). The bootstrap creates a key-based `deploy` user and turns SSH password login off; the human keeps root SSH, by key only. |
 | LLM | OpenRouter via Mindcraft's `openrouter` provider (`OPENROUTER_API_KEY`, model `openrouter/<vendor>/<model>`). One key per bot with a credit limit. Models chosen by scenario benchmark. Embeddings fall back to word overlap. |
 | Behavior | Autonomous, player tasks take priority (see priority stack). |
 | Scale | One bot at launch. Everything per-bot is configuration. |
