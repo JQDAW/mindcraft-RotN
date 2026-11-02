@@ -18,6 +18,7 @@ import { Task } from './tasks/tasks.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
+import { runUpdateLoop, createErrorReporter } from './update_loop.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -95,12 +96,8 @@ export class Agent {
         this.bot.on('login', () => {
             console.log(this.name, 'logged in!');
             serverProxy.login();
-            
-            // Set skin for profile, requires Fabric Tailor. (https://modrinth.com/mod/fabrictailor)
-            if (this.prompter.profile.skin)
-                this.bot.chat(`/skin set URL ${this.prompter.profile.skin.model} ${this.prompter.profile.skin.path}`);
-            else
-                this.bot.chat(`/skin clear`);
+            // Upstream sent "/skin set ..." or "/skin clear" here (Fabric Tailor).
+            // RotN is Forge and has no such command, so nothing is sent (skills-rotn A3).
         });
 		const spawnTimeoutDuration = settings.spawn_timeout;
         const spawnTimeout = setTimeout(() => {
@@ -501,19 +498,15 @@ export class Agent {
         // Init NPC controller
         this.npc.init();
 
-        // This update loop ensures that each update() is called one at a time, even if it takes longer than the interval
+        // This update loop ensures that each update() is called one at a time, even if it takes longer than the interval.
+        // A throwing update is logged (rate-limited) and the loop carries on (skills-rotn A3).
         const INTERVAL = 300;
-        let last = Date.now();
+        const reportUpdateError = createErrorReporter('update');
         setTimeout(async () => {
-            while (true) {
-                let start = Date.now();
-                await this.update(start - last);
-                let remaining = INTERVAL - (Date.now() - start);
-                if (remaining > 0) {
-                    await new Promise((resolve) => setTimeout(resolve, remaining));
-                }
-                last = start;
-            }
+            await runUpdateLoop((delta) => this.update(delta), {
+                interval: INTERVAL,
+                onError: (err) => reportUpdateError('agent update', err),
+            });
         }, INTERVAL);
 
         this.bot.emit('idle');
