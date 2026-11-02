@@ -20,7 +20,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- PR 1 (this file): the G3 plan below.
+- #100 (this file): the G3 plan below. Next: A1 `log-hygiene` once #100 is in.
 
 ## G3 plan: small PRs, in order
 
@@ -105,4 +105,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- PR 1: `coord/STATUS-skills-rotn.md`, the G3 plan (branch `agent/skills-rotn/g3-start`).
+- #100 `coord/STATUS-skills-rotn.md`, the G3 plan (branch `agent/skills-rotn/g3-start`).
