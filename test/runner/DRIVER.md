@@ -137,10 +137,23 @@ node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY 
 
 G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
 - **The marker.** Every scenario it starts gets `ROTN_G3_BATCH=<batch id>:<limit>`. A G3 run without that marker, or whose marker limit differs from its `maxBatchUsd`, is not gate-valid.
+- **The batch cross-check** (#122 review, nit 1). Anyone can set an environment variable, so the marker alone does not prove that a run happened under the spend stop. A G3 gate claim therefore needs the batch summary (`--summary`, the `BATCH` JSON) next to its `result.json` files, plus:
+  ```
+  node test/tools/g3-batch-check.mjs <batch.json> <result.json>...
+  ```
+  That command exits 0 only if all of these hold:
+  - the summary has a batch id and `testMode: false`;
+  - at least one G3 result is given;
+  - every G3 result's `batch` is exactly `<that batch id>:<its maxBatchUsd>`;
+  - the summary ran each of those scenarios exactly once;
+  - no passing result has a nonzero recorded exit in the summary.
+
+  The command exits 1 when a check fails or a file cannot be read as JSON, and 2 on a usage error. Results that are not G3 are ignored. CI checks every `test/evidence/g3/*/batch.json`, together with the `result.json` files under it, the same way.
 - **G3 scenario requirements.** Every G3 scenario has `llm: true` and `maxBatchUsd` 2 compared 'equal' (a unit test checks this). The console allowlist applies whenever `llm` is true or the gate is G3.
 - **When the spend is checked.** The key's usage is read, numbers only, at the start (none: refuse, exit 2), before each scenario, and after the last one.
   - Over `maxBatchUsd` stops the batch, or ends it with exit 5. A failed reading before a scenario stops it; a failed reading at the end exits 6.
   - The logs are always fetched.
+  - A scenario that hits its `--timeout-min` is recorded with exit **124**, whatever run.mjs exits after the SIGTERM. A runner that cannot be started is recorded with exit **127**. The summary records each scenario's `out` folder and its `exit`, and the batch's own `exit`.
 - **Limits:**
   - The spend is checked **between** scenarios, not during one, so a single scenario can run past the limit.
   - OpenRouter's usage figure can lag a little behind the newest requests.

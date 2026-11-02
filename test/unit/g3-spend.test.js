@@ -13,8 +13,12 @@ import { fileURLToPath } from 'node:url';
 import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL } from '../runner/lib/llm-spend.mjs';
 import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProblems, g3Policy } from '../runner/lib/g3.mjs';
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
-import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
+import { EventEmitter } from 'node:events';
+import { setImmediate } from 'node:timers';
+import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
+import { crossCheckBatch } from '../runner/lib/g3.mjs';
+import { checkFiles, resultFilesUnder } from '../tools/g3-batch-check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BATCH = path.join(HERE, '..', 'runner', 'batch.mjs');
@@ -133,7 +137,9 @@ describe('maxBatchUsd: USD 2, an equal gate parameter of every G3 scenario', () 
     });
 
     test('every G3 scenario runs the real agent and carries maxBatchUsd 2 compared equal (#122 finding 3)', async () => {
-        const g3 = Object.values(await loadScenarios()).filter((sc) => sc.gate === 'G3');
+        const all = Object.values(await loadScenarios());
+        assert.ok(all.length > 0, 'loadScenarios found scenarios at all (#122 nit 2)');
+        const g3 = all.filter((sc) => sc.gate === 'G3');
         for (const sc of g3) {
             assert.equal(sc.llm, true, `${sc.id}: llm`);
             assert.equal(sc.defaults?.maxBatchUsd, 2, `${sc.id}: default maxBatchUsd`);
@@ -156,17 +162,18 @@ describe('maxBatchUsd: USD 2, an equal gate parameter of every G3 scenario', () 
 });
 
 /** batch.mjs with the fake runner, a fake key-usage file and a fake TEST_SERVER_CTL that records the fetch. */
-function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b', 'c'], key = KEY, usageFile = true, runExit = '0', fakeCloud = '1', breakUsage = '' } = {}) {
+function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b', 'c'], key = KEY, usageFile = true, runExit = '0', fakeCloud = '1', breakUsage = '', hang = '', timeoutMin = null } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-batch-'));
     const file = path.join(dir, 'usage.json');
     if (usageFile) fs.writeFileSync(file, JSON.stringify({ data: { usage, limit: 5, limit_remaining: 5 - usage } }));
     const ctl = path.join(dir, 'ctl.sh');
     fs.writeFileSync(ctl, `#!/usr/bin/env bash\necho "$*" >> "${fwd(path.join(dir, 'ctl.txt'))}"\n`);
     const args = [BATCH, '--max-batch-usd', maxUsd, '--logs-out', fwd(path.join(dir, 'logs')), '--summary', path.join(dir, 'batch.json')];
+    if (timeoutMin) args.push('--timeout-min', timeoutMin);
     for (const s of scenarios) args.push('--scenario', s, '--out', path.join(dir, `out-${s}`));
     args.push('--', 'node', 'driver.mjs');
     const env = { ...process.env, ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: file, ROTN_BATCH_RUNNER: FAKE_RUNNER,
-        FAKE_DIR: dir, FAKE_SPEND: spend, FAKE_RUN_EXIT: runExit, TEST_SERVER_CTL: fwd(ctl), TEST_SERVER_FAKE_CLOUD: fakeCloud, FAKE_BREAK_USAGE: breakUsage, OPENROUTER_API_KEY: key };
+        FAKE_DIR: dir, FAKE_SPEND: spend, FAKE_RUN_EXIT: runExit, TEST_SERVER_CTL: fwd(ctl), TEST_SERVER_FAKE_CLOUD: fakeCloud, FAKE_BREAK_USAGE: breakUsage, FAKE_HANG: hang, OPENROUTER_API_KEY: key };
     if (!key) delete env.OPENROUTER_API_KEY;
     return new Promise((resolve) => {
         const child = spawn(process.execPath, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -241,6 +248,68 @@ describe('batch.mjs: the spend stop', () => {
             assert.match(r.out, /a batch whose spend cannot be watched does not run/);
             assert.match(r.ctl, /fetch logs/);
         }
+    });
+});
+
+describe('batch.mjs: timeouts, spawn errors and the summary (#122 nits 1, 3, 4)', () => {
+    test('a scenario stopped by the batch\'s timeout is recorded as 124 (run.mjs itself exits 143)', { timeout: 60000 }, async () => {
+        const r = await runBatch({ spend: '0', scenarios: ['a', 'b'], hang: 'a', timeoutMin: '0.02' });
+        assert.deepEqual(r.summary.scenarios.map((x) => [x.id, x.exit]), [['a', 124], ['b', 0]], r.out);
+        assert.equal(r.code, 1);
+        assert.match(r.out, /a: timeout after 0.02 min, stopping it/);
+    });
+
+    test('a runner that cannot start is logged and recorded as 127', async () => {
+        const fakeSpawn = () => { const c = new EventEmitter(); c.kill = () => {}; setImmediate(() => c.emit('error', Object.assign(new Error('spawn failed'), { code: 'EACCES' }))); return c; };
+        const code = await runOne({ id: 'a', out: 'A', timeoutMin: 1 }, { maxBatchUsd: 2, driver: ['node', 'd.mjs'] }, {}, { spawnImpl: fakeSpawn });
+        assert.equal(code, 127);
+    });
+
+    test('the summary records each scenario\'s output folder and the batch\'s exit', { timeout: 60000 }, async () => {
+        const r = await runBatch({ spend: '0', scenarios: ['a'] });
+        assert.equal(r.summary.exit, 0);
+        assert.ok(path.isAbsolute(r.summary.scenarios[0].out) && r.summary.scenarios[0].out.endsWith('out-a'));
+    });
+});
+
+describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 nit 1)', () => {
+    const summary = { batchId: '20261102T2200-42', testMode: false, maxBatchUsd: 2, scenarios: [{ id: 'g3-a', exit: 0 }, { id: 'g3-b', exit: 1 }], exit: 1 };
+    const res = (scenario, extra = {}) => ({ file: `${scenario}/result.json`, result: { scenario, gate: 'G3', pass: false, batch: '20261102T2200-42:2', ...extra } });
+
+    test('consistent results pass', () => {
+        assert.deepEqual(crossCheckBatch(summary, [res('g3-a', { pass: true }), res('g3-b')]), []);
+    });
+
+    test('a forged marker, a scenario the batch never ran, a passing result the batch saw fail, test mode', () => {
+        assert.match(crossCheckBatch(summary, [res('g3-a', { batch: 'x-1:2' })])[0], /marker 'x-1:2' is not this batch's '20261102T2200-42:2'/);
+        assert.match(crossCheckBatch(summary, [res('g3-c')])[0], /ran g3-c 0 time\(s\), not once/);
+        assert.match(crossCheckBatch(summary, [res('g3-b', { pass: true })])[0], /a passing result, but the batch recorded exit 1 for g3-b/);
+        assert.match(crossCheckBatch({ ...summary, testMode: true }, [res('g3-a')])[0], /ran in test mode/);
+        assert.match(crossCheckBatch({ ...summary, testMode: undefined }, [res('g3-a')])[0], /ran in test mode \(or does not say\)/);
+        const twice = { ...summary, scenarios: [...summary.scenarios, { id: 'g3-a', exit: 0 }] };
+        assert.match(crossCheckBatch(twice, [res('g3-a')])[0], /ran g3-a 2 time\(s\), not once/);
+        assert.match(crossCheckBatch(null, [res('g3-a')])[0], /no batch summary/);
+        assert.match(crossCheckBatch(summary, [])[0], /no G3 result\.json to check/);
+        assert.deepEqual(crossCheckBatch(summary, [{ file: 'x', result: { gate: 'G2', scenario: 'g2-x' } }, res('g3-a')]), [], 'non-G3 results are not this check\'s business');
+    });
+
+    test('the CLI helper reads the files; unreadable files are problems', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-check-'));
+        fs.writeFileSync(path.join(dir, 'batch.json'), JSON.stringify(summary));
+        fs.mkdirSync(path.join(dir, 'a'));
+        fs.writeFileSync(path.join(dir, 'a', 'result.json'), JSON.stringify(res('g3-a').result));
+        assert.deepEqual(checkFiles(path.join(dir, 'batch.json'), resultFilesUnder(dir)), []);
+        fs.writeFileSync(path.join(dir, 'a', 'result.json'), '{');
+        assert.match(checkFiles(path.join(dir, 'batch.json'), resultFilesUnder(dir))[0], /cannot be read as JSON/);
+        assert.match(checkFiles(path.join(dir, 'none.json'), [])[0], /cannot be read as JSON \(ENOENT\)/);
+    });
+
+    test('every committed G3 batch in test/evidence/g3/ passes the cross-check', () => {
+        const root = path.join(HERE, '..', 'evidence', 'g3');
+        const batches = fs.existsSync(root) ? fs.readdirSync(root).map((d) => path.join(root, d)).filter((d) => fs.existsSync(path.join(d, 'batch.json'))) : [];
+        for (const d of batches) assert.deepEqual(checkFiles(path.join(d, 'batch.json'), resultFilesUnder(d)), [], d);
+        // No G3 evidence exists yet; each batch is checked as it lands.
+        assert.ok(Array.isArray(batches));
     });
 });
 

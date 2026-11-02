@@ -15,7 +15,10 @@
 //      its start, or the usage cannot be read, it stops: no further scenario starts.
 //   3. Runs each scenario through run.mjs with --param maxBatchUsd=<the limit> (an 'equal' gate parameter
 //      of every G3 scenario, so a batch with another limit is never a gate pass) and --pass-env
-//      OPENROUTER_API_KEY, under that scenario's timeout (--timeout-min before it; exit 124 when hit).
+//      OPENROUTER_API_KEY, under that scenario's timeout (--timeout-min before it). A scenario stopped by that
+//      timeout is recorded as 124 whatever run.mjs exits with (143 on SIGTERM); one whose runner cannot start
+//      at all is recorded as 127. Each is recorded with its output folder, so the gate evidence check
+//      (crossCheckBatch in lib/g3.mjs, test/tools/g3-batch-check.mjs) can tie every result to this batch.
 //   4. Always fetches the server logs at the end (TEST_SERVER_CTL fetch logs --out <logs-out>).
 //   5. After the last scenario, reads the usage once more: spend over the limit exits 5, and a failed
 //      reading exits 6 (the end of a batch fails closed too; #122 review).
@@ -100,19 +103,27 @@ export function spendGate(base, now, maxBatchUsd) {
 }
 
 /** Run one scenario (the runner is run.mjs; tests may swap it in test mode). Resolves the exit code. */
-function runScenario(s, o, env) {
+export function runOne(s, o, env, { spawnImpl = spawn } = {}) {
     const runner = testOverridesAllowed(env) && env.ROTN_BATCH_RUNNER ? env.ROTN_BATCH_RUNNER : path.join(HERE, 'run.mjs');
     const args = [runner, '--scenario', s.id, '--out', s.out, '--param', `maxBatchUsd=${o.maxBatchUsd}`, '--pass-env', 'OPENROUTER_API_KEY', '--', ...o.driver];
     return new Promise((resolve) => {
-        const child = spawn(process.execPath, args, { stdio: 'inherit', env });
+        let timedOut = false;
+        let done = false;
+        const settle = (code) => { if (!done) { done = true; clearTimeout(timer); resolve(code); } };
+        const child = spawnImpl(process.execPath, args, { stdio: 'inherit', env });
         const timer = setTimeout(() => {
+            timedOut = true;
             log(`${s.id}: timeout after ${s.timeoutMin} min, stopping it`);
             child.kill('SIGTERM');
             setTimeout(() => child.kill('SIGKILL'), 20000).unref();
         }, s.timeoutMin * 60000);
-        child.on('exit', (code, signal) => {
-            clearTimeout(timer);
-            resolve(signal || code === null ? 124 : code);
+        // A timeout is 124 whatever the runner's own exit was (run.mjs exits 143 on SIGTERM; #122 nit 3).
+        child.on('exit', (code, signal) => settle(timedOut ? 124 : signal || code === null ? 124 : code));
+        // The runner could not start (#122 nit 4): logged and recorded as 127, and the batch goes on to its
+        // end-of-batch spend check, the log fetch and the summary.
+        child.on('error', (e) => {
+            log(`${s.id}: the runner could not start (${e.code ?? e.message})`);
+            settle(127);
         });
     });
 }
@@ -139,6 +150,7 @@ async function main(argv) {
     if (!base.ok) {
         log(`refused: the key's usage cannot be read (${base.error}); a batch whose spend cannot be watched does not run`);
         summary.stopped = `no usage reading at the start (${base.error})`;
+        summary.exit = 2;
         finish(o, summary);
         return 2;
     }
@@ -152,8 +164,9 @@ async function main(argv) {
             break;
         }
         log(`${s.id}: start (spent so far USD ${gate.spent} of ${o.maxBatchUsd})`);
-        const code = await runScenario(s, o, env);
-        summary.scenarios.push({ id: s.id, exit: code, spentBefore: gate.spent });
+        const code = await runOne(s, o, env);
+        // The output folder ties this batch to the result.json it wrote (crossCheckBatch, #122 nit 1).
+        summary.scenarios.push({ id: s.id, out: path.resolve(s.out), exit: code, spentBefore: gate.spent });
         if (code !== 0 && exit === 0) exit = 1;
     }
     const end = await read();
@@ -164,6 +177,7 @@ async function main(argv) {
         log(`spend check at the end: ${verdict.reason}`);
         summary.stopped ??= `after the last scenario: ${verdict.reason}`;
     }
+    summary.exit = verdict.exit;
     finish(o, summary);
     return verdict.exit;
 }

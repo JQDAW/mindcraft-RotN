@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (21:30 UTC, from `date -u`)
+Updated: 2026-11-02 (22:10 UTC, from `date -u`)
 
 ## Done
 
@@ -103,7 +103,7 @@ Updated: 2026-11-02 (21:30 UTC, from `date -u`)
     - no insecure settings;
     - no process left behind on a stop.
     - It is tested offline with a fake `main.js`.
-  - **This PR, required before any G3 paid batch (lead, #116 review):**
+  - **Merged (#122, 2b30405), required before any G3 paid batch (lead, #116 review):**
     - **`test/runner/batch.mjs`:** the batch spend stop at `maxBatchUsd` USD 2. It reads the key's usage before every scenario (numbers only), stops above the limit, always fetches the logs, and exits 5. Without a reading it refuses to start.
     - **Per scenario:** LLM calls and cost recorded in `result.json` (`llm`). An unknown cost is notGate.
     - **G3 console allowlist:** no `give`, `summon`, `kill` or op commands.
@@ -116,6 +116,12 @@ Updated: 2026-11-02 (21:30 UTC, from `date -u`)
       - `llm` is in progress and killed records;
       - the spend is checked between scenarios only, as documented in DRIVER.md.
   - **CX23 GO 1** (the read-only probe): the CLI could not create the `/root` workspace on `cx23`, and the approved `orca terminal create --environment cx23` needs a workspace ("Remote terminal create requires --worktree"). It waits for the human to open a folder workspace at `/root` on `cx23` from Orca's desktop app. Nothing has touched the CX23.
+  - **This PR: the #122 review nits** (`agent/harness-ops/g3-batch-check`):
+    1. the G3 gate evidence is cross-checked against `batch.mjs`'s summary (`test/tools/g3-batch-check.mjs`), because the `ROTN_G3_BATCH` marker alone can be forged;
+    2. the wiring test asserts that G3 scenarios exist;
+    3. a timed-out scenario is recorded as 124, whatever run.mjs exits;
+    4. a runner that cannot start is recorded as 127, not left hanging.
+    - Nit 5 (a stricter fake-cloud check) is not done: `TEST_SERVER_FAKE_CLOUD=1` is already set only with `ROTN_TEST_MODE=1`, the fake state and a non-default hcloud binary.
   - **Next:** the G3 arbiters library (inventory by count-only `clear`, the stat objectives with absent read as 0, deaths, leaves and no-cheat), then the scenarios once skills-rotn's chat formats are agreed.
 - **G2 PASSED** on batch 8 (#97): blocks, mobs and items all gate-valid in one batch on the fixed world and cube.
 - **History:**
@@ -1095,5 +1101,6 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the G3 spend stop, the console allowlist and the test-only giver check (`agent/harness-ops/g3-spend`; develop merged in after #116).
-- Merged since the last update: #113 (S1-A evidence and findings), #116 (the G3 driver).
+- This PR: the #122 review nits (`agent/harness-ops/g3-batch-check`).
+- #128: the CX23 GO 1 probe evidence (`agent/harness-ops/cx23-probe`).
+- Merged since the last update: #122 (the G3 spend stop, 2b30405).

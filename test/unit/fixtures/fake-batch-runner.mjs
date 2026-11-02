@@ -16,4 +16,11 @@ const file = process.env.ROTN_OPENROUTER_USAGE_FILE;
 const body = JSON.parse(fs.readFileSync(file, 'utf8'));
 body.data.usage = Math.round((body.data.usage + Number(process.env.FAKE_SPEND || 0)) * 1e6) / 1e6;
 fs.writeFileSync(file, process.env.FAKE_BREAK_USAGE === id ? '{"data":' : JSON.stringify(body));
-process.exit(Number(process.env.FAKE_RUN_EXIT || 0));
+// FAKE_HANG=<scenario id>: that scenario never ends on its own (for the batch's timeout); on SIGTERM it
+// exits 143 like run.mjs does.
+if (process.env.FAKE_HANG === id) {
+    process.on('SIGTERM', () => process.exit(143));
+    setInterval(() => {}, 1000);
+} else {
+    process.exit(Number(process.env.FAKE_RUN_EXIT || 0));
+}
