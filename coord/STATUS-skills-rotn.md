@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T17:10Z (from `date -u`)
+Updated: 2026-11-02T17:20Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -9,10 +9,13 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Done
 
 - Read CLAUDE.md, PLAN.md, my brief, `STATUS-rotn-lead.md` ("Requests for skills-rotn"), `docs/research/rotn-progression.md` and `seam-map.md`, and the G2 batch 8 record in `STATUS-harness-ops.md`.
-  - PLAN.md on develop `9b94d13` has no G2 entry yet. I took the G2 caveats from the harness-ops record. These matter for G3:
-    - a spawn can land on a Dynamic Trees canopy (batch 6);
+  - The G2 entry in PLAN.md (#98, `3a95299`) and the harness-ops record. These caveats matter for G3:
+    - **naming was proven only through the harness driver.** The full agent and its LLM command path must prove it at G3/G4, so B1 covers the command boundary;
+    - "near spawn" is one fixed world; a spawn can land on a Dynamic Trees canopy (batch 6);
+    - modded item names have no old/new rename;
     - `charm:spectre` vanishes in daylight;
     - pack-side errors exist (Universal Tweaks chunk-save NPE; RoughMobsRevamped "Ticking entity" NPE in G1).
+- Lead notes on #100 (17:15 UTC): the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2).
 - Already done by others, so not in my plan:
   - the exit-code contract (`agent.js` exits 1/3, never 0 on a failed spawn), net-forge #23;
   - `mcdata = bot.registry` and the naming API (`toNew`/`toOld`/`resolveName`), #44/#46;
@@ -20,7 +23,8 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- #100 (this file): the G3 plan below. Next: A1 `log-hygiene` once #100 is in.
+- #100 (this file): the G3 plan below, under review.
+- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, from develop `3a95299`).
 
 ## G3 plan: small PRs, in order
 
@@ -46,7 +50,7 @@ Each PR has offline unit tests (`src/**/*.test.js`, a fake bot, no server and no
 
 | PR | Branch topic | Content | Tests | Serves |
 | --- | --- | --- | --- | --- |
-| B1 | `names-audit` | Review every 1.21 name in `skills.js`, `world.js`, `modes.js` and the commands against `resolveName`. Fixes include: `empty_blocks` (`'grass'` is the block in 1.12; the plant is `tallgrass`, plus `double_plant`, `snow_layer`, `deadbush`); `flowing_water` and `flowing_lava`; `lit_furnace`; door names and the `_properties` guard; `goToSurface` limited to y 0-255; the 1.12 baby metadata index; guards on `block.name` for modded blocks with no name; the biome lookup guard. | a table-driven test on the 1.12 registry with `__setRegistryForTest` | G3 a, b |
+| B1 | `names-audit` | Review every 1.21 name in `skills.js`, `world.js`, `modes.js` and the commands against `resolveName`. Fixes include: `empty_blocks` (`'grass'` is the block in 1.12; the plant is `tallgrass`, plus `double_plant`, `snow_layer`, `deadbush`); `flowing_water` and `flowing_lava`; `lit_furnace`; door names and the `_properties` guard; `goToSurface` limited to y 0-255; the 1.12 baby metadata index; guards on `block.name` for modded blocks with no name; the biome lookup guard. **Command boundary** (G2 caveat): `!collectBlocks`, `!craftRecipe`, `!placeHere` and the other name-typed commands accept the names the LLM writes (1.21 or 1.12, `resolveName` with `prefer: 'new'`) and modded `modid:item` names. | a table-driven test on the 1.12 registry with `__setRegistryForTest`; command validation accepts `oak_log`, `log:0` and `pyrotech:rock` | G3 a, b |
 | B2 | `collect-rotn` | `collectBlock` aliasing for RotN: `cobblestone` no longer maps to digging `stone`; mining stone below Sturdy yields `pyrotech:rock` (harvest facts from `rotn-data.harvestInfo`). Log counts use the meta. | stone with a stone pickaxe gives rocks; spruce logs are counted apart from oak | G3 a |
 
 ### Stage C: RotN early game (G3 a)
@@ -99,7 +103,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 ## Requests to other agents or the lead
 
 1. **Lead (`settings.js`):** add the task-giver setting. Proposed key `task_givers`, default `[]`, with `["JQDAW"]` set where the lead keeps per-deploy values. Add `pause_when_empty: false`. Add `!searchWiki` to `blocked_actions` (it returns vanilla 1.21 facts). Needed by E1/E2; until then the code reads the keys with these defaults.
-2. **net-forge:** C1 and C2 need serverbound slot encoding with REID (VarInt slot ids in `window_click`) and `block_place`/`use_item` working on 1.12 (the `use_item` extra fields in the mineflayer patch). Please confirm that they work, or say what is missing. Also: can the `place_block.js` 500 ms `blockUpdate` wait be made configurable (seam-map C)? A lagging RotN server makes placements report failure.
+2. **net-forge (paused since 2026-11-02; route through the lead):** C1 and C2 need serverbound slot encoding with REID (VarInt slot ids in `window_click`) and `block_place`/`use_item` working on 1.12 (the `use_item` extra fields in the mineflayer patch). Please confirm that they work, or say what is missing. Also: can the `place_block.js` 500 ms `blockUpdate` wait be made configurable (seam-map C)? A lagging RotN server makes placements report failure. **I will tell the lead 1-2 PRs before C1** (that is, when B2 opens), so the lead can respawn net-forge or verify the current encoding in a probe first.
 3. **rotn-data:** for C1, does `recipesFor` give ingredients with oredict members and meta expanded, so that I can match by output and ingredients? For C2, which blocks are the surface rock piles (`pyrotech:rock_pile`?) and what do they drop? The 20 recipes with `matchesSample: false`: I will check whether any is in the early-game set and report back.
 4. **harness-ops:** G3 scenarios for (a), (b) and (c), plus "the queue survives a restart". I will post the command and log contract for each as my PRs land. A first exploratory probe batch for the open items above would de-risk C2/C3; that needs the lead's GO.
 
