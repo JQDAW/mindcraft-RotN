@@ -2,6 +2,7 @@ import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta } from "./rotn_names.js";
+import { worldSources, toolAllows, describeTool } from "./rotn_sources.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -457,8 +458,22 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         blocktypes.push(baseType+'_ore');
     if (baseType === 'dirt')
         blocktypes.push(names112.GRASS_BLOCK); // 1.12: the grass block drops dirt
-    if (blockType === 'cobblestone')
-        blocktypes.push('stone');
+    // RotN world rules (rotn-data howToGet, B2): the blocks whose breaking gives this item, if
+    // the bot holds the tool the rule needs, and how many items one break gives. Rocks also come
+    // from stone mined with a pickaxe below Sturdy (4 per block). That is also why the old
+    // cobblestone -> stone alias is gone: such stone drops rocks, not cobblestone.
+    const yields = [];
+    const needsTool = [];
+    for (const source of worldSources(blockType)) {
+        if (!toolAllows(bot, source.tool)) {
+            needsTool.push(source);
+            continue;
+        }
+        for (const name of source.blocks)
+            if (!blocktypes.includes(name)) blocktypes.push(name);
+        yields.push([blockMatcher(source.blocks), source.count]);
+    }
+    const yieldOf = (block) => yields.find(([matches]) => matches(block))?.[1] ?? 1;
     const isLiquid = baseType === 'lava' || baseType === 'water';
     const isWanted = blockMatcher(blocktypes); // the shared resolver: names and variants (#131 review)
 
@@ -471,7 +486,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Blocks to ignore safety for, usually next to lava/water
     const unsafeBlocks = ['obsidian'];
 
-    for (let i=0; i<num; i++) {
+    for (let i=0; i<num && collected<num; i++) { // collected counts items: a stone gives 4 rocks (B2)
         let blocks = world.getNearestBlocksWhere(bot, block => {
             if (!isWanted(block)) {
                 return false;
@@ -496,6 +511,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 log(bot, `No ${blockType} nearby to collect.`);
             else
                 log(bot, `No more ${blockType} nearby to collect.`);
+            // Say which other source the bot could use with the right tool (B2).
+            for (const source of needsTool)
+                log(bot, `${source.text} That needs ${describeTool(source.tool)}.`);
             break;
         }
         const block = blocks[0];
@@ -518,7 +536,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (isLiquid) {
                 success = await useToolOnBlock(bot, 'bucket', block);
             }
-            else if (mc.mustCollectManually(baseType)) {
+            else if (mc.mustCollectManually(block.name)) { // the block found (a rock pile or stone), not the item asked for (B2)
                 await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                 await bot.dig(block);
                 await pickupNearbyItems(bot);
@@ -529,7 +547,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 success = true;
             }
             if (success)
-                collected++;
+                collected += yieldOf(block);
             await autoLight(bot);
         }
         catch (err) {
