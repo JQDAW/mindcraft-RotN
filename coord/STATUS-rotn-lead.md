@@ -1,8 +1,27 @@
 # Status: rotn-lead
 
-Updated: 2026-11-01 23:30 UTC (from `date -u`)
+Updated: 2026-11-02 17:07 UTC (from `date -u`)
 
-## Current snapshot (23:30 UTC)
+## Current snapshot (2026-11-02 17:07 UTC)
+
+- **G2 passed** on G2 batch 8 (#97): strict review APPROVE, plus an independent verifier MET WITH CAVEATS. Details and caveats are in `docs/PLAN.md` Status.
+- **The path since the last snapshot:**
+  - G2 batches 1-4, 6 and 7 failed honestly, and each failure fed a fix (#64-#96); batch 5 passed but was not declared (#83: its world lacked the defect's blocks).
+  - The double-plant defect was Forge's two-pass network ids, fixed via the dumper's state-meta-remap and client-view decoding.
+  - G2 runs now use a fixed world seed and cube.
+  - The movement guard (#95) stopped the items kick.
+  - Evidence is redacted by one tool, with a CI leak check over all of `test/evidence/**` (#94).
+- **Paid batches since the last snapshot** (each under a written GO, project empty afterwards):
+  - G2 batches 2-8, about EUR 0.14 each;
+  - dump 3 (state-meta-remap), about EUR 0.14.
+
+  The total so far is about EUR 2.12 plus IPv4-hours.
+- **Orca restart (2026-11-02, about 13:30 UTC):** the dev agents' sessions ended. With the human's approval they were respawned with a plain `claude` in their existing worktrees.
+- **New dev-agent rules recorded:** prismarine-auth is an approved net-forge patch (CLAUDE.md); new independent reviewers run at medium effort (the human's instruction).
+- **Phase 3 (G3) starts.** The human chose to pause net-forge (worktree kept, respawn for protocol issues). skills-rotn is spawned; the team is skills-rotn, rotn-data and harness-ops. skills-rotn's first inputs are this file's "Requests for skills-rotn" and the G2 caveats in PLAN.
+- **Before the first CX23 run** (still open): skills-rotn's `src/agent/agent.js:87/456` print whole error objects.
+
+## Earlier snapshot (2026-11-01 23:30 UTC)
 
 - **G2 batch 1** (GO 22:03): an honest **FAIL**; the server was deleted at 22:24:20, about EUR 0.14.
   - Items passed fully (643/643).
@@ -41,7 +60,7 @@ Updated: 2026-11-01 23:30 UTC (from `date -u`)
 - **G2 batch: GO given at 22:03 UTC** (below). G2 is not passed until its evidence PR is reviewed and merged.
 - Open: #58 (CX23 env-file name allowlist). REQUEST: the check fails open on an unreadable file, so it must fail closed.
 
-## Current snapshot (21:25 UTC)
+## Earlier snapshot (2026-11-01 21:25 UTC)
 
 - **The G2 code is all on develop:**
   - #43 translation follow-ups (`c9b1855`);
