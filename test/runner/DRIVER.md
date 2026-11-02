@@ -103,3 +103,27 @@ Some changes make a run a smoke run, never a G2 pass:
 The run's `weakenedParams` says why.
 
 The 1.12 command replies parsed are `Successfully found the block at x, y, z`, `Found <name>`, `Object successfully summoned`, `Given [...] * 1 to NAME` and `Seed: N`. The first real G2 run (2026-11-01) confirmed them on the RotN 3.3.4 server, except that `testforblock` prints `x, y, z` with spaces and no full stop, where the en_us lang key has `x,y,z.`. The parser accepts both forms.
+
+## S1: survey and smoke before G3
+
+S1 (`test/scenarios/s1/`) is a survey, not a gate. **Every S1 run is not gate-valid:** `run()` first records "S1 is a survey/smoke, never a gate pass" as a notGate reason, so its verdict is at best `SMOKE-PASS (not a gate pass)`. Its findings are data the lead uses to pin G3's world, dawn bound and arbiters (`coord/STATUS-harness-ops.md`, "G3 batches"). The driver is the G2 one (`g1-driver.mjs` with `attachScenario` and `attachG2`); S1 needs one more behaviour:
+
+| Whisper | The driver |
+| --- | --- |
+| `s1-whisper-<TOKEN>` (a console `tell`) | prints the event `DRIVER {"type":"whisper","username":<sender as mineflayer reports it>,"token":<TOKEN>}`, from mineflayer's `whisper` event, which Mindcraft's agent also listens to |
+
+- **`s1-site-survey`:** a G2 census around the fresh spawn (no teleport) with radius 48 and up to 400 types. Its findings are rock piles, trees, stone and loot containers (`classifyCensus` in `lib/s1.mjs`), and up to 5 positions per group are confirmed by `testforblock`. A census cut off at the type limit is not complete.
+  - **`no_containers` fails closed.** A type counts as a container if any of three signals says so:
+    - its registry name (chest, barrel, crate, shulker, basket, drawer, ...);
+    - it is a vanilla inventory block or a spawner;
+    - its Java class in rotn-data's block dump, which has the class but no tile-entity flag (Chest, Container, TileEntity, Inventory, ...).
+  - Without the dump, the check fails. Any container found is named in the check's detail ("CONTAINERS FOUND ...").
+  - Every modded type that no group claims is listed in `notes.findings.unclassifiedModded`, with its class, for the lead.
+- **`s1-arbiters`:** `scoreboard objectives remove` for every `s1_*` objective first (so an earlier run's leftovers cannot hide an invalid criterion), then `scoreboard objectives add` for the stat criteria G3 wants (vanilla and RotN; an `invalid` reply must name the same criterion), `scoreboard players list`, a `give` of one stone pickaxe, then the count-only `clear <bot> <item> -1 0` (it must report 1 twice, so it removed nothing, and 0 for items the bot lacks), `time query daytime`, and the whisper above.
+- **`s1-day-cycle`:** `time query daytime` every 60 s for 45 min with the bot online. The runner changes neither the time nor the daylight rule; it records the rate, the day length that implies, and each new day.
+
+The reply forms parsed (from the 1.12 en_us lang file, to be confirmed on the RotN server by S1):
+- `<bot> has N items that match the criteria`, and `Could not clear the inventory of <bot>, no items to remove` for 0;
+- `Added new objective '<name>' successfully`, `Invalid objective criteria type '<criteria>'`, `An objective with the name '<name>' already exists`;
+- `Showing N tracked objective(s) for <bot>:` with lines `- <display name>: <score> (<objective>)`, or `Player <bot> has no scores recorded`;
+- `Time is N`.
