@@ -1,8 +1,53 @@
 # Status: net-forge
 
-Updated: 2026-11-02T16:09Z
+Updated: 2026-11-02T17:09Z
 
-Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
+Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1` (kept while paused).
+
+## Paused 2026-11-02
+
+G2 passed (batch 8, #97). The human paused net-forge for Phase 3, and skills-rotn takes the agent slot. net-forge will be respawned for protocol issues.
+
+**State at pause:**
+- Nothing is uncommitted or in flight. Every `agent/net-forge/*` branch is pushed. No net-forge PR is open except this STATUS PR.
+- The last merged code PR is #95 (the movement guard).
+
+**What is done.** All of it is on develop; the details are in the sections below and in `packages/forge-bridge/README.md`.
+- **The Forge connection:**
+  - the FML|HS handshake and RegistryData;
+  - `FML|MP` and the FML EntitySpawn into `bot.entities`, with rotn-data's mod-entity table;
+  - REID/`jeid` overrides;
+  - mod entity-metadata serializers;
+  - the status-ping mod list with a fixture fallback;
+  - the JSONL capture.
+- **Bot setup:**
+  - the `bot.registry` extension;
+  - the Forge two-pass block-state-id remap, applied once at decode and active on the real server (batch 8: 506 state ids in 132 blocks, 0 conflicts);
+  - the movement guard;
+  - the `initBot` auth guard;
+  - the `agent_process.js` exit-code contract.
+- **The harness:** the G1/G2 driver (`tools/g1-driver.mjs`), and the dependency patches listed in CLAUDE.md.
+
+**Known gaps:**
+1. **Other server data with block states bypasses the remap.** Only chunk data, `block_change` and `multi_block_change` are remapped. These are used as sent:
+   - falling-block `spawn_entity` object data;
+   - `world_event` 2001 (block break) data;
+   - block particle arguments;
+   - mod plugin-channel payloads.
+
+   Stock mineflayer reads none of them as block states today. Vanilla builds the first three with `Block.getStateId` (`id + (meta << 12)`), which may not need the map, but this is not checked with `javap`. See the README, "Known gap".
+2. **The movement guard's root cause is still unproven.**
+   - The batch 7 items kick (`invalid_player_movement`) was reproduced offline only, as a NaN explosion knockback. The capture did not record the movement packets, so the cause is not proven.
+   - In batch 8 the guard never had to act: there was no `movement guard:` line and no `movement_trace`.
+   - The trigger is named only when the guard fires on a real server.
+3. **The capture logs no client movement packets.** It also does not log the server's `position`, `explosion` or `entity_velocity` packets except inside a guard-triggered `movement_trace`. Its map_chunk cap is 40 records, so the bot's own chunk can be missed and physics cannot be replayed from a capture.
+4. **Never run on the real server:** death and respawn, dimension changes, and riding a vehicle. `vehicle_move` is guarded and unit-tested only. No G1/G2 evidence covers any of them.
+
+**What I would do next:**
+1. If any Phase 3 run logs `[forge-bridge] movement guard: ...` or a kick: take the `movement_trace` from that capture, name the trigger, and fix it where it starts (not only in the guard). Then add the sanitized trace as a test fixture.
+2. Before any skill reads falling-block data, block-break `world_event`s or particles as block states: confirm the encoding with `javap` on Forge 14.23.5.2860. Remap them, or document that they need no remap, with a test.
+3. Add capture options for C2S movement packets and the bot's own chunk (a ring buffer, off by default), so the next protocol kick is diagnosable from the first capture.
+4. Live-test death and respawn, a dimension change, and riding, each in a harness scenario, since skills will need them.
 
 ## Done (offline, step 1 of the G1 spike; PR #10, merged as 26a0b5e)
 
@@ -382,7 +427,7 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - README: `skippedTooWide` lives on `bot.registry.stateIdRemap` (the live Map), not in the `bot.forge.stateIdRemap` login report.
 - This STATUS: the #86 entry no longer says "stacked on #84".
 
-## In review: G2 batch 7 blocker, the movement guard (PR #95; branch `agent/net-forge/invalid-move-guard`, from develop c3163b1)
+## Done: G2 batch 7 blocker, the movement guard (PR #95, merged as 0bdb537; branch `agent/net-forge/invalid-move-guard`, from develop c3163b1)
 
 - **Batch 7 items kick** (`invalid_player_movement`, about 2.2 s after spawn). Forge 1.12.2 sends it for a movement packet with a non-finite x, y, z, yaw or pitch, or with a coordinate whose absolute value is over 3.0E7.
 - **What the capture shows** (items vs. the mobs control):
@@ -411,6 +456,7 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 
 ## Doing
 
+- **Nothing: paused 2026-11-02** (see "Paused 2026-11-02" at the top). The notes below are historical. #50 and #56 are merged. The PR #54 nit (an explicit `source: 'fallback'` in `g2_adapter`) is in `tools/g1-driver.mjs`.
 - G1 PASSED. Phase 2 (G2): #25, #38, #46, #49 and #54 are merged. Open: #50 (PR #31 follow-ups) and #56 (mod-entity table).
 - Done in #56 too: serializers 14-18 and 256/257 from rotn-data's second dump (#55), through `loadRotnData(PACK_VERSION).serializers()`. 14 is confirmed, and the inferred-decode logging is removed. `javap` on the seven dumped classes matches every format except Charset's quaternion: the order on the wire is w, x, y, z, not x, y, z, w (same 16 bytes, so it was never misparsed; field names fixed).
 - Next: the PR #54 nits: log `g2_adapter source=fallback` explicitly, and assert no `null` census type once harness-ops' census fix lands.
@@ -460,6 +506,7 @@ The setup for both batches:
 
 ## Blocked
 
+- Nothing (paused). The two G1 lines below are historical: G1 passed.
 - Batch A: approved; waiting only for the preflight (a scheduled sweeper run within 120 min; PR #12 in review).
 - Batch B+C: approved; the driver is ready (below). Runs after Batch A, with the same preflight condition.
 
@@ -490,6 +537,7 @@ The setup for both batches:
 
 ## Open PRs
 
+- **At the pause (2026-11-02): none** except this STATUS PR. The lines below are historical; all of those PRs are merged.
 - Merged: #15, #16, #18, #19, #23, #24 and #26 (G1 Batch A: real handshake fixture and replay test).
 - #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. Being updated for its REQUEST CHANGES review, plus the PR #28 nits.
 - #28: G1 Batch B+C FAIL evidence plus the fix (Triumph advancements opaque, parse safety net), on `agent/net-forge/g1-batch-bc`. APPROVE WITH NITS; develop merged in; CI green.
