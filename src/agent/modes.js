@@ -3,6 +3,7 @@ import * as world from './library/world.js';
 import * as mc from '../utils/mcdata.js';
 import settings from './settings.js'
 import convoManager from './conversation.js';
+import * as names112 from './library/names112.js';
 import { createErrorReporter } from './update_loop.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
 
@@ -37,19 +38,19 @@ const modes_list = [
             let blockAbove = bot.blockAt(bot.entity.position.offset(0, 1, 0));
             if (!block) block = {name: 'air'}; // hacky fix when blocks are not loaded
             if (!blockAbove) blockAbove = {name: 'air'};
-            if (blockAbove.name === 'water') {
+            if (names112.isWater(blockAbove.name)) {
                 // does not call execute so does not interrupt other actions
                 if (!bot.pathfinder.goal) {
                     bot.setControlState('jump', true);
                 }
             }
-            else if (this.fall_blocks.some(name => blockAbove.name.includes(name))) {
+            else if (this.fall_blocks.some(name => blockAbove.name?.includes(name))) {
                 execute(this, agent, async () => {
                     await skills.moveAway(bot, 2);
                 });
             }
-            else if (block.name === 'lava' || block.name === 'fire' ||
-                blockAbove.name === 'lava' || blockAbove.name === 'fire') {
+            else if (names112.isLava(block.name) || block.name === 'fire' ||
+                names112.isLava(blockAbove.name) || blockAbove.name === 'fire') {
                 say(agent, 'I\'m on fire!');
                 // if you have a water bucket, use it
                 let waterBucket = bot.inventory.findInventoryItem('water_bucket');
@@ -67,7 +68,7 @@ const modes_list = [
                             if (success) say(agent, 'Placed some water, ahhhh that\'s better!');
                             return;
                         }
-                        let nearestWater = world.getNearestBlock(bot, 'water', 20);
+                        let nearestWater = world.getNearestBlock(bot, names112.WATER_BLOCKS, 20);
                         if (nearestWater) {
                             const pos = nearestWater.position;
                             let success = await skills.goToPosition(bot, pos.x, pos.y, pos.z, 0.2);
@@ -287,7 +288,7 @@ const modes_list = [
                 this.next_change = Date.now() + Math.random() * 1000 + 4000;
             }
             if (entity_in_view && this.staring) {
-                let isbaby = entity.type !== 'player' && entity.metadata[16];
+                let isbaby = entity.type !== 'player' && names112.isBaby(entity);
                 let height = isbaby ? entity.height/2 : entity.height;
                 agent.bot.lookAt(entity.position.offset(0, height, 0));
             }
