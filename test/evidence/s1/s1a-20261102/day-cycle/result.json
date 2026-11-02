@@ -1,0 +1,82 @@
+{
+  "scenario": "s1-day-cycle",
+  "gate": "S1",
+  "title": "The day length on RotN (Extended Days) with the bot online, for G3's dawn bound (a measurement, not a gate)",
+  "runId": "20261102t192015-ceee04",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": false,
+  "weakenedParams": [
+    "S1 is a survey/smoke, never a gate pass"
+  ],
+  "verdict": "FAIL",
+  "passed": 1,
+  "failed": 3,
+  "durationS": 2183,
+  "params": {
+    "bot": "<bot>",
+    "dataRoot": "",
+    "durationMs": 2700000,
+    "sampleMs": 60000,
+    "minParsedShare": 0.9,
+    "loginTimeoutMs": 240000,
+    "settleMs": 10000,
+    "pollMs": 5000,
+    "logTail": 40000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "The bot logs in with its own account (online mode)"
+    },
+    {
+      "check": "samples_ok",
+      "pass": false,
+      "detail": "not reached (scenario error)",
+      "readyToTry": "`time query daytime` answered throughout the measurement"
+    },
+    {
+      "check": "time_advances",
+      "pass": false,
+      "detail": "not reached (scenario error)",
+      "readyToTry": "The day time advances while the bot is online"
+    },
+    {
+      "check": "stayed_online",
+      "pass": false,
+      "detail": "not reached (scenario error)",
+      "readyToTry": "The bot stayed connected for the whole measurement"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "wired": true,
+      "why": "mcdata.js exports toNew and toOld; all 643 table entries round-trip through them",
+      "entries": 643,
+      "failureCount": 0
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "gamerule": [
+      "[19:20:46] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: doDaylightCycle = true"
+    ]
+  },
+  "botExitCode": 128,
+  "botExitSignal": "SIGTERM",
+  "botStoppedByRunner": true,
+  "error": "Error: console failed (3221225794):  (after 3 attempts)\n    at call (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/adapters.mjs:34:15)\n    at Object.console (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/adapters.mjs:37:38)\n    at Object.run (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/scenarios/s1/s1-day-cycle.mjs:57:46)\n    at async runScenario (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/runner.mjs:106:9)\n    at async main (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/run.mjs:168:26)",
+  "git": {
+    "sha": "16db8ac8007aa77f9ab67c81600ea780c17495c8",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261102-191209",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}

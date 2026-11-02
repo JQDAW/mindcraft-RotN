@@ -1,0 +1,157 @@
+{
+  "scenario": "s1-arbiters",
+  "gate": "S1",
+  "title": "The replies G3's arbiters parse (scoreboard stats, clear in test mode, time query) and the console whisper sender (a smoke run, not a gate)",
+  "runId": "20261102t191850-e97911",
+  "pass": false,
+  "checksPassed": true,
+  "gateValid": false,
+  "weakenedParams": [
+    "S1 is a survey/smoke, never a gate pass"
+  ],
+  "verdict": "SMOKE-PASS (not a gate pass)",
+  "passed": 5,
+  "failed": 0,
+  "durationS": 83,
+  "params": {
+    "bot": "<bot>",
+    "dataRoot": "",
+    "loginTimeoutMs": 240000,
+    "settleMs": 10000,
+    "whisperTimeoutMs": 30000,
+    "pollMs": 1000,
+    "logTail": 20000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "The bot logs in with its own account (online mode)"
+    },
+    {
+      "check": "stat_criteria",
+      "pass": true,
+      "detail": "stat.craftItem.minecraft.crafting_table: added; stat.craftItem.minecraft.stone_pickaxe: added; stat.craftItem.minecraft.stone_axe: added; stat.craftItem.minecraft.cobblestone: added; stat.craftItem.pyrotech.crude_axe: added; stat.craftItem.contenttweaker.crafting_tools: added; stat.deaths: added; stat.playOneMinute: added",
+      "readyToTry": "Every scoreboard reply has a known form, and the vanilla stat criteria exist"
+    },
+    {
+      "check": "clear_test",
+      "pass": true,
+      "detail": "stone_pickaxe 1 then 1 (want 1 then 1), diamond 0 (want 0), pyrotech:crude_axe 0 (want 0)",
+      "readyToTry": "`clear <bot> <item> <meta> 0` counts without removing, in the form the runner parses"
+    },
+    {
+      "check": "time_query",
+      "pass": true,
+      "detail": "daytime 3001",
+      "readyToTry": "`time query daytime` answers with the day time"
+    },
+    {
+      "check": "whisper_seen",
+      "pass": true,
+      "detail": "whisper handler saw sender \"Server\"",
+      "readyToTry": "A console `tell` reaches the bot's whisper handler"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "wired": true,
+      "why": "mcdata.js exports toNew and toOld; all 643 table entries round-trip through them",
+      "entries": 643,
+      "failureCount": 0
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "statCriteria": [
+      {
+        "obj": "s1_c_table",
+        "criteria": "stat.craftItem.minecraft.crafting_table",
+        "vanilla": true,
+        "result": "added"
+      },
+      {
+        "obj": "s1_c_spick",
+        "criteria": "stat.craftItem.minecraft.stone_pickaxe",
+        "vanilla": true,
+        "result": "added"
+      },
+      {
+        "obj": "s1_c_saxe",
+        "criteria": "stat.craftItem.minecraft.stone_axe",
+        "vanilla": true,
+        "result": "added"
+      },
+      {
+        "obj": "s1_c_cobble",
+        "criteria": "stat.craftItem.minecraft.cobblestone",
+        "vanilla": false,
+        "result": "added"
+      },
+      {
+        "obj": "s1_c_crudeaxe",
+        "criteria": "stat.craftItem.pyrotech.crude_axe",
+        "vanilla": false,
+        "result": "added"
+      },
+      {
+        "obj": "s1_c_ctools",
+        "criteria": "stat.craftItem.contenttweaker.crafting_tools",
+        "vanilla": false,
+        "result": "added"
+      },
+      {
+        "obj": "s1_deaths",
+        "criteria": "stat.deaths",
+        "vanilla": true,
+        "result": "added"
+      },
+      {
+        "obj": "s1_played",
+        "criteria": "stat.playOneMinute",
+        "vanilla": true,
+        "result": "added"
+      }
+    ],
+    "scores": {
+      "s1_played": 36
+    },
+    "clearTest": {
+      "give": [
+        "[19:19:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Given    [Stone Pickaxe] * 1 to <bot>"
+      ],
+      "counts": {
+        "minecraft:stone_pickaxe": [
+          1,
+          1
+        ],
+        "minecraft:diamond": [
+          0
+        ],
+        "pyrotech:crude_axe": [
+          0
+        ]
+      }
+    },
+    "daytime": 3001,
+    "whisper": {
+      "username": "Server"
+    }
+  },
+  "botExitCode": 128,
+  "botExitSignal": "SIGTERM",
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "16db8ac8007aa77f9ab67c81600ea780c17495c8",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261102-191209",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}
