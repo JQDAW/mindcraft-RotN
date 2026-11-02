@@ -1,8 +1,38 @@
 # Status: rotn-lead
 
-Updated: 2026-11-02 18:14 UTC (from `date -u`)
+Updated: 2026-11-02 20:26 UTC (from `date -u`)
 
-## Current snapshot (2026-11-02 17:07 UTC; decisions added 2026-11-02 18:14 UTC)
+
+## Current snapshot (2026-11-02 20:26 UTC): Phase 3 (G3)
+
+- **Team:** skills-rotn, rotn-data and harness-ops; net-forge is paused (#99).
+- **Merged in Phase 3 so far:**
+  - skills-rotn: #103 and #104 (log hygiene in the agent and model layers; required before the CX23 run), #108 (cheat can't be enabled), #109 (the update loop survives a throwing mode; no restart after smelting), #110 (Mindcraft task files refused unless a test-only opt-in is set; G3 never uses them).
+  - rotn-data: #102 (RotN recipes in bot.registry), #107 (howToGet), #111 and #115 (first-night threats; creeper and skeleton variants, witch, stray and others), #112 and #114.
+  - harness-ops: #101 (G3 and CX23 plan), #106 (S1 tooling), #113 (S1-A evidence).
+- **S1-A survey** (19:12-19:57 UTC, about EUR 0.14; the server was deleted):
+  - the G2 world has 203 surface rock-pile blocks within 46 blocks of spawn, and 2 dungeons (5 chests) underground;
+  - craft stats exist for all five G3 items;
+  - the count-only `clear` removes nothing;
+  - the console whisper sender is `Server`;
+  - Extended Days: a cycle of about 40 min, a night of about 19 min, and two freezes of about 10 min.
+
+  The run was cut short by this PC's low memory (Claude Code reaped the batch shell); the teardown worked.
+- **Lead decisions after S1:**
+  - G3 uses the G2 world (seed `1880465901402976865`, cube -45 66 -66);
+  - S1-B is cancelled;
+  - `crafted_by_bot` gates all five items, so the dungeon chests can't fake a pass;
+  - the dawn bound is provisional (about 40 min from the first join, limit 55 min) until the first G3 smoke batch's full night;
+  - `maxBatchUsd` is USD 2.
+- **Memory rule (Requests item 13):** during any paid batch over 20 min, no other agent runs `npm ci` or a full suite, and reviews are static with at most one running. The human's optional `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` was offered and is not recommended.
+- **CX23:** the read-only probe (GO 1) is approved but waits for the human to open a folder workspace at `/root` on the Orca target `cx23` (Orca must connect from the desktop app). Helper files Orca places itself are accepted, and `ls -la /root` is approved as a last read-only command.
+- **Open follow-ups:**
+  - rotn-data: cited entries for dread_lich and troll, plus the remaining Overworld "fight" mobs (Quark ashen and dweller first), before the first-night batch;
+  - skills-rotn A4: quiet reflexes, unstuck no longer kills the agent, an awaited execute;
+  - harness-ops: README nits on #113, then the G3 runner and driver offline.
+- **Spend:** agent batches total about EUR 2.26 plus IPv4-hours (S1-A added EUR 0.14).
+
+## Earlier snapshot (2026-11-02 17:07 UTC; decisions added 2026-11-02 18:14 UTC)
 
 - **G2 passed** on G2 batch 8 (#97): strict review APPROVE, plus an independent verifier MET WITH CAVEATS. Details and caveats are in `docs/PLAN.md` Status.
 - **The path since the last snapshot:**
