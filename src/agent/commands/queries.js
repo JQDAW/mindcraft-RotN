@@ -4,6 +4,7 @@ import { getCommandDocs } from './index.js';
 import convoManager from '../conversation.js';
 import { checkLevelBlueprint, checkBlueprint } from '../tasks/construction_tasks.js';
 import { load } from 'cheerio';
+import { safeError } from '../safe_error.js';
 
 const pad = (str) => {
     return '\n' + str + '\n';
@@ -301,7 +302,7 @@ export const queryList = [
                 craftingPlan = prefixMessage + craftingPlan;
                 return pad(craftingPlan);
             } catch (error) {
-                console.error("Error generating crafting plan:", error);
+                console.error("Error generating crafting plan:", safeError(error));
                 return `An error occurred while generating the crafting plan: ${error.message}`;
             }
             
@@ -332,8 +333,8 @@ export const queryList = [
             
                 return divContent.trim();
               } catch (error) {
-                console.error("Error fetching or parsing HTML:", error);
-                return `The following error occurred: ${error}`
+                console.error("Error fetching or parsing HTML:", safeError(error));
+                return `The following error occurred: ${safeError(error)}`
               }
         }
     },

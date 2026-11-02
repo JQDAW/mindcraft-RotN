@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T18:11Z (from `date -u`)
+Updated: 2026-11-02T18:35Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -16,6 +16,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
     - `charm:spectre` vanishes in daylight;
     - pack-side errors exist (Universal Tweaks chunk-save NPE; RoughMobsRevamped "Ticking entity" NPE in G1).
 - **#100 merged** (`4b175cc`): this file and the G3 plan.
+- **#103 merged** (`3a009d9`): A1 log hygiene in `src/agent/` (`safe_error.js`, the static guard, the review nits). Lint baseline 254.
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -27,8 +28,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, on develop `4b175cc`): #103 open.
-- A1b `models-log-hygiene` (lead-approved exception in `src/models/`): #104 open, stacked on #103. Next: A2 `no-cheat`.
+- A1b `models-log-hygiene` (lead-approved exception in `src/models/`): #104 open. Review REQUEST CHANGES (small), all fixed, rebased onto develop `62c873a` at 18:35 UTC. Next: A2 `no-cheat`.
 
 ## G3 plan: small PRs, in order
 
@@ -110,15 +110,13 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 2. **net-forge (paused since 2026-11-02; route through the lead):** C1 and C2 need serverbound slot encoding with REID (VarInt slot ids in `window_click`) and `block_place`/`use_item` working on 1.12 (the `use_item` extra fields in the mineflayer patch). Please confirm that they work, or say what is missing. Also: can the `place_block.js` 500 ms `blockUpdate` wait be made configurable (seam-map C)? A lagging RotN server makes placements report failure. **I will tell the lead 1-2 PRs before C1** (that is, when B2 opens), so the lead can respawn net-forge or verify the current encoding in a probe first.
 3. **rotn-data:** for C1, does `recipesFor` give ingredients with oredict members and meta expanded, so that I can match by output and ingredients? For C2, which blocks are the surface rock piles (`pyrotech:rock_pile`?) and what do they drop? The 20 recipes with `matchesSample: false`: I will check whether any is in the early-game set and report back.
 4. **harness-ops:** G3 scenarios for (a), (b) and (c), plus "the queue survives a restart". I will post the command and log contract for each as my PRs land. A first exploratory probe batch for the open items above would de-risk C2/C3; that needs the lead's GO.
-5. **Lead (`src/models/`, lead-owned; found during A1):** the model layer prints whole error objects too. **In progress under the lead-approved exception (2026-11-02), in #104:**
+5. **Lead (`src/models/`, lead-owned; found during A1):** the model layer prints whole error objects too. **In progress under the lead-approved exception (2026-11-02), in #104, extended by the lead to `prompter.js:327`:**
    - `openrouter.js:49` (the whole SDK error) and `:40` (the whole response body when there are no choices);
-   - `prompter.js:131` and `:238`.
+   - `prompter.js:124-125`, `:131-132` and `:238` (`safeStack`), and `:327` (the goal parser's `err` through `safeError`; the raw model reply stays, as does line 234).
 
-   The exception named "openrouter.js:131 and :238", but openrouter.js has 76 lines; those numbers are `prompter.js`'s, so I read it that way. Please confirm. **Still open, for the lead to decide:**
-   - `prompter.js:124` prints the same examples error whole, plus its stack. It is outside the exception, so it is unchanged.
+   The #103 review confirmed this exact list (the lead's 18:15 message). **Still open, for the lead to decide:**
    - The providers the bot does not use (claude, gpt, gemini, ollama, ...) still print `console.log(err)`. Only OpenRouter is used (PLAN).
 
 ## Open PRs
 
-- #103 A1 log hygiene (branch `agent/skills-rotn/log-hygiene`). Serves the lead's "Before the first CX23 run" line.
-- #104 A1b model-layer log hygiene (branch `agent/skills-rotn/models-log-hygiene`), lead-approved exception in `src/models/`; stacked on #103, merge after it.
+- #104 A1b model-layer log hygiene (branch `agent/skills-rotn/models-log-hygiene`), lead-approved exception in `src/models/`; on develop `62c873a`.

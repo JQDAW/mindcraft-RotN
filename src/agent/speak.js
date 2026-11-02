@@ -4,6 +4,7 @@ import os from 'os';
 import path from 'path';
 import { TTSConfig as gptTTSConfig } from '../models/gpt.js';
 import { TTSConfig as geminiTTSConfig } from '../models/gemini.js';
+import { safeError } from './safe_error.js';
 
 let speakingQueue = []; // each item: {text, model, audioData, ready}
 let isSpeaking = false;
@@ -76,7 +77,7 @@ async function processQueue() {
         await item.ready;
         if (item.error) throw item.error;
     } catch (err) {
-        console.error('[TTS] preprocess error', err);
+        console.error('[TTS] preprocess error', safeError(err));
         isSpeaking = false;
         processQueue();
         return;
@@ -93,7 +94,7 @@ async function processQueue() {
             : `espeak "${txt.replace(/"/g,'\\"')}"`;
 
         exec(cmd, err => {
-            if (err) console.error('TTS error', err);
+            if (err) console.error('TTS error', safeError(err));
             isSpeaking = false;
             processQueue();
         });
@@ -119,7 +120,7 @@ async function processQueue() {
                     stdio: 'ignore', windowsHide: true
                 });
                 player.on('error', async (err) => {
-                    console.error('[TTS] ffplay error', err);
+                    console.error('[TTS] ffplay error', safeError(err));
                     try { await fs.unlink(tmpPath); } catch {}
                     isSpeaking = false;
                     processQueue();
@@ -142,7 +143,7 @@ async function processQueue() {
                 });
             }
         } catch (e) {
-            console.error('[TTS] Audio error', e);
+            console.error('[TTS] Audio error', safeError(e));
             isSpeaking = false;
             processQueue();
         }

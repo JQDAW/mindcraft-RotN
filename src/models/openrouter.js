@@ -39,7 +39,7 @@ export class OpenRouter {
             let completion = await this.openai.chat.completions.create(pack);
             if (!completion?.choices?.[0]) {
                 // Never the whole response body; only its error summary, if any.
-                console.error('No completion or choices returned:', completion?.error ? safeError(completion.error) : 'no choices in the response');
+                console.error(`No completion or choices returned (model ${this.model_name}):`, completion?.error ? safeError(completion.error) : 'no choices in the response');
                 return 'No response received.';
             }
             if (completion.choices[0].finish_reason === 'length') {

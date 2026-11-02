@@ -64,7 +64,7 @@ test('a response without choices logs its error summary, not the body', async (t
     assert.equal(lines.length, 1);
     assert.ok(lines[0].every(a => typeof a === 'string'));
     const out = flat(lines);
-    assert.match(out, /No completion or choices returned: Object \[429\]: Rate limit exceeded/);
+    assert.match(out, /No completion or choices returned \(model vendor\/some-model\): Object \[429\]: Rate limit exceeded/);
     for (const leak of [FAKE_KEY, 'upstream body text', 'gen-1']) {
         assert.ok(!out.includes(leak), `leaked ${leak}`);
     }
@@ -74,7 +74,18 @@ test('an empty response says so without printing it', async (t) => {
     const lines = captureErrors(t);
     const res = await modelWith(() => Promise.resolve({ choices: [], usage: { prompt_tokens: 5 } })).sendRequest([], 'system');
     assert.equal(res, 'No response received.');
-    assert.equal(flat(lines), 'No completion or choices returned: no choices in the response');
+    assert.equal(flat(lines), 'No completion or choices returned (model vendor/some-model): no choices in the response');
+});
+
+test('an error whose message embeds a JSON body is cut before the body', async (t) => {
+    const lines = captureErrors(t);
+    const err = new Error(`400 {"error":{"message":"Provider returned error","metadata":{"raw":"upstream body text","key":"${FAKE_KEY}"}}}`);
+    err.status = 400;
+
+    const res = await modelWith(() => Promise.reject(err)).sendRequest([], 'system');
+
+    assert.equal(res, 'My brain disconnected, try again.');
+    assert.equal(flat(lines), 'Error while awaiting response: Error (status 400): 400 {...}');
 });
 
 test('a normal response is unchanged', async (t) => {

@@ -1,4 +1,5 @@
 import { sendOutputToServer } from './mindserver_proxy.js';
+import { safeError } from './safe_error.js';
 
 // Definitions of error types, keywords, and full human-readable messages.
 const ERROR_DEFINITIONS = {
@@ -50,7 +51,8 @@ export const log = (agentName, msg) => {
 export function parseKickReason(reason) {
     if (!reason) return { type: 'unknown', msg: 'Unknown reason (Empty)', isFatal: true };
     
-    const raw = (typeof reason === 'string' ? reason : JSON.stringify(reason)).toLowerCase();
+    // An Error is summarised safely; JSON.stringify would print its own properties.
+    const raw = (typeof reason === 'string' ? reason : reason instanceof Error ? safeError(reason) : JSON.stringify(reason)).toLowerCase();
 
     // Search for keywords in definitions
     for (const [type, def] of Object.entries(ERROR_DEFINITIONS)) {

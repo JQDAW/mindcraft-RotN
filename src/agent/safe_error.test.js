@@ -111,7 +111,39 @@ test('safeStack keeps the frames and replaces the raw first line', () => {
     assert.ok(lines.length > 1 && lines.length <= 9);
     assert.ok(lines.slice(1).every(l => l.startsWith('    at ')));
     assert.ok(!out.includes(FAKE_KEY));
-    assert.match(out, /safe_error\.test\.js/);
+    // Frame contents depend on the checkout path, so they are checked with a
+    // synthetic stack below, not here.
+});
+
+test('safeStack keeps synthetic frames with long mixed-case path segments', () => {
+    const err = new Error(`bad ${FAKE_KEY}`);
+    err.stack = [
+        `Error: bad ${FAKE_KEY}`,
+        '    at run (/tmp/Review-Worktree-20261102T1800Z-ab12/mindcraft-RotN-skills-g3/src/agent/safe_error.test.js:117:5)',
+        '    at C:\\Users\\Admin2\\orca\\workspaces\\mindcraft-RotN\\skills-rotn-g3\\src\\agent\\agent.js:88:18',
+        'not a frame line',
+    ].join('\n');
+    assert.equal(safeStack(err), [
+        'Error: bad [redacted-key]',
+        '    at run (/tmp/Review-Worktree-20261102T1800Z-ab12/mindcraft-RotN-skills-g3/src/agent/safe_error.test.js:117:5)',
+        '    at C:\\Users\\Admin2\\orca\\workspaces\\mindcraft-RotN\\skills-rotn-g3\\src\\agent\\agent.js:88:18',
+    ].join('\n'));
+});
+
+test('/-joined paths are kept; a base64 token with / is still redacted', () => {
+    const path = '/home/Deploy2026User/Mindcraft-RotN-Checkout-ab12CD34ef/src/agent/library/skills.js';
+    assert.equal(redact(path), path);
+    // A long base64 token: '/' about once per 64 characters leaves 40+ runs.
+    const token = 'EwBwA8l6BAAU7p9QDpi/' + 'D7xs9pLmT6x4Q2Rk3Yz8Jh0Wq1Vb5Nc7Gd2Fe4Hf6Ig9Kl0Mn' + '/Ab12';
+    assert.equal(redact(`tok ${token} end`), 'tok [redacted-blob] end');
+});
+
+test('messages are cut at the first JSON body', () => {
+    const err = new Error('400 status code {"error":{"message":"bad","metadata":{"raw":"upstream body"}}}');
+    assert.equal(safeError(err), 'Error: 400 status code {...}');
+    assert.equal(safeError('failed: [ "a", "b" ]'), 'failed: {...}');
+    // Braces that do not start JSON are kept.
+    assert.equal(safeError(new Error('Unexpected token } in JSON')), 'Error: Unexpected token } in JSON');
 });
 
 test('safeStack without a stack is just the summary', () => {
