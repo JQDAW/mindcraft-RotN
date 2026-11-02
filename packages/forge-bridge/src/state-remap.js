@@ -14,8 +14,10 @@
 // keyed by registry name (numeric ids belong to a world's save), network meta -> the
 // meta of BLOCK_STATE_IDS.getByValue(id << 4 | meta) per getMetaFromState. initBot passes
 // it as { blocks: byBlock }. This module turns that into registry.stateIdRemap (Map
-// network state id -> client state id), which patches/prismarine-chunk+1.41.0.patch
-// applies to every chunk load and block update.
+// network state id -> client state id). It is applied exactly once, at decode time:
+// patches/prismarine-chunk+1.41.0.patch in ChunkColumn.load (palettes, global data) and
+// patches/mineflayer+4.33.0.patch in block_change / multi_block_change. Local writes
+// (setBlockStateId and friends) hold client ids and are never remapped.
 //
 // The remapped ids are the bot's local view only. A remapped state id (2810) must never
 // be sent back to the server, whose own id for that state is 2811; 1.12 clients send
@@ -33,40 +35,49 @@ function blockEntry(registry, registryName) {
 
 /**
  * Builds the network -> client state-id map for a (Forge-extended) registry.
+ *
+ * The table is taken literally: network meta m of a block is client meta table[m]. The map
+ * is a pure function, applied exactly once at decode time (chunk palettes, global-palette
+ * data, block_change), so chains and cycles need no special handling: a permutation such
+ * as pyrotech's worktable 0 -> 1, 1 -> 2, 2 -> 0 is applied as is. The only entries
+ * skipped are true conflicts: one network id given two different client ids, which can
+ * happen only when two table names resolve to the same synced block (an alias). Such an
+ * id is left unmapped.
  * @param {object} registry  bot.registry after extendRegistry
- * @param {{blocks?: Record<string, Record<string, number>>} | null} table  rotn-data's table
- * @returns {{ map: Map<number, number>, blocks: string[], unknownBlocks: string[], invalid: string[] }}
+ * @param {{blocks?: Record<string, Record<string, number>>} | null} table  { blocks: stateMetaRemap().byBlock }
+ * @returns {{ map: Map<number, number>, blocks: string[], unknownBlocks: string[], invalid: string[], conflicts: string[] }}
  */
 export function buildStateIdRemap(registry, table) {
     const map = new Map();
-    const report = { map, blocks: [], unknownBlocks: [], invalid: [] };
+    const report = { map, blocks: [], unknownBlocks: [], invalid: [], conflicts: [] };
     const blocks = table?.blocks;
     if (!blocks || typeof blocks !== 'object') return report;
+    const candidates = new Map(); // network id -> { to, from: [label], conflict }
     for (const [registryName, metas] of Object.entries(blocks)) {
         const entry = blockEntry(registry, registryName);
         if (!entry || !Number.isInteger(entry.id)) { report.unknownBlocks.push(registryName); continue; }
         if (!metas || typeof metas !== 'object') { report.invalid.push(`${registryName}: not an object`); continue; }
-        const local = new Map();
         for (const [from, to] of Object.entries(metas)) {
             if (!META.test(from) || !Number.isInteger(to) || to < 0 || to > 15) {
                 report.invalid.push(`${registryName} ${from} -> ${to}`);
                 continue;
             }
-            if (Number(from) !== to) local.set(Number(from), to);
+            const networkId = (entry.id << 4) | Number(from);
+            const clientId = (entry.id << 4) | to;
+            const label = `${registryName} ${from} -> ${to}`;
+            const c = candidates.get(networkId);
+            if (!c) candidates.set(networkId, { to: clientId, from: [label], conflict: false, name: registryName });
+            else { c.from.push(label); if (c.to !== clientId) c.conflict = true; }
         }
-        // Resolve chains (a -> b -> c becomes a -> c), so applying the map twice changes
-        // nothing; a cycle is dropped whole.
-        let used = false;
-        for (const from of local.keys()) {
-            let to = local.get(from);
-            const seen = new Set([from]);
-            while (local.has(to) && !seen.has(to)) { seen.add(to); to = local.get(to); }
-            if (local.has(to) || to === from) { report.invalid.push(`${registryName} ${from}: cycle`); continue; }
-            map.set((entry.id << 4) | from, (entry.id << 4) | to);
-            used = true;
-        }
-        if (used) report.blocks.push(registryName);
     }
+    const used = new Set();
+    for (const [networkId, c] of candidates) {
+        if (c.conflict) { report.conflicts.push(`network id ${networkId}: ${c.from.join(' vs ')}`); continue; }
+        if (c.to === networkId) continue; // identity: nothing to do
+        map.set(networkId, c.to);
+        used.add(c.name);
+    }
+    report.blocks = Object.keys(blocks).filter((n) => used.has(n));
     return report;
 }
 
@@ -81,6 +92,7 @@ export function attachStateIdRemap(registry, table, { log = () => {} } = {}) {
     else delete registry.stateIdRemap;
     for (const n of report.unknownBlocks) log(`state-id remap: ${n} is not in the synced registry; skipped`);
     for (const n of report.invalid) log(`state-id remap: invalid entry ${n}; skipped`);
+    for (const n of report.conflicts) log(`state-id remap: conflict, ${n}; skipped`);
     const blocks = table?.blocks;
     const tableBlocks = blocks && typeof blocks === 'object' ? Object.keys(blocks).length : null;
     return { tableBlocks, ...report, size: map.size };
@@ -94,6 +106,6 @@ export function attachStateIdRemap(registry, table, { log = () => {} } = {}) {
 export function stateIdRemapStatus(report) {
     if (!report) return 'state-id remap inactive: no Forge registry sync; block state ids are used as sent';
     if (report.tableBlocks === null) return "state-id remap inactive: rotn-data's dump has no state-meta-remap table; block state ids are used as sent";
-    if (report.size === 0) return `state-id remap inactive: none of the table's ${report.tableBlocks} blocks is in the synced registry; block state ids are used as sent`;
-    return `state-id remap active: ${report.size} state ids in ${report.blocks.length} of the table's ${report.tableBlocks} blocks`;
+    if (report.size === 0) return `state-id remap inactive: nothing applied from the table's ${report.tableBlocks} blocks (not in the synced registry: ${report.unknownBlocks.length}; conflicts ${report.conflicts.length} skipped); block state ids are used as sent`;
+    return `state-id remap active: applied ${report.size} state ids in ${report.blocks.length} of the table's ${report.tableBlocks} blocks; conflicts ${report.conflicts.length} skipped`;
 }

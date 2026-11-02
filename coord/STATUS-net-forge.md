@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-02T02:31Z
+Updated: 2026-11-02T03:31Z
 
 Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -358,6 +358,17 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
   - The prismarine-chunk patch applies it at chunk load (palette and global data) and in `setBlockStateId`.
 - Tests: a sanitized fixture of section (-3,-4) y 64-79, and rotn-data's real catalog API over #80's mini-dump fixture (also through `initBot` in e2e-initbot, so an API-name mismatch fails CI).
 - PR #81: REQUEST CHANGES fixed (catalog API name, real-API e2e, login line, two nits). Stacked on #80 until it merges, then rebased onto develop.
+
+## Done: state-id remap cycles (G2 batch 5 review; branch `agent/net-forge/state-remap-cycles`, from develop 01a8193)
+
+- **The bug.** Batch 5 showed "active, 382 state ids in 94 of 132 blocks", with 124 modded entries skipped as "cycle" (pyrotech worktable `0>1, 1>2, 2>0`, animania, twilightforest and others).
+  - My builder also resolved chains, which was wrong: network 1 -> client 2 is not network 1 -> client 3.
+- **Fix: the table is taken literally** (a pure function), applied exactly once at decode time.
+  - prismarine-chunk `load` (palettes, global data).
+  - mineflayer `block_change` / `multi_block_change` (new mineflayer patch hunk).
+  - `ChunkColumn.setBlockStateId` no longer remaps. Local writes (digging, `update_sign`'s `setBlock`, pathfinder) hold client ids, so a cycle is never applied twice.
+- **Only true conflicts are skipped:** one network id with two different targets, from two names resolving to one synced block. They are logged. The login line now has `applied N ...; conflicts C skipped`.
+- **Real 3.3.4 table:** all 506 entries apply, with 0 conflicts.
 
 ## Doing
 
