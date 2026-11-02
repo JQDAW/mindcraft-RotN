@@ -28,9 +28,11 @@ import process from 'node:process';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { runScenario } from './lib/runner.mjs';
+import { runScenario, addNotGate } from './lib/runner.mjs';
 import { ctlServer, driverProcess, wallClock } from './lib/adapters.mjs';
 import { linesAfter } from './lib/server-log.mjs';
+import { guardConsole, g3Policy } from './lib/g3.mjs';
+import { keyFetch, llmRecord, readKeyUsage } from './lib/llm-spend.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -140,7 +142,15 @@ async function main(argv) {
     const git = gitInfo();
     log(`${scenario.id} (${scenario.gate}) run ${runId}; git ${git.sha ?? 'unknown'}${git.dirty ? ' (DIRTY: uncommitted changes)' : ''}; driver: ${o.driver.join(' ')}; out: ${outDir}`);
     const resultFile = path.join(outDir, 'result.json');
-    const stamp = (r) => Object.assign(r, { git, server: process.env.TEST_SERVER_NAME ?? null, driver: o.driver.join(' ') });
+    // G3 (#116 and #122 reviews): the console allowlist whenever the real agent runs or the gate is G3, and a
+    // G3 run is gate-valid only under batch.mjs's spend stop (its ROTN_G3_BATCH marker).
+    const policy = g3Policy(scenario, process.env, o.params.maxBatchUsd ?? scenario.defaults?.maxBatchUsd);
+    let usageBefore = null;
+    // Every record, the progress and killed ones too, carries the LLM calls so far (#122 review nit): a run
+    // that never finishes still shows what it used. The after-reading exists only in the final result.
+    const stamp = (r) => Object.assign(r, { git, server: process.env.TEST_SERVER_NAME ?? null, driver: o.driver.join(' ') },
+        scenario.llm && !r.llm ? { llm: llmRecord(usageBefore, { ok: false, error: 'the run did not finish' }, bot.output()) } : {},
+        scenario.gate === 'G3' ? { batch: policy.batch } : {});
     let finished = false;
     const onProgress = (rec) => {
         if (finished) return;
@@ -165,9 +175,20 @@ async function main(argv) {
         Promise.race([bot.stop(), new Promise((r) => setTimeout(r, 20000))]).finally(() => process.exit(128 + signals[sig]));
     };
     for (const sig of Object.keys(signals)) process.on(sig, () => onSignal(sig));
-    const result = stamp(await runScenario(scenario, { server, bot, clock: wallClock, params: o.params, runId, log, onProgress, control }));
+    // Only the approved console commands reach the server (no give, summon or op commands); a scenario that
+    // runs the real agent (llm: true) records its LLM calls and cost.
+    const scenarioServer = policy.guard ? guardConsole(server) : server;
+    const readUsage = () => readKeyUsage({ key: process.env.OPENROUTER_API_KEY, fetchImpl: keyFetch(process.env) });
+    if (scenario.llm) usageBefore = await readUsage();
+    const result = stamp(await runScenario(scenario, { server: scenarioServer, bot, clock: wallClock, params: o.params, runId, log, onProgress, control }));
     if (finished) return new Promise(() => {});   // a signal arrived first: its handler writes and exits
     finished = true;
+    if (scenario.llm) {
+        result.llm = llmRecord(usageBefore, await readUsage(), bot.output());
+        log(`${scenario.id}: ${result.llm.calls} LLM calls, USD ${result.llm.usd ?? 'unknown'}`);
+        if (result.llm.usd === null) addNotGate(result, `the LLM cost is unknown (${result.llm.error}): a G3 run must record its spend`);
+    }
+    if (policy.notGate) addNotGate(result, policy.notGate);
     try {
         const since = linesAfter(server.log(result.params.logTail), `scenario-${runId}-begin`);
         fs.writeFileSync(path.join(outDir, 'server.log'), since === null ? '(scenario marker not in the fetched log tail)\n' : since.join('\n') + '\n');
