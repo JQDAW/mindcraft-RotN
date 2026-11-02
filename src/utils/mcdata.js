@@ -292,9 +292,15 @@ export function initBot(username, { onMsaCode } = {}) {
  * "12, Boolean, Is baby, false"; archived at
  * https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata?oldid=2768639
  */
+// 1.12.2 only (the pinned Minecraft version, CLAUDE.md): on 1.21 the same flag is index 16.
 export const BABY_METADATA_INDEX = 12;
 
-/** True if the entity's 1.12 metadata marks it as a baby (EntityAgeable index 12). */
+/**
+ * True if the entity's 1.12 metadata marks it as a baby (EntityAgeable index 12).
+ * Only valid for EntityAgeable subclasses (animals, villagers), as in isHuntable's list. On other
+ * entities index 12 belongs to their own class: a zombie's index 12 is its own "is child" flag, which
+ * looks right but is a different field, and other mobs use it for unrelated data (#125 review).
+ */
 export function isBaby(mob) {
     return !!mob?.metadata?.[BABY_METADATA_INDEX];
 }
