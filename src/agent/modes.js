@@ -131,13 +131,15 @@ const modes_list = [
                     // that is likely, and every restart is a full Forge relogin. Now the
                     // attempt is bounded, then the bot stops moving; execute() records the
                     // re-plan for the stuck action (A4).
-                    const freed = await moveAwayWithin(bot, 5, free_timeout_ms);
-                    if (freed) {
+                    const outcome = await moveAwayWithin(bot, 5, free_timeout_ms);
+                    if (outcome === 'freed') {
                         say(agent, 'I\'m free.');
                         return;
                     }
                     try { bot.pathfinder.stop(); } catch (err) { reportModeError('unstuck', err); }
-                    console.warn(`[reflex] unstuck: still stuck after ${free_timeout_ms / 1000} s; re-planning instead of a restart.`);
+                    console.warn(outcome === 'timeout'
+                        ? `[reflex] unstuck: still stuck after ${free_timeout_ms / 1000} s; re-planning instead of a restart.`
+                        : '[reflex] unstuck: could not move away (no path); re-planning instead of a restart.');
                     say(agent, 'I\'m still stuck.');
                 });
             }
@@ -315,11 +317,12 @@ const modes_list = [
     }
 ];
 
-// True if skills.moveAway finished within timeoutMs, false if it timed out or failed.
+// 'freed' if skills.moveAway finished within timeoutMs, 'timeout' if it did not,
+// 'failed' if it gave up first (for example no path).
 async function moveAwayWithin(bot, distance, timeoutMs) {
     let timer;
-    const timedOut = new Promise((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); });
-    const moved = skills.moveAway(bot, distance).then(() => true, () => false);
+    const timedOut = new Promise((resolve) => { timer = setTimeout(() => resolve('timeout'), timeoutMs); });
+    const moved = skills.moveAway(bot, distance).then(() => 'freed', () => 'failed');
     try {
         return await Promise.race([moved, timedOut]);
     } finally {
