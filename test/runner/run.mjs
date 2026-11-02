@@ -28,9 +28,11 @@ import process from 'node:process';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { runScenario } from './lib/runner.mjs';
+import { runScenario, addNotGate } from './lib/runner.mjs';
 import { ctlServer, driverProcess, wallClock } from './lib/adapters.mjs';
 import { linesAfter } from './lib/server-log.mjs';
+import { guardConsole } from './lib/g3.mjs';
+import { keyFetch, llmRecord, readKeyUsage } from './lib/llm-spend.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -165,9 +167,19 @@ async function main(argv) {
         Promise.race([bot.stop(), new Promise((r) => setTimeout(r, 20000))]).finally(() => process.exit(128 + signals[sig]));
     };
     for (const sig of Object.keys(signals)) process.on(sig, () => onSignal(sig));
-    const result = stamp(await runScenario(scenario, { server, bot, clock: wallClock, params: o.params, runId, log, onProgress, control }));
+    // G3: only the approved console commands reach the server (lead, #116 review: no give, summon or op
+    // commands); and a scenario that runs the real agent (llm: true) records its LLM calls and cost.
+    const scenarioServer = scenario.gate === 'G3' ? guardConsole(server) : server;
+    const readUsage = () => readKeyUsage({ key: process.env.OPENROUTER_API_KEY, fetchImpl: keyFetch(process.env) });
+    const usageBefore = scenario.llm ? await readUsage() : null;
+    const result = stamp(await runScenario(scenario, { server: scenarioServer, bot, clock: wallClock, params: o.params, runId, log, onProgress, control }));
     if (finished) return new Promise(() => {});   // a signal arrived first: its handler writes and exits
     finished = true;
+    if (scenario.llm) {
+        result.llm = llmRecord(usageBefore, await readUsage(), bot.output());
+        log(`${scenario.id}: ${result.llm.calls} LLM calls, USD ${result.llm.usd ?? 'unknown'}`);
+        if (result.llm.usd === null) addNotGate(result, `the LLM cost is unknown (${result.llm.error}): a G3 run must record its spend`);
+    }
     try {
         const since = linesAfter(server.log(result.params.logTail), `scenario-${runId}-begin`);
         fs.writeFileSync(path.join(outDir, 'server.log'), since === null ? '(scenario marker not in the fetched log tail)\n' : since.join('\n') + '\n');

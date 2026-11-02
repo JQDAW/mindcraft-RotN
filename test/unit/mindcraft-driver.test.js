@@ -148,6 +148,15 @@ describe('mindcraft-driver end to end with a fake main.js', () => {
         assert.equal(fs.existsSync(path.join(dir, 'pids.json')), false);
     });
 
+    test('a production settings.js with `Server` as a task giver is refused (it is test-only)', async (t) => {
+        const { dir, exited, cleanup } = startDriver({ settings: path.join(HERE, 'fixtures', 'settings-server-giver.mjs') });
+        t.after(cleanup);
+        const r = await exited;
+        assert.equal(r.code, EXIT_FATAL);
+        assert.match(r.out, /refused: .*settings\.js: settings\.task_givers contains 'Server'/);
+        assert.equal(fs.existsSync(path.join(dir, 'pids.json')), false);
+    });
+
     test('a null profile is refused with a reason, not a crash (#116 finding 2)', async (t) => {
         const { dir, exited, cleanup } = startDriver({ profileBody: 'null' });
         t.after(cleanup);

@@ -291,6 +291,30 @@ describe('up / run / down', () => {
         assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0);
     });
 
+    test('run + the G3 batch spend stop: the batch stops, fetches the logs, and the server is deleted (#116 review)', () => {
+        // batch.mjs with a fake runner that "spends" USD 1.5 per scenario against a limit of 2: a and b
+        // run, c would start at USD 3 spent, so the batch stops, fetches the logs and exits 5.
+        const usage = path.join(tmp, 'usage.json');
+        fs.writeFileSync(usage, JSON.stringify({ data: { usage: 0.25, limit: 5, limit_remaining: 4.75 } }));
+        const out = (s) => fwd(path.join(tmp, `out-${s}`));
+        const r = run(['run', '--yes', '--name', 'mcr-test-spend', '--', fwd(process.execPath), fwd(path.join(repo, 'test', 'runner', 'batch.mjs')),
+            '--max-batch-usd', '2', '--logs-out', fwd(path.join(tmp, 'g3-logs')),
+            '--scenario', 'a', '--out', out('a'), '--scenario', 'b', '--out', out('b'), '--scenario', 'c', '--out', out('c'),
+            '--', 'node', 'driver.mjs'], {
+            ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: fwd(usage), ROTN_BATCH_RUNNER: fwd(path.join(fixtures, 'fake-batch-runner.mjs')),
+            FAKE_DIR: fwd(tmp), FAKE_SPEND: '1.5', OPENROUTER_API_KEY: 'not-a-real-key',
+        });
+        assert.equal(r.code, 5, r.all);
+        assert.deepEqual(fs.readFileSync(path.join(tmp, 'ran.txt'), 'utf8').trim().split('\n').map((l) => l.split(' ')[0]), ['a', 'b'], 'c never started');
+        assert.match(r.stderr, /spend stop before c: spent USD 3 since the batch start, more than maxBatchUsd 2/);
+        assert.ok(sshCalls().some((c) => c[0] === 'scp' && c.includes('-r') && c.some((a) => a.endsWith(':/opt/rotn/server/logs'))), 'the logs were fetched');
+        assert.match(r.stderr, /EXIT trap: tearing down mcr-test-spend/);
+        assert.match(r.stderr, /verified gone: server, Primary IPv4 and SSH key of mcr-test-spend/);
+        const st = state();
+        assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0, 'the server is deleted');
+        assert.ok(!r.all.includes('not-a-real-key'), 'the key is never printed');
+    });
+
     test('up: a failed server create cleans up the IP and key already created', () => {
         const r = run(['up', '--yes', '--name', 'mcr-test-crfail'], { FAKE_HCLOUD_FAIL: 'server create' });
         assert.notEqual(r.code, 0);

@@ -1,0 +1,16 @@
+// A stand-in for run.mjs in batch.mjs's tests (test mode only, ROTN_BATCH_RUNNER): records which
+// scenario ran and with which maxBatchUsd, then "spends" FAKE_SPEND US dollars by raising the usage in
+// the fake key-usage file (ROTN_OPENROUTER_USAGE_FILE), and exits FAKE_RUN_EXIT (default 0).
+import fs from 'node:fs';
+import path from 'node:path';
+import process from 'node:process';
+
+const argv = process.argv.slice(2);
+const id = argv[argv.indexOf('--scenario') + 1];
+const max = argv.find((a) => a.startsWith('maxBatchUsd='));
+fs.appendFileSync(path.join(process.env.FAKE_DIR, 'ran.txt'), `${id} ${max} key:${process.env.OPENROUTER_API_KEY ? 'set' : 'unset'}\n`);
+const file = process.env.ROTN_OPENROUTER_USAGE_FILE;
+const body = JSON.parse(fs.readFileSync(file, 'utf8'));
+body.data.usage = Math.round((body.data.usage + Number(process.env.FAKE_SPEND || 0)) * 1e6) / 1e6;
+fs.writeFileSync(file, JSON.stringify(body));
+process.exit(Number(process.env.FAKE_RUN_EXIT || 0));

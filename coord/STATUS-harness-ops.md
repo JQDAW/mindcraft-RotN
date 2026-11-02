@@ -98,11 +98,17 @@ Updated: 2026-11-02 (20:42 UTC, from `date -u`)
     - **S1-B is cancelled**;
     - the dawn bound is provisional until the first G3 smoke batch;
     - memory: option 1 (Requests item 13).
-  - **This PR: the G3 driver** (`test/runner/drivers/mindcraft-driver.mjs`). It runs the real Mindcraft agent under the runner contract:
+  - **#116: the G3 driver** (`test/runner/drivers/mindcraft-driver.mjs`). It runs the real Mindcraft agent under the runner contract:
     - no task files, and it refuses skills-rotn's `MINDCRAFT_ROTN_ALLOW_TASK_FILES` too;
     - no insecure settings;
     - no process left behind on a stop.
     - It is tested offline with a fake `main.js`.
+  - **This PR, required before any G3 paid batch (lead, #116 review):**
+    - **`test/runner/batch.mjs`:** the batch spend stop at `maxBatchUsd` USD 2. It reads the key's usage before every scenario (numbers only), stops above the limit, always fetches the logs, and exits 5. Without a reading it refuses to start.
+    - **Per scenario:** LLM calls and cost recorded in `result.json` (`llm`). An unknown cost is notGate.
+    - **G3 console allowlist:** no `give`, `summon`, `kill` or op commands.
+    - **`Server` is test-only:** the driver refuses a production `settings.js` that lists it as a task giver.
+    - It is stacked on #116.
   - **CX23 GO 1** (the read-only probe, lead 18:31 UTC): waiting for the human to open the `/root` folder workspace on `cx23` from Orca's desktop app (lead's option 1). Nothing has touched the CX23.
   - **Next:** the G3 arbiters library (inventory by count-only `clear`, the stat objectives with absent read as 0, deaths, leaves and no-cheat), then the scenarios once skills-rotn's chat formats are agreed.
 - **G2 PASSED** on batch 8 (#97): blocks, mobs and items all gate-valid in one batch on the fixed world and cube.
@@ -1083,5 +1089,6 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the G3 driver for the real Mindcraft agent (`agent/harness-ops/g3-driver`).
+- #116: the G3 driver for the real Mindcraft agent (`agent/harness-ops/g3-driver`).
+- This PR: the G3 spend stop, the console allowlist and the test-only giver check (`agent/harness-ops/g3-spend`, stacked on #116).
 - Merged since the last update: #113 (S1-A evidence and findings).
