@@ -1,0 +1,217 @@
+{
+  "scenario": "g2-blocks-named",
+  "gate": "G2",
+  "title": "The 50 most common blocks near spawn have registry names the server confirms",
+  "runId": "20261102t030515-d09d66",
+  "pass": true,
+  "checksPassed": true,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "PASS",
+  "passed": 4,
+  "failed": 0,
+  "durationS": 394,
+  "params": {
+    "bot": "<bot>",
+    "radius": 16,
+    "topN": 50,
+    "minTypes": 10,
+    "candidates": 8,
+    "samplesPerType": 3,
+    "spotChecks": 40,
+    "spotMaxPositions": 400,
+    "absentHits": 4,
+    "maxShareGap": 0.25,
+    "maxUnloadedShare": 0.01,
+    "maxWorldChangeShare": 0.02,
+    "maxWorldChangesPerType": 1,
+    "seed": 0,
+    "dataRoot": "",
+    "loginTimeoutMs": 240000,
+    "settleMs": 20000,
+    "replyTimeoutMs": 180000,
+    "pollMs": 3000,
+    "logTail": 40000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the service makes the bot log in with its own account"
+    },
+    {
+      "check": "blocks_named",
+      "pass": true,
+      "detail": "20 non-air block types (need 10..50)",
+      "readyToTry": "Blocks show RotN names; none of the 50 most common blocks near spawn shows as unknown"
+    },
+    {
+      "check": "blocks_confirmed",
+      "pass": true,
+      "detail": "50/50 runner-picked samples (3 per type) re-asked and confirmed by testforblock",
+      "readyToTry": "Blocks show RotN names (each name is the block the server has there)"
+    },
+    {
+      "check": "blocks_spotcheck",
+      "pass": true,
+      "detail": "41 confirmed non-air answers of 40 needed (80 positions asked, 0 unloaded, seed 2604144604)",
+      "readyToTry": "Blocks show RotN names (at positions the runner picks, consistent with the census)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "8796110535854059511",
+    "naming": {
+      "wired": true,
+      "why": "mcdata.js exports toNew and toOld; all 643 table entries round-trip through them",
+      "entries": 643,
+      "failureCount": 0
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "center": [
+      -703,
+      65,
+      -210
+    ],
+    "cube": {
+      "center": [
+        -703,
+        65,
+        -210
+      ],
+      "radius": 16
+    },
+    "spotSeed": 2604144604,
+    "censusAt": "2026-11-02T03:06:18.559Z",
+    "censusSum": {
+      "types": 16706,
+      "air": 19231,
+      "unloaded": 0,
+      "sum": 35937,
+      "cube": 35937
+    },
+    "census": [
+      "undergroundbiomes:sedimentary_stone 0 7522",
+      "minecraft:sand 0 3128",
+      "minecraft:water 0 2312",
+      "minecraft:sandstone 0 1241",
+      "undergroundbiomes:igneous_stone 4 851",
+      "undergroundbiomes:metamorphic_stone 0 802",
+      "minecraft:dirt 0 435",
+      "contenttweaker:raw_wrought_iron 0 150",
+      "pyrotech:pile_slag 0 114",
+      "minecraft:gravel 0 91",
+      "osv:coal_ore_undergroundbiomes_sedimentary_stone 0 30",
+      "osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0 12",
+      "pyrotech:rock 6 5",
+      "osv:coal_ore_sandstone 0 5",
+      "osv:simpleores_copper_ore_sandstone 0 2",
+      "minecraft:grass 0 2",
+      "osv:simpleores_tin_ore_sandstone 0 1",
+      "osv:simpleores_tin_ore_undergroundbiomes_sedimentary_stone 0 1",
+      "contenttweaker:codex_junk 0 1",
+      "pyrotech:rock 8 1"
+    ],
+    "samples": [
+      "-698,53,-198 census undergroundbiomes:sedimentary_stone 0 fresh undergroundbiomes:sedimentary_stone 0 server found: confirmed",
+      "-719,53,-221 census undergroundbiomes:sedimentary_stone 0 fresh undergroundbiomes:sedimentary_stone 0 server found: confirmed",
+      "-696,51,-215 census undergroundbiomes:sedimentary_stone 0 fresh undergroundbiomes:sedimentary_stone 0 server found: confirmed",
+      "-701,63,-206 census minecraft:sand 0 fresh minecraft:sand 0 server found: confirmed",
+      "-717,65,-201 census minecraft:sand 0 fresh minecraft:sand 0 server found: confirmed",
+      "-713,62,-198 census minecraft:sand 0 fresh minecraft:sand 0 server found: confirmed",
+      "-708,62,-217 census minecraft:water 0 fresh minecraft:water 0 server found: confirmed",
+      "-700,61,-220 census minecraft:water 0 fresh minecraft:water 0 server found: confirmed",
+      "-714,62,-224 census minecraft:water 0 fresh minecraft:water 0 server found: confirmed",
+      "-718,60,-201 census minecraft:sandstone 0 fresh minecraft:sandstone 0 server found: confirmed",
+      "-690,59,-203 census minecraft:sandstone 0 fresh minecraft:sandstone 0 server found: confirmed",
+      "-691,58,-210 census minecraft:sandstone 0 fresh minecraft:sandstone 0 server found: confirmed",
+      "-687,52,-211 census undergroundbiomes:igneous_stone 4 fresh undergroundbiomes:igneous_stone 4 server found: confirmed",
+      "-707,55,-217 census undergroundbiomes:igneous_stone 4 fresh undergroundbiomes:igneous_stone 4 server found: confirmed",
+      "-706,52,-220 census undergroundbiomes:igneous_stone 4 fresh undergroundbiomes:igneous_stone 4 server found: confirmed",
+      "-705,50,-195 census undergroundbiomes:metamorphic_stone 0 fresh undergroundbiomes:metamorphic_stone 0 server found: confirmed",
+      "-690,50,-208 census undergroundbiomes:metamorphic_stone 0 fresh undergroundbiomes:metamorphic_stone 0 server found: confirmed",
+      "-689,50,-195 census undergroundbiomes:metamorphic_stone 0 fresh undergroundbiomes:metamorphic_stone 0 server found: confirmed",
+      "-697,54,-220 census minecraft:dirt 0 fresh minecraft:dirt 0 server found: confirmed",
+      "-702,55,-218 census minecraft:dirt 0 fresh minecraft:dirt 0 server found: confirmed",
+      "-703,57,-218 census minecraft:dirt 0 fresh minecraft:dirt 0 server found: confirmed",
+      "-719,49,-220 census contenttweaker:raw_wrought_iron 0 fresh contenttweaker:raw_wrought_iron 0 server found: confirmed",
+      "-718,49,-225 census contenttweaker:raw_wrought_iron 0 fresh contenttweaker:raw_wrought_iron 0 server found: confirmed",
+      "-714,49,-219 census contenttweaker:raw_wrought_iron 0 fresh contenttweaker:raw_wrought_iron 0 server found: confirmed",
+      "-717,51,-216 census pyrotech:pile_slag 0 fresh pyrotech:pile_slag 0 server found: confirmed",
+      "-717,52,-226 census pyrotech:pile_slag 0 fresh pyrotech:pile_slag 0 server found: confirmed",
+      "-712,51,-221 census pyrotech:pile_slag 0 fresh pyrotech:pile_slag 0 server found: confirmed",
+      "-692,52,-221 census minecraft:gravel 0 fresh minecraft:gravel 0 server found: confirmed",
+      "-687,51,-221 census minecraft:gravel 0 fresh minecraft:gravel 0 server found: confirmed",
+      "-698,50,-226 census minecraft:gravel 0 fresh minecraft:gravel 0 server found: confirmed",
+      "-704,56,-199 census osv:coal_ore_undergroundbiomes_sedimentary_stone 0 fresh osv:coal_ore_undergroundbiomes_sedimentary_stone 0 server found: confirmed",
+      "-694,60,-201 census osv:coal_ore_undergroundbiomes_sedimentary_stone 0 fresh osv:coal_ore_undergroundbiomes_sedimentary_stone 0 server found: confirmed",
+      "-693,61,-202 census osv:coal_ore_undergroundbiomes_sedimentary_stone 0 fresh osv:coal_ore_undergroundbiomes_sedimentary_stone 0 server found: confirmed",
+      "-696,59,-201 census osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0 fresh osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0 server found: confirmed",
+      "-696,59,-200 census osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0 fresh osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0 server found: confirmed",
+      "-714,49,-207 census osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0 fresh osv:simpleores_copper_ore_undergroundbiomes_sedimentary_stone 0 server found: confirmed",
+      "-697,66,-205 census pyrotech:rock 6 fresh pyrotech:rock 6 server found: confirmed",
+      "-699,65,-210 census pyrotech:rock 6 fresh pyrotech:rock 6 server found: confirmed",
+      "-716,66,-194 census pyrotech:rock 6 fresh pyrotech:rock 6 server found: confirmed",
+      "-694,60,-211 census osv:coal_ore_sandstone 0 fresh osv:coal_ore_sandstone 0 server found: confirmed",
+      "-694,61,-202 census osv:coal_ore_sandstone 0 fresh osv:coal_ore_sandstone 0 server found: confirmed",
+      "-694,61,-209 census osv:coal_ore_sandstone 0 fresh osv:coal_ore_sandstone 0 server found: confirmed",
+      "-710,62,-194 census osv:simpleores_copper_ore_sandstone 0 fresh osv:simpleores_copper_ore_sandstone 0 server found: confirmed",
+      "-696,60,-200 census osv:simpleores_copper_ore_sandstone 0 fresh osv:simpleores_copper_ore_sandstone 0 server found: confirmed",
+      "-702,62,-213 census minecraft:grass 0 fresh minecraft:grass 0 server found: confirmed",
+      "-700,62,-214 census minecraft:grass 0 fresh minecraft:grass 0 server found: confirmed",
+      "-710,61,-204 census osv:simpleores_tin_ore_sandstone 0 fresh osv:simpleores_tin_ore_sandstone 0 server found: confirmed",
+      "-709,61,-203 census osv:simpleores_tin_ore_undergroundbiomes_sedimentary_stone 0 fresh osv:simpleores_tin_ore_undergroundbiomes_sedimentary_stone 0 server found: confirmed",
+      "-698,65,-196 census contenttweaker:codex_junk 0 fresh contenttweaker:codex_junk 0 server found: confirmed",
+      "-692,64,-206 census pyrotech:rock 8 fresh pyrotech:rock 8 server found: confirmed"
+    ],
+    "worldChanges": [],
+    "metaDrift": {
+      "count": 0,
+      "of": 50,
+      "first": []
+    },
+    "blocksWrong": {
+      "count": 0,
+      "first": []
+    },
+    "spotDistribution": {
+      "undergroundbiomes:sedimentary_stone 0": 21,
+      "minecraft:sand 0": 6,
+      "minecraft:water 0": 4,
+      "minecraft:sandstone 0": 3,
+      "minecraft:gravel 0": 3,
+      "minecraft:dirt 0": 1,
+      "undergroundbiomes:igneous_stone 4": 1,
+      "contenttweaker:raw_wrought_iron 0": 1,
+      "undergroundbiomes:metamorphic_stone 0": 1
+    },
+    "spotFailures": {
+      "count": 0,
+      "first": []
+    },
+    "spotSkew": [],
+    "unloaded": {
+      "census": 0,
+      "cube": 35937,
+      "censusShare": 0,
+      "spot": 0,
+      "spotAsked": 80,
+      "spotShare": 0,
+      "maxShare": 0.01
+    }
+  },
+  "botExitCode": 128,
+  "error": null,
+  "git": {
+    "sha": "01a8193edff17c7fb017d0e671a96dc83374574c",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261102-030159",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}

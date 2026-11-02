@@ -76,12 +76,14 @@ export function driverProcess(argv, outFile, { passEnv = [] } = {}) {
     driverEnv({}, {}, passEnv); // validate --pass-env before anything starts
     let child = null;
     let code = null;
+    let signal = null;
     const lines = [];
     const out = fs.createWriteStream(outFile, { flags: 'a' });
     return {
         start(env) {
             // A second start (the one login retry, session.mjs) is a new process: forget the old exit code.
             code = null;
+            signal = null;
             child = spawn(argv[0], argv.slice(1), { env: driverEnv(process.env, env, passEnv), stdio: ['ignore', 'pipe', 'pipe'] });
             const take = (buf) => {
                 out.write(buf);
@@ -89,11 +91,14 @@ export function driverProcess(argv, outFile, { passEnv = [] } = {}) {
             };
             child.stdout.on('data', take);
             child.stderr.on('data', take);
-            child.on('exit', (c, sig) => { code = c ?? (sig ? 128 : 1); });
+            // Ended by a signal (the runner's SIGTERM at the end of a scenario, or a kill): code 128, and
+            // exitSignal() says which signal.
+            child.on('exit', (c, sig) => { signal = sig ?? null; code = c ?? (sig ? 128 : 1); });
             child.on('error', (e) => { take(Buffer.from(`driver spawn error: ${e.message}\n`)); code = 127; });
         },
         alive: () => child !== null && code === null,
         exitCode: () => code,
+        exitSignal: () => signal,
         output: () => lines,
         async stop(graceMs = 15000) {
             if (!child || code !== null) return;

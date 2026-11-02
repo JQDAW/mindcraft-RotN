@@ -167,6 +167,16 @@ describe('render-user-data', () => {
         assert.doesNotMatch(r.stdout + cfg, /HCLOUD_TOKEN|OPENROUTER|password/i);
     });
 
+    test('--seed reaches the build as LEVEL_SEED (the G2 world, lead after batch 5); no --seed leaves it empty', () => {
+        const withSeed = decodeWriteFiles(run(['render-user-data', '--name', 'mcr-test-unit', '--seed', '1880465901402976865']).stdout);
+        assert.match(withSeed['/etc/rotn-test/config.env'].content, /^LEVEL_SEED=1880465901402976865$/m);
+        const plain = decodeWriteFiles(run(['render-user-data', '--name', 'mcr-test-unit']).stdout);
+        assert.match(plain['/etc/rotn-test/config.env'].content, /^LEVEL_SEED=''$/m, 'no seed: a random world');
+        // build.sh writes it to server.properties before the first start.
+        assert.match(fs.readFileSync(path.join(repo, 'deploy/test-server/build.sh'), 'utf8'), /set_prop "\$props" level-seed "\$LEVEL_SEED"/);
+        assert.notEqual(run(['render-user-data', '--seed', 'bad seed;rm']).code, 0);
+    });
+
     test('--capture sets the FML debug flag; --extra-mod holds the start; upload drops the URL', () => {
         const jar = path.join(tmp, 'rotn-dumper-0.1.jar');
         fs.writeFileSync(jar, 'jar');

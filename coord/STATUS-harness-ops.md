@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (01:36 UTC, from `date -u`)
+Updated: 2026-11-02 (03:31 UTC, from `date -u`)
 
 ## Done
 
@@ -90,12 +90,12 @@ Updated: 2026-11-02 (01:36 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 4 ran on the lead's GO (2026-11-02 01:11 UTC) and FAILED; the server is deleted.** Mobs and items PASSED. Blocks failed `blocks_confirmed` 147/150. All three were gate-valid, with no world changes, no meta drift and no login retry.
-  - **The 3 failures are one systematic bot/server disagreement:** every sampled upper half of a double plant. The bot says `minecraft:double_plant 11`, and the server's `testforblock` says data value 10.
-  - The census lists 24 `double_plant 11` blocks and no `double_plant 10`, so the bot reads all upper halves as 11.
-  - This is a plain fail by the rules. It needs an owner (net-forge or rotn-data), see "G2 batch 4" below.
-  - I stopped as the GO says.
-- G2 batches 1-3 FAILED. The lead's decisions went into #64, #66, #67, #73 and #77 (all merged).
+- **G2 batch 5 PASSED** (all three scenarios gate-valid in one batch on 01a8193), and it is merged as honest evidence (#83). **The lead is not declaring G2 on it**: that world's cube had no double plants or Dynamic Trees blocks, so batch 4's defect was never exercised.
+- **The lead's follow-ups, this PR:**
+  - the plan fixes the G2 world to batch 4's (seed `1880465901402976865`, `deploy/test-server.sh run --seed`);
+  - the scenarios now check the recorded seed against it (notGate if different);
+  - `botExitCode` 128 is explained and recorded: the runner's SIGTERM at the end of a session gives `botStoppedByRunner: true` and `botExitSignal: SIGTERM`.
+- G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82 (all merged).
 - **Follow-up (lead, not blocking):** in `g2-mobs-named`, require a run-tagged entity within 1 block of a matched mob report.
 
 ## Watching
@@ -103,6 +103,52 @@ Updated: 2026-11-02 (01:36 UTC, from `date -u`)
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
 ## Real G2 batches
+
+### G2 batch 5 (2026-11-02): PASS (blocks, mobs and items all PASS, gate-valid); the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 2026-11-02 02:59 UTC.
+- **Code:** a clean detached checkout of develop at 01a8193 (#79-#82), after `npm ci`, which applied #81's prismarine-chunk patch. Every `result.json` has `git.dirty: false` and `untracked: 0`.
+- **Checks right before the create, all passed:**
+  - `agentNaming('.')`: wired, 643/643.
+  - `msa-login FRCFLD --check`: OK; its output is not recorded.
+  - The preflight on its own: cadence path, 4 dispatch runs; no leftovers.
+- **Command:** the planned one, unchanged.
+- **Console:** `gamerule doDaylightCycle false` once and `time set day` before each scenario: 4 lines, in the raw `latest.log` only. Then the runner's commands. No difficulty change.
+- **Raw files:** batch 4's are in `captures/raw/batch4-20261102/`, including the capture net-forge used.
+
+**Real times (UTC, 2026-11-02)**
+
+| Event | Time |
+| --- | --- |
+| Batch start | 03:01:57 |
+| Server created | 03:02:06 |
+| Ready | 03:05:09 |
+| `g2-blocks-named` | 03:05:15 to 03:11:52 (394 s) |
+| `g2-mobs-named` | 03:11:55 to 03:14:44 (166 s) |
+| `g2-items-roundtrip` | 03:14:47 to 03:16:41 (112 s) |
+| EXIT-trap teardown | started 03:16:50; "verified gone" 03:17:05 |
+
+- **Server up:** 15 min.
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. IPv4), plus 1 Primary IPv4-hour.
+- **Afterwards:** at 03:17:20 UTC, `hcloud server list`, `hcloud primary-ip list` and the labelled `ssh-key list` were all empty.
+
+**Results.** Every run had `pass: true`, `gateValid: true`, `weakenedParams: []`, no `notGate` reasons, no kicks, and `notes.loginRetry` `{retried: false}`. The driver's remap line at login was the same in all three: `state-id remap active: 382 state ids in 94 of the table's 132 blocks`.
+
+| Scenario | Verdict | Details |
+| --- | --- | --- |
+| `g2-blocks-named` | **PASS** | 20 non-air types; census sum 16706 + air 19231 + unloaded 0 = 35937. `blocks_confirmed` 50/50; `worldChanges` none; `metaDrift` 0 of 50. `blocks_spotcheck` 41 of 40, 80 positions, 0 unloaded, no skew; every spot hit is a census type. |
+| `g2-mobs-named` | **PASS** | 12/12 named and confirmed by run tag, 7 of them modded. **Replaced 1 of 12:** `charm:spectre` vanished, replaced by `quark:stoneling`. |
+| `g2-items-roundtrip` | **PASS** | 643/643 table entries; 30/30 read, named and round-tripped. |
+
+**Caveats and notes**
+- **The double-plant case was not exercised.** The spawn cube (centre -703 65 -210, world seed 8796110535854059511) has sedimentary stone, sand, water and sandstone, and no double plants or Dynamic Trees blocks.
+  - The remap is active in all three sessions, and its `minecraft:double_plant` entries (upper-half ids map to meta 10) were not skipped.
+  - The 124 skipped entries are all modded blocks, skipped by forge-bridge as "cycle" (e.g. `animania:block_trough`, `artisanworkstumps:*`). None of them is in this cube.
+  - The lead decides whether G2 needs a double-plant world.
+- **A server-side error, not caused by the bot:** at 03:06:23 (during blocks), `[File IO Thread/ERROR] [Universal Tweaks]: Failed to save chunk` with a NullPointerException in NBT writing. It is a pack-side save error; all checks used the live world. Worth knowing for the live server.
+
+**Evidence:** `test/evidence/g2/batch5-20261102/` (this PR), redacted with the merged tool; the CI leak check passes.
 
 ### G2 batch 4 (2026-11-02): FAIL (blocks 147/150, mobs PASS, items PASS); the server is deleted
 
@@ -310,9 +356,14 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 
 ## Planned real batches
 
-### G2 batch (batch 1 ran on 2026-11-01 and FAILED; this is the re-run plan, updated after the lead's decisions on #65. It needs a new written GO.)
+### G2 batch (the plan for every G2 gate batch; batches 1-5 ran on 2026-11-01/02. Each batch needs the lead's written GO.)
 
 **Goal:** G2 gate evidence. All three G2 scenarios at the gate parameters (no `--param` overrides, so the default `dataRoot`), with the agent's own naming, on one disposable test server.
+
+**The world is fixed (lead, after G2 batch 5):** a G2 gate run must use batch 4's world, **seed `1880465901402976865`**.
+- That world's spawn cube (centre -45 66 -66 in batch 4) has double plants and Dynamic Trees blocks, the cases batches 1-4 found.
+- The server is created with `--seed 1880465901402976865` (below).
+- The scenarios check it: the recorded seed must equal `G2_WORLD_SEED` (`test/runner/lib/g2.mjs`), otherwise the run is notGate. The spawn point may move by the spawn radius (about 10 blocks), so the cube is the same area, not necessarily the same centre.
 
 **Preconditions, all checked right before the run:**
 1. The lead's written GO in `coord/STATUS-rotn-lead.md`.
@@ -335,6 +386,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
     - #67 merged: findings 2-5 (re-asked block samples, mob replacements capped at 3, tagged confirms, placeholder names fail);
     - #66 merged: the batch 1 evidence plus the redaction tool and CI leak check;
     - and a **new** written GO from the lead.
+13. **For batch 6 (lead, after batch 5):** net-forge's fix for the 124 remap entries skipped as "cycle" merged; this PR (the world-seed check) merged; and a new written GO.
 
 **Driver (agreed: net-forge's #54).**
 - **The driver:** net-forge's `packages/forge-bridge/tools/g1-driver.mjs`. It already builds the bot with the real `initBot` (`src/utils/mcdata.js`) with forge-bridge attached, and speaks the G1 protocol through `attachScenario`. The G2 extension is about three lines in **their** file:
@@ -349,7 +401,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 - **Not proposed:** the stock `mineflayer-reference.mjs`. It has no forge-bridge, so it can't join a Forge 1.12.2 server with RotN's mod list.
 
 **Where things run.**
-- **Server:** `deploy/test-server.sh run`, unchanged. CPX42 in nbg1, `--ttl-hours 2`, EUR 0.138/h. The `run` EXIT trap deletes the server, with the watchdog and the sweeper as backup.
+- **Server:** `deploy/test-server.sh run`, unchanged, with `--seed 1880465901402976865`. CPX42 in nbg1, `--ttl-hours 2`, EUR 0.138/h. The `run` EXIT trap deletes the server, with the watchdog and the sweeper as backup.
 - **The bot runs on this PC.** The runner gives the driver only its allowlisted environment: `TEST_SERVER_HOST`/`PORT`, `MINDCRAFT_PROFILES_FOLDER` and the `ROTN_*` variables. It never gets `TEST_SERVER_CTL` or cloud credentials.
 - **Login cache:** `MINDCRAFT_PROFILES_FOLDER=C:/Users/admin/.mindcraft-rotn/FRCFLD/msa` exists only in this PC's environment, as for G1.
 - **Whitelist:** FRCFLD and JQDAW (the default).
@@ -361,7 +413,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 **Command** (one server, three scenarios in sequence, each with its own bot session):
 
 ```bash
-deploy/test-server.sh run --yes --ttl-hours 2 -- bash -c '
+deploy/test-server.sh run --yes --ttl-hours 2 --seed 1880465901402976865 -- bash -c '
   C() { bash "$TEST_SERVER_CTL" console --wait 2 -- "$@"; };
   C gamerule doDaylightCycle false;
   D="node packages/forge-bridge/tools/g1-driver.mjs";
@@ -419,7 +471,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 batch 5:** the double-plant upper-half meta (bot 11, server 10) found and fixed by its owner (net-forge or rotn-data, the lead routes it), then a new written GO.
+- **G2 batch 6:** net-forge's fix for the 124 remap entries skipped as "cycle", this PR (the world-seed check), then a new written GO. It runs in batch 4's world (`--seed 1880465901402976865`).
 
 ## Requests to other agents or the lead
 
@@ -442,5 +494,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: G2 batch 4 evidence and this status update (`agent/harness-ops/g2-batch4-evidence`).
-- Merged since the last update: #76, #77.
+- This PR: the G2 world-seed check, the `botExitCode` 128 explanation and the plan update (`agent/harness-ops/g2-world-seed`).
+- Merged since the last update: #83.
