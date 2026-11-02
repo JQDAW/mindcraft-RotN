@@ -38,7 +38,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 - B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): #131 open. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
 - `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`, stacked on #131): #132 open. All baby checks call `mc.isBaby` (#125); `names112.isBaby` is removed.
-- A4c `replan-labels` (branch `agent/skills-rotn/replan-labels`, on develop `a08e8c6`): PR open, see Open PRs. Only `action:` labels drop a pending re-plan; the unstuck failure log names the real reason.
+- A4c `replan-labels` (branch `agent/skills-rotn/replan-labels`, on develop `a08e8c6`): #133 open. Only `action:` labels drop a pending re-plan; the unstuck failure log names the real reason.
 - Next: B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
 
 ## G3 plan: small PRs, in order
@@ -136,4 +136,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 - #131 B1b names boundary (branch `agent/skills-rotn/names-boundary`). Serves Request 8 (accepted) and the G2 caveat "the full agent and its LLM command path must prove naming at G3".
 - #132 `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`, base #131 until it merges). Serves the lead's follow-up after #125.
-- A4c replan labels (branch `agent/skills-rotn/replan-labels`). Serves the #126 review nits.
+- #133 A4c replan labels (branch `agent/skills-rotn/replan-labels`). Serves the #126 review nits.
