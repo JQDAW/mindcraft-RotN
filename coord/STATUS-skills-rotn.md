@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T19:28Z (from `date -u`)
+Updated: 2026-11-02T19:57Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -19,6 +19,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#103 merged** (`3a009d9`): A1 log hygiene in `src/agent/` (`safe_error.js`, the static guard, the review nits). Lint baseline 254.
 - **#104 merged** (`aa4cead`): model-layer log hygiene under the lead-approved exception (`openrouter.js:40/49`, `prompter.js:124-125/131-132/238/327`). Log hygiene for the CX23 is done (lead, 2026-11-02).
 - **#108 merged** (`e3a2a31`): A2, cheat mode cannot be enabled (`!setMode`, profile, `setOn`/`loadJson`); the `/tp` and `/setblock` branches in `skills.js` cannot run.
+- **#109 merged** (`004cd38`): A3, the update loop and each mode survive a throw (rate-limited `[modes]`/`[update]` lines); no restart after `!smeltItem`; no `/skin` at login.
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -30,8 +31,8 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A3 `loop-and-restarts` (branch `agent/skills-rotn/loop-and-restarts`): #109 open.
-- A2b `no-task-files` (branch `agent/skills-rotn/no-task-files`, lead follow-up before the first G3 batch): #110 open. Mindcraft task files are refused unless `MINDCRAFT_ROTN_ALLOW_TASK_FILES=1` (test-only). Next: A4 `quiet-reflexes`.
+- A2b `no-task-files` (branch `agent/skills-rotn/no-task-files`, lead follow-up before the first G3 batch): #110 open. Mindcraft task files are refused unless `MINDCRAFT_ROTN_ALLOW_TASK_FILES=1` (test-only). Review APPROVE WITH NITS; both items fixed (a loud `[tasks] WARNING: TEST-ONLY TASK FILES ARE ENABLED ...` line when a task loads under the opt-in, and a test with the real env var).
+- Next: A4 `quiet-reflexes`, with the lead's follow-ups: (1) the unstuck mode no longer kills the agent after 10 s (`modes.js:127`) but recovers or logs a re-plan; (2) `execute(...)` at `modes.js:125` is awaited, so the per-mode catch covers it; (3) the `!smeltItem` and `/skin` tests become behavioural. Other exit paths (action_manager, mindserver_proxy, agent.js exit 4, `!restart`) are noted for G4.
 
 ## G3 plan: small PRs, in order
 
@@ -123,5 +124,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- #109 A3 loop and restarts (branch `agent/skills-rotn/loop-and-restarts`).
 - #110 A2b no task files (branch `agent/skills-rotn/no-task-files`). Serves the lead's follow-up on #108 (before the first G3 batch).

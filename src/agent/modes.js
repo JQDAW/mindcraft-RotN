@@ -461,7 +461,7 @@ class ModeController {
             if (json[mode.name] != undefined) {
                 if (json[mode.name] && this.isDisabled(mode.name)) {
                     // e.g. profiles/defaults/god_mode.json sets cheat: true
-                    console.warn(`[no-cheat] Profile sets ${mode.name}: true; ignored (${DISABLED_MODES[mode.name]}).`);
+                    console.warn(`[no-cheat] Loaded modes (profile or saved state) set ${mode.name}: true; ignored (${DISABLED_MODES[mode.name]}).`);
                     continue;
                 }
                 mode.on = json[mode.name];
