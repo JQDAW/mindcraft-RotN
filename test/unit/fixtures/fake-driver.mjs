@@ -14,5 +14,7 @@ console.log(`DRIVER {"type":"spawn","bot":"${process.env.ROTN_SCENARIO_BOT}"}`);
 // What the runner let through (PR #9 review finding 5): never the ctl, the state dir or cloud tokens.
 console.log(`DRIVER ${JSON.stringify({ type: 'env', ctl: 'TEST_SERVER_CTL' in process.env, stateDir: 'TEST_SERVER_STATE_DIR' in process.env,
     hcloud: 'HCLOUD_TOKEN' in process.env, extra: process.env.ROTN_SCENARIO_EXTRA })}`);
+// Its pid, so a test that hard-kills the runner can clean up the driver it leaves behind.
+console.log(`DRIVER {"type":"pid","pid":${process.pid}}`);
 process.on('SIGTERM', () => process.exit(0));
 setInterval(() => {}, 1000);

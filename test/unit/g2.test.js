@@ -14,7 +14,7 @@ import { setImmediate } from 'node:timers';
 import { Vec3 } from 'vec3';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { attachG2, pages, stockNames, agentNames } from '../runner/drivers/scenario-protocol.mjs';
-import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, agentNaming, namingCheckEnv, G2_WORLD_SEED } from '../runner/lib/g2.mjs';
+import { replyPages, testforblockVerdict, testforVerdict, isRegistryName, prng, agentNaming, namingCheckEnv, G2_WORLD_SEED, G2_CUBE_CENTRE, parseCentre } from '../runner/lib/g2.mjs';
 import blocks, { blockMeta } from '../scenarios/g2/g2-blocks-named.mjs';
 import mobs, { VANILLA_COMMON_MOBS, chooseMobs, readCommonMobs } from '../scenarios/g2/g2-mobs-named.mjs';
 import items, { VANILLA_SAMPLE, parseItems, checkFullTable } from '../scenarios/g2/g2-items-roundtrip.mjs';
@@ -23,6 +23,7 @@ import { isProfileFetchFailure } from '../runner/lib/session.mjs';
 const NAME = 'FRCFLD';
 const UUID_V4 = '0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d';
 const DS = 'net.minecraft.server.dedicated.DedicatedServer';
+const SHIFT = [-55, 2, -62];   // global = local + SHIFT: the sim's old spawn cube (10,64,-4) is the fixed G2 cube (-45,66,-66)
 const tick = () => new Promise((r) => setImmediate(r));
 
 // The world near spawn: stone, ores, dirt layers, grass with modded rock, plants, trees, then air.
@@ -50,9 +51,15 @@ const ENTITY_DISPLAY = { 'minecraft:zombie': 'Zombie', 'minecraft:skeleton': 'Sk
  *   server read it, to model blocks that change state (G2 batch 1: Dynamic Trees leaves)
  */
 function sim(opt = {}) {
+    // Coordinates. The fixtures (blockAtWorld, opt.extra, opt.unloaded) are in LOCAL coordinates,
+    // built around the old spawn (10,64,-4). The server and the bot use GLOBAL ones = local + SHIFT, so the
+    // fixed G2 cube (G2_CUBE_CENTRE, -45,66,-66) shows that same test world. The bot spawns at the global
+    // 10.5 64 -3.5, outside the fixed cube, and only the runner's teleport brings it there (G2 batch 6).
+    const loc = (x, y, z) => [x - SHIFT[0], y - SHIFT[1], z - SHIFT[2]];
     // opt.extra: {"x,y,z": block} placed into the static world (e.g. a type with only 2 blocks).
     const base = (x, y, z) => opt.extra?.[`${x},${y},${z}`] ?? blockAtWorld(x, y, z);
-    const world = (x, y, z) => (opt.world ? opt.world(x, y, z, base(x, y, z)) : base(x, y, z));
+    // opt.world(x, y, z, block) gets GLOBAL coordinates: what the bot and the server see there now.
+    const world = (x, y, z) => { const b = base(...loc(x, y, z)); return opt.world ? opt.world(x, y, z, b) : b; };
     const log = [];
     let t = 0;
     let online = false;
@@ -72,7 +79,7 @@ function sim(opt = {}) {
     let loadedAt = Infinity;   // loadAfterMs: the chunks arrive that long (real time) after the first lookup that missed
     fake.blockAt = (v) => {
         const late = Date.now() >= loadedAt;
-        if (opt.unloaded && !(opt.loadOnWait && waited) && !late && opt.unloaded(v.x, v.y, v.z)) {
+        if (opt.unloaded && !(opt.loadOnWait && waited) && !late && opt.unloaded(...loc(v.x, v.y, v.z))) {
             if (opt.loadAfterMs && loadedAt === Infinity) loadedAt = Date.now() + opt.loadAfterMs;
             return null;   // no chunk there
         }
@@ -95,6 +102,16 @@ function sim(opt = {}) {
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
             else if (cmd === 'seed') add(opt.noSeed ? 'Unknown command. Try /help for a list of commands' : `Seed: ${opt.seed ?? G2_WORLD_SEED}`);
             else if (cmd === `tp ${NAME} ~ ~ ~`) add(online ? `Teleported ${NAME} to ${pos.x}, ${pos.y}, ${pos.z}` : 'Player not found');
+            else if ((m = /^tp (\S+) (-?\d+) (-?\d+) (-?\d+)$/.exec(cmd)) && m[1] === NAME) {
+                // 1.12 centres integer x and z on the block: tp NAME -45 66 -66 -> -44.5 66 -65.5.
+                // opt.tpSilent: no "Teleported" line (and no move); opt.tpLandsAt: where the bot really ends up.
+                if (!online) add('Player not found');
+                else if (!opt.tpSilent) {
+                    const [x, y, z] = [Number(m[2]) + 0.5, Number(m[3]), Number(m[4]) + 0.5];
+                    add(`Teleported ${NAME} to ${x}, ${y}, ${z}`);
+                    [pos.x, pos.y, pos.z] = opt.tpLandsAt ?? [x, y, z];
+                }
+            }
             else if ((m = /^tell (\S+) (.*)$/.exec(cmd)) && online) fake.emit('messagestr', `Server whispers to you: ${m[2]}`);
             else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) (\S+) (\d+)$/.exec(cmd))) {
                 const [x, y, z] = [m[1], m[2], m[3]].map(Number);
@@ -306,6 +323,75 @@ describe('the agent\'s naming path (PR #36 re-review item 3)', () => {
         assert.equal(w.gateValid, false);
     });
 
+    test('the fixed cube (lead, after G2 batch 6): the bot is teleported to G2_CUBE_CENTRE and the census covers that cube', async () => {
+        assert.equal(G2_CUBE_CENTRE, '-45,66,-66');
+        assert.equal(blocks.defaults.cubeCentre, G2_CUBE_CENTRE);
+        assert.equal(blocks.gateParams.cubeCentre, 'equal');
+        const s = sim();
+        const sent = [];
+        const orig = s.server.console;
+        s.server.console = (cmd, w) => { sent.push(cmd); return orig(cmd, w); };
+        const r = await run(blocks, s, { seed: 7 });
+        // The teleport comes after the login and before the census, and the census whisper names the centre.
+        const tp = sent.indexOf('tp FRCFLD -45 66 -66');
+        const census = sent.findIndex((c) => /^tell FRCFLD scenario-blocks [0-9a-f]+ 16 50 8 -45,66,-66$/.test(c));
+        assert.ok(tp > sent.indexOf('seed') && tp < census, sent.slice(0, 8).join(' | '));
+        assert.ok(sent.slice(tp + 1, census).includes('tp FRCFLD ~ ~ ~'), 'the real position is read after the teleport');
+        assert.equal(r.notes.cube.botInCube, true);
+        assert.ok(!r.weakenedParams.some((w) => /cube|teleport/.test(w)), JSON.stringify(r.weakenedParams));
+        assert.equal(byName(r).blocks_named.pass, true);
+    });
+
+    test('the fixed cube: a bot that lands off-centre but in the cube still counts; the census stays on the fixed centre', async () => {
+        const r = await run(blocks, sim({ tpLandsAt: [-40.5, 70, -60.5] }), { seed: 7 });
+        assert.deepEqual(r.notes.cube.center, [-45, 66, -66]);
+        assert.deepEqual(r.notes.cube.botPosition, [-40.5, 70, -60.5]);
+        assert.equal(r.notes.cube.botInCube, true);
+        assert.ok(!r.weakenedParams.some((w) => /cube|teleport/.test(w)), JSON.stringify(r.weakenedParams));
+        // The driver took the census around the whispered centre, not around itself (-41,70,-61): a census
+        // around the bot would report candidates outside the fixed cube, which blocks_named fails.
+        assert.equal(byName(r).blocks_named.pass, true, byName(r).blocks_named.detail);
+        assert.equal(byName(r).blocks_confirmed.pass, true, byName(r).blocks_confirmed.detail);
+    });
+
+    test('the fixed cube: a bot not in the cube after the teleport, or no "Teleported" line, is not a gate run', async () => {
+        // Lands 17 blocks above the centre (batch 6's canopy was 17 above batch 4's ground): outside the radius 16.
+        const high = await run(blocks, sim({ tpLandsAt: [-44.5, 83, -65.5] }), { seed: 7 });
+        assert.equal(high.notes.cube.botInCube, false);
+        assert.ok(high.weakenedParams.includes('the bot is at -44.5 83 -65.5 after the teleport, not in the cube (centre -45 66 -66, radius 16)'),
+            JSON.stringify(high.weakenedParams));
+        assert.equal(high.gateValid, false);
+        assert.equal(high.pass, false);
+        // The server never confirms the teleport: the bot stays at its spawn, far from the cube.
+        const silent = await run(blocks, sim({ tpSilent: true }), { seed: 7 });
+        assert.equal(silent.notes.cube.teleportedTo, null);
+        assert.ok(silent.weakenedParams.includes('no "Teleported" line for "tp FRCFLD -45 66 -66": the move to the fixed cube is unconfirmed'),
+            JSON.stringify(silent.weakenedParams));
+        assert.ok(silent.weakenedParams.some((w) => w.startsWith('the bot is at 10.5 64 -3.5 after the teleport, not in the cube')));
+        assert.equal(silent.gateValid, false);
+    });
+
+    test("the fixed cube: cubeCentre '' centres the cube on the bot with no teleport (a weakened run); a bad value is an error", async () => {
+        const s = sim();
+        const sent = [];
+        const orig = s.server.console;
+        s.server.console = (cmd, w) => { sent.push(cmd); return orig(cmd, w); };
+        const r = await run(blocks, s, { seed: 7, cubeCentre: '' });
+        assert.ok(!sent.some((c) => /^tp FRCFLD -?\d/.test(c)), 'no teleport');
+        assert.deepEqual(r.notes.cube, { center: [10, 64, -4], radius: 16, planned: null, teleportedTo: null, botPosition: [10.5, 64, -3.5], botInCube: true });
+        assert.ok(r.weakenedParams.includes(`cubeCentre= (gate needs = ${G2_CUBE_CENTRE})`), JSON.stringify(r.weakenedParams));
+        const bad = await run(blocks, sim(), { seed: 7, cubeCentre: '-45 66 -66' });
+        assert.match(bad.error, /cubeCentre '-45 66 -66' is not "x,y,z"/);
+        assert.equal(bad.pass, false);
+        assert.deepEqual([parseCentre('-45,66,-66'), parseCentre(''), parseCentre('1,2'), parseCentre('a,b,c'), parseCentre(' 3,-4,5 ')],
+            [[-45, 66, -66], null, undefined, undefined, [3, -4, 5]]);
+    });
+
+    test("the fixed centre is batch 4's: its recorded cube centre, where its bot stood after 1.12's block-centred tp", () => {
+        const b4 = JSON.parse(fs.readFileSync(new URL('../evidence/g2/batch4-20261102/blocks/result.json', import.meta.url), 'utf8'));
+        assert.deepEqual(b4.notes.center, parseCentre(G2_CUBE_CENTRE));
+    });
+
     test("the planned G2 seed is batch 4's world (the double-plant world), as recorded in its evidence", () => {
         const b4 = JSON.parse(fs.readFileSync(new URL('../evidence/g2/batch4-20261102/blocks/result.json', import.meta.url), 'utf8'));
         assert.equal(b4.notes.worldSeed, G2_WORLD_SEED);
@@ -356,7 +442,10 @@ describe('g2-blocks-named on a simulated server', () => {
         assert.ok(r.notes.census.some((b) => b.startsWith('pyrotech:rock 6 ')), 'the modded block is in the census');
         assert.ok(!r.notes.census.some((b) => b.startsWith('minecraft:air')), 'no air in the census');
         assert.equal(r.notes.worldSeed, G2_WORLD_SEED, 'the world seed is evidence (finding 5)');
-        assert.deepEqual(r.notes.cube, { center: [10, 64, -4], radius: 16 });
+        // The fixed cube (lead, after G2 batch 6): teleported from its spawn (10.5 64 -3.5) to G2_CUBE_CENTRE.
+        assert.deepEqual(r.notes.cube, { center: [-45, 66, -66], radius: 16, planned: G2_CUBE_CENTRE, teleportedTo: [-44.5, 66, -65.5],
+            botPosition: [-44.5, 66, -65.5], botInCube: true });
+        assert.ok(!r.weakenedParams.some((w) => /cube|teleport|cubeCentre/.test(w)), JSON.stringify(r.weakenedParams));
         assert.equal(r.notes.spotSkew.length, 0);
     });
 

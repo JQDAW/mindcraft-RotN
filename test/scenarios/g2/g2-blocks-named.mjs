@@ -5,9 +5,13 @@
 // Steps
 //   1. login_online, as in G1. The world seed (`seed`) and the cube centre are recorded in notes; no seed,
 //      or an agent naming path not yet wired to rotn-data (mcdata.js), makes the run not a gate run.
-//   2. After settleMs, `tp NAME ~ ~ ~` gives the bot's position: the centre of the cube.
-//   3. The console whispers "scenario-blocks TOKEN R N K". The bot reports its census of the N most
-//      common NON-AIR block types in the cube (radius R): "name meta count x,y,z ..." with up to K
+//   2. After settleMs the runner teleports the bot to the fixed cube centre (`cubeCentre`, G2_CUBE_CENTRE:
+//      batch 4's ground centre; lead, after G2 batch 6: the seed fixes the world, not the spawn), waits
+//      tpSettleMs, and reads the bot's real position from the server (`tp NAME ~ ~ ~`). A bot that is not
+//      inside the cube then makes the run not a gate run. notes.cube records the planned centre, the
+//      teleport and the position. With cubeCentre '' (a weakened run) the cube is centred on the bot.
+//   3. The console whispers "scenario-blocks TOKEN R N K X,Y,Z". The bot reports its census of the N most
+//      common NON-AIR block types in the cube (radius R) around X,Y,Z: "name meta count x,y,z ..." with up to K
 //      candidate positions per type, drawn uniformly from all blocks of that type.
 //      blocks_named: minTypes..N non-air entries, every name a full registry name (nothing unknown),
 //      min(count, K) distinct candidates per type, all inside the cube.
@@ -33,7 +37,7 @@
 import crypto from 'node:crypto';
 import { startSession } from '../../runner/lib/session.mjs';
 import { lastTeleport } from '../../runner/lib/server-log.mjs';
-import { G2_WORLD_SEED, awaitReply, isRegistryName, ints, prng, sample, testforblockVerdict } from '../../runner/lib/g2.mjs';
+import { G2_CUBE_CENTRE, G2_WORLD_SEED, awaitReply, parseCentre, isRegistryName, ints, prng, sample, testforblockVerdict } from '../../runner/lib/g2.mjs';
 
 const MS = 1000;
 const BATCH = 8;
@@ -85,8 +89,10 @@ export default {
         seed: 0,                  // 0 = random; the seed used is recorded in notes
         dataRoot: '',              // '' = this repo (its mcdata.js wiring decides gate validity); tests use fixtures
         worldSeed: G2_WORLD_SEED,  // the planned G2 world (deploy/test-server.sh run --seed); another seed is not a gate run
+        cubeCentre: G2_CUBE_CENTRE, // "x,y,z": the bot is teleported here and the census covers this cube; '' = around the bot
         loginTimeoutMs: 240 * MS,
         settleMs: 20 * MS,         // chunks around spawn arrive after the join
+        tpSettleMs: 5 * MS,        // after the teleport to cubeCentre, before the position check
         replyTimeoutMs: 180 * MS,
         pollMs: 3 * MS,
         logTail: 40000,
@@ -95,7 +101,7 @@ export default {
     gateParams: {
         bot: 'equal', radius: 'min', topN: 'min', minTypes: 'min', candidates: 'min', samplesPerType: 'min',
         spotChecks: 'min', absentHits: 'equal', maxShareGap: 'equal', maxUnloadedShare: 'equal', dataRoot: 'equal',
-        maxWorldChangeShare: 'equal', maxWorldChangesPerType: 'equal', worldSeed: 'equal',
+        maxWorldChangeShare: 'equal', maxWorldChangesPerType: 'equal', worldSeed: 'equal', cubeCentre: 'equal',
     },
 
     async run(ctx) {
@@ -106,12 +112,23 @@ export default {
         if (!s.ok) return;
         await clock.sleep(p.settleMs);
 
+        // 2. the fixed cube (lead, after G2 batch 6): teleport, then the bot's real position from the server
+        const fixedCentre = parseCentre(p.cubeCentre);
+        if (fixedCentre === undefined) throw new Error(`cubeCentre '${p.cubeCentre}' is not "x,y,z" (integers) or ''`);
+        let teleportedTo = null;
+        if (fixedCentre) {
+            teleportedTo = lastTeleport(server.console(`tp ${name} ${fixedCentre.join(' ')}`, p.consoleWaitS), name);
+            await clock.sleep(p.tpSettleMs);
+        }
         const at = lastTeleport(server.console(`tp ${name} ~ ~ ~`, p.consoleWaitS), name);
         if (!at) throw new Error(`no position for ${name} from "tp ${name} ~ ~ ~"`);
-        const c = at.map(Math.floor);
-        ctx.note('center', c);
-        ctx.note('cube', { center: c, radius: p.radius });
+        const botAt = at.map(Math.floor);
+        const c = fixedCentre ?? botAt;
         const inCube = ([x, y, z]) => Math.abs(x - c[0]) <= p.radius && Math.abs(y - c[1]) <= p.radius && Math.abs(z - c[2]) <= p.radius;
+        ctx.note('center', c);
+        ctx.note('cube', { center: c, radius: p.radius, planned: fixedCentre ? p.cubeCentre : null, teleportedTo, botPosition: at, botInCube: inCube(botAt) });
+        if (fixedCentre && !teleportedTo) ctx.notGate(`no "Teleported" line for "tp ${name} ${fixedCentre.join(' ')}": the move to the fixed cube is unconfirmed`);
+        if (!inCube(botAt)) ctx.notGate(`the bot is at ${at.join(' ')} after the teleport, not in the cube (centre ${c.join(' ')}, radius ${p.radius})`);
         const seed = p.seed || crypto.randomBytes(4).readUInt32LE(0);
         ctx.note('spotSeed', seed);
         const rnd = prng(seed);
@@ -123,7 +140,7 @@ export default {
 
         // 3. the bot's census
         const token = crypto.randomBytes(6).toString('hex');
-        server.console(`tell ${name} scenario-blocks ${token} ${p.radius} ${p.topN} ${p.candidates}`, 1);
+        server.console(`tell ${name} scenario-blocks ${token} ${p.radius} ${p.topN} ${p.candidates} ${c.join(',')}`, 1);
         const rep = await awaitReply(ctx, s.sinceMarker, name, 'blocks', token, p.replyTimeoutMs);
         const censusAt = new Date().toISOString();   // when the census reply was in (#77 follow-up)
         ctx.note('censusAt', censusAt);

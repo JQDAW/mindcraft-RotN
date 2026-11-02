@@ -136,3 +136,46 @@ describe('committed evidence has no unredacted addresses, UUIDs or local paths',
         assert.deepEqual(found, [], 'redact these with test/tools/redact-evidence.mjs (never widen the version allowlist for an address)');
     });
 });
+
+describe('one rule for the tool and the check (lead, after G2 batch 6: a bare address the tool missed was removed by hand)', () => {
+    test('the G2 batch 6 run.log line shape: "server NAME is at A.B.C.D" at the end of the line, both ways', () => {
+        both('[test-server 13:53:32] server mcr-test-20261102-135312 is at 203.0.113.7',
+            '[test-server 13:53:32] server mcr-test-20261102-135312 is at <ip>', 'ipv4');
+        // The same batch log's READY line (host:port), with CRLF as on Windows.
+        both('[test-server 13:56:06] READY: mcr-test-20261102-135312 at 198.51.100.23:25565 (delete-after 2026-11-02T15:53:20Z)\r\n',
+            '[test-server 13:56:06] READY: mcr-test-20261102-135312 at <ip>:25565 (delete-after 2026-11-02T15:53:20Z)\r\n', 'ipv4');
+    });
+
+    test('a bare address at the end of a line, of the text, or before a full stop, both ways', () => {
+        both('address 192.0.2.10', 'address <ip>', 'ipv4');
+        both('address 192.0.2.10\nnext line', 'address <ip>\nnext line', 'ipv4');
+        both('reached 198.51.100.9.', 'reached <ip>.', 'ipv4');
+        both('peer=203.0.113.250', 'peer=<ip>', 'ipv4');
+    });
+
+    test('everything the check flags as IPv4, the tool redacts; the exempt version forms stay', () => {
+        const flagged = ['ip-203.0.113.7', 'host_203.0.113.7', 'rev203.0.113.7', 'v203.0.113.7', '203.0.113.7-', '203.0.113.7abc',
+            'ssh root@203.0.113.7', 'ssh root@203.0.113.7,x', 'server at 192.0.2.10 ready', 'ip=198.51.100.9',
+            'version 192.0.2.10', '{192.0.2.10 }', 'a-192.0.2.10.jarx', '-192.0.2.10.jar', 'x-192.0.2.10.tar',
+            '[INFO]: somemod@203.0.113.7,othermod@1.0'];
+        for (const t of flagged) {
+            assert.ok(kinds(t).includes('ipv4'), `${t}: flagged`);
+            assert.deepEqual(kinds(redact(t)), [], `${t}: clean after redaction (${redact(t)})`);
+        }
+        const exempt = '[FML]: Client attempting to join with 2 mods : somemod@1.2.3.4,FML@8.0.99.99\n'
+            + 'UCHIJAAAA\tsomemod{1.2.3.4} [Some Mod] (somemod-1.2.3.4.jar)\nForge 14.23.5.2860';
+        assert.equal(redact(exempt), exempt);
+    });
+
+    test('committed G2 evidence comes out of the tool: redacting it again changes nothing', () => {
+        const files = evidenceFiles(path.join(ROOT, 'test', 'evidence', 'g2'));
+        assert.ok(files.length > 0);
+        for (const f of files) {
+            const t = fs.readFileSync(f, 'utf8');
+            // Logs and result.json come out of the tool with --bot; a README is prose that may name the bot
+            // account, so for it only addresses, UUIDs and local paths count.
+            const bot = path.basename(f) === 'README.md' ? undefined : 'FRCFLD';
+            assert.equal(redact(t, { bot }), t, `${path.relative(ROOT, f)}: the tool would still change it`);
+        }
+    });
+});

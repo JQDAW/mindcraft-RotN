@@ -18,6 +18,22 @@ import { chatLines, parseLine } from './server-log.mjs';
  */
 export const G2_WORLD_SEED = '1880465901402976865';
 
+/**
+ * The cube every G2 gate run of g2-blocks-named checks (lead, after G2 batch 6): batch 4's ground centre
+ * in G2_WORLD_SEED's world, "x,y,z". The fixed seed pins the world but not the bot's spawn (batch 6 landed
+ * on a canopy 17 blocks higher, so its cube was 90% air), so after login the runner teleports the bot here
+ * (1.12's `tp NAME -45 66 -66` puts it at -44.5 66.0 -65.5, where batch 4's bot stood) and takes the census
+ * of this cube. The `cubeCentre` gate param defaults to it and is compared 'equal'.
+ */
+export const G2_CUBE_CENTRE = '-45,66,-66';
+
+/** "x,y,z" (integers) -> [x, y, z]; '' -> null (no fixed centre); anything else -> undefined. */
+export function parseCentre(s) {
+    if (s === '' || s === null || s === undefined) return null;
+    const m = /^(-?\d+),(-?\d+),(-?\d+)$/.exec(String(s).trim());
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : undefined;
+}
+
 /** A full registry name, "namespace:path". Anything else (null, a number, "unknown") is not a name. */
 export const REGISTRY_NAME = /^[a-z][a-z0-9_.-]*:[a-z0-9_./-]*[a-z][a-z0-9_./-]*$/;   // "1:0" (an id) is not a name
 export const isRegistryName = (n) => typeof n === 'string' && REGISTRY_NAME.test(n) && !/(^|[:_/])unknown([_/]|$)/.test(n);

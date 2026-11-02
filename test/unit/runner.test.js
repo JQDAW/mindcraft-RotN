@@ -4,17 +4,17 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { runScenario, waitFor, weakenedParams } from '../runner/lib/runner.mjs';
+import { runScenario, waitFor, weakenedParams, KILLED_NOTE } from '../runner/lib/runner.mjs';
 import { G2_WORLD_SEED } from '../runner/lib/g2.mjs';
 import g2Blocks from '../scenarios/g2/g2-blocks-named.mjs';
 import * as L from '../runner/lib/server-log.mjs';
-import { parseArgs, loadScenarios, gitInfo } from '../runner/run.mjs';
+import { parseArgs, loadScenarios, gitInfo, writeAtomic } from '../runner/run.mjs';
 import { driverEnv, ctlServer, driverProcess } from '../runner/lib/adapters.mjs';
 import { attachScenario } from '../runner/drivers/scenario-protocol.mjs';
 import g1 from '../scenarios/g1/g1-login-chat-walk.mjs';
@@ -422,6 +422,8 @@ describe('run.mjs', () => {
         // The planned G2 seed given on the command line is the gate default, so the run is not weakened.
         const params = parseArgs(['--param', `worldSeed=${G2_WORLD_SEED}`]).params;
         assert.deepEqual(weakenedParams(g2Blocks, params), []);
+        // The fixed cube centre given on the command line is a string ("x,y,z") equal to the gate default.
+        assert.deepEqual(weakenedParams(g2Blocks, parseArgs(['--param', 'cubeCentre=-45,66,-66']).params), []);
         assert.deepEqual(weakenedParams(g2Blocks, { worldSeed: Number(G2_WORLD_SEED) }).map((w) => w.split(' ')[0]), ['worldSeed=1880465901402976800']);
     });
 
@@ -608,5 +610,105 @@ describe('driver side (scenario-protocol.mjs) on a fake mineflayer bot', () => {
         } finally {
             process.off('unhandledRejection', onUnhandled);
         }
+    });
+});
+
+describe('P2 (lead, after G2 batch 6): a killed runner leaves the checks it had done in result.json, never a pass', () => {
+    const fakeBot = () => ({ start() {}, stop: async () => {}, alive: () => false, exitCode: () => null, output: () => [] });
+    const clock = { now: () => 0, sleep: async () => {} };
+    const scenario = {
+        id: 'p2', gate: 'GX', title: 't', checks: { a: 'item a', b: 'item b' }, defaults: {}, gateParams: {},
+        run(ctx) { ctx.check('a', true, 'ok'); ctx.note('k', 1); ctx.check('b', true, 'ok'); },
+    };
+
+    test('onProgress gets a FAIL (killed) record at the start and after every check; the final result replaces it', async () => {
+        const recs = [];
+        const control = {};
+        const r = await runScenario(scenario, { server: {}, bot: fakeBot(), clock, runId: 'x', onProgress: (x) => recs.push(structuredClone(x)), control });
+        assert.equal(recs.length, 3, 'start, a, b');
+        for (const x of recs) {
+            assert.equal(x.pass, false);
+            assert.equal(x.checksPassed, false);
+            assert.equal(x.verdict, 'FAIL (killed)');
+            assert.equal(x.notes.killed, KILLED_NOTE);
+            assert.equal(x.error, 'runner killed before the scenario finished');
+        }
+        assert.deepEqual(recs[0].checks.map((c) => c.detail), ['not reached (runner killed)', 'not reached (runner killed)']);
+        assert.deepEqual(recs[1].checks.map((c) => [c.check, c.pass, c.detail]), [['a', true, 'ok'], ['b', false, 'not reached (runner killed)']]);
+        // Every check passed before the kill: still never a pass.
+        assert.equal(recs[2].passed, 2);
+        assert.equal(recs[2].pass, false);
+        assert.equal(r.pass, true);
+        assert.equal(r.verdict, 'PASS');
+        assert.equal('killed' in r.notes, false, 'a finished run has no killed note');
+        assert.match(control.progress('SIGTERM').notes.killed, /Killed by SIGTERM\.$/);
+    });
+
+    test('writeAtomic replaces the file whole and leaves no temp file', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-wa-'));
+        try {
+            const f = path.join(dir, 'result.json');
+            writeAtomic(f, 'one\n');
+            writeAtomic(f, 'two\n');
+            assert.equal(fs.readFileSync(f, 'utf8'), 'two\n');
+            assert.deepEqual(fs.readdirSync(dir), ['result.json']);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // run.mjs on the fake test-server CLI and fake driver, G1 with a 10-minute stay, killed during the stay.
+    async function killDuringStay(signal) {
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-kill-'));
+        const fwd = (q) => q.replace(/\\/g, '/');
+        const ctl = path.join(tmp, 'ctl.sh');
+        fs.writeFileSync(ctl, `#!/usr/bin/env bash\nexec "${fwd(process.execPath)}" "${fwd(path.join(repo, 'test/unit/fixtures/fake-ctl.mjs'))}" "$@"\n`, { mode: 0o755 });
+        const out = path.join(tmp, 'out');
+        const child = spawn(process.execPath, [path.join(repo, 'test/runner/run.mjs'), '--scenario', 'g1-login-chat-walk',
+            '--param', 'pollMs=200', '--param', 'consoleWaitS=0', '--out', out, '--pass-env', 'FAKE_CTL_DIR',
+            '--', process.execPath, path.join(repo, 'test/unit/fixtures/fake-driver.mjs')],
+        { stdio: 'ignore', env: { ...process.env, TEST_SERVER_CTL: fwd(ctl), FAKE_CTL_DIR: tmp, TEST_SERVER_NAME: 'mcr-test-x', TEST_SERVER_STATE_DIR: fwd(tmp) } });
+        const exited = new Promise((r) => child.on('exit', (code, sig) => r({ code, sig })));
+        const file = path.join(out, 'result.json');
+        const read = () => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+        try {
+            // Wait until the progress record shows the walk passed (the stay is next and lasts 10 minutes).
+            let rec = null;
+            for (let i = 0; i < 600 && !(rec?.checks?.find((c) => c.check === 'walk')?.pass); i++) {
+                await new Promise((r) => setTimeout(r, 100));
+                rec = read();
+            }
+            assert.ok(rec, 'a progress record exists while the run is going');
+            child.kill(signal);
+            const ex = await exited;
+            return { rec: read(), ex };
+        } finally {
+            const pid = /DRIVER \{"type":"pid","pid":(\d+)\}/.exec(fs.existsSync(path.join(out, 'driver.log')) ? fs.readFileSync(path.join(out, 'driver.log'), 'utf8') : '')?.[1];
+            try { if (pid) process.kill(Number(pid), 'SIGKILL'); } catch { /* already gone */ }
+            child.kill('SIGKILL');
+            await new Promise((r) => setTimeout(r, 200));
+            fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+        }
+    }
+
+    test('run.mjs: a hard kill (TerminateProcess on Windows, SIGKILL elsewhere) leaves FAIL (killed) with the checks done', { timeout: 120000 }, async () => {
+        const { rec } = await killDuringStay('SIGKILL');
+        assert.equal(rec.pass, false);
+        assert.equal(rec.verdict, 'FAIL (killed)');
+        assert.equal(rec.notes.killed, KILLED_NOTE);
+        const by = Object.fromEntries(rec.checks.map((c) => [c.check, c]));
+        for (const k of ['login_online', 'chat_send', 'chat_receive', 'walk']) assert.equal(by[k].pass, true, `${k}: ${by[k].detail}`);
+        assert.deepEqual([by.stay_10min.pass, by.stay_10min.detail], [false, 'not reached (runner killed)']);
+        assert.equal(rec.server, 'mcr-test-x');
+        assert.equal(typeof rec.git.sha, 'string', 'the progress record names the code under test');
+    });
+
+    test('run.mjs: SIGTERM where it can be caught (not Windows) names the signal and exits 143', { timeout: 120000, skip: process.platform === 'win32' && 'node cannot catch a SIGTERM sent to it on Windows (TerminateProcess)' }, async () => {
+        const { rec, ex } = await killDuringStay('SIGTERM');
+        assert.equal(ex.code, 143);
+        assert.equal(rec.pass, false);
+        assert.equal(rec.verdict, 'FAIL (killed)');
+        assert.match(rec.notes.killed, /Killed by SIGTERM\.$/);
+        assert.equal(rec.checks.find((c) => c.check === 'walk').pass, true);
     });
 });

@@ -99,8 +99,9 @@ export async function walk(bot, n, timeoutMs, stepMs = 250) {
 // ---------------------------------------------------------------------------------------------
 // G2: the bot names what it sees; the runner has the server check every name (DRIVER.md, G2).
 //
-//   "scenario-blocks TOKEN R N K"        -> the N most common non-air block types in the cube of radius R
-//                                           around the bot: "name meta count x,y,z x,y,z ..." with up to K
+//   "scenario-blocks TOKEN R N K [X,Y,Z]" -> the N most common non-air block types in the cube of radius R
+//                                           around X,Y,Z (the runner's fixed cube centre; without it, around
+//                                           the bot's floored position): "name meta count x,y,z x,y,z ..." with up to K
 //                                           candidate positions per type, drawn uniformly from its blocks
 //                                           (the first entry is "#unloaded U T A": U of the T positions had
 //                                           no loaded chunk after waiting for the cube, they are never named;
@@ -224,10 +225,12 @@ export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = e
 
     bot.on('messagestr', (msg) => {
         let m;
-        if ((m = /scenario-blocks ([0-9a-f]{6,32}) (\d{1,2}) (\d{1,3}) (\d{1,2})\b/.exec(msg))) {
+        if ((m = /scenario-blocks ([0-9a-f]{6,32}) (\d{1,2}) (\d{1,3}) (\d{1,2})(?: (-?\d{1,8}),(-?\d{1,3}),(-?\d{1,8}))?(?!\S)/.exec(msg))) {
             const [token, r, n, k] = [m[1], Number(m[2]), Number(m[3]), Number(m[4])];
+            // The runner's fixed cube centre (G2 batch 6); without it, the cube is around the bot.
+            const centre = m[5] === undefined ? null : new Vec3(Number(m[5]), Number(m[6]), Number(m[7]));
             serial(async () => {
-                const c = here();
+                const c = centre ?? here();
                 await waitForCube(c, r);
                 // Census without air; per type, k candidate positions drawn uniformly (reservoir sampling)
                 // from all of its blocks, so the runner's pick among them is a fair sample of the type.
