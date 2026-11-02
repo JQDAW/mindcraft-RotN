@@ -1,8 +1,8 @@
 # Status: rotn-lead
 
-Updated: 2026-11-02 17:07 UTC (from `date -u`)
+Updated: 2026-11-02 18:14 UTC (from `date -u`)
 
-## Current snapshot (2026-11-02 17:07 UTC)
+## Current snapshot (2026-11-02 17:07 UTC; decisions added 2026-11-02 18:14 UTC)
 
 - **G2 passed** on G2 batch 8 (#97): strict review APPROVE, plus an independent verifier MET WITH CAVEATS. Details and caveats are in `docs/PLAN.md` Status.
 - **The path since the last snapshot:**
@@ -252,7 +252,8 @@ Updated: 2026-11-02 17:07 UTC (from `date -u`)
   - the dawn bound, marker and agenda counter are pinned before gate batches;
   - crafting must be proven by craft statistics if S1 shows they exist, plus S1 checks for no loot chests near the cube;
   - LLM calls and cost are recorded per scenario, with a batch spend stop;
-  - on test servers only: `Server` as a test-only task giver, `clear … 0`, `scoreboard`, `time query`, and `setblock` for the marker only;
+  - on test servers only (never in production): `Server` as a test-only task giver, `clear … 0`, `scoreboard`, `time query`, and `setblock` for the marker only;
+  - `give` and `summon` stay out of G3 scenarios (S1 only);
   - survival is the night gate (shelter is evidence);
   - restarts are tested offline in G3 and for real in G4.
 - **Incident (2026-11-02, harness-ops):** plan text passed through a bash string executed backticked `ssh`, `scp` and `passwd deploy`. All failed locally; none used `cx23` or an address, and nothing reached the CX23. Rule: write markdown with the Write or Edit tools, never through shell strings (memory note added).

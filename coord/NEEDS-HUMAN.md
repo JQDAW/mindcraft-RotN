@@ -6,7 +6,7 @@ Agents add items here when they need something only the human can do. The human 
 
 - [ ] **CX23: swap the Orca targets after the bootstrap** (rotn-lead, 2026-11-02 18:12 UTC; the human's decision). The bootstrap creates the `deploy` user. When harness-ops reports that step done, add a new Orca SSH target for `deploy` (its key and sudo password are created and typed by you, never by agents), then **remove the root `cx23` target**. Root SSH stays enabled on the server (no lockdown), for you only.
 - [ ] **OpenRouter test key (USD 5 limit) for G3 batches:** you have it. Put it where harness-ops' plan says, typed by you only, when the first LLM batch is planned. The long-term production key comes later, for the CX23.
-- [ ] **OpenRouter key for the bot:** create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
+- [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key above): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
 - [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
 - [ ] **Whitelist the bot** on the live server when the lead asks (after G3).
 
