@@ -1,0 +1,35 @@
+19:20:08 -> 19:20:48  dt=40s  ddaytime=0  ticks/min=0
+19:20:48 -> 19:21:53  dt=65s  ddaytime=0  ticks/min=0
+19:21:53 -> 19:22:58  dt=65s  ddaytime=0  ticks/min=0
+19:22:58 -> 19:24:03  dt=65s  ddaytime=0  ticks/min=0
+19:24:03 -> 19:25:08  dt=65s  ddaytime=0  ticks/min=0
+19:25:08 -> 19:26:13  dt=65s  ddaytime=0  ticks/min=0
+19:26:13 -> 19:27:17  dt=64s  ddaytime=0  ticks/min=0
+19:27:17 -> 19:28:22  dt=65s  ddaytime=130  ticks/min=120
+19:28:22 -> 19:29:28  dt=66s  ddaytime=1304  ticks/min=1185
+19:29:28 -> 19:30:33  dt=65s  ddaytime=1300  ticks/min=1200
+19:30:33 -> 19:31:38  dt=65s  ddaytime=1304  ticks/min=1204
+19:31:38 -> 19:32:43  dt=65s  ddaytime=1301  ticks/min=1201
+19:32:43 -> 19:33:48  dt=65s  ddaytime=1298  ticks/min=1198
+19:33:48 -> 19:34:53  dt=65s  ddaytime=1306  ticks/min=1206
+19:34:53 -> 19:35:58  dt=65s  ddaytime=1308  ticks/min=1207
+19:35:58 -> 19:37:03  dt=65s  ddaytime=1295  ticks/min=1195
+19:37:03 -> 19:38:08  dt=65s  ddaytime=1301  ticks/min=1201
+19:38:08 -> 19:39:13  dt=65s  ddaytime=1153  ticks/min=1064
+19:39:13 -> 19:40:19  dt=66s  ddaytime=0  ticks/min=0
+19:40:19 -> 19:41:24  dt=65s  ddaytime=0  ticks/min=0
+19:41:24 -> 19:42:28  dt=64s  ddaytime=0  ticks/min=0
+19:42:28 -> 19:43:33  dt=65s  ddaytime=0  ticks/min=0
+19:43:33 -> 19:44:38  dt=65s  ddaytime=0  ticks/min=0
+19:44:38 -> 19:45:43  dt=65s  ddaytime=0  ticks/min=0
+19:45:43 -> 19:46:47  dt=64s  ddaytime=0  ticks/min=0
+19:46:47 -> 19:47:52  dt=65s  ddaytime=0  ticks/min=0
+19:47:52 -> 19:48:58  dt=66s  ddaytime=0  ticks/min=0
+19:48:58 -> 19:50:02  dt=64s  ddaytime=1131  ticks/min=1060
+19:50:02 -> 19:51:07  dt=65s  ddaytime=1301  ticks/min=1201
+19:51:07 -> 19:52:12  dt=65s  ddaytime=1294  ticks/min=1194
+19:52:12 -> 19:53:17  dt=65s  ddaytime=1299  ticks/min=1199
+19:53:17 -> 19:54:22  dt=65s  ddaytime=1307  ticks/min=1206
+19:54:22 -> 19:55:28  dt=66s  ddaytime=1302  ticks/min=1184
+samples 34 moving segments 17 median ticks/min 1199 min 120 max 1207
+first movement in segment 19:27:17 -> 19:28:22

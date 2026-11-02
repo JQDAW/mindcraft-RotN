@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (18:55 UTC, from `date -u`)
+Updated: 2026-11-02 (19:59 UTC, from `date -u`)
 
 ## Done
 
@@ -92,7 +92,9 @@ Updated: 2026-11-02 (18:55 UTC, from `date -u`)
 
 - **Phase 3 (G3).**
   - The G3 plan, the driver interface proposal, the CX23 plan and the human items H1-H6 are merged (#101).
-  - **This PR: the S1 runner tooling.** Three S1 scenarios, their reply parsers, a whisper probe in the driver protocol, and offline tests. S1's written GO follows its merge.
+  - **S1-A ran on 2026-11-02 and was cut short; this PR is its evidence and findings.** The survey and arbiters completed. The day cycle stopped at 19:56:37, after about 36 min, when the PC ran out of resources (see "S1-A" under "Real S1 batches"). The server is deleted.
+    - **S1-B was not started.** It waits for the lead's decision (Requests item 13).
+  - S1 runner tooling merged (#106).
   - **CX23 GO 1** (the read-only probe, lead 18:31 UTC): waiting for the human to open the `/root` folder workspace on `cx23` from Orca's desktop app (lead's option 1). Nothing has touched the CX23.
   - Next: the offline G3 runner parts (arbiters, the Mindcraft driver wrapper with a fake `main.js`), in small PRs.
 - **G2 PASSED** on batch 8 (#97): blocks, mobs and items all gate-valid in one batch on the fixed world and cube.
@@ -107,6 +109,61 @@ Updated: 2026-11-02 (18:55 UTC, from `date -u`)
 ## Watching
 
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
+
+## Real S1 batches
+
+### S1-A (2026-11-02): the G2 world, a survey (never a gate). Cut short by this PC's memory; the server is deleted
+
+The full record is in `test/evidence/s1/s1a-20261102/README.md` (this PR).
+
+- **Run:**
+  - The GO came from the lead at 19:09 UTC; the code was develop 16db8ac, clean.
+  - Checks before the create: `msa-login --check` exit 0 (output discarded); the preflight on its own (helper path); an empty project.
+  - The command was the planned one, unchanged; only S1's console commands were used.
+- **Times (UTC):** start 19:12:08, ready 19:15:15, survey 19:15:17-19:18:50, arbiters 19:18:50-19:20:15, day cycle from 19:20:15. "Verified gone" at 19:57:08.
+- **Cost:** up 44 min, 1 billed hour, about **EUR 0.14** plus 1 IPv4-hour. At 19:57:13 the project was empty, apart from the human's unlabelled SSH key.
+- **What broke:**
+  - At about 19:55 Claude Code reaped the batch's tracking shell and my hard-stop watcher, because the PC was critically low on memory. The batch processes kept running unsupervised.
+  - Following the GO ("stop, delete, report"), I fetched the server logs by hand at 19:56:27.
+  - At 19:56:37 the day-cycle run failed by itself: a console call could not start a process on the PC (Windows `0xC0000142`).
+  - The batch's EXIT trap then deleted everything normally.
+  - S1-B was not started.
+
+**Findings:**
+
+- **World 1880465901402976865 (radius 48 around the fresh spawn -50.5 64 -66.5).** The census was complete: 323 types, 0 unloaded.
+  - **Rock piles: 203 blocks,** mostly `pyrotech_compat:rock_metamorphic`, `_igneous` and `_sedimentary`, plus `pyrotech:rock` 4. They are on the surface, 19-46 blocks from spawn.
+  - **Trees:** 8,521 blocks. **Stone:** 406,694 blocks of Underground Biomes stone.
+  - **Containers: 7 blocks in two underground dungeons:** 2 `minecraft:mob_spawner` and 5 `minecraft:chest`. They are 38-45 blocks below spawn and 34-41 blocks away; every sampled position was server-confirmed.
+  - **172 unclassified modded types** are listed for the lead (leaves, `osv:*` ore variants, cave moss, gases, plants, `pyrotech:rock_grass`); none has a container-like class.
+- **Reply forms (the parsers matched the real server):**
+  - `<bot> has N items that match the criteria`;
+  - `Could not clear the inventory of <bot>, no items to remove`;
+  - `Added new objective '<name>' successfully`, and `No objective was found by the name '<name>'`;
+  - `Showing N tracked objective(s) for <bot>:` with `- <name>: <score> (<name>)`;
+  - `Time is N`.
+  - **For G3:** `scoreboard players list` omits objectives that have no score yet, so an absent objective reads as 0.
+- **Craft stats:** all exist on RotN 3.3.4: `pyrotech.crude_axe`, `contenttweaker.crafting_tools`, `minecraft.crafting_table`, `minecraft.stone_pickaxe`, `minecraft.stone_axe`, `minecraft.cobblestone`, plus `stat.deaths` and `stat.playOneMinute`.
+- **The count-only `clear`** really removes nothing: it counted 1, then 1 again, for the given pickaxe.
+- **The whisper sender:** a console `tell` reaches mineflayer's `whisper` event as **`Server`**.
+- **The day cycle** (from the server log's `Time is N` lines; `time-segments.txt`):
+  - running, the vanilla rate: 1,199 ticks per minute;
+  - Extended Days **freezes the time twice per cycle, about 10 min each: at 3000 (morning) and at 16000 (early night)**;
+  - so a cycle is about 20 min running plus 20 min frozen, about **40 min**; the night (12542-23460) is about **19 min**;
+  - not observed: 0-3000 and the wrap past 24000 (the run stopped at 23635);
+  - Time Shall Not Pass pauses the cycle while no player is online.
+
+**Proposals for the lead (from S1-A):**
+
+1. **The world.** The G2 world has plenty of rock piles and trees near spawn, but two dungeons 38-45 blocks down.
+   - Proposal: keep it. `crafted_by_bot` can now gate for every G3 item (all the stats exist), so tools from a dungeon chest cannot pass. A bot without a pickaxe is also unlikely to reach y 19-26 in 25 min.
+   - S1-B (batch 5's world, about EUR 0.14) would give a comparison. The lead decides whether it is still needed.
+2. **The dawn bound for `g3-first-night`:**
+   - Dawn is the first `time query daytime` sample below 12000 after the bot has seen 13000 or more (the time has wrapped past 24000).
+   - Expected about 40 min after the first join on a fresh server: about 20 min of day including the freeze at 3000, plus about 19 min of night including the freeze at 16000.
+   - Proposal: the scenario's limit is 55 min, compared 'equal'.
+   - The wrap itself was not observed (the run stopped at 23635). The first G3 smoke batch confirms it.
+3. **`crafted_by_bot` gates for all five items:** the crude axe, Crafting Tools, the table and both stone tools. That assumes the counters really count when the agent crafts, which the G3 smoke batch checks.
 
 ## Real G2 batches
 
@@ -718,6 +775,10 @@ harness-ops writes `test/runner/drivers/mindcraft-driver.mjs` (in `test/`, mine)
   - `node main.js` with `MINDCRAFT_SINGLE_BOT_SERVICE=1`, `PROFILES=["<scenario profile>"]`, `SETTINGS_JSON={"host":..., "port":..., "auth":"microsoft", "auto_open_ui":false}`, a free `MINDSERVER_PORT`, and `MINDCRAFT_PROFILES_FOLDER` (the PC's FRCFLD cache).
   - `OPENROUTER_API_KEY` comes through the runner's `--pass-env` and is never printed.
   - It never sets `INSECURE_CODING` or `BLOCKED_ACTIONS`. The same checks as `deploy/cx23/check-env.mjs` run first.
+- **No Mindcraft task files (lead, 2026-11-02).** G3 scenarios never load Mindcraft task files: no `--task_path` or `--task_id`, and nothing from `tasks/`. Task files run op commands (`/give`, `/tp`, ...) regardless of cheat mode; skills-rotn is adding a refusal by default.
+  - The driver starts `main.js` with no task arguments, and refuses to start if its arguments or environment carry any.
+  - A unit test asserts both.
+  - G3 inputs come only as whispers from the test-only task giver `Server`.
 - **Stop:** on SIGTERM it stops the agent cleanly. On Windows it kills the whole process tree (`taskkill /T`), because `main.js` starts the agent as a child process, and a hard kill of the parent alone would leave the bot online.
 - **Exit codes:** 0, 1 and 3 pass through (ADR 0003 decision 5).
 
@@ -797,9 +858,9 @@ What skills-rotn provides (to agree):
 - the test key is a user environment variable with a USD 5 limit.
 
 **Still open:**
-1. The world, after S1.
-2. The model (skills-rotn's profile) and `maxBatchUsd` (proposal: USD 2).
-3. The S1 GO.
+1. The world: S1-A's proposal is to keep the G2 world ("Real S1 batches"), and whether S1-B still runs.
+2. The dawn bound (S1-A's proposal: the wrap past 24000 after the night; limit 55 min).
+3. The model (skills-rotn's profile) and `maxBatchUsd` (proposal: USD 2).
 
 ### G2 batch (the plan for every G2 gate batch; batches 1-7 ran on 2026-11-01/02. Each batch needs the lead's written GO.)
 
@@ -920,7 +981,8 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G3 batches:** the lead's decisions on the G3 plan's open questions, skills-rotn's agent and profile, the test OpenRouter key (Requests item 12), and a written GO for each batch (S1 first).
+- **G3 batches:** the lead's decisions on the G3 plan's open questions and on S1-A's proposals, skills-rotn's agent and profile, the test OpenRouter key (Requests item 12), and a written GO for each batch.
+- **S1-B and any further paid batch:** the lead's decision on this PC's memory (Requests item 13), then a written GO.
 - **The CX23** (Requests item 8):
   1. GO 1, the read-only probe, through `cx23`;
   2. H1, the deploy key;
@@ -989,8 +1051,16 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
     - Set it as a **user environment variable** on this PC: `OPENROUTER_API_KEY` (Windows: Settings > System > About > Advanced system settings > Environment Variables > User variables). Then restart Orca, so new terminals see it.
     - The runner passes it only to the agent (`--pass-env OPENROUTER_API_KEY`) and never prints or records it. Agents never read `keys.json`.
     - Not needed for survey batch S1.
+13. **Lead (and the human): this PC's memory during paid batches** (S1-A, 2026-11-02).
+    - **What happened:** Claude Code reaped my background shells (the batch's tracking shell and the hard-stop watcher) because the PC was critically low on memory. Minutes later, new processes could not start (`0xC0000142`), which ended the day-cycle run.
+    - **The safety net held:** the batch script's own teardown, plus the TTL and sweeper behind it, still deleted everything.
+    - **But:** a long batch (G3's first night, about 45 min; S1's day cycle) cannot be supervised when the PC runs out of memory. Several agents and test runs were active at the same time; for example, another worktree's `deploy/test-server.sh` processes were running then, which look like unit tests.
+    - **Options (decision for the lead and the human):**
+      1. Fewer concurrent heavy agents or test runs during a paid batch. I propose this, at least for batches longer than 20 minutes.
+      2. The human could start Claude Code with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`. That keeps supervision alive, but it does not add memory.
+      3. Re-run S1-B and the missing day-cycle piece (0-3000 and the wrap) only after 1 is in place.
 
 ## Open PRs
 
-- This PR: the S1 runner tooling (`agent/harness-ops/s1-tooling`).
-- Merged since the last update: #101 (the G3 plan and the CX23 plan).
+- This PR: the S1-A evidence and findings, and the no-task-files rule in the G3 driver section (`agent/harness-ops/s1a-evidence`).
+- Merged since the last update: #106 (the S1 runner tooling).
