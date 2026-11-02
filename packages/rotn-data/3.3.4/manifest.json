@@ -1,18 +1,18 @@
 {
  "format": "rotn-dump/1",
- "dumper": "0.1.0",
+ "dumper": "0.2.0",
  "dumperJar": {
-  "file": "rotndump-0.1.0.jar",
-  "bytes": 58632,
-  "sha256": "438b3ce64107f680ea7eefe6d143234b12eb140f89f4fd12d3ca3e72e8a47d33"
+  "file": "rotndump-0.2.0.jar",
+  "bytes": 62963,
+  "sha256": "3d25f2d74a783495e86f62820c872a63c4095e158377ea089bef1e95a41031a7"
  },
  "minecraft": "1.12.2",
  "forge": "14.23.5.2860",
- "dumpedAt": "2026-11-01T21:26:59Z",
+ "dumpedAt": "2026-11-02T02:37:07Z",
  "batch": 500,
  "tickBudgetMs": 40,
  "modCount": 347,
- "modListSha256": "7ca372b7677ef55d14471b8e0421e14113a0a5c58df7453f8fbe786ee5cd7392",
+ "modListSha256": "70d98c0da18fd233851102f18ad52347ab28b73f4597f3b7da3078b3aa569e9f",
  "mods": [
   {
    "id": "FML",
@@ -1116,7 +1116,7 @@
   },
   {
    "id": "rotndump",
-   "version": "0.1.0"
+   "version": "0.2.0"
   },
   {
    "id": "rotntweaker",
@@ -1411,40 +1411,54 @@
   "smelting": 1530,
   "entities": 971,
   "spawns": 175,
-  "serializers": 3
+  "serializers": 3,
+  "state-meta-remap": 506
  },
  "timing": {
   "oredict": {
-   "ms": 36,
-   "ticks": 5
+   "ms": 28,
+   "ticks": 5,
+   "maxTickMs": 15
   },
   "blocks": {
-   "ms": 523,
-   "ticks": 14
+   "ms": 533,
+   "ticks": 14,
+   "maxTickMs": 42
   },
   "items": {
-   "ms": 745,
-   "ticks": 27
+   "ms": 754,
+   "ticks": 26,
+   "maxTickMs": 69
   },
   "recipes": {
-   "ms": 531,
-   "ticks": 24
+   "ms": 544,
+   "ticks": 24,
+   "maxTickMs": 72
   },
   "smelting": {
-   "ms": 38,
-   "ticks": 4
+   "ms": 23,
+   "ticks": 4,
+   "maxTickMs": 12
   },
   "entities": {
    "ms": 43,
-   "ticks": 2
+   "ticks": 2,
+   "maxTickMs": 28
   },
   "spawns": {
-   "ms": 41,
-   "ticks": 1
+   "ms": 42,
+   "ticks": 1,
+   "maxTickMs": 33
   },
   "serializers": {
-   "ms": 1168,
-   "ticks": 26
+   "ms": 1179,
+   "ticks": 27,
+   "maxTickMs": 86
+  },
+  "state-meta-remap": {
+   "ms": 42,
+   "ticks": 157,
+   "maxTickMs": 12
   }
  },
  "entryErrors": {},
@@ -1455,18 +1469,19 @@
  },
  "importedFrom": "tools/dumper via deploy/test-server.sh --fetch rotn-dump",
  "import": {
-  "expectedJarSha256": "438b3ce64107f680ea7eefe6d143234b12eb140f89f4fd12d3ca3e72e8a47d33",
+  "expectedJarSha256": "3d25f2d74a783495e86f62820c872a63c4095e158377ea089bef1e95a41031a7",
   "rawSha256": {
-   "DONE": "5e1ad5331fb41dcfa3c7259085ad48224431817b07f195a3f89ec67dcd2ae576",
-   "blocks.json": "a996121d341ec25a6090d7eaf66900f21c052f2b10a46febf54c6ca078b9ad92",
+   "DONE": "04153b253d95468e64fcee68025e2a2959e7704afeb71757475581b0ae4d6ae5",
+   "blocks.json": "63143646b69bff04f7e94203985f3fb33daa58a3bdf9b4791e11f4dc99e0745c",
    "entities.json": "0fc31780218c3d6d0f8fb799cc99f981575ecb54a6ac98dd6c2745a07599b5e1",
-   "items.json": "e1b0eb2d91cdbee154299d6f84f59126af6b1b6185c1f243201b9b0349ed7219",
-   "manifest.json": "da641c2206c58d33782a9937b2769ad0bf7ae7ae42841426adca4a459d293080",
-   "oredict.json": "77b9f998e879805b93bfe8f5b9e550c7bb6937f34f0c3f1e7e8a0c28d1a1daed",
-   "recipes.json": "accd6c2363f5dc3736e3f5935d8af83e022f9c18ad418453ba525f18547ea78e",
+   "items.json": "66c4f5c64b366d11399c6f3b7568d70a9690e23c48ad1f2c52b4a511434ee960",
+   "manifest.json": "08fc826a3bde9077baf69abfcd8661807f2908abdfcb46ed68b367e8c09c4c61",
+   "oredict.json": "278e0dee4aa1ca8179338270a0d533b5fde83dcce9b73cc0da63c0461ce47d17",
+   "recipes.json": "c59c6760da67ce3f6d6d2da176e81be7a3ee140d93dcaa07f72a4a1b7408c77c",
    "serializers.json": "df31e18914b16f4f0af8679120dfd044dd578d68d0c039236baba3b917b55319",
-   "smelting.json": "bc5cca44abae0be7a514fea0de8441e1ad05c5e90700c1e02d56def1a6d7b08f",
-   "spawns.json": "00194287985de3fc490c8f4ef39ab3e74ff854d98c0d183fbf04f36478460be8"
+   "smelting.json": "f0f9b516902ecb697c588df3cf6c671863be5797145a0efa92e7ec04959c966f",
+   "spawns.json": "fd1bf1fdd3e3f3775852c856022d8d6784fb570c7e6aeff35fc2fc5276eb26dd",
+   "state-meta-remap.json": "29bee0d3ac3eff83a8d9ae4f63a0859568ecae8a186e347bc1e79e0498242fd8"
   }
  }
 }

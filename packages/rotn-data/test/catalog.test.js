@@ -145,6 +145,10 @@ test('stateMetaRemap, clientMeta and networkRemap on the mini dump stub', () => 
     assert.equal(mini.clientMeta('minecraft:double_plant', 3), 3); // lower half: not remapped
     assert.equal(mini.clientMeta('minecraft:stone', 1), 1);
     assert.equal(mini.clientMeta('nomod:nothing', 1), null);
+    // idMeta must be an integer 0-15 (#80 review).
+    for (const bad of [16, -1, 2.5, '11', null, undefined, NaN]) {
+        assert.throws(() => mini.clientMeta('minecraft:double_plant', bad), RangeError, String(bad));
+    }
     // Network ids from the connected server's block ids, not the dumped server's.
     assert.deepEqual([...mini.networkRemap({ 'minecraft:double_plant': 175 })], [[2808, 10], [2809, 10], [2811, 10]]);
     assert.deepEqual([...mini.networkRemap({ 'minecraft:double_plant': 200, 'minecraft:stone': 1 })], [[3208, 10], [3209, 10], [3211, 10]]);

@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T02:16Z (from `date -u`)
+Updated: 2026-11-02T02:42Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -15,6 +15,8 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#59 merged**: canonical list order in the importer, `maxTickMs` and the sorted recipe sample in the dumper, the corrected first-vs-second dump comparison.
 - **#62 merged** (`b47449e`): entity threat overrides beyond IMob, cited from the mods' bytecode (13 entries; dangerous: fire and ice dragons, sea serpent, death worm, cockatrice; 33 reviewed and not marked, among them the 24 Animania rabbits, whose player targeting is only for a rabbit named "Killer"). It also marks the vanilla animals Animania replaces (chicken, cow, pig, rabbit, sheep; `config/animania.cfg` lines 104-119; G2 batch 1) and leaves them out of `common-mobs.json`.
   - Correction to its PR description's condition table: the cockatrice's player-targeting task, `CockatriceAITarget(EntityLivingBase, EntityCockatrice$1)`, is at bytecode **253**. Offset 183 is `CockatriceAITargetItems` (item targeting), which my checker's name match also caught. Neither has a branch that skips it, so the classification stands. The offset is now in the `entity-overrides.json` evidence.
+- **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
+- **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below). Imported in this PR, which replaces the second dump.
 - **#68 merged** (`7d33cee`): the cockatrice offset correction (above).
 - **#48 merged** (`7f0feef`): the dumper's per-tick time cap, per-entry isolation and `serializers.json`; the importer requires `serializers.json` and blocks on `entryErrors`.
 - **First RotN 3.3.4 dump batch: PASS** (lead's written GO, 2026-11-01 about 19:24 UTC, before the server was created at 19:25:54; record below).
@@ -113,13 +115,70 @@ Ids 0-13 are vanilla. Registered entities that use a modded serializer: `doggyta
   - **`wards:enchanted_paper`.** Its enchanted-book ingredient stacks carry **numeric enchantment ids** in NBT, e.g. id 113 in one dump and 117 in the other, for 18 of 380 stacks. Numeric ids are per server, as ADR 0004 says.
   - **World or random values:** `betterwithaddons:world_scale_ore` hardness (225 vs 15) and `randomthings:spectrecoil_number`.
 
+## Third dump batch record (state-meta-remap dump, 2026-11-02)
+
+| Item | Value |
+| --- | --- |
+| GO | lead's written GO, 02:33 UTC (third dump batch, the plan of the second) |
+| Checkout | separate scratch worktree, detached at origin/develop `ef84946` (#80); clean; removed after the batch |
+| Jar | dumper-build push run **41378074076** (develop `ef84946`, success), downloaded with `gh run download`; `rotndump-0.2.0.jar`, 62,963 bytes, SHA-256 `3d25f2d74a783495e86f62820c872a63c4095e158377ea089bef1e95a41031a7` (the same hash the run's log prints), recorded at 02:33:06, before the batch |
+| Command | `timeout -s TERM -k 120 2700 deploy/test-server.sh run --type cpx42 --location nbg1 --ttl-hours 2 --yes --extra-mod <jar> -- bash tools/dumper/run-dump.sh <scratch out>`; `deploy/test-server.sh` identical to develop |
+| Preflight | passed on its own: "sweeper OK: scheduled run 41369381802 on JQDAW/mindcraft-RotN succeeded 102 min ago (limit 120 min)". No `--skip-sweeper-check`. |
+| Before (02:33:16) | server, Primary IP and labelled SSH key lists empty; nothing else running |
+| Times (UTC) | command start 02:33:38; server `mcr-test-20261102-023339` (id 174074075, CPX42, nbg1, delete-after 04:33:43) create requested 02:33:44, created 02:33:54; jar uploaded 02:35:10; ready 02:37:04; `rotndump` scheduled 02:37:07; `DONE` 02:37:20; fetch done 02:37:48; delete started 02:37:49; server, Primary IPv4 and SSH key verified gone 02:38:04 |
+| Duration and cost | ran about 4 min (02:33:44 to 02:38:04); 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. Primary IPv4), against a maximum of EUR 0.28 + IPv4 |
+| After (02:38:12) | `hcloud server list`, `primary-ip list` and `ssh-key list -l purpose=mindcraft-rotn-test` all empty |
+| Live server | not touched |
+| Manifest | dumper 0.2.0; `dumperJar.sha256` = `3d25f2d7...31a7`, **matches** (`import-dump.mjs --jar-sha256` accepted it); Forge 14.23.5.2860; 347 mods; **0 errors, 0 entryErrors** |
+| Import | `import-dump.mjs`: no problems, every scripts cross-check ok; one note (Quark flowerpot ids, below) |
+| Raw output | `rotn-dump/` (32 MB) and `latest.log` stay in my scratchpad, out of git |
+
+`manifest.timing` (batch 500, 40 ms budget; 12,980 ms in total, most of it waiting between ticks):
+
+| Part | ms | ticks | maxTickMs |
+| --- | --- | --- | --- |
+| oredict | 28 | 5 | 15 |
+| blocks | 533 | 14 | 42 |
+| items | 754 | 26 | 69 |
+| recipes | 544 | 24 | 72 |
+| smelting | 23 | 4 | 12 |
+| entities | 43 | 2 | 28 |
+| spawns | 42 | 1 | 33 |
+| serializers | 1,179 | 27 | 86 |
+| state-meta-remap | 42 | 157 | 12 |
+| manifest | 11 | 1 | 11 |
+
+Ticks over the 40 ms budget: one entry can exceed it, because the budget is checked after each entry (the serializers part constructs entities; 86 ms at most).
+
+**state-meta-remap summary:** `scanned` = 4,896 blocks, 24,011 network ids that resolve to a state, 220,349 valid states. **506 records** over **132 blocks**; 184 of them are ids the server actually sends (`networkId == stateNetworkId`). `anomalies`: encodingMismatches **0**, foreignStates **0**, so the `id << 4 | meta` encoding holds under REID. **double_plant: 8, 9 and 11 map to 10** (all three resolve to `minecraft:double_plant[facing=north,half=upper,variant=sunflower]`, which is sent as 2811 = `175 << 4 | 11`); 10 is not remapped.
+
+Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that state):
+
+- **minecraft (3):** `double_plant` 8>10 9>10 11>10\*; `flower_pot` 1..15>0 (15\*); `tripwire` 2>0 3>1 6>4 7>5 10>8 11>9 14>12 (Forge's tripwire special case; none is sent).
+- **pyrotech (10), early game:** `worktable`, `worktable_stone`, `crate`, `crate_stone`, `stash`, `stash_stone`, `soaking_pot`, `bellows`, `wood_rack`: 0>1\* 1>2\* 2>0\*; `drying_rack` 8>0\* 9>1\* 10>2\* 11>3\*.
+- **artisanworkstumps (17):** every `workstump_*` (basic, blacksmith, carpenter, chef, chemist, designer, engineer, farmer, jeweler, mage, mason, potter, scribe, tailor, tanner), `log_basin`, `stone_basin`: 0>1\* 1>2\* 2>0\*.
+- **quark (16):** `colored_flowerpot_<16 colours>`: 1..15>0 (15\*), like the vanilla flower pot.
+- **earthworks (45):** every `doubleslab_*`: 0>1 (not sent).
+- **twilightforest (4):** `aurora_block` 1..15>0 (15\*); `double_aurora_slab` 1>0\*; `force_field` 0..4>10..14\*, 5..14>0..9\*; `trophy_pedestal` 0>4 1>5 2>6 3>7.
+- **betterwithmods (4):** `blood_leaves` 0>4\* 4>0\* 8>12\* 12>8\*; `screw_pump` 3>5\* 4>3\* 5>4\* 11>13\* 12>11\* 13>12\*; `steel_broken_gearbox`, `wooden_broken_gearbox` 4>0\* 5>1\* 12>8\* 13>9\*.
+- **dungeontactics (9):** every `trap_*` (ailment, ambush, boom, clamp, fire, foul, piston, port, spectral): 3>2\*.
+- **betternether (6):** five `*_slab_half` 0>1\* 1>0\*; `lucis_spore` 2>3\* 3>2\*.
+- **animania (3):** `block_hive`, `block_wild_hive` 0>2 1>2; `block_trough` 0>3 1>4 3>5\* 4>3\* 5>4\*.
+- **cyclicmagic (3):** `target`, `wireless_receiver`, `wireless_transmitter` 1>0\*.
+- **growthcraft (6):** `growthcraft_apples:apple_sapling`, `growthcraft_cellar:cork_sapling` 8>0\*; `apple_slab_half`, `bamboo_slab_half` 1>2\* 2>1\*; `native_grape_vine0`, `native_grape_vine1` 2>0\* 3>1\*.
+- **others:** `aether_legacy:treasure_chest` 2>3 4>3 5>3\*; `exsartagine:smelter` 8..15>0..7\*; `iceandfire:dread_stone_face` 4>0\* 6>4\*; `rustic:ironwood_doubleslab`, `rustic:olive_doubleslab` 0>1; `stygian:endleaves` 4>0 8>0 12>0\*.
+
+**Ids on another server.** The 16 Quark colored flowerpots have block ids 1203-1218 on the test server but 1263-1278 in the registry capture (`registry-names.json`); every other remapped block has the same id. So the ids do differ between servers, and forge-bridge must build network ids from the connected server's registry (`networkRemap(blockIds)`), never from `records[].networkId`.
+
+**Other differences from the second dump** (`scratchpad` diff; nothing missing, counts equal):
+- recipes: 740 changed. 638 only in `remaining`: the dumper now samples each ingredient's first stack in sorted order (#59; this is the first batch with it), e.g. `animania:hamster_ball_colored_alt` now leaves a glass bottle. 100 in `result`/`slots`: CraftTweaker rebound the generated ids `crafttweaker:rustic_chair_*` and `rustic_table_*` to other colours (known). One: `rats:rat_nugget_to_seed` (rat-nugget NBT).
+- oredict `ratPoop` and 14 smelting entries: the rat-nugget `OreItem` NBT (known).
+- blocks/items: `betterwithaddons:world_scale_ore` hardness 15 -> 225 and `randomthings:spectrecoil_number` names (world or random values, known).
+- entities, spawns and serializers: unchanged. `common-mobs.json`: only its dump stamp changed.
+
 ## Doing
 
-- **G2 blocker (lead, 2026-11-02): `state-meta-remap`.** net-forge found that Forge's second `BLOCK_STATE_IDS` pass (`GameData$BlockCallbacks.onAdd`) sends the double plant's upper half as `175 << 4 | 11`, while a Forge client and `/testforblock` report meta 10. This PR:
-  - dumper 0.2.0: a read-only part `state-meta-remap.json`. For every block id and `m` in 0-15 it resolves `id << 4 | m` with `BLOCK_STATE_IDS.getByValue` and records `{networkId, block, blockId, idMeta, stateMeta, stateNetworkId, state}` where `idMeta != getMetaFromState`. Batched like the other parts (500 ids or 40 ms per tick), `J.get` guards, `.tmp` then rename, `DONE` last, opt-in marker. Guards: `anomalies.encodingMismatches` (a valid state whose id is not its block's `id << 4 | x`; REID raises the id limit, 4,896 blocks here) and `foreignStates`;
-  - rotn-data: `stateMetaRemap()`, `clientMeta(block, idMeta)` and `networkRemap(blockIds)` (null until a dump has the table); the importer requires the file and checks every record and the anomalies; a stub in `test/fixtures/mini-dump/state-meta-remap.json`.
-- **Plan for the third dump batch (needs the lead's written GO after this PR merges):** the same as the second batch. Separate scratch worktree detached at the merge commit; jar from the dumper-build push run on develop for that commit, SHA-256 recorded before the batch; `timeout -s TERM -k 120 2700 deploy/test-server.sh run --type cpx42 --location nbg1 --ttl-hours 2 --yes --extra-mod <jar> -- bash tools/dumper/run-dump.sh <scratch out>` with `deploy/test-server.sh` unchanged and its preflight passing on its own (no `--skip-sweeper-check`); CPX42 nbg1, TTL 2 h, stop at 45 min, at most about EUR 0.28 plus the Primary IPv4; project empty before and after; raw output out of git. Then import with `--jar-sha256` in a PR that turns on the remap acceptance test.
-
+- This PR: the third dump's import (it replaces the second) and the #80 review nits. Then hold for the lead.
 ## Follow-ups (later PRs)
 
 - ~~Importer: sort order-unstable lists~~: done in this PR (`canonicalize`).
@@ -151,4 +210,4 @@ Ids 0-13 are vanilla. Registered entities that use a modded serializer: `doggyta
 
 ## Open PRs
 
-- This PR (`agent/rotn-data/state-meta-remap`): the `state-meta-remap` dumper part, catalog API and importer support.
+- This PR (`agent/rotn-data/dump3-import`): the third dump's import, and the #80 nits (`stateNetworkId >> 4 === blockId` in the importer; `clientMeta` checks that `idMeta` is an integer 0-15).
