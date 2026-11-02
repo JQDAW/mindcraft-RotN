@@ -31,7 +31,7 @@ test('a profile with cheat: true (god_mode.json) is ignored with a log line', (t
     assert.equal(modes.isOn('idle_staring'), true);
     assert.equal(modes.isOn('self_preservation'), false);
     assert.deepEqual(warnings.filter(w => w.startsWith('[no-cheat]')), [
-        '[no-cheat] Profile sets cheat: true; ignored (the bot has no operator rights on this server, so /tp and /setblock cannot work).',
+        '[no-cheat] Loaded modes (profile or saved state) set cheat: true; ignored (the bot has no operator rights on this server, so /tp and /setblock cannot work).',
     ]);
 });
 
