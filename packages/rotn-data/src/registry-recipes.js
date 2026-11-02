@@ -30,6 +30,12 @@
 // cobblestone) -> 4 cobblestone" would otherwise list the result as its own first ingredient. Wildcard metadata (32767) becomes
 // metadata null, which prismarine-recipe and mineflayer treat as "any". Each result carries
 // `meta` next to `metadata`, so Recipe.find(id, meta) (bot.recipesFor) returns only that metadata's recipes.
+//
+// Not emitted: outShape (the dump's `remaining`, items left in the grid such as buckets; 1,116 of
+// 6,089 recipes, none on the G3 path). prismarine-recipe 1.5.0's computeDelta reads inShape when
+// it applies outShape (applyShape uses recipe.inShape[y]), so a recipe with an outShape would
+// count every input as returned and look free to bot.recipesFor. It needs a prismarine-recipe
+// patch first (#102 review follow-up; STATUS).
 import { botName, WILDCARD_META } from './names.js';
 
 export const DEFAULT_MAX_VARIANTS = 256;
