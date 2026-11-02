@@ -625,20 +625,24 @@ describe('P2 (lead, after G2 batch 6): a killed runner leaves the checks it had 
         const recs = [];
         const control = {};
         const r = await runScenario(scenario, { server: {}, bot: fakeBot(), clock, runId: 'x', onProgress: (x) => recs.push(structuredClone(x)), control });
-        assert.equal(recs.length, 3, 'start, a, b');
+        assert.equal(recs.length, 4, 'start, a, note k, b');
         for (const x of recs) {
             assert.equal(x.pass, false);
             assert.equal(x.checksPassed, false);
+            assert.equal(x.gateValid, false, 'a killed record is never gate-valid');
             assert.equal(x.verdict, 'FAIL (killed)');
             assert.equal(x.notes.killed, KILLED_NOTE);
             assert.equal(x.error, 'runner killed before the scenario finished');
         }
         assert.deepEqual(recs[0].checks.map((c) => c.detail), ['not reached (runner killed)', 'not reached (runner killed)']);
         assert.deepEqual(recs[1].checks.map((c) => [c.check, c.pass, c.detail]), [['a', true, 'ok'], ['b', false, 'not reached (runner killed)']]);
+        assert.equal(recs[2].notes.k, 1, 'a note is written through as well');
         // Every check passed before the kill: still never a pass.
-        assert.equal(recs[2].passed, 2);
-        assert.equal(recs[2].pass, false);
+        assert.equal(recs[3].passed, 2);
+        assert.equal(recs[3].pass, false);
+        assert.deepEqual(recs[3].weakenedParams, [], 'not weakened, yet not gate-valid');
         assert.equal(r.pass, true);
+        assert.equal(r.gateValid, true);
         assert.equal(r.verdict, 'PASS');
         assert.equal('killed' in r.notes, false, 'a finished run has no killed note');
         assert.match(control.progress('SIGTERM').notes.killed, /Killed by SIGTERM\.$/);
@@ -694,6 +698,7 @@ describe('P2 (lead, after G2 batch 6): a killed runner leaves the checks it had 
     test('run.mjs: a hard kill (TerminateProcess on Windows, SIGKILL elsewhere) leaves FAIL (killed) with the checks done', { timeout: 120000 }, async () => {
         const { rec } = await killDuringStay('SIGKILL');
         assert.equal(rec.pass, false);
+        assert.equal(rec.gateValid, false);
         assert.equal(rec.verdict, 'FAIL (killed)');
         assert.equal(rec.notes.killed, KILLED_NOTE);
         const by = Object.fromEntries(rec.checks.map((c) => [c.check, c]));
