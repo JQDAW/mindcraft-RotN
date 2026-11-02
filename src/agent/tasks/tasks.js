@@ -3,7 +3,7 @@ import { executeCommand } from '../commands/index.js';
 import { getPosition } from '../library/world.js';
 import { ConstructionTaskValidator, Blueprint } from './construction_tasks.js';
 import { CookingTaskInitiator } from './cooking_tasks.js';
-import { taskFilesAllowed, taskRefusalMessage } from './task_guard.js';
+import { taskFilesAllowed, taskRefusalMessage, taskOptInWarning } from './task_guard.js';
 
 const PROGRESS_FILE = './hells_kitchen_progress.json';
 
@@ -239,6 +239,9 @@ export class Task {
         if (task_data && !allowTaskFiles) {
             console.warn(taskRefusalMessage(task_data.task_id));
             task_data = null;
+        } else if (task_data) {
+            // Loud on purpose: a loaded task file means the test-only opt-in is on.
+            console.warn(taskOptInWarning(task_data.task_id));
         }
         this.data = null;
         if (taskStartTime !== null)

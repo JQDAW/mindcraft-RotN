@@ -12,6 +12,13 @@ export function taskFilesAllowed(env = process.env) {
     return env?.[ALLOW_TASK_FILES_ENV] === '1';
 }
 
+/** The loud warning logged whenever a task file is loaded under the opt-in. */
+export function taskOptInWarning(taskId) {
+    return `[tasks] WARNING: TEST-ONLY TASK FILES ARE ENABLED (${ALLOW_TASK_FILES_ENV}=1). Loading task ${taskId ?? '(no id)'}, ` +
+        'which sends op commands (/give, /tp, /clear, /fill, /setblock, /summon, /kill, /data). ' +
+        'This must never happen in production or in a G3 gate run.';
+}
+
 export function taskRefusalMessage(taskId) {
     return `[tasks] Refused to load task ${taskId ?? '(no id)'}: Mindcraft task files send op commands ` +
         '(/give, /tp, /clear, /fill, /setblock, /summon, /kill, /data), and the bot has no operator rights on RotN. ' +

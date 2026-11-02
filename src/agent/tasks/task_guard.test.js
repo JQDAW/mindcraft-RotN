@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import process from 'node:process';
 import { ALLOW_TASK_FILES_ENV, taskFilesAllowed } from './task_guard.js';
 import { Task } from './tasks.js';
 
@@ -64,17 +65,49 @@ test('a task file is refused by default: no data, no goal, no blocked actions, a
     assert.deepEqual(agent.chats, []);
 });
 
-test('control: with the opt-in, the task loads and initBotTask starts with /clear', async (t) => {
+const LOUD = /^\[tasks\] WARNING: TEST-ONLY TASK FILES ARE ENABLED \(MINDCRAFT_ROTN_ALLOW_TASK_FILES=1\)\. Loading task multiagent_cooking_1_bread, which sends op commands .*never happen in production or in a G3 gate run\.$/;
+
+test('control: with the opt-in, the task loads loudly and initBotTask starts with /clear', async (t) => {
+    const warnings = [];
     t.mock.method(console, 'log', () => {});
-    t.mock.method(console, 'warn', () => {});
+    t.mock.method(console, 'warn', (...args) => warnings.push(args.join(' ')));
     const agent = fakeAgent();
 
     const task = new Task(agent, TASK, null, { allowTaskFiles: true });
 
     assert.equal(task.data, TASK);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], LOUD);
     assert.deepEqual(task.blocked_actions, ['!craftRecipe', '!endGoal', '!endConversation']);
     await assert.rejects(task.initBotTask(), Sentinel);
     assert.deepEqual(agent.chats, ['/clear FRCFLD']);
+});
+
+test('the real env var MINDCRAFT_ROTN_ALLOW_TASK_FILES=1 makes new Task load it, loudly', (t) => {
+    const before = process.env[ALLOW_TASK_FILES_ENV];
+    t.after(() => {
+        if (before === undefined) delete process.env[ALLOW_TASK_FILES_ENV];
+        else process.env[ALLOW_TASK_FILES_ENV] = before;
+    });
+    const warnings = [];
+    t.mock.method(console, 'warn', (...args) => warnings.push(args.join(' ')));
+    t.mock.method(console, 'log', () => {});
+
+    process.env[ALLOW_TASK_FILES_ENV] = '1';
+    const task = new Task(fakeAgent(), TASK); // no option: the default reads process.env
+
+    assert.equal(task.data, TASK);
+    assert.equal(task.goal, 'Make bread');
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], LOUD);
+
+    // Any other value refuses again.
+    process.env[ALLOW_TASK_FILES_ENV] = 'true';
+    assert.equal(new Task(fakeAgent(), TASK).data, null);
+});
+
+test('the env var is restored after the previous test', () => {
+    assert.equal(taskFilesAllowed(), false);
 });
 
 test('no task file: nothing is refused and nothing is sent', async (t) => {
