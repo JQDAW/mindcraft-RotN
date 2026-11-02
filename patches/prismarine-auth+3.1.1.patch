@@ -1,5 +1,5 @@
 diff --git a/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js b/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js
-index e1899d0..45392e7 100644
+index e1899d0..283e307 100644
 --- a/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js
 +++ b/node_modules/prismarine-auth/src/TokenManagers/LiveTokenManager.js
 @@ -1,7 +1,7 @@
@@ -29,6 +29,25 @@ index e1899d0..45392e7 100644
            throw Error('Failed to request live.com device code')
          }
          if (res.headers.get('set-cookie')) {
+@@ -134,7 +134,8 @@ class LiveTokenManager {
+               if (res.error === 'authorization_pending') {
+                 debug('[live] Still waiting:', res.error_description)
+               } else {
+-                throw Error(`Failed to acquire authorization code from device token (${res.error}) - ${res.error_description}`)
++                // Mindcraft-RotN patch: the OAuth error code is attached, so errorSummary can name it.
++                throw Object.assign(Error(`Failed to acquire authorization code from device token (${res.error}) - ${res.error_description}`), { code: res.error })
+               }
+             } else {
+               return res
+@@ -145,7 +146,7 @@ class LiveTokenManager {
+         this.polling = false
+         return { accessToken: token.access_token }
+       } catch (e) {
+-        console.debug(e)
++        console.debug(`[live] device code polling error (${errorSummary(e)})`) // Mindcraft-RotN patch: not the error object
+       }
+     }
+     this.polling = false
 diff --git a/node_modules/prismarine-auth/src/TokenManagers/MsaTokenManager.js b/node_modules/prismarine-auth/src/TokenManagers/MsaTokenManager.js
 index 568385d..42d279f 100644
 --- a/node_modules/prismarine-auth/src/TokenManagers/MsaTokenManager.js

@@ -13,8 +13,10 @@ after(() => { globalThis.fetch = realFetch; });
 
 // Fake secrets: a JWT-shaped access token, and token-like text in the response body.
 const ACCESS_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmYWtlLWJvdCJ9.' + 'Zm9vYmFyLXNpZ25hdHVyZS1ub3QtcmVhbA'.repeat(3);
-const BODY = JSON.stringify({ error: 'TOO_MANY_REQUESTS', refresh_token: 'M.R3_BAY.fake-refresh-token-0123456789abcdefABCDEF', path: '/minecraft/profile' });
+const BODY = JSON.stringify({ Authorization: `Bearer ${ACCESS_TOKEN}`, error: 'TOO_MANY_REQUESTS', refresh_token: 'M.R3_BAY.fake-refresh-token-0123456789abcdefABCDEF', path: '/minecraft/profile' });
 const TOKEN_LIKE = /eyJ[\w-]{8,}|Bearer|refresh_token|M\.R3_|[A-Za-z0-9_\-.]{24,}/;
+// Standalone: no Bearer value, whatever else the pattern above covers (PR #74 review nit).
+const BEARER = /Bearer/i;
 
 const logs = [];
 const calls = [];
@@ -32,6 +34,7 @@ test('an HTTP failure logs the status and error class only, and rethrows the sam
     assert.equal(calls.at(-1).auth, `Bearer ${ACCESS_TOKEN}`, 'the real fetchProfile ran, with the token in its request');
     assert.deepEqual(logs, ['Minecraft profile fetch failed after 400 ms: HTTP 429 Too Many Requests (Error)']);
     assert.doesNotMatch(logs.join('\n'), TOKEN_LIKE);
+    assert.doesNotMatch(logs.join('\n'), BEARER);
     assert.ok(!logs.join('\n').includes('TOO_MANY_REQUESTS'), 'nothing from the response body');
 });
 
@@ -43,6 +46,7 @@ test('a network failure logs the cause class and code, never its message (addres
     assert.ok(err instanceof TypeError);
     assert.deepEqual(logs, ['Minecraft profile fetch failed after 400 ms: no HTTP response (TypeError; cause Error ETIMEDOUT)']);
     assert.doesNotMatch(logs.join('\n'), TOKEN_LIKE);
+    assert.doesNotMatch(logs.join('\n'), BEARER);
     assert.ok(!logs.join('\n').includes('203.0.113.9'));
 });
 
@@ -55,6 +59,7 @@ test('a success logs nothing; a 2xx with an error field is noted without its val
     assert.equal((await fetchProfile()).error, 'NOT_FOUND', 'the result is returned unchanged');
     assert.deepEqual(logs, ['Minecraft profile fetch answered after 400 ms with an error field (value not logged)']);
     assert.doesNotMatch(logs.join('\n'), TOKEN_LIKE);
+    assert.doesNotMatch(logs.join('\n'), BEARER);
 });
 
 test('instrumenting twice wraps once (one line per failure; the newest log function wins)', async () => {
@@ -88,6 +93,7 @@ test('attachBotErrorLogger: before login only the classified facts, after login 
         '[mcdata] bot error before login: Error, HTTP 404 (profile fetch); auth-permanent (message not logged)',
     ]);
     assert.doesNotMatch(lines.join('\n'), TOKEN_LIKE);
+    assert.doesNotMatch(lines.join('\n'), BEARER);
     bot.emit('login');
     const late = new Error('while playing');
     bot.emit('error', late);

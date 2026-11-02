@@ -13,7 +13,7 @@ import process from 'node:process';
 import { createRequire } from 'node:module';
 
 export const FAKE_JWT = 'eyJhbGciOiJSUzI1NiJ9.eyJmYWtlIjoidGVzdC1vbmx5In0.ZmFrZS1zaWduYXR1cmUtZm9yLWEtdGVzdA';
-const BODY = JSON.stringify({ XErr: 2148916233, Message: '', Token: FAKE_JWT, DisplayClaims: { xui: [{ uhs: 'fake-user-hash' }] } });
+const BODY = JSON.stringify({ Authorization: `Bearer ${FAKE_JWT}`, XErr: 2148916233, Message: '', Token: FAKE_JWT, DisplayClaims: { xui: [{ uhs: 'fake-user-hash' }] } });
 
 const authIndex = createRequire(createRequire(import.meta.url).resolve('minecraft-protocol')).resolve('prismarine-auth');
 const requireAuth = createRequire(authIndex);
