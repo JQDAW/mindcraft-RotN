@@ -179,7 +179,7 @@ export const queryList = [
                 entityCounts[entity.name]++;
                 
                 if (entity.name === 'villager') {
-                    if (names112.isBaby(entity)) {
+                    if (mc.isBaby(entity)) {
                         babyVillagerIds.push(entity.id);
                     } else {
                         const profession = world.getVillagerProfession(entity);

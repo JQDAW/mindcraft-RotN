@@ -1,6 +1,6 @@
 import pf from 'mineflayer-pathfinder';
 import * as mc from '../../utils/mcdata.js';
-import { isBaby, VILLAGER_PROFESSIONS_112 } from './names112.js';
+import { VILLAGER_PROFESSIONS_112 } from './names112.js';
 import { inventoryKey, blockMetasFor, blockDisplayName } from './rotn_names.js';
 
 
@@ -270,7 +270,7 @@ export function getVillagerProfession(entity) {
     }
     
     // If we can't determine profession but it's an adult villager
-    if (entity.metadata && !isBaby(entity)) { // Not a baby (1.12: index 12)
+    if (entity.metadata && !mc.isBaby(entity)) { // Not a baby (mc.isBaby: 1.12 index 12, #125)
         return 'Adult';
     }
     
