@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T20:34Z (from `date -u`)
+Updated: 2026-11-02T21:10Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -21,6 +21,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#108 merged** (`e3a2a31`): A2, cheat mode cannot be enabled (`!setMode`, profile, `setOn`/`loadJson`); the `/tp` and `/setblock` branches in `skills.js` cannot run.
 - **#109 merged** (`004cd38`): A3, the update loop and each mode survive a throw (rate-limited `[modes]`/`[update]` lines); no restart after `!smeltItem`; no `/skin` at login.
 - **#110 merged** (`32fb576`): A2b, Mindcraft task files are refused unless `MINDCRAFT_ROTN_ALLOW_TASK_FILES=1`, with a loud warning when they load.
+- **#119 merged** (`0cac640`): the #104 regression fix; the OpenRouter test no longer runs inside the agent (guard test added). The lead added #121 (`_model_map.js` skips `*.test.js`), so request 7 is done.
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -32,8 +33,9 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- **Fix (found during A4; regression from my #104):** `src/models/_model_map.js` imports every `.js` in `src/models/` at agent startup, so `src/models/openrouter.test.js` ran **inside the bot**, and its `before()` hook replaced `OPENROUTER_API_KEY` with the fake key (reproduced). The fix moves it to `src/agent/openrouter_logging.test.js` (restoring the env), with a guard test. Branch `agent/skills-rotn/move-openrouter-test`, #119 open. **Must merge before any run with an LLM.**
-- A4 `quiet-reflexes` (in progress, local; PR after the fix above), with the lead's follow-ups: (1) the unstuck mode no longer kills the agent after 10 s (`modes.js:127`) but recovers or logs a re-plan; (2) `execute(...)` at `modes.js:125` is awaited, so the per-mode catch covers it; (3) the `!smeltItem` and `/skin` tests become behavioural. Other exit paths (action_manager, mindserver_proxy, agent.js exit 4, `!restart`) are noted for G4.
+- A4 `quiet-reflexes` (branch `agent/skills-rotn/quiet-reflexes`, on develop `3b796fc`): #123 open. Reflexes record a re-plan instead of stopping the self-prompter and prompting the LLM; `execute()` never rejects; unstuck re-plans instead of killing the agent; `isClearPath` bounded; behavioural `!smeltItem` and `/skin` tests.
+- B1 `names-audit` (branch `agent/skills-rotn/names-audit`, on develop `3b796fc`): PR open, see Open PRs. The 1.12 name fixes from the seam map (liquids, furnaces, grass, empty blocks, doors, world height, baby and profession indexes, the biome and door crash guards) through `src/agent/library/names112.js`.
+- Next: B1b `names-boundary` (the command boundary hands skills the bot's registry names; meta-aware block and inventory helpers), after the lead answers Request 8. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
 
 ## G3 plan: small PRs, in order
 
@@ -122,8 +124,16 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
    **Still open, for the lead to decide:**
    - The providers the bot does not use (claude, gpt, gemini, ollama, ...) still print `console.log(err)`. Only OpenRouter is used (PLAN).
 6. **Lead and harness-ops (A2b):** Mindcraft task files are now refused unless the env var `MINDCRAFT_ROTN_ALLOW_TASK_FILES` is exactly `1`. No `settings.js` key is needed. Please keep it out of the CX23 env file, and harness-ops: keep it out of the runner's env allowlist for G3 gate runs (a test-only batch may set it, and its evidence should then say so).
-7. **Lead (`src/models/_model_map.js`, lead-owned):** please make the model map skip `*.test.js` (and anything not a provider), so a test file in `src/models/` can never run inside the agent again. My guard test (`src/agent/model_map_no_tests.test.js`) catches it today, but only in CI.
+7. ~~Lead: `_model_map.js` should skip `*.test.js`~~: done by the lead in #121.
+8. **Lead (decision for B1b, the skills name space):** today a name-typed command passes the LLM's raw string to the skills. So `!collectBlocks("oak_log", 10)` finds every log variant (`getItemId` drops the meta), then counts inventory under `oak_log`, which a 1.12 slot (`log`) never matches. **Proposal:**
+   - The command boundary resolves names with `resolveName(arg, kind, {prefer: 'new'})` and hands the skills the bot's registry form, in rotn-data's `formatOld` convention: `log` = any log, `log:1` = spruce, `pyrotech:rock:6`, `crafting_table`.
+   - Skills match blocks and count inventory by name plus meta when a meta is given, and by name alone otherwise.
+   - LLM-facing output (`!inventory`, `!nearbyBlocks`) uses the same form, which the profile's 1.12 examples teach (brief: "RotN examples using real 1.12.2 names"). A 1.21 name the LLM writes still works.
+   - Open point: 1.21 `oak_log` resolves to `log` with meta 0 (oak only), while plain `log` means any variant.
+
+   Objections, or an ADR?
 
 ## Open PRs
 
-- #119 Fix: openrouter test out of `src/models/` (branch `agent/skills-rotn/move-openrouter-test`). Serves log hygiene (#104) and the "Before the first CX23 run" line.
+- #123 A4 quiet reflexes (branch `agent/skills-rotn/quiet-reflexes`). Serves brief "Stop modes from re-prompting the LLM on every reflex" and "Limit `isClearPath` A* cost on the CX23", PLAN priority 1, and the #109 follow-ups.
+- B1 names audit (branch `agent/skills-rotn/names-audit`). Serves the seam-map name fixes (B1 in the G3 plan) for G3 (a) and (b).
