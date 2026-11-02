@@ -37,31 +37,69 @@ export function weakenedParams(scenario, params) {
     return out;
 }
 
+/** notes.killed in a progress record (P2, lead after G2 batch 6). */
+export const KILLED_NOTE = 'the runner did not finish: it rewrites result.json after every check and replaces it when the run ends, '
+    + 'so a file that still says this was left by a killed (e.g. `timeout`) or crashed runner. Never a pass.';
+
 /**
  * Run one scenario. Returns the result object (also what run.mjs writes as result.json).
  * Every declared check appears in the result: a check the scenario never reached is a FAIL with
  * detail "not reached", so a crash or early stop can never look like a pass.
+ *
+ * onProgress(record), if given, is called at the start and after every check and notGate with a
+ * PROGRESS record: the checks done so far, `pass: false`, `verdict: 'FAIL (killed)'` and notes.killed.
+ * run.mjs writes it as result.json, so a runner killed by `timeout` leaves the checks it had done
+ * (G2 batch 6: on Windows `timeout` ends node with TerminateProcess, so no signal handler runs).
+ * progress(killedBy) returns the same record on demand, with notes.killed naming the signal.
  */
-export async function runScenario(scenario, { server, bot, clock, params = {}, runId, log = () => {} }) {
+export async function runScenario(scenario, { server, bot, clock, params = {}, runId, log = () => {}, onProgress = null, control = {} }) {
     const p = { ...scenario.defaults, ...params };
     const results = new Map();
     const notes = {};
     const notGate = [];
+    const started = clock.now();
+    let botStoppedByRunner = false;
+    // The result, final or (killed set) a progress record that can never pass.
+    const build = (error, killed = null) => {
+        const checks = Object.entries(scenario.checks).map(([name, readyToTry]) => ({
+            ...(results.get(name) ?? { check: name, pass: false,
+                detail: killed ? 'not reached (runner killed)' : error ? 'not reached (scenario error)' : 'not reached' }),
+            readyToTry,
+        }));
+        const passed = checks.filter((c) => c.pass).length;
+        const checksPassed = !killed && !error && passed === checks.length;
+        const weakened = [...weakenedParams(scenario, p), ...notGate];
+        const gateValid = weakened.length === 0;
+        return {
+            scenario: scenario.id, gate: scenario.gate, title: scenario.title, runId,
+            // pass means "counts for the gate"; a weakened run never does (PR #9 review finding 1).
+            pass: checksPassed && gateValid, checksPassed, gateValid, weakenedParams: weakened,
+            verdict: killed ? 'FAIL (killed)' : checksPassed ? (gateValid ? 'PASS' : 'SMOKE-PASS (not a gate pass)') : 'FAIL',
+            passed, failed: checks.length - passed,
+            durationS: Math.round((clock.now() - started) / 1000), params: p, checks,
+            notes: killed ? { ...notes, killed } : notes,
+            botExitCode: bot.exitCode(), botExitSignal: typeof bot.exitSignal === 'function' ? bot.exitSignal() : null, botStoppedByRunner,
+            error: killed ? 'runner killed before the scenario finished' : error,
+        };
+    };
+    const progress = (killedBy = null) => build(null, killedBy ? `${KILLED_NOTE} Killed by ${killedBy}.` : KILLED_NOTE);
+    control.progress = progress;
+    const report = () => { if (onProgress) onProgress(progress()); };
     const ctx = {
         server, bot, clock, params: p, runId, log,
         check(name, pass, detail) {
             if (!(name in scenario.checks)) throw new Error(`scenario ${scenario.id} has no check '${name}'`);
             results.set(name, { check: name, pass: Boolean(pass), detail: String(detail ?? '') });
             log(`${pass ? 'PASS' : 'FAIL'} ${name}: ${detail ?? ''}`);
+            report();
         },
         note(key, value) { notes[key] = value; },
         // The run cannot count for the gate (e.g. its gate data is missing), whatever its checks say.
-        notGate(reason) { notGate.push(String(reason)); log(`not a gate run: ${reason}`); },
+        notGate(reason) { notGate.push(String(reason)); log(`not a gate run: ${reason}`); report(); },
         waitFor: (fn, timeoutMs, pollMs = p.pollMs) => waitFor(clock, fn, timeoutMs, pollMs),
     };
-    const started = clock.now();
     let error = null;
-    let botStoppedByRunner = false;
+    report();
     try {
         await scenario.run(ctx);
     } catch (e) {
@@ -76,22 +114,7 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
             await bot.stop();
         }
     }
-    const checks = Object.entries(scenario.checks).map(([name, readyToTry]) => ({
-        ...(results.get(name) ?? { check: name, pass: false, detail: error ? 'not reached (scenario error)' : 'not reached' }),
-        readyToTry,
-    }));
-    const passed = checks.filter((c) => c.pass).length;
-    const checksPassed = !error && passed === checks.length;
-    const weakened = [...weakenedParams(scenario, p), ...notGate];
-    const gateValid = weakened.length === 0;
-    if (!gateValid) log(`SMOKE run, not a ${scenario.gate} pass: ${weakened.join(', ')}`);
-    return {
-        scenario: scenario.id, gate: scenario.gate, title: scenario.title, runId,
-        // pass means "counts for the gate"; a weakened run never does (PR #9 review finding 1).
-        pass: checksPassed && gateValid, checksPassed, gateValid, weakenedParams: weakened,
-        verdict: checksPassed ? (gateValid ? 'PASS' : 'SMOKE-PASS (not a gate pass)') : 'FAIL',
-        passed, failed: checks.length - passed,
-        durationS: Math.round((clock.now() - started) / 1000), params: p, checks, notes,
-        botExitCode: bot.exitCode(), botExitSignal: typeof bot.exitSignal === 'function' ? bot.exitSignal() : null, botStoppedByRunner, error,
-    };
+    const result = build(error);
+    if (!result.gateValid) log(`SMOKE run, not a ${scenario.gate} pass: ${result.weakenedParams.join(', ')}`);
+    return result;
 }

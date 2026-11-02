@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (14:15 UTC, from `date -u`)
+Updated: 2026-11-02 (14:40 UTC, from `date -u`)
 
 ## Done
 
@@ -90,7 +90,8 @@ Updated: 2026-11-02 (14:15 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 6 FAILED** (2026-11-02, develop 2de68ec, the fixed world). `g2-blocks-named` was killed by its `timeout 15m` in the spot check, and I stopped the batch as the GO says. The server is deleted. Details are under "Real G2 batches". **I am waiting for the lead's decision on proposals P1-P3 (Requests, item 9) and a new written GO.**
+- **G2 batch 6 FAILED** (2026-11-02, develop 2de68ec, the fixed world). `g2-blocks-named` was killed by its `timeout 15m` in the spot check, and I stopped the batch as the GO says. The server is deleted. Details are under "Real G2 batches". Evidence merged (#88).
+- **The lead's batch 6 decisions, this PR:** P1 (fixed cube centre) and P2 (a killed runner leaves its checks) approved, P3 declined (the timeout stays 15 min); the redaction tool now uses the check's own IPv4 rule. Batch 7 needs this PR merged and a new written GO.
 - **G2 batch 5 PASSED** (all three scenarios gate-valid in one batch on 01a8193), and it is merged as honest evidence (#83). **The lead is not declaring G2 on it**: that world's cube had no double plants or Dynamic Trees blocks, so batch 4's defect was never exercised.
 - **The lead's follow-ups, merged in #85:**
   - the plan fixes the G2 world to batch 4's (seed `1880465901402976865`, `deploy/test-server.sh run --seed`);
@@ -399,6 +400,8 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 **Goal:** G2 gate evidence. All three G2 scenarios at the gate parameters (no `--param` overrides, so the default `dataRoot`), with the agent's own naming, on one disposable test server.
 
 **The world is fixed (lead, after G2 batch 5):** a G2 gate run must use batch 4's world, **seed `1880465901402976865`**.
+
+**The cube is fixed too (lead, after G2 batch 6):** `g2-blocks-named` teleports the bot to batch 4's ground centre **-45 66 -66** (`tp FRCFLD -45 66 -66`, test server only) after login and before the census, checks its real position with `tp FRCFLD ~ ~ ~`, and takes the census of that cube. The `cubeCentre` gate parameter is compared 'equal'; a bot not in the cube is notGate. Batch 6's spawn was on a canopy 17 blocks higher, and its cube was 90% air.
 - That world's spawn cube (centre -45 66 -66 in batch 4) has double plants and Dynamic Trees blocks, the cases batches 1-4 found.
 - The server is created with `--seed 1880465901402976865` (below).
 - The scenarios check it: the recorded seed must equal `G2_WORLD_SEED` (`test/runner/lib/g2.mjs`), otherwise the run is notGate. The spawn point may move by the spawn radius (about 10 blocks), so the cube is the same area, not necessarily the same centre.
@@ -424,7 +427,8 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
     - #67 merged: findings 2-5 (re-asked block samples, mob replacements capped at 3, tagged confirms, placeholder names fail);
     - #66 merged: the batch 1 evidence plus the redaction tool and CI leak check;
     - and a **new** written GO from the lead.
-13. **For batch 6 (lead, after batch 5):** net-forge's fix for the 124 remap entries skipped as "cycle" merged; this PR (the world-seed check) merged; and a new written GO.
+13. **For batch 6 (lead, after batch 5):** net-forge's fix for the 124 remap entries skipped as "cycle" merged; the world-seed check (#85) merged; and a new written GO.
+14. **For batch 7 (lead, after batch 6):** this PR merged (the fixed cube, killed-run records, the redaction rule), and a new written GO.
 
 **Driver (agreed: net-forge's #54).**
 - **The driver:** net-forge's `packages/forge-bridge/tools/g1-driver.mjs`. It already builds the bot with the real `initBot` (`src/utils/mcdata.js`) with forge-bridge attached, and speaks the G1 protocol through `attachScenario`. The G2 extension is about three lines in **their** file:
@@ -446,7 +450,7 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 - **Console use (test server only, never the live server):**
   - **Before the first scenario**, approved by the lead on the disposable test server only: `gamerule doDaylightCycle false`. **No** peaceful difficulty.
   - **Before each scenario**, approved by the lead on #65 for the disposable test server only: `time set day`, so the bot isn't attacked at night. Batch 1 showed that Time Shall Not Pass re-enables the daylight cycle whenever a player connects, so the gamerule alone does not hold.
-  - **During the scenarios**, through the runner: `say`, `seed`, `tp`, `tell`, `testforblock`, `testfor`, `summon`, `kill @e[tag=<run tag>]`, `clear` and `give`.
+  - **During the scenarios**, through the runner: `say`, `seed`, `tp` (`tp FRCFLD ~ ~ ~`, and in blocks `tp FRCFLD -45 66 -66`), `tell`, `testforblock`, `testfor`, `summon`, `kill @e[tag=<run tag>]`, `clear` and `give`.
 
 **Command** (one server, three scenarios in sequence, each with its own bot session):
 
@@ -509,7 +513,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 batch 7:** the lead's decision on P1-P3 (Requests, item 9), any harness change it needs merged, then a new written GO.
+- **G2 batch 7:** this PR (P1, P2, the redaction rule) reviewed and merged, then a new written GO.
 
 ## Requests to other agents or the lead
 
@@ -528,15 +532,16 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
    5. GitHub disables the helper's schedule after 60 days without activity in the helper repo. The preflight warns from day 45; a small commit to the helper repo resets the clock.
 
 7. **Lead: a `.gitattributes`** with `*.sh text eol=lf` and `deploy/cx23/** text eol=lf`. Root files are yours. The stopgap is in place: the scripts are `.sh`, and bootstrap strips CRs.
-9. **Lead: decide how G2 handles the cube after batch 6.** The world is fixed, but the spawn radius moves the cube; this time it sat on a canopy and was 90% air.
+9. ~~Lead: decide how G2 handles the cube after batch 6~~ **Decided** (#88 comment): P1 and P2 approved, P3 declined; done in this PR. The original proposals, for the record:
    - **P1 (recommended): fix the cube too.** After login, the runner teleports the bot to batch 4's ground centre (-45 66 -66) with `tp`, which is already on the plan's console list. It then waits for chunks and takes the census there, so every G2 run sees the same cube (the one where batch 4 found double plants and Dynamic Trees blocks). The new gate parameter `cubeCentre` would be 'equal'.
    - **P2: keep partial results.** On SIGTERM (`timeout`), the runner writes `result.json` with the checks done so far, verdict FAIL and an "interrupted" error, so a kill no longer loses passed checks.
    - **P3 (optional): make the spot check faster or give it more time.** Either one SSH console call per batch of 8 `testforblock` commands (a `deploy/test-server.sh console` change), or `timeout 25m` for blocks with the hard stop adjusted. P1 alone should bring the spot check back to about 1-2 min (batch 4: 43 non-air in 72 positions).
+
+10. **Lead (info): G0 evidence predates the redaction rules.** `test/evidence/g0/g0-batch.log` lines 9 and 17 hold the G0 test server's public IPv4 (the "is at" and "READY ... at" forms). That server was deleted on 2026-11-01. The CI leak check covers only `test/evidence/g2/**`, so it never flagged them. Say if you want them redacted with the tool (a small PR of mine). The G1 `server.log`'s other flags are FML's pipe-table mod versions, a form G2 excerpts never contain.
 
 8. **Human, via the lead, for the first real CX23 run (later, after the lead's approval):** the CX23's root login and IP, the `deploy` user's public key, the bot's OpenRouter key (set on the server only), and the bot's first Microsoft device-code login. Steps: `deploy/cx23/README.md`.
 
 ## Open PRs
 
-- This PR: G2 batch 6 evidence (FAIL) and this record (`agent/harness-ops/g2-batch6-evidence`).
-- Next: #85's review nits (19-digit `--param` values stay strings; DRIVER.md on SIGKILL after the grace period; the G1 seed-check exemption comment), on `agent/harness-ops/pr85-nits`.
-- Merged since the last update: #83, #85.
+- This PR: the fixed G2 cube (P1), killed-run records (P2) and the redaction tool on the check's rule (`agent/harness-ops/g2-cube-centre`).
+- Merged since the last update: #88 (batch 6 evidence), #89 (#85 nits).

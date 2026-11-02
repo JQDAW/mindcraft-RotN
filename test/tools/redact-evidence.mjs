@@ -9,10 +9,10 @@
 //   ("addr:2001:db8::1", "_2001:...", "v2001:..."), with a trailing ":port" (Java 8 prints
 //   "/2001:db8:0:0:0:0:0:1:51234" in the 1.12 login line) or ":" ("2001:db8::1: timeout"), and in the
 //   IPv4-mapped form (::ffff:203.0.113.7). The whole address becomes <ip>.
-// - IPv4 is REDACTED where a log shows an address: after "/", inside "[ ]", as host:port, or as a whole
-//   JSON string.
-// - The CHECK is stricter than the redaction and fails closed. It flags EVERY dotted quad with octets
-//   0..255 except these three exact version forms:
+// - IPv4: the tool and the check use ONE rule (lead, after G2 batch 6, whose run.log had a bare
+//   "server ... is at A.B.C.D" that the old context list missed and the check caught). EVERY dotted quad
+//   with octets 0..255 (QUAD_ANY) is redacted by the tool and flagged by the check, except these three
+//   exact version forms (Forge's 14.23.5.2860 is no quad: 2860 is no octet):
 //     {1.2.3.4}                 a brace pair around the quad (FML's mod table)
 //     -1.2.3.4.jar, -1.2.3.4-build.0673.jar   a jar file name
 //     modid@1.2.3.4             on FML's "Client attempting to join with N mods : ..." line only, inside
@@ -21,7 +21,8 @@
 //                               Accepted (lead, PR #66 re-review): the line is FML's own list of the
 //                               client's mods and versions.
 //   It also flags any IPv6 address, any UUID, this PC's user paths, and partial leftovers next to
-//   <ip> (e.g. "<ip>.0.113.7"). A flagged address is fixed by a manual redaction, never a wider allowlist.
+//   <ip> (e.g. "<ip>.0.113.7"). Committed evidence comes out of this tool, never from hand edits: a form
+//   the check flags and the tool misses is fixed in the tool, with a test.
 // - UUIDs become <uuid-vN> (N = the version nibble; G1's <uuid-v4> for Mojang player UUIDs). The bot's
 //   name becomes <bot>; this PC's user paths become <local>.
 import fs from 'node:fs';
@@ -35,13 +36,6 @@ const QUAD = String.raw`${OCTET}(?:\.${OCTET}){3}`;
 // A dotted quad not glued to more digits or dots (so 1.12.2.4.5 or 14.23.5.2860 are not quads).
 const QUAD_ANY = new RegExp(String.raw`(?<![\d.])${QUAD}(?!\d|\.\d)`, 'g');
 
-// IPv4 address contexts for the redaction.
-const ADDRESS_CONTEXTS = [
-    new RegExp(String.raw`(?<=/)${QUAD}(?!\d|\.\d)`, 'g'), // FRCFLD[/1.2.3.4:5678], /1.2.3.4
-    new RegExp(String.raw`(?<=\[)${QUAD}(?=[\]:])`, 'g'), // [1.2.3.4] or [1.2.3.4:5678]
-    new RegExp(String.raw`(?<![\d.])${QUAD}(?=:\d{1,5}(?!\d))`, 'g'), // 1.2.3.4:25565
-    new RegExp(String.raw`(?<=")${QUAD}(?=")`, 'g'), // "host": "1.2.3.4"
-];
 
 // IPv6 candidates: maximal runs of hex digits, colons and dots (searched inside, see v6Spans). No
 // lookbehind: an address glued to a word or a key ("addr:2001:db8::1", "_2001...", "v2001...") is found.
@@ -115,9 +109,8 @@ function redactV6(text) {
 /** Redact one evidence text. `bot` is the bot's player name (replaced by <bot>). */
 export function redact(text, { bot } = {}) {
     let out = redactV6(text);   // first, so an IPv4-mapped address goes whole
-    for (const re of ADDRESS_CONTEXTS) {
-        out = out.replace(re, (m, offset, whole) => (isVersionContext(whole, offset, m) ? m : '<ip>'));
-    }
+    // The check's own rule (findLeaks): every quad that is not one of the exact version forms.
+    out = out.replace(QUAD_ANY, (m, offset, whole) => (isVersionContext(whole, offset, m) ? m : '<ip>'));
     out = out.replace(UUID, (_m, v) => `<uuid-v${v.toLowerCase()}>`);
     out = out.replace(LOCAL_PATH, '<local>');
     if (bot) {
