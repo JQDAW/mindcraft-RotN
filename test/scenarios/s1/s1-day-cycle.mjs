@@ -12,7 +12,7 @@
 //   notes.cycle: ticks per real minute, the cycle length that implies, and every wrap (daytime going
 //   down, the start of a new day).
 import { startSession } from '../../runner/lib/session.mjs';
-import { dayCycleSummary, timeQuery } from '../../runner/lib/s1.mjs';
+import { S1_NOT_GATE, dayCycleSummary, timeQuery } from '../../runner/lib/s1.mjs';
 
 const MS = 1000;
 
@@ -42,6 +42,7 @@ export default {
 
     async run(ctx) {
         const { server, clock, params: p } = ctx;
+        ctx.notGate(S1_NOT_GATE);
         const name = p.bot;
         const s = await startSession(ctx, { name });
         ctx.check('login_online', s.ok, s.why);

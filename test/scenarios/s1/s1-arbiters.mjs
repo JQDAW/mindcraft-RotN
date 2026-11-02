@@ -17,7 +17,7 @@
 //      whisper event with the token); notes.whisper records the sender name the bot saw.
 import crypto from 'node:crypto';
 import { startSession } from '../../runner/lib/session.mjs';
-import { S1_CRITERIA, clearTestCommand, clearTestCount, playerScores, scoreboardAddResult, timeQuery } from '../../runner/lib/s1.mjs';
+import { S1_CRITERIA, S1_NOT_GATE, clearTestCommand, clearTestCount, playerScores, scoreboardAddResult, timeQuery } from '../../runner/lib/s1.mjs';
 
 const MS = 1000;
 
@@ -58,23 +58,27 @@ export default {
 
     async run(ctx) {
         const { server, bot, clock, params: p } = ctx;
+        ctx.notGate(S1_NOT_GATE);
         const name = p.bot;
         const s = await startSession(ctx, { name });
         ctx.check('login_online', s.ok, s.why);
         if (!s.ok) return;
         await clock.sleep(p.settleMs);
 
-        // 2. stat criteria
+        // 2. stat criteria. Any s1_* objective left by an earlier run is removed first, so 'exists' never
+        //    hides whether a criterion is valid (#106 review finding 4); the reply to a missing one is fine.
+        for (const c of S1_CRITERIA) server.console(`scoreboard objectives remove ${c.obj}`, p.consoleWaitS);
         const criteria = [];
         for (const c of S1_CRITERIA) {
             const lines = server.console(`scoreboard objectives add ${c.obj} ${c.criteria}`, p.consoleWaitS);
-            criteria.push({ ...c, result: scoreboardAddResult(lines, c.obj), reply: lines.slice(-2) });
+            criteria.push({ ...c, result: scoreboardAddResult(lines, c.obj, c.criteria), reply: lines.slice(-2) });
         }
         const scoresLines = server.console(`scoreboard players list ${name}`, p.consoleWaitS);
         ctx.note('statCriteria', criteria.map(({ obj, criteria: cr, vanilla, result }) => ({ obj, criteria: cr, vanilla, result })));
         ctx.note('scores', playerScores(scoresLines, name));
         for (const c of criteria.filter((x) => x.result === 'added')) server.console(`scoreboard objectives remove ${c.obj}`, p.consoleWaitS);
-        const unknownReply = criteria.filter((c) => c.result === null);
+        // 'exists' cannot happen after the removal above; treat it like an unknown reply.
+        const unknownReply = criteria.filter((c) => c.result === null || c.result === 'exists');
         const vanillaMissing = criteria.filter((c) => c.vanilla && c.result !== 'added');
         ctx.check('stat_criteria', unknownReply.length === 0 && vanillaMissing.length === 0,
             criteria.map((c) => `${c.criteria}: ${c.result ?? 'no known reply'}`).join('; '));

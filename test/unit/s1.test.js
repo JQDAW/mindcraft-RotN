@@ -13,8 +13,10 @@ import { runScenario } from '../runner/lib/runner.mjs';
 import { attachG2, attachScenario } from '../runner/drivers/scenario-protocol.mjs';
 import {
     clearTestCount, clearTestCommand, scoreboardAddResult, playerScores, timeQuery, classifyCensus, dayCycleSummary,
-    S1_CRITERIA, ROCK_RE, TREE_RE, CONTAINER_RE,
+    containerReason, loadBlockClasses, S1_CRITERIA, S1_NOT_GATE, ROCK_RE, TREE_RE,
 } from '../runner/lib/s1.mjs';
+import zlib from 'node:zlib';
+import { Buffer } from 'node:buffer';
 import survey from '../scenarios/s1/s1-site-survey.mjs';
 import arbiters, { whisperEvent } from '../scenarios/s1/s1-arbiters.mjs';
 import dayCycle from '../scenarios/s1/s1-day-cycle.mjs';
@@ -23,8 +25,23 @@ const NAME = 'FRCFLD';
 const DS = 'net.minecraft.server.dedicated.DedicatedServer';
 const L = (msg, logger = DS) => `[12:00:00] [Server thread/INFO] [${logger}]: ${msg}`;
 const tick = () => new Promise((r) => setImmediate(r));
-// An empty data root: S1 is not a gate, so the naming check only adds a recorded notGate reason.
+// An empty data root: no naming module and no block dump (the naming check only adds a notGate reason).
 const NO_DATA = fs.mkdtempSync(path.join(os.tmpdir(), 's1-nodata-'));
+/** A data root holding only rotn-data's block dump, with these block classes (name -> Java class). */
+function dumpRoot(classes) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 's1-dump-'));
+    const dir = path.join(root, 'packages', 'rotn-data', '3.3.4');
+    fs.mkdirSync(dir, { recursive: true });
+    const blocks = Object.fromEntries(Object.entries(classes).map(([n, c]) => [n, { defaultMeta: 0, class: c, states: [] }]));
+    fs.writeFileSync(path.join(dir, 'blocks.json.br'), zlib.brotliCompressSync(Buffer.from(JSON.stringify({ format: 'rotn-dump/1', blocks }))));
+    return root;
+}
+const DUMP = dumpRoot({
+    'minecraft:chest': 'net.minecraft.block.BlockChest',
+    'pyrotech:rock': 'com.codetaylor.mc.pyrotech.modules.core.block.BlockRock',
+    'mymod:thing': 'com.example.BlockTileEntityThing',   // a container only by its class
+    'rustic:wildberry_bush': 'rustic.common.blocks.crops.BlockBerryBush',
+});
 
 describe('S1 reply parsers (1.12 en_us forms)', () => {
     test('clear in test mode: "has N items", and the failure form means 0', () => {
@@ -37,7 +54,10 @@ describe('S1 reply parsers (1.12 en_us forms)', () => {
 
     test('scoreboard objectives add: added, invalid, exists, too long, or unknown', () => {
         assert.equal(scoreboardAddResult([L("Added new objective 's1_c_table' successfully")], 's1_c_table'), 'added');
-        assert.equal(scoreboardAddResult([L("Invalid objective criteria type 'stat.craftItem.pyrotech.crude_axe'")], 's1_c_crudeaxe'), 'invalid');
+        const invalid = [L("Invalid objective criteria type 'stat.craftItem.pyrotech.crude_axe'")];
+        assert.equal(scoreboardAddResult(invalid, 's1_c_crudeaxe', 'stat.craftItem.pyrotech.crude_axe'), 'invalid');
+        assert.equal(scoreboardAddResult(invalid, 's1_c_ctools', 'stat.craftItem.contenttweaker.crafting_tools'), null, 'a reply about another criterion is not this one (#106 finding 4)');
+        assert.equal(S1_CRITERIA.find((c) => c.criteria.endsWith('minecraft.cobblestone')).vanilla, false, 'no vanilla cobblestone recipe (#106 finding 3)');
         assert.equal(scoreboardAddResult([L("An objective with the name 's1_deaths' already exists")], 's1_deaths'), 'exists');
         assert.equal(scoreboardAddResult([L("The name 'a_very_long_objective' is too long for an objective, it can be at most 16 characters long")], 'a_very_long_objective'), 'too-long');
         assert.equal(scoreboardAddResult([L('Unknown command')], 'x'), null);
@@ -61,8 +81,6 @@ describe('S1 reply parsers (1.12 en_us forms)', () => {
         for (const n of ['pyrotech:rock_pile', 'pyrotech:pile_slag', 'minecraft:stone']) assert.ok(!ROCK_RE.test(n), n);
         for (const n of ['minecraft:log', 'minecraft:log2', 'dynamictrees:oakbranch', 'dynamictreesbop:sprucebranch', 'dynamictrees:trunkshell']) assert.ok(TREE_RE.test(n), n);
         for (const n of ['dynamictrees:leaves0', 'minecraft:leaves']) assert.ok(!TREE_RE.test(n), `${n}: leaves are not wood`);
-        for (const n of ['minecraft:chest', 'minecraft:trapped_chest', 'quark:custom_chest', 'minecraft:dispenser', 'rustic:cabinet']) assert.ok(CONTAINER_RE.test(n), n);
-        for (const n of ['minecraft:furnace', 'minecraft:crafting_table', 'minecraft:stone']) assert.ok(!CONTAINER_RE.test(n), n);
         const g = classifyCensus([
             { name: 'undergroundbiomes:sedimentary_stone', meta: 0, count: 900, cand: [[1, 2, 3]] },
             { name: 'pyrotech:rock', meta: 0, count: 4, cand: [[5, 65, 5], [6, 65, 6]] },
@@ -70,6 +88,27 @@ describe('S1 reply parsers (1.12 en_us forms)', () => {
         ]);
         assert.deepEqual([g.stone.blocks, g.rocks.blocks, g.containers.blocks, g.trees.blocks], [900, 4, 1, 0]);
         assert.deepEqual(g.rocks.cand[1], { name: 'pyrotech:rock', meta: 0, pos: [6, 65, 6] });
+    });
+
+    test('containers fail closed: by name, as a vanilla inventory or spawner, or by the dump class (#106 finding 2)', () => {
+        const classes = loadBlockClasses(DUMP);
+        assert.equal(classes.get('mymod:thing'), 'com.example.BlockTileEntityThing');
+        assert.equal(loadBlockClasses(NO_DATA), null, 'no dump: null, never an empty map');
+        assert.equal(containerReason('minecraft:chest', null), 'vanilla inventory');
+        assert.equal(containerReason('minecraft:furnace', null), 'vanilla inventory');
+        assert.equal(containerReason('minecraft:mob_spawner', null), 'vanilla inventory', 'a spawner means a dungeon with loot chests');
+        assert.equal(containerReason('quark:custom_chest', null), 'name');
+        assert.equal(containerReason('basketcase:basket_small_generic', null), 'name');
+        assert.equal(containerReason('mymod:thing', null), null, 'without the dump its class is unknown');
+        assert.equal(containerReason('mymod:thing', classes), 'class BlockTileEntityThing');
+        for (const n of ['minecraft:crafting_table', 'minecraft:stone', 'pyrotech:rock']) assert.equal(containerReason(n, classes), null, n);
+        const g = classifyCensus([
+            { name: 'mymod:thing', meta: 0, count: 1, cand: [[1, 65, 1]] },
+            { name: 'rustic:wildberry_bush', meta: 0, count: 3, cand: [] },
+            { name: 'minecraft:grass', meta: 0, count: 100, cand: [] },
+        ], classes);
+        assert.deepEqual(g.containers.types, ['mymod:thing 0 1 (class BlockTileEntityThing)']);
+        assert.deepEqual(g.unclassifiedModded, ['rustic:wildberry_bush 0 3 <BlockBerryBush>'], 'every modded type no group claims is listed; vanilla ones are not');
     });
 
     test('day cycle: the median rate, the implied day length and the wraps', () => {
@@ -87,6 +126,7 @@ describe('S1 reply parsers (1.12 en_us forms)', () => {
  * A small simulated 1.12 server plus a fake bot running the real driver side.
  *   opt.world(x, y, z): {name, meta}; opt.moddedStats: RotN stat criteria that exist; opt.ticksPerMinute
  *   opt.whisperName: the sender mineflayer reports for a console tell; opt.dropAtMs: the bot is kicked then
+ *   opt.leftoverObjectives: objective names an earlier run left behind
  */
 function sim(opt = {}) {
     const world = opt.world ?? ((x, y, z) => {
@@ -94,6 +134,7 @@ function sim(opt = {}) {
         if (y === 64) return { name: 'minecraft:grass', meta: 0 };
         if (y === 65 && x % 4 === 0 && z % 4 === 0) return { name: 'pyrotech:rock', meta: 0 };
         if (y >= 65 && y < 69 && x === 3 && z === -3) return { name: 'minecraft:log', meta: 0 };
+        if (y === 65 && x === -3 && z === 2) return { name: 'rustic:wildberry_bush', meta: 0 };
         return { name: 'minecraft:air', meta: 0 };
     });
     const log = [];
@@ -101,7 +142,7 @@ function sim(opt = {}) {
     let online = false;
     let joinedAt = null;
     const inventory = new Map();
-    const objectives = new Map();
+    const objectives = new Map((opt.leftoverObjectives ?? []).map((o) => [o, 'stat.deaths']));
     const vanillaStats = new Set(S1_CRITERIA.filter((c) => c.vanilla).map((c) => c.criteria));
     const add = (msg, logger = DS) => log.push(L(msg, logger));
     const output = [];
@@ -134,8 +175,8 @@ function sim(opt = {}) {
                 else if (vanillaStats.has(m[2]) || (opt.moddedStats ?? []).includes(m[2])) { objectives.set(m[1], m[2]); add(`Added new objective '${m[1]}' successfully`); }
                 else add(`Invalid objective criteria type '${m[2]}'`);
             } else if ((m = /^scoreboard objectives remove (\S+)$/.exec(cmd))) {
-                objectives.delete(m[1]);
-                add(`Removed objective '${m[1]}' successfully`);
+                if (objectives.delete(m[1])) add(`Removed objective '${m[1]}' successfully`);
+                else add(`No objective was found by the name '${m[1]}'`);
             } else if (cmd === `scoreboard players list ${NAME}`) {
                 if (!objectives.size) add(`Player ${NAME} has no scores recorded`);
                 else {
@@ -182,33 +223,60 @@ function sim(opt = {}) {
 const fast = { settleMs: 1000, pollMs: 1000, consoleWaitS: 0, dataRoot: NO_DATA };
 const run = (scenario, s, params = {}) => runScenario(scenario, { ...s, runId: 'r1', params: { ...fast, ...params } });
 const byName = (r) => Object.fromEntries(r.checks.map((c) => [c.check, c]));
+/** S1 is never a gate pass (#106 finding 1): not gate-valid, and its reason is recorded. */
+const neverGate = (r) => {
+    assert.equal(r.gateValid, false);
+    assert.equal(r.pass, false);
+    assert.ok(r.weakenedParams.includes(S1_NOT_GATE), JSON.stringify(r.weakenedParams));
+    assert.notEqual(r.verdict, 'PASS');
+};
 
 describe('s1-site-survey on a simulated server', () => {
     test('a complete census: rocks, trees and no containers, with sampled positions confirmed', async () => {
-        const r = await run(survey, sim(), { radius: 6 });
+        const r = await run(survey, sim(), { radius: 6, dataRoot: DUMP });
         const c = byName(r);
-        assert.equal(c.login_online.pass, true, c.login_online.detail);
-        assert.equal(c.census_complete.pass, true, c.census_complete.detail);
-        assert.equal(c.findings_confirmed.pass, true, c.findings_confirmed.detail);
+        for (const k of ['login_online', 'census_complete', 'no_containers', 'findings_confirmed']) assert.equal(c[k].pass, true, `${k}: ${c[k].detail} ${r.error ?? ''}`);
+        assert.equal(r.verdict, 'SMOKE-PASS (not a gate pass)');
+        neverGate(r);
+        assert.deepEqual(r.notes.findings.unclassifiedModded, ['rustic:wildberry_bush 0 1 <BlockBerryBush>'], 'listed for the lead');
+        assert.deepEqual(r.notes.findings.containerSignals, { names: true, vanillaInventory: true, dumpClasses: true });
         assert.deepEqual(r.notes.spawn, [0.5, 65, 0.5]);
         assert.equal(r.notes.findings.rocks.blocks, 9, 'rock piles where x and z are multiples of 4: x, z in {-4, 0, 4} within radius 6');
         assert.equal(r.notes.findings.trees.blocks, 4);
         assert.equal(r.notes.findings.containers.blocks, 0, 'no loot containers near spawn');
         assert.ok(r.notes.confirmed.length > 0 && r.notes.confirmed.every((x) => x.ok));
-        assert.deepEqual(r.weakenedParams.filter((w) => !/mcdata/.test(w)), [], 'S1 has no gate params; only the naming reason from the empty data root');
+    });
+
+    test('without rotn-data\'s block dump no_containers fails closed', async () => {
+        const r = await run(survey, sim(), { radius: 6, dataRoot: NO_DATA });
+        const c = byName(r).no_containers;
+        assert.equal(c.pass, false);
+        assert.match(c.detail, /block dump is missing.*fails closed/);
+        neverGate(r);
+    });
+
+    test('a block that is a container only by its dump class is found', async () => {
+        const world = (x, y, z) => (x === 1 && y === 65 && z === 1 ? { name: 'mymod:thing', meta: 0 }
+            : y < 64 ? { name: 'minecraft:stone', meta: 0 } : { name: 'minecraft:air', meta: 0 });
+        const r = await run(survey, sim({ world }), { radius: 4, dataRoot: DUMP });
+        const c = byName(r).no_containers;
+        assert.equal(c.pass, false);
+        assert.equal(c.detail, 'CONTAINERS FOUND within 4 blocks: mymod:thing 0 1 (class BlockTileEntityThing)');
     });
 
     test('a chest near spawn is a finding, and the census lists it', async () => {
         const world = (x, y, z) => (x === -2 && y === 65 && z === 2 ? { name: 'minecraft:chest', meta: 2 }
             : y < 64 ? { name: 'minecraft:stone', meta: 0 } : { name: 'minecraft:air', meta: 0 });
-        const r = await run(survey, sim({ world }), { radius: 5 });
+        const r = await run(survey, sim({ world }), { radius: 5, dataRoot: DUMP });
         assert.equal(r.notes.findings.containers.blocks, 1);
-        assert.deepEqual(r.notes.findings.containers.types, ['minecraft:chest 2 1']);
+        assert.deepEqual(r.notes.findings.containers.types, ['minecraft:chest 2 1 (vanilla inventory)']);
+        assert.equal(byName(r).no_containers.pass, false, 'a container within the radius is reported prominently');
+        assert.match(byName(r).no_containers.detail, /^CONTAINERS FOUND within 5 blocks: minecraft:chest 2 1/);
         assert.equal(byName(r).findings_confirmed.pass, true);
     });
 
     test('a position the server does not confirm fails findings_confirmed', async () => {
-        const r = await run(survey, sim({ lieAbout: 'pyrotech:rock' }), { radius: 6 });
+        const r = await run(survey, sim({ lieAbout: 'pyrotech:rock' }), { radius: 6, dataRoot: DUMP });
         const c = byName(r).findings_confirmed;
         assert.equal(c.pass, false);
         assert.match(c.detail, /not confirmed: -?\d+,65,-?\d+ pyrotech:rock 0: The block at/);
@@ -233,6 +301,17 @@ describe('s1-arbiters on a simulated server', () => {
         assert.deepEqual(r.notes.clearTest.counts['minecraft:stone_pickaxe'], [1, 1], 'the test mode removed nothing');
         assert.equal(s.inventory.get('minecraft:stone_pickaxe'), 1);
         assert.deepEqual(r.notes.whisper, { username: 'Server' });
+        neverGate(r);
+    });
+
+    test('objectives an earlier run left are removed before adding, so the criteria are really tested (#106 finding 4)', async () => {
+        const s = sim({ leftoverObjectives: ['s1_deaths', 's1_c_table'] });
+        const r = await run(arbiters, s);
+        const byCrit = Object.fromEntries(r.notes.statCriteria.map((x) => [x.criteria, x.result]));
+        assert.equal(byCrit['stat.deaths'], 'added', 'not "exists"');
+        assert.equal(byCrit['stat.craftItem.minecraft.crafting_table'], 'added');
+        assert.equal(byName(r).stat_criteria.pass, true, byName(r).stat_criteria.detail);
+        assert.equal(s.objectives.size, 0);
     });
 
     test('a missing vanilla criterion or an unknown reply fails stat_criteria', async () => {
@@ -269,6 +348,7 @@ describe('s1-day-cycle on a simulated server', () => {
         const r = await run(dayCycle, sim({ ticksPerMinute: 600 }), { durationMs: 60 * 60000, sampleMs: 60000 });
         const c = byName(r);
         for (const k of ['login_online', 'samples_ok', 'time_advances', 'stayed_online']) assert.equal(c[k].pass, true, `${k}: ${c[k].detail}`);
+        neverGate(r);
         assert.equal(r.notes.cycle.ticksPerMinute, 600);
         assert.equal(r.notes.cycle.cycleMinutes, 40);
         assert.equal(r.notes.cycle.wraps.length, 1, 'one new day within the hour');
