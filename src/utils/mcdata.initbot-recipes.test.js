@@ -36,11 +36,69 @@ test('no recipe data, a failing load, or no registry: logged, nothing thrown, va
     assert.equal(registry.recipes, table);
     assert.equal(table[pick], before, 'the vanilla stone pickaxe recipes are untouched');
     assert.ok(names12(registry, table[pick][0]).includes('cobblestone'), 'still the vanilla recipe (cobblestone)');
+    // Messages carry no prefix of their own; initBot's log adds "[forge-bridge] " (#130 review nit 4).
     assert.deepEqual(logs, [
-        '[rotn-data] the dump has no recipe data: bot.registry keeps its vanilla recipes',
-        '[rotn-data] RotN recipes not installed: boom',
-        '[rotn-data] no registry: RotN recipes not installed',
+        'the dump has no recipe data: bot.registry keeps its vanilla recipes',
+        'RotN recipes not installed: boom',
+        'no registry: RotN recipes not installed',
     ]);
+});
+
+// #130 review 1: a failure after the table is cleared puts the previous (vanilla) table back.
+test('an install that fails while refilling the table restores the previous recipes', () => {
+    const registry = rotnRegistry();
+    const vanilla = { ...registry.recipes };
+    const keys = new Set(Object.keys(vanilla));
+    // A table that refuses new keys: clearing works, refilling with RotN result ids throws.
+    registry.recipes = new Proxy({ ...vanilla }, {
+        defineProperty(target, key, d) {
+            if (!keys.has(String(key))) throw new Error(`refused ${String(key)}`);
+            return Reflect.defineProperty(target, key, d);
+        },
+    });
+    const logs = [];
+    assert.equal(mc.installRotnRecipesOnce(registry, { log: (m) => logs.push(m) }), null);
+    assert.equal(logs.length, 1);
+    assert.match(logs[0], /^RotN recipes not installed: refused \d+; the previous recipes were restored$/);
+    assert.deepEqual(new Set(Object.keys(registry.recipes)), keys);
+    const pick = registry.itemsByName.stone_pickaxe.id;
+    assert.equal(registry.recipes[pick], vanilla[pick], 'the vanilla stone pickaxe recipes are back');
+});
+
+// #130 review 2: the install uses the injected catalog's recipes, not the real dump.
+test('the injected catalog is what gets installed', () => {
+    const registry = rotnRegistry();
+    const fake = { dump: { recipes: { recipes: [{
+        id: 'test:dirt_pick', type: 'shapeless', dynamic: false, requiresTable: false,
+        result: { name: 'minecraft:stone_pickaxe', meta: 0, count: 1 },
+        ingredients: [{ stacks: [{ name: 'minecraft:dirt', meta: 0 }] }],
+    }] } } };
+    const report = mc.installRotnRecipesOnce(registry, { log: () => {}, load: () => fake });
+    assert.deepEqual([report.recipes, report.results], [1, 1]);
+    assert.deepEqual(Object.keys(registry.recipes).map(Number), [registry.itemsByName.stone_pickaxe.id]);
+    assert.deepEqual(names12(registry, registry.recipes[registry.itemsByName.stone_pickaxe.id][0]), ['dirt']);
+});
+
+// #130 review 1: the lazy build fails soft, so bot.recipesFor cannot throw from a bad conversion.
+test('a recipe whose conversion throws is skipped and counted; reading the table does not throw', () => {
+    const registry = rotnRegistry();
+    const bad = {
+        id: 'test:bad', type: 'shapeless', dynamic: false, requiresTable: false,
+        result: { name: 'minecraft:stick', meta: 0, count: 1 },
+        ingredients: [{ get stacks() { throw new Error('broken ingredient'); } }],
+    };
+    const good = { ...bad, id: 'test:good', ingredients: [{ stacks: [{ name: 'minecraft:planks', meta: 0 }] }] };
+    const report = mc.installRotnRecipesOnce(registry, { log: () => {}, load: () => ({ dump: { recipes: { recipes: [bad, good] } } }) });
+    const stick = registry.itemsByName.stick.id;
+    let variants;
+    assert.doesNotThrow(() => { variants = registry.recipes[stick]; });
+    assert.deepEqual(variants.map((r) => names12(registry, r)), [['planks']], 'the good recipe is still there');
+    const stats = report.stats();
+    assert.equal(stats.errors, 1);
+    assert.match(stats.firstError, /test:bad: broken ingredient/);
+    // mineflayer's Recipe.find reads the same table.
+    const Recipe = require('prismarine-recipe')(registry).Recipe;
+    assert.doesNotThrow(() => Recipe.find(stick));
 });
 
 test('installRotnRecipesOnce installs RotN recipes exactly once per registry (login)', () => {
