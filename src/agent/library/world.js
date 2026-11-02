@@ -272,6 +272,21 @@ export function getVillagerProfession(entity) {
 }
 
 
+/**
+ * Inventory totals by bare registry name, every variant summed ("planks": 9 for 4 oak
+ * and 5 spruce). For code that works on bare recipe names, such as mcdata's
+ * crafting planner (B1b, #131 re-review); getInventoryCounts keeps the variant keys.
+ */
+export function getInventoryTotals(bot) {
+    let totals = {};
+    for (const slot of bot.inventory.slots) {
+        if (slot != null && slot.name) {
+            totals[slot.name] = (totals[slot.name] ?? 0) + slot.count;
+        }
+    }
+    return totals;
+}
+
 export function getInventoryCounts(bot) {
     /**
      * Get an object representing the bot's inventory.

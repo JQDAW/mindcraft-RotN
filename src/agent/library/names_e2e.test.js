@@ -11,14 +11,14 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { parseCommandMessage } from '../commands/index.js';
-import { actionsList } from '../commands/actions.js';
+import { parseCommandMessage, getCommand } from '../commands/index.js';
+import { canonicalName } from './rotn_names.js';
 import * as world from './world.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
 
-const command = (name) => actionsList.find(c => c.name === name);
+const command = (name) => getCommand(name);
 
 // Run a command exactly as the agent does: parse (the boundary), then perform.
 function run(agent, message) {
@@ -137,4 +137,49 @@ test('scenario 3: !craftRecipe("stick", 4) with 2 planks crafts once, and says w
     assert.deepEqual(bot.calls.craft, [1], 'limited to the planks the bot has');
     assert.match(bot.output, /Not enough planks to craft 4, crafted 1/);
     assert.doesNotMatch(bot.output, /undefined/);
+});
+
+// #131 re-review.
+test('re-review 1: !getCraftingPlan("stick", 4) with 4 oak planks plans from the planks, not from logs', async () => {
+    const bot = fakeBot({ items: [stack('planks', 0, 4, 36)] });
+    const plan = await run(fakeAgent(bot), '!getCraftingPlan("stick", 4)');
+    assert.match(plan, /You have all items required to craft this item!/);
+    assert.match(plan, /Craft 2 planks -> 4 stick/);
+    assert.doesNotMatch(plan, /log/);
+    // A 1.21 or variant target works too.
+    assert.match(await run(fakeAgent(bot), '!getCraftingPlan("oak_planks", 4)'), /You already have 4 planks in your inventory/);
+});
+
+test('re-review 2: !smeltItem("sand:0", 1), a name copied from !inventory, is accepted as sand', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = fakeBot({ items: [stack('sand', 0, 4, 36)] });
+    assert.ok(Object.keys(world.getInventoryCounts(bot)).includes('sand:0'), 'what !inventory shows');
+    await run(fakeAgent(bot), '!smeltItem("sand:0", 1)');
+    assert.doesNotMatch(bot.output, /Cannot smelt/);
+    assert.match(bot.output, /There is no furnace nearby and you have no furnace/, 'it got past the smeltable check');
+});
+
+test('re-review nit 3: the craft limit counts only the variant the recipe asks for', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const planksId = reg.itemsByName.planks.id;
+    const recipe = {
+        result: { id: reg.itemsByName.stick.id, count: 4 },
+        inShape: [[{ id: planksId, metadata: 0, count: 1 }], [{ id: planksId, metadata: 0, count: 1 }]], // oak only
+        requiresTable: false,
+    };
+    const bot = fakeBot({ items: [stack('planks', 0, 2, 36), stack('planks', 1, 6, 37)] });
+    bot.recipesFor = () => [recipe];
+    await run(fakeAgent(bot), '!craftRecipe("stick", 3)');
+    assert.deepEqual(bot.calls.craft, [1], '2 oak planks make one craft; the 6 spruce do not count');
+});
+
+test('re-review nit 4: an ambiguous name shown to the LLM comes back to the same thing', () => {
+    const bot = fakeBot({ items: [stack('snow', 0, 3, 36)], blocks: [placed('grass', 0, at(1, 63))] });
+    const shownItem = Object.keys(world.getInventoryCounts(bot))[0];
+    const shownBlock = world.getNearbyBlockTypes(bot, 16)[0];
+    assert.equal(shownItem, 'minecraft:snow');
+    assert.equal(shownBlock, 'minecraft:grass');
+    assert.equal(canonicalName(shownItem, 'items'), 'snow', 'the 1.12 snow block, not the layer');
+    assert.equal(canonicalName(shownBlock, 'blocks'), 'grass');
+    assert.equal(canonicalName('snow', 'items'), 'snow_layer', 'a bare LLM "snow" keeps the 1.21 meaning');
 });

@@ -6,6 +6,7 @@ import { checkLevelBlueprint, checkBlueprint } from '../tasks/construction_tasks
 import { load } from 'cheerio';
 import { safeError } from '../safe_error.js';
 import * as names112 from '../library/names112.js';
+import { canonicalName, parseName } from '../library/rotn_names.js';
 
 const pad = (str) => {
     return '\n' + str + '\n';
@@ -287,9 +288,10 @@ export const queryList = [
         perform: function (agent, targetItem, quantity = 1) {
             let bot = agent.bot;
 
-            // Fetch the bot's inventory
-            const curr_inventory = world.getInventoryCounts(bot); 
-            const target_item = targetItem;
+            // mcdata's planner works on bare recipe names ("planks"), so it gets bare-name
+            // totals and a bare target, not the variant keys of !inventory (B1b, #131 re-review).
+            const curr_inventory = world.getInventoryTotals(bot);
+            const target_item = parseName(canonicalName(targetItem, 'items') ?? targetItem)?.name ?? targetItem;
             let existingCount = curr_inventory[target_item] || 0;
             let prefixMessage = '';
             if (existingCount > 0) {
