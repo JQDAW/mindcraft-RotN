@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (17:15 UTC, from `date -u`)
+Updated: 2026-11-02 (17:23 UTC, from `date -u`)
 
 ## Done
 
@@ -93,7 +93,8 @@ Updated: 2026-11-02 (17:15 UTC, from `date -u`)
 - **Phase 3 (G3) started** (lead, 2026-11-02, after G2 PASSED on batch 8, #97/#98). This PR:
   - the G3 scenario plan, under "Planned real batches";
   - the G3 driver interface proposal for skills-rotn, routed through the lead;
-  - precise human requests for the first CX23 run (Requests item 8, rewritten) and a test OpenRouter key (item 12).
+  - **the CX23 plan** (lead, after the human added the Orca SSH target `cx23`): a read-only probe, the bootstrap with `deploy/cx23/`, and the human items H1-H5 (Requests item 8). Nothing touches the CX23 before the lead's written GO;
+  - a test OpenRouter key for G3 batches (Requests item 12).
   - Next: the offline runner parts for G3 (arbiters, fake server, the Mindcraft driver wrapper), in small PRs.
 - **G2 PASSED** on batch 8 (#97): blocks, mobs and items all gate-valid in one batch on the fixed world and cube.
 - **History:**
@@ -471,6 +472,97 @@ Nothing is tolerated on naming: each counted sample still needs census name = fr
 
 ## Planned real batches
 
+### CX23 first run (the plan; nothing touches the CX23 until the lead's written GO for each step)
+
+The CX23 is the bot's own VPS, reachable as the Orca SSH target **`cx23`** (root, by an SSH key on this PC that the human added). It is not the live server, which stays off-limits.
+
+**Ground rules:**
+- I never read, print or copy the key or Orca's SSH settings, and I never run `ssh` or `scp` myself.
+- Commands go through an Orca terminal on host `cx23`: a folder workspace at `/root` on that host, which is Orca metadata only, and `orca terminal create/send/read`.
+- The server's IP address appears nowhere in the repo or STATUS; I use the name `cx23`.
+- Raw output stays in `captures/raw/cx23/` (git-ignored). Anything committed goes through `test/tools/redact-evidence.mjs` and the CI leak check, plus a manual read before the PR.
+
+#### Step 1: a read-only probe (GO 1)
+
+- **No installs and no changes.** No `apt update` (it writes package lists), no file writes, no service changes. Each command only reads.
+- **The commands:**
+  - **OS and hardware:** `cat /etc/os-release`, `uname -r`, `nproc`, `lscpu | head -20`, `free -m`, `swapon --show`, `df -h /`, `lsblk -o NAME,SIZE,TYPE,MOUNTPOINT`, `timedatectl`.
+  - **Network (no addresses needed):** `ss -tulpn` (listening sockets), `ufw status verbose`, `nft list ruleset | head -50`.
+  - **SSH config, effective:** `sshd -T | grep -Ei '^(port|permitrootlogin|passwordauthentication|pubkeyauthentication|allowusers|kbdinteractiveauthentication) '`.
+  - **Users:** `getent passwd | awk -F: '$3==0 || $3>=1000'` (names, uids and shells only), `ls -ld /home/*`, `ls -l /etc/sudoers.d`.
+  - **Services:** `systemctl list-units --type=service --state=running --no-pager`, `systemctl list-unit-files --state=enabled --no-pager`.
+  - **Packages:** `dpkg -l nodejs git unattended-upgrades ufw 2>/dev/null | tail -n +6`, `command -v node git`, `cat /etc/apt/apt.conf.d/20auto-upgrades 2>/dev/null`.
+  - **Our footprint (expected: none):** `ls -ld /opt/mindcraft-rotn /var/lib/mindcraft-rotn /etc/mindcraft-rotn 2>&1`, `id deploy mindcraft-rotn 2>&1`.
+- **Not read:** `authorized_keys`, `/etc/shadow`, environment variables, shell history, `ip addr` (MAC and public addresses).
+- **Output:** saved from `orca terminal read` to `captures/raw/cx23/probe-<date>.txt`. Then redacted with the tool into `test/evidence/cx23/probe-<date>.txt`: every IPv4 and IPv6 address becomes `<ip>`, and local paths become `<local>`. The hostname stays only if it does not contain the IP.
+- **Then a short findings note in STATUS:** Ubuntu version, RAM and swap, what `setup` will change, and anything unexpected (other users, open ports, running services).
+
+#### Step 2: the bootstrap (GO 2, after the probe; the human items H1-H3 happen at the marked points inside it)
+
+**What `deploy/cx23/bootstrap.sh setup` does** (README "One-time bootstrap"; tested offline in `test/unit/cx23.test.js`, plus shellcheck and `systemd-analyze verify` in CI):
+- **Users:**
+  - `deploy`: key login only, groups `sudo` and `mindcraft-rotn`;
+  - system user `mindcraft-rotn`: no login, home `/var/lib/mindcraft-rotn`. The bot runs as this user.
+- **Updates and resources:** unattended **security** upgrades (`20auto-upgrades`); a 2 GB `/swapfile` with `vm.swappiness=10` if no swap exists.
+- **Firewall:** ufw denies all incoming except SSH (it allows SSH before enabling ufw, so the session survives). The bot needs no inbound port, and the MindServer UI binds to localhost only.
+- **Node 22** from NodeSource's apt repo, with the repo key's fingerprint pinned (`6F71F525...BE0B4`; setup refuses on a mismatch), then git.
+- **Installed:**
+  - the unit template `mindcraft-rotn@.service`;
+  - `/usr/local/lib/mindcraft-rotn/check-env-names` and `check-env` (+ `check-env.mjs`);
+  - `/usr/local/sbin/mindcraft-rotn-ctl`;
+  - a sudoers rule, checked with `visudo -c`, that lets `deploy` run only `mindcraft-rotn-ctl` without a password.
+- **Folders:** `/opt/mindcraft-rotn` (`deploy:mindcraft-rotn` 0750), `/var/lib/mindcraft-rotn`, `/etc/mindcraft-rotn` (`root:mindcraft-rotn` 0750).
+
+**How the unit starts a bot** (`mindcraft-rotn@frcfld`):
+1. `ExecStartPre=+check-env-names` runs **as root**. It reads only `/etc/mindcraft-rotn/frcfld.env` (`root:root` 0600), and every line must be a comment, blank, or `NAME=value` with an allowlisted NAME. It prints names and line numbers, never values.
+2. `ExecStartPre=check-env` runs as the bot user. It checks the **effective** environment the way `main.js` reads it:
+   - it refuses `INSECURE_CODING` and `BLOCKED_ACTIONS` if set at all;
+   - `SETTINGS_JSON` may hold only `auth`, `host`, `port` and `auto_open_ui`;
+   - it refuses a `DEBUG` that would print tokens;
+   - it refuses loader, proxy and TLS-override variables;
+   - the token cache folder must exist, be 0700 and be owned by `mindcraft-rotn`;
+   - the OpenRouter key must be set and not the placeholder.
+3. `ExecStart` runs `node main.js` in the current release.
+   - `MINDCRAFT_SINGLE_BOT_SERVICE=1`, so a clean stop exits 0. `Restart=always` with `RestartPreventExitStatus=0 3`: no restart after a clean stop or a fatal kick. `StartLimitBurst=6` per 10 min.
+   - `UMask=0077`; memory caps `MemoryHigh=1G` and `MemoryMax=1536M`, to confirm in the soak.
+
+**The order** (each line run by me in the Orca root terminal unless marked **human**):
+1. Get the bootstrap files without copying from this PC: `git clone --depth 1 --branch <tag> https://github.com/JQDAW/mindcraft-RotN /root/mindcraft-rotn-src` (the repo is public).
+   - The tag is one the lead creates on develop. I check `git rev-parse HEAD` against the tag's SHA before running anything from it.
+   - If git is missing on the image (the probe shows this), the human copies the folder instead.
+2. **Human (H1):** the `deploy` public key file on the CX23 (see H1). Agents never see the private key.
+3. `bash /root/mindcraft-rotn-src/deploy/cx23/bootstrap.sh setup --deploy-key-file /root/deploy.pub`.
+   - No `--ssh-from`: this PC's address can change, and a narrow rule could lock everyone out. SSH stays key-only after lockdown. The lead decides whether to narrow it later.
+4. `bash .../bootstrap.sh add-bot frcfld`. It creates `/var/lib/mindcraft-rotn/frcfld/msa` (0700, `mindcraft-rotn`) and `/etc/mindcraft-rotn/frcfld.env` (`root:root` 0600, from `bot.env.example`, with placeholders). It never overwrites an existing file.
+5. **Human (H2):** a second Orca SSH target **`cx23-deploy`** (user `deploy`, the H1 key). The human tests it once; I then run `whoami` through it (read-only) to confirm.
+6. **Human (H3):** `passwd deploy`, in the human's own terminal, because the password is a secret.
+7. `bash .../bootstrap.sh lockdown --i-tested-deploy-login`.
+   - After this, **the `cx23` root target stops working by design**: no root login, no passwords, `AllowUsers deploy`.
+   - From here on everything goes through `cx23-deploy`. Lockdown refuses unless `deploy` has a key, a sudo password, and an `Accepted publickey for deploy` line since setup (step 5 makes it).
+8. **The first release, as `deploy`** (through `cx23-deploy`). `/root` is 0700, so `deploy` uses its own copy of the public repo:
+   - `git clone --depth 1 --branch <tag> https://github.com/JQDAW/mindcraft-RotN ~/deploy-src`, with the same SHA check;
+   - then `bash ~/deploy-src/deploy/cx23/deploy.sh deploy <tag>`. Its paths are fixed under `/opt/mindcraft-rotn`. It makes a bare clone, runs `git archive` of the tag (refusing a tag not on develop) and `npm ci`, and refuses a release whose `settings.js` does not evaluate to `allow_insecure_coding === false`.
+   - No bot is enabled yet, so nothing starts.
+9. **Human (H4 and H5):** the OpenRouter key into the env file, and the bot's Microsoft login (below).
+10. **Read-only checks by me before any start:**
+    - `sudo -n mindcraft-rotn-ctl status frcfld` (allowed without a password);
+    - `stat -c '%U:%G %a'` on the env file and the `msa` folder (names and modes only);
+    - `systemctl cat mindcraft-rotn@frcfld` for the effective unit;
+    - `ufw status`, and the effective `sshd -T` settings.
+11. **The first start needs its own GO,** plus the lead's decision on which server it joins (recommended: a disposable test server created with `--allow-from` covering the CX23). Then `sudo -n mindcraft-rotn-ctl enable frcfld` and `start frcfld`, and the journal is watched for `check-env` results and the login.
+
+**Secrets never pass through chat, git or an agent-read terminal:**
+- The OpenRouter key and the deploy password are typed by the human in a terminal the human opens and agents never read. In Orca, that is a terminal tab the human creates on `cx23-deploy`, titled `HUMAN ONLY`.
+- The Microsoft device code is shown only in that terminal and lasts minutes.
+- The token cache stays in `/var/lib/mindcraft-rotn/frcfld/msa` (0700, `mindcraft-rotn`). No agent reads it, and `check-env` prints no values.
+
+**Undo:**
+- Before lockdown, root can revert anything.
+- After lockdown, `deploy` with sudo can stop and disable the unit (`mindcraft-rotn-ctl stop|disable`), roll back a release (`deploy.sh rollback`), or remove the bot.
+- `setup` and `add-bot` are safe to re-run.
+
+**Time and cost:** the CX23 is already paid monthly (about EUR 6.81). The probe takes about 5 min; the bootstrap and first deploy about 30-45 min, mostly `npm ci`.
+
 ### G3 batches (the plan; lead, 2026-11-02 after G2 PASSED. Nothing paid without the lead's written GO.)
 
 **Goal:** G3 gate evidence for the three PLAN items:
@@ -754,7 +846,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 ## Blocked
 
 - **G3 batches:** the lead's decisions on the G3 plan's open questions, skills-rotn's agent and profile, the test OpenRouter key (Requests item 12), and a written GO for each batch (S1 first).
-- **The first CX23 run:** the human's items in Requests item 8.
+- **The CX23:** GO 1 (the read-only probe), then the human items H1-H3, then GO 2 (the bootstrap), then H4-H5, then a GO for the first start (Requests item 8).
 
 ## Requests to other agents or the lead
 
@@ -773,33 +865,24 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
    5. GitHub disables the helper's schedule after 60 days without activity in the helper repo. The preflight warns from day 45; a small commit to the helper repo resets the clock.
 
 7. **Lead: a `.gitattributes`** with `*.sh text eol=lf` and `deploy/cx23/** text eol=lf`. Root files are yours. The stopgap is in place: the scripts are `.sh`, and bootstrap strips CRs.
-8. **Human, via the lead: the first CX23 run** (replaces the three short CX23 items in NEEDS-HUMAN). Steps follow `deploy/cx23/README.md`. Never paste a key, password, token or code into a chat, a file in the repo or a status file.
-   - **8a. Create the CX23** in your **own** Hetzner project (not `mindcraft-rotn-test`, so the test sweeper can never touch it).
-     - Type CX23, image Ubuntu 24.04, location nbg1 (near the test servers; any EU location works).
-     - Use your own SSH key for root. No labels are needed.
-     - Tell the lead its IPv4 address (not a secret). Cost: about EUR 6.81 per month (2026-11-01 price).
-   - **8b. The `deploy` key.** On this PC, in your own terminal:
-     - run `ssh-keygen -t ed25519 -f C:/Users/admin/.ssh/mindcraft-rotn-deploy -C deploy@mindcraft-rotn`, with a passphrase if you like;
-     - only the **public** file `mindcraft-rotn-deploy.pub` is used below. Agents never read the private key; they use it only through `ssh -i` if you allow deploys from this PC.
-   - **8c. Bootstrap as root** (once, about 15 min), from a terminal on this PC. Do steps 5 and 6 before `lockdown`, while root can still log in.
-     1. `scp -r deploy/cx23 root@<ip>:/root/cx23`
-     2. `scp C:/Users/admin/.ssh/mindcraft-rotn-deploy.pub root@<ip>:/root/deploy.pub`
-     3. `ssh root@<ip> bash /root/cx23/bootstrap.sh setup --deploy-key-file /root/deploy.pub --ssh-from <your public IP>/32`
-     4. In a second terminal: `ssh -i C:/Users/admin/.ssh/mindcraft-rotn-deploy deploy@<ip>`. It must work.
-     5. `ssh root@<ip> bash /root/cx23/bootstrap.sh add-bot frcfld`. Unit and folder names are lowercase; the Minecraft name stays FRCFLD in the profile.
-     6. The bot's OpenRouter key (8d) goes in now: `ssh -t root@<ip> nano /etc/mindcraft-rotn/frcfld.env`. The file stays `root:root` 0600, and `check-env` refuses a placeholder or empty key.
-     7. As root: `passwd deploy` (deploy's own sudo password; keep it in your password manager).
-     8. `ssh root@<ip> bash /root/cx23/bootstrap.sh lockdown --i-tested-deploy-login`. After this, root and password logins are off. Later admin work: `ssh -t -i ... deploy@<ip> sudo ...`.
-   - **8d. The bot's OpenRouter key** (production): create a key at https://openrouter.ai/settings/keys, named `mindcraft-rotn-frcfld-cx23`, with a **credit limit**. The lead sets the amount in the soak ADR; until then a small one, for example USD 5. Put it in the env file in step 8c.6, replacing the `OPENROUTER_API_KEY` placeholder. Fill in `SETTINGS_JSON`'s `host` there too, once 8f is decided.
-   - **8e. The bot's Microsoft login on the CX23**, after the lead's first release tag is deployed (`bash deploy.sh deploy <tag>` as deploy):
-     - `sudo -u mindcraft-rotn env MINDCRAFT_PROFILES_FOLDER=/var/lib/mindcraft-rotn/frcfld/msa node /opt/mindcraft-rotn/current/packages/forge-bridge/tools/msa-login.mjs FRCFLD`
-     - Follow Microsoft's own instructions (microsoft.com/link and the code it prints); type the account password only on Microsoft's page.
-     - Then run the same command with `--check`. It prints only the profile name.
-     - This is net-forge's `msa-login.mjs`, the same tool used for this PC's cache. The cache folder stays `mindcraft-rotn`-owned and 0700.
-   - **8f. Which server the first CX23 run joins** (decision for the lead and you):
-     - (recommended) first a disposable **test** server. harness-ops creates it with `--allow-from <cx23 ip>/32` plus this PC; it needs a GO.
-     - Later your live server. That needs FRCFLD whitelisted there (NEEDS-HUMAN "Whitelist the bot", after G3) and its host and port in the env file.
-   - **Agents never** log in as root, see the deploy private key, the OpenRouter key or the Microsoft code, or connect to your live server.
+8. **Human, via the lead: the CX23 items** (the CX23 exists as Orca SSH target `cx23`; the plan is under "Planned real batches", "CX23 first run"). They replace the three short CX23 items in NEEDS-HUMAN. Never paste a key, password, token or code into a chat, a file in the repo or a status file. Steps H1-H3 come before the bootstrap's `lockdown`; H4-H5 come after the first deploy.
+   - **H1. The `deploy` key** (about 5 min, in your own terminal on this PC):
+     1. `ssh-keygen -t ed25519 -f C:/Users/admin/.ssh/mindcraft-rotn-deploy -C deploy@mindcraft-rotn`. A passphrase is optional; Orca must be able to use the key.
+     2. Put the **public** key on the CX23 as `/root/deploy.pub`: in an Orca terminal **you** open on `cx23`, run `nano /root/deploy.pub`, paste the one line from `mindcraft-rotn-deploy.pub`, and save.
+     3. Tell the lead "H1 done". Agents never read either key file.
+   - **H2. A second Orca SSH target, `cx23-deploy`** (after my bootstrap step 4): the same host, user `deploy`, the H1 private key. Connect once to check it, then tell the lead. After `lockdown`, the root target `cx23` stops working by design, and everything goes through `cx23-deploy`.
+   - **H3. `deploy`'s sudo password** (before `lockdown`): in a terminal you open on `cx23` (root), run `passwd deploy` and keep the password in your password manager. `lockdown` refuses without it.
+   - **H4. The bot's OpenRouter key** (after the first deploy):
+     1. Create a key at https://openrouter.ai/settings/keys, named `mindcraft-rotn-frcfld-cx23`, with a **credit limit**. The lead sets it in the soak ADR; until then a small one, for example USD 5.
+     2. In a terminal **you** open on `cx23-deploy` (title it `HUMAN ONLY`; agents never read it), run `sudo nano /etc/mindcraft-rotn/frcfld.env`.
+     3. Replace `<set-by-human-never-in-repo>` after `OPENROUTER_API_KEY=` with the key. Fill in `"host"` in `SETTINGS_JSON` once the lead decides which server the first run joins. Save.
+     4. Check: `sudo stat -c '%U:%G %a' /etc/mindcraft-rotn/frcfld.env` must print `root:root 600`.
+   - **H5. The bot's Microsoft login on the CX23** (after the first deploy), in the same `HUMAN ONLY` terminal:
+     1. `sudo -u mindcraft-rotn env MINDCRAFT_PROFILES_FOLDER=/var/lib/mindcraft-rotn/frcfld/msa node /opt/mindcraft-rotn/current/packages/forge-bridge/tools/msa-login.mjs FRCFLD`
+     2. Open the Microsoft link it prints, enter the code, and sign in with the bot's account on Microsoft's page only.
+     3. Then run the same command with `--check` at the end. It prints only the profile name (FRCFLD); tell the lead "H5 done".
+     - This is the same tool as for this PC's cache. The cache stays in that folder (0700, owned by `mindcraft-rotn`).
+   - **Agents never** log in as root on their own initiative, see a private key, the OpenRouter key, the deploy password or the Microsoft code, read a `HUMAN ONLY` terminal, or connect to your live server.
 
 9. ~~Lead: decide how G2 handles the cube after batch 6~~ **Decided** (#88 comment): P1 and P2 approved, P3 declined; done in #92. The original proposals, for the record:
    - **P1 (recommended): fix the cube too.** After login, the runner teleports the bot to batch 4's ground centre (-45 66 -66) with `tp`, which is already on the plan's console list. It then waits for chunks and takes the census there, so every G2 run sees the same cube (the one where batch 4 found double plants and Dynamic Trees blocks). The new gate parameter `cubeCentre` would be 'equal'.
@@ -816,5 +899,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the G3 plan, the G3 driver interface proposal, the CX23 human requests, and the CX23 README's login step (`agent/harness-ops/g3-plan`).
+- This PR: the G3 plan, the G3 driver interface proposal, the CX23 plan (probe, bootstrap, human items H1-H5), the test-key request, and the CX23 README's login step (`agent/harness-ops/g3-plan`).
 - Merged since the last update: #97 (G2 batch 8 evidence).
