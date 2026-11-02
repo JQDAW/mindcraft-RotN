@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (19:59 UTC, from `date -u`)
+Updated: 2026-11-02 (20:42 UTC, from `date -u`)
 
 ## Done
 
@@ -92,11 +92,19 @@ Updated: 2026-11-02 (19:59 UTC, from `date -u`)
 
 - **Phase 3 (G3).**
   - The G3 plan, the driver interface proposal, the CX23 plan and the human items H1-H6 are merged (#101).
-  - **S1-A ran on 2026-11-02 and was cut short; this PR is its evidence and findings.** The survey and arbiters completed. The day cycle stopped at 19:56:37, after about 36 min, when the PC ran out of resources (see "S1-A" under "Real S1 batches"). The server is deleted.
-    - **S1-B was not started.** It waits for the lead's decision (Requests item 13).
-  - S1 runner tooling merged (#106).
+  - **S1 is done.** S1-A's evidence and findings are merged (#113); the S1 tooling is in #106.
+  - **The lead's decisions after S1-A:**
+    - the G3 world is the G2 world (seed 1880465901402976865, cube -45 66 -66);
+    - **S1-B is cancelled**;
+    - the dawn bound is provisional until the first G3 smoke batch;
+    - memory: option 1 (Requests item 13).
+  - **This PR: the G3 driver** (`test/runner/drivers/mindcraft-driver.mjs`). It runs the real Mindcraft agent under the runner contract:
+    - no task files, and it refuses skills-rotn's `MINDCRAFT_ROTN_ALLOW_TASK_FILES` too;
+    - no insecure settings;
+    - no process left behind on a stop.
+    - It is tested offline with a fake `main.js`.
   - **CX23 GO 1** (the read-only probe, lead 18:31 UTC): waiting for the human to open the `/root` folder workspace on `cx23` from Orca's desktop app (lead's option 1). Nothing has touched the CX23.
-  - Next: the offline G3 runner parts (arbiters, the Mindcraft driver wrapper with a fake `main.js`), in small PRs.
+  - **Next:** the G3 arbiters library (inventory by count-only `clear`, the stat objectives with absent read as 0, deaths, leaves and no-cheat), then the scenarios once skills-rotn's chat formats are agreed.
 - **G2 PASSED** on batch 8 (#97): blocks, mobs and items all gate-valid in one batch on the fixed world and cube.
 - **History:**
   - G2 batches 1-4 FAILED. The lead's decisions went into #64, #66, #67, #73, #77 and #79, and the double-plant fix into #80-#82.
@@ -835,7 +843,7 @@ What skills-rotn provides (to agree):
   - The calls are counted from the agent's own log lines (one per request to OpenRouter).
   - The cost is the difference in the test key's `usage`, read from OpenRouter's key endpoint (`GET /api/v1/key`) before and after the scenario. The runner prints and records only the numbers, never the key.
 - **Batch spend stop:** before each scenario the batch script reads the key's usage. If the batch has spent more than `maxBatchUsd`, it stops the batch: no further scenarios, logs fetched, the server deleted as always.
-  - Proposal: USD 2 per batch, a gate parameter compared 'equal'.
+  - **Decided (lead, #116 review): `maxBatchUsd` is USD 2 per batch,** a gate parameter compared 'equal'.
   - The key's USD 5 credit limit is the hard cap behind it.
 - **Order of work:**
   1. this plan;
@@ -857,10 +865,19 @@ What skills-rotn provides (to agree):
 - LLM calls and cost are recorded per scenario, with a batch spend stop;
 - the test key is a user environment variable with a USD 5 limit.
 
-**Still open:**
-1. The world: S1-A's proposal is to keep the G2 world ("Real S1 batches"), and whether S1-B still runs.
-2. The dawn bound (S1-A's proposal: the wrap past 24000 after the night; limit 55 min).
-3. The model (skills-rotn's profile) and `maxBatchUsd` (proposal: USD 2).
+**Decided after S1-A (lead):**
+- **The world:** the G2 world (seed 1880465901402976865, cube -45 66 -66). The dungeon chests cannot fake a pass, because `crafted_by_bot` gates all five items.
+- **S1-B is cancelled.**
+- **The dawn bound, provisionally:** the wrap past 24000 after the night, about 40 min from the first join, limit 55 min. The first G3 smoke batch runs a full night and confirms it before it is pinned as an 'equal' parameter.
+
+**Decided (lead, #116 review):** `maxBatchUsd` is USD 2.
+
+**Required before any G3 paid batch (lead, #116 review; my next PR):**
+- the spend stop: `maxBatchUsd` as an 'equal' gate parameter; a numbers-only read of the key's usage (`GET /api/v1/key`); per-scenario LLM calls and cost; and a test that the batch stops, fetches the logs and deletes the server;
+- `Server` as a test-only task giver;
+- `give` and `summon` excluded from G3.
+
+**Still open:** the model (skills-rotn's profile).
 
 ### G2 batch (the plan for every G2 gate batch; batches 1-7 ran on 2026-11-01/02. Each batch needs the lead's written GO.)
 
@@ -982,7 +999,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 ## Blocked
 
 - **G3 batches:** the lead's decisions on the G3 plan's open questions and on S1-A's proposals, skills-rotn's agent and profile, the test OpenRouter key (Requests item 12), and a written GO for each batch.
-- **S1-B and any further paid batch:** the lead's decision on this PC's memory (Requests item 13), then a written GO.
+- **Any further paid batch:** a written GO. For batches over 20 min, I announce the batch window to the lead first (Requests item 13).
 - **The CX23** (Requests item 8):
   1. GO 1, the read-only probe, through `cx23`;
   2. H1, the deploy key;
@@ -1051,7 +1068,11 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
     - Set it as a **user environment variable** on this PC: `OPENROUTER_API_KEY` (Windows: Settings > System > About > Advanced system settings > Environment Variables > User variables). Then restart Orca, so new terminals see it.
     - The runner passes it only to the agent (`--pass-env OPENROUTER_API_KEY`) and never prints or records it. Agents never read `keys.json`.
     - Not needed for survey batch S1.
-13. **Lead (and the human): this PC's memory during paid batches** (S1-A, 2026-11-02).
+13. ~~Lead (and the human): this PC's memory during paid batches~~ **Decided (lead, after S1-A): option 1.**
+    - During any paid batch over 20 minutes, no other agent runs `npm ci` or a full test suite, and reviews are static, with at most one running.
+    - **I announce each batch window to the lead,** who tells the others.
+    - Option 2 is the human's choice; the lead told them.
+    - S1-B is cancelled. The original note:
     - **What happened:** Claude Code reaped my background shells (the batch's tracking shell and the hard-stop watcher) because the PC was critically low on memory. Minutes later, new processes could not start (`0xC0000142`), which ended the day-cycle run.
     - **The safety net held:** the batch script's own teardown, plus the TTL and sweeper behind it, still deleted everything.
     - **But:** a long batch (G3's first night, about 45 min; S1's day cycle) cannot be supervised when the PC runs out of memory. Several agents and test runs were active at the same time; for example, another worktree's `deploy/test-server.sh` processes were running then, which look like unit tests.
@@ -1062,5 +1083,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the S1-A evidence and findings, and the no-task-files rule in the G3 driver section (`agent/harness-ops/s1a-evidence`).
-- Merged since the last update: #106 (the S1 runner tooling).
+- This PR: the G3 driver for the real Mindcraft agent (`agent/harness-ops/g3-driver`).
+- Merged since the last update: #113 (S1-A evidence and findings).
