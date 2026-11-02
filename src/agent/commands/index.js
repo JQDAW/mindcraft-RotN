@@ -1,4 +1,5 @@
 import { getBlockId, getItemId } from "../../utils/mcdata.js";
+import { canonicalName } from "../library/rotn_names.js";
 import { actionsList } from './actions.js';
 import { queryList } from './queries.js';
 
@@ -162,10 +163,13 @@ export function parseCommandMessage(message) {
             }
         } else if(param.type === 'BlockName') { //Check that there is a block with this name
             if(getBlockId(arg) == null) return  `Invalid block type: ${arg}.`
+            arg = canonicalName(arg, 'blocks') ?? arg; // the skills' name space (rotn_names.js, B1b)
         } else if(param.type === 'ItemName') { //Check that there is an item with this name
             if(getItemId(arg) == null) return `Invalid item type: ${arg}.`
+            arg = canonicalName(arg, 'items') ?? arg;
         } else if(param.type === 'BlockOrItemName') {
             if(getBlockId(arg) == null && getItemId(arg) == null) return  `Invalid block or item type: ${arg}.`
+            arg = canonicalName(arg, 'items') ?? canonicalName(arg, 'blocks') ?? arg;
         }
         args[i] = arg;
     }
