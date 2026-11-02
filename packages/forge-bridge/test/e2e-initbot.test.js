@@ -209,6 +209,25 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.ok(server.state.positions.length > before, 'server received movement');
     assert.ok(Math.hypot(last.x - start.x, last.z - start.z) > 2, 'server saw the newest position');
 
+    // The movement guard (G2 batch 7): a NaN explosion knockback from the server never reaches
+    // the wire as a non-finite position (stock mineflayer would send x NaN: a kick).
+    const sentBefore = server.state.positions.length;
+    server.state.client.write('explosion', { x: 0, y: 65, z: 0, radius: 1, affectedBlockOffsets: [], playerMotionX: NaN, playerMotionY: 0, playerMotionZ: 0 });
+    for (let waited = 0; bot.forge.movementGuard.sanitizedInputs === 0 && waited < 10000; waited += 50) await sleep(50);
+    assert.equal(bot.forge.movementGuard.sanitizedInputs, 1);
+    // Physics resumes: the bot walks on, and the server sees it (poll: ticks slow down under load).
+    const afterBlast = bot.entity.position.clone();
+    bot.setControlState('forward', true);
+    for (let waited = 0; bot.entity.position.distanceTo(afterBlast) <= 1.5 && waited < 30000; waited += 100) await sleep(100);
+    bot.setControlState('forward', false);
+    await sleep(300);
+    const walked = bot.entity.position.distanceTo(afterBlast);
+    assert.ok(walked > 1.5, `bot walked ${walked.toFixed(2)} blocks after the explosion`);
+    assert.ok(server.state.positions.length > sentBefore, 'still sending movement after the explosion');
+    const seen = server.state.positions.at(-1);
+    assert.ok(Math.hypot(seen.x - afterBlast.x, seen.z - afterBlast.z) > 1.5, 'the server saw the displacement');
+    for (const q of server.state.positions) assert.ok([q.x, q.y, q.z].every(Number.isFinite), `finite position ${JSON.stringify(q)}`);
+
     // Capture
     bot.quit();
     await sleep(300);
@@ -222,6 +241,7 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     assert.ok(cap.some(l => l.kind === 'packet' && l.name === 'window_items'));
     assert.ok(cap.some(l => l.kind === 'event' && l.name === 'hs_complete'));
     assert.ok(cap.some(l => l.kind === 'event' && l.name === 'registries'));
+    assert.ok(cap.some(l => l.kind === 'event' && l.name === 'movement_trace' && l.trace.some(e => e.name === 'explosion')), 'movement trace in the capture');
     assert.ok(!JSON.stringify(cap).includes('FRCFLD'), 'username redacted');
     for (const l of cap.filter(x => x.b64)) assert.equal(Buffer.from(l.b64, 'base64').indexOf('FRCFLD'), -1);
 });
