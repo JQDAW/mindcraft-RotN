@@ -20,8 +20,10 @@ const { errorSummary } = requireAuth('./src/common/Util.js');
 const { xboxLiveErrors } = requireAuth('./src/common/Constants.js');
 
 const FAKE = 'eyJhbGciOiJSUzI1NiJ9.eyJmYWtlIjoicGF0Y2gtdGVzdCJ9.ZmFrZS1zaWduYXR1cmU';
-const BODY = JSON.stringify({ error: 'invalid_grant', refresh_token: FAKE, access_token: FAKE });
+const BODY = JSON.stringify({ Authorization: `Bearer ${FAKE}`, error: 'invalid_grant', refresh_token: FAKE, access_token: FAKE });
 const SECRET_LIKE = /eyJ|invalid_grant|refresh_token|access_token/;
+// Standalone: no Bearer value, whatever else the pattern above covers (PR #74 review nit).
+const BEARER = /Bearer/i;
 
 // Capture what prismarine-auth prints, then restore the console.
 const realConsole = { warn: console.warn, debug: console.debug, log: console.log, info: console.info, error: console.error };
@@ -51,6 +53,7 @@ for (const [name, Manager] of [['Live', LiveTokenManager], ['MSA', MsaTokenManag
         assert.equal(await Manager.prototype.verifyTokens.call(fake), false);
         assert.deepEqual(printed, ['Error refreshing token (HTTP 400, Error)']);
         assert.doesNotMatch(printed.join('\n'), SECRET_LIKE);
+        assert.doesNotMatch(printed.join('\n'), BEARER);
     });
 }
 
@@ -62,6 +65,7 @@ test('Live device-code request non-200: the status, never the response body', as
     await new Promise((resolve) => setTimeout(resolve, 20)); // the unpatched code printed the body asynchronously
     assert.deepEqual(printed, ['Failed to request live.com device code (HTTP 400)']);
     assert.doesNotMatch(printed.join('\n'), SECRET_LIKE);
+    assert.doesNotMatch(printed.join('\n'), BEARER);
 });
 
 test('MSA device-code failure: the fixed hint and a summary, not the serialized MSAL error', async () => {
@@ -95,4 +99,29 @@ test('errorSummary: status, class, code and XErr only', () => {
     assert.equal(errorSummary(Object.assign(new Error('x'), { xerr: 2148916233 })), 'Error, XErr 2148916233');
     assert.equal(errorSummary(Object.assign(new Error('x'), { name: `Bearer ${FAKE}`, code: 'token=abc' })), 'Error');
     assert.equal(errorSummary(undefined), 'Error');
+});
+
+test('Live device-code polling loop: each failed poll prints a summary, never the error (PR #74 review nit)', async () => {
+    // Device-code request OK; then every poll fails: an OAuth error whose description
+    // carries a fake token, then a network error whose cause message does.
+    let polls = 0;
+    globalThis.fetch = (url) => {
+        if (String(url).includes('oauth20_connect.srf')) { // Endpoints.live.deviceCodeRequest
+            return Promise.resolve(Response.json({ device_code: 'fake-device-code', user_code: 'FAKE-CODE', verification_uri: 'https://example.invalid/link', expires_in: 1, interval: 0.05 }));
+        }
+        polls++;
+        if (polls % 2) return Promise.resolve(Response.json({ error: 'expired_token', error_description: `token expired: Bearer ${FAKE}` }));
+        return Promise.reject(new TypeError('fetch failed', { cause: Object.assign(new Error(`read ECONNRESET Bearer ${FAKE}`), { code: 'ECONNRESET' }) }));
+    };
+    const live = new LiveTokenManager('fake-client-id', ['service::user.auth.xboxlive.com::MBI_SSL'], { getCached: () => Promise.resolve({}), setCachedPartial: () => Promise.resolve() });
+    capture();
+    await assert.rejects(live.authDeviceCode(() => {}), /Authentication failed, timed out/);
+    assert.ok(polls >= 2, `polled ${polls} times`);
+    const pollLines = printed.filter((l) => l.startsWith('[live] device code polling error'));
+    assert.equal(pollLines.length, printed.length, `only summary lines: ${printed.length}`);
+    assert.ok(pollLines.includes('[live] device code polling error (Error, expired_token)'), pollLines.join(' | '));
+    assert.ok(pollLines.includes('[live] device code polling error (TypeError, ECONNRESET)'), pollLines.join(' | '));
+    assert.doesNotMatch(printed.join(' | '), SECRET_LIKE);
+    assert.doesNotMatch(printed.join(' | '), BEARER);
+    assert.ok(!printed.join(' | ').includes('token expired'), 'not the error description');
 });
