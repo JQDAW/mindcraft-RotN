@@ -47,6 +47,48 @@ export function g3Policy(scenario, env, maxBatchUsd) {
     return { guard, notGate, batch: marker };
 }
 
+/**
+ * The gate evidence cross-check (#122 nit 1). The ROTN_G3_BATCH marker alone can be forged (export it and
+ * run run.mjs directly), so a G3 result counts only if the batch summary that batch.mjs wrote (BATCH,
+ * batch.json) vouches for it:
+ *   - the summary is from a real batch (testMode false) and names its batchId and maxBatchUsd;
+ *   - the result's marker is exactly "<that batchId>:<that maxBatchUsd>";
+ *   - the batch ran that scenario exactly once, the result's runId is the one the batch read back from
+ *     that run's result.json, and its recorded exit agrees with the result (a passing result needs exit 0;
+ *     run.mjs exits 0 only for a gate pass).
+ * test/tools/g3-batch-check.mjs checkEvidenceTree makes it compulsory: every G3 result under test/evidence/
+ * must sit under a folder with a batch.json that vouches for it.
+ * results: [{file, result}] with each result.json's contents. Returns the problems (empty = consistent).
+ */
+export function crossCheckBatch(summary, results) {
+    if (!summary || typeof summary.batchId !== 'string' || !summary.batchId) return ['no batch summary with a batchId (batch.json from batch.mjs)'];
+    const p = [];
+    if (summary.testMode !== false) p.push(`batch ${summary.batchId} ran in test mode (or does not say): not gate evidence`);
+    const marker = `${summary.batchId}:${summary.maxBatchUsd}`;
+    const ran = (summary.scenarios ?? []).reduce((m, s) => m.set(s.id, [...(m.get(s.id) ?? []), s]), new Map());
+    const g3 = results.filter(({ result }) => isG3Result(result));
+    if (!g3.length) p.push('no G3 result.json to check');
+    for (const { file, result } of g3) {
+        if (result.batch !== marker) p.push(`${file}: its batch marker '${result.batch ?? 'none'}' is not this batch's '${marker}'`);
+        const runs = ran.get(result.scenario) ?? [];
+        if (runs.length !== 1) {
+            p.push(`${file}: batch ${summary.batchId} ran ${result.scenario} ${runs.length} time(s), not once`);
+            continue;
+        }
+        // The run itself, not only the batch id: a second, hand-run result under a reused batch id fails here (#129 review).
+        if (typeof runs[0].runId !== 'string' || !runs[0].runId || result.runId !== runs[0].runId) {
+            p.push(`${file}: its runId '${result.runId ?? 'none'}' is not the run batch ${summary.batchId} recorded for ${result.scenario} ('${runs[0].runId ?? 'none'}')`);
+        }
+        if (result.pass === true && runs[0].exit !== 0) p.push(`${file}: a passing result, but the batch recorded exit ${runs[0].exit} for ${result.scenario}`);
+    }
+    return p;
+}
+
+/** A G3 result: gate G3, or a g3- scenario (so dropping the gate field does not dodge the cross-check). */
+export function isG3Result(result) {
+    return result?.gate === 'G3' || /^g3-/i.test(String(result?.scenario ?? ''));
+}
+
 /** The verb of a console command, for error messages (never the arguments). */
 const verb = (cmd) => String(cmd).trim().split(/\s+/)[0] || '(empty)';
 
