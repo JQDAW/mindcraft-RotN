@@ -27,7 +27,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, on develop `4b175cc`): PR open, see Open PRs. Next: A2 `no-cheat`.
+- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, on develop `4b175cc`): #103 open. Next: A2 `no-cheat`.
 
 ## G3 plan: small PRs, in order
 
@@ -113,4 +113,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- A1 log hygiene (branch `agent/skills-rotn/log-hygiene`). Serves the lead's "Before the first CX23 run" line.
+- #103 A1 log hygiene (branch `agent/skills-rotn/log-hygiene`). Serves the lead's "Before the first CX23 run" line.
