@@ -33,7 +33,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A4 `quiet-reflexes` (branch `agent/skills-rotn/quiet-reflexes`, on develop `3b796fc`): PR open, see Open PRs. Reflexes record a re-plan instead of stopping the self-prompter and prompting the LLM; `execute()` never rejects; unstuck re-plans instead of killing the agent; `isClearPath` bounded; behavioural `!smeltItem` and `/skin` tests.
+- A4 `quiet-reflexes` (branch `agent/skills-rotn/quiet-reflexes`, on develop `3b796fc`): #123 open. Reflexes record a re-plan instead of stopping the self-prompter and prompting the LLM; `execute()` never rejects; unstuck re-plans instead of killing the agent; `isClearPath` bounded; behavioural `!smeltItem` and `/skin` tests.
 - Next: stage B, B1 `names-audit` (1.12 names in skills, world, modes and the command boundary). I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
 
 ## G3 plan: small PRs, in order
@@ -127,4 +127,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- A4 quiet reflexes (branch `agent/skills-rotn/quiet-reflexes`). Serves brief "Stop modes from re-prompting the LLM on every reflex" and "Limit `isClearPath` A* cost on the CX23", PLAN priority 1, and the #109 follow-ups.
+- #123 A4 quiet reflexes (branch `agent/skills-rotn/quiet-reflexes`). Serves brief "Stop modes from re-prompting the LLM on every reflex" and "Limit `isClearPath` A* cost on the CX23", PLAN priority 1, and the #109 follow-ups.
