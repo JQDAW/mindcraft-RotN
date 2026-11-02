@@ -1,5 +1,6 @@
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
+import * as names112 from "./names112.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -159,14 +160,14 @@ export async function smeltItem(bot, itemName, num=1) {
     let placedFurnace = false;
     let furnaceBlock = undefined;
     const furnaceRange = 16;
-    furnaceBlock = world.getNearestBlock(bot, 'furnace', furnaceRange);
+    furnaceBlock = world.getNearestBlock(bot, names112.FURNACE_BLOCKS, furnaceRange);
     if (!furnaceBlock){
         // Try to place furnace
         let hasFurnace = world.getInventoryCounts(bot)['furnace'] > 0;
         if (hasFurnace) {
             let pos = world.getNearestFreeSpace(bot, 1, furnaceRange);
             await placeBlock(bot, 'furnace', pos.x, pos.y, pos.z);
-            furnaceBlock = world.getNearestBlock(bot, 'furnace', furnaceRange);
+            furnaceBlock = world.getNearestBlock(bot, names112.FURNACE_BLOCKS, furnaceRange);
             placedFurnace = true;
         }
     }
@@ -175,7 +176,7 @@ export async function smeltItem(bot, itemName, num=1) {
         return false;
     }
     if (bot.entity.position.distanceTo(furnaceBlock.position) > 4) {
-        await goToNearestBlock(bot, 'furnace', 4, furnaceRange);
+        await goToNearestBlock(bot, names112.FURNACE_BLOCKS, 4, furnaceRange);
     }
     bot.modes.pause('unstuck');
     await bot.lookAt(furnaceBlock.position);
@@ -280,13 +281,13 @@ export async function clearNearestFurnace(bot) {
      * @example
      * await skills.clearNearestFurnace(bot);
      **/
-    let furnaceBlock = world.getNearestBlock(bot, 'furnace', 32);
+    let furnaceBlock = world.getNearestBlock(bot, names112.FURNACE_BLOCKS, 32);
     if (!furnaceBlock) {
         log(bot, `No furnace nearby to clear.`);
         return false;
     }
     if (bot.entity.position.distanceTo(furnaceBlock.position) > 4) {
-        await goToNearestBlock(bot, 'furnace', 4, 32);
+        await goToNearestBlock(bot, names112.FURNACE_BLOCKS, 4, 32);
     }
 
     console.log('clearing furnace...');
@@ -435,7 +436,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     if (blockType.endsWith('ore'))
         blocktypes.push('deepslate_'+blockType);
     if (blockType === 'dirt')
-        blocktypes.push('grass_block');
+        blocktypes.push(names112.GRASS_BLOCK); // 1.12: the grass block drops dirt
     if (blockType === 'cobblestone')
         blocktypes.push('stone');
     const isLiquid = blockType === 'lava' || blockType === 'water';
@@ -572,7 +573,7 @@ export async function breakBlockAt(bot, x, y, z) {
      **/
     if (x == null || y == null || z == null) throw new Error('Invalid position to break block at.');
     let block = bot.blockAt(Vec3(x, y, z));
-    if (block.name !== 'air' && block.name !== 'water' && block.name !== 'lava') {
+    if (block.name !== 'air' && !names112.isLiquid(block.name)) {
         if (bot.modes.isOn('cheat')) {
             if (useDelay) { await new Promise(resolve => setTimeout(resolve, blockPlaceDelay)); }
             let msg = '/setblock ' + Math.floor(x) + ' ' + Math.floor(y) + ' ' + Math.floor(z) + ' air';
@@ -699,11 +700,11 @@ export async function placeBlock(bot, blockType, x, y, z, placeOn='bottom', dont
     }
 
     const targetBlock = bot.blockAt(target_dest);
-    if (targetBlock.name === blockType || (targetBlock.name === 'grass_block' && blockType === 'dirt')) {
+    if (targetBlock.name === blockType || (targetBlock.name === names112.GRASS_BLOCK && blockType === 'dirt')) {
         log(bot, `${blockType} already at ${targetBlock.position}.`);
         return false;
     }
-    const empty_blocks = ['air', 'water', 'lava', 'grass', 'short_grass', 'tall_grass', 'snow', 'dead_bush', 'fern'];
+    const empty_blocks = names112.EMPTY_BLOCKS; // 1.12 names (B1); "grass" is the solid grass block in 1.12
     if (!empty_blocks.includes(targetBlock.name)) {
         log(bot, `${targetBlock.name} in the way at ${targetBlock.position}.`);
         const removed = await breakBlockAt(bot, x, y, z);
@@ -1507,10 +1508,13 @@ export async function useDoor(bot, door_pos=null) {
      * await skills.useDoor(bot, door);
      **/
     if (!door_pos) {
-        for (let door_type of ['oak_door', 'spruce_door', 'birch_door', 'jungle_door', 'acacia_door', 'dark_oak_door',
-                               'mangrove_door', 'cherry_door', 'bamboo_door', 'crimson_door', 'warped_door']) {
-            door_pos = world.getNearestBlock(bot, door_type, 16).position;
-            if (door_pos) break;
+        // 1.12 door names (B1); upstream read .position of a null result when a type was absent.
+        for (let door_type of names112.WOODEN_DOORS) {
+            const door = world.getNearestBlock(bot, door_type, 16);
+            if (door) {
+                door_pos = door.position;
+                break;
+            }
         }
     } else {
         door_pos = Vec3(door_pos.x, door_pos.y, door_pos.z);
@@ -1528,7 +1532,7 @@ export async function useDoor(bot, door_pos=null) {
     
     let door_block = bot.blockAt(door_pos);
     await bot.lookAt(door_pos);
-    if (!door_block._properties.open)
+    if (!names112.isDoorOpen(bot, door_block))
         await bot.activateBlock(door_block);
     
     bot.setControlState("forward", true);
@@ -1550,7 +1554,7 @@ export async function goToBed(bot) {
      **/
     const beds = bot.findBlocks({
         matching: (block) => {
-            return block.name.includes('bed');
+            return block.name?.includes('bed');
         },
         maxDistance: 32,
         count: 1
@@ -1601,8 +1605,8 @@ export async function tillAndSow(bot, x, y, z, seedType=null) {
         return true;
     }
 
-    if (block.name !== 'grass_block' && block.name !== 'dirt' && block.name !== 'farmland') {
-        log(bot, `Cannot till ${block.name}, must be grass_block or dirt.`);
+    if (block.name !== names112.GRASS_BLOCK && block.name !== 'dirt' && block.name !== 'farmland') {
+        log(bot, `Cannot till ${block.name}, must be grass or dirt.`);
         return false;
     }
     let above = bot.blockAt(new Vec3(x, y+1, z));
@@ -1689,7 +1693,7 @@ async function findAndGoToVillager(bot, id) {
         let villager_list = "Available villagers:\n";
         for (let entity of entities) {
             if (entity.name === 'villager') {
-                if (entity.metadata && entity.metadata[16] === 1) {
+                if (names112.isBaby(entity)) {
                     villager_list += `${entity.id}: baby villager\n`;
                 } else {
                     const profession = world.getVillagerProfession(entity);
@@ -1710,7 +1714,7 @@ async function findAndGoToVillager(bot, id) {
         return null;
     }
     
-    if (entity.metadata && entity.metadata[16] === 1) {
+    if (names112.isBaby(entity)) {
         log(bot, 'This is either a baby villager or a villager with no job - neither can trade');
         return null;
     }
@@ -1924,8 +1928,7 @@ export async function digDown(bot, distance = 10) {
         }
 
         // Check for lava, water
-        if (targetBlock.name === 'lava' || targetBlock.name === 'water' || 
-            belowBlock.name === 'lava' || belowBlock.name === 'water') {
+        if (names112.isLiquid(targetBlock.name) || names112.isLiquid(belowBlock.name)) {
             log(bot, `Dug down ${i-1} blocks, but reached ${belowBlock ? belowBlock.name : '(lava/water)'}`)
             return false;
         }
@@ -1967,7 +1970,7 @@ export async function goToSurface(bot) {
      * @returns {Promise<boolean>} true if the surface was reached, false otherwise.
      **/
     const pos = bot.entity.position;
-    for (let y = 360; y > -64; y--) { // probably not the best way to find the surface but it works
+    for (let y = names112.WORLD_MAX_Y; y >= names112.WORLD_MIN_Y; y--) { // 1.12 height (B1); probably not the best way to find the surface but it works
         const block = bot.blockAt(new Vec3(pos.x, y, pos.z));
         if (!block || block.name === 'air' || block.name === 'cave_air') {
             continue;
@@ -2050,7 +2053,7 @@ export async function useToolOn(bot, toolName, targetName) {
      * @returns {Promise<boolean>} true if action succeeded
      */
 
-    const distance = toolName === 'water_bucket' && block.name !== 'lava' ? 1.5 : 2;
+    const distance = toolName === 'water_bucket' && !names112.isLava(block.name) ? 1.5 : 2;
     await goToPosition(bot, block.position.x, block.position.y, block.position.z, distance);
     await bot.lookAt(block.position.offset(0.5, 0.5, 0.5));
 
