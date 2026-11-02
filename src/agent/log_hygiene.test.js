@@ -6,7 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-const FILES = ['agent.js', 'action_manager.js', 'mindserver_proxy.js'];
+// Paths relative to this file. src/models/openrouter.js is lead-owned and was
+// changed under a lead-approved exception (the provider the bot uses).
+const FILES = ['agent.js', 'action_manager.js', 'mindserver_proxy.js', '../models/openrouter.js'];
 const ERR_NAMES = '(?:err|error|e)';
 
 // console.x(..., err), console.x(err), console.x(err.stack), String(err) or
@@ -27,12 +29,24 @@ for (const file of FILES) {
     });
 }
 
+// src/models/prompter.js (lead-owned): only the two statements in the
+// lead-approved exception are checked; the rest of the file is out of scope.
+test('prompter.js logs model and example errors through safeStack', () => {
+    const lines = readFileSync(new URL('../models/prompter.js', import.meta.url), 'utf8').split(/\r?\n/);
+    for (const message of ["'Failed to initialize examples:'", "'Error during message generation or file writing:'"]) {
+        const hits = lines.filter(l => l.includes(message));
+        assert.equal(hits.length, 1, message);
+        assert.match(hits[0], /safeStack\(error\)\);\s*$/, message);
+    }
+});
+
 test('the guard itself catches the old patterns', () => {
     const old = [
         "console.error('Error event!', err);",
         "console.error(err.stack);",
         "log(this.name, `[LoginGuard] Connection Error: ${String(err)}`);",
         "console.error('Error: ', JSON.stringify(error, Object.getOwnPropertyNames(error)));",
+        "console.error('Error while awaiting response:', err);",
     ];
     for (const line of old) assert.ok(BAD.some(re => re.test(line)), line);
     assert.ok(!BAD.some(re => re.test("console.error('Error event!', safeError(err));")));

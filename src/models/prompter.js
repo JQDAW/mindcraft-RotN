@@ -9,6 +9,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { selectAPI, createModel } from './_model_map.js';
+import { safeStack } from '../agent/safe_error.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -128,8 +129,7 @@ export class Prompter {
 
             console.log('Examples initialized.');
         } catch (error) {
-            console.error('Failed to initialize examples:', error);
-            console.error('Stack trace:', error.stack);
+            console.error('Failed to initialize examples:', safeStack(error));
             throw error; // Re-throw with preserved details
         }
     }
@@ -235,7 +235,7 @@ export class Prompter {
                 await this._saveLog(prompt, messages, generation, 'conversation');
 
             } catch (error) {
-                console.error('Error during message generation or file writing:', error);
+                console.error('Error during message generation or file writing:', safeStack(error));
                 continue;
             }
 

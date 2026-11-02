@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T17:32Z (from `date -u`)
+Updated: 2026-11-02T18:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -27,7 +27,8 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, on develop `4b175cc`): #103 open. Next: A2 `no-cheat`.
+- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, on develop `4b175cc`): #103 open.
+- A1b `models-log-hygiene` (lead-approved exception in `src/models/`), stacked on #103. Next: A2 `no-cheat`.
 
 ## G3 plan: small PRs, in order
 
@@ -109,7 +110,13 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 2. **net-forge (paused since 2026-11-02; route through the lead):** C1 and C2 need serverbound slot encoding with REID (VarInt slot ids in `window_click`) and `block_place`/`use_item` working on 1.12 (the `use_item` extra fields in the mineflayer patch). Please confirm that they work, or say what is missing. Also: can the `place_block.js` 500 ms `blockUpdate` wait be made configurable (seam-map C)? A lagging RotN server makes placements report failure. **I will tell the lead 1-2 PRs before C1** (that is, when B2 opens), so the lead can respawn net-forge or verify the current encoding in a probe first.
 3. **rotn-data:** for C1, does `recipesFor` give ingredients with oredict members and meta expanded, so that I can match by output and ingredients? For C2, which blocks are the surface rock piles (`pyrotech:rock_pile`?) and what do they drop? The 20 recipes with `matchesSample: false`: I will check whether any is in the early-game set and report back.
 4. **harness-ops:** G3 scenarios for (a), (b) and (c), plus "the queue survives a restart". I will post the command and log contract for each as my PRs land. A first exploratory probe batch for the open items above would de-risk C2/C3; that needs the lead's GO.
-5. **Lead (`src/models/`, lead-owned; found during A1):** the model layer also prints whole error objects, and an OpenRouter/HTTP error can carry request headers or bodies. The most relevant are `src/models/openrouter.js:49` (`console.error('Error while awaiting response:', err)`) and `src/models/prompter.js:124`, `:131` and `:238`; the other providers print `console.log(err)` too. A1 adds `safeError`/`safeStack` in `src/agent/safe_error.js`, which these files can import. Please change them, or let me, before the first CX23 run.
+5. **Lead (`src/models/`, lead-owned; found during A1):** the model layer prints whole error objects too. **In progress under the lead-approved exception (2026-11-02), in the A1b PR (see Open PRs):**
+   - `openrouter.js:49` (the whole SDK error) and `:40` (the whole response body when there are no choices);
+   - `prompter.js:131` and `:238`.
+
+   The exception named "openrouter.js:131 and :238", but openrouter.js has 76 lines; those numbers are `prompter.js`'s, so I read it that way. Please confirm. **Still open, for the lead to decide:**
+   - `prompter.js:124` prints the same examples error whole, plus its stack. It is outside the exception, so it is unchanged.
+   - The providers the bot does not use (claude, gpt, gemini, ollama, ...) still print `console.log(err)`. Only OpenRouter is used (PLAN).
 
 ## Open PRs
 
