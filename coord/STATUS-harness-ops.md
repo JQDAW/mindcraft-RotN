@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (22:08 UTC, from `date -u`)
+Updated: 2026-11-02 (22:50 UTC, from `date -u`)
 
 ## Done
 
@@ -1119,6 +1119,15 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the CX23 GO 1 probe evidence (`agent/harness-ops/cx23-probe`).
-- Next: the #122 follow-up, nits 1-4 (`agent/harness-ops/g3-batch-check`).
-- Merged since the last update: #122 (the G3 spend stop, 2b30405).
+- This PR: the CI job on Ubuntu 26.04 (ADR 0007; `agent/harness-ops/ci-ubuntu-2604`).
+  - It runs `npm ci` and `npm test` in an `ubuntu:26.04` container, pinned by digest, with Node 22 from NodeSource `nodistro`.
+  - The NodeSource key is checked against the fingerprint pinned in `bootstrap.sh`.
+  - The container has only the apt packages that setup installs.
+  - The tests run as a non-root user.
+  - It must pass before GO 2.
+- #129: the #122 review nits, with the review fixes (re-review asked).
+- Next: the bootstrap for 26.04 (`agent/harness-ops/cx23-sshd`).
+  - **Done there (WIP):** SSH password login turned off in setup (the `10-` drop-in, `sshd -t`, then `sshd -T`, then the reload), with its tests.
+  - **Still to do:** the OS check, the 26.04 system-step checks (the ssh unit, the journal, ufw, sudo-rs with `visudo -c`, the drop-in Include), and the README.
+- Later: a research note on Java 8 packages on Ubuntu 26.04.
+- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45).

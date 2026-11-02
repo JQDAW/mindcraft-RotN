@@ -1,0 +1,88 @@
+# The bot's OS (ADR 0007): npm ci and npm test on Ubuntu 26.04 with Node 22 from NodeSource, on every
+# pull request and every push to develop (harness-ops). It must pass before GO 2, the CX23 bootstrap.
+#
+# What it mirrors from deploy/cx23/bootstrap.sh setup, so a failure here is a failure on the CX23:
+#   - the same apt packages setup installs, and nothing else: no build-essential, so a native
+#     dependency (canvas, gl) that cannot use a prebuilt binary fails here as it would on the CX23;
+#   - Node 22 from NodeSource's `nodistro` repository, with the repository key checked against the
+#     fingerprint pinned in bootstrap.sh (read from that file, so the two cannot drift apart);
+#   - npm ci (its postinstall runs patch-package --error-on-fail) and npm test as a non-root user,
+#     as `deploy` runs npm ci on the CX23 (deploy/cx23/deploy.sh).
+# The image is ubuntu:26.04, pinned by digest. The CX23's cloud image has more packages than this
+# container (python3 comes in here through unattended-upgrades), so this is the stricter of the two.
+#
+# Secrets: none. No GitHub Environment, `pull_request` only (never `pull_request_target`), a
+# read-only GITHUB_TOKEN, and the checkout does not keep it.
+name: ci-ubuntu-2604
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-ubuntu-2604-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-ubuntu-2604:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      # ubuntu:26.04, multi-arch index digest from Docker Hub (2026-11-02).
+      image: ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: The OS is Ubuntu 26.04
+        run: |
+          set -eu
+          cat /etc/os-release
+          grep -q '^ID=ubuntu$' /etc/os-release
+          grep -q '^VERSION_ID="26.04"$' /etc/os-release
+          ldd --version | head -1
+
+      - name: apt packages, exactly as bootstrap.sh setup installs them
+        run: |
+          set -eu
+          apt-get update -q
+          apt-get install -y -q unattended-upgrades git ufw ca-certificates curl gnupg
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Node 22 from NodeSource (nodistro), key fingerprint pinned in bootstrap.sh
+        run: |
+          set -euo pipefail
+          fpr_pinned=$(sed -n 's/^readonly NODESOURCE_KEY_FPR_PINNED=\([0-9A-F]\{40\}\)$/\1/p' deploy/cx23/bootstrap.sh)
+          [ -n "$fpr_pinned" ] || { echo "no pinned NodeSource fingerprint in bootstrap.sh"; exit 1; }
+          key=$(mktemp)
+          curl -fsSL --proto '=https' --tlsv1.2 -o "$key" https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+          fpr=$(gpg --show-keys --with-colons "$key" 2>/dev/null | awk -F: '$1 == "fpr" { print $10; exit }')
+          echo "NodeSource key fingerprint: $fpr (pinned: $fpr_pinned)"
+          [ "$fpr" = "$fpr_pinned" ] || { echo "the NodeSource key is not the pinned one"; exit 1; }
+          mkdir -p /etc/apt/keyrings
+          gpg --dearmor --yes -o /etc/apt/keyrings/nodesource.gpg "$key"
+          chmod 0644 /etc/apt/keyrings/nodesource.gpg
+          echo 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main' > /etc/apt/sources.list.d/nodesource.list
+          apt-get update -q
+          apt-get install -y -q nodejs
+          v=$(node --version)
+          echo "node $v, npm $(npm --version)"
+          case $v in v22.*) ;; *) echo "node is $v, expected v22.x (ADR 0002)"; exit 1 ;; esac
+
+      - name: A non-root user, as deploy on the CX23
+        run: |
+          set -eu
+          useradd --create-home --shell /bin/bash ci
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+
+      - name: npm ci (postinstall applies the patches; fails if one does not apply)
+        run: runuser -u ci -- env HOME=/home/ci npm ci --no-audit --no-fund
+
+      - name: npm test (offline unit tests)
+        run: runuser -u ci -- env HOME=/home/ci npm test
