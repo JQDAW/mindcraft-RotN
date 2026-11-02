@@ -243,6 +243,21 @@ Updated: 2026-11-02 17:07 UTC (from `date -u`)
   - the same conditions as batch 1: runtime preconditions just before the create, no `--skip-sweeper-check`, one CPX42, TTL 2 h, a hard stop at 56 min, worst case about EUR 0.42 + IPv4, test server only, the FRCFLD cache only from this PC, the project empty afterwards, and evidence through the merged redaction tool with the CI leak check;
   - an honest report of pass, gateValid, notGate, replacements and metaDrift.
 
+- **2026-11-02 18:12 UTC: the human's CX23 and LLM decisions (on harness-ops' plan #101):**
+  - **No lockdown:** root SSH stays enabled for the human. The bootstrap creates `deploy`; the human then adds a `deploy` Orca target and removes the root `cx23` target, so root steps (the probe and the bootstrap setup) run before that swap.
+  - Only the **test OpenRouter key** (USD 5 limit) for G3 batches for now; the long-term key comes later.
+  - The first CX23 start joins a **disposable test server**; the human supplies the CX23's IP for `--allow-from` at that GO.
+- **Lead decisions on #101:**
+  - maxMinutes is compared 'equal';
+  - the dawn bound, marker and agenda counter are pinned before gate batches;
+  - crafting must be proven by craft statistics if S1 shows they exist, plus S1 checks for no loot chests near the cube;
+  - LLM calls and cost are recorded per scenario, with a batch spend stop;
+  - on test servers only: `Server` as a test-only task giver, `clear … 0`, `scoreboard`, `time query`, and `setblock` for the marker only;
+  - survival is the night gate (shelter is evidence);
+  - restarts are tested offline in G3 and for real in G4.
+- **Incident (2026-11-02, harness-ops):** plan text passed through a bash string executed backticked `ssh`, `scp` and `passwd deploy`. All failed locally; none used `cx23` or an address, and nothing reached the CX23. Rule: write markdown with the Write or Edit tools, never through shell strings (memory note added).
+- **Lead-owned exception for skills-rotn:** `src/models/openrouter.js:40,49` and `src/models/prompter.js:124-125,131-132,238`, which print whole errors or completions, may be changed to use `safeError` in one small PR.
+
 ## Notes for dev agents
 
 - mineflayer-pvp pulls in a nested `mineflayer@2.41.0` and `minecraft-data@2.221.0` through `mineflayer-utils` (upstream issue). net-forge should keep this in mind when it extends the registry.
