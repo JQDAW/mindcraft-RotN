@@ -20,7 +20,7 @@ buildscript {
 
 apply plugin: 'net.minecraftforge.gradle'
 
-version = '0.2.0' // keep equal to RotnDump.VERSION (build.sh checks)
+version = '0.2.1' // keep equal to RotnDump.VERSION (build.sh checks)
 group = 'mindcraftrotn.dumper'
 archivesBaseName = 'rotndump'
 

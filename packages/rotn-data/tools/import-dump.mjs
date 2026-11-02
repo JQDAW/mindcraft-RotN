@@ -134,7 +134,7 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     }
 
     // 2b. the network block-state remap (state-meta-remap.json, dumper 0.2.0)
-    notes.push(...checkStateMetaRemap(files['state-meta-remap'], names['minecraft:blocks']?.ids ?? {}, { allowErrors, problems }));
+    notes.push(...checkStateMetaRemap(files['state-meta-remap'], names['minecraft:blocks']?.ids ?? {}, { allowErrors, problems, dumperVersion: m.dumper }));
 
     // 3. scripts cross-check, on a catalog over the fetched files
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-import-'));
@@ -189,11 +189,14 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
  * one record per networkId), a block
  * the server does not sync, and (unless allowErrors) a non-zero anomaly count: the dumper's scan
  * assumes the id << 4 | meta encoding, and an anomaly means it does not hold.
+ * Since dumper 0.2.1 the anomalies also hold unscannedIds (the ids in the network-id map minus the
+ * ids scanned, #80 review); it must be 0 as well. Only a 0.2.0 dump may lack it (a note); for any
+ * other version a missing one counts as non-zero.
  * A blockId that differs from the registry capture's id is only a note: the table is used by block
  * name (catalog.networkRemap rebuilds ids from the connected server), and another world can number
  * mod blocks differently.
  */
-export function checkStateMetaRemap(r, syncedIds, { allowErrors = false, problems = [] } = {}) {
+export function checkStateMetaRemap(r, syncedIds, { allowErrors = false, problems = [], dumperVersion } = {}) {
     const notes = [];
     const bad = (msg) => problems.push(`state-meta-remap: ${msg}`);
     if (!Array.isArray(r?.remap)) { bad('no remap list'); return notes; }
@@ -202,6 +205,11 @@ export function checkStateMetaRemap(r, syncedIds, { allowErrors = false, problem
     const a = r.anomalies ?? {};
     if (((a.encodingMismatches ?? 1) !== 0 || (a.foreignStates ?? 1) !== 0) && !allowErrors) {
         bad(`anomalies: ${a.encodingMismatches} encoding mismatches, ${a.foreignStates} foreign states (first: ${a.first})`);
+    }
+    // The map-size check (dumper 0.2.1, #80 review). null (map unreadable) and missing are non-zero.
+    if (dumperVersion === '0.2.0' && !('unscannedIds' in a)) notes.push('state-meta-remap: dumper 0.2.0 predates the map-size check (unscannedIds)');
+    else if ((a.unscannedIds ?? 1) !== 0 && !allowErrors) {
+        bad(`anomalies: ${a.unscannedIds} unscanned ids (map ${r.scanned?.mapIds} vs ${r.scanned?.networkIds} scanned)`);
     }
     const seen = new Set();
     const isMeta = (m) => Number.isInteger(m) && m >= 0 && m <= 15;

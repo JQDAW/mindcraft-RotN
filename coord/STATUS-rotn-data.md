@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T02:42Z (from `date -u`)
+Updated: 2026-11-02T13:52Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -16,7 +16,8 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#62 merged** (`b47449e`): entity threat overrides beyond IMob, cited from the mods' bytecode (13 entries; dangerous: fire and ice dragons, sea serpent, death worm, cockatrice; 33 reviewed and not marked, among them the 24 Animania rabbits, whose player targeting is only for a rabbit named "Killer"). It also marks the vanilla animals Animania replaces (chicken, cow, pig, rabbit, sheep; `config/animania.cfg` lines 104-119; G2 batch 1) and leaves them out of `common-mobs.json`.
   - Correction to its PR description's condition table: the cockatrice's player-targeting task, `CockatriceAITarget(EntityLivingBase, EntityCockatrice$1)`, is at bytecode **253**. Offset 183 is `CockatriceAITargetItems` (item targeting), which my checker's name match also caught. Neither has a branch that skips it, so the classification stands. The offset is now in the `entity-overrides.json` evidence.
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
-- **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below). Imported in this PR, which replaces the second dump.
+- **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
+- **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
 - **#68 merged** (`7d33cee`): the cockatrice offset correction (above).
 - **#48 merged** (`7f0feef`): the dumper's per-tick time cap, per-entry isolation and `serializers.json`; the importer requires `serializers.json` and blocks on `entryErrors`.
 - **First RotN 3.3.4 dump batch: PASS** (lead's written GO, 2026-11-01 about 19:24 UTC, before the server was created at 19:25:54; record below).
@@ -178,7 +179,12 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- This PR: the third dump's import (it replaces the second) and the #80 review nits. Then hold for the lead.
+- Holding for the lead (G2 batch 6 is harness-ops', after net-forge's #84). Worktree on `agent/rotn-data/dumper-nits` from origin/develop `4b3d04e` (develop itself is checked out in the lead's worktree).
+- Optional small PR (`agent/rotn-data/dumper-nits`): the #80 Java dumper nits, dumper **0.2.1**:
+  - map size vs ids scanned: `scanned.mapIds` (ids in `BLOCK_STATE_IDS` that hold a state) and `anomalies.unscannedIds = mapIds - networkIds`. The importer blocks unless it is 0; null or missing counts as non-zero, except a 0.2.0 dump, which gets a note. The map's `size()` (distinct states) is deliberately not compared: Forge never removes a state from it, so a replaced block's stale states could block an import with no effect on what any id resolves to.
+  - `checkEncoding` guards each state (an unreadable id counts as an encoding mismatch); an entry that throws rolls back every counter and the first anomaly.
+  - Not yet built: `dumper-build` CI compiles it (no local Forge toolchain). It needs no batch; it shows on the next dump.
+- Per the lead (13:5x UTC): G2 batch 6 runs on this PC, so nothing heavy here (no full `npm test`) until the lead says the batch is done.
 ## Follow-ups (later PRs)
 
 - ~~Importer: sort order-unstable lists~~: done in this PR (`canonicalize`).
@@ -210,4 +216,4 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Open PRs
 
-- This PR (`agent/rotn-data/dump3-import`): the third dump's import, and the #80 nits (`stateNetworkId >> 4 === blockId` in the importer; `clientMeta` checks that `idMeta` is an integer 0-15).
+- `agent/rotn-data/dumper-nits`: the #80 Java dumper nits (dumper 0.2.1) plus the importer's `unscannedIds` check (see Doing).
