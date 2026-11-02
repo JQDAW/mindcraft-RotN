@@ -65,7 +65,14 @@ function blockBot(blocks) {
     return {
         calls,
         entity: { position: new Vec3(0, 64, 0) },
-        findBlocks: (opts) => { calls.push(opts); return blocks.map(b => b.position); },
+        // Like mineflayer: ids narrow the search, useExtraInfo(block) filters inside it, count caps it.
+        findBlocks: (opts) => {
+            calls.push(opts);
+            const ids = opts.matching == null ? null : [].concat(opts.matching);
+            return blocks.filter(b => (!ids || typeof opts.matching === 'function' || ids.includes(b.type))
+                && (typeof opts.useExtraInfo !== 'function' || opts.useExtraInfo(b)))
+                .slice(0, opts.count ?? blocks.length).map(b => b.position);
+        },
         blockAt: (pos) => blocks.find(b => b.position.equals(pos)) ?? null,
     };
 }
@@ -78,6 +85,7 @@ test('getNearestBlocks honours a variant, in every orientation; a bare name find
     assert.deepEqual(world.getNearestBlocks(bot, 'log:0', 16, 1).map(b => b.metadata), [0]);
     assert.equal(world.getNearestBlocks(bot, 'log', 16).length, 5);
     assert.deepEqual(bot.calls[0].matching, [reg.blocksByName.log.id]);
+    assert.equal(typeof bot.calls[0].useExtraInfo, 'function', 'the variant is checked inside findBlocks (#131 review nit)');
 });
 
 test('getNearbyBlockTypes shows canonical names: a sideways spruce log is log:1', () => {

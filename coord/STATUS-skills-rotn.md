@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T22:24Z (from `date -u`)
+Updated: 2026-11-02T23:00Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -36,7 +36,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 - A4b `replan-clear` (branch `agent/skills-rotn/replan-clear`): #126 open. A new action drops a stale re-plan request; unstuck says "no path" on a fast failure; a login-wiring test.
-- B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): #131 open. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
+- B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): #131 open. Review REQUEST CHANGES (the variant form reached the LLM but collectBlock, placeBlock, equip, discard, chests, consume and the craft limit compared bare names); fixed with one shared resolver (findItem/itemMatches for items, blockMatcher for blocks) in every consuming skill, plus an end-to-end test per review scenario. This blocks G3, so it comes before B2. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
 - Next: the `mc.isBaby` switch (#125; ready locally on top of B1b), then B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2). The villager profession at index 13 (lead, #124 review) is already in #124.
 
 ## G3 plan: small PRs, in order
