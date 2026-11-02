@@ -9,6 +9,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { selectAPI, createModel } from './_model_map.js';
+import { safeError, safeStack } from '../agent/safe_error.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -120,16 +121,14 @@ export class Prompter {
                 this.coding_examples.load(this.profile.coding_examples),
                 this.skill_libary.initSkillLibrary()
             ]).catch(error => {
-                // Preserve error details
-                console.error('Failed to initialize examples. Error details:', error);
-                console.error('Stack trace:', error.stack);
+                // A safe summary with stack frames; the error itself is rethrown.
+                console.error('Failed to initialize examples. Error details:', safeStack(error));
                 throw error;
             });
 
             console.log('Examples initialized.');
         } catch (error) {
-            console.error('Failed to initialize examples:', error);
-            console.error('Stack trace:', error.stack);
+            console.error('Failed to initialize examples:', safeStack(error));
             throw error; // Re-throw with preserved details
         }
     }
@@ -235,7 +234,7 @@ export class Prompter {
                 await this._saveLog(prompt, messages, generation, 'conversation');
 
             } catch (error) {
-                console.error('Error during message generation or file writing:', error);
+                console.error('Error during message generation or file writing:', safeStack(error));
                 continue;
             }
 
@@ -324,7 +323,7 @@ export class Prompter {
             let data = res.split('```')[1].replace('json', '').trim();
             goal = JSON.parse(data);
         } catch (err) {
-            console.log('Failed to parse goal:', res, err);
+            console.log('Failed to parse goal:', res, safeError(err));
         }
         if (!goal || !goal.name || !goal.quantity || isNaN(parseInt(goal.quantity))) {
             console.log('Failed to set goal:', res);
