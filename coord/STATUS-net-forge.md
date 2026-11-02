@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-02T13:36Z
+Updated: 2026-11-02T14:34Z
 
 Branch `agent/net-forge/g1-spike`, worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -370,12 +370,18 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 - **Only true conflicts are skipped:** one network id with two different targets, from two names resolving to one synced block. They are logged. The login line now has `applied N ...; conflicts C skipped`.
 - **Real 3.3.4 table:** all 506 entries apply, with 0 conflicts.
 
-## In review: PR #84 nits (branch `agent/net-forge/state-remap-nits`, stacked on #84's head 59787cf; rebase onto develop once #84 merges)
+## Done: PR #84 nits (PR #86, merged; branch `agent/net-forge/state-remap-nits`, develop merged in after #84 landed as 18fbed6)
 
 - `state-remap.test.js`: the "same chunk again" comment now says it is a consistency check only (load decodes fresh bytes, so it cannot catch a double remap); the local-write loop is named as the real test.
 - README: names the known gap. Other server data with block states (falling-block `spawn_entity` object data, `world_event` 2001, block particles, mod payloads) bypasses the map. Stock mineflayer reads none of them as states today.
 - prismarine-chunk patch, `remapGlobalData`: a target too wide for the section is left as sent, counted in `stateIdRemap.skippedTooWide`, and the first one per map is logged. New test.
 - Tested: `node --test` on `state-remap.test.js` and `chunk.test.js`, 25/25 pass; ESLint is clean on the test file; the patch reverse-applies cleanly to the installed `node_modules`.
+
+## In review: #86 nits (branch `agent/net-forge/remap-readme-status`, from develop 7013155)
+
+- README: `skippedTooWide` lives on `bot.registry.stateIdRemap` (the live Map), not in the `bot.forge.stateIdRemap` login report.
+- This STATUS: the #86 entry no longer says "stacked on #84".
+- Then hold until G2 batch 7 (lead, 2026-11-02).
 
 ## Doing
 
