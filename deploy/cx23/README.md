@@ -31,7 +31,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
    Re-running `setup` is safe. It appends a missing key to `deploy`'s `authorized_keys` and never drops keys already there. With `--ssh-from`, it adds the narrow SSH rule and then removes an earlier open `22/tcp` rule.
 3. In a **second** terminal: `ssh deploy@<cx23>`. It must work.
 4. As root: `passwd deploy`. This is `deploy`'s own sudo password for admin work once root login is off.
-5. `bash /root/cx23/bootstrap.sh lockdown --i-tested-deploy-login`. This writes `/etc/ssh/sshd_config.d/00-mindcraft-rotn.conf` (no root login, no passwords, `AllowUsers deploy`). It checks the file with `sshd -t`, then reloads ssh. It refuses unless:
+5. **Optional, and not run on this project's CX23** (the human's decision on #101): the human keeps root SSH and instead swaps Orca's root target for a `deploy` target; see `coord/STATUS-harness-ops.md`, "CX23 first run". `bash /root/cx23/bootstrap.sh lockdown --i-tested-deploy-login`. This writes `/etc/ssh/sshd_config.d/00-mindcraft-rotn.conf` (no root login, no passwords, `AllowUsers deploy`). It checks the file with `sshd -t`, then reloads ssh. It refuses unless:
    - `deploy` has a key;
    - `deploy` has a sudo password;
    - the ssh journal shows an `Accepted publickey for deploy` line since setup. The flag alone is not enough: step 3 must really have happened.
@@ -44,7 +44,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
 
    It never overwrites an existing env file.
 2. **Human:** put the bot's OpenRouter key into the env file on the server, and fill in the Minecraft host. The key never goes into the repo or a chat.
-3. **Human (NEEDS-HUMAN):** do the bot's first Microsoft device-code login into its `msa/` folder (`docs/research/ops.md` section 1). Agents never handle the code, the password or the token cache.
+3. **Human (NEEDS-HUMAN):** do the bot's first Microsoft device-code login into its `msa/` folder, with `msa-login.mjs` (the command is under "Not verified yet" below). It needs a deployed release. Agents never handle the code, the password or the token cache.
 4. `sudo mindcraft-rotn-ctl enable <bot>` and `sudo mindcraft-rotn-ctl start <bot>`.
 
 The MindServer web UI listens on `localhost` only (`src/mindcraft/mindserver.js`). Reach it with `ssh -L 8080:localhost:8080 deploy@<cx23>`.
@@ -98,4 +98,4 @@ That is the pin in `bootstrap.sh`.
 ## Not verified yet
 
 - **Resource caps** (`MemoryHigh=1G`, `MemoryMax=1536M`, `--max-old-space-size=768`) are ops.md estimates, to be confirmed in the 2-hour soak.
-- **The first device-code login** needs a helper (ops.md section 1 sketches `login-bot.mjs`). It is not written yet; it comes with the first real bot.
+- **The first device-code login** uses net-forge's `packages/forge-bridge/tools/msa-login.mjs`, the tool already used for the test bot's cache on the PC. It replaces the `login-bot.mjs` sketched in ops.md section 1. On the CX23, after the first deploy, as `deploy` (`ssh -t`): `sudo -u mindcraft-rotn env MINDCRAFT_PROFILES_FOLDER=/var/lib/mindcraft-rotn/<bot>/msa node /opt/mindcraft-rotn/current/packages/forge-bridge/tools/msa-login.mjs <MinecraftName>`, then the same with `--check`. It prints only Microsoft's instructions and the profile name, never a token. It has not been run on a CX23 yet.
