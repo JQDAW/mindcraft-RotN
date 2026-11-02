@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (22:34 UTC, from `date -u`)
+Updated: 2026-11-02 (23:44 UTC, from `date -u`)
 
 ## Done
 
@@ -134,7 +134,7 @@ Updated: 2026-11-02 (22:34 UTC, from `date -u`)
       - **only SSH (port 22) is public.** Orca's server listens on loopback only.
       - The users are root and nobody only. The running services are a standard cloud set. Nothing of ours is there yet.
     - GO 2 waits on the human (Ubuntu 26.04 against the 24.04 pin, and sshd password logins); the lead is asking.
-  - **This PR: the #122 review nits** (`agent/harness-ops/g3-batch-check`), with the #129 review fixes:
+  - **Merged (#129, c2d6867): the #122 review nits**, with the #129 review fixes (its re-review nits 1-3 are in this PR):
     1. **The G3 gate evidence is cross-checked against `batch.mjs`'s summary** (`test/tools/g3-batch-check.mjs`), because the `ROTN_G3_BATCH` marker alone can be forged.
        - The check is forced: CI fails on any G3 `result.json` anywhere under `test/evidence/` that no `batch.json` in its own folder or a parent folder covers.
        - Each result is bound to its batch by its `runId`, which `batch.mjs` reads back from the scenario's `result.json`. A second, hand-run result under a reused batch id therefore fails.
@@ -1127,6 +1127,13 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the #122 review nits, with the #129 review fixes (`agent/harness-ops/g3-batch-check`).
-- Next: the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from).
-- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45).
+- This PR: the #129 re-review nits 1-3, required before the first G3 gate batch (`agent/harness-ops/g3-evidence-scan`):
+  1. the tree check reads every `*.json` under `test/evidence/`, whatever its name; a `batch.json` that is itself a G3 result fails it;
+  2. a G3 result is found by its gate in any case or spacing, a `g3-` scenario in any case, or a scenario `loadScenarios` marks G3;
+  3. DRIVER.md says gate reviews accept G3 evidence only from `test/evidence/g3/<batch>/`.
+- #135: the CI job on Ubuntu 26.04. It is APPROVED WITH NITS, and the load step for `canvas` and `gl` is done (both load).
+- #137: the bootstrap for 26.04. It is APPROVED WITH NITS, and the required fixes are done: `--ssh-from` must contain the client IP, and lockdown needs `--turn-off-root-ssh`.
+- Later:
+  - the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from);
+  - a research note on Java 8 packages on Ubuntu 26.04.
+- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), and the lead's #134 (ADR 0007).

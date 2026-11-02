@@ -18,7 +18,7 @@ import { setImmediate } from 'node:timers';
 import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
 import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
-import { checkFiles, resultFilesUnder, checkEvidenceTree } from '../tools/g3-batch-check.mjs';
+import { checkFiles, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds } from '../tools/g3-batch-check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BATCH = path.join(HERE, '..', 'runner', 'batch.mjs');
@@ -322,6 +322,18 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
         assert.match(crossCheckBatch(summary, [res('g3-a', { gate: undefined, batch: 'x-1:2' })])[0], /marker 'x-1:2'/);
     });
 
+    test('the gate in any case or spacing, and a scenario loadScenarios marks G3, are G3 results too (#129 re-review nit 2)', () => {
+        for (const gate of ['g3', 'G3', ' g3 ', 'G3\n']) assert.equal(isG3Result({ gate, scenario: 'first-night' }), true, JSON.stringify(gate));
+        assert.equal(isG3Result({ scenario: 'G3-First-Night' }), true);
+        assert.equal(isG3Result({ scenario: 'first-night' }), false, 'no gate and no g3- prefix: only the scenario list can tell');
+        assert.equal(isG3Result({ scenario: 'First-Night' }, ['first-night']), true, 'a scenario loadScenarios marks G3, without case');
+        assert.equal(isG3Result({ scenario: '' }, ['']), false);
+        for (const notObject of [null, [], 'G3', 3]) assert.equal(isG3Result(notObject), false);
+        // The review's case: gate 'g3' with an unprefixed scenario id and a forged marker is cross-checked.
+        assert.match(crossCheckBatch(summary, [{ file: 'x', result: { gate: 'g3', scenario: 'first-night', batch: 'x-1:2' } }])[0], /marker 'x-1:2'/);
+        assert.match(crossCheckBatch(summary, [{ file: 'x', result: { scenario: 'first-night', batch: 'x-1:2' } }], { g3Scenarios: ['first-night'] })[0], /marker 'x-1:2'/);
+    });
+
     test('the CLI helper reads the files; unreadable files are problems', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-check-'));
         fs.writeFileSync(path.join(dir, 'batch.json'), JSON.stringify(summary));
@@ -363,17 +375,47 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
         assert.deepEqual(checkEvidenceTree(path.join(root, 'none')), []);
     });
 
-    test('CI: every G3 result.json under test/evidence/ is covered and vouched for by its batch.json', (t) => {
+    test('the tree check reads every *.json, whatever its name; a batch.json that is a G3 result is a problem (#129 re-review nit 1)', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-names-'));
+        const put = (rel, obj) => {
+            fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+            fs.writeFileSync(path.join(root, rel), typeof obj === 'string' ? obj : JSON.stringify(obj));
+        };
+        const forged = res('g3-a', { batch: 'x-1:2' }).result;
+        for (const name of ['g3-result.json', 'Result.json', 'RESULT.JSON', 'notes/run.json']) {
+            put(`g3/hand/${name}`, forged);
+            assert.match(checkEvidenceTree(root).join('\n'), /a G3 result that no batch\.json covers/, name);
+            fs.rmSync(path.join(root, 'g3'), { recursive: true });
+        }
+        // An unprefixed scenario with a lower-case gate, or one only loadScenarios knows as G3.
+        put('g3/hand/r.json', { gate: 'g3', scenario: 'first-night', batch: 'x-1:2' });
+        assert.match(checkEvidenceTree(root).join('\n'), /a G3 result that no batch\.json covers/);
+        put('g3/hand/r.json', { scenario: 'first-night', batch: 'x-1:2' });
+        assert.deepEqual(checkEvidenceTree(root), [], 'without the scenario list it cannot tell');
+        assert.match(checkEvidenceTree(root, { g3Scenarios: ['first-night'] }).join('\n'), /a G3 result that no batch\.json covers/);
+        fs.rmSync(path.join(root, 'g3'), { recursive: true });
+        // A result hidden in a file named batch.json.
+        put('g3/hand/batch.json', forged);
+        assert.match(checkEvidenceTree(root).join('\n'), /a batch\.json that is itself a G3 result/);
+        fs.rmSync(path.join(root, 'g3'), { recursive: true });
+        // Any unreadable *.json is a problem, since it could hide one.
+        put('g2/x/notes.json', '{');
+        assert.match(checkEvidenceTree(root).join('\n'), /notes\.json: cannot be read as JSON .* may hide a G3 result/);
+        assert.deepEqual(jsonFilesUnder(root).map((p) => path.basename(p)), ['notes.json']);
+    });
+
+    test('CI: every G3 result in any *.json under test/evidence/ is covered and vouched for by its batch.json', async (t) => {
         const root = path.join(HERE, '..', 'evidence');
-        assert.deepEqual(checkEvidenceTree(root), []);
+        const g3Scenarios = await g3ScenarioIds();
+        assert.deepEqual(checkEvidenceTree(root, { g3Scenarios }), []);
         const g3 = resultFilesUnder(root).filter((f) => {
             try {
-                return isG3Result(JSON.parse(fs.readFileSync(f, 'utf8')));
+                return isG3Result(JSON.parse(fs.readFileSync(f, 'utf8')), g3Scenarios);
             } catch {
                 return false;
             }
         });
-        t.diagnostic(`${g3.length} G3 result(s) under test/evidence/`);
+        t.diagnostic(`${jsonFilesUnder(root).length} *.json read, ${g3.length} G3 result(s), ${g3Scenarios.length} G3 scenario(s) known`);
     });
 });
 
