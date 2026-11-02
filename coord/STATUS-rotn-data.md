@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T19:38Z (from `date -u`)
+Updated: 2026-11-02T19:45Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -194,7 +194,7 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Follow-ups (later PRs)
 
-- **#102 review follow-ups:** emit `outShape` from the dump's `remaining` (buckets, Crafting Tools come back); in the crafting table test assert that no planks-only variant remains; test sticks directly.
+- **#102 review follow-ups:** the crafting table test (no planks-only variant) and the sticks test are in PR #112. `outShape` from the dump's `remaining` is **blocked** (Request 9): prismarine-recipe 1.5.0's `computeDelta` applies `outShape` with inShape's items, so those recipes would look free to `bot.recipesFor`. No G3 recipe has remaining items.
 
 - ~~Importer: sort order-unstable lists~~: done in this PR (`canonicalize`).
 - **Dumper:**
@@ -227,7 +227,9 @@ Findings for skills-rotn (via the lead): see Request 8.
    - `skills.craftRecipe` calls `bot.recipesFor(mc.getItemId(name), null, ...)`. A null metadata matches every variant of the item, so `spruce_planks` can come out as oak. Pass `mc.resolveName(name).meta`.
    - `getDetailedCraftingPlan` does not know whether a crafting table is available. In RotN the first plank comes from debarking a placed log with the crude axe (not a recipe), and log -> 3 planks needs a table. PR 2's `howToGet` gives the non-recipe steps.
    - Tell me the shape you want for PR 2 (`howToGet`) and PR 3 (first-night threats) before I fix it.
+9. **Lead: a prismarine-recipe patch?** (from PR #112). `node_modules/prismarine-recipe/lib/recipe.js` `computeDelta` > `applyShape` reads `recipe.inShape[y]` where it should read `shape[y]`, so any `outShape` adds back every input. A one-line patch would let rotn-data emit `outShape` from the dump's `remaining` (1,116 recipes: buckets, knives), which mineflayer's `craft.js` `updateOutShape` then handles correctly. Not needed for G3 (no G3 recipe has remaining items). `patches/` for prismarine-recipe is not on net-forge's list, so it's your call: patch it (who?), or leave `outShape` out.
 
 ## Open PRs
 
-- `agent/rotn-data/g3-threats`: Phase 3 PR 3, first-night threats (see Doing).
+- `agent/rotn-data/g3-threats` (#111): Phase 3 PR 3, first-night threats (see Doing).
+- `agent/rotn-data/recipes-followups` (#112): #102 review follow-ups (tests) and the `outShape` note.
