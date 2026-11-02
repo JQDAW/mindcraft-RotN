@@ -21,7 +21,7 @@ const DRIVER = path.join(TOOLS, 'g1-driver.mjs');
 const PRELOAD = pathToFileURL(path.join(HERE, 'fake-auth-failure.mjs')).href;
 
 // What prismarine-auth's checkStatus throws (src/common/Util.js): "<status> <statusText> <body>".
-const BODY = JSON.stringify({ XErr: 2148916233, Token: FAKE_JWT });
+const BODY = JSON.stringify({ Authorization: `Bearer ${FAKE_JWT}`, XErr: 2148916233, Token: FAKE_JWT });
 const httpError = (status, text) => new Error(`${status} ${text} ${BODY}`);
 // nmp's own message after a swallowed profile-fetch failure (src/client/microsoftAuth.js).
 const NMP_PROFILE = () => new Error('Failed to obtain profile data for FRCFLD, does the account own minecraft?');
@@ -31,6 +31,8 @@ const coded = (Ctor, message, code, causeCode) => {
     return e;
 };
 const SECRET_LIKE = new RegExp(`eyJ|${FAKE_JWT.slice(0, 12)}|XErr|203\\.0\\.113\\.9|Token`);
+// Standalone: no Bearer value, whatever else the pattern above covers (PR #74 review nit).
+const BEARER = /Bearer/i;
 
 function tracker(profileFailure = null) {
     const events = [];
@@ -73,6 +75,7 @@ for (const c of CLASSES) {
         assert.equal(error.xerr, c.xerr ?? null);
         assert.deepEqual([end.type, end.reason, end.exitCode, end.joined, end.beforeJoin], ['end', 'error before join', c.exit, false, true]);
         assert.doesNotMatch(JSON.stringify(events), SECRET_LIKE);
+        assert.doesNotMatch(JSON.stringify(events), BEARER);
     });
 }
 
@@ -82,6 +85,7 @@ test('an HTTP body with an eyJ... value never reaches the output, from either ha
     assert.deepEqual(events, [{ type: 'error', phase: 'before_join', unhandledRejection: true, errorClass: 'Error', code: null, status: 401, statusSource: 'error', xerr: null, kind: 'auth-permanent' }]);
     t.botError(httpError(400, 'Bad Request'));
     assert.doesNotMatch(JSON.stringify(events), SECRET_LIKE);
+    assert.doesNotMatch(JSON.stringify(events), BEARER);
     assert.ok(!JSON.stringify(events).includes(FAKE_JWT));
 });
 
@@ -174,6 +178,7 @@ for (const [mode, exit, kind] of [['xbox401', 3, 'auth-permanent'], ['profile404
         assert.ok(!all.includes(FAKE_JWT), 'the fake token never appears');
         // The body's JSON never appears ("XErr": its key); an XErr code may be logged as a number.
         assert.doesNotMatch(all, /eyJ|"XErr"|203\.0\.113\.9/);
+        assert.doesNotMatch(all, BEARER);
     });
 }
 

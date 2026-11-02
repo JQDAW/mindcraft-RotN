@@ -38,6 +38,7 @@ It never shows a device code. The default `onMsaCode` (`quietMsaCodeHandler`) lo
   - `Error refreshing token` (Live and MSA) no longer prints the error object;
   - a non-200 Live device-code request prints its status, not its body;
   - an MSA device-code failure no longer prints the serialized MSAL error;
+  - each failed poll of the Live device-code loop prints a summary (`[live] device code polling error (Error, expired_token)`), not the error object; the OAuth error code is attached as `code`;
   - XSTS errors carry `err.xerr`, and an unknown XErr's message no longer includes the response JSON.
 
 `initBot` in `src/utils/mcdata.js` passes `createForgeConnect(...)` as nmp's `connect` option. nmp calls it after authentication. It then:
