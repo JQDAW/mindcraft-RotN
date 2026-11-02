@@ -36,7 +36,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 - A4b `replan-clear` (branch `agent/skills-rotn/replan-clear`): #126 open. A new action drops a stale re-plan request; unstuck says "no path" on a fast failure; a login-wiring test.
-- B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): PR open, see Open PRs. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
+- B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): #131 open. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
 - Next: the `mc.isBaby` switch (#125; ready locally on top of B1b), then B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2). The villager profession at index 13 (lead, #124 review) is already in #124.
 
 ## G3 plan: small PRs, in order
@@ -133,4 +133,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 ## Open PRs
 
 - #126 A4b replan clear (branch `agent/skills-rotn/replan-clear`). Serves the lead's required follow-up on #123 (before any G3 batch).
-- B1b names boundary (branch `agent/skills-rotn/names-boundary`). Serves Request 8 (accepted) and the G2 caveat "the full agent and its LLM command path must prove naming at G3".
+- #131 B1b names boundary (branch `agent/skills-rotn/names-boundary`). Serves Request 8 (accepted) and the G2 caveat "the full agent and its LLM command path must prove naming at G3".
