@@ -1,0 +1,4570 @@
+{
+ "format": "rotn-dump/1",
+ "encoding": "networkId = blockId << 4 | meta",
+ "remap": [
+  {
+   "networkId": 2114,
+   "block": "minecraft:tripwire",
+   "blockId": 132,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 2112,
+   "state": "minecraft:tripwire[attached=false,disarmed=false,east=false,north=false,powered=false,south=false,west=false]"
+  },
+  {
+   "networkId": 2115,
+   "block": "minecraft:tripwire",
+   "blockId": 132,
+   "idMeta": 3,
+   "stateMeta": 1,
+   "stateNetworkId": 2113,
+   "state": "minecraft:tripwire[attached=false,disarmed=false,east=false,north=false,powered=true,south=false,west=false]"
+  },
+  {
+   "networkId": 2118,
+   "block": "minecraft:tripwire",
+   "blockId": 132,
+   "idMeta": 6,
+   "stateMeta": 4,
+   "stateNetworkId": 2116,
+   "state": "minecraft:tripwire[attached=true,disarmed=false,east=false,north=false,powered=false,south=false,west=false]"
+  },
+  {
+   "networkId": 2119,
+   "block": "minecraft:tripwire",
+   "blockId": 132,
+   "idMeta": 7,
+   "stateMeta": 5,
+   "stateNetworkId": 2117,
+   "state": "minecraft:tripwire[attached=true,disarmed=false,east=false,north=false,powered=true,south=false,west=false]"
+  },
+  {
+   "networkId": 2122,
+   "block": "minecraft:tripwire",
+   "blockId": 132,
+   "idMeta": 10,
+   "stateMeta": 8,
+   "stateNetworkId": 2120,
+   "state": "minecraft:tripwire[attached=false,disarmed=true,east=false,north=false,powered=false,south=false,west=false]"
+  },
+  {
+   "networkId": 2123,
+   "block": "minecraft:tripwire",
+   "blockId": 132,
+   "idMeta": 11,
+   "stateMeta": 9,
+   "stateNetworkId": 2121,
+   "state": "minecraft:tripwire[attached=false,disarmed=true,east=false,north=false,powered=true,south=false,west=false]"
+  },
+  {
+   "networkId": 2126,
+   "block": "minecraft:tripwire",
+   "blockId": 132,
+   "idMeta": 14,
+   "stateMeta": 12,
+   "stateNetworkId": 2124,
+   "state": "minecraft:tripwire[attached=true,disarmed=true,east=false,north=false,powered=false,south=false,west=false]"
+  },
+  {
+   "networkId": 2241,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2242,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2243,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2244,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2245,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2246,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2247,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2248,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2249,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2250,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2251,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2252,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2253,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2254,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2255,
+   "block": "minecraft:flower_pot",
+   "blockId": 140,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 2255,
+   "state": "minecraft:flower_pot[contents=empty,extra=false,legacy_data=0]"
+  },
+  {
+   "networkId": 2808,
+   "block": "minecraft:double_plant",
+   "blockId": 175,
+   "idMeta": 8,
+   "stateMeta": 10,
+   "stateNetworkId": 2811,
+   "state": "minecraft:double_plant[facing=north,half=upper,variant=sunflower]"
+  },
+  {
+   "networkId": 2809,
+   "block": "minecraft:double_plant",
+   "blockId": 175,
+   "idMeta": 9,
+   "stateMeta": 10,
+   "stateNetworkId": 2811,
+   "state": "minecraft:double_plant[facing=north,half=upper,variant=sunflower]"
+  },
+  {
+   "networkId": 2811,
+   "block": "minecraft:double_plant",
+   "blockId": 175,
+   "idMeta": 11,
+   "stateMeta": 10,
+   "stateNetworkId": 2811,
+   "state": "minecraft:double_plant[facing=north,half=upper,variant=sunflower]"
+  },
+  {
+   "networkId": 7392,
+   "block": "betternether:stalagnate_planks_slab_half",
+   "blockId": 462,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 7392,
+   "state": "betternether:stalagnate_planks_slab_half[half=top]"
+  },
+  {
+   "networkId": 7393,
+   "block": "betternether:stalagnate_planks_slab_half",
+   "blockId": 462,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 7393,
+   "state": "betternether:stalagnate_planks_slab_half[half=bottom]"
+  },
+  {
+   "networkId": 7520,
+   "block": "betternether:reeds_slab_half",
+   "blockId": 470,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 7520,
+   "state": "betternether:reeds_slab_half[half=top]"
+  },
+  {
+   "networkId": 7521,
+   "block": "betternether:reeds_slab_half",
+   "blockId": 470,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 7521,
+   "state": "betternether:reeds_slab_half[half=bottom]"
+  },
+  {
+   "networkId": 7634,
+   "block": "betternether:lucis_spore",
+   "blockId": 477,
+   "idMeta": 2,
+   "stateMeta": 3,
+   "stateNetworkId": 7634,
+   "state": "betternether:lucis_spore[facing=east]"
+  },
+  {
+   "networkId": 7635,
+   "block": "betternether:lucis_spore",
+   "blockId": 477,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 7635,
+   "state": "betternether:lucis_spore[facing=west]"
+  },
+  {
+   "networkId": 8048,
+   "block": "betternether:cincinnasite_slab_half",
+   "blockId": 503,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 8048,
+   "state": "betternether:cincinnasite_slab_half[half=top]"
+  },
+  {
+   "networkId": 8049,
+   "block": "betternether:cincinnasite_slab_half",
+   "blockId": 503,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 8049,
+   "state": "betternether:cincinnasite_slab_half[half=bottom]"
+  },
+  {
+   "networkId": 8256,
+   "block": "betternether:bone_slab_half",
+   "blockId": 516,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 8256,
+   "state": "betternether:bone_slab_half[half=top]"
+  },
+  {
+   "networkId": 8257,
+   "block": "betternether:bone_slab_half",
+   "blockId": 516,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 8257,
+   "state": "betternether:bone_slab_half[half=bottom]"
+  },
+  {
+   "networkId": 8368,
+   "block": "betternether:nether_brick_tile_slab_half",
+   "blockId": 523,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 8368,
+   "state": "betternether:nether_brick_tile_slab_half[half=top]"
+  },
+  {
+   "networkId": 8369,
+   "block": "betternether:nether_brick_tile_slab_half",
+   "blockId": 523,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 8369,
+   "state": "betternether:nether_brick_tile_slab_half[half=bottom]"
+  },
+  {
+   "networkId": 9792,
+   "block": "rustic:olive_doubleslab",
+   "blockId": 612,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 9793,
+   "state": "rustic:olive_doubleslab[half=top]"
+  },
+  {
+   "networkId": 9824,
+   "block": "rustic:ironwood_doubleslab",
+   "blockId": 614,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 9825,
+   "state": "rustic:ironwood_doubleslab[half=top]"
+  },
+  {
+   "networkId": 16128,
+   "block": "twilightforest:trophy_pedestal",
+   "blockId": 1008,
+   "idMeta": 0,
+   "stateMeta": 4,
+   "stateNetworkId": 16132,
+   "state": "twilightforest:trophy_pedestal[facing=south,latent=true]"
+  },
+  {
+   "networkId": 16129,
+   "block": "twilightforest:trophy_pedestal",
+   "blockId": 1008,
+   "idMeta": 1,
+   "stateMeta": 5,
+   "stateNetworkId": 16133,
+   "state": "twilightforest:trophy_pedestal[facing=west,latent=true]"
+  },
+  {
+   "networkId": 16130,
+   "block": "twilightforest:trophy_pedestal",
+   "blockId": 1008,
+   "idMeta": 2,
+   "stateMeta": 6,
+   "stateNetworkId": 16134,
+   "state": "twilightforest:trophy_pedestal[facing=north,latent=true]"
+  },
+  {
+   "networkId": 16131,
+   "block": "twilightforest:trophy_pedestal",
+   "blockId": 1008,
+   "idMeta": 3,
+   "stateMeta": 7,
+   "stateNetworkId": 16135,
+   "state": "twilightforest:trophy_pedestal[facing=east,latent=true]"
+  },
+  {
+   "networkId": 16145,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16146,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16147,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16148,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16149,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16150,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16151,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16152,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16153,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16154,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16155,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16156,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16157,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16158,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16159,
+   "block": "twilightforest:aurora_block",
+   "blockId": 1009,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 16159,
+   "state": "twilightforest:aurora_block[variant=0]"
+  },
+  {
+   "networkId": 16305,
+   "block": "twilightforest:double_aurora_slab",
+   "blockId": 1019,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 16305,
+   "state": "twilightforest:double_aurora_slab[half=top,variant=aurora]"
+  },
+  {
+   "networkId": 16720,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 0,
+   "stateMeta": 10,
+   "stateNetworkId": 16720,
+   "state": "twilightforest:force_field[axis=y,color=purple,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16721,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 1,
+   "stateMeta": 11,
+   "stateNetworkId": 16721,
+   "state": "twilightforest:force_field[axis=y,color=pink,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16722,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 2,
+   "stateMeta": 12,
+   "stateNetworkId": 16722,
+   "state": "twilightforest:force_field[axis=y,color=orange,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16723,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 3,
+   "stateMeta": 13,
+   "stateNetworkId": 16723,
+   "state": "twilightforest:force_field[axis=y,color=green,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16724,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 4,
+   "stateMeta": 14,
+   "stateNetworkId": 16724,
+   "state": "twilightforest:force_field[axis=y,color=blue,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16725,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 16725,
+   "state": "twilightforest:force_field[axis=z,color=purple,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16726,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 6,
+   "stateMeta": 1,
+   "stateNetworkId": 16726,
+   "state": "twilightforest:force_field[axis=z,color=pink,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16727,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 7,
+   "stateMeta": 2,
+   "stateNetworkId": 16727,
+   "state": "twilightforest:force_field[axis=z,color=orange,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16728,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 8,
+   "stateMeta": 3,
+   "stateNetworkId": 16728,
+   "state": "twilightforest:force_field[axis=z,color=green,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16729,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 9,
+   "stateMeta": 4,
+   "stateNetworkId": 16729,
+   "state": "twilightforest:force_field[axis=z,color=blue,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16730,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 10,
+   "stateMeta": 5,
+   "stateNetworkId": 16730,
+   "state": "twilightforest:force_field[axis=x,color=purple,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16731,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 11,
+   "stateMeta": 6,
+   "stateNetworkId": 16731,
+   "state": "twilightforest:force_field[axis=x,color=pink,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16732,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 12,
+   "stateMeta": 7,
+   "stateNetworkId": 16732,
+   "state": "twilightforest:force_field[axis=x,color=orange,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16733,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 13,
+   "stateMeta": 8,
+   "stateNetworkId": 16733,
+   "state": "twilightforest:force_field[axis=x,color=green,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 16734,
+   "block": "twilightforest:force_field",
+   "blockId": 1045,
+   "idMeta": 14,
+   "stateMeta": 9,
+   "stateNetworkId": 16734,
+   "state": "twilightforest:force_field[axis=x,color=blue,east=false,north=false,south=false,west=false]"
+  },
+  {
+   "networkId": 18816,
+   "block": "artisanworkstumps:workstump_tailor",
+   "blockId": 1176,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18816,
+   "state": "artisanworkstumps:workstump_tailor[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18817,
+   "block": "artisanworkstumps:workstump_tailor",
+   "blockId": 1176,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18817,
+   "state": "artisanworkstumps:workstump_tailor[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18818,
+   "block": "artisanworkstumps:workstump_tailor",
+   "blockId": 1176,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18818,
+   "state": "artisanworkstumps:workstump_tailor[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18832,
+   "block": "artisanworkstumps:workstump_carpenter",
+   "blockId": 1177,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18832,
+   "state": "artisanworkstumps:workstump_carpenter[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18833,
+   "block": "artisanworkstumps:workstump_carpenter",
+   "blockId": 1177,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18833,
+   "state": "artisanworkstumps:workstump_carpenter[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18834,
+   "block": "artisanworkstumps:workstump_carpenter",
+   "blockId": 1177,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18834,
+   "state": "artisanworkstumps:workstump_carpenter[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18848,
+   "block": "artisanworkstumps:workstump_mason",
+   "blockId": 1178,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18848,
+   "state": "artisanworkstumps:workstump_mason[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18849,
+   "block": "artisanworkstumps:workstump_mason",
+   "blockId": 1178,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18849,
+   "state": "artisanworkstumps:workstump_mason[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18850,
+   "block": "artisanworkstumps:workstump_mason",
+   "blockId": 1178,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18850,
+   "state": "artisanworkstumps:workstump_mason[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18864,
+   "block": "artisanworkstumps:workstump_blacksmith",
+   "blockId": 1179,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18864,
+   "state": "artisanworkstumps:workstump_blacksmith[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18865,
+   "block": "artisanworkstumps:workstump_blacksmith",
+   "blockId": 1179,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18865,
+   "state": "artisanworkstumps:workstump_blacksmith[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18866,
+   "block": "artisanworkstumps:workstump_blacksmith",
+   "blockId": 1179,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18866,
+   "state": "artisanworkstumps:workstump_blacksmith[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18880,
+   "block": "artisanworkstumps:workstump_jeweler",
+   "blockId": 1180,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18880,
+   "state": "artisanworkstumps:workstump_jeweler[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18881,
+   "block": "artisanworkstumps:workstump_jeweler",
+   "blockId": 1180,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18881,
+   "state": "artisanworkstumps:workstump_jeweler[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18882,
+   "block": "artisanworkstumps:workstump_jeweler",
+   "blockId": 1180,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18882,
+   "state": "artisanworkstumps:workstump_jeweler[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18896,
+   "block": "artisanworkstumps:workstump_basic",
+   "blockId": 1181,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18896,
+   "state": "artisanworkstumps:workstump_basic[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18897,
+   "block": "artisanworkstumps:workstump_basic",
+   "blockId": 1181,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18897,
+   "state": "artisanworkstumps:workstump_basic[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18898,
+   "block": "artisanworkstumps:workstump_basic",
+   "blockId": 1181,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18898,
+   "state": "artisanworkstumps:workstump_basic[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18912,
+   "block": "artisanworkstumps:workstump_engineer",
+   "blockId": 1182,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18912,
+   "state": "artisanworkstumps:workstump_engineer[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18913,
+   "block": "artisanworkstumps:workstump_engineer",
+   "blockId": 1182,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18913,
+   "state": "artisanworkstumps:workstump_engineer[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18914,
+   "block": "artisanworkstumps:workstump_engineer",
+   "blockId": 1182,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18914,
+   "state": "artisanworkstumps:workstump_engineer[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18928,
+   "block": "artisanworkstumps:workstump_mage",
+   "blockId": 1183,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18928,
+   "state": "artisanworkstumps:workstump_mage[active=false,condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18929,
+   "block": "artisanworkstumps:workstump_mage",
+   "blockId": 1183,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18929,
+   "state": "artisanworkstumps:workstump_mage[active=false,condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18930,
+   "block": "artisanworkstumps:workstump_mage",
+   "blockId": 1183,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18930,
+   "state": "artisanworkstumps:workstump_mage[active=false,condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18944,
+   "block": "artisanworkstumps:workstump_scribe",
+   "blockId": 1184,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18944,
+   "state": "artisanworkstumps:workstump_scribe[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18945,
+   "block": "artisanworkstumps:workstump_scribe",
+   "blockId": 1184,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18945,
+   "state": "artisanworkstumps:workstump_scribe[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18946,
+   "block": "artisanworkstumps:workstump_scribe",
+   "blockId": 1184,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18946,
+   "state": "artisanworkstumps:workstump_scribe[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18960,
+   "block": "artisanworkstumps:workstump_chemist",
+   "blockId": 1185,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18960,
+   "state": "artisanworkstumps:workstump_chemist[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18961,
+   "block": "artisanworkstumps:workstump_chemist",
+   "blockId": 1185,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18961,
+   "state": "artisanworkstumps:workstump_chemist[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18962,
+   "block": "artisanworkstumps:workstump_chemist",
+   "blockId": 1185,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18962,
+   "state": "artisanworkstumps:workstump_chemist[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18976,
+   "block": "artisanworkstumps:workstump_farmer",
+   "blockId": 1186,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18976,
+   "state": "artisanworkstumps:workstump_farmer[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18977,
+   "block": "artisanworkstumps:workstump_farmer",
+   "blockId": 1186,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18977,
+   "state": "artisanworkstumps:workstump_farmer[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18978,
+   "block": "artisanworkstumps:workstump_farmer",
+   "blockId": 1186,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18978,
+   "state": "artisanworkstumps:workstump_farmer[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 18992,
+   "block": "artisanworkstumps:workstump_chef",
+   "blockId": 1187,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 18992,
+   "state": "artisanworkstumps:workstump_chef[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 18993,
+   "block": "artisanworkstumps:workstump_chef",
+   "blockId": 1187,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 18993,
+   "state": "artisanworkstumps:workstump_chef[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 18994,
+   "block": "artisanworkstumps:workstump_chef",
+   "blockId": 1187,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 18994,
+   "state": "artisanworkstumps:workstump_chef[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 19008,
+   "block": "artisanworkstumps:workstump_designer",
+   "blockId": 1188,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 19008,
+   "state": "artisanworkstumps:workstump_designer[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 19009,
+   "block": "artisanworkstumps:workstump_designer",
+   "blockId": 1188,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 19009,
+   "state": "artisanworkstumps:workstump_designer[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 19010,
+   "block": "artisanworkstumps:workstump_designer",
+   "blockId": 1188,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19010,
+   "state": "artisanworkstumps:workstump_designer[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 19024,
+   "block": "artisanworkstumps:workstump_tanner",
+   "blockId": 1189,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 19024,
+   "state": "artisanworkstumps:workstump_tanner[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 19025,
+   "block": "artisanworkstumps:workstump_tanner",
+   "blockId": 1189,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 19025,
+   "state": "artisanworkstumps:workstump_tanner[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 19026,
+   "block": "artisanworkstumps:workstump_tanner",
+   "blockId": 1189,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19026,
+   "state": "artisanworkstumps:workstump_tanner[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 19040,
+   "block": "artisanworkstumps:workstump_potter",
+   "blockId": 1190,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 19040,
+   "state": "artisanworkstumps:workstump_potter[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=south]"
+  },
+  {
+   "networkId": 19041,
+   "block": "artisanworkstumps:workstump_potter",
+   "blockId": 1190,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 19041,
+   "state": "artisanworkstumps:workstump_potter[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=west]"
+  },
+  {
+   "networkId": 19042,
+   "block": "artisanworkstumps:workstump_potter",
+   "blockId": 1190,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19042,
+   "state": "artisanworkstumps:workstump_potter[condition=0,damaged_east=false,damaged_south=false,damaged_west=false,facing=north]"
+  },
+  {
+   "networkId": 19056,
+   "block": "artisanworkstumps:log_basin",
+   "blockId": 1191,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 19056,
+   "state": "artisanworkstumps:log_basin[facing=south]"
+  },
+  {
+   "networkId": 19057,
+   "block": "artisanworkstumps:log_basin",
+   "blockId": 1191,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 19057,
+   "state": "artisanworkstumps:log_basin[facing=west]"
+  },
+  {
+   "networkId": 19058,
+   "block": "artisanworkstumps:log_basin",
+   "blockId": 1191,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19058,
+   "state": "artisanworkstumps:log_basin[facing=north]"
+  },
+  {
+   "networkId": 19072,
+   "block": "artisanworkstumps:stone_basin",
+   "blockId": 1192,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 19072,
+   "state": "artisanworkstumps:stone_basin[facing=south]"
+  },
+  {
+   "networkId": 19073,
+   "block": "artisanworkstumps:stone_basin",
+   "blockId": 1192,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 19073,
+   "state": "artisanworkstumps:stone_basin[facing=west]"
+  },
+  {
+   "networkId": 19074,
+   "block": "artisanworkstumps:stone_basin",
+   "blockId": 1192,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19074,
+   "state": "artisanworkstumps:stone_basin[facing=north]"
+  },
+  {
+   "networkId": 19249,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19250,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19251,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19252,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19253,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19254,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19255,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19256,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19257,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19258,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19259,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19260,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19261,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19262,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19263,
+   "block": "quark:colored_flowerpot_white",
+   "blockId": 1203,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19263,
+   "state": "quark:colored_flowerpot_white[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19265,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19266,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19267,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19268,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19269,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19270,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19271,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19272,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19273,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19274,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19275,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19276,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19277,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19278,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19279,
+   "block": "quark:colored_flowerpot_orange",
+   "blockId": 1204,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19279,
+   "state": "quark:colored_flowerpot_orange[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19281,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19282,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19283,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19284,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19285,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19286,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19287,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19288,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19289,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19290,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19291,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19292,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19293,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19294,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19295,
+   "block": "quark:colored_flowerpot_magenta",
+   "blockId": 1205,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19295,
+   "state": "quark:colored_flowerpot_magenta[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19297,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19298,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19299,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19300,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19301,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19302,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19303,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19304,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19305,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19306,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19307,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19308,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19309,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19310,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19311,
+   "block": "quark:colored_flowerpot_light_blue",
+   "blockId": 1206,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19311,
+   "state": "quark:colored_flowerpot_light_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19313,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19314,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19315,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19316,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19317,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19318,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19319,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19320,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19321,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19322,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19323,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19324,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19325,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19326,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19327,
+   "block": "quark:colored_flowerpot_yellow",
+   "blockId": 1207,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19327,
+   "state": "quark:colored_flowerpot_yellow[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19329,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19330,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19331,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19332,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19333,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19334,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19335,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19336,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19337,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19338,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19339,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19340,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19341,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19342,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19343,
+   "block": "quark:colored_flowerpot_lime",
+   "blockId": 1208,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19343,
+   "state": "quark:colored_flowerpot_lime[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19345,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19346,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19347,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19348,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19349,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19350,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19351,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19352,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19353,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19354,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19355,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19356,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19357,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19358,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19359,
+   "block": "quark:colored_flowerpot_pink",
+   "blockId": 1209,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19359,
+   "state": "quark:colored_flowerpot_pink[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19361,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19362,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19363,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19364,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19365,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19366,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19367,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19368,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19369,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19370,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19371,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19372,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19373,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19374,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19375,
+   "block": "quark:colored_flowerpot_gray",
+   "blockId": 1210,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19375,
+   "state": "quark:colored_flowerpot_gray[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19377,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19378,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19379,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19380,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19381,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19382,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19383,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19384,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19385,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19386,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19387,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19388,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19389,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19390,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19391,
+   "block": "quark:colored_flowerpot_silver",
+   "blockId": 1211,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19391,
+   "state": "quark:colored_flowerpot_silver[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19393,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19394,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19395,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19396,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19397,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19398,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19399,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19400,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19401,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19402,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19403,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19404,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19405,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19406,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19407,
+   "block": "quark:colored_flowerpot_cyan",
+   "blockId": 1212,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19407,
+   "state": "quark:colored_flowerpot_cyan[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19409,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19410,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19411,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19412,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19413,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19414,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19415,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19416,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19417,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19418,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19419,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19420,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19421,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19422,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19423,
+   "block": "quark:colored_flowerpot_purple",
+   "blockId": 1213,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19423,
+   "state": "quark:colored_flowerpot_purple[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19425,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19426,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19427,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19428,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19429,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19430,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19431,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19432,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19433,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19434,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19435,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19436,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19437,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19438,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19439,
+   "block": "quark:colored_flowerpot_blue",
+   "blockId": 1214,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19439,
+   "state": "quark:colored_flowerpot_blue[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19441,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19442,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19443,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19444,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19445,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19446,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19447,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19448,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19449,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19450,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19451,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19452,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19453,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19454,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19455,
+   "block": "quark:colored_flowerpot_brown",
+   "blockId": 1215,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19455,
+   "state": "quark:colored_flowerpot_brown[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19457,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19458,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19459,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19460,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19461,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19462,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19463,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19464,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19465,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19466,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19467,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19468,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19469,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19470,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19471,
+   "block": "quark:colored_flowerpot_green",
+   "blockId": 1216,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19471,
+   "state": "quark:colored_flowerpot_green[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19473,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19474,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19475,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19476,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19477,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19478,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19479,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19480,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19481,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19482,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19483,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19484,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19485,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19486,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19487,
+   "block": "quark:colored_flowerpot_red",
+   "blockId": 1217,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19487,
+   "state": "quark:colored_flowerpot_red[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19489,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19490,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19491,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 3,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19492,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19493,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 5,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19494,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 6,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19495,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 7,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19496,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19497,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 9,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19498,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 10,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19499,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 11,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19500,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19501,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 13,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19502,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 14,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 19503,
+   "block": "quark:colored_flowerpot_black",
+   "blockId": 1218,
+   "idMeta": 15,
+   "stateMeta": 0,
+   "stateNetworkId": 19503,
+   "state": "quark:colored_flowerpot_black[contents=empty,custom=false,legacy_data=0]"
+  },
+  {
+   "networkId": 26612,
+   "block": "betterwithmods:steel_broken_gearbox",
+   "blockId": 1663,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 26612,
+   "state": "betterwithmods:steel_broken_gearbox[facing=down,repair=0]"
+  },
+  {
+   "networkId": 26613,
+   "block": "betterwithmods:steel_broken_gearbox",
+   "blockId": 1663,
+   "idMeta": 5,
+   "stateMeta": 1,
+   "stateNetworkId": 26613,
+   "state": "betterwithmods:steel_broken_gearbox[facing=up,repair=0]"
+  },
+  {
+   "networkId": 26620,
+   "block": "betterwithmods:steel_broken_gearbox",
+   "blockId": 1663,
+   "idMeta": 12,
+   "stateMeta": 8,
+   "stateNetworkId": 26620,
+   "state": "betterwithmods:steel_broken_gearbox[facing=down,repair=1]"
+  },
+  {
+   "networkId": 26621,
+   "block": "betterwithmods:steel_broken_gearbox",
+   "blockId": 1663,
+   "idMeta": 13,
+   "stateMeta": 9,
+   "stateNetworkId": 26621,
+   "state": "betterwithmods:steel_broken_gearbox[facing=up,repair=1]"
+  },
+  {
+   "networkId": 26628,
+   "block": "betterwithmods:wooden_broken_gearbox",
+   "blockId": 1664,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 26628,
+   "state": "betterwithmods:wooden_broken_gearbox[facing=down,repair=0]"
+  },
+  {
+   "networkId": 26629,
+   "block": "betterwithmods:wooden_broken_gearbox",
+   "blockId": 1664,
+   "idMeta": 5,
+   "stateMeta": 1,
+   "stateNetworkId": 26629,
+   "state": "betterwithmods:wooden_broken_gearbox[facing=up,repair=0]"
+  },
+  {
+   "networkId": 26636,
+   "block": "betterwithmods:wooden_broken_gearbox",
+   "blockId": 1664,
+   "idMeta": 12,
+   "stateMeta": 8,
+   "stateNetworkId": 26636,
+   "state": "betterwithmods:wooden_broken_gearbox[facing=down,repair=1]"
+  },
+  {
+   "networkId": 26637,
+   "block": "betterwithmods:wooden_broken_gearbox",
+   "blockId": 1664,
+   "idMeta": 13,
+   "stateMeta": 9,
+   "stateNetworkId": 26637,
+   "state": "betterwithmods:wooden_broken_gearbox[facing=up,repair=1]"
+  },
+  {
+   "networkId": 27219,
+   "block": "betterwithmods:screw_pump",
+   "blockId": 1701,
+   "idMeta": 3,
+   "stateMeta": 5,
+   "stateNetworkId": 27219,
+   "state": "betterwithmods:screw_pump[active=false,facing=east]"
+  },
+  {
+   "networkId": 27220,
+   "block": "betterwithmods:screw_pump",
+   "blockId": 1701,
+   "idMeta": 4,
+   "stateMeta": 3,
+   "stateNetworkId": 27220,
+   "state": "betterwithmods:screw_pump[active=false,facing=south]"
+  },
+  {
+   "networkId": 27221,
+   "block": "betterwithmods:screw_pump",
+   "blockId": 1701,
+   "idMeta": 5,
+   "stateMeta": 4,
+   "stateNetworkId": 27221,
+   "state": "betterwithmods:screw_pump[active=false,facing=west]"
+  },
+  {
+   "networkId": 27227,
+   "block": "betterwithmods:screw_pump",
+   "blockId": 1701,
+   "idMeta": 11,
+   "stateMeta": 13,
+   "stateNetworkId": 27227,
+   "state": "betterwithmods:screw_pump[active=true,facing=east]"
+  },
+  {
+   "networkId": 27228,
+   "block": "betterwithmods:screw_pump",
+   "blockId": 1701,
+   "idMeta": 12,
+   "stateMeta": 11,
+   "stateNetworkId": 27228,
+   "state": "betterwithmods:screw_pump[active=true,facing=south]"
+  },
+  {
+   "networkId": 27229,
+   "block": "betterwithmods:screw_pump",
+   "blockId": 1701,
+   "idMeta": 13,
+   "stateMeta": 12,
+   "stateNetworkId": 27229,
+   "state": "betterwithmods:screw_pump[active=true,facing=west]"
+  },
+  {
+   "networkId": 27488,
+   "block": "betterwithmods:blood_leaves",
+   "blockId": 1718,
+   "idMeta": 0,
+   "stateMeta": 4,
+   "stateNetworkId": 27488,
+   "state": "betterwithmods:blood_leaves[check_decay=false,decayable=true]"
+  },
+  {
+   "networkId": 27492,
+   "block": "betterwithmods:blood_leaves",
+   "blockId": 1718,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 27492,
+   "state": "betterwithmods:blood_leaves[check_decay=false,decayable=false]"
+  },
+  {
+   "networkId": 27496,
+   "block": "betterwithmods:blood_leaves",
+   "blockId": 1718,
+   "idMeta": 8,
+   "stateMeta": 12,
+   "stateNetworkId": 27496,
+   "state": "betterwithmods:blood_leaves[check_decay=true,decayable=true]"
+  },
+  {
+   "networkId": 27500,
+   "block": "betterwithmods:blood_leaves",
+   "blockId": 1718,
+   "idMeta": 12,
+   "stateMeta": 8,
+   "stateNetworkId": 27500,
+   "state": "betterwithmods:blood_leaves[check_decay=true,decayable=false]"
+  },
+  {
+   "networkId": 32819,
+   "block": "dungeontactics:trap_clamp",
+   "blockId": 2051,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 32819,
+   "state": "dungeontactics:trap_clamp[hidden=true,triggered=false]"
+  },
+  {
+   "networkId": 32835,
+   "block": "dungeontactics:trap_boom",
+   "blockId": 2052,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 32835,
+   "state": "dungeontactics:trap_boom[hidden=true,triggered=false]"
+  },
+  {
+   "networkId": 32851,
+   "block": "dungeontactics:trap_piston",
+   "blockId": 2053,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 32851,
+   "state": "dungeontactics:trap_piston[hidden=true,triggered=false]"
+  },
+  {
+   "networkId": 32867,
+   "block": "dungeontactics:trap_fire",
+   "blockId": 2054,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 32867,
+   "state": "dungeontactics:trap_fire[hidden=true,triggered=false]"
+  },
+  {
+   "networkId": 32883,
+   "block": "dungeontactics:trap_foul",
+   "blockId": 2055,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 32883,
+   "state": "dungeontactics:trap_foul[hidden=true,triggered=false]"
+  },
+  {
+   "networkId": 32899,
+   "block": "dungeontactics:trap_ailment",
+   "blockId": 2056,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 32899,
+   "state": "dungeontactics:trap_ailment[hidden=true,triggered=false]"
+  },
+  {
+   "networkId": 32915,
+   "block": "dungeontactics:trap_port",
+   "blockId": 2057,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 32915,
+   "state": "dungeontactics:trap_port[hidden=true,triggered=false]"
+  },
+  {
+   "networkId": 32931,
+   "block": "dungeontactics:trap_ambush",
+   "blockId": 2058,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 32931,
+   "state": "dungeontactics:trap_ambush[hidden=true,triggered=false]"
+  },
+  {
+   "networkId": 32947,
+   "block": "dungeontactics:trap_spectral",
+   "blockId": 2059,
+   "idMeta": 3,
+   "stateMeta": 2,
+   "stateNetworkId": 32947,
+   "state": "dungeontactics:trap_spectral[hidden=true,triggered=false]"
+  },
+  {
+   "networkId": 37584,
+   "block": "earthworks:doubleslab_adobe",
+   "blockId": 2349,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37585,
+   "state": "earthworks:doubleslab_adobe[half=top]"
+  },
+  {
+   "networkId": 37616,
+   "block": "earthworks:doubleslab_chalk",
+   "blockId": 2351,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37617,
+   "state": "earthworks:doubleslab_chalk[half=top]"
+  },
+  {
+   "networkId": 37648,
+   "block": "earthworks:doubleslab_cinder",
+   "blockId": 2353,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37649,
+   "state": "earthworks:doubleslab_cinder[half=top]"
+  },
+  {
+   "networkId": 37680,
+   "block": "earthworks:doubleslab_cob",
+   "blockId": 2355,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37681,
+   "state": "earthworks:doubleslab_cob[half=top]"
+  },
+  {
+   "networkId": 37712,
+   "block": "earthworks:doubleslab_concrete",
+   "blockId": 2357,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37713,
+   "state": "earthworks:doubleslab_concrete[half=top]"
+  },
+  {
+   "networkId": 37744,
+   "block": "earthworks:doubleslab_cordwood",
+   "blockId": 2359,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37745,
+   "state": "earthworks:doubleslab_cordwood[half=top]"
+  },
+  {
+   "networkId": 37776,
+   "block": "earthworks:doubleslab_dry_stone",
+   "blockId": 2361,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37777,
+   "state": "earthworks:doubleslab_dry_stone[half=top]"
+  },
+  {
+   "networkId": 37808,
+   "block": "earthworks:doubleslab_gabion_gravel",
+   "blockId": 2363,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37809,
+   "state": "earthworks:doubleslab_gabion_gravel[half=top]"
+  },
+  {
+   "networkId": 37840,
+   "block": "earthworks:doubleslab_gabion_sand",
+   "blockId": 2365,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37841,
+   "state": "earthworks:doubleslab_gabion_sand[half=top]"
+  },
+  {
+   "networkId": 37872,
+   "block": "earthworks:doubleslab_gabion_dirt",
+   "blockId": 2367,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37873,
+   "state": "earthworks:doubleslab_gabion_dirt[half=top]"
+  },
+  {
+   "networkId": 37904,
+   "block": "earthworks:doubleslab_mud",
+   "blockId": 2369,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37905,
+   "state": "earthworks:doubleslab_mud[half=top]"
+  },
+  {
+   "networkId": 37936,
+   "block": "earthworks:doubleslab_planks_vert_oak",
+   "blockId": 2371,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37937,
+   "state": "earthworks:doubleslab_planks_vert_oak[half=top]"
+  },
+  {
+   "networkId": 37968,
+   "block": "earthworks:doubleslab_planks_vert_spruce",
+   "blockId": 2373,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 37969,
+   "state": "earthworks:doubleslab_planks_vert_spruce[half=top]"
+  },
+  {
+   "networkId": 38000,
+   "block": "earthworks:doubleslab_planks_vert_birch",
+   "blockId": 2375,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38001,
+   "state": "earthworks:doubleslab_planks_vert_birch[half=top]"
+  },
+  {
+   "networkId": 38032,
+   "block": "earthworks:doubleslab_planks_vert_jungle",
+   "blockId": 2377,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38033,
+   "state": "earthworks:doubleslab_planks_vert_jungle[half=top]"
+  },
+  {
+   "networkId": 38064,
+   "block": "earthworks:doubleslab_planks_vert_acacia",
+   "blockId": 2379,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38065,
+   "state": "earthworks:doubleslab_planks_vert_acacia[half=top]"
+  },
+  {
+   "networkId": 38096,
+   "block": "earthworks:doubleslab_planks_vert_dark_oak",
+   "blockId": 2381,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38097,
+   "state": "earthworks:doubleslab_planks_vert_dark_oak[half=top]"
+  },
+  {
+   "networkId": 38128,
+   "block": "earthworks:doubleslab_plaster",
+   "blockId": 2383,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38129,
+   "state": "earthworks:doubleslab_plaster[half=top]"
+  },
+  {
+   "networkId": 38160,
+   "block": "earthworks:doubleslab_rammed_earth",
+   "blockId": 2385,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38161,
+   "state": "earthworks:doubleslab_rammed_earth[half=top]"
+  },
+  {
+   "networkId": 38192,
+   "block": "earthworks:doubleslab_slate",
+   "blockId": 2387,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38193,
+   "state": "earthworks:doubleslab_slate[half=top]"
+  },
+  {
+   "networkId": 38224,
+   "block": "earthworks:doubleslab_slate_green",
+   "blockId": 2389,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38225,
+   "state": "earthworks:doubleslab_slate_green[half=top]"
+  },
+  {
+   "networkId": 38256,
+   "block": "earthworks:doubleslab_slate_purple",
+   "blockId": 2391,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38257,
+   "state": "earthworks:doubleslab_slate_purple[half=top]"
+  },
+  {
+   "networkId": 38288,
+   "block": "earthworks:doubleslab_slate_slab",
+   "blockId": 2393,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38289,
+   "state": "earthworks:doubleslab_slate_slab[half=top]"
+  },
+  {
+   "networkId": 38320,
+   "block": "earthworks:doubleslab_slate_slab_green",
+   "blockId": 2395,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38321,
+   "state": "earthworks:doubleslab_slate_slab_green[half=top]"
+  },
+  {
+   "networkId": 38352,
+   "block": "earthworks:doubleslab_slate_slab_purple",
+   "blockId": 2397,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38353,
+   "state": "earthworks:doubleslab_slate_slab_purple[half=top]"
+  },
+  {
+   "networkId": 38384,
+   "block": "earthworks:doubleslab_slate_shingle",
+   "blockId": 2399,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38385,
+   "state": "earthworks:doubleslab_slate_shingle[half=top]"
+  },
+  {
+   "networkId": 38416,
+   "block": "earthworks:doubleslab_slate_shingle_verte",
+   "blockId": 2401,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38417,
+   "state": "earthworks:doubleslab_slate_shingle_verte[half=top]"
+  },
+  {
+   "networkId": 38448,
+   "block": "earthworks:doubleslab_slate_shingle_purple",
+   "blockId": 2403,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38449,
+   "state": "earthworks:doubleslab_slate_shingle_purple[half=top]"
+  },
+  {
+   "networkId": 38480,
+   "block": "earthworks:doubleslab_slate_tile",
+   "blockId": 2405,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38481,
+   "state": "earthworks:doubleslab_slate_tile[half=top]"
+  },
+  {
+   "networkId": 38512,
+   "block": "earthworks:doubleslab_slate_tile_verte",
+   "blockId": 2407,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38513,
+   "state": "earthworks:doubleslab_slate_tile_verte[half=top]"
+  },
+  {
+   "networkId": 38544,
+   "block": "earthworks:doubleslab_slate_tile_purple",
+   "blockId": 2409,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38545,
+   "state": "earthworks:doubleslab_slate_tile_purple[half=top]"
+  },
+  {
+   "networkId": 38576,
+   "block": "earthworks:doubleslab_timber",
+   "blockId": 2411,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38577,
+   "state": "earthworks:doubleslab_timber[half=top]"
+  },
+  {
+   "networkId": 38608,
+   "block": "earthworks:doubleslab_timber_birch",
+   "blockId": 2413,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38609,
+   "state": "earthworks:doubleslab_timber_birch[half=top]"
+  },
+  {
+   "networkId": 38640,
+   "block": "earthworks:doubleslab_timber_spruce",
+   "blockId": 2415,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38641,
+   "state": "earthworks:doubleslab_timber_spruce[half=top]"
+  },
+  {
+   "networkId": 38672,
+   "block": "earthworks:doubleslab_timber_jungle",
+   "blockId": 2417,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38673,
+   "state": "earthworks:doubleslab_timber_jungle[half=top]"
+  },
+  {
+   "networkId": 38704,
+   "block": "earthworks:doubleslab_timber_acacia",
+   "blockId": 2419,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38705,
+   "state": "earthworks:doubleslab_timber_acacia[half=top]"
+  },
+  {
+   "networkId": 38736,
+   "block": "earthworks:doubleslab_timber_dark_oak",
+   "blockId": 2421,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38737,
+   "state": "earthworks:doubleslab_timber_dark_oak[half=top]"
+  },
+  {
+   "networkId": 38768,
+   "block": "earthworks:doubleslab_wattle",
+   "blockId": 2423,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38769,
+   "state": "earthworks:doubleslab_wattle[half=top]"
+  },
+  {
+   "networkId": 38800,
+   "block": "earthworks:doubleslab_wicker",
+   "blockId": 2425,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38801,
+   "state": "earthworks:doubleslab_wicker[half=top]"
+  },
+  {
+   "networkId": 38832,
+   "block": "earthworks:doubleslab_wood_shingle_oak",
+   "blockId": 2427,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38833,
+   "state": "earthworks:doubleslab_wood_shingle_oak[half=top]"
+  },
+  {
+   "networkId": 38864,
+   "block": "earthworks:doubleslab_wood_shingle_spruce",
+   "blockId": 2429,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38865,
+   "state": "earthworks:doubleslab_wood_shingle_spruce[half=top]"
+  },
+  {
+   "networkId": 38896,
+   "block": "earthworks:doubleslab_wood_shingle_birch",
+   "blockId": 2431,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38897,
+   "state": "earthworks:doubleslab_wood_shingle_birch[half=top]"
+  },
+  {
+   "networkId": 38928,
+   "block": "earthworks:doubleslab_wood_shingle_jungle",
+   "blockId": 2433,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38929,
+   "state": "earthworks:doubleslab_wood_shingle_jungle[half=top]"
+  },
+  {
+   "networkId": 38960,
+   "block": "earthworks:doubleslab_wood_shingle_acacia",
+   "blockId": 2435,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38961,
+   "state": "earthworks:doubleslab_wood_shingle_acacia[half=top]"
+  },
+  {
+   "networkId": 38992,
+   "block": "earthworks:doubleslab_wood_shingle_dark_oak",
+   "blockId": 2437,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 38993,
+   "state": "earthworks:doubleslab_wood_shingle_dark_oak[half=top]"
+  },
+  {
+   "networkId": 40824,
+   "block": "exsartagine:smelter",
+   "blockId": 2551,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 40824,
+   "state": "exsartagine:smelter[facing=south,full=false,legs=false]"
+  },
+  {
+   "networkId": 40825,
+   "block": "exsartagine:smelter",
+   "blockId": 2551,
+   "idMeta": 9,
+   "stateMeta": 1,
+   "stateNetworkId": 40825,
+   "state": "exsartagine:smelter[facing=west,full=false,legs=false]"
+  },
+  {
+   "networkId": 40826,
+   "block": "exsartagine:smelter",
+   "blockId": 2551,
+   "idMeta": 10,
+   "stateMeta": 2,
+   "stateNetworkId": 40826,
+   "state": "exsartagine:smelter[facing=north,full=false,legs=false]"
+  },
+  {
+   "networkId": 40827,
+   "block": "exsartagine:smelter",
+   "blockId": 2551,
+   "idMeta": 11,
+   "stateMeta": 3,
+   "stateNetworkId": 40827,
+   "state": "exsartagine:smelter[facing=east,full=false,legs=false]"
+  },
+  {
+   "networkId": 40828,
+   "block": "exsartagine:smelter",
+   "blockId": 2551,
+   "idMeta": 12,
+   "stateMeta": 4,
+   "stateNetworkId": 40828,
+   "state": "exsartagine:smelter[facing=south,full=true,legs=false]"
+  },
+  {
+   "networkId": 40829,
+   "block": "exsartagine:smelter",
+   "blockId": 2551,
+   "idMeta": 13,
+   "stateMeta": 5,
+   "stateNetworkId": 40829,
+   "state": "exsartagine:smelter[facing=west,full=true,legs=false]"
+  },
+  {
+   "networkId": 40830,
+   "block": "exsartagine:smelter",
+   "blockId": 2551,
+   "idMeta": 14,
+   "stateMeta": 6,
+   "stateNetworkId": 40830,
+   "state": "exsartagine:smelter[facing=north,full=true,legs=false]"
+  },
+  {
+   "networkId": 40831,
+   "block": "exsartagine:smelter",
+   "blockId": 2551,
+   "idMeta": 15,
+   "stateMeta": 7,
+   "stateNetworkId": 40831,
+   "state": "exsartagine:smelter[facing=east,full=true,legs=false]"
+  },
+  {
+   "networkId": 42440,
+   "block": "growthcraft_apples:apple_sapling",
+   "blockId": 2652,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 42440,
+   "state": "growthcraft_apples:apple_sapling[stage=0]"
+  },
+  {
+   "networkId": 42449,
+   "block": "growthcraft_apples:apple_slab_half",
+   "blockId": 2653,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 42449,
+   "state": "growthcraft_apples:apple_slab_half[half=bottom]"
+  },
+  {
+   "networkId": 42450,
+   "block": "growthcraft_apples:apple_slab_half",
+   "blockId": 2653,
+   "idMeta": 2,
+   "stateMeta": 1,
+   "stateNetworkId": 42450,
+   "state": "growthcraft_apples:apple_slab_half[half=top]"
+  },
+  {
+   "networkId": 42760,
+   "block": "growthcraft_cellar:cork_sapling",
+   "blockId": 2672,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 42760,
+   "state": "growthcraft_cellar:cork_sapling[stage=0]"
+  },
+  {
+   "networkId": 42786,
+   "block": "growthcraft_grapes:native_grape_vine0",
+   "blockId": 2674,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 42786,
+   "state": "growthcraft_grapes:native_grape_vine0[age=0,type=1]"
+  },
+  {
+   "networkId": 42787,
+   "block": "growthcraft_grapes:native_grape_vine0",
+   "blockId": 2674,
+   "idMeta": 3,
+   "stateMeta": 1,
+   "stateNetworkId": 42787,
+   "state": "growthcraft_grapes:native_grape_vine0[age=1,type=1]"
+  },
+  {
+   "networkId": 42802,
+   "block": "growthcraft_grapes:native_grape_vine1",
+   "blockId": 2675,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 42802,
+   "state": "growthcraft_grapes:native_grape_vine1[age=0,type=1]"
+  },
+  {
+   "networkId": 42803,
+   "block": "growthcraft_grapes:native_grape_vine1",
+   "blockId": 2675,
+   "idMeta": 3,
+   "stateMeta": 1,
+   "stateNetworkId": 42803,
+   "state": "growthcraft_grapes:native_grape_vine1[age=1,type=1]"
+  },
+  {
+   "networkId": 43249,
+   "block": "growthcraft_bamboo:bamboo_slab_half",
+   "blockId": 2703,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 43249,
+   "state": "growthcraft_bamboo:bamboo_slab_half[half=bottom]"
+  },
+  {
+   "networkId": 43250,
+   "block": "growthcraft_bamboo:bamboo_slab_half",
+   "blockId": 2703,
+   "idMeta": 2,
+   "stateMeta": 1,
+   "stateNetworkId": 43250,
+   "state": "growthcraft_bamboo:bamboo_slab_half[half=top]"
+  },
+  {
+   "networkId": 45892,
+   "block": "iceandfire:dread_stone_face",
+   "blockId": 2868,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 45892,
+   "state": "iceandfire:dread_stone_face[facing=south,player_placed=false]"
+  },
+  {
+   "networkId": 45894,
+   "block": "iceandfire:dread_stone_face",
+   "blockId": 2868,
+   "idMeta": 6,
+   "stateMeta": 4,
+   "stateNetworkId": 45894,
+   "state": "iceandfire:dread_stone_face[facing=north,player_placed=false]"
+  },
+  {
+   "networkId": 50128,
+   "block": "pyrotech:stash",
+   "blockId": 3133,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 50128,
+   "state": "pyrotech:stash[facing=south]"
+  },
+  {
+   "networkId": 50129,
+   "block": "pyrotech:stash",
+   "blockId": 3133,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 50129,
+   "state": "pyrotech:stash[facing=west]"
+  },
+  {
+   "networkId": 50130,
+   "block": "pyrotech:stash",
+   "blockId": 3133,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 50130,
+   "state": "pyrotech:stash[facing=north]"
+  },
+  {
+   "networkId": 50144,
+   "block": "pyrotech:stash_stone",
+   "blockId": 3134,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 50144,
+   "state": "pyrotech:stash_stone[facing=south]"
+  },
+  {
+   "networkId": 50145,
+   "block": "pyrotech:stash_stone",
+   "blockId": 3134,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 50145,
+   "state": "pyrotech:stash_stone[facing=west]"
+  },
+  {
+   "networkId": 50146,
+   "block": "pyrotech:stash_stone",
+   "blockId": 3134,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 50146,
+   "state": "pyrotech:stash_stone[facing=north]"
+  },
+  {
+   "networkId": 50160,
+   "block": "pyrotech:crate",
+   "blockId": 3135,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 50160,
+   "state": "pyrotech:crate[facing=south]"
+  },
+  {
+   "networkId": 50161,
+   "block": "pyrotech:crate",
+   "blockId": 3135,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 50161,
+   "state": "pyrotech:crate[facing=west]"
+  },
+  {
+   "networkId": 50162,
+   "block": "pyrotech:crate",
+   "blockId": 3135,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 50162,
+   "state": "pyrotech:crate[facing=north]"
+  },
+  {
+   "networkId": 50176,
+   "block": "pyrotech:crate_stone",
+   "blockId": 3136,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 50176,
+   "state": "pyrotech:crate_stone[facing=south]"
+  },
+  {
+   "networkId": 50177,
+   "block": "pyrotech:crate_stone",
+   "blockId": 3136,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 50177,
+   "state": "pyrotech:crate_stone[facing=west]"
+  },
+  {
+   "networkId": 50178,
+   "block": "pyrotech:crate_stone",
+   "blockId": 3136,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 50178,
+   "state": "pyrotech:crate_stone[facing=north]"
+  },
+  {
+   "networkId": 50192,
+   "block": "pyrotech:wood_rack",
+   "blockId": 3137,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 50192,
+   "state": "pyrotech:wood_rack[facing=south]"
+  },
+  {
+   "networkId": 50193,
+   "block": "pyrotech:wood_rack",
+   "blockId": 3137,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 50193,
+   "state": "pyrotech:wood_rack[facing=west]"
+  },
+  {
+   "networkId": 50194,
+   "block": "pyrotech:wood_rack",
+   "blockId": 3137,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 50194,
+   "state": "pyrotech:wood_rack[facing=north]"
+  },
+  {
+   "networkId": 50392,
+   "block": "pyrotech:drying_rack",
+   "blockId": 3149,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 50392,
+   "state": "pyrotech:drying_rack[facing=south,variant=crude]"
+  },
+  {
+   "networkId": 50393,
+   "block": "pyrotech:drying_rack",
+   "blockId": 3149,
+   "idMeta": 9,
+   "stateMeta": 1,
+   "stateNetworkId": 50393,
+   "state": "pyrotech:drying_rack[facing=west,variant=crude]"
+  },
+  {
+   "networkId": 50394,
+   "block": "pyrotech:drying_rack",
+   "blockId": 3149,
+   "idMeta": 10,
+   "stateMeta": 2,
+   "stateNetworkId": 50394,
+   "state": "pyrotech:drying_rack[facing=north,variant=crude]"
+  },
+  {
+   "networkId": 50395,
+   "block": "pyrotech:drying_rack",
+   "blockId": 3149,
+   "idMeta": 11,
+   "stateMeta": 3,
+   "stateNetworkId": 50395,
+   "state": "pyrotech:drying_rack[facing=east,variant=crude]"
+  },
+  {
+   "networkId": 50400,
+   "block": "pyrotech:worktable",
+   "blockId": 3150,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 50400,
+   "state": "pyrotech:worktable[facing=south]"
+  },
+  {
+   "networkId": 50401,
+   "block": "pyrotech:worktable",
+   "blockId": 3150,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 50401,
+   "state": "pyrotech:worktable[facing=west]"
+  },
+  {
+   "networkId": 50402,
+   "block": "pyrotech:worktable",
+   "blockId": 3150,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 50402,
+   "state": "pyrotech:worktable[facing=north]"
+  },
+  {
+   "networkId": 50416,
+   "block": "pyrotech:worktable_stone",
+   "blockId": 3151,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 50416,
+   "state": "pyrotech:worktable_stone[facing=south]"
+  },
+  {
+   "networkId": 50417,
+   "block": "pyrotech:worktable_stone",
+   "blockId": 3151,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 50417,
+   "state": "pyrotech:worktable_stone[facing=west]"
+  },
+  {
+   "networkId": 50418,
+   "block": "pyrotech:worktable_stone",
+   "blockId": 3151,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 50418,
+   "state": "pyrotech:worktable_stone[facing=north]"
+  },
+  {
+   "networkId": 50448,
+   "block": "pyrotech:soaking_pot",
+   "blockId": 3153,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 50448,
+   "state": "pyrotech:soaking_pot[campfire=false,facing=south]"
+  },
+  {
+   "networkId": 50449,
+   "block": "pyrotech:soaking_pot",
+   "blockId": 3153,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 50449,
+   "state": "pyrotech:soaking_pot[campfire=false,facing=west]"
+  },
+  {
+   "networkId": 50450,
+   "block": "pyrotech:soaking_pot",
+   "blockId": 3153,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 50450,
+   "state": "pyrotech:soaking_pot[campfire=false,facing=north]"
+  },
+  {
+   "networkId": 50624,
+   "block": "pyrotech:bellows",
+   "blockId": 3164,
+   "idMeta": 0,
+   "stateMeta": 1,
+   "stateNetworkId": 50624,
+   "state": "pyrotech:bellows[facing=south]"
+  },
+  {
+   "networkId": 50625,
+   "block": "pyrotech:bellows",
+   "blockId": 3164,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 50625,
+   "state": "pyrotech:bellows[facing=west]"
+  },
+  {
+   "networkId": 50626,
+   "block": "pyrotech:bellows",
+   "blockId": 3164,
+   "idMeta": 2,
+   "stateMeta": 0,
+   "stateNetworkId": 50626,
+   "state": "pyrotech:bellows[facing=north]"
+  },
+  {
+   "networkId": 52068,
+   "block": "stygian:endleaves",
+   "blockId": 3254,
+   "idMeta": 4,
+   "stateMeta": 0,
+   "stateNetworkId": 52076,
+   "state": "stygian:endleaves[check_decay=false,decayable=true]"
+  },
+  {
+   "networkId": 52072,
+   "block": "stygian:endleaves",
+   "blockId": 3254,
+   "idMeta": 8,
+   "stateMeta": 0,
+   "stateNetworkId": 52076,
+   "state": "stygian:endleaves[check_decay=false,decayable=true]"
+  },
+  {
+   "networkId": 52076,
+   "block": "stygian:endleaves",
+   "blockId": 3254,
+   "idMeta": 12,
+   "stateMeta": 0,
+   "stateNetworkId": 52076,
+   "state": "stygian:endleaves[check_decay=false,decayable=true]"
+  },
+  {
+   "networkId": 54146,
+   "block": "aether_legacy:treasure_chest",
+   "blockId": 3384,
+   "idMeta": 2,
+   "stateMeta": 3,
+   "stateNetworkId": 54149,
+   "state": "aether_legacy:treasure_chest[facing=south]"
+  },
+  {
+   "networkId": 54148,
+   "block": "aether_legacy:treasure_chest",
+   "blockId": 3384,
+   "idMeta": 4,
+   "stateMeta": 3,
+   "stateNetworkId": 54149,
+   "state": "aether_legacy:treasure_chest[facing=south]"
+  },
+  {
+   "networkId": 54149,
+   "block": "aether_legacy:treasure_chest",
+   "blockId": 3384,
+   "idMeta": 5,
+   "stateMeta": 3,
+   "stateNetworkId": 54149,
+   "state": "aether_legacy:treasure_chest[facing=south]"
+  },
+  {
+   "networkId": 58768,
+   "block": "animania:block_trough",
+   "blockId": 3673,
+   "idMeta": 0,
+   "stateMeta": 3,
+   "stateNetworkId": 58772,
+   "state": "animania:block_trough[facing=south]"
+  },
+  {
+   "networkId": 58769,
+   "block": "animania:block_trough",
+   "blockId": 3673,
+   "idMeta": 1,
+   "stateMeta": 4,
+   "stateNetworkId": 58773,
+   "state": "animania:block_trough[facing=west]"
+  },
+  {
+   "networkId": 58771,
+   "block": "animania:block_trough",
+   "blockId": 3673,
+   "idMeta": 3,
+   "stateMeta": 5,
+   "stateNetworkId": 58771,
+   "state": "animania:block_trough[facing=east]"
+  },
+  {
+   "networkId": 58772,
+   "block": "animania:block_trough",
+   "blockId": 3673,
+   "idMeta": 4,
+   "stateMeta": 3,
+   "stateNetworkId": 58772,
+   "state": "animania:block_trough[facing=south]"
+  },
+  {
+   "networkId": 58773,
+   "block": "animania:block_trough",
+   "blockId": 3673,
+   "idMeta": 5,
+   "stateMeta": 4,
+   "stateNetworkId": 58773,
+   "state": "animania:block_trough[facing=west]"
+  },
+  {
+   "networkId": 58992,
+   "block": "animania:block_hive",
+   "blockId": 3687,
+   "idMeta": 0,
+   "stateMeta": 2,
+   "stateNetworkId": 58994,
+   "state": "animania:block_hive[facing=north]"
+  },
+  {
+   "networkId": 58993,
+   "block": "animania:block_hive",
+   "blockId": 3687,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 58994,
+   "state": "animania:block_hive[facing=north]"
+  },
+  {
+   "networkId": 59008,
+   "block": "animania:block_wild_hive",
+   "blockId": 3688,
+   "idMeta": 0,
+   "stateMeta": 2,
+   "stateNetworkId": 59010,
+   "state": "animania:block_wild_hive[facing=north]"
+  },
+  {
+   "networkId": 59009,
+   "block": "animania:block_wild_hive",
+   "blockId": 3688,
+   "idMeta": 1,
+   "stateMeta": 2,
+   "stateNetworkId": 59010,
+   "state": "animania:block_wild_hive[facing=north]"
+  },
+  {
+   "networkId": 65393,
+   "block": "cyclicmagic:wireless_transmitter",
+   "blockId": 4087,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 65393,
+   "state": "cyclicmagic:wireless_transmitter[powered=false]"
+  },
+  {
+   "networkId": 65409,
+   "block": "cyclicmagic:wireless_receiver",
+   "blockId": 4088,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 65409,
+   "state": "cyclicmagic:wireless_receiver[powered=false]"
+  },
+  {
+   "networkId": 65697,
+   "block": "cyclicmagic:target",
+   "blockId": 4106,
+   "idMeta": 1,
+   "stateMeta": 0,
+   "stateNetworkId": 65697,
+   "state": "cyclicmagic:target[powered=false]"
+  }
+ ],
+ "scanned": {
+  "blocks": 4896,
+  "networkIds": 24011,
+  "validStates": 220349
+ },
+ "anomalies": {
+  "encodingMismatches": 0,
+  "foreignStates": 0,
+  "first": null
+ }
+}

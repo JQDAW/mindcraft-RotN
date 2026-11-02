@@ -234,6 +234,7 @@ test('state-meta-remap: inconsistent records and unsynced blocks are refused', (
         r[0].networkId = 2807; // not 175 << 4 | 8
         r[1].stateMeta = r[1].idMeta; // not a remap
         r.push({ ...r[2] }); // duplicate 2811
+        r[2].stateNetworkId = 176 << 4 | 11; // another block's id (#80 review)
         r.push({ networkId: 99 << 4 | 1, block: 'nomod:nothing', blockId: 99, idMeta: 1, stateMeta: 0, stateNetworkId: 99 << 4, state: 'nomod:nothing' });
         f['state-meta-remap'].scanned.networkIds = 0;
     } });
@@ -242,6 +243,7 @@ test('state-meta-remap: inconsistent records and unsynced blocks are refused', (
         assert.match(text, /networkId 2807 \(minecraft:double_plant\): not blockId << 4 \| idMeta/);
         assert.match(text, /networkId 2809 \(minecraft:double_plant\): idMeta equals stateMeta/);
         assert.match(text, /networkId 2811 \(minecraft:double_plant\): duplicate/);
+        assert.match(text, /networkId 2811 \(minecraft:double_plant\): stateNetworkId 2827 is not an id of block 175/);
         assert.match(text, /networkId 1585 \(nomod:nothing\): block not synced/);
         assert.match(text, /scanned\.networkIds is not positive/);
     } finally {
@@ -251,7 +253,7 @@ test('state-meta-remap: inconsistent records and unsynced blocks are refused', (
 
 test('state-meta-remap: block ids that differ from the capture are a note, not a problem', () => {
     const { root, src, pack } = fakeFetch({ mutate: (f) => {
-        for (const x of f['state-meta-remap'].remap) Object.assign(x, { blockId: 176, networkId: 176 << 4 | x.idMeta });
+        for (const x of f['state-meta-remap'].remap) Object.assign(x, { blockId: 176, networkId: 176 << 4 | x.idMeta, stateNetworkId: 176 << 4 | 11 });
     } });
     try {
         const res = importDump({ src, jarSha256: JAR, outDir: pack });
