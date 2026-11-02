@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T23:00Z (from `date -u`)
+Updated: 2026-11-02T23:16Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -37,7 +37,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): #131 open. Review REQUEST CHANGES (the variant form reached the LLM but collectBlock, placeBlock, equip, discard, chests, consume and the craft limit compared bare names); fixed with one shared resolver (findItem/itemMatches for items, blockMatcher for blocks) in every consuming skill, plus an end-to-end test per review scenario. This blocks G3, so it comes before B2. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
+- B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): #131 open. Review REQUEST CHANGES (the variant form reached the LLM but collectBlock, placeBlock, equip, discard, chests, consume and the craft limit compared bare names); fixed with one shared resolver (findItem/itemMatches for items, blockMatcher for blocks) in every consuming skill, plus an end-to-end test per review scenario. Re-review REQUEST CHANGES: !getCraftingPlan (bare-name totals for the planner) and smeltItem (bare name for isSmeltable) fixed, plus nits 3 (craft limit by the recipe's variant) and 4 (ambiguous names shown as minecraft:snow round-trip); nit 5 (NPC code) is pre-existing. This blocks G3, so it comes before B2. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
 - `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`, stacked on #131): #132 open. All baby checks call `mc.isBaby` (#125); `names112.isBaby` is removed.
 - Next: B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
 

@@ -1,7 +1,7 @@
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
-import { countItem, parseName, findItem, itemMatches, blockMatcher, variantMeta } from "./rotn_names.js";
+import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta } from "./rotn_names.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -33,6 +33,21 @@ async function equipHighestAttack(bot) {
     let weapon = weapons[0];
     if (weapon)
         await bot.equip(weapon, 'hand');
+}
+
+// The ingredients of one craft, keyed by canonical name: "planks:0" when the recipe pins
+// a variant, "planks" when any will do (metadata null). mcdata's helper drops the meta,
+// so a mixed stack could pass the limit and fail in bot.craft (#131 re-review nit).
+function recipeIngredients(recipe) {
+    const out = {};
+    const add = (ingredient, n) => {
+        if (!ingredient || ingredient.id < 0) return; // -1 is an empty slot
+        const name = formatName(mc.getItemName(ingredient.id), ingredient.metadata ?? null);
+        out[name] = (out[name] ?? 0) + n;
+    };
+    if (recipe.inShape) for (const ingredient of recipe.inShape.flat()) add(ingredient, ingredient.count);
+    if (recipe.ingredients) for (const ingredient of recipe.ingredients) add(ingredient, -ingredient.count); // unshaped counts are negative
+    return out;
 }
 
 export async function craftRecipe(bot, itemName, num=1) {
@@ -101,9 +116,8 @@ export async function craftRecipe(bot, itemName, num=1) {
     const recipe = recipes[0];
     console.log('crafting...');
     //Check that the agent has sufficient items to use the recipe `num` times.
-    const requiredIngredients = mc.ingredientsFromPrismarineRecipe(recipe); //Items required to use the recipe once.
-    // Count each ingredient by its name (every variant), not through the variant-keyed
-    // inventory counts, which never have a bare "planks" key (#131 review).
+    const requiredIngredients = recipeIngredients(recipe); //Items required to use the recipe once, by variant.
+    // Count each ingredient with countItem: "planks:0" only oak, "planks" every variant (#131 review).
     const inventory = Object.fromEntries(Object.keys(requiredIngredients).map(name => [name, countItem(bot, name)]));
     const craftLimit = mc.calculateLimitingResource(inventory, requiredIngredients);
     
@@ -158,7 +172,8 @@ export async function smeltItem(bot, itemName, num=1) {
      * await skills.smeltItem(bot, "beef");
      **/
 
-    if (!mc.isSmeltable(itemName)) {
+    // isSmeltable checks bare names; "sand:0" from !inventory is sand (#131 re-review).
+    if (!mc.isSmeltable(parseName(itemName)?.name ?? itemName)) {
         log(bot, `Cannot smelt ${itemName}. Hint: make sure you are smelting the 'raw' item.`);
         return false;
     }

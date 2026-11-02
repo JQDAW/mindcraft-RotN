@@ -57,7 +57,9 @@ export const AMBIGUOUS_NAMES = new Set(['grass', 'stone_slab', 'snow', 'melon', 
  */
 export function canonicalName(input, kind = 'items') {
     const p = parseName(input);
-    if (p && !AMBIGUOUS_NAMES.has(p.name)) {
+    // "minecraft:snow" (how the displays write an ambiguous name) is the bot's own 1.12 name.
+    const explicit = typeof input === 'string' && /^s*minecraft:/i.test(input);
+    if (p && (explicit || !AMBIGUOUS_NAMES.has(p.name))) {
         const own = resolveName(input, kind, { prefer: 'old' });
         if (own && own.name === p.name) return formatName(own.name, own.meta);
     }
@@ -68,7 +70,15 @@ export function canonicalName(input, kind = 'items') {
 /** The inventory key for an item stack: "log:1", "pyrotech:rock:6", "stone_pickaxe". */
 export function inventoryKey(item) {
     if (!item?.name) return null;
-    return hasSubtypes(item.name) ? `${item.name}:${item.metadata ?? 0}` : item.name;
+    return displayForm(hasSubtypes(item.name) ? `${item.name}:${item.metadata ?? 0}` : item.name);
+}
+
+// What the LLM sees must come back to the same thing (#131 re-review nit): a name that
+// means something else in 1.21 (AMBIGUOUS_NAMES, e.g. "snow") is shown with its
+// namespace, "minecraft:snow", which canonicalName reads as the 1.12 name.
+function displayForm(name) {
+    const p = parseName(name);
+    return p && AMBIGUOUS_NAMES.has(p.name) ? `minecraft:${name}` : name;
 }
 
 /** Whether an item stack is the named item: any variant for a bare name. */
@@ -143,8 +153,8 @@ export function blockMatcher(names) {
 /** The canonical name of a placed block: a spruce log on its side ("log", 9) -> "log:1". */
 export function blockDisplayName(block) {
     if (!block?.name) return null;
-    if (!hasSubtypes(block.name)) return block.name;
+    if (!hasSubtypes(block.name)) return displayForm(block.name);
     const newName = blockToNew(block.name, block.metadata ?? 0);
     const old = newName ? blockToOld(newName).find(s => botName(s.name) === block.name) : null;
-    return formatName(block.name, old ? old.meta : (block.metadata ?? 0));
+    return displayForm(formatName(block.name, old ? old.meta : (block.metadata ?? 0)));
 }
