@@ -12,8 +12,19 @@ const id = argv[argv.indexOf('--scenario') + 1];
 const max = argv.find((a) => a.startsWith('maxBatchUsd='));
 const marker = /^[0-9A-Za-z-]+:\d+(\.\d+)?$/.test(process.env.ROTN_G3_BATCH ?? '') ? 'batch:set' : 'batch:unset';
 fs.appendFileSync(path.join(process.env.FAKE_DIR, 'ran.txt'), `${id} ${max} key:${process.env.OPENROUTER_API_KEY ? 'set' : 'unset'} ${marker}\n`);
+// Like run.mjs, a result.json with this run's runId in --out (batch.mjs reads it back into its summary).
+const out = argv[argv.indexOf('--out') + 1];
+fs.mkdirSync(out, { recursive: true });
+fs.writeFileSync(path.join(out, 'result.json'), JSON.stringify({ scenario: id, runId: `fake-${id}-${process.pid}` }));
 const file = process.env.ROTN_OPENROUTER_USAGE_FILE;
 const body = JSON.parse(fs.readFileSync(file, 'utf8'));
 body.data.usage = Math.round((body.data.usage + Number(process.env.FAKE_SPEND || 0)) * 1e6) / 1e6;
 fs.writeFileSync(file, process.env.FAKE_BREAK_USAGE === id ? '{"data":' : JSON.stringify(body));
-process.exit(Number(process.env.FAKE_RUN_EXIT || 0));
+// FAKE_HANG=<scenario id>: that scenario never ends on its own (for the batch's timeout); on SIGTERM it
+// exits 143 like run.mjs does.
+if (process.env.FAKE_HANG === id) {
+    process.on('SIGTERM', () => process.exit(143));
+    setInterval(() => {}, 1000);
+} else {
+    process.exit(Number(process.env.FAKE_RUN_EXIT || 0));
+}
