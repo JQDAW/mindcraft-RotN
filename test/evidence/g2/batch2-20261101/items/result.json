@@ -1,0 +1,127 @@
+{
+  "scenario": "g2-items-roundtrip",
+  "gate": "G2",
+  "title": "Vanilla 1.12 items in the bot's inventory round-trip between old and new names",
+  "runId": "20261101t233739-2159c0",
+  "pass": true,
+  "checksPassed": true,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "PASS",
+  "passed": 5,
+  "failed": 0,
+  "durationS": 112,
+  "params": {
+    "bot": "<bot>",
+    "items": "minecraft:log:0=oak_log,minecraft:log:1=spruce_log,minecraft:log:2=birch_log,minecraft:log:3=jungle_log,minecraft:log2:0=acacia_log,minecraft:log2:1=dark_oak_log,minecraft:planks:0=oak_planks,minecraft:planks:5=dark_oak_planks,minecraft:sapling:0=oak_sapling,minecraft:stone:0=stone,minecraft:stone:1=granite,minecraft:stone:3=diorite,minecraft:cobblestone:0=cobblestone,minecraft:wool:0=white_wool,minecraft:wool:14=red_wool,minecraft:dye:1=red_dye,minecraft:dye:4=lapis_lazuli,minecraft:dye:15=bone_meal,minecraft:coal:0=coal,minecraft:coal:1=charcoal,minecraft:red_flower:0=poppy,minecraft:yellow_flower:0=dandelion,minecraft:stonebrick:0=stone_bricks,minecraft:crafting_table:0=crafting_table,minecraft:stick:0=stick,minecraft:wooden_pickaxe:0=wooden_pickaxe,minecraft:torch:0=torch,minecraft:bone:0=bone,minecraft:rotten_flesh:0=rotten_flesh,minecraft:wheat_seeds:0=wheat_seeds",
+    "dataRoot": "",
+    "loginTimeoutMs": 240000,
+    "settleMs": 10000,
+    "seeMs": 5000,
+    "replyTimeoutMs": 120000,
+    "pollMs": 3000,
+    "logTail": 40000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the service makes the bot log in with its own account"
+    },
+    {
+      "check": "items_read",
+      "pass": true,
+      "detail": "30/30 given items reported with their 1.12 name and meta",
+      "readyToTry": "Items and inventory show RotN names (the bot reads what the server gave it)"
+    },
+    {
+      "check": "items_named",
+      "pass": true,
+      "detail": "30/30 with the expected 1.13+ name",
+      "readyToTry": "Items show readable 1.13+ names (old/new names round-trip)"
+    },
+    {
+      "check": "items_roundtrip",
+      "pass": true,
+      "detail": "30/30 round-trip to the same 1.12 name and meta",
+      "readyToTry": "Old/new names round-trip"
+    },
+    {
+      "check": "items_table",
+      "pass": true,
+      "detail": "agent naming (src/utils/mcdata.js toNew/toOld): mcdata.js exports toNew and toOld; all 643 table entries round-trip through them; sample: all 30 in the table",
+      "readyToTry": "Old/new names round-trip (every vanilla 1.12 item with a 1.13+ name, through the agent's mcdata.js toNew/toOld)"
+    }
+  ],
+  "notes": {
+    "tableFailures": {
+      "count": 0,
+      "first": []
+    },
+    "worldSeed": "3236084396548950896",
+    "naming": {
+      "wired": true,
+      "why": "mcdata.js exports toNew and toOld; all 643 table entries round-trip through them",
+      "entries": 643,
+      "failureCount": 0
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "notGiven": [],
+    "slots": [
+      "9 minecraft:stone 0 stone minecraft:stone 0",
+      "10 minecraft:stone 1 granite minecraft:stone 1",
+      "11 minecraft:stone 3 diorite minecraft:stone 3",
+      "12 minecraft:cobblestone 0 cobblestone minecraft:cobblestone 0",
+      "13 minecraft:wool 0 white_wool minecraft:wool 0",
+      "14 minecraft:wool 14 red_wool minecraft:wool 14",
+      "15 minecraft:dye 1 red_dye minecraft:dye 1",
+      "16 minecraft:dye 4 lapis_lazuli minecraft:dye 4",
+      "17 minecraft:dye 15 bone_meal minecraft:dye 15",
+      "18 minecraft:coal 0 coal minecraft:coal 0",
+      "19 minecraft:coal 1 charcoal minecraft:coal 1",
+      "20 minecraft:red_flower 0 poppy minecraft:red_flower 0",
+      "21 minecraft:yellow_flower 0 dandelion minecraft:yellow_flower 0",
+      "22 minecraft:stonebrick 0 stone_bricks minecraft:stonebrick 0",
+      "23 minecraft:crafting_table 0 crafting_table minecraft:crafting_table 0",
+      "24 minecraft:stick 0 stick minecraft:stick 0",
+      "25 minecraft:wooden_pickaxe 0 wooden_pickaxe minecraft:wooden_pickaxe 0",
+      "26 minecraft:torch 0 torch minecraft:torch 0",
+      "27 minecraft:bone 0 bone minecraft:bone 0",
+      "28 minecraft:rotten_flesh 0 rotten_flesh minecraft:rotten_flesh 0",
+      "29 minecraft:wheat_seeds 0 wheat_seeds minecraft:wheat_seeds 0",
+      "36 minecraft:log 0 oak_log minecraft:log 0",
+      "37 minecraft:log 1 spruce_log minecraft:log 1",
+      "38 minecraft:log 2 birch_log minecraft:log 2",
+      "39 minecraft:log 3 jungle_log minecraft:log 3",
+      "40 minecraft:log2 0 acacia_log minecraft:log2 0",
+      "41 minecraft:log2 1 dark_oak_log minecraft:log2 1",
+      "42 minecraft:planks 0 oak_planks minecraft:planks 0",
+      "43 minecraft:planks 5 dark_oak_planks minecraft:planks 5",
+      "44 minecraft:sapling 0 oak_sapling minecraft:sapling 0"
+    ],
+    "unread": {
+      "count": 0,
+      "first": []
+    },
+    "misnamed": {
+      "count": 0,
+      "first": []
+    },
+    "roundtripBroken": {
+      "count": 0,
+      "first": []
+    }
+  },
+  "botExitCode": 128,
+  "error": null,
+  "git": {
+    "sha": "53a1d5ea78c11d503ef47e758a8fac6c47590122",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261101-233101",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}

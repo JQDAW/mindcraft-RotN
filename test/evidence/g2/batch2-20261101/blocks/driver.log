@@ -1,0 +1,6 @@
+[mcdata] forge-bridge capture: captures/raw/<bot>-2026-11-01T23-34-25-211Z.jsonl
+DRIVER {"t":"2026-11-01T23:34:25.639Z","type":"g2_adapter","source":"src/utils/mcdata.js (names via bot.registry as world.js reads them; translation: mcdata toNew/toOld)","translation":true,"chunkWaitMs":30000,"chunkWaitSource":"default"}
+Error: Failed to obtain profile data for <bot>, does the account own minecraft?
+    at Object.authenticate (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\minecraft-protocol\src\client\microsoftAuth.js:31:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+DRIVER {"t":"2026-11-01T23:34:26.534Z","type":"error","message":"Failed to obtain profile data for <bot>, does the account own minecraft?"}

@@ -1,0 +1,194 @@
+{
+  "scenario": "g2-mobs-named",
+  "gate": "G2",
+  "title": "Common mobs near the bot carry registry names the server confirms",
+  "runId": "20261101t233444-e30360",
+  "pass": true,
+  "checksPassed": true,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "PASS",
+  "passed": 3,
+  "failed": 0,
+  "durationS": 169,
+  "params": {
+    "bot": "<bot>",
+    "mobs": "",
+    "mobsFile": "packages/rotn-data/3.3.4/common-mobs.json",
+    "dataRoot": "",
+    "maxMobs": 12,
+    "maxReplaced": 3,
+    "verifyRounds": 4,
+    "extraMobs": "",
+    "radius": 12,
+    "ring": 4,
+    "loginTimeoutMs": 240000,
+    "settleMs": 20000,
+    "seeMs": 10000,
+    "replyTimeoutMs": 120000,
+    "pollMs": 3000,
+    "logTail": 40000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the service makes the bot log in with its own account"
+    },
+    {
+      "check": "mobs_named",
+      "pass": true,
+      "detail": "12/12 summoned mobs reported by registry name (1 replaced)",
+      "readyToTry": "Nearby mobs show RotN names (each summoned mob, by its registry name; no placeholder names)"
+    },
+    {
+      "check": "mobs_confirmed",
+      "pass": true,
+      "detail": "12/12 reported summons confirmed by testfor (run tag)",
+      "readyToTry": "Nearby mobs show RotN names (the server confirms each summoned mob the bot reported)"
+    }
+  ],
+  "notes": {
+    "mobSource": "packages/rotn-data/3.3.4/common-mobs.json",
+    "worldSeed": "3236084396548950896",
+    "naming": {
+      "wired": true,
+      "why": "mcdata.js exports toNew and toOld; all 643 table entries round-trip through them",
+      "entries": 643,
+      "failureCount": 0
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "summoned": [
+      {
+        "name": "minecraft:slime",
+        "pos": [
+          -52.5,
+          80,
+          -56.5
+        ]
+      },
+      {
+        "name": "butterflies:butterfly",
+        "pos": [
+          -53.5,
+          80,
+          -57.5
+        ]
+      },
+      {
+        "name": "quark:stoneling",
+        "pos": [
+          -53.5,
+          80,
+          -59.5
+        ]
+      },
+      {
+        "name": "animania:toad",
+        "pos": [
+          -51.5,
+          80,
+          -61.5
+        ]
+      },
+      {
+        "name": "minecraft:creeper",
+        "pos": [
+          -50.5,
+          80,
+          -62.5
+        ]
+      },
+      {
+        "name": "betteranimalsplus:deer",
+        "pos": [
+          -48.5,
+          80,
+          -62.5
+        ]
+      },
+      {
+        "name": "minecraft:spider",
+        "pos": [
+          -46.5,
+          80,
+          -60.5
+        ]
+      },
+      {
+        "name": "animania:cow_holstein",
+        "pos": [
+          -45.5,
+          80,
+          -59.5
+        ]
+      },
+      {
+        "name": "minecraft:skeleton",
+        "pos": [
+          -45.5,
+          80,
+          -57.5
+        ]
+      },
+      {
+        "name": "animania:hen_rhode_island_red",
+        "pos": [
+          -47.5,
+          80,
+          -55.5
+        ]
+      },
+      {
+        "name": "minecraft:zombie",
+        "pos": [
+          -48.5,
+          80,
+          -54.5
+        ]
+      },
+      {
+        "name": "animania:hen_wyandotte",
+        "pos": [
+          -50.5,
+          80,
+          -54.5
+        ]
+      }
+    ],
+    "replaced": [
+      {
+        "name": "charm:spectre",
+        "reason": "vanished: the server no longer had it before the bot was asked"
+      }
+    ],
+    "seen": [
+      "minecraft:slime -52.5 80.0 -56.5",
+      "butterflies:butterfly -53.5 80.0 -57.5",
+      "animania:toad -51.5 80.0 -61.5",
+      "minecraft:creeper -50.5 80.0 -62.5",
+      "betteranimalsplus:deer -48.5 80.0 -62.5",
+      "minecraft:spider -46.5 80.0 -60.5",
+      "animania:cow_holstein -45.5 80.0 -59.5",
+      "minecraft:skeleton -45.5 80.0 -57.5",
+      "animania:hen_rhode_island_red -47.5 80.0 -55.5",
+      "minecraft:zombie -48.5 80.0 -54.5",
+      "animania:hen_wyandotte -50.5 80.0 -54.5",
+      "quark:stoneling -53.5 80.0 -59.5"
+    ],
+    "otherSeen": [],
+    "notConfirmed": []
+  },
+  "botExitCode": 128,
+  "error": null,
+  "git": {
+    "sha": "53a1d5ea78c11d503ef47e758a8fac6c47590122",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261101-233101",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}

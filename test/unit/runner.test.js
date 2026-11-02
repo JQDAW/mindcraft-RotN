@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { runScenario, waitFor } from '../runner/lib/runner.mjs';
 import * as L from '../runner/lib/server-log.mjs';
 import { parseArgs, loadScenarios, gitInfo } from '../runner/run.mjs';
-import { driverEnv, ctlServer } from '../runner/lib/adapters.mjs';
+import { driverEnv, ctlServer, driverProcess } from '../runner/lib/adapters.mjs';
 import { attachScenario } from '../runner/drivers/scenario-protocol.mjs';
 import g1 from '../scenarios/g1/g1-login-chat-walk.mjs';
 
@@ -462,6 +462,26 @@ describe('run.mjs end to end with its real adapters (fake test-server CLI and fa
         } finally {
             fs.rmSync(tmp, { recursive: true, force: true });
         }
+    });
+});
+
+describe('driverProcess: a second start is a new process (the one login retry)', () => {
+    test('exit code and alive() are reset by start(); output keeps both runs in order', async () => {
+        const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-dp-')), 'driver.log');
+        const d = driverProcess([process.execPath, '-e', 'console.log("run " + process.env.ROTN_T); setTimeout(() => process.exit(Number(process.env.ROTN_T)), 50)'], out);
+        const waitExit = async () => { for (let i = 0; i < 200 && d.alive(); i++) await new Promise((r) => setTimeout(r, 25)); };
+        d.start({ ROTN_T: '3' });
+        assert.equal(d.alive(), true);
+        await waitExit();
+        assert.equal(d.exitCode(), 3);
+        d.start({ ROTN_T: '0' });
+        assert.equal(d.alive(), true, 'alive again right after the second start');
+        assert.equal(d.exitCode(), null);
+        await waitExit();
+        assert.equal(d.exitCode(), 0);
+        await new Promise((r) => setTimeout(r, 100));
+        assert.deepEqual(d.output(), ['run 3', 'run 0']);
+        await d.stop();
     });
 });
 
