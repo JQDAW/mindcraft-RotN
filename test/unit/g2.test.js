@@ -730,6 +730,40 @@ describe('login retry: one, only for the profile-fetch failure', () => {
             assert.equal(r.notes.loginRetry.retried, true);
             assert.equal(r.notes.loginRetry.secondAttempt, 'joined');
             assert.equal(r.notes.loginRetry.delayMs, 10000);
+            assert.match(r.notes.loginRetry.at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/, 'when it happened, as an ISO time (PR #73 review 1)');
+        }
+    });
+
+    test('the driver joins, then exits with the profile error: no retry (PR #73 review 2)', async () => {
+        const s = sim();
+        const orig = s.bot.start;
+        s.bot.start = (env) => {
+            orig(env);   // joins
+            s.bot.output().push(...PROFILE);   // then the error, and the driver is gone
+            s.bot.alive = () => false;
+        };
+        const r = await run(items, s, { dataRoot: DATA });
+        assert.equal(byName(r).login_online.pass, true, 'it did join');
+        assert.equal(s.bot.starts(), 1);
+        assert.deepEqual(r.notes.loginRetry, { retried: false });
+    });
+
+    test('a join or kick that shows in the log during the 1 s wait after the exit: no retry (PR #73 review 3)', async () => {
+        for (const late of [`${NAME} joined the game`, `${NAME} lost connection: You are not white-listed on this server!`]) {
+            const s = sim({ loginFails: [PROFILE] });
+            const origSleep = s.clock.sleep;
+            let pending = true;
+            s.clock.sleep = (ms) => {
+                // The exit was seen first; the server's line lands during the stderr wait.
+                if (pending && ms === 1000 && s.bot.starts() === 1) {
+                    pending = false;
+                    s.lines.push(`[12:00:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: ${late}`);
+                }
+                return origSleep(ms);
+            };
+            const r = await run(items, s, { dataRoot: DATA });
+            assert.equal(s.bot.starts(), 1, late);
+            assert.deepEqual(r.notes.loginRetry, { retried: false }, late);
         }
     });
 

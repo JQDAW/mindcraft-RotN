@@ -71,15 +71,21 @@ export async function startSession(ctx, { name, env = {}, naming = null }) {
         bot.start({ ROTN_SCENARIO_BOT: name, ROTN_SCENARIO_RUN: runId, ...env });
         const ev = await ctx.waitFor(() => events().find((e) => e.type === 'joined' || gone(e))
             || (!bot.alive() && { type: 'exited' }), p.loginTimeoutMs);
-        if (ev?.type === 'exited') await clock.sleep(MS);   // a child's last stderr can arrive after its 'exit'
-        return { ev, lines: output().slice(from) };
+        let last = ev;
+        if (ev?.type === 'exited') {
+            await clock.sleep(MS);   // a child's last stderr can arrive after its 'exit'
+            // ... and so can the server's join or kick line: if one is there now, that is what happened
+            // (PR #73 review 3), and it is not a "before joining" failure.
+            last = events().find((e) => e.type === 'joined' || gone(e)) ?? ev;
+        }
+        return { ev: last, lines: output().slice(from) };
     };
     // One retry, only for the profile-fetch failure, only if the driver exited before any join or kick
     // (lead, #71). login_online still needs a real join; any other failure, or a second one, is a FAIL.
     let { ev: first, lines } = await attempt();
     const retry = { retried: false };
     if (first?.type === 'exited' && isProfileFetchFailure(lines, name)) {
-        Object.assign(retry, { retried: true, reason: 'profile fetch failed before joining (minecraft-protocol: "Failed to obtain profile data")',
+        Object.assign(retry, { retried: true, at: new Date().toISOString(), reason: 'profile fetch failed before joining (minecraft-protocol: "Failed to obtain profile data")',
             firstExitCode: bot.exitCode(), delayMs: RETRY_DELAY_MS });
         await clock.sleep(RETRY_DELAY_MS);
         ({ ev: first, lines } = await attempt());
