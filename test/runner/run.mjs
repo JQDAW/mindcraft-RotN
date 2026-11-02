@@ -59,7 +59,11 @@ export function gitInfo(cwd = path.join(here, '..', '..'), exec = execFileSync) 
     }
 }
 
-/** --param key=value: numbers stay numbers, everything else is a string. */
+/**
+ * --param key=value: numbers stay numbers, everything else is a string. An integer too large for a JS
+ * number to hold exactly (beyond Number.MAX_SAFE_INTEGER, e.g. a 19-digit world seed) stays a string,
+ * so `--param worldSeed=1880465901402976865` keeps every digit.
+ */
 export function parseArgs(argv) {
     const o = { params: {}, driver: [], list: false, scenario: null, out: null, passEnv: [] };
     for (let i = 0; i < argv.length; i++) {
@@ -73,7 +77,9 @@ export function parseArgs(argv) {
             const [k, ...v] = (argv[++i] ?? '').split('=');
             if (!k || !v.length) throw new Error(`--param needs key=value, got '${argv[i]}'`);
             const s = v.join('=');
-            o.params[k] = /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : s;
+            const numeric = /^-?\d+(\.\d+)?$/.test(s);
+            const unsafeInt = /^-?\d+$/.test(s) && !Number.isSafeInteger(Number(s));
+            o.params[k] = numeric && !unsafeInt ? Number(s) : s;
         } else throw new Error(`unknown argument '${a}'`);
     }
     return o;
