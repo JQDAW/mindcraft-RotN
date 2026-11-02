@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T17:20Z (from `date -u`)
+Updated: 2026-11-02T18:20Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -15,7 +15,11 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
     - modded item names have no old/new rename;
     - `charm:spectre` vanishes in daylight;
     - pack-side errors exist (Universal Tweaks chunk-save NPE; RoughMobsRevamped "Ticking entity" NPE in G1).
-- Lead notes on #100 (17:15 UTC): the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2).
+- **#100 merged** (`4b175cc`): this file and the G3 plan.
+- Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
+  - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
+  - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
+  - (c) A1 cites the lead's "Before the first CX23 run" line (`STATUS-rotn-lead.md`).
 - Already done by others, so not in my plan:
   - the exit-code contract (`agent.js` exits 1/3, never 0 on a failed spawn), net-forge #23;
   - `mcdata = bot.registry` and the naming API (`toNew`/`toOld`/`resolveName`), #44/#46;
@@ -23,8 +27,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- #100 (this file): the G3 plan below, under review.
-- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, from develop `3a95299`).
+- A1 `log-hygiene` (branch `agent/skills-rotn/log-hygiene`, on develop `4b175cc`): #103 open. Review APPROVE WITH NITS; nits 1-4 fixed at 18:20 UTC (connection_handler, path-safe blob rule, speak.js, queries.js, the agent-visible action error; documented contract and JSON cut). Lint baseline 255 -> 254. Next: A2 `no-cheat`.
 
 ## G3 plan: small PRs, in order
 
@@ -41,7 +44,7 @@ Each PR has offline unit tests (`src/**/*.test.js`, a fake bot, no server and no
 
 | PR | Branch topic | Content | Tests | Serves |
 | --- | --- | --- | --- | --- |
-| A1 | `log-hygiene` | `agent.js:87` and `:456` stop printing whole error objects. A small `safeError(err)` helper prints only the name, the code and a capped, single-line message, with no request or response bodies, headers or tokens. Same treatment for any other `console.error(..., err)` in `src/agent/` that a connection or model error can reach. **Must merge before the first CX23 run.** | the helper strips bodies, headers and long messages; the call sites use it | lead request (5) |
+| A1 | `log-hygiene` | `agent.js:87` and `:456` stop printing whole error objects. A small `safeError(err)` helper prints only the name, the code and a capped, single-line message, with no request or response bodies, headers or tokens. Same treatment for any other `console.error(..., err)` in `src/agent/` that a connection or model error can reach. **Must merge before the first CX23 run.** | the helper strips bodies, headers and long messages; the call sites use it | lead's "Before the first CX23 run" line (`STATUS-rotn-lead.md`) |
 | A2 | `no-cheat` | `cheat` cannot be turned on: `!setMode cheat` is refused, a profile's `cheat: true` (`god_mode.json`) is ignored with a log line, and the `/tp` and `/setblock` branches in `skills.js` are unreachable. | `!setMode` and profile tests (brief acceptance) | brief, safety |
 | A3 | `loop-and-restarts` | The update loop catches and logs a throwing mode and carries on. `!smeltItem` no longer calls `cleanKill`. The `/skin` chat at login is gone. | loop survives a throwing mode; `!smeltItem` does not exit (brief acceptance) | brief, safety |
 | A4 | `quiet-reflexes` | Modes stop calling `self_prompter.stopLoop()` and re-prompting the LLM on every reflex (`modes.js` ~L306-330); a reflex only logs and sets a "re-plan" flag for the agenda. Cap `isClearPath`'s A* cost for the CX23. | one reflex makes no LLM call; the A* cap is passed through | brief, PLAN priority 1 |
@@ -73,7 +76,7 @@ Each PR has offline unit tests (`src/**/*.test.js`, a fake bot, no server and no
 
 | PR | Branch topic | Content | Tests | Serves |
 | --- | --- | --- | --- | --- |
-| E1 | `task-queue` | A persistent JSON queue per bot (`bots/<name>/tasks.json`, written atomically) with `id`, `text`, `priority` (urgent or normal), `giver`, `assignee`, `status`, `result`. Commands `!task add`, `!task list` and `!task cancel`. Only players on the task-giver setting (plus `only_chat_with`) may add tasks; others get a polite refusal. | an untrusted task is refused; a task from `JQDAW` is queued; the queue survives a reload (brief acceptance) | G3 c, brief 5 |
+| E1 | `task-queue` | A persistent JSON queue per bot (`bots/<name>/tasks.json`, written atomically) with `id`, `text`, `priority` (urgent or normal), `giver`, `assignee`, `status`, `result`. Commands `!task add`, `!task list` and `!task cancel`. Only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it (lead decision a). Others get a polite refusal. | an untrusted task is refused; a player in `only_chat_with` but not on the task-giver list is refused; a task from `JQDAW` (on the list) is queued; the queue survives a reload (brief acceptance) | G3 c, brief 5 |
 | E2 | `agenda` | The RotN agenda in a goal file per bot (the early-game steps, then shelter by night), built on `self_prompter.js` and `!goal`. It calls the LLM only at decision points, not on a timer, and does not die silently after 3 replies without a command. `pause_when_empty` (default false). | the agenda resumes after a restart; no LLM call between decision points | G3 c, brief 6 |
 | E3 | `priority-stack` | Reflexes > control commands (stop, pause, come, resume) > tasks > agenda. Interrupts happen only at safe checkpoints (between skill steps), and the agenda resumes after a task is reported done or failed. | a task preempts the agenda at the next checkpoint and the agenda resumes; `stop` beats a task | G3 c, brief 4 |
 
@@ -88,7 +91,7 @@ F1 can move earlier if harness-ops needs the profile for scenario dry runs.
 ### Scenario evidence
 
 harness-ops writes the G3 harness scenarios, and batches run only on the lead's written GO. My part:
-- for each stage, the commands and observable log lines a scenario can check (listed in each PR);
+- for each stage, the commands and observable log lines a scenario can check (listed in each PR). None of them depends on Minecraft command feedback (lead decision b);
 - the open harness questions from `rotn-progression.md` "Open items", which an early probe batch could answer before C2/C3 harden:
   - Does punching a log drop anything?
   - Does Crafting Tools consume the crude axe?
@@ -106,7 +109,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 2. **net-forge (paused since 2026-11-02; route through the lead):** C1 and C2 need serverbound slot encoding with REID (VarInt slot ids in `window_click`) and `block_place`/`use_item` working on 1.12 (the `use_item` extra fields in the mineflayer patch). Please confirm that they work, or say what is missing. Also: can the `place_block.js` 500 ms `blockUpdate` wait be made configurable (seam-map C)? A lagging RotN server makes placements report failure. **I will tell the lead 1-2 PRs before C1** (that is, when B2 opens), so the lead can respawn net-forge or verify the current encoding in a probe first.
 3. **rotn-data:** for C1, does `recipesFor` give ingredients with oredict members and meta expanded, so that I can match by output and ingredients? For C2, which blocks are the surface rock piles (`pyrotech:rock_pile`?) and what do they drop? The 20 recipes with `matchesSample: false`: I will check whether any is in the early-game set and report back.
 4. **harness-ops:** G3 scenarios for (a), (b) and (c), plus "the queue survives a restart". I will post the command and log contract for each as my PRs land. A first exploratory probe batch for the open items above would de-risk C2/C3; that needs the lead's GO.
+5. **Lead (`src/models/`, lead-owned; found during A1):** the model layer also prints whole error objects, and an OpenRouter/HTTP error can carry request headers or bodies. The most relevant are `src/models/openrouter.js:49` (`console.error('Error while awaiting response:', err)`) and `src/models/prompter.js:124`, `:131` and `:238`; the other providers print `console.log(err)` too. A1 adds `safeError`/`safeStack` in `src/agent/safe_error.js`, which these files can import. Please change them, or let me, before the first CX23 run.
 
 ## Open PRs
 
-- #100 `coord/STATUS-skills-rotn.md`, the G3 plan (branch `agent/skills-rotn/g3-start`).
+- #103 A1 log hygiene (branch `agent/skills-rotn/log-hygiene`). Serves the lead's "Before the first CX23 run" line.

@@ -1,10 +1,10 @@
 {
-  "total": 255,
+  "total": 254,
   "files": {
     "bots/execTemplate.js": 3,
     "bots/lintTemplate.js": 1,
     "main.js": 19,
-    "src/agent/action_manager.js": 4,
+    "src/agent/action_manager.js": 3,
     "src/agent/agent.js": 11,
     "src/agent/coder.js": 2,
     "src/agent/commands/actions.js": 11,

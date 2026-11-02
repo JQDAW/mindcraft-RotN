@@ -1,3 +1,5 @@
+import { safeStack } from './safe_error.js';
+
 export class ActionManager {
     constructor(agent) {
         this.agent = agent;
@@ -129,16 +131,15 @@ export class ActionManager {
             this.currentActionFn = null;
             clearTimeout(TIMEOUT);
             this.cancelResume();
-            console.error("Code execution triggered catch:", err);
-            // Log the full stack trace
-            console.error(err.stack);
+            // A safe summary and the stack frames, never the whole error object.
+            console.error("Code execution triggered catch:", safeStack(err));
             await this.stop();
-            err = err.toString();
 
+            // The agent (and the LLM) gets the same capped, redacted summary and
+            // a few frames, never the raw error text or stack.
             let message = this.getBotOutputSummary() +
                 '!!Code threw exception!!\n' +
-                'Error: ' + err + '\n' +
-                'Stack trace:\n' + err.stack+'\n';
+                'Error: ' + safeStack(err, { maxFrames: 4 }) + '\n';
 
             let interrupted = this.agent.bot.interrupt_code;
             this.agent.clearBotLogs();
