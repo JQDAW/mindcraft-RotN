@@ -33,11 +33,13 @@
  "scanned": {
   "blocks": 7,
   "networkIds": 40,
-  "validStates": 60
+  "validStates": 60,
+  "mapIds": 40
  },
  "anomalies": {
   "encodingMismatches": 0,
   "foreignStates": 0,
+  "unscannedIds": 0,
   "first": null
  }
 }

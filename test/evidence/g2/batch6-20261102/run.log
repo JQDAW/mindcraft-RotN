@@ -1,0 +1,46 @@
+BATCH START 13:53:11
+[test-server 13:53:19] sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15.2, 14.7 min, newest 41455722254 7.7 min ago
+[test-server 13:53:20] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 13:53:20] creating mcr-test-20261102-135312: delete-after 2026-11-02T15:53:20Z (TTL 2h)
+Waiting for create_server (server: 174169412, image: 161547269) ...
+Waiting for start_server (server: 174169412) ...
+Waiting for create_server (server: 174169412, image: 161547269) ... done
+Waiting for start_server (server: 174169412) ... done
+Server 174169412 created
+[test-server 13:53:32] server mcr-test-20261102-135312 is at <ip>
+[test-server 13:53:32] waiting for SSH and the build (up to 120 min)
+[test-server 13:53:42] phase: unreachable
+[test-server 13:53:58] phase: booting:running
+[test-server 13:54:14] phase: pack
+[test-server 13:54:30] phase: unpack
+[test-server 13:54:46] phase: starting
+[test-server 13:56:05] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 13:56:06] READY: mcr-test-20261102-135312 at <ip>:25565 (delete-after 2026-11-02T15:53:20Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261102-135312
+[test-server 13:56:07] running: bash -c 
+  C() { bash "$TEST_SERVER_CTL" console --wait 2 -- "$@"; };
+  C gamerule doDaylightCycle false;
+  D="node packages/forge-bridge/tools/g1-driver.mjs";
+  C time set day; timeout 15m node test/runner/run.mjs --scenario g2-blocks-named    --out captures/raw/g2-blocks -- $D; b=$?;
+  C time set day; timeout 15m node test/runner/run.mjs --scenario g2-mobs-named      --out captures/raw/g2-mobs   -- $D; m=$?;
+  C time set day; timeout 15m node test/runner/run.mjs --scenario g2-items-roundtrip --out captures/raw/g2-items  -- $D; i=$?;
+  bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/g2/server;
+  echo "blocks=$b mobs=$m items=$i"; [ "$b$m$i" = 000 ]
+[13:56:07] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Game rule doDaylightCycle has been updated to false
+[13:56:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Set the time to 1000
+[scenario 13:56:12] g2-blocks-named (G2) run 20261102t135612-5010d2; git 2de68ec56cfdf93108bf5c11c618af8aba9d402a; driver: node packages/forge-bridge/tools/g1-driver.mjs; out: captures/raw/g2-blocks
+[scenario 13:56:30] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 13:57:59] PASS blocks_named: 50 non-air block types (need 10..50)
+[scenario 14:03:46] PASS blocks_confirmed: 150/150 runner-picked samples (3 per type) re-asked and confirmed by testforblock
+[14:11:13] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Set the time to 1000
+[scenario 14:11:15] g2-mobs-named (G2) run 20261102t141115-dd1905; git 2de68ec56cfdf93108bf5c11c618af8aba9d402a; driver: node packages/forge-bridge/tools/g1-driver.mjs; out: captures/raw/g2-mobs
+[scenario 14:11:34] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+Terminated                 "${run_cmd[@]}"
+[test-server 14:12:02] command exited with 143
+[test-server 14:12:02] EXIT trap: tearing down mcr-test-20261102-135312
+[test-server 14:12:02] deleting batch mcr-test-20261102-135312 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261102-135312)
+Waiting for delete_server (server: 174169412) ...
+Waiting for delete_server (server: 174169412) ... done
+[test-server 14:12:17] batch mcr-test-20261102-135312: ran 18 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 14:12:17] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261102-135312
+BATCH EXIT 143 14:12:17
