@@ -102,8 +102,10 @@ export async function walk(bot, n, timeoutMs, stepMs = 250) {
 //   "scenario-blocks TOKEN R N K"        -> the N most common non-air block types in the cube of radius R
 //                                           around the bot: "name meta count x,y,z x,y,z ..." with up to K
 //                                           candidate positions per type, drawn uniformly from its blocks
-//                                           (the first entry is "#unloaded U T": U of the T positions had no
-//                                           loaded chunk after waiting for the cube; they are never named)
+//                                           (the first entry is "#unloaded U T A": U of the T positions had
+//                                           no loaded chunk after waiting for the cube, they are never named;
+//                                           A loaded positions are air. The counts of all types + A + U = T,
+//                                           so a census of fewer than N types is checkably the whole cube)
 //   "scenario-blockat TOKEN x,y,z ..."    -> "x y z name meta" for each position ("x y z #unloaded 0" if no chunk)
 //   "scenario-entities TOKEN R"           -> "name x y z" for each non-player entity within R
 //   "scenario-items TOKEN"                -> "slot oldName oldMeta newName backName backMeta" per slot
@@ -232,6 +234,7 @@ export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = e
                 // Positions without a loaded chunk are counted apart and reported as "#unloaded U T".
                 const hist = new Map();
                 let unloaded = 0;
+                let air = 0;
                 let total = 0;
                 for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) for (let dz = -r; dz <= r; dz++) {
                     const p = c.offset(dx, dy, dz);
@@ -239,7 +242,7 @@ export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = e
                     const blk = bot.blockAt(p);
                     if (!blk) { unloaded++; continue; }
                     const nm = names.blockName(blk);
-                    if (nm?.name === 'minecraft:air') continue;
+                    if (nm?.name === 'minecraft:air') { air++; continue; }
                     const key = `${show(nm?.name)} ${nm?.meta ?? 0}`;
                     const h = hist.get(key) ?? { count: 0, picks: [] };
                     h.count++;
@@ -248,8 +251,8 @@ export function attachG2(bot, { names = stockNames, pageDelayMs = 1200, emit = e
                     hist.set(key, h);
                 }
                 const top = [...hist.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, n);
-                emit('g2_blocks', { types: hist.size, reported: top.length, unloaded, total });
-                await sayPages(pages('blocks', token, [`${UNLOADED} ${unloaded} ${total}`,
+                emit('g2_blocks', { types: hist.size, reported: top.length, unloaded, air, total });
+                await sayPages(pages('blocks', token, [`${UNLOADED} ${unloaded} ${total} ${air}`,
                     ...top.map(([key, h]) => `${key} ${h.count} ${h.picks.map((p) => `${p.x},${p.y},${p.z}`).join(' ')}`)]));
             });
         } else if ((m = /scenario-blockat ([0-9a-f]{6,32}) ((?:-?\d+,-?\d+,-?\d+ ?){1,16})/.exec(msg))) {
