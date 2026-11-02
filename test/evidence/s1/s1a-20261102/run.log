@@ -1,0 +1,63 @@
+BATCH START 19:12:08
+[test-server 19:12:16] sweeper OK (via helper): helper scheduled run 41503775461 on JQDAW/rotn-sweeper-cron succeeded 25 min ago (limit 40 min), then sweeper run 41503789561 (workflow_dispatch) on develop succeeded
+[test-server 19:12:17] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 19:12:17] creating mcr-test-20261102-191209: delete-after 2026-11-02T21:12:17Z (TTL 2h)
+Waiting for create_server (server: 174205725, image: 161547269) ...
+Waiting for start_server (server: 174205725) ...
+Waiting for create_server (server: 174205725, image: 161547269) ... done
+Waiting for start_server (server: 174205725) ... done
+Server 174205725 created
+[test-server 19:12:25] server mcr-test-20261102-191209 is at <ip>
+[test-server 19:12:25] waiting for SSH and the build (up to 120 min)
+[test-server 19:12:35] phase: unreachable
+[test-server 19:12:52] phase: booting:running
+[test-server 19:13:08] phase: pack
+[test-server 19:13:23] phase: starting
+[test-server 19:15:15] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 19:15:16] READY: mcr-test-20261102-191209 at <ip>:25565 (delete-after 2026-11-02T21:12:17Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261102-191209
+[test-server 19:15:16] running: bash -c 
+  D="node packages/forge-bridge/tools/g1-driver.mjs";
+  timeout 15m node test/runner/run.mjs --scenario s1-site-survey --out captures/raw/s1-survey   -- $D; a=$?;
+  timeout 10m node test/runner/run.mjs --scenario s1-arbiters    --out captures/raw/s1-arbiters -- $D; b=$?;
+  timeout 55m node test/runner/run.mjs --scenario s1-day-cycle   --out captures/raw/s1-day      -- $D; c=$?;
+  bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/s1/server;
+  echo "survey=$a arbiters=$b day=$c"; [ "$a$b$c" = 444 ]
+[scenario 19:15:17] s1-site-survey (S1) run 20261102t191517-14b939; git 16db8ac8007aa77f9ab67c81600ea780c17495c8; driver: node packages/forge-bridge/tools/g1-driver.mjs; out: captures/raw/s1-survey
+[scenario 19:15:17] not a gate run: S1 is a survey/smoke, never a gate pass
+[scenario 19:15:36] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 19:18:20] PASS census_complete: 323 non-air types (limit 400), unloaded 0 of 912673
+[scenario 19:18:20] FAIL no_containers: CONTAINERS FOUND within 48 blocks: minecraft:mob_spawner 0 2 (vanilla inventory); minecraft:chest 4 2 (vanilla inventory); minecraft:chest 2 2 (vanilla inventory); minecraft:chest 5 1 (vanilla inventory)
+[scenario 19:18:47] PASS findings_confirmed: 15/15 sampled positions confirmed (rocks 203, trees 8521, containers 7 blocks)
+[scenario 19:18:47] SMOKE run, not a S1 pass: S1 is a survey/smoke, never a gate pass
+[scenario 19:18:50] s1-site-survey: FAIL; 3 passed, 1 failed (captures/raw/s1-survey/result.json)
+[scenario 19:18:50] s1-arbiters (S1) run 20261102t191850-e97911; git 16db8ac8007aa77f9ab67c81600ea780c17495c8; driver: node packages/forge-bridge/tools/g1-driver.mjs; out: captures/raw/s1-arbiters
+[scenario 19:18:50] not a gate run: S1 is a survey/smoke, never a gate pass
+[scenario 19:19:04] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 19:19:59] PASS stat_criteria: stat.craftItem.minecraft.crafting_table: added; stat.craftItem.minecraft.stone_pickaxe: added; stat.craftItem.minecraft.stone_axe: added; stat.craftItem.minecraft.cobblestone: added; stat.craftItem.pyrotech.crude_axe: added; stat.craftItem.contenttweaker.crafting_tools: added; stat.deaths: added; stat.playOneMinute: added
+[scenario 19:20:08] PASS clear_test: stone_pickaxe 1 then 1 (want 1 then 1), diamond 0 (want 0), pyrotech:crude_axe 0 (want 0)
+[scenario 19:20:09] PASS time_query: daytime 3001
+[scenario 19:20:12] PASS whisper_seen: whisper handler saw sender "Server"
+[scenario 19:20:12] SMOKE run, not a S1 pass: S1 is a survey/smoke, never a gate pass
+[scenario 19:20:15] s1-arbiters: SMOKE-PASS (not a gate pass); 5 passed, 0 failed (captures/raw/s1-arbiters/result.json)
+[scenario 19:20:15] s1-day-cycle (S1) run 20261102t192015-ceee04; git 16db8ac8007aa77f9ab67c81600ea780c17495c8; driver: node packages/forge-bridge/tools/g1-driver.mjs; out: captures/raw/s1-day
+[scenario 19:20:15] not a gate run: S1 is a survey/smoke, never a gate pass
+[scenario 19:20:36] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 19:56:38] scenario error: Error: console failed (3221225794):  (after 3 attempts)
+    at call (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/adapters.mjs:34:15)
+    at Object.console (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/adapters.mjs:37:38)
+    at Object.run (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/scenarios/s1/s1-day-cycle.mjs:57:46)
+    at async runScenario (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/runner.mjs:106:9)
+    at async main (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/run.mjs:168:26)
+[scenario 19:56:38] SMOKE run, not a S1 pass: S1 is a survey/smoke, never a gate pass
+[scenario 19:56:44] could not save the server log: log failed (3221225794):  (after 3 attempts)
+[scenario 19:56:44] s1-day-cycle: FAIL; 1 passed, 3 failed (captures/raw/s1-day/result.json)
+captures/raw/s1/server
+survey=1 arbiters=4 day=1
+[test-server 19:56:54] command exited with 1
+[test-server 19:56:54] EXIT trap: tearing down mcr-test-20261102-191209
+[test-server 19:56:55] deleting batch mcr-test-20261102-191209 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261102-191209)
+Waiting for delete_server (server: 174205725) ...
+Waiting for delete_server (server: 174205725) ... done
+[test-server 19:57:08] batch mcr-test-20261102-191209: ran 44 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 19:57:08] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261102-191209
