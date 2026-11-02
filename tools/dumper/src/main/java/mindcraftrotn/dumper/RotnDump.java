@@ -58,7 +58,7 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
         acceptableRemoteVersions = "*", serverSideOnly = true)
 public class RotnDump {
     public static final String MODID = "rotndump";
-    public static final String VERSION = "0.2.0"; // keep equal to build.gradle's version (build.sh checks)
+    public static final String VERSION = "0.2.1"; // keep equal to build.gradle's version (build.sh checks)
     public static final String FORMAT = "rotn-dump/1";
     public static final String ENABLE_MARKER = "rotn-dump.enable";
     static final Logger LOG = LogManager.getLogger(MODID);

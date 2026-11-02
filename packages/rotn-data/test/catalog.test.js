@@ -137,7 +137,8 @@ test('stateMetaRemap, clientMeta and networkRemap on the mini dump stub', () => 
     assert.equal(r.encoding, 'networkId = blockId << 4 | meta');
     assert.equal(r.records.length, 3);
     assert.deepEqual(r.byBlock, { 'minecraft:double_plant': { 8: 10, 9: 10, 11: 10 } });
-    assert.deepEqual(r.anomalies, { encodingMismatches: 0, foreignStates: 0, first: null });
+    // The stub has dumper 0.2.1's map-size fields.
+    assert.deepEqual(r.anomalies, { encodingMismatches: 0, foreignStates: 0, unscannedIds: 0, first: null });
     // What the server sends for the upper half (175 << 4 | 11) is meta 10 on a Forge client.
     assert.equal(mini.clientMeta('minecraft:double_plant', 11), 10);
     assert.equal(mini.clientMeta('double_plant', 8), 10); // 1.12 short name
