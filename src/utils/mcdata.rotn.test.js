@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { RegistrySnapshot, extendRegistry } from '../../packages/forge-bridge/index.js';
 import * as mc from './mcdata.js';
+import * as rdData from '../../packages/rotn-data/index.js';
 
 const require = createRequire(import.meta.url);
 const names = require('../../packages/rotn-data/3.3.4/registry-names.json').registries;
@@ -118,9 +119,14 @@ test('mustCollectManually: 1.12, 1.21 and modded blocks with no collision box, p
         'air', 'water', 'lava', 'nosuchmod:block']) {
         assert.equal(mc.mustCollectManually(n), false, n);
     }
-    // Upstream's 1.21 names still count (carpet has a thin collision box, so only the name list catches it).
+    // Upstream's 1.21 names still count. Carpet has a thin collision box in the dump, so only the
+    // name list catches it (#127 review: checked here rather than claimed).
     assert.equal(mc.mustCollectManually('lily_of_the_valley'), true);
+    assert.deepEqual(rdData.getBlock('minecraft:carpet').state.collision, [[0, 0, 0, 1, 0.0625, 1]]);
     assert.equal(mc.mustCollectManually('carpet'), true);
+    // #127 review: gases, portals and fire have no box but are not things to collect; rails are.
+    for (const n of ['adpother:carbon', 'adpother:mist', 'minecraft:portal', 'minecraft:fire']) assert.equal(mc.mustCollectManually(n), false, n);
+    assert.equal(mc.mustCollectManually('rail'), true);
     assert.equal(mc.mustCollectManually(undefined), false);
 });
 
