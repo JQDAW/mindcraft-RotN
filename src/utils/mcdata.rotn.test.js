@@ -91,6 +91,23 @@ test('the agent naming API: mcdata.toNew/toOld round-trip every vanilla table en
     assert.equal(mc.toNew.length, 1); // (name, meta = 0)
 });
 
+// skills-rotn Request 9: the 1.12 baby flag is metadata index 12 (1.21 uses 16).
+test('isHuntable and isBaby read the 1.12 baby flag (metadata index 12), not the 1.21 index 16', () => {
+    assert.equal(mc.BABY_METADATA_INDEX, 12);
+    // mineflayer stores entity metadata by key; 1.12's index 12 is a Boolean.
+    assert.equal(mc.isHuntable({ name: 'cow', metadata: { 12: true } }), false, 'a baby cow is not hunted');
+    assert.equal(mc.isBaby({ name: 'cow', metadata: { 12: true } }), true);
+    assert.equal(mc.isHuntable({ name: 'cow', metadata: { 12: false } }), true, 'an adult cow is huntable');
+    // Index 16 means something else on 1.12 and must not decide it either way.
+    assert.equal(mc.isHuntable({ name: 'pig', metadata: { 12: false, 16: 1 } }), true);
+    assert.equal(mc.isHuntable({ name: 'pig', metadata: { 12: true, 16: 0 } }), false);
+    // No metadata yet (just spawned): counted as an adult, and no exception.
+    assert.equal(mc.isHuntable({ name: 'sheep' }), true);
+    assert.equal(mc.isBaby({ name: 'sheep', metadata: [] }), false);
+    assert.equal(mc.isHuntable({ name: 'zombie', metadata: { 12: false } }), false, 'not an animal');
+    assert.equal(mc.isHuntable(null), false);
+});
+
 // ---- RotN recipes in the registry (rotn-data brief item 4; Phase 3). These run last: installing
 // changes the shared registry's recipes for the rest of this process.
 
