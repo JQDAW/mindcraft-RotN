@@ -3,6 +3,7 @@ import * as world from './library/world.js';
 import * as mc from '../utils/mcdata.js';
 import settings from './settings.js'
 import convoManager from './conversation.js';
+import { createErrorReporter } from './update_loop.js';
 
 async function say(agent, message) {
     agent.bot.modes.behavior_log += message + '\n';
@@ -338,6 +339,7 @@ const DISABLED_MODES = {
 };
 
 let _agent = null;
+const reportModeError = createErrorReporter('modes');
 const modes_map = {};
 for (let mode of modes_list) {
     modes_map[mode.name] = mode;
@@ -428,7 +430,13 @@ class ModeController {
         for (let mode of modes_list) {
             let interruptible = mode.interrupts.some(i => i === 'all') || mode.interrupts.some(i => i === _agent.actions.currentActionLabel);
             if (mode.on && !mode.paused && !mode.active && (_agent.isIdle() || interruptible)) {
-                await mode.update(_agent);
+                // One throwing mode must not stop the others or the update loop (skills-rotn A3).
+                try {
+                    await mode.update(_agent);
+                } catch (err) {
+                    mode.active = false;
+                    reportModeError(mode.name, err);
+                }
             }
             if (mode.active) break;
         }
