@@ -28,7 +28,8 @@
 // recipes left with an ingredient that has no usable stack, and variants that take the result itself
 // (same id, same or any metadata): an ore dictionary conversion such as "4 cobblestone (any
 // cobblestone) -> 4 cobblestone" would otherwise list the result as its own first ingredient. Wildcard metadata (32767) becomes
-// metadata null, which prismarine-recipe and mineflayer treat as "any".
+// metadata null, which prismarine-recipe and mineflayer treat as "any". Each result carries
+// `meta` next to `metadata`, so Recipe.find(id, meta) (bot.recipesFor) returns only that metadata's recipes.
 import { botName, WILDCARD_META } from './names.js';
 
 export const DEFAULT_MAX_VARIANTS = 256;
@@ -122,7 +123,11 @@ export function convertRecipe(registry, r, { maxVariants = DEFAULT_MAX_VARIANTS 
     const sizes = keys.map((k) => groups.get(k).length);
     const tuples = choiceTuples(sizes, maxVariants);
     const total = sizes.reduce((a, n) => a * n, 1);
-    const result = { id: resultId, metadata: r.result.meta ?? 0, count: r.result.count ?? 1 };
+    // `meta` as well as `metadata` (#102 review): prismarine-recipe's Recipe.find filters by the
+    // requested metadata only when the result has a `meta` key, so without it bot.recipesFor(planks,
+    // 1) would also return oak planks recipes for spruce.
+    const meta = r.result.meta ?? 0;
+    const result = { id: resultId, metadata: meta, meta, count: r.result.count ?? 1 };
     const takesResult = (c) => c.id === result.id && (c.metadata === null || c.metadata === result.metadata);
     const variants = tuples.filter((t) => !keys.some((k, i) => takesResult(groups.get(k)[t[i]]))).map((t) => {
         const pick = new Map(keys.map((k, i) => [k, groups.get(k)[t[i]]]));

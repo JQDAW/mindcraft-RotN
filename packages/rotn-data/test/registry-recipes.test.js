@@ -32,7 +32,7 @@ test('a shaped recipe: pyrotech and vanilla stacks first, equal ingredients take
     assert.equal(variants.length, 6);
     assert.deepEqual(variants[0], {
         inShape: [[{ id: ID(reg, 'pyrotech:rock'), metadata: 0 }, { id: ID(reg, 'stick'), metadata: 0 }], [{ id: ID(reg, 'stick'), metadata: 0 }, null]],
-        result: { id: ID(reg, 'pyrotech:crude_axe'), metadata: 0, count: 1 },
+        result: { id: ID(reg, 'pyrotech:crude_axe'), metadata: 0, meta: 0, count: 1 },
     });
     for (const v of variants) assert.deepEqual(v.inShape[0][1], v.inShape[1][0], 'both stick slots take one stack');
     assert.ok(variants.some((v) => v.inShape[0][0].id === ID(reg, 'flint')));
@@ -48,7 +48,7 @@ test('shapeless, wildcard metadata, NBT stacks and unknown items', () => {
         ],
     };
     const { variants } = convertRecipe(reg, r);
-    assert.deepEqual(variants, [{ ingredients: [{ id: ID(reg, 'pyrotech:rock'), metadata: null }, { id: ID(reg, 'pyrotech:rock'), metadata: null }], result: { id: ID(reg, 'cobblestone'), metadata: 0, count: 1 } }]);
+    assert.deepEqual(variants, [{ ingredients: [{ id: ID(reg, 'pyrotech:rock'), metadata: null }, { id: ID(reg, 'pyrotech:rock'), metadata: null }], result: { id: ID(reg, 'cobblestone'), metadata: 0, meta: 0, count: 1 } }]);
 });
 
 test('skipped: dynamic, sample mismatch, unknown result, an ingredient with no usable stack', () => {

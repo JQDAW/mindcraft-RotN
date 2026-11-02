@@ -628,6 +628,7 @@ export function initializeLoopingItems() {
  */
 export function getDetailedCraftingPlan(targetItem, count = 1, current_inventory = {}) {
     initializeLoopingItems();
+    cycleCache.clear(); // the registry's recipes may have changed since the last plan
     if (!targetItem || count <= 0 || !getItemId(targetItem)) {
         return "Invalid input. Please provide a valid item name and positive count.";
     }
@@ -652,21 +653,22 @@ function isBaseItem(item) {
 // upstream's loopingItems lists only 1.21 names. An item whose first recipe leads back to it
 // through first recipes is gathered, not crafted (rotn-data brief item 4: the plan on RotN recipes).
 const cycleCache = new Map();
-function inFirstRecipeCycle(item, maxDepth = 8) {
+// No depth limit (#102 review): `seen` ends the walk, which is iterative so a long chain cannot
+// overflow the stack.
+function inFirstRecipeCycle(item) {
     if (cycleCache.has(item)) return cycleCache.get(item);
     const first = (name) => Object.keys(getItemCraftingRecipes(name)?.[0]?.[0] ?? {});
     let found = false;
     const seen = new Set();
-    const walk = (name, depth) => {
-        if (found || depth > maxDepth) return;
-        for (const next of first(name)) {
-            if (next === item) { found = true; return; }
+    const todo = [item];
+    while (todo.length && !found) {
+        for (const next of first(todo.pop())) {
+            if (next === item) { found = true; break; }
             if (seen.has(next)) continue;
             seen.add(next);
-            walk(next, depth + 1);
+            todo.push(next);
         }
-    };
-    walk(item, 0);
+    }
     cycleCache.set(item, found);
     return found;
 }

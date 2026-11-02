@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T17:21Z (from `date -u`)
+Updated: 2026-11-02T18:13Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -183,7 +183,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 **Phase 3 (G3), from 2026-11-02 ~17:10 UTC** (lead: G2 passed on batch 8, #97/#98). Team: skills-rotn, rotn-data, harness-ops; net-forge paused. My part: data and helpers for G3 ("rocks to stone tools on a fresh spawn; survives the first night"). Plan, one small test-backed PR each:
 
-1. **RotN recipes in `bot.registry`** (this PR, `agent/rotn-data/g3-progression`). Finding: `bot.registry.recipes` is minecraft-data's vanilla 1.12.2 table, so mineflayer's `bot.recipesFor`/`bot.craft` and `getItemCraftingRecipes`/`getDetailedCraftingPlan` planned vanilla crafts that RotN removed (a stone pickaxe from cobblestone, wooden tools). `rotn-data.installRecipes(registry)` / `mcdata.installRotnRecipes()` refill that object in place from the dump (prismarine-recipe keeps a reference to it), keyed by the server's item ids. Ore dictionary slots become variants (likeliest first, capped at 256 per recipe, built lazily per result). `getDetailedCraftingPlan` gets a general cycle guard (rocks <-> cobblestone), since upstream's `loopingItems` lists only 1.21 names. Result: `stone_pickaxe` plans as 3 rocks + log -> planks -> sticks; the crafting table as crude axe -> Crafting Tools -> table. **Needs a call site** (Request 7).
+1. **RotN recipes in `bot.registry`** (this PR, `agent/rotn-data/g3-progression`). Finding: `bot.registry.recipes` is minecraft-data's vanilla 1.12.2 table, so mineflayer's `bot.recipesFor`/`bot.craft` and `getItemCraftingRecipes`/`getDetailedCraftingPlan` planned vanilla crafts that RotN removed (a stone pickaxe from cobblestone, wooden tools). `rotn-data.installRecipes(registry)` / `mcdata.installRotnRecipes()` refill that object in place from the dump (prismarine-recipe keeps a reference to it), keyed by the server's item ids. Ore dictionary slots become variants (likeliest first, capped at 256 per recipe, built lazily per result). `getDetailedCraftingPlan` gets a general cycle guard (rocks <-> cobblestone), since upstream's `loopingItems` lists only 1.21 names. Result: `stone_pickaxe` plans as 3 rocks + log -> planks -> sticks; the crafting table as crude axe -> Crafting Tools -> table. **Needs a call site** (Request 7). Review (#102): APPROVE WITH NITS; fixed: results carry `meta` so `Recipe.find(id, meta)` filters (spruce vs oak planks, tested), and the cycle guard has no depth limit (iterative, `seen` ends it; a 12-step cycle is tested).
 2. **"How do I get X"** (`howToGet(item)`): dump crafting + furnace smelting + a cited table of non-recipe sources (rock piles, stone mined with a pickaxe below Sturdy gives 4 rocks, sticks from leaves, logs need an axe, the first plank from debarking, raw iron from iron ore). Each row is sourced from `rotn-progression.md` or the pinned zip, and marked verified or not.
 3. **First-night threats**: a threat level per mob (none, hostile = fight or avoid, dangerous = avoid) with a reaction hint (creepers explode: back off), and night spawns per biome from `spawns.json`. Plus `isHostile`/`isHuntable` for 1.12 (Animania animals, the 1.12 baby flag).
 4. **Pyrotech machine recipes** (kiln, pit kiln for charcoal, drying rack for tinder, chopping block, campfire): not in the dump. Needs a new dumper part and a paid batch: **only with the lead's written GO**.
@@ -191,6 +191,8 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 Findings for skills-rotn (via the lead): see Request 8.
 
 ## Follow-ups (later PRs)
+
+- **#102 review follow-ups:** emit `outShape` from the dump's `remaining` (buckets, Crafting Tools come back); in the crafting table test assert that no planks-only variant remains; test sticks directly.
 
 - ~~Importer: sort order-unstable lists~~: done in this PR (`canonicalize`).
 - **Dumper:**
@@ -218,7 +220,7 @@ Findings for skills-rotn (via the lead): see Request 8.
 4. ~~net-forge: initBot uses bot.registry~~: done (#46).
 5. ~~Lead: ADR 0004 addendum (FG3)~~: accepted; the lead writes it.
 6. ~~Lead: lint baseline for #44~~: approved and done (255).
-7. **Lead: a call site for `mc.installRotnRecipes()`** (PR 1 above). It must run once per login, after forge-bridge's `extendRegistry`, i.e. right after `src/utils/mcdata.js:196` (`mcdata = bot.registry`) in `initBot`. That is net-forge's part of `mcdata.js`, and net-forge is paused. Options: (a) you allow me a one-line call there; (b) skills-rotn calls it on spawn. Until one is chosen, nothing in the agent uses RotN recipes.
+7. **Lead: a call site for `mc.installRotnRecipes()`** (PR 1 above). It must run once per login, after forge-bridge's `extendRegistry`, i.e. right after `src/utils/mcdata.js:196` (`mcdata = bot.registry`) in `initBot`. That is net-forge's part of `mcdata.js`, and net-forge is paused. Options: (a) you allow me a one-line call there; (b) skills-rotn calls it on spawn. Until one is chosen, nothing in the agent uses RotN recipes. Lead (#102 review message): it needs net-forge, who is paused; tell the lead when skills-rotn needs it, and the lead may grant me a one-line `initBot` exception.
 8. **skills-rotn (route via the lead), from PR 1:**
    - `skills.craftRecipe` calls `bot.recipesFor(mc.getItemId(name), null, ...)`. A null metadata matches every variant of the item, so `spruce_planks` can come out as oak. Pass `mc.resolveName(name).meta`.
    - `getDetailedCraftingPlan` does not know whether a crafting table is available. In RotN the first plank comes from debarking a placed log with the crude axe (not a recipe), and log -> 3 planks needs a table. PR 2's `howToGet` gives the non-recipe steps.

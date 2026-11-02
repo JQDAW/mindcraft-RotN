@@ -122,6 +122,14 @@ test('installRotnRecipes: mineflayer\'s Recipe, bound before the install, sees R
     assert.deepEqual(names(table[0]), [['planks', null, 1], ['contenttweaker:crafting_tools', 0, 1]]);
     assert.equal(table[0].requiresTable, false);
     assert.deepEqual(Recipe.find(id('wooden_pickaxe')), [], 'RotN has no wooden tools');
+
+    // #102 review: results carry `meta`, so Recipe.find (bot.recipesFor) filters by metadata.
+    const spruce = Recipe.find(id('planks'), 1);
+    assert.ok(spruce.length > 0);
+    assert.ok(spruce.every((r) => r.result.metadata === 1), 'only spruce planks recipes');
+    assert.ok(spruce.some((r) => names(r).some(([n, m]) => n === 'log' && m === 1)), 'from a spruce log');
+    assert.ok(Recipe.find(id('planks'), 0).every((r) => r.result.metadata === 0), 'only oak planks recipes');
+    assert.ok(Recipe.find(id('planks')).some((r) => r.result.metadata === 1), 'no metadata: every kind');
 });
 
 test('getItemCraftingRecipes and getDetailedCraftingPlan follow RotN recipes', () => {
@@ -135,4 +143,21 @@ test('getItemCraftingRecipes and getDetailedCraftingPlan follow RotN recipes', (
     assert.match(table, /Craft 1 pyrotech:rock \+ 2 stick -> 1 pyrotech:crude_axe\nCraft 1 pyrotech:crude_axe \+ 1 pyrotech:rock \+ 1 stick -> 1 contenttweaker:crafting_tools\nCraft 1 planks \+ 1 contenttweaker:crafting_tools -> 1 crafting_table/);
     assert.equal(mc.getDetailedCraftingPlan('cobblestone', 1, {}), 'cobblestone is a base item, you need to find 1 more in the world');
     assert.match(mc.getDetailedCraftingPlan('furnace', 1, { 'pyrotech:rock': 2 }), /- 6 pyrotech:rock/);
+});
+
+test('the plan cycle guard has no depth limit: a 12-step cycle is found (#102 review)', () => {
+    const N = 12;
+    const items = Array.from({ length: N }, (_, i) => ({ id: 9000 + i, name: `cyc${i}` }));
+    const fake = {
+        items: Object.fromEntries(items.map((x) => [x.id, x])),
+        itemsByName: Object.fromEntries(items.map((x) => [x.name, x])),
+        // cyc_i is crafted from cyc_(i+1), and the last one from cyc0
+        recipes: Object.fromEntries(items.map((x, i) => [x.id, [{ ingredients: [{ id: 9000 + ((i + 1) % N), metadata: 0 }], result: { id: x.id, metadata: 0, count: 1 } }]])),
+    };
+    try {
+        mc.__setRegistryForTest(fake);
+        assert.equal(mc.getDetailedCraftingPlan('cyc0', 1, {}), 'cyc0 is a base item, you need to find 1 more in the world');
+    } finally {
+        mc.__setRegistryForTest(registry);
+    }
 });
