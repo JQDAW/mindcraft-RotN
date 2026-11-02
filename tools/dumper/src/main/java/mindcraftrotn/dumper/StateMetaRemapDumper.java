@@ -23,8 +23,8 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
  *
  * {"format", "encoding": "networkId = blockId << 4 | meta",
  *  "remap": [{networkId, block, blockId, idMeta, stateMeta, stateNetworkId, state}],
- *  "scanned": {blocks, networkIds, validStates},
- *  "anomalies": {encodingMismatches, foreignStates, first}}
+ *  "scanned": {blocks, networkIds, validStates, mapIds},
+ *  "anomalies": {encodingMismatches, foreignStates, unscannedIds, first}}
  *
  * For every registered block (sorted by id) and every m in 0..15, networkId = id &lt;&lt; 4 | m is
  * resolved with BLOCK_STATE_IDS.getByValue (what a client does with an id it receives); ids that
@@ -36,6 +36,17 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
  * whose BLOCK_STATE_IDS id is not their own block's id &lt;&lt; 4 | something (the scan above assumes
  * that encoding; REID raises the block id limit and could change it); foreignStates counts network
  * ids that resolve to a state of another block. Read only: no state is changed.
+ *
+ * Map size (0.2.1, #80 review): mapIds counts the ids in BLOCK_STATE_IDS that hold a state (its
+ * iterator skips empty slots). unscannedIds = mapIds - networkIds must be 0: otherwise the map holds
+ * ids the per-block scan never reached. Null when the map cannot be read; the importer treats that
+ * as non-zero. (The map's size(), its distinct states, is not compared: Forge never removes a state
+ * from it, so a replaced block's old states could stay without changing what any id resolves to.)
+ *
+ * Errors (0.2.1, #80 review): each valid state is checked on its own; a state whose network id
+ * cannot be read counts as an encoding mismatch. An entry that throws (Part drops it and counts it in
+ * entryErrors) leaves every counter and the first anomaly as they were before it, so the scanned
+ * counts cover only entries that were written or skipped normally.
  */
 final class StateMetaRemapDumper extends Part<Integer> {
     private int blocks;
@@ -89,6 +100,22 @@ final class StateMetaRemapDumper extends Part<Integer> {
 
     @Override
     protected boolean entry(JsonWriter w, Integer nid) throws IOException {
+        int[] before = {networkIds, validStates, encodingMismatches, foreignStates};
+        String firstBefore = firstAnomaly;
+        try {
+            return scan(w, nid);
+        } catch (Throwable t) {
+            // Part drops this entry; roll the counters back so they only count finished entries.
+            networkIds = before[0];
+            validStates = before[1];
+            encodingMismatches = before[2];
+            foreignStates = before[3];
+            firstAnomaly = firstBefore;
+            throw t;
+        }
+    }
+
+    private boolean scan(JsonWriter w, int nid) throws IOException {
         int blockId = nid >> 4;
         int idMeta = nid & 15;
         Block owner = Block.getBlockById(blockId);
@@ -115,17 +142,32 @@ final class StateMetaRemapDumper extends Part<Integer> {
         return true;
     }
 
-    /** Every valid state of the block must have a network id of this block (id << 4 | 0..15). */
+    /**
+     * Every valid state of the block must have a network id of this block (id << 4 | 0..15). Each
+     * state is guarded on its own: one whose id cannot be read is a mismatch, and the rest are still
+     * checked.
+     */
     private void checkEncoding(Block owner, int blockId) {
         if (owner == null) return;
         for (IBlockState s : owner.getBlockState().getValidStates()) {
             validStates++;
-            int sid = networkIdOf(s);
-            if (sid >> 4 != blockId) {
+            Integer sid = J.get(() -> networkIdOf(s));
+            if (sid == null || sid >> 4 != blockId) {
                 encodingMismatches++;
-                anomaly("state " + s + " of block id " + blockId + " has network id " + sid);
+                String name = J.get(s::toString);
+                anomaly("state " + name + " of block id " + blockId + (sid == null ? ": network id unreadable" : " has network id " + sid));
             }
         }
+    }
+
+    /** Ids in BLOCK_STATE_IDS that hold a state (the iterator skips empty slots); null if unreadable. */
+    @SuppressWarnings("deprecation")
+    private static Integer mapIds() {
+        return J.get(() -> {
+            int n = 0;
+            for (IBlockState s : Block.BLOCK_STATE_IDS) n++;
+            return n;
+        });
     }
 
     @Override
@@ -135,10 +177,13 @@ final class StateMetaRemapDumper extends Part<Integer> {
         J.num(w, "blocks", blocks);
         J.num(w, "networkIds", networkIds);
         J.num(w, "validStates", validStates);
+        Integer ids = mapIds();
+        J.num(w, "mapIds", ids);
         w.endObject();
         w.name("anomalies").beginObject();
         J.num(w, "encodingMismatches", encodingMismatches);
         J.num(w, "foreignStates", foreignStates);
+        J.num(w, "unscannedIds", ids == null ? null : ids - networkIds);
         J.str(w, "first", firstAnomaly);
         w.endObject();
         w.endObject();

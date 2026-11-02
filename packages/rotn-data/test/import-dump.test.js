@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
-import { importDump, canonicalize } from '../tools/import-dump.mjs';
+import { importDump, canonicalize, checkStateMetaRemap } from '../tools/import-dump.mjs';
 import { RotnData, DUMP_FILES } from '../src/catalog.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -226,6 +226,51 @@ test('state-meta-remap: anomalies block the import unless allowErrors', () => {
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
+});
+
+// The map-size check (dumper 0.2.1, #80 review).
+test('state-meta-remap: unscanned map ids block the import unless allowErrors', () => {
+    const { root, src, pack } = fakeFetch({ mutate: (f) => {
+        f['state-meta-remap'].scanned.mapIds = 42;
+        f['state-meta-remap'].anomalies.unscannedIds = 2;
+    } });
+    try {
+        const res = importDump({ src, jarSha256: JAR, outDir: pack });
+        assert.deepEqual(res.written, []);
+        assert.match(res.problems.join('\n'), /state-meta-remap: anomalies: 2 unscanned ids \(map 42 vs 40 scanned\)/);
+        assert.deepEqual(importDump({ src, jarSha256: JAR, outDir: pack, allowErrors: true }).problems, []);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('state-meta-remap: an unreadable map (null) or a missing map-size field counts as non-zero', () => {
+    const cases = [
+        (a) => { a.unscannedIds = null; },
+        (a) => { delete a.unscannedIds; },
+    ];
+    for (const change of cases) {
+        const problems = [];
+        const r = read('state-meta-remap.json');
+        change(r.anomalies);
+        checkStateMetaRemap(r, { 'minecraft:double_plant': 175 }, { problems, dumperVersion: '0.2.1' });
+        assert.equal(problems.length, 1, String(change));
+        assert.match(problems[0], /unscanned/);
+    }
+});
+
+test('state-meta-remap: only a 0.2.0 dump may lack the map-size field (a note)', () => {
+    const r = read('state-meta-remap.json');
+    delete r.anomalies.unscannedIds;
+    let problems = [];
+    const notes = checkStateMetaRemap(r, { 'minecraft:double_plant': 175 }, { problems, dumperVersion: '0.2.0' });
+    assert.deepEqual(problems, []);
+    assert.match(notes.join('\n'), /dumper 0\.2\.0 predates the map-size check/);
+    // A 0.2.0 label does not excuse a non-zero count that is present.
+    r.anomalies.unscannedIds = 1;
+    problems = [];
+    checkStateMetaRemap(r, { 'minecraft:double_plant': 175 }, { problems, dumperVersion: '0.2.0' });
+    assert.match(problems.join('\n'), /1 unscanned ids/);
 });
 
 test('state-meta-remap: inconsistent records and unsynced blocks are refused', () => {
