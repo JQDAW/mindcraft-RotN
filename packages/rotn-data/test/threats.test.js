@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRotnData } from '../src/catalog.js';
 import { isOverworldBiome } from '../src/biomes.js';
+import { NIGHT_THREATS_NOT_REFLECTED } from '../src/threats.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const pack = loadRotnData('3.3.4');
@@ -24,6 +25,10 @@ test('threat-reactions.json: well formed, cited, and every entity exists on the 
         assert.ok(r.summary && r.evidence?.length > 0, `${name}: summary and evidence`);
         if (r.confidence === 'documented') assert.ok(r.evidence.every((e) => e.includes('rotn-progression.md')), `${name}: documented means cited from the research`);
     }
+    for (const r of reactions.classRules) {
+        assert.ok(r.id && r.pattern && REACTIONS.includes(r.reaction), `class rule ${r.id}`);
+        assert.ok(r.summary && r.evidence?.length > 0 && r.note, `class rule ${r.id}: summary, evidence, note`);
+    }
 });
 
 test('threatOf: the documented first-night mobs', () => {
@@ -39,7 +44,7 @@ test('threatOf: the documented first-night mobs', () => {
 
 test('threatOf: defaults from the threat level; dangerous always means avoid', () => {
     const dragon = pack.threatOf('iceandfire:firedragon');
-    assert.deepEqual([dragon.level, dragon.reaction, dragon.source], ['dangerous', 'avoid', 'default']);
+    assert.deepEqual([dragon.level, dragon.reaction, dragon.source], ['dangerous', 'avoid', 'override']);
     assert.ok(dragon.evidence.some((e) => /jar/.test(e)), 'the override\'s bytecode evidence');
     const spectre = pack.threatOf('charm:spectre');
     assert.deepEqual([spectre.level, spectre.reaction, spectre.source, spectre.summary], ['hostile', 'fight', 'default', null]);
@@ -49,6 +54,46 @@ test('threatOf: defaults from the threat level; dangerous always means avoid', (
     const ender = pack.threatOf('minecraft:enderman');
     assert.deepEqual([ender.level, ender.reaction, ender.source], ['hostile', 'ignore-unless-provoked', 'vanilla']);
     assert.equal(pack.threatOf('nosuchmod:mob'), null);
+});
+
+test('#111 review (safety): no creeper variant in the dump is to be fought', () => {
+    const E = pack.dump.entities.entities;
+    const simple = (c) => c.slice(c.lastIndexOf('.') + 1);
+    const creepers = Object.keys(E).filter((n) => /Creeper/.test(simple(E[n].class ?? '')) && pack.entity(n).hostile);
+    assert.ok(creepers.length >= 19, `creeper classes in the dump: ${creepers.length}`);
+    for (const n of creepers) {
+        const t = pack.threatOf(n);
+        assert.equal(t.reaction, 'keep-distance', n);
+        assert.equal(t.explodes, true, n);
+    }
+    const fire = pack.threatOf('specialmobs:firecreeper');
+    assert.deepEqual([fire.source, fire.rule], ['documented', undefined], 'the research names Fire Creepers');
+    const special = pack.threatOf('specialmobs:specialcreeper');
+    assert.deepEqual([special.source, special.rule], ['inferred', 'creeper-variants']);
+    assert.match(special.note, /sheared creeper/);
+    assert.equal(pack.threatOf('primitivemobs:rocket_creeper').reaction, 'keep-distance');
+    assert.equal(pack.threatOf('minecraft:creeper').source, 'documented', 'an entry wins over a class rule');
+});
+
+test('#111 review: skeleton variants take cover; wither skeletons and the skeleton horse do not', () => {
+    for (const n of ['specialmobs:sniperskeleton', 'specialmobs:knightskeleton', 'primitivemobs:skeleton_warrior', 'trumpetskeleton:trumpet_skeleton']) {
+        const t = pack.threatOf(n);
+        assert.deepEqual([t.reaction, t.ranged, t.source, t.rule], ['take-cover', true, 'inferred', 'skeleton-variants'], n);
+    }
+    for (const n of ['minecraft:wither_skeleton', 'specialmobs:sniperwitherskeleton']) {
+        const t = pack.threatOf(n);
+        assert.deepEqual([t.reaction, t.source], ['fight', 'default'], n);
+    }
+    assert.deepEqual([pack.threatOf('minecraft:skeleton_horse').level, pack.threatOf('minecraft:skeleton_horse').reaction], ['none', 'ignore'], 'class rules apply to hostile mobs only');
+});
+
+test('#111 review: what threatOf and nightThreats do not reflect is stated', () => {
+    const text = NIGHT_THREATS_NOT_REFLECTED.join('\n');
+    for (const re of [/Special Mobs/, /Light level/, /Mob Stages/, /Invasions/, /MultiMob/]) assert.match(text, re);
+    // Special Mobs variants are in no spawn list.
+    assert.ok(!pack.nightThreats({ limit: 1000 }).some((t) => t.name.startsWith('specialmobs:')));
+    // The custom-name gap: a rabbit named "Killer" targets players, but threatOf takes no name.
+    assert.equal(pack.threatOf('animania:buck_chinchilla').level, 'none');
 });
 
 test('nightThreats: one biome, from its monster spawn list, hostile only, most likely first', () => {

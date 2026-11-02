@@ -1,7 +1,7 @@
 {
   "format": "rotn-threat-reactions/1",
   "pack": "3.3.4",
-  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack. Mobs not listed get a default from their threat level (entity(): hostile = IMob or bytecode-cited player targeting, dangerous = entity-overrides.json): dangerous -> avoid, hostile -> fight, otherwise ignore. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
+  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack. Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source 'inferred'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
   "general": {
     "summary": "At night stay sealed in a cobblestone or stone shelter with light only inside; a dirt shack is not safe because mobs dig and pillar. Retreat if two or more hostiles come at once.",
     "confidence": "documented",
@@ -34,11 +34,39 @@
       "confidence": "documented",
       "evidence": ["docs/research/rotn-progression.md section 2, Creepers and Fire Creepers: [W-Getting_Started], [W-Tips], [W-Progression_Stages]"]
     },
+    "specialmobs:firecreeper": {
+      "reaction": "keep-distance",
+      "explodes": true,
+      "summary": "A Fire Creeper: explodes like a creeper and can burn dropped items. Back off at once; do not fight near stored items or wooden walls.",
+      "confidence": "documented",
+      "evidence": ["docs/research/rotn-progression.md section 2, Creepers and Fire Creepers: [W-Tips] 'Fire Creepers explode and can burn dropped items', [W-Progression_Stages]; the dump's specialmobs:firecreeper has the display name 'Fire Creeper'"]
+    },
     "minecraft:enderman": {
       "reaction": "ignore-unless-provoked",
       "summary": "Neutral until you look at its head or hit it. Do not look at it; do not attack it on the first night.",
       "confidence": "vanilla",
       "evidence": ["Minecraft 1.12 EntityEnderman behaviour (the dump marks it IMob, so entity() calls it hostile); not in the RotN sources, unverified on this pack"]
     }
-  }
+  },
+  "classRules": [
+    {
+      "id": "creeper-variants",
+      "pattern": "Creeper",
+      "reaction": "keep-distance",
+      "explodes": true,
+      "summary": "A creeper variant (Special Mobs, Primitive Mobs, NetherEx, Better With Mods): treat it as a creeper. Back off at once; do not melee it.",
+      "evidence": ["the dump: the class's simple name contains 'Creeper' (fathertoast.specialmobs.entity.creeper.*, net.daveyx0.primitivemobs.entity.monster.Entity*Creeper, ...); the creeper reaction is documented in docs/research/rotn-progression.md section 2"],
+      "note": "Inferred from the class name, not from each mod's code: a variant may not explode (Better With Mods' sheared creeper) or may explode differently (Primitive Mobs' rocket creeper). Keeping distance is the safe reaction either way."
+    },
+    {
+      "id": "skeleton-variants",
+      "pattern": "Skeleton",
+      "notPattern": "WitherSkeleton|SkeletonHorse",
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A skeleton variant (Special Mobs, Primitive Mobs, ...): treat it as a skeleton. Stay behind cover; do not strafe in open ground.",
+      "evidence": ["the dump: the class's simple name contains 'Skeleton' (fathertoast.specialmobs.entity.skeleton.*, ...); the skeleton reaction is documented in docs/research/rotn-progression.md section 2"],
+      "note": "Inferred from the class name: some variants fight in melee (brute, knight, ninja). Wither skeletons and their Special Mobs variants (Nether mobs, mostly melee) are excluded and get the default."
+    }
+  ]
 }
