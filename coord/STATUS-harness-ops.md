@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-01 (23:58 UTC, from `date -u`)
+Updated: 2026-11-02 (00:48 UTC, from `date -u`)
 
 ## Done
 
@@ -90,8 +90,10 @@ Updated: 2026-11-01 (23:58 UTC, from `date -u`)
 
 ## Doing
 
-- **G2 batch 2 ran on the lead's GO (23:28 UTC) and FAILED; the server is deleted.** Mobs and items PASSED as valid gate runs. Blocks did not run: the bot's Microsoft profile fetch failed before it connected (transient; see "Real G2 batches"). I stopped as the GO says; a blocks run needs a new written GO.
-- G2 batch 1 (22:10 UTC) FAILED, and the lead's decisions on its findings went into #64, #66 and #67 (all merged).
+- **G2 batch 3 ran on the lead's GO (2026-11-02 00:26 UTC) and FAILED by one sample; the server is deleted.** Mobs and items PASSED, and blocks passed everything except one sample in `blocks_confirmed` (110/111), so G2 does not count. All three were gate-valid; no login retry was used.
+  - The failed sample is a world change, not a naming error: a plant was removed between the census and the re-ask, and the server confirmed the bot's fresh "air".
+  - I stopped as the GO says. A batch 4 needs the lead's decision on the proposal under "G2 batch 3" and a new written GO.
+- G2 batches 1 and 2 (2026-11-01) FAILED. The lead's decisions went into #64, #66, #67 and #73 (all merged).
 - **Follow-up (lead, not blocking):** in `g2-mobs-named`, require a run-tagged entity within 1 block of a matched mob report.
 
 ## Watching
@@ -99,6 +101,59 @@ Updated: 2026-11-01 (23:58 UTC, from `date -u`)
 - rotn-data's #47 (first RotN 3.3.4 dump, `common-mobs.json`): the G2 batch waits for it.
 
 ## Real G2 batches
+
+### G2 batch 3 (2026-11-02): FAIL (blocks 110/111, mobs PASS, items PASS); the server is deleted
+
+**Run conditions**
+- **GO:** the lead, 2026-11-02 00:26 UTC.
+- **Code:** a clean detached checkout of develop at 1a396f5 (#72, #73), after `npm ci`. Every `result.json` has `git.dirty: false` and `untracked: 0`.
+- **Checks right before the create, all passed:**
+  - `agentNaming('.')`: wired, 643/643.
+  - `msa-login FRCFLD --check`: OK; its output is not recorded.
+  - The preflight on its own: cadence path, gaps 15.4 and 14.5 min; no leftovers.
+- **Command:** the planned one, unchanged.
+- **Console:** `gamerule doDaylightCycle false` once and `time set day` before each scenario. That is 4 lines in the raw `latest.log` only, since the committed excerpts start at each marker. Then the runner's commands. No difficulty change.
+- **Batch 2 raw files** were moved to `captures/raw/batch2-20261101/` first.
+
+**Real times (UTC, 2026-11-02)**
+
+| Event | Time |
+| --- | --- |
+| Batch start | 00:28:34 |
+| Server created | 00:28:44 |
+| Ready | 00:31:49 |
+| `g2-blocks-named` | 00:31:55 to 00:41:50 (592 s) |
+| `g2-mobs-named` | 00:41:53 to 00:44:09 (133 s) |
+| `g2-items-roundtrip` | 00:44:12 to 00:46:06 (112 s) |
+| EXIT-trap teardown | started 00:46:14; "verified gone" 00:46:30 |
+
+- **Server up:** 18 min.
+- **Cost:** 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. IPv4), plus 1 Primary IPv4-hour.
+- **Afterwards:** at 00:46:47 UTC, `hcloud server list`, `hcloud primary-ip list` and the labelled `ssh-key list` were all empty.
+
+**Results.** Every run had `gateValid: true`, `weakenedParams: []`, no `notGate` reasons, no kicks, and `notes.loginRetry` `{retried: false}`.
+
+| Scenario | Verdict | Details |
+| --- | --- | --- |
+| `g2-blocks-named` | FAIL | 39 non-air types. `blocks_confirmed` **110/111**; `metaDrift` 0 of 110. `blocks_spotcheck` PASS: 40/40 non-air, 88 positions asked, 0 unloaded, no skew. |
+| `g2-mobs-named` | **PASS** | 12/12 named and confirmed by run tag, 7 of them modded. 0 replaced. `otherSeen`: one natural `primitivemobs:grovesprite`. |
+| `g2-items-roundtrip` | **PASS** | 643/643 table entries; 30/30 read, named and round-tripped. |
+
+**The failed sample.** `-56,95,-58 census biomesoplenty:plant_0 0 fresh minecraft:air 0 server found: FAIL`.
+- The census (about 00:33) named a plant there.
+- At the re-ask (00:33-00:38) the bot said air, and the server confirmed air.
+- The bot was right both times; the plant was gone. The #67 rule (fresh name must equal the census name) fails it.
+- Why the plant went is not logged. A mob, or a neighbouring block change that pops a plant, could do it.
+- The 11 other `plant_0` samples were confirmed.
+
+**Proposal (the lead decides).** Like the mob replacements, a sample whose block **changed name** since the census becomes a world change, provided the server confirms the bot's fresh answer **exactly**. In that case:
+- it is recorded in `notes.worldChanged`;
+- it is replaced by another candidate of the same census type (5 unpicked candidates per type remain), which must pass the full rule;
+- more than 2% of samples (3 of 150) changed makes the run notGate.
+
+Nothing is tolerated on naming: each counted sample still needs census name = fresh name = the server's answer. The alternative is to keep the rule as it is and re-run: this happened to 1 of 111 samples.
+
+**Evidence:** `test/evidence/g2/batch3-20261102/` (this PR), redacted with the merged tool; the CI leak check passes.
 
 ### G2 batch 2 (2026-11-01): FAIL (mobs PASS, items PASS, blocks did not run); the server is deleted
 
@@ -314,7 +369,7 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Blocked
 
-- **G2 blocks:** a new written GO, and the lead's choice on proposals 1-3 under G2 batch 2.
+- **G2 batch 4:** the lead's decision on the "world changed" proposal under G2 batch 3, then a new written GO.
 
 ## Requests to other agents or the lead
 
@@ -337,5 +392,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: G2 batch 2 evidence and this status update (`agent/harness-ops/g2-batch2-evidence`).
-- Merged since the last update: #58, #64, #65, #66, #67.
+- This PR: G2 batch 3 evidence and this status update (`agent/harness-ops/g2-batch3-evidence`).
+- Merged since the last update: #71, #73.
