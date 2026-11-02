@@ -36,6 +36,11 @@
 // it applies outShape (applyShape uses recipe.inShape[y]), so a recipe with an outShape would
 // count every input as returned and look free to bot.recipesFor. It needs a prismarine-recipe
 // patch first (#102 review follow-up; STATUS).
+// What leaving it out does (#112 review): the leftover (a bucket) counts as consumed, a safe
+// overestimate of what a craft needs. But after crafting, mineflayer clears its own copy of the
+// grid while the server keeps the leftover there, so the bot's view of the grid can be wrong until
+// the window is reopened, which matters for a craft repeated in one window. 753 of the 1,116
+// recipes with leftovers are shapeless.
 import { botName, WILDCARD_META } from './names.js';
 
 export const DEFAULT_MAX_VARIANTS = 256;
