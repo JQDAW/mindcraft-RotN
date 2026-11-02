@@ -378,7 +378,7 @@ describe('bootstrap.sh', () => {
         fs.writeFileSync(f, `${content}\n`);
         return f;
     };
-    const ok = { FAKE_OUT_id: '0', FAKE_RC_getent: '2', FAKE_OUT_gpg: `fpr:::::::::${FPR}:`, FAKE_OUT_node: 'v22.11.0', NODESOURCE_KEY_FPR: undefined };
+    const ok = { FAKE_OUT_id: '0', FAKE_RC_getent: '2', FAKE_OUT_gpg: `fpr:::::::::${FPR}:`, FAKE_OUT_node: 'v22.11.0', NODESOURCE_KEY_FPR: undefined, SSH_CONNECTION: undefined };
     const boot = (args, extra = {}) => run(path.join(CX, 'bootstrap.sh'), args, { ...ok, ...extra });
 
     test('setup: users, key, sudoers, upgrades, Node 22, swap, firewall, unit; password login off, root login stays on', () => {
@@ -445,6 +445,7 @@ describe('bootstrap.sh', () => {
     };
     const setup = (extra = {}) => boot(['setup', '--deploy-key-file', keyFile()], extra);
     const reloaded = () => called('systemctl').some((c) => c.join(' ') === 'systemctl reload ssh');
+    const sshdChecks = () => called('sshd').filter((c) => c[1] === '-t').length; // the sshd step's own check, not preflight's sshd -T
 
     test('sshd: the drop-in turns password and keyboard-interactive login off and leaves PermitRootLogin alone', () => {
         ubuntu();
@@ -487,7 +488,7 @@ describe('bootstrap.sh', () => {
         cloudInit('yes');
         assert.equal(setup().code, 0);
         const t = callIndex((c) => c.join(' ') === 'sshd -t');
-        const T = callIndex((c) => c.join(' ') === 'sshd -T');
+        const T = calls().findIndex((c, i) => i > t && c.join(' ') === 'sshd -T');
         const reload = callIndex((c) => c.join(' ') === 'systemctl reload ssh');
         assert.ok(t >= 0 && T > t && reload > T, `order: sshd -t ${t}, sshd -T ${T}, reload ${reload}`);
         assert.ok(exists('run/sshd'), 'the privilege separation folder sshd -t needs');
@@ -499,7 +500,8 @@ describe('bootstrap.sh', () => {
         assert.equal(r.code, 1, r.all);
         assert.match(r.stderr, /sshd -t rejected the config; put back what was there, ssh not reloaded/);
         assert.ok(!exists(SSHD_DROPIN));
-        assert.ok(!called('sshd').some((c) => c[1] === '-T'), 'no -T after a failed -t');
+        const tFailed = callIndex((c) => c.join(' ') === 'sshd -t');
+        assert.ok(tFailed >= 0 && !calls().some((c, i) => i > tFailed && c.join(' ') === 'sshd -T'), 'no -T after a failed -t');
         assert.ok(!reloaded());
         // An earlier drop-in of ours is restored as it was, with no backup left behind.
         fs.writeFileSync(rootFile(SSHD_DROPIN), '# an earlier version\nPasswordAuthentication no\n');
@@ -580,7 +582,7 @@ describe('bootstrap.sh', () => {
         assert.equal(r.code, 1);
         assert.match(r.stderr, /sudo \(sudo-rs 0\.2\.8\) does not show the rule for deploy after install \(sudo -l -U deploy\); removed it/);
         assert.ok(!exists('etc/sudoers.d/mindcraft-rotn'));
-        assert.equal(called('ufw').length + called('sshd').length, 0, 'the firewall and sshd are untouched');
+        assert.equal(called('ufw').length + sshdChecks(), 0, 'the firewall and sshd are untouched (only the read-only preflight sshd -T ran)');
         assert.ok(called('sudo').some((c) => c.join(' ') === 'sudo -l -U deploy'));
         const ok = boot(['setup', '--deploy-key-file', keyFile()]);
         assert.equal(ok.code, 0, ok.all);
@@ -593,17 +595,50 @@ describe('bootstrap.sh', () => {
         assert.equal(noRule.code, 1);
         assert.match(noRule.stderr, /ufw does not list the SSH rule \(ufw show added\); not enabling the firewall/);
         assert.ok(!called('ufw').some((c) => c.includes('enable')), 'ufw was not enabled');
-        assert.equal(called('sshd').length, 0);
+        assert.equal(sshdChecks(), 0, 'the sshd step never ran');
         const noEnable = boot(['setup', '--deploy-key-file', keyFile()], { FAKE_UFW_NO_ENABLE: '1' });
         assert.equal(noEnable.code, 1);
         assert.match(noEnable.stderr, /ufw is not active after 'ufw --force enable' \(ufw status\)/);
-        assert.equal(called('sshd').length, 0);
+        assert.equal(sshdChecks(), 0, 'the sshd step never ran');
         assert.ok(!exists(SSHD_DROPIN));
+    });
+
+    test('--ssh-from must contain this SSH session\'s client address, or setup refuses before any change (#137 review)', () => {
+        ubuntu();
+        const from = (cidr, env) => boot(['setup', '--deploy-key-file', keyFile(), '--ssh-from', cidr], env);
+        const cases = [
+            ['203.0.113.0/24', {}, /--ssh-from needs this to run in an SSH session over IPv4 \(SSH_CONNECTION\)/],
+            ['203.0.113.0/24', { SSH_CONNECTION: '2001:db8::5 50122 2001:db8::1 22' }, /needs this to run in an SSH session over IPv4/],
+            ['203.0.113.0/24', { SSH_CONNECTION: '198.51.100.7 50122 192.0.2.10 22' }, /--ssh-from 203\.0\.113\.0\/24 does not contain this SSH session's client address/],
+            ['203.0.113.4/32', { SSH_CONNECTION: '203.0.113.5 50122 192.0.2.10 22' }, /does not contain this SSH session's client address/],
+            ['203.0.113.0/33', { SSH_CONNECTION: '203.0.113.5 50122 192.0.2.10 22' }, /the prefix \/33 is not 0\.\.32/],
+            ['203.0.113.300/24', { SSH_CONNECTION: '203.0.113.5 50122 192.0.2.10 22' }, /203\.0\.113\.300 is not an IPv4 address/],
+        ];
+        for (const [cidr, env, re] of cases) {
+            const r = from(cidr, env);
+            assert.equal(r.code, 1, cidr);
+            assert.match(r.stderr, re, `${cidr} ${JSON.stringify(env)}`);
+            assert.ok(!r.stderr.includes('198.51.100.7') && !r.stderr.includes('203.0.113.5'), 'the client address is never printed');
+        }
+        assert.equal(calls().length, 0, 'refused before any system command ran');
+        for (const cidr of ['203.0.113.5/32', '203.0.113.0/24', '203.0.0.0/16', '0.0.0.0/0', '203.000.113.005/32']) {
+            assert.equal(from(cidr, { SSH_CONNECTION: '203.0.113.5 50122 192.0.2.10 22' }).code, 0, cidr);
+        }
+    });
+
+    test('preflight: sshd must listen on port 22 only, since ufw opens only 22 (#137 review nit 4)', () => {
+        for (const conf of ['Include /etc/ssh/sshd_config.d/*.conf\nPort 2222\n', 'Include /etc/ssh/sshd_config.d/*.conf\nPort 22\nPort 2222\n']) {
+            ubuntu('26.04', conf);
+            const r = boot(['setup', '--deploy-key-file', keyFile()]);
+            assert.equal(r.code, 1);
+            assert.match(r.stderr, /sshd listens on port\(s\) '(2222|22 2222)', but ufw will allow only 22; not changing anything/);
+        }
+        assert.equal(called('useradd').length + called('ufw').length + called('apt-get').length, 0);
     });
 
     test('ufw: with --ssh-from, the narrow rule is what must be listed before enabling', () => {
         ubuntu();
-        const r = boot(['setup', '--deploy-key-file', keyFile(), '--ssh-from', '203.0.113.0/24']);
+        const r = boot(['setup', '--deploy-key-file', keyFile(), '--ssh-from', '203.0.113.0/24'], { SSH_CONNECTION: '203.0.113.5 50122 192.0.2.10 22' });
         assert.equal(r.code, 0, r.all);
         const show = callIndex((c) => c.join(' ') === 'ufw show added');
         const enable = callIndex((c) => c.join(' ') === 'ufw --force enable');
@@ -650,7 +685,7 @@ describe('bootstrap.sh', () => {
     test('setup is idempotent: existing users and swap are left alone; --ssh-from limits SSH', () => {
         ubuntu();
         const r = boot(['setup', '--deploy-key-file', keyFile(), '--ssh-from', '203.0.113.0/24'],
-            { FAKE_RC_getent: '0', FAKE_OUT_swapon: '/swapfile file 2G 0B -2' });
+            { FAKE_RC_getent: '0', FAKE_OUT_swapon: '/swapfile file 2G 0B -2', SSH_CONNECTION: '203.0.113.5 50122 192.0.2.10 22' });
         assert.equal(r.code, 0, r.all);
         assert.equal(called('useradd').length, 0);
         assert.equal(called('fallocate').length, 0);
@@ -699,11 +734,18 @@ describe('bootstrap.sh', () => {
 
     test('lockdown refuses until deploy has a key and a sudo password, and without the explicit flag', () => {
         ubuntu();
-        assert.match(boot(['lockdown']).stderr, /pass --i-tested-deploy-login/);
-        assert.match(boot(['lockdown', '--i-tested-deploy-login'], { FAKE_OUT_passwd: 'deploy P' }).stderr, /deploy has no authorized key/);
+        // Not run on this CX23 (ADR 0007): without its own flag it refuses, whatever else is given (#137 review).
+        for (const args of [['lockdown'], ['lockdown', '--i-tested-deploy-login']]) {
+            const r = boot(args, { FAKE_OUT_passwd: 'deploy P' });
+            assert.equal(r.code, 1);
+            assert.match(r.stderr, /lockdown turns root SSH login off \(PermitRootLogin no, AllowUsers deploy\); it is not run on this project's CX23 \(ADR 0007\)\. Only on the lead's written decision, add --turn-off-root-ssh/);
+        }
+        assert.match(boot(['lockdown', '--turn-off-root-ssh']).stderr, /pass --i-tested-deploy-login/);
+        assert.match(boot(['lockdown', '--turn-off-root-ssh', '--yes']).stderr, /lockdown: unknown option --yes/);
+        assert.match(boot(['lockdown', '--turn-off-root-ssh', '--i-tested-deploy-login'], { FAKE_OUT_passwd: 'deploy P' }).stderr, /deploy has no authorized key/);
         fs.mkdirSync(rootFile('home/deploy/.ssh'), { recursive: true });
         fs.writeFileSync(rootFile('home/deploy/.ssh/authorized_keys'), `${KEY}\n`);
-        assert.match(boot(['lockdown', '--i-tested-deploy-login'], { FAKE_OUT_passwd: 'deploy L 2026-11-01 0 99999 7 -1' }).stderr,
+        assert.match(boot(['lockdown', '--turn-off-root-ssh', '--i-tested-deploy-login'], { FAKE_OUT_passwd: 'deploy L 2026-11-01 0 99999 7 -1' }).stderr,
             /deploy has no usable password \(passwd --status says 'L'\)/);
         assert.ok(!exists('etc/ssh/sshd_config.d/00-mindcraft-rotn.conf'));
         assert.ok(!called('systemctl').some((c) => c[1] === 'reload'));
@@ -714,20 +756,20 @@ describe('bootstrap.sh', () => {
         fs.mkdirSync(rootFile('home/deploy/.ssh'), { recursive: true });
         fs.writeFileSync(rootFile('home/deploy/.ssh/authorized_keys'), `${KEY}\n`);
         const env = { FAKE_OUT_passwd: 'deploy P 2026-11-01 0 99999 7 -1' };
-        assert.match(boot(['lockdown', '--i-tested-deploy-login'], { ...env, FAKE_OUT_journalctl: ACCEPTED }).stderr, /no setup timestamp/);
+        assert.match(boot(['lockdown', '--turn-off-root-ssh', '--i-tested-deploy-login'], { ...env, FAKE_OUT_journalctl: ACCEPTED }).stderr, /no setup timestamp/);
         fs.mkdirSync(rootFile('etc/mindcraft-rotn'), { recursive: true });
         fs.writeFileSync(rootFile('etc/mindcraft-rotn/.setup-epoch'), '1793534400\n');
         for (const journal of ['', 'Accepted password for deploy from 203.0.113.5 port 50122 ssh2',
             'Accepted publickey for root from 203.0.113.5 port 50122 ssh2: ED25519 SHA256:x',
             'Failed publickey for deploy from 203.0.113.5 port 50122 ssh2', `Invalid user x: ${ACCEPTED}`]) {
-            const r = boot(['lockdown', '--i-tested-deploy-login'], { ...env, FAKE_OUT_journalctl: journal });
+            const r = boot(['lockdown', '--turn-off-root-ssh', '--i-tested-deploy-login'], { ...env, FAKE_OUT_journalctl: journal });
             assert.equal(r.code, 1, journal);
             assert.match(r.stderr, /no 'Accepted publickey for deploy' in the ssh journal since setup/, journal);
         }
         assert.ok(!exists('etc/ssh/sshd_config.d/00-mindcraft-rotn.conf'));
         const j = called('journalctl')[0];
         assert.deepEqual(j, ['journalctl', '-u', 'ssh', '-u', 'sshd', '--since', '@1793534400', '--no-pager', '-o', 'cat']);
-        const r = boot(['lockdown', '--i-tested-deploy-login'], { ...env, FAKE_OUT_journalctl: `Server listening on 0.0.0.0 port 22.\n${ACCEPTED}` });
+        const r = boot(['lockdown', '--turn-off-root-ssh', '--i-tested-deploy-login'], { ...env, FAKE_OUT_journalctl: `Server listening on 0.0.0.0 port 22.\n${ACCEPTED}` });
         assert.equal(r.code, 0, r.all);
     });
 
@@ -738,12 +780,12 @@ describe('bootstrap.sh', () => {
         fs.mkdirSync(rootFile('etc/mindcraft-rotn'), { recursive: true });
         fs.writeFileSync(rootFile('etc/mindcraft-rotn/.setup-epoch'), '1793534400\n');
         const env = { FAKE_OUT_passwd: 'deploy P 2026-11-01 0 99999 7 -1', FAKE_OUT_journalctl: ACCEPTED };
-        const bad = boot(['lockdown', '--i-tested-deploy-login'], { ...env, FAKE_RC_sshd: '255' });
+        const bad = boot(['lockdown', '--turn-off-root-ssh', '--i-tested-deploy-login'], { ...env, FAKE_RC_sshd: '255' });
         assert.equal(bad.code, 1);
         assert.match(bad.stderr, /sshd -t rejected the config; removed it/);
         assert.ok(!exists('etc/ssh/sshd_config.d/00-mindcraft-rotn.conf'));
         assert.ok(!called('systemctl').some((c) => c[1] === 'reload'));
-        const r = boot(['lockdown', '--i-tested-deploy-login'], env);
+        const r = boot(['lockdown', '--turn-off-root-ssh', '--i-tested-deploy-login'], env);
         assert.equal(r.code, 0, r.all);
         const conf = read('etc/ssh/sshd_config.d/00-mindcraft-rotn.conf');
         for (const l of ['PermitRootLogin no', 'PasswordAuthentication no', 'KbdInteractiveAuthentication no', 'AllowUsers deploy'])

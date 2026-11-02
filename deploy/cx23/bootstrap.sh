@@ -5,6 +5,7 @@
 # the Ubuntu and NodeSource apt mirrors.
 #
 #   bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override]
+#       --ssh-from must contain this SSH session's client address (SSH_CONNECTION); GO 2 runs without it.
 #       Users: `deploy` (SSH key login, in groups sudo and mindcraft-rotn) and the system user
 #       `mindcraft-rotn` (no login) that runs the bots. Unattended security upgrades. ufw: SSH only.
 #       2 GB swap. Node 22 from NodeSource (key fingerprint pinned). git. The unit template, check-env,
@@ -17,7 +18,8 @@
 #   bootstrap.sh add-bot BOT [--mindserver-port N]
 #       Per-bot folders (token cache 0700) and /etc/mindcraft-rotn/BOT.env (0600 root:root) from bot.env.example.
 #       Never overwrites an existing env file.
-#   bootstrap.sh lockdown --i-tested-deploy-login
+#   bootstrap.sh lockdown --turn-off-root-ssh --i-tested-deploy-login
+#       NOT run on this project's CX23 (ADR 0007: root keeps key-only SSH); refuses without both flags.
 #       Also needs evidence: an "Accepted publickey for deploy" line in the ssh journal since setup.
 #       Turns root login and password login off (sshd drop-in, checked with `sshd -t`). Refuses until
 #       `deploy` has an authorized key and a sudo password, so nobody is locked out of admin access.
@@ -78,9 +80,41 @@ preflight_system() {
   # The password-login drop-in works only if sshd_config includes sshd_config.d/*.conf.
   grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf[[:space:]]*$' "$(p /etc/ssh/sshd_config)" 2> /dev/null \
     || die "/etc/ssh/sshd_config does not include /etc/ssh/sshd_config.d/*.conf; the password-login drop-in would not be read"
+  # ufw opens only port 22, so sshd must listen on 22 and nothing else (#137 review nit 4). sshd -t and
+  # -T need the privilege separation folder, which ssh.service creates only while it runs.
+  dir_owned 0755 root:root /run/sshd
+  local ports
+  ports=$(sshd -T 2> /dev/null | awk 'tolower($1) == "port" { print $2 }' | sort -u | tr '\n' ' ') \
+    || die "sshd -T failed; cannot check sshd's port"
+  [[ $ports == '22 ' ]] || die "sshd listens on port(s) '${ports% }', but ufw will allow only 22; not changing anything"
 }
 
 user_exists() { getent passwd "$1" > /dev/null 2>&1; }
+
+# A dotted IPv4 address as a number; fails on anything else (octets read as decimal, even with a leading 0).
+ip_to_int() {
+  local a b c d o
+  [[ $1 =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+  a=$((10#${BASH_REMATCH[1]})) b=$((10#${BASH_REMATCH[2]})) c=$((10#${BASH_REMATCH[3]})) d=$((10#${BASH_REMATCH[4]}))
+  for o in "$a" "$b" "$c" "$d"; do (( o <= 255 )) || return 1; done
+  echo $(( (a << 24) | (b << 16) | (c << 8) | d ))
+}
+
+# --ssh-from must contain this SSH session's client address (#137 review): a CIDR that does not (a home
+# address that changed, a typo) lets this session live on through ufw's ESTABLISHED rule and then shuts
+# out every new SSH login, root included. Without an IPv4 SSH session to check against, it refuses.
+check_ssh_from() {
+  local cidr=$1 net bits client ni ci mask
+  net=${cidr%/*} bits=$((10#${cidr#*/}))
+  (( bits <= 32 )) || die "--ssh-from: the prefix /$bits is not 0..32"
+  ni=$(ip_to_int "$net") || die "--ssh-from: $net is not an IPv4 address"
+  client=${SSH_CONNECTION:-}; client=${client%% *}
+  ci=$(ip_to_int "$client") \
+    || die "--ssh-from needs this to run in an SSH session over IPv4 (SSH_CONNECTION), to check that the CIDR contains your own address; GO 2 runs without --ssh-from"
+  mask=$(( bits == 0 ? 0 : (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF ))
+  (( (ni & mask) == (ci & mask) )) \
+    || die "--ssh-from $cidr does not contain this SSH session's client address; it would shut out every new SSH login (root included) once this session ends. GO 2 runs without --ssh-from"
+}
 
 # ---------------------------------------------------------------- setup
 setup_users() {
@@ -293,6 +327,7 @@ do_setup() {
   fi
   [[ -n $keyfile && -f $keyfile ]] || die "setup needs --deploy-key-file FILE (the deploy user's public key)"
   [[ -z $from || $from =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]] || die "--ssh-from must be an IPv4 CIDR"
+  [[ -z $from ]] || check_ssh_from "$from"
   [[ $swap =~ ^[1-9][0-9]*[MG]$ ]] || die "--swap-size like 2G"
   require_root_ubuntu
   preflight_system
@@ -347,7 +382,19 @@ do_add_bot() {
 
 # ---------------------------------------------------------------- lockdown
 do_lockdown() {
-  [[ ${1:-} == --i-tested-deploy-login ]] \
+  local tested=0 root_off=0
+  while (( $# )); do
+    case $1 in
+      --i-tested-deploy-login) tested=1; shift ;;
+      --turn-off-root-ssh) root_off=1; shift ;;
+      *) die "lockdown: unknown option $1" ;;
+    esac
+  done
+  # Not run on this project's CX23 (#101, ADR 0007: root keeps key-only SSH). It writes PermitRootLogin
+  # no and AllowUsers deploy, which cuts off root's SSH, so it needs a flag of its own (#137 review).
+  (( root_off )) \
+    || die "lockdown turns root SSH login off (PermitRootLogin no, AllowUsers $DEPLOY_USER); it is not run on this project's CX23 (ADR 0007). Only on the lead's written decision, add --turn-off-root-ssh"
+  (( tested )) \
     || die "lockdown turns root and password login off. First log in as deploy in a second terminal, then pass --i-tested-deploy-login"
   require_root_ubuntu
   local ak; ak=$(p "/home/$DEPLOY_USER/.ssh/authorized_keys")
@@ -385,5 +432,5 @@ case ${1:-} in
   setup) shift; do_setup "$@" ;;
   add-bot) shift; do_add_bot "$@" ;;
   lockdown) shift; do_lockdown "$@" ;;
-  *) die "usage: bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override] | add-bot BOT [--mindserver-port N] | lockdown --i-tested-deploy-login" ;;
+  *) die "usage: bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override] | add-bot BOT [--mindserver-port N] | lockdown --turn-off-root-ssh --i-tested-deploy-login (not on this CX23)" ;;
 esac

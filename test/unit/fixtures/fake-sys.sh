@@ -40,9 +40,11 @@ case $name in
     # sshd -T: the effective config like the real one. For each key the FIRST value read wins, in the
     # order sshd reads them: $ROOT/etc/ssh/sshd_config line by line, and at its
     # "Include /etc/ssh/sshd_config.d/*.conf" line the drop-ins in sorted order; then sshd's defaults.
-    # FAKE_RC_sshd sets the exit code (also for -t).
+    # Port is multi-valued, as in sshd: every Port line counts (default 22 only if there is none).
+    # FAKE_RC_sshd sets the exit code of sshd -t, FAKE_RC_sshd_T that of sshd -T.
     if [[ ${1:-} == -T ]]; then
       declare -A eff=()
+      ports=()
       take() { local k v; while read -r k v; do
         [[ -z $k || $k == \#* ]] && continue
         k=${k,,}
@@ -51,12 +53,17 @@ case $name in
           for f in ${ROOT:-}$v; do take < <(tr -d '\r' < "$f"); done
           continue
         fi
+        if [[ $k == port ]]; then ports+=("$v"); continue; fi
         [[ -n ${eff[$k]+x} ]] || eff[$k]=${v,,}
       done; }
       [[ -f ${ROOT:-}/etc/ssh/sshd_config ]] && take < <(tr -d '\r' < "${ROOT:-}/etc/ssh/sshd_config")
-      take <<< $'port 22\npermitrootlogin prohibit-password\npubkeyauthentication yes\npasswordauthentication yes\nkbdinteractiveauthentication yes'
-      for k in "${!eff[@]}"; do printf '%s %s\n' "$k" "${eff[$k]}"; done | sort
+      take <<< $'permitrootlogin prohibit-password\npubkeyauthentication yes\npasswordauthentication yes\nkbdinteractiveauthentication yes'
+      (( ${#ports[@]} )) || ports=(22)
+      { for k in "${!eff[@]}"; do printf '%s %s\n' "$k" "${eff[$k]}"; done
+        for v in "${ports[@]}"; do printf 'port %s\n' "$v"; done; } | sort
+      exit "${FAKE_RC_sshd_T:-0}"
     fi
+    # sshd -t (and anything else): FAKE_RC_sshd.
     exit "${!rc_var:-0}" ;;
   systemctl)
     # is-active: 3 (inactive) when FAKE_SSH_INACTIVE is set, else 0. cat: 1 when FAKE_NO_SSH_UNIT is set.

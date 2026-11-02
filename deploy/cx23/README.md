@@ -17,13 +17,18 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
 ## One-time bootstrap (human, with the root login)
 
 1. Copy this folder to the server: `scp -r deploy/cx23 root@<cx23>:/root/cx23`. Also copy the `deploy` user's **public** key (`deploy.pub`).
-2. `bash /root/cx23/bootstrap.sh setup --deploy-key-file /root/deploy.pub` (optionally `--ssh-from <your-ip>/32`).
+2. `bash /root/cx23/bootstrap.sh setup --deploy-key-file /root/deploy.pub`.
+
+   **GO 2 runs without `--ssh-from`** (#137 review): SSH stays open to all addresses, by key only.
+   - A narrow rule ties SSH to one address. If that address changes later (a home IP, for example), every new SSH login is shut out, root's included. The current session lives on, so the lockout only shows the next day.
+   - If `--ssh-from <CIDR>` is ever used, setup refuses a CIDR that does not contain this SSH session's own client address (from `SSH_CONNECTION`), and refuses outright outside an IPv4 SSH session.
 
    **Checks before it changes anything.** A mismatch stops setup with a message:
    - the OS is Ubuntu 26.04 or 24.04;
    - there is an `ssh.service` unit (setup reloads it, and lockdown reads its journal);
    - `sshd` is installed;
-   - `/etc/ssh/sshd_config` includes `/etc/ssh/sshd_config.d/*.conf`.
+   - `/etc/ssh/sshd_config` includes `/etc/ssh/sshd_config.d/*.conf`;
+   - `sshd -T` reports port 22 and no other, since ufw opens only 22.
 
    These are the system steps that the Ubuntu 26.04 CI job (`.github/workflows/ci-ubuntu-2604.yml`) cannot test in a container.
 
@@ -51,10 +56,10 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
    Re-running `setup` is safe. It appends a missing key to `deploy`'s `authorized_keys` and never drops keys already there. With `--ssh-from`, it adds the narrow SSH rule and then removes an earlier open `22/tcp` rule.
 3. In a **second** terminal: `ssh deploy@<cx23>`. It must work.
 4. As root: `passwd deploy`. This is `deploy`'s own **sudo** password. SSH never accepts it, because password login is off.
-5. **Not run on this project's CX23** (the human's decisions on #101 and ADR 0007: root keeps key-only SSH, `PermitRootLogin prohibit-password`): the human keeps root SSH and instead swaps Orca's root target for a `deploy` target; see `coord/STATUS-harness-ops.md`, "CX23 first run". `bash /root/cx23/bootstrap.sh lockdown --i-tested-deploy-login`. This writes `/etc/ssh/sshd_config.d/00-mindcraft-rotn.conf` (no root login, no passwords, `AllowUsers deploy`). It checks the file with `sshd -t`, then reloads ssh. It refuses unless:
-   - `deploy` has a key;
-   - `deploy` has a sudo password;
-   - the ssh journal shows an `Accepted publickey for deploy` line since setup. The flag alone is not enough: step 3 must really have happened.
+5. **There is no step 5 on this project's CX23.** `bootstrap.sh` also has a `lockdown` subcommand. **It is not run here:** by the human's decisions on #101 and ADR 0007, root keeps key-only SSH (`PermitRootLogin prohibit-password`).
+   - **What it would do:** write `/etc/ssh/sshd_config.d/00-mindcraft-rotn.conf` with `PermitRootLogin no` and `AllowUsers deploy`, which cuts off root's SSH.
+   - **Why it is hard to run by accident:** it refuses unless it gets an explicit flag of its own that names that effect, *and* `deploy` has a key and a sudo password, *and* the ssh journal shows a real key login for `deploy` since setup.
+   - Its usage is in the header of `bootstrap.sh`. It runs only on the lead's written decision.
 
 ## Each bot
 
