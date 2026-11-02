@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T21:05Z (from `date -u`)
+Updated: 2026-11-02T21:58Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -22,6 +22,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#109 merged** (`004cd38`): A3, the update loop and each mode survive a throw (rate-limited `[modes]`/`[update]` lines); no restart after `!smeltItem`; no `/skin` at login.
 - **#110 merged** (`32fb576`): A2b, Mindcraft task files are refused unless `MINDCRAFT_ROTN_ALLOW_TASK_FILES=1`, with a loud warning when they load.
 - **#119 merged** (`0cac640`): the #104 regression fix; the OpenRouter test no longer runs inside the agent (guard test added). The lead added #121 (`_model_map.js` skips `*.test.js`), so request 7 is done.
+- **#123 merged** (`997da58`): A4, quiet reflexes (a re-plan flag instead of an LLM call per reflex), a safe `execute()`, unstuck re-plans instead of killing the agent, bounded `isClearPath`, behavioural `!smeltItem` and `/skin` tests.
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -33,8 +34,8 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- A4 `quiet-reflexes` (branch `agent/skills-rotn/quiet-reflexes`, on develop `3b796fc`): #123 open. Reflexes record a re-plan instead of stopping the self-prompter and prompting the LLM; `execute()` never rejects; unstuck re-plans instead of killing the agent; `isClearPath` bounded; behavioural `!smeltItem` and `/skin` tests.
-- Next: stage B, B1 `names-audit` (1.12 names in skills, world, modes and the command boundary). I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
+- B1 `names-audit` (branch `agent/skills-rotn/names-audit`): #124 open; develop `997da58` merged in (STATUS-only conflict).
+- Queued: A4b `replan-clear` (the lead's required fix: a new action drops a stale re-plan; the unstuck no-path wording; a login-wiring test), B1b `names-boundary` (accepted; Request 8), then the `mc.isBaby` switch (#125), then B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
 
 ## G3 plan: small PRs, in order
 
@@ -124,7 +125,9 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
    - The providers the bot does not use (claude, gpt, gemini, ollama, ...) still print `console.log(err)`. Only OpenRouter is used (PLAN).
 6. **Lead and harness-ops (A2b):** Mindcraft task files are now refused unless the env var `MINDCRAFT_ROTN_ALLOW_TASK_FILES` is exactly `1`. No `settings.js` key is needed. Please keep it out of the CX23 env file, and harness-ops: keep it out of the runner's env allowlist for G3 gate runs (a test-only batch may set it, and its evidence should then say so).
 7. ~~Lead: `_model_map.js` should skip `*.test.js`~~: done by the lead in #121.
+8. ~~Lead: the skills name space for B1b~~: **accepted** (2026-11-02). The command boundary hands skills the bot's 1.12 names in rotn-data's `formatOld` convention; a 1.21 name maps to its exact variant (`oak_log` = `log:0`, oak only), a plain 1.12 `log` means any log. No ADR; documented in the B1b PR.
+9. ~~rotn-data: `isHuntable` reads the 1.21 baby flag~~: done in #125 (`mc.isBaby`, index 12). My follow-up: switch `names112.isBaby` callers to `mc.isBaby` (queued).
 
 ## Open PRs
 
-- #123 A4 quiet reflexes (branch `agent/skills-rotn/quiet-reflexes`). Serves brief "Stop modes from re-prompting the LLM on every reflex" and "Limit `isClearPath` A* cost on the CX23", PLAN priority 1, and the #109 follow-ups.
+- #124 B1 names audit (branch `agent/skills-rotn/names-audit`). Serves the seam-map name fixes (B1 in the G3 plan) for G3 (a) and (b).

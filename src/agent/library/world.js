@@ -1,5 +1,6 @@
 import pf from 'mineflayer-pathfinder';
 import * as mc from '../../utils/mcdata.js';
+import { isBaby, VILLAGER_PROFESSIONS_112 } from './names112.js';
 
 
 export function getNearestFreeSpace(bot, size=1, distance=8) {
@@ -235,6 +236,10 @@ export function getVillagerProfession(entity) {
         14: 'Weaponsmith'
     };
     
+    // 1.12: the profession is metadata index 13, an int 0-5 (names112.js, B1).
+    if (typeof entity.metadata?.[13] === 'number' && VILLAGER_PROFESSIONS_112[entity.metadata[13]]) {
+        return VILLAGER_PROFESSIONS_112[entity.metadata[13]];
+    }
     if (entity.metadata && entity.metadata[18]) {
         // Check if metadata[18] is an object with villagerProfession property
         if (typeof entity.metadata[18] === 'object' && entity.metadata[18].villagerProfession !== undefined) {
@@ -251,7 +256,7 @@ export function getVillagerProfession(entity) {
     }
     
     // If we can't determine profession but it's an adult villager
-    if (entity.metadata && entity.metadata[16] !== 1) { // Not a baby
+    if (entity.metadata && !isBaby(entity)) { // Not a baby (1.12: index 12)
         return 'Adult';
     }
     
@@ -440,5 +445,5 @@ export function getBiomeName(bot) {
      * let biome = world.getBiomeName(bot);
      **/
     const biomeId = bot.world.getBiome(bot.entity.position);
-    return mc.getAllBiomes()[biomeId].name;
+    return mc.getAllBiomes()[biomeId]?.name ?? 'unknown'; // a modded or unknown biome id must not throw (B1)
 }

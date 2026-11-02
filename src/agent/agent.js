@@ -93,7 +93,7 @@ export class Agent {
 
         initModes(this);
 
-        this.bot.on('login', () => this.onLogin());
+        this.bindLoginHandler();
 		const spawnTimeoutDuration = settings.spawn_timeout;
         const spawnTimeout = setTimeout(() => {
             const msg = `Bot has not spawned after ${spawnTimeoutDuration} seconds. Exiting.`;
@@ -511,6 +511,11 @@ export class Agent {
         await this.bot.modes.update();
         this.self_prompter.update(delta);
         await this.checkTaskDone();
+    }
+
+    // The one 'login' listener (A3/A4b; a test emits 'login' on a fake bot).
+    bindLoginHandler() {
+        this.bot.on('login', () => this.onLogin());
     }
 
     // Called on the bot's 'login' event. Upstream also sent "/skin set ..." or
