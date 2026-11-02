@@ -354,6 +354,8 @@ export const actionsList = [
             const modes = agent.bot.modes;
             if (!modes.exists(mode_name))
             return `Mode ${mode_name} does not exist.` + modes.getDocs();
+            if (on && modes.isDisabled(mode_name))
+            return `Mode ${mode_name} is disabled: ${modes.disabledReason(mode_name)}.`;
             if (modes.isOn(mode_name) === on)
             return `Mode ${mode_name} is already ${on ? 'on' : 'off'}.`;
             modes.setOn(mode_name, on);
