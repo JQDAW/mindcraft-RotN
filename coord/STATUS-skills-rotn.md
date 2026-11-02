@@ -39,7 +39,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 - `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`): #132 open, retargeted to develop (diff is only the switch); approved, merging on CI.
-- B2 `collect-rotn` (branch `agent/skills-rotn/collect-rotn`, on develop `27403a2`): PR open, see Open PRs. `collectBlock` follows rotn-data's world rules (`howToGet`): rocks from rock piles by hand and from stone with a pickaxe below Sturdy (4 per block); no `cobblestone` -> `stone` alias; a hint when a source needs a tool the bot lacks.
+- B2 `collect-rotn` (branch `agent/skills-rotn/collect-rotn`, on develop `27403a2`): #141 open. `collectBlock` follows rotn-data's world rules (`howToGet`): rocks from rock piles by hand and from stone with a pickaxe below Sturdy (4 per block); no `cobblestone` -> `stone` alias; a hint when a source needs a tool the bot lacks.
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - Next: B1c, the #131 nits (the `rotn_names.js` `/^\s*minecraft:/` regex; `!getCraftingPlan` bare totals vs variant-restricted recipes such as rocks for the crude axe), then C1 when Request 2 is settled.
 
@@ -137,4 +137,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 ## Open PRs
 
 - #132 `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`, base develop). Serves the lead's follow-up after #125.
-- B2 collect for RotN (branch `agent/skills-rotn/collect-rotn`). Serves G3 (a), rocks to stone tools (plan item B2).
+- #141 B2 collect for RotN (branch `agent/skills-rotn/collect-rotn`). Serves G3 (a), rocks to stone tools (plan item B2).
