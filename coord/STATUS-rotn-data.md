@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T02:11Z (from `date -u`)
+Updated: 2026-11-03T03:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -190,6 +190,26 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - oredict `ratPoop` and 14 smelting entries: the rat-nugget `OreItem` NBT (known).
 - blocks/items: `betterwithaddons:world_scale_ore` hardness 15 -> 225 and `randomthings:spectrecoil_number` names (world or random values, known).
 - entities, spawns and serializers: unchanged. `common-mobs.json`: only its dump stamp changed.
+
+## Restart point (Orca restart, 2026-11-03T03:11Z)
+
+- **Worktree:** branch `agent/rotn-data/plan-metas` (#153), clean, everything pushed. No background jobs, nothing half-done.
+- **Open PR:** #153, Request 10: the plan reads ingredient metas, plus skills-rotn #156's `!getCraftingPlan` caller fix. It is approved, develop is merged in, and it is mergeable; the lead merges on green CI. Nothing more to do on it unless CI or the lead says so.
+- **Exact next step:** a small follow-up PR from develop (after #153 merges) with the #152 nits:
+  - `packages/rotn-data/README.md`: the `installRecipes` row's variant count (now 115,782 if all were built);
+  - `src/craft-fill.js` `canFill`: drop item units that no slot accepts before the matching;
+  - its JSDoc: `assignment` covers the first craft only.
+
+  Targeted tests only: `packages/rotn-data/test/craft-fill.test.js`.
+- **Then:** ask the lead. The G3 note's open items: 14 overworld night mobs still default to "fight", and the parasite and weta are not cited.
+- **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
+- **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
+  - `pack/pack.zip`: the pinned RotN 3.3.4 server pack, SHA-256 `90642fd5...f5205` (verify again before use), plus `charm.jar`, `specialmobs.jar`, `Frozen-Fiend-1.5.3.jar`;
+  - `bc/summ.sh`: the javap summariser;
+  - `bc/x/`: extracted classes;
+  - the older mod jars are in session `2c454268-...`'s `scratchpad/modjars/`.
+
+  Nothing in them is needed for #153.
 
 ## Doing
 
