@@ -5,12 +5,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
-import { nightPhase, minutesToSunset, isSturdy, shelterShell, shelterPlan, NightClock, NIGHT_START, NIGHT_END, SHELTER_LEAD_MIN, TICKS_PER_MIN, FREEZE_MIN, STUCK_BOUND_MIN } from './night.js';
+import { nightPhase, minutesToSunset, isSturdy, shelterShell, shelterPlan, NightClock, NIGHT_START, NIGHT_END, SHELTER_LEAD_MIN, TICKS_PER_MIN, FREEZE_MIN, STUCK_BOUND_MIN, MORNING_FREEZE, NIGHT_FREEZE } from './night.js';
 
 const reg = minecraftData('1.12.2');
 const block = (name) => {
     const b = reg.blocksByName[name];
-    return { name, material: b.material, hardness: b.hardness, boundingBox: b.boundingBox, transparent: b.transparent };
+    return { name, metadata: 0, material: b.material, hardness: b.hardness, boundingBox: b.boundingBox, transparent: b.transparent };
 };
 const key = (p) => `${p.x},${p.y},${p.z}`;
 // A world: everything is `fill` unless set.
@@ -24,7 +24,7 @@ test('night is 12542-23460 (S1-A); dusk is the last SHELTER_LEAD_MIN of running 
     assert.equal(nightPhase(NIGHT_END - 1), 'night');
     assert.equal(nightPhase(NIGHT_END), 'day', 'dawn: about 11 min of running time plus the morning freeze to sunset');
     assert.equal(nightPhase(0), 'day');
-    assert.equal(nightPhase(3000), 'day', 'at the morning freeze about 8 min are certain');
+    assert.equal(nightPhase(MORNING_FREEZE), 'day', 'at the morning freeze about 8 min are certain');
     assert.equal(nightPhase(NIGHT_START - SHELTER_LEAD_MIN * TICKS_PER_MIN), 'dusk');
     assert.equal(nightPhase(NIGHT_START - SHELTER_LEAD_MIN * TICKS_PER_MIN - TICKS_PER_MIN), 'day');
     assert.equal(nightPhase(24000 + 13000), 'night', 'the time of day wraps');
@@ -33,17 +33,29 @@ test('night is 12542-23460 (S1-A); dusk is the last SHELTER_LEAD_MIN of running 
 
 test('minutes to sunset count the morning freeze only while it is ahead', () => {
     assert.equal(minutesToSunset(15000), 0);
-    assert.ok(Math.abs(minutesToSunset(3000) - (NIGHT_START - 3000) / TICKS_PER_MIN) < 1e-9);
+    assert.equal(MORNING_FREEZE, 3001, 'S1-A: the server log froze at "Time is 3001" and "Time is 16001"');
+    assert.equal(NIGHT_FREEZE, 16001);
+    assert.ok(Math.abs(minutesToSunset(MORNING_FREEZE) - (NIGHT_START - MORNING_FREEZE) / TICKS_PER_MIN) < 1e-9);
+    assert.ok(Math.abs(minutesToSunset(3000) - ((NIGHT_START - 3000) / TICKS_PER_MIN + FREEZE_MIN)) < 1e-9, 'just before it, the freeze is ahead');
     assert.ok(Math.abs(minutesToSunset(0) - (NIGHT_START / TICKS_PER_MIN + 10)) < 1e-9);
     assert.ok(minutesToSunset(NIGHT_END) > minutesToSunset(0), 'dawn (23460) comes before 0, so it is further from sunset');
 });
 
-test('sturdy: rock (stone, cobblestone), or a solid modded block as hard as stone; never dirt, sand, gravel, wood or leaves', () => {
-    for (const n of ['stone', 'cobblestone']) assert.equal(isSturdy(block(n)), true, n);
-    for (const n of ['dirt', 'grass', 'sand', 'gravel', 'planks', 'log', 'leaves', 'glass', 'air', 'water']) assert.equal(isSturdy(block(n)), false, n);
-    assert.equal(isSturdy({ name: 'undergroundbiomes:igneous_stone', boundingBox: 'block', transparent: false, hardness: 1.5 }), true);
-    assert.equal(isSturdy({ name: 'somemod:soft', boundingBox: 'block', transparent: false, hardness: 0.5 }), false);
+test('#181 review: sturdy comes from the dump: rock, a full cube and at least stone hardness; never the forge-bridge defaults', () => {
+    const b = (name, metadata = 0) => ({ name, metadata, boundingBox: 'block' });
+    for (const n of ['stone', 'cobblestone', 'mossy_cobblestone', 'double_stone_slab', 'undergroundbiomes:igneous_stone', 'undergroundbiomes:igneous_cobble', 'pyrotech:cobblestone'])
+        assert.equal(isSturdy(b(n)), true, n);
+    const not = {
+        netherrack: 'rock but hardness 0.4', stone_slab: 'not a full cube', stone_stairs: 'not a full cube', cobblestone_wall: 'not a full cube',
+        monster_egg: 'silverfish stone is clay', dirt: 'ground', grass: 'grass', sand: 'sand', gravel: 'sand', planks: 'wood', log: 'wood', glass: 'glass',
+        'biomesoplenty:dirt': 'modded ground', 'biomesoplenty:white_sand': 'modded sand', 'biomesoplenty:planks_0': 'modded wood', 'biomesoplenty:leaves_0': 'modded leaves',
+    };
+    for (const [n, why] of Object.entries(not)) assert.equal(isSturdy(b(n)), false, `${n}: ${why}`);
+    // forge-bridge's defaults for a block without known properties: hardness 1.5, no material, a full box.
+    assert.equal(isSturdy({ name: 'somemod:unknown_block', metadata: 0, hardness: 1.5, material: undefined, boundingBox: 'block', transparent: false }), false);
+    assert.equal(isSturdy({ name: 'biomesoplenty:dirt', metadata: 0, hardness: 1.5, material: undefined, boundingBox: 'block' }), false, 'the bot.registry values are not used');
     assert.equal(isSturdy(null), false, 'an unloaded block');
+    assert.equal(isSturdy({ metadata: 0 }), false, 'no name');
 });
 
 test('a shelter: 10 shell blocks around a 1x2 space; in the open all 10 are missing, in a stone pocket none', () => {
@@ -83,25 +95,29 @@ test('lead decision on D2a: the server time first; stuck longer than the freeze 
 
     // Running normally, then Extended Days' 10 min morning freeze: still the server's time.
     clock.observe(1800, 0);
-    clock.observe(3000, 1 * MIN);
-    assert.equal(clock.timeOfDay(1 * MIN + FREEZE_MIN * MIN), 3000);
-    assert.equal(clock.timeOfDay(1 * MIN + STUCK_BOUND_MIN * MIN), 3000, 'up to the bound');
+    clock.observe(MORNING_FREEZE, 1 * MIN);
+    assert.equal(clock.timeOfDay(1 * MIN + FREEZE_MIN * MIN), MORNING_FREEZE);
+    assert.equal(clock.timeOfDay(1 * MIN + STUCK_BOUND_MIN * MIN), MORNING_FREEZE, 'up to the bound');
     assert.deepEqual(logs, []);
 
     // Stuck past the bound: the wall clock, less the one freeze, at the measured rate.
     const at = 1 * MIN + (STUCK_BOUND_MIN + 3) * MIN;
-    assert.equal(clock.timeOfDay(at), 3000 + (STUCK_BOUND_MIN + 3 - FREEZE_MIN) * TICKS_PER_MIN);
+    assert.equal(clock.timeOfDay(at), MORNING_FREEZE + (STUCK_BOUND_MIN + 3 - FREEZE_MIN) * TICKS_PER_MIN);
     assert.equal(clock.fallback, true);
     assert.equal(logs.length, 1);
-    assert.match(logs[0], /^\[night\] the time has stayed at 3000 for 18 min \(more than 15\); using the wall clock until it advances$/);
-    const late = 1 * MIN + 20 * MIN; // 10 min of running time after the freeze: 14990, night
-    assert.deepEqual([clock.timeOfDay(late), clock.phase(late)], [3000 + 10 * TICKS_PER_MIN, 'night']);
+    assert.match(logs[0], /^\[night\] the time has stayed at 3001 for 18 min \(more than 15\); using the wall clock until it advances$/);
+    const late = 1 * MIN + 20 * MIN; // 10 min of running time after the freeze: 14991, night
+    assert.deepEqual([clock.timeOfDay(late), clock.phase(late)], [MORNING_FREEZE + 10 * TICKS_PER_MIN, 'night']);
     assert.equal(logs.length, 1, 'logged once');
 
     // The value advances again: the server's time, logged once.
     clock.observe(12700, late);
     assert.deepEqual([clock.fallback, clock.timeOfDay(late)], [false, 12700]);
-    assert.match(logs[1], /^\[night\] the time advances again \(3000 -> 12700\); using the server's time$/);
+    assert.match(logs[1], /^\[night\] the time advances again \(3001 -> 12700\); using the server's time$/);
+
+    // Stuck a few ticks from the night freeze (the packet came a moment late): still that freeze.
+    clock.observe(NIGHT_FREEZE + 3, 0);
+    assert.equal(clock.timeOfDay((STUCK_BOUND_MIN + 1) * MIN), NIGHT_FREEZE + 3 + (STUCK_BOUND_MIN + 1 - FREEZE_MIN) * TICKS_PER_MIN);
 
     // Stuck at a value that is no freeze point: the whole stuck time counts.
     clock.observe(8000, 0);
