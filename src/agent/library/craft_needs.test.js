@@ -104,3 +104,55 @@ test('!craftRecipe("stone_pickaxe", 1) without enough rocks says what to get, no
     await getCommand(commandName).perform(agent, ...args);
     assert.match(bot.output, /You do not have the resources to craft stone_pickaxe\. To craft stone_pickaxe \(at a crafting table\): 3 rock: you have 2 pyrotech_compat:rock_metamorphic, so get 1 more pyrotech:rock \(any rock\)/);
 });
+
+// #151 re-review: the advice is rotn-data's top-ranked choice, not the ore list's first entry,
+// and a slot takes every stack the recipe slot lists (the crude axe's rock slot takes flint).
+test('crude axe without sticks: the advice is stick (any ladderMat), not a Better With Mods shaft', () => {
+    const needs = craftNeeds(invBot([stack('pyrotech:rock', 0, 1)]), 'pyrotech:crude_axe');
+    assert.equal(describeNeeds('pyrotech:crude_axe', needs),
+        'To craft pyrotech:crude_axe: 1 rock: you have 1 pyrotech:rock:0 (enough); 2 ladderMat: you have none, so get 2 stick (any ladderMat).');
+});
+
+test('crafting table without planks: the advice is planks (any plankWood), not skyroot', () => {
+    const needs = craftNeeds(invBot([stack('contenttweaker:crafting_tools', 0, 1)]), 'crafting_table');
+    assert.equal(describeNeeds('crafting_table', needs),
+        'To craft crafting_table: 1 plankWood: you have none, so get 1 planks (any plankWood); 1 contenttweaker:crafting_tools: you have 1 contenttweaker:crafting_tools (enough).');
+});
+
+test('crude axe from flint and sticks is ready (the recipe slot lists flint)', () => {
+    const needs = craftNeeds(invBot([stack('flint', 0, 1), stack('stick', 0, 2)]), 'pyrotech:crude_axe');
+    assert.equal(needs.ready, true);
+    assert.equal(needs.inputs[0].short, 0);
+    assert.deepEqual(needs.inputs[0].kinds, [{ name: 'flint', have: 1 }]);
+});
+
+// #151 re-review: craftRecipe's messages must not throw (getItemCraftingRecipes gives null
+// for an item without recipes; the raw-recipe text read [0][0] of it).
+async function craftLog(items, name) {
+    const bot = {
+        ...invBot(items),
+        registry: reg,
+        output: '',
+        entity: { position: new Vec3(0, 64, 0) },
+        modes: { isOn: () => false },
+        findBlocks: () => [],
+        blockAt: () => null,
+        recipesFor: () => [],
+    };
+    const agent = { bot, actions: { runAction: async (label, fn) => { await fn(); return { message: bot.output, interrupted: false }; } } };
+    const { commandName, args } = parseCommandMessage(`!craftRecipe("${name}", 1)`);
+    await getCommand(commandName).perform(agent, ...args);
+    return bot.output;
+}
+
+test('!craftRecipe: items that fit a RotN recipe but no mineflayer variant give a message, not a throw', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const out = await craftLog([stack('pyrotech:rock', 0, 3), stack('stick', 0, 2)], 'stone_pickaxe');
+    assert.match(out, /Could not craft stone_pickaxe: your items fit a RotN recipe, but no matching recipe variant was found./);
+});
+
+test('!craftRecipe: an item with no crafting recipe gives a message, not a TypeError', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const out = await craftLog([], 'bedrock');
+    assert.match(out, /bedrock is either not an item, or it does not have a crafting recipe!/);
+});

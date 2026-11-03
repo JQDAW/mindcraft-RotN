@@ -14,8 +14,31 @@ import { countItem, formatName, parseName } from './rotn_names.js';
 
 const memberName = (m) => (m.meta == null ? botName(m.name) : formatName(botName(m.name), m.meta));
 
-// Every stack that fits an input: the full ore dictionary (a way lists at most 6 choices), else its choices.
-function inputMembers(input) {
+const WILD = (meta) => meta == null || meta === WILDCARD_META;
+const sameStack = (a, b) => botName(a.name) === botName(b.name) && (WILD(a.meta) || WILD(b.meta) || a.meta === b.meta);
+
+// The dump recipe's slots (shaped or shapeless), or [] when the recipe is unknown.
+function recipeCells(recipeId) {
+    if (!recipeId) return [];
+    let r = null;
+    try { r = loadRotnData(PACK_VERSION).recipeById(recipeId); } catch { return []; }
+    if (!r) return [];
+    const cells = Array.isArray(r.inShape) ? r.inShape.flat() : (Array.isArray(r.ingredients) ? r.ingredients : []);
+    return cells.filter(c => c && Array.isArray(c.stacks) && c.stacks.length > 0);
+}
+
+// Every stack that fits an input. Prefer the recipe slot's own stacks: the crude axe's rock slot
+// also takes flint, which is not in the rock ore list (#151 re-review). Else the full ore
+// dictionary (a way lists at most 6 choices), else its choices.
+function inputMembers(input, cells) {
+    const c0 = input.choices?.[0];
+    const cell = c0 ? cells.find(c => c.stacks.some(s => sameStack(s, c0))) : null;
+    const plain = cell ? cell.stacks.filter(s => !s.nbt) : [];
+    if (plain.length > 0) {
+        const seen = new Set();
+        return plain.map(s => ({ name: s.name, meta: WILD(s.meta) ? null : s.meta }))
+            .filter(m => { const k = memberName(m); if (seen.has(k)) return false; seen.add(k); return true; });
+    }
     if (input.ore) {
         const members = loadRotnData(PACK_VERSION).oreDict(input.ore);
         if (Array.isArray(members) && members.length > 0)
@@ -48,19 +71,22 @@ export function craftNeeds(bot, name) {
     const stacks = stacksOf(bot);
     const evaluated = ways.map(way => {
         const fill = canFill(way, stacks); // the whole recipe: the verdict
+        const cells = recipeCells(way.recipeId);
         const inputs = way.inputs.map(input => {
-            const members = inputMembers(input);
+            const members = inputMembers(input, cells);
+            const c0 = input.choices?.[0] ?? members[0];
             // This input alone, for the message: how many of its slots the inventory can fill.
             const part = canFill({ ingredients: Array(input.count).fill({ stacks: members }) }, stacks);
             const kinds = members.map(m => ({ name: memberName(m), have: countItem(bot, memberName(m)) }))
                 .filter(k => k.have > 0)
                 .sort((a, b) => b.have - a.have);
             const short = part ? part.missing : input.count;
-            const label = input.ore ?? (members[0] ? memberName(members[0]) : '?');
-            // What to get: any member of an ore ("pyrotech:rock (any rock)", what collecting a bare
-            // pyrotech:rock gathers, #151 review), else the input's own item.
-            const more = short > 0 && members[0]
-                ? (input.ore ? `${botName(members[0].name)} (any ${input.ore})` : (kinds[0]?.name ?? memberName(members[0])))
+            const label = input.ore ?? (c0 ? memberName(c0) : '?');
+            // What to get: rotn-data's top-ranked choice, not the ore list's first entry (that gave
+            // betterwithmods:shaft for sticks, #151 re-review). For an ore any member does
+            // ("pyrotech:rock (any rock)", what collecting a bare pyrotech:rock gathers).
+            const more = short > 0 && c0
+                ? (input.ore ? `${botName(c0.name)} (any ${input.ore})` : (kinds[0]?.name ?? memberName(c0)))
                 : null;
             return { ore: input.ore ?? null, count: input.count, label, kinds, short, more };
         });
