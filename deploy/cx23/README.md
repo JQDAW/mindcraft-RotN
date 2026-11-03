@@ -17,6 +17,12 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
 ## One-time bootstrap (human, with the root login)
 
 1. Copy this folder to the server: `scp -r deploy/cx23 root@<cx23>:/root/cx23`. Also copy the `deploy` user's **public** key (`deploy.pub`).
+
+   **From a Windows checkout** (`core.autocrlf=true`): every file here must reach the server with LF line ends.
+   - `deploy/.gitattributes` sets `eol=lf` for all of `deploy/cx23/`, so a fresh checkout is fine.
+   - **A checkout made before that rule** (before 2026-11-03) may still hold CRLF copies, and git does not rewrite them on its own. Copy from git instead of the working tree, in Git Bash: `mkdir -p /tmp/cx23-copy && git archive HEAD deploy/cx23 | tar -x -C /tmp/cx23-copy`, then `scp -r /tmp/cx23-copy/deploy/cx23 root@<cx23>:/root/cx23`.
+   - **To check a copy**, run `grep -rlI $'\r' deploy/cx23`. It must print nothing.
+   - **In CI,** `test/unit/deploy-eol.test.js` checks both the attribute and the files.
 2. `bash /root/cx23/bootstrap.sh setup --deploy-key-file /root/deploy.pub`.
 
    **GO 2 runs without `--ssh-from`** (#137 review): SSH stays open to all addresses, by key only.
@@ -51,7 +57,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
      - If either check fails, it puts back what was there, so sshd is never left half-configured.
      - `PermitRootLogin` is not touched: root keeps its key login (`prohibit-password`);
    - installs the unit, `check-env` and `mindcraft-rotn-ctl`;
-   - creates `/opt/mindcraft-rotn` (`deploy:mindcraft-rotn`, 0750), `/var/lib/mindcraft-rotn` and `/etc/mindcraft-rotn` (`root:mindcraft-rotn`, 0750).
+   - creates `/opt/mindcraft-rotn` (`deploy:mindcraft-rotn`, 0750), `/var/lib/mindcraft-rotn` and `/var/lib/mindcraft-rotn/bots` (`mindcraft-rotn:mindcraft-rotn`, 0750), and `/etc/mindcraft-rotn` (`root:mindcraft-rotn`, 0750).
 
    After `setup`, SSH password login is **off**, and root login by key stays **on**.
 
