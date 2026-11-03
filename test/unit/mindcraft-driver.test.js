@@ -62,6 +62,10 @@ describe('mindcraft-driver: checks before anything starts', () => {
         assert.match(profileProblems(f('task.json', '{"name":"FRCFLD","task":{"goal":"x"}}'), 'FRCFLD')[0], /has 'task'/);
         assert.match(profileProblems(f('other.json', '{"name":"Andy"}'), 'FRCFLD')[0], /name 'Andy' is not the runner's bot 'FRCFLD'/);
         assert.deepEqual(profileProblems(f('ok.json', '{"name":"FRCFLD"}'), 'FRCFLD'), []);
+        // Givers are settings; the test-only Server giver is the driver's alone (#146).
+        for (const k of ['allow_server_task_giver', 'task_givers', 'TaskGivers']) {
+            assert.match(profileProblems(f('giver.json', JSON.stringify({ name: 'FRCFLD', [k]: k === 'allow_server_task_giver' ? true : ['Server'] })), 'FRCFLD')[0], new RegExp(`has '${k}'`));
+        }
     });
 
     test('settings.js must evaluate to allow_insecure_coding === false', async () => {
@@ -74,9 +78,12 @@ describe('mindcraft-driver: checks before anything starts', () => {
         assert.deepEqual(await settingsProblems(path.join(HERE, '..', '..', 'settings.js')), []);
     });
 
-    test('main.js gets host, port, auth and auto_open_ui only; one profile; the single-bot service; no runner vars', async () => {
+    test('main.js gets host, port, auth, auto_open_ui and the test-only Server giver switch; one profile; the single-bot service; no runner vars', async () => {
         const e = mindcraftEnv(runnerEnv({ OPENROUTER_API_KEY: 'not-a-key' }), { profile: 'profiles/g3.json', mindserverPort: 40123 });
-        assert.deepEqual(JSON.parse(e.SETTINGS_JSON), { host: '192.0.2.10', port: 25565, auth: 'microsoft', auto_open_ui: false });
+        // skills-rotn's test-only allow_server_task_giver (#146): turned on here and nowhere else; task_givers
+        // (the players) are left to settings.js.
+        assert.deepEqual(JSON.parse(e.SETTINGS_JSON), { host: '192.0.2.10', port: 25565, auth: 'microsoft', auto_open_ui: false, allow_server_task_giver: true });
+        assert.ok(!('task_givers' in JSON.parse(e.SETTINGS_JSON)));
         assert.deepEqual(JSON.parse(e.PROFILES), ['profiles/g3.json']);
         assert.equal(e.MINDCRAFT_SINGLE_BOT_SERVICE, '1');
         assert.equal(e.MINDSERVER_PORT, '40123');
@@ -173,7 +180,8 @@ describe('mindcraft-driver end to end with a fake main.js', () => {
         const pids = await waitFor(() => readJson(path.join(dir, 'pids.json')));
         assert.ok(pids, 'the fake main.js and its agent started');
         const seen = readJson(path.join(dir, 'seen.json'));
-        assert.deepEqual(seen.settingsKeys, ['auth', 'auto_open_ui', 'host', 'port']);
+        assert.deepEqual(seen.settingsKeys, ['allow_server_task_giver', 'auth', 'auto_open_ui', 'host', 'port']);
+        assert.equal(seen.allowServerTaskGiver, true, 'the test-only Server giver switch reaches main.js (#146)');
         assert.deepEqual(seen.settings, { host: '192.0.2.10', port: 25565, auth: 'microsoft', auto_open_ui: false });
         assert.equal(seen.singleBot, '1');
         assert.equal(seen.argv.length, 0, 'no arguments for main.js: no task files');

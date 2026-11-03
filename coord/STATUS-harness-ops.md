@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (01:00 UTC, from `date -u`)
+Updated: 2026-11-03 (01:37 UTC, from `date -u`)
 
 ## Done
 
@@ -1127,15 +1127,13 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the #128 and #135 review nits (`agent/harness-ops/review-nits-128-135`):
-  - **#128:**
-    - the redactor keeps loopback (`127.x.x.x`) and the wildcard (`0.0.0.0`), so the cx23 probe's `ss` lines are regenerated from the raw capture and show them;
-    - the README marks "MainThread is Orca" as an inference;
-    - the README cites where the 997da58, terminal-time and other-terminal facts came from;
-    - the README notes the lost space at line 186.
-  - **#135:**
-    - a comment that the load step proves linking, not rendering;
-    - each npm and node step changes to `$GITHUB_WORKSPACE`.
-- Next: a research note on Java 8 packages on Ubuntu 26.04 (for the lead to file).
+- This PR: G3's test-only Server task giver, for skills-rotn's #146 (`agent/harness-ops/g3-server-giver`):
+  - the G3 driver writes `allow_server_task_giver: true` into its own `SETTINGS_JSON` for `main.js`, and nowhere else;
+  - the production `settings.js` must have it `false` or absent, which the driver checks and CI checks;
+  - a profile with any task-giver key is refused;
+  - the CX23's `check-env.mjs` keeps refusing `allow_server_task_giver` and `task_givers` in `SETTINGS_JSON` (explicit tests).
+  - `task_givers` (the players) is left to the lead's `settings.js`; per #146, `Server` needs no entry there.
+- #150: the research note on Java 8 on Ubuntu 26.04 (APPROVED WITH NITS; develop merged in). The 26.04 test-server build batch waits until after the first G3 smoke batch.
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
-- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (the #137 re-review nits, 655bcaa), and the lead's #134 (ADR 0007).
+- **The CX23:** the human has run GO 2. Nothing of mine touches it until the lead's word.
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), and the lead's #134 (ADR 0007).
