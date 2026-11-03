@@ -16,6 +16,8 @@
 //                           only when that mob is angry (the enderman's "screaming" flag);
 //                           for one whose flag is unknown, back off after a hit nearby
 //   ignore                  not a threat
+// Any mob, whatever its reaction, may also be one the bot must not look at (rotn-data's
+// lookAt: false): idle_staring never looks at it, and no random look is made near it.
 //
 // rotn-data's sources (documented, vanilla, verified, inferred class rules) are treated the
 // same: the inferred rules lean cautious (every creeper variant keeps its distance, skeleton
@@ -59,8 +61,9 @@ export function threatFor(entity) {
             level: t.level,
             explodes: !!t.explodes,
             ranged: !!t.ranged,
-            // rotn-data has no field for it yet; its summary says "Do not look at it".
-            doNotLook: t.reaction === 'ignore-unless-provoked' && /do not look at it/i.test(t.summary ?? ''),
+            // rotn-data's lookAt (#187): false for a mob that targets whoever looks at it (the
+            // enderman family, the ender creeper) or whose gaze needs a look back (the cockatrice).
+            doNotLook: t.lookAt === false,
         } : null);
     }
     const known = cache.get(entity.name);
