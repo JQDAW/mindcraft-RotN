@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T11:44Z (from `date -u`)
+Updated: 2026-11-03T11:46Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -205,11 +205,15 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
   - `bc/x/`: extracted classes;
   - the older mod jars are in session `2c454268-...`'s `scratchpad/modjars/`.
 
-  Nothing in them is needed for #153.
+  Nothing in them is needed for #172.
 
 ## Doing
 
-- **#145 review nit 1, mixed ore-dictionary slots (`agent/rotn-data/mixed-ore-slots`; G3 crafting path).**
+- **#172, the #152 nits** (see Follow-ups). The independent review approved it with nits; the STATUS nits are fixed and the test nit is left as is. It waits for the lead.
+
+The entries below are done; they are kept here as the record of how they work.
+
+- **#145 review nit 1, mixed ore-dictionary slots (done: merged as #152; G3 crafting path).**
   - **What prismarine-recipe and mineflayer can express (no patch needed):**
     - a prismarine-recipe slot is one `RecipeItem` (`id`, `metadata`; `node_modules/prismarine-recipe/lib/recipe_item.js:3-5`);
     - metadata >= 32767 becomes `null` (`recipe.js:102-105`);
@@ -223,7 +227,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
   - no mix pairs a wildcard with a specific meta of the same item (0 such variants);
   - the candidate order is develop's again; only the mix pool prefers whole families.
 - **New for skills-rotn #151 (lead's request):** `canFill(recipe | recipeId | howToGet craft way, stacks, { times })`, the same slot rule as the variants, with bipartite matching so one item is never counted twice; also `recipeById(id)`.
-- **Request 10, the plan reads ingredient metas (#153, `agent/rotn-data/plan-metas`; approved; carries skills-rotn #156, the `!getCraftingPlan` caller fix; develop merged in after #152):**
+- **Request 10, the plan reads ingredient metas (done: merged as #153, with skills-rotn #156, the `!getCraftingPlan` caller fix):**
   - **How it works:** `getDetailedCraftingPlan` now keys ingredients like `world.getInventoryCounts` does (`name:meta` for items with subtypes, bare otherwise; a bare recipe key means any variant), and plans with the first recipe variant the inventory and leftovers can supply.
   - **Results:** a dirt clump (`pyrotech:rock:4`) no longer counts as a rock; a metamorphic rock does; 1 igneous + 2 metamorphic make a stone pickaxe (with #152).
   - **New export:** `getItemCraftingRecipeVariants(key)`. `getItemCraftingRecipes` (bare names, upstream shape) is unchanged.
