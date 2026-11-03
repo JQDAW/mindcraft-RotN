@@ -1149,6 +1149,16 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
     **A separate point for the human:** sshd allows password logins (`passwordauthentication yes`), and nothing filters the ports until GO 2 turns on ufw. With no lockdown (the human's decision), the `deploy` password from H2 will also work over SSH. Turning off `PasswordAuthentication` before H2 would close that. It is the human's call, and it is not part of my bootstrap.
 
+15. **net-forge: the P1 reply contract** (lead: coordinate it through STATUS). **#165 uses #162's protocol as it is** (`packages/forge-bridge/tools/probe-commands.mjs`), and **`test/unit/probe-e2e.test.js` holds it to the real code.** It runs the scenario against a real `g1-driver.mjs` process with `ROTN_DRIVER_PROBE=1` on your fake server and craft world (`packages/forge-bridge/test/craft-world.js`, `fake-containers.js`). What the scenario relies on, so a change on your side shows up in that test:
+    - **Commands:** `probe-craft TOKEN RECIPE_ID [x,y,z]` (P1: `crafttweaker:pyro_crude_axe`, `crafttweaker:crafting_tools`, `crafttweaker:crafting_table`, and `crafttweaker:stone_pickaxe` at the table), `probe-place TOKEN ITEM x,y,z FACE` and `probe-eat TOKEN ITEM`, as a console whisper from `Server`.
+    - **Replies:** exactly one `DRIVER {"type":"probe","token","cmd","ok",...}` per token, within your 60 s limit. Fields read:
+      - craft: `ok`, `error`, `result`, `before`, `after`, `ms`, `variant`, `tableBlock`;
+      - place: `ok`, `error`, `after`, `updateMs` (into `notes.placeLatencyMs`), `totalMs`;
+      - eat: `ok`, `error`, `foodBefore`, `foodAfter`, `countBefore`, `countAfter`, `ms`.
+    - **The capture path** comes from your `forge` event (`capture`). Rejected transactions and the `fastbench` mod window are read from the capture in the evidence step; the e2e test checks that the capture has the `fastbench` `mod_window`.
+    - **I use your test helpers** (`craft-world.js`, `fake-forge-server.js`, `stack` from `fake-containers.js`, `helpers.js`) from `test/unit/probe-e2e.test.js`. Please keep their exports, or tell me here before you change them.
+    - **Optional, later:** per-craft `modWindow` and `transactions` in the craft reply would let a scenario check them directly. They are not needed for P1.
+
 16. **skills-rotn (via the lead): the RotN profile's model.** Open as skills-rotn's #170. The Mindcraft driver refuses any profile whose `model` is not `"openrouter/@preset/glm-5-1-mindcraft"` (the human's decision; #169). Until the RotN profile in `profiles/` sets it, every G3 or smoke run is refused at the start (exit 3, `refused`), which fails closed, as intended.
     - If the profile sets `code_model` or `vision_model`, they must be the same model.
     - The embedding model is not checked.
@@ -1161,4 +1171,4 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
   - **The test key:** `OPENROUTER_API_KEY` is a Windows user environment variable. The human has restarted Orca (2026-11-03); the lead checks that a fresh terminal sees it (set or not set only).
 - #165: probe P1, the scenario `probe-craft-place` (never a gate), with the #165 review fixes and the offline e2e against the real driver (CI green).
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
-- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b), #166 (`deploy.sh` refuses the test-only giver settings), and the lead's #134 (ADR 0007).
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b; the terminal was closed at 02:16:21 UTC), #166 (`deploy.sh` refuses the test-only giver settings), and the lead's #134 (ADR 0007).
