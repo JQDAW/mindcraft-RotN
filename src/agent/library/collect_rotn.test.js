@@ -1,25 +1,52 @@
 // Offline tests for skills-rotn B2: collectBlock follows RotN's world rules
 // from rotn-data (howToGet): rocks come from rock piles by hand and from stone
-// mined with a pickaxe below Sturdy (4 per block); "cobblestone" no longer digs
-// stone. Fake bot on the 1.12.2 registry; no server, no LLM.
+// mined with a pickaxe below Sturdy; "cobblestone" no longer digs stone. The
+// #141 review: count the real inventory gain, keep the rule's tool equipped, and
+// treat only rock variants as rocks. A fake bot on the 1.12.2 registry (plus the
+// modded rock the server's registry has) simulates the drops; no server, no LLM.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { worldSources, toolAllows, describeTool } from './rotn_sources.js';
+import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from './rotn_sources.js';
+import { countItem } from './rotn_names.js';
 import * as skills from './skills.js';
 
-const reg = minecraftData('1.12.2');
+const vanilla = minecraftData('1.12.2');
+const ROCK_ITEM = { id: 5000, name: 'pyrotech:rock', stackSize: 64 };
+const ROCK_BLOCK = { id: 4242, name: 'pyrotech:rock' };
+const reg = {
+    ...vanilla,
+    items: { ...vanilla.items, [ROCK_ITEM.id]: ROCK_ITEM },
+    itemsByName: { ...vanilla.itemsByName, [ROCK_ITEM.name]: ROCK_ITEM },
+    blocks: { ...vanilla.blocks, [ROCK_BLOCK.id]: ROCK_BLOCK },
+    blocksByName: { ...vanilla.blocksByName, [ROCK_BLOCK.name]: ROCK_BLOCK },
+};
 __setRegistryForTest(reg);
 
 const at = (x, y = 64, z = 0) => new Vec3(x, y, z);
-const block = (name, metadata, position, type = reg.blocksByName[name]?.id ?? 4000) =>
-    ({ name, metadata, type, position, canHarvest: () => true, boundingBox: 'block', transparent: false, shapes: [[0, 0, 0, 1, 1, 1]] });
-const stack = (name, count) => ({ name, metadata: 0, count, type: reg.itemsByName[name]?.id ?? 4001 });
+const block = (name, metadata, position) => ({
+    name, metadata, type: reg.blocksByName[name].id, position,
+    canHarvest: () => true, boundingBox: 'block', transparent: false, shapes: [[0, 0, 0, 1, 1, 1]],
+});
+const tool = (name) => ({ name, metadata: 0, count: 1, type: reg.itemsByName[name].id });
+const PICKAXE_LEVEL = { stone_pickaxe: 0, iron_pickaxe: 1 };
+
+// What a break drops in RotN, by block and held tool.
+function drops(b, held) {
+    const level = held ? PICKAXE_LEVEL[held.name] : undefined;
+    if (b.name === 'stone') {
+        if (level === 0) return [['pyrotech:rock', 0, 4]];
+        if (level >= 1) return [['cobblestone', 0, 1]];
+        return [];
+    }
+    if (b.name === 'pyrotech:rock') return [['pyrotech:rock', b.metadata, 1]];
+    return []; // leaves: an unlucky roll, no stick
+}
 
 function fakeBot({ blocks = [], items = [] } = {}) {
-    const calls = { collect: [], dig: [] };
+    const calls = { equip: [], collected: [], dug: [] };
     const remaining = [...blocks];
     const bot = {
         calls,
@@ -32,7 +59,7 @@ function fakeBot({ blocks = [], items = [] } = {}) {
         entities: {},
         heldItem: null,
         modes: { isOn: () => false, pause() {}, unpause() {} },
-        inventory: { items: () => items, slots: [null, ...items] },
+        inventory: { items: () => items.filter(i => i.count > 0), slots: [] },
         findBlocks({ matching, maxDistance = 16, count = 1 }) {
             return remaining.filter(b => (typeof matching === 'function' ? matching(b) : [].concat(matching).includes(b.type)))
                 .filter(b => b.position.distanceTo(bot.entity.position) <= maxDistance)
@@ -40,64 +67,108 @@ function fakeBot({ blocks = [], items = [] } = {}) {
                 .slice(0, count).map(b => b.position);
         },
         blockAt: (pos) => remaining.find(b => b.position.equals(pos)) ?? null,
-        tool: { equipForBlock: () => Promise.resolve() },
-        collectBlock: { collect: (b) => { calls.collect.push(b); remaining.splice(remaining.indexOf(b), 1); return Promise.resolve(); } },
-        dig: (b) => { calls.dig.push(b); remaining.splice(remaining.indexOf(b), 1); return Promise.resolve(); },
+        equip: (item) => { calls.equip.push(item.name); bot.heldItem = item; return Promise.resolve(); },
+        // Like mineflayer-tool: the fastest pickaxe.
+        tool: {
+            equipForBlock: () => {
+                const best = items.filter(i => i.name in PICKAXE_LEVEL).sort((a, b) => PICKAXE_LEVEL[b.name] - PICKAXE_LEVEL[a.name])[0];
+                if (best) bot.heldItem = best;
+                return Promise.resolve();
+            },
+        },
+        collectBlock: { collect: (b) => { calls.collected.push(b); breakBlock(b); return Promise.resolve(); } },
+        dig: (b) => { calls.dug.push(b); breakBlock(b); return Promise.resolve(); },
         pathfinder: { setMovements() {}, stop() {}, setGoal() {}, isMoving: () => false, goto: () => Promise.resolve(), getPathTo: () => ({ status: 'success', path: [] }) },
         lookAt: () => Promise.resolve(),
-        nearestEntity: () => null, // no dropped items to pick up in the fake world
+        nearestEntity: () => null,
     };
+    function breakBlock(b) {
+        remaining.splice(remaining.indexOf(b), 1);
+        for (const [name, metadata, count] of drops(b, bot.heldItem)) {
+            const stack = items.find(i => i.name === name && i.metadata === metadata);
+            if (stack) stack.count += count;
+            else items.push({ name, metadata, count, type: reg.itemsByName[name].id });
+        }
+    }
     return bot;
 }
 
-test('rotn-data world rules for rocks: piles by hand (1), stone with a pickaxe below Sturdy (4)', () => {
+test('rotn-data world rules for rocks: piles by hand, stone with a pickaxe below Sturdy; only rock variants', () => {
     const sources = worldSources('pyrotech:rock');
     const pile = sources.find(s => s.blocks.some(b => b.startsWith('pyrotech:rock')));
     const stone = sources.find(s => s.blocks.includes('stone:0'));
-    assert.ok(pile && pile.tool === null && pile.count === 1, 'rock piles by hand, 1 rock');
-    assert.ok(stone && stone.tool?.type === 'pickaxe' && stone.tool.maxLevel === 0 && stone.count === 4, 'stone: pickaxe level 0, 4 rocks');
+    assert.ok(pile && pile.tool === null, 'rock piles by hand');
+    assert.ok(stone && stone.tool?.type === 'pickaxe' && stone.tool.maxLevel === 0, 'stone: pickaxe below Sturdy');
     assert.equal(describeTool(stone.tool), 'a pickaxe of level 0 or lower');
-    assert.equal(toolAllows(fakeBot({ items: [stack('stone_pickaxe', 1)] }), stone.tool), true);
-    assert.equal(toolAllows(fakeBot({ items: [stack('iron_pickaxe', 1)] }), stone.tool), false, 'iron is Sturdy: stone would drop cobblestone');
-    assert.equal(toolAllows(fakeBot(), stone.tool), false);
+    // The rock variants come from rotn-data (the "rock" ore dictionary), not from this code.
+    assert.deepEqual(itemVariants('pyrotech:rock'), ['pyrotech:rock:0', 'pyrotech:rock:6', 'pyrotech:rock:8']);
+    assert.deepEqual(itemVariants('pyrotech:rock:4'), ['pyrotech:rock:4']);
+    assert.deepEqual(itemVariants('cobblestone'), ['cobblestone']);
+    assert.equal(toolAllows(fakeBot({ items: [tool('stone_pickaxe')] }), stone.tool), true);
+    assert.equal(toolAllows(fakeBot({ items: [tool('iron_pickaxe')] }), stone.tool), false, 'iron is Sturdy');
+    assert.equal(allowedTool(fakeBot({ items: [tool('iron_pickaxe'), tool('stone_pickaxe')] }), stone.tool).name, 'stone_pickaxe');
 });
 
-test('!collectBlocks("pyrotech:rock", 8) with a stone pickaxe mines 2 stone blocks for 8 rocks', async (t) => {
+test('nit 4: only "break" rules are collect sources (no item-on-block rules, no "a undefined")', () => {
+    for (const name of ['planks', 'planks:0', 'stick', 'pyrotech:rock']) {
+        for (const s of worldSources(name)) assert.doesNotMatch(describeTool(s.tool), /undefined/, name);
+    }
+});
+
+test('8 rocks with a stone pickaxe: 2 stone blocks, counted from the inventory', async (t) => {
     t.mock.method(console, 'log', () => {});
-    const bot = fakeBot({
-        items: [stack('stone_pickaxe', 1)],
-        blocks: [block('stone', 0, at(2)), block('stone', 0, at(3)), block('stone', 0, at(4)), block('dirt', 0, at(1))],
-    });
+    const items = [tool('stone_pickaxe')];
+    const bot = fakeBot({ items, blocks: [block('stone', 0, at(2)), block('stone', 0, at(3)), block('stone', 0, at(4))] });
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 8), true);
-    assert.equal(bot.calls.collect.length, 2, 'two stone blocks, not eight');
-    assert.ok(bot.calls.collect.every(b => b.name === 'stone'));
+    assert.equal(bot.calls.dug.length, 2, 'two stone blocks, not eight');
+    assert.equal(countItem(bot, 'pyrotech:rock'), 8);
     assert.match(bot.output, /Collected 8 pyrotech:rock\./);
+});
+
+test('review 2: with a stone and an iron pickaxe, the stone one is used (iron would give cobblestone)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('iron_pickaxe'), tool('stone_pickaxe')];
+    const bot = fakeBot({ items, blocks: [block('stone', 0, at(2)), block('stone', 0, at(3))] });
+    await skills.collectBlock(bot, 'pyrotech:rock', 8);
+    assert.deepEqual([...new Set(bot.calls.equip)], ['stone_pickaxe']);
+    assert.equal(countItem(bot, 'pyrotech:rock'), 8);
+    assert.equal(countItem(bot, 'cobblestone'), 0);
+    assert.match(bot.output, /Collected 8 pyrotech:rock\./);
+});
+
+test('review 1: the count is the real gain: leaves that drop no stick give "Collected 0 stick"', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = fakeBot({ blocks: [block('leaves', 0, at(1, 66)), block('leaves', 0, at(2, 66))] });
+    assert.equal(await skills.collectBlock(bot, 'stick', 2), false);
+    assert.match(bot.output, /Broke leaves but got no stick\./);
+    assert.match(bot.output, /Collected 0 stick\./);
+});
+
+test('review 3: a bare "pyrotech:rock" skips a nearer dirt clump (meta 4) and takes a rock pile', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const clump = block('pyrotech:rock', 4, at(1));
+    const pile = block('pyrotech:rock', 0, at(5));
+    const bot = fakeBot({ blocks: [clump, pile] });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true);
+    const taken = [...bot.calls.collected, ...bot.calls.dug];
+    assert.deepEqual(taken.map(b => b.metadata), [0]);
+    assert.equal(countItem(bot, 'pyrotech:rock:4'), 0, 'no dirt clump picked up');
+    assert.match(bot.output, /Collected 1 pyrotech:rock\./);
 });
 
 test('without a pickaxe, stone is not a rock source, and the bot says what it needs', async (t) => {
     t.mock.method(console, 'log', () => {});
     const bot = fakeBot({ blocks: [block('stone', 0, at(2))] });
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 4), false);
-    assert.deepEqual(bot.calls.collect, []);
+    assert.deepEqual(bot.calls.dug, []);
     assert.match(bot.output, /No pyrotech:rock nearby to collect\./);
     assert.match(bot.output, /Mine stone with a pickaxe below Sturdy.*That needs a pickaxe of level 0 or lower\./);
 });
 
 test('"cobblestone" no longer digs stone (that gives rocks below Sturdy)', async (t) => {
     t.mock.method(console, 'log', () => {});
-    const bot = fakeBot({ items: [stack('stone_pickaxe', 1)], blocks: [block('stone', 0, at(2))] });
+    const bot = fakeBot({ items: [tool('stone_pickaxe')], blocks: [block('stone', 0, at(2))] });
     assert.equal(await skills.collectBlock(bot, 'cobblestone', 1), false);
-    assert.deepEqual(bot.calls.collect, []);
+    assert.deepEqual([...bot.calls.collected, ...bot.calls.dug], []);
     assert.match(bot.output, /No cobblestone nearby to collect\./);
-});
-
-test('rock piles are picked up by hand, 1 rock each', async (t) => {
-    t.mock.method(console, 'log', () => {});
-    const pileType = 4242;
-    const bot = fakeBot({ blocks: [block('pyrotech:rock', 0, at(2), pileType), block('pyrotech:rock', 0, at(5), pileType)] });
-    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 2), true);
-    const taken = [...bot.calls.collect, ...bot.calls.dig];
-    assert.equal(taken.length, 2);
-    assert.ok(taken.every(b => b.name === 'pyrotech:rock'));
-    assert.match(bot.output, /Collected 2 pyrotech:rock\./);
 });

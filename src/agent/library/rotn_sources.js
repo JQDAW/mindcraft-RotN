@@ -6,23 +6,43 @@
 import { howToGet, getItem, registryName, botName } from '../../../packages/rotn-data/index.js';
 import { formatName, parseName } from './rotn_names.js';
 
+// rotn-data's howToGet for a canonical name, or null for an unknown item.
+function lookup(name) {
+    const p = parseName(name);
+    if (!p) return null;
+    try {
+        return howToGet(registryName(p.name), p.meta == null ? {} : { meta: p.meta });
+    } catch {
+        return null;
+    }
+}
+
 /**
- * The world rules for getting an item by breaking blocks.
+ * The item variants a name stands for when collecting: rotn-data narrows a bare
+ * rock name to the variants that are rocks (the "rock" ore dictionary, e.g.
+ * pyrotech:rock 0, 6, 8), so dirt clumps, sand piles and wood chips are not
+ * rocks (#141 review). Anything else is just the name.
+ */
+export function itemVariants(name) {
+    const p = parseName(name);
+    const metas = lookup(name)?.item?.metas;
+    if (!p || p.meta != null || !Array.isArray(metas) || metas.length === 0) return [name];
+    return metas.map(meta => formatName(p.name, meta));
+}
+
+/**
+ * The world rules for getting an item by breaking blocks (only rules whose action is "break").
  * @param {string} name a canonical item name ("pyrotech:rock", "pyrotech:rock:0")
  * @returns {Array<{blocks: string[], tool: {type: string, minLevel?: number, maxLevel?: number}|null, count: number, text: string}>}
+ *          count is the rule's documented yield (a hint; collectBlock counts the real gain);
  *          text is the rule's summary, for the bot's log
  */
 export function worldSources(name) {
-    const p = parseName(name);
-    if (!p) return [];
-    let result = null;
-    try {
-        result = howToGet(registryName(p.name), p.meta == null ? {} : { meta: p.meta });
-    } catch {
-        return [];
-    }
+    const result = lookup(name);
+    if (!result) return [];
     return (result?.ways ?? [])
-        .filter(w => w.kind === 'world' && Array.isArray(w.blocks) && w.blocks.length > 0)
+        // Only rules that break a block; item-on-block rules (debark a log) are skills of their own (C2).
+        .filter(w => w.kind === 'world' && w.action === 'break' && Array.isArray(w.blocks) && w.blocks.length > 0)
         .map(w => ({
             blocks: w.blocks.map(b => formatName(botName(b.name), b.meta ?? null)),
             tool: w.tool ?? null,
@@ -41,11 +61,30 @@ export function toolLevels(bot, type) {
     return levels;
 }
 
+const levelOk = (tool, level) => (tool.minLevel == null || level >= tool.minLevel) && (tool.maxLevel == null || level <= tool.maxLevel);
+
 /** Whether the bot holds a tool the rule accepts (no rule: any hand). */
 export function toolAllows(bot, tool) {
     if (!tool) return true;
-    return toolLevels(bot, tool.type).some(level =>
-        (tool.minLevel == null || level >= tool.minLevel) && (tool.maxLevel == null || level <= tool.maxLevel));
+    return toolLevels(bot, tool.type).some(level => levelOk(tool, level));
+}
+
+/**
+ * The stack to equip for a rule: the highest-level held tool of the type the rule
+ * still accepts (a stone pickaxe, not an iron one, for "below Sturdy"), or null.
+ */
+export function allowedTool(bot, tool) {
+    if (!tool) return null;
+    let best = null;
+    let bestLevel = -1;
+    for (const item of bot.inventory.items()) {
+        const level = getItem(registryName(item.name))?.toolClasses?.[tool.type];
+        if (typeof level === 'number' && level >= 0 && levelOk(tool, level) && level > bestLevel) {
+            best = item;
+            bestLevel = level;
+        }
+    }
+    return best;
 }
 
 /** "a pickaxe below Sturdy (level 0)" style text for a rule's tool, for the bot's log. */

@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T23:51Z (from `date -u`)
+Updated: 2026-11-03T00:13Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -39,7 +39,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 - `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`): #132 open, retargeted to develop (diff is only the switch); approved, merging on CI.
-- B2 `collect-rotn` (branch `agent/skills-rotn/collect-rotn`, on develop `27403a2`): #141 open. `collectBlock` follows rotn-data's world rules (`howToGet`): rocks from rock piles by hand and from stone with a pickaxe below Sturdy (4 per block); no `cobblestone` -> `stone` alias; a hint when a source needs a tool the bot lacks.
+- B2 `collect-rotn` (branch `agent/skills-rotn/collect-rotn`, on develop `27403a2`): #141 open. Review REQUEST CHANGES, fixed: the count is the real inventory gain per break; a rule's tool is equipped (a stone pickaxe, never a Sturdy one) and the block is dug by hand so collectblock cannot re-equip; a bare pyrotech:rock means rotn-data's rock variants (howToGet item.metas, the rock ore dictionary: 0, 6, 8), not dirt clumps or sand piles; only break rules. Flag for G3 (review nit 5): with an axe, collecting log targets Dynamic Trees branches and the tree falls; the count is now the real gain, but scattered drops may not all be picked up. `collectBlock` follows rotn-data's world rules (`howToGet`): rocks from rock piles by hand and from stone with a pickaxe below Sturdy (4 per block); no `cobblestone` -> `stone` alias; a hint when a source needs a tool the bot lacks.
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - Next: B1c, the #131 nits (the `rotn_names.js` `/^\s*minecraft:/` regex; `!getCraftingPlan` bare totals vs variant-restricted recipes such as rocks for the crude axe), then C1 when Request 2 is settled.
 
