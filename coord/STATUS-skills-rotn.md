@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T15:06Z (from `date -u`)
+Updated: 2026-11-03T15:24Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -62,6 +62,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
     Tests 1, 2 and 5 fail on the old code.
   - **#174 re-review (lead):** items 1, 2, 4 and 5 are fixed, and no working non-giver channel was found. The one item left is fixed in `9fdc5d56`: the model's own goals share one 5 min count across `!goal` swaps, which reset it before. The count starts again only after self-prompting stopped, or after a giver's goal, a task or the agenda had the self-prompter. The goal-swap test fails on the old code. Tests: `src/agent/**` 185/185; lint 254.
+  - **#174 third review (lead), fixed in `3302d960`:** autonomy owns a goal by identity. `driveTo` records the prompt a driver set, and `ownsPrompt` compares against it; the text-prefix check is gone. A model `!goal` starting `Player task `/`RotN agenda, step ` is refused. The test fails on the old code; `src/agent/**` 186/186; lint 254.
   - **Known limit (lead, #174 re-review): bot-to-bot messages are trusted.** `handleMessage` treats a message from another Mindcraft bot (`convoManager.isOtherAgent`) as neither a giver's nor an untrusted sender's: it is not marked untrusted, and its replies may run actions. Before a second bot joins (multi-bot, ready-to-try's last item), bot-to-bot messages need the E3 marking, or giver rules of their own.
 
   Tests: `src/agent/**` 181/181; lint 254. The E3 contents:
@@ -75,7 +76,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
   1. the #174 re-review;
   2. C1 crafting execution and C2 (first plank). Net-forge's final Request 2 answer is in #167, which is not merged yet, and P1 (paid, lead GO) measures the place timing. Until then C1 stays blocked;
   3. D2 night shelter, for G3 (b).
-     - **D2a, #181** (branch `agent/skills-rotn/night-shelter`): `library/night.js`, pure functions, not called yet. **Lead decision applied** (`c3cbc428`): world time first; when it is stuck longer than the freeze plus a margin (15 min), `NightClock` falls back and logs it.
+     - **D2a, #181: approved by the lead** (wall-clock fallback accepted; merge pending). Branch `agent/skills-rotn/night-shelter`: `library/night.js`, pure functions, not called yet. **Lead decision applied** (`c3cbc428`): world time first; when it is stuck longer than the freeze plus a margin (15 min), `NightClock` falls back and logs it.
        - The fallback is the wall clock, not sky light: in 1.12 sky light and the sunset event come from the same world time. The PR asks the lead to overrule if wanted.
        - Tests 5/5; `src/agent/**` 166/166 on develop.
        - **#181 review (REQUEST CHANGES), fixed in `be24174c`:**
@@ -88,10 +89,16 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
        3. fight an enderman only right after it hit the bot.
 
        `cowardice` (now on by default) and `self_defense` act on the plan; `idle_staring` never looks at do-not-look mobs. `nightThreatNote` is ready for D2b's night routine. Tests 6/6; `src/agent/**` 167/167; lint 254.
+       - **#186 review (REQUEST CHANGES), fixed in `3b65ebc4`:**
+         1. the fight re-checks the plan each round (`defendSelf` `keepFighting`) and backs off when a creeper or more mobs arrive;
+         2. "provoked" means that enderman is angry (its `screaming` flag, metadata 13), not any damage; a do-not-look mob whose anger cannot be read is never attacked, and the bot backs off after a hit next to it;
+         3. no random looks while a do-not-look mob is within 64 blocks.
+
+         The nits went into a comment and the PR, and the data notes to rotn-data. Tested during the P1 rerun with targeted files only (`threats.test.js` 9/9, `quiet_reflexes.test.js` 11/11). An old-code check of the mid-fight test hung (the old fight never ends). I stopped it at once, because the P1 rule forbids long node runs.
        - `nightPhase`/`minutesToSunset` from S1-A's measured cycle (night 12542-23460; Extended Days freezes at 3000 and 16000). This deviates from the brief's "no world time" line, and the PR asks the lead.
        - `shelterPlan` (a 1x2 space, 10 shell blocks, rock only).
      - **D2b** (the shelter agenda step, placing, the night routine) comes after P1's placing results.
-- **P1 batch (lead, 2026-11-03):** attempt 1 failed at setup on a harness console-wait; the rerun comes later. The memory rule for P1 is lifted.
+- **P1 batch (lead, 2026-11-03):** attempt 1 failed at setup on a harness console-wait. **The rerun is running (lead, about 15:20Z).** Until the lead says it is over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - **Merged:** E1 #146 (task queue), C1a #151 (craft needs; lead nit for later: `craft_needs.js` should match the exact slot stack list, as the slot found by `choices[0]` is wrong for `soaking_pot` and `hamster_wheel`), #156 (with rotn-data #153).
@@ -192,7 +199,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 8. ~~Lead: the skills name space for B1b~~: **accepted** (2026-11-02). The command boundary hands skills the bot's 1.12 names in rotn-data's `formatOld` convention; a 1.21 name maps to its exact variant (`oak_log` = `log:0`, oak only), a plain 1.12 `log` means any log. No ADR; documented in the B1b PR.
 9. ~~rotn-data: `isHuntable` reads the 1.21 baby flag~~: done in #125 (`mc.isBaby`, index 12). My follow-up: switch `names112.isBaby` callers to `mc.isBaby` (queued).
 10. ~~Lead: `getDetailedCraftingPlan` reading ingredient metas~~: decided (lead): it goes to rotn-data (the `mcdata.js` recipe helpers), low priority, after G3 unless C1 needs it.
-12. **rotn-data (from D2c, #186):** a structured `doNotLook: true` in `threat-reactions.json` (enderman, rifted enderman). Today it exists only in the summary text ("Do not look at it"), which `threats.js` reads for `ignore-unless-provoked` mobs.
+12. **rotn-data (from D2c, #186):** a structured `doNotLook: true` in `threat-reactions.json` (enderman, rifted enderman). Today it exists only in the summary text ("Do not look at it"), which `threats.js` reads for `ignore-unless-provoked` mobs. Also, data notes from the #186 review: `ender_dragon`, `wither`, `ghast` and `blaze` come back as `fight`, and `zombie_horse` as hostile. None is a first-night overworld mob.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
