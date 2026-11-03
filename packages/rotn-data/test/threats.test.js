@@ -89,7 +89,13 @@ test('#111 review: skeleton variants take cover; wither skeletons and the skelet
         const t = pack.threatOf(n);
         assert.deepEqual([t.reaction, t.source], ['fight', 'default'], n);
     }
-    assert.deepEqual([pack.threatOf('minecraft:skeleton_horse').level, pack.threatOf('minecraft:skeleton_horse').reaction], ['none', 'ignore'], 'class rules apply to hostile mobs only');
+    // Class rules apply to hostile mobs only: a non-hostile skeleton-named class gets no rule. (The
+    // skeleton horse was the example here until it became hostile on this pack; see the next test file.)
+    const E = pack.dump.entities.entities;
+    const passive = Object.keys(E).filter((n) => /Skeleton/.test((E[n].class ?? '').slice((E[n].class ?? '').lastIndexOf('.') + 1)) && !pack.entity(n).hostile);
+    for (const n of passive) assert.equal(pack.threatOf(n).rule, undefined, `${n}: no class rule for a non-hostile mob`);
+    // The skeleton horse is hostile on this pack (Special AI's depacify; entity-overrides.json), and its entry says fight.
+    assert.deepEqual([pack.threatOf('minecraft:skeleton_horse').level, pack.threatOf('minecraft:skeleton_horse').reaction, pack.threatOf('minecraft:skeleton_horse').source], ['hostile', 'fight', 'verified']);
 });
 
 test('#111 review: what threatOf and nightThreats do not reflect is stated', () => {
