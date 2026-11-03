@@ -1,6 +1,31 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (03:07 UTC, from `date -u`)
+Updated: 2026-11-03 (03:11 UTC, from `date -u`)
+
+## Restart handoff (2026-11-03 03:11 UTC; Orca restart by the human, lead's request)
+
+**State at the stop:** every change is committed and pushed. There are no uncommitted changes and no background shells. Nothing touches the CX23; GO 3 is done and merged (#163).
+
+**Open PRs (mine):**
+- **#169** `agent/harness-ops/g3-model-pin`: every LLM run uses `openrouter/@preset/glm-5-1-mindcraft`.
+  - The Mindcraft driver refuses other models, and `result.llm.models` records the model.
+  - CI had not finished at the stop: check it first (`gh pr checks 169`).
+  - It depends on Requests item 16: skills-rotn's RotN profile must set that model. Until then every Mindcraft-driver run is refused at the start (fail closed).
+- **#165** `agent/harness-ops/probe-p1`: probe P1, the scenario `probe-craft-place` (never a gate).
+  - The #165 review fixes are in 857e7d82: #162's protocol, the kick, exit and 120 s aborts, and the offline e2e `test/unit/probe-e2e.test.js` against the real `g1-driver` (2 pass).
+  - CI was green and the PR merged cleanly at 857e7d82. It waits for the lead's re-review.
+
+**Exact next step after the restart:**
+1. Read this file and `docs/PLAN.md`.
+2. `git fetch origin`, then for each open PR: `gh pr view N --json state,mergeable` and `gh pr checks N`.
+3. **If a PR conflicts with develop:** it is almost always this STATUS file. Merge develop into the branch, keep one shared "Open PRs" list, and push. Never force-push.
+4. **Then wait for the lead.** The P1 batch needs #165 merged and the lead's written GO. The first G3 batch needs #169 merged, the RotN profile with the model (Requests item 16), the Orca restart for `OPENROUTER_API_KEY` (a Windows user environment variable now), and a written GO.
+
+**Rules still in force:**
+- PC memory is tight: targeted test files only, one at a time; no `npm ci`, no full suite, no Docker. CI runs the full suite.
+- Write markdown and code edits with the Write/Edit tools or script files, never inside double-quoted shell strings.
+
+**Queued (not started):** the #139 nits: trim the `loadScenarios` ids, and a DRIVER.md line saying that a G3 result wrapped in an array or a parent object is not detected.
 
 ## Done
 
