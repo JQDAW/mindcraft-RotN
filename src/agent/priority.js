@@ -119,9 +119,9 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
 }
 
 /**
- * Nothing autonomous is on, but the model's own !goal runs (#174 review 3): it gets one agenda
- * step's LLM time, then it stops. A goal a task giver typed is not limited. Returns null, 'goal'
- * or 'goal:stopped'.
+ * Nothing autonomous is on, but the model's own !goal runs (#174 review 3): its goals, however
+ * often it swaps them, get one agenda step's LLM time together, then self-prompting stops. A goal
+ * a task giver typed is not limited. Returns null, 'goal' or 'goal:stopped'.
  */
 function modelGoalTick(agent, now) {
     const sp = agent.self_prompter;
@@ -129,8 +129,10 @@ function modelGoalTick(agent, now) {
         agent._model_goal = null;
         return null;
     }
-    let g = agent._model_goal;
-    if (!g || g.prompt !== sp.prompt) g = agent._model_goal = { prompt: sp.prompt, ms: 0, at: now };
+    // One count for the model's goals while self-prompting runs: a new !goal from the model does
+    // not reset it (#174 re-review: chained !goal calls ran on forever). It starts again only after
+    // self-prompting stopped, or a giver's goal, a task or the agenda had the self-prompter.
+    const g = agent._model_goal ??= { ms: 0, at: now };
     g.ms += Math.min(Math.max(0, now - g.at), MAX_TICK_GAP_MS);
     g.at = now;
     if (g.ms < stepBudget().llm_ms) return 'goal';

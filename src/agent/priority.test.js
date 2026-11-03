@@ -333,6 +333,29 @@ test('#174 review 3: with nothing autonomous on, the model\'s own goal gets one 
     assert.equal(sp.isActive(), true);
 });
 
+test('#174 re-review: the model swapping its own !goal does not reset the count; its goals together stop after one step\'s LLM time', async (t) => {
+    const agent = harnessAgent(t);
+    agent.agenda.stop();
+    const { executeCommand } = await import('./commands/index.js');
+    const sp = agent.self_prompter;
+    await executeCommand(agent, '!goal("goal 0")');
+    let now = 0, res = null, swaps = 0;
+    for (; now <= 3 * STEP_LLM_MS && res !== 'goal:stopped'; now += TICK_MS) {
+        if (now > 0 && now % 60_000 === 0) { // a new goal every minute
+            await executeCommand(agent, `!goal("goal ${++swaps}")`);
+            assert.equal(sp.goal_by, null);
+        }
+        res = autonomyTick(agent, { now });
+    }
+    assert.equal(res, 'goal:stopped');
+    assert.ok(swaps >= 4, `${swaps} swaps`);
+    assert.ok(now <= STEP_LLM_MS + 2 * TICK_MS, `stopped after ${now} ms, about STEP_LLM_MS in all`);
+    assert.equal(sp.isActive(), false);
+    // After it stopped, a new count starts (the model is prompted again only by a player or a task).
+    await executeCommand(agent, '!goal("again")');
+    assert.equal(autonomyTick(agent, { now }), 'goal');
+});
+
 test('#174 nit 4 and review 3: tasks wait for a giver\'s typed !goal, even a new task; they take the model\'s own goal over', (t) => {
     const agent = fakeAgent(t, { agenda: false });
     const sp = agent.self_prompter;
