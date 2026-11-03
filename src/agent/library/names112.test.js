@@ -38,11 +38,16 @@ test('liquid and furnace predicates cover the 1.12 split blocks', () => {
     assert.ok(names112.isFurnace('lit_furnace') && names112.isFurnace('furnace') && !names112.isFurnace('crafting_table'));
 });
 
-test('isBaby reads the 1.12 index 12, not the 1.21 index 16', () => {
-    assert.equal(names112.isBaby({ metadata: { 12: true } }), true);
-    assert.equal(names112.isBaby({ metadata: { 12: false, 16: true } }), false);
-    assert.equal(names112.isBaby({ metadata: {} }), false);
-    assert.equal(names112.isBaby({}), false);
+// The baby flag is mc.isBaby (#125, 1.12 index 12); the callers use it, not the 1.21 index 16.
+test('baby villagers: the callers read the 1.12 index 12 through mc.isBaby', async () => {
+    assert.equal(world.getVillagerProfession({ metadata: { 12: true } }), 'Unknown', 'a baby is not an adult');
+    assert.equal(world.getVillagerProfession({ metadata: { 12: false } }), 'Adult');
+    assert.equal(world.getVillagerProfession({ metadata: { 16: true } }), 'Adult', 'the 1.21 flag no longer marks a baby');
+
+    const baby = { id: 7, name: 'villager', entityType: reg.entitiesByName.villager.id, metadata: { 12: true }, position: new Vec3(1, 64, 0) };
+    const bot = { output: '', registry: reg, entity: { position: new Vec3(0, 64, 0) }, entities: { 7: baby } };
+    assert.equal(await skills.showVillagerTrades(bot, 7), false);
+    assert.match(bot.output, /baby villager or a villager with no job/);
 });
 
 test('isDoorOpen reads 1.12 door metadata (lower half bit 4; the upper half reads the block below)', () => {
