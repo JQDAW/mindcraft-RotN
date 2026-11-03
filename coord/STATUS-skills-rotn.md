@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T15:33Z (from `date -u`)
+Updated: 2026-11-03T15:42Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -76,14 +76,14 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
   1. the #174 re-review;
   2. C1 crafting execution and C2 (first plank). Net-forge's final Request 2 answer is in #167, which is not merged yet, and P1 (paid, lead GO) measures the place timing. Until then C1 stays blocked;
   3. D2 night shelter, for G3 (b).
-     - **D2a, #181: approved by the lead** (wall-clock fallback accepted; merge pending). Branch `agent/skills-rotn/night-shelter`: `library/night.js`, pure functions, not called yet. **Lead decision applied** (`c3cbc428`): world time first; when it is stuck longer than the freeze plus a margin (15 min), `NightClock` falls back and logs it.
+     - **D2a, #181: merged** (wall-clock fallback accepted by the lead). Branch `agent/skills-rotn/night-shelter`: `library/night.js`, pure functions, not called yet. **Lead decision applied** (`c3cbc428`): world time first; when it is stuck longer than the freeze plus a margin (15 min), `NightClock` falls back and logs it.
        - The fallback is the wall clock, not sky light: in 1.12 sky light and the sunset event come from the same world time. The PR asks the lead to overrule if wanted.
        - Tests 5/5; `src/agent/**` 166/166 on develop.
        - **#181 review (REQUEST CHANGES), fixed in `be24174c`:**
          - `isSturdy` comes from rotn-data's dump: material rock, `fullCube`, hardness 1.5 or more. A block the dump lacks is not sturdy, so forge-bridge's defaults never pass. Slabs, stairs, walls, netherrack and silverfish stone are out. Tested on real dump entries.
          - The freezes are the measured 3001 and 16001.
          - Fallback: the wall clock, pushed earlier in `c3cbc428`. The reply explains why sky light is not independent, and asks the lead to name a signal if wanted.
-     - **D2c, #186 opened** (branch `agent/skills-rotn/night-threats`, lead request on #181): the modes react by rotn-data's `threatOf`. `library/threats.js` `threatPlan`, first match wins:
+     - **D2c, #186: merged** (lead request on #181). the modes react by rotn-data's `threatOf`. `library/threats.js` `threatPlan`, first match wins:
        1. flee a dangerous mob, one that explodes, two or more melee mobs, or a ranged mob;
        2. fight a lone melee mob;
        3. fight an enderman only right after it hit the bot.
@@ -199,7 +199,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 8. ~~Lead: the skills name space for B1b~~: **accepted** (2026-11-02). The command boundary hands skills the bot's 1.12 names in rotn-data's `formatOld` convention; a 1.21 name maps to its exact variant (`oak_log` = `log:0`, oak only), a plain 1.12 `log` means any log. No ADR; documented in the B1b PR.
 9. ~~rotn-data: `isHuntable` reads the 1.21 baby flag~~: done in #125 (`mc.isBaby`, index 12). My follow-up: switch `names112.isBaby` callers to `mc.isBaby` (queued).
 10. ~~Lead: `getDetailedCraftingPlan` reading ingredient metas~~: decided (lead): it goes to rotn-data (the `mcdata.js` recipe helpers), low priority, after G3 unless C1 needs it.
-12. **rotn-data (from D2c, #186):** a structured `doNotLook: true` in `threat-reactions.json` (enderman, rifted enderman). Today it exists only in the summary text ("Do not look at it"), which `threats.js` reads for `ignore-unless-provoked` mobs. Also, data notes from the #186 review: `ender_dragon`, `wither`, `ghast` and `blaze` come back as `fight`, and `zombie_horse` as hostile. None is a first-night overworld mob.
+12. ~~rotn-data (from D2c, #186): a structured do-not-look field~~: **done in rotn-data #187** (`lookAt`). #190 switches `threats.js` to `lookAt === false`, which now also covers the ender creeper and the cockatrice. **Still open (data):** on develop `threatOf('iceandfire:gorgon')` is `fight` with `lookAt: true`, but its gaze petrifies a player who looks at it. Also, data notes from the #186 review: `ender_dragon`, `wither`, `ghast` and `blaze` come back as `fight`, and `zombie_horse` as hostile. None is a first-night overworld mob.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
@@ -207,5 +207,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 - #170 F1 start, the RotN profile on the OpenRouter preset (branch `agent/skills-rotn/rotn-profile`). Serves the human decision on the model and brief item 7. Bot name FRCFLD (#170 review).
 - #175 the #151 nit: craft_needs matches each input's recipe slot by its exact stack list (branch `agent/skills-rotn/craft-needs-slot`).
 - #174 E3 priority stack (branch `agent/skills-rotn/priority-stack`, base `develop`). Serves brief item 4, G3 (c) and the lead's E3 requirements.
-- #181 D2a night detector and shelter closure check (branch `agent/skills-rotn/night-shelter`). Serves G3 (b).
-- #186 D2c threat reactions in the modes (branch `agent/skills-rotn/night-threats`). Serves G3 (b) and brief item 3.
+- #190 the D2c follow-up: do-not-look from rotn-data's `lookAt` (branch `agent/skills-rotn/threat-lookat`). Serves the lead's #186 follow-up and G3 (b). #186 was squash-merged before this commit could be pushed (it waited for #187), so it is a new PR.
