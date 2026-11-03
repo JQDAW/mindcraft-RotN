@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T02:11Z (from `date -u`)
+Updated: 2026-11-03T11:46Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -18,6 +18,8 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
 - **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
 - **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
+- **#153 merged** (`ad169c7`): Request 10, the plan reads ingredient metas (with skills-rotn #156). My last two STATUS commits on that branch (`e019e683`, `817cacfc`, the restart point) came after the squash merge; they are brought over in #172.
+- **#143 merged** (`49ec671`): Special Mobs enderman and witch class rules (follow-up 2).
 - **#152 merged** (`0edfd8d`): mixed ore-dictionary slots (single-kind variants first, no same-item wildcard mixes) and `canFill`.
 - **#142 merged** (`89f3ef6`): the rock-pile rule names the Underground Biomes rock piles, and the rock-pile and stone rules say which metas give a rock (`ore`, `inOre`).
 - **#140 merged** (`c114b44`): the G3 research note (STATUS only).
@@ -191,9 +193,27 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - blocks/items: `betterwithaddons:world_scale_ore` hardness 15 -> 225 and `randomthings:spectrecoil_number` names (world or random values, known).
 - entities, spawns and serializers: unchanged. `common-mobs.json`: only its dump stamp changed.
 
+## Restart point (respawned after the Orca restart; updated 2026-11-03T11:44Z)
+
+- **Worktree:** branch `agent/rotn-data/fill-nits` (#172), from origin/develop `6a6d9ee`, everything pushed. No background jobs.
+- **Open PR:** #172, the #152 nits (below). Waiting for the independent review and the lead.
+- **Then:** ask the lead for the next item. The G3 note's open items: 14 overworld night mobs still default to "fight", and the parasite and weta are not cited.
+- **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
+- **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
+  - `pack/pack.zip`: the pinned RotN 3.3.4 server pack, SHA-256 `90642fd5...f5205` (verify again before use), plus `charm.jar`, `specialmobs.jar`, `Frozen-Fiend-1.5.3.jar`;
+  - `bc/summ.sh`: the javap summariser;
+  - `bc/x/`: extracted classes;
+  - the older mod jars are in session `2c454268-...`'s `scratchpad/modjars/`.
+
+  Nothing in them is needed for #172.
+
 ## Doing
 
-- **#145 review nit 1, mixed ore-dictionary slots (`agent/rotn-data/mixed-ore-slots`; G3 crafting path).**
+- **#172, the #152 nits** (see Follow-ups). The independent review approved it with nits; the STATUS nits are fixed and the test nit is left as is. It waits for the lead.
+
+The entries below are done; they are kept here as the record of how they work.
+
+- **#145 review nit 1, mixed ore-dictionary slots (done: merged as #152; G3 crafting path).**
   - **What prismarine-recipe and mineflayer can express (no patch needed):**
     - a prismarine-recipe slot is one `RecipeItem` (`id`, `metadata`; `node_modules/prismarine-recipe/lib/recipe_item.js:3-5`);
     - metadata >= 32767 becomes `null` (`recipe.js:102-105`);
@@ -207,7 +227,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
   - no mix pairs a wildcard with a specific meta of the same item (0 such variants);
   - the candidate order is develop's again; only the mix pool prefers whole families.
 - **New for skills-rotn #151 (lead's request):** `canFill(recipe | recipeId | howToGet craft way, stacks, { times })`, the same slot rule as the variants, with bipartite matching so one item is never counted twice; also `recipeById(id)`.
-- **Request 10, the plan reads ingredient metas (#153, `agent/rotn-data/plan-metas`; approved; carries skills-rotn #156, the `!getCraftingPlan` caller fix; develop merged in after #152):**
+- **Request 10, the plan reads ingredient metas (done: merged as #153, with skills-rotn #156, the `!getCraftingPlan` caller fix):**
   - **How it works:** `getDetailedCraftingPlan` now keys ingredients like `world.getInventoryCounts` does (`name:meta` for items with subtypes, bare otherwise; a bare recipe key means any variant), and plans with the first recipe variant the inventory and leftovers can supply.
   - **Results:** a dirt clump (`pyrotech:rock:4`) no longer counts as a rock; a metamorphic rock does; 1 igneous + 2 metamorphic make a stone pickaxe (with #152).
   - **New export:** `getItemCraftingRecipeVariants(key)`. `getItemCraftingRecipes` (bare names, upstream shape) is unchanged.
@@ -273,7 +293,7 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Follow-ups (later PRs)
 
-- **#152 nits (lead, for later):** the README's variant count (now 115,782 if all were built); `canFill` could drop item units that no slot accepts before matching; its JSDoc should say `assignment` covers the first craft only.
+- **#152 nits: in PR #172** (`agent/rotn-data/fill-nits`). The README's variant count is now 115,782, re-measured on develop `6a6d9ee` (209 recipes truncated; install about 0.3 s, building everything about 0.6 s). `canFill` drops stacks no slot accepts before the matching; results are unchanged (tested). The JSDoc says `assignment` covers the first craft only. Tests: `craft-fill.test.js` 5/5, skills-rotn's `craft_needs.test.js` 16/16, ESLint clean on the touched files.
 
 - **#102 review follow-ups:** the crafting table test (no planks-only variant) and the sticks test are in PR #112. `outShape` from the dump's `remaining` is **blocked** (Request 9): prismarine-recipe 1.5.0's `computeDelta` applies `outShape` with inShape's items, so those recipes would look free to `bot.recipesFor`. No G3 recipe has remaining items.
 
@@ -313,5 +333,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- #143 `agent/rotn-data/ender-witch-rules`: follow-up 2 (see Doing).
-- #153 `agent/rotn-data/plan-metas`: Request 10 with skills-rotn #156 (see Doing).
+- #172 `agent/rotn-data/fill-nits`: the #152 nits (see Follow-ups).

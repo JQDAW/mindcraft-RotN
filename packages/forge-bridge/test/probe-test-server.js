@@ -91,7 +91,7 @@ export async function startProbeTestServer({ name = 'FRCFLD', placeDelayMs = 30 
                     { shaped: [[I.rock, I.rock, I.rock], [null, I.stick, null], [null, I.stick, null]], result: { id: I.stonePickaxe } },
                 ],
                 blocks: { [I.cobble]: B.cobble },
-                foods: { [I.bread]: 5 },
+                foods: { [I.bread]: { hunger: 3, saturation: 0.2 } }, // RotN scripts/food.zs
                 maxStack: { [I.crudeAxe]: 1, [I.craftingTools]: 1, [I.stonePickaxe]: 1 },
                 placeDelayMs,
                 inventory: {},
@@ -146,7 +146,9 @@ export async function startProbeTestServer({ name = 'FRCFLD', placeDelayMs = 30 
             return add(`Given [${DISPLAY[m[1]] ?? m[1]}] * ${m[2]} to ${name}`);
         }
         if ((m = new RegExp(`^effect ${name} minecraft:hunger (\\d+) (\\d+)$`).exec(cmd))) {
-            containers.setFood(14); // a strong, short hunger effect: food under 20 for the eat step
+            // RotN 3.3.4's exhaustion and saturation (fake-containers.js simulateHunger): a weak effect
+            // leaves a fresh player at food 20, as on the real server, and the eat step then fails.
+            containers.applyHunger(Number(m[1]), Number(m[2]));
             return add(`Given Hunger (ID 17) * ${m[2]} to ${name} for ${m[1]} seconds`);
         }
         if ((m = /^setblock (-?\d+) (-?\d+) (-?\d+) (\S+)$/.exec(cmd))) {
