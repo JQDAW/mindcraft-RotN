@@ -136,6 +136,9 @@ test('placeBlockTimeout: env wins over the setting; out-of-range or non-integer 
     assert.deepEqual(placeBlockTimeout(null, 2000), { ms: 2000, warning: null });
     assert.deepEqual(placeBlockTimeout('1500', 2000), { ms: 1500, warning: null });
     assert.deepEqual(placeBlockTimeout('', 2000), { ms: 2000, warning: null }, 'an empty env var does not count');
+    // A bad env value falls back to a valid setting, and the warning names the env var.
+    assert.deepEqual(placeBlockTimeout('soon', 2000), { ms: 2000, warning: 'MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS "soon" ignored (integer 50-60000 expected)' });
+    assert.equal(placeBlockTimeout(null, 'x').warning, 'place_block_timeout_ms "x" ignored (integer 50-60000 expected); using 500 ms');
     for (const bad of ['soon', '2.5', '49', '60001', -1]) {
         const r = placeBlockTimeout(String(bad), undefined);
         assert.equal(r.ms, null, String(bad));

@@ -79,10 +79,10 @@ index 70db312..93d2054 100644
      }
    }
 diff --git a/node_modules/mineflayer/lib/plugins/place_block.js b/node_modules/mineflayer/lib/plugins/place_block.js
-index fdaec6b..360d30b 100644
+index fdaec6b..d660159 100644
 --- a/node_modules/mineflayer/lib/plugins/place_block.js
 +++ b/node_modules/mineflayer/lib/plugins/place_block.js
-@@ -2,7 +2,14 @@ const { onceWithCleanup } = require('../promise_utils')
+@@ -2,7 +2,15 @@ const { onceWithCleanup } = require('../promise_utils')
  
  module.exports = inject
  
@@ -93,12 +93,13 @@ index fdaec6b..360d30b 100644
 +const DEFAULT_PLACE_BLOCK_TIMEOUT = 500
 +
 +function inject (bot, botOptions = {}) {
-+  bot.placeBlockTimeout = botOptions.placeBlockTimeout ?? DEFAULT_PLACE_BLOCK_TIMEOUT
++  // A value set on the bot before the plugins load (right after createBot) is kept.
++  bot.placeBlockTimeout ??= botOptions.placeBlockTimeout ?? DEFAULT_PLACE_BLOCK_TIMEOUT
 +
    async function placeBlockWithOptions (referenceBlock, faceVector, options) {
      const dest = referenceBlock.position.plus(faceVector)
      let oldBlock = bot.blockAt(dest)
-@@ -11,7 +18,7 @@ function inject (bot) {
+@@ -11,7 +19,7 @@ function inject (bot) {
      let newBlock = bot.blockAt(dest)
      if (oldBlock.type === newBlock.type) {
        [oldBlock, newBlock] = await onceWithCleanup(bot, `blockUpdate:${dest}`, {

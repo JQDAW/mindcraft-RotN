@@ -35,17 +35,17 @@ function stubBot(lagMs, injectOptions) {
 const floor = { position: new Vec3(6, 64, 6) };
 const up = new Vec3(0, 1, 0);
 
-test('default: 500 ms, so an 800 ms server makes placeBlock fail (Mindcraft behaviour kept)', async () => {
-    const bot = stubBot(800);
+test('default: 500 ms, so a server that answers after 1500 ms makes placeBlock fail (Mindcraft behaviour kept)', async () => {
+    const bot = stubBot(1500);
     assert.equal(bot.placeBlockTimeout, 500);
     const t0 = Date.now();
     await assert.rejects(bot.placeBlock(floor, up), /blockUpdate:\(6, 65, 6\) did not fire within timeout of 500ms/);
     const took = Date.now() - t0;
-    assert.ok(took >= 450 && took < 790, `failed after ${took} ms`);
+    assert.ok(took >= 450 && took < 1400, `failed after ${took} ms, before the 1500 ms update`);
 });
 
-test('createBot option placeBlockTimeout: the same 800 ms server now succeeds', async () => {
-    const bot = stubBot(800, { placeBlockTimeout: 2000 });
+test('createBot option placeBlockTimeout: the same 1500 ms server now succeeds', async () => {
+    const bot = stubBot(1500, { placeBlockTimeout: 2500 });
     const placed = once(bot, 'blockPlaced');
     await bot.placeBlock(floor, up);
     const [, newBlock] = await placed;
@@ -63,40 +63,60 @@ test('bot.placeBlockTimeout at runtime, and { timeout } per call, override it', 
     await bot3._placeBlockWithOptions(floor, up, { swingArm: 'right', timeout: 1000 });
 });
 
+test('a value set on the bot before the plugin loads is kept over the createBot option', () => {
+    const bot = new EventEmitter();
+    bot.placeBlockTimeout = 700;
+    injectPlaceBlock(bot, { placeBlockTimeout: 2000 });
+    assert.equal(bot.placeBlockTimeout, 700);
+});
+
 test('a fast server still returns at once, whatever the timeout', async () => {
-    const bot = stubBot(20, { placeBlockTimeout: 10000 });
+    // mineflayer's onceWithCleanup leaves its timeout timer running after success, so a
+    // large value here would only keep the test process alive; 2500 ms shows the point.
+    const bot = stubBot(20, { placeBlockTimeout: 2500 });
     const t0 = Date.now();
     await bot.placeBlock(floor, up);
     assert.ok(Date.now() - t0 < 1000);
 });
 
-// initBot: start it offline against a loopback server that hangs up, and read the
-// value the place_block plugin got (plugins inject right after createBot when the
-// version is pinned and forge-bridge is off).
+// initBot: start it offline against a loopback server that accepts and holds the
+// connection (so no reset can race the plugins), and read the value the place_block
+// plugin got. Plugins inject right after createBot when the version is pinned and
+// forge-bridge is off. The env vars this sets are restored afterwards.
+const ENV_KEYS = ['FORGE_BRIDGE', 'MINDCRAFT_PROFILES_FOLDER', 'MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS'];
+
 async function initBotTimeout({ env, setting }) {
-    const hangup = net.createServer((s) => s.destroy());
-    hangup.listen(0, '127.0.0.1');
-    await once(hangup, 'listening');
+    const sockets = new Set();
+    const server = net.createServer((s) => { sockets.add(s); s.on('error', () => {}); });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
     const { setSettings } = await import('../../../src/agent/settings.js');
     const { initBot } = await import('../../../src/utils/mcdata.js');
+    const saved = Object.fromEntries(ENV_KEYS.map(k => [k, process.env[k]]));
     process.env.FORGE_BRIDGE = 'off';
     delete process.env.MINDCRAFT_PROFILES_FOLDER;
     if (env === undefined) delete process.env.MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS; else process.env.MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS = env;
-    setSettings({ host: '127.0.0.1', port: hangup.address().port, auth: 'offline', minecraft_version: '1.12.2', ...(setting === undefined ? {} : { place_block_timeout_ms: setting }) });
+    setSettings({ host: '127.0.0.1', port: server.address().port, auth: 'offline', minecraft_version: '1.12.2', ...(setting === undefined ? {} : { place_block_timeout_ms: setting }) });
     const warnings = [];
     const warn = console.warn;
     console.warn = (...a) => warnings.push(a.join(' '));
     let bot;
     try {
         bot = initBot('FRCFLD');
-        bot.on('error', () => {}); // the hang-up
-        if (bot.placeBlockTimeout === undefined) await once(bot, 'inject_allowed');
-        await new Promise((r) => setImmediate(r));
+        bot.on('error', () => {});
+        if (bot.placeBlockTimeout === undefined) {
+            // Not events.once: it would reject on an 'error' event.
+            await new Promise((resolve) => bot.once('inject_allowed', () => setImmediate(resolve)));
+        }
         return { value: bot.placeBlockTimeout, warnings };
     } finally {
         console.warn = warn;
-        try { bot?.end(); bot?._client.socket?.destroy(); clearTimeout(bot?._client.closeTimer); } catch { /* ended */ }
-        hangup.close();
+        for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+        try { bot?.quit(); } catch { /* not connected */ }
+        bot?.emit('end', 'test cleanup'); // stops mineflayer's physics and other per-bot timers
+        try { bot?._client.socket?.destroy(); clearTimeout(bot?._client.closeTimer); } catch { /* ended */ }
+        for (const s of sockets) s.destroy();
+        await new Promise((resolve) => server.close(resolve));
     }
 }
 
@@ -104,8 +124,9 @@ test('initBot passes settings.place_block_timeout_ms and MINDCRAFT_PLACE_BLOCK_T
     assert.equal((await initBotTimeout({})).value, 500, 'nothing configured: 500');
     assert.equal((await initBotTimeout({ setting: 2000 })).value, 2000, 'settings key');
     assert.equal((await initBotTimeout({ env: '1500', setting: 2000 })).value, 1500, 'env var overrides the setting');
-    const bad = await initBotTimeout({ env: 'soon' });
-    assert.equal(bad.value, 500);
-    assert.ok(bad.warnings.some(w => w.includes('place_block_timeout_ms "soon" ignored')), bad.warnings.join('\n'));
+    const bad = await initBotTimeout({ env: 'soon', setting: 2000 });
+    assert.equal(bad.value, 2000, 'a bad env value falls back to the setting');
+    assert.ok(bad.warnings.some(w => w.includes('MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS "soon" ignored')), bad.warnings.join('\n'));
     assert.equal((await initBotTimeout({ setting: 10 })).value, 500, 'below 50 ms is refused');
+    for (const k of ENV_KEYS.slice(2)) assert.equal(process.env[k], undefined, `${k} restored`);
 });

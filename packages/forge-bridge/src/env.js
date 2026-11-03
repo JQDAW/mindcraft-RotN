@@ -33,14 +33,19 @@ export function forgeOptionsFromEnv(username, env = process.env, now = new Date(
 export const PLACE_BLOCK_TIMEOUT_RANGE = Object.freeze({ min: 50, max: 60000 });
 
 /**
- * placeBlock's wait for the server's block update, from the env var (wins) or the setting.
- * @returns {{ ms: number|null, warning: string|null }} ms null = keep mineflayer's patched default (500)
+ * placeBlock's wait for the server's block update: the env var MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS
+ * wins, then settings.place_block_timeout_ms, then mineflayer's patched default (500). An
+ * invalid value is skipped with a warning that names its source, and the next source is used.
+ * @returns {{ ms: number|null, warning: string|null }} ms null = keep the default (500)
  */
 export function placeBlockTimeout(envRaw, settingRaw) {
-    const raw = envRaw !== null && envRaw !== undefined && envRaw !== '' ? envRaw : settingRaw;
-    if (raw === null || raw === undefined || raw === '') return { ms: null, warning: null };
-    const ms = Number(raw);
     const { min, max } = PLACE_BLOCK_TIMEOUT_RANGE;
-    if (Number.isInteger(ms) && ms >= min && ms <= max) return { ms, warning: null };
-    return { ms: null, warning: `place_block_timeout_ms ${JSON.stringify(raw)} ignored (integer ${min}-${max} expected); using 500 ms` };
+    const warnings = [];
+    for (const [source, raw] of [['MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS', envRaw], ['place_block_timeout_ms', settingRaw]]) {
+        if (raw === null || raw === undefined || raw === '') continue;
+        const ms = Number(raw);
+        if (Number.isInteger(ms) && ms >= min && ms <= max) return { ms, warning: warnings.length ? warnings.join('; ') : null };
+        warnings.push(`${source} ${JSON.stringify(raw)} ignored (integer ${min}-${max} expected)`);
+    }
+    return { ms: null, warning: warnings.length ? `${warnings.join('; ')}; using 500 ms` : null };
 }
