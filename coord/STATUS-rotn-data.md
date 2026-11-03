@@ -195,8 +195,8 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Restart point (updated 2026-11-03T15:24Z)
 
-- **Worktree:** branches `agent/rotn-data/threat-look-bosses` (#187) and `agent/rotn-data/threat-bosses` (bosses PR), both pushed. No background jobs except reviews.
-- **Open PRs:** #187 (structured `lookAt`, the sludge_wand lines) and the bosses PR. They merge with each other cleanly, and both test files pass on the merged tree (checked in a temporary worktree).
+- **Worktree:** branches `agent/rotn-data/threat-look-bosses` (#187) and `agent/rotn-data/threat-bosses` (#188), both pushed. No background jobs except reviews.
+- **Open PRs:** #187 (structured `lookAt`, the sludge_wand lines) and #188 (bosses). They merge with each other cleanly, and both test files pass on the merged tree (checked in a temporary worktree).
 - **Then:** ask the lead. skills-rotn #186 can switch `doNotLook` to `t.lookAt === false` once #187 is in.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
@@ -210,7 +210,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- **#186 review data requests (lead).** (1) #187: `threatOf` and `nightThreats` return `lookAt` (false: enderman, rifted enderman, Special Mobs enderman variants and ender creeper, cockatrice via its override, all cited); it also carries the sludge_wand line fix (180-198; my push to #185 came after it had merged). Review: REQUEST CHANGES (the override path), fixed. (2) Bosses PR: ender dragon and wither `avoid`, ghast and blaze `take-cover` (ranged), zombie horse `ignore` (vanilla, with the pack configs that change them), gorgon `avoid` + `lookAt: false` (verified: its gaze kills a player who looks back).
+- **#186 review data requests (lead).** (1) #187: `threatOf` and `nightThreats` return `lookAt` (false: enderman, rifted enderman, Special Mobs enderman variants and ender creeper, cockatrice via its override, all cited); it also carries the sludge_wand line fix (180-198; my push to #185 came after it had merged). Review: REQUEST CHANGES (the override path), fixed. (2) #188: ender dragon and wither `avoid`, ghast and blaze `take-cover` (ranged), zombie horse `ignore` (vanilla, with the pack configs that change them), gorgon `avoid` + `lookAt: false` (verified: its gaze kills a player who looks back).
 - **#185 merged** (`ec75f23`), **the #178/#179 follow-up (lead, after merging both).** The two PR bodies are corrected: nothing calls `threatOf` yet, and the parasite fire line is described as a mechanism, not advice. In `threat-reactions.json`: the 4 `packfiles/scripts/fishsundeadrising.zs` citations now read `scripts/fishsundeadrising.zs`, the 4 Fish's entries from #178 name the jar as it is in the pack (`Fish's Undead Rising-1.3.2.jar`, not my scratch copy's name), and one "no vanilla jar in SCRATCH" is reworded. A test keeps scratch paths out. The README `threatOf` row names the parasite and weta.
 - **#178 merged** (`38728f2`), **the last 14 overworld night defaults (lead's pick 1, G3 night survival).** Every mob `nightThreats()` listed with the default `fight` now has a cited entry: 12 `verified` from the mods' bytecode and the pack's configs, husk and zombie villager `vanilla`. Three workers did the first pass, one per mod group; I re-ran the deciding checks. The independent review re-checked 7 claims in the bytecode, and all held. APPROVE WITH NITS; the wording nits are fixed. Open points are in the evidence as "Not settled: ...". No overworld night threat is left to the default (test).
 - **#179 merged** (`b66a2a8`), **parasite and weta (lead's pick 2).** Both read from Fish's Undead Rising's bytecode by me. Parasite: `fight`. It latches on by touch, infests (a slow hunger drain), bites for 1 and dies by itself unattached. 0-4 spawn from a dead zombie, frozen zombie or mushroom zombie (5%), or from any mob that dies infested. Weta: `ignore-unless-provoked`. It only retaliates, and it does not spawn naturally on this pack (`weta spawn rate`=0). Independent review: APPROVE WITH NITS (6 claims re-checked in the bytecode; all held). Nits fixed: the sand source (a dry-biome sand block, 1%), now cited; advice to kill an attached parasite, since each bite renews Infested; infested deaths leave parasites.
@@ -339,4 +339,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 ## Open PRs
 
 - #187 `agent/rotn-data/threat-look-bosses`: structured `lookAt` (see Doing).
-- bosses PR `agent/rotn-data/threat-bosses` (see Doing).
+- #188 `agent/rotn-data/threat-bosses`: bosses, ghast, blaze, zombie horse, gorgon (see Doing).
