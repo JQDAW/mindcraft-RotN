@@ -16,6 +16,8 @@ import { serverProxy, sendOutputToServer } from './mindserver_proxy.js';
 import settings from './settings.js';
 import { Task } from './tasks/tasks.js';
 import { TaskQueue, isTaskGiver } from './task_queue.js';
+import { Agenda } from './agenda.js';
+import { agendaTick } from './agenda_driver.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
@@ -44,6 +46,7 @@ export class Agent {
         
         this.history = new History(this);
         this.tasks = new TaskQueue(this.name); // player tasks, ./bots/<name>/tasks.json (E1)
+        this.agenda = new Agenda(this.name); // the RotN agenda, ./bots/<name>/agenda.json (E2)
         this.coder = new Coder(this);
         this.npc = new NPCContoller(this);
         this.memory_bank = new MemoryBank();
@@ -129,6 +132,11 @@ export class Agent {
                         this.task.setAgentGoal();
                     }
                 }
+
+                // The RotN agenda starts by itself at spawn (E2; harness-ops' G3 driver proposal),
+                // or resumes after a restart; a giver can stop it with !agendaStop.
+                if (!this.task.data && settings.agenda_autostart !== false)
+                    this.agenda.start();
 
                 await new Promise((resolve) => setTimeout(resolve, 10000));
                 this.checkAllPlayersPresent();
@@ -526,6 +534,7 @@ export class Agent {
 
     async update(delta) {
         await this.bot.modes.update();
+        agendaTick(this); // throttled; no LLM call (E2)
         this.self_prompter.update(delta);
         await this.checkTaskDone();
     }

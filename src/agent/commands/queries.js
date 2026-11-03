@@ -8,6 +8,8 @@ import { safeError } from '../safe_error.js';
 import * as names112 from '../library/names112.js';
 import { canonicalName, parseName } from '../library/rotn_names.js';
 import { listTasks } from '../task_queue.js';
+import { describeAgenda } from '../agenda.js';
+import { agendaState } from '../agenda_driver.js';
 
 const pad = (str) => {
     return '\n' + str + '\n';
@@ -268,6 +270,14 @@ export const queryList = [
             let res = agent.task.blueprint.explainLevel(levelNum);
             console.log(res);
             return pad(res);
+        }
+    },
+    {
+        name: '!agenda',
+        description: 'Show the RotN agenda: whether it is active, the current step, and the steps done.',
+        perform: function (agent) {
+            const { step } = agent.agenda.evaluate(agendaState(agent.bot));
+            return describeAgenda(agent.agenda, step);
         }
     },
     {
