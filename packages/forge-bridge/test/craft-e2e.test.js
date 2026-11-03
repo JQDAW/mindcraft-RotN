@@ -94,7 +94,7 @@ clicks: ${JSON.stringify(st.clicks.map(c => [c.windowId, c.slot, c.mouseButton, 
     await bot.equip(bot.inventory.items().find(i => i.type === I.bread), 'hand');
     await within(10000, bot.consume(), 'consume');
     assert.deepEqual(st.uses.map(u => u.hand), [0]);
-    assert.equal(st.food, 20);
+    assert.equal(st.food, 18); // RotN bread: +3 food
     assert.equal(containers.count(I.bread), 1);
 
     // The capture records the clicks, transactions and the mod window for live debugging.

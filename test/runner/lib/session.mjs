@@ -33,12 +33,13 @@ export function isProfileFetchFailure(lines, name) {
 }
 
 /**
- * startSession(ctx, {name, env, naming}) -> {ok, why, sinceMarker, events, joinedAt, uuidVersion, naming}
+ * startSession(ctx, {name, env, naming, checkNaming}) -> {ok, why, sinceMarker, events, gone, joinedAt, uuidVersion, naming}
  * naming: a precomputed agentNaming() result (the items scenario needs it before the login), else computed here.
+ * checkNaming false (P1, which names nothing): no naming check and no child process; notes.naming says so.
  * Throws if the marker never lands (before the driver is started). ok=false with a reason when the
  * bot did not join with an online-mode (version-4) UUID; the caller records that as its login check.
  */
-export async function startSession(ctx, { name, env = {}, naming = null }) {
+export async function startSession(ctx, { name, env = {}, naming = null, checkNaming = true }) {
     const { server, bot, clock, params: p, runId } = ctx;
     const marker = `scenario-${runId}-begin`;
     const markerSeen = (lines) => lines.some((l) => l.includes(marker));
@@ -68,9 +69,12 @@ export async function startSession(ctx, { name, env = {}, naming = null }) {
     }
     // G2 is about the agent's own naming API (mcdata.js toNew/toOld): no run counts until a child
     // process finds it and the full table round-trips through it.
-    const agent = naming ?? agentNaming(p.dataRoot || REPO);
-    ctx.note('naming', { wired: agent.wired, why: agent.why, entries: agent.entries, failureCount: agent.failureCount });
-    if (!agent.wired) ctx.notGate(`mcdata.js not wired to rotn-data: ${agent.why}`);
+    // A scenario that names nothing (P1) skips the check and its child process (checkNaming: false).
+    const agent = checkNaming ? naming ?? agentNaming(p.dataRoot || REPO) : null;
+    if (agent) {
+        ctx.note('naming', { wired: agent.wired, why: agent.why, entries: agent.entries, failureCount: agent.failureCount });
+        if (!agent.wired) ctx.notGate(`mcdata.js not wired to rotn-data: ${agent.why}`);
+    } else ctx.note('naming', { checked: false, why: 'this scenario names nothing' });
 
     const output = () => (typeof bot.output === 'function' ? bot.output() : []);
     const attempt = async () => {
