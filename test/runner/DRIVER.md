@@ -278,5 +278,9 @@ P1 is net-forge's "Probe plan P1" (`coord/STATUS-net-forge.md`), which the lead 
 
 - On a failure, the reply has `error`, plus `timedOut` when the 60 s limit was hit.
 - **Each check needs two confirmations:** the driver's `ok`, and the server's own count (`clear ... 0`) or `testforblock`.
+- **Late console replies** (`test/runner/lib/late-console.mjs`, after P1 attempt 1): `rotn-test console` returns only the log lines written during its own 1 s wait. In attempt 1 the server answered a `give` about 3 s after a `clear`, which made two mods save, so a give it had done was read as unconfirmed.
+  - Every reply the scenario checks (gives, counts, `testforblock`, `tp`, scoreboard) is now looked for again in the server log lines written after the newest lines any console call has returned, for up to `lateReplyMs` (5 s).
+  - Lines at or before that anchor belong to earlier commands and are never used.
+  - Each late reply is recorded in `notes.lateReplies`, with how long after the call it was found.
 - **Recorded as notes:** `notes.placeLatencyMs` holds each `updateMs`. `notes.capture` holds the capture file from the driver's `forge` event.
 - **Not in the replies:** window-click transactions (REID: none rejected) and the FastWorkbench window (`mod_window` with `fastbench`). The evidence step reads them from that capture, as net-forge's plan says.
