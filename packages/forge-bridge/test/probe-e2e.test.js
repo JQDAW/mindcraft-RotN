@@ -44,14 +44,17 @@ test('probe-craft, probe-place and probe-eat through initBot, answered as JSON a
     const pack = loadRotnData(PACK_VERSION);
 
     const events = [];
-    attachProbe(bot, { emit: (type, data = {}) => events.push({ type, ...data }), dumpRecipes: () => pack.dump.recipes.recipes, convertRecipe, answerDelayMs: 0 });
+    // A short time limit for the hung-command check below; every real command here takes well under it.
+    attachProbe(bot, { emit: (type, data = {}) => events.push({ type, ...data }), dumpRecipes: () => pack.dump.recipes.recipes, convertRecipe, answerDelayMs: 0, commandTimeoutMs: 6000, placeTimeoutMs: 9000 });
+    // What a 1.12 server sends for a console `tell FRCFLD <text>`; mineflayer reports it as a whisper from Server.
+    const whisper = (from, text) => serverClient.write('chat', { message: JSON.stringify({ translate: 'commands.message.display.incoming', with: [from, { text }], color: 'gray', italic: true }), position: 0 });
     assert.deepEqual(events.find(e => e.type === 'probe_ready'), { type: 'probe_ready', autoEat: 'off' });
     assert.equal(bot.autoEat.disabled, true, 'auto-eat is off while the probe runs');
 
     let n = 0;
     const send = async (text) => {
         const token = `abcdef${String(++n).padStart(2, '0')}`;
-        serverClient.write('chat', { message: JSON.stringify({ text: text.replace('TOKEN', token) }), position: 1 });
+        whisper('Server', text.replace('TOKEN', token));
         const ev = await within(60000, (async () => {
             for (;;) {
                 const e = events.find(x => x.type === 'probe' && x.token === token);
@@ -90,8 +93,30 @@ test('probe-craft, probe-place and probe-eat through initBot, answered as JSON a
     assert.equal(place.ok, true, JSON.stringify(place));
     assert.deepEqual([place.before, place.after, place.target], ['air', 'cobblestone', [6, 65, 6]]);
     assert.ok(Number.isInteger(place.updateMs) && place.updateMs >= 0 && place.updateMs <= place.totalMs, JSON.stringify(place));
-    assert.equal(place.timeoutMs, 10000);
+    assert.equal(place.timeoutMs, 9000);
+    assert.deepEqual([place.expected, place.otherUpdates], ["cobblestone", 0], "only the update to the placed block counts");
     assert.deepEqual(st.placed.map(p => p.target), [{ x: 6, y: 65, z: 6 }]);
+
+    // Only the console whisper is accepted: the same command in public chat, or whispered by a player, does nothing.
+    const heard = () => events.filter(e => e.type === 'probe_heard').length;
+    const heardBefore = heard();
+    serverClient.write('chat', { message: JSON.stringify({ text: '<JQDAW> probe-eat abcdef77 minecraft:bread' }), position: 0 });
+    serverClient.write('chat', { message: JSON.stringify({ text: 'probe-eat abcdef78 minecraft:bread' }), position: 1 });
+    whisper('JQDAW', 'probe-eat abcdef79 minecraft:bread');
+    whisper('Server', 'say probe-eat abcdef80 minecraft:bread'); // not anchored at the start
+    await sleep(1500);
+    assert.equal(heard(), heardBefore, 'no command from public chat, a player whisper or an unanchored line');
+    assert.ok(events.some(e => e.type === 'probe_ignored' && e.from === 'JQDAW'), 'the player whisper is logged as ignored');
+
+    // A hung command (the fake server never places a stick) is answered ok:false at the time limit;
+    // its late result is only logged, and the next command runs after it settles.
+    const hung = await send('probe-place TOKEN minecraft:stick 7,64,6 up');
+    assert.equal(hung.ok, false);
+    assert.equal(hung.timedOut, true);
+    assert.match(hung.error, /time limit of 6000 ms reached/);
+    const late = await within(30000, (async () => { for (;;) { const e = events.find(x => x.type === 'probe_late' && x.token === hung.token); if (e) return e; await sleep(100); } })(), 'probe_late');
+    assert.equal(late.ok, false);
+    assert.ok(!events.some(e => e.type === 'probe_stuck'), 'it settled within the grace time');
 
     // Eat bread (food under 20 first, as the scenario's hunger effect does).
     containers.setFood(15);
@@ -103,7 +128,7 @@ test('probe-craft, probe-place and probe-eat through initBot, answered as JSON a
 
     // A repeated token runs once.
     const before = events.filter(e => e.type === 'probe').length;
-    serverClient.write('chat', { message: JSON.stringify({ text: 'probe-eat abcdef01 minecraft:bread' }), position: 1 });
+    whisper('Server', 'probe-eat abcdef01 minecraft:bread');
     await sleep(1500);
     assert.equal(events.filter(e => e.type === 'probe').length, before);
 

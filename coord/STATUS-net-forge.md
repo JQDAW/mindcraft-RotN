@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-03T02:10Z
+Updated: 2026-11-03T02:22Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -581,14 +581,15 @@ The setup for both batches:
     - The lead writes the GO after both code PRs merge. net-forge never starts the batch.
   - **Code needed first (none of it touches the live server):**
     - **net-forge: done in PR "probe driver"** (`packages/forge-bridge/tools/probe-commands.mjs`). It is wired into `tools/g1-driver.mjs` only when the scenario sets **`ROTN_DRIVER_PROBE=1`**; G1/G2 runs are unchanged. While the probe runs, auto-eat is off (`probe_ready {autoEat:"off"}`).
-      - Commands, one per chat line (a console `tell FRCFLD ...` works). TOKEN is 6-32 hex characters, and each token runs once:
+      - Commands come **only as a console whisper** (`tell FRCFLD probe-...`), which mineflayer reports as a whisper from `Server` (lead, #162 review). The whole whisper text must be the command (anchored). Public chat, players' whispers and anything else are ignored (`probe_ignored` is logged for a player's whisper). TOKEN is 6-32 hex characters, and each token runs once:
         - `probe-craft TOKEN RECIPE_ID [X,Y,Z]`: crafts once with rotn-data's dump recipe (through `convertRecipe`, taking the first variant the inventory covers). X,Y,Z is the crafting table; without it, the 2x2 grid is used.
         - `probe-place TOKEN ITEM X,Y,Z FACE`: holds ITEM and places it against X,Y,Z on FACE (`up|down|north|south|east|west`). The wait is 10 s, `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS`, 50-60000.
         - `probe-eat TOKEN ITEM`: `bot.consume`.
       - Answers come one at a time:
         - a `DRIVER {"type":"probe","token":...,"cmd":...,"ok":...}` JSON line with the full result (craft: recipe, variant, result, before/after counts, ms, table block; place: before/after block, `updateMs`, `totalMs`; eat: food and counts before and after);
         - one chat line, at most 200 characters: `probe TOKEN CMD ok|fail k=v ...`.
-      - Failures are answered (`ok:false`, `error`), never thrown.
+      - Failures are answered (`ok:false`, `error`), never thrown. Each command has a **60 s time limit** (lead, #162 review): at the limit it is answered `ok:false, timedOut:true`, and a later result is only logged (`probe_late`). The next command waits until the hung one settles, at most 10 s more (then `probe_stuck` is logged and any open window is closed). Each token gets exactly one answer.
+      - `probe-place` counts only a block update whose new state is the placed block (`expected`, `otherUpdates`).
       - The recipe ids for P1: `crafttweaker:pyro_crude_axe`, `crafttweaker:crafting_tools`, `crafttweaker:crafting_table`, `crafttweaker:stone_pickaxe` (with the table's X,Y,Z).
     - **harness-ops:** a scenario `test/scenarios/probe/probe-craft-place.mjs`. It sets `ROTN_DRIVER_PROBE=1` for the driver, and it is not a gate: `gateValid: false` always.
   - **Abort on a kick (lead):** if the bot is kicked or disconnected, the run stops and the server is torn down. Nothing reconnects.

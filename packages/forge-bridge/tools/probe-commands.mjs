@@ -1,8 +1,11 @@
 // Probe P1 commands for g1-driver (skills-rotn Request 2 live proof; plan in coord/STATUS-net-forge.md).
 // Enabled only with ROTN_DRIVER_PROBE=1, so G1/G2 gate runs are unchanged. Not a gate.
 //
-// The scenario (harness-ops, test/scenarios/probe/) sends one command per chat line; the
-// bot runs them one at a time and answers each with
+// The scenario (harness-ops, test/scenarios/probe/) sends one command per console whisper
+// (`tell <bot> probe-...`). Only a whisper from the console ("Server") whose whole text is the
+// command is accepted; public chat and players' whispers are ignored (logged as probe_ignored).
+// The bot runs them one at a time, each with a 60 s time limit (answered ok:false when reached),
+// and answers each exactly once with
 //   - one `DRIVER {"type":"probe",...}` JSON line on stdout (the full result), and
 //   - one chat line "probe TOKEN CMD ok|fail k=v ..." (at most 200 characters, for the server log).
 // Pass or fail is decided by the scenario from the server's own commands (clear ... 0 counts,
@@ -27,15 +30,21 @@ const { Vec3 } = require('vec3');
 const TOKEN = '([0-9a-f]{6,32})';
 const NAME = '([a-z0-9_.-]+:[a-z0-9_./-]+)';
 const POS = '(-?\\d{1,8}),(-?\\d{1,3}),(-?\\d{1,8})';
+// Anchored on the whole whisper text: the command must be the message, from start to end.
+// A bad position or extra text is a malformed command (answered as such below), never a
+// silent fallback to the 2x2 grid.
 const COMMANDS = {
-    // The whole rest of the line must match: a bad position or extra text is a malformed
-    // command (answered as such below), never a silent fallback to the 2x2 grid.
-    craft: new RegExp(`probe-craft ${TOKEN} ${NAME}(?: ${POS})?\\s*$`),
-    place: new RegExp(`probe-place ${TOKEN} ${NAME} ${POS} (up|down|north|south|east|west)\\s*$`),
-    eat: new RegExp(`probe-eat ${TOKEN} ${NAME}\\s*$`),
+    craft: new RegExp(`^probe-craft ${TOKEN} ${NAME}(?: ${POS})?\\s*$`),
+    place: new RegExp(`^probe-place ${TOKEN} ${NAME} ${POS} (up|down|north|south|east|west)\\s*$`),
+    eat: new RegExp(`^probe-eat ${TOKEN} ${NAME}\\s*$`),
 };
 // Any probe command at all, to answer a malformed one instead of leaving the scenario waiting.
-const ANY_COMMAND = new RegExp(`probe-(craft|place|eat) ${TOKEN}(?!\\S)`);
+const ANY_COMMAND = new RegExp(`^probe-(craft|place|eat) ${TOKEN}(?!\\S)`);
+// The only accepted sender: the test server's console (`tell <bot> ...`), which mineflayer reports
+// as a 'whisper' from "Server" (S1 check d, coord/STATUS-harness-ops.md). Public chat and whispers
+// from players are ignored. The P1 test server's whitelist holds only the bot and the human.
+export const PROBE_SENDER = 'Server';
+export const COMMAND_TIME_LIMIT_MS = 60000;
 export const FACES = Object.freeze({
     up: [0, 1, 0], down: [0, -1, 0], north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0],
 });
@@ -87,15 +96,46 @@ export function chatLine(token, cmd, ok, fields) {
  *           convertRecipe: (registry: object, r: object) => {variants: object[], skipped: string|null},
  *           placeTimeoutMs?: number, answerDelayMs?: number }} opts
  */
-export function attachProbe(bot, { emit, dumpRecipes, convertRecipe, placeTimeoutMs = 10000, answerDelayMs = 1200 }) {
+export function attachProbe(bot, {
+    emit, dumpRecipes, convertRecipe, placeTimeoutMs = 10000, answerDelayMs = 1200,
+    commandTimeoutMs = COMMAND_TIME_LIMIT_MS, stuckGraceMs = 10000,
+}) {
     let queue = Promise.resolve();
     const serial = (fn) => { queue = queue.then(fn).catch((err) => emit('probe_error', { message: String(err?.message ?? err) })); return queue; };
+    // Each token gets exactly one answer. A command that finishes after its time limit was answered
+    // is only logged ('probe_late'), never answered twice.
+    const answered = new Set();
     const answer = async (token, cmd, ok, data) => {
+        if (answered.has(token)) { emit('probe_late', { token, cmd, ok, ...data, chat: undefined }); return; }
+        answered.add(token);
         emit('probe', { token, cmd, ok, ...data });
         try { bot.chat(chatLine(token, cmd, ok, data.chat ?? {})); } catch (err) { emit('chat_error', { message: String(err?.message ?? err) }); }
         if (answerDelayMs) await sleep(answerDelayMs); // under the server's chat spam limit
     };
     const fail = (token, cmd, data, err) => answer(token, cmd, false, { ...data, error: String(err?.message ?? err).slice(0, 300), chat: { error: String(err?.message ?? err).slice(0, 120) } });
+
+    // The per-command time limit (lead, #162 review): a hung craft, equip, place or consume is
+    // answered ok:false at commandTimeoutMs. The next command still waits until the hung one
+    // settles, so two never click at once, but at most stuckGraceMs more; then any open window is
+    // closed and the queue goes on ('probe_stuck').
+    const limited = (token, cmd, run) => async () => {
+        let settled = false;
+        const op = Promise.resolve().then(run).catch((err) => emit('probe_error', { token, cmd, message: String(err?.message ?? err) }))
+            .finally(() => { settled = true; });
+        let timer;
+        const limit = new Promise((resolve) => { timer = setTimeout(() => resolve('limit'), commandTimeoutMs); });
+        const first = await Promise.race([op.then(() => 'done'), limit]);
+        clearTimeout(timer);
+        if (first === 'done') return;
+        await fail(token, cmd, { timedOut: true, limitMs: commandTimeoutMs }, new Error(`time limit of ${commandTimeoutMs} ms reached`));
+        let graceTimer;
+        await Promise.race([op, new Promise((resolve) => { graceTimer = setTimeout(resolve, stuckGraceMs); })]);
+        clearTimeout(graceTimer);
+        if (!settled) {
+            emit('probe_stuck', { token, cmd, graceMs: stuckGraceMs });
+            try { if (bot.currentWindow) bot.closeWindow(bot.currentWindow); } catch { /* no window */ }
+        }
+    };
 
     function ready() {
         try {
@@ -150,13 +190,20 @@ export function attachProbe(bot, { emit, dumpRecipes, convertRecipe, placeTimeou
         const target = refPos.plus(face);
         const base = { item: name, ref: refPos.toArray(), face: faceName, target: target.toArray() };
         try {
-            await equip(name);
+            const def = await equip(name);
             const ref = bot.blockAt(refPos);
             if (!ref) throw new Error(`no loaded block at ${refPos}`);
             const before = bot.blockAt(target)?.name ?? null;
+            // Only an update to the placed block counts (#162 review nit 3): the block of the same
+            // name as the item if bot.registry has one, else any change away from `before`.
+            const expected = bot.registry.blocksByName[def.name] ? def.name : null;
             let updateAt = null;
-            const onUpdate = () => { updateAt ??= Date.now(); };
-            bot.once(`blockUpdate:${target}`, onUpdate);
+            let otherUpdates = 0;
+            const onUpdate = (oldBlock, newBlock) => {
+                const isPlaced = expected ? newBlock?.name === expected : (newBlock?.name ?? null) !== before;
+                if (isPlaced) updateAt ??= Date.now(); else otherUpdates++;
+            };
+            bot.on(`blockUpdate:${target}`, onUpdate);
             const t0 = Date.now();
             try {
                 // A generous per-call wait, so a slow server is measured instead of failing at 500 ms.
@@ -166,8 +213,8 @@ export function attachProbe(bot, { emit, dumpRecipes, convertRecipe, placeTimeou
             }
             const after = bot.blockAt(target)?.name ?? null;
             // updateMs runs from the call to the server's block update; it includes the look (up to one tick).
-            const data = { ...base, before, after, totalMs: Date.now() - t0, updateMs: updateAt === null ? null : updateAt - t0, timeoutMs: placeTimeoutMs };
-            await answer(token, 'place', after !== before, { ...data, chat: { at: target.toArray().join(','), block: after, updateMs: data.updateMs } });
+            const data = { ...base, before, after, expected, otherUpdates, totalMs: Date.now() - t0, updateMs: updateAt === null ? null : updateAt - t0, timeoutMs: placeTimeoutMs };
+            await answer(token, 'place', after !== before && (expected === null || after === expected), { ...data, chat: { at: target.toArray().join(','), block: after, updateMs: data.updateMs } });
         } catch (err) {
             await fail(token, 'place', base, err);
         }
@@ -191,25 +238,30 @@ export function attachProbe(bot, { emit, dumpRecipes, convertRecipe, placeTimeou
         }
     }
 
-    // A command can arrive twice (whisper and broadcast); each token runs once.
+    // Each token runs once.
     const seen = new Set();
     const fresh = (token) => !seen.has(token) && seen.add(token);
-    bot.on('messagestr', (msg) => {
+    bot.on('whisper', (username, message) => {
+        const msg = String(message ?? '');
+        if (!ANY_COMMAND.test(msg)) return;
+        if (username !== PROBE_SENDER) {
+            emit('probe_ignored', { from: String(username).slice(0, 32), reason: `not a console whisper (only ${PROBE_SENDER} is accepted)` });
+            return;
+        }
         let m;
         if ((m = COMMANDS.craft.exec(msg)) && fresh(m[1])) {
             const pos = m[3] === undefined ? null : new Vec3(Number(m[3]), Number(m[4]), Number(m[5]));
             emit('probe_heard', { cmd: 'craft', token: m[1] });
-            serial(() => craft(m[1], m[2], pos));
+            serial(limited(m[1], 'craft', () => craft(m[1], m[2], pos)));
         } else if ((m = COMMANDS.place.exec(msg)) && fresh(m[1])) {
             emit('probe_heard', { cmd: 'place', token: m[1] });
-            serial(() => place(m[1], m[2], new Vec3(Number(m[3]), Number(m[4]), Number(m[5])), m[6]));
+            serial(limited(m[1], 'place', () => place(m[1], m[2], new Vec3(Number(m[3]), Number(m[4]), Number(m[5])), m[6])));
         } else if ((m = COMMANDS.eat.exec(msg)) && fresh(m[1])) {
             emit('probe_heard', { cmd: 'eat', token: m[1] });
-            serial(() => eat(m[1], m[2]));
+            serial(limited(m[1], 'eat', () => eat(m[1], m[2])));
         } else if ((m = ANY_COMMAND.exec(msg)) && fresh(m[2])) {
             emit('probe_heard', { cmd: m[1], token: m[2], malformed: true });
-            const at = msg.indexOf('probe-');
-            serial(() => fail(m[2], m[1], { line: msg.slice(at, at + 200) }, new Error('malformed command (see probe-commands.mjs for the formats)')));
+            serial(() => fail(m[2], m[1], { line: msg.slice(0, 200) }, new Error('malformed command (see probe-commands.mjs for the formats)')));
         }
     });
     return { idle: () => queue };

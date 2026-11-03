@@ -321,7 +321,7 @@ Redaction happens at write time. The bot's username and UUID become same-length 
     - `probe-place TOKEN ITEM X,Y,Z FACE`: waits up to `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS` (default 10000) and reports `updateMs`;
     - `probe-eat TOKEN ITEM`.
 
-    Each answer is a `DRIVER {"type":"probe",...}` line plus one chat line of at most 200 characters (`probe TOKEN CMD ok|fail k=v ...`). Auto-eat is off while the probe runs, and each token runs once. A command whose line does not match its format exactly (a bad position, extra text) is answered `fail` as malformed, never run another way. `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS` is only checked when the probe is on. `test/probe-e2e.test.js` runs all three commands through `initBot` in the offline craft world.
+    Commands are accepted only as a console whisper (`tell <bot> probe-...`, a whisper from `Server`), anchored on the whole text; public chat and players' whispers are ignored. Each command has a 60 s time limit, answered `ok:false, timedOut:true`; a later result is only logged (`probe_late`). Each answer is a `DRIVER {"type":"probe",...}` line plus one chat line of at most 200 characters (`probe TOKEN CMD ok|fail k=v ...`). Auto-eat is off while the probe runs, and each token runs once. A command whose line does not match its format exactly (a bad position, extra text) is answered `fail` as malformed, never run another way. `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS` is only checked when the probe is on. `test/probe-e2e.test.js` runs all three commands through `initBot` in the offline craft world.
 
 ## Tests
 
