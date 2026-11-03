@@ -73,16 +73,22 @@ test('a value set on the bot before the plugin loads is kept over the createBot 
 // #155 nit: a runtime or per-call value is clamped into the configured range (50-60000 ms).
 // Before the clamp, 0, a negative number or a non-number meant onceWithCleanup set no
 // timer at all, so placeBlock could wait forever.
-test('runtime and per-call values are clamped to 50 ms at the low end; non-numbers use 500 ms', async () => {
-    const low = stubBot(1500);
+test('runtime and per-call values are clamped to 50 ms at the low end; non-numbers fall through to the next source', async () => {
+    // The stub server answers after 900 ms: later than every timeout tested here.
+    const low = stubBot(900);
     low.placeBlockTimeout = 10;
     await assert.rejects(low.placeBlock(floor, up), /did not fire within timeout of 50ms/);
-    await assert.rejects(stubBot(1500)._placeBlockWithOptions(floor, up, { timeout: 0 }), /did not fire within timeout of 50ms/, '0 no longer means "no timeout"');
-    await assert.rejects(stubBot(1500)._placeBlockWithOptions(floor, up, { timeout: -5 }), /did not fire within timeout of 50ms/);
-    await assert.rejects(stubBot(1500)._placeBlockWithOptions(floor, up, { timeout: '2000' }), /did not fire within timeout of 500ms/, 'a string is not a timeout');
-    const nan = stubBot(1500);
+    await assert.rejects(stubBot(900)._placeBlockWithOptions(floor, up, { timeout: 0 }), /did not fire within timeout of 50ms/, '0 no longer means "no timeout"');
+    await assert.rejects(stubBot(900)._placeBlockWithOptions(floor, up, { timeout: -5 }), /did not fire within timeout of 50ms/);
+    // A per-call value that is not a number uses bot.placeBlockTimeout (here the createBot option 700).
+    await assert.rejects(stubBot(900, { placeBlockTimeout: 700 })._placeBlockWithOptions(floor, up, { timeout: '2000' }), /did not fire within timeout of 700ms/, 'a string is not a timeout');
+    // A runtime value that is not a number uses the createBot option, then 500.
+    const nan = stubBot(900, { placeBlockTimeout: 600 });
     nan.placeBlockTimeout = NaN;
-    await assert.rejects(nan.placeBlock(floor, up), /did not fire within timeout of 500ms/);
+    await assert.rejects(nan.placeBlock(floor, up), /did not fire within timeout of 600ms/);
+    const none = stubBot(900);
+    none.placeBlockTimeout = NaN;
+    await assert.rejects(none.placeBlock(floor, up), /did not fire within timeout of 500ms/);
 });
 
 test('values above 60000 ms are clamped to 60000 ms (mock timers)', async (t) => {

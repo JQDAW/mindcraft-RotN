@@ -79,10 +79,10 @@ index 70db312..93d2054 100644
      }
    }
 diff --git a/node_modules/mineflayer/lib/plugins/place_block.js b/node_modules/mineflayer/lib/plugins/place_block.js
-index fdaec6b..228cc54 100644
+index fdaec6b..3a93b70 100644
 --- a/node_modules/mineflayer/lib/plugins/place_block.js
 +++ b/node_modules/mineflayer/lib/plugins/place_block.js
-@@ -2,7 +2,23 @@ const { onceWithCleanup } = require('../promise_utils')
+@@ -2,7 +2,25 @@ const { onceWithCleanup } = require('../promise_utils')
  
  module.exports = inject
  
@@ -91,12 +91,14 @@ index fdaec6b..228cc54 100644
 +// Upstream mineflayer waits 5000 ms; Mindcraft uses 500 ms. Configurable for a lagging server:
 +// createBot({ placeBlockTimeout }), bot.placeBlockTimeout at runtime, or { timeout } per call.
 +const DEFAULT_PLACE_BLOCK_TIMEOUT = 500
-+// The same range initBot accepts for the configured value. A runtime or per-call value outside it
-+// is clamped into it; one that is not a finite number uses the default.
++// The same range initBot accepts for the configured value. The first candidate that is a finite
++// number (per call, then bot.placeBlockTimeout, then the createBot option) is rounded and clamped
++// into it; with none, the default is used.
 +const MIN_PLACE_BLOCK_TIMEOUT = 50
 +const MAX_PLACE_BLOCK_TIMEOUT = 60000
-+function clampPlaceBlockTimeout (ms) {
-+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return DEFAULT_PLACE_BLOCK_TIMEOUT
++function pickPlaceBlockTimeout (...candidates) {
++  const ms = candidates.find((c) => typeof c === 'number' && Number.isFinite(c))
++  if (ms === undefined) return DEFAULT_PLACE_BLOCK_TIMEOUT
 +  return Math.min(MAX_PLACE_BLOCK_TIMEOUT, Math.max(MIN_PLACE_BLOCK_TIMEOUT, Math.round(ms)))
 +}
 +
@@ -107,12 +109,12 @@ index fdaec6b..228cc54 100644
    async function placeBlockWithOptions (referenceBlock, faceVector, options) {
      const dest = referenceBlock.position.plus(faceVector)
      let oldBlock = bot.blockAt(dest)
-@@ -11,7 +27,7 @@ function inject (bot) {
+@@ -11,7 +29,7 @@ function inject (bot) {
      let newBlock = bot.blockAt(dest)
      if (oldBlock.type === newBlock.type) {
        [oldBlock, newBlock] = await onceWithCleanup(bot, `blockUpdate:${dest}`, {
 -        timeout: 5000,
-+        timeout: clampPlaceBlockTimeout(options?.timeout ?? bot.placeBlockTimeout),
++        timeout: pickPlaceBlockTimeout(options?.timeout, bot.placeBlockTimeout, botOptions.placeBlockTimeout),
          // Condition to wait to receive block update actually changing the block type, in case the bot receives block updates with no changes
          // oldBlock and newBlock will both be null when the world unloads
          checkCondition: (oldBlock, newBlock) => !oldBlock || !newBlock || oldBlock.type !== newBlock.type
