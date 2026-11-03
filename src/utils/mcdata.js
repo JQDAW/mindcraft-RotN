@@ -9,7 +9,7 @@ import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
 import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
-import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
+import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
 let mc_version = settings.minecraft_version;
 let mcdata = null;
@@ -747,9 +747,9 @@ export function getDetailedCraftingPlan(targetItem, count = 1, current_inventory
     }
 
     if (isBaseItem(targetItem)) {
-        const available = current_inventory[targetItem] || 0;
-        if (available >= count) return "You have all required items already in your inventory!";
-        return `${targetItem} is a base item, you need to find ${count - available} more in the world`;
+        const have = available(current_inventory, targetItem);
+        if (have >= count) return "You have all required items already in your inventory!";
+        return `${targetItem} is a base item, you need to find ${count - have} more in the world`;
     }
 
     const inventory = { ...current_inventory };
@@ -758,8 +758,83 @@ export function getDetailedCraftingPlan(targetItem, count = 1, current_inventory
     return formatPlan(targetItem, plan);
 }
 
+// ---- The plan reads ingredient metas (Request 10, #131 nit) -----------------------------------
+// Keys are inventory keys as world.getInventoryCounts writes them (skills-rotn B1b): "name:meta" for
+// an item with subtypes ("pyrotech:rock:6", "log:1"), the bare name otherwise. A bare key in a
+// recipe means any variant (wildcard metadata). A recipe variant is chosen that the inventory can
+// supply, so "you have everything" no longer holds for the wrong variant (rocks outside the rock ore,
+// a dirt clump). A bare inventory total of an item with subtypes cannot vouch for one variant, so it
+// only counts towards a bare (any-variant) need.
+
+/** Whether the item has subtypes (metadata matters), from the dump; else the registry's variations. */
+function hasSubtypes(name) {
+    const it = rdGetItem(name);
+    if (it?.propertiesKnown) return !!it.hasSubtypes;
+    return (reg()?.itemsByName?.[name]?.variations?.length ?? 0) > 1;
+}
+
+const parseKey = (key) => {
+    const i = key.lastIndexOf(':');
+    const tail = i > 0 ? key.slice(i + 1) : '';
+    return /^\d+$/.test(tail) ? { name: key.slice(0, i), meta: Number(tail) } : { name: key, meta: null };
+};
+
+/** A recipe item ({id, metadata}, a number, or [id, metadata]) as an inventory key, or null. */
+function ingredientKey(x) {
+    const it = typeof x === 'number' ? { id: x, metadata: null } : Array.isArray(x) ? { id: x[0], metadata: x[1] ?? null } : x;
+    if (!it || it.id == null || it.id < 0) return null;
+    const name = getItemName(it.id);
+    if (!name) return null;
+    const meta = it.metadata == null || it.metadata >= 32767 ? null : it.metadata;
+    return meta == null || !hasSubtypes(name) ? name : `${name}:${meta}`;
+}
+
+/**
+ * The crafting recipes that make `key`, as [ingredients {key: count}, { craftedCount }], meta-aware.
+ * A key with a meta keeps only the recipes whose result has that meta.
+ */
+export function getItemCraftingRecipeVariants(key) {
+    const id = getItemId(key);
+    if (id == null) return null;
+    const want = parseKey(key).meta;
+    const list = reg()?.recipes?.[id] ?? [];
+    const out = [];
+    for (const r of list) {
+        const rm = r.result?.metadata ?? null;
+        if (want != null && rm != null && rm !== want) continue;
+        const ingredients = {};
+        const cells = r.ingredients ?? (r.inShape ? r.inShape.flat() : []);
+        for (const c of cells) {
+            const k = ingredientKey(c);
+            if (k) ingredients[k] = (ingredients[k] ?? 0) + 1;
+        }
+        out.push([ingredients, { craftedCount: r.result?.count ?? 1 }]);
+    }
+    return out.length ? out : null;
+}
+
+/** How much of `key` a pool (inventory or leftovers) holds, with take() to use it. */
+function poolKeys(pool, key) {
+    const { name, meta } = parseKey(key);
+    if (meta == null) return Object.keys(pool).filter((k) => k === name || parseKey(k).name === name);
+    const keys = pool[key] != null ? [key] : [];
+    if (!hasSubtypes(name) && pool[name] != null) keys.push(name);
+    return keys;
+}
+const available = (pool, key) => poolKeys(pool, key).reduce((a, k) => a + Math.max(0, pool[k] || 0), 0);
+function take(pool, key, n) {
+    let left = n;
+    for (const k of poolKeys(pool, key)) {
+        if (left <= 0) break;
+        const use = Math.min(left, Math.max(0, pool[k] || 0));
+        pool[k] = (pool[k] || 0) - use;
+        left -= use;
+    }
+    return n - left;
+}
+
 function isBaseItem(item) {
-    return loopingItems.has(item) || getItemCraftingRecipes(item) === null || inFirstRecipeCycle(item);
+    return loopingItems.has(parseKey(item).name) || getItemCraftingRecipeVariants(item) === null || inFirstRecipeCycle(item);
 }
 
 // RotN recipes loop (4 rocks -> cobblestone -> 4 rocks; ingots <-> nuggets and blocks), and
@@ -767,16 +842,18 @@ function isBaseItem(item) {
 // through first recipes is gathered, not crafted (rotn-data brief item 4: the plan on RotN recipes).
 const cycleCache = new Map();
 // No depth limit (#102 review): `seen` ends the walk, which is iterative so a long chain cannot
-// overflow the stack.
+// overflow the stack. Keys are compared by item name, so "pyrotech:rock:0" and its cobblestone loop
+// are found whatever the metas.
 function inFirstRecipeCycle(item) {
     if (cycleCache.has(item)) return cycleCache.get(item);
-    const first = (name) => Object.keys(getItemCraftingRecipes(name)?.[0]?.[0] ?? {});
+    const target = parseKey(item).name;
+    const first = (key) => Object.keys(getItemCraftingRecipeVariants(key)?.[0]?.[0] ?? {});
     let found = false;
     const seen = new Set();
     const todo = [item];
     while (todo.length && !found) {
         for (const next of first(todo.pop())) {
-            if (next === item) { found = true; break; }
+            if (parseKey(next).name === target) { found = true; break; }
             if (seen.has(next)) continue;
             seen.add(next);
             todo.push(next);
@@ -786,37 +863,31 @@ function inFirstRecipeCycle(item) {
     return found;
 }
 
-function craftItem(item, count, inventory, leftovers, crafted = { required: {}, steps: [], leftovers: {} }) {
-    // Check available inventory and leftovers first
-    const availableInv = inventory[item] || 0;
-    const availableLeft = leftovers[item] || 0;
-    const totalAvailable = availableInv + availableLeft;
-
-    if (totalAvailable >= count) {
-        // Use leftovers first, then inventory
-        const useFromLeft = Math.min(availableLeft, count);
-        leftovers[item] = availableLeft - useFromLeft;
-        
-        const remainingNeeded = count - useFromLeft;
-        if (remainingNeeded > 0) {
-            inventory[item] = availableInv - remainingNeeded;
-        }
-        return crafted;
+/** The first recipe variant whose ingredients the inventory and leftovers can supply now, else the first. */
+function pickRecipe(variants, stillNeeded, inventory, leftovers) {
+    for (const v of variants) {
+        const batches = Math.ceil(stillNeeded / v[1].craftedCount);
+        if (Object.entries(v[0]).every(([k, n]) => available(inventory, k) + available(leftovers, k) >= n * batches)) return v;
     }
+    return variants[0];
+}
 
-    // Use whatever is available
-    const stillNeeded = count - totalAvailable;
-    if (availableLeft > 0) leftovers[item] = 0;
-    if (availableInv > 0) inventory[item] = 0;
+function craftItem(item, count, inventory, leftovers, crafted = { required: {}, steps: [], leftovers: {} }) {
+    // Leftovers first, then the inventory.
+    const fromLeft = take(leftovers, item, count);
+    const fromInv = take(inventory, item, count - fromLeft);
+    const stillNeeded = count - fromLeft - fromInv;
+    if (stillNeeded <= 0) return crafted;
 
     if (isBaseItem(item)) {
         crafted.required[item] = (crafted.required[item] || 0) + stillNeeded;
         return crafted;
     }
 
-    const recipe = getItemCraftingRecipes(item)?.[0];
+    const variants = getItemCraftingRecipeVariants(item);
+    const recipe = variants ? pickRecipe(variants, stillNeeded, inventory, leftovers) : null;
     if (!recipe) {
-        crafted.required[item] = stillNeeded;
+        crafted.required[item] = (crafted.required[item] || 0) + stillNeeded;
         return crafted;
     }
 
@@ -832,8 +903,7 @@ function craftItem(item, count, inventory, leftovers, crafted = { required: {}, 
 
     // Process each ingredient
     for (const [ingredientName, ingredientCount] of Object.entries(ingredients)) {
-        const totalIngredientNeeded = ingredientCount * batchCount;
-        craftItem(ingredientName, totalIngredientNeeded, inventory, leftovers, crafted);
+        craftItem(ingredientName, ingredientCount * batchCount, inventory, leftovers, crafted);
     }
 
     // Add crafting step

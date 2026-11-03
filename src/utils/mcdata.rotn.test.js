@@ -185,12 +185,41 @@ test('getItemCraftingRecipes and getDetailedCraftingPlan follow RotN recipes', (
     assert.deepEqual(mc.getItemCraftingRecipes('crafting_table')[0], [{ planks: 1, 'contenttweaker:crafting_tools': 1 }, { craftedCount: 1 }]);
     // Rocks and cobblestone make each other; both are gathered, not crafted (no endless recursion).
     const pick = mc.getDetailedCraftingPlan('stone_pickaxe', 1, {});
-    assert.match(pick, /- 3 pyrotech:rock\n- 1 log\n/);
-    assert.match(pick, /Craft 1 log -> 3 planks\nCraft 2 planks -> 4 stick\nCraft 3 pyrotech:rock \+ 2 stick -> 1 stone_pickaxe/);
+    // Request 10: the plan names variants as inventory keys ("pyrotech:rock:0", "log:0"); a bare
+    // key (planks, stick) means any variant.
+    assert.match(pick, /- 3 pyrotech:rock:0\n- 1 log:0\n/);
+    assert.match(pick, /Craft 1 log:0 -> 3 planks\nCraft 2 planks -> 4 stick\nCraft 3 pyrotech:rock:0 \+ 2 stick -> 1 stone_pickaxe/);
     const table = mc.getDetailedCraftingPlan('crafting_table', 1, {});
-    assert.match(table, /Craft 1 pyrotech:rock \+ 2 stick -> 1 pyrotech:crude_axe\nCraft 1 pyrotech:crude_axe \+ 1 pyrotech:rock \+ 1 stick -> 1 contenttweaker:crafting_tools\nCraft 1 planks \+ 1 contenttweaker:crafting_tools -> 1 crafting_table/);
+    assert.match(table, /Craft 1 pyrotech:rock:0 \+ 2 stick -> 1 pyrotech:crude_axe\nCraft 1 pyrotech:crude_axe \+ 1 pyrotech:rock:0 \+ 1 stick -> 1 contenttweaker:crafting_tools\nCraft 1 planks \+ 1 contenttweaker:crafting_tools -> 1 crafting_table/);
     assert.equal(mc.getDetailedCraftingPlan('cobblestone', 1, {}), 'cobblestone is a base item, you need to find 1 more in the world');
-    assert.match(mc.getDetailedCraftingPlan('furnace', 1, { 'pyrotech:rock': 2 }), /- 6 pyrotech:rock/);
+    assert.match(mc.getDetailedCraftingPlan('furnace', 1, { 'pyrotech:rock:0': 2 }), /- 6 pyrotech:rock:0/);
+});
+
+// Request 10 (#131 nit): the plan reads ingredient metas against a variant-keyed inventory
+// (world.getInventoryCounts: "name:meta" for items with subtypes), so the wrong variant is not "everything".
+test('getDetailedCraftingPlan: a dirt clump is not a rock; any rock in the ore is; mixed rocks make a stone pickaxe', () => {
+    const everything = /^You have all items required to craft this item!/;
+    // A dirt clump (pyrotech:rock:4) is not in the rock ore dictionary: the crude axe still needs a rock.
+    const clump = mc.getDetailedCraftingPlan('pyrotech:crude_axe', 1, { 'pyrotech:rock:4': 1, stick: 2 });
+    assert.doesNotMatch(clump, everything);
+    assert.match(clump, /- 1 pyrotech:rock:0/);
+    // A metamorphic rock (any meta) is in the ore: everything is there, and the plan names it.
+    const meta6 = mc.getDetailedCraftingPlan('pyrotech:crude_axe', 1, { 'pyrotech_compat:rock_metamorphic:6': 1, stick: 2 });
+    assert.match(meta6, everything);
+    assert.match(meta6, /Craft 1 pyrotech_compat:rock_metamorphic \+ 2 stick -> 1 pyrotech:crude_axe/);
+    // Mixed families (the G3 spawn): 1 igneous + 2 metamorphic make a stone pickaxe (#152's mixed variants).
+    const mixed = mc.getDetailedCraftingPlan('stone_pickaxe', 1, { 'pyrotech_compat:rock_igneous:3': 1, 'pyrotech_compat:rock_metamorphic:0': 2, stick: 2 });
+    assert.match(mixed, everything);
+    assert.match(mixed, /1 pyrotech_compat:rock_igneous \+ 2 pyrotech_compat:rock_metamorphic \+ 2 stick -> 1 stone_pickaxe/);
+    // Not enough of the right variants: 2 good rocks and a clump are not 3 rocks.
+    assert.doesNotMatch(mc.getDetailedCraftingPlan('stone_pickaxe', 1, { 'pyrotech_compat:rock_igneous:0': 2, 'pyrotech:rock:4': 1, stick: 2 }), everything);
+    // A bare total of an item with subtypes cannot vouch for a variant: callers pass variant keys.
+    assert.doesNotMatch(mc.getDetailedCraftingPlan('pyrotech:crude_axe', 1, { 'pyrotech:rock': 1, stick: 2 }), everything);
+    // Items without subtypes keep bare keys, and a bare need takes any variant ("planks" from "planks:2").
+    assert.match(mc.getDetailedCraftingPlan('stick', 4, { 'planks:2': 2 }), everything);
+    // The variant-aware recipes: the stone pickaxe's first variant, keyed like the inventory.
+    assert.deepEqual(mc.getItemCraftingRecipeVariants('stone_pickaxe')[0], [{ 'pyrotech:rock:0': 3, stick: 2 }, { craftedCount: 1 }]);
+    assert.equal(mc.getItemCraftingRecipeVariants('nosuchmod:thing'), null);
 });
 
 test('the plan cycle guard has no depth limit: a 12-step cycle is found (#102 review)', () => {
@@ -207,5 +236,43 @@ test('the plan cycle guard has no depth limit: a 12-step cycle is found (#102 re
         assert.equal(mc.getDetailedCraftingPlan('cyc0', 1, {}), 'cyc0 is a base item, you need to find 1 more in the world');
     } finally {
         mc.__setRegistryForTest(registry);
+    }
+});
+
+// #145 review: near the G3 spawn the bot holds mixed Underground Biomes rocks. mineflayer's
+// recipesFor keeps a recipe when, for every delta entry, inventory.count(id, metadata) covers it
+// (craft.js requirementsMetForRecipe); the same rule here, on the installed RotN table.
+test('mixed rocks (1 igneous + 2 metamorphic) and 2 sticks make a stone pickaxe and a stone axe', () => {
+    mc.installRotnRecipes();
+    const Recipe = require('prismarine-recipe')(registry).Recipe;
+    const id = (n) => registry.itemsByName[n].id;
+    const inv = [[id('pyrotech_compat:rock_igneous'), 3, 1], [id('pyrotech_compat:rock_metamorphic'), 0, 2], [id('stick'), 0, 2]];
+    const count = (i, m) => inv.filter(([a, b]) => a === i && (m == null || m === b)).reduce((n, x) => n + x[2], 0);
+    const craftable = (r) => r.delta.every((d) => count(d.id, d.metadata) + d.count >= 0);
+    for (const item of ['stone_pickaxe', 'stone_axe']) assert.ok(Recipe.find(id(item)).some(craftable), item);
+    // Cobblestone takes 4 rocks of one type (one recipe per rock type), so a mix makes none.
+    assert.ok(!Recipe.find(id('cobblestone')).some(craftable));
+});
+
+// #152 review: single-kind variants are never pushed out by mixes, and no variant counts a stack twice.
+test('stone tools keep all 78 single-kind variants; no variant pairs a wildcard with the same item', () => {
+    mc.installRotnRecipes();
+    const Recipe = require('prismarine-recipe')(registry).Recipe;
+    const id = (n) => registry.itemsByName[n].id;
+    const canCraft = (inv) => (r) => r.delta.every((d) => inv.filter(([a, b]) => a === d.id && (d.metadata == null || d.metadata === b)).reduce((n, x) => n + x[2], 0) + d.count >= 0);
+    // The reviewer's case: 3 sedimentary sand rocks (meta 8) and 2 sticks (develop could craft it).
+    const sand3 = [[id('pyrotech_compat:rock_sedimentary_sand'), 8, 3], [id('stick'), 0, 2]];
+    for (const item of ['stone_pickaxe', 'stone_axe']) assert.ok(Recipe.find(id(item)).some(canCraft(sand3)), item);
+    // The rock recipe's first 78 variants are single-kind (13 rocks x 6 stick choices), as on develop.
+    const rockVariants = registry.recipes[id('stone_pickaxe')].filter((r) => r.inShape[0].length === 3 && r.inShape[0][0].id !== id('flint'));
+    const singleKind = (r) => new Set(r.inShape[0].map((x) => `${x.id}:${x.metadata}`)).size === 1;
+    assert.ok(rockVariants.slice(0, 78).every(singleKind));
+    assert.ok(rockVariants.slice(78).some((r) => !singleKind(r)), 'mixes after them');
+    // The reviewer's double-count examples: no variant has a wildcard and a specific meta of one item.
+    for (const item of ['concrete_powder', 'bookshelf']) {
+        for (const r of registry.recipes[id(item)] ?? []) {
+            const its = (r.ingredients ?? r.inShape.flat()).filter((x) => x && x.id >= 0);
+            assert.ok(!its.some((x) => x.metadata == null && its.some((y) => y !== x && y.id === x.id && y.metadata != null)), item);
+        }
     }
 });
