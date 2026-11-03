@@ -14,6 +14,9 @@
 #   run [up options] -- CMD [ARGS...]
 #                 Batch mode: up, run CMD with TEST_SERVER_* in the environment, then always down.
 #                 Exits with CMD's status (or the teardown's, if teardown fails).
+#                 If CMD runs test/runner/batch.mjs (the G3 batch), `batch.mjs --preflight` with the same
+#                 arguments runs first, BEFORE anything is created: the driver, profile, model and settings
+#                 checks, and one key-usage reading. If it refuses, no server is created (exit 1).
 #   up [options]  Create and build a server and leave it running until `down` or delete-after.
 #                 Deleted at once if the build fails (unless --keep-on-failure).
 #   down          Delete the server, then its Primary IPv4, then its SSH key; verify all are gone.
@@ -987,6 +990,30 @@ do_list() {
   done
 }
 
+# ---------------------------------------------------------------- G3 batch preflight
+# The G3 batch's checks that need no server (lead, #169 review): if the run command's script is
+# test/runner/batch.mjs, run it once with --preflight inserted right after the script, with the same
+# TEST_SERVER_CTL and TEST_SERVER_FAKE_CLOUD the real run will get (so its test-mode rules are the same).
+# It refuses before anything is created. Sets ROTN_BATCH_PREFLIGHT=passed only when it passed.
+batch_preflight() {
+  local -a cmd=("$@")
+  local i a
+  for (( i = 0; i < ${#cmd[@]}; i++ )); do
+    a=${cmd[i]//\\//}
+    case $a in
+      test/runner/batch.mjs|*/test/runner/batch.mjs) ;;
+      *) continue ;;
+    esac
+    local -a pre=("${cmd[@]:0:i+1}" --preflight "${cmd[@]:i+1}")
+    log "G3 batch preflight (no server yet): ${pre[*]}"
+    local st=0
+    TEST_SERVER_CTL=$SELF TEST_SERVER_FAKE_CLOUD=$TEST_SERVER_FAKE_CLOUD "${pre[@]}" || st=$?
+    (( st == 0 )) || die "the G3 batch preflight refused (exit $st): no server was created"
+    export ROTN_BATCH_PREFLIGHT=passed
+    return 0
+  done
+}
+
 # ---------------------------------------------------------------- main
 main() {
   local cmd=${1:-help}
@@ -1006,19 +1033,22 @@ main() {
       local -a run_cmd=("${ARGS[@]}")
       ARGS=()
       KEEP_ON_SUCCESS=0
-      trap on_exit EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
-      do_up
-      (( DRY_RUN )) && exit 0
-      export TEST_SERVER_NAME=$NAME TEST_SERVER_HOST=$IP TEST_SERVER_PORT=25565
-      export TEST_SERVER_STATE_DIR=$SDIR TEST_SERVER_CTL=$SELF
       # TEST_SERVER_FAKE_CLOUD=1 only for the offline tests (test mode, a fake hcloud with its fake state);
       # set here, never inherited. The G3 batch runner refuses its test-mode overrides (a fake key-usage
       # file, a fake runner) unless this is 1, so they can never weaken a real batch (#122 review).
       if [[ ${ROTN_TEST_MODE:-} == 1 && -n ${FAKE_HCLOUD_STATE:-} && $HCLOUD_BIN != hcloud ]]; then
-        export TEST_SERVER_FAKE_CLOUD=1
+        TEST_SERVER_FAKE_CLOUD=1
       else
-        export TEST_SERVER_FAKE_CLOUD=0
+        TEST_SERVER_FAKE_CLOUD=0
       fi
+      # The G3 batch's preflight, before anything exists (lead, #169 review). Its mark is never inherited.
+      unset ROTN_BATCH_PREFLIGHT
+      batch_preflight "${run_cmd[@]}"
+      trap on_exit EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
+      do_up
+      (( DRY_RUN )) && exit 0
+      export TEST_SERVER_NAME=$NAME TEST_SERVER_HOST=$IP TEST_SERVER_PORT=25565
+      export TEST_SERVER_STATE_DIR=$SDIR TEST_SERVER_CTL=$SELF TEST_SERVER_FAKE_CLOUD
       log "running: ${run_cmd[*]}"
       local status=0
       "${run_cmd[@]}" || status=$?
