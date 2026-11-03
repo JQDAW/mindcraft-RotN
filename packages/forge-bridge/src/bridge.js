@@ -11,6 +11,7 @@ import { decodeRegister, decodeFml, decodeForge, decodeJeid, MultipartAssembler 
 import { hasReid, findMod, REID_MODID } from './modlist.js';
 import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, rotnMetadataSerializers, MC_VERSION } from './reid.js';
 import { classifyKick, classifySocketError } from './kicks.js';
+import { modGuiWindow } from './mod-guis.js';
 
 const require = createRequire(import.meta.url);
 
@@ -20,8 +21,13 @@ const DEFAULT_CAPTURED_PACKETS = {
     login: 5, map_chunk: 40, window_items: 50, set_slot: 300,
     entity_effect: 100, remove_entity_effect: 100, kick_disconnect: 5,
     spawn_entity_living: 100, spawn_entity: 100, entity_metadata: 300, open_window: 20,
+    transaction: 300, close_window: 20, block_change: 300,
 };
-const DEFAULT_CAPTURED_C2S = { window_click: 50, set_creative_slot: 20, held_item_slot: 20 };
+// Crafting, placing and item use (skills-rotn Request 2): enough for a probe batch.
+const DEFAULT_CAPTURED_C2S = {
+    window_click: 300, set_creative_slot: 20, held_item_slot: 50,
+    transaction: 300, close_window: 20, block_place: 100, use_item: 50,
+};
 
 const RING_SIZE = 200;
 
@@ -63,7 +69,7 @@ export function attachForgeBridge(client, opts) {
     bridge.stats = {
         payloadsIn: 0, payloadsOut: 0, byChannel: {},
         parseErrors: 0, partialReadErrors: 0, partialPackets: {}, droppedPackets: {},
-        entitySpawns: 0, openGuis: 0, jeidMessages: 0, reidEffectTails: 0,
+        entitySpawns: 0, openGuis: 0, modWindows: 0, modWindowErrors: 0, jeidMessages: 0, reidEffectTails: 0,
     };
     bridge.handshakeDone = false;
 
@@ -184,7 +190,31 @@ export function attachForgeBridge(client, opts) {
                 const msg = decodeFml(data, { readMetadata: typeReader.readMetadata });
                 decoded = summarizeFml(msg);
                 if (msg.type === 'EntitySpawn') { bridge.stats.entitySpawns++; bridge.emit('entitySpawn', msg); }
-                if (msg.type === 'OpenGui') { bridge.stats.openGuis++; bridge.emit('openGui', msg); }
+                if (msg.type === 'OpenGui') {
+                    bridge.stats.openGuis++;
+                    // A mod GUI over a vanilla container: give mineflayer the open_window a
+                    // vanilla server would send (mod-guis.js). Emitted now, so it comes before
+                    // the window_items that Forge sends right after OpenGui. If mineflayer still
+                    // holds an unopened window_items with the same id (an ignored mod GUI's), the
+                    // window opens with those slots for a moment; the real window_items replaces them.
+                    const win = modGuiWindow(msg);
+                    if (win) {
+                        bridge.stats.modWindows++;
+                        capture?.event('mod_window', { modId: msg.modId, modGuiId: msg.modGuiId, ...win });
+                        // Own try/catch: a throw in mineflayer's open_window handler is not a decode
+                        // error on FML, and must not skip the openGui event below.
+                        try {
+                            client.emit('open_window', win, { name: 'open_window', state: 'play', synthetic: true });
+                        } catch (e) {
+                            bridge.stats.modWindowErrors++;
+                            log(`synthetic open_window for ${msg.modId}:${msg.modGuiId} window ${msg.windowId}: handler threw ${e?.name ?? 'Error'}: ${e?.message ?? e}`);
+                            capture?.event('mod_window_error', { modId: msg.modId, modGuiId: msg.modGuiId, windowId: msg.windowId, error: String(e?.message ?? e) });
+                        }
+                    } else {
+                        log(`OpenGui ${msg.modId}:${msg.modGuiId} window ${msg.windowId} at ${msg.x} ${msg.y} ${msg.z}: no vanilla window known for this mod GUI; ignored`);
+                    }
+                    bridge.emit('openGui', msg);
+                }
                 break;
             }
             case 'FORGE':
