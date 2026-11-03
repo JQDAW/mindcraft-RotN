@@ -49,6 +49,38 @@ test('gorgon: its gaze kills a player who looks back; the entry marks it do-not-
     assert.match(ev('iceandfire:gorgon'), /isEntityLookingAt\(gorgon, target, 0\.4\) and isEntityLookingAt\(target, gorgon, 0\.4\)/);
     assert.match(ev('iceandfire:gorgon'), /2\.147E9 damage/);
     assert.match(pack.threatOf('iceandfire:gorgon').summary, /Never look at it/);
-    // The field threatOf returns once #187 (lookAt) is in; checked on the data here.
+    // In the data, and through threatOf's lookAt (#187).
     assert.equal(reactions.entities['iceandfire:gorgon'].lookAt, false);
+    assert.equal(pack.threatOf('iceandfire:gorgon').lookAt, false);
+});
+
+// #188 review follow-up (lead): the ghast and blaze variants from Special Mobs, NetherEx and Twilight
+// Forest still returned 'fight'. A class rule covers them; the two bosses get 'avoid' entries.
+test('every hostile ghast or blaze class in the dump takes cover or is avoided; none is left to the default', () => {
+    const E = pack.dump.entities.entities;
+    const simple = (c) => (c ?? '').slice((c ?? '').lastIndexOf('.') + 1);
+    const names = Object.keys(E).filter((n) => /Ghast|Blaze/.test(simple(E[n].class)) && pack.entity(n).hostile);
+    assert.ok(names.length >= 20, `ghast and blaze classes: ${names.length}`);
+    for (const n of names) {
+        const t = pack.threatOf(n);
+        assert.notEqual(t.source, 'default', n);
+        assert.ok(['take-cover', 'avoid'].includes(t.reaction), `${n}: ${t.reaction}`);
+        assert.equal(t.ranged, true, n);
+    }
+    // The rule matches NetherEx's ghastling (not ending in Ghast); the fighter ghast stays ranged.
+    for (const n of ['netherex:ghastling', 'specialmobs:fighterghast', 'specialmobs:kingghast', 'specialmobs:wildfireblaze', 'twilightforest:tower_ghast', 'twilightforest:mini_ghast']) {
+        const t = pack.threatOf(n);
+        assert.deepEqual([t.reaction, t.ranged, t.source, t.rule], ['take-cover', true, 'inferred', 'ghast-blaze-variants'], n);
+    }
+    assert.match(pack.threatOf('specialmobs:fighterghast').evidence.join(' '), /EntityFighterGhast only adjusts attributes/);
+    // The bosses are avoided (entries win over the rule).
+    for (const n of ['netherex:ghast_queen', 'twilightforest:ur_ghast']) {
+        const t = pack.threatOf(n);
+        assert.deepEqual([t.reaction, t.ranged, t.source], ['avoid', true, 'verified'], n);
+        assert.match(t.evidence[0], /\.boss\.Entity/);
+    }
+    // Fireball projectiles are not hostile, so the rule does not touch them.
+    for (const n of ['netherex:ghast_queen_fireball', 'netherex:ghastling_fireball']) {
+        assert.deepEqual([pack.threatOf(n).level, pack.threatOf(n).reaction], ['none', 'ignore'], n);
+    }
 });

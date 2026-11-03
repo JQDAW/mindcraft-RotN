@@ -338,6 +338,26 @@
         "The pinned pack makes it tougher: config/roughmobsrevamped.cfg attributes lines 77, 86, 95 and 104 (blaze knockbackResistance +0.5, maxHealth +20, armor +3, attackDamage +3; operator 0 = add, line 10) and blaze.blazePushAttackersAway=true (line 701); config/Special_Mobs.cfg replaces vanilla blazes with Special Mobs blazes and variants (the blazes section from line 44; Nether chance dimension/the_nether=0.33, line 60)"
       ]
     },
+    "netherex:ghast_queen": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "NetherEx's Ghast Queen, a Nether boss that shoots fireballs. Not on the first-night path. Never fight it with early gear; leave.",
+      "confidence": "verified",
+      "evidence": [
+        "NetherEx-1.12.2-2.2.5.jar (in the pack as mods/NetherEx-1.12.2-2.2.5.jar, SHA-256 ab71d3f63d8905727c769ddfe8c4849d735a4d9feb502a9135ce27e16bca815e): logictechcorp.netherex.entity.boss.EntityGhastQueen (a boss package class) extends net.minecraft.entity.monster.EntityGhast and uses a FireballAttack",
+        "Not settled: its attack strength, health and summons"
+      ]
+    },
+    "twilightforest:ur_ghast": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "Twilight Forest's Ur-Ghast, a boss that shoots fireballs. Not on the first-night path. Never fight it with early gear; leave.",
+      "confidence": "verified",
+      "evidence": [
+        "twilightforest-1.12.2-3.14.jar (in the pack as mods/twilightforest-1.12.2-3.14.jar, SHA-256 cf9f7798d50c70097ece08a8822d58b0f43547ea57cb620fd798b33ec5762c61): twilightforest.entity.boss.EntityTFUrGhast (a boss package class) extends EntityTFTowerGhast, which extends net.minecraft.entity.monster.EntityGhast with EntityLargeFireball",
+        "Not settled: its attack strength, health and summons"
+      ]
+    },
     "minecraft:zombie_horse": {
       "reaction": "fight",
       "summary": "On this pack an aggressive undead horse: The Hordes gives it zombie AI, so it hunts players from up to 35 blocks, hits for 3 and burns in daylight. Fight it like a zombie, at a choke point; it is not a mount to ignore.",
@@ -653,6 +673,21 @@
         "specialmobs:specialwitch": "The base class: vanilla behaviour plus Special Mobs' generic options."
       },
       "note": "Matches classes whose simple name ends with 'Witch', so Special Mobs' witch spiders (EntityWitchSpider, EntityWitchCaveSpider) are not caught. minecraft:witch keeps its own entry."
+    },
+    {
+      "id": "ghast-blaze-variants",
+      "pattern": "(Ghast|Ghastling|GhastQueen|Blaze)$",
+      "reaction": "take-cover",
+      "ranged": true,
+      "confidence": "inferred",
+      "summary": "A ghast or blaze variant (Special Mobs, NetherEx, Twilight Forest): it fights from range with fireballs like the vanilla ghast or blaze it is built on. Stay behind solid cover and out of its line of sight. Nether and Twilight Forest mobs; not on the first-night path.",
+      "note": "Matched on the dumped class's simple name; class rules apply to hostile mobs only, so the fireball projectiles (not hostile) are not matched. Bosses get their own entries (NetherEx ghast queen, Twilight Forest ur-ghast: avoid). Each variant's extra behaviour was not read.",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125; javap -c -p, no mod code run): every *Ghast variant (Baby, Fighter, King, Queen, Unholy) extends Entity_SpecialGhast, which extends net.minecraft.entity.monster.EntityGhast and implements IRangedAttackMob with EntityLargeFireball; every *Blaze variant (Cinder, Conflagration, Ember, Hellfire, Inferno, Jolt, Wildfire) extends Entity_SpecialBlaze, which extends net.minecraft.entity.monster.EntityBlaze and implements IRangedAttackMob with EntitySmallFireball bursts (FireballBurstCount, FireballBurstDelay). EntityFighterGhast only adjusts attributes (adjustTypeAttributes: +20 health, +10 armor, +2 attack, speed x1.3) and is half size; its ranged attack is the base class's",
+        "NetherEx-1.12.2-2.2.5.jar (in the pack as mods/NetherEx-1.12.2-2.2.5.jar, SHA-256 ab71d3f63d8905727c769ddfe8c4849d735a4d9feb502a9135ce27e16bca815e): EntityGhastling extends EntityGhast and uses a FireballAttack",
+        "twilightforest-1.12.2-3.14.jar (in the pack as mods/twilightforest-1.12.2-3.14.jar, SHA-256 cf9f7798d50c70097ece08a8822d58b0f43547ea57cb620fd798b33ec5762c61): EntityTFTowerGhast extends EntityGhast with EntityLargeFireball; EntityTFMiniGhast extends EntityTFTowerGhast",
+        "Not checked: each variant's own extra behaviour (for example Special Mobs' unholy or king ghast) and whether any variant disables its ranged attack through Special Mobs' config"
+      ]
     }
   ]
 }
