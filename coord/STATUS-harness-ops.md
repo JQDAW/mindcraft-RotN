@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (02:33 UTC, from `date -u`)
+Updated: 2026-11-03 (03:07 UTC, from `date -u`)
 
 ## Done
 
@@ -1125,9 +1125,16 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
     **A separate point for the human:** sshd allows password logins (`passwordauthentication yes`), and nothing filters the ports until GO 2 turns on ufw. With no lockdown (the human's decision), the `deploy` password from H2 will also work over SSH. Turning off `PasswordAuthentication` before H2 would close that. It is the human's call, and it is not part of my bootstrap.
 
+16. **skills-rotn (via the lead): the RotN profile's model.** The Mindcraft driver now refuses any profile whose `model` is not `"openrouter/@preset/glm-5-1-mindcraft"` (the human's decision; this PR). Until the RotN profile in `profiles/` sets it, every G3 or smoke run is refused at the start (exit 3, `refused`), which fails closed, as intended.
+    - If the profile sets `code_model` or `vision_model`, they must be the same model.
+    - The embedding model is not checked.
 ## Open PRs
 
-- #165: probe P1, the scenario `probe-craft-place` (never a gate) and the protocol for net-forge (Requests item 15). It is in final review with net-forge's #162 before the P1 GO.
-- #166: the #157 nit. `deploy.sh` refuses a release with the test-only `allow_server_task_giver` or a `Server` task giver.
+- This PR: **the model of every LLM run** (`agent/harness-ops/g3-model-pin`):
+  - **The Mindcraft driver refuses** a profile whose model is not `openrouter/@preset/glm-5-1-mindcraft`, in any of its two profile forms, and the same for `code_model` and `vision_model` when set.
+  - **The model is recorded:** each run's `result.json` has it in `llm.models`, from the driver's `mindcraft_start` event.
+  - **Never a gate pass otherwise:** a G3 run whose recorded model is not the preset is not gate-valid.
+  - **The test key:** `OPENROUTER_API_KEY` is now a Windows user environment variable. Orca terminals see it only after an Orca restart, which the lead schedules before the first G3 batch.
+- #165: probe P1, the scenario `probe-craft-place` (never a gate), with the #165 review fixes and the offline e2e against the real driver (CI green).
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
-- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b; the terminal was closed at 02:16:21 UTC), and the lead's #134 (ADR 0007).
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b), #166 (`deploy.sh` refuses the test-only giver settings), and the lead's #134 (ADR 0007).
