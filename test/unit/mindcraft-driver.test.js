@@ -12,6 +12,9 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { parseDriverArgs, envProblems, profileProblems, settingsProblems, settingsFileOf, mindcraftEnv, freePort, EXIT_FATAL } from '../runner/drivers/mindcraft-driver.mjs';
 
+// A profile as skills-rotn's RotN profile sets it: the bot's name and the preset model (lib/g3.mjs LLM_MODEL).
+const GOOD_PROFILE = JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-1-mindcraft' });
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, '..', 'runner', 'drivers', 'mindcraft-driver.mjs');
 const FAKE_MAIN = path.join(HERE, 'fixtures', 'fake-mindcraft-main.mjs');
@@ -59,9 +62,19 @@ describe('mindcraft-driver: checks before anything starts', () => {
         assert.match(profileProblems(path.join(dir, 'none.json'), 'FRCFLD')[0], /not found/);
         assert.match(profileProblems(f('bad.json', '{'), 'FRCFLD')[0], /not valid JSON/);
         for (const body of ['null', '42', '"FRCFLD"', '[]']) assert.match(profileProblems(f('odd.json', body), 'FRCFLD')[0], /not a JSON object/, body);
-        assert.match(profileProblems(f('task.json', '{"name":"FRCFLD","task":{"goal":"x"}}'), 'FRCFLD')[0], /has 'task'/);
+        assert.match(profileProblems(f('task.json', JSON.stringify({ ...JSON.parse(GOOD_PROFILE), task: { goal: 'x' } })), 'FRCFLD')[0], /has 'task'/);
         assert.match(profileProblems(f('other.json', '{"name":"Andy"}'), 'FRCFLD')[0], /name 'Andy' is not the runner's bot 'FRCFLD'/);
-        assert.deepEqual(profileProblems(f('ok.json', '{"name":"FRCFLD"}'), 'FRCFLD'), []);
+        assert.deepEqual(profileProblems(f('ok.json', GOOD_PROFILE), 'FRCFLD'), []);
+        // The model of every LLM run (the human's decision, 2026-11-03): the OpenRouter preset, in any profile form.
+        assert.deepEqual(profileProblems(f('obj.json', JSON.stringify({ name: 'FRCFLD', model: { api: 'openrouter', model: '@preset/glm-5-1-mindcraft' } })), 'FRCFLD'), []);
+        for (const [body, re] of [
+            ['{"name":"FRCFLD"}', /model is 'not set', not openrouter\/@preset\/glm-5-1-mindcraft/],
+            ['{"name":"FRCFLD","model":"openrouter/anthropic/claude-sonnet-4-6"}', /model is 'openrouter\/anthropic\/claude-sonnet-4-6', not openrouter\/@preset/],
+            ['{"name":"FRCFLD","model":"@preset/glm-5-1-mindcraft"}', /model is '@preset\/glm-5-1-mindcraft', not openrouter\/@preset/],
+            ['{"name":"FRCFLD","model":{"api":"openai","model":"@preset/glm-5-1-mindcraft"}}', /model is 'openai\/@preset\/glm-5-1-mindcraft'/],
+            [JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-1-mindcraft', code_model: 'gpt-4o' }), /code_model is 'gpt-4o', not openrouter\/@preset/],
+            [JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-1-mindcraft', vision_model: {} }), /vision_model is 'not understood'/],
+        ]) assert.match(profileProblems(f('model.json', body), 'FRCFLD').join('; '), re, body);
         // Givers are settings; the test-only Server giver is the driver's alone (#146).
         for (const k of ['allow_server_task_giver', 'task_givers', 'TaskGivers']) {
             assert.match(profileProblems(f('giver.json', JSON.stringify({ name: 'FRCFLD', [k]: k === 'allow_server_task_giver' ? true : ['Server'] })), 'FRCFLD')[0], new RegExp(`has '${k}'`));
@@ -96,7 +109,7 @@ describe('mindcraft-driver: checks before anything starts', () => {
 });
 
 /** Spawns the driver with the fake main.js. Returns {child, dir, exited}. */
-function startDriver({ env = {}, args = [], profileBody = '{"name":"FRCFLD"}', settings = SAFE } = {}) {
+function startDriver({ env = {}, args = [], profileBody = GOOD_PROFILE, settings = SAFE } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcd-run-'));
     const profile = path.join(dir, 'profile.json');
     fs.writeFileSync(profile, profileBody);
@@ -190,6 +203,8 @@ describe('mindcraft-driver end to end with a fake main.js', () => {
         const start = JSON.parse(/DRIVER (\{.*"type":"mindcraft_start".*\})/.exec(await waitFor(() => (/mindcraft_start/.test(out()) ? out() : null)))[1]);
         assert.equal(start.main, path.join(app, 'main.js'));
         assert.equal(start.settings, path.join(app, 'settings.js'), 'the settings file main.js imports was the one checked');
+        assert.deepEqual(start.models, { model: 'openrouter/@preset/glm-5-1-mindcraft', code_model: null, vision_model: null },
+            'the model goes into the run record (run.mjs result.llm.models)');
         assert.ok(alive(pids.main) && alive(pids.agent));
         // The runner's stop: SIGTERM (on Windows node turns this into TerminateProcess of the driver alone).
         child.kill('SIGTERM');

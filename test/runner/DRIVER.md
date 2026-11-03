@@ -122,6 +122,7 @@ node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY 
   - a `settings.js` whose `allow_insecure_coding` is not exactly `false`, that names `Server` as a task giver, or whose skills-rotn `allow_server_task_giver` is anything but `false` or absent (#146). The file checked is always the one next to `main.js`, which `main.js` imports; there is no option to check another, and `--settings` is refused;
   - a profile that is not a JSON object (`null`, a number, a string or an array);
   - a profile that is missing, has a task in it, has any task-giver key (`task_givers`, `allow_server_task_giver`, ...), or names another bot than `ROTN_SCENARIO_BOT`.
+  - **a profile whose model is not `openrouter/@preset/glm-5-1-mindcraft`** (the human's decision for every LLM run, 2026-11-03; `LLM_MODEL` in `lib/g3.mjs`). It must be set in the profile itself, as a string or as `{api: "openrouter", model: "@preset/glm-5-1-mindcraft"}`. `code_model` and `vision_model` must be the same model when they are set.
 - **What `main.js` gets:**
   - `SETTINGS_JSON` with only these keys:
     - `host` and `port` (from `TEST_SERVER_HOST`/`PORT`);
@@ -188,7 +189,7 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
   - The spend is checked **between** scenarios, not during one, so a single scenario can run past the limit.
   - OpenRouter's usage figure can lag a little behind the newest requests.
   - The key's own credit limit (USD 5 for the test key) is the hard backstop.
-- **Records.** `result.json`'s `llm` (calls, the usage before and after, the cost) is in every record. Progress and killed records carry the calls so far.
+- **Records.** `result.json`'s `llm` (the models, the calls, the usage before and after, the cost) is in every record. `llm.models` is what the driver started the agent with (its `mindcraft_start` event), and a G3 run whose recorded model is not the preset is not gate-valid. Progress and killed records carry the calls so far.
 - **Test mode is for the offline tests only.** `ROTN_TEST_MODE`, `ROTN_OPENROUTER_USAGE_FILE` and `ROTN_BATCH_RUNNER` make `batch.mjs` refuse to start inside a real test-server run, and the usage read ignores the fake file there. `deploy/test-server.sh run` sets `TEST_SERVER_FAKE_CLOUD=1` only against the offline fakes. `BATCH` records `testMode`.
 
 ## S1: survey and smoke before G3
