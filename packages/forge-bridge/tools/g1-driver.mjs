@@ -69,7 +69,8 @@ if (!['microsoft', 'offline'].includes(auth)) fatalSetup(`ROTN_DRIVER_AUTH must 
 const probeOn = process.env.ROTN_DRIVER_PROBE === '1';
 const probePlaceRaw = process.env.ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS;
 const probePlaceTimeoutMs = probePlaceRaw === undefined || probePlaceRaw === '' ? 10000 : Number(probePlaceRaw);
-if (!(Number.isInteger(probePlaceTimeoutMs) && probePlaceTimeoutMs >= 50 && probePlaceTimeoutMs <= 60000)) fatalSetup(`ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS must be a whole number of ms from 50 to 60000, not ${probePlaceRaw}`);
+// Checked only with the probe on: a stray value must not stop a gate run.
+if (probeOn && !(Number.isInteger(probePlaceTimeoutMs) && probePlaceTimeoutMs >= 50 && probePlaceTimeoutMs <= 60000)) fatalSetup(`ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS must be a whole number of ms from 50 to 60000, not ${probePlaceRaw}`);
 if (chunkWaitMs !== undefined && !(Number.isInteger(chunkWaitMs) && chunkWaitMs >= 0)) fatalSetup(`ROTN_DRIVER_CHUNK_WAIT_MS must be a whole number of ms >= 0, not ${chunkWaitRaw}`);
 if (auth === 'microsoft' && !process.env.MINDCRAFT_PROFILES_FOLDER) {
     fatalSetup('MINDCRAFT_PROFILES_FOLDER is not set: the bot account needs its own token cache folder');

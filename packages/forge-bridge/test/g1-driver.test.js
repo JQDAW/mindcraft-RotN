@@ -179,6 +179,16 @@ test('g1-driver exits 3 on a bad ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS, before conn
     assert.match(r.stdout, /DRIVER .*"type":"fatal".*ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS must be a whole number of ms from 50 to 60000/);
 });
 
+test('with the probe off, a stray ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS is ignored (a gate run is not stopped)', () => {
+    const r = spawnSync(process.execPath, [DRIVER], {
+        env: driverEnv({ TEST_SERVER_HOST: '127.0.0.1', TEST_SERVER_PORT: '1', ROTN_DRIVER_AUTH: 'offline', ROTN_DRIVER_CAPTURE: '0', ROTN_DRIVER_PING_TIMEOUT_MS: '2000', ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS: '0' }),
+        encoding: 'utf8', timeout: 120000,
+    });
+    assert.doesNotMatch(r.stdout, /ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS must be/);
+    assert.notEqual(r.status, 3, 'it gets as far as connecting (and fails there, before join)');
+    assert.ok(!r.stdout.includes('"type":"probe_attached"'));
+});
+
 test('g1-driver exits 3 on a bad ROTN_DRIVER_CHUNK_WAIT_MS, before connecting anywhere', () => {
     const r = spawnSync(process.execPath, [DRIVER], {
         env: driverEnv({ TEST_SERVER_HOST: '127.0.0.1', TEST_SERVER_PORT: '1', ROTN_DRIVER_AUTH: 'offline', ROTN_DRIVER_CHUNK_WAIT_MS: '-5' }),

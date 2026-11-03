@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { tmpFile } from './helpers.js';
 import { I, TABLE, within, startCraftWorld, stopCraftWorld } from './craft-world.js';
-import { attachProbe, chatLine, itemByName } from '../tools/probe-commands.mjs';
+import { attachProbe, chatLine, itemByName, pickVariant } from '../tools/probe-commands.mjs';
 
 let world;
 after(() => stopCraftWorld(world));
@@ -22,6 +22,16 @@ test('chatLine stays under 200 characters and itemByName knows minecraft: prefix
     assert.equal(itemByName(registry, 'minecraft:stick').id, 280);
     assert.equal(itemByName(registry, 'pyrotech:rock').id, 8917);
     assert.equal(itemByName(registry, 'minecraft:nope'), null);
+});
+
+test('pickVariant never counts one stack for two cells (any meta plus a fixed meta of the same id)', () => {
+    const inv = (items) => ({ inventory: { items: () => items.map(([type, metadata, count]) => ({ type, metadata, count })) } });
+    // Two cells of item 5: one any-meta, one meta 2. One meta-2 plank cannot fill both.
+    const v = [{ ingredients: [{ id: 5, metadata: null }, { id: 5, metadata: 2 }] }];
+    assert.equal(pickVariant(inv([[5, 2, 1]]), v), null);
+    assert.equal(pickVariant(inv([[5, 2, 2]]), v)?.index, 0);
+    assert.equal(pickVariant(inv([[5, 2, 1], [5, 0, 1]]), v)?.index, 0);
+    assert.equal(pickVariant(inv([[5, 0, 2]]), v), null, 'the fixed meta still needs its own stack');
 });
 
 test('probe-craft, probe-place and probe-eat through initBot, answered as JSON and in chat', { timeout: 240000 }, async () => {
@@ -96,6 +106,18 @@ test('probe-craft, probe-place and probe-eat through initBot, answered as JSON a
     serverClient.write('chat', { message: JSON.stringify({ text: 'probe-eat abcdef01 minecraft:bread' }), position: 1 });
     await sleep(1500);
     assert.equal(events.filter(e => e.type === 'probe').length, before);
+
+    // A malformed command (a bad table position) is answered as such, never run in the 2x2 grid.
+    const bad = await send('probe-craft TOKEN crafttweaker:pyro_crude_axe 1,2');
+    assert.equal(bad.ok, false);
+    assert.match(bad.error, /malformed command/);
+    assert.equal(bad.line, `probe-craft abcdef${String(n).padStart(2, '0')} crafttweaker:pyro_crude_axe 1,2`);
+
+    // The bot's own answer, echoed back in chat, starts nothing.
+    const quiet = events.filter(e => e.type === 'probe' || e.type === 'probe_heard').length;
+    serverClient.write('chat', { message: JSON.stringify({ text: '<FRCFLD> probe abcdef99 craft ok recipe=crafttweaker:pyro_crude_axe' }), position: 0 });
+    await sleep(1500);
+    assert.equal(events.filter(e => e.type === 'probe' || e.type === 'probe_heard').length, quiet);
 
     // One chat answer per command, in the documented form.
     for (let waited = 0; server.state.chats.filter(c => c.startsWith('probe ')).length < n && waited < 5000; waited += 50) await sleep(50);

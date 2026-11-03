@@ -28,10 +28,14 @@ const TOKEN = '([0-9a-f]{6,32})';
 const NAME = '([a-z0-9_.-]+:[a-z0-9_./-]+)';
 const POS = '(-?\\d{1,8}),(-?\\d{1,3}),(-?\\d{1,8})';
 const COMMANDS = {
-    craft: new RegExp(`probe-craft ${TOKEN} ${NAME}(?: ${POS})?(?!\\S)`),
-    place: new RegExp(`probe-place ${TOKEN} ${NAME} ${POS} (up|down|north|south|east|west)(?!\\S)`),
-    eat: new RegExp(`probe-eat ${TOKEN} ${NAME}(?!\\S)`),
+    // The whole rest of the line must match: a bad position or extra text is a malformed
+    // command (answered as such below), never a silent fallback to the 2x2 grid.
+    craft: new RegExp(`probe-craft ${TOKEN} ${NAME}(?: ${POS})?\\s*$`),
+    place: new RegExp(`probe-place ${TOKEN} ${NAME} ${POS} (up|down|north|south|east|west)\\s*$`),
+    eat: new RegExp(`probe-eat ${TOKEN} ${NAME}\\s*$`),
 };
+// Any probe command at all, to answer a malformed one instead of leaving the scenario waiting.
+const ANY_COMMAND = new RegExp(`probe-(craft|place|eat) ${TOKEN}(?!\\S)`);
 export const FACES = Object.freeze({
     up: [0, 1, 0], down: [0, -1, 0], north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0],
 });
@@ -48,17 +52,24 @@ function held(bot, id, meta) {
         .reduce((n, i) => n + i.count, 0);
 }
 
-/** The first converted variant whose ingredients the bot holds (counts per id and meta). */
+/**
+ * The first converted variant whose ingredients the bot holds. Per item id: each fixed meta needs
+ * that many of its own, and the id's total (fixed metas plus any-meta cells) needs that many of
+ * any meta, so one stack is never counted for two cells.
+ */
 export function pickVariant(bot, variants) {
     for (const [index, v] of variants.entries()) {
-        const need = new Map();
+        const byId = new Map(); // id -> { total, fixed: Map(meta -> n) }
         const cells = v.inShape ? v.inShape.flat() : v.ingredients;
         for (const c of cells) {
             if (!c || c.id === -1) continue;
-            const key = `${c.id}:${c.metadata ?? '*'}`;
-            need.set(key, { id: c.id, meta: c.metadata ?? null, n: (need.get(key)?.n ?? 0) + 1 });
+            const e = byId.get(c.id) ?? { total: 0, fixed: new Map() };
+            e.total++;
+            if (c.metadata !== null && c.metadata !== undefined) e.fixed.set(c.metadata, (e.fixed.get(c.metadata) ?? 0) + 1);
+            byId.set(c.id, e);
         }
-        if ([...need.values()].every((x) => held(bot, x.id, x.meta) >= x.n)) return { index, variant: v };
+        const ok = [...byId.entries()].every(([id, e]) => held(bot, id, null) >= e.total && [...e.fixed.entries()].every(([meta, n]) => held(bot, id, meta) >= n));
+        if (ok) return { index, variant: v };
     }
     return null;
 }
@@ -86,12 +97,15 @@ export function attachProbe(bot, { emit, dumpRecipes, convertRecipe, placeTimeou
     };
     const fail = (token, cmd, data, err) => answer(token, cmd, false, { ...data, error: String(err?.message ?? err).slice(0, 300), chat: { error: String(err?.message ?? err).slice(0, 120) } });
 
-    function autoEatOff() {
-        if (typeof bot.autoEat?.disable === 'function') { bot.autoEat.disable(); return 'off'; }
-        return 'absent';
+    function ready() {
+        try {
+            if (typeof bot.autoEat?.disable === 'function') { bot.autoEat.disable(); emit('probe_ready', { autoEat: 'off' }); } else emit('probe_ready', { autoEat: 'absent' });
+        } catch (err) {
+            emit('probe_attach_error', { message: `auto-eat could not be turned off: ${String(err?.message ?? err)}` });
+        }
     }
-    if (bot.entity) emit('probe_ready', { autoEat: autoEatOff() });
-    else bot.once('spawn', () => emit('probe_ready', { autoEat: autoEatOff() }));
+    if (bot.entity) ready();
+    else bot.once('spawn', ready);
 
     async function equip(name) {
         const def = itemByName(bot.registry, name);
@@ -167,8 +181,9 @@ export function attachProbe(bot, { emit, dumpRecipes, convertRecipe, placeTimeou
             const countBefore = held(bot, def.id, null);
             const t0 = Date.now();
             await bot.consume();
-            // The server's update_health can come just after the eating status; give it a moment.
-            for (let waited = 0; bot.food === foodBefore && waited < 2000; waited += 100) await sleep(100);
+            // The server's update_health and the item slot's set_slot can come just after the eating
+            // status; wait (at most 2 s) for both before reading them.
+            for (let waited = 0; (bot.food === foodBefore || held(bot, def.id, null) === countBefore) && waited < 2000; waited += 100) await sleep(100);
             const data = { ...base, foodBefore, foodAfter: bot.food, countBefore, countAfter: held(bot, def.id, null), ms: Date.now() - t0 };
             await answer(token, 'eat', data.foodAfter > foodBefore && data.countAfter === countBefore - 1, { ...data, chat: { food: `${foodBefore}->${bot.food}`, left: data.countAfter } });
         } catch (err) {
@@ -191,6 +206,10 @@ export function attachProbe(bot, { emit, dumpRecipes, convertRecipe, placeTimeou
         } else if ((m = COMMANDS.eat.exec(msg)) && fresh(m[1])) {
             emit('probe_heard', { cmd: 'eat', token: m[1] });
             serial(() => eat(m[1], m[2]));
+        } else if ((m = ANY_COMMAND.exec(msg)) && fresh(m[2])) {
+            emit('probe_heard', { cmd: m[1], token: m[2], malformed: true });
+            const at = msg.indexOf('probe-');
+            serial(() => fail(m[2], m[1], { line: msg.slice(at, at + 200) }, new Error('malformed command (see probe-commands.mjs for the formats)')));
         }
     });
     return { idle: () => queue };

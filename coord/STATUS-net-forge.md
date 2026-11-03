@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-03T02:05Z
+Updated: 2026-11-03T02:10Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -593,6 +593,7 @@ The setup for both batches:
     - **harness-ops:** a scenario `test/scenarios/probe/probe-craft-place.mjs`. It sets `ROTN_DRIVER_PROBE=1` for the driver, and it is not a gate: `gateValid: false` always.
   - **Abort on a kick (lead):** if the bot is kicked or disconnected, the run stops and the server is torn down. Nothing reconnects.
     - The g1-driver never reconnects. On a kick it logs a `kicked` event and exits 1 (3 if fatal), following the exit contract (`driver-exit.mjs`).
+    - The one relaunch anywhere is the runner's: if the driver exits **before joining** with the profile-fetch failure ("Failed to obtain profile data"), `test/runner/lib/session.mjs` starts it once more (lead, #71). A kick after join, or any second failure, is never retried.
     - harness-ops' scenario must treat a driver exit before the last answer as an abort: send no more commands, record FAIL with the kick reason, and end at once.
     - `run.mjs` then returns, and `deploy/test-server.sh run`'s EXIT trap deletes the server, its Primary IPv4 and its SSH key, so nothing waits for the 2 h TTL.
     - The same applies to a probe step that gets no answer within 120 s.
@@ -612,7 +613,7 @@ The setup for both batches:
        - `contenttweaker:crafting_tools` (2x2): Crafting Tools 1, crude axe 0;
        - `minecraft:crafting_table` (2x2): table 1, planks 0;
        - `minecraft:stone_pickaxe` at the placed table (3x3): pickaxe 1, rock 3.
-    5. `probe-place` 5 times (`probe-place <token> minecraft:cobblestone X,65,Z up`, on the floor at y 65): cobblestone on the floor around the bot. Check each with `testforblock`, and record each latency.
+    5. `probe-place` 5 times (`probe-place <token> minecraft:cobblestone X,65,Z up`: against the floor block at y 65, so the cobblestone lands at y 66; check it with `testforblock X 66 Z minecraft:cobblestone`): cobblestone on the floor around the bot. Check each with `testforblock`, and record each latency.
     6. `probe-eat <token> minecraft:bread`: bread 1 left, food up (`data get` is not in 1.12, so use the driver's `bot.food` after `update_health`, plus the bread count).
     7. `clear FRCFLD`, then the end.
   - **Pass (for the record, not a gate):**
