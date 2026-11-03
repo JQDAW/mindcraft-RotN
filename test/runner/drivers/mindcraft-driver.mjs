@@ -85,22 +85,28 @@ export function envProblems(env, { debugEnables = () => false } = {}) {
  * Problems with the profile file: missing, not JSON, a task in it, a task-giver key, a different bot name,
  * or a model other than LLM_MODEL (the human's decision for every LLM run, 2026-11-03).
  */
-export function profileProblems(file, bot) {
+export const profileProblems = (file, bot) => checkProfile(file, bot).problems;
+
+/**
+ * The profile, read once (#169 review nit), and its problems (profileProblems): {profile, problems}.
+ * profile is null when the file cannot be read as a JSON object.
+ */
+export function checkProfile(file, bot) {
     let prof;
     try {
         prof = JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch (e) {
-        return [`profile ${file}: ${e.code === 'ENOENT' ? 'not found' : 'not valid JSON'}`];
+        return { profile: null, problems: [`profile ${file}: ${e.code === 'ENOENT' ? 'not found' : 'not valid JSON'}`] };
     }
     // null, a number, a string or an array is valid JSON but no profile (#116 review finding 2).
-    if (prof === null || typeof prof !== 'object' || Array.isArray(prof)) return [`profile ${file}: not a JSON object`];
+    if (prof === null || typeof prof !== 'object' || Array.isArray(prof)) return { profile: null, problems: [`profile ${file}: not a JSON object`] };
     const p = [];
     for (const k of ['task', 'task_path', 'task_id']) if (k in prof) p.push(`profile ${file}: has '${k}' (G3 never runs Mindcraft tasks)`);
     // Task givers come from settings.js and, for the test-only "Server", from the driver alone (#146).
     for (const k of Object.keys(prof).filter((x) => /giver/i.test(x))) p.push(`profile ${file}: has '${k}' (task givers are settings, and the test-only Server giver is the driver's alone)`);
     if (bot && prof.name !== bot) p.push(`profile ${file}: name '${prof.name}' is not the runner's bot '${bot}'`);
     for (const m of modelProblems(prof)) p.push(`profile ${file}: ${m}`);
-    return p;
+    return { profile: prof, problems: p };
 }
 
 /** The repo's settings, as main.js imports them: allow_insecure_coding must be exactly false. */
@@ -156,7 +162,9 @@ async function main(argv) {
         ({ debugValueEnables: debugEnables } = await import(pathToFileURL(path.join(REPO, 'packages', 'forge-bridge', 'index.js')).href));
     } catch { /* tests without forge-bridge: the name checks still run */ }
     problems.push(...envProblems(process.env, { debugEnables }));
-    if (o.profile) problems.push(...profileProblems(o.profile, process.env.ROTN_SCENARIO_BOT));
+    // Read once (#169 review nit): the same parsed profile is checked here and recorded at the start.
+    const checked = o.profile ? checkProfile(o.profile, process.env.ROTN_SCENARIO_BOT) : { profile: null, problems: [] };
+    problems.push(...checked.problems);
     problems.push(...(await settingsProblems(o.settings)));
     if (problems.length) {
         for (const m of problems) console.error(`mindcraft-driver: refused: ${m}`);
@@ -173,7 +181,7 @@ async function main(argv) {
     });
     // The paths of what runs and of the settings file that was checked (the one main.js imports).
     // The models the agent will use (checked above to be LLM_MODEL), for the run record (run.mjs, result.llm.models).
-    const models = profileModels(JSON.parse(fs.readFileSync(o.profile, 'utf8')));
+    const models = profileModels(checked.profile);
     event('mindcraft_start', { pid: child.pid, main: path.resolve(o.main), settings: o.settings, profile: o.profile, mindserverPort, models });
 
     let stopping = false;
