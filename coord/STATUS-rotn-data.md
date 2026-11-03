@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T01:33Z (from `date -u`)
+Updated: 2026-11-03T02:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -18,6 +18,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
 - **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
 - **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
+- **#152 merged** (`0edfd8d`): mixed ore-dictionary slots (single-kind variants first, no same-item wildcard mixes) and `canFill`.
 - **#142 merged** (`89f3ef6`): the rock-pile rule names the Underground Biomes rock piles, and the rock-pile and stone rules say which metas give a rock (`ore`, `inOre`).
 - **#140 merged** (`c114b44`): the G3 research note (STATUS only).
 - **#138 merged** (`27403a2`): the initBot recipe tests restore the shared recipe table after each test.
@@ -206,7 +207,11 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
   - no mix pairs a wildcard with a specific meta of the same item (0 such variants);
   - the candidate order is develop's again; only the mix pool prefers whole families.
 - **New for skills-rotn #151 (lead's request):** `canFill(recipe | recipeId | howToGet craft way, stacks, { times })`, the same slot rule as the variants, with bipartite matching so one item is never counted twice; also `recipeById(id)`.
-- **Request 10 is #153**, merging together with skills-rotn switching `!getCraftingPlan` to `getInventoryCounts` (lead routes it). It inherits the #152 fixes.
+- **Request 10, the plan reads ingredient metas (#153, `agent/rotn-data/plan-metas`; approved; carries skills-rotn #156, the `!getCraftingPlan` caller fix; develop merged in after #152):**
+  - **How it works:** `getDetailedCraftingPlan` now keys ingredients like `world.getInventoryCounts` does (`name:meta` for items with subtypes, bare otherwise; a bare recipe key means any variant), and plans with the first recipe variant the inventory and leftovers can supply.
+  - **Results:** a dirt clump (`pyrotech:rock:4`) no longer counts as a rock; a metamorphic rock does; 1 igneous + 2 metamorphic make a stone pickaxe (with #152).
+  - **New export:** `getItemCraftingRecipeVariants(key)`. `getItemCraftingRecipes` (bare names, upstream shape) is unchanged.
+  - **For skills-rotn (via the lead):** `!getCraftingPlan` (`src/agent/commands/queries.js:292`) passes `world.getInventoryTotals` (bare totals). A bare total of an item with subtypes cannot vouch for one variant, so it counts only towards any-variant needs (planks, sticks still plan as before; `names_e2e.test.js` passes). To get variant-checked plans for rocks, pass `world.getInventoryCounts(bot)` (variant keys). The target can stay bare.
 
 - **Free** (lead, after #138). Low-priority offline task done: the research note below (STATUS only, no code).
 - **Lead's pick, follow-up 1 (`agent/rotn-data/ub-rock-piles`; G3 critical path, skills-rotn B2 #141 uses the world rules):** the `rock-pile` rule names the Underground Biomes rock piles (`pyrotech_compat:rock_igneous`, `_metamorphic`, `_sedimentary`), per-pair `inferred`, cited from the dump (no collision box, hardness 0.1, no tool, each state drops its own item at the same meta, state names match item names) and S1-A (the metas seen near the G3 spawn). `pyrotech:rock` stays `documented`. Blocks item 1 below is done by it. Lead (for skills-rotn B2): the rock-pile and stone rules carry `ore: rock`, and `howToGet` ways list per block the metas that give a rock in the dump's `rock` ore dictionary (`pyrotech:rock` 0, 6, 8; the Underground Biomes piles every meta), with `inOre` on each listed block; the metas 4, 5, 7, 9 of a bare `pyrotech:rock` pile are not rocks. Cross-checked against the dump's drops and the crude axe's rock slot.
@@ -268,6 +273,8 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Follow-ups (later PRs)
 
+- **#152 nits (lead, for later):** the README's variant count (now 115,782 if all were built); `canFill` could drop item units that no slot accepts before matching; its JSDoc should say `assignment` covers the first craft only.
+
 - **#102 review follow-ups:** the crafting table test (no planks-only variant) and the sticks test are in PR #112. `outShape` from the dump's `remaining` is **blocked** (Request 9): prismarine-recipe 1.5.0's `computeDelta` applies `outShape` with inShape's items, so those recipes would look free to `bot.recipesFor`. No G3 recipe has remaining items.
 
 - ~~Importer: sort order-unstable lists~~: done in this PR (`canonicalize`).
@@ -307,4 +314,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 ## Open PRs
 
 - #143 `agent/rotn-data/ender-witch-rules`: follow-up 2 (see Doing).
-- `agent/rotn-data/mixed-ore-slots`: mixed ore-dictionary slots (see Doing).
+- #153 `agent/rotn-data/plan-metas`: Request 10 with skills-rotn #156 (see Doing).
