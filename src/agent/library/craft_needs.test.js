@@ -156,3 +156,12 @@ test('!craftRecipe: an item with no crafting recipe gives a message, not a TypeE
     const out = await craftLog([], 'bedrock');
     assert.match(out, /bedrock is either not an item, or it does not have a crafting recipe!/);
 });
+
+test('#151 nit: each input counts its own recipe slot (soaking_pot: string fits the twine slot, not the 1-stack slot beside it)', () => {
+    const needs = craftNeeds(invBot([stack('string', 0, 5)]), 'pyrotech:soaking_pot');
+    const one = needs.inputs.filter(i => i.count === 1 && !i.ore);
+    assert.equal(one.length, 1);
+    assert.deepEqual([one[0].kinds, one[0].short], [[], 1], 'string does not fill the 1-stack slot');
+    const twine = needs.inputs.find(i => i.ore === 'twine');
+    assert.deepEqual([twine.kinds, twine.short], [[{ name: 'string', have: 5 }], 0], 'it fills the twine slot');
+});
