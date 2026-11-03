@@ -10,7 +10,8 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL } from '../runner/lib/llm-spend.mjs';
+import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, agentModels, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL } from '../runner/lib/llm-spend.mjs';
+import { LLM_MODEL, modelId, modelProblems, profileModels } from '../runner/lib/g3.mjs';
 import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProblems, g3Policy } from '../runner/lib/g3.mjs';
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
 import { EventEmitter } from 'node:events';
@@ -85,10 +86,27 @@ describe('the key usage read: numbers only, the key never leaves the header', ()
         assert.equal(countLlmCalls(['a', LLM_CALL_LINE, 'Received.', `x ${LLM_CALL_LINE}`]), 2);
         assert.equal(spent({ ok: true, usage: 1.1 }, { ok: true, usage: 1.4 }), 0.3);
         assert.equal(spent({ ok: true, usage: 1 }, { ok: false, error: 'http 401' }), null);
-        assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1.25 }, [LLM_CALL_LINE, LLM_CALL_LINE]),
-            { calls: 2, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
+        const start = `DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: LLM_MODEL, code_model: null, vision_model: null } })}`;
+        assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1.25 }, [start, LLM_CALL_LINE, LLM_CALL_LINE]),
+            { models: { model: LLM_MODEL, code_model: null, vision_model: null }, calls: 2, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
         assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: false, error: 'timeout' }, []),
-            { calls: 0, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
+            { models: null, calls: 0, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
+    });
+
+    test('the model of every LLM run: the OpenRouter preset (the human\'s decision, 2026-11-03), recorded from the driver', () => {
+        assert.equal(LLM_MODEL, 'openrouter/@preset/glm-5-1-mindcraft');
+        assert.equal(modelId('openrouter/@preset/glm-5-1-mindcraft'), LLM_MODEL);
+        assert.equal(modelId({ api: 'openrouter', model: '@preset/glm-5-1-mindcraft' }), LLM_MODEL, 'the object form is the same model');
+        assert.equal(modelId({ api: 'openrouter', model: 'openrouter/@preset/glm-5-1-mindcraft' }), LLM_MODEL, 'a prefixed model is not prefixed twice');
+        assert.equal(modelId({ model: 'openrouter/@preset/glm-5-1-mindcraft', params: { temperature: 0 } }), LLM_MODEL);
+        for (const bad of [undefined, null, '', 3, {}, { model: 3 }]) assert.equal(modelId(bad), null, JSON.stringify(bad));
+        assert.deepEqual(modelProblems({ model: LLM_MODEL }), []);
+        assert.deepEqual(modelProblems({ model: LLM_MODEL, code_model: LLM_MODEL, vision_model: { api: 'openrouter', model: '@preset/glm-5-1-mindcraft' } }), []);
+        assert.equal(modelProblems({ model: 'gpt-4o' }).length, 1);
+        assert.equal(modelProblems({ model: LLM_MODEL, code_model: 'claude-sonnet-4-6' }).length, 1);
+        assert.deepEqual(profileModels({ model: LLM_MODEL }), { model: LLM_MODEL, code_model: null, vision_model: null });
+        assert.equal(agentModels(['noise', 'DRIVER {bad', `DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: 'x' } })}`]).model, 'x');
+        assert.equal(agentModels(['DRIVER {"type":"refused"}']), null);
     });
 
     test('an unknown LLM cost makes a run not gate-valid', () => {

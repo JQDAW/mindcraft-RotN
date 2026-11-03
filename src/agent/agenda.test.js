@@ -1,0 +1,264 @@
+// Offline tests for skills-rotn E2, the RotN agenda: steps judged from the bot's
+// state (no LLM), persistence across a restart, and the driver that points the
+// self-prompter at the current step. Fake bot, fake self-prompter, temp dirs; no
+// server, no LLM.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import minecraftData from 'minecraft-data';
+import settings from './settings.js';
+import { __setRegistryForTest } from '../utils/mcdata.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda } from './agenda.js';
+import { agendaTick, agendaState, TICK_MS, BACKOFF_MS, STEP_LLM_MS } from './agenda_driver.js';
+import { Agent } from './agent.js';
+import { parseCommandMessage } from './commands/index.js';
+import { TaskQueue } from './task_queue.js';
+
+__setRegistryForTest(minecraftData('1.12.2'));
+
+function tempDir(t) {
+    const dir = mkdtempSync(path.join(tmpdir(), 'rotn-agenda-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    return dir;
+}
+const stack = (name, metadata, count) => ({ name, metadata, count });
+function fakeBot(items = [], { tableNear = false, players = { FRCFLD: {}, JQDAW: {} } } = {}) {
+    return {
+        players,
+        entity: { position: { x: 0, y: 64, z: 0 } },
+        inventory: { items: () => items, slots: [null, ...items] },
+        findBlocks: () => (tableNear ? [{ x: 1, y: 64, z: 0 }] : []),
+        blockAt: (p) => ({ name: 'crafting_table', position: p }),
+    };
+}
+function fakeSelfPrompter() {
+    const sp = { state: 'stopped', prompt: '', starts: [], stops: 0 };
+    sp.isActive = () => sp.state === 'active';
+    sp.isStopped = () => sp.state === 'stopped';
+    sp.start = (prompt) => { sp.state = 'active'; sp.prompt = prompt; sp.starts.push(prompt); };
+    sp.stop = () => { sp.state = 'stopped'; sp.stops++; };
+    return sp;
+}
+function fakeAgent(t, items = [], opts = {}) {
+    const said = [];
+    const agent = {
+        name: 'FRCFLD',
+        agenda: new Agenda('FRCFLD', { dir: tempDir(t) }),
+        self_prompter: fakeSelfPrompter(),
+        bot: fakeBot(items, opts),
+        said,
+        openChat: (m) => { said.push(m); },
+    };
+    agent.agenda.start();
+    return agent;
+}
+const stepOf = (items, opts) => new Agenda('x', { dir: path.join(tmpdir(), `rotn-none-${Math.random()}`) }).evaluate(agendaState(fakeBot(items, opts))).step?.id ?? null;
+
+test('the steps follow the RotN first day, judged from the inventory', () => {
+    assert.equal(stepOf([]), 'rocks');
+    const rocks = [stack('pyrotech_compat:rock_metamorphic', 0, 4), stack('pyrotech:rock', 0, 2)]; // any rock counts
+    assert.equal(stepOf(rocks), 'sticks');
+    assert.equal(stepOf([...rocks, stack('stick', 0, 4)]), 'crude_axe');
+    assert.equal(stepOf([...rocks, stack('stick', 0, 4), stack('pyrotech:crude_axe', 0, 1)]), 'logs');
+    const logs = [...rocks, stack('stick', 0, 4), stack('pyrotech:crude_axe', 0, 1), stack('log', 0, 2), stack('log2', 1, 1)];
+    assert.equal(stepOf(logs), 'first_plank');
+    assert.equal(stepOf([...logs, stack('planks', 0, 1)]), 'crafting_tools');
+    assert.equal(stepOf([...logs, stack('planks', 0, 1), stack('contenttweaker:crafting_tools', 0, 1)]), 'crafting_table');
+    assert.equal(stepOf([...logs, stack('planks', 0, 1)], { tableNear: true }), 'planks_sticks', 'a placed table counts');
+    assert.equal(stepOf([stack('stone_pickaxe', 0, 1), stack('stick', 0, 2)], { tableNear: true }), 'stone_axe');
+    assert.equal(stepOf([stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1)], { tableNear: true }), 'cobblestone');
+    assert.equal(stepOf([stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, 8)], { tableNear: true }), null);
+    assert.ok(ROTN_EARLY_GAME.every(s => /^[a-z_]+$/.test(s.id) && s.goal.length > 20));
+});
+
+test('the agenda survives a restart; a corrupt file is moved aside', (t) => {
+    const dir = tempDir(t);
+    const a = new Agenda('FRCFLD', { dir, now: () => 7 });
+    assert.equal(a.existed, false, 'a fresh bot: autostart starts it');
+    a.start();
+    a.evaluate(agendaState(fakeBot([stack('pyrotech:rock', 0, 6)])));
+    const b = new Agenda('FRCFLD', { dir });
+    assert.equal(b.active, true);
+    assert.deepEqual(b.done_at, { rocks: 7 });
+    assert.deepEqual(readdirSync(dir), ['agenda.json']);
+
+    t.mock.method(console, 'warn', () => {});
+    writeFileSync(path.join(dir, 'agenda.json'), 'nonsense');
+    const c = new Agenda('FRCFLD', { dir, now: () => 9 });
+    assert.equal(c.active, false);
+    assert.match(c.loadProblem, /moved it to .*agenda\.json\.corrupt-9/);
+});
+
+test('the driver points the self-prompter at the current step and moves on when it is done', (t) => {
+    const items = [];
+    const agent = fakeAgent(t, items);
+    assert.equal(agendaTick(agent, { now: 1_000 }), 'rocks');
+    assert.deepEqual(agent.said, ['agenda step rocks started: collect 6 rocks']);
+    assert.equal(agent.self_prompter.starts.length, 1);
+    assert.match(agent.self_prompter.prompt, /^RotN agenda, step 1 of 11 \(rocks\): Collect at least 6 rocks with !collectBlocks\("pyrotech:rock", 6\)/);
+
+    assert.equal(agendaTick(agent, { now: 1_000 + TICK_MS - 1 }), null, 'throttled');
+    items.push(stack('pyrotech_compat:rock_igneous', 0, 6));
+    assert.equal(agendaTick(agent, { now: 1_000 + TICK_MS }), 'sticks');
+    assert.deepEqual(agent.said.slice(1), ['agenda step rocks done', 'agenda step sticks started: collect 4 sticks']);
+    assert.equal(agent.self_prompter.starts.length, 1, 'already running: only the prompt changes');
+    assert.match(agent.self_prompter.prompt, /\(sticks\): Get at least 4 sticks with !collectBlocks\("stick", 4\)/);
+});
+
+test('a stopped self-prompter is restarted after a doubling back-off; after 3 runs the step is stuck and the agenda pauses', (t) => {
+    const agent = fakeAgent(t);
+    const sp = agent.self_prompter;
+    agendaTick(agent, { now: 0 });
+    assert.equal(sp.starts.length, 1);
+    sp.stop(); // e.g. three replies without a command
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'rocks');
+    assert.equal(sp.starts.length, 1, 'not yet: back-off');
+    agendaTick(agent, { now: TICK_MS + BACKOFF_MS - TICK_MS });
+    assert.equal(sp.starts.length, 1, 'still backing off');
+    agendaTick(agent, { now: TICK_MS + BACKOFF_MS });
+    assert.equal(sp.starts.length, 2, 'run 2 after BACKOFF_MS');
+    sp.stop();
+    const t2 = TICK_MS + BACKOFF_MS + TICK_MS;
+    agendaTick(agent, { now: t2 });
+    agendaTick(agent, { now: t2 + 2 * BACKOFF_MS - TICK_MS });
+    assert.equal(sp.starts.length, 2, 'the back-off doubled');
+    agendaTick(agent, { now: t2 + 2 * BACKOFF_MS });
+    assert.equal(sp.starts.length, 3, 'run 3 after 2 x BACKOFF_MS');
+    sp.stop();
+    assert.equal(agendaTick(agent, { now: t2 + 2 * BACKOFF_MS + TICK_MS }), 'stuck');
+    assert.equal(agent.said.at(-1), 'agenda step rocks stuck: 3 self-prompter runs; agenda paused');
+    assert.equal(agent.agenda.active, false);
+    assert.equal(agendaTick(agent, { now: t2 + 10 * BACKOFF_MS }), null, 'paused: no more runs');
+    assert.equal(sp.starts.length, 3);
+    // It survives a restart, and a giver's start gives the step a fresh budget.
+    const again = new Agenda('FRCFLD', { dir: path.dirname(agent.agenda.file) });
+    assert.equal(again.active, false);
+    assert.equal(again.stuck.id, 'rocks');
+    assert.equal(again.existed, true, 'so autostart leaves it paused');
+    again.start();
+    assert.deepEqual([again.active, again.stuck, again.spentOn('rocks').attempts], [true, null, 0]);
+});
+
+test('a self-prompter that never stops is bounded by STEP_LLM_MS of self-prompting for the step', (t) => {
+    const agent = fakeAgent(t);
+    let now = 0, result = null;
+    while (now <= STEP_LLM_MS + 10 * TICK_MS && result !== 'stuck') {
+        result = agendaTick(agent, { now });
+        now += TICK_MS;
+    }
+    assert.equal(result, 'stuck');
+    assert.ok(now >= STEP_LLM_MS && now <= STEP_LLM_MS + 3 * TICK_MS, `stuck after about STEP_LLM_MS (${now} ms)`);
+    assert.equal(agent.self_prompter.isActive(), false);
+    assert.equal(agent.self_prompter.starts.length, 1);
+    assert.match(agent.said.at(-1), /^agenda step rocks stuck: 5 min of self-prompting; agenda paused$/);
+});
+
+test('resuming after pause_when_empty is not a new run; a restart keeps the runs already spent', (t) => {
+    const before = settings.pause_when_empty;
+    settings.pause_when_empty = true;
+    t.after(() => { settings.pause_when_empty = before; });
+    const agent = fakeAgent(t);
+    agendaTick(agent, { now: 0 });
+    delete agent.bot.players.JQDAW;
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'paused');
+    agent.bot.players.JQDAW = {};
+    agendaTick(agent, { now: 2 * TICK_MS });
+    assert.equal(agent.self_prompter.starts.length, 2);
+    assert.equal(agent.agenda.spentOn('rocks').attempts, 1);
+    assert.equal(new Agenda('FRCFLD', { dir: path.dirname(agent.agenda.file) }).spentOn('rocks').attempts, 1);
+});
+
+test('wood comes from rotn-data: modded RotN logs and planks count (logWood, plankWood)', () => {
+    const early = [stack('pyrotech:rock', 0, 6), stack('stick', 0, 4), stack('pyrotech:crude_axe', 0, 1)];
+    assert.equal(stepOf([...early, stack('biomesoplenty:log_0', 4, 3)]), 'first_plank');
+    assert.equal(stepOf([...early, stack('biomesoplenty:log_0', 4, 2), stack('log', 2, 1)]), 'first_plank', 'mixed woods add up');
+    assert.equal(stepOf([...early, stack('biomesoplenty:log_0', 4, 3), stack('biomesoplenty:planks_0', 2, 1)]), 'crafting_tools');
+});
+
+test('a chat line that fails is logged, not an unhandled rejection', async (t) => {
+    const warn = t.mock.method(console, 'warn', () => {});
+    const agent = fakeAgent(t);
+    agent.openChat = () => Promise.reject(new Error('chat down'));
+    assert.equal(agendaTick(agent, { now: 0 }), 'rocks');
+    await new Promise(r => setTimeout(r, 0));
+    assert.ok(warn.mock.calls.some(c => /^\[agenda\] chat failed: /.test(c.arguments[0])));
+});
+
+test('pause_when_empty: no other player online pauses the agenda; a player back resumes it', (t) => {
+    const before = settings.pause_when_empty;
+    settings.pause_when_empty = true;
+    t.after(() => { settings.pause_when_empty = before; });
+    const agent = fakeAgent(t, [], { players: { FRCFLD: {} } });
+    assert.equal(agendaTick(agent, { now: 0 }), 'paused');
+    assert.equal(agent.self_prompter.starts.length, 0);
+    agent.bot.players.JQDAW = {};
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'rocks');
+    assert.equal(agent.self_prompter.starts.length, 1);
+});
+
+test('all steps done: "agenda done", the agenda stops', (t) => {
+    const agent = fakeAgent(t, [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, 8)], { tableNear: true });
+    assert.equal(agendaTick(agent, { now: 0 }), 'done');
+    assert.equal(agent.said.at(-1), 'agenda done');
+    assert.equal(agent.agenda.active, false);
+});
+
+test('after a restart the agenda resumes at the step the world is at', (t) => {
+    const dir = tempDir(t);
+    const first = new Agenda('FRCFLD', { dir });
+    first.start();
+    const agent = { name: 'FRCFLD', agenda: new Agenda('FRCFLD', { dir }), self_prompter: fakeSelfPrompter(), said: [], openChat(m) { this.said.push(m); },
+        bot: fakeBot([stack('pyrotech:rock', 0, 6), stack('stick', 0, 4)]) };
+    assert.equal(agent.agenda.active, true);
+    assert.equal(agendaTick(agent, { now: 0 }), 'crude_axe');
+    assert.equal(agent.self_prompter.starts.length, 1);
+});
+
+test('commands: !agenda describes it; !agendaStop/!agendaStart only when a giver types them; !collectBlocks takes "stick"', async (t) => {
+    const before = { ...settings };
+    Object.assign(settings, { language: 'en', task_givers: ['JQDAW'], only_chat_with: [] });
+    t.after(() => { for (const k of Object.keys(settings)) delete settings[k]; Object.assign(settings, before); });
+    t.mock.method(console, 'log', () => {});
+    const said = [];
+    const agent = Object.create(Agent.prototype);
+    Object.assign(agent, {
+        name: 'FRCFLD', shut_up: false,
+        agenda: new Agenda('FRCFLD', { dir: tempDir(t) }),
+        tasks: new TaskQueue('FRCFLD', { dir: tempDir(t) }),
+        self_prompter: Object.assign(fakeSelfPrompter(), { shouldInterrupt: () => false, handleUserPromptedCmd() {} }),
+        bot: { ...fakeBot([]), players: {}, modes: { flushBehaviorLog: () => '' } },
+        checkTaskDone: () => Promise.resolve(),
+        routeResponse: (to, m) => { said.push(`${to}: ${m}`); return Promise.resolve(); },
+        history: { add: () => Promise.resolve(), getHistory: () => [], save() {} },
+    });
+    agent.agenda.start();
+    await agent.handleMessage('JQDAW', '!agenda');
+    assert.ok(said.includes('JQDAW: agenda: active, step rocks (collect 6 rocks); done: none'));
+    // #164 review: the query records nothing, so the driver still posts "agenda step rocks done".
+    agent.bot.inventory = fakeBot([stack('pyrotech:rock', 0, 6)]).inventory;
+    await agent.handleMessage('JQDAW', '!agenda');
+    assert.ok(said.includes('JQDAW: agenda: active, step sticks (collect 4 sticks); done: rocks'));
+    assert.deepEqual(agent.agenda.done_at, {});
+    await agent.handleMessage('Alex', '!agendaStop');
+    assert.equal(agent.agenda.active, true, 'not a task giver');
+    await agent.handleMessage('JQDAW', '!agendaStop');
+    assert.equal(agent.agenda.active, false);
+    assert.ok(said.includes('JQDAW: agenda stopped'));
+    await agent.handleMessage('JQDAW', '!agendaStart');
+    assert.equal(agent.agenda.active, true);
+
+    assert.deepEqual(parseCommandMessage('!collectBlocks("stick", 2)').args, ['stick', 2]);
+    assert.equal(describeAgenda({ steps: ROTN_EARLY_GAME, active: false, done_at: {} }, null), 'agenda: stopped, all steps done; done: none');
+});
+
+test('a step once done stays done: crafting the crude axe uses up sticks, the agenda does not go back', (t) => {
+    const items = [stack('pyrotech:rock', 0, 6), stack('stick', 0, 4)];
+    const agent = fakeAgent(t, items);
+    assert.equal(agendaTick(agent, { now: 0 }), 'crude_axe');
+    // The bot crafts the crude axe: 1 rock and 2 sticks are used up.
+    items[0].count = 5; items[1].count = 2; items.push(stack('pyrotech:crude_axe', 0, 1));
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'logs');
+    assert.ok(!agent.said.some(m => m === 'agenda step sticks started: collect 4 sticks'), 'never back to sticks');
+});
