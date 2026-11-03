@@ -16,7 +16,8 @@
 #   deploys.log            one line per deploy or rollback
 #
 # A deploy refuses a tag that is not on develop, and a release whose settings.js does not have
-# "allow_insecure_coding": false. After the switch it restarts the enabled bots, waits HEALTH_WAIT_S
+# "allow_insecure_coding": false, turns on the test-only allow_server_task_giver, or names "Server" as a
+# task giver (#146, #157 review). After the switch it restarts the enabled bots, waits HEALTH_WAIT_S
 # (default 45 s), and if any is not active it switches back to the previous release by itself.
 set -Eeuo pipefail
 
@@ -84,13 +85,22 @@ fetch() {
   git_ fetch --quiet --prune --force origin '+refs/heads/develop:refs/heads/develop' '+refs/tags/*:refs/tags/*'
 }
 
-# insecure_check DIR: 0 only if DIR/settings.js's default export has allow_insecure_coding === false.
-insecure_check() {
+# settings_check DIR: DIR/settings.js's default export, as main.js imports it. Exit 0 only if:
+#   allow_insecure_coding === false (else 1; also 1 if it cannot be evaluated);
+#   skills-rotn's test-only allow_server_task_giver (#146) is false or absent (else 2): only the G3
+#     driver turns it on, on a test server (#157 review);
+#   no task-giver list names the console sender "Server", in any case (else 3).
+settings_check() {
   local node; node=$(command -v node) || return 1
   (cd "$1" && env -i PATH=/usr/bin:/bin "$node" --input-type=module -e '
     import { pathToFileURL } from "node:url";
     const s = (await import(pathToFileURL(process.cwd() + "/settings.js").href)).default;
-    process.exit(s && typeof s === "object" && s.allow_insecure_coding === false ? 0 : 1);
+    if (!(s && typeof s === "object" && s.allow_insecure_coding === false)) process.exit(1);
+    if ("allow_server_task_giver" in s && s.allow_server_task_giver !== false) process.exit(2);
+    for (const [k, v] of Object.entries(s)) {
+      if (/giver/i.test(k) && (Array.isArray(v) ? v : [v]).some((x) => String(x).toLowerCase() === "server")) process.exit(3);
+    }
+    process.exit(0);
   ' > /dev/null 2>&1)
 }
 
@@ -103,7 +113,14 @@ build() {
   # Evaluate settings.js the way main.js does (import its default export), not by grep: only a real
   # `allow_insecure_coding === false` passes (PR #30 review finding 7). It runs with an empty
   # environment so nothing outside the release can change the answer.
-  insecure_check "$tmp" || { rm -rf "$tmp"; die "$tag: settings.js does not evaluate to allow_insecure_coding === false; refusing"; }
+  local rc=0
+  settings_check "$tmp" || rc=$?
+  case $rc in
+    0) ;;
+    2) rm -rf "$tmp"; die "$tag: settings.js has allow_server_task_giver not false: it is test-only (the G3 driver's, on a test server), never on the CX23; refusing" ;;
+    3) rm -rf "$tmp"; die "$tag: settings.js names \"Server\" as a task giver: the console sender is a test-only giver, never on the CX23; refusing" ;;
+    *) rm -rf "$tmp"; die "$tag: settings.js does not evaluate to allow_insecure_coding === false; refusing" ;;
+  esac
   log "npm ci in $name"
   (cd "$tmp" && npm ci --no-audit --no-fund) || { rm -rf "$tmp"; die "$tag: npm ci failed"; }
   rm -rf "$tmp/bots"
