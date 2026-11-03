@@ -21,14 +21,16 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
 
    **GO 2 runs without `--ssh-from`** (#137 review): SSH stays open to all addresses, by key only.
    - A narrow rule ties SSH to one address. If that address changes later (a home IP, for example), every new SSH login is shut out, root's included. The current session lives on, so the lockout only shows the next day.
-   - If `--ssh-from <CIDR>` is ever used, setup refuses a CIDR that does not contain this SSH session's own client address (from `SSH_CONNECTION`), and refuses outright outside an IPv4 SSH session.
+   - If `--ssh-from <CIDR>` is ever used, setup refuses a CIDR that does not contain this SSH session's own client address (from `SSH_CONNECTION`), and refuses outright outside an IPv4 SSH session. Run it from a root SSH login, not through `sudo`, which drops `SSH_CONNECTION`.
 
    **Checks before it changes anything.** A mismatch stops setup with a message:
    - the OS is Ubuntu 26.04 or 24.04;
    - there is an `ssh.service` unit (setup reloads it, and lockdown reads its journal);
    - `sshd` is installed;
    - `/etc/ssh/sshd_config` includes `/etc/ssh/sshd_config.d/*.conf`;
-   - `sshd -T` reports port 22 and no other, since ufw opens only 22.
+   - `sshd -T` reports port 22 and no other, since ufw opens only 22;
+   - no `Match` block in `sshd_config` or `sshd_config.d/*.conf`. `sshd -T` without `-C` ignores Match blocks, so it could not verify password login under one.
+   - no `Include` other than Ubuntu's own `Include /etc/ssh/sshd_config.d/*.conf` in `sshd_config`, and none in a drop-in. This check reads only those files, so a file included from elsewhere could hide a Match block.
 
    These are the system steps that the Ubuntu 26.04 CI job (`.github/workflows/ci-ubuntu-2604.yml`) cannot test in a container.
 

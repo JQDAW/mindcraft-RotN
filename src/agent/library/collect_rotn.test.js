@@ -14,15 +14,15 @@ import { countItem } from './rotn_names.js';
 import * as skills from './skills.js';
 
 const vanilla = minecraftData('1.12.2');
-const ROCK_ITEM = { id: 5000, name: 'pyrotech:rock', stackSize: 64 };
-const ROCK_BLOCK = { id: 4242, name: 'pyrotech:rock' };
-const reg = {
-    ...vanilla,
-    items: { ...vanilla.items, [ROCK_ITEM.id]: ROCK_ITEM },
-    itemsByName: { ...vanilla.itemsByName, [ROCK_ITEM.name]: ROCK_ITEM },
-    blocks: { ...vanilla.blocks, [ROCK_BLOCK.id]: ROCK_BLOCK },
-    blocksByName: { ...vanilla.blocksByName, [ROCK_BLOCK.name]: ROCK_BLOCK },
-};
+// The modded rocks the server's registry has (net-forge's registry extension); ids are made up.
+const MODDED = ['pyrotech:rock', 'pyrotech_compat:rock_igneous', 'pyrotech_compat:rock_metamorphic', 'pyrotech_compat:rock_sedimentary'];
+const reg = { ...vanilla, items: { ...vanilla.items }, itemsByName: { ...vanilla.itemsByName }, blocks: { ...vanilla.blocks }, blocksByName: { ...vanilla.blocksByName } };
+MODDED.forEach((name, i) => {
+    const item = { id: 5000 + i, name, stackSize: 64 };
+    const blk = { id: 4242 + i, name };
+    reg.items[item.id] = item; reg.itemsByName[name] = item;
+    reg.blocks[blk.id] = blk; reg.blocksByName[name] = blk;
+});
 __setRegistryForTest(reg);
 
 const at = (x, y = 64, z = 0) => new Vec3(x, y, z);
@@ -41,7 +41,7 @@ function drops(b, held) {
         if (level >= 1) return [['cobblestone', 0, 1]];
         return [];
     }
-    if (b.name === 'pyrotech:rock') return [['pyrotech:rock', b.metadata, 1]];
+    if (MODDED.includes(b.name)) return [[b.name, b.metadata, 1]]; // a pile drops its own rock, same meta
     return []; // leaves: an unlucky roll, no stick
 }
 
@@ -101,7 +101,11 @@ test('rotn-data world rules for rocks: piles by hand, stone with a pickaxe below
     assert.ok(stone && stone.tool?.type === 'pickaxe' && stone.tool.maxLevel === 0, 'stone: pickaxe below Sturdy');
     assert.equal(describeTool(stone.tool), 'a pickaxe of level 0 or lower');
     // The rock variants come from rotn-data (the "rock" ore dictionary), not from this code.
-    assert.deepEqual(itemVariants('pyrotech:rock'), ['pyrotech:rock:0', 'pyrotech:rock:6', 'pyrotech:rock:8']);
+    const rocks = itemVariants('pyrotech:rock');
+    assert.deepEqual(rocks.slice(0, 3), ['pyrotech:rock:0', 'pyrotech:rock:6', 'pyrotech:rock:8']);
+    for (const ub of ['pyrotech_compat:rock_igneous', 'pyrotech_compat:rock_metamorphic', 'pyrotech_compat:rock_sedimentary'])
+        assert.ok(rocks.includes(ub), `${ub}: any meta is a rock (rotn-data #142, the rock ore dictionary)`);
+    assert.ok(!rocks.includes('pyrotech:rock:4') && !rocks.includes('pyrotech:rock'), 'a dirt clump is not a rock');
     assert.deepEqual(itemVariants('pyrotech:rock:4'), ['pyrotech:rock:4']);
     assert.deepEqual(itemVariants('cobblestone'), ['cobblestone']);
     assert.equal(toolAllows(fakeBot({ items: [tool('stone_pickaxe')] }), stone.tool), true);
@@ -171,4 +175,44 @@ test('"cobblestone" no longer digs stone (that gives rocks below Sturdy)', async
     assert.equal(await skills.collectBlock(bot, 'cobblestone', 1), false);
     assert.deepEqual([...bot.calls.collected, ...bot.calls.dug], []);
     assert.match(bot.output, /No cobblestone nearby to collect\./);
+});
+
+// Lead, before the first G3 batch: near the G3 spawn the only plain pyrotech:rock piles are dirt
+// clumps; the rocks there are Underground Biomes piles (S1-A survey), which the crude axe, Crafting
+// Tools and stone tools accept (the rock ore dictionary, rotn-data #142).
+test('G3 spawn: a bare "pyrotech:rock" collects Underground Biomes rock piles and skips the dirt clump', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = fakeBot({
+        blocks: [
+            block('pyrotech:rock', 4, at(1)), // dirt clump, nearest
+            block('pyrotech_compat:rock_metamorphic', 0, at(3)),
+            block('pyrotech_compat:rock_igneous', 7, at(4)),
+            block('pyrotech_compat:rock_metamorphic', 6, at(6)),
+        ],
+    });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 3), true);
+    const taken = [...bot.calls.collected, ...bot.calls.dug].map(b => `${b.name}:${b.metadata}`);
+    assert.deepEqual(taken, ['pyrotech_compat:rock_metamorphic:0', 'pyrotech_compat:rock_igneous:7', 'pyrotech_compat:rock_metamorphic:6']);
+    assert.equal(countItem(bot, 'pyrotech:rock:4'), 0);
+    assert.match(bot.output, /Collected 3 pyrotech:rock\./);
+});
+
+test('a pickaxe that breaks mid-run: no throw; stone is skipped and hand sources continue', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const pickaxe = tool('stone_pickaxe');
+    const items = [pickaxe];
+    const bot = fakeBot({
+        items,
+        blocks: [block('stone', 0, at(2)), block('stone', 0, at(3)), block('pyrotech_compat:rock_igneous', 0, at(9))],
+    });
+    const dig = bot.dig;
+    bot.dig = async (b) => {
+        await dig(b);
+        if (b.name === 'stone') { pickaxe.count = 0; bot.heldItem = null; } // it breaks on the first stone
+    };
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 8), true);
+    assert.match(bot.output, /No longer have a pickaxe of level 0 or lower to break stone; skipping those blocks\./);
+    assert.deepEqual(bot.calls.dug.map(b => b.name), ['stone', 'pyrotech_compat:rock_igneous']);
+    assert.equal(countItem(bot, 'pyrotech:rock') + countItem(bot, 'pyrotech_compat:rock_igneous'), 5);
+    assert.match(bot.output, /Collected 5 pyrotech:rock\./);
 });

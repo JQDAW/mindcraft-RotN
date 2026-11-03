@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T00:52Z (from `date -u`)
+Updated: 2026-11-03T01:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -29,6 +29,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#131 merged** (`ce02cc8`): B1b, the skills name space (Request 8): canonical names at the command boundary; one shared resolver (`findItem`/`itemMatches`, `blockMatcher`) in every consuming skill; variant-aware counts, block search, crafting, smelting and `!getCraftingPlan`; end-to-end tests per review scenario.
 - **#132 merged**: every baby check uses `mc.isBaby` (#125).
 - **#141 merged** (`37ba167`): B2, `collectBlock` follows rotn-data's world rules; real inventory gain per break; the rule's tool equipped (never a Sturdy pickaxe for rocks); no `cobblestone` -> `stone` alias.
+- **#145 merged** (`6e5d63f`): B2b, a bare rock name covers the rock ore dictionary (the Underground Biomes piles at the G3 spawn); no throw when the pickaxe breaks; the #131 regex nit.
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -41,9 +42,11 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
-- B2b `rock-ore` (branch `agent/skills-rotn/rock-ore`, on develop `89f3ef6` with rotn-data #142; lead: required before the first G3 batch): #145 open. A bare `pyrotech:rock` covers the whole rock ore dictionary from rotn-data #142 (`way.ore`): the Underground Biomes piles near the G3 spawn, not dirt clumps; a pickaxe that breaks mid-run no longer throws; the #131 regex nit.
-- E1 `task-queue` (branch `agent/skills-rotn/task-queue`, on develop `89f3ef6`): #146 open. The persistent player task queue: `!taskAdd(text, priority)`, `!taskList`, `!taskCancel(id)`; `./bots/<name>/tasks.json`; only `task_givers` may add tasks; the giver is the real sender; the harness-ops chat formats.
-- Waiting: C1 until the lead and the human settle Request 2 (no C1 code that depends on slot clicks or block placement until then). Next after E1: E2 (agenda) and E3 (priority stack), which need no slot clicks. Flag for G3 (#141 nit 5): with an axe, collecting log targets Dynamic Trees branches; the count is the real gain, but scattered drops may not all be picked up.
+- E1 `task-queue` (branch `agent/skills-rotn/task-queue`): #146 open. Review REQUEST CHANGES, fixed: `!taskAdd`/`!taskCancel` only on the forced path (a giver types them), with the sender passed per call (no shared field) and hidden from the LLM; "Server" only with the test-only `allow_server_task_giver` and only from the console; a corrupt `tasks.json` is moved aside and reported, entries are validated, a save failure at load cannot stop the agent; and Request 11 (below) in the same PR, with tests for overlapping calls.
+- B2c `collect-nits` (branch `agent/skills-rotn/collect-nits`, on develop `6e5d63f`): #148 open. The #145 nits 2-4: the log names the items really gained; an explicit variant uses only its own rule blocks; finding the tool gone does not use up an attempt.
+- **C1 coordination (net-forge is back, working on Request 2):** I build only the C1 parts that need no `window_click`, `block_place` or `use_item`: choosing a RotN recipe the inventory can satisfy (by output and ingredients, never a CraftTweaker id), including #145 nit 1 (stone tools need 3 rocks of one kind, because `recipesFor` gives equal slots the same stack, so a mixed haul is refused; the plan collects or picks one kind). Executing crafts in the 2x2 grid or the table, placing the table and the first-plank interaction (C2) wait for net-forge's report in `coord/STATUS-net-forge.md`.
+- C1a `craft-needs` (branch `agent/skills-rotn/craft-needs`, on develop `6e5d63f`): #151 open. The packet-free part of C1: `craftNeeds`/`describeNeeds` say what is missing by RotN's recipes (rotn-data `howToGet` craft ways, every way, full ore members), including #145 nit 1 (3 rocks of ONE kind); `craftRecipe` logs it when nothing is craftable.
+- Next after B2c: those C1 parts, then E2 (agenda) and E3 (priority stack, task done/failed lines). Flag for G3 (#141 nit 5): with an axe, collecting log targets Dynamic Trees branches; the count is the real gain, but scattered drops may not all be picked up.
 
 ## G3 plan: small PRs, in order
 
@@ -121,7 +124,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Requests to other agents or the lead
 
-1. **Lead (`settings.js`):** add the task-giver setting. Proposed key `task_givers`, default `[]`, with `["JQDAW"]` set where the lead keeps per-deploy values. Add `pause_when_empty: false`. Add `!searchWiki` to `blocked_actions` (it returns vanilla 1.21 facts). Needed by E1/E2; until then the code reads the keys with these defaults. **E1 reads `settings.task_givers`** (default: nobody may give tasks). Until the key is in `settings.js`, G3 sets it through `SETTINGS_JSON` (for example `{"task_givers": ["Server"]}`).
+1. **Lead (`settings.js`):** add the task-giver setting. Proposed key `task_givers`, default `[]`, with `["JQDAW"]` set where the lead keeps per-deploy values. Add `pause_when_empty: false`. Add `!searchWiki` to `blocked_actions` (it returns vanilla 1.21 facts). Needed by E1/E2; until then the code reads the keys with these defaults. **E1 reads `settings.task_givers`** (default: nobody may give tasks or type commands). Also a **test-only** `allow_server_task_giver: false`: G3 sets it to true (with `SETTINGS_JSON`) so the console whisper sender "Server" is a giver; never true in a committed profile. Until both keys are in `settings.js`, the code reads them with these defaults.
 2. **net-forge (paused since 2026-11-02; route through the lead):** C1 and C2 need serverbound slot encoding with REID (VarInt slot ids in `window_click`) and `block_place`/`use_item` working on 1.12 (the `use_item` extra fields in the mineflayer patch). Please confirm that they work, or say what is missing. Also: can the `place_block.js` 500 ms `blockUpdate` wait be made configurable (seam-map C)? A lagging RotN server makes placements report failure. **I will tell the lead 1-2 PRs before C1** (that is, when B2 opens), so the lead can respawn net-forge or verify the current encoding in a probe first.
 3. **rotn-data:** for C1, does `recipesFor` give ingredients with oredict members and meta expanded, so that I can match by output and ingredients? For C2, which blocks are the surface rock piles (`pyrotech:rock_pile`?) and what do they drop? The 20 recipes with `matchesSample: false`: I will check whether any is in the early-game set and report back.
 4. **harness-ops:** G3 scenarios for (a), (b) and (c), plus "the queue survives a restart". I will post the command and log contract for each as my PRs land. A first exploratory probe batch for the open items above would de-risk C2/C3; that needs the lead's GO.
@@ -136,9 +139,10 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 8. ~~Lead: the skills name space for B1b~~: **accepted** (2026-11-02). The command boundary hands skills the bot's 1.12 names in rotn-data's `formatOld` convention; a 1.21 name maps to its exact variant (`oak_log` = `log:0`, oak only), a plain 1.12 `log` means any log. No ADR; documented in the B1b PR.
 9. ~~rotn-data: `isHuntable` reads the 1.21 baby flag~~: done in #125 (`mc.isBaby`, index 12). My follow-up: switch `names112.isBaby` callers to `mc.isBaby` (queued).
 10. ~~Lead: `getDetailedCraftingPlan` reading ingredient metas~~: decided (lead): it goes to rotn-data (the `mcdata.js` recipe helpers), low priority, after G3 unless C1 needs it.
-11. **Lead (security, for E3):** a player's chat message that contains a command runs it directly (upstream's forced-command path in `agent.js` `handleMessage`), so with `only_chat_with` empty any player can make the bot run any command (`!discard`, `!givePlayer`, ...). E1 only guards `!taskAdd`/`!taskCancel`. E3 (priority stack) will limit forced commands to task givers plus a small list of safe ones. Confirm, or say if you want it sooner.
+11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
 
-- #145 B2b rock ore (branch `agent/skills-rotn/rock-ore`). Serves the lead's required follow-up before the first G3 batch (G3 (a), rocks at the G3 spawn).
 - #146 E1 task queue (branch `agent/skills-rotn/task-queue`). Serves brief item 5 and its acceptance tests, G3 (c).
+- #148 B2c collect nits (branch `agent/skills-rotn/collect-nits`). Serves the #145 review nits 2-4.
+- #151 C1a craft needs (branch `agent/skills-rotn/craft-needs`). Serves C1 (the part without slot clicks) and #145 nit 1.
