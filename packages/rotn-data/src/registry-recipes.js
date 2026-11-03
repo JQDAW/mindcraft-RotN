@@ -66,8 +66,11 @@ function itemId(registry, name) {
 function candidates(registry, ingredient) {
     const seen = new Set();
     const out = [];
+    // Within a rank a wildcard stack (any meta of one item, e.g. a whole Underground Biomes rock
+    // family) comes before single metas, so mixed variants (below) reach every family.
+    const wild = (x) => (x.meta === WILDCARD_META || x.meta == null ? 0 : 1);
     const stacks = (ingredient?.stacks ?? []).map((s, i) => ({ s, i }))
-        .sort((a, b) => rank(a.s.name) - rank(b.s.name) || a.i - b.i);
+        .sort((a, b) => rank(a.s.name) - rank(b.s.name) || wild(a.s) - wild(b.s) || a.i - b.i);
     for (const { s } of stacks) {
         if (s.nbt) continue;
         const id = itemId(registry, s.name);
@@ -110,39 +113,117 @@ export function choiceTuples(sizes, max) {
     return out;
 }
 
+export const DEFAULT_MIX_BUDGET = 64;
+
+const multisetCount = (k, n) => {
+    // C(k + n - 1, n): multisets of size n from k candidates
+    let c = 1;
+    for (let i = 1; i <= n; i++) c = (c * (k + i - 1)) / i;
+    return Math.round(c);
+};
+
+/**
+ * The ways one ingredient group can fill its n slots, as arrays of candidate indices (one per slot),
+ * cheapest first. Uniform options (every slot the same candidate) for all candidates; when n >= 2,
+ * also mixed options: multisets over the group's first K candidates, K as large as the budget allows
+ * (C(K + n - 1, n) <= mixBudget). Cost = the largest candidate index used (how unlikely the least
+ * likely stack is). Why (#145 review): mineflayer fills each slot with one {id, metadata}, so 3 rock
+ * slots from one variant need 3 rocks of one item; the server accepts any rock in each slot.
+ * @returns {Array<{slots: number[], cost: number, uniform: boolean}>}
+ */
+export function groupOptions(candidateCount, n, { mixBudget = DEFAULT_MIX_BUDGET } = {}) {
+    const out = [];
+    for (let i = 0; i < candidateCount; i++) out.push({ slots: Array(n).fill(i), cost: i, uniform: true });
+    if (n >= 2) {
+        let k = Math.min(candidateCount, 2);
+        while (k < candidateCount && multisetCount(k + 1, n) <= mixBudget) k++;
+        if (multisetCount(k, n) <= mixBudget || k === 2) {
+            const walk = (start, acc) => {
+                if (acc.length === n) {
+                    if (acc[0] !== acc[n - 1]) out.push({ slots: [...acc], cost: acc[n - 1], uniform: false });
+                    return;
+                }
+                for (let i = start; i < k; i++) { acc.push(i); walk(i, acc); acc.pop(); }
+            };
+            walk(0, []);
+        }
+    }
+    // Cheapest first; on a tie uniform first, then by the slots.
+    return out.sort((a, b) => a.cost - b.cost || (a.uniform ? 0 : 1) - (b.uniform ? 0 : 1)
+        || a.slots.join(',').localeCompare(b.slots.join(','), undefined, { numeric: true }));
+}
+
+/**
+ * Option index tuples over groups, smallest total cost first, at most `max`.
+ * @param {number[][]} costs per group, the (sorted) cost of each option
+ */
+export function costTuples(costs, max) {
+    const out = [];
+    if (costs.some((c) => c.length === 0)) return out;
+    const minRest = costs.map((_, i) => costs.slice(i + 1).reduce((a, c) => a + c[0], 0));
+    const maxRest = costs.map((_, i) => costs.slice(i + 1).reduce((a, c) => a + c[c.length - 1], 0));
+    const total = costs.reduce((a, c) => a + c[c.length - 1], 0);
+    const walk = (i, left, acc) => {
+        if (out.length >= max) return;
+        if (i === costs.length) {
+            if (left === 0) out.push([...acc]);
+            return;
+        }
+        for (let j = 0; j < costs[i].length; j++) {
+            const c = costs[i][j];
+            if (c > left) break;
+            const rest = left - c;
+            if (rest < minRest[i] || rest > maxRest[i]) continue;
+            acc.push(j);
+            walk(i + 1, rest, acc);
+            acc.pop();
+            if (out.length >= max) return;
+        }
+    };
+    for (let sum = 0; sum <= total && out.length < max; sum++) walk(0, sum, []);
+    return out;
+}
+
 /**
  * The minecraft-data recipe variants of one dump recipe ([] if it cannot be used).
  * @returns {{variants: object[], skipped: string|null, truncated: boolean}}
  */
-export function convertRecipe(registry, r, { maxVariants = DEFAULT_MAX_VARIANTS } = {}) {
+export function convertRecipe(registry, r, { maxVariants = DEFAULT_MAX_VARIANTS, mixBudget = DEFAULT_MIX_BUDGET } = {}) {
     if (r.dynamic) return { variants: [], skipped: 'dynamic', truncated: false };
     if (r.matchesSample === false) return { variants: [], skipped: 'sample grid did not match', truncated: false };
     const resultId = itemId(registry, r.result?.name ?? '');
     if (resultId === null) return { variants: [], skipped: 'result not in the registry', truncated: false };
     const shaped = Array.isArray(r.slots);
     const cells = shaped ? r.slots : (r.ingredients ?? []);
-    // Group equal ingredients so they take the same stack.
+    // Group equal ingredients; each group fills its slots with one option (uniform or mixed).
     const groups = new Map();
     const slotGroup = cells.map((c) => {
         if (!c) return null;
         const key = JSON.stringify(c.stacks ?? []);
-        if (!groups.has(key)) groups.set(key, candidates(registry, c));
+        if (!groups.has(key)) groups.set(key, { cands: candidates(registry, c), slots: 0 });
+        groups.get(key).slots++;
         return key;
     });
     const keys = [...groups.keys()];
-    if (keys.some((k) => groups.get(k).length === 0)) return { variants: [], skipped: 'an ingredient has no usable stack', truncated: false };
-    const sizes = keys.map((k) => groups.get(k).length);
-    const tuples = choiceTuples(sizes, maxVariants);
-    const total = sizes.reduce((a, n) => a * n, 1);
+    if (keys.some((k) => groups.get(k).cands.length === 0)) return { variants: [], skipped: 'an ingredient has no usable stack', truncated: false };
+    const options = keys.map((k) => groupOptions(groups.get(k).cands.length, groups.get(k).slots, { mixBudget }));
+    const tuples = costTuples(options.map((o) => o.map((x) => x.cost)), maxVariants);
+    const total = options.reduce((a, o) => a * o.length, 1);
     // `meta` as well as `metadata` (#102 review): prismarine-recipe's Recipe.find filters by the
     // requested metadata only when the result has a `meta` key, so without it bot.recipesFor(planks,
     // 1) would also return oak planks recipes for spruce.
     const meta = r.result.meta ?? 0;
     const result = { id: resultId, metadata: meta, meta, count: r.result.count ?? 1 };
     const takesResult = (c) => c.id === result.id && (c.metadata === null || c.metadata === result.metadata);
-    const variants = tuples.filter((t) => !keys.some((k, i) => takesResult(groups.get(k)[t[i]]))).map((t) => {
-        const pick = new Map(keys.map((k, i) => [k, groups.get(k)[t[i]]]));
-        const items = slotGroup.map((k) => (k === null ? null : { ...pick.get(k) }));
+    const used = (t) => keys.flatMap((k, i) => options[i][t[i]].slots.map((ci) => groups.get(k).cands[ci]));
+    const variants = tuples.filter((t) => !used(t).some(takesResult)).map((t) => {
+        // Each group's slots, in order, take its option's candidates.
+        const next = new Map(keys.map((k, i) => [k, { cands: groups.get(k).cands, slots: options[i][t[i]].slots, at: 0 }]));
+        const items = slotGroup.map((k) => {
+            if (k === null) return null;
+            const g = next.get(k);
+            return { ...g.cands[g.slots[g.at++]] };
+        });
         if (!shaped) return { ingredients: items.filter(Boolean), result: { ...result } };
         const w = r.width;
         const inShape = [];
