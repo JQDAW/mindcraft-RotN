@@ -190,7 +190,7 @@ function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b
     if (usageFile) fs.writeFileSync(file, JSON.stringify({ data: { usage, limit: 5, limit_remaining: 5 - usage } }));
     const ctl = path.join(dir, 'ctl.sh');
     fs.writeFileSync(ctl, `#!/usr/bin/env bash\necho "$*" >> "${fwd(path.join(dir, 'ctl.txt'))}"\n`);
-    const args = [BATCH, ...(preflight ? ['--preflight'] : []), '--max-batch-usd', maxUsd, '--logs-out', fwd(path.join(dir, 'logs')), '--summary', path.join(dir, 'batch.json')];
+    const args = [BATCH, ...(preflight ? [preflight === true ? '--preflight' : preflight] : []), '--max-batch-usd', maxUsd, '--logs-out', fwd(path.join(dir, 'logs')), '--summary', path.join(dir, 'batch.json')];
     if (timeoutMin) args.push('--timeout-min', timeoutMin);
     for (const s of scenarios) args.push('--scenario', s, '--out', path.join(dir, `out-${s}`));
     args.push('--', ...driver);
@@ -306,6 +306,20 @@ describe('batch.mjs: the preflight before any server exists (lead, #169 review)'
         assert.match(r.out, /preflight passed: driver, profile, model and settings checked; the key's usage can be read; 3 scenario\(s\)/);
         assert.deepEqual([r.ran, r.ctl, r.summary], [[], '', null]);
         assert.ok(!r.out.includes(KEY), 'the key is never printed');
+    });
+
+    test('--preflight-files (a dry run): the same file checks, no usage reading at all (#176 review nit)', { timeout: 60000 }, async () => {
+        // No usage file: --preflight would refuse, so passing shows the usage was not read.
+        const ok = await runBatch({ preflight: '--preflight-files', mark: '', usageFile: false, driver: ['node', DRIVER, '--profile', good] });
+        assert.equal(ok.code, 0, ok.out);
+        assert.match(ok.out, /preflight passed \(files only, a dry run\): driver, profile, model and settings checked; the key's usage was not read/);
+        assert.deepEqual([ok.ran, ok.ctl, ok.summary], [[], '', null]);
+        const bad = await runBatch({ preflight: '--preflight-files', mark: '', usageFile: false, driver: ['node', DRIVER, '--profile', other] });
+        assert.equal(bad.code, 2, bad.out);
+        assert.match(bad.out, /refused: driver: profile .*model is 'openrouter\/openai\/gpt-4o'/);
+        const p = parseBatchArgs(['--preflight-files', '--max-batch-usd', '2', '--logs-out', 'l', '--scenario', 'a', '--out', 'o', '--', 'node', 'd.mjs']);
+        assert.deepEqual([p.options.preflight, p.options.readUsage, p.problems], [true, false, []]);
+        assert.equal(parseBatchArgs(['--preflight', '--max-batch-usd', '2', '--logs-out', 'l', '--scenario', 'a', '--out', 'o', '--', 'node', 'd.mjs']).options.readUsage, true);
     });
 
     test('--preflight: another model, or no usage reading, refuses with 2 and runs nothing', { timeout: 60000 }, async () => {

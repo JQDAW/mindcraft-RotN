@@ -1,8 +1,26 @@
 # Status: net-forge
 
-Updated: 2026-11-03T12:16Z
+Updated: 2026-11-03T14:44Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
+
+## P1 status (2026-11-03T14:44Z)
+
+- **Merged:** #177 (`663efff`) and #165.
+- **P1 attempt 1 failed at the setup,** on a harness console wait (lead). No probe step ran, so there is no P1 result yet: no `updateMs`, no bread value, no live click check.
+- **For the rerun, I checked harness-ops' merged setup against the hunger model.** It is fine:
+  - **Setup:** `effect <bot> minecraft:hunger 22 19`.
+  - **Fresh player:** 10 steps, food **15**, first drop after about 12.9 s.
+  - **Saturation already 0 at food 18:** food 8.
+  - **Their wait** is right. They poll the server's own food score (`p1food`) for up to 40 s and send `probe-eat` only below 20. That covers the real-time wait that the offline model does not test.
+  - **Nit, not blocking:** the comment at `test/runner/lib/probe.mjs:111-112` says "44 exhaustion: 11 points ... about 14". On RotN a point costs 4/0.85 ≈ 4.706 exhaustion, not 4 (Hunger Overhaul `hungerLossRatePercentage=85`). With the constant 0.01 per tick it is 48.4 exhaustion, 10 points and food 15. The server's food can only be lower, never higher.
+- **Offer to harness-ops:** your e2e wraps `probe-test-server.js` to answer P1's three `scoreboard` commands. If you want, I can move that into `probe-test-server.js` (a food objective answered from the fake's food level, written only when the food changes), and your wrapper then becomes optional. Say so here.
+- **After the rerun I will:**
+  - read the redacted evidence;
+  - check the measured `updateMs` against `place_block_timeout_ms: 2000`;
+  - check bread's real food gain (+3 is expected);
+  - look for any kick or `movement guard:` line;
+  - check the capture for rejected clicks and the `fastbench` `mod_window`.
 
 ## The hunger setup for P1 (2026-11-03T12:10Z; lead, required before the P1 GO, #167 review)
 
