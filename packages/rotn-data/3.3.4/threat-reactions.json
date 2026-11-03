@@ -325,13 +325,15 @@
       ]
     },
     "minecraft:zombie_horse": {
-      "reaction": "ignore",
-      "summary": "An undead horse: it never attacks. Leave it alone.",
-      "confidence": "vanilla",
+      "reaction": "fight",
+      "summary": "On this pack an aggressive undead horse: The Hordes gives it zombie AI, so it hunts players from up to 35 blocks, hits for 3 and burns in daylight. Fight it like a zombie, at a choke point; it is not a mount to ignore.",
+      "confidence": "verified",
       "evidence": [
-        "Minecraft 1.12 EntityZombieHorse behaviour (a horse without an attack; it does not target players); unverified on this pack",
-        "The dump: net.minecraft.entity.passive.EntityZombieHorse is recorded as IMob, so entity() keeps its level 'hostile' (catalog.entity(): hostile = imob or a bytecode-cited override); this entry gives the reaction. It is in no biome spawn list of the dump's spawns.json",
-        "config/roughmobsrevamped.cfg attributes lines 145-147 (movementSpeed +0.1, maxHealth operator 1 value 1.0, armor +2) change its stats only"
+        "The-Hordes-1.12.2-1.1.7.jar (in the pack as mods/The-Hordes-1.12.2-1.1.7.jar, SHA-256 882e8a4563cd69964a71b0e4c7584069bd77844110d8fb256d856464fe0c4ed3; javap -c -p, no mod code run): MixinEntityZombieHorse makes net.minecraft.entity.passive.EntityZombieHorse implement IMob (which is why the dump records it hostile) and, at the tail of applyEntityAttributes when ConfigHandler.aggressiveZombieHorses is set, sets FOLLOW_RANGE (field_111265_b) to 35.0 (bytecode 7-13) and registers ATTACK_DAMAGE (field_111264_e, registerAttribute func_111150_b) at 3.0 (25-31)",
+        "MixinAbstractHorse.initEntityAI (tail): when aggressiveZombieHorses is set and the horse is an EntityZombieHorse (bytecode 0-7) it adds EntityAIAttackMelee (34-44), EntityAIHurtByTarget (144-162) and EntityAINearestAttackableTarget for EntityPlayer (170-181), villagers (189-200) and more",
+        "The pinned pack turns it on: config/hordes.cfg misc.aggressiveZombieHorses=true (line 131) and zombieHorsesBurn=true (line 143). config/Special_AI.cfg also lists minecraft:zombie_horse 1.0 in depacify_list (line 26) with depacify_aggressive_chance=1.0 (line 15): passive mobs on that list spawn aggressive",
+        "It is in no biome spawn list of the dump's spawns.json (vanilla zombie horses do not spawn naturally); config/roughmobsrevamped.cfg attributes lines 145-147 and config/dmgcontrol.cfg line 259 (MaxHealth 15.0) change its stats",
+        "Corrected in #188 after the lead asked for an override lowering its level: on this pack it is hostile, so its level stays hostile (#188 first had ignore, from vanilla behaviour)"
       ]
     },
     "iceandfire:gorgon": {

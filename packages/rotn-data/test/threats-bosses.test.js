@@ -13,23 +13,26 @@ const pack = loadRotnData('3.3.4');
 const reactions = JSON.parse(fs.readFileSync(path.join(HERE, '../3.3.4/threat-reactions.json'), 'utf8'));
 const ev = (n) => pack.threatOf(n).evidence.join(' ');
 
-test('bosses are avoided, ghast and blaze are ranged (take cover), the zombie horse is ignored', () => {
+test('bosses are avoided, ghast and blaze are ranged (take cover), the zombie horse is fought', () => {
     const want = {
         'minecraft:ender_dragon': ['avoid', true, 'vanilla'],
         'minecraft:wither': ['avoid', true, 'vanilla'],
         'minecraft:ghast': ['take-cover', true, 'vanilla'],
         'minecraft:blaze': ['take-cover', true, 'vanilla'],
-        'minecraft:zombie_horse': ['ignore', false, 'vanilla'],
+        'minecraft:zombie_horse': ['fight', false, 'verified'],
         'iceandfire:gorgon': ['avoid', false, 'verified'],
     };
     for (const [n, [reaction, ranged, source]] of Object.entries(want)) {
         const t = pack.threatOf(n);
         assert.deepEqual([t.reaction, t.ranged, t.source], [reaction, ranged, source], n);
-        assert.notEqual(t.reaction, 'fight', n);
+        if (n !== 'minecraft:zombie_horse') assert.notEqual(t.reaction, 'fight', n);
         assert.ok(t.summary && t.evidence.length > 0, `${n}: summary and evidence`);
     }
-    // The zombie horse keeps the dump's level (its class is recorded as IMob); only the reaction changes.
-    assert.equal(pack.threatOf('minecraft:zombie_horse').level, 'hostile');
+    // The zombie horse is hostile on this pack: The Hordes makes it IMob and gives it zombie AI.
+    const zh = pack.threatOf('minecraft:zombie_horse');
+    assert.equal(zh.level, 'hostile');
+    assert.match(zh.evidence.join(' '), /MixinAbstractHorse.*EntityAINearestAttackableTarget for EntityPlayer/);
+    assert.match(zh.evidence.join(' '), /hordes\.cfg misc\.aggressiveZombieHorses=true \(line 131\)/);
 });
 
 test('their pack facts are cited: where they spawn and the configs that change them', () => {
