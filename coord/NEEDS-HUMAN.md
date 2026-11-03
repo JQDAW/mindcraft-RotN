@@ -20,7 +20,7 @@ Agents add items here when they need something only the human can do. The human 
   - ufw allows incoming SSH only;
   - SSH password login off (verified with `sshd -T`), with root's key login unchanged.
 
-  The human then set `passwd deploy`. Not yet confirmed: the `deploy` key login from a second terminal.
+  The human then set `passwd deploy`, and confirmed the `deploy` key login from a second terminal (01:25 UTC).
 - [x] **CX23 root access for setup:** the human added the Orca SSH target `cx23` (root via an SSH key on this PC; the IP is not in the repo), 2026-11-02 18:12 UTC. Replaces "CX23 root login".
 - [x] **Set up an external cron job that triggers the sweeper every 15 min** (rotn-lead, 2026-11-01 13:55 UTC; you chose this option).
   - **Why.** GitHub does not run scheduled workflows on your account at all. The non-fork helper repo also missed 13:18, 13:33 and 13:48, while manual and API dispatch always work. GitHub's status page shows no incident.

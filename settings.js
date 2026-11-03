@@ -31,6 +31,7 @@ const settings = {
     "only_chat_with": [], // users that the bots listen to and send general messages to. if empty it will chat publicly
     "task_givers": ["JQDAW"], // RotN: players whose typed commands and tasks the bot accepts; everyone else may only chat (#146)
     "allow_server_task_giver": false, // RotN: test servers only; lets the console whisper sender "Server" give tasks. Never true in a committed file
+    "place_block_timeout_ms": 2000, // RotN: how long block placement waits for the server's update before it reports failure (50-60000; #155). A lagging modded server needs more than upstream's 500
 
     "speak": false,
     // allows all bots to speak through text-to-speech. 
