@@ -14,6 +14,11 @@
 // minecraft-data types ClickType as i8. For ordinals 0-6 a VarInt is the same single byte.
 // REID 2.2.2 (MixinPacketBuffer): the stack's item id, and the -1 empty marker, are VarInts.
 // Item ids are the real ones from G1 Batch A's RegistryData (fixtures/rotn-3.3.4/handshake-runA.*).
+//
+// Scope: single clicks, placements and item use, packet by packet. The stub bot uses the
+// vanilla registry (modded items have no name or stack size here), so stack merging,
+// shift-clicks and bot.craft() are not covered. The offline end-to-end craft test
+// through initBot covers those.
 
 import { Buffer } from 'node:buffer';
 import { test } from 'node:test';
@@ -90,7 +95,7 @@ function stubBot() {
     return bot;
 }
 
-test('the Run A ids used here are real and above the vanilla range where expected', () => {
+test('the Run A ids used here are real; the modded ones lie beyond the block-id range (4095)', () => {
     assert.equal(runARegistries().get('minecraft:items').overrides.get('minecraft:crafting_table'), 'fastbench');
     assert.equal(ID.craftingTable, 58);
     assert.equal(ID.stick, 280);
@@ -105,6 +110,9 @@ test('window_click from mineflayer clickWindow: vanilla layout, REID VarInt item
     assert.ok(click, 'mineflayer wrote window_click');
     bot._client.emit('transaction', { windowId: 0, action: click.params.action, accepted: true });
     await done;
+    // The inventory window needs the server's confirmation, so the accepted transaction
+    // completes the click and mineflayer writes nothing else (no "faulty transaction" reply).
+    assert.deepEqual(bot.writes.map(w => w.name), ['window_click']);
 
     const { buf, params } = roundTrip('window_click', click.params);
     const expected = reidStack(new Writer().varint(packetId('window_click')).u8(0).i16(36).i8(0).i16(click.params.action).bytes(encodeVarInt(0)), ID.crudeAxe, 1, 0).toBuffer();
@@ -130,6 +138,13 @@ test('window_click item stacks: empty slot, meta, a 3-byte VarInt id and NBT all
     const named = roundTrip('window_click', { windowId: 0, slot: 36, mouseButton: 0, action: 10, mode: 0, item: Item.toNotch(new Item(ID.crudeAxe, 1, 3, nbt)) });
     assert.deepEqual(named.params.item.nbtData, nbt);
     assert.equal(named.params.item.itemDamage, 3);
+});
+
+test('set_creative_slot uses the same REID slot (the slot type is overridden globally)', () => {
+    const { buf, params } = roundTrip('set_creative_slot', { slot: 36, item: Item.toNotch(new Item(ID.craftingTools, 1, 0)) });
+    const expected = reidStack(new Writer().varint(packetId('set_creative_slot')).i16(36), ID.craftingTools, 1, 0).toBuffer();
+    assert.equal(buf.toString('hex'), expected.toString('hex'));
+    assert.equal(params.item.blockId, ID.craftingTools);
 });
 
 test('window_click modes 0-6 encode as one byte, the same bytes as vanilla readEnumValue', () => {
