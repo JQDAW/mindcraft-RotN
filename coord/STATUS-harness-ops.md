@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (00:20 UTC, from `date -u`)
+Updated: 2026-11-03 (00:36 UTC, from `date -u`)
 
 ## Done
 
@@ -1131,6 +1131,10 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
   1. the `--ssh-from` refusal says to run setup from a root SSH login, not through sudo (sudo drops `SSH_CONNECTION`);
   2. `/run/sshd` is made before the drop-in is written, so a failure there cannot leave an unchecked drop-in;
   3. setup refuses, before any change, an sshd config with a `Match` line (`sshd -T` without `-C` ignores Match blocks).
+  - **The #144 review, done here:**
+    - nit 3 (required): the not-root message no longer says `sudo bash bootstrap.sh`; it points to a root SSH login;
+    - nit 1: `Match=` is refused too, as is any `Include` other than Ubuntu's own one.
+    - Nit 2 (no signal trap during the write) is not done: a hangup can only leave a drop-in that turns password login off.
 - Later:
   - the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected);
   - the #135 nits (a comment that the load step proves linking, not rendering; an explicit working directory);

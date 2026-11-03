@@ -542,9 +542,10 @@ describe('bootstrap.sh', () => {
     });
 
     test('setup refuses: not root, not Ubuntu 24.04, no or bad key; nothing is created', () => {
+        assert.ok(!/sudo bash bootstrap/.test(fs.readFileSync(path.join(CX, 'bootstrap.sh'), 'utf8')), 'no message suggests running it through sudo (#144 review nit 3)');
         ubuntu();
         const cases = [
-            [['setup', '--deploy-key-file', keyFile()], { FAKE_OUT_id: '1000' }, /run as root/],
+            [['setup', '--deploy-key-file', keyFile()], { FAKE_OUT_id: '1000' }, /run as root, from a root SSH login \(ssh root@<cx23>, then bash bootstrap\.sh \.\.\.\); setup --ssh-from needs that login, because sudo drops SSH_CONNECTION/],
             [['setup'], {}, /needs --deploy-key-file/],
             [['setup', '--deploy-key-file', keyFile('-----BEGIN OPENSSH PRIVATE KEY-----')], {}, /one OpenSSH public key line/],
             [['setup', '--deploy-key-file', keyFile('not a key')], {}, /one OpenSSH public key line/],
@@ -639,6 +640,7 @@ describe('bootstrap.sh', () => {
             [`${inc}Match User deploy\n    PasswordAuthentication yes\n`, null, /\(\/etc\/ssh\/sshd_config\)/],
             [`${inc}  match address 10.0.0.0/8\n`, null, /\(\/etc\/ssh\/sshd_config\)/],
             [inc, 'Match Group sftp\n  ForceCommand internal-sftp\n', /\(\/etc\/ssh\/sshd_config\.d\/60-x\.conf\)/],
+            [`${inc}Match=User deploy\n`, null, /\(\/etc\/ssh\/sshd_config\)/],
         ];
         for (const [main, dropin, re] of cases) {
             ubuntu('26.04', main);
@@ -656,6 +658,33 @@ describe('bootstrap.sh', () => {
         assert.equal(called('useradd').length + called('ufw').length + called('apt-get').length + called('sshd').length, 0, 'refused before any change');
         // A commented-out Match, or a word that only starts with Match, is fine.
         ubuntu('26.04', `${inc}# Match User deploy\n`);
+        fs.rmSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true, force: true });
+        assert.equal(boot(['setup', '--deploy-key-file', keyFile()]).code, 0);
+    });
+
+    test('preflight: an Include of anything but sshd_config.d/*.conf, or any Include in a drop-in, refuses setup (#144 review nit 1)', () => {
+        const inc = 'Include /etc/ssh/sshd_config.d/*.conf\n';
+        const cases = [
+            [`${inc}Include /etc/ssh/extra/*.conf\n`, null, /\(\/etc\/ssh\/sshd_config\)/],
+            [`${inc}  include=/root/x.conf\n`, null, /\(\/etc\/ssh\/sshd_config\)/],
+            [inc, 'Include /etc/ssh/elsewhere.conf\n', /\(\/etc\/ssh\/sshd_config\.d\/60-x\.conf\)/],
+            [inc, 'Include /etc/ssh/sshd_config.d/*.conf\n', /\(\/etc\/ssh\/sshd_config\.d\/60-x\.conf\)/],
+        ];
+        for (const [main, dropin, re] of cases) {
+            ubuntu('26.04', main);
+            fs.rmSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true, force: true });
+            if (dropin) {
+                fs.mkdirSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true });
+                fs.writeFileSync(rootFile('etc/ssh/sshd_config.d/60-x.conf'), dropin);
+            }
+            const r = boot(['setup', '--deploy-key-file', keyFile()]);
+            assert.equal(r.code, 1, `${main} | ${dropin}`);
+            assert.match(r.stderr, /the sshd config includes files other than \/etc\/ssh\/sshd_config\.d\/\*\.conf/);
+            assert.match(r.stderr, re);
+        }
+        assert.equal(called('useradd').length + called('ufw').length + called('apt-get').length + called('sshd').length, 0, 'refused before any change');
+        // The standard Include alone (Ubuntu's sshd_config) and a commented-out Include pass.
+        ubuntu('26.04', `${inc}# Include /etc/ssh/extra/*.conf\n`);
         fs.rmSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true, force: true });
         assert.equal(boot(['setup', '--deploy-key-file', keyFile()]).code, 0);
     });

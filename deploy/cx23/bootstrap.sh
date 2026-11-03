@@ -63,7 +63,7 @@ file_owned() {
 }
 
 require_root_ubuntu() {
-  [[ $(id -u) == 0 ]] || die "run as root (sudo bash bootstrap.sh ...)"
+  [[ $(id -u) == 0 ]] || die "run as root, from a root SSH login (ssh root@<cx23>, then bash bootstrap.sh ...); setup --ssh-from needs that login, because sudo drops SSH_CONNECTION"
   local osr; osr=$(p /etc/os-release)
   [[ -f $osr ]] && grep -q '^ID=ubuntu$' "$osr" && grep -Eq '^VERSION_ID="(26\.04|24\.04)"$' "$osr" \
     || die "this is for Ubuntu 26.04 (ADR 0007) or 24.04 (see /etc/os-release)"
@@ -81,15 +81,24 @@ preflight_system() {
   grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf[[:space:]]*$' "$(p /etc/ssh/sshd_config)" 2> /dev/null \
     || die "/etc/ssh/sshd_config does not include /etc/ssh/sshd_config.d/*.conf; the password-login drop-in would not be read"
   # sshd -T without -C ignores Match blocks, so a Match block that turns password login back on for some
-  # users or addresses would pass the check unseen (#137 re-review nit 3): refuse any Match line.
-  local cfg matched=()
+  # users or addresses would pass the check unseen (#137 re-review nit 3): refuse any Match line, also in
+  # the "Match=..." form sshd accepts (#144 review nit 1).
+  # Every other Include is refused too: the scan below covers only sshd_config and sshd_config.d/*.conf,
+  # so a file included from elsewhere could hide a Match block (#144 review nit 1).
+  local cfg matched=() included=() std_include='^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf[[:space:]]*$'
   shopt -s nullglob
   for cfg in "$(p /etc/ssh/sshd_config)" "$(p /etc/ssh/sshd_config.d)"/*.conf; do
-    if grep -Eiq '^[[:space:]]*Match([[:space:]]|$)' "$cfg" 2> /dev/null; then matched+=("${cfg#"$ROOT"}"); fi
+    if grep -Eiq '^[[:space:]]*Match([[:space:]=]|$)' "$cfg" 2> /dev/null; then matched+=("${cfg#"$ROOT"}"); fi
+    if grep -Ei '^[[:space:]]*Include([[:space:]=]|$)' "$cfg" 2> /dev/null | grep -Eqv "$std_include" \
+      || { [[ $cfg != "$(p /etc/ssh/sshd_config)" ]] && grep -Eiq '^[[:space:]]*Include([[:space:]=]|$)' "$cfg" 2> /dev/null; }; then
+      included+=("${cfg#"$ROOT"}")
+    fi
   done
   shopt -u nullglob
   (( ${#matched[@]} == 0 )) \
     || die "the sshd config has Match blocks (${matched[*]}); sshd -T cannot verify password login under them, so setup does not change anything"
+  (( ${#included[@]} == 0 )) \
+    || die "the sshd config includes files other than /etc/ssh/sshd_config.d/*.conf (${included[*]}); this check does not read them, so setup does not change anything"
   # ufw opens only port 22, so sshd must listen on 22 and nothing else (#137 review nit 4). sshd -t and
   # -T need the privilege separation folder, which ssh.service creates only while it runs.
   dir_owned 0755 root:root /run/sshd

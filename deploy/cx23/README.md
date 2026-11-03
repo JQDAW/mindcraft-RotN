@@ -30,6 +30,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
    - `/etc/ssh/sshd_config` includes `/etc/ssh/sshd_config.d/*.conf`;
    - `sshd -T` reports port 22 and no other, since ufw opens only 22;
    - no `Match` block in `sshd_config` or `sshd_config.d/*.conf`. `sshd -T` without `-C` ignores Match blocks, so it could not verify password login under one.
+   - no `Include` other than Ubuntu's own `Include /etc/ssh/sshd_config.d/*.conf` in `sshd_config`, and none in a drop-in. This check reads only those files, so a file included from elsewhere could hide a Match block.
 
    These are the system steps that the Ubuntu 26.04 CI job (`.github/workflows/ci-ubuntu-2604.yml`) cannot test in a container.
 
