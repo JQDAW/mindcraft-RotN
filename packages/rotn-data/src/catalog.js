@@ -319,7 +319,7 @@ export class RotnData {
         const imob = e.hostile ?? null;
         const out = { ...e, imob, targetsPlayers: !!o?.targetsPlayers, dangerous: !!o?.dangerous };
         if (imob !== null || o) out.hostile = !!(imob || o?.targetsPlayers);
-        if (o) out.threat = { confidence: o.confidence, evidence: o.evidence, ...(o.note ? { note: o.note } : {}) };
+        if (o) out.threat = { confidence: o.confidence, evidence: o.evidence, ...(o.note ? { note: o.note } : {}), ...(o.lookAt === false ? { lookAt: false } : {}) };
         const r = this.replacedByMod[name];
         if (r) {
             const replacements = Object.entries(this.dump.entities?.entities ?? {})
