@@ -2,6 +2,7 @@ import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta } from "./rotn_names.js";
+import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from "./rotn_sources.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -452,13 +453,34 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     }
     // blockType is a canonical name ("log", "log:0", "dirt:0"); aliases key on its bare name (#131 review).
     const baseType = parseName(blockType)?.name ?? blockType;
-    let blocktypes = [blockType];
+    // The variants the name stands for: rotn-data narrows a bare rock name to the rock
+    // variants, so dirt clumps and sand piles are not "rocks" (#141 review).
+    const targets = itemVariants(blockType);
+    let blocktypes = [...targets];
     if (baseType === 'coal' || baseType === 'diamond' || baseType === 'emerald' || baseType === 'iron' || baseType === 'gold' || baseType === 'lapis_lazuli' || baseType === 'redstone')
         blocktypes.push(baseType+'_ore');
     if (baseType === 'dirt')
         blocktypes.push(names112.GRASS_BLOCK); // 1.12: the grass block drops dirt
-    if (blockType === 'cobblestone')
-        blocktypes.push('stone');
+    // RotN world rules (rotn-data howToGet, B2): the blocks whose breaking gives this item, if
+    // the bot holds the tool the rule needs. Rocks also come from stone mined with a pickaxe
+    // below Sturdy. That is also why the old cobblestone -> stone alias is gone: such stone
+    // drops rocks, not cobblestone.
+    const ruleTools = []; // [matcher, tool] for rules that need a tool
+    const needsTool = [];
+    for (const source of worldSources(blockType)) {
+        if (!toolAllows(bot, source.tool)) {
+            needsTool.push(source);
+            continue;
+        }
+        for (const name of source.blocks)
+            if (!blocktypes.includes(name)) blocktypes.push(name);
+        if (source.tool) ruleTools.push([blockMatcher(source.blocks), source.tool]);
+    }
+    const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
+    // Count what the bot really gains, not a rule's yield (#141 review): the targets in the
+    // inventory before and after each break. A block with no item (water) counts 1 per success.
+    const countsItems = mc.getItemId(baseType) != null;
+    const held = () => targets.reduce((n, name) => n + countItem(bot, name), 0);
     const isLiquid = baseType === 'lava' || baseType === 'water';
     const isWanted = blockMatcher(blocktypes); // the shared resolver: names and variants (#131 review)
 
@@ -471,7 +493,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Blocks to ignore safety for, usually next to lava/water
     const unsafeBlocks = ['obsidian'];
 
-    for (let i=0; i<num; i++) {
+    for (let i=0; i<num && collected<num; i++) { // collected counts the items really gained (a stone can give 4 rocks)
         let blocks = world.getNearestBlocksWhere(bot, block => {
             if (!isWanted(block)) {
                 return false;
@@ -496,10 +518,19 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 log(bot, `No ${blockType} nearby to collect.`);
             else
                 log(bot, `No more ${blockType} nearby to collect.`);
+            // Say which other source the bot could use with the right tool (B2).
+            for (const source of needsTool)
+                log(bot, `${source.text} That needs ${describeTool(source.tool)}.`);
             break;
         }
         const block = blocks[0];
-        await bot.tool.equipForBlock(block);
+        // A rule's tool decides what drops: below Sturdy stone gives rocks, a Sturdy pickaxe
+        // cobblestone. So equip a tool the rule accepts, not the fastest (#141 review).
+        const ruleTool = ruleToolFor(block);
+        if (ruleTool)
+            await bot.equip(allowedTool(bot, ruleTool), 'hand');
+        else
+            await bot.tool.equipForBlock(block);
         if (isLiquid) {
             const bucket = bot.inventory.findInventoryItem('bucket');
             if (!bucket) {
@@ -515,10 +546,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         }
         try {
             let success = false;
+            const before = held();
             if (isLiquid) {
                 success = await useToolOnBlock(bot, 'bucket', block);
             }
-            else if (mc.mustCollectManually(baseType)) {
+            // By hand when the block has no collision box (a rock pile), or when a rule's tool must
+            // stay equipped: bot.collectBlock.collect would re-equip the fastest tool (B2).
+            else if (ruleTool || mc.mustCollectManually(block.name)) {
                 await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                 await bot.dig(block);
                 await pickupNearbyItems(bot);
@@ -528,8 +562,12 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 await bot.collectBlock.collect(block);
                 success = true;
             }
-            if (success)
-                collected++;
+            if (success) {
+                const gained = countsItems ? Math.max(0, held() - before) : 1;
+                collected += gained;
+                if (gained === 0)
+                    log(bot, `Broke ${block.name} but got no ${blockType}.`);
+            }
             await autoLight(bot);
         }
         catch (err) {
