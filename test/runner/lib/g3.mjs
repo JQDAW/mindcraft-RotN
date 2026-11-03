@@ -119,6 +119,10 @@ export function guardConsole(server, allow = G3_CONSOLE_ALLOW) {
  */
 export function giverProblems(settings) {
     const p = [];
+    // skills-rotn's test-only switch (#146): only the G3 driver turns it on, through SETTINGS_JSON.
+    if (settings && 'allow_server_task_giver' in settings && settings.allow_server_task_giver !== false) {
+        p.push('settings.allow_server_task_giver is not false: it is test-only, turned on by the G3 driver alone, never in production');
+    }
     for (const [k, v] of Object.entries(settings ?? {})) {
         if (!/giver/i.test(k)) continue;
         const list = Array.isArray(v) ? v : [v];

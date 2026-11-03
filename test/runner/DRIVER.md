@@ -119,11 +119,20 @@ node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY 
   - `SETTINGS_JSON` from outside;
   - skills-rotn's test-only `MINDCRAFT_ROTN_ALLOW_TASK_FILES` (#110);
   - a `DEBUG` that would make prismarine-auth print tokens;
-  - a `settings.js` whose `allow_insecure_coding` is not exactly `false`. The file checked is always the one next to `main.js`, which `main.js` imports; there is no option to check another, and `--settings` is refused;
+  - a `settings.js` whose `allow_insecure_coding` is not exactly `false`, that names `Server` as a task giver, or whose skills-rotn `allow_server_task_giver` is anything but `false` or absent (#146). The file checked is always the one next to `main.js`, which `main.js` imports; there is no option to check another, and `--settings` is refused;
   - a profile that is not a JSON object (`null`, a number, a string or an array);
-  - a profile that is missing, has a task in it, or names another bot than `ROTN_SCENARIO_BOT`.
+  - a profile that is missing, has a task in it, has any task-giver key (`task_givers`, `allow_server_task_giver`, ...), or names another bot than `ROTN_SCENARIO_BOT`.
 - **What `main.js` gets:**
-  - `SETTINGS_JSON` with only `host`, `port` (from `TEST_SERVER_HOST`/`PORT`), `auth: "microsoft"` and `auto_open_ui: false`;
+  - `SETTINGS_JSON` with only these keys:
+    - `host` and `port` (from `TEST_SERVER_HOST`/`PORT`);
+    - `auth: "microsoft"` and `auto_open_ui: false`;
+    - **`allow_server_task_giver: true`**, skills-rotn's test-only switch (#146). With it, the console's whisper sender `Server` (the runner's G3 task giver) may give tasks, and only from the console.
+
+    **This is the only place the switch is turned on:**
+    - never in a committed `settings.js` or profile (refused above);
+    - never on the CX23: `deploy/cx23/check-env.mjs` refuses `allow_server_task_giver` and `task_givers` in `SETTINGS_JSON`.
+
+    The players in `task_givers` stay as the lead's `settings.js` has them; `Server` needs no entry there;
   - `PROFILES=[the profile]`, `MINDCRAFT_SINGLE_BOT_SERVICE=1`, and a free local `MINDSERVER_PORT`;
   - `OPENROUTER_API_KEY` only if the runner passed it with `--pass-env`. It is never printed.
   - No arguments at all, so no task file can come in.

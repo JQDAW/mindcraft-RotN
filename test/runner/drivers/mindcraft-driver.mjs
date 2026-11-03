@@ -17,8 +17,9 @@
 //         another one) must evaluate to allow_insecure_coding === false, as deploy.sh checks;
 //       * the profile must exist, parse, carry no task, and be named as the runner's bot.
 //   - Starts `node main.js` with MINDCRAFT_SINGLE_BOT_SERVICE=1, PROFILES=[profile], a free local
-//     MINDSERVER_PORT, and SETTINGS_JSON={"host","port","auth":"microsoft","auto_open_ui":false} from the
-//     runner's TEST_SERVER_HOST/PORT. OPENROUTER_API_KEY comes only through the runner's --pass-env and is
+//     MINDSERVER_PORT, and SETTINGS_JSON={"host","port","auth":"microsoft","auto_open_ui":false,
+//     "allow_server_task_giver":true} from the runner's TEST_SERVER_HOST/PORT (the last is skills-rotn's
+//     test-only switch for the console giver "Server", #146; see mindcraftEnv). OPENROUTER_API_KEY comes only through the runner's --pass-env and is
 //     never printed. Output goes straight to the runner (stdio inherit).
 //   - Stopping leaves no process behind. main.js starts the agent as a child process:
 //       * POSIX: main.js runs in its own process group; on SIGTERM/SIGINT the driver signals the whole
@@ -70,7 +71,7 @@ export function envProblems(env, { debugEnables = () => false } = {}) {
     const has = (k) => Object.prototype.hasOwnProperty.call(env, k);
     if (has('INSECURE_CODING')) p.push('INSECURE_CODING is set (main.js turns insecure coding on for any value)');
     if (has('BLOCKED_ACTIONS')) p.push('BLOCKED_ACTIONS is set (it would replace settings.js\'s list)');
-    if (has('SETTINGS_JSON')) p.push('SETTINGS_JSON is set (the driver writes its own, with host, port, auth and auto_open_ui only)');
+    if (has('SETTINGS_JSON')) p.push('SETTINGS_JSON is set (the driver writes its own: host, port, auth, auto_open_ui and the test-only Server giver switch)');
     // skills-rotn's test-only opt-in for task files (#110, src/agent/tasks/task_guard.js): never in a G3 run.
     if (has('MINDCRAFT_ROTN_ALLOW_TASK_FILES')) p.push('MINDCRAFT_ROTN_ALLOW_TASK_FILES is set (G3 never loads Mindcraft task files)');
     if (has('DEBUG') && debugEnables(env.DEBUG)) p.push('DEBUG would make prismarine-auth print tokens');
@@ -90,6 +91,8 @@ export function profileProblems(file, bot) {
     if (prof === null || typeof prof !== 'object' || Array.isArray(prof)) return [`profile ${file}: not a JSON object`];
     const p = [];
     for (const k of ['task', 'task_path', 'task_id']) if (k in prof) p.push(`profile ${file}: has '${k}' (G3 never runs Mindcraft tasks)`);
+    // Task givers come from settings.js and, for the test-only "Server", from the driver alone (#146).
+    for (const k of Object.keys(prof).filter((x) => /giver/i.test(x))) p.push(`profile ${file}: has '${k}' (task givers are settings, and the test-only Server giver is the driver's alone)`);
     if (bot && prof.name !== bot) p.push(`profile ${file}: name '${prof.name}' is not the runner's bot '${bot}'`);
     return p;
 }
@@ -106,11 +109,21 @@ export async function settingsProblems(file) {
     }
 }
 
-/** The environment main.js runs with. */
+/**
+ * The environment main.js runs with. SETTINGS_JSON is the driver's own: the test server's host and port,
+ * online auth, no UI, and skills-rotn's TEST-ONLY allow_server_task_giver (#146): with it, the console's
+ * whisper sender "Server" (the runner's G3 task giver) may give tasks, and only from the console.
+ * This is the one place it is turned on: it never sits in a committed settings.js (settingsProblems) or
+ * profile (profileProblems), and the CX23 refuses it (deploy/cx23/check-env.mjs). task_givers (players)
+ * stay as the lead's settings.js has them; "Server" needs no entry there.
+ */
 export function mindcraftEnv(env, { profile, mindserverPort }) {
     const out = { ...env };
     for (const k of ['TEST_SERVER_HOST', 'TEST_SERVER_PORT']) delete out[k];
-    out.SETTINGS_JSON = JSON.stringify({ host: env.TEST_SERVER_HOST, port: Number(env.TEST_SERVER_PORT), auth: 'microsoft', auto_open_ui: false });
+    out.SETTINGS_JSON = JSON.stringify({
+        host: env.TEST_SERVER_HOST, port: Number(env.TEST_SERVER_PORT), auth: 'microsoft', auto_open_ui: false,
+        allow_server_task_giver: true,
+    });
     out.PROFILES = JSON.stringify([profile]);
     out.MINDSERVER_PORT = String(mindserverPort);
     out.MINDCRAFT_SINGLE_BOT_SERVICE = '1';

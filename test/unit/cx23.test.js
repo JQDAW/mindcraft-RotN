@@ -154,6 +154,11 @@ describe('check-env (ExecStartPre)', () => {
             ['{"host":"x","blocked_actions":[]}', /keys outside .*"blocked_actions"/],
             ['{"__proto__":{"allow_insecure_coding":true}}', /keys outside .*"__proto__"/],
             ['{"profiles":["./x.json"]}', /keys outside .*"profiles"/],
+            // skills-rotn's task givers (#146): settings.js only; the Server switch is test-only, never on the CX23.
+            ['{"allow_server_task_giver":true}', /keys outside .*"allow_server_task_giver"/],
+            ['{"allow_server_task_giver":false}', /keys outside .*"allow_server_task_giver"/],
+            ['{"task_givers":["Server"]}', /keys outside .*"task_givers"/],
+            ['{"host":"x","task_givers":["JQDAW"]}', /keys outside .*"task_givers"/],
             ['{"auto_open_ui":true}', /auto_open_ui may only be false/],
             ['{"auth":"offline"}', /auth must be "microsoft"/],
             ['{"port":"25565"}', /port must be an integer/],
