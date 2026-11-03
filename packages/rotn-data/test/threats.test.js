@@ -281,6 +281,8 @@ test('the last 14 overworld night defaults are cited; no overworld night threat 
 test('threat-reactions.json cites pack paths, not scratch paths', () => {
     const text = JSON.stringify(reactions);
     for (const re of [/packfiles\//, /SCRATCH/, /scratchpad/i, /fishs-undead-rising/]) assert.doesNotMatch(text, re);
-    assert.match(pack.threatOf('mod_lavacow:mummy').evidence[0], /^Fish's Undead Rising-1\.3\.2\.jar \(in the pack as mods\//);
+    for (const n of ['mod_lavacow:zombiemushroom', 'mod_lavacow:mummy', 'mod_lavacow:zombiefrozen', 'mod_lavacow:sludgelord', 'mod_lavacow:parasite', 'mod_lavacow:weta']) {
+        assert.match(pack.threatOf(n).evidence[0], /^Fish's Undead Rising-1\.3\.2\.jar \(in the pack as mods\//, n);
+    }
     assert.ok(Object.values(reactions.entities).flatMap((e) => e.evidence).some((e) => e.startsWith('scripts/fishsundeadrising.zs')));
 });
