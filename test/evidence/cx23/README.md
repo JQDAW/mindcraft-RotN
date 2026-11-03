@@ -2,13 +2,16 @@
 
 harness-ops ran this on the lead's GO 1, by the terminal route the lead gave once the human had opened a workspace on cx23. The server is called **cx23** here, and its address appears nowhere. The file name carries this PC's local date (2026-11-03); the probe itself started at 2026-11-02T22:05:37Z, as its first line shows.
 
-- **How:** one Orca terminal on the cx23 Orca server, in the workspace the human opened (`/tmp/mindcraft-RotN`, a clone of this fork at develop 997da58). Command:
+- **How:** one Orca terminal on the cx23 Orca server, in the workspace the human opened (`/tmp/mindcraft-RotN`, a clone of this fork at develop 997da58; that commit and the folder come from the lead's GO message, which relayed what the human set up, since the probe ran no git command). Command:
   `orca terminal create --environment cx23 --worktree "path:/tmp/mindcraft-RotN" --title cx23-probe`.
 - **What ran:** only the approved read-only commands, with `ls -la /root` last. No installs, no writes, no `apt update`, nothing in the clone. Not read: `authorized_keys`, shadow, environment variables, history, `ip addr`, and anything under `/root/.ssh`.
-- **The terminal** was opened at 22:05:21 and closed at 22:06:05 UTC.
-- **The human's other workspaces on cx23** were left alone and are only recorded: `/tmp/mindcraft` (the upstream clone) and its Orca worktree `/root/orca/workspaces/mindcraft/tunicate`. Their two terminals stay open.
+- **The terminal** was opened at 22:05:21 and closed at 22:06:05 UTC. These times were recorded on this PC when `orca terminal create` and `orca terminal close` ran; they are not in the capture. The capture's own first line shows the probe starting at 22:05:37Z.
+- **The human's other workspaces on cx23** were left alone and are only recorded: `/tmp/mindcraft` (the upstream clone) and its Orca worktree `/root/orca/workspaces/mindcraft/tunicate`. Their two terminals stayed open. This comes from `orca terminal list` after the close, not from the capture.
 
-**Files:** `probe-20261103.txt` is the full terminal output, from `test/tools/redact-evidence.mjs` with no hand edits; the CI leak check passes. The tool replaces every dotted quad, loopback and wildcard included, so the `ss` lines show `<ip>`. The bindings are described in words below.
+**Files:** `probe-20261103.txt` is the full terminal output, produced from the git-ignored raw capture by `test/tools/redact-evidence.mjs`, with no hand edits. The CI leak check passes.
+
+- **Addresses:** the tool keeps loopback (`127.x.x.x`) and the wildcard (`0.0.0.0`), which name no host (#128 review), and replaces every other dotted quad with `<ip>`. So the `ss` lines show directly which sockets are loopback-only. The one `<ip>` left is cx23's own address on `eth0` (the DHCP client).
+- **Not byte-exact:** the file is the text Orca's terminal read returned. In a few places a space between columns was lost in that transfer: line 186 reads `sysstat.service enabledenabled`. This is cosmetic, and the values are as `systemctl` printed them.
 
 ## Findings
 
@@ -18,7 +21,7 @@ harness-ops ran this on the lead's GO 1, by the terminal route the lead gave onc
 | Hardware | 2 vCPU (Intel Xeon Skylake, KVM), 3,814 MB RAM, **no swap**. Location Helsinki (hostname `ubuntu-4gb-hel1-2`) |
 | Disk | `/dev/sda1` 38 GB, 2.1 GB used (6%) |
 | Time | UTC; chrony running; clock synchronised |
-| Listening | **Only SSH (port 22, IPv4 and IPv6 wildcard) is public.** systemd-resolved and chrony are on loopback. The Orca server process ("MainThread") listens on ports 6768 and 37233, **both on loopback only**. The DHCP client (UDP 68) is on eth0 |
+| Listening | **Only SSH (port 22, IPv4 and IPv6 wildcard) is public.** systemd-resolved and chrony are on loopback. A process named "MainThread" listens on ports 6768 and 37233, **both on loopback only** (`127.0.0.1`). That it is the Orca server is an inference: `ss` shows only the thread name, and Orca's server is the only non-system process we know runs on cx23. The DHCP client (UDP 68) is on eth0 |
 | Firewall | **None active:** `ufw` is installed but "Status: inactive"; the nft ruleset is empty |
 | sshd (effective) | port 22; `permitrootlogin prohibit-password` (root by key only); `pubkeyauthentication yes`; **`passwordauthentication yes`**; `kbdinteractiveauthentication no` |
 | Users | root (uid 0) and nobody only; no `/home` |

@@ -85,6 +85,15 @@ function decodeEntitySpawn(r, disc, { readMetadata }) {
     return msg;
 }
 
+// FMLMessage.OpenGui.toBytes (javap, Forge 14.23.5.2860): i32 windowId,
+// ByteBufUtils.writeUTF8String(modId) (VarInt length), i32 modGuiId, i32 x, y, z.
+export function encodeOpenGui(m) {
+    return new Writer().i8(FML_DISC.OPEN_GUI)
+        .i32(m.windowId).string(m.modId).i32(m.modGuiId)
+        .i32(m.x).i32(m.y).i32(m.z)
+        .toBuffer();
+}
+
 export function encodeEntitySpawn(m, metadataBuf = Buffer.from([0xff])) {
     const w = new Writer().i8(FML_DISC.ENTITY_SPAWN)
         .i32(m.entityId).string(m.modId).i32(m.modEntityTypeId).uuid(m.uuid)

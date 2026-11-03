@@ -13,7 +13,7 @@ export { classifyKick, classifySocketError, chatToText, createRestartPolicy, EXI
 export { CaptureWriter, readCapture, redactBuffer } from './src/capture.js';
 export { throttleMovement, mergeMovement } from './src/movement-throttle.js';
 export { attachMovementGuard, movementProblem, GUARDED_PACKETS, MAX_COORD } from './src/movement-guard.js';
-export { forgeOptionsFromEnv } from './src/env.js';
+export { forgeOptionsFromEnv, placeBlockTimeout } from './src/env.js';
 export { assertMicrosoftAuthSafe, quietMsaCodeHandler, debugValueEnables, patternMayEnablePrefix, PRISMARINE_AUTH_DEBUG_NAMESPACE } from './src/auth-guard.js';
 export { instrumentProfileFetch, describeProfileFetchError, formatProfileFetchFailure, lastProfileFetchFailure, classifyBeforeJoinError, formatBeforeJoinError, PERMANENT_AUTH_STATUSES, PERMANENT_XSTS_XERRS, attachBotErrorLogger } from './src/auth-diagnostics.js';
 export { assertOutsideGitWorkTrees, prepareSecretFolder, findGitWorkTree, realLocation } from './src/secret-folder.js';

@@ -450,6 +450,13 @@ describe('`Server` is a test-only task giver: never in the production settings',
         assert.deepEqual(giverProblems({ task_givers: ['JQDAW'], only_chat_with: ['Server'] }), [], 'only giver keys count');
         assert.deepEqual(giverProblems(null), []);
     });
+    test('allow_server_task_giver (#146) is test-only: anything but false (or absent) in the settings is a problem', () => {
+        for (const v of [true, 'true', 1, null]) {
+            assert.match(giverProblems({ allow_server_task_giver: v })[0], /settings\.allow_server_task_giver is not false: it is test-only/, String(v));
+        }
+        assert.deepEqual(giverProblems({ allow_server_task_giver: false, task_givers: ['JQDAW'] }), []);
+        assert.deepEqual(giverProblems({ task_givers: ['JQDAW'] }), []);
+    });
     test('the repo\'s settings.js has no Server giver', async () => {
         const s = (await import(new URL('../../settings.js', import.meta.url).href)).default;
         assert.deepEqual(giverProblems(s), []);

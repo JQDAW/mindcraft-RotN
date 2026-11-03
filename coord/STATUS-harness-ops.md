@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (00:36 UTC, from `date -u`)
+Updated: 2026-11-03 (01:42 UTC, from `date -u`)
 
 ## Done
 
@@ -119,7 +119,7 @@ Updated: 2026-11-03 (00:36 UTC, from `date -u`)
     - **Where:** in the human's workspace `/tmp/mindcraft-RotN`. Only the approved read-only commands ran, with `ls -la /root` last. No installs or writes. Nothing under `/root/.ssh` was read.
     - **The human's other workspaces** were left alone: `/tmp/mindcraft` and `/root/orca/workspaces/mindcraft/tunicate`, plus their two terminals.
     - **Evidence:** `test/evidence/cx23/`. The findings table is in its README.
-    - **Ubuntu: 26.04.1 LTS.** The human chose to keep it (ADR 0007, #134). The bootstrap accepts it (#137, f028e9b), and the 26.04 CI job (#135, 05b1a5b) passes. GO 2 waits for the #137 re-review nits and the lead's GO.
+    - **Ubuntu: 26.04.1 LTS.** The human chose to keep it (ADR 0007, #134). The bootstrap accepts it (#137, f028e9b; its re-review nits in #144, 655bcaa), and the 26.04 CI job (#135, 05b1a5b) passes. All GO 2 prerequisites are merged; the lead is handing the bootstrap steps to the human.
     - **RAM and swap:** 2 vCPU, 3,814 MB RAM, **no swap**.
     - **Disk:** 38 GB, 6% used.
     - **What setup will change:**
@@ -1127,17 +1127,13 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the #137 re-review nits, before GO 2 (`agent/harness-ops/cx23-sshd-nits`):
-  1. the `--ssh-from` refusal says to run setup from a root SSH login, not through sudo (sudo drops `SSH_CONNECTION`);
-  2. `/run/sshd` is made before the drop-in is written, so a failure there cannot leave an unchecked drop-in;
-  3. setup refuses, before any change, an sshd config with a `Match` line (`sshd -T` without `-C` ignores Match blocks).
-  - **The #144 review, done here:**
-    - nit 3 (required): the not-root message no longer says `sudo bash bootstrap.sh`; it points to a root SSH login;
-    - nit 1: `Match=` is refused too, as is any `Include` other than Ubuntu's own one.
-    - Nit 2 (no signal trap during the write) is not done: a hangup can only leave a drop-in that turns password login off.
-- Later:
-  - the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected);
-  - the #135 nits (a comment that the load step proves linking, not rendering; an explicit working directory);
-  - the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from);
-  - a research note on Java 8 packages on Ubuntu 26.04.
-- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), #135 (the CI job on Ubuntu 26.04, 05b1a5b), #137 (the bootstrap for Ubuntu 26.04, f028e9b), #139 (the G3 evidence scan, f1fd589), and the lead's #134 (ADR 0007).
+- This PR: G3's test-only Server task giver, for skills-rotn's #146 (`agent/harness-ops/g3-server-giver`):
+  - the G3 driver writes `allow_server_task_giver: true` into its own `SETTINGS_JSON` for `main.js`, and nowhere else;
+  - the production `settings.js` must have it `false` or absent, which the driver checks and CI checks;
+  - a profile with any task-giver key is refused;
+  - the CX23's `check-env.mjs` keeps refusing `allow_server_task_giver` and `task_givers` in `SETTINGS_JSON` (explicit tests).
+  - `task_givers` (the players) is left to the lead's `settings.js`; per #146, `Server` needs no entry there.
+- #159: every file under `deploy/cx23/` is LF (the attribute, a unit check, and a README note for Windows copies).
+- Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
+- **The CX23:** GO 2 is done (the human ran setup; every step reported OK). Nothing of mine touches it. The post-bootstrap read-only check needs the lead's written GO after the human adds the `cx23-deploy` Orca target.
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), and the lead's #134 (ADR 0007).
