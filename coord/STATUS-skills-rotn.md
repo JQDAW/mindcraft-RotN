@@ -42,7 +42,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - B2b `rock-ore` (branch `agent/skills-rotn/rock-ore`, on develop `89f3ef6` with rotn-data #142; lead: required before the first G3 batch): #145 open. A bare `pyrotech:rock` covers the whole rock ore dictionary from rotn-data #142 (`way.ore`): the Underground Biomes piles near the G3 spawn, not dirt clumps; a pickaxe that breaks mid-run no longer throws; the #131 regex nit.
-- E1 `task-queue` (branch `agent/skills-rotn/task-queue`, on develop `89f3ef6`): PR open, see Open PRs. The persistent player task queue: `!taskAdd(text, priority)`, `!taskList`, `!taskCancel(id)`; `./bots/<name>/tasks.json`; only `task_givers` may add tasks; the giver is the real sender; the harness-ops chat formats.
+- E1 `task-queue` (branch `agent/skills-rotn/task-queue`, on develop `89f3ef6`): #146 open. The persistent player task queue: `!taskAdd(text, priority)`, `!taskList`, `!taskCancel(id)`; `./bots/<name>/tasks.json`; only `task_givers` may add tasks; the giver is the real sender; the harness-ops chat formats.
 - Waiting: C1 until the lead and the human settle Request 2 (no C1 code that depends on slot clicks or block placement until then). Next after E1: E2 (agenda) and E3 (priority stack), which need no slot clicks. Flag for G3 (#141 nit 5): with an axe, collecting log targets Dynamic Trees branches; the count is the real gain, but scattered drops may not all be picked up.
 
 ## G3 plan: small PRs, in order
@@ -141,4 +141,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 ## Open PRs
 
 - #145 B2b rock ore (branch `agent/skills-rotn/rock-ore`). Serves the lead's required follow-up before the first G3 batch (G3 (a), rocks at the G3 spawn).
-- E1 task queue (branch `agent/skills-rotn/task-queue`). Serves brief item 5 and its acceptance tests, G3 (c).
+- #146 E1 task queue (branch `agent/skills-rotn/task-queue`). Serves brief item 5 and its acceptance tests, G3 (c).
