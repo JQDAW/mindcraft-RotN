@@ -49,8 +49,9 @@ function classRule(catalog, e) {
  *   reaction: string, source: 'override'|'documented'|'vanilla'|'verified'|'inferred'|'default', rule?: string,
  *   variantNote?: string,
  *   summary: string|null, explodes: boolean, ranged: boolean, lookAt: boolean, evidence: string[]}|null}
- *   null for an unknown entity. lookAt false: its targeting is triggered by a player looking at it
- *   (the enderman's stare), so do not look at its head (#186 review: a field, not a regex on the summary)
+ *   null for an unknown entity. lookAt false: the mob is dangerous to look at (its targeting starts
+ *   when a player looks at it, like the enderman's stare, or its gaze attack needs the player to look
+ *   back, like the gorgon's), so do not look at its head (#186 review: a field, not a regex on the summary)
  */
 export function threatOf(catalog, input) {
     const e = catalog.entity(input);
