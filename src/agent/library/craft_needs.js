@@ -125,3 +125,47 @@ export function describeNeeds(name, needs) {
     const where = needs.requiresTable ? ' (at a crafting table)' : '';
     return `To craft ${name}${where}: ${parts.join('; ')}.`;
 }
+
+// ---- Crafting from canFill (skills-rotn C1) ----
+// bot.registry holds rotn-data's recipes as explicit variants, capped per recipe, so a mix of rock
+// kinds the cap left out has no variant: bot.recipesFor finds nothing although canFill says the
+// items fit. These build the variant from the bot's own stacks instead (P1, #189: modded item ids in
+// the window clicks and the FastWorkbench table were accepted).
+
+/** canFill for a recipe id against the bot's inventory now: {ok, missing, assignment, recipeId} or null. */
+export function fillNow(bot, recipeId) {
+    try { return canFill(recipeId, stacksOf(bot)); } catch { return null; }
+}
+
+/** The registry item for a full or bot name ("minecraft:stick" is "stick" in bot.registry). */
+function registryItem(registry, name) {
+    return registry.itemsByName[botName(name)] ?? registry.itemsByName[name] ?? null;
+}
+
+/**
+ * A prismarine-recipe-shaped variant of rotn-data's recipe that uses exactly the stacks canFill
+ * assigned (one per non-empty cell, in the recipe's cell order). Throws when a cell has no stack or
+ * a name is not in bot.registry.
+ * @returns {{inShape?: Array<Array<{id: number, metadata: number}|null>>, ingredients?: Array<{id, metadata}>,
+ *            result: {id: number, metadata: number, meta: number, count: number}}}
+ */
+export function filledRecipe(registry, recipeId, assignment) {
+    const r = loadRotnData(PACK_VERSION).recipeById(recipeId);
+    if (!r) throw new Error(`recipe ${recipeId} is not in rotn-data's dump`);
+    let k = 0;
+    const toItem = (cell) => {
+        if (!cell) return null;
+        const a = assignment?.[k++];
+        if (!a) throw new Error(`no stack for slot ${k} of ${recipeId}`);
+        const def = registryItem(registry, a.name);
+        if (!def) throw new Error(`${a.name} is not in bot.registry`);
+        return { id: def.id, metadata: a.meta ?? 0 };
+    };
+    const res = registryItem(registry, r.result?.name ?? '');
+    if (!res) throw new Error(`${r.result?.name} is not in bot.registry`);
+    const meta = r.result.meta ?? 0;
+    // `meta` as well as `metadata`, as rotn-data's registry recipes have it (#102 review).
+    const result = { id: res.id, metadata: meta, meta, count: r.result.count ?? 1 };
+    if (Array.isArray(r.inShape)) return { inShape: r.inShape.map(row => row.map(toItem)), result };
+    return { ingredients: (r.ingredients ?? []).map(toItem).filter(Boolean), result };
+}
