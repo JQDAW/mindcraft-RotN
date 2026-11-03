@@ -8,8 +8,9 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { tmpFile } from './helpers.js';
-import { I, TABLE, within, startCraftWorld, stopCraftWorld } from './craft-world.js';
-import { attachProbe, chatLine, itemByName, pickVariant } from '../tools/probe-commands.mjs';
+import { I, B, TABLE, within, startCraftWorld, stopCraftWorld } from './craft-world.js';
+import { simulateHunger, ROTN_HUNGER } from './fake-containers.js';
+import { attachProbe, chatLine, itemByName, pickVariant, checkProbeReply, registryName } from '../tools/probe-commands.mjs';
 
 let world;
 after(() => stopCraftWorld(world));
@@ -22,6 +23,43 @@ test('chatLine stays under 200 characters and itemByName knows minecraft: prefix
     assert.equal(itemByName(registry, 'minecraft:stick').id, 280);
     assert.equal(itemByName(registry, 'pyrotech:rock').id, 8917);
     assert.equal(itemByName(registry, 'minecraft:nope'), null);
+});
+
+test('registryName gives full names; checkProbeReply holds a reply to the contract', () => {
+    assert.equal(registryName({ name: 'stick' }), 'minecraft:stick');
+    assert.equal(registryName({ name: 'pyrotech:rock' }), 'pyrotech:rock');
+    assert.equal(registryName({ name: 'silver_shulker_box', registryName: 'minecraft:silver_shulker_box' }), 'minecraft:silver_shulker_box');
+    const ok = { type: 'probe', t: '2026-11-03T00:00:00Z', v: 1, token: 'abcdef', cmd: 'place', ok: true, item: 'minecraft:cobblestone', ref: [1, 64, 1], face: 'up', target: [1, 65, 1],
+        before: 'minecraft:air', after: 'minecraft:cobblestone', expected: 'minecraft:cobblestone', otherUpdates: 0, totalMs: 80, updateMs: 40, timeoutMs: 10000 };
+    assert.deepEqual(checkProbeReply(ok), []);
+    // What #165's first fake driver read: fields the real driver never sends, and short names.
+    assert.ok(checkProbeReply({ ...ok, window: 'x' }).includes('unknown field window'));
+    assert.ok(checkProbeReply({ ...ok, after: 'cobblestone' }).some(p => p.startsWith('after:')));
+    const noUpdate = { ...ok };
+    delete noUpdate.updateMs;
+    assert.ok(checkProbeReply(noUpdate).includes('ok reply without updateMs'));
+    assert.ok(checkProbeReply({ ...ok, v: 0 }).some(p => p.startsWith('v is')));
+    assert.deepEqual(checkProbeReply({ v: 1, token: 'abcdef', cmd: 'craft', ok: false, error: 'time limit of 60000 ms reached', timedOut: true, limitMs: 60000 }), []);
+    assert.ok(checkProbeReply({ v: 1, token: 'abcdef', cmd: 'eat', ok: false }).includes('failure without error'));
+    assert.ok(checkProbeReply({ v: 1, token: 'abcdef', cmd: 'eat', ok: false, error: 'x', timedOut: false }).some(p => p.startsWith('timedOut:')), 'timedOut is only ever true');
+});
+
+test('RotN 3.3.4 hunger: exhaustion, saturation and the P1 setup (normal difficulty, Hunger Overhaul 85 %)', () => {
+    const fresh = { food: 20, saturation: 5 };
+    // The #167 review: 10 s at amplifier 10 is 11 exhaustion from the effect plus 2 constant, two
+    // steps of 4.706, which only take saturation 5 -> 3. Food stays 20, so the eat step cannot run.
+    const weak = simulateHunger(fresh, 10, 10);
+    assert.deepEqual([weak.food, weak.saturation, weak.steps], [20, 3, 2]);
+    // P1's setup: 20 s at amplifier 24 = 54 exhaustion, 11 steps: saturation 5 -> 0, then food 20 -> 14.
+    const p1 = simulateHunger(fresh, 20, 24);
+    assert.deepEqual([p1.food, p1.saturation, p1.steps], [14, 0, 11]);
+    // A bot that already idled to saturation 0 ends far above 0 (Hunger Overhaul: 200 damage at food 0).
+    assert.equal(simulateHunger({ food: 18, saturation: 0 }, 20, 24).food, 7);
+    // Saturation never goes below 0, food never below 0, and exhaustion never above the cap.
+    const max = simulateHunger(fresh, 60, 255);
+    assert.deepEqual([max.food, max.saturation], [0, 0]);
+    assert.ok(max.exhaustion <= ROTN_HUNGER.cap);
+    assert.equal(simulateHunger(fresh, 0, 24).food, 20);
 });
 
 test('pickVariant never counts one stack for two cells (any meta plus a fixed meta of the same id)', () => {
@@ -76,7 +114,7 @@ test('probe-craft, probe-place and probe-eat through initBot, answered as JSON a
     // RotN's FastWorkbench table at X,Y,Z (OpenGui -> the synthetic window).
     const pick = await send(`probe-craft TOKEN crafttweaker:stone_pickaxe ${TABLE.x},${TABLE.y},${TABLE.z}`);
     assert.equal(pick.ok, true, JSON.stringify(pick));
-    assert.deepEqual([pick.result, pick.tableBlock], ['stone_pickaxe', 'crafting_table']);
+    assert.deepEqual([pick.result, pick.tableBlock], ['minecraft:stone_pickaxe', 'minecraft:crafting_table'], 'full registry names (contract v1)');
     assert.deepEqual([containers.count(I.crudeAxe), containers.count(I.craftingTools), containers.count(I.table), containers.count(I.stonePickaxe), containers.count(I.rock)], [0, 0, 1, 1, 0], 'server-side inventory');
     assert.deepEqual(st.rejected, []);
     assert.equal(bot.forge.bridge.stats.modWindows, 1);
@@ -91,11 +129,19 @@ test('probe-craft, probe-place and probe-eat through initBot, answered as JSON a
     // Place cobblestone on the floor; latency from the call to the server's block update.
     const place = await send('probe-place TOKEN minecraft:cobblestone 6,64,6 up');
     assert.equal(place.ok, true, JSON.stringify(place));
-    assert.deepEqual([place.before, place.after, place.target], ['air', 'cobblestone', [6, 65, 6]]);
+    assert.deepEqual([place.before, place.after, place.target], ['minecraft:air', 'minecraft:cobblestone', [6, 65, 6]]);
     assert.ok(Number.isInteger(place.updateMs) && place.updateMs >= 0 && place.updateMs <= place.totalMs, JSON.stringify(place));
     assert.equal(place.timeoutMs, 9000);
-    assert.deepEqual([place.expected, place.otherUpdates], ["cobblestone", 0], "only the update to the placed block counts");
-    assert.deepEqual(st.placed.map(p => p.target), [{ x: 6, y: 65, z: 6 }]);
+    assert.deepEqual([place.expected, place.otherUpdates], ['minecraft:cobblestone', 0], 'only the update to the placed block counts');
+
+    // An unrelated update to the same block first (stone, before the cobblestone): mineflayer's
+    // placeBlock returns on it, but the probe waits for the placed block's own update.
+    containers.state.noiseNext = B.stone;
+    const noisy = await send('probe-place TOKEN minecraft:cobblestone 5,64,6 up');
+    assert.equal(noisy.ok, true, JSON.stringify(noisy));
+    assert.deepEqual([noisy.after, noisy.otherUpdates], ['minecraft:cobblestone', 1], 'the stone update is counted apart, the cobblestone one is the placement');
+    assert.ok(Number.isInteger(noisy.updateMs));
+    assert.deepEqual(st.placed.map(p => p.target), [{ x: 6, y: 65, z: 6 }, { x: 5, y: 65, z: 6 }]);
 
     // Only the console whisper is accepted: the same command in public chat, or whispered by a player, does nothing.
     const heard = () => events.filter(e => e.type === 'probe_heard').length;
@@ -118,12 +164,30 @@ test('probe-craft, probe-place and probe-eat through initBot, answered as JSON a
     assert.equal(late.ok, false);
     assert.ok(!events.some(e => e.type === 'probe_stuck'), 'it settled within the grace time');
 
-    // Eat bread (food under 20 first, as the scenario's hunger effect does).
-    containers.setFood(15);
-    for (let waited = 0; bot.food !== 15 && waited < 5000; waited += 50) await sleep(50);
+    // An op's /say lookalike ("[JQDAW] Server whispers to you: ...", chat.type.announcement) is not a
+    // console whisper: mineflayer's whisper pattern takes it for one from Server, the probe does not.
+    const sayBefore = heard();
+    serverClient.write('chat', { message: JSON.stringify({ translate: 'chat.type.announcement', with: ['JQDAW', { text: 'Server whispers to you: probe-eat abcdef81 minecraft:bread' }] }), position: 0 });
+    await sleep(1500);
+    assert.equal(heard(), sayBefore, 'the /say lookalike starts nothing');
+
+    // At full food a 1.12 player cannot eat bread: the probe fails at once and says why (it never
+    // starts eating, so it does not hang until the time limit).
+    assert.equal(bot.food, 20);
+    const t0 = Date.now();
+    const full = await send('probe-eat TOKEN minecraft:bread');
+    assert.equal(full.ok, false);
+    assert.match(full.error, /^food is 20, not below 20: .*the hunger setup did not lower food/);
+    assert.ok(Date.now() - t0 < 3000, `failed fast (${Date.now() - t0} ms)`);
+    assert.deepEqual(checkProbeReply(full), []);
+    assert.deepEqual(st.uses, [], 'no use_item was sent');
+
+    // Eat bread after P1's hunger setup (RotN's exhaustion model: 20 s at amplifier 24 -> food 14).
+    assert.deepEqual(containers.applyHunger(20, 24).food, 14);
+    for (let waited = 0; bot.food !== 14 && waited < 5000; waited += 50) await sleep(50);
     const eat = await send('probe-eat TOKEN minecraft:bread');
     assert.equal(eat.ok, true, JSON.stringify(eat));
-    assert.deepEqual([eat.foodBefore, eat.foodAfter, eat.countBefore, eat.countAfter], [15, 20, 2, 1]);
+    assert.deepEqual([eat.foodBefore, eat.foodAfter, eat.countBefore, eat.countAfter], [14, 17, 2, 1], 'RotN bread: +3 food');
     assert.deepEqual(st.uses.map(u => u.hand), [0]);
 
     // A repeated token runs once.
@@ -144,10 +208,16 @@ test('probe-craft, probe-place and probe-eat through initBot, answered as JSON a
     await sleep(1500);
     assert.equal(events.filter(e => e.type === 'probe' || e.type === 'probe_heard').length, quiet);
 
+    // Every reply (and the late one) meets the reply contract.
+    for (const e of events.filter(x => x.type === 'probe' || x.type === 'probe_late')) {
+        const { type, ...reply } = e;
+        assert.deepEqual(checkProbeReply(type === 'probe' ? { type, ...reply } : reply), [], JSON.stringify(e));
+    }
+
     // One chat answer per command, in the documented form.
     for (let waited = 0; server.state.chats.filter(c => c.startsWith('probe ')).length < n && waited < 5000; waited += 50) await sleep(50);
     const answers = server.state.chats.filter(c => c.startsWith('probe '));
     assert.equal(answers.length, n);
     assert.ok(answers.every(a => a.length <= 200 && /^probe abcdef\d\d (craft|place|eat) (ok|fail)/.test(a)), answers.join('\n'));
-    assert.ok(answers.some(a => a.startsWith('probe abcdef04 craft ok recipe=crafttweaker:stone_pickaxe result=stone_pickaxe before=0 after=1')), answers.join('\n'));
+    assert.ok(answers.some(a => a.startsWith('probe abcdef04 craft ok recipe=crafttweaker:stone_pickaxe result=minecraft:stone_pickaxe before=0 after=1')), answers.join('\n'));
 });

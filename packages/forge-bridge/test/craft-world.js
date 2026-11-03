@@ -81,7 +81,7 @@ export function joinCraftWorld(client) {
             { shaped: [[I.rock, I.rock, I.rock], [null, I.stick, null], [null, I.stick, null]], result: { id: I.stonePickaxe } },
         ],
         blocks: { [I.cobble]: B.cobble },
-        foods: { [I.bread]: 5 },
+        foods: { [I.bread]: { hunger: 3, saturation: 0.2 } }, // RotN scripts/food.zs
         maxStack: { [I.crudeAxe]: 1, [I.craftingTools]: 1, [I.stonePickaxe]: 1 },
         inventory: {
             36: { id: I.rock, count: 5 }, 37: { id: I.stick, count: 6 }, 38: { id: I.planks, count: 1 },

@@ -14,12 +14,15 @@
 
 /** Poll fn() every pollMs until it returns a truthy value or timeoutMs passes. Returns the value or null. */
 export async function waitFor(clock, fn, timeoutMs, pollMs) {
+    // A scenario without a pollMs default once made this sleep NaN and never time out (P1, offline):
+    // a missing or bad poll interval is 1 s.
+    const step = Number.isFinite(pollMs) && pollMs > 0 ? pollMs : 1000;
     const end = clock.now() + timeoutMs;
     for (;;) {
         const v = await fn();
         if (v) return v;
         if (clock.now() >= end) return null;
-        await clock.sleep(Math.min(pollMs, Math.max(1, end - clock.now())));
+        await clock.sleep(Math.min(step, Math.max(1, end - clock.now())));
     }
 }
 

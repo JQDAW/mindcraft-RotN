@@ -30,20 +30,70 @@ const same = (a, b) => (!a && !b) || (a && b && a.id === b.id && a.count === b.c
 export { stack };
 
 /**
+ * RotN 3.3.4's hunger, as the server computes it on normal difficulty (server.properties
+ * `difficulty=2` in the pinned pack). Read with javap on the pinned zip's jars (scratch only, never run):
+ * - vanilla `minecraft_server.1.12.2.jar` Potion (`uz`): Hunger adds 0.005 * (amplifier + 1) exhaustion
+ *   on every tick it lasts (its isReady is always true);
+ * - Hunger Overhaul 1.3.3 (`HungerOverhaul.cfg`: constantHungerLoss=true, hungerLossRatePercentage=85,
+ *   difficultyScalingHunger=true): +0.01 exhaustion every tick (`onLivingUpdate`), and one hunger step
+ *   costs 4 / 0.85 exhaustion (`getMaxExhaustion`; x1.333 on easy and x1.667 on peaceful, not used here);
+ * - AppleCore 3.4.0: exhaustion is capped at 40 (`GetExhaustionCap`); each tick with exhaustion >= the
+ *   step cost takes one step (`onAppleCoreFoodStatsUpdate`): saturation -1 (never below 0), or, when
+ *   saturation is already 0, food -1 (never below 0). At food 0 Hunger Overhaul deals 200 damage
+ *   (`damageOnStarve`), so a setup must never get there.
+ * A new player starts at food 20, saturation 5 (vanilla FoodStats).
+ */
+export const ROTN_HUNGER = Object.freeze({
+    effectPerTick: (amplifier) => 0.005 * (amplifier + 1),
+    constantPerTick: 0.01,
+    stepCost: Math.fround(4 / Math.fround(85 / 100)), // Java: 4.0f / (85f / 100f)
+    cap: 40,
+});
+
+/**
+ * The food state after a `/effect <player> minecraft:hunger SECONDS AMPLIFIER`, tick by tick, with
+ * Hunger Overhaul's constant loss during those ticks. Time before and after the effect is not
+ * counted (the real server keeps losing 0.01 a tick, so its food can only be lower).
+ * @param {{food:number, saturation:number, exhaustion?:number}} s
+ * @param {number} seconds @param {number} amplifier
+ * @returns {{food:number, saturation:number, exhaustion:number, steps:number}}
+ */
+export function simulateHunger(s, seconds, amplifier) {
+    const f = Math.fround;
+    let { food, saturation } = s;
+    let exhaustion = s.exhaustion ?? 0;
+    let steps = 0;
+    const add = f(ROTN_HUNGER.effectPerTick(amplifier) + ROTN_HUNGER.constantPerTick);
+    const cost = f(ROTN_HUNGER.stepCost);
+    for (let tick = 0; tick < seconds * 20; tick++) {
+        exhaustion = Math.min(f(exhaustion + add), ROTN_HUNGER.cap);
+        if (exhaustion >= cost) { // AppleCore onAppleCoreFoodStatsUpdate: a step unless exhaustion < cost (fcmpl; iflt), so >=
+            exhaustion = f(exhaustion - cost);
+            steps++;
+            if (saturation > 0) saturation = Math.max(f(saturation - 1), 0);
+            else food = Math.max(food - 1, 0);
+        }
+    }
+    return { food, saturation, exhaustion, steps };
+}
+
+/**
  * @param {import('minecraft-protocol').ServerClient} client
  * @param {{ recipes: Array<{shaped?: (number|null)[][], shapeless?: number[], result: {id:number,count?:number,meta?:number}}>,
- *           blocks: Record<number, number>, foods: Record<number, number>, table: {x:number,y:number,z:number},
- *           inventory: Record<number, {id:number,count:number,meta?:number}>, placeDelayMs?: number, entityId?: number }} opts
- *   blocks: item id -> block id that placing it sets; foods: item id -> food points.
+ *           blocks: Record<number, number>, foods: Record<number, number|{hunger:number,saturation:number}>,
+ *           table: {x:number,y:number,z:number}, inventory: Record<number, {id:number,count:number,meta?:number}>,
+ *           placeDelayMs?: number, entityId?: number, food?: number, saturation?: number }} opts
+ *   blocks: item id -> block id that placing it sets; foods: item id -> food points, or food points and
+ *   the saturation modifier (RotN's bread, scripts/food.zs: { hunger: 3, saturation: 0.2 }).
  */
 export function attachFakeContainers(client, opts) {
-    const { recipes, blocks, foods, table, placeDelayMs = 0, entityId = 1, food = 20, maxStack = {} } = opts;
+    const { recipes, blocks, foods, table, placeDelayMs = 0, entityId = 1, food = 20, saturation = 5, maxStack = {} } = opts;
     // Item max stack size (tools are 1 on a real server), DEFAULT_MAX_STACK otherwise.
     const max = (id) => maxStack[id] ?? DEFAULT_MAX_STACK;
     const inv = Array(46).fill(null); // ContainerPlayer: 0 result, 1-4 grid, 5-8 armour, 9-35 main, 36-44 hotbar, 45 offhand
     for (const [slot, s] of Object.entries(opts.inventory ?? {})) inv[Number(slot)] = stack(s.id, s.count, s.meta ?? 0);
     const state = {
-        inv, cursor: null, held: 0, food,
+        inv, cursor: null, held: 0, food, saturation, exhaustion: 0, table: table ? { ...table } : null, noiseNext: null,
         tableWindow: null, // { id, grid: Array(10) } while FastWorkbench is open
         pending: null, // { windowId, action } after a rejected click
         clicks: [], rejected: [], ignored: [], unsupported: [], placed: [], uses: [], closed: [],
@@ -186,7 +236,8 @@ export function attachFakeContainers(client, opts) {
 
     client.on('block_place', (p) => {
         const at = p.location;
-        if (at.x === table.x && at.y === table.y && at.z === table.z) { // BlockFastBench.onBlockActivated
+        const table = state.table;
+        if (table && at.x === table.x && at.y === table.y && at.z === table.z) { // BlockFastBench.onBlockActivated
             nextWindowId = (nextWindowId % 100) + 1;
             state.tableWindow = { id: nextWindowId, grid: Array(10).fill(null) };
             client.write('custom_payload', { channel: 'FML', data: encodeOpenGui({ windowId: nextWindowId, modId: 'fastbench', modGuiId: 0, ...table }) });
@@ -201,6 +252,12 @@ export function attachFakeContainers(client, opts) {
         const face = [[0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1], [-1, 0, 0], [1, 0, 0]][p.direction];
         const target = { x: at.x + face[0], y: at.y + face[1], z: at.z + face[2] };
         inv[heldSlot] = item.count > 1 ? { ...item, count: item.count - 1 } : null;
+        // An unrelated update to the same block first (a test hook, used once): the client must not
+        // take it for the placement.
+        if (state.noiseNext !== null && state.noiseNext !== undefined) {
+            client.write('block_change', { location: target, type: state.noiseNext << 4 });
+            state.noiseNext = null;
+        }
         const sent = Date.now();
         setTimeout(() => {
             client.write('block_change', { location: target, type: blockId << 4 });
@@ -213,16 +270,24 @@ export function attachFakeContainers(client, opts) {
         state.uses.push(p);
         const heldSlot = 36 + state.held;
         const item = inv[heldSlot];
-        const points = item && foods[item.id];
-        if (p.hand !== 0 || points === undefined || state.food >= 20) return;
+        const value = item && foods[item.id];
+        // AppleCore needFood: food < 20 (bread is not always edible). At 20 the server starts nothing.
+        if (p.hand !== 0 || value === undefined || state.food >= 20) return;
+        const { hunger, saturation: modifier } = typeof value === 'number' ? { hunger: value, saturation: 0 } : value;
         setTimeout(() => { // 32 ticks in vanilla; shortened here
             inv[heldSlot] = item.count > 1 ? { ...item, count: item.count - 1 } : null;
-            state.food = Math.min(20, state.food + points);
+            // vanilla FoodStats.addStats: saturation += hunger * modifier * 2, at most the new food level.
+            state.food = Math.min(20, state.food + hunger);
+            state.saturation = Math.min(Math.fround(state.saturation + hunger * modifier * 2), state.food);
             client.write('entity_status', { entityId, entityStatus: 9 });
             client.write('set_slot', { windowId: 0, slot: heldSlot, item: toWire(inv[heldSlot]) });
-            client.write('update_health', { health: 20, food: state.food, foodSaturation: 5 });
+            health();
         }, 100);
     });
+
+    function health() {
+        client.write('update_health', { health: 20, food: state.food, foodSaturation: state.saturation });
+    }
 
     return {
         state,
@@ -230,10 +295,54 @@ export function attachFakeContainers(client, opts) {
         /** Send the player's inventory window (as at login). */
         sendInventory() {
             client.write('window_items', { windowId: 0, items: windowItems(0) });
-            client.write('update_health', { health: 20, food: state.food, foodSaturation: 5 });
+            health();
         },
-        /** Change the food level (update_health), as hunger would. */
-        setFood(n) { state.food = n; client.write('update_health', { health: 20, food: n, foodSaturation: 0 }); },
-        count(id) { return inv.slice(9, 45).reduce((n, s) => n + (s?.id === id ? s.count : 0), 0); },
+        /** Set the food level directly, with saturation 0 (update_health). Not what any command does. */
+        setFood(n) { state.food = n; state.saturation = 0; health(); },
+        /**
+         * `/effect <player> minecraft:hunger SECONDS AMPLIFIER` on RotN 3.3.4 (simulateHunger), applied at
+         * once; sends one update_health if food or saturation changed. Returns the new food state.
+         */
+        applyHunger(seconds, amplifier) {
+            const r = simulateHunger(state, seconds, amplifier);
+            const changed = r.food !== state.food || r.saturation !== state.saturation;
+            [state.food, state.saturation, state.exhaustion] = [r.food, r.saturation, r.exhaustion];
+            if (changed) health();
+            return { food: state.food, saturation: state.saturation, exhaustion: state.exhaustion };
+        },
+        // The main inventory and hotbar (9-44) only; the real /clear also counts armour, the offhand and the cursor.
+        count(id, meta = -1) { return inv.slice(9, 45).reduce((n, s) => n + (s?.id === id && (meta === -1 || s.meta === meta) ? s.count : 0), 0); },
+        /** /give: merge into matching stacks, then the first empty hotbar slot, then the main inventory (vanilla order). */
+        give(id, count, meta = 0) {
+            let left = count;
+            const slots = [...Array(9).keys()].map(i => 36 + i).concat([...Array(27).keys()].map(i => 9 + i));
+            for (const s of slots) {
+                const st = inv[s];
+                if (left && st && st.id === id && st.meta === meta && st.count < max(id)) {
+                    const n = Math.min(left, max(id) - st.count);
+                    inv[s] = { ...st, count: st.count + n };
+                    left -= n;
+                    client.write('set_slot', { windowId: 0, slot: s, item: toWire(inv[s]) });
+                }
+            }
+            for (const s of slots) {
+                if (left && !inv[s]) {
+                    const n = Math.min(left, max(id));
+                    inv[s] = stack(id, n, meta);
+                    left -= n;
+                    client.write('set_slot', { windowId: 0, slot: s, item: toWire(inv[s]) });
+                }
+            }
+            return count - left;
+        },
+        /** /clear without an item: empty the inventory; returns how many items were removed. */
+        clearAll() {
+            let n = 0;
+            for (let s = 0; s < inv.length; s++) if (inv[s]) { n += inv[s].count; inv[s] = null; }
+            client.write('window_items', { windowId: 0, items: windowItems(0) });
+            return n;
+        },
+        /** Move RotN's crafting table (a setblock of minecraft:crafting_table). */
+        setTable(pos) { state.table = pos ? { ...pos } : null; },
     };
 }
