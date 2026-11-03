@@ -31,6 +31,11 @@ test('threatFor reads rotn-data: zombie fight, creeper keep-distance, skeleton t
     assert.equal(r('somemod:unknown_beast').reaction, 'fight', 'an unknown hostile mob falls back to fight');
     assert.equal(doNotLook(mob('enderman', 3)), true);
     assert.equal(doNotLook(mob('zombie', 3)), false);
+    // rotn-data #187's lookAt, beyond the ignore-unless-provoked mobs the old summary regex covered:
+    assert.deepEqual([r('specialmobs:endercreeper').reaction, r('specialmobs:endercreeper').doNotLook], ['keep-distance', true], 'the ender creeper');
+    assert.deepEqual([r('iceandfire:if_cockatrice').reaction, r('iceandfire:if_cockatrice').doNotLook], ['avoid', true], 'the cockatrice');
+    assert.deepEqual([r('iceandfire:gorgon').reaction, r('iceandfire:gorgon').doNotLook], ['avoid', true], 'the gorgon (rotn-data #188)');
+    assert.equal(r('creeper').doNotLook, false);
 });
 
 test('the plan, first match wins: dangerous > explodes > outnumbered > ranged > melee > provoked', () => {
