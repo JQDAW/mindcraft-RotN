@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-02T23:15Z (from `date -u`)
+Updated: 2026-11-03T00:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -18,6 +18,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
 - **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
 - **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
+- **#138 merged** (`27403a2`): the initBot recipe tests restore the shared recipe table after each test.
 - **#136 merged** (`fedab3d`): atomic recipe install with restore, fail-soft lazy build, injected catalog used.
 - **#130 merged** (`8557060`): `initBot` installs RotN recipes once per login (lead exception, Request 7), with the #127 nits.
 - **#127 merged** (`f457642`): `mustCollectManually` on RotN names (no collision box: dug in place).
@@ -189,7 +190,43 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- **#136 review nit (`agent/rotn-data/initbot-test-aftereach`):** `mcdata.initbot-recipes.test.js` snapshots minecraft-data's shared 1.12.2 recipe table and restores it after each test, so test order does not matter.
+- **Free** (lead, after #138). Low-priority offline task done: the research note below (STATUS only, no code).
+
+## G3 first-night path: what rotn-data has NOT cited yet (research note, 2026-11-02)
+
+Offline, from:
+- the committed 3.3.4 data;
+- harness-ops' S1-A survey evidence (`test/evidence/s1/s1a-20261102/survey/result.json`; G2 world 1880465901402976865, radius 48 around the fresh spawn);
+- the pinned pack's `config/Special_Mobs.cfg`. That is the file at that path **inside the server pack zip** (`RotN 3.3.4 Server Pack.zip`, SHA-256 `90642fd5...f5205`, URL in `deploy/test-server.sh`); it is not in the repo. Reproduce with `unzip -p <zip> config/Special_Mobs.cfg`; the line numbers below are in that file. "Cited" means an entry with evidence in `world-sources.json` or `threat-reactions.json` (documented, verified or vanilla); "inferred" and "default" are not.
+
+**Blocks (G3: rocks to stone tools)**
+1. **Underground Biomes rock piles: the main rock source at the G3 spawn, not in the cited rule.** S1-A (`result.json` `findings.rocks`, lines 84-95): 203 rock-pile blocks within 48 blocks, 200 of them `pyrotech_compat:rock_metamorphic`, `_igneous` and `_sedimentary`. The other 3 are `pyrotech:rock` meta 4 (the survey line `pyrotech:rock 4 3` is meta 4, count 3), which is a Dirt Clump, not a rock. `world-sources.json` `rock-pile` names only `pyrotech:rock`, so `howToGet('pyrotech_compat:rock_igneous:0')` shows the pile only as a `block-drop` (dump-sample). The dump: these blocks have no collision box (so `mustCollectManually` digs them in place), hardness 0.1, no tool, and their plain drop is the same item (meta 0 in the fixed-seed sample; the item meta per block meta is not verified). Their items are in the `rock` ore dictionary, so they make the crude axe and stone tools. Proposal: add them to the rock-pile rule as `inferred` (the research cites "rock piles" in general). Check the meta mapping in a G3 run.
+2. **Underground Biomes stone to rocks: inferred.** The spawn stone is Underground Biomes stone (every G2 census). The pairs (e.g. `undergroundbiomes:igneous_stone:3` to `pyrotech_compat:rock_igneous:3`) come from dumped names; the sources name only `minecraft:stone`.
+3. **Felling a tree: which log drops is inferred.** S1-A `findings.trees.types` (`result.json` lines 98-168) has 71 name+meta entries: 70 Dynamic Trees entries across 9 block names (8,186 blocks: branches, `trunkshell`, `rootydirt`, `rootydirtspecies`) plus `minecraft:log` meta 0 (335 blocks), 8,521 tree blocks in all. My count by these rules differs slightly from the #140 review's "69 entries in 8 names". The "31 Dynamic Trees types" I first wrote is from a G2 census (`coord/STATUS-harness-ops.md`), not from S1-A. The `fell-tree` pairs (branch to log) are by wood name, and the research marks the dropped log as UNVERIFIED.
+4. **Sticks from Dynamic Trees leaves: unverified.** `sticks-from-leaves` lists `dynamictrees:leaves0/1`, but the research cites only "break leaves". The dump's plain drop of `dynamictrees:leaves1` is empty.
+5. **Debarking and the first plank: only oak is documented.** The other woods' pairs are inferred, and planks per click are unverified.
+6. **`pyrotech:rock_grass`:** in the S1-A census (unclassified). Its plain drop is itself; it is not in the `rock` ore dictionary. What it is, and whether it is a rock source, is not known.
+
+**Mobs (G3: survive the first night)**
+1. **Special Mobs variants: about 25% of each vanilla family in the Overworld, and most get only a default reaction.** `config/Special_Mobs.cfg` (in the pack zip, above): `_special_chance_exceptions` `dimension/overworld=0.25`. The lines: cave spiders 150, creepers 248, endermen 435, silverfish 688, skeletons 809, slimes 961, spiders 1085, witches 1246, zombies 1589. The global chance is 0.6, or 0 for witches and silverfish, but the more specific dimension setting wins (the file's own comment). The variants never appear in spawn lists (`NIGHT_THREATS_NOT_REFLECTED`).
+   - Covered only by inferred class rules: the creeper variants (keep distance) and the skeleton variants (take cover).
+   - Default `fight`, not cited: zombie (8), spider (11), cave spider (6), slime (8) and silverfish (6) variants.
+   - **Inconsistent:** the 7 enderman variants get `fight`, though `minecraft:enderman` is `ignore-unless-provoked`; the 6 witch variants get `fight`, though `minecraft:witch` is `take-cover`. Proposal: class rules for `Enderman` and `Witch`, like the creeper and skeleton rules, then per-variant bytecode checks for the dangerous ones (e.g. `lightningenderman`, `dominationwitch`).
+2. **14 spawn-list mobs still default to `fight`**, each under 1.5% of overworld monster weight. The percentages are rotn-data's `nightThreats()` over the dump's `packages/rotn-data/3.3.4/spawns.json.br` (each mob's `monster` spawn weight summed over the overworld biomes of `src/biomes.js`, as a share of all listed hostile weight). Reproduce with `node -e "import('./packages/rotn-data/src/catalog.js').then(({loadRotnData}) => console.log(loadRotnData('3.3.4').nightThreats({ limit: 100 })))"`: `mod_lavacow:zombiemushroom` 1.3%, `mummy` 1.0%, `zombiefrozen` 0.6%, `sludgelord`; `defiledlands:host`, `scuttler` 0.6%, `shambler`, `shambler_twisted` 0.5%; `minecraft:zombie_villager` 0.5%, `husk` 0.2%; `betteranimalsplus:tarantula` 0.2%; `mowziesmobs:grottol`, `foliaath`, `barakoana` (0.1% or less).
+3. **Mobs the research's hazard table names, not cited:**
+   - `mod_lavacow:parasite`: "Parasites may drop when [zombies] die". Default `fight`.
+   - `mod_lavacow:weta`: "Wetas: complete darkness in caves". It reads as level **none**: not IMob, no override. If it attacks players, `threatOf` misses it entirely.
+   - Swamp mobs: `iceandfire:stymphalianbird`, `betteranimalsplus:eel_freshwater` and `lamprey`. Default `fight`.
+   - Deep caves: `magma_monsters:magma_monster_grunt` and `mod_lavacow:salamander`. Default `fight`.
+   - None of these is in an overworld monster spawn list (they come from mod spawning or other events). The swamp and deep-cave ones are off the first-night path if the bot stays out of swamps and caves. The parasite and the weta may not be.
+   - Also defaulting and not in the overworld lists: `minecraft:cave_spider` and `minecraft:silverfish` (vanilla; spawners and stone).
+
+**Suggested order, if the lead wants follow-ups:**
+1. The Underground Biomes rock piles in `world-sources.json` (G3 critical path).
+2. Class rules for the enderman and witch variants (safety and consistency).
+3. A bytecode check of `mod_lavacow:weta` and `mod_lavacow:parasite`.
+4. The zombie and spider variants with the biggest changes (giant, brute, fire, poison, web).
+
 - **After that: free** (lead, 2026-11-02). Lead decisions recorded:
   - Request 7: granted (above).
   - Request 9 (prismarine-recipe `outShape` patch): not now; revisit after G3.
@@ -249,4 +286,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/initbot-test-aftereach`: #136 review nit (see Doing).
+- None open; this note is in `agent/rotn-data/g3-uncited-note` (STATUS only).

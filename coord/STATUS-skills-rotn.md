@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-02T23:16Z (from `date -u`)
+Updated: 2026-11-03T00:13Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -26,6 +26,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#124 merged** (`085dc3d`): B1, the 1.12 name fixes from the seam map (liquids, lit furnaces, grass, empty blocks, doors, world height, profession index 13, biome and door crash guards).
 - **#126 merged** (`a08e8c6`): A4b, a new action drops a stale re-plan request; the unstuck no-path wording; the login-wiring test.
 - **#133 merged** (`70cf3cb`): A4c, only `action:` labels drop a pending re-plan; the unstuck failure log names the real reason.
+- **#131 merged** (`ce02cc8`): B1b, the skills name space (Request 8): canonical names at the command boundary; one shared resolver (`findItem`/`itemMatches`, `blockMatcher`) in every consuming skill; variant-aware counts, block search, crafting, smelting and `!getCraftingPlan`; end-to-end tests per review scenario.
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -37,9 +38,10 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-- B1b `names-boundary` (branch `agent/skills-rotn/names-boundary`, on develop `085dc3d`): #131 open. Review REQUEST CHANGES (the variant form reached the LLM but collectBlock, placeBlock, equip, discard, chests, consume and the craft limit compared bare names); fixed with one shared resolver (findItem/itemMatches for items, blockMatcher for blocks) in every consuming skill, plus an end-to-end test per review scenario. Re-review REQUEST CHANGES: !getCraftingPlan (bare-name totals for the planner) and smeltItem (bare name for isSmeltable) fixed, plus nits 3 (craft limit by the recipe's variant) and 4 (ambiguous names shown as minecraft:snow round-trip); nit 5 (NPC code) is pre-existing. This blocks G3, so it comes before B2. The command boundary hands skills canonical names (`oak_log` -> `log:0`, `log` = any); variant-aware inventory counts, block search and `!nearbyBlocks`; dead `wall_torch`, `cave_air`, `deepslate_` names removed; `craftRecipe` asks `recipesFor` for the named variant (lead, #124 review).
-- `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`, stacked on #131): #132 open. All baby checks call `mc.isBaby` (#125); `names112.isBaby` is removed.
-- Next: B2. I tell the lead when B2 opens, 1-2 PRs before C1 (net-forge, Request 2).
+- `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`): #132 open, retargeted to develop (diff is only the switch); approved, merging on CI.
+- B2 `collect-rotn` (branch `agent/skills-rotn/collect-rotn`, on develop `27403a2`): #141 open. Review REQUEST CHANGES, fixed: the count is the real inventory gain per break; a rule's tool is equipped (a stone pickaxe, never a Sturdy one) and the block is dug by hand so collectblock cannot re-equip; a bare pyrotech:rock means rotn-data's rock variants (howToGet item.metas, the rock ore dictionary: 0, 6, 8), not dirt clumps or sand piles; only break rules. Flag for G3 (review nit 5): with an axe, collecting log targets Dynamic Trees branches and the tree falls; the count is now the real gain, but scattered drops may not all be picked up. `collectBlock` follows rotn-data's world rules (`howToGet`): rocks from rock piles by hand and from stone with a pickaxe below Sturdy (4 per block); no `cobblestone` -> `stone` alias; a hint when a source needs a tool the bot lacks.
+- **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
+- Next: B1c, the #131 nits (the `rotn_names.js` `/^\s*minecraft:/` regex; `!getCraftingPlan` bare totals vs variant-restricted recipes such as rocks for the crude axe), then C1 when Request 2 is settled.
 
 ## G3 plan: small PRs, in order
 
@@ -134,5 +136,5 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- #131 B1b names boundary (branch `agent/skills-rotn/names-boundary`). Serves Request 8 (accepted) and the G2 caveat "the full agent and its LLM command path must prove naming at G3".
-- #132 `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`, base #131 until it merges). Serves the lead's follow-up after #125.
+- #132 `mc.isBaby` switch (branch `agent/skills-rotn/is-baby`, base develop). Serves the lead's follow-up after #125.
+- #141 B2 collect for RotN (branch `agent/skills-rotn/collect-rotn`). Serves G3 (a), rocks to stone tools (plan item B2).
