@@ -213,7 +213,9 @@ function numParams(command) {
     return commandParams(command).length;
 }
 
-export async function executeCommand(agent, message) {
+// context (optional, per call): { sender } when a player typed the command (the forced path in
+// agent.js). It reaches perform as one extra last argument; commands that do not need it ignore it.
+export async function executeCommand(agent, message, context = {}) {
     let parsed = parseCommandMessage(message);
     if (typeof parsed === 'string')
         return parsed; //The command was incorrectly formatted or an invalid input was given.
@@ -227,7 +229,7 @@ export async function executeCommand(agent, message) {
         if (numArgs !== numParams(command))
             return `Command ${command.name} was given ${numArgs} args, but requires ${numParams(command)} args.`;
         else {
-            const result = await command.perform(agent, ...parsed.args);
+            const result = await command.perform(agent, ...parsed.args, context);
             return result;
         }
     }
@@ -248,8 +250,8 @@ export function getCommandDocs(agent) {
     Use the commands with the syntax: !commandName or !commandName("arg1", 1.2, ...) if the command takes arguments.\n
     Do not use codeblocks. Use double quotes for strings. Only use one command in each response, trailing commands and comments will be ignored.\n`;
     for (let command of commandList) {
-        if (agent.blocked_actions.includes(command.name)) {
-            continue;
+        if (agent.blocked_actions.includes(command.name) || command.forcedOnly) {
+            continue; // forcedOnly: only a player may type it (task commands, #146 review)
         }
         docs += command.name + ': ' + command.description + '\n';
         if (command.params) {
