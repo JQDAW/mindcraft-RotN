@@ -80,6 +80,16 @@ preflight_system() {
   # The password-login drop-in works only if sshd_config includes sshd_config.d/*.conf.
   grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf[[:space:]]*$' "$(p /etc/ssh/sshd_config)" 2> /dev/null \
     || die "/etc/ssh/sshd_config does not include /etc/ssh/sshd_config.d/*.conf; the password-login drop-in would not be read"
+  # sshd -T without -C ignores Match blocks, so a Match block that turns password login back on for some
+  # users or addresses would pass the check unseen (#137 re-review nit 3): refuse any Match line.
+  local cfg matched=()
+  shopt -s nullglob
+  for cfg in "$(p /etc/ssh/sshd_config)" "$(p /etc/ssh/sshd_config.d)"/*.conf; do
+    if grep -Eiq '^[[:space:]]*Match([[:space:]]|$)' "$cfg" 2> /dev/null; then matched+=("${cfg#"$ROOT"}"); fi
+  done
+  shopt -u nullglob
+  (( ${#matched[@]} == 0 )) \
+    || die "the sshd config has Match blocks (${matched[*]}); sshd -T cannot verify password login under them, so setup does not change anything"
   # ufw opens only port 22, so sshd must listen on 22 and nothing else (#137 review nit 4). sshd -t and
   # -T need the privilege separation folder, which ssh.service creates only while it runs.
   dir_owned 0755 root:root /run/sshd
@@ -110,7 +120,7 @@ check_ssh_from() {
   ni=$(ip_to_int "$net") || die "--ssh-from: $net is not an IPv4 address"
   client=${SSH_CONNECTION:-}; client=${client%% *}
   ci=$(ip_to_int "$client") \
-    || die "--ssh-from needs this to run in an SSH session over IPv4 (SSH_CONNECTION), to check that the CIDR contains your own address; GO 2 runs without --ssh-from"
+    || die "--ssh-from needs this to run in an SSH session over IPv4 (SSH_CONNECTION), to check that the CIDR contains your own address. Run setup from a root SSH login (ssh root@<cx23>), not through sudo: sudo drops SSH_CONNECTION. GO 2 runs without --ssh-from"
   mask=$(( bits == 0 ? 0 : (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF ))
   (( (ni & mask) == (ci & mask) )) \
     || die "--ssh-from $cidr does not contain this SSH session's client address; it would shut out every new SSH login (root included) once this session ends. GO 2 runs without --ssh-from"
@@ -253,6 +263,10 @@ setup_firewall() {
 readonly SSHD_DROPIN=/etc/ssh/sshd_config.d/10-mindcraft-rotn.conf
 setup_sshd() {
   local f bak=''
+  # sshd -t and -T need the privilege separation folder, which ssh.service creates only while it runs.
+  # Made BEFORE the drop-in is written (#137 re-review nit 2): from the write on, every step either
+  # passes or puts back what was there, so a failure here cannot leave an unchecked drop-in behind.
+  dir_owned 0755 root:root /run/sshd
   f=$(p "$SSHD_DROPIN")
   if [[ -f $f ]]; then bak=$f.bak.$$; cp -p "$f" "$bak"; fi
   # Put back what was there (or nothing) when the new config is rejected or does not take effect.
@@ -264,8 +278,6 @@ setup_sshd() {
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 EOF
-  # sshd -t and -T need the privilege separation folder, which ssh.service creates only while it runs.
-  dir_owned 0755 root:root /run/sshd
   if ! sshd -t; then
     restore_dropin
     die "sshd -t rejected the config; put back what was there, ssh not reloaded"

@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (23:45 UTC, from `date -u`)
+Updated: 2026-11-03 (00:15 UTC, from `date -u`)
 
 ## Done
 
@@ -1127,17 +1127,14 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the bootstrap for Ubuntu 26.04 (ADR 0007; `agent/harness-ops/cx23-sshd`). It is APPROVED WITH NITS, and the required nits 1-2 are done here.
-  - It accepts 26.04 (24.04 too).
-  - **SSH password login is turned off in setup:** the `10-mindcraft-rotn.conf` drop-in, then `sshd -t`, then `sshd -T`, then the reload. A failure puts back what was there.
-  - It checks the 26.04 system steps before any change: the `ssh.service` unit, sshd, the drop-in Include, and sshd listening on port 22 only.
-  - It checks that sudo-rs really applies the rule (`sudo -l -U deploy`).
-  - It checks the ufw rule before enabling, and the active status after.
-  - **The required nits:**
-    1. `--ssh-from` must contain the client IP from `SSH_CONNECTION`, and GO 2 runs without `--ssh-from`;
-    2. `lockdown` refuses without `--turn-off-root-ssh`, and the README no longer shows the lockdown command.
-- #139: the #129 re-review nits 1-3 (scan every evidence `*.json`, a case-insensitive G3 test that also looks up the scenario, and the DRIVER.md line), required before the first G3 gate batch.
+- This PR: the #137 re-review nits, before GO 2 (`agent/harness-ops/cx23-sshd-nits`):
+  1. the `--ssh-from` refusal says to run setup from a root SSH login, not through sudo (sudo drops `SSH_CONNECTION`);
+  2. `/run/sshd` is made before the drop-in is written, so a failure there cannot leave an unchecked drop-in;
+  3. setup refuses, before any change, an sshd config with a `Match` line (`sshd -T` without `-C` ignores Match blocks).
+- #139: the #129 re-review nits 1-3. It is APPROVED WITH NITS; develop is merged in.
 - Later:
+  - the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected);
+  - the #135 nits (a comment that the load step proves linking, not rendering; an explicit working directory);
   - the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from);
   - a research note on Java 8 packages on Ubuntu 26.04.
-- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), #135 (the CI job on Ubuntu 26.04, 05b1a5b; `canvas` and `gl` load there), and the lead's #134 (ADR 0007).
+- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), #135 (the CI job on Ubuntu 26.04, 05b1a5b), #137 (the bootstrap for Ubuntu 26.04, f028e9b), and the lead's #134 (ADR 0007).

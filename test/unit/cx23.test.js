@@ -492,6 +492,13 @@ describe('bootstrap.sh', () => {
         const reload = callIndex((c) => c.join(' ') === 'systemctl reload ssh');
         assert.ok(t >= 0 && T > t && reload > T, `order: sshd -t ${t}, sshd -T ${T}, reload ${reload}`);
         assert.ok(exists('run/sshd'), 'the privilege separation folder sshd -t needs');
+        // #137 re-review nit 2: setup_sshd makes /run/sshd BEFORE it writes the drop-in, so no unchecked drop-in
+        // can be left behind if that fails.
+        const write = callIndex((c) => c[0] === 'chmod' && c[1] === '0644' && c[2].includes('/etc/ssh/sshd_config.d/10-mindcraft-rotn.conf'));
+        const runDir = calls().findLastIndex((c, i) => i < write && c[0] === 'chmod' && c[1] === '0755' && c[2].endsWith('/run/sshd'));
+        const lastPreflightT = calls().findIndex((c) => c.join(' ') === 'sshd -T');
+        assert.ok(write > 0 && runDir > lastPreflightT, `/run/sshd made again in setup_sshd (${runDir}) before the drop-in is written (${write})`);
+        assert.ok(!calls().some((c, i) => i > write && c[0] === 'chmod' && c[2].endsWith('/run/sshd')), 'not made after the write');
     });
 
     test('sshd: a config sshd -t rejects is taken out again (or the earlier one put back), and ssh is not reloaded', () => {
@@ -607,7 +614,7 @@ describe('bootstrap.sh', () => {
         ubuntu();
         const from = (cidr, env) => boot(['setup', '--deploy-key-file', keyFile(), '--ssh-from', cidr], env);
         const cases = [
-            ['203.0.113.0/24', {}, /--ssh-from needs this to run in an SSH session over IPv4 \(SSH_CONNECTION\)/],
+            ['203.0.113.0/24', {}, /--ssh-from needs this to run in an SSH session over IPv4 \(SSH_CONNECTION\).*Run setup from a root SSH login \(ssh root@<cx23>\), not through sudo: sudo drops SSH_CONNECTION/],
             ['203.0.113.0/24', { SSH_CONNECTION: '2001:db8::5 50122 2001:db8::1 22' }, /needs this to run in an SSH session over IPv4/],
             ['203.0.113.0/24', { SSH_CONNECTION: '198.51.100.7 50122 192.0.2.10 22' }, /--ssh-from 203\.0\.113\.0\/24 does not contain this SSH session's client address/],
             ['203.0.113.4/32', { SSH_CONNECTION: '203.0.113.5 50122 192.0.2.10 22' }, /does not contain this SSH session's client address/],
@@ -624,6 +631,33 @@ describe('bootstrap.sh', () => {
         for (const cidr of ['203.0.113.5/32', '203.0.113.0/24', '203.0.0.0/16', '0.0.0.0/0', '203.000.113.005/32']) {
             assert.equal(from(cidr, { SSH_CONNECTION: '203.0.113.5 50122 192.0.2.10 22' }).code, 0, cidr);
         }
+    });
+
+    test('preflight: a Match block anywhere in the sshd config refuses setup before any change (#137 re-review nit 3)', () => {
+        const inc = 'Include /etc/ssh/sshd_config.d/*.conf\n';
+        const cases = [
+            [`${inc}Match User deploy\n    PasswordAuthentication yes\n`, null, /\(\/etc\/ssh\/sshd_config\)/],
+            [`${inc}  match address 10.0.0.0/8\n`, null, /\(\/etc\/ssh\/sshd_config\)/],
+            [inc, 'Match Group sftp\n  ForceCommand internal-sftp\n', /\(\/etc\/ssh\/sshd_config\.d\/60-x\.conf\)/],
+        ];
+        for (const [main, dropin, re] of cases) {
+            ubuntu('26.04', main);
+            fs.rmSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true, force: true });
+            if (dropin) {
+                fs.mkdirSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true });
+                fs.writeFileSync(rootFile('etc/ssh/sshd_config.d/60-x.conf'), dropin);
+            }
+            const r = boot(['setup', '--deploy-key-file', keyFile()]);
+            assert.equal(r.code, 1, main);
+            assert.match(r.stderr, /the sshd config has Match blocks/);
+            assert.match(r.stderr, re);
+            assert.match(r.stderr, /sshd -T cannot verify password login under them, so setup does not change anything/);
+        }
+        assert.equal(called('useradd').length + called('ufw').length + called('apt-get').length + called('sshd').length, 0, 'refused before any change');
+        // A commented-out Match, or a word that only starts with Match, is fine.
+        ubuntu('26.04', `${inc}# Match User deploy\n`);
+        fs.rmSync(rootFile('etc/ssh/sshd_config.d'), { recursive: true, force: true });
+        assert.equal(boot(['setup', '--deploy-key-file', keyFile()]).code, 0);
     });
 
     test('preflight: sshd must listen on port 22 only, since ufw opens only 22 (#137 review nit 4)', () => {
