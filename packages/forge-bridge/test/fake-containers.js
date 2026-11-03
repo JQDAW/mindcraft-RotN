@@ -43,7 +43,7 @@ export function attachFakeContainers(client, opts) {
     const inv = Array(46).fill(null); // ContainerPlayer: 0 result, 1-4 grid, 5-8 armour, 9-35 main, 36-44 hotbar, 45 offhand
     for (const [slot, s] of Object.entries(opts.inventory ?? {})) inv[Number(slot)] = stack(s.id, s.count, s.meta ?? 0);
     const state = {
-        inv, cursor: null, held: 0, food,
+        inv, cursor: null, held: 0, food, table: table ? { ...table } : null, noiseNext: null,
         tableWindow: null, // { id, grid: Array(10) } while FastWorkbench is open
         pending: null, // { windowId, action } after a rejected click
         clicks: [], rejected: [], ignored: [], unsupported: [], placed: [], uses: [], closed: [],
@@ -186,7 +186,8 @@ export function attachFakeContainers(client, opts) {
 
     client.on('block_place', (p) => {
         const at = p.location;
-        if (at.x === table.x && at.y === table.y && at.z === table.z) { // BlockFastBench.onBlockActivated
+        const table = state.table;
+        if (table && at.x === table.x && at.y === table.y && at.z === table.z) { // BlockFastBench.onBlockActivated
             nextWindowId = (nextWindowId % 100) + 1;
             state.tableWindow = { id: nextWindowId, grid: Array(10).fill(null) };
             client.write('custom_payload', { channel: 'FML', data: encodeOpenGui({ windowId: nextWindowId, modId: 'fastbench', modGuiId: 0, ...table }) });
@@ -201,6 +202,12 @@ export function attachFakeContainers(client, opts) {
         const face = [[0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1], [-1, 0, 0], [1, 0, 0]][p.direction];
         const target = { x: at.x + face[0], y: at.y + face[1], z: at.z + face[2] };
         inv[heldSlot] = item.count > 1 ? { ...item, count: item.count - 1 } : null;
+        // An unrelated update to the same block first (a test hook, used once): the client must not
+        // take it for the placement.
+        if (state.noiseNext !== null && state.noiseNext !== undefined) {
+            client.write('block_change', { location: target, type: state.noiseNext << 4 });
+            state.noiseNext = null;
+        }
         const sent = Date.now();
         setTimeout(() => {
             client.write('block_change', { location: target, type: blockId << 4 });
@@ -234,6 +241,38 @@ export function attachFakeContainers(client, opts) {
         },
         /** Change the food level (update_health), as hunger would. */
         setFood(n) { state.food = n; client.write('update_health', { health: 20, food: n, foodSaturation: 0 }); },
-        count(id) { return inv.slice(9, 45).reduce((n, s) => n + (s?.id === id ? s.count : 0), 0); },
+        count(id, meta = -1) { return inv.slice(9, 45).reduce((n, s) => n + (s?.id === id && (meta === -1 || s.meta === meta) ? s.count : 0), 0); },
+        /** /give: merge into matching stacks, then the first empty hotbar slot, then the main inventory (vanilla order). */
+        give(id, count, meta = 0) {
+            let left = count;
+            const slots = [...Array(9).keys()].map(i => 36 + i).concat([...Array(27).keys()].map(i => 9 + i));
+            for (const s of slots) {
+                const st = inv[s];
+                if (left && st && st.id === id && st.meta === meta && st.count < max(id)) {
+                    const n = Math.min(left, max(id) - st.count);
+                    inv[s] = { ...st, count: st.count + n };
+                    left -= n;
+                    client.write('set_slot', { windowId: 0, slot: s, item: toWire(inv[s]) });
+                }
+            }
+            for (const s of slots) {
+                if (left && !inv[s]) {
+                    const n = Math.min(left, max(id));
+                    inv[s] = stack(id, n, meta);
+                    left -= n;
+                    client.write('set_slot', { windowId: 0, slot: s, item: toWire(inv[s]) });
+                }
+            }
+            return count - left;
+        },
+        /** /clear without an item: empty the inventory; returns how many items were removed. */
+        clearAll() {
+            let n = 0;
+            for (let s = 0; s < inv.length; s++) if (inv[s]) { n += inv[s].count; inv[s] = null; }
+            client.write('window_items', { windowId: 0, items: windowItems(0) });
+            return n;
+        },
+        /** Move RotN's crafting table (a setblock of minecraft:crafting_table). */
+        setTable(pos) { state.table = pos ? { ...pos } : null; },
     };
 }
