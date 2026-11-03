@@ -3,6 +3,7 @@ import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from "./rotn_sources.js";
+import { craftNeeds, describeNeeds } from "./craft_needs.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -65,7 +66,8 @@ export async function craftRecipe(bot, itemName, num=1) {
     // A null meta would let bot.recipesFor return oak planks for spruce.
     const craftMeta = mc.resolveName(itemName)?.meta ?? null;
 
-    if (mc.getItemCraftingRecipes(itemName).length == 0) {
+    // getItemCraftingRecipes gives null for an item without recipes (#151 re-review).
+    if ((mc.getItemCraftingRecipes(itemName)?.length ?? 0) == 0) {
         log(bot, `${itemName} is either not an item, or it does not have a crafting recipe!`);
         return false;
     }
@@ -103,7 +105,21 @@ export async function craftRecipe(bot, itemName, num=1) {
         }
     }
     if (!recipes || recipes.length === 0) {
-        log(bot, `You do not have the resources to craft a ${itemName}. It requires: ${Object.entries(mc.getItemCraftingRecipes(itemName)[0][0]).map(([key, value]) => `${key}: ${value}`).join(', ')}.`);
+        // Say what is missing by RotN's recipes, judged by rotn-data's canFill (C1): slots are
+        // independent, so mixed rocks are fine; cobblestone has one recipe per rock type.
+        const needs = craftNeeds(bot, itemName);
+        if (needs && !needs.ready)
+            log(bot, `You do not have the resources to craft ${itemName}. ${describeNeeds(itemName, needs)}`);
+        else if (needs)
+            // canFill says the items fit a RotN recipe, but mineflayer's recipesFor found no variant.
+            log(bot, `Could not craft ${itemName}: your items fit a RotN recipe, but no matching recipe variant was found. ${describeNeeds(itemName, needs)}`);
+        else {
+            // No RotN craft way: upstream's text from the registry recipes, guarded (#151 review).
+            let first = null;
+            try { first = mc.getItemCraftingRecipes(itemName)?.[0]?.[0] ?? null; } catch { first = null; }
+            const requires = first ? ` It requires: ${Object.entries(first).map(([key, value]) => `${key}: ${value}`).join(', ')}.` : '';
+            log(bot, `You do not have the resources to craft a ${itemName}.${requires}`);
+        }
         if (placedTable) {
             await collectBlock(bot, 'crafting_table', 1);
         }
