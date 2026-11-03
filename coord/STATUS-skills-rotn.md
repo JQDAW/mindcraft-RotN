@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T02:34Z (from `date -u`)
+Updated: 2026-11-03T03:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -42,11 +42,20 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
+**Restart handoff (2026-11-03T03:11Z; Orca restart, lead request):** everything is committed and pushed, with no uncommitted work. Open PRs and their state:
+- **#164 E2 agenda** (`agent/skills-rotn/agenda`): all six #164 review items are fixed and pushed, the PR body is updated and a review reply is posted. CI had not reported on the last push yet. **Next step:** check `gh pr checks 164`. If a check fails, run only that test file (memory rule) and fix it. Then wait for the lead’s re-review.
+- **#170 F1 start, RotN profile** (`agent/skills-rotn/rotn-profile`): CI was pending at the restart. Develop has since gained #168 (the lead’s model decision); merge develop into #170 if it conflicts. **Next step:** check `gh pr checks 170` and answer the review.
+- **After that, in order:**
+  1. E3 priority stack (requirements below), which also fixes the known limit that `!stop`/`!stfu` are undone by the agenda;
+  2. the #151 lead nit: `craft_needs.js` should match the exact slot stack list, because `choices[0]` finds the wrong slot for `soaking_pot` and `hamster_wheel`;
+  3. C1 crafting execution and C2 (first plank) after net-forge’s Request 2 report;
+  4. D2 night shelter, so that G3 (b) is served.
+
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
-- E1 `task-queue` (branch `agent/skills-rotn/task-queue`): #146 open. Review REQUEST CHANGES, fixed: `!taskAdd`/`!taskCancel` only on the forced path (a giver types them), with the sender passed per call (no shared field) and hidden from the LLM; "Server" only with the test-only `allow_server_task_giver` and only from the console; a corrupt `tasks.json` is moved aside and reported, entries are validated, a save failure at load cannot stop the agent; and Request 11 (below) in the same PR, with tests for overlapping calls.
+- **Merged:** E1 #146 (task queue), C1a #151 (craft needs; lead nit for later: `craft_needs.js` should match the exact slot stack list, as the slot found by `choices[0]` is wrong for `soaking_pot` and `hamster_wheel`), #156 (with rotn-data #153).
 - **C1 coordination (net-forge is back, working on Request 2):** I build only the C1 parts that need no `window_click`, `block_place` or `use_item`: choosing a RotN recipe the inventory can satisfy (by output and ingredients, never a CraftTweaker id), including #145 nit 1 (fixed in rotn-data #152: mixed rocks make a stone tool, and `canFill` judges the recipe; cobblestone still needs one rock type, one recipe per type). Executing crafts in the 2x2 grid or the table, placing the table and the first-plank interaction (C2) wait for net-forge's report in `coord/STATUS-net-forge.md`. **net-forge progress:** #154 (FastWorkbench crafting-table window for mineflayer, Request 2 item 1) merged; the lead set `place_block_timeout_ms: 2000` in settings.js.
-- C1a `craft-needs` (branch `agent/skills-rotn/craft-needs`): #151 open. Review fixed: `craftNeeds` judges each RotN craft way with rotn-data's `canFill` (#152), so the mixed-rock rule lives in rotn-data only (mixed rocks make stone tools; cobblestone still one type, one recipe per type); with none held it advises "pyrotech:rock (any rock)"; the crude axe, Crafting Tools, crafting table and stone axe messages are tested word for word. Re-review fixed: the advice is the way's ranked `choices[0]` ("stick (any ladderMat)", "planks (any plankWood)", never a shaft or skyroot); a slot's members are the recipe slot's own stacks, so flint fills the crude axe's rock slot; `craftRecipe` no longer throws when the registry has no recipe (both `getItemCraftingRecipes(...)` reads are guarded); items that fit a RotN recipe but have no mineflayer variant get their own message.
-- #156 (stacked on rotn-data #153, base `agent/rotn-data/plan-metas`): `!getCraftingPlan` passes `world.getInventoryCounts` (variant keys) to #153's planner; dirt clumps are no longer the rocks a stone pickaxe needs. To merge together with #153.
+- E2 `agenda` (branch `agent/skills-rotn/agenda`): #164 open. Review REQUEST CHANGES, fixed: each step gets a bounded LLM budget (3 self-prompter runs with a doubling back-off of 30 s then 60 s, and 5 min of self-prompter time), then `agenda step <id> stuck: <why>; agenda paused`; the pause and the runs spent are saved, and a giver’s `!agendaStart` retries with a fresh budget. `!agenda` records nothing. Autostart happens only on a fresh bot (no `agenda.json`). The logs and planks steps count rotn-data’s `logWood`/`plankWood`. Chat failures are logged. Known limits for E3: `!stop`/`!stfu` are undone when the agenda restarts the self-prompter after the back-off (each costs one run of the step budget, so 3 of them make the step stuck); G3 (b) (night) is not served yet (no shelter step; D2).
+- **F1 start (human decision):** the RotN profile `profiles/rotn-bot.json` uses the OpenRouter preset `openrouter/@preset/glm-5-1-mindcraft`: #170 open (branch `agent/skills-rotn/rotn-profile`, with a test that it resolves to api openrouter and model `@preset/glm-5-1-mindcraft`; bot name `rotn_bot`).
 - **E3 requirements (lead, #146 review):** mark history entries from non-givers as untrusted data (review B); `!stfu` for task givers only; task text framed as untrusted when it goes into a prompt.
 - Next after B2c: those C1 parts, then E2 (agenda) and E3 (priority stack, task done/failed lines). Flag for G3 (#141 nit 5): with an axe, collecting log targets Dynamic Trees branches; the count is the real gain, but scattered drops may not all be picked up.
 
@@ -126,7 +135,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Requests to other agents or the lead
 
-1. **Lead (`settings.js`):** add the task-giver setting. Proposed key `task_givers`, default `[]`, with `["JQDAW"]` set where the lead keeps per-deploy values. Add `pause_when_empty: false`. Add `!searchWiki` to `blocked_actions` (it returns vanilla 1.21 facts). Needed by E1/E2; until then the code reads the keys with these defaults. **E1 reads `settings.task_givers`** (default: nobody may give tasks or type commands). Also a **test-only** `allow_server_task_giver: false`: G3 sets it to true (with `SETTINGS_JSON`) so the console whisper sender "Server" is a giver; never true in a committed profile. Until both keys are in `settings.js`, the code reads them with these defaults.
+1. **Lead (`settings.js`):** add the task-giver setting. Proposed key `task_givers`, default `[]`, with `["JQDAW"]` set where the lead keeps per-deploy values. Add `pause_when_empty: false`. Add `!searchWiki` to `blocked_actions` (it returns vanilla 1.21 facts). Needed by E1/E2; until then the code reads the keys with these defaults. **E1 reads `settings.task_givers`** (default: nobody may give tasks or type commands). Also a **test-only** `allow_server_task_giver: false`: G3 sets it to true (with `SETTINGS_JSON`) so the console whisper sender "Server" is a giver; never true in a committed profile. Until both keys are in `settings.js`, the code reads them with these defaults. **E2 reads** `agenda_autostart` (default true: the agenda starts on a fresh bot) and `pause_when_empty` (default false), and optionally `agenda_step_attempts` (default 3) and `agenda_step_llm_ms` (default 300000), the per-step LLM budget.
 2. **net-forge (paused since 2026-11-02; route through the lead):** C1 and C2 need serverbound slot encoding with REID (VarInt slot ids in `window_click`) and `block_place`/`use_item` working on 1.12 (the `use_item` extra fields in the mineflayer patch). Please confirm that they work, or say what is missing. Also: can the `place_block.js` 500 ms `blockUpdate` wait be made configurable (seam-map C)? A lagging RotN server makes placements report failure. **I will tell the lead 1-2 PRs before C1** (that is, when B2 opens), so the lead can respawn net-forge or verify the current encoding in a probe first.
 3. **rotn-data:** for C1, does `recipesFor` give ingredients with oredict members and meta expanded, so that I can match by output and ingredients? For C2, which blocks are the surface rock piles (`pyrotech:rock_pile`?) and what do they drop? The 20 recipes with `matchesSample: false`: I will check whether any is in the early-game set and report back.
 4. **harness-ops:** G3 scenarios for (a), (b) and (c), plus "the queue survives a restart". I will post the command and log contract for each as my PRs land. A first exploratory probe batch for the open items above would de-risk C2/C3; that needs the lead's GO.
@@ -145,6 +154,5 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- #146 E1 task queue (branch `agent/skills-rotn/task-queue`). Serves brief item 5 and its acceptance tests, G3 (c).
-- #151 C1a craft needs (branch `agent/skills-rotn/craft-needs`). Serves C1 (the part without slot clicks) and #145 nit 1.
-- #156 getCraftingPlan variant keys (branch `agent/skills-rotn/plan-variant-keys`, base #153). Serves rotn-data #153 (Request 10).
+- #164 E2 agenda (branch `agent/skills-rotn/agenda`). Serves brief item 6 and G3 (c), with harness-ops’ "the agenda at a fresh spawn".
+- #170 F1 start, the RotN profile on the OpenRouter preset (branch `agent/skills-rotn/rotn-profile`). Serves the human decision on the model and brief item 7.
