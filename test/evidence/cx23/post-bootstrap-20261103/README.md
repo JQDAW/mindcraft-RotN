@@ -24,7 +24,7 @@ harness-ops ran this on the lead's written GO 3, after GO 2, the human's updates
 | Node | v22.23.4 | `node v22.23.4`, `npm 10.9.9`; git 2.53.0 | yes |
 | jq, unzip | not installed by setup | `command -v jq unzip` prints nothing: neither is installed. Nothing in `deploy/cx23/` uses them | as expected |
 | Users | `deploy` and `mindcraft-rotn` | `deploy` uid 1000 in groups `sudo` and `mindcraft-rotn`; `mindcraft-rotn` uid 999 (a system user), shell `/usr/sbin/nologin`, home `/var/lib/mindcraft-rotn`; `deploy` has `/bin/bash` | yes |
-| Folders | as in the README | `/opt/mindcraft-rotn` `deploy:mindcraft-rotn` 0750; `/var/lib/mindcraft-rotn` `mindcraft-rotn:mindcraft-rotn` 0750; `/etc/mindcraft-rotn` `root:mindcraft-rotn` 0750; `/usr/local/lib/mindcraft-rotn` `root:root` 0755; all from 01:23 (setup) | yes |
+| Folders | as in the README | `/opt/mindcraft-rotn` `deploy:mindcraft-rotn` 0750; `/var/lib/mindcraft-rotn` `mindcraft-rotn:mindcraft-rotn` 0750 (as `bootstrap.sh` creates it; `deploy/cx23/README.md` said `root:mindcraft-rotn` until this PR fixed it); `/etc/mindcraft-rotn` `root:mindcraft-rotn` 0750; `/usr/local/lib/mindcraft-rotn` `root:root` 0755; all from 01:23 (setup) | yes |
 | Unit and ctl | installed | `mindcraft-rotn@.service` `root:root` 0644 (2870 bytes); `mindcraft-rotn-ctl` `root:root` 0755 (1999 bytes) | yes |
 | Swap | 2 GB | `/swapfile` 2G, 0B used; `free -m`: swap 2047 MB, RAM 3814 MB | yes |
 | Disk | | `/dev/sda1` 38G, 4.8G used (14%; GO 1: 6%, before Node and updates) | ok |
@@ -39,4 +39,6 @@ harness-ops ran this on the lead's written GO 3, after GO 2, the human's updates
 ## Findings
 
 - **Everything setup reported holds after the updates and the reboot.**
-- **Open, for a later check:** the ufw rule list, which only root can read. `ss` shows nothing public except SSH, which agrees with "SSH only", but it does not show the firewall rules themselves.
+- **Open, for a later check (both need root):**
+  - **the ufw rule list.** `ss` shows nothing public except SSH, which agrees with "SSH only", but it does not show the firewall rules themselves.
+  - **`sshd -T` after the reboot.** The drop-in is in place and is the only file in `sshd_config.d`, but the effective `passwordauthentication no` was last verified by setup's `sshd -T`, before the updates and the reboot.
