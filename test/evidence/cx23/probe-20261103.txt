@@ -74,16 +74,16 @@ System clock synchronized: yes
 root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN# echo "=== ss -tulpn"; ss -tulpn
 === ss -tulpn
 Netid       State        Recv-Q       Send-Q                  Local Address:Port                Peer Address:Port       Process
-udp         UNCONN       0            0                          <ip>:53                       <ip>:*           users:(("systemd-resolve",pid=47068,fd=19))
-udp         UNCONN       0            0                       <ip>%lo:53                       <ip>:*           users:(("systemd-resolve",pid=47068,fd=17))
-udp         UNCONN       0            0                    <ip>%eth0:68                       <ip>:*           users:(("systemd-network",pid=47098,fd=36))
-udp         UNCONN       0            0                           <ip>:323                      <ip>:*           users:(("chronyd",pid=39203,fd=4))
+udp         UNCONN       0            0                          127.0.0.54:53                       0.0.0.0:*           users:(("systemd-resolve",pid=47068,fd=19))
+udp         UNCONN       0            0                       127.0.0.53%lo:53                       0.0.0.0:*           users:(("systemd-resolve",pid=47068,fd=17))
+udp         UNCONN       0            0                    <ip>%eth0:68                       0.0.0.0:*           users:(("systemd-network",pid=47098,fd=36))
+udp         UNCONN       0            0                           127.0.0.1:323                      0.0.0.0:*           users:(("chronyd",pid=39203,fd=4))
 udp         UNCONN       0            0                               [::1]:323                         [::]:*           users:(("chronyd",pid=39203,fd=5))
-tcp         LISTEN       0            4096                       <ip>:53                       <ip>:*           users:(("systemd-resolve",pid=47068,fd=20))
-tcp         LISTEN       0            511                         <ip>:6768                     <ip>:*           users:(("MainThread",pid=63104,fd=38))
-tcp         LISTEN       0            4096                          <ip>:22                       <ip>:*           users:(("sshd",pid=47070,fd=3),("systemd",pid=1,fd=286))
-tcp         LISTEN       0            511                         <ip>:37233                    <ip>:*           users:(("MainThread",pid=63104,fd=31))
-tcp         LISTEN       0            4096                    <ip>%lo:53                       <ip>:*           users:(("systemd-resolve",pid=47068,fd=18))
+tcp         LISTEN       0            4096                       127.0.0.54:53                       0.0.0.0:*           users:(("systemd-resolve",pid=47068,fd=20))
+tcp         LISTEN       0            511                         127.0.0.1:6768                     0.0.0.0:*           users:(("MainThread",pid=63104,fd=38))
+tcp         LISTEN       0            4096                          0.0.0.0:22                       0.0.0.0:*           users:(("sshd",pid=47070,fd=3),("systemd",pid=1,fd=286))
+tcp         LISTEN       0            511                         127.0.0.1:37233                    0.0.0.0:*           users:(("MainThread",pid=63104,fd=31))
+tcp         LISTEN       0            4096                    127.0.0.53%lo:53                       0.0.0.0:*           users:(("systemd-resolve",pid=47068,fd=18))
 tcp         LISTEN       0            4096                             [::]:22                          [::]:*           users:(("sshd",pid=47070,fd=4),("systemd",pid=1,fd=287))
 root@ubuntu-4gb-hel1-2:/tmp/mindcraft-RotN#echo "=== ufw status verbose"; ufw status verbose 2>&1
 === ufw status verbose

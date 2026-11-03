@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (00:36 UTC, from `date -u`)
+Updated: 2026-11-03 (01:30 UTC, from `date -u`)
 
 ## Done
 
@@ -119,7 +119,7 @@ Updated: 2026-11-03 (00:36 UTC, from `date -u`)
     - **Where:** in the human's workspace `/tmp/mindcraft-RotN`. Only the approved read-only commands ran, with `ls -la /root` last. No installs or writes. Nothing under `/root/.ssh` was read.
     - **The human's other workspaces** were left alone: `/tmp/mindcraft` and `/root/orca/workspaces/mindcraft/tunicate`, plus their two terminals.
     - **Evidence:** `test/evidence/cx23/`. The findings table is in its README.
-    - **Ubuntu: 26.04.1 LTS.** The human chose to keep it (ADR 0007, #134). The bootstrap accepts it (#137, f028e9b), and the 26.04 CI job (#135, 05b1a5b) passes. GO 2 waits for the #137 re-review nits and the lead's GO.
+    - **Ubuntu: 26.04.1 LTS.** The human chose to keep it (ADR 0007, #134). The bootstrap accepts it (#137, f028e9b; its re-review nits in #144, 655bcaa), and the 26.04 CI job (#135, 05b1a5b) passes. All GO 2 prerequisites are merged; the lead is handing the bootstrap steps to the human.
     - **RAM and swap:** 2 vCPU, 3,814 MB RAM, **no swap**.
     - **Disk:** 38 GB, 6% used.
     - **What setup will change:**
@@ -1127,17 +1127,10 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the #137 re-review nits, before GO 2 (`agent/harness-ops/cx23-sshd-nits`):
-  1. the `--ssh-from` refusal says to run setup from a root SSH login, not through sudo (sudo drops `SSH_CONNECTION`);
-  2. `/run/sshd` is made before the drop-in is written, so a failure there cannot leave an unchecked drop-in;
-  3. setup refuses, before any change, an sshd config with a `Match` line (`sshd -T` without `-C` ignores Match blocks).
-  - **The #144 review, done here:**
-    - nit 3 (required): the not-root message no longer says `sudo bash bootstrap.sh`; it points to a root SSH login;
-    - nit 1: `Match=` is refused too, as is any `Include` other than Ubuntu's own one.
-    - Nit 2 (no signal trap during the write) is not done: a hangup can only leave a drop-in that turns password login off.
-- Later:
-  - the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected);
-  - the #135 nits (a comment that the load step proves linking, not rendering; an explicit working directory);
-  - the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from);
-  - a research note on Java 8 packages on Ubuntu 26.04.
-- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), #135 (the CI job on Ubuntu 26.04, 05b1a5b), #137 (the bootstrap for Ubuntu 26.04, f028e9b), #139 (the G3 evidence scan, f1fd589), and the lead's #134 (ADR 0007).
+- This PR: the research note on Java 8 on Ubuntu 26.04 (`deploy/test-server/JAVA8-ON-UBUNTU-2604.md`; `agent/harness-ops/java8-2604-note`). The lead may file it under `docs/research/`.
+  - **Answer:** 26.04 publishes `openjdk-8-jre-headless` 8u504 in universe with security updates, the same build as 24.04, and Hetzner has `ubuntu-26.04` images.
+  - **Recommendation:** one G0-style build batch with `--image ubuntu-26.04`. The lead says it waits until after the first G3 smoke batch.
+- Next: the G3 runner sets skills-rotn's `allow_server_task_giver` and `task_givers` (#146) in a test-only way, on the test server only. The CX23's `check-env.mjs` keeps refusing both in `SETTINGS_JSON`.
+- Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
+- **The CX23:** the human has run GO 2. Nothing of mine touches it until the lead's word.
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), and the lead's #134 (ADR 0007).
