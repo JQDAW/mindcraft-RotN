@@ -7,8 +7,9 @@
 // Order, first match wins: dangerous -> 'avoid' (source 'override'); an 'entities' entry; a
 // 'classRules' entry matching the dumped class's simple name, for hostile mobs (source: the rule's
 // confidence, default 'inferred': the creeper variants keep distance and the skeleton variants take
-// cover (inferred); the Special Mobs enderman and witch variants, read from the mod's bytecode,
-// ignore unless provoked and take cover (verified)); then a
+// cover; the Special Mobs enderman and witch variants ignore unless provoked and take cover, also
+// inferred: only their targeting AI is verified vanilla, and each variant's extra behaviour is
+// returned as variantNote); then a
 // default from the level (hostile -> fight, otherwise ignore; source 'default').
 //
 // Not reflected by threatOf: a mob's custom name. It can change behaviour: an Animania rabbit named
@@ -46,6 +47,7 @@ function classRule(catalog, e) {
  * @param {string} input entity registry name ("minecraft:zombie", "charm:spectre")
  * @returns {{name: string, displayName: string|null, level: 'dangerous'|'hostile'|'none',
  *   reaction: string, source: 'override'|'documented'|'vanilla'|'verified'|'inferred'|'default', rule?: string,
+ *   variantNote?: string,
  *   summary: string|null, explodes: boolean, ranged: boolean, evidence: string[]}|null}
  *   null for an unknown entity
  */
@@ -73,6 +75,9 @@ export function threatOf(catalog, input) {
     };
     if (rule) out.rule = rule.id;
     if (rule?.note) out.note = rule.note;
+    // What this variant does beyond the rule's reaction (#143 review: e.g. the thief enderman
+    // teleports its target, the domination witch pulls its target in).
+    if (rule?.variants?.[e.name]) out.variantNote = rule.variants[e.name];
     return out;
 }
 

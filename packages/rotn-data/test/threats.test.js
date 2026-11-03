@@ -165,15 +165,38 @@ test('cited follow-up: the mobs the lead listed, read from the mods bytecode (or
     assert.deepEqual(Object.entries(reactions.entities).filter(([, r]) => r.confidence === 'inferred').map(([n]) => n), []);
 });
 
-// Follow-up 2 (#140 note): Special Mobs enderman and witch variants, about 25% of each overworld family.
-test('Special Mobs enderman and witch variants get the vanilla reaction (verified), witch spiders do not', () => {
-    for (const n of ['blindingenderman', 'icyenderman', 'lightningenderman', 'minienderman', 'mirageenderman', 'thiefenderman', 'specialenderman']) {
+// Follow-up 2 (#140 note), narrowed after the #143 review: Special Mobs enderman and witch variants.
+test('Special Mobs enderman and witch variants: vanilla reaction (inferred), each variant named', () => {
+    const enders = ['blindingenderman', 'icyenderman', 'lightningenderman', 'minienderman', 'mirageenderman', 'thiefenderman', 'specialenderman'];
+    const witches = ['dominationwitch', 'shadowswitch', 'undeadwitch', 'wildswitch', 'windwitch', 'specialwitch'];
+    for (const n of enders) {
         const t = pack.threatOf(`specialmobs:${n}`);
-        assert.deepEqual([t.reaction, t.source, t.rule], ['ignore-unless-provoked', 'verified', 'enderman-variants'], n);
+        assert.deepEqual([t.reaction, t.source, t.rule], ['ignore-unless-provoked', 'inferred', 'enderman-variants'], n);
+        assert.ok(t.variantNote, `${n} has a variant note`);
     }
-    for (const n of ['dominationwitch', 'shadowswitch', 'undeadwitch', 'wildswitch', 'windwitch', 'specialwitch']) {
+    for (const n of witches) {
         const t = pack.threatOf(`specialmobs:${n}`);
-        assert.deepEqual([t.reaction, t.ranged, t.source, t.rule], ['take-cover', true, 'verified', 'witch-variants'], n);
+        assert.deepEqual([t.reaction, t.ranged, t.source, t.rule], ['take-cover', true, 'inferred', 'witch-variants'], n);
+        assert.ok(t.variantNote, `${n} has a variant note`);
+    }
+    // The behaviours the review found are named, with the bytecode method.
+    assert.match(pack.threatOf('specialmobs:thiefenderman').variantNote, /teleportTargetRandomly/);
+    assert.match(pack.threatOf('specialmobs:blindingenderman').variantNote, /12 blocks/);
+    assert.match(pack.threatOf('specialmobs:mirageenderman').variantNote, /fake/);
+    assert.match(pack.threatOf('specialmobs:undeadwitch').variantNote, /EntitySkeleton/);
+    assert.match(pack.threatOf('specialmobs:wildswitch').variantNote, /EntityBabySpider/);
+    assert.match(pack.threatOf('specialmobs:dominationwitch').variantNote, /10 and 14 blocks/);
+    assert.match(pack.threatOf('specialmobs:windwitch').variantNote, /teleport/i);
+    // The rules claim as verified only that the targeting AI is vanilla, and no longer that no variant refers to players.
+    for (const id of ['enderman-variants', 'witch-variants']) {
+        const r = reactions.classRules.find((x) => x.id === id);
+        assert.match(r.evidence[0], /verified only that the targeting AI is vanilla/);
+        assert.ok(!r.evidence.join(' ').includes('none refers to EntityPlayer'), id);
+        // Every variant key is a real entity that the rule matches.
+        for (const n of Object.keys(r.variants)) {
+            assert.ok(pack.names.entities.has(n), n);
+            assert.equal(pack.threatOf(n).rule, id, n);
+        }
     }
     // Witch spiders are spiders: no witch rule.
     for (const n of ['witchspider', 'witchcavespider']) assert.equal(pack.threatOf(`specialmobs:${n}`).rule, undefined, n);
@@ -187,8 +210,8 @@ test('Special Mobs enderman and witch variants get the vanilla reaction (verifie
         if (!/(Enderman|Witch)$/.test(simple) || !pack.entity(n).hostile) continue;
         assert.notEqual(pack.threatOf(n).reaction, 'fight', n);
     }
-    // The creeper and skeleton rules stay inferred.
     assert.equal(pack.threatOf('specialmobs:specialcreeper').source, 'inferred');
+    assert.equal(pack.threatOf('specialmobs:specialcreeper').variantNote, undefined);
 });
 
 test('nightThreats: one biome, from its monster spawn list, hostile only, most likely first', () => {
