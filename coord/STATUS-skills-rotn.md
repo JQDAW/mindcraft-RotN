@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T15:53Z (from `date -u`)
+Updated: 2026-11-03T16:08Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -204,5 +204,16 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- #190 the D2c follow-up: do-not-look from rotn-data's `lookAt`, now also the gorgon (branch `agent/skills-rotn/threat-lookat`). Serves the lead's #186 follow-up and G3 (b). In review.
-- Next: D2b (the shelter agenda step, placing, the night routine with `NightClock` and `nightThreatNote`). It waits for the P1 rerun evidence (harness-ops #189, in review).
+- None open. Merged since the last entry: #190 (do-not-look from `lookAt`), and #189 (P1 passed: 4/4 RotN crafts, including the stone pickaxe at a FastWorkbench table; modded item ids accepted in clicks; 5/5 placements in 589-1158 ms).
+
+## PAUSED (lead, 2026-11-03, received before 16:08Z by `date -u`): shared weekly usage limit at 93%
+
+- **Branch `agent/skills-rotn/rotn-crafting`** (from develop `88c02bc`), commit `2a9b35fb`, pushed. **No PR yet.** This is C1, crafting execution:
+  - when `bot.recipesFor` finds no variant (bot.registry's RotN variants are capped, so a mix of rock kinds can be missing) but rotn-data's `canFill` says the items fit, `craftByFill` (skills.js) crafts from canFill's assigned stacks;
+  - it uses `filledRecipe` and `fillNow` (craft_needs.js) and a prismarine-recipe `Recipe`, one craft at a time, re-judged each time, at a found or placed crafting table.
+  - Tests: `craft_needs.test.js` 19/19 (the new full `!craftRecipe` test fails on the old skills.js); `src/agent/**` 202/202; lint 254; skills.js at 20 errors (develop 20).
+- **Exact next step on resume:**
+  1. open the C1 PR from that branch (serves the lead's C1 GO after P1 and G3 (a); it states how it was tested, as above);
+  2. ask the lead (it owns package.json) to add `prismarine-recipe` as a direct dependency: `skills.js` and `craft_needs.test.js` import it, and today it is only installed through mineflayer;
+  3. coordinate with net-forge through STATUS: C1 calls `bot.craft(recipe, 1, table)` with a FastWorkbench table, as P1's probe did;
+  4. then D2b (the shelter agenda step, placing with the measured 589-1158 ms, the night routine with `NightClock` and `nightThreatNote`), in small PRs.
