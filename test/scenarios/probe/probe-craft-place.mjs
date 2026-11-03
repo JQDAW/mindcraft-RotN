@@ -14,6 +14,11 @@
 // test server): every command goes through guardP1Console, so nothing outside P1_CONSOLE_ALLOW is sent.
 // The bot never gets op.
 //
+// Every console reply the scenario checks (gives, counts, testforblock, tp, scoreboard) goes through
+// lib/late-console.mjs: a reply missing from the console's own 1 s wait is looked for in the server log
+// lines written after it, for up to lateReplyMs (5 s), and each such late reply is in notes.lateReplies.
+// P1 attempt 1 (2026-11-03) failed setup because a `give` was answered about 3 s after a `clear`.
+//
 // Every driver reply is checked with net-forge's checkProbeReply (contract v1, #167); a reply that breaks
 // it counts as a failed step, and notes.contractProblems lists why.
 //
@@ -49,6 +54,7 @@ import {
     P1_NOT_GATE, P1_PLAN, PROBE_DRIVER_ENV, below, foodScore, guardP1Console, probeCraft, probeEat, probePlace, probeReply,
 } from '../../runner/lib/probe.mjs';
 import { checkProbeReply } from '../../../packages/forge-bridge/tools/probe-commands.mjs';
+import { lateConsole } from '../../runner/lib/late-console.mjs';
 
 const MS = 1000;
 const newToken = () => crypto.randomBytes(6).toString('hex');
@@ -91,6 +97,8 @@ export default {
         tpSettleMs: 3 * MS,
         logTail: 20000,
         consoleWaitS: 1,
+        lateReplyMs: 5 * MS,       // a reply missing from the console's own wait is looked for in the log this long (P1 attempt 1)
+        latePollMs: 1 * MS,
         foodWaitMs: 40 * MS,       // from the hunger effect's start: its 22 s plus margin for the food to fall
         foodPollMs: 2 * MS,
     },
@@ -102,8 +110,20 @@ export default {
         const server = guardP1Console(ctx.server);
         const name = p.bot;
         const plan = P1_PLAN;
-        const con = (cmd) => server.console(cmd, p.consoleWaitS);
-        const count = (item) => clearTestCount(con(clearTestCommand(name, item, -1)), name)?.count ?? null;
+        // Every console reply the scenario checks goes through confirm: a reply written after the console's
+        // own wait is looked for in the later server log lines (lib/late-console.mjs; P1 attempt 1).
+        const lc = lateConsole(server, clock, { waitS: p.consoleWaitS, lateMs: p.lateReplyMs, pollMs: p.latePollMs });
+        const con = lc.con;
+        const confirm = async (cmd, accept) => {
+            const n = lc.late().length;
+            const lines = await lc.confirm(cmd, accept);
+            if (lc.late().length > n) ctx.note('lateReplies', lc.late());
+            return lines;
+        };
+        const count = async (item) => clearTestCount(await confirm(clearTestCommand(name, item, -1), (l) => clearTestCount(l, name) !== null), name)?.count ?? null;
+        const tp = async (cmd) => lastTeleport(await confirm(cmd, (l) => lastTeleport(l, name) !== null), name);
+        const testfor = async (pos, block) => testforblockVerdict(await confirm(`testforblock ${pos.join(' ')} ${block}`,
+            (l) => { const v = testforblockVerdict(l, pos); return v.ok || /^The block at /.test(v.detail ?? ''); }), pos);
         let aborted = null;   // why the run stopped early, or null
         let session = null;
         const contractProblems = [];
@@ -154,19 +174,23 @@ export default {
         ctx.note('capture', captureOf(bot.output()));
         con('gamerule doDaylightCycle false');
         con('time set day');
-        const teleported = lastTeleport(con(`tp ${name} ${plan.landing.join(' ')}`), name);
+        const teleported = await tp(`tp ${name} ${plan.landing.join(' ')}`);
         await clock.sleep(p.tpSettleMs);
-        ctx.note('landing', { planned: plan.landing, teleportedTo: teleported, botPosition: lastTeleport(con(`tp ${name} ~ ~ ~`), name) });
+        ctx.note('landing', { planned: plan.landing, teleportedTo: teleported, botPosition: await tp(`tp ${name} ~ ~ ~`) });
 
         // 2. setup
         con(`clear ${name}`);
-        const gives = plan.gives.map(([item, n, meta]) => ({ item, n, ...giveVerdict(con(`give ${name} ${item} ${n} ${meta}`), name) }));
+        const gives = [];
+        for (const [item, n, meta] of plan.gives) {
+            gives.push({ item, n, ...giveVerdict(await confirm(`give ${name} ${item} ${n} ${meta}`, (l) => giveVerdict(l, name).ok), name) });
+        }
         // The objective first: 1.12 writes a food score only when the food level changes after it exists.
-        const objective = scoreboardAddResult(con(`scoreboard objectives add ${plan.foodObjective} food`), plan.foodObjective, 'food');
+        const objective = scoreboardAddResult(await confirm(`scoreboard objectives add ${plan.foodObjective} food`,
+            (l) => scoreboardAddResult(l, plan.foodObjective, 'food') !== null), plan.foodObjective, 'food');
         con(`effect ${name} minecraft:hunger ${plan.hunger.join(' ')}`);
         const hungerAt = clock.now();
         con(`setblock ${plan.table.join(' ')} minecraft:crafting_table`);
-        const table = testforblockVerdict(con(`testforblock ${plan.table.join(' ')} minecraft:crafting_table`), plan.table);
+        const table = await testfor(plan.table, 'minecraft:crafting_table');
         for (const cell of plan.place.targets) {
             con(`setblock ${cell.join(' ')} minecraft:air`);
             con(`setblock ${below(cell).join(' ')} minecraft:stone`);
@@ -183,7 +207,8 @@ export default {
         const crafts = [];
         for (const c of plan.crafts) {
             const reply = await ask('craft', (t) => probeCraft(name, t, c.recipeId, c.atTable ? plan.table : null));
-            const counts = Object.fromEntries(Object.keys(c.counts).map((item) => [item, count(item)]));
+            const counts = {};
+            for (const item of Object.keys(c.counts)) counts[item] = await count(item);
             const countsOk = Object.entries(c.counts).every(([item, want]) => counts[item] === want);
             crafts.push({
                 recipeId: c.recipeId, grid: c.grid, ok: reply?.ok ?? null, error: reply?.error ?? (reply ? null : noReply()),
@@ -202,7 +227,7 @@ export default {
         const places = [];
         for (const cell of plan.place.targets) {
             const reply = await ask('place', (t) => probePlace(name, t, plan.place.item, below(cell), plan.place.face));
-            const found = testforblockVerdict(con(`testforblock ${cell.join(' ')} ${plan.place.item}`), cell);
+            const found = await testfor(cell, plan.place.item);
             places.push({ cell, ok: reply?.ok ?? null, updateMs: reply?.updateMs ?? null, totalMs: reply?.totalMs ?? null,
                 after: reply?.after ?? null, error: reply?.error ?? (reply ? null : noReply()), server: found.ok });
             if (aborted) break;
@@ -215,14 +240,14 @@ export default {
         if (aborted) return;
 
         // 5. eat, only once the server's food level is below 20 (bread cannot be eaten at 20: the eat would time out)
-        const listFood = () => {
-            const lines = con(`scoreboard players list ${name}`);
+        const listFood = async () => {
+            const lines = await confirm(`scoreboard players list ${name}`, (l) => playerScores(l, name) !== null);
             return { food: foodScore(lines, name), read: playerScores(lines, name) !== null };
         };
-        let food = listFood();
+        let food = await listFood();
         while (!belowFull(food.food) && clock.now() - hungerAt < p.foodWaitMs && !stopReason()) {
             await clock.sleep(p.foodPollMs);
-            food = listFood();
+            food = await listFood();
         }
         ctx.note('foodBeforeEat', { server: food.food, read: food.read, waitedMs: clock.now() - hungerAt });
         const eatStop = stopReason();
@@ -237,7 +262,7 @@ export default {
             ctx.check('eat', false, `not sent: the food is not below 20 after ${Math.round((clock.now() - hungerAt) / MS)}s of hunger (${why}); bread cannot be eaten at 20`);
         } else {
             const eat = await ask('eat', (t) => probeEat(name, t, plan.eat.item));
-            const breadLeft = count(plan.eat.item);
+            const breadLeft = await count(plan.eat.item);
             // The driver's own view (bot.food) must agree that the food was below 20 when it ate.
             const driverBelow = typeof eat?.foodBefore === 'number' && eat.foodBefore < 20;
             ctx.note('eat', eat

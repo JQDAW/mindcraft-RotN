@@ -33,7 +33,8 @@
 //      it; the totals; why it stopped; testMode. Never the key.
 //   Exit: 0 if every scenario exited 0 (gate pass), 5 if the spend went over the limit (stop or end), 6 if
 //   the spend could not be read at the end, 2 if it could not start, else 1. The wrapper deletes the server.
-//   With --preflight: 0 if every check passed, else 2.
+//   With --preflight: 0 if every check passed, else 2. --preflight-files (test-server.sh's --dry-run) runs
+//   the same checks without the key's usage reading, so a dry run never contacts OpenRouter (#176 review nit).
 //
 // Limits (#122 review nits): the spend is checked BETWEEN scenarios, not during one, so a single scenario
 // can run past the limit; and OpenRouter's usage figure can lag behind the newest requests by a little.
@@ -101,15 +102,16 @@ export function endVerdict(base, end, maxBatchUsd, exit) {
 }
 const log = (m) => console.error(`[batch ${new Date().toISOString().slice(11, 19)}] ${m}`);
 
-/** Arguments: [--preflight] --max-batch-usd N --logs-out DIR [--summary FILE] ([--timeout-min M] --scenario ID --out DIR)+ -- DRIVER... */
+/** Arguments: [--preflight | --preflight-files] --max-batch-usd N --logs-out DIR [--summary FILE] ([--timeout-min M] --scenario ID --out DIR)+ -- DRIVER... */
 export function parseBatchArgs(argv) {
-    const o = { preflight: false, maxBatchUsd: null, logsOut: null, summary: null, scenarios: [], driver: [] };
+    const o = { preflight: false, readUsage: true, maxBatchUsd: null, logsOut: null, summary: null, scenarios: [], driver: [] };
     const problems = [];
     let timeoutMin = 15;
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--') { o.driver = argv.slice(i + 1); break; }
         if (a === '--preflight') o.preflight = true;
+        else if (a === '--preflight-files') { o.preflight = true; o.readUsage = false; }
         else if (a === '--max-batch-usd') o.maxBatchUsd = Number(argv[++i]);
         else if (a === '--logs-out') o.logsOut = argv[++i];
         else if (a === '--summary') o.summary = argv[++i];
@@ -193,6 +195,10 @@ async function main(argv) {
     if (pre.length) {
         for (const p of pre) log(`refused: ${p}`);
         return 2;
+    }
+    if (o.preflight && !o.readUsage) {
+        log(`preflight passed (files only, a dry run): driver, profile, model and settings checked; the key's usage was not read; ${o.scenarios.length} scenario(s)`);
+        return 0;
     }
     if (o.preflight) {
         const u = await readKeyUsage({ key: process.env.OPENROUTER_API_KEY, fetchImpl: keyFetch(process.env) });
