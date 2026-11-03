@@ -5,7 +5,8 @@
 // (#164 review): at most STEP_ATTEMPTS self-prompter runs, restarted after a
 // doubling back-off, and at most STEP_LLM_MS of self-prompter time. Then the
 // step is stuck: "agenda step <id> stuck: <why>", and the agenda pauses until a
-// giver types !agendaStart. Task preemption and resuming come with E3.
+// giver types !agendaStart. Holds, tasks preempting the agenda and its resuming
+// are in priority.js (E3), which calls agendaTick when no task and no hold is due.
 import settings from './settings.js';
 import * as world from './library/world.js';
 import { countItem, formatName } from './library/rotn_names.js';
@@ -21,7 +22,9 @@ export const STEP_ATTEMPTS = 3;
 /** Self-prompter time per step, over all its runs (first_plank cannot be done before C2). */
 export const STEP_LLM_MS = 5 * 60_000;
 const MAX_TICK_GAP_MS = 10_000; // a stalled update loop does not count as LLM time
-const SAVE_EVERY_MS = 60_000;
+// LLM time is saved this often (#164 nit: was 60 s); runs are saved as they start, so a
+// crash loop is bounded by the run budget anyway.
+export const SAVE_EVERY_MS = 10_000;
 
 /** A step's budget; settings.agenda_step_attempts and agenda_step_llm_ms override it. */
 export function stepBudget() {
@@ -61,10 +64,35 @@ export function agendaGoal(agenda, step) {
         + 'When this step is done, the agenda moves on by itself.';
 }
 
+/** The prompt prefixes the agenda and tasks write; a model's !goal may not use them (#174 re-review). */
+export const AUTONOMY_PREFIXES = ['RotN agenda, step ', 'Player task '];
+export const hasAutonomyPrefix = (prompt) => typeof prompt === 'string'
+    && AUTONOMY_PREFIXES.some(p => prompt.trimStart().startsWith(p));
+
+/**
+ * Point the self-prompter at the agenda's or a task's goal and remember it as the drivers' own.
+ * Whether the running goal is autonomy's is decided by this identity, never by its text (#174
+ * re-review: a model !goal that copied the prefix ran unbounded).
+ */
+export function driveTo(agent, prompt, { start = false } = {}) {
+    agent._autonomy_prompt = prompt;
+    if (start) agent.self_prompter.start(prompt);
+    else agent.self_prompter.prompt = prompt;
+}
+
+/** Whether the self-prompter runs the goal a driver set (driveTo), not one a player or the model set. */
+export const ownsPrompt = (agent) => agent._autonomy_prompt != null && agent.self_prompter.prompt === agent._autonomy_prompt;
+
+/**
+ * Whether the self-prompter runs a goal a task giver typed (!goal with a sender, goal_by): the only
+ * self-prompting the agenda and tasks wait for without counting it (#174 review 3).
+ */
+export const isGiverGoal = (agent) => agent.self_prompter.isActive() && !ownsPrompt(agent) && !!agent.self_prompter.goal_by;
+
 const othersOnline = (agent) => Object.keys(agent.bot?.players ?? {}).some(n => n !== agent.name);
 
 // A chat line; a failed send is logged, never an unhandled rejection (#164 review nit).
-function say(agent, line) {
+export function say(agent, line) {
     try {
         Promise.resolve(agent.openChat(line)).catch(err => console.warn(`[agenda] chat failed: ${safeError(err)}`));
     } catch (err) {
@@ -72,11 +100,12 @@ function say(agent, line) {
     }
 }
 
-const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
+export const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
 
 /**
  * One agenda tick (throttled). Returns what it did, for tests and logs: null (not due or not
- * active), 'paused' (pause_when_empty and nobody else online), 'done', 'stuck', or the current step id.
+ * active), 'paused' (pause_when_empty and nobody else online), 'yield' (someone else's self-prompting
+ * or a paused conversation), 'done', 'stuck', or the current step id.
  */
 export function agendaTick(agent, { now = Date.now() } = {}) {
     const agenda = agent.agenda;
@@ -92,10 +121,20 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         return 'paused';
     }
 
+    // A goal a task giver typed, or self-prompting a bot-to-bot conversation paused: the agenda
+    // waits, counts none of it against the step and never stops it as stuck, and resumes
+    // afterwards without a new run (#164 nits). Any other goal (the model's own) is taken over
+    // below and counts (#174 review 3).
+    if (isGiverGoal(agent) || sp.isPaused?.()) {
+        agent._agenda_paused = true;
+        return 'yield';
+    }
+
     // The self-prompter's time since the last tick goes to the step it was pointed at.
     if (agent._agenda_step && sp.isActive() && last !== undefined) {
         agenda.addLlmTime(agent._agenda_step, Math.min(now - last, MAX_TICK_GAP_MS));
-        if (now - (agent._agenda_saved_at ?? last) >= SAVE_EVERY_MS) {
+        agent._agenda_saved_at ??= last; // the first counted tick (#164 nit: `?? last` alone never saved)
+        if (now - agent._agenda_saved_at >= SAVE_EVERY_MS) {
             agenda.save();
             agent._agenda_saved_at = now;
         }
@@ -115,8 +154,19 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     if (agent._agenda_step !== step.id) {
         agent._agenda_step = step.id;
         agent._agenda_stopped_at = undefined;
-        say(agent, `agenda step ${step.id} started: ${step.short}`);
-        sp.prompt = goal; // the self-prompter's next prompt uses it
+        // After a task (E3) the agenda says it resumed, not that the step started anew.
+        const resumed = agent._agenda_preempted;
+        agent._agenda_preempted = false;
+        say(agent, resumed ? `agenda resumed: ${step.id}` : `agenda step ${step.id} started: ${step.short}`);
+        driveTo(agent, goal); // the self-prompter's next prompt uses it
+        // A run still going from the step before now works on this one: it is this step's run
+        // (#164 nit: it was not counted, so a step could get one run more than its budget).
+        if (sp.isActive()) agenda.recordAttempt(step.id);
+    } else if (sp.isActive() && !ownsPrompt(agent)) {
+        // The model's own goal (or one restored after a restart, whose giver is unknown): the step
+        // takes the running loop over, and the run counts against it (#174 review 3).
+        driveTo(agent, goal);
+        agenda.recordAttempt(step.id);
     }
 
     // The step's budget: spent means stuck, and the agenda pauses (no more LLM calls for it).
@@ -134,8 +184,9 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     }
 
     // Keep it going: start it, or restart it after it stopped, after BACKOFF_MS doubling per run.
-    // Resuming after a pause (pause_when_empty) is not a new run.
-    if (!sp.isActive()) {
+    // Resuming after a pause (pause_when_empty, an E3 hold or a task) is not a new run.
+    // A stopped loop still finishing its command is waited for (E3: the safe checkpoint).
+    if (!sp.isActive() && !sp.loop_active) {
         const resuming = !!agent._agenda_paused;
         if (agent._agenda_stopped_at === undefined) agent._agenda_stopped_at = now;
         const wait = resuming || spent.attempts === 0 ? 0 : BACKOFF_MS * 2 ** (spent.attempts - 1);
@@ -143,7 +194,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
             if (!resuming || spent.attempts === 0) agenda.recordAttempt(step.id);
             agent._agenda_paused = false;
             agent._agenda_stopped_at = undefined;
-            sp.start(goal);
+            driveTo(agent, goal, { start: true });
         }
     }
     return step.id;

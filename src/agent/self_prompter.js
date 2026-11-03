@@ -135,7 +135,9 @@ export class SelfPrompter {
     }
 
     async stop(stop_action=true) {
-        this.interrupt = true;
+        // Only a running loop needs the interrupt; set with no loop, it stayed on and
+        // made the next start a no-op (skills-rotn E3).
+        if (this.loop_active) this.interrupt = true;
         if (stop_action)
             await this.agent.actions.stop();
         this.stopLoop();
@@ -143,7 +145,7 @@ export class SelfPrompter {
     }
 
     async pause() {
-        this.interrupt = true;
+        if (this.loop_active) this.interrupt = true;
         await this.agent.actions.stop();
         this.stopLoop();
         this.state = PAUSED;
@@ -160,7 +162,10 @@ export class SelfPrompter {
             this.dropped_for_reflex = true;
             return true;
         }
-        return is_self_prompt && (this.state === ACTIVE || this.state === PAUSED) && this.interrupt;
+        // A stop sets the state to STOPPED at once, so the interrupt alone decides: the reply
+        // loop ends at its next checkpoint instead of running more commands (E3: !stop, a hold
+        // or a task taking over must win before the next command).
+        return is_self_prompt && this.interrupt;
     }
 
     handleUserPromptedCmd(is_self_prompt, is_action) {
