@@ -18,6 +18,37 @@
         "docs/research/rotn-progression.md section 2, Zombies: [W-Zombie], [W-Getting_Started]"
       ]
     },
+    "mod_lavacow:parasite": {
+      "reaction": "fight",
+      "summary": "A small 7-health crawler that can burst from a dead zombie, frozen zombie or mushroom zombie, or from sand dug in a dry (desert) biome. If it touches you it latches on, infests you (a slow hunger drain) and keeps biting for 1 damage, renewing the infestation with each bite, so waiting does not shake it off; unattached, it dies by itself after about 16 s. Kill it in one or two hits before it reaches you, or back away from the corpse until it dies; if one is on you, kill it.",
+      "confidence": "verified",
+      "evidence": [
+        "Fish's Undead Rising-1.3.2.jar (in the pack as mods/Fish's Undead Rising-1.3.2.jar, SHA-256 f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50): EntityParasite extends EntitySpider; applyEntityAI (func_175456_n) bytecode 5-16 adds EntityAINearestAttackableTarget(EntityPlayer, checkSight true) at priority 2, and bytecode 24-42 a second one for EntityLivingBase with a predicate (Modconfig.Parasite_Plague; config/Fishs_Undead_Rising.cfg line 619 'parasite attacks everything'=false)",
+        "Stats: applyEntityAttributes (func_110147_ax): MAX_HEALTH = Modconfig.Parasite_Health (config/Fishs_Undead_Rising.cfg line 625 'parasite health'=7.0), FOLLOW_RANGE 8.0 at bytecode 26, MOVEMENT_SPEED 0.2 at 41, ATTACK_DAMAGE = Modconfig.Parasite_Attack (cfg line 613 'parasite attack'=1.0)",
+        "Attaching: collideWithEntity (func_82167_n) bytecode 11-135: when a living entity that is a non-creative player (EntityPlayer.isCreative func_184812_l_ false), or a listed host, touches it and Modconfig.Parasite_Attach is set (cfg line 616 'parasite attacks by attaching onto target'=true), it gives that entity INFESTED for 160 ticks (sipush 160 at 79), rides it (startRiding func_184220_m at 91), sets long_live = true (126; the lifespan stops counting) and makes it its attack target (setAttackTarget func_70624_b at 135)",
+        "On hit: attackEntityAsMob (func_70652_k) bytecode 9-59: on a player (with Parasite_Attach) it re-applies INFESTED for 160 ticks; with skin 2 also Poison (field_76436_u) for 80 ticks (bytecode 63-87)",
+        "MobEffectInfested (performEffect func_76394_a): on a player it calls addExhaustion (func_71020_j) with 0.005f times (amplifier + 1) (bytecode 1-18): a slow hunger drain, no damage",
+        "Lifespan and release: lifespawn starts at 320 ticks (constructors, sipush 320 at 19). onLivingUpdate (func_70636_d) bytecode 1-257: it counts down unless long_live; at 0 it kills itself (attackEntityFrom with causeMobDamage(self).setDamageIsAbsolute, its max health), or, for skin 2 with a player in follow range and nextInt(100) < Modconfig.pSpawnRate_Vespa, it turns into a Vespa cocoon; the pack sets 'vespa spawn rate'=0 (cfg line 805), so on this pack it only dies. Bytecode 262-353: while riding a living entity it dismounts (dismountEntity func_110145_l, dismountRidingEntity func_184210_p) and kills itself once the host has no INFESTED, and if the host is burning (isBurning func_70027_ad) it catches fire (setFire func_70015_d 20) and drops off",
+        "Where it comes from: Fish's Undead Rising-1.3.2.jar ModEventHandler.onEDeath (LivingDeathEvent) bytecode 158-304: in a surface world (WorldProvider.isSurfaceWorld func_76569_d), a dying mob spawns parasites if it is in the host list and either nextInt(100) < Modconfig.pSpawnRate_Parasite or a parasite rides it (bytecode 167-207), or, for any mob, if it has INFESTED (211-220; so a player who dies infested leaves parasites at the corpse); the count is (3 + nextInt(3)) + (amplifier - 1) * (1 + nextInt(3)), where amplifier is INFESTED's amplifier or 0, so 0 to 4 for a mob without the effect or with Infested I. Pack config: host list lines 606-610 (minecraft:zombie, mod_lavacow:zombiefrozen, mod_lavacow:zombiemushroom; the default's husk, unburied and mummy are removed), 'parasite spawn rate'=5 (line 628). Not in any spawn list of the dump's spawns.json",
+        "Sand: ModEventHandler.onBlockDestroyed (BlockEvent.HarvestDropsEvent) bytecode 217-340: when a block of Material.SAND (field_151595_p) is broken in a biome with BiomeDictionary type DRY in the overworld, and nextInt(100) < Modconfig.Parasite_SandSpawn (cfg line 622 'parasite from sand blocks'=1) and pSpawnRate_Parasite > 0, a parasite spawns there",
+        "processInteract (func_184645_a) bytecode 2-69: a player with an empty hand can pick it up as an item (FishItems.PARASITE_ITEM) and it vanishes (setDead func_70106_y)",
+        "docs/research/rotn-progression.md section 2, Zombies: 'Parasites may drop when they die ... After killing one that carries a Parasite, move away from it' ([W-Zombie])",
+        "Not settled: whether a player can reach the empty-hand pickup on a parasite that is riding them; whether Rough Mobs or Special AI change it (config/ZombieAwareness/MobLists.cfg line 274 enables Zombie Awareness for it; roughmobsrevamped.cfg lines 2195 and 2506-2509 name it only in pairings, not read further); the server's difficulty; which blocks count as Material.SAND on this pack (in vanilla 1.12 sand and gravel); whether the sand spawn needs a player harvester"
+      ]
+    },
+    "mod_lavacow:weta": {
+      "reaction": "ignore-unless-provoked",
+      "summary": "A large cave insect (12 health, 3 damage) that only fights back when attacked or when its owner tells it to; it does not hunt players. On this pack it does not spawn naturally at all. Leave it alone.",
+      "confidence": "verified",
+      "evidence": [
+        "Fish's Undead Rising-1.3.2.jar (in the pack as mods/Fish's Undead Rising-1.3.2.jar, SHA-256 f45662c8b3ba6a46d251fbb56044bdc5290d1102d23500ad0dfd927aa9bf5c50): com.Fishmod.mod_LavaCow.entities.tameable.EntityWeta extends EntityFishTameable extends EntityTameable (not IMob, so the dump does not mark it hostile)",
+        "Targeting: initEntityAI (func_184651_r) adds EntityAIHurtByTarget (bytecode 165-178) and calls applyEntityAI (func_175456_n) at 182, which adds only EntityAIOwnerHurtByTarget (bytecode 5), EntityAIOwnerHurtTarget (21) and EntityAIHurtByTarget (37); no EntityAINearestAttackableTarget for players anywhere in the class. Its other tasks are EntityAIDestroyCrops (bytecode 1-10), swimming, mating, leaping at a target, EntityAITempt with FishItems.CANEPORK (76-89), melee, watching players and looking idle",
+        "Stats: applyEntityAttributes (func_110147_ax): MAX_HEALTH = Modconfig.Weta_Health (config/Fishs_Undead_Rising.cfg line 814 'weta health'=12.0), FOLLOW_RANGE 16.0 at bytecode 26, MOVEMENT_SPEED 0.23 at 41, ATTACK_DAMAGE = Modconfig.Weta_Attack (cfg line 811 'weta attack'=3.0); config/roughmobsrevamped.cfg lines 580-584 add movementSpeed 0.05, maxHealth 2, armor 1, attackDamage 1 and knockbackResistance 0.15 (operator 0 = add, cfg line 10). attackEntityAsMob (func_70652_k) adds no effect (bytecode 2-25)",
+        "Spawning: config/Fishs_Undead_Rising.cfg line 817 'weta spawn rate'=0, and it is in no spawn list of the dump's spawns.json; the only summoner, the Avaton (cfg lines 13-20 'avaton summon ...'), also has 'avaton spawn rate'=0 (line 11). getCanSpawnHere (func_70601_bi) bytecode 0-22 needs SpawnUtil.isAllowedDimension and EntityFishTameable's light and difficulty check",
+        "docs/research/rotn-progression.md section 2 names 'Wetas: complete darkness in caves'; on this pack's config that spawn is off",
+        "Not settled: whether a Weta summoned by an Avaton (none spawn on this pack) has the Avaton as its owner and so attacks the Avaton's target"
+      ]
+    },
     "minecraft:skeleton": {
       "reaction": "take-cover",
       "ranged": true,
@@ -257,6 +288,219 @@
       "evidence": [
         "Charm-1.12.2-1.4.1.jar: EntitySpectre extends EntityMob; initEntityAI adds EntityAINearestAttackableTarget(EntityPlayer) and EntityAIAttackMelee; applyEntityAttributes reads svenhjol.charm.world.feature.Spectre (defaults: max health 0.5, attack 0.01, speed 0.19); attackEntityAsMob (func_70652_k) curses items when Spectre.applyCurse, else applies Weakness; getCanSpawnHere (func_70601_bi) requires the bounding box at or below Spectre.spawnDepth; onUpdate (func_70071_h_) despawns it at Spectre.despawnLight; attackEntityFrom (func_70097_a) ignores fall (field_76379_h) and in-wall (field_76368_d) damage",
         "the pinned pack's config/charm.cfg lines 832-846 and 858: B:\"Apply curse\"=true, I:\"Despawn light level\"=8, I:\"Spawn depth\"=24, I:\"Spawn weight\"=100, I:\"Spectre lifetime\"=120"
+      ]
+    },
+    "mod_lavacow:zombiemushroom": {
+      "reaction": "fight",
+      "summary": "A fast 40-health zombie that poisons everything within about 2 blocks of it every second; poison cannot kill, but it adds up with its 3-damage hits. Fight it at a choke point, hit from max reach and step back between hits, and do not stand on its corpse on Hard (poison cloud) unless it died burning.",
+      "confidence": "verified",
+      "evidence": [
+        "fishs-undead-rising-1.3.2.jar: EntityZombieMushroom extends net.minecraft.entity.monster.EntityZombie implements IAggressive. initEntityAI (func_184651_r) calls EntityZombie.initEntityAI at bytecode 1 and only adds EntityFishAIBreakDoor (priority 1) at 9; applyEntityAI (func_175456_n) is not overridden, so the vanilla zombie target tasks (EntityAINearestAttackableTarget EntityPlayer) are inherited.",
+        "Aura: onUpdate (func_70071_h_) every 20 ticks (ticksExisted field_70173_aa % 20, bytecode 5-11) calls World.getEntitiesWithinAABBExcludingEntity (func_72839_b) on its bounding box grown by 2.0 on each axis (func_72314_b, bytecode 23-35); for every EntityLivingBase (instanceof at 66, so players included) without POISON (getActivePotionEffect func_70660_b + ifnonnull at 99-102) it adds PotionEffect(POISON field_76436_u, 40 * (int)getAdditionalDifficulty (func_180168_b), amplifier 0) at bytecode 109-126.",
+        "Melee: attackEntityAsMob (func_70652_k) only calls EntityZombie.attackEntityAsMob at bytecode 2 and sets an animation timer; no extra effect on hit.",
+        "Death: onDeath (func_70645_a) at bytecode 136-158: if World.getDifficulty (func_175659_aa) == HARD and not isBurning (func_70027_ad) it calls makeAreaOfEffectCloud, an EntityAreaEffectCloud with setRadius (func_184483_a) 3.0 at 49, setWaitTime (func_184485_d) 10 at 63 and addEffect (func_184496_a) POISON 40 * (int)additionalDifficulty ticks, amplifier 0, at bytecode 91-107.",
+        "Stats: applyEntityAttributes (func_110147_ax) sets MAX_HEALTH (field_111267_a) = Modconfig.ZombieMushroom_Health at bytecode 11 and ATTACK_DAMAGE (field_111264_e) = Modconfig.ZombieMushroom_Attack at 26. Modconfig reads them from category Mycosis, keys 'mycosis health' / 'mycosis attack' (Modconfig.<clinit>/sync bytecode 600-652); config/Fishs_Undead_Rising.cfg line 585 'mycosis health'=20.0, line 582 'mycosis attack'=3.0.",
+        "config/roughmobsrevamped.cfg lines 263-265: zombiemushroom maxHealth +20 (op 0 = add, so 40 health), knockbackResistance +0.5, movementSpeed op 1 x0.6 (60% faster than base); line 2914 lists it as a RoughMobs zombie (leap, hunger on hit, per lines 2933-2945). config/Special_AI.cfg line 109 (door breaking 1.0) and line 699 (griefing 0.7); config/ZombieAwareness/MobLists.cfg line 286 enables ZombieAwareness for it.",
+        "Daylight: shouldBurnInDay (func_190730_o) returns !Modconfig.SunScreen_Mode (bytecode 0-11); config/Fishs_Undead_Rising.cfg line 489 'sunscreen mode'=false, so it burns in daylight. getCanSpawnHere (func_70601_bi) requires SpawnUtil.isAllowedDimension (bytecode 4): cfg lines 212-215 allow dimensions 0 and 7.",
+        "Parasite: listed as a parasite host in config/Fishs_Undead_Rising.cfg line 609. ModEventHandler.onEDeath (LivingDeathEvent) at bytecode 158-220: in a surface world (WorldProvider.isSurfaceWorld func_76569_d), if EntityList.getKey (func_191301_a) is in LootTableHandler.PARASITE_HOSTLIST (built from Modconfig.Parasite_Hostlist, 'available host for parasite') and Random.nextInt(100) < pSpawnRate_Parasite (cfg line 628 'parasite spawn rate'=5), it spawns new EntityParasite at bytecode 333-474; loop bound at 281-304 gives 0-4 parasites when the corpse was not INFESTED. No parasite on hit: EntityZombieMushroom never references EntityParasite or ModMobEffects.INFESTED.",
+        "packfiles/scripts/fishsundeadrising.zs lines 77-79 only add player-kill drops (deathstalk/mooncap mushrooms, glowshroom); no behaviour change.",
+        "Not settled: Poison duration is 40 * (int)getAdditionalDifficulty ticks. By vanilla DifficultyInstance math (not checked in bytecode here: no vanilla jar in SCRATCH) that is 0 on Easy, about 40 ticks on Normal and about 80 ticks on Hard on the first night, rising to about 160 ticks later. The server difficulty is not in these files.",
+        "Not settled: Vanilla EntityZombie target tasks (player, villager, iron golem) are taken from vanilla 1.12.2 knowledge; no vanilla classes are available to javap.",
+        "Not settled: RotN-wide damage or weapon changes (stone sword damage) were not checked, so the 'fight' call assumes roughly vanilla stone-tool damage against 40 health."
+      ]
+    },
+    "mod_lavacow:mummy": {
+      "reaction": "fight",
+      "summary": "A slow zombie (24 health, 4 damage, 4 armor) that does not burn in daylight; each hit gives Corroded II, so you take about 20% more damage. Fight it at a choke point and retreat when several come.",
+      "confidence": "verified",
+      "evidence": [
+        "fishs-undead-rising-1.3.2.jar: EntityMummy extends net.minecraft.entity.monster.EntityZombie implements IAggressive. initEntityAI (func_184651_r) calls EntityZombie.initEntityAI at bytecode 1 and adds EntityFishAIBreakDoor at 9; applyEntityAI (func_175456_n) is not overridden, so the vanilla zombie player targeting is inherited.",
+        "On hit: attackEntityAsMob (func_70652_k), after EntityZombie.attackEntityAsMob at 2, adds PotionEffect(ModMobEffects.CORRODED, 40 * (int)getAdditionalDifficulty (func_180168_b), amplifier 1) to the EntityLivingBase target at bytecode 22-68. CORRODED is com.Fishmod.mod_LavaCow.mobeffect.MobEffectCorroded; ModEventHandler.onEDamage (LivingDamageEvent) at bytecode 1095-1152 multiplies damage taken by 1 + (isNonBoss func_184222_aU ? 0.1 : 0.05) * (1 + amplifier), so +20% for a player.",
+        "Stats: applyEntityAttributes (func_110147_ax) sets MAX_HEALTH = Modconfig.Mummy_Health at 11, ATTACK_DAMAGE = Modconfig.Mummy_Attack at 26, MOVEMENT_SPEED (field_111263_d) 0.21 at 41, ARMOR (field_188791_g) 4.0 at 56. Modconfig reads category Mummy keys 'mummy health' / 'mummy attack' (bytecode 2973-3027); config/Fishs_Undead_Rising.cfg line 573 'mummy health'=24.0, line 570 'mummy attack'=4.0. No roughmobsrevamped.cfg attribute line for mummy.",
+        "Daylight: shouldBurnInDay (func_190730_o) returns iconst_0 at bytecode 0: it never burns.",
+        "Spawn: getCanSpawnHere (func_70601_bi) needs SpawnUtil.isAllowedDimension (bytecode 4) and SpawnUtil.isNearBlock(world, Blocks.STAINED_HARDENED_CLAY field_150406_ce, pos, 8) non-null (bytecode 14-44): only near stained hardened clay (mesa terrain).",
+        "Parasite: not a host in this pack. config/Fishs_Undead_Rising.cfg lines 606-610 list only minecraft:zombie, zombiefrozen and zombiemushroom (the default list on line 605 includes mummy; the pack removed it). EntityMummy never references EntityParasite. onDeath (func_70645_a) only drops loot (ACIDICHEART via LootTableHandler.dropRareLoot, bytecode 32-42).",
+        "config/ZombieAwareness/MobLists.cfg line 273 enables ZombieAwareness for mod_lavacow.mummy. packfiles/scripts/fishsundeadrising.zs has no mummy line.",
+        "Not settled: Corroded duration is 40 * (int)additionalDifficulty ticks (0 on Easy by vanilla math, not checked here); server difficulty unknown.",
+        "Not settled: Vanilla EntityZombie target tasks are assumed from vanilla 1.12.2 knowledge, not javap."
+      ]
+    },
+    "mod_lavacow:zombiefrozen": {
+      "reaction": "avoid",
+      "summary": "A 40-health zombie with armor above the game's cap of 30 (stone weapons do only about a fifth of their damage), no knockback, and Slowness V on every hit (lasting longer with the regional difficulty; none where it is below 1), so after one hit you may not be able to run. Keep away before it reaches you, or kill it with fire, which deals double damage to it; it burns in daylight.",
+      "confidence": "verified",
+      "evidence": [
+        "fishs-undead-rising-1.3.2.jar: EntityZombieFrozen extends net.minecraft.entity.monster.EntityZombie implements IAggressive. initEntityAI (func_184651_r) calls EntityZombie.initEntityAI at bytecode 1 and adds EntityFishAIBreakDoor at 9; applyEntityAI (func_175456_n) not overridden, so vanilla zombie player targeting is inherited.",
+        "On hit: attackEntityAsMob (func_70652_k), after EntityZombie.attackEntityAsMob at 2, adds PotionEffect(SLOWNESS field_76421_d, 40 * (int)getAdditionalDifficulty (func_180168_b), amplifier 4) to the EntityLivingBase target at bytecode 22-68.",
+        "attackEntityFrom (func_70097_a): if DamageSource.isFireDamage (func_76347_k) it passes 2.0 * damage to EntityZombie.attackEntityFrom (bytecode 1-12).",
+        "Stats: applyEntityAttributes (func_110147_ax) sets MAX_HEALTH = Modconfig.ZombieFrozen_Health at 11 and ATTACK_DAMAGE = Modconfig.ZombieFrozen_Attack at 26. Modconfig reads category Frigid keys 'frigid health' / 'frigid attack' (bytecode 711-765); config/Fishs_Undead_Rising.cfg line 71 'frigid health'=20.0, line 68 'frigid attack'=3.0.",
+        "config/roughmobsrevamped.cfg lines 266-268: zombiefrozen maxHealth +20 (40 total), knockbackResistance +3 (immune), armor +40 (on top of the zombie's own armor); line 2915 makes it a RoughMobs zombie (leap, hunger on hit). config/Special_AI.cfg lines 108 (door breaking) and 698 (griefing); config/ZombieAwareness/MobLists.cfg line 285.",
+        "Daylight: shouldBurnInDay (func_190730_o) returns !Modconfig.SunScreen_Mode (bytecode 0-11); cfg line 489 'sunscreen mode'=false, so it burns. setEquipmentBasedOnDifficulty (func_180481_a) gives a FROZENTHIGH weapon with 5% (Hard) / 1% chance (bytecode 9-50).",
+        "Parasite: host in config/Fishs_Undead_Rising.cfg line 608; on death ModEventHandler.onEDeath can spawn 0-4 EntityParasite with 5% chance (cfg line 628), bytecode 167-474. No parasite on hit (class never references EntityParasite or INFESTED). packfiles/scripts/fishsundeadrising.zs line 76 only adds a packed_ice drop.",
+        "Not settled: Armor math uses vanilla 1.12.2 knowledge (not javap): the armor attribute caps at 30 and the reduction caps at 80%, so a 5-damage stone sword does about 1 damage per hit whether the cap applies or not. A pack mod that changes armor math was not checked.",
+        "Not settled: Slowness duration 40 * (int)additionalDifficulty ticks is 0 on Easy by vanilla math; server difficulty unknown."
+      ]
+    },
+    "mod_lavacow:sludgelord": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "A rare 150-health, heavily armored caster that spits sludge (7 damage plus Slowness IV and Blindness for 4 s) at range, hits for 7 in melee, and summons groups of 3 Lil'Sludges that attack you. Do not engage with early gear; break line of sight and leave, ideally into daylight, where it burns and flees from the sun.",
+      "confidence": "verified",
+      "evidence": [
+        "fishs-undead-rising-1.3.2.jar: EntitySludgeLord extends net.minecraft.entity.monster.EntityMob (no IRangedAttackMob). applyEntityAI (func_175456_n) adds EntityAIHurtByTarget at bytecode 5 and EntityAINearestAttackableTarget(EntityPlayer, true) at 26-34 (targetTasks field_70715_bh).",
+        "initEntityAI (func_184651_r): AICastingApell (1) at 5, EntityFishAIAttackRange(EntitySludgeJet, sound, shot_times 1, attackCD 2, curve 5.0, range 8.0, offsets 1.2/0.6/1.2) (2) at 21-48, EntityAIAttackMelee(1.0, false) (3) at 59, AIUseSpell (4) at 77, EntityAIFleeSun (4) at 99 only if !SunScreen_Mode (88-91).",
+        "Ranged: EntityFishAIAttackRange.updateTask (func_75246_d) melees when distanceSq < (width sum)^2 (bytecode 27-59, calls attackEntityAsMob at 80) and otherwise fires when distanceSq < followDistance^2 (bytecode 112-121), spawning the shot via EntityList.newEntity (func_191304_a) at 432 and spawnEntity at 587. EntitySludgeJet extends EntityFireball; onImpact (func_70227_a) sets damage to the shooter's ATTACK_DAMAGE (bytecode 39-51), deals it as causeIndirectDamage(...).setProjectile (73), then adds SLOWNESS amplifier 3 for 80 ticks (88-97) and BLINDNESS (field_76440_q) amplifier 1 for 80 ticks (111-120).",
+        "Summons: AIUseSpell.shouldExecute (func_75250_a) needs a target, cooldown elapsed and fewer than Modconfig.SludgeLord_Ability_Max EntityLilSludge within 16 blocks (bytecode 31-73). castSpell spawns SludgeLord_Ability_Num EntityLilSludge (bytecode 3-172), sets their MAX_HEALTH base to 8.0 (75), setOwnerId (func_184754_b) to the lord (126) and a limited life of 20 * (30 + nextInt(90)) ticks (130-148). Cooldown getCastingInterval = SludgeLord_Ability_Cooldown * 20. Cfg lines 736 'summon number'=3, 733 'summon max'=6, 730 'summon cooldown'=13 (260 ticks). EntityLilSludge applyEntityAI adds EntityAIOwnerHurtByTarget, EntityAIOwnerHurtTarget, EntityAIHurtByTarget and AICopyOwnerTarget, so they attack the lord's target; LilSludge_Attack cfg line 534 = 4.0.",
+        "Stats: applyEntityAttributes (func_110147_ax) MAX_HEALTH = Modconfig.SludgeLord_Health at 11, MOVEMENT_SPEED 0.19 at 26, ATTACK_DAMAGE = Modconfig.SludgeLord_Attack at 41, ARMOR 8.0 at 56, KNOCKBACK_RESISTANCE (field_111266_c) 1.0 at 71. Modconfig category 'Sludge Lord' keys (bytecode 1115-1169); cfg line 724 'sludge lord health'=150.0, line 721 'sludge lord attack'=7.0. config/roughmobsrevamped.cfg lines 241-243 add knockbackResistance +4, armor +5 (13 total), armorToughness +2.",
+        "Melee: attackEntityAsMob (func_70652_k) calls EntityMob.attackEntityAsMob at 2; if it has an empty main hand and is burning it may set the target on fire (bytecode 30-67). attackEntityFrom (func_70097_a) doubles fire damage (bytecode 1-12).",
+        "Daylight: onLivingUpdate (func_70636_d) at bytecode 0-96: if !SunScreen_Mode, isDaytime (func_72935_r), server side, getBrightness (func_70013_c) > 0.5 and canSeeSky (func_175678_i) at eye height, randomly setFire (func_70015_d) 40 (= 8 s). cfg line 489 'sunscreen mode'=false.",
+        "Spawn rate is low: cfg line 727 'sludge lord spawn rate'=3 (vs mummy 100, mycosis 40). getCanSpawnHere (func_70601_bi) also checks SpawnUtil.isAllowedDimension at 4. cfg line 486 'suicidal minion'=true: summons die with their summoner.",
+        "Parasite: not a host (cfg lines 606-610); onDeath (func_70645_a) only drops loot (UNDYINGHEART via LootTableHandler.dropRareLoot, bytecode 23-34); no parasite reference in EntitySludgeLord or its inner classes. packfiles/scripts/fishsundeadrising.zs only changes the sludge_wand item (lines 101-119).",
+        "Not settled: Ranged reach depends on its follow range (getFollowDistance); the base value was not read from vanilla, and no RoughMobs followRange line exists for it.",
+        "Not settled: Lil'Sludge health: castSpell sets base 8.0, but config/roughmobsrevamped.cfg line 248 (maxHealth op 1, 3) may multiply it if RoughMobs applies modifiers after the summon; the order was not settled. AICastingApell was not disassembled (it is a casting-pose AI)."
+      ]
+    },
+    "defiledlands:host": {
+      "reaction": "fight",
+      "summary": "A 20-health undead melee mob (5 damage) that sheds small defiled slimes as it takes damage and releases the rest when it dies; each slime has 1 health but hits for 2. Fight it in a 1-wide corridor, kill the slimes as they appear, and retreat if the swarm builds up.",
+      "confidence": "verified",
+      "evidence": [
+        "defiledlands-1.12.2-1.4.3.jar: EntityHost extends net.minecraft.entity.monster.EntityMob (direct, no zombie AI); func_184651_r initEntityAI: tasks EntityAIAttackMelee (bytecode 21) and targetTasks EntityAINearestAttackableTarget(EntityPlayer, checkSight=true) at bytecode 96-104, EntityAIHurtByTarget at 115",
+        "defiledlands-1.12.2-1.4.3.jar: EntityHost func_110147_ax applyEntityAttributes: MOVEMENT_SPEED (field_111263_d) 0.27 at bytecode 5-14, ATTACK_DAMAGE (field_111264_e) 5.0 at 20-29; MAX_HEALTH is not set here, so it keeps the attribute default of 20; slimesRemaining = (int) func_110138_aP getMaxHealth at 34-40",
+        "defiledlands-1.12.2-1.4.3.jar: EntityHost func_70097_a attackEntityFrom calls queueSlimes((int) damage) on a successful hit (bytecode 21-24); func_70106_y setDead queues all remaining slimes and spawns them (bytecode 0-9); func_70636_d onLivingUpdate calls spawnSlimes every tick (bytecode 0)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityHost.spawnSlimes: while slimesQueued >= 2 spawns a new EntitySlimeDefiled (bytecode 61) of size 1, or size 2 when more than 8 are queued (bytecode 10-20), via func_70799_a setSlimeSize (90) and func_72838_d spawnEntity (138); a size-1 slime costs 2 queued points, a size-2 slime costs 8 (bytecode 142-169). So the host releases about 10 size-1 slimes over its 20 health",
+        "defiledlands-1.12.2-1.4.3.jar: EntitySlimeDefiled extends EntitySlime; func_70800_m canDamagePlayer returns true for every size (bytecode 0), func_70805_n getAttackStrength = size*2 (bytecode 0-5), func_180430_e fall is empty (no fall damage); size-1 slime health is size*size = 1 (vanilla setSlimeSize)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityHost func_70668_bt getCreatureAttribute returns UNDEAD (bytecode 0); it extends EntityMob, not EntityZombie, and its onLivingUpdate has no daylight burn",
+        "defiledlands-1.12.2-1.4.3.jar: spawns only from BiomeDefiled.cleanSpawnLists spawnableMonsterList (field_76761_J) entry EntityHost weight Config.weightHost, group 2-3 (bytecode 155-176), config/defiled_lands.cfg line 62 weightHost=100; also from Defiled dungeon spawners, ModEntities.init addDungeonMob(\"host\", 120) at bytecode 175-179; ModEntities.registerEntity adds no global spawn (no EntityEntryBuilder.spawn call)",
+        "Not settled: Health 20 relies on the vanilla MAX_HEALTH default (EntityMob does not set it); not read from a vanilla jar here.",
+        "Not settled: Host has no getCanSpawnHere override, so it uses vanilla EntityMob darkness rules; whether other RotN mods (spawn controllers) add it outside Defiled biomes was not checked beyond config/defiled_lands.cfg, scripts/defiled_lands.zs and scripts/mobstages.zs (neither script mentions it)."
+      ]
+    },
+    "defiledlands:scuttler": {
+      "reaction": "fight",
+      "summary": "A Defiled spider (16 health, spider-strength bite, faster than a spider) that hunts players day and night, climbs walls and leaps. Fight it like a spider in a 1-wide spot; walls do not keep it out, so do not rely on them.",
+      "confidence": "verified",
+      "evidence": [
+        "defiledlands-1.12.2-1.4.3.jar: EntityScuttler extends net.minecraft.entity.monster.EntitySpider; func_184651_r initEntityAI is overridden without calling super: tasks EntityAILeapAtTarget(0.5) at bytecode 21, EntityScuttler$AISpiderAttack at 39; targetTasks EntityAIHurtByTarget at 112 and EntityAINearestAttackableTarget(EntityPlayer, checkSight=false) at bytecode 133-141, plain class, so the vanilla spider's daylight-neutral target task is replaced and it targets players in daylight too",
+        "defiledlands-1.12.2-1.4.3.jar: EntityScuttler$AISpiderAttack extends EntityAIAttackMeleeStrafe(speed 1.0, true, strafe 0.6f) (bytecode 0-6); getAttackReachSqr = 4.0 + target width (bytecode 0-7)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityScuttler func_110147_ax applyEntityAttributes: MAX_HEALTH (field_111267_a) 16.0 at bytecode 5-14, MOVEMENT_SPEED (field_111263_d) 0.34 at 20-29; ATTACK_DAMAGE not set (inherits the spider value); func_180430_e fall empty and func_82143_as getMaxFallHeight = Integer.MAX_VALUE (no fall damage)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityScuttler func_70601_bi getCanSpawnHere: false on PEACEFUL (bytecode 4-14), else func_70814_o isValidLightLevel (16); isValidLightLevel with Config.scuttlerSpawnInLight true (config/defiled_lands.cfg line 59) spawns at light >= 8 with a 1-in-16 chance (bytecode 43-66), else when light <= random 0-7 (67-85). No block or biome check in the method",
+        "defiledlands-1.12.2-1.4.3.jar: spawns only from BiomeDefiled.cleanSpawnLists spawnableMonsterList entry EntityScuttler weight Config.weightScuttler, group 1-3 (bytecode 125-146), config/defiled_lands.cfg line 65 weightScuttler=100; also Defiled dungeon spawners, ModEntities.init addDungeonMob(\"scuttler\", 160) at bytecode 166-171",
+        "Not settled: Attack damage, wall climbing and the spider-jockey/potion roll in onInitialSpawn are inherited from vanilla EntitySpider (not overridden here); vanilla bytecode was not read.",
+        "Not settled: Because scuttlerSpawnInLight=true it can spawn in lit Defiled ground during the day; outside Defiled biomes it only appears if another mod adds it (not checked)."
+      ]
+    },
+    "defiledlands:shambler": {
+      "reaction": "avoid",
+      "summary": "A tall, slow undead brute (40 health, 14 damage, no knockback) whose hit throws you back and gives Slowness II, Mining Fatigue II and Blindness; arrows do not hurt it. Walk away, since it is slow, and keep out of Defiled biomes at night; it vanishes when it sees daylight.",
+      "confidence": "verified",
+      "evidence": [
+        "defiledlands-1.12.2-1.4.3.jar: EntityShambler extends net.minecraft.entity.monster.EntityMob; func_184651_r initEntityAI: EntityAIAttackMelee at bytecode 21, targetTasks EntityAINearestAttackableTarget(EntityPlayer, checkSight=true) at bytecode 133-141",
+        "defiledlands-1.12.2-1.4.3.jar: EntityShambler func_110147_ax applyEntityAttributes: FOLLOW_RANGE (field_111265_b) 64 at bytecode 5-14, MOVEMENT_SPEED 0.14 at 20-29, ATTACK_DAMAGE 14.0 at 35-44, MAX_HEALTH 40.0 at 50-59, KNOCKBACK_RESISTANCE (field_111266_c) 1.0 at 65-72; size 0.6 x 2.9 in the constructor",
+        "defiledlands-1.12.2-1.4.3.jar: EntityShambler func_70652_k attackEntityAsMob: on hit, func_70653_a knockBack strength 2.5 (bytecode 8-50); then MobEffects.SLOWNESS (field_76421_d) and MINING_FATIGUE (field_76419_f) amplifier 1 for getDebuffDuration ticks (bytecode 105-149), and BLINDNESS (field_76440_q) 40 ticks amplifier 0 (152-169); getDebuffDuration = 3 s, 15 s on NORMAL, 30 s on HARD, times 20 ticks (bytecode 0-41)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityShambler func_70097_a attackEntityFrom returns false for any EntityDamageSourceIndirect, so arrows and thrown projectiles do no damage (bytecode 10-18)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityShambler func_70636_d onLivingUpdate: if func_72935_r isDaytime, server side, func_70013_c brightness > 0.5, a random roll, and func_175678_i canSeeSky at eye level, sets dead and calls func_70106_y setDead (bytecode 107-202): it vanishes in sunlight (no burning, no drops)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityShambler func_70601_bi getCanSpawnHere: false unless isCorrectDepth (y > 50, bytecode 0-16 of isCorrectDepth), then EntityMob rules (bytecode 10); spawns only from BiomeDefiled spawnableMonsterList entry weight Config.weightShambler, group 1-2 (bytecode 65-86), config/defiled_lands.cfg line 68 weightShambler=80; not in the Defiled dungeon list (ModEntities.init 166-187)",
+        "Not settled: Damage scaling by difficulty is vanilla player-side behaviour (14 on Normal, more on Hard); the server's difficulty was not checked.",
+        "Not settled: Outside Defiled biomes it only appears if another mod adds it (not checked)."
+      ]
+    },
+    "defiledlands:shambler_twisted": {
+      "reaction": "avoid",
+      "summary": "The underground Shambler: same 40 health, 14 damage, knockback and Slowness II / Mining Fatigue II / Blindness on hit, arrow-immune, but twice as fast and it targets you without line of sight. Do not dig or explore caves below y 50 in Defiled biomes; leave the area if one is near.",
+      "confidence": "verified",
+      "evidence": [
+        "defiledlands-1.12.2-1.4.3.jar: EntityShamblerTwisted extends lykrast.defiledlands.common.entity.monster.EntityShambler (inherits its attackEntityAsMob debuffs, projectile immunity, 40 health, 14 damage, knockback resistance 1.0, follow range 64 and daylight vanish)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityShamblerTwisted func_184651_r initEntityAI: EntityAIAttackMelee at bytecode 21, targetTasks EntityAINearestAttackableTarget(EntityPlayer, checkSight=false) at bytecode 133-141 (the Shambler uses checkSight=true)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityShamblerTwisted func_110147_ax applyEntityAttributes: calls super then MOVEMENT_SPEED (field_111263_d) 0.28 at bytecode 5-14 (Shambler 0.14)",
+        "defiledlands-1.12.2-1.4.3.jar: EntityShamblerTwisted isCorrectDepth returns y < 50 (bytecode 0-16), used by the inherited func_70601_bi getCanSpawnHere: it spawns only below y 50",
+        "defiledlands-1.12.2-1.4.3.jar: spawns only from BiomeDefiled.cleanSpawnLists spawnableMonsterList entry weight Config.weightTwistedShambler, group 1-2 (bytecode 95-116), config/defiled_lands.cfg line 71 weightTwistedShambler=80; also Defiled dungeon spawners, ModEntities.init addDungeonMob(\"shambler_twisted\", 20) at bytecode 183-187",
+        "Not settled: How 0.28 speed compares with a sprinting player was not computed; it is faster than a vanilla zombie (0.23).",
+        "Not settled: Outside Defiled biomes it only appears if another mod adds it (not checked)."
+      ]
+    },
+    "mowziesmobs:grottol": {
+      "reaction": "ignore",
+      "summary": "A harmless crystal critter that runs from players and never attacks. Ignore it; only a pickaxe that can mine diamond ore can hurt it, and one hit kills it.",
+      "confidence": "verified",
+      "evidence": [
+        "mowziesmobs-1.5.8.jar: EntityGrottol extends MowzieEntity extends net.minecraft.entity.EntityCreature (implements IMob). MowzieEntity has no initEntityAI (func_184651_r) override, so EntityGrottol.func_184651_r (initEntityAI) is the whole AI: it calls super at bytecode 1, then adds only tasks (field_70714_bg): EntityAISwimming, EntityAIWander 0.3, EntityAIGrottolFindMinecart, EntityGrottol$1 at bytecode 60-76, EntityAILookIdle, EntityAIWatchClosest(EntityPlayer, 8), AnimationTakeDamage, AnimationDieAI, EntityAIGrottolIdle, SimpleAnimationAI(BURROW_ANIMATION). It adds nothing to targetTasks (field_70715_bh) and never calls setAttackTarget (func_70624_b).",
+        "EntityGrottol$1 extends com.bobmowzie.mowziesmobs.server.ai.MMAIAvoidEntity, built at initEntityAI bytecode 66-76 with (EntityPlayer, 16.0f, 0.5d, 0.7d): it flees players within 16 blocks.",
+        "EntityGrottol does not override attackEntityAsMob (func_70652_k), onLivingUpdate (func_70636_d) or any damage call; grep of the class for attackEntityFrom on another entity, PotionEffect or explosion finds none. The only func_70097_a (attackEntityFrom) calls are its own super calls in its damage handler.",
+        "EntityGrottol.func_70097_a (attackEntityFrom): when the attacker (func_76346_g getTrueSource) is an EntityPlayer that can harvest diamond ore (EntityPlayer.func_184823_b(Blocks.field_150482_ag) at bytecode 20-26), it takes damage equal to its full health (func_110143_aJ at bytecode 85-88); otherwise it plays ENTITY_GROTTOL_UNDAMAGED (bytecode 93).",
+        "EntityGrottol.func_110147_ax (applyEntityAttributes): MAX_HEALTH (field_111267_a) = 20.0f * ConfigHandler$Grottol.healthMultiplier (bytecode 11-24), KNOCKBACK_RESISTANCE (field_111266_c) = 1.0 (bytecode 30-37). config/mowziesmobs.cfg line 310: health_multiplier=2.0, so 40 health.",
+        "config/mowziesmobs.cfg lines 324-326: grottol spawn dimensions = 10 only (not the overworld, 0); line 352: requires_cant_see_sky=true; line 360: spawn_rate=1.",
+        "Not settled: Which dimension has id 10 in RotN 3.3.4 was not checked. Grottol may not spawn naturally in the overworld at all.",
+        "Not settled: I did not open EntityAIGrottolIdle, EntityAIGrottolFindMinecart or the MMAIAvoidEntity body. They are idle, minecart and flee behaviours by name and constructor, and none is a target task.",
+        "The dump's spawns.json lists it in overworld biome spawn lists (nightThreats share 0.1% or less), but the pack's config/mowziesmobs.cfg grottol spawn_data dimensions (lines 324-326) is 10 only, so natural overworld spawns are unlikely",
+        "Not settled: which dimension has id 10 in RotN 3.3.4 (the config limit above) was not checked"
+      ]
+    },
+    "mowziesmobs:foliaath": {
+      "reaction": "keep-distance",
+      "summary": "A stationary jungle plant that bites anything within 4 blocks for 10 damage (5 hearts) and cannot be hurt while closed. Never walk within 5 blocks of it; path around it.",
+      "confidence": "verified",
+      "evidence": [
+        "mowziesmobs-1.5.8.jar: EntityFoliaath extends MowzieEntity extends net.minecraft.entity.EntityCreature (implements IMob). The AI is set in the constructor <init>: targetTasks (field_70715_bh) priority 3 gets EntityFoliaath$1 (extends EntityAINearestAttackableTarget) for EntityLivingBase with chance 0 and checkSight true, plus selector lambda$new$0 (bytecode 182-205). lambda$new$0 accepts any EntityPlayer or EntityCreature (bytecode 0-23). EntityFoliaath$1.func_75296_a (isSuitableTarget) skips only other Foliaaths, invisible targets (func_82150_aj) and invulnerable ones (func_190530_aW). So it targets players.",
+        "<init> bytecode 115-143: tasks priority 1 gets AnimationAttackAI(ATTACK_ANIMATION, BITE_1, null, knockback 2.0f, range 4.0f, damageMultiplier = ConfigHandler$Foliaath.combatData.attackMultiplier, damageFrame 3). AnimationAttackAI.func_75246_d (updateTask) at bytecode 58-102 deals getAttack() * damageMultiplier as DamageSource.func_76358_a (causeMobDamage) when targetDistance <= range. EntityFoliaath.getAttack returns 10 (bytecode 0). config/mowziesmobs.cfg line 773: attack_multiplier=1.0, so 10 damage per bite.",
+        "EntityFoliaath.func_70071_h_ (onUpdate) sets motionX (field_70159_w) and motionZ (field_70179_y) to 0 every tick (bytecode 5-11), so it is stationary. canBePushed (func_70104_M) returns false. It starts the attack when targetDistance <= 4.0 (bytecode 419-425) and the target is between 1 block below and 2 blocks above; it opens (setActivateTarget 30) at <= 10.5 blocks (bytecode 494-546).",
+        "EntityFoliaath.func_70097_a (attackEntityFrom) at bytecode 0-17 ignores damage unless it is active (open) or the source canHarmInCreative (func_76357_e).",
+        "EntityFoliaath.func_110147_ax (applyEntityAttributes): KNOCKBACK_RESISTANCE (field_111266_c) 1.0 (bytecode 5-12), MAX_HEALTH 10.0f * combatData.healthMultiplier (bytecode 18-40). config/mowziesmobs.cfg line 778: health_multiplier=1.0. config/roughmobsrevamped.cfg lines 157-158: armor +2, maxHealth +5 (operator 0 = add, line 10), so about 15 health.",
+        "EntityFoliaath.func_70074_a (onKillEntity) gives itself REGENERATION (field_76428_l) for 300 ticks, amplifier 1 (bytecode 1-17).",
+        "config/mowziesmobs.cfg lines 702-704: dimension 0; lines 757-760: biome types JUNGLE and LUSH,SWAMP; lines 693-699: spawns on grass, leaves and logs; line 738: spawn_rate=8; line 727: needs_darkness=false, so it spawns by day too.",
+        "Not settled: The rough mobs attribute bonuses (roughmobsrevamped.cfg) come from another mod's config. I read them from the cfg only, not from the Rough Mobs bytecode."
+      ]
+    },
+    "mowziesmobs:barakoana": {
+      "reaction": "avoid",
+      "summary": "A savanna tribal elite (about 60 health) that leads 3-4 masked spear warriors; a third of them shoot poison darts. They gang up on you with 6-9 damage spear stabs, so leave at once and never fight the pack with early gear.",
+      "confidence": "verified",
+      "evidence": [
+        "mowziesmobs-1.5.8.jar: EntityBarakoana extends EntityBarakoa (abstract, implements IRangedAttackMob, IMob) extends MowzieEntity extends net.minecraft.entity.EntityCreature. The EntityBarakoana constructor (<init>) adds to targetTasks (field_70715_bh) at bytecode 200-217: BarakoaAttackTargetAI(EntityPlayer, chance 0, checkSight true, false) at priority 3. It also adds BarakoaHurtByTargetAI at priority 3 (bytecode 22-39) and EntityAINearestAttackableTarget for cows, pigs, sheep, chickens, zombies and skeletons at priority 5 (bytecode 43-171).",
+        "BarakoaAttackTargetAI.lambda$new$0: a player is skipped only on PEACEFUL difficulty (bytecode 8-21) or when wearing a BarakoaMask helmet (inventory.armorInventory[3] at bytecode 23-50). Otherwise it is a valid target.",
+        "EntityBarakoana.func_180482_a (onInitialSpawn): spawns rand.nextInt(2)+3 = 3-4 EntityBarakoanToBarakoana followers (bytecode 1-9, new at 27, spawnEntity func_72838_d at 119). Each follower gets setWeapon(rand.nextInt(3)==0 ? 1 : 0) at bytecode 89-110, so about 1 in 3 has a blowgun. EntityBarakoanToBarakoana.func_70071_h_ (onUpdate) copies the leader's getAttackTarget into its own setAttackTarget each tick (bytecode 5-22). When the leader dies, EntityBarakoana.func_70645_a (onDeath) calls removeLeader on each follower (bytecode 9-14, bootstrap 1), and removeLeader adds BarakoaAttackTargetAI(EntityPlayer) to the follower's own targetTasks (bytecode 18-35). The pack stays hostile after the leader dies.",
+        "EntityBarakoa <init> bytecode 191-225: AnimationAttackAI(range 2.5f, damageMultiplier = ConfigHandler$Barakoa.combatData.attackMultiplier, damageFrame 9). getAttack returns 6 for MaskType.FURY, else 4 (bytecode 1-16). The leader's mask is FURY (Barakoana <init> bytecode 221-224) and canHoldVaryingWeapons returns false, so it always uses the spear. config/mowziesmobs.cfg line 572: attack_multiplier=1.5, so the leader does 9 damage per stab and followers 6 or 9. EntityBarakoa.updateAttackAI paths to the target when it is further than 6.5 blocks (bytecode 59-98) and stabs at <= 2.5 blocks (bytecode 220-255). Blowgun users (weapon 1) fire whenever they can see the target (bytecode 259-273).",
+        "EntityBarakoa.func_82196_d (attackEntityWithRangedAttack) fires an EntityDart (extends EntityTippedArrow) at velocity 1.6 (bytecode 0-93). AnimationProjectileAttackAI passes distanceFactor 0 (fconst_0 at bytecode 65), so the dart damage is about (gaussian*0.25 + difficulty*0.11) * 1.5 (bytecode 128-218), roughly 1 damage. EntityDart.func_184548_a (arrowHit) gives POISON (field_76436_u) for 20 ticks at amplifier 1 when the shooter is not a player (bytecode 45-60).",
+        "EntityBarakoa.func_110147_ax (applyEntityAttributes): MAX_HEALTH 10.0f * combatData.healthMultiplier (bytecode 11-28). config/mowziesmobs.cfg line 577: health_multiplier=1.5, so 15 health. config/roughmobsrevamped.cfg lines 163-166 add to barakoana +45 max health, +5 armor, +5 attack damage and +0.7 knockback resistance, so about 60 health. Lines 159-162 add to barakoan_barakoana followers +15 health and +3 armor, so about 30 health each.",
+        "config/mowziesmobs.cfg lines 502-504: dimension 0; lines 557-559: biome type SAVANNA; line 527: needs_darkness=false; line 533: requires_see_sky=true (surface); line 538: spawn_rate=4. It can be met by day or night.",
+        "Not settled: The rough mobs bonuses come from another mod's config, read from the cfg only. Its +attackDamage probably does not change spear damage, because AnimationAttackAI uses getAttack() and not the ATTACK_DAMAGE attribute.",
+        "Not settled: I did not trace the blocking (AnimationBlockAI) and the angle check in EntityBarakoa.func_70097_a (attackEntityFrom) at bytecode 13-178. Barakoa may block hits from some directions."
+      ]
+    },
+    "betteranimalsplus:tarantula": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "A big spider that is hostile day and night, climbs walls, and every 8 seconds spits a hair dart from up to 15 blocks for 8 damage plus blindness; its bite slows you and webs you in. Break line of sight and leave; do not trade hits with stone tools.",
+      "confidence": "verified",
+      "evidence": [
+        "betteranimalsplus-1.12.2-9.0.1.jar: EntityTarantula extends net.minecraft.entity.monster.EntitySpider implements IRangedAttackMob. Its func_184651_r (initEntityAI) does not call super, so the vanilla daylight-checking EntitySpider$AISpiderTarget and $AISpiderAttack are not used. targetTasks (field_70715_bh) gets EntityAIHurtByTarget at priority 1 (bytecode 123-141) and plain EntityAINearestAttackableTarget(EntityPlayer, true) at priority 2 (bytecode 144-160), plus an iron golem target at priority 3. So it is hostile to players in daylight too.",
+        "initEntityAI tasks: EntityAIAttackRanged(this, 1.0, 160, 15.0f) with setMutexBits (func_75248_a) 4 at priority 3 (bytecode 16-42), EntityAILeapAtTarget 0.4 (bytecode 50-60) and EntityAIAttackMelee 0.8 (bytecode 68-80), also at priority 3. Its mutex bits do not overlap with melee's, so it shoots and melees at the same time. It fires every 160 ticks (8 s) at targets within 15 blocks.",
+        "EntityTarantula.func_82196_d (attackEntityWithRangedAttack) spawns EntityTarantulaHair (extends EntityThrowable) and shoots it (func_70186_c) at velocity 1.5 with inaccuracy 8.0 (bytecode 0-148). EntityTarantulaHair.func_70184_a (onImpact) deals 8 damage as DamageSource.func_76356_a (causeThrownDamage) (bytecode 7-24). On a player it adds blindness for 40/60/80 ticks on easy/normal/hard (bytecode 59-113) via func_70690_d (addPotionEffect) at bytecode 115-134.",
+        "EntityTarantula has no func_110147_ax (applyEntityAttributes) or func_70652_k (attackEntityAsMob) override, so it inherits the EntitySpider stats (16 health; attack damage from EntityMob, 2) and wall climbing. config/roughmobsrevamped.cfg lines 215-218: armor +2, maxHealth operator 1 value 2 (multiply) and +2, and knockback resistance +0.7 (operators on line 10), which gives roughly 50 health.",
+        "config/roughmobsrevamped.cfg line 1554 lists betteranimalsplus:tarantula in spiderEntities (spider features on, line 1539). Line 1626 spiderSlownessChance=1 (every melee hit slows), line 1629 spiderSlownessCreateWeb=true, line 1632 spiderSlownessDuration=120 ticks, line 1574 spiderRiderChanceRandom=15 (a mob may ride it).",
+        "config/betteranimalsplus.cfg lines 582-620: entitytarantula doSpawning=true (line 587), group 1-3 (lines 590, 593), weight 10 (line 619). Spawn biomes (lines 596-616) are mesa, desert and jungle variants plus BoP steppe, lush_desert, outback, xeric_shrubland, ominous_woods, rainforest, tropical_rainforest and tropical_island. No script in scripts/betteranimalsplus.zs or mobstages.zs touches it.",
+        "Not settled: The inherited EntitySpider stats (16 health, attack damage 2, climbing) are from vanilla 1.12.2 knowledge, not read from a vanilla jar here.",
+        "Not settled: The rough mobs effects (health multiplier, slowness, webs, riders) come from another mod's config, read from the cfg only and not from Rough Mobs bytecode.",
+        "Not settled: BAP's spawn registration (which creature type it uses, and whether it needs darkness) was not traced. It may spawn as a monster only at night even though it stays hostile by day."
+      ]
+    },
+    "minecraft:husk": {
+      "reaction": "fight",
+      "summary": "A desert zombie: melee like a zombie, but its hits can cause Hunger and it does not burn in daylight. Fight it like a zombie at a choke point, and do not count on dawn to remove it.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityHusk behaviour (extends EntityZombie; attackEntityAsMob adds Hunger for 140 ticks (7 s) per whole point of regional difficulty, so none where it is below 1; does not burn in daylight); unverified on this pack",
+        "The pinned pack treats it like the zombie: config/ZombieAwareness/MobLists.cfg line 77 (B:Husk=true), config/roughmobsrevamped.cfg zombie.zombieEntities lines 2902-2912 (minecraft:husk at 2912) and spiderRiderEntities (line 1606), config/Special_AI.cfg door-breaking mob_list (line 75, chance 1.0), passive griefing mob_list (line 671, 0.7) and rider_list (line 1154, 0.05). These configs come from the server pack zip (SHA-256 90642fd5...f5205)",
+        "docs/research/rotn-progression.md section 2 names husks only as invasion special mobs ([R:hordes.cfg]); invasions are not expected on day 1"
+      ]
+    },
+    "minecraft:zombie_villager": {
+      "reaction": "fight",
+      "summary": "A zombie with a villager's look: it fights exactly like a zombie and burns in daylight. Fight it like a zombie at a choke point.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityZombieVillager behaviour (extends EntityZombie; same melee attack and daylight burning; can be cured with a splash potion of Weakness and a golden apple); unverified on this pack",
+        "The pinned pack treats it like the zombie: config/ZombieAwareness/MobLists.cfg line 166 (B:ZombieVillager=true), config/roughmobsrevamped.cfg zombie.zombieEntities (line 2911) and spiderRiderEntities (line 1605), config/Special_AI.cfg door-breaking mob_list (line 74, chance 1.0), passive griefing mob_list (line 670, 0.7) and rider_list (line 1153, 0.05). These configs come from the server pack zip (SHA-256 90642fd5...f5205)"
       ]
     }
   },
