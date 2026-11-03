@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (00:10 UTC, from `date -u`)
+Updated: 2026-11-03 (00:36 UTC, from `date -u`)
 
 ## Done
 
@@ -134,7 +134,7 @@ Updated: 2026-11-02 (00:10 UTC, from `date -u`)
       - **only SSH (port 22) is public.** Orca's server listens on loopback only.
       - The users are root and nobody only. The running services are a standard cloud set. Nothing of ours is there yet.
     - GO 2 waits on the human (Ubuntu 26.04 against the 24.04 pin, and sshd password logins); the lead is asking.
-  - **Merged (#129, c2d6867): the #122 review nits**, with the #129 review fixes (its re-review nits 1-3 are in this PR):
+  - **Merged (#129, c2d6867): the #122 review nits**, with the #129 review fixes (its re-review nits 1-3: #139, f1fd589):
     1. **The G3 gate evidence is cross-checked against `batch.mjs`'s summary** (`test/tools/g3-batch-check.mjs`), because the `ROTN_G3_BATCH` marker alone can be forged.
        - The check is forced: CI fails on any G3 `result.json` anywhere under `test/evidence/` that no `batch.json` in its own folder or a parent folder covers.
        - Each result is bound to its batch by its `runId`, which `batch.mjs` reads back from the scenario's `result.json`. A second, hand-run result under a reused batch id therefore fails.
@@ -1127,16 +1127,17 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the #129 re-review nits 1-3, required before the first G3 gate batch (`agent/harness-ops/g3-evidence-scan`):
-  1. the tree check reads every `*.json` under `test/evidence/`, whatever its name; a `batch.json` that is itself a G3 result fails it;
-  2. a G3 result is found by its gate in any case or spacing, a `g3-` scenario in any case, or a scenario `loadScenarios` marks G3;
-  3. DRIVER.md says gate reviews accept G3 evidence only from `test/evidence/g3/<batch>/`.
-- Next, before GO 2: the #137 re-review nits:
-  1. the `--ssh-from` refusal says to run setup from a root SSH login, not through sudo;
-  2. the drop-in is put back if `/run/sshd` cannot be created;
-  3. setup refuses an sshd config with a `Match` line.
+- This PR: the #137 re-review nits, before GO 2 (`agent/harness-ops/cx23-sshd-nits`):
+  1. the `--ssh-from` refusal says to run setup from a root SSH login, not through sudo (sudo drops `SSH_CONNECTION`);
+  2. `/run/sshd` is made before the drop-in is written, so a failure there cannot leave an unchecked drop-in;
+  3. setup refuses, before any change, an sshd config with a `Match` line (`sshd -T` without `-C` ignores Match blocks).
+  - **The #144 review, done here:**
+    - nit 3 (required): the not-root message no longer says `sudo bash bootstrap.sh`; it points to a root SSH login;
+    - nit 1: `Match=` is refused too, as is any `Include` other than Ubuntu's own one.
+    - Nit 2 (no signal trap during the write) is not done: a hangup can only leave a drop-in that turns password login off.
 - Later:
+  - the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected);
   - the #135 nits (a comment that the load step proves linking, not rendering; an explicit working directory);
   - the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from);
   - a research note on Java 8 packages on Ubuntu 26.04.
-- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), #135 (the CI job on Ubuntu 26.04, 05b1a5b), #137 (the bootstrap for Ubuntu 26.04, f028e9b), and the lead's #134 (ADR 0007).
+- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), #135 (the CI job on Ubuntu 26.04, 05b1a5b), #137 (the bootstrap for Ubuntu 26.04, f028e9b), #139 (the G3 evidence scan, f1fd589), and the lead's #134 (ADR 0007).
