@@ -79,15 +79,31 @@ index 70db312..93d2054 100644
      }
    }
 diff --git a/node_modules/mineflayer/lib/plugins/place_block.js b/node_modules/mineflayer/lib/plugins/place_block.js
-index fdaec6b..08983b6 100644
+index fdaec6b..360d30b 100644
 --- a/node_modules/mineflayer/lib/plugins/place_block.js
 +++ b/node_modules/mineflayer/lib/plugins/place_block.js
-@@ -11,7 +11,7 @@ function inject (bot) {
+@@ -2,7 +2,14 @@ const { onceWithCleanup } = require('../promise_utils')
+ 
+ module.exports = inject
+ 
+-function inject (bot) {
++// How long placeBlock waits for the server's block update before it reports failure.
++// Upstream mineflayer waits 5000 ms; Mindcraft uses 500 ms. Configurable for a lagging server:
++// createBot({ placeBlockTimeout }), bot.placeBlockTimeout at runtime, or { timeout } per call.
++const DEFAULT_PLACE_BLOCK_TIMEOUT = 500
++
++function inject (bot, botOptions = {}) {
++  bot.placeBlockTimeout = botOptions.placeBlockTimeout ?? DEFAULT_PLACE_BLOCK_TIMEOUT
++
+   async function placeBlockWithOptions (referenceBlock, faceVector, options) {
+     const dest = referenceBlock.position.plus(faceVector)
+     let oldBlock = bot.blockAt(dest)
+@@ -11,7 +18,7 @@ function inject (bot) {
      let newBlock = bot.blockAt(dest)
      if (oldBlock.type === newBlock.type) {
        [oldBlock, newBlock] = await onceWithCleanup(bot, `blockUpdate:${dest}`, {
 -        timeout: 5000,
-+        timeout: 500,
++        timeout: options?.timeout ?? bot.placeBlockTimeout,
          // Condition to wait to receive block update actually changing the block type, in case the bot receives block updates with no changes
          // oldBlock and newBlock will both be null when the world unloads
          checkCondition: (oldBlock, newBlock) => !oldBlock || !newBlock || oldBlock.type !== newBlock.type
