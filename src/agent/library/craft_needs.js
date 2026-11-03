@@ -51,7 +51,10 @@ export function craftNeeds(bot, name) {
             const short = Math.max(0, input.count - (best?.have ?? 0));
             const label = input.ore ?? (members[0] ? memberName(members[0]) : '?');
             // The kind to get more of: the one the bot holds most of, else the likeliest choice.
-            const more = short > 0 ? (best?.name ?? (members[0] ? memberName(members[0]) : null)) : null;
+            // With none held, an ore input is any member: advise the likeliest family's bare name
+            // ("pyrotech:rock (any rock)"), not one variant (#151 review).
+            const anyOf = members[0] ? (input.ore ? `${botName(members[0].name)} (any ${input.ore})` : memberName(members[0])) : null;
+            const more = short > 0 ? (best?.name ?? anyOf) : null;
             return { ore: input.ore ?? null, count: input.count, label, kinds, short, more };
         });
         const short = inputs.reduce((n, i) => n + i.short, 0);
@@ -68,9 +71,9 @@ export function craftNeeds(bot, name) {
  */
 export function describeNeeds(name, needs) {
     const parts = needs.inputs.map(i => {
-        const kind = i.ore ? `${i.count} ${i.label} of one kind` : `${i.count} ${i.label}`;
+        const kind = i.ore && i.count > 1 ? `${i.count} ${i.label} of one kind` : `${i.count} ${i.label}`;
         const held = i.kinds.length ? `you have ${i.kinds.map(k => `${k.have} ${k.name}`).join(', ')}` : 'you have none';
-        const verdict = i.short > 0 ? `, so get ${i.short} more ${i.more}` : ' (enough)';
+        const verdict = i.short > 0 ? `, so get ${i.short}${i.kinds.length ? ' more' : ''} ${i.more}` : ' (enough)';
         return `${kind}: ${held}${verdict}`;
     });
     const where = needs.requiresTable ? ' (at a crafting table)' : '';

@@ -43,7 +43,7 @@ test('the flint recipe counts too (any RotN craft way, matched by output and ing
 test('no rocks at all: "you have none", and the likeliest rock to get', () => {
     const needs = craftNeeds(invBot([stack('stick', 0, 2)]), 'stone_pickaxe');
     assert.equal(needs.ready, false);
-    assert.match(describeNeeds('stone_pickaxe', needs), /3 rock of one kind: you have none, so get 3 more pyrotech:rock:0/);
+    assert.match(describeNeeds('stone_pickaxe', needs), /3 rock of one kind: you have none, so get 3 pyrotech:rock \(any rock\)/);
 });
 
 test('an item with no RotN craft way gives null', () => {
@@ -67,4 +67,32 @@ test('!craftRecipe("stone_pickaxe", 1) with a mixed haul says which rock to get,
     const { commandName, args } = parseCommandMessage('!craftRecipe("stone_pickaxe", 1)');
     await getCommand(commandName).perform(agent, ...args);
     assert.match(bot.output, /You do not have the resources to craft stone_pickaxe\. To craft stone_pickaxe \(at a crafting table\): 3 rock of one kind: .* so get 1 more pyrotech_compat:rock_metamorphic/);
+});
+
+// #151 review: the early-game messages, word for word.
+test('crude axe: a single rock is "1 rock", and with none the advice is any rock', () => {
+    const needs = craftNeeds(invBot([stack('stick', 0, 2)]), 'pyrotech:crude_axe');
+    assert.equal(describeNeeds('pyrotech:crude_axe', needs),
+        'To craft pyrotech:crude_axe: 1 rock: you have none, so get 1 pyrotech:rock (any rock); 2 ladderMat of one kind: you have 2 stick (enough).');
+});
+
+test('Crafting Tools: the crude axe, a rock and a stick', () => {
+    const needs = craftNeeds(invBot([stack('pyrotech:crude_axe', 0, 1), stack('stick', 0, 1)]), 'contenttweaker:crafting_tools');
+    assert.equal(describeNeeds('contenttweaker:crafting_tools', needs),
+        'To craft contenttweaker:crafting_tools: 1 pyrotech:crude_axe: you have 1 pyrotech:crude_axe (enough); 1 rock: you have none, so get 1 pyrotech:rock (any rock); 1 ladderMat: you have 1 stick (enough).');
+    const ready = craftNeeds(invBot([stack('pyrotech:crude_axe', 0, 1), stack('stick', 0, 1), stack('pyrotech_compat:rock_igneous', 3, 1)]), 'contenttweaker:crafting_tools');
+    assert.equal(ready.ready, true, 'an Underground Biomes rock is a rock');
+});
+
+test('crafting table: a plank and the Crafting Tools (no plank-only recipe)', () => {
+    const needs = craftNeeds(invBot([stack('planks', 0, 1)]), 'crafting_table');
+    assert.equal(describeNeeds('crafting_table', needs),
+        'To craft crafting_table: 1 plankWood: you have 1 planks (enough); 1 contenttweaker:crafting_tools: you have none, so get 1 contenttweaker:crafting_tools.');
+});
+
+test('stone axe: at a crafting table, from rocks', () => {
+    const needs = craftNeeds(invBot([stack('pyrotech_compat:rock_igneous', 0, 2), stack('stick', 0, 2)]), 'stone_axe');
+    assert.equal(needs.requiresTable, true);
+    assert.equal(describeNeeds('stone_axe', needs),
+        'To craft stone_axe (at a crafting table): 3 rock of one kind: you have 2 pyrotech_compat:rock_igneous, so get 1 more pyrotech_compat:rock_igneous; 2 ladderMat of one kind: you have 2 stick (enough).');
 });
