@@ -209,3 +209,18 @@ test('the plan cycle guard has no depth limit: a 12-step cycle is found (#102 re
         mc.__setRegistryForTest(registry);
     }
 });
+
+// #145 review: near the G3 spawn the bot holds mixed Underground Biomes rocks. mineflayer's
+// recipesFor keeps a recipe when, for every delta entry, inventory.count(id, metadata) covers it
+// (craft.js requirementsMetForRecipe); the same rule here, on the installed RotN table.
+test('mixed rocks (1 igneous + 2 metamorphic) and 2 sticks make a stone pickaxe and a stone axe', () => {
+    mc.installRotnRecipes();
+    const Recipe = require('prismarine-recipe')(registry).Recipe;
+    const id = (n) => registry.itemsByName[n].id;
+    const inv = [[id('pyrotech_compat:rock_igneous'), 3, 1], [id('pyrotech_compat:rock_metamorphic'), 0, 2], [id('stick'), 0, 2]];
+    const count = (i, m) => inv.filter(([a, b]) => a === i && (m == null || m === b)).reduce((n, x) => n + x[2], 0);
+    const craftable = (r) => r.delta.every((d) => count(d.id, d.metadata) + d.count >= 0);
+    for (const item of ['stone_pickaxe', 'stone_axe']) assert.ok(Recipe.find(id(item)).some(craftable), item);
+    // Cobblestone takes 4 rocks of one type (one recipe per rock type), so a mix makes none.
+    assert.ok(!Recipe.find(id('cobblestone')).some(craftable));
+});
