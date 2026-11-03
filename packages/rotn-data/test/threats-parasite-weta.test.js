@@ -30,3 +30,12 @@ test('weta: not hostile, only retaliates, and does not spawn naturally on this p
     assert.match(ev('mod_lavacow:weta'), /'weta spawn rate'=0/);
     assert.ok(!pack.nightThreats({ limit: 1000 }).some((x) => x.name === 'mod_lavacow:weta'), 'in no night spawn list');
 });
+
+test('#179 review: the sand source is cited, and the advice does not rely on the infestation wearing off', () => {
+    const t = pack.threatOf('mod_lavacow:parasite');
+    assert.match(t.summary, /sand dug in a dry \(desert\) biome/);
+    assert.match(t.summary, /waiting does not shake it off/);
+    assert.doesNotMatch(t.summary, /catch fire|wears off/);
+    assert.match(ev('mod_lavacow:parasite'), /HarvestDropsEvent.*Material\.SAND.*DRY.*'parasite from sand blocks'=1/);
+    assert.match(ev('mod_lavacow:parasite'), /a player who dies infested leaves parasites/);
+});
