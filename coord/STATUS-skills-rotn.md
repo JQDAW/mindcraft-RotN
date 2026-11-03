@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T11:55Z (from `date -u`)
+Updated: 2026-11-03T11:59Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -44,7 +44,8 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 **Session 2 (respawned after the Orca restart, 2026-11-03):** the branches matched origin, and CI was green on #164 and #170.
 - **#164 E2 agenda:** fixes pushed, CI green; waiting for the lead's re-review.
-- **#170 F1 profile:** lead REQUEST CHANGES, fixed in `837cc2c6`: `"name": "FRCFLD"` (lead decision: the bot is FRCFLD, here and on the CX23), with a test of the exact name. The `speak_model` nit is left as is (`settings.speak` is false). Reply posted; CI is running.
+- **#170 F1 profile:** lead REQUEST CHANGES, fixed in `837cc2c6`: `"name": "FRCFLD"` (lead decision: the bot is FRCFLD, here and on the CX23), with a test of the exact name. The `speak_model` nit is left as is (`settings.speak` is false). Reply posted; CI green.
+- **#175 opened:** the #151 nit (branch `agent/skills-rotn/craft-needs-slot`, base `develop`). `craft_needs.js` finds an input's own recipe slot by its exact stack list (size `choices + more`, every choice in it). Before, `soaking_pot`'s 1-stack slot counted string from the twine slot. The new test fails on the old code; library and command tests pass 57/57.
 - **#174 E3 priority stack opened** (branch `agent/skills-rotn/priority-stack`, stacked on #164; retarget to `develop` after #164 merges):
   - control holds: a giver's typed `!stop`, `!pause` (new), `!stfu` (now giver-only) and `!resume` (new), saved in `bots/<name>/control.json`; a giver's typed action holds autonomy while it runs;
   - tasks before the agenda, switching at the checkpoint, with the step-sized budget, `!taskDone`/`!taskFailed`, and the agenda resuming with no new run;
@@ -53,10 +54,9 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
   This fixes #164's known limit (`!stop`/`!stfu` undone by the agenda). Tests: `src/agent/**` 170/170; lint 254.
 - **Next, in order:**
-  1. answer the #164, #170 and #174 reviews;
-  2. the #151 nit (`craft_needs.js` matches the exact slot stack list);
-  3. C1 crafting execution and C2 (first plank), after net-forge's Request 2 report;
-  4. D2 night shelter, for G3 (b).
+  1. answer the reviews on #164, #170, #174 and #175;
+  2. C1 crafting execution and C2 (first plank). Net-forge's final Request 2 answer is in #167, which is not merged yet, and P1 (paid, lead GO) measures the place timing. Until then C1 stays blocked;
+  3. D2 night shelter, for G3 (b): the night detector and the shelter blueprint closure check need no packets, so they can start before C1.
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - **Merged:** E1 #146 (task queue), C1a #151 (craft needs; lead nit for later: `craft_needs.js` should match the exact slot stack list, as the slot found by `choices[0]` is wrong for `soaking_pot` and `hamster_wheel`), #156 (with rotn-data #153).
@@ -163,4 +163,5 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 - #164 E2 agenda (branch `agent/skills-rotn/agenda`). Serves brief item 6 and G3 (c), with harness-ops’ "the agenda at a fresh spawn".
 - #170 F1 start, the RotN profile on the OpenRouter preset (branch `agent/skills-rotn/rotn-profile`). Serves the human decision on the model and brief item 7. Bot name FRCFLD (#170 review).
+- #175 the #151 nit: craft_needs matches each input's recipe slot by its exact stack list (branch `agent/skills-rotn/craft-needs-slot`).
 - #174 E3 priority stack (branch `agent/skills-rotn/priority-stack`, base #164's branch). Serves brief item 4, G3 (c) and the lead's E3 requirements.
