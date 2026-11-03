@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-03T01:01Z
+Updated: 2026-11-03T01:31Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -27,14 +27,14 @@ The human approved the resume on 2026-11-03, and the lead brought me back for sk
    - All of these are covered in the same test file through mineflayer's real `_genericPlace`, `activateItem` and `deactivateItem`.
 3. **The 500 ms `blockUpdate` wait: yes, it can be made configurable.** That is PR 3 (the mineflayer patch, plus an `initBot` option). Details are in that PR.
 
-**Gap found: the RotN crafting table opens through FML OpenGui, so `bot.craft(recipe, n, table)` hangs.**
+**Gap found: the RotN crafting table opens through FML OpenGui, so `bot.craft(recipe, n, table)` fails.**
 - Run A's RegistryData overrides `minecraft:crafting_table` (block and item) with **`fastbench`** (FastWorkbench 1.7.4).
 - `javap` on `FastWorkbench-1.12.2-1.7.4.jar` from the pinned zip:
   - `BlockFastBench.onBlockActivated` calls `player.openGui(FastBench, 0, world, x, y, z)`.
   - Its `Handler` returns a `ContainerFastBench` (a `ContainerWorkbench`, same slots) for gui id 0.
 - `javap` on Forge 14.23.5.2860 `FMLNetworkHandler.openGui`: it writes the FML OpenGui message (i32 windowId, modId, i32 gui id, x, y, z) **before** `addListener` sends `window_items`.
-- So the server never sends a vanilla `open_window`. mineflayer's `craftOnce` then waits on `once(bot, 'windowOpen')`, which has no timeout. forge-bridge only logs OpenGui today.
-- **The fix (PR 2, forge-bridge only):** on OpenGui `fastbench`/0, emit a synthetic `open_window` (`minecraft:crafting_table`) on the client before the `window_items` that follows. prismarine-windows already knows that window (result 0, grid 1-9, inventory 10-45). Unknown mod GUIs stay logged only.
+- So the server never sends a vanilla `open_window`. mineflayer's `craftOnce` then waits on `once(bot, 'windowOpen')` and fails after 20 s ("Event windowOpen did not fire within timeout of 20000ms", reproduced in PR 2's mutation check). Before PR 2, forge-bridge only logged OpenGui.
+- **The fix (PR 2, forge-bridge only, done):** on OpenGui `fastbench`/0, emit a synthetic `open_window` (`minecraft:crafting_table`) on the client before the `window_items` that follows. prismarine-windows already knows that window (result 0, grid 1-9, inventory 10-45). Unknown mod GUIs stay logged only.
 - Also from `javap`: `ContainerFastBench` sends the result slot (`set_slot` 0) only when the recipe or the result changes, plus an int recipe id on the `fastbench` channel. No reply is needed. mineflayer sets slot 0 from `recipe.result` before it clicks, so this does not matter for `bot.craft`.
 
 **Notes for skills-rotn (C1), from the same reading:**
@@ -42,6 +42,14 @@ The human approved the resume on 2026-11-03, and the lead brought me back for sk
 - Ingredient meta `32767` is the wildcard. Pass `metadata: null` for it, or `findInventoryItem` looks for meta 32767.
 - `remaining` items (container items) must become `outShape`. Otherwise mineflayer clears the grid locally while the server keeps them. The server's `set_slot`s fix this later. None of the early-game recipes have any.
 - `craftingcraft:portable_crafting_table` also opens through OpenGui (not handled; not needed for ready-to-try).
+- **mineflayer-auto-eat (loaded by `initBot`) clicks the inventory too.** In PR 2's test, at food 15 it equipped bread in the middle of a 2x2 craft (with its default `offhand: true`, it moved stacks into slot 45), and mineflayer's craft then failed with a rejected click. `agent.js` sets `startAt: 14` without `offhand`, so the window is smaller, but it is still there. C1 should pause auto-eat during `bot.craft` (`bot.autoEat.disable()` / `enable()`), or not craft while hungry.
+
+**PR 2 (offline proof of the flow):** `packages/forge-bridge/test/craft-e2e.test.js`. The real `initBot` runs through forge-bridge and REID against the fake Forge server plus `test/fake-containers.js`, a model of `processClickWindow`, the crafting result slot, FastWorkbench's OpenGui, placing and eating as read with `javap`. It uses the real Run A ids and the `fastbench` override, and builds prismarine-recipe objects the way C1 will.
+- The bot crafts the crude axe (2x2 shaped), Crafting Tools and the crafting table (2x2 shapeless), and a stone pickaxe at the FastWorkbench table (3x3).
+- Every click is accepted on the first try, and the server-side inventory ends up right.
+- `bot.placeBlock` places cobblestone, confirmed by `block_change`.
+- `bot.consume` eats bread with `use_item` hand 0.
+- Mutation check: with the FastWorkbench mapping removed, the table craft fails with the 20 s `windowOpen` timeout.
 
 **Live proof:** the encoding is checked against the vanilla jar and the real ids, and PR 2's flow against a fake server that follows the `javap` reading. A real-server check is still needed. The probe plan is under "Requests" (it needs a written GO).
 
@@ -557,22 +565,62 @@ The setup for both batches:
 
 ## Requests to other agents or the lead
 
-- **Lead: GO for one live probe batch (Request 2 proof), after PR 2 merges. Not started; it needs your written GO.**
-  - **What:** one disposable CPX42 from the pinned zip, with the usual watchdog (8 h) and delete-after. The estimate is under 45 min up, about EUR 0.10 plus IPv4 hours.
-  - **Setup:** harness-ops' runner gives the bot items with `/give` on the test server only: 4 `pyrotech:rock`, 4 `minecraft:stick`, 1 `minecraft:planks`, 1 bread, 8 `minecraft:cobblestone`. It also sets a `minecraft:crafting_table` (FastWorkbench) next to the bot with `/setblock`.
-  - **Steps:** a small net-forge probe driver (`packages/forge-bridge/tools/craft-probe.mjs`, on the g1-driver pattern) runs, using rotn-data's recipes:
-    1. 2x2: craft `pyrotech:crude_axe`, then `contenttweaker:crafting_tools`, then `minecraft:crafting_table`.
-    2. Table: `bot.craft` with the placed table, so FastWorkbench's OpenGui leads to the synthetic window; craft `minecraft:stone_pickaxe` from 3 rocks and 2 sticks.
-    3. Place cobblestone 5 times, recording the `block_place` -> `block_change` latency.
-    4. Eat bread (`use_item`) and check the food level.
-  - **Evidence:**
-    - every `window_click` and `transaction` both ways in the capture (I add `transaction` to the capture list);
-    - the inventory before and after, confirmed with `/clear <bot> <item> 0` counts on the server;
-    - the placement latencies (to pick the timeout default);
+- **Probe plan P1 for the human's GO (Request 2 live proof). Not started: it needs a written GO.** The lead takes it to the human.
+  - **What it proves:** the offline tests cannot prove these three things on the real RotN 3.3.4 server:
+    1. Serverbound REID: the server accepts `window_click` stacks with VarInt item ids above 4095 (crude axe 9075, rock 8917, Crafting Tools 12510).
+    2. FastWorkbench: right-clicking `minecraft:crafting_table` sends FML OpenGui `fastbench`/0, then `window_items`. A 3x3 craft in it works through the synthetic window. The result slot's `set_slot` behaves as `fake-containers.js` assumes.
+    3. Placing and eating: `block_place` and `use_item` on 1.12, with the real `block_change` latency. That latency picks the `place_block_timeout_ms` value.
+  - **Server:** one disposable CPX42 in nbg1, built from the pinned zip by `deploy/test-server.sh run`, as in G2 batch 8:
+    - fixed world seed `1880465901402976865`;
+    - `--ttl-hours 2` (the delete-after watchdog; the sweeper preflight must pass, and nothing is skipped);
+    - deleted by the EXIT trap.
+  - **Code needed first (none of it touches the live server):**
+    - **net-forge:** probe commands in `packages/forge-bridge/tools/g1-driver.mjs` (scenario protocol, whispered by the scenario):
+      - `probe-craft <recipe>`: `bot.craft` with rotn-data's recipe; for the table recipe, `bot.blockAt` of the table;
+      - `probe-place <x y z face>`: `bot.placeBlock`, recording the ms until `blockUpdate`;
+      - `probe-eat`: `bot.consume`.
+      - Each answers with a JSON line. Auto-eat is off during the probe. `ROTN_DRIVER_CAPTURE=1` keeps the capture, with `window_click`, `transaction`, `set_slot`, `block_place`, `block_change` and `use_item` captured by default since #154.
+    - **harness-ops:** a scenario `test/scenarios/probe/probe-craft-place.mjs`. It is not a gate: `gateValid: false` always.
+  - **Scenario steps** (server console on the test server only; no op for the bot):
+    1. Log in as in G1. `gamerule doDaylightCycle false`, `time set day`, `tp FRCFLD -45 66 -66` (batch 8's landing spot).
+    2. `clear FRCFLD`, then:
+       - `give FRCFLD pyrotech:rock 8 0`
+       - `give FRCFLD minecraft:stick 6 0`
+       - `give FRCFLD minecraft:planks 1 0`
+       - `give FRCFLD minecraft:bread 2 0`
+       - `give FRCFLD minecraft:cobblestone 8 0`
+       - `effect FRCFLD minecraft:hunger 10 10` (food under 20 for the eat step)
+    3. `setblock -43 66 -66 minecraft:crafting_table`; check it with `testforblock -43 66 -66 minecraft:crafting_table`.
+    4. Run `probe-craft` for each recipe, and check each with the server's own count (`clear FRCFLD <item> <meta> 0` reports the count without removing anything):
+       - `pyrotech:crude_axe` (2x2): crude axe 1, rock 7;
+       - `contenttweaker:crafting_tools` (2x2): Crafting Tools 1, crude axe 0;
+       - `minecraft:crafting_table` (2x2): table 1, planks 0;
+       - `minecraft:stone_pickaxe` at the placed table (3x3): pickaxe 1, rock 3.
+    5. `probe-place` 5 times: cobblestone on the floor around the bot. Check each with `testforblock`, and record each latency.
+    6. `probe-eat`: bread 1 left, food up (`data get` is not in 1.12, so use the driver's `bot.food` after `update_health`, plus the bread count).
+    7. `clear FRCFLD`, then the end.
+  - **Pass (for the record, not a gate):**
+    - all 4 crafts are confirmed by server counts;
+    - the capture has 0 rejected transactions (`accepted: false`);
+    - one `mod_window` event with `fastbench`;
+    - 5/5 placements confirmed by `testforblock`;
+    - food up and bread down by 1.
+  - **Commands (PC, after `npm ci` on a clean develop checkout):**
+    ```
+    deploy/test-server.sh run --yes --ttl-hours 2 --seed 1880465901402976865 -- \
+      node test/runner/run.mjs --scenario probe-craft-place --out captures/raw/probe-p1 -- \
+        node packages/forge-bridge/tools/g1-driver.mjs
+    ```
+    It needs no LLM and no OpenRouter key (the g1-driver, not the Mindcraft driver), so `batch.mjs`'s spend stop does not apply. Afterwards, `hcloud server list` and `hcloud primary-ip list` must be empty, as in batch 8.
+  - **Evidence:** `test/evidence/probe/p1-<date>/`, redacted with harness-ops' tool. It holds:
+    - `result.json`;
+    - the driver log;
+    - the capture summary: clicks, transactions, `set_slot` around the table craft, and placement latencies;
     - the server log.
-  - **Pass:** all 4 crafts land in the server-side inventory, with no rejected transaction; 5/5 placements are confirmed; the food level rises.
-  - This can also be folded into harness-ops' G3 (a) scenario if you prefer. Then I only provide the driver.
-- **Lead (`settings.js`, after PR 3):** please add `place_block_timeout_ms` (PR 3 reads it in `initBot`; default 500, upstream Mindcraft's value). I suggest 2000 for RotN: a successful placement returns as soon as the server's `block_change` arrives, so a longer timeout only delays real failures. The probe's latencies can settle it.
+  - **Time and cost:** batch 8's build-to-ready was about 3 min, its three scenarios took 15 min, and the server was up 18 min. This probe is one short scenario (about 5 min), so it should be up about 10-15 min and **under 30 min** including the teardown. That is **1 billed hour of CPX42, about EUR 0.14**, plus 1 Primary IPv4-hour. The worst case, a hang until the 2 h TTL, is about EUR 0.28 plus 2 IPv4-hours.
+  - **Order:** the driver commands (net-forge PR) and the scenario (harness-ops PR) are reviewed and merged first. Then the human's GO, the batch, and the evidence PR.
+
+- **Lead (`settings.js`, after PR 3 = #155):** please add `place_block_timeout_ms` (#155 reads it in `initBot`; `MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS` wins; default 500, upstream Mindcraft's value). I suggest 2000 for RotN: a successful placement returns as soon as the server's `block_change` arrives, so a longer timeout only delays real failures. The probe's latencies can settle it.
 
 - ~~**rotn-data: the state-id remap table.**~~ Done in #80 (`stateMetaRemap().byBlock`), which `initBot` uses. A dumper 0.2.0 run on the test server is still needed for the real 3.3.4 table; until then the remap is inactive and the login line says so.
 
@@ -599,6 +647,10 @@ The setup for both batches:
 
 ## Open PRs
 
+- **2026-11-03 (Request 2):**
+  - **#149** merged (`ba07cce`).
+  - **#154**: FastWorkbench window. Retargeted to develop, develop merged in, and the lead's nit is done (the `open_window` emit has its own try/catch, with a test). The lead merges it on green CI.
+  - **#155**: configurable placement wait, default unchanged. Independent re-review: APPROVE.
 - **At the pause (2026-11-02): none** except this STATUS PR. The lines below are historical; all of those PRs are merged.
 - Merged: #15, #16, #18, #19, #23, #24 and #26 (G1 Batch A: real handshake fixture and replay test).
 - #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. Being updated for its REQUEST CHANGES review, plus the PR #28 nits.
