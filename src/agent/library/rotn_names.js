@@ -58,7 +58,7 @@ export const AMBIGUOUS_NAMES = new Set(['grass', 'stone_slab', 'snow', 'melon', 
 export function canonicalName(input, kind = 'items') {
     const p = parseName(input);
     // "minecraft:snow" (how the displays write an ambiguous name) is the bot's own 1.12 name.
-    const explicit = typeof input === 'string' && /^s*minecraft:/i.test(input);
+    const explicit = typeof input === 'string' && /^\s*minecraft:/i.test(input);
     if (p && (explicit || !AMBIGUOUS_NAMES.has(p.name))) {
         const own = resolveName(input, kind, { prefer: 'old' });
         if (own && own.name === p.name) return formatName(own.name, own.meta);
