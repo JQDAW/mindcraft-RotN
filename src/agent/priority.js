@@ -25,7 +25,7 @@
 //   task <id> failed: <reason>
 //   agenda resumed: <step id>
 import settings from './settings.js';
-import { agendaTick, say, minutes, isAutonomyPrompt, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
+import { agendaTick, say, minutes, isAutonomyPrompt, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData } from './task_queue.js';
 
 /** Self-prompter time per task, over all its runs. */
@@ -113,7 +113,31 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
     }
 
     // 4. The agenda.
-    return agendaTick(agent, { now });
+    const res = agendaTick(agent, { now });
+    if (res === null && !agent.agenda?.active) return modelGoalTick(agent, now);
+    return res;
+}
+
+/**
+ * Nothing autonomous is on, but the model's own !goal runs (#174 review 3): it gets one agenda
+ * step's LLM time, then it stops. A goal a task giver typed is not limited. Returns null, 'goal'
+ * or 'goal:stopped'.
+ */
+function modelGoalTick(agent, now) {
+    const sp = agent.self_prompter;
+    if (!sp.isActive() || isAutonomyPrompt(sp.prompt) || sp.goal_by) {
+        agent._model_goal = null;
+        return null;
+    }
+    let g = agent._model_goal;
+    if (!g || g.prompt !== sp.prompt) g = agent._model_goal = { prompt: sp.prompt, ms: 0, at: now };
+    g.ms += Math.min(Math.max(0, now - g.at), MAX_TICK_GAP_MS);
+    g.at = now;
+    if (g.ms < stepBudget().llm_ms) return 'goal';
+    sp.stop(false);
+    agent._model_goal = null;
+    say(agent, `self-prompting stopped: my own goal used ${minutes(g.ms)} of self-prompting`);
+    return 'goal:stopped';
 }
 
 function taskTick(agent, task, now) {
@@ -123,8 +147,9 @@ function taskTick(agent, task, now) {
     const sp = agent.self_prompter;
     const queue = agent.tasks;
 
-    // A bot-to-bot conversation paused the self-prompter: wait for it (no run is used).
-    if (sp.isPaused?.()) {
+    // A bot-to-bot conversation paused the self-prompter, or a task giver typed a !goal: wait
+    // for it (no run is used). A new task does not cut a giver's own goal short (#174 nit 4).
+    if (sp.isPaused?.() || isGiverGoal(sp)) {
         if (agent._task_id === task.id) agent._task_paused = true;
         return `task:${task.id}:yield`;
     }
@@ -143,10 +168,11 @@ function taskTick(agent, task, now) {
         agent._task_stopped_at = undefined;
     }
 
-    // A giver's typed !goal runs for now: the task waits, and that time is not the task's.
-    if (sp.isActive() && !isAutonomyPrompt(sp.prompt)) {
-        agent._task_paused = true;
-        return `task:${task.id}:yield`;
+    // Any other goal (the model's own, or one restored after a restart): the task takes the
+    // running loop over, and the run counts against it (#174 review 3).
+    if (sp.isActive() && sp.prompt !== taskGoal(task)) {
+        sp.prompt = taskGoal(task);
+        queue.recordAttempt(task.id);
     }
 
     // Its LLM time since the last tick (only its own prompt counts).

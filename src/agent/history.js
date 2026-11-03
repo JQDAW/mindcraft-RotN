@@ -3,6 +3,12 @@ import { NPCData } from './npc/data.js';
 import settings from './settings.js';
 
 
+// A turn from or about a non-giver: flagged by add(), or (for a turn saved without the flag)
+// carrying the marker task_queue.js markUntrusted() writes.
+export function isUntrustedTurn(turn) {
+    return !!turn?.untrusted || (typeof turn?.content === 'string' && /^[^:\n]{1,40}: \[untrusted: /.test(turn.content));
+}
+
 export class History {
     constructor(agent) {
         this.agent = agent;
@@ -27,7 +33,8 @@ export class History {
     }
 
     getHistory() { // expects an Examples object
-        return JSON.parse(JSON.stringify(this.turns));
+        // Only role and content go to the model (the untrusted flag is ours, E3).
+        return this.turns.map(({ role, content }) => ({ role, content }));
     }
 
     async summarizeMemories(turns) {
@@ -58,7 +65,12 @@ export class History {
         }
     }
 
-    async add(name, content) {
+    /**
+     * @param {{untrusted?: boolean}} [opts] untrusted: the turn is a non-giver's words, or the bot's
+     *   reply and command results in a conversation with one (E3, #174 review). Such turns stay in
+     *   the context marked, but never go into the long-term memory summary.
+     */
+    async add(name, content, { untrusted = false } = {}) {
         let role = 'assistant';
         if (name === 'system') {
             role = 'system';
@@ -67,14 +79,18 @@ export class History {
             role = 'user';
             content = `${name}: ${content}`;
         }
-        this.turns.push({role, content});
+        this.turns.push(untrusted ? { role, content, untrusted: true } : { role, content });
 
         if (this.turns.length >= this.max_messages) {
             let chunk = this.turns.splice(0, this.summary_chunk_size);
             while (this.turns.length > 0 && this.turns[0].role === 'assistant')
                 chunk.push(this.turns.shift()); // remove until turns starts with system/user message
 
-            await this.summarizeMemories(chunk);
+            // A non-giver's words must not become a "long-term reminder" in $MEMORY, which every
+            // later prompt (self-prompts included) trusts (#174 review 1): they are left out.
+            const trusted = chunk.filter(t => !isUntrustedTurn(t));
+            if (trusted.length > 0)
+                await this.summarizeMemories(trusted);
             await this.appendFullHistory(chunk);
         }
     }

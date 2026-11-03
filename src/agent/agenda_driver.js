@@ -68,6 +68,12 @@ export function agendaGoal(agenda, step) {
 export const isAutonomyPrompt = (prompt) => typeof prompt === 'string'
     && (prompt.startsWith('RotN agenda, step ') || prompt.startsWith('Player task '));
 
+/**
+ * Whether the self-prompter runs a goal a task giver typed (!goal with a sender, goal_by): the only
+ * self-prompting the agenda and tasks wait for without counting it (#174 review 3).
+ */
+export const isGiverGoal = (sp) => sp.isActive() && !isAutonomyPrompt(sp.prompt) && !!sp.goal_by;
+
 const othersOnline = (agent) => Object.keys(agent.bot?.players ?? {}).some(n => n !== agent.name);
 
 // A chat line; a failed send is logged, never an unhandled rejection (#164 review nit).
@@ -100,10 +106,11 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         return 'paused';
     }
 
-    // Self-prompting the agenda did not start (a player's or the model's !goal), or one a
-    // bot-to-bot conversation paused: the agenda waits, counts none of it against the step and
-    // never stops it as stuck, and resumes afterwards without a new run (#164 nits).
-    if ((sp.isActive() && !isAutonomyPrompt(sp.prompt)) || sp.isPaused?.()) {
+    // A goal a task giver typed, or self-prompting a bot-to-bot conversation paused: the agenda
+    // waits, counts none of it against the step and never stops it as stuck, and resumes
+    // afterwards without a new run (#164 nits). Any other goal (the model's own) is taken over
+    // below and counts (#174 review 3).
+    if (isGiverGoal(sp) || sp.isPaused?.()) {
         agent._agenda_paused = true;
         return 'yield';
     }
@@ -140,6 +147,11 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         // A run still going from the step before now works on this one: it is this step's run
         // (#164 nit: it was not counted, so a step could get one run more than its budget).
         if (sp.isActive()) agenda.recordAttempt(step.id);
+    } else if (sp.isActive() && !isAutonomyPrompt(sp.prompt)) {
+        // The model's own goal (or one restored after a restart, whose giver is unknown): the step
+        // takes the running loop over, and the run counts against it (#174 review 3).
+        sp.prompt = goal;
+        agenda.recordAttempt(step.id);
     }
 
     // The step's budget: spent means stuck, and the agenda pauses (no more LLM calls for it).

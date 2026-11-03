@@ -3,7 +3,6 @@ import settings from '../settings.js';
 import convoManager from '../conversation.js';
 import { addTask, cancelTask } from '../task_queue.js';
 import { finishTask } from '../priority.js';
-import { isAutonomyPrompt } from '../agenda_driver.js';
 
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
@@ -469,11 +468,13 @@ export const actionsList = [
             'selfPrompt': { type: 'string', description: 'The goal prompt.' },
         },
         perform: async function (agent, prompt, context) {
-            // While the agenda or a player task runs the self-prompter, the model may not swap
-            // its goal (E3, #164 nit); a task giver who types !goal may.
+            // While the agenda is on or a player task is open, the model may not set its own goal
+            // (E3; #174 review 3: in a back-off gap it escaped every budget). A task giver who types
+            // !goal may; only such a goal is exempt from the budgets (goal_by, priority.js).
             const sp = agent.self_prompter;
-            if (!context?.sender && sp.isActive() && isAutonomyPrompt(sp.prompt))
-                return 'Not now: you are self-prompting on the RotN agenda or a player task. Keep working on it with commands.';
+            if (!context?.sender && (agent.agenda?.active || agent.tasks?.current()))
+                return 'Not now: the RotN agenda or a player task sets your goal. Keep working on it with commands.';
+            sp.goal_by = context?.sender ?? null;
             if (convoManager.inConversation()) {
                 agent.self_prompter.setPromptPaused(prompt);
             }

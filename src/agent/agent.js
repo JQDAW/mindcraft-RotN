@@ -108,44 +108,47 @@ export class Agent {
             log(this.name, msg);
             process.exit(1);
         }, spawnTimeoutDuration * 1000);
-        this.bot.once('spawn', async () => {
-            try {
-                clearTimeout(spawnTimeout);
-                addBrowserViewer(this.bot, count_id);
-                console.log('Initializing vision intepreter...');
-                this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
+        this.bot.once('spawn', () => this.onSpawn({ spawnTimeout, save_data, init_message, load_mem, count_id }));
+    }
 
-                // wait for a bit so stats are not undefined
-                await new Promise((resolve) => setTimeout(resolve, 1000));
-                
-                console.log(`${this.name} spawned.`);
-                this.clearBotLogs();
-              
-                this._setupEventHandlers(save_data, init_message);
-                this.startEvents();
-              
-                if (!load_mem) {
-                    if (this.task.data) { // a loaded task; a refused task file is null (task_guard.js)
-                        this.task.initBotTask();
-                        this.task.setAgentGoal();
-                    }
-                } else {
-                    // set the goal without initializing the rest of the task
-                    if (this.task.data) { // a loaded task; a refused task file is null (task_guard.js)
-                        this.task.setAgentGoal();
-                    }
+    // The bot's first spawn: upstream's spawn handler, as a method so a test can run it (#174 nit 5).
+    async onSpawn({ spawnTimeout, save_data, init_message, load_mem, count_id }) {
+        try {
+            clearTimeout(spawnTimeout);
+            addBrowserViewer(this.bot, count_id);
+            console.log('Initializing vision intepreter...');
+            this.vision_interpreter = new VisionInterpreter(this, settings.allow_vision);
+
+            // wait for a bit so stats are not undefined
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            
+            console.log(`${this.name} spawned.`);
+            this.clearBotLogs();
+          
+            this._setupEventHandlers(save_data, init_message);
+            this.startEvents();
+          
+            if (!load_mem) {
+                if (this.task.data) { // a loaded task; a refused task file is null (task_guard.js)
+                    this.task.initBotTask();
+                    this.task.setAgentGoal();
                 }
-
-                this.autostartAgenda();
-
-                await new Promise((resolve) => setTimeout(resolve, 10000));
-                this.checkAllPlayersPresent();
-
-            } catch (error) {
-                console.error('Error in spawn event:', safeStack(error));
-                process.exit(this.bot?.forge?.recordExit?.({ error }) ?? 1); // 1, or 3 if fatal; never 0
+            } else {
+                // set the goal without initializing the rest of the task
+                if (this.task.data) { // a loaded task; a refused task file is null (task_guard.js)
+                    this.task.setAgentGoal();
+                }
             }
-        });
+
+            this.autostartAgenda();
+
+            await new Promise((resolve) => setTimeout(resolve, 10000));
+            this.checkAllPlayersPresent();
+
+        } catch (error) {
+            console.error('Error in spawn event:', safeStack(error));
+            process.exit(this.bot?.forge?.recordExit?.({ error }) ?? 1); // 1, or 3 if fatal; never 0
+        }
     }
 
     async _setupEventHandlers(save_data, init_message) {
@@ -332,7 +335,8 @@ export class Agent {
         }
 
         // Handle other user messages. A non-giver's words are kept as marked, quoted data (E3).
-        await this.history.add(source, untrusted_sender ? markUntrusted(source, message) : message);
+        const untrusted = { untrusted: untrusted_sender }; // every turn of this exchange (#174 review 1)
+        await this.history.add(source, untrusted_sender ? markUntrusted(source, message) : message, untrusted);
         this.history.save();
 
         if (!self_prompt && this.self_prompter.isActive()) // message is from user during self-prompting
@@ -353,18 +357,22 @@ export class Agent {
 
             if (command_name) { // contains query or command
                 res = truncCommandMessage(res); // everything after the command is ignored
-                this.history.add(this.name, res);
+                // A reply to a non-giver that asks for an action is not run, and it is not kept as the
+                // bot's own words either, so a later self-prompt cannot repeat it (#174 review 2).
+                const refused = untrusted_sender && commandExists(command_name) && isAction(command_name);
+                if (!refused)
+                    this.history.add(this.name, res, untrusted);
                 
                 if (!commandExists(command_name)) {
-                    this.history.add('system', `Command ${command_name} does not exist.`);
+                    this.history.add('system', `Command ${command_name} does not exist.`, untrusted);
                     console.warn('Agent hallucinated command:', command_name)
                     continue;
                 }
 
                 if (checkInterrupt()) break;
-                if (untrusted_sender && isAction(command_name)) {
+                if (refused) {
                     // Questions (queries) are answered; actions are not run for a non-giver.
-                    this.history.add('system', `${command_name} was not run: ${source} is not a task giver, so only questions are answered for them.`);
+                    this.history.add('system', `${command_name} was not run: ${source} is not a task giver, so only questions are answered for them.`, untrusted);
                     this.routeResponse(source, `Sorry ${source}, I only do things for task givers.`);
                     break;
                 }
@@ -394,12 +402,12 @@ export class Agent {
                 used_command = true;
 
                 if (execute_res)
-                    this.history.add('system', execute_res);
+                    this.history.add('system', execute_res, untrusted);
                 else
                     break;
             }
             else { // conversation response
-                this.history.add(this.name, res);
+                this.history.add(this.name, res, untrusted);
                 this.routeResponse(source, res);
                 break;
             }
