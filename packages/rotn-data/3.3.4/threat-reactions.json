@@ -295,6 +295,73 @@
         "Minecraft 1.12 EntitySlime behaviour (melee by size, splits on death, the smallest size deals no damage; spawns in swamps at night and in slime chunks below Y 40); not in the RotN sources, unverified on this pack"
       ]
     },
+    "minecraft:ender_dragon": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "The End's boss: it flies, charges, breathes acid and shoots fireballs. Not on the first-night path (it lives in the End). Never engage it with early gear; leave.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityDragon behaviour (boss of the End; charges, dragon breath and dragon fireballs; heals from end crystals); unverified on this pack",
+        "The dump: net.minecraft.entity.boss.EntityDragon, IMob (so entity() calls it hostile); it is in no biome spawn list of the dump's spawns.json"
+      ]
+    },
+    "minecraft:wither": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "A summoned boss that shoots exploding wither skulls (Wither effect) and breaks blocks. It never spawns by itself (a player builds it from soul sand and wither skulls). Never fight it with early gear; leave the area.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityWither behaviour (summoned from soul sand and three wither skeleton skulls; ranged explosive wither skulls that inflict Wither; breaks blocks when hurt); unverified on this pack",
+        "The dump: net.minecraft.entity.boss.EntityWither, IMob; it is in no biome spawn list of the dump's spawns.json",
+        "The pinned pack makes it tougher: config/roughmobsrevamped.cfg attributes lines 233-235 (maxHealth operator 1 value 2, armor +6, movementSpeed operator 1 value 0.2; operator 0 = add, 1 = multiply and add, line 10) and wither.witherEnableKnockBackDamage=true (line 2867)"
+      ]
+    },
+    "minecraft:ghast": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A Nether flyer that shoots exploding fireballs from far away. Not on the first-night path (Nether only on this pack). Stay behind solid cover and out of its line of sight; do not stand in the open.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityGhast behaviour (flies; ranged explosive fireballs that can be knocked back); unverified on this pack",
+        "The dump lists it only in MultiMob's multimob_monster list, which the dump repeats in every biome (that list has no biome filter); MultiMob's own config keeps it in the Nether: config/multimob/multimob_spawns.cfg spawndimensions ghast = -1 (lines 1887-1889), spawnallowed ghast=true (line 1207), heightlevels -1 to 110 (lines 734-737)",
+        "config/roughmobsrevamped.cfg ghast.ghastExplosionRadius=3 (line 1014); config/Special_Mobs.cfg replaces vanilla ghasts with Special Mobs ghasts and variants (the ghasts section from line 522; Nether chance dimension/the_nether=0.33)"
+      ]
+    },
+    "minecraft:blaze": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A Nether fire spirit that shoots bursts of fireballs that set you alight; it pushes attackers away. Not on the first-night path (Nether biomes only). Stay behind cover; do not fight it in the open.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityBlaze behaviour (flies slowly; bursts of three small fireballs that set the target on fire; spawns in Nether fortresses); unverified on this pack",
+        "The dump's spawns.json lists it only in Nether biomes' monster lists (minecraft:hell and Biomes O' Plenty's corrupted_sands, phantasmagoric_inferno and visceral_heap)",
+        "The pinned pack makes it tougher: config/roughmobsrevamped.cfg attributes lines 77, 86, 95 and 104 (blaze knockbackResistance +0.5, maxHealth +20, armor +3, attackDamage +3; operator 0 = add, line 10) and blaze.blazePushAttackersAway=true (line 701); config/Special_Mobs.cfg replaces vanilla blazes with Special Mobs blazes and variants (the blazes section from line 44; Nether chance dimension/the_nether=0.33, line 60)"
+      ]
+    },
+    "minecraft:zombie_horse": {
+      "reaction": "fight",
+      "summary": "On this pack an aggressive undead horse: The Hordes gives it zombie AI, so it hunts players from up to 35 blocks, hits for 3 and burns in daylight. Fight it like a zombie, at a choke point; it is not a mount to ignore.",
+      "confidence": "verified",
+      "evidence": [
+        "The-Hordes-1.12.2-1.1.7.jar (in the pack as mods/The-Hordes-1.12.2-1.1.7.jar, SHA-256 882e8a4563cd69964a71b0e4c7584069bd77844110d8fb256d856464fe0c4ed3; javap -c -p, no mod code run): MixinEntityZombieHorse makes net.minecraft.entity.passive.EntityZombieHorse implement IMob (which is why the dump records it hostile) and, at the tail of applyEntityAttributes when ConfigHandler.aggressiveZombieHorses is set, sets FOLLOW_RANGE (field_111265_b) to 35.0 (bytecode 7-13) and registers ATTACK_DAMAGE (field_111264_e, registerAttribute func_111150_b) at 3.0 (25-31)",
+        "MixinAbstractHorse.initEntityAI (tail): when aggressiveZombieHorses is set and the horse is an EntityZombieHorse (bytecode 0-7) it adds EntityAIAttackMelee (34-44), EntityAIHurtByTarget (144-162) and EntityAINearestAttackableTarget for EntityPlayer (170-181), villagers (189-200) and more",
+        "The pinned pack turns it on: config/hordes.cfg misc.aggressiveZombieHorses=true (line 131) and zombieHorsesBurn=true (line 143). config/Special_AI.cfg also lists minecraft:zombie_horse 1.0 in depacify_list (line 26) with depacify_aggressive_chance=1.0 (line 15): passive mobs on that list spawn aggressive",
+        "It is in no biome spawn list of the dump's spawns.json (vanilla zombie horses do not spawn naturally); config/roughmobsrevamped.cfg attributes lines 145-147 and config/dmgcontrol.cfg line 259 (MaxHealth 15.0) change its stats",
+        "Corrected in #188 after the lead asked for an override lowering its level: on this pack it is hostile, so its level stays hostile (#188 first had ignore, from vanilla behaviour)"
+      ]
+    },
+    "iceandfire:gorgon": {
+      "reaction": "avoid",
+      "lookAt": false,
+      "summary": "A temple monster whose gaze kills: if it looks at you while you look at it for about half a second, you die and become a stone statue. Never look at it; turn away and leave. Blindness or a blindfold protects you.",
+      "confidence": "verified",
+      "evidence": [
+        "IceAndFireRotN-1.9.1-1.2.1.jar (in the pack as mods/IceAndFireRotN-1.9.1-1.2.1.jar, SHA-256 6f8f6d7a12fbc207f2f0dc638d4b9901bab5b003e1793313be8c4aede00ca747; javap -c -p, no mod code run): EntityGorgon extends EntityMob; onLivingUpdate (func_70636_d) bytecode 124-147: with an attack target, isEntityLookingAt(gorgon, target, 0.4) and isEntityLookingAt(target, gorgon, 0.4) must both hold, the target must not be blindfolded (isBlindfolded, 150-154), and neither may have Blindness (MobEffects field_76440_q, 157-171); after more than 10 ticks of that (bipush 10 at 241) a player target takes 2.147E9 damage from IceAndFire.gorgon (attackEntityFrom func_70097_a, 263-270), and a stone statue (EntityStoneStatue) is spawned (296-344)",
+        "initEntityAI (func_184651_r) builds GorgonAIStare (bytecode 55-67 and 101-109) and EntityAINearestAttackableTarget tasks with predicates (201-249)",
+        "It is in no biome spawn list of the dump's spawns.json (Ice and Fire places gorgons in its temple structures); not on the first-night path",
+        "Not settled: the target tasks' predicates (201-249) and GorgonAIStare were not read further"
+      ]
+    },
     "charm:spectre": {
       "reaction": "fight",
       "summary": "An underground ghost (spawns only at depth 24 or below, in darkness): 0.5 health and 0.01 attack, but on this pack its touch curses the player's armor or items. Kill it with one hit before it touches you; it disappears in light (level 8) and after 120 s.",
