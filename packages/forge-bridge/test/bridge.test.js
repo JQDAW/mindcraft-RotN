@@ -141,9 +141,9 @@ test('the capture stops at maxFileBytes but still writes its closing summary', (
 
 test('outgoing packets are capped per name too', () => {
     const { client, capture, file } = setup(() => ({ data: {}, metadata: { size: 0 } }));
-    for (let i = 0; i < 60; i++) client.write('window_click', { windowId: 0, slot: i });
+    for (let i = 0; i < 400; i++) client.write('window_click', { windowId: 0, slot: i });
     capture.close();
-    assert.equal(readCapture(file).filter(l => l.kind === 'packet' && l.name === 'window_click').length, 50);
+    assert.equal(readCapture(file).filter(l => l.kind === 'packet' && l.name === 'window_click').length, 300);
 });
 
 test('maxFileBytes counts UTF-8 bytes, not characters', () => {

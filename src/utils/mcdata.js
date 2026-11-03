@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -130,6 +130,12 @@ export function initBot(username, { onMsaCode } = {}) {
     // Env switches (FORGE_BRIDGE, FORGE_CAPTURE, FORGE_MODLIST_FILE,
     // MINDCRAFT_PROFILES_FOLDER) are documented in packages/forge-bridge/src/env.js.
     const env = forgeOptionsFromEnv(username);
+    // How long placeBlock waits for the server's block update (patches/mineflayer: default 500 ms).
+    // A lagging server makes placements report failure: MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS (wins) or
+    // settings.place_block_timeout_ms raises it. bot.placeBlockTimeout can change it later.
+    const placeTimeout = placeBlockTimeout(env.placeBlockTimeoutRaw, settings.place_block_timeout_ms);
+    if (placeTimeout.warning) console.warn(`[initBot] ${placeTimeout.warning}`);
+    if (placeTimeout.ms !== null) options.placeBlockTimeout = placeTimeout.ms;
     // Per-bot Microsoft token cache, outside every repo (docs/research/ops.md
     // section 1). Refuse to start without it (nmp would use its shared default
     // cache), with it inside a git work tree, or with DEBUG enabling
