@@ -98,7 +98,9 @@ test('the command boundary hands skills canonical names', () => {
     assert.deepEqual(parseCommandMessage('!collectBlocks("log", 5)'), { commandName: '!collectBlocks', args: ['log', 5] });
     assert.deepEqual(parseCommandMessage('!craftRecipe("charcoal", 1)').args, ['coal:1', 1]);
     assert.deepEqual(parseCommandMessage('!craftRecipe("crafting_table", 1)').args, ['crafting_table', 1]);
-    assert.match(parseCommandMessage('!collectBlocks("not_a_block", 1)'), /Invalid block type: not_a_block/);
+    // E2: !collectBlocks takes a block or an item with a world rule ("stick" from leaves).
+    assert.match(parseCommandMessage('!collectBlocks("not_a_block", 1)'), /Invalid block or item type: not_a_block/);
+    assert.deepEqual(parseCommandMessage('!collectBlocks("stick", 3)').args, ['stick', 3]);
 });
 
 test('no dead 1.21-only names (wall_torch, cave_air, deepslate_) in the skills code paths', async () => {
