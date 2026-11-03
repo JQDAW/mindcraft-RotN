@@ -291,7 +291,7 @@ const modes_list = [
                 this.next_change = Date.now() + Math.random() * 1000 + 4000;
             }
             if (entity_in_view && this.staring) {
-                let isbaby = entity.type !== 'player' && names112.isBaby(entity);
+                let isbaby = entity.type !== 'player' && mc.isBaby(entity);
                 let height = isbaby ? entity.height/2 : entity.height;
                 agent.bot.lookAt(entity.position.offset(0, height, 0));
             }
