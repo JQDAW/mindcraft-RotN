@@ -296,7 +296,7 @@
     },
     "mod_lavacow:zombiefrozen": {
       "reaction": "avoid",
-      "summary": "A 40-health zombie with armor above the game's cap of 30 (stone weapons do only about a fifth of their damage), no knockback, and Slowness V on every hit, so after one hit you cannot run. Keep away before it reaches you, or kill it with fire, which deals double damage to it; it burns in daylight.",
+      "summary": "A 40-health zombie with armor above the game's cap of 30 (stone weapons do only about a fifth of their damage), no knockback, and Slowness V on every hit (lasting longer with the regional difficulty; none where it is below 1), so after one hit you may not be able to run. Keep away before it reaches you, or kill it with fire, which deals double damage to it; it burns in daylight.",
       "confidence": "verified",
       "evidence": [
         "fishs-undead-rising-1.3.2.jar: EntityZombieFrozen extends net.minecraft.entity.monster.EntityZombie implements IAggressive. initEntityAI (func_184651_r) calls EntityZombie.initEntityAI at bytecode 1 and adds EntityFishAIBreakDoor at 9; applyEntityAI (func_175456_n) not overridden, so vanilla zombie player targeting is inherited.",
@@ -347,7 +347,7 @@
     },
     "defiledlands:scuttler": {
       "reaction": "fight",
-      "summary": "A Defiled spider (16 health, spider-strength bite, faster than a spider) that hunts players day and night and climbs walls and leaps. Fight it like a spider, back to a wall or in a 1-wide spot; a wall does not stop it.",
+      "summary": "A Defiled spider (16 health, spider-strength bite, faster than a spider) that hunts players day and night, climbs walls and leaps. Fight it like a spider in a 1-wide spot; walls do not keep it out, so do not rely on them.",
       "confidence": "verified",
       "evidence": [
         "defiledlands-1.12.2-1.4.3.jar: EntityScuttler extends net.minecraft.entity.monster.EntitySpider; func_184651_r initEntityAI is overridden without calling super: tasks EntityAILeapAtTarget(0.5) at bytecode 21, EntityScuttler$AISpiderAttack at 39; targetTasks EntityAIHurtByTarget at 112 and EntityAINearestAttackableTarget(EntityPlayer, checkSight=false) at bytecode 133-141, plain class, so the vanilla spider's daylight-neutral target task is replaced and it targets players in daylight too",
@@ -401,7 +401,8 @@
         "config/mowziesmobs.cfg lines 324-326: grottol spawn dimensions = 10 only (not the overworld, 0); line 352: requires_cant_see_sky=true; line 360: spawn_rate=1.",
         "Not settled: Which dimension has id 10 in RotN 3.3.4 was not checked. Grottol may not spawn naturally in the overworld at all.",
         "Not settled: I did not open EntityAIGrottolIdle, EntityAIGrottolFindMinecart or the MMAIAvoidEntity body. They are idle, minecart and flee behaviours by name and constructor, and none is a target task.",
-        "The dump's spawns.json lists it in overworld biome spawn lists (nightThreats share 0.1% or less), but the pack's config/mowziesmobs.cfg grottol spawn_data dimensions (lines 324-326) is 10 only, so natural overworld spawns are unlikely; which dimension has id 10 was not checked"
+        "The dump's spawns.json lists it in overworld biome spawn lists (nightThreats share 0.1% or less), but the pack's config/mowziesmobs.cfg grottol spawn_data dimensions (lines 324-326) is 10 only, so natural overworld spawns are unlikely",
+        "Not settled: which dimension has id 10 in RotN 3.3.4 (the config limit above) was not checked"
       ]
     },
     "mowziesmobs:foliaath": {
