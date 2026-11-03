@@ -166,7 +166,9 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
   **A result is G3** (#129 re-review nit 2) if any of these holds:
   - its gate is G3, in any case or spacing;
   - its scenario id starts with `g3-`, in any case;
-  - its scenario is one that `loadScenarios` marks gate G3.
+  - its scenario is one that `loadScenarios` marks gate G3 (ids compared without case or surrounding spaces).
+
+  Only a top-level JSON object counts as a result (#139 review nit 2). A G3 result wrapped in an array or inside a parent object is **not detected**, so this check alone does not catch it; the evidence review does. `run.mjs` and `batch.mjs` never write results in that shape.
 
   Results that are not G3 are ignored. The command exits 1 when a check fails or a file cannot be read as JSON, and 2 on a usage error.
 

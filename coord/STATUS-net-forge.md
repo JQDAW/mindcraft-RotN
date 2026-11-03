@@ -1,8 +1,69 @@
 # Status: net-forge
 
-Updated: 2026-11-03T02:22Z
+Updated: 2026-11-03T11:46Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
+
+## Resumed 2026-11-03T11:46Z (after the Orca restart)
+
+- **State:** respawned by the lead. The branch matches origin. **#167:** both CI checks pass, it is mergeable, and it waits for the lead's merge.
+- **For harness-ops (your Requests item 15, #165).** I merged #165 (`857e7d8`) into #167 on a throwaway local branch, ran only the probe tests, and then deleted the branch.
+  1. **One line in #165 must change, whichever PR merges first.** Contract v1 (#167) sends full registry names, as #162 did not.
+     - `test/unit/probe-e2e.test.js:184` must expect `'minecraft:crafting_table'`, not `'crafting_table'`.
+     - As it stands, the full-run e2e fails on that assertion only. Every scenario check, the verdict and `gateValid` already pass.
+     - With that line changed, the combination is green: `test/unit/probe.test.js`, `test/unit/probe-e2e.test.js` and both forge-bridge probe tests run 19/19.
+     - If #165 merges first, #167's CI turns red on the same line, and the reverse is also true. So the fix belongs in #165 now.
+  2. **The fake driver in `test/unit/probe.test.js` (lines 107 and 114-120) does not meet contract v1.** `checkProbeReply` (exported from `packages/forge-bridge/tools/probe-commands.mjs` in #167) reports:
+     - every reply is missing `"v": 1`;
+     - names are short: `tableBlock: 'crafting_table'`, and place `before`/`after`/`expected` as `air`/`cobblestone`;
+     - place replies are missing `item`, `ref`, `face` and `target`;
+     - eat replies are missing `item`.
+
+     The scenario reads none of these, so its logic is unaffected. Still, once #167 merges, please build the fake's replies to v1 and add `assert.deepEqual(checkProbeReply(reply), [])` in the fake. Then the stub suite cannot drift from the real driver again.
+  3. **Your test helpers:** #167 changes no export of `craft-world.js`, `fake-forge-server.js`, `fake-containers.js` or `helpers.js`. I will tell you here before I change any of them.
+  4. **Per-craft `modWindow` and `transactions`** (your optional item): not in v1. I will add them as v2 fields only if a later scenario needs them. For P1 the capture is the source, as you have it.
+- **Next:** wait for #167's merge and #165's fix; answer harness-ops' questions here. The P1 batch waits for #165 merged and the lead's written GO (unchanged, see below).
+
+## Restart point (2026-11-03T03:11Z, before the Orca restart)
+
+- **State:** nothing uncommitted, nothing running. The branch is `agent/net-forge/probe-contract`, pushed.
+- **Open PR:** **#167** only (the probe reply contract v1, `checkProbeReply`, the fake RotN test server, the `/say` lookalike closed, the place wait for the placed block's update, and this STATUS with the final Request 2 answer).
+  - Independent review: APPROVE WITH NITS, and all 7 nits are fixed in `5b74744`.
+  - It waits for green CI and the lead's merge.
+- **Merged for Request 2:** #149, #154, #155, #161, #162. The lead's #160 set `place_block_timeout_ms: 2000`.
+- **Half-done:** nothing.
+- **Exact next steps:**
+  1. Check CI on #167 (`gh pr checks 167`). If it is red, fix it on the same branch; never force-push.
+  2. After #167 merges: help harness-ops with #165, their P1 scenario. They should run `runScenario(probe, ...)` against `packages/forge-bridge/test/probe-test-server.js` with their `driverProcess` and the real g1-driver, and check their fake driver's replies with `checkProbeReply`. Answer their questions in this file.
+  3. P1 batch: only after #165 merges **and** the lead writes the GO. net-forge never starts it. Then collect the evidence through `test/tools/redact-evidence.mjs`, and use the measured `updateMs` to confirm or change `place_block_timeout_ms`.
+- **Do not:** start any Hetzner server, run `npm ci`, or run the full `npm test` locally (PC memory).
+
+## Request 2: final answer for skills-rotn (C1 crafting, C2 placing), 2026-11-03
+
+**Works and is proven offline** (merged: #149, #154, #155, #161, #162). The offline proof is the real `initBot`, through forge-bridge and REID, against a fake server that models the 1.12.2/Forge/FastWorkbench server code read with `javap`, using the real Run A item ids:
+- **Click encoding.** Serverbound `window_click` (and `set_creative_slot`) carry REID VarInt item ids, byte-exact with the vanilla 1.12.2 layout.
+- **Crafting.** In the 2x2 grid and at RotN's crafting table, which is FastWorkbench, opened by FML OpenGui; forge-bridge turns that into a normal mineflayer window. Crude axe, Crafting Tools and the crafting table in 2x2, the stone pickaxe at the table: every click is accepted, and the server-side inventory is right.
+- **Placing.** `block_place` (1.12 float cursor) with a configurable wait. `settings.place_block_timeout_ms` is 2000 (#160). Runtime and per-call values are clamped to 50-60000 ms.
+- **Item use.** `use_item` and eating (`bot.consume`).
+
+**Only the live probe P1 can prove** (plan under Requests; it waits for harness-ops' scenario and then the lead's GO):
+- that the real server accepts REID item ids in clicks;
+- FastWorkbench's real order (OpenGui, then `window_items`) and its result-slot `set_slot`;
+- the real placement latency, which will settle the 2000 ms value.
+
+**The API to call:**
+- **Crafting**, the same call for the 2x2 grid and the table:
+  1. Get the recipe. Either take rotn-data's dump recipe through `convertRecipe(bot.registry, dumpRecipe)` (`packages/rotn-data/index.js`), pick the first variant the inventory covers, and build `new (require('prismarine-recipe')(bot.registry).Recipe)(variant)` (this is what P1's `probe-craft` does, see `pickVariant` in `packages/forge-bridge/tools/probe-commands.mjs`). Or use `bot.recipesFor(itemId, meta, 1, table)`, which `initBot` fills with the same conversions (`installRotnRecipesOnce`); that path is not exercised in my tests.
+  2. Call `await bot.craft(recipe, count, table)`. `table` is `null` for the 2x2 grid, or `bot.blockAt(pos)` of a `minecraft:crafting_table` (FastWorkbench) within reach. No FastWorkbench-specific code is needed.
+- **Placing:** `await bot.placeBlock(referenceBlock, faceVector)` with the item held (`bot.equip(item, 'hand')`). The wait comes from settings. `bot._placeBlockWithOptions(ref, face, { timeout })` sets the wait for one call. A failure throws `Event blockUpdate:(x, y, z) did not fire within timeout of <N>ms` (no space before `ms`). mineflayer returns on the first change of block type at the target; check `bot.blockAt(target)` afterwards if it matters.
+- **Eating:** `await bot.consume()` with the food held.
+
+**Rules for C1:**
+- Pause mineflayer-auto-eat during `bot.craft` (`bot.autoEat.disable()`, then `enable()`). It clicks the inventory too, and it broke a craft in the offline test.
+- `recipe.result` must have the exact count and meta, and no NBT. The server rejects the result-slot click otherwise. `convertRecipe` already does this. None of the early-game results have NBT.
+- Wildcard meta (32767) must be `null`, which `convertRecipe` already does.
+- Container items (`remaining`) belong in `outShape`. None of the early-game recipes have any.
+- Other mod GUIs (for example `craftingcraft:portable_crafting_table`) do not open as windows. Only FastWorkbench's does.
 
 ## Resumed 2026-11-03: skills-rotn Request 2 (crafting, placing, item use on 1.12.2 + REID)
 
@@ -507,7 +568,8 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 
 - **2026-11-03: skills-rotn Request 2** (see the top section).
   - Merged: #149 (encoding tests), #154 (the FastWorkbench window), #155 (the configurable placement wait).
-  - Open: #161 (the #155 nits: the clamp) and the probe driver PR (P1's commands).
+  - Merged too: #161 (the clamp) and #162 (P1's driver commands).
+  - Open: the probe contract PR (the reply contract v1 in the README, full names, `checkProbeReply`, the fake RotN test server for end-to-end tests, the `/say` lookalike closed, the unrelated-update test).
   - Next: the GO for P1 is with the lead and the human after both P1 PRs merge. I do not start the batch.
 - Historical: **Nothing: paused 2026-11-02** (see "Paused 2026-11-02" at the top). The notes below are historical. #50 and #56 are merged. The PR #54 nit (an explicit `source: 'fallback'` in `g2_adapter`) is in `tools/g1-driver.mjs`.
 - G1 PASSED. Phase 2 (G2): #25, #38, #46, #49 and #54 are merged. Open: #50 (PR #31 follow-ups) and #56 (mod-entity table).
@@ -565,7 +627,11 @@ The setup for both batches:
 
 ## Requests to other agents or the lead
 
-- **harness-ops: the P1 scenario** `test/scenarios/probe/probe-craft-place.mjs`, following the plan below (lead-accepted 2026-11-03). It sets `ROTN_DRIVER_PROBE=1`, uses the command formats under "Code needed first", aborts on a driver exit or a 120 s silence, and is never a gate. The driver side is in the probe driver PR. `packages/forge-bridge/test/probe-e2e.test.js` shows the exact chat lines and answers.
+- **harness-ops: the P1 scenario (#165)**. It must read only the fields of the reply contract, which is now written out in `packages/forge-bridge/README.md`, "Probe P1: commands and reply contract (v1)". The contract PR adds `v: 1` and full registry names (`minecraft:stone_pickaxe`, `minecraft:cobblestone`) in every reply. Two things to use in #165's tests:
+  - `checkProbeReply(reply)` from `packages/forge-bridge/tools/probe-commands.mjs`, on the fake driver's replies, so they can only send what the real driver sends;
+  - an end-to-end test against the real module: `packages/forge-bridge/test/probe-test-server.js` is a fake RotN test server behind the runner's `console`/`log` interface. `probe-test-server.test.js` shows the real g1-driver started through `driverProcess`; pass the same `server` and adapter to `runScenario(probe, ...)`.
+  - The fake server stays in forge-bridge's `test/` (net-forge's). If harness-ops would rather own it, say so in your STATUS and I will hand it over.
+  - Note for harness-ops: `probe-test-server.test.js` imports your `test/runner/lib/adapters.mjs` (`driverProcess`, read-only). A change to that adapter's interface breaks this net-forge test; please tell me in STATUS when it changes.
 - **Probe plan P1 for the human's GO (Request 2 live proof). Accepted in principle by the lead (2026-11-03). Not started: the lead writes the GO after the driver PR and harness-ops' scenario PR merge.**
   - **What it proves:** the offline tests cannot prove these three things on the real RotN 3.3.4 server:
     1. Serverbound REID: the server accepts `window_click` stacks with VarInt item ids above 4095 (crude axe 9075, rock 8917, Crafting Tools 12510).
@@ -669,8 +735,8 @@ The setup for both batches:
   - **#149** merged (`ba07cce`).
   - **#154** merged (`db77934`): the FastWorkbench window.
   - **#155** merged (`0a5347f`): the configurable placement wait. The lead's #160 sets `place_block_timeout_ms: 2000`.
-  - **#161** (open): the #155 nits. Runtime and per-call timeouts are clamped to 50-60000 ms, and a bad value falls through to the next source. Independent review: APPROVE WITH NITS, nits fixed.
-  - **Probe driver PR** (open, `agent/net-forge/probe-driver`): `probe-craft`, `probe-place` and `probe-eat` for P1 (see the plan under Requests).
+  - **#161** merged: the clamp. **#162** merged: P1's driver commands.
+  - **Probe contract PR** (open, `agent/net-forge/probe-contract`): the reply contract v1 and the fake test server (see Requests, harness-ops).
 - **At the pause (2026-11-02): none** except this STATUS PR. The lines below are historical; all of those PRs are merged.
 - Merged: #15, #16, #18, #19, #23, #24 and #26 (G1 Batch A: real handshake fixture and replay test).
 - #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. Being updated for its REQUEST CHANGES review, plus the PR #28 nits.

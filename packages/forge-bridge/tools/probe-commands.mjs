@@ -45,10 +45,81 @@ const ANY_COMMAND = new RegExp(`^probe-(craft|place|eat) ${TOKEN}(?!\\S)`);
 // from players are ignored. The P1 test server's whitelist holds only the bot and the human.
 export const PROBE_SENDER = 'Server';
 export const COMMAND_TIME_LIMIT_MS = 60000;
+
+/**
+ * The reply contract (README, "Probe P1"): the fields of a DRIVER {"type":"probe",...} line.
+ * `base` fields are in every reply that got as far as parsing the command (failures included,
+ * except a time-limit or malformed-command reply, which carry only the common and failure fields);
+ * `done` fields are in every ok:true reply. A field not listed here is never sent.
+ * Types: 'name' = a full registry name ("minecraft:cobblestone", "pyrotech:crude_axe");
+ * 'pos' = [x, y, z] integers; '|null' = may be null.
+ */
+export const PROBE_CONTRACT_VERSION = 1;
+export const PROBE_REPLY = Object.freeze({
+    common: Object.freeze({ type: 'string', t: 'string', v: 'number', token: 'string', cmd: 'string', ok: 'boolean' }),
+    failure: Object.freeze({ error: 'string', timedOut: 'true', limitMs: 'number', line: 'string' }),
+    craft: Object.freeze({
+        base: Object.freeze({ recipe: 'string', table: 'pos|null' }),
+        done: Object.freeze({ variant: 'number', variants: 'number', result: 'name', resultMeta: 'number|null', before: 'number', after: 'number', ms: 'number', tableBlock: 'name|null' }),
+    }),
+    place: Object.freeze({
+        base: Object.freeze({ item: 'name', ref: 'pos', face: 'string', target: 'pos' }),
+        done: Object.freeze({ before: 'name|null', after: 'name|null', expected: 'name|null', otherUpdates: 'number', totalMs: 'number', updateMs: 'number|null', timeoutMs: 'number' }),
+    }),
+    eat: Object.freeze({
+        base: Object.freeze({ item: 'name' }),
+        done: Object.freeze({ foodBefore: 'number', foodAfter: 'number', countBefore: 'number', countAfter: 'number', ms: 'number' }),
+    }),
+});
+
+const isType = (v, type) => type.split('|').some((t) => {
+    if (t === 'null') return v === null;
+    if (t === 'true') return v === true;
+    if (t === 'name') return typeof v === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(v);
+    if (t === 'pos') return Array.isArray(v) && v.length === 3 && v.every(Number.isInteger);
+    if (t === 'number') return typeof v === 'number' && Number.isFinite(v);
+    return typeof v === t;
+});
+
+/**
+ * Problems with a probe reply under the contract ([] = valid). For the scenario's own tests: a fake
+ * driver's replies should pass this, so the scenario reads only fields the real driver sends.
+ * `t` and `type` come from the driver's event() wrapper and may be absent in a bare reply object.
+ */
+export function checkProbeReply(reply) {
+    const problems = [];
+    if (!reply || typeof reply !== 'object') return ['not an object'];
+    const spec = PROBE_REPLY[reply.cmd];
+    if (!spec || reply.cmd === 'common' || reply.cmd === 'failure') return [`unknown cmd ${JSON.stringify(reply.cmd)}`];
+    if (reply.type !== undefined && reply.type !== 'probe') problems.push(`type is ${JSON.stringify(reply.type)}, not "probe"`);
+    if (reply.v !== PROBE_CONTRACT_VERSION) problems.push(`v is ${JSON.stringify(reply.v)}, not ${PROBE_CONTRACT_VERSION}`);
+    const known = { ...PROBE_REPLY.common, ...PROBE_REPLY.failure, ...spec.base, ...spec.done };
+    for (const [k, v] of Object.entries(reply)) {
+        if (!(k in known)) problems.push(`unknown field ${k}`);
+        else if (!isType(v, known[k])) problems.push(`${k}: ${JSON.stringify(v)} is not ${known[k]}`);
+    }
+    for (const k of ['v', 'token', 'cmd', 'ok']) if (!(k in reply)) problems.push(`missing ${k}`);
+    if (reply.ok === true) {
+        for (const k of [...Object.keys(spec.base), ...Object.keys(spec.done)]) if (!(k in reply)) problems.push(`ok reply without ${k}`);
+        for (const k of Object.keys(PROBE_REPLY.failure)) if (k in reply) problems.push(`ok reply with ${k}`);
+    } else if (reply.ok === false && typeof reply.error !== 'string') problems.push('failure without error');
+    return problems;
+}
 export const FACES = Object.freeze({
     up: [0, 1, 0], down: [0, -1, 0], north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0],
 });
 const CHAT_MAX = 200;
+
+/**
+ * The full registry name of a bot.registry entry: forge-bridge's `registryName` when it set one,
+ * else "modid:name" as it is, else "minecraft:" + minecraft-data's name. Every name in a reply is
+ * in this form (contract v1), so vanilla and modded names compare the same way.
+ */
+export function registryName(entry) {
+    if (!entry) return null;
+    if (entry.registryName) return entry.registryName;
+    return entry.name.includes(':') ? entry.name : `minecraft:${entry.name}`;
+}
 
 /** The bot.registry item for a registry name ("minecraft:stick" is "stick" in minecraft-data). */
 export function itemByName(registry, name) {
@@ -105,11 +176,13 @@ export function attachProbe(bot, {
     // Each token gets exactly one answer. A command that finishes after its time limit was answered
     // is only logged ('probe_late'), never answered twice.
     const answered = new Set();
-    const answer = async (token, cmd, ok, data) => {
-        if (answered.has(token)) { emit('probe_late', { token, cmd, ok, ...data, chat: undefined }); return; }
+    // A mineflayer Block's full registry name, through bot.registry (forge-bridge's names and aliases).
+    const blockName = (block) => (block ? registryName(bot.registry.blocks[block.type] ?? { name: block.name }) : null);
+    const answer = async (token, cmd, ok, { chat = {}, ...data }) => {
+        if (answered.has(token)) { emit('probe_late', { v: PROBE_CONTRACT_VERSION, token, cmd, ok, ...data }); return; }
         answered.add(token);
-        emit('probe', { token, cmd, ok, ...data });
-        try { bot.chat(chatLine(token, cmd, ok, data.chat ?? {})); } catch (err) { emit('chat_error', { message: String(err?.message ?? err) }); }
+        emit('probe', { v: PROBE_CONTRACT_VERSION, token, cmd, ok, ...data });
+        try { bot.chat(chatLine(token, cmd, ok, chat)); } catch (err) { emit('chat_error', { message: String(err?.message ?? err) }); }
         if (answerDelayMs) await sleep(answerDelayMs); // under the server's chat spam limit
     };
     const fail = (token, cmd, data, err) => answer(token, cmd, false, { ...data, error: String(err?.message ?? err).slice(0, 300), chat: { error: String(err?.message ?? err).slice(0, 120) } });
@@ -172,14 +245,15 @@ export function attachProbe(bot, {
                 table = bot.blockAt(tablePos);
                 if (!table) throw new Error(`no loaded block at ${tablePos}`);
             } else if (recipe.requiresTable) throw new Error(`${recipeId} needs a crafting table`);
-            const resultName = bot.registry.items[recipe.result.id]?.name ?? String(recipe.result.id);
+            const resultName = registryName(bot.registry.items[recipe.result.id]) ?? String(recipe.result.id);
             const before = held(bot, recipe.result.id, recipe.result.metadata);
             const t0 = Date.now();
             await bot.craft(recipe, 1, table);
             const ms = Date.now() - t0;
             const after = held(bot, recipe.result.id, recipe.result.metadata);
-            const data = { ...base, variant: picked.index, variants: conv.variants.length, result: resultName, resultMeta: recipe.result.metadata, before, after, ms, tableBlock: table?.name ?? null };
-            await answer(token, 'craft', after > before, { ...data, chat: { recipe: recipeId, result: resultName, before, after, ms } });
+            const data = { ...base, variant: picked.index, variants: conv.variants.length, result: resultName, resultMeta: recipe.result.metadata, before, after, ms, tableBlock: table ? blockName(table) : null };
+            const ok = after > before;
+            await answer(token, 'craft', ok, { ...data, ...(ok ? {} : { error: `the ${resultName} count did not rise (${before} -> ${after})` }), chat: { recipe: recipeId, result: resultName, before, after, ms } });
         } catch (err) {
             await fail(token, 'craft', base, err);
         }
@@ -193,14 +267,15 @@ export function attachProbe(bot, {
             const def = await equip(name);
             const ref = bot.blockAt(refPos);
             if (!ref) throw new Error(`no loaded block at ${refPos}`);
-            const before = bot.blockAt(target)?.name ?? null;
+            const before = blockName(bot.blockAt(target));
             // Only an update to the placed block counts (#162 review nit 3): the block of the same
             // name as the item if bot.registry has one, else any change away from `before`.
-            const expected = bot.registry.blocksByName[def.name] ? def.name : null;
+            const expected = bot.registry.blocksByName[def.name] ? registryName(bot.registry.blocksByName[def.name]) : null;
             let updateAt = null;
             let otherUpdates = 0;
             const onUpdate = (oldBlock, newBlock) => {
-                const isPlaced = expected ? newBlock?.name === expected : (newBlock?.name ?? null) !== before;
+                const now = blockName(newBlock);
+                const isPlaced = expected ? now === expected : now !== before;
                 if (isPlaced) updateAt ??= Date.now(); else otherUpdates++;
             };
             bot.on(`blockUpdate:${target}`, onUpdate);
@@ -208,13 +283,17 @@ export function attachProbe(bot, {
             try {
                 // A generous per-call wait, so a slow server is measured instead of failing at 500 ms.
                 await bot._placeBlockWithOptions(ref, face, { swingArm: 'right', timeout: placeTimeoutMs });
+                // mineflayer returns on the first update that changes the block type, which may be an
+                // unrelated one; wait (within the same timeout) for the placed block's own update.
+                while (expected && updateAt === null && Date.now() - t0 < placeTimeoutMs) await sleep(25);
             } finally {
                 bot.removeListener(`blockUpdate:${target}`, onUpdate);
             }
-            const after = bot.blockAt(target)?.name ?? null;
+            const after = blockName(bot.blockAt(target));
             // updateMs runs from the call to the server's block update; it includes the look (up to one tick).
             const data = { ...base, before, after, expected, otherUpdates, totalMs: Date.now() - t0, updateMs: updateAt === null ? null : updateAt - t0, timeoutMs: placeTimeoutMs };
-            await answer(token, 'place', after !== before && (expected === null || after === expected), { ...data, chat: { at: target.toArray().join(','), block: after, updateMs: data.updateMs } });
+            const ok = after !== before && (expected === null || after === expected);
+            await answer(token, 'place', ok, { ...data, ...(ok ? {} : { error: `the block at ${target} is ${after}, not ${expected ?? 'a new block'}` }), chat: { at: target.toArray().join(','), block: after, updateMs: data.updateMs } });
         } catch (err) {
             await fail(token, 'place', base, err);
         }
@@ -228,11 +307,13 @@ export function attachProbe(bot, {
             const countBefore = held(bot, def.id, null);
             const t0 = Date.now();
             await bot.consume();
+            const ms = Date.now() - t0; // bot.consume only, not the wait below
             // The server's update_health and the item slot's set_slot can come just after the eating
             // status; wait (at most 2 s) for both before reading them.
             for (let waited = 0; (bot.food === foodBefore || held(bot, def.id, null) === countBefore) && waited < 2000; waited += 100) await sleep(100);
-            const data = { ...base, foodBefore, foodAfter: bot.food, countBefore, countAfter: held(bot, def.id, null), ms: Date.now() - t0 };
-            await answer(token, 'eat', data.foodAfter > foodBefore && data.countAfter === countBefore - 1, { ...data, chat: { food: `${foodBefore}->${bot.food}`, left: data.countAfter } });
+            const data = { ...base, foodBefore, foodAfter: bot.food, countBefore, countAfter: held(bot, def.id, null), ms };
+            const ok = data.foodAfter > foodBefore && data.countAfter === countBefore - 1;
+            await answer(token, 'eat', ok, { ...data, ...(ok ? {} : { error: `food ${foodBefore} -> ${data.foodAfter}, ${name} ${countBefore} -> ${data.countAfter}` }), chat: { food: `${foodBefore}->${bot.food}`, left: data.countAfter } });
         } catch (err) {
             await fail(token, 'eat', base, err);
         }
@@ -241,11 +322,17 @@ export function attachProbe(bot, {
     // Each token runs once.
     const seen = new Set();
     const fresh = (token) => !seen.has(token) && seen.add(token);
-    bot.on('whisper', (username, message) => {
-        const msg = String(message ?? '');
+    // The raw chat component, not mineflayer's 'whisper' text pattern: 1.12 sends a console `tell` as
+    // {translate: "commands.message.display.incoming", with: [sender, message]}. The text pattern
+    // would also take an op's `/say Server whispers to you: ...` ("[JQDAW] Server whispers ...",
+    // translate chat.type.announcement), so it is not used (#162 re-review nit 1).
+    bot.on('message', (jsonMsg) => {
+        if (jsonMsg?.translate !== 'commands.message.display.incoming' || !Array.isArray(jsonMsg.with) || jsonMsg.with.length !== 2) return;
+        const username = String(jsonMsg.with[0]?.toString?.() ?? jsonMsg.with[0] ?? '');
+        const msg = String(jsonMsg.with[1]?.toString?.() ?? jsonMsg.with[1] ?? '');
         if (!ANY_COMMAND.test(msg)) return;
         if (username !== PROBE_SENDER) {
-            emit('probe_ignored', { from: String(username).slice(0, 32), reason: `not a console whisper (only ${PROBE_SENDER} is accepted)` });
+            emit('probe_ignored', { from: username.slice(0, 32), reason: `not a console whisper (only ${PROBE_SENDER} is accepted)` });
             return;
         }
         let m;

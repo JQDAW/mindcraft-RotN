@@ -257,7 +257,8 @@ export const actionsList = [
         name: '!collectBlocks',
         description: 'Collect the nearest blocks of a given type.',
         params: {
-            'type': { type: 'BlockName', description: 'The block type to collect.' },
+            // BlockOrItemName (E2): an item with a world rule works too, e.g. "stick" (from leaves).
+            'type': { type: 'BlockOrItemName', description: 'The block or item to collect: a block (e.g. "log") or an item that comes from breaking blocks (e.g. "stick" from leaves, "pyrotech:rock" from rock piles and stone).' },
             'num': { type: 'int', description: 'The number of blocks to collect.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
         perform: runAsAction(async (agent, type, num) => {
@@ -373,6 +374,27 @@ export const actionsList = [
         },
         perform: function (agent, text, priority, context) {
             return addTask(agent.tasks, { giver: context?.sender ?? null, text, priority }, (name) => agent.isTaskGiver(name));
+        }
+    },
+    {
+        name: '!agendaStop',
+        description: 'A task giver types this to stop the RotN agenda (autonomous play).',
+        forcedOnly: true, // only a player who typed it, never the LLM (E2)
+        perform: function (agent, context) {
+            if (!context?.sender) return 'agenda: a task giver must type !agendaStop themselves';
+            agent.agenda.stop();
+            if (agent.self_prompter.isActive()) agent.self_prompter.stop(false);
+            return 'agenda stopped';
+        }
+    },
+    {
+        name: '!agendaStart',
+        description: 'A task giver types this to start (or resume) the RotN agenda.',
+        forcedOnly: true,
+        perform: function (agent, context) {
+            if (!context?.sender) return 'agenda: a task giver must type !agendaStart themselves';
+            agent.agenda.start();
+            return 'agenda started';
         }
     },
     {

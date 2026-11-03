@@ -412,7 +412,9 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
         assert.equal(isG3Result({ scenario: 'G3-First-Night' }), true);
         assert.equal(isG3Result({ scenario: 'first-night' }), false, 'no gate and no g3- prefix: only the scenario list can tell');
         assert.equal(isG3Result({ scenario: 'First-Night' }, ['first-night']), true, 'a scenario loadScenarios marks G3, without case');
+        assert.equal(isG3Result({ scenario: 'first-night' }, [' First-Night\n']), true, 'the scenario list ids are trimmed too (#139 review nit 1)');
         assert.equal(isG3Result({ scenario: '' }, ['']), false);
+        assert.equal(isG3Result({ scenario: ' ' }, [' ']), false, 'a blank id never matches a blank list entry');
         for (const notObject of [null, [], 'G3', 3]) assert.equal(isG3Result(notObject), false);
         // The review's case: gate 'g3' with an unprefixed scenario id and a forged marker is cross-checked.
         assert.match(crossCheckBatch(summary, [{ file: 'x', result: { gate: 'g3', scenario: 'first-night', batch: 'x-1:2' } }])[0], /marker 'x-1:2'/);

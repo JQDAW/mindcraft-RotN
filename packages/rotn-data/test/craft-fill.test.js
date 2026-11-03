@@ -31,6 +31,21 @@ test('wrong variants and too few items do not fill it, and say how many slots ar
     assert.equal(pack.canFill(rockPick, [{ name: 'pyrotech:rock', meta: 0, count: 6 }, { name: 'stick', meta: 0, count: 4 }], { times: 2 }).ok, true);
 });
 
+test('stacks no slot accepts are ignored; assignment lists the first craft only (#152 nits)', () => {
+    const fit = [{ name: 'pyrotech:rock', meta: 0, count: 6 }, { name: 'stick', meta: 0, count: 4 }];
+    // A full inventory of unrelated items (and a dirt clump, which no slot accepts) changes nothing.
+    const junk = [...Array.from({ length: 30 }, (_, i) => ({ name: 'dirt', meta: i % 3, count: 64 })), { name: 'pyrotech:rock', meta: 4, count: 64 }];
+    for (const times of [1, 2, 3]) {
+        assert.deepEqual(pack.canFill(rockPick, [...junk, ...fit], { times }), pack.canFill(rockPick, fit, { times }), `times ${times}`);
+    }
+    assert.deepEqual(pack.canFill(rockPick, junk), { ok: false, missing: 5, assignment: [null, null, null, null, null], recipeId: rockPick.id ?? null });
+    // times 2: ten slots are matched, but the assignment has the five of one craft.
+    const twice = pack.canFill(rockPick, fit, { times: 2 });
+    assert.equal(twice.ok, true);
+    assert.equal(twice.assignment.length, 5);
+    assert.ok(twice.assignment.every(Boolean));
+});
+
 test('one item is never counted for two slots (a wildcard and a specific meta of one item)', () => {
     const r = { id: 'test:sand', ingredients: [{ stacks: [{ name: 'minecraft:sand', meta: 32767 }] }, { stacks: [{ name: 'minecraft:sand', meta: 1 }] }] };
     assert.equal(pack.canFill(r, [{ name: 'sand', meta: 1, count: 1 }]).ok, false, 'one red sand cannot fill both');
