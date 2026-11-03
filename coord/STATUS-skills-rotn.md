@@ -43,7 +43,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - E1 `task-queue` (branch `agent/skills-rotn/task-queue`, on develop `89f3ef6`): #146 open. The persistent player task queue: `!taskAdd(text, priority)`, `!taskList`, `!taskCancel(id)`; `./bots/<name>/tasks.json`; only `task_givers` may add tasks; the giver is the real sender; the harness-ops chat formats.
-- B2c `collect-nits` (branch `agent/skills-rotn/collect-nits`, on develop `6e5d63f`): PR open, see Open PRs. The #145 nits 2-4: the log names the items really gained; an explicit variant uses only its own rule blocks; finding the tool gone does not use up an attempt.
+- B2c `collect-nits` (branch `agent/skills-rotn/collect-nits`, on develop `6e5d63f`): #148 open. The #145 nits 2-4: the log names the items really gained; an explicit variant uses only its own rule blocks; finding the tool gone does not use up an attempt.
 - **C1 coordination (net-forge is back, working on Request 2):** I build only the C1 parts that need no `window_click`, `block_place` or `use_item`: choosing a RotN recipe the inventory can satisfy (by output and ingredients, never a CraftTweaker id), including #145 nit 1 (stone tools need 3 rocks of one kind, because `recipesFor` gives equal slots the same stack, so a mixed haul is refused; the plan collects or picks one kind). Executing crafts in the 2x2 grid or the table, placing the table and the first-plank interaction (C2) wait for net-forge's report in `coord/STATUS-net-forge.md`.
 - Next after B2c: those C1 parts, then E2 (agenda) and E3 (priority stack, task done/failed lines). Flag for G3 (#141 nit 5): with an axe, collecting log targets Dynamic Trees branches; the count is the real gain, but scattered drops may not all be picked up.
 
@@ -143,4 +143,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 ## Open PRs
 
 - #146 E1 task queue (branch `agent/skills-rotn/task-queue`). Serves brief item 5 and its acceptance tests, G3 (c).
-- B2c collect nits (branch `agent/skills-rotn/collect-nits`). Serves the #145 review nits 2-4.
+- #148 B2c collect nits (branch `agent/skills-rotn/collect-nits`). Serves the #145 review nits 2-4.
