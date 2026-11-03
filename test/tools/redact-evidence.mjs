@@ -26,6 +26,11 @@
 //                               (sig: 40 hex digits or None); only the version cell and the .jar cell.
 //     the ping's mod list       a line that is exactly `"version": "x"` right after a line that is
 //                               exactly `"modid": "y",` (FML's modinfo.modList in the status ping JSON).
+//   and two address forms that name no host (lead, #128 review: the cx23 probe's `ss` lines must show
+//   which sockets are loopback-only and which listen on all addresses):
+//     127.x.x.x                 loopback (127.0.0.0/8), e.g. 127.0.0.1 and systemd-resolved's 127.0.0.53
+//     0.0.0.0                   the IPv4 wildcard ("all addresses")
+//   IPv6 "::" and "::1" were never addresses to this tool (see isAddress6).
 //   It also flags any IPv6 address, any UUID, this PC's user paths, and partial leftovers next to
 //   <ip> (e.g. "<ip>.0.113.7"). Committed evidence comes out of this tool, never from hand edits: a form
 //   the check flags and the tool misses is fixed in the tool, with a test.
@@ -91,6 +96,14 @@ function lineAround(text, index) {
     return { line: text.slice(start, end).replace(/\r$/, ''), col: index - start };
 }
 
+/** A quad that names no host: loopback 127.0.0.0/8 or the wildcard 0.0.0.0 (see the header). */
+const isHostless = (quad) => quad === '0.0.0.0' || quad.startsWith('127.');
+
+/** May the quad at `index` stay: a host-less address, or one of the exact version forms (see the header)? */
+function isExempt(text, index, match) {
+    return isHostless(match) || isVersionContext(text, index, match);
+}
+
 /** Is the quad at `index` one of the three exact version forms (see the header)? Everything else is flagged. */
 function isVersionContext(text, index, match) {
     const before = text.slice(Math.max(0, index - 1), index);
@@ -137,8 +150,8 @@ function redactV6(text) {
 /** Redact one evidence text. `bot` is the bot's player name (replaced by <bot>). */
 export function redact(text, { bot } = {}) {
     let out = redactV6(text);   // first, so an IPv4-mapped address goes whole
-    // The check's own rule (findLeaks): every quad that is not one of the exact version forms.
-    out = out.replace(QUAD_ANY, (m, offset, whole) => (isVersionContext(whole, offset, m) ? m : '<ip>'));
+    // The check's own rule (findLeaks): every quad that is not host-less or one of the exact version forms.
+    out = out.replace(QUAD_ANY, (m, offset, whole) => (isExempt(whole, offset, m) ? m : '<ip>'));
     out = out.replace(UUID, (_m, v) => `<uuid-v${v.toLowerCase()}>`);
     out = out.replace(LOCAL_PATH, '<local>');
     if (bot) {
@@ -154,7 +167,7 @@ export function findLeaks(text) {
     const lineOf = (i) => text.slice(0, i).split('\n').length;
     for (const m of text.matchAll(V6_RUN)) for (const [a] of v6Spans(m[0])) leaks.push({ kind: 'ipv6', line: lineOf(m.index + a) });
     for (const m of text.matchAll(QUAD_ANY)) {
-        if (!isVersionContext(text, m.index, m[0])) leaks.push({ kind: 'ipv4', line: lineOf(m.index) });
+        if (!isExempt(text, m.index, m[0])) leaks.push({ kind: 'ipv4', line: lineOf(m.index) });
     }
     for (const m of text.matchAll(PARTIAL)) leaks.push({ kind: 'partial-ip', line: lineOf(m.index) });
     for (const m of text.matchAll(UUID)) leaks.push({ kind: 'uuid', line: lineOf(m.index) });

@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T01:11Z (from `date -u`)
+Updated: 2026-11-03T01:29Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -30,6 +30,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#132 merged**: every baby check uses `mc.isBaby` (#125).
 - **#141 merged** (`37ba167`): B2, `collectBlock` follows rotn-data's world rules; real inventory gain per break; the rule's tool equipped (never a Sturdy pickaxe for rocks); no `cobblestone` -> `stone` alias.
 - **#145 merged** (`6e5d63f`): B2b, a bare rock name covers the rock ore dictionary (the Underground Biomes piles at the G3 spawn); no throw when the pickaxe breaks; the #131 regex nit.
+- **#148 merged**: B2c, the #145 nits 2-4 (the log names the items gained; an explicit variant uses only its own blocks; a skipped rule does not use up an attempt).
 - Lead notes on #100: the plan is good; Stage A first; A1 must merge before the first CX23 run; net-forge is **paused** (see Request 2). Lead decisions, folded into the plan below:
   - (a) E1: only players on the task-giver setting may add tasks; `only_chat_with` alone does not grant it. Tested both ways.
   - (b) Every log line and command reply that harness-ops' scenarios check must not depend on Minecraft command feedback, because a pack mod sets `sendCommandFeedback` false for the player on join. The bot reports from its own state (inventory, position, its own log lines), never from a `/command`'s chat answer.
@@ -43,9 +44,10 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - E1 `task-queue` (branch `agent/skills-rotn/task-queue`): #146 open. Review REQUEST CHANGES, fixed: `!taskAdd`/`!taskCancel` only on the forced path (a giver types them), with the sender passed per call (no shared field) and hidden from the LLM; "Server" only with the test-only `allow_server_task_giver` and only from the console; a corrupt `tasks.json` is moved aside and reported, entries are validated, a save failure at load cannot stop the agent; and Request 11 (below) in the same PR, with tests for overlapping calls.
-- B2c `collect-nits` (branch `agent/skills-rotn/collect-nits`, on develop `6e5d63f`): #148 open. The #145 nits 2-4: the log names the items really gained; an explicit variant uses only its own rule blocks; finding the tool gone does not use up an attempt.
 - **C1 coordination (net-forge is back, working on Request 2):** I build only the C1 parts that need no `window_click`, `block_place` or `use_item`: choosing a RotN recipe the inventory can satisfy (by output and ingredients, never a CraftTweaker id), including #145 nit 1 (stone tools need 3 rocks of one kind, because `recipesFor` gives equal slots the same stack, so a mixed haul is refused; the plan collects or picks one kind). Executing crafts in the 2x2 grid or the table, placing the table and the first-plank interaction (C2) wait for net-forge's report in `coord/STATUS-net-forge.md`.
-- C1a `craft-needs` (branch `agent/skills-rotn/craft-needs`, on develop `6e5d63f`): #151 open. The packet-free part of C1: `craftNeeds`/`describeNeeds` say what is missing by RotN's recipes (rotn-data `howToGet` craft ways, every way, full ore members), including #145 nit 1 (3 rocks of ONE kind); `craftRecipe` logs it when nothing is craftable.
+- C1a `craft-needs` (branch `agent/skills-rotn/craft-needs`, on develop `6e5d63f`): #151 open. Review REQUEST CHANGES: it must agree with rotn-data #152 on mixed rocks (use rotn-data's "can these stacks fill this way" helper once it exists), advise a bare pyrotech:rock when the bot has none, and test the crude axe, Crafting Tools, crafting table and stone axe messages. The packet-free part of C1: `craftNeeds`/`describeNeeds` say what is missing by RotN's recipes (rotn-data `howToGet` craft ways, every way, full ore members), including #145 nit 1 (3 rocks of ONE kind); `craftRecipe` logs it when nothing is craftable.
+- Queued: a tiny PR for rotn-data #153: `!getCraftingPlan` passes `world.getInventoryCounts` (variant keys) instead of bare totals, to merge together with #153.
+- **E3 requirements (lead, #146 review):** mark history entries from non-givers as untrusted data (review B); `!stfu` for task givers only; task text framed as untrusted when it goes into a prompt.
 - Next after B2c: those C1 parts, then E2 (agenda) and E3 (priority stack, task done/failed lines). Flag for G3 (#141 nit 5): with an axe, collecting log targets Dynamic Trees branches; the count is the real gain, but scattered drops may not all be picked up.
 
 ## G3 plan: small PRs, in order
@@ -144,5 +146,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 ## Open PRs
 
 - #146 E1 task queue (branch `agent/skills-rotn/task-queue`). Serves brief item 5 and its acceptance tests, G3 (c).
-- #148 B2c collect nits (branch `agent/skills-rotn/collect-nits`). Serves the #145 review nits 2-4.
 - #151 C1a craft needs (branch `agent/skills-rotn/craft-needs`). Serves C1 (the part without slot clicks) and #145 nit 1.

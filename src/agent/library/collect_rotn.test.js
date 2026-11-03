@@ -126,7 +126,7 @@ test('8 rocks with a stone pickaxe: 2 stone blocks, counted from the inventory',
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 8), true);
     assert.equal(bot.calls.dug.length, 2, 'two stone blocks, not eight');
     assert.equal(countItem(bot, 'pyrotech:rock'), 8);
-    assert.match(bot.output, /Collected 8 pyrotech:rock\./);
+    assert.match(bot.output, /Collected 8 pyrotech:rock \(8 pyrotech:rock:0\)\./);
 });
 
 test('review 2: with a stone and an iron pickaxe, the stone one is used (iron would give cobblestone)', async (t) => {
@@ -137,7 +137,7 @@ test('review 2: with a stone and an iron pickaxe, the stone one is used (iron wo
     assert.deepEqual([...new Set(bot.calls.equip)], ['stone_pickaxe']);
     assert.equal(countItem(bot, 'pyrotech:rock'), 8);
     assert.equal(countItem(bot, 'cobblestone'), 0);
-    assert.match(bot.output, /Collected 8 pyrotech:rock\./);
+    assert.match(bot.output, /Collected 8 pyrotech:rock \(8 pyrotech:rock:0\)\./);
 });
 
 test('review 1: the count is the real gain: leaves that drop no stick give "Collected 0 stick"', async (t) => {
@@ -157,7 +157,7 @@ test('review 3: a bare "pyrotech:rock" skips a nearer dirt clump (meta 4) and ta
     const taken = [...bot.calls.collected, ...bot.calls.dug];
     assert.deepEqual(taken.map(b => b.metadata), [0]);
     assert.equal(countItem(bot, 'pyrotech:rock:4'), 0, 'no dirt clump picked up');
-    assert.match(bot.output, /Collected 1 pyrotech:rock\./);
+    assert.match(bot.output, /Collected 1 pyrotech:rock \(1 pyrotech:rock:0\)\./);
 });
 
 test('without a pickaxe, stone is not a rock source, and the bot says what it needs', async (t) => {
@@ -194,7 +194,7 @@ test('G3 spawn: a bare "pyrotech:rock" collects Underground Biomes rock piles an
     const taken = [...bot.calls.collected, ...bot.calls.dug].map(b => `${b.name}:${b.metadata}`);
     assert.deepEqual(taken, ['pyrotech_compat:rock_metamorphic:0', 'pyrotech_compat:rock_igneous:7', 'pyrotech_compat:rock_metamorphic:6']);
     assert.equal(countItem(bot, 'pyrotech:rock:4'), 0);
-    assert.match(bot.output, /Collected 3 pyrotech:rock\./);
+    assert.match(bot.output, /Collected 3 pyrotech:rock \(1 pyrotech_compat:rock_metamorphic:0, 1 pyrotech_compat:rock_igneous:7, 1 pyrotech_compat:rock_metamorphic:6\)\./);
 });
 
 test('a pickaxe that breaks mid-run: no throw; stone is skipped and hand sources continue', async (t) => {
@@ -214,5 +214,34 @@ test('a pickaxe that breaks mid-run: no throw; stone is skipped and hand sources
     assert.match(bot.output, /No longer have a pickaxe of level 0 or lower to break stone; skipping those blocks\./);
     assert.deepEqual(bot.calls.dug.map(b => b.name), ['stone', 'pyrotech_compat:rock_igneous']);
     assert.equal(countItem(bot, 'pyrotech:rock') + countItem(bot, 'pyrotech_compat:rock_igneous'), 5);
-    assert.match(bot.output, /Collected 5 pyrotech:rock\./);
+    assert.match(bot.output, /Collected 5 pyrotech:rock \(4 pyrotech:rock:0, 1 pyrotech_compat:rock_igneous:0\)\./);
+});
+
+// #145 review nits.
+test('nit 2: the log names the items really gained, not only the name asked for', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = fakeBot({ blocks: [block('pyrotech_compat:rock_igneous', 7, at(2)), block('pyrotech_compat:rock_igneous', 7, at(3))] });
+    await skills.collectBlock(bot, 'pyrotech:rock', 2);
+    assert.match(bot.output, /Collected 2 pyrotech:rock \(2 pyrotech_compat:rock_igneous:7\)\./);
+});
+
+test('nit 3: an explicit "pyrotech:rock:0" takes only stone-rock piles, not the Underground Biomes ones', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = fakeBot({ blocks: [block('pyrotech_compat:rock_metamorphic', 0, at(1)), block('pyrotech:rock', 0, at(6))] });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock:0', 1), true);
+    assert.deepEqual([...bot.calls.collected, ...bot.calls.dug].map(b => `${b.name}:${b.metadata}`), ['pyrotech:rock:0']);
+    assert.match(bot.output, /Collected 1 pyrotech:rock:0\./);
+});
+
+test('nit 4: finding the tool gone does not use up an attempt', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const items = [tool('stone_pickaxe')];
+    const bot = fakeBot({ items, blocks: [block('stone', 0, at(2)), block('pyrotech:rock', 0, at(5))] });
+    // The pickaxe is there when the sources are chosen, gone (it broke earlier) by the first equip.
+    const listItems = bot.inventory.items;
+    let calls = 0;
+    bot.inventory.items = () => (calls++ === 0 ? listItems() : listItems().filter(i => i.name !== 'stone_pickaxe'));
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 1), true, 'the one attempt goes to the rock pile');
+    assert.match(bot.output, /No longer have a pickaxe of level 0 or lower to break stone; skipping those blocks\./);
+    assert.match(bot.output, /Collected 1 pyrotech:rock \(1 pyrotech:rock:0\)\./);
 });
