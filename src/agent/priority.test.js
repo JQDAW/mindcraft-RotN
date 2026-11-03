@@ -11,7 +11,8 @@ import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
 import { Agenda } from './agenda.js';
-import { TICK_MS, BACKOFF_MS } from './agenda_driver.js';
+import { TICK_MS, BACKOFF_MS, STEP_LLM_MS, SAVE_EVERY_MS } from './agenda_driver.js';
+import { readFileSync } from 'node:fs';
 import { autonomyTick, taskGoal, finishTask } from './priority.js';
 import { Control } from './control.js';
 import { TaskQueue, markUntrusted } from './task_queue.js';
@@ -41,7 +42,8 @@ function fakeSelfPrompter() {
     const sp = { state: 'stopped', prompt: '', starts: [], stops: 0, loop_active: false };
     sp.isActive = () => sp.state === 'active';
     sp.isStopped = () => sp.state === 'stopped';
-    sp.isPaused = () => false;
+    sp.paused = false;
+    sp.isPaused = () => sp.paused;
     sp.start = (prompt) => { sp.state = 'active'; sp.prompt = prompt; sp.starts.push(prompt); };
     sp.stop = () => { sp.state = 'stopped'; sp.stops++; };
     return sp;
@@ -270,6 +272,103 @@ test('a corrupt control.json is moved aside and reported; no hold is set', (t) =
     const c = new Control('FRCFLD', { dir, now: () => 5 });
     assert.equal(c.blocking(), null);
     assert.match(c.loadProblem, /moved it to .*control\.json\.corrupt-5/);
+});
+
+test('#164 nit: a player\'s or the model\'s !goal is not the agenda\'s: no step time, never stopped as stuck; the agenda resumes after it', (t) => {
+    const agent = fakeAgent(t);
+    const sp = agent.self_prompter;
+    sp.start('mine iron until I say stop'); // someone else's goal
+    let now = 0;
+    for (; now <= STEP_LLM_MS + 10 * TICK_MS; now += TICK_MS) assert.equal(autonomyTick(agent, { now }), 'yield');
+    assert.equal(sp.isActive(), true, 'not stopped by the stuck check');
+    assert.deepEqual(agent.agenda.spentOn('rocks'), { attempts: 0, llm_ms: 0 });
+    sp.stop();
+    assert.equal(autonomyTick(agent, { now }), 'rocks');
+    assert.match(sp.prompt, /^RotN agenda, step 1/);
+    assert.equal(agent.agenda.spentOn('rocks').attempts, 1);
+});
+
+test('#164 nit: the model cannot swap the agenda\'s goal with !goal; a task giver who types it can', async (t) => {
+    const agent = harnessAgent(t);
+    const { executeCommand } = await import('./commands/index.js');
+    autonomyTick(agent, { now: 0 });
+    const goal = agent.self_prompter.prompt;
+    assert.match(await executeCommand(agent, '!goal("build a tower")'), /^Not now: you are self-prompting on the RotN agenda/);
+    assert.equal(agent.self_prompter.prompt, goal);
+    await agent.handleMessage('JQDAW', '!goal("build a tower")');
+    assert.equal(agent.self_prompter.prompt, 'build a tower');
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'yield');
+});
+
+test('#164 nit: a giver\'s !goal during a task: the task waits, and that time is not the task\'s', (t) => {
+    const agent = fakeAgent(t, { agenda: false });
+    agent.tasks.add({ text: 'dig', priority: 'normal', giver: 'JQDAW' });
+    assert.equal(autonomyTick(agent, { now: 0 }), 'task:t1');
+    agent.self_prompter.start('wave at me');
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'task:t1:yield');
+    assert.equal(autonomyTick(agent, { now: 2 * TICK_MS }), 'task:t1:yield');
+    assert.equal(agent.tasks.spentOn('t1').llm_ms, 0);
+    agent.self_prompter.stop();
+    assert.equal(autonomyTick(agent, { now: 3 * TICK_MS }), 'task:t1');
+    assert.match(agent.self_prompter.prompt, /^Player task t1/);
+    assert.equal(agent.tasks.spentOn('t1').attempts, 1, 'resumed, not a new run');
+});
+
+test('#164 nit: a run that carries on into the next step counts as that step\'s run', (t) => {
+    const items = [];
+    const agent = fakeAgent(t);
+    autonomyTick(agent, { now: 0 });
+    items.push({ name: 'pyrotech:rock', metadata: 0, count: 6 });
+    agent.bot.inventory = fakeBot(items).inventory;
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'sticks');
+    assert.equal(agent.self_prompter.starts.length, 1, 'the same run goes on');
+    assert.equal(agent.agenda.spentOn('sticks').attempts, 1);
+});
+
+test('#164 nit: the step\'s LLM time is saved within SAVE_EVERY_MS (10 s), not once a minute', (t) => {
+    assert.equal(SAVE_EVERY_MS, 10_000);
+    const agent = fakeAgent(t);
+    let now = 0;
+    for (; now <= SAVE_EVERY_MS + 2 * TICK_MS; now += TICK_MS) autonomyTick(agent, { now });
+    const saved = JSON.parse(readFileSync(agent.agenda.file, 'utf8')).spent.rocks;
+    assert.ok(saved.llm_ms >= SAVE_EVERY_MS, `saved ${saved.llm_ms} ms`);
+    // The same for a task's time.
+    agent.tasks.add({ text: 'dig', priority: 'normal', giver: 'JQDAW' });
+    for (const end = now + SAVE_EVERY_MS + 3 * TICK_MS; now <= end; now += TICK_MS) autonomyTick(agent, { now });
+    assert.ok(new TaskQueue('FRCFLD', { dir: agent.dir }).spentOn('t1').llm_ms >= SAVE_EVERY_MS);
+});
+
+test('#164 nit: a bot-to-bot conversation that paused the self-prompter uses up no run', (t) => {
+    const agent = fakeAgent(t);
+    const sp = agent.self_prompter;
+    autonomyTick(agent, { now: 0 });
+    sp.state = 'paused'; sp.paused = true; // conversation.js pause()
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'yield');
+    assert.equal(autonomyTick(agent, { now: 100 * BACKOFF_MS }), 'yield');
+    assert.equal(sp.starts.length, 1, 'not restarted over the conversation');
+    sp.paused = false; sp.start(sp.prompt); // the conversation ended and resumed it
+    assert.equal(autonomyTick(agent, { now: 101 * BACKOFF_MS }), 'rocks');
+    assert.equal(agent.agenda.spentOn('rocks').attempts, 1);
+});
+
+test('#164 nit: autostart on spawn starts the agenda only on a fresh bot with no Mindcraft task and autostart on', (t) => {
+    const before = settings.agenda_autostart;
+    t.after(() => { settings.agenda_autostart = before; });
+    const dir = tempDir(t);
+    const bot = (opts = {}) => Object.assign(Object.create(Agent.prototype), { agenda: new Agenda('FRCFLD', { dir }), task: { data: null }, ...opts });
+    settings.agenda_autostart = false;
+    assert.equal(bot().autostartAgenda(), false, 'agenda_autostart false');
+    settings.agenda_autostart = undefined;
+    assert.equal(bot({ task: { data: {} } }).autostartAgenda(), false, 'a Mindcraft task loaded');
+    const fresh = bot();
+    assert.equal(fresh.autostartAgenda(), true);
+    assert.equal(fresh.agenda.active, true);
+    fresh.agenda.stop(); // a giver's !agendaStop, saved
+    assert.equal(bot().autostartAgenda(), false, 'an agenda.json exists: left as saved');
+    // The spawn handler calls it.
+    const src = readFileSync(new URL('./agent.js', import.meta.url), 'utf8');
+    const spawn = src.slice(src.indexOf("this.bot.once('spawn'"), src.indexOf('this.checkAllPlayersPresent();'));
+    assert.match(spawn, /\n\s+this\.autostartAgenda\(\);\n/);
 });
 
 function t_log(fn) {

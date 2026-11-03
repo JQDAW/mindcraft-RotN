@@ -25,13 +25,12 @@
 //   task <id> failed: <reason>
 //   agenda resumed: <step id>
 import settings from './settings.js';
-import { agendaTick, say, minutes, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS } from './agenda_driver.js';
+import { agendaTick, say, minutes, isAutonomyPrompt, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData } from './task_queue.js';
 
 /** Self-prompter time per task, over all its runs. */
 export const TASK_LLM_MS = 10 * 60_000;
 const MAX_TICK_GAP_MS = 10_000; // a stalled update loop does not count as LLM time
-const SAVE_EVERY_MS = 60_000;
 
 /** A task's budget; settings.task_attempts and task_llm_ms override it. */
 export function taskBudget() {
@@ -84,7 +83,8 @@ function yieldAgenda(agent, task) {
 /**
  * One tick of the priority stack. Returns what it did, for tests and logs:
  * 'held:<kind>' (a control hold), 'task:<id>' or 'task:<id>:waiting' (a task runs or waits for
- * the checkpoint), 'task:<id>:failed', or agendaTick's result (null, 'paused', 'done', 'stuck', a step id).
+ * the checkpoint), 'task:<id>:yield' (a paused conversation or a giver's !goal), 'task:<id>:failed',
+ * or agendaTick's result (null, 'paused', 'yield', 'done', 'stuck', a step id).
  */
 export function autonomyTick(agent, { now = Date.now() } = {}) {
     const sp = agent.self_prompter;
@@ -123,6 +123,12 @@ function taskTick(agent, task, now) {
     const sp = agent.self_prompter;
     const queue = agent.tasks;
 
+    // A bot-to-bot conversation paused the self-prompter: wait for it (no run is used).
+    if (sp.isPaused?.()) {
+        if (agent._task_id === task.id) agent._task_paused = true;
+        return `task:${task.id}:yield`;
+    }
+
     if (task.status === 'queued') {
         // A safe checkpoint: let the self-prompter's command in flight finish first.
         if (sp.isActive()) sp.stop(false);
@@ -137,10 +143,17 @@ function taskTick(agent, task, now) {
         agent._task_stopped_at = undefined;
     }
 
-    // Its LLM time since the last tick.
-    if (sp.isActive() && last !== undefined) {
+    // A giver's typed !goal runs for now: the task waits, and that time is not the task's.
+    if (sp.isActive() && !isAutonomyPrompt(sp.prompt)) {
+        agent._task_paused = true;
+        return `task:${task.id}:yield`;
+    }
+
+    // Its LLM time since the last tick (only its own prompt counts).
+    if (sp.isActive() && sp.prompt === taskGoal(task) && last !== undefined) {
         queue.addLlmTime(task.id, Math.min(now - last, MAX_TICK_GAP_MS));
-        if (now - (agent._task_saved_at ?? last) >= SAVE_EVERY_MS) {
+        agent._task_saved_at ??= last; // the first counted tick (#164 nit: `?? last` alone never saved)
+        if (now - agent._task_saved_at >= SAVE_EVERY_MS) {
             try { queue.save(); } catch (err) { console.warn(`[tasks] Could not save (${err.message}).`); }
             agent._task_saved_at = now;
         }

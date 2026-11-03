@@ -136,11 +136,7 @@ export class Agent {
                     }
                 }
 
-                // The RotN agenda starts by itself on a fresh bot (E2; harness-ops' G3 driver proposal).
-                // With an agenda.json it is left as saved: active resumes, while a giver's !agendaStop,
-                // a stuck step or "agenda done" survive a restart (#164 review).
-                if (!this.task.data && settings.agenda_autostart !== false && !this.agenda.existed)
-                    this.agenda.start();
+                this.autostartAgenda();
 
                 await new Promise((resolve) => setTimeout(resolve, 10000));
                 this.checkAllPlayersPresent();
@@ -556,6 +552,17 @@ export class Agent {
     // The one 'login' listener (A3/A4b; a test emits 'login' on a fake bot).
     bindLoginHandler() {
         this.bot.on('login', () => this.onLogin());
+    }
+
+    /**
+     * The RotN agenda starts by itself on a fresh bot (E2; harness-ops' G3 driver proposal).
+     * With an agenda.json it is left as saved: active resumes, while a giver's !agendaStop,
+     * a stuck step or "agenda done" survive a restart (#164 review). Returns whether it started.
+     */
+    autostartAgenda() {
+        if (this.task?.data || settings.agenda_autostart === false || this.agenda.existed) return false;
+        this.agenda.start();
+        return true;
     }
 
     /**

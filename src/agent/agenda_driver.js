@@ -22,7 +22,9 @@ export const STEP_ATTEMPTS = 3;
 /** Self-prompter time per step, over all its runs (first_plank cannot be done before C2). */
 export const STEP_LLM_MS = 5 * 60_000;
 const MAX_TICK_GAP_MS = 10_000; // a stalled update loop does not count as LLM time
-const SAVE_EVERY_MS = 60_000;
+// LLM time is saved this often (#164 nit: was 60 s); runs are saved as they start, so a
+// crash loop is bounded by the run budget anyway.
+export const SAVE_EVERY_MS = 10_000;
 
 /** A step's budget; settings.agenda_step_attempts and agenda_step_llm_ms override it. */
 export function stepBudget() {
@@ -62,6 +64,10 @@ export function agendaGoal(agenda, step) {
         + 'When this step is done, the agenda moves on by itself.';
 }
 
+/** Whether a self-prompt is the agenda's or a task's own (E3); any other is a player's or the model's !goal. */
+export const isAutonomyPrompt = (prompt) => typeof prompt === 'string'
+    && (prompt.startsWith('RotN agenda, step ') || prompt.startsWith('Player task '));
+
 const othersOnline = (agent) => Object.keys(agent.bot?.players ?? {}).some(n => n !== agent.name);
 
 // A chat line; a failed send is logged, never an unhandled rejection (#164 review nit).
@@ -77,7 +83,8 @@ export const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
 
 /**
  * One agenda tick (throttled). Returns what it did, for tests and logs: null (not due or not
- * active), 'paused' (pause_when_empty and nobody else online), 'done', 'stuck', or the current step id.
+ * active), 'paused' (pause_when_empty and nobody else online), 'yield' (someone else's self-prompting
+ * or a paused conversation), 'done', 'stuck', or the current step id.
  */
 export function agendaTick(agent, { now = Date.now() } = {}) {
     const agenda = agent.agenda;
@@ -93,10 +100,19 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         return 'paused';
     }
 
+    // Self-prompting the agenda did not start (a player's or the model's !goal), or one a
+    // bot-to-bot conversation paused: the agenda waits, counts none of it against the step and
+    // never stops it as stuck, and resumes afterwards without a new run (#164 nits).
+    if ((sp.isActive() && !isAutonomyPrompt(sp.prompt)) || sp.isPaused?.()) {
+        agent._agenda_paused = true;
+        return 'yield';
+    }
+
     // The self-prompter's time since the last tick goes to the step it was pointed at.
     if (agent._agenda_step && sp.isActive() && last !== undefined) {
         agenda.addLlmTime(agent._agenda_step, Math.min(now - last, MAX_TICK_GAP_MS));
-        if (now - (agent._agenda_saved_at ?? last) >= SAVE_EVERY_MS) {
+        agent._agenda_saved_at ??= last; // the first counted tick (#164 nit: `?? last` alone never saved)
+        if (now - agent._agenda_saved_at >= SAVE_EVERY_MS) {
             agenda.save();
             agent._agenda_saved_at = now;
         }
@@ -121,6 +137,9 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         agent._agenda_preempted = false;
         say(agent, resumed ? `agenda resumed: ${step.id}` : `agenda step ${step.id} started: ${step.short}`);
         sp.prompt = goal; // the self-prompter's next prompt uses it
+        // A run still going from the step before now works on this one: it is this step's run
+        // (#164 nit: it was not counted, so a step could get one run more than its budget).
+        if (sp.isActive()) agenda.recordAttempt(step.id);
     }
 
     // The step's budget: spent means stuck, and the agenda pauses (no more LLM calls for it).
