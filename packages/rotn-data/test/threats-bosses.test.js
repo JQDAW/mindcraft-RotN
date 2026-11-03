@@ -39,7 +39,7 @@ test('their pack facts are cited: where they spawn and the configs that change t
     assert.match(ev('minecraft:wither'), /lines 233-235/);
     // None of them is a first-night overworld threat.
     const night = new Set(pack.nightThreats({ limit: 1000 }).map((t) => t.name));
-    for (const n of ['minecraft:ender_dragon', 'minecraft:wither', 'minecraft:blaze', 'minecraft:zombie_horse', 'iceandfire:gorgon']) assert.ok(!night.has(n), n);
+    for (const n of ['minecraft:ender_dragon', 'minecraft:wither', 'minecraft:ghast', 'minecraft:blaze', 'minecraft:zombie_horse', 'iceandfire:gorgon']) assert.ok(!night.has(n), n);
 });
 
 test('gorgon: its gaze kills a player who looks back; the entry marks it do-not-look', () => {
