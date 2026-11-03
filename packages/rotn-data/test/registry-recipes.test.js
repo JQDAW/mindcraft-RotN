@@ -105,11 +105,11 @@ test('installRecipes: same object, vanilla contents replaced, built lazily and o
 
 // #145 review: equal ingredients in several slots also get mixed variants (mineflayer fills a slot
 // with one {id, metadata}; the server accepts any matching stack per slot).
-test('groupOptions: uniform first, then mixes of the likeliest candidates within the budget; cost = least likely used', () => {
+test('groupOptions: every uniform option first, then mixes from the pool by cost', () => {
     assert.deepEqual(groupOptions(3, 1).map((o) => o.slots), [[0], [1], [2]]);
     const three = groupOptions(3, 3);
-    assert.deepEqual(three.map((o) => o.slots.join('')), ['000', '111', '001', '011', '222', '002', '012', '022', '112', '122']);
-    assert.deepEqual(three.map((o) => o.cost), [0, 1, 1, 1, 2, 2, 2, 2, 2, 2]);
+    assert.deepEqual(three.map((o) => o.slots.join('')), ['000', '111', '222', '001', '011', '002', '012', '022', '112', '122']);
+    assert.deepEqual(three.map((o) => o.cost), [0, 1, 2, 1, 1, 2, 2, 2, 2, 2]);
     // 13 rock candidates in 3 slots: mixes only among the first 6 (C(8,3) = 56 <= 64; C(9,3) = 84 > 64).
     const rocks = groupOptions(13, 3);
     assert.equal(rocks.filter((o) => o.uniform).length, 13);
@@ -121,6 +121,8 @@ test('groupOptions: uniform first, then mixes of the likeliest candidates within
 test('costTuples: smallest total cost first, capped', () => {
     assert.deepEqual(costTuples([[0, 1, 2], [0, 1]], 10), [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]]);
     assert.deepEqual(costTuples([[0, 1, 1], [0]], 2), [[0, 0], [1, 0]]);
+    // Costs in any order (uniform options first, then mixes).
+    assert.deepEqual(costTuples([[0, 2, 1], [0]], 5), [[0, 0], [2, 0], [1, 0]]);
     assert.deepEqual(costTuples([[0], []], 5), []);
 });
 
@@ -135,4 +137,28 @@ test('a stone pickaxe from mixed rocks (one igneous, two metamorphic) has a vari
     const row = (v) => v.inShape[0].map((x) => [x.id, x.metadata]);
     assert.deepEqual(row(variants[0]), [[ID(reg, 'pyrotech:rock'), 0], [ID(reg, 'pyrotech:rock'), 0], [ID(reg, 'pyrotech:rock'), 0]], 'uniform first');
     assert.ok(variants.some((v) => JSON.stringify(row(v)) === JSON.stringify([[200, null], [201, null], [201, null]])), 'igneous + 2 metamorphic (any meta)');
+});
+
+// #152 review 2: a wildcard and a specific meta of the same item would count the same stacks twice.
+test('groupOptions: no mix pairs a wildcard with another candidate of the same item', () => {
+    const cands = [{ id: 5, metadata: null, name: 'minecraft:sand' }, { id: 5, metadata: 1, name: 'minecraft:sand' }, { id: 6, metadata: null, name: 'minecraft:gravel' }];
+    const mixes = groupOptions(cands, 2).filter((o) => !o.uniform).map((o) => [...o.slots].sort().join(''));
+    assert.ok(!mixes.includes('01'), 'sand (any) + red sand');
+    assert.deepEqual(mixes.sort(), ['02', '12']);
+});
+
+// #152 review 1: mixes never push single-kind variants out of the cap.
+test('the cap keeps every single-kind variant ahead of the mixes', () => {
+    const reg = fakeRegistry();
+    const many = { ores: ['rock'], stacks: [{ name: 'pyrotech:rock', meta: 0 }, { name: 'pyrotech:rock', meta: 6 }, { name: 'pyrotech:rock', meta: 8 }, { name: 'minecraft:flint', meta: 0 }, { name: 'minecraft:cobblestone', meta: 0 }] };
+    const pick = { ...crudeAxe, id: 'p', requiresTable: true, result: { name: 'minecraft:stone_pickaxe', meta: 0, count: 1 }, width: 3, height: 3,
+        slots: [many, many, many, null, stickWood, null, null, stickWood, null] };
+    const uniformOnly = (v) => new Set(v.inShape[0].map((x) => `${x.id}:${x.metadata}`)).size === 1 && v.inShape[1][1].id === v.inShape[2][1].id;
+    // 5 rocks x 2 sticks = 10 single-kind variants; a cap of 12 leaves room for 2 mixes.
+    const { variants } = convertRecipe(reg, pick, { maxVariants: 12 });
+    assert.equal(variants.length, 12);
+    assert.equal(variants.slice(0, 10).filter(uniformOnly).length, 10);
+    assert.equal(variants.slice(10).filter(uniformOnly).length, 0);
+    // A cap below the single-kind count: single-kind variants only.
+    assert.ok(convertRecipe(reg, pick, { maxVariants: 4 }).variants.every(uniformOnly));
 });

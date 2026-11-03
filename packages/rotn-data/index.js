@@ -28,6 +28,8 @@ export const lookup = (query, opts) => pack().lookup(query, opts);
 // "How do I get X" (Phase 3): world rules (3.3.4/world-sources.json), recipes, smelting, plain drops.
 export const howToGet = (item, opts) => pack().howToGet(item, opts);
 export const rockRecipes = () => pack().rockRecipes();
+// Can these inventory stacks fill this recipe or craft way? One rule for rotn-data and skills-rotn (#152 review).
+export const canFill = (recipe, stacks, opts) => pack().canFill(recipe, stacks, opts);
 export { formatHowToGet } from './src/howto.js';
 // First-night threats (Phase 3): reaction per mob (3.3.4/threat-reactions.json) and night spawns per biome.
 export const threatOf = (entityName) => pack().threatOf(entityName);

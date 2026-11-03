@@ -66,11 +66,8 @@ function itemId(registry, name) {
 function candidates(registry, ingredient) {
     const seen = new Set();
     const out = [];
-    // Within a rank a wildcard stack (any meta of one item, e.g. a whole Underground Biomes rock
-    // family) comes before single metas, so mixed variants (below) reach every family.
-    const wild = (x) => (x.meta === WILDCARD_META || x.meta == null ? 0 : 1);
     const stacks = (ingredient?.stacks ?? []).map((s, i) => ({ s, i }))
-        .sort((a, b) => rank(a.s.name) - rank(b.s.name) || wild(a.s) - wild(b.s) || a.i - b.i);
+        .sort((a, b) => rank(a.s.name) - rank(b.s.name) || a.i - b.i);
     for (const { s } of stacks) {
         if (s.nbt) continue;
         const id = itemId(registry, s.name);
@@ -79,7 +76,7 @@ function candidates(registry, ingredient) {
         const key = `${id}:${metadata}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        out.push({ id, metadata });
+        out.push({ id, metadata, name: s.name });
     }
     return out;
 }
@@ -123,46 +120,55 @@ const multisetCount = (k, n) => {
 };
 
 /**
- * The ways one ingredient group can fill its n slots, as arrays of candidate indices (one per slot),
- * cheapest first. Uniform options (every slot the same candidate) for all candidates; when n >= 2,
- * also mixed options: multisets over the group's first K candidates, K as large as the budget allows
- * (C(K + n - 1, n) <= mixBudget). Cost = the largest candidate index used (how unlikely the least
- * likely stack is). Why (#145 review): mineflayer fills each slot with one {id, metadata}, so 3 rock
- * slots from one variant need 3 rocks of one item; the server accepts any rock in each slot.
- * @returns {Array<{slots: number[], cost: number, uniform: boolean}>}
+ * The ways one ingredient group can fill its n slots, as arrays of candidate indices (one per slot).
+ * Uniform options (every slot the same candidate), one per candidate, in candidate order (cost =
+ * index). When n >= 2, also mixed options (#145 review: mineflayer fills each slot with one
+ * {id, metadata}, so 3 rock slots from one variant need 3 rocks of one item, while the server accepts
+ * any rock per slot): multisets over a mix pool of K candidates, K as large as C(K + n - 1, n) <=
+ * mixBudget allows. The pool prefers whole items (wildcard metadata, e.g. a whole Underground Biomes
+ * rock family) within a rank, so the families are in it; cost = the largest pool position used.
+ * Skipped (#152 review): a mix that has a wildcard candidate and another candidate of the same item,
+ * which would count the same stacks twice (recipesFor says yes, craft runs out).
+ * @param {Array<{id: number, metadata: number|null, name?: string}>} cands
+ * @returns {Array<{slots: number[], cost: number, uniform: boolean}>} uniform first, then mixes by cost
  */
-export function groupOptions(candidateCount, n, { mixBudget = DEFAULT_MIX_BUDGET } = {}) {
-    const out = [];
-    for (let i = 0; i < candidateCount; i++) out.push({ slots: Array(n).fill(i), cost: i, uniform: true });
-    if (n >= 2) {
-        let k = Math.min(candidateCount, 2);
-        while (k < candidateCount && multisetCount(k + 1, n) <= mixBudget) k++;
-        if (multisetCount(k, n) <= mixBudget || k === 2) {
-            const walk = (start, acc) => {
-                if (acc.length === n) {
-                    if (acc[0] !== acc[n - 1]) out.push({ slots: [...acc], cost: acc[n - 1], uniform: false });
-                    return;
-                }
-                for (let i = start; i < k; i++) { acc.push(i); walk(i, acc); acc.pop(); }
-            };
-            walk(0, []);
+export function groupOptions(cands, n, { mixBudget = DEFAULT_MIX_BUDGET } = {}) {
+    const list = typeof cands === 'number' ? Array.from({ length: cands }, (_, i) => ({ id: i, metadata: 0 })) : cands;
+    const uniform = list.map((_, i) => ({ slots: Array(n).fill(i), cost: i, uniform: true }));
+    if (n < 2 || list.length < 2) return uniform;
+    const wild = (c) => (c.metadata == null ? 0 : 1);
+    const pool = list.map((c, i) => ({ c, i }))
+        .sort((a, b) => rank(a.c.name ?? '') - rank(b.c.name ?? '') || wild(a.c) - wild(b.c) || a.i - b.i)
+        .map((x) => x.i);
+    let k = 2;
+    while (k < pool.length && multisetCount(k + 1, n) <= mixBudget) k++;
+    const mixes = [];
+    const walk = (start, acc) => {
+        if (acc.length === n) {
+            if (acc[0] === acc[n - 1]) return; // uniform
+            const picked = acc.map((pos) => list[pool[pos]]);
+            const doubles = picked.some((a) => a.metadata == null && picked.some((b) => b !== a && b.id === a.id));
+            if (!doubles) mixes.push({ slots: acc.map((pos) => pool[pos]), cost: acc[n - 1], uniform: false });
+            return;
         }
-    }
-    // Cheapest first; on a tie uniform first, then by the slots.
-    return out.sort((a, b) => a.cost - b.cost || (a.uniform ? 0 : 1) - (b.uniform ? 0 : 1)
-        || a.slots.join(',').localeCompare(b.slots.join(','), undefined, { numeric: true }));
+        for (let pos = start; pos < k; pos++) { acc.push(pos); walk(pos, acc); acc.pop(); }
+    };
+    walk(0, []);
+    return [...uniform, ...mixes.sort((a, b) => a.cost - b.cost)];
 }
 
 /**
  * Option index tuples over groups, smallest total cost first, at most `max`.
- * @param {number[][]} costs per group, the (sorted) cost of each option
+ * @param {number[][]} costs per group, the cost of each option (any order)
  */
 export function costTuples(costs, max) {
     const out = [];
     if (costs.some((c) => c.length === 0)) return out;
-    const minRest = costs.map((_, i) => costs.slice(i + 1).reduce((a, c) => a + c[0], 0));
-    const maxRest = costs.map((_, i) => costs.slice(i + 1).reduce((a, c) => a + c[c.length - 1], 0));
-    const total = costs.reduce((a, c) => a + c[c.length - 1], 0);
+    const lo = costs.map((c) => Math.min(...c));
+    const hi = costs.map((c) => Math.max(...c));
+    const minRest = costs.map((_, i) => lo.slice(i + 1).reduce((a, x) => a + x, 0));
+    const maxRest = costs.map((_, i) => hi.slice(i + 1).reduce((a, x) => a + x, 0));
+    const total = hi.reduce((a, x) => a + x, 0);
     const walk = (i, left, acc) => {
         if (out.length >= max) return;
         if (i === costs.length) {
@@ -171,7 +177,7 @@ export function costTuples(costs, max) {
         }
         for (let j = 0; j < costs[i].length; j++) {
             const c = costs[i][j];
-            if (c > left) break;
+            if (c > left) continue;
             const rest = left - c;
             if (rest < minRest[i] || rest > maxRest[i]) continue;
             acc.push(j);
@@ -206,8 +212,19 @@ export function convertRecipe(registry, r, { maxVariants = DEFAULT_MAX_VARIANTS,
     });
     const keys = [...groups.keys()];
     if (keys.some((k) => groups.get(k).cands.length === 0)) return { variants: [], skipped: 'an ingredient has no usable stack', truncated: false };
-    const options = keys.map((k) => groupOptions(groups.get(k).cands.length, groups.get(k).slots, { mixBudget }));
-    const tuples = costTuples(options.map((o) => o.map((x) => x.cost)), maxVariants);
+    const options = keys.map((k) => groupOptions(groups.get(k).cands, groups.get(k).slots, { mixBudget }));
+    // Single-kind (uniform) variants exactly as before mixes existed (develop's order and count), then
+    // mixes in the room the cap leaves (#152 review: mixes must never push single-kind variants out).
+    const uniformCounts = options.map((o) => o.filter((x) => x.uniform).length);
+    const tuples = choiceTuples(uniformCounts, maxVariants);
+    const room = maxVariants - tuples.length;
+    if (room > 0 && options.some((o, i) => o.length > uniformCounts[i])) {
+        const all = costTuples(options.map((o) => o.map((x) => x.cost)), tuples.length + room);
+        for (const t of all) {
+            if (tuples.length >= maxVariants) break;
+            if (t.some((j, i) => !options[i][j].uniform)) tuples.push(t);
+        }
+    }
     const total = options.reduce((a, o) => a * o.length, 1);
     // `meta` as well as `metadata` (#102 review): prismarine-recipe's Recipe.find filters by the
     // requested metadata only when the result has a `meta` key, so without it bot.recipesFor(planks,
@@ -222,7 +239,8 @@ export function convertRecipe(registry, r, { maxVariants = DEFAULT_MAX_VARIANTS,
         const items = slotGroup.map((k) => {
             if (k === null) return null;
             const g = next.get(k);
-            return { ...g.cands[g.slots[g.at++]] };
+            const c = g.cands[g.slots[g.at++]];
+            return { id: c.id, metadata: c.metadata };
         });
         if (!shaped) return { ingredients: items.filter(Boolean), result: { ...result } };
         const w = r.width;

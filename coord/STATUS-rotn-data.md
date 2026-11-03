@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T01:06Z (from `date -u`)
+Updated: 2026-11-03T01:33Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -201,7 +201,12 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
     So one slot accepts any meta of one item, but not two items. A mix of rock families needs recipe entries whose slots name different items, which the table can hold.
   - **Fix (rotn-data only):** `registry-recipes.js` also emits mixed variants for an ingredient that fills n >= 2 slots (multisets of its likeliest candidates, K as large as `C(K+n-1, n) <= 64` allows), ordered by cost after the uniform ones. Within a rank, wildcard candidates (a whole rock family) come first, so the three Underground Biomes families are among the K. Stone pickaxe and axe: 1 igneous + 2 metamorphic rocks and 2 sticks are now craftable by mineflayer's rule. Cobblestone still needs 4 rocks of one type (one recipe per type).
-- **Next: Request 10** (`getDetailedCraftingPlan` reading ingredient metas).
+- **#152 review (REQUEST CHANGES) fixed:**
+  - single-kind variants are enumerated exactly as on develop, and mixes only fill the room the cap leaves. Over all 6,089 recipes against develop's algorithm: no first variant changed, every develop variant kept in order, and 744 recipes gain mixes; the stone pickaxe and axe keep 78 single-kind variants and add 178 mixes;
+  - no mix pairs a wildcard with a specific meta of the same item (0 such variants);
+  - the candidate order is develop's again; only the mix pool prefers whole families.
+- **New for skills-rotn #151 (lead's request):** `canFill(recipe | recipeId | howToGet craft way, stacks, { times })`, the same slot rule as the variants, with bipartite matching so one item is never counted twice; also `recipeById(id)`.
+- **Request 10 is #153**, merging together with skills-rotn switching `!getCraftingPlan` to `getInventoryCounts` (lead routes it). It inherits the #152 fixes.
 
 - **Free** (lead, after #138). Low-priority offline task done: the research note below (STATUS only, no code).
 - **Lead's pick, follow-up 1 (`agent/rotn-data/ub-rock-piles`; G3 critical path, skills-rotn B2 #141 uses the world rules):** the `rock-pile` rule names the Underground Biomes rock piles (`pyrotech_compat:rock_igneous`, `_metamorphic`, `_sedimentary`), per-pair `inferred`, cited from the dump (no collision box, hardness 0.1, no tool, each state drops its own item at the same meta, state names match item names) and S1-A (the metas seen near the G3 spawn). `pyrotech:rock` stays `documented`. Blocks item 1 below is done by it. Lead (for skills-rotn B2): the rock-pile and stone rules carry `ore: rock`, and `howToGet` ways list per block the metas that give a rock in the dump's `rock` ore dictionary (`pyrotech:rock` 0, 6, 8; the Underground Biomes piles every meta), with `inOre` on each listed block; the metas 4, 5, 7, 9 of a bare `pyrotech:rock` pile are not rocks. Cross-checked against the dump's drops and the crude axe's rock slot.
