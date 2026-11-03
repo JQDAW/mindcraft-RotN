@@ -209,3 +209,41 @@ test('the plan cycle guard has no depth limit: a 12-step cycle is found (#102 re
         mc.__setRegistryForTest(registry);
     }
 });
+
+// #145 review: near the G3 spawn the bot holds mixed Underground Biomes rocks. mineflayer's
+// recipesFor keeps a recipe when, for every delta entry, inventory.count(id, metadata) covers it
+// (craft.js requirementsMetForRecipe); the same rule here, on the installed RotN table.
+test('mixed rocks (1 igneous + 2 metamorphic) and 2 sticks make a stone pickaxe and a stone axe', () => {
+    mc.installRotnRecipes();
+    const Recipe = require('prismarine-recipe')(registry).Recipe;
+    const id = (n) => registry.itemsByName[n].id;
+    const inv = [[id('pyrotech_compat:rock_igneous'), 3, 1], [id('pyrotech_compat:rock_metamorphic'), 0, 2], [id('stick'), 0, 2]];
+    const count = (i, m) => inv.filter(([a, b]) => a === i && (m == null || m === b)).reduce((n, x) => n + x[2], 0);
+    const craftable = (r) => r.delta.every((d) => count(d.id, d.metadata) + d.count >= 0);
+    for (const item of ['stone_pickaxe', 'stone_axe']) assert.ok(Recipe.find(id(item)).some(craftable), item);
+    // Cobblestone takes 4 rocks of one type (one recipe per rock type), so a mix makes none.
+    assert.ok(!Recipe.find(id('cobblestone')).some(craftable));
+});
+
+// #152 review: single-kind variants are never pushed out by mixes, and no variant counts a stack twice.
+test('stone tools keep all 78 single-kind variants; no variant pairs a wildcard with the same item', () => {
+    mc.installRotnRecipes();
+    const Recipe = require('prismarine-recipe')(registry).Recipe;
+    const id = (n) => registry.itemsByName[n].id;
+    const canCraft = (inv) => (r) => r.delta.every((d) => inv.filter(([a, b]) => a === d.id && (d.metadata == null || d.metadata === b)).reduce((n, x) => n + x[2], 0) + d.count >= 0);
+    // The reviewer's case: 3 sedimentary sand rocks (meta 8) and 2 sticks (develop could craft it).
+    const sand3 = [[id('pyrotech_compat:rock_sedimentary_sand'), 8, 3], [id('stick'), 0, 2]];
+    for (const item of ['stone_pickaxe', 'stone_axe']) assert.ok(Recipe.find(id(item)).some(canCraft(sand3)), item);
+    // The rock recipe's first 78 variants are single-kind (13 rocks x 6 stick choices), as on develop.
+    const rockVariants = registry.recipes[id('stone_pickaxe')].filter((r) => r.inShape[0].length === 3 && r.inShape[0][0].id !== id('flint'));
+    const singleKind = (r) => new Set(r.inShape[0].map((x) => `${x.id}:${x.metadata}`)).size === 1;
+    assert.ok(rockVariants.slice(0, 78).every(singleKind));
+    assert.ok(rockVariants.slice(78).some((r) => !singleKind(r)), 'mixes after them');
+    // The reviewer's double-count examples: no variant has a wildcard and a specific meta of one item.
+    for (const item of ['concrete_powder', 'bookshelf']) {
+        for (const r of registry.recipes[id(item)] ?? []) {
+            const its = (r.ingredients ?? r.inShape.flat()).filter((x) => x && x.id >= 0);
+            assert.ok(!its.some((x) => x.metadata == null && its.some((y) => y !== x && y.id === x.id && y.metadata != null)), item);
+        }
+    }
+});
