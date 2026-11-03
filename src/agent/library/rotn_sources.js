@@ -51,13 +51,16 @@ export function itemVariants(name) {
 export function worldSources(name) {
     const result = lookup(name);
     if (!result) return [];
+    // A bare name ("pyrotech:rock") means every member of the rule's ore; an explicit variant
+    // ("pyrotech:rock:0") only the blocks that drop that variant (#145 review nit).
+    const bare = parseName(name)?.meta == null;
     return (result?.ways ?? [])
         // Only rules that break a block; item-on-block rules (debark a log) are skills of their own (C2).
         .filter(w => w.kind === 'world' && w.action === 'break' && Array.isArray(w.blocks) && w.blocks.length > 0)
         .map(w => ({
             // With an ore (rotn-data #142), the blocks and metas whose drop is in it: the
             // Underground Biomes piles at every meta, pyrotech:rock only at 0, 6 and 8.
-            blocks: w.ore?.blocks?.length
+            blocks: bare && w.ore?.blocks?.length
                 ? w.ore.blocks.flatMap(b => b.metas.map(meta => formatName(botName(b.name), meta)))
                 : w.blocks.map(b => formatName(botName(b.name), b.meta ?? null)),
             tool: w.tool ?? null,

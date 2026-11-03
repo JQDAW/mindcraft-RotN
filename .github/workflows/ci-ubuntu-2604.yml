@@ -88,16 +88,26 @@ jobs:
           useradd --create-home --shell /bin/bash ci
           chown -R ci:ci "$GITHUB_WORKSPACE"
 
+      # Each npm and node step changes to the checkout itself (#135 review nit): in a container job,
+      # ${{ github.workspace }} is the HOST's path, so working-directory is not used; $GITHUB_WORKSPACE
+      # inside the step is the container's.
       - name: npm ci (postinstall applies the patches; fails if one does not apply)
-        run: runuser -u ci -- env HOME=/home/ci npm ci --no-audit --no-fund
+        run: |
+          set -eu
+          cd "$GITHUB_WORKSPACE"
+          runuser -u ci -- env HOME=/home/ci npm ci --no-audit --no-fund
 
       # Installing is not loading: a prebuilt binary can still miss a system library at run time (#135
       # review). With only the CX23's packages, each native module must load. A missing library is
       # reported (ldd's "not found" lines) and fails the job; it is never installed here, because the
       # CX23 would not have it either.
+      # What it proves (#135 review nit): each binding LINKS (the dynamic loader finds every library it
+      # needs) and initialises. It does not prove that anything renders: no canvas is drawn and no GL
+      # context is created (that needs a display, which the bot does not use on the CX23).
       - name: The native modules load (canvas, gl) with only the CX23's packages
         run: |
           set -u
+          cd "$GITHUB_WORKSPACE"
           rc=0
           for m in canvas gl; do
             if runuser -u ci -- node -e "require('$m'); console.log('$m: loads')"; then
@@ -116,4 +126,7 @@ jobs:
         run: apt-get install -y -q jq
 
       - name: npm test (offline unit tests)
-        run: runuser -u ci -- env HOME=/home/ci npm test
+        run: |
+          set -eu
+          cd "$GITHUB_WORKSPACE"
+          runuser -u ci -- env HOME=/home/ci npm test
