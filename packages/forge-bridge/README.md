@@ -62,7 +62,7 @@ Each ack value is the ordinal of the client's own state.
 The bridge also decodes the other Forge and REID channels:
 
 - `FML|MP` multipart reassembly.
-- `FML`: EntitySpawn and OpenGui.
+- `FML`: EntitySpawn and OpenGui (FastWorkbench's becomes an `open_window`; see "Mod GUIs" below).
 - `FORGE`: DimensionRegister and FluidIdMap.
 - `jeid`: REID biome messages.
 
@@ -83,6 +83,7 @@ The bridge also decodes the other Forge and REID channels:
 | `FORGE_MODLIST_FILE` | Ping JSON to use when the live ping has no mod list. The pinned one is `test/fixtures/rotn-3.3.4/ping.json`. |
 | `MINDCRAFT_PROFILES_FOLDER` | Per-bot Microsoft token cache, outside the repo. Becomes nmp's `profilesFolder`. |
 | `PROTODEF_LOG_PARTIAL=1` | Turns protodef's "partial packet" console line back on (`patches/protodef+1.19.0.patch`). |
+| `MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS` | How long `bot.placeBlock` waits for the server's block update before it fails ("Event blockUpdate:... did not fire within timeout"). The default is 500 ms (Mindcraft's value; upstream mineflayer uses 5000). It wins over `settings.place_block_timeout_ms` and must be an integer from 50 to 60000; any other value is warned about and ignored. A successful placement returns as soon as the update arrives, so a larger value only delays real failures. `bot.placeBlockTimeout` changes it at runtime, and `bot._placeBlockWithOptions(ref, face, { timeout })` changes it for one call (`patches/mineflayer+4.33.0.patch`, `place_block.js`). A value set on the bot before the plugins load is kept. mineflayer's `onceWithCleanup` leaves its timer running after a success (upstream behaviour), so each placement leaves one harmless pending timer of this length. |
 
 ## REID 2.2.2 wire changes (confirmed from the jar)
 
@@ -217,6 +218,24 @@ In G2 batch 7, the server kicked the items session about 2 s after join with `mu
   4. **Trace.** A ring of the last 80 movement inputs and outputs: server `position`, `explosion`, the bot's own velocity, teleports, mounts and on-fire flag, `update_health`, `abilities`, and every movement packet the bot sends. It is written once to the capture as a `movement_trace` event, at the first guard event or at a movement kick.
 - **Logging.** Each kind of event is logged once (`[forge-bridge] movement guard: ...`). Counts are in `bot.forge.movementGuard`: `{ droppedPackets, repairedStates, sanitizedInputs, movementKicks, first }`.
 - **If it fires on the test server**, the driver log has the line, and the capture's `movement_trace` names the input that caused it.
+
+## Mod GUIs over vanilla containers: the RotN crafting table (skills-rotn Request 2)
+
+In RotN 3.3.4, `minecraft:crafting_table` is FastWorkbench 1.7.4's block: Run A's RegistryData overrides the block and the item with `fastbench`. That block does not open with vanilla `open_window`.
+
+- **What the server does** (`javap` on the pinned pack's jars):
+  - `BlockFastBench.onBlockActivated` calls `player.openGui(FastBench, 0, world, x, y, z)`.
+  - Forge's `FMLNetworkHandler.openGui` writes the FML OpenGui message (i32 window id, mod id, i32 gui id, x, y, z), then `addListener`, which sends `window_items`.
+  - The container, `ContainerFastBench`, extends `ContainerWorkbench`: result 0, grid 1-9, player inventory 10-45. Clicks go through vanilla `processClickWindow`.
+- **Without a fix**, mineflayer never sees a window. `bot.craft(recipe, n, table)` fails with "Event windowOpen did not fire within timeout of 20000ms".
+- **`src/mod-guis.js`.** For an OpenGui listed in `MOD_GUI_WINDOWS` (only `fastbench:0` today), the bridge emits the `open_window` that a vanilla server would send (`minecraft:crafting_table`, title `container.crafting`). It is emitted while OpenGui is decoded, so it comes before the `window_items` that follows. mineflayer then opens the window as usual.
+  - Any other OpenGui is logged once per message and ignored. Examples: `craftingcraft:portable_crafting_table`, and any mod machine.
+  - Counts are in `bridge.stats.openGuis` and `bridge.stats.modWindows`. Each synthetic window is captured as a `mod_window` event.
+- **The result slot.** FastWorkbench sends the result slot (`set_slot` 0) only when the recipe or the result changes, plus an int recipe id on its `fastbench` channel, which needs no reply. mineflayer's `craft` sets slot 0 from `recipe.result` before it clicks, so this does not matter for it.
+- **Tests:**
+  - `test/mod-guis.test.js`: a golden OpenGui vector, the mapping, the order before `window_items`, and the unknown-GUI path.
+  - `test/craft-e2e.test.js`: `initBot` crafts the crude axe, Crafting Tools and the crafting table in the 2x2 grid, then a stone pickaxe at the FastWorkbench table. It also places cobblestone and eats bread, all against `test/fake-containers.js`, a model of the server code above. That is a model, not a server; the live probe is the proof.
+  - Captured by default now: `transaction`, `close_window` and `block_change` (S2C), and `transaction`, `close_window`, `block_place` and `use_item` (C2S), with `window_click` raised to 300.
 
 ## Other protocol changes
 
