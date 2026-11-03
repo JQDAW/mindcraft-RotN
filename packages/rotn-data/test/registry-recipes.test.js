@@ -2,7 +2,7 @@
 // fake registry. The real-registry and mineflayer-level tests are in src/utils/mcdata.rotn.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { choiceTuples, convertRecipe, installRecipes } from '../src/registry-recipes.js';
+import { choiceTuples, convertRecipe, installRecipes, groupOptions, costTuples } from '../src/registry-recipes.js';
 
 // minecraft-data style: vanilla names without "minecraft:", modded names in full.
 const NAMES = ['stick', 'flint', 'planks', 'cobblestone', 'stone_pickaxe', 'pyrotech:rock', 'pyrotech:crude_axe', 'betterwithmods:shaft', 'wool', 'dye'];
@@ -23,18 +23,21 @@ test('choiceTuples: smallest index sum first, capped, and empty when a group is 
     assert.equal(choiceTuples([40, 40, 40], 256).length, 256);
 });
 
-test('a shaped recipe: pyrotech and vanilla stacks first, equal ingredients take the same stack', () => {
+test('a shaped recipe: pyrotech and vanilla stacks first; equal ingredients take the same stack, then mixed', () => {
     const reg = fakeRegistry();
     const { variants, skipped, truncated } = convertRecipe(reg, crudeAxe);
     assert.equal(skipped, null);
     assert.equal(truncated, false);
     // rock group: pyrotech:rock 0, pyrotech:rock 6, flint; stick group: stick, shaft -> 6 variants
-    assert.equal(variants.length, 6);
+    // rock (1 slot): 3 options; sticks (2 slots, stick or shaft): stick+stick, shaft+shaft, stick+shaft.
+    assert.equal(variants.length, 9);
     assert.deepEqual(variants[0], {
         inShape: [[{ id: ID(reg, 'pyrotech:rock'), metadata: 0 }, { id: ID(reg, 'stick'), metadata: 0 }], [{ id: ID(reg, 'stick'), metadata: 0 }, null]],
         result: { id: ID(reg, 'pyrotech:crude_axe'), metadata: 0, meta: 0, count: 1 },
     });
-    for (const v of variants) assert.deepEqual(v.inShape[0][1], v.inShape[1][0], 'both stick slots take one stack');
+    // The uniform variants come first; a mixed one (a stick and a shaft) exists too (#145 review).
+    for (const v of variants.slice(0, 2)) assert.deepEqual(v.inShape[0][1], v.inShape[1][0], 'uniform first (stick+stick, shaft+shaft)');
+    assert.ok(variants.some((v) => v.inShape[0][1].id === ID(reg, 'stick') && v.inShape[1][0].id === ID(reg, 'betterwithmods:shaft')), 'a stick and a shaft');
     assert.ok(variants.some((v) => v.inShape[0][0].id === ID(reg, 'flint')));
 });
 
@@ -93,8 +96,69 @@ test('installRecipes: same object, vanilla contents replaced, built lazily and o
     const picks = table[ID(reg, 'stone_pickaxe')];
     // The rock recipe sorts before the flint one (pyrotech before minecraft), whatever the dump order.
     assert.equal(picks[0].inShape[0][0].id, ID(reg, 'pyrotech:rock'));
-    assert.equal(picks.length, 6 + 2);
+    // rock pick: rock (3 slots, 3 candidates) 3 uniform + 7 mixed, sticks (2 slots) 3 -> 30; flint pick: 1 x 3 -> 3.
+    assert.equal(picks.length, 30 + 3);
     assert.equal(table[ID(reg, 'stone_pickaxe')], picks, 'built once, then a plain value');
     assert.equal(report.stats().results, 1);
     assert.throws(() => installRecipes(null, []), /registry is required/);
+});
+
+// #145 review: equal ingredients in several slots also get mixed variants (mineflayer fills a slot
+// with one {id, metadata}; the server accepts any matching stack per slot).
+test('groupOptions: every uniform option first, then mixes from the pool by cost', () => {
+    assert.deepEqual(groupOptions(3, 1).map((o) => o.slots), [[0], [1], [2]]);
+    const three = groupOptions(3, 3);
+    assert.deepEqual(three.map((o) => o.slots.join('')), ['000', '111', '222', '001', '011', '002', '012', '022', '112', '122']);
+    assert.deepEqual(three.map((o) => o.cost), [0, 1, 2, 1, 1, 2, 2, 2, 2, 2]);
+    // 13 rock candidates in 3 slots: mixes only among the first 6 (C(8,3) = 56 <= 64; C(9,3) = 84 > 64).
+    const rocks = groupOptions(13, 3);
+    assert.equal(rocks.filter((o) => o.uniform).length, 13);
+    assert.equal(rocks.filter((o) => !o.uniform).length, 56 - 6);
+    assert.ok(rocks.filter((o) => !o.uniform).every((o) => Math.max(...o.slots) < 6));
+    assert.deepEqual(groupOptions(13, 3, { mixBudget: 1 }).filter((o) => !o.uniform).map((o) => o.slots.join('')), ['001', '011'], 'at least the two likeliest mix');
+});
+
+test('costTuples: smallest total cost first, capped', () => {
+    assert.deepEqual(costTuples([[0, 1, 2], [0, 1]], 10), [[0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]]);
+    assert.deepEqual(costTuples([[0, 1, 1], [0]], 2), [[0, 0], [1, 0]]);
+    // Costs in any order (uniform options first, then mixes).
+    assert.deepEqual(costTuples([[0, 2, 1], [0]], 5), [[0, 0], [2, 0], [1, 0]]);
+    assert.deepEqual(costTuples([[0], []], 5), []);
+});
+
+test('a stone pickaxe from mixed rocks (one igneous, two metamorphic) has a variant', () => {
+    const reg = fakeRegistry();
+    reg.itemsByName['pyrotech_compat:rock_igneous'] = { id: 200, name: 'pyrotech_compat:rock_igneous' };
+    reg.itemsByName['pyrotech_compat:rock_metamorphic'] = { id: 201, name: 'pyrotech_compat:rock_metamorphic' };
+    const ub = { ores: ['rock'], stacks: [{ name: 'pyrotech:rock', meta: 0 }, { name: 'pyrotech_compat:rock_igneous', meta: 32767 }, { name: 'pyrotech_compat:rock_metamorphic', meta: 32767 }] };
+    const pick = { ...crudeAxe, id: 'stone_pickaxe', requiresTable: true, result: { name: 'minecraft:stone_pickaxe', meta: 0, count: 1 }, width: 3, height: 3,
+        slots: [ub, ub, ub, null, stickWood, null, null, stickWood, null] };
+    const { variants } = convertRecipe(reg, pick);
+    const row = (v) => v.inShape[0].map((x) => [x.id, x.metadata]);
+    assert.deepEqual(row(variants[0]), [[ID(reg, 'pyrotech:rock'), 0], [ID(reg, 'pyrotech:rock'), 0], [ID(reg, 'pyrotech:rock'), 0]], 'uniform first');
+    assert.ok(variants.some((v) => JSON.stringify(row(v)) === JSON.stringify([[200, null], [201, null], [201, null]])), 'igneous + 2 metamorphic (any meta)');
+});
+
+// #152 review 2: a wildcard and a specific meta of the same item would count the same stacks twice.
+test('groupOptions: no mix pairs a wildcard with another candidate of the same item', () => {
+    const cands = [{ id: 5, metadata: null, name: 'minecraft:sand' }, { id: 5, metadata: 1, name: 'minecraft:sand' }, { id: 6, metadata: null, name: 'minecraft:gravel' }];
+    const mixes = groupOptions(cands, 2).filter((o) => !o.uniform).map((o) => [...o.slots].sort().join(''));
+    assert.ok(!mixes.includes('01'), 'sand (any) + red sand');
+    assert.deepEqual(mixes.sort(), ['02', '12']);
+});
+
+// #152 review 1: mixes never push single-kind variants out of the cap.
+test('the cap keeps every single-kind variant ahead of the mixes', () => {
+    const reg = fakeRegistry();
+    const many = { ores: ['rock'], stacks: [{ name: 'pyrotech:rock', meta: 0 }, { name: 'pyrotech:rock', meta: 6 }, { name: 'pyrotech:rock', meta: 8 }, { name: 'minecraft:flint', meta: 0 }, { name: 'minecraft:cobblestone', meta: 0 }] };
+    const pick = { ...crudeAxe, id: 'p', requiresTable: true, result: { name: 'minecraft:stone_pickaxe', meta: 0, count: 1 }, width: 3, height: 3,
+        slots: [many, many, many, null, stickWood, null, null, stickWood, null] };
+    const uniformOnly = (v) => new Set(v.inShape[0].map((x) => `${x.id}:${x.metadata}`)).size === 1 && v.inShape[1][1].id === v.inShape[2][1].id;
+    // 5 rocks x 2 sticks = 10 single-kind variants; a cap of 12 leaves room for 2 mixes.
+    const { variants } = convertRecipe(reg, pick, { maxVariants: 12 });
+    assert.equal(variants.length, 12);
+    assert.equal(variants.slice(0, 10).filter(uniformOnly).length, 10);
+    assert.equal(variants.slice(10).filter(uniformOnly).length, 0);
+    // A cap below the single-kind count: single-kind variants only.
+    assert.ok(convertRecipe(reg, pick, { maxVariants: 4 }).variants.every(uniformOnly));
 });

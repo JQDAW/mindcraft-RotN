@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (01:30 UTC, from `date -u`)
+Updated: 2026-11-03 (01:42 UTC, from `date -u`)
 
 ## Done
 
@@ -1127,10 +1127,13 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the research note on Java 8 on Ubuntu 26.04 (`deploy/test-server/JAVA8-ON-UBUNTU-2604.md`; `agent/harness-ops/java8-2604-note`). The lead may file it under `docs/research/`.
-  - **Answer:** 26.04 publishes `openjdk-8-jre-headless` 8u504 in universe with security updates, the same build as 24.04, and Hetzner has `ubuntu-26.04` images.
-  - **Recommendation:** one G0-style build batch with `--image ubuntu-26.04`. The lead says it waits until after the first G3 smoke batch.
-- Next: the G3 runner sets skills-rotn's `allow_server_task_giver` and `task_givers` (#146) in a test-only way, on the test server only. The CX23's `check-env.mjs` keeps refusing both in `SETTINGS_JSON`.
+- This PR: G3's test-only Server task giver, for skills-rotn's #146 (`agent/harness-ops/g3-server-giver`):
+  - the G3 driver writes `allow_server_task_giver: true` into its own `SETTINGS_JSON` for `main.js`, and nowhere else;
+  - the production `settings.js` must have it `false` or absent, which the driver checks and CI checks;
+  - a profile with any task-giver key is refused;
+  - the CX23's `check-env.mjs` keeps refusing `allow_server_task_giver` and `task_givers` in `SETTINGS_JSON` (explicit tests).
+  - `task_givers` (the players) is left to the lead's `settings.js`; per #146, `Server` needs no entry there.
+- #159: every file under `deploy/cx23/` is LF (the attribute, a unit check, and a README note for Windows copies).
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
-- **The CX23:** the human has run GO 2. Nothing of mine touches it until the lead's word.
-- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), and the lead's #134 (ADR 0007).
+- **The CX23:** GO 2 is done (the human ran setup; every step reported OK). Nothing of mine touches it. The post-bootstrap read-only check needs the lead's written GO after the human adds the `cx23-deploy` Orca target.
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), and the lead's #134 (ADR 0007).

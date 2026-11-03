@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { createTranslator } from './translate.js';
 import { howToGet, rockRecipes } from './howto.js';
 import { threatOf, nightThreats } from './threats.js';
+import { canFill } from './craft-fill.js';
 import { parseOld, registryName, WILDCARD_META } from './names.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -200,6 +201,18 @@ export class RotnData {
         if (x.remaining) out.remaining = x.remaining;
         if (x.staged) out.staged = x.staged;
         return out;
+    }
+
+    /** One dump recipe by id, in recipesFor's shape, or null. CraftTweaker ids are only stable within one dump. */
+    recipeById(id) {
+        if (!this._recipesById) this._recipesById = new Map((this.dump.recipes?.recipes ?? []).map((r) => [r.id, r]));
+        const r = this._recipesById.get(id);
+        return r ? this._shape(r) : null;
+    }
+
+    /** Whether inventory stacks can fill a recipe or howToGet craft way (src/craft-fill.js). */
+    canFill(recipe, stacks, opts) {
+        return canFill(this, recipe, stacks, opts);
     }
 
     /** Furnace recipes whose output is `item` (FurnaceRecipes after CraftTweaker). */
