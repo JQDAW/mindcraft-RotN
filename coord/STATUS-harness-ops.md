@@ -1,33 +1,38 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (12:16 UTC, from `date -u`)
+Updated: 2026-11-03 (14:50 UTC, from `date -u`)
 
-## After the Orca restart (2026-11-03)
+## Now (2026-11-03 afternoon)
 
-**State:** respawned by the lead at 11:42 UTC. **#169 (the model pin) and net-forge's #167 are merged.** Nothing touches the CX23. No paid batch is running or planned without a written GO. Only this PR (#176) edits this file, so #165 and #173 cannot conflict with it.
+**State:** P1 attempt 1 ran under the lead's written GO and failed at setup, a harness timing false negative (below). The server is deleted, and the spend was about EUR 0.14. Nothing is running. Nothing touches the CX23. Merged since the restart: #165, #169, #170 (skills-rotn's profile with the preset), #172, #173, #176 and net-forge's #167 and #177. Only this PR edits this file.
 
 **Open PRs (mine):**
-- **#176, the G3 model preflight** `agent/harness-ops/g3-model-preflight` (the lead's #169 review: required before the first G3 batch).
-  - `deploy/test-server.sh run` runs `batch.mjs --preflight` before it creates anything. That checks the driver, the profile, its model and `settings.js`, and reads the key's usage once. If it refuses, no server is created.
-  - Inside a test-server run, the batch refuses without the preflight's mark.
-  - The two #169 nits: the driver reads the profile once; the `llmRecord` JSDoc is back above `llmRecord`.
-- **#165** `agent/harness-ops/probe-p1`: probe P1, the scenario `probe-craft-place` (never a gate). The lead's requests after #167 are in 580716fe (develop merged in, not rebased: no force-push):
-  - `checkProbeReply` on every reply; a reply that breaks contract v1 fails its step (`notes.contractProblems`). The stub driver sends v1 replies and checks each one.
-  - The protocol notes describe the raw whisper component, not mineflayer's `whisper` event.
-  - The e2e runs on net-forge's `probe-test-server.js` with the real `g1-driver` (3 pass: full, food left at 20, lost connection).
-  - **Hunger:** `22 19` (44 exhaustion: about food 14 from a fresh 20/5). Before the eat, the server's `p1food` score (criterion `food`) must be below 20, or the eat is not sent; the driver's `foodBefore` must be below 20 as well.
-  - **Lead decision asked in the #165 comment:** three anchored `scoreboard` commands added to `P1_CONSOLE_ALLOW`, or instead a net-forge change that reports `bot.food` before the eat.
-- **#173**: the #139 re-review nits. CI is green.
-- Requests item 16 is open as skills-rotn's **#170** (the RotN profile uses the preset). Until #170 merges, every Mindcraft-driver run is refused, and with the preflight, before any server exists.
+- **This PR: the P1 attempt 1 evidence**, `test/evidence/probe/p1-20261103-a1/` (README with the timeline, the 3 s console delay after `clear`, the first-join starter items; redacted `result.json`, server log, driver log, run log).
+- **#183: the attempt 1 fix.** A console reply missing from its own 1 s wait is looked up in the later server log lines for up to 5 s (`test/runner/lib/late-console.mjs`), and recorded in `notes.lateReplies`. Its unit test replays attempt 1's exact lines.
+- **#180: the #176 review nits.** The batch script is matched by its resolved path, and `--dry-run` runs `--preflight-files`, which never reads the key usage.
 
-**Next step:** wait for the lead.
-- The P1 batch needs #165 merged, then the lead's written GO.
-- The first G3 batch needs #176 and #170 merged, the lead's check that a fresh Orca terminal sees `OPENROUTER_API_KEY` (set or not set only), and a written GO.
-- If a PR conflicts with develop again, it is almost always this file: merge develop in, keep one shared "Open PRs" list, and push. Never force-push.
+**Next step:**
+- **P1 rerun:** one, on a fresh server, under the same GO terms (the human approved it). It starts only after the lead has reviewed and merged #183 and written "P1 rerun: go".
+- **#165 follow-ups (lead's nits), one small PR after the rerun:** use net-forge's RotN hunger model (`simulateHunger`, #177: Hunger Overhaul and AppleCore; `20 24` with at least 25 s before eating) instead of my vanilla sums; the lead's rule that each P1 attempt uses a fresh server; and the lead's approval of the `p1food` scoreboard commands, recorded at `P1_CONSOLE_ALLOW` and in DRIVER.md.
+- **The first G3 batch** needs #180, the lead's check that a fresh Orca terminal sees `OPENROUTER_API_KEY` (set or not set only), and a written GO.
+- If a PR conflicts with develop, it is almost always this file: merge develop in and push. Never force-push.
 
 **Rules still in force:**
-- PC memory is tight: targeted test files only, one at a time; no `npm ci`, no full suite, no Docker. CI runs the full suite.
+- Targeted test files only, one at a time; no full suite locally (CI runs it). During a paid batch over 20 minutes, nothing else heavy runs on this PC.
 - Write markdown and code edits with the Write/Edit tools or script files, never inside double-quoted shell strings.
+
+## Real P1 batches
+
+### P1 attempt 1 (2026-11-03): FAIL at setup (a harness timing false negative); the server is deleted
+
+The full record is in `test/evidence/probe/p1-20261103-a1/README.md` (this PR).
+- **Run:** the lead's written GO (approved by the human); a clean detached worktree of develop at e6196244 after `npm ci`; `msa-login --check` exit 0; the preflight on its own passed (cadence path); `--ttl-hours 2`, no skip flags; no LLM key in the batch's environment.
+- **Times (UTC):** start 14:34:07, created 14:34:20, ready 14:39:42, scenario 14:39:42-14:41:02, "verified gone" 14:41:33. Project empty at 14:41:47.
+- **Checks:** `login_online` PASS; `setup` FAIL (4/5 gives confirmed); the four crafts, `place_5` and `eat` not reached.
+- **Cause:** after `clear`, gamestages and antiqueatlas saved, and the server answered the rock `give` at 14:40:23, about 3 s later, after the console's 1 s window. All five gives are in the server log. Fix: #183.
+- **No retry:** neither infrastructure nor a probe finding. The lead approved the fix and one rerun on a fresh server.
+- **For G3:** on a fresh world's first join the pack runs, as the bot, `gamerule commandBlockOutput false`, `gamerule sendCommandFeedback false`, gives 1 Bread and 1 Bundle, and grants one game stage.
+- **Spend:** 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour.
 
 ## Done
 
@@ -1169,12 +1174,8 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- #176: **the G3 model preflight** (`agent/harness-ops/g3-model-preflight`; the lead's #169 review):
-  - **Before the create:** when the run command's script is `test/runner/batch.mjs`, `deploy/test-server.sh run` first runs it with `--preflight` and the same arguments. It checks the driver (only the Mindcraft driver; a fake one only in offline test mode), its arguments, the profile and its model (profileProblems and modelProblems), and `settings.js`, and it reads the key's usage once. A refusal exits 1 with no hcloud create.
-  - **The mark:** only then does `test-server.sh` set `ROTN_BATCH_PREFLIGHT=passed` (never inherited). Inside a test-server run, `batch.mjs` refuses without it, so a command that hides the script fails closed.
-  - **#169 nits:** the driver reads the profile once (`checkProfile`), and the `llmRecord` JSDoc is back.
-- #169 merged (70cb5187): every LLM run uses `openrouter/@preset/glm-5-1-mindcraft`; the driver refuses other models, and `result.llm.models` records it. `OPENROUTER_API_KEY` is a Windows user environment variable; the lead checks that a fresh Orca terminal sees it (set or not set only).
-- #165: probe P1, the scenario `probe-craft-place` (never a gate), with the #165 review fixes and, since 580716fe, the lead's post-#167 requests: `checkProbeReply` on every reply, the e2e on `probe-test-server.js`, and hunger `22 19` with the server's food score below 20 before the eat (details at the top).
-- Merged since the last update: #169 (70cb5187) and net-forge's #167.
-- #173: the #139 re-review nits (`isG3Result` trims the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected). The new test fails on develop's code; this file is left out of it, so it cannot conflict.
+- This PR: the P1 attempt 1 evidence (`test/evidence/probe/p1-20261103-a1/`).
+- #183: the attempt 1 fix (late console replies looked up in the later server log lines, up to 5 s).
+- #180: the #176 review nits (the batch script matched by its resolved path; `--dry-run` never reads the key usage).
+- Merged since the restart: #165 (P1 scenario), #169 (model pin), #173 (#139 nits), #176 (G3 batch preflight), and the others' #167, #170, #172 and #177.
 - Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b; the terminal was closed at 02:16:21 UTC), #166 (`deploy.sh` refuses the test-only giver settings), and the lead's #134 (ADR 0007).
