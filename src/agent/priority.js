@@ -25,7 +25,7 @@
 //   task <id> failed: <reason>
 //   agenda resumed: <step id>
 import settings from './settings.js';
-import { agendaTick, say, minutes, isAutonomyPrompt, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
+import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData } from './task_queue.js';
 
 /** Self-prompter time per task, over all its runs. */
@@ -125,7 +125,7 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
  */
 function modelGoalTick(agent, now) {
     const sp = agent.self_prompter;
-    if (!sp.isActive() || isAutonomyPrompt(sp.prompt) || sp.goal_by) {
+    if (!sp.isActive() || ownsPrompt(agent) || sp.goal_by) {
         agent._model_goal = null;
         return null;
     }
@@ -151,7 +151,7 @@ function taskTick(agent, task, now) {
 
     // A bot-to-bot conversation paused the self-prompter, or a task giver typed a !goal: wait
     // for it (no run is used). A new task does not cut a giver's own goal short (#174 nit 4).
-    if (sp.isPaused?.() || isGiverGoal(sp)) {
+    if (sp.isPaused?.() || isGiverGoal(agent)) {
         if (agent._task_id === task.id) agent._task_paused = true;
         return `task:${task.id}:yield`;
     }
@@ -173,7 +173,7 @@ function taskTick(agent, task, now) {
     // Any other goal (the model's own, or one restored after a restart): the task takes the
     // running loop over, and the run counts against it (#174 review 3).
     if (sp.isActive() && sp.prompt !== taskGoal(task)) {
-        sp.prompt = taskGoal(task);
+        driveTo(agent, taskGoal(task));
         queue.recordAttempt(task.id);
     }
 
@@ -207,7 +207,7 @@ function taskTick(agent, task, now) {
             if (!resuming) queue.recordAttempt(task.id);
             agent._task_paused = false;
             agent._task_stopped_at = undefined;
-            sp.start(taskGoal(task));
+            driveTo(agent, taskGoal(task), { start: true });
         }
     }
     return `task:${task.id}`;

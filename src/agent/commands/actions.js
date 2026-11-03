@@ -3,6 +3,7 @@ import settings from '../settings.js';
 import convoManager from '../conversation.js';
 import { addTask, cancelTask } from '../task_queue.js';
 import { finishTask } from '../priority.js';
+import { hasAutonomyPrefix } from '../agenda_driver.js';
 
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
@@ -474,6 +475,8 @@ export const actionsList = [
             const sp = agent.self_prompter;
             if (!context?.sender && (agent.agenda?.active || agent.tasks?.current()))
                 return 'Not now: the RotN agenda or a player task sets your goal. Keep working on it with commands.';
+            if (!context?.sender && hasAutonomyPrefix(prompt))
+                return 'Not now: goal texts that start like the agenda or a player task are set only by them.';
             sp.goal_by = context?.sender ?? null;
             if (convoManager.inConversation()) {
                 agent.self_prompter.setPromptPaused(prompt);
