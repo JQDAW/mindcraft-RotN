@@ -1,6 +1,7 @@
 import * as skills from '../library/skills.js';
 import settings from '../settings.js';
 import convoManager from '../conversation.js';
+import { addTask, cancelTask } from '../task_queue.js';
 
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
@@ -23,6 +24,13 @@ function runAsAction (actionFn, resume = false, timeout = -1) {
     }
 
     return wrappedAction;
+}
+
+// The reply reaches public chat either way: a forced command (a player typed it) is routed
+// by handleMessage; an LLM-issued one is announced here (harness-ops parses these lines).
+function announced(agent, reply) {
+    if (!agent.in_forced_command) agent.openChat(reply);
+    return reply;
 }
 
 export const actionsList = [
@@ -358,6 +366,28 @@ export const actionsList = [
             return `Mode ${mode_name} is already ${on ? 'on' : 'off'}.`;
             modes.setOn(mode_name, on);
             return `Mode ${mode_name} is now ${on ? 'on' : 'off'}.`;
+        }
+    },
+    {
+        name: '!taskAdd',
+        description: 'Queue a task the player you are talking to asked for. Only players on the task-giver list may give tasks; others are refused. Priority is "urgent" or "normal".',
+        params: {
+            'text': { type: 'string', description: 'The task, in the player\'s words.' },
+            'priority': { type: 'string', description: 'urgent or normal.' } // required: the parser has no optional params
+        },
+        perform: function (agent, text, priority) {
+            // The giver is the player whose message is being handled, never a name the LLM writes (E1).
+            return announced(agent, addTask(agent.tasks, { giver: agent.current_source, text, priority }, settings));
+        }
+    },
+    {
+        name: '!taskCancel',
+        description: 'Cancel an open task by its id (like t3). Only task givers may cancel tasks.',
+        params: {
+            'id': { type: 'string', description: 'The task id, for example t3.' }
+        },
+        perform: function (agent, id) {
+            return announced(agent, cancelTask(agent.tasks, { by: agent.current_source, id }, settings));
         }
     },
     {

@@ -15,6 +15,7 @@ import { addBrowserViewer } from './vision/browser_viewer.js';
 import { serverProxy, sendOutputToServer } from './mindserver_proxy.js';
 import settings from './settings.js';
 import { Task } from './tasks/tasks.js';
+import { TaskQueue } from './task_queue.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
@@ -42,6 +43,7 @@ export class Agent {
         }
         
         this.history = new History(this);
+        this.tasks = new TaskQueue(this.name); // player tasks, ./bots/<name>/tasks.json (E1)
         this.coder = new Coder(this);
         this.npc = new NPCContoller(this);
         this.memory_bank = new MemoryBank();
@@ -262,6 +264,8 @@ export class Agent {
 
         const self_prompt = source === 'system' || source === this.name;
         const from_other_bot = convoManager.isOtherAgent(source);
+        // The player this message is from: the giver for !taskAdd (E1). Never the bot or another bot.
+        this.current_source = (self_prompt || from_other_bot) ? null : source;
 
         if (!self_prompt && !from_other_bot) { // from user, check for forced commands
             const user_command_name = containsCommand(message);
@@ -276,7 +280,13 @@ export class Agent {
                     // add the preceding message to the history to give context for newAction
                     this.history.add(source, message);
                 }
-                let execute_res = await executeCommand(this, message);
+                let execute_res;
+                this.in_forced_command = true; // its reply is routed below (task commands, E1)
+                try {
+                    execute_res = await executeCommand(this, message);
+                } finally {
+                    this.in_forced_command = false;
+                }
                 if (execute_res) 
                     this.routeResponse(source, execute_res);
                 return true;
