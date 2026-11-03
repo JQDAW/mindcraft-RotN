@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T03:10Z (from `date -u`)
+Updated: 2026-11-03T03:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -41,6 +41,15 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
   - entity threat overrides (`isDangerous`), rotn-data #62.
 
 ## Doing
+
+**Restart handoff (2026-11-03T03:11Z; Orca restart, lead request):** everything is committed and pushed, with no uncommitted work. Open PRs and their state:
+- **#164 E2 agenda** (`agent/skills-rotn/agenda`): all six #164 review items are fixed and pushed, the PR body is updated and a review reply is posted. CI had not reported on the last push yet. **Next step:** check `gh pr checks 164`. If a check fails, run only that test file (memory rule) and fix it. Then wait for the lead’s re-review.
+- **#170 F1 start, RotN profile** (`agent/skills-rotn/rotn-profile`): CI was pending at the restart. Develop has since gained #168 (the lead’s model decision); merge develop into #170 if it conflicts. **Next step:** check `gh pr checks 170` and answer the review.
+- **After that, in order:**
+  1. E3 priority stack (requirements below), which also fixes the known limit that `!stop`/`!stfu` are undone by the agenda;
+  2. the #151 lead nit: `craft_needs.js` should match the exact slot stack list, because `choices[0]` finds the wrong slot for `soaking_pot` and `hamster_wheel`;
+  3. C1 crafting execution and C2 (first plank) after net-forge’s Request 2 report;
+  4. D2 night shelter, so that G3 (b) is served.
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - **Merged:** E1 #146 (task queue), C1a #151 (craft needs; lead nit for later: `craft_needs.js` should match the exact slot stack list, as the slot found by `choices[0]` is wrong for `soaking_pot` and `hamster_wheel`), #156 (with rotn-data #153).
