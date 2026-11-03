@@ -50,9 +50,9 @@ test('threatOf: defaults from the threat level; dangerous always means avoid', (
     const dragon = pack.threatOf('iceandfire:firedragon');
     assert.deepEqual([dragon.level, dragon.reaction, dragon.source], ['dangerous', 'avoid', 'override']);
     assert.ok(dragon.evidence.some((e) => /jar/.test(e)), 'the override\'s bytecode evidence');
-    // A hostile mob without an entry or class rule (defiledlands:host) gets the default.
-    const host = pack.threatOf('defiledlands:host');
-    assert.deepEqual([host.level, host.reaction, host.source, host.summary], ['hostile', 'fight', 'default', null]);
+    // A hostile mob without an entry or class rule (the wither skeleton: Nether only) gets the default.
+    const wither = pack.threatOf('minecraft:wither_skeleton');
+    assert.deepEqual([wither.level, wither.reaction, wither.source, wither.summary], ['hostile', 'fight', 'default', null]);
     const cow = pack.threatOf('animania:cow_holstein');
     assert.deepEqual([cow.level, cow.reaction], ['none', 'ignore']);
     // The enderman is IMob (hostile) but neutral in vanilla; its entry says so and is marked vanilla.
@@ -237,4 +237,41 @@ test('nightThreats: default is every overworld biome; several biomes; unknown bi
     assert.ok(two.find((t) => t.name === 'minecraft:zombie').biomes === 2);
     assert.deepEqual(pack.nightThreats({ biome: 'nosuchmod:biome' }), []);
     assert.ok(!isOverworldBiome('minecraft:hell') && isOverworldBiome('minecraft:plains') && isOverworldBiome('iceandfire:glacier'));
+});
+
+// The lead's G3 pick (2026-11-03): the 14 overworld night mobs that still defaulted to 'fight', each
+// cited from its mod's bytecode (javap on the pinned pack's jars) and the pack's configs, or vanilla.
+test('the last 14 overworld night defaults are cited; no overworld night threat is left to the default', () => {
+    const want = {
+        'mod_lavacow:zombiemushroom': ['fight', false, 'verified'],
+        'mod_lavacow:mummy': ['fight', false, 'verified'],
+        'mod_lavacow:zombiefrozen': ['avoid', false, 'verified'],
+        'mod_lavacow:sludgelord': ['avoid', true, 'verified'],
+        'defiledlands:host': ['fight', false, 'verified'],
+        'defiledlands:scuttler': ['fight', false, 'verified'],
+        'defiledlands:shambler': ['avoid', false, 'verified'],
+        'defiledlands:shambler_twisted': ['avoid', false, 'verified'],
+        'mowziesmobs:grottol': ['ignore', false, 'verified'],
+        'mowziesmobs:foliaath': ['keep-distance', false, 'verified'],
+        'mowziesmobs:barakoana': ['avoid', false, 'verified'],
+        'betteranimalsplus:tarantula': ['avoid', true, 'verified'],
+        'minecraft:husk': ['fight', false, 'vanilla'],
+        'minecraft:zombie_villager': ['fight', false, 'vanilla'],
+    };
+    for (const [n, [reaction, ranged, source]] of Object.entries(want)) {
+        const t = pack.threatOf(n);
+        assert.deepEqual([t.reaction, t.ranged, t.source], [reaction, ranged, source], n);
+        assert.ok(t.summary && t.evidence.length > 0, `${n}: summary and evidence`);
+    }
+    const defaults = pack.nightThreats({ limit: 1000 }).filter((t) => pack.threatOf(t.name).source === 'default');
+    assert.deepEqual(defaults.map((t) => t.name), []);
+    // Key facts a reviewer can recheck in the bytecode or the pack's configs.
+    const ev = (n) => pack.threatOf(n).evidence.join(' ');
+    assert.match(ev('defiledlands:shambler'), /SLOWNESS|Slowness/);
+    assert.match(ev('defiledlands:shambler'), /EntityDamageSourceIndirect/);
+    assert.match(ev('mod_lavacow:zombiefrozen'), /roughmobsrevamped\.cfg lines 266-268/);
+    assert.match(ev('mowziesmobs:grottol'), /mowziesmobs\.cfg.*lines 324-326/);
+    assert.match(ev('betteranimalsplus:tarantula'), /EntityTarantulaHair/);
+    // What the workers could not settle stays visible in the evidence.
+    assert.ok(Object.keys(want).filter((n) => /Not settled: /.test(ev(n))).length >= 10);
 });
