@@ -48,8 +48,9 @@ function classRule(catalog, e) {
  * @returns {{name: string, displayName: string|null, level: 'dangerous'|'hostile'|'none',
  *   reaction: string, source: 'override'|'documented'|'vanilla'|'verified'|'inferred'|'default', rule?: string,
  *   variantNote?: string,
- *   summary: string|null, explodes: boolean, ranged: boolean, evidence: string[]}|null}
- *   null for an unknown entity
+ *   summary: string|null, explodes: boolean, ranged: boolean, lookAt: boolean, evidence: string[]}|null}
+ *   null for an unknown entity. lookAt false: its targeting is triggered by a player looking at it
+ *   (the enderman's stare), so do not look at its head (#186 review: a field, not a regex on the summary)
  */
 export function threatOf(catalog, input) {
     const e = catalog.entity(input);
@@ -59,7 +60,7 @@ export function threatOf(catalog, input) {
     const base = { name: e.name, displayName: e.displayName ?? null, level };
     // A dangerous mob is avoided whatever else applies (entity-overrides.json wins).
     if (level === 'dangerous') {
-        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, evidence: overrideEvidence };
+        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, lookAt: true, evidence: overrideEvidence };
     }
     const entry = catalog.threatReactions?.entities?.[e.name];
     const rule = !entry && level === 'hostile' ? classRule(catalog, e) : null;
@@ -71,6 +72,7 @@ export function threatOf(catalog, input) {
         summary: r?.summary ?? null,
         explodes: !!r?.explodes,
         ranged: !!r?.ranged,
+        lookAt: r?.lookAt !== false,
         evidence: [...(r?.evidence ?? []), ...overrideEvidence],
     };
     if (rule) out.rule = rule.id;
@@ -86,7 +88,7 @@ export function threatOf(catalog, input) {
  * @param {import('./catalog.js').RotnData} catalog
  * @param {{biome?: string|string[], limit?: number}} [opts] a biome registry name ("minecraft:plains")
  *        or several; default: every overworld biome (src/biomes.js, as common-mobs.json)
- * @returns {Array<{name, displayName, level, reaction, explodes, ranged, share: number, biomes: number}>}
+ * @returns {Array<{name, displayName, level, reaction, explodes, ranged, lookAt, share: number, biomes: number}>}
  *        share = the mob's spawn weight / all listed monsters' weight over the biomes (0-1)
  */
 export function nightThreats(catalog, { biome, limit = 20 } = {}) {
@@ -105,7 +107,7 @@ export function nightThreats(catalog, { biome, limit = 20 } = {}) {
     for (const [name, w] of weight) {
         const t = threatOf(catalog, name);
         if (!t || t.level === 'none') continue;
-        rows.push({ name, displayName: t.displayName, level: t.level, reaction: t.reaction, explodes: t.explodes, ranged: t.ranged, weight: w, biomes: where.get(name) });
+        rows.push({ name, displayName: t.displayName, level: t.level, reaction: t.reaction, explodes: t.explodes, ranged: t.ranged, lookAt: t.lookAt, weight: w, biomes: where.get(name) });
     }
     const total = rows.reduce((a, r) => a + r.weight, 0);
     return rows

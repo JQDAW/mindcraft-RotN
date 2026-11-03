@@ -1,7 +1,7 @@
 {
   "format": "rotn-threat-reactions/1",
   "pack": "3.3.4",
-  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source 'inferred'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
+  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source 'inferred'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Optional fields on an entry or class rule: 'ranged', 'explodes', and 'lookAt': false for a mob whose targeting is triggered by a player looking at it (the enderman's stare check), so the bot must not look at its head; threatOf returns lookAt true otherwise. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
   "general": {
     "summary": "At night stay sealed in a cobblestone or stone shelter with light only inside; a dirt shack is not safe because mobs dig and pillar. Retreat if two or more hostiles come at once.",
     "confidence": "documented",
@@ -122,6 +122,7 @@
     },
     "minecraft:enderman": {
       "reaction": "ignore-unless-provoked",
+      "lookAt": false,
       "summary": "Neutral until you look at its head or hit it. Do not look at it; do not attack it on the first night.",
       "confidence": "vanilla",
       "evidence": [
@@ -199,6 +200,7 @@
     },
     "ancientbeasts:rifted_enderman": {
       "reaction": "ignore-unless-provoked",
+      "lookAt": false,
       "summary": "Like an enderman: it targets a player who looks at it, then teleports and hits for 6. 40 health. Do not look at it.",
       "confidence": "verified",
       "evidence": [
@@ -532,6 +534,7 @@
       "id": "enderman-variants",
       "pattern": "Enderman$",
       "reaction": "ignore-unless-provoked",
+      "lookAt": false,
       "confidence": "inferred",
       "summary": "A Special Mobs enderman variant. Its targeting is the vanilla enderman's (it targets a player who looks at it or hits it), so do not look at it and do not attack it on the first night. Some variants do more (see variantNote): the thief enderman teleports its target, the blinding enderman blinds players within 12 blocks, the mirage enderman makes fake copies.",
       "evidence": [
