@@ -69,7 +69,7 @@ export function attachForgeBridge(client, opts) {
     bridge.stats = {
         payloadsIn: 0, payloadsOut: 0, byChannel: {},
         parseErrors: 0, partialReadErrors: 0, partialPackets: {}, droppedPackets: {},
-        entitySpawns: 0, openGuis: 0, modWindows: 0, jeidMessages: 0, reidEffectTails: 0,
+        entitySpawns: 0, openGuis: 0, modWindows: 0, modWindowErrors: 0, jeidMessages: 0, reidEffectTails: 0,
     };
     bridge.handshakeDone = false;
 
@@ -201,7 +201,15 @@ export function attachForgeBridge(client, opts) {
                     if (win) {
                         bridge.stats.modWindows++;
                         capture?.event('mod_window', { modId: msg.modId, modGuiId: msg.modGuiId, ...win });
-                        client.emit('open_window', win, { name: 'open_window', state: 'play', synthetic: true });
+                        // Own try/catch: a throw in mineflayer's open_window handler is not a decode
+                        // error on FML, and must not skip the openGui event below.
+                        try {
+                            client.emit('open_window', win, { name: 'open_window', state: 'play', synthetic: true });
+                        } catch (e) {
+                            bridge.stats.modWindowErrors++;
+                            log(`synthetic open_window for ${msg.modId}:${msg.modGuiId} window ${msg.windowId}: handler threw ${e?.name ?? 'Error'}: ${e?.message ?? e}`);
+                            capture?.event('mod_window_error', { modId: msg.modId, modGuiId: msg.modGuiId, windowId: msg.windowId, error: String(e?.message ?? e) });
+                        }
                     } else {
                         log(`OpenGui ${msg.modId}:${msg.modGuiId} window ${msg.windowId} at ${msg.x} ${msg.y} ${msg.z}: no vanilla window known for this mod GUI; ignored`);
                     }

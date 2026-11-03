@@ -69,6 +69,21 @@ test('the bridge emits open_window for FastWorkbench before the window_items tha
     assert.equal(ev?.windowId, 7);
 });
 
+test('a throwing open_window handler is logged on its own; openGui still fires and FML decoding is not blamed', () => {
+    const { client, bridge, logs, payload, capture, file } = setup();
+    client.on('open_window', () => { throw new Error('handler broke'); });
+    const seen = [];
+    bridge.on('openGui', (m) => seen.push(m.windowId));
+    payload(encodeOpenGui({ ...MSG, windowId: 9 }));
+    assert.deepEqual(seen, [9]);
+    assert.equal(bridge.stats.modWindows, 1);
+    assert.equal(bridge.stats.modWindowErrors, 1);
+    assert.ok(logs.some(l => l.includes('synthetic open_window for fastbench:0 window 9: handler threw Error: handler broke')), logs.join('\n'));
+    assert.ok(!logs.some(l => l.includes('decode error')), logs.join('\n'));
+    capture.close();
+    assert.ok(readCapture(file).some(l => l.kind === 'event' && l.name === 'mod_window_error' && l.windowId === 9));
+});
+
 test('an unknown mod GUI is logged and opens no window', () => {
     const { client, bridge, logs, payload } = setup();
     let opened = 0;
