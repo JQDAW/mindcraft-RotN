@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T03:08Z (from `date -u`)
+Updated: 2026-11-03T03:10Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -46,7 +46,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **Merged:** E1 #146 (task queue), C1a #151 (craft needs; lead nit for later: `craft_needs.js` should match the exact slot stack list, as the slot found by `choices[0]` is wrong for `soaking_pot` and `hamster_wheel`), #156 (with rotn-data #153).
 - **C1 coordination (net-forge is back, working on Request 2):** I build only the C1 parts that need no `window_click`, `block_place` or `use_item`: choosing a RotN recipe the inventory can satisfy (by output and ingredients, never a CraftTweaker id), including #145 nit 1 (fixed in rotn-data #152: mixed rocks make a stone tool, and `canFill` judges the recipe; cobblestone still needs one rock type, one recipe per type). Executing crafts in the 2x2 grid or the table, placing the table and the first-plank interaction (C2) wait for net-forge's report in `coord/STATUS-net-forge.md`. **net-forge progress:** #154 (FastWorkbench crafting-table window for mineflayer, Request 2 item 1) merged; the lead set `place_block_timeout_ms: 2000` in settings.js.
 - E2 `agenda` (branch `agent/skills-rotn/agenda`): #164 open. Review REQUEST CHANGES, fixed: each step gets a bounded LLM budget (3 self-prompter runs with a doubling back-off of 30 s then 60 s, and 5 min of self-prompter time), then `agenda step <id> stuck: <why>; agenda paused`; the pause and the runs spent are saved, and a giver’s `!agendaStart` retries with a fresh budget. `!agenda` records nothing. Autostart happens only on a fresh bot (no `agenda.json`). The logs and planks steps count rotn-data’s `logWood`/`plankWood`. Chat failures are logged. Known limits for E3: `!stop`/`!stfu` are undone when the agenda restarts the self-prompter after the back-off (each costs one run of the step budget, so 3 of them make the step stuck); G3 (b) (night) is not served yet (no shelter step; D2).
-- **F1 start (human decision):** the RotN profile `profiles/rotn-bot.json` uses the OpenRouter preset `openrouter/@preset/glm-5-1-mindcraft`; next PR after #164.
+- **F1 start (human decision):** the RotN profile `profiles/rotn-bot.json` uses the OpenRouter preset `openrouter/@preset/glm-5-1-mindcraft`: #170 open (branch `agent/skills-rotn/rotn-profile`, with a test that it resolves to api openrouter and model `@preset/glm-5-1-mindcraft`; bot name `rotn_bot`).
 - **E3 requirements (lead, #146 review):** mark history entries from non-givers as untrusted data (review B); `!stfu` for task givers only; task text framed as untrusted when it goes into a prompt.
 - Next after B2c: those C1 parts, then E2 (agenda) and E3 (priority stack, task done/failed lines). Flag for G3 (#141 nit 5): with an axe, collecting log targets Dynamic Trees branches; the count is the real gain, but scattered drops may not all be picked up.
 
@@ -146,3 +146,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 ## Open PRs
 
 - #164 E2 agenda (branch `agent/skills-rotn/agenda`). Serves brief item 6 and G3 (c), with harness-ops’ "the agenda at a fresh spawn".
+- #170 F1 start, the RotN profile on the OpenRouter preset (branch `agent/skills-rotn/rotn-profile`). Serves the human decision on the model and brief item 7.
