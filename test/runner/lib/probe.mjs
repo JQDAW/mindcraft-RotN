@@ -2,27 +2,36 @@
 // crafting (REID item ids, FastWorkbench), placing and eating work against the real RotN 3.3.4 server?
 // A probe, never a gate. Shared by test/scenarios/probe/probe-craft-place.mjs and its unit tests.
 //
-// THE DRIVER PROTOCOL: net-forge's, in packages/forge-bridge/tools/probe-commands.mjs (#162), used here as
-// it is. The driver answers only with ROTN_DRIVER_PROBE=1, which the scenario sets when it starts the bot.
-//   The scenario sends each command as a console `tell <bot> ...`, so it reaches mineflayer's 'whisper'
-//   event from "Server" (S1-A evidence); the driver accepts only that sender, and the whole whisper text
-//   must be the command. TOKEN: 6-32 hex characters, each runs once. Positions are "x,y,z".
+// THE DRIVER PROTOCOL: net-forge's reply contract v1 (#162, #167), in
+// packages/forge-bridge/tools/probe-commands.mjs and packages/forge-bridge/README.md ("Probe P1: commands
+// and reply contract (v1)"), used here as it is. The scenario checks EVERY reply with net-forge's
+// checkProbeReply; a reply that breaks the contract fails its step. The driver answers only with
+// ROTN_DRIVER_PROBE=1, which the scenario sets when it starts the bot.
+//   The scenario sends each command as a console `tell <bot> ...`. 1.12 sends that to the bot as the raw
+//   chat component {translate: "commands.message.display.incoming", with: ["Server", message]}, and the
+//   driver reads exactly that component (mineflayer's 'message' event), NOT mineflayer's 'whisper' text
+//   pattern, which an op's `/say Server whispers to you: ...` would also match (#162 re-review nit 1). It
+//   accepts only the sender "Server", and the whole message must be the command. TOKEN: 6-32 hex
+//   characters, each runs once. Positions are "x,y,z".
 //     probe-craft TOKEN RECIPE_ID [x,y,z]      one craft with rotn-data's dump recipe RECIPE_ID (e.g.
 //                                               crafttweaker:pyro_crude_axe); with x,y,z, at that table
 //     probe-place TOKEN ITEM x,y,z FACE        place ITEM against the block x,y,z on FACE
 //     probe-eat   TOKEN ITEM                   eat one ITEM (bot.consume); auto-eat is off during the probe
 //   Each command gets exactly one line on stdout within the driver's 60 s limit (then ok:false, timedOut):
-//     DRIVER {"type":"probe","token":TOKEN,"cmd":"craft"|"place"|"eat","ok":bool, ...}
+//     DRIVER {"type":"probe","v":1,"token":TOKEN,"cmd":"craft"|"place"|"eat","ok":bool, ...}
 //     craft: recipe, table, variant, variants, result, resultMeta, before, after (the result item held),
 //            ms, tableBlock; ok means after > before
-//     place: before, after (block names at the target), expected, otherUpdates, totalMs, updateMs (to the
-//            server's block update for the placed block), timeoutMs; ok means the block changed to the item
-//     eat:   foodBefore, foodAfter, countBefore, countAfter, ms; ok means food up and one item fewer
-//     on failure: error (and timedOut for the time limit)
-//   plus one chat line, which the scenario does not need.
+//     place: item, ref, face, target, before, after (block names at the target), expected, otherUpdates,
+//            totalMs, updateMs (to the server's block update for the placed block), timeoutMs; ok means
+//            the block changed to the item
+//     eat:   item, foodBefore, foodAfter, countBefore, countAfter, ms; ok means food up and one item fewer
+//     on failure: error (and timedOut, limitMs for the time limit)
+//   Every item and block name is a full registry name ("minecraft:crafting_table"). Plus one chat line,
+//   which the scenario does not need.
 //   The driver reports neither window-click transactions nor the FastWorkbench window per command; those
 //   come from the capture (ROTN_DRIVER_CAPTURE=1) in the evidence step, as net-forge's plan says.
 import { guardConsole } from './g3.mjs';
+import { playerScores } from './s1.mjs';
 
 export const P1_NOT_GATE = 'P1 is a probe of crafting, placing and eating, never a gate pass';
 export const PROBE_TOKEN = /^[0-9a-f]{6,32}$/;
@@ -46,6 +55,10 @@ export const P1_CONSOLE_ALLOW = [
     new RegExp(`^clear ${NAME} ${ITEM} ${N} 0$`),                          // count only
     new RegExp(`^give ${NAME} ${ITEM} \\d{1,2} \\d{1,2}$`),
     new RegExp(`^effect ${NAME} minecraft:hunger \\d{1,3} \\d{1,3}$`),
+    // The server's own food level before the eat step (the 1.12 `food` criterion; only P1's objective).
+    /^scoreboard objectives add p1food food$/,
+    /^scoreboard objectives remove p1food$/,
+    new RegExp(`^scoreboard players list ${NAME}$`),
     new RegExp(`^setblock ${N} ${N} ${N} minecraft:(crafting_table|air|stone)$`),
     new RegExp(`^testforblock ${N} ${N} ${N} ${ITEM}( \\d{1,2})?$`),
     new RegExp(`^tell ${NAME} probe-(craft|place|eat) [0-9a-f]{6,32}( \\S+){1,3}$`),     // the driver anchors and checks each form
@@ -94,7 +107,11 @@ export const P1_PLAN = Object.freeze({
         ['minecraft:bread', 2, 0],
         ['minecraft:cobblestone', 8, 0],
     ],
-    hunger: [10, 10],                                                     // seconds, amplifier: food under 20 for the eat step
+    // Hunger for the eat step: `effect <bot> minecraft:hunger SECONDS AMPLIFIER` (hungerFood shows the sums).
+    // 22 s at amplifier 19 is 44 exhaustion: 11 points, 5 of them taken by a fresh player's saturation,
+    // so food 20 -> about 14. The old 10 s at amplifier 10 (11 exhaustion, 2 points) left food at 20.
+    hunger: [22, 19],
+    foodObjective: 'p1food',
     table: [-43, 66, -66],
     // recipeId: rotn-data's dump recipe (net-forge's #162 e2e test); item: the result the server counts.
     crafts: [
@@ -113,6 +130,23 @@ export const P1_PLAN = Object.freeze({
 
 /** The driver's opt-in (#162): it answers probe commands only with this in its environment. */
 export const PROBE_DRIVER_ENV = Object.freeze({ ROTN_DRIVER_PROBE: '1' });
+
+/**
+ * The food level after a Hunger effect, by 1.12's rules (PotionHunger.performEffect, FoodStats.onUpdate):
+ * every tick it adds 0.005 * (amplifier + 1) exhaustion; each 4 exhaustion takes 1 saturation point while
+ * there is saturation, else 1 food point. A fresh player has food 20 and saturation 5. Other exhaustion
+ * (walking, placing) is ignored here, and so is natural regeneration, which needs health below its maximum.
+ */
+export function hungerFood(seconds, amplifier, { food = 20, saturation = 5 } = {}) {
+    const points = Math.floor((seconds * 20 * 0.005 * (amplifier + 1)) / 4 + 1e-9);
+    return Math.max(0, food - Math.max(0, points - Math.ceil(saturation)));
+}
+
+/** The bot's food score from `scoreboard players list <bot>`: a number, or null when it has none yet. */
+export function foodScore(lines, bot, objective = P1_PLAN.foodObjective) {
+    const scores = playerScores(lines, bot);
+    return scores && Number.isInteger(scores[objective]) ? scores[objective] : null;
+}
 
 /** The floor block under a target cell (the block placed against). */
 export const below = ([x, y, z]) => [x, y - 1, z];

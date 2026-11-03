@@ -1,13 +1,15 @@
 // Offline tests for probe P1 (test/scenarios/probe/probe-craft-place.mjs, test/runner/lib/probe.mjs):
 // the protocol helpers, P1's console allowlist, and the scenario on a small simulated server whose fake
-// driver answers the probe protocol in net-forge's format (#162, packages/forge-bridge/tools/probe-commands.mjs).
+// driver answers the probe protocol in net-forge's reply contract v1 (#162, #167: packages/forge-bridge/tools/probe-commands.mjs;
+// every fake reply passes checkProbeReply).
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import {
-    P1_CONSOLE_ALLOW, P1_NOT_GATE, P1_PLAN, PROBE_DRIVER_ENV, below, guardP1Console, probeCraft, probeEat, probePlace, probeReply,
+    P1_CONSOLE_ALLOW, P1_NOT_GATE, P1_PLAN, PROBE_DRIVER_ENV, below, foodScore, guardP1Console, hungerFood, probeCraft, probeEat, probePlace, probeReply,
 } from '../runner/lib/probe.mjs';
+import { checkProbeReply } from '../../packages/forge-bridge/tools/probe-commands.mjs';
 import probe, { captureOf } from '../scenarios/probe/probe-craft-place.mjs';
 
 const NAME = 'FRCFLD';
@@ -39,7 +41,8 @@ describe('the P1 driver protocol and console allowlist', () => {
         const p = P1_PLAN;
         const sent = [
             'gamerule doDaylightCycle false', 'time set day', `tp ${NAME} ${p.landing.join(' ')}`, `tp ${NAME} ~ ~ ~`, `clear ${NAME}`,
-            ...p.gives.map(([i, n, m]) => `give ${NAME} ${i} ${n} ${m}`), `effect ${NAME} minecraft:hunger 10 10`,
+            ...p.gives.map(([i, n, m]) => `give ${NAME} ${i} ${n} ${m}`), `effect ${NAME} minecraft:hunger ${p.hunger.join(' ')}`,
+            `scoreboard objectives add ${p.foodObjective} food`, `scoreboard players list ${NAME}`, `scoreboard objectives remove ${p.foodObjective}`,
             `setblock ${p.table.join(' ')} minecraft:crafting_table`, `testforblock ${p.table.join(' ')} minecraft:crafting_table`,
             ...p.place.targets.flatMap((c) => [`setblock ${c.join(' ')} minecraft:air`, `setblock ${below(c).join(' ')} minecraft:stone`, `testforblock ${c.join(' ')} minecraft:cobblestone`]),
             `clear ${NAME} pyrotech:rock -1 0`, probeCraft(NAME, 'abc123', 'crafttweaker:stone_pickaxe', p.table),
@@ -49,7 +52,8 @@ describe('the P1 driver protocol and console allowlist', () => {
         for (const c of sent) assert.ok(allowed(c), c);
         for (const c of ['op FRCFLD', 'gamemode 1 FRCFLD', 'summon minecraft:zombie', 'kill FRCFLD', `clear ${NAME} pyrotech:rock -1 5`,
             'effect FRCFLD minecraft:regeneration 10 10', 'setblock 0 0 0 minecraft:tnt', 'time set night', 'gamerule keepInventory true',
-            'give FRCFLD minecraft:diamond 640 0', 'tell FRCFLD hello', 'tell FRCFLD probe-craft abc123 x:y; op FRCFLD x y']) {
+            'give FRCFLD minecraft:diamond 640 0', 'tell FRCFLD hello', 'scoreboard objectives add other food',
+            'scoreboard objectives add p1food deathCount', 'scoreboard players set FRCFLD p1food 3', 'scoreboard players list @a', 'tell FRCFLD probe-craft abc123 x:y; op FRCFLD x y']) {
             assert.ok(!allowed(c), c);
         }
         const g = guardP1Console({ console: () => ['ok'] });
@@ -65,7 +69,10 @@ describe('the P1 driver protocol and console allowlist', () => {
  *   opt.failCraft: a recipe id the driver fails; opt.silent: a command it never answers
  *   ('craft'|'place'|'eat'); opt.misplace: a placement index the server does not get; opt.exitAt: the
  *   command ('craft'|'place'|'eat') at which the driver exits instead of answering; opt.kickAt: the command
- *   at which the server kicks the bot ("FRCFLD lost connection: ..." in the log; the driver still runs)
+ *   at which the server kicks the bot ("FRCFLD lost connection: ..." in the log; the driver still runs);
+ *   opt.noHunger: the hunger effect changes nothing (food stays 20); opt.breakContract: a command whose
+ *   reply breaks contract v1 (no "v"). Food starts at 20; the hunger effect sets it to hungerFood(...), and
+ *   the p1food score, as 1.12 keeps it, exists only once the food changed after the objective was added.
  */
 function sim(opt = {}) {
     const log = [];
@@ -76,7 +83,13 @@ function sim(opt = {}) {
     const key = (x, y, z) => `${x},${y},${z}`;
     const add = (msg, logger = DS) => log.push(L(msg, logger));
     const output = [];
-    const reply = (cmd, token, data) => output.push(`DRIVER ${JSON.stringify({ type: 'probe', cmd, token, ...data })}`);
+    // Contract v1 (#167): every reply of this fake passes net-forge's checkProbeReply, so the stub suite cannot
+    // drift from the real driver; only opt.breakContract (a command) sends one without "v" on purpose.
+    const reply = (cmd, token, data) => {
+        const r = { type: 'probe', v: opt.breakContract === cmd ? undefined : 1, cmd, token, ...data };
+        if (opt.breakContract !== cmd) assert.deepEqual(checkProbeReply(r), [], JSON.stringify(r));
+        output.push(`DRIVER ${JSON.stringify(r)}`);
+    };
     const take = (item, n) => inv.set(item, (inv.get(item) ?? 0) - n);
     const put = (item, n) => inv.set(item, (inv.get(item) ?? 0) + n);
     const RECIPES = {
@@ -87,7 +100,9 @@ function sim(opt = {}) {
     };
     let startEnv = null;
     let alive = false;
-    let food = 14;
+    let food = 20;
+    let objective = false;
+    let foodAtAdd = null;
     let placeN = 0;
     const driver = (msg) => {
         if (startEnv?.ROTN_DRIVER_PROBE !== '1') return;   // the real driver ignores probe commands without it
@@ -100,23 +115,23 @@ function sim(opt = {}) {
             const [, token, recipeId, table] = m;
             const [result, use] = RECIPES[recipeId];
             const before = inv.get(result) ?? 0;
-            if (opt.failCraft === recipeId) return reply('craft', token, { ok: false, recipe: recipeId, error: `missing ingredients for ${recipeId}` });
+            if (opt.failCraft === recipeId) return reply('craft', token, { ok: false, recipe: recipeId, table: null, error: `missing ingredients for ${recipeId}` });
             use();
             put(result, 1);
             reply('craft', token, { ok: true, recipe: recipeId, table: table ? [m[4], m[5], m[6]].map(Number) : null, variant: 0, variants: 1,
-                result, resultMeta: 0, before, after: before + 1, ms: 300, tableBlock: table ? 'crafting_table' : null });
+                result, resultMeta: 0, before, after: before + 1, ms: 300, tableBlock: table ? 'minecraft:crafting_table' : null });
         } else if ((m = /^probe-place ([0-9a-f]{6,32}) (\S+) (-?\d+),(-?\d+),(-?\d+) up$/.exec(msg))) {
             if (opt.silent === 'place') return;
             const [, token, item, x, y, z] = m;
             const at = [Number(x), Number(y) + 1, Number(z)];
             if (placeN++ !== opt.misplace) blocks.set(key(...at), item);
             take(item, 1);
-            reply('place', token, { ok: true, before: 'air', after: 'cobblestone', expected: 'cobblestone', otherUpdates: 0, totalMs: 60 + placeN, updateMs: 40 + placeN, timeoutMs: 10000 });
+            reply('place', token, { ok: true, item, ref: [x, y, z].map(Number), face: 'up', target: at, before: 'minecraft:air', after: 'minecraft:cobblestone', expected: 'minecraft:cobblestone', otherUpdates: 0, totalMs: 60 + placeN, updateMs: 40 + placeN, timeoutMs: 10000 });
         } else if ((m = /^probe-eat ([0-9a-f]{6,32}) (\S+)$/.exec(msg))) {
             if (opt.silent === 'eat') return;
             const countBefore = inv.get(m[2]) ?? 0;
             take(m[2], 1);
-            reply('eat', m[1], { ok: true, foodBefore: food, foodAfter: (food += 5), countBefore, countAfter: countBefore - 1, ms: 1700 });
+            reply('eat', m[1], { ok: true, item: m[2], foodBefore: food, foodAfter: (food += 5), countBefore, countAfter: countBefore - 1, ms: 1700 });
         }
     };
     const server = {
@@ -131,6 +146,21 @@ function sim(opt = {}) {
             else if ((m = /^clear (\S+) (\S+) -?\d+ 0$/.exec(cmd))) {
                 const n = inv.get(m[2]) ?? 0;
                 add(n ? `${m[1]} has ${n} items that match the criteria` : `Could not clear the inventory of ${m[1]}, no items to remove`);
+            } else if ((m = /^effect \S+ minecraft:hunger (\d+) (\d+)$/.exec(cmd))) {
+                if (!opt.noHunger) food = hungerFood(Number(m[1]), Number(m[2]), { food });
+                add(`Given Hunger (ID 17) * ${m[2]} to ${NAME} for ${m[1]} seconds`);
+            } else if (cmd === `scoreboard objectives add ${P1_PLAN.foodObjective} food`) {
+                objective = true;
+                foodAtAdd = food;
+                add(`Added new objective '${P1_PLAN.foodObjective}' successfully`);
+            } else if (cmd === `scoreboard players list ${NAME}`) {
+                if (objective && food !== foodAtAdd) {
+                    add(`Showing 1 tracked objective(s) for ${NAME}:`);
+                    add(`- ${P1_PLAN.foodObjective}: ${food} (${P1_PLAN.foodObjective})`);
+                } else add(`Player ${NAME} has no scores recorded`);
+            } else if (cmd === `scoreboard objectives remove ${P1_PLAN.foodObjective}`) {
+                objective = false;
+                add(`Removed objective '${P1_PLAN.foodObjective}' successfully`);
             } else if ((m = /^setblock (-?\d+) (-?\d+) (-?\d+) (\S+)$/.exec(cmd))) { blocks.set(key(m[1], m[2], m[3]), m[4]); add('Block placed'); }
             else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) (\S+)$/.exec(cmd))) {
                 const b = blocks.get(key(m[1], m[2], m[3])) ?? 'minecraft:air';
@@ -174,6 +204,29 @@ test('captureOf reads the capture path from the driver\'s forge event', () => {
     assert.equal(captureOf(['DRIVER {"type":"forge","capture":null}']), null);
 });
 
+describe('the hunger step (lead, #165: food must be below 20 before the eat, but well above 6)', () => {
+    test('hungerFood follows 1.12: 0.005 * (amplifier + 1) exhaustion per tick, 4 exhaustion per point, saturation first', () => {
+        assert.equal(hungerFood(10, 10), 20, 'the old 10 s at amplifier 10: 11 exhaustion, 2 points, all from saturation 5');
+        assert.equal(hungerFood(22, 19), 14, 'P1: 44 exhaustion, 11 points, 5 from saturation');
+        assert.deepEqual(P1_PLAN.hunger, [22, 19]);
+        // Whatever the saturation of a fresh player turns out to be (0 to 5), the food lands below 20 and well above 6.
+        for (let sat = 0; sat <= 5; sat++) {
+            const f = hungerFood(...P1_PLAN.hunger, { saturation: sat });
+            assert.ok(f < 20 && f >= 9, `saturation ${sat}: food ${f}`);
+        }
+        // With one point fewer (float rounding at the 4.0 threshold), still below 20.
+        assert.ok(hungerFood(20, 19) < 20);
+    });
+
+    test('foodScore reads p1food from `scoreboard players list`; no score is null, never 0', () => {
+        const L2 = (m) => L(m);
+        assert.equal(foodScore([L2(`Showing 2 tracked objective(s) for ${NAME}:`), L2('- deaths: 0 (deaths)'), L2('- p1food: 14 (p1food)')], NAME), 14);
+        assert.equal(foodScore([L2(`Player ${NAME} has no scores recorded`)], NAME), null);
+        assert.equal(foodScore([L2(`Showing 1 tracked objective(s) for ${NAME}:`), L2('- deaths: 0 (deaths)')], NAME), null);
+        assert.equal(foodScore(['nothing'], NAME), null);
+    });
+});
+
 describe('probe-craft-place on a simulated server', () => {
     test('everything works: every check passes, and it is still never a gate pass', async () => {
         const s = sim();
@@ -188,11 +241,39 @@ describe('probe-craft-place on a simulated server', () => {
         assert.equal(r.notes.capture, 'captures/raw/FRCFLD-20261103.jsonl', 'the capture path for the evidence step');
         assert.deepEqual(r.notes.crafts.map((c) => [c.result, c.before, c.after]), [['pyrotech:crude_axe', 0, 1], ['contenttweaker:crafting_tools', 0, 1],
             ['minecraft:crafting_table', 0, 1], ['minecraft:stone_pickaxe', 0, 1]]);
-        assert.equal(r.notes.crafts[3].tableBlock, 'crafting_table');
-        assert.deepEqual(r.notes.eat, { ok: true, foodBefore: 14, foodAfter: 19, countBefore: 2, countAfter: 1, ms: 1700, error: null, breadLeft: 1 });
+        assert.equal(r.notes.crafts[3].tableBlock, 'minecraft:crafting_table');
+        assert.deepEqual(r.notes.eat, { ok: true, foodBefore: 14, foodAfter: 19, countBefore: 2, countAfter: 1, ms: 1700, error: null, breadLeft: 1, serverFoodBefore: 14 });
+        assert.equal(r.notes.foodBeforeEat.server, 14);
+        assert.equal(r.notes.contractProblems, undefined);
         assert.equal(s.inv.size, 0, 'the inventory is cleared at the end');
         assert.equal(s.blocks.get('-43,66,-66'), 'minecraft:crafting_table');
         assert.equal(s.blocks.get('-47,65,-66'), 'minecraft:stone', 'the floor under each placement is stone');
+    });
+
+    test('food still at 20 before the eat step: the eat is not sent (it would only time out), and the check fails', async () => {
+        const s = sim({ noHunger: true });
+        const seen = [];
+        const r = await run({ ...s, server: { ...s.server, console: (cmd, w) => { seen.push(cmd); return s.server.console(cmd, w); } } });
+        const c = byName(r);
+        assert.equal(c.place_5.pass, true);
+        assert.equal(c.eat.pass, false);
+        assert.match(c.eat.detail, /^not sent: the food is not below 20 after \d+s of hunger \(no food score: the food never changed from 20\)/);
+        assert.ok(!seen.some((x) => x.includes('probe-eat')), 'no eat command sent');
+        assert.ok(seen.filter((x) => x === `scoreboard players list ${NAME}`).length > 1, 'it polled until foodWaitMs');
+        assert.ok(r.notes.foodBeforeEat.waitedMs >= probe.defaults.foodWaitMs);
+        assert.ok(seen.includes(`scoreboard objectives remove ${P1_PLAN.foodObjective}`), 'the objective is removed at the end');
+        neverGate(r);
+    });
+
+    test('a reply that breaks contract v1 fails its step, whatever its ok says, and is listed in notes.contractProblems', async () => {
+        const r = await run(sim({ breakContract: 'craft' }));
+        const c = byName(r);
+        assert.equal(c.craft_crude_axe.pass, false);
+        assert.match(c.craft_crude_axe.detail, /driver ok=false \(the reply breaks contract v1: [^)]*\bv\b/);
+        assert.equal(r.notes.contractProblems.length, 4, 'all four craft replies');
+        assert.equal(r.notes.crafts[0].ok, false);
+        assert.equal(c.place_5.pass, true, 'places and eats still keep to the contract');
+        neverGate(r);
     });
 
     test('a craft the driver fails also fails its server counts, and the later crafts are still tried', async () => {

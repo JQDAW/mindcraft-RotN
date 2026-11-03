@@ -14,33 +14,46 @@
 // test server): every command goes through guardP1Console, so nothing outside P1_CONSOLE_ALLOW is sent.
 // The bot never gets op.
 //
+// Every driver reply is checked with net-forge's checkProbeReply (contract v1, #167); a reply that breaks
+// it counts as a failed step, and notes.contractProblems lists why.
+//
 // Steps:
 //   1. login_online, as in G1/G2; `gamerule doDaylightCycle false`, `time set day`, `tp <bot> -45 66 -66`.
-//   2. setup: `clear <bot>`, the gives, `effect <bot> minecraft:hunger 10 10`; the table at -43 66 -66
-//      (setblock, then testforblock); each placement cell set to air with stone under it.
+//   2. setup: `clear <bot>`, the gives, `scoreboard objectives add p1food food` (the server's own food
+//      level), `effect <bot> minecraft:hunger 22 19` (about food 14; see hungerFood in lib/probe.mjs); the
+//      table at -43 66 -66 (setblock, then testforblock); each placement cell set to air with stone under it.
 //   3. craft_*: probe-craft for each of the four recipes (rotn-data's recipe ids); the driver's reply must
 //      be ok, and the server's own count-only `clear <bot> <item> -1 0` must show the plan's counts.
 //   4. place_5: probe-place five cobblestones; the driver's reply must be ok and `testforblock` must find
 //      minecraft:cobblestone at each. notes.placeLatencyMs records each updateMs.
-//   5. eat: probe-eat bread; the driver's ok (food up, one bread fewer) and the server counts 1 bread left.
-//   6. `clear <bot>`, the end.
+//   5. eat: first the food must be below 20, or bread cannot be eaten and the eat would only time out.
+//      The scenario reads the server's p1food score (`scoreboard players list <bot>`) until it is below 20,
+//      at most until foodWaitMs after the effect began. No score means the food never changed. Without
+//      food below 20 the eat command is not sent and the check fails. Then probe-eat bread: the driver's ok
+//      (food up, one bread fewer), its foodBefore below 20, and the server counts 1 bread left.
+//   6. `clear <bot>`, `scoreboard objectives remove p1food`, the end.
 // Window-click transactions and the FastWorkbench window are not in the driver's replies: the evidence
 // step reads them from the capture, whose path notes.capture records (the driver's `forge` event).
 // It stops at once (notes.aborted, and the step's check fails with the reason; later checks are not
 // reached) on a kick or lost connection in the server log (with its reason), on a driver exit, or when
 // the driver prints nothing for stepAbortMs (120 s) after a command (net-forge's plan).
-// test/unit/probe-e2e.test.js runs it against net-forge's REAL g1-driver and probe-commands.mjs.
+// test/unit/probe-e2e.test.js runs it against net-forge's REAL g1-driver and probe-commands.mjs, on net-forge's
+// fake RotN test server (packages/forge-bridge/test/probe-test-server.js, #167).
 import crypto from 'node:crypto';
 import { startSession } from '../../runner/lib/session.mjs';
 import { lastTeleport } from '../../runner/lib/server-log.mjs';
 import { giveVerdict, testforblockVerdict } from '../../runner/lib/g2.mjs';
 import { clearTestCommand, clearTestCount } from '../../runner/lib/s1.mjs';
+import { playerScores, scoreboardAddResult } from '../../runner/lib/s1.mjs';
 import {
-    P1_NOT_GATE, P1_PLAN, PROBE_DRIVER_ENV, below, guardP1Console, probeCraft, probeEat, probePlace, probeReply,
+    P1_NOT_GATE, P1_PLAN, PROBE_DRIVER_ENV, below, foodScore, guardP1Console, probeCraft, probeEat, probePlace, probeReply,
 } from '../../runner/lib/probe.mjs';
+import { checkProbeReply } from '../../../packages/forge-bridge/tools/probe-commands.mjs';
 
 const MS = 1000;
 const newToken = () => crypto.randomBytes(6).toString('hex');
+/** A food level below 20 (a number; null, "no score", is not: in JS `null < 20` is true). */
+const belowFull = (food) => typeof food === 'number' && food < 20;
 
 /** The capture file the driver reports in its `forge` event, or null. */
 export function captureOf(output) {
@@ -66,7 +79,7 @@ export default {
         craft_crafting_table: 'crafttweaker:crafting_table (2x2) crafted, confirmed by the server\'s counts',
         craft_stone_pickaxe: 'crafttweaker:stone_pickaxe (3x3) crafted at the placed table, confirmed by the server\'s counts',
         place_5: 'Five cobblestones placed, each confirmed by testforblock; the block update latency recorded',
-        eat: 'Bread eaten: food went up and the server counts one bread less',
+        eat: 'Bread eaten: the food was below 20 first (server and driver), went up, and the server counts one bread less',
     },
     defaults: {
         bot: 'FRCFLD',
@@ -78,6 +91,8 @@ export default {
         tpSettleMs: 3 * MS,
         logTail: 20000,
         consoleWaitS: 1,
+        foodWaitMs: 40 * MS,       // from the hunger effect's start: its 22 s plus margin for the food to fall
+        foodPollMs: 2 * MS,
     },
     gateParams: {},
 
@@ -91,6 +106,7 @@ export default {
         const count = (item) => clearTestCount(con(clearTestCommand(name, item, -1)), name)?.count ?? null;
         let aborted = null;   // why the run stopped early, or null
         let session = null;
+        const contractProblems = [];
         const stopReason = () => {
             const k = session?.events().find(session.gone);
             if (k) return `kicked (${k.type}): ${k.reason ?? 'no reason logged'}`;
@@ -110,7 +126,14 @@ export default {
             const linesAtSend = bot.output().length;
             con(line(t));
             const r = await ctx.waitFor(() => probeReply(bot.output(), cmd, t) ?? (stopReason() ? { stop: true } : null), p.replyTimeoutMs);
-            if (r && !r.stop) return r;
+            if (r && !r.stop) {
+                // net-forge's contract v1 (#167): a reply that breaks it is a failed step, whatever its ok says.
+                const problems = checkProbeReply(r);
+                if (!problems.length) return r;
+                contractProblems.push({ cmd, token: t, problems });
+                ctx.note('contractProblems', contractProblems);
+                return { ...r, ok: false, reportedOk: r.ok, error: `the reply breaks contract v1: ${problems.join('; ')}` };
+            }
             if (r?.stop) return abort(stopReason());
             // No reply: if the driver has printed nothing since the command, give it until stepAbortMs, then abort.
             if (bot.output().length === linesAtSend) {
@@ -138,17 +161,21 @@ export default {
         // 2. setup
         con(`clear ${name}`);
         const gives = plan.gives.map(([item, n, meta]) => ({ item, n, ...giveVerdict(con(`give ${name} ${item} ${n} ${meta}`), name) }));
+        // The objective first: 1.12 writes a food score only when the food level changes after it exists.
+        const objective = scoreboardAddResult(con(`scoreboard objectives add ${plan.foodObjective} food`), plan.foodObjective, 'food');
         con(`effect ${name} minecraft:hunger ${plan.hunger.join(' ')}`);
+        const hungerAt = clock.now();
         con(`setblock ${plan.table.join(' ')} minecraft:crafting_table`);
         const table = testforblockVerdict(con(`testforblock ${plan.table.join(' ')} minecraft:crafting_table`), plan.table);
         for (const cell of plan.place.targets) {
             con(`setblock ${cell.join(' ')} minecraft:air`);
             con(`setblock ${below(cell).join(' ')} minecraft:stone`);
         }
-        ctx.note('setup', { gives: gives.map(({ item, n, ok }) => ({ item, n, ok })), table: table.detail });
-        const setupOk = gives.every((g) => g.ok) && table.ok;
+        ctx.note('setup', { gives: gives.map(({ item, n, ok }) => ({ item, n, ok })), table: table.detail, foodObjective: objective, hunger: plan.hunger });
+        const setupOk = gives.every((g) => g.ok) && table.ok;   // the food objective matters only for the eat step
         const setupStop = stopReason();
-        ctx.check('setup', setupOk && !setupStop, setupStop ? `aborted: ${setupStop}` : `${gives.filter((g) => g.ok).length}/${gives.length} gives confirmed; table: ${table.detail}`);
+        ctx.check('setup', setupOk && !setupStop, setupStop ? `aborted: ${setupStop}`
+            : `${gives.filter((g) => g.ok).length}/${gives.length} gives confirmed; table: ${table.detail}; food objective: ${objective ?? 'no reply'}`);
         if (setupStop) return abort(setupStop);
         if (!setupOk) return;
 
@@ -187,17 +214,43 @@ export default {
             `${placed}/${plan.place.targets.length} placed and confirmed; update latencies ms: ${places.map((x) => x.updateMs ?? '?').join(', ')}${aborted ? `; aborted: ${aborted}` : ''}`);
         if (aborted) return;
 
-        // 5. eat
-        const eat = await ask('eat', (t) => probeEat(name, t, plan.eat.item));
-        const breadLeft = count(plan.eat.item);
-        ctx.note('eat', eat
-            ? { ok: eat.ok, foodBefore: eat.foodBefore, foodAfter: eat.foodAfter, countBefore: eat.countBefore, countAfter: eat.countAfter, ms: eat.ms, error: eat.error ?? null, breadLeft }
-            : { reply: null, why: noReply(), breadLeft });
-        ctx.check('eat', eat?.ok === true && breadLeft === plan.eat.after,
-            eat ? `driver ok=${eat.ok}; food ${eat.foodBefore} -> ${eat.foodAfter}; bread left ${breadLeft ?? '?'} (want ${plan.eat.after})` : `${noReply()}; bread left ${breadLeft ?? '?'}`);
+        // 5. eat, only once the server's food level is below 20 (bread cannot be eaten at 20: the eat would time out)
+        const listFood = () => {
+            const lines = con(`scoreboard players list ${name}`);
+            return { food: foodScore(lines, name), read: playerScores(lines, name) !== null };
+        };
+        let food = listFood();
+        while (!belowFull(food.food) && clock.now() - hungerAt < p.foodWaitMs && !stopReason()) {
+            await clock.sleep(p.foodPollMs);
+            food = listFood();
+        }
+        ctx.note('foodBeforeEat', { server: food.food, read: food.read, waitedMs: clock.now() - hungerAt });
+        const eatStop = stopReason();
+        if (eatStop) {
+            abort(eatStop);
+            ctx.check('eat', false, `aborted: ${eatStop}`);
+            return;
+        }
+        if (!belowFull(food.food)) {
+            const why = !food.read ? 'the scoreboard did not answer' : food.food === null ? 'no food score: the food never changed from 20' : `food score ${food.food}`;
+            ctx.note('eat', { reply: null, why: `not sent: the food is not below 20 (${why})` });
+            ctx.check('eat', false, `not sent: the food is not below 20 after ${Math.round((clock.now() - hungerAt) / MS)}s of hunger (${why}); bread cannot be eaten at 20`);
+        } else {
+            const eat = await ask('eat', (t) => probeEat(name, t, plan.eat.item));
+            const breadLeft = count(plan.eat.item);
+            // The driver's own view (bot.food) must agree that the food was below 20 when it ate.
+            const driverBelow = typeof eat?.foodBefore === 'number' && eat.foodBefore < 20;
+            ctx.note('eat', eat
+                ? { ok: eat.ok, foodBefore: eat.foodBefore, foodAfter: eat.foodAfter, countBefore: eat.countBefore, countAfter: eat.countAfter, ms: eat.ms, error: eat.error ?? null, breadLeft, serverFoodBefore: food.food }
+                : { reply: null, why: noReply(), breadLeft, serverFoodBefore: food.food });
+            ctx.check('eat', eat?.ok === true && driverBelow && breadLeft === plan.eat.after,
+                eat ? `server food ${food.food}; driver ok=${eat.ok}${eat.error ? ` (${eat.error})` : ''}; food ${eat.foodBefore} -> ${eat.foodAfter}${driverBelow ? '' : ' (the driver\'s food was not below 20)'}; bread left ${breadLeft ?? '?'} (want ${plan.eat.after})`
+                    : `${noReply()}; bread left ${breadLeft ?? '?'}`);
+        }
         if (aborted) return;
 
         // 6. the end
         con(`clear ${name}`);
+        con(`scoreboard objectives remove ${plan.foodObjective}`);
     },
 };
