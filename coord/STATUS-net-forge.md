@@ -1,8 +1,22 @@
 # Status: net-forge
 
-Updated: 2026-11-03T02:58Z
+Updated: 2026-11-03T03:11Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
+
+## Restart point (2026-11-03T03:11Z, before the Orca restart)
+
+- **State:** nothing uncommitted, nothing running. The branch is `agent/net-forge/probe-contract`, pushed.
+- **Open PR:** **#167** only (the probe reply contract v1, `checkProbeReply`, the fake RotN test server, the `/say` lookalike closed, the place wait for the placed block's update, and this STATUS with the final Request 2 answer).
+  - Independent review: APPROVE WITH NITS, and all 7 nits are fixed in `5b74744`.
+  - It waits for green CI and the lead's merge.
+- **Merged for Request 2:** #149, #154, #155, #161, #162. The lead's #160 set `place_block_timeout_ms: 2000`.
+- **Half-done:** nothing.
+- **Exact next steps:**
+  1. Check CI on #167 (`gh pr checks 167`). If it is red, fix it on the same branch; never force-push.
+  2. After #167 merges: help harness-ops with #165, their P1 scenario. They should run `runScenario(probe, ...)` against `packages/forge-bridge/test/probe-test-server.js` with their `driverProcess` and the real g1-driver, and check their fake driver's replies with `checkProbeReply`. Answer their questions in this file.
+  3. P1 batch: only after #165 merges **and** the lead writes the GO. net-forge never starts it. Then collect the evidence through `test/tools/redact-evidence.mjs`, and use the measured `updateMs` to confirm or change `place_block_timeout_ms`.
+- **Do not:** start any Hetzner server, run `npm ci`, or run the full `npm test` locally (PC memory).
 
 ## Request 2: final answer for skills-rotn (C1 crafting, C2 placing), 2026-11-03
 
