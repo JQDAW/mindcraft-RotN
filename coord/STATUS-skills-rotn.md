@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T11:59Z (from `date -u`)
+Updated: 2026-11-03T12:07Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -43,10 +43,17 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 **Session 2 (respawned after the Orca restart, 2026-11-03):** the branches matched origin, and CI was green on #164 and #170.
-- **#164 E2 agenda:** fixes pushed, CI green; waiting for the lead's re-review.
-- **#170 F1 profile:** lead REQUEST CHANGES, fixed in `837cc2c6`: `"name": "FRCFLD"` (lead decision: the bot is FRCFLD, here and on the CX23), with a test of the exact name. The `speak_model` nit is left as is (`settings.speak` is false). Reply posted; CI green.
+- **#164 E2 agenda: merged** (`ebdc6b1`). Its merge nits went to E3 and are fixed in #174 (`51d4c5e9`).
+- **#170 F1 profile:** lead REQUEST CHANGES, fixed in `837cc2c6`: `"name": "FRCFLD"` (lead decision: the bot is FRCFLD, here and on the CX23), with a test of the exact name. The `speak_model` nit is left as is (`settings.speak` is false). Reply posted; CI green. The fix was pushed at 11:5xZ (head `837cc2c6`), so it waits only for the lead's re-review.
 - **#175 opened:** the #151 nit (branch `agent/skills-rotn/craft-needs-slot`, base `develop`). `craft_needs.js` finds an input's own recipe slot by its exact stack list (size `choices + more`, every choice in it). Before, `soaking_pot`'s 1-stack slot counted string from the twine slot. The new test fails on the old code; library and command tests pass 57/57.
-- **#174 E3 priority stack opened** (branch `agent/skills-rotn/priority-stack`, stacked on #164; retarget to `develop` after #164 merges):
+- **#174 E3 priority stack** (branch `agent/skills-rotn/priority-stack`, now based on `develop`, with develop merged in). The #164 nits are fixed in `51d4c5e9`:
+  - someone else's `!goal` is not counted against the agenda, and the model's `!goal` is refused while the agenda or a task runs the self-prompter;
+  - a run carried into the next step counts as that step's run;
+  - LLM time is saved every 10 s. This also fixes the E2 bug that the time was never saved by the timer;
+  - a paused bot-to-bot conversation uses no run;
+  - `Agent.autostartAgenda()` is tested.
+
+  Tests: `src/agent/**` 177/177; lint 254. The E3 contents:
   - control holds: a giver's typed `!stop`, `!pause` (new), `!stfu` (now giver-only) and `!resume` (new), saved in `bots/<name>/control.json`; a giver's typed action holds autonomy while it runs;
   - tasks before the agenda, switching at the checkpoint, with the step-sized budget, `!taskDone`/`!taskFailed`, and the agenda resuming with no new run;
   - non-giver history and task text kept as quoted, marked data;
@@ -54,7 +61,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
   This fixes #164's known limit (`!stop`/`!stfu` undone by the agenda). Tests: `src/agent/**` 170/170; lint 254.
 - **Next, in order:**
-  1. answer the reviews on #164, #170, #174 and #175;
+  1. answer the reviews on #170, #174 and #175;
   2. C1 crafting execution and C2 (first plank). Net-forge's final Request 2 answer is in #167, which is not merged yet, and P1 (paid, lead GO) measures the place timing. Until then C1 stays blocked;
   3. D2 night shelter, for G3 (b): the night detector and the shelter blueprint closure check need no packets, so they can start before C1.
 
@@ -161,7 +168,6 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- #164 E2 agenda (branch `agent/skills-rotn/agenda`). Serves brief item 6 and G3 (c), with harness-ops’ "the agenda at a fresh spawn".
 - #170 F1 start, the RotN profile on the OpenRouter preset (branch `agent/skills-rotn/rotn-profile`). Serves the human decision on the model and brief item 7. Bot name FRCFLD (#170 review).
 - #175 the #151 nit: craft_needs matches each input's recipe slot by its exact stack list (branch `agent/skills-rotn/craft-needs-slot`).
-- #174 E3 priority stack (branch `agent/skills-rotn/priority-stack`, base #164's branch). Serves brief item 4, G3 (c) and the lead's E3 requirements.
+- #174 E3 priority stack (branch `agent/skills-rotn/priority-stack`, base `develop`). Serves brief item 4, G3 (c) and the lead's E3 requirements.
