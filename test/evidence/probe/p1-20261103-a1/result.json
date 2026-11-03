@@ -1,0 +1,155 @@
+{
+  "scenario": "probe-craft-place",
+  "gate": "P1",
+  "title": "Probe P1: crafting (REID ids, FastWorkbench), placing and eating on the real RotN server (a probe, never a gate)",
+  "runId": "20261103t143942-9e0b23",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": false,
+  "weakenedParams": [
+    "P1 is a probe of crafting, placing and eating, never a gate pass"
+  ],
+  "verdict": "FAIL",
+  "passed": 1,
+  "failed": 7,
+  "durationS": 78,
+  "params": {
+    "bot": "<bot>",
+    "loginTimeoutMs": 240000,
+    "settleMs": 10000,
+    "replyTimeoutMs": 75000,
+    "stepAbortMs": 120000,
+    "pollMs": 1000,
+    "tpSettleMs": 3000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "foodWaitMs": 40000,
+    "foodPollMs": 2000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "The bot logs in with its own account (online mode)"
+    },
+    {
+      "check": "setup",
+      "pass": false,
+      "detail": "4/5 gives confirmed; table: found; food objective: added",
+      "readyToTry": "The test server set the probe up: the items were given and the crafting table stands at its place"
+    },
+    {
+      "check": "craft_crude_axe",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "crafttweaker:pyro_crude_axe (2x2) crafted: the driver reports it, and the server counts the crude axe and the rocks left"
+    },
+    {
+      "check": "craft_crafting_tools",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "crafttweaker:crafting_tools (2x2) crafted, confirmed by the server's counts"
+    },
+    {
+      "check": "craft_crafting_table",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "crafttweaker:crafting_table (2x2) crafted, confirmed by the server's counts"
+    },
+    {
+      "check": "craft_stone_pickaxe",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "crafttweaker:stone_pickaxe (3x3) crafted at the placed table, confirmed by the server's counts"
+    },
+    {
+      "check": "place_5",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "Five cobblestones placed, each confirmed by testforblock; the block update latency recorded"
+    },
+    {
+      "check": "eat",
+      "pass": false,
+      "detail": "not reached",
+      "readyToTry": "Bread eaten: the food was below 20 first (server and driver), went up, and the server counts one bread less"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "capture": "captures\\raw\\<bot>-2026-11-03T14-39-49-240Z.jsonl",
+    "landing": {
+      "planned": [
+        -45,
+        66,
+        -66
+      ],
+      "teleportedTo": [
+        -44.5,
+        66,
+        -65.5
+      ],
+      "botPosition": [
+        -44.5,
+        66,
+        -65.5
+      ]
+    },
+    "setup": {
+      "gives": [
+        {
+          "item": "pyrotech:rock",
+          "n": 8,
+          "ok": false
+        },
+        {
+          "item": "minecraft:stick",
+          "n": 6,
+          "ok": true
+        },
+        {
+          "item": "minecraft:planks",
+          "n": 1,
+          "ok": true
+        },
+        {
+          "item": "minecraft:bread",
+          "n": 2,
+          "ok": true
+        },
+        {
+          "item": "minecraft:cobblestone",
+          "n": 8,
+          "ok": true
+        }
+      ],
+      "table": "found",
+      "foodObjective": "added",
+      "hunger": [
+        22,
+        19
+      ]
+    }
+  },
+  "botExitCode": 128,
+  "botExitSignal": "SIGTERM",
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "e619624403f17c8c267b2865f860bf85476aa0a4",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261103-143412",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}
