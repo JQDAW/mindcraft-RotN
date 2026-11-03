@@ -26,7 +26,10 @@
 //   6. `clear <bot>`, the end.
 // Window-click transactions and the FastWorkbench window are not in the driver's replies: the evidence
 // step reads them from the capture, whose path notes.capture records (the driver's `forge` event).
-// The scenario stops early if the driver exits (notes.driverExited).
+// It stops at once (notes.aborted, and the step's check fails with the reason; later checks are not
+// reached) on a kick or lost connection in the server log (with its reason), on a driver exit, or when
+// the driver prints nothing for stepAbortMs (120 s) after a command (net-forge's plan).
+// test/unit/probe-e2e.test.js runs it against net-forge's REAL g1-driver and probe-commands.mjs.
 import crypto from 'node:crypto';
 import { startSession } from '../../runner/lib/session.mjs';
 import { lastTeleport } from '../../runner/lib/server-log.mjs';
@@ -70,6 +73,7 @@ export default {
         loginTimeoutMs: 240 * MS,
         settleMs: 10 * MS,
         replyTimeoutMs: 75 * MS,   // the driver answers within its own 60 s limit per command
+        stepAbortMs: 120 * MS,     // no driver output at all for this long after a command: abort
         pollMs: 1 * MS,
         tpSettleMs: 3 * MS,
         logTail: 20000,
@@ -85,25 +89,42 @@ export default {
         const plan = P1_PLAN;
         const con = (cmd) => server.console(cmd, p.consoleWaitS);
         const count = (item) => clearTestCount(con(clearTestCommand(name, item, -1)), name)?.count ?? null;
-        let exited = false;
-        const ask = async (cmd, line) => {
-            if (!bot.alive()) {
-                exited = true;
-                return null;
-            }
-            const t = newToken();
-            con(line(t));
-            const r = await ctx.waitFor(() => probeReply(bot.output(), cmd, t) ?? (bot.alive() ? null : { exited: true }), p.replyTimeoutMs);
-            if (r?.exited) {
-                exited = true;
-                return null;
-            }
-            return r;
+        let aborted = null;   // why the run stopped early, or null
+        let session = null;
+        const stopReason = () => {
+            const k = session?.events().find(session.gone);
+            if (k) return `kicked (${k.type}): ${k.reason ?? 'no reason logged'}`;
+            return bot.alive() ? null : `the driver exited (code ${bot.exitCode()})`;
         };
-        const noReply = () => (exited ? 'the driver exited' : `no reply within ${p.replyTimeoutMs / MS}s`);
-
+        const abort = (why) => {
+            aborted ??= why;
+            ctx.note('aborted', aborted);
+            return null;
+        };
+        // One command: its reply, or null (aborted, or no reply within replyTimeoutMs).
+        const ask = async (cmd, line) => {
+            const pre = stopReason();
+            if (pre) return abort(pre);
+            const t = newToken();
+            const sent = clock.now();
+            const linesAtSend = bot.output().length;
+            con(line(t));
+            const r = await ctx.waitFor(() => probeReply(bot.output(), cmd, t) ?? (stopReason() ? { stop: true } : null), p.replyTimeoutMs);
+            if (r && !r.stop) return r;
+            if (r?.stop) return abort(stopReason());
+            // No reply: if the driver has printed nothing since the command, give it until stepAbortMs, then abort.
+            if (bot.output().length === linesAtSend) {
+                const left = p.stepAbortMs - (clock.now() - sent);
+                const woke = left > 0 ? await ctx.waitFor(() => bot.output().length > linesAtSend || stopReason(), left) : null;
+                if (!woke) return abort(`the driver printed nothing for ${p.stepAbortMs / MS}s after probe-${cmd}`);
+                if (stopReason()) return abort(stopReason());
+            }
+            return null;
+        };
+        const noReply = () => aborted ?? `no reply within ${p.replyTimeoutMs / MS}s`;
         // 1. login (the driver with its probe commands on), the fixed time and the landing spot
-        const s = await startSession(ctx, { name, env: { ...PROBE_DRIVER_ENV } });
+        const s = await startSession(ctx, { name, env: { ...PROBE_DRIVER_ENV }, checkNaming: false });
+        session = s;
         ctx.check('login_online', s.ok, s.why);
         if (!s.ok) return;
         await clock.sleep(p.settleMs);
@@ -126,7 +147,9 @@ export default {
         }
         ctx.note('setup', { gives: gives.map(({ item, n, ok }) => ({ item, n, ok })), table: table.detail });
         const setupOk = gives.every((g) => g.ok) && table.ok;
-        ctx.check('setup', setupOk, `${gives.filter((g) => g.ok).length}/${gives.length} gives confirmed; table: ${table.detail}`);
+        const setupStop = stopReason();
+        ctx.check('setup', setupOk && !setupStop, setupStop ? `aborted: ${setupStop}` : `${gives.filter((g) => g.ok).length}/${gives.length} gives confirmed; table: ${table.detail}`);
+        if (setupStop) return abort(setupStop);
         if (!setupOk) return;
 
         // 3. the four crafts, each confirmed by the server's own counts
@@ -143,10 +166,10 @@ export default {
             ctx.check(`craft_${c.check}`, reply?.ok === true && countsOk,
                 `${reply ? `driver ok=${reply.ok}${reply.error ? ` (${reply.error})` : ''}` : noReply()}; ` +
                 Object.entries(c.counts).map(([item, want]) => `${item} ${counts[item] ?? '?'} (want ${want})`).join(', '));
-            if (exited) break;
+            if (aborted) break;
         }
         ctx.note('crafts', crafts);
-        if (exited) return ctx.note('driverExited', true);
+        if (aborted) return;
 
         // 4. five placements, each confirmed by testforblock
         const places = [];
@@ -155,14 +178,14 @@ export default {
             const found = testforblockVerdict(con(`testforblock ${cell.join(' ')} ${plan.place.item}`), cell);
             places.push({ cell, ok: reply?.ok ?? null, updateMs: reply?.updateMs ?? null, totalMs: reply?.totalMs ?? null,
                 after: reply?.after ?? null, error: reply?.error ?? (reply ? null : noReply()), server: found.ok });
-            if (exited) break;
+            if (aborted) break;
         }
         ctx.note('places', places);
         ctx.note('placeLatencyMs', places.map((x) => x.updateMs));
         const placed = places.filter((x) => x.ok === true && x.server).length;
         ctx.check('place_5', placed === plan.place.targets.length,
-            `${placed}/${plan.place.targets.length} placed and confirmed; update latencies ms: ${places.map((x) => x.updateMs ?? '?').join(', ')}`);
-        if (exited) return ctx.note('driverExited', true);
+            `${placed}/${plan.place.targets.length} placed and confirmed; update latencies ms: ${places.map((x) => x.updateMs ?? '?').join(', ')}${aborted ? `; aborted: ${aborted}` : ''}`);
+        if (aborted) return;
 
         // 5. eat
         const eat = await ask('eat', (t) => probeEat(name, t, plan.eat.item));
@@ -172,7 +195,7 @@ export default {
             : { reply: null, why: noReply(), breadLeft });
         ctx.check('eat', eat?.ok === true && breadLeft === plan.eat.after,
             eat ? `driver ok=${eat.ok}; food ${eat.foodBefore} -> ${eat.foodAfter}; bread left ${breadLeft ?? '?'} (want ${plan.eat.after})` : `${noReply()}; bread left ${breadLeft ?? '?'}`);
-        if (exited) return ctx.note('driverExited', true);
+        if (aborted) return;
 
         // 6. the end
         con(`clear ${name}`);

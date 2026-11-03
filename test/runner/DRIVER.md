@@ -241,7 +241,12 @@ P1 is net-forge's "Probe plan P1" (`coord/STATUS-net-forge.md`), which the lead 
 - **The opt-in:** the driver answers probes only with `ROTN_DRIVER_PROBE=1`. The scenario passes it when it starts the bot (`PROBE_DRIVER_ENV`).
 - **The sender:** commands are accepted only as a console whisper (the sender `Server`), and the whole whisper text must be the command.
 - **Tokens:** 6-32 hex characters; each runs once.
-- **Replies:** each command is answered within the driver's 60 s limit (the scenario waits up to 75 s). The scenario stops early if the driver exits.
+- **Replies:** each command is answered within the driver's 60 s limit; the scenario waits up to 75 s.
+- **The run stops at once** (`notes.aborted`; the step's check fails with the reason, and later checks are "not reached") on any of these:
+  - a kick or lost connection in the server log, with its reason;
+  - a driver exit;
+  - 120 s with no driver output at all after a command (`stepAbortMs`, net-forge's plan).
+- **The offline end-to-end test** `test/unit/probe-e2e.test.js` runs this scenario through the runner against net-forge's REAL `g1-driver.mjs` and `probe-commands.mjs` (a driver process with `ROTN_DRIVER_PROBE=1`), on net-forge's fake Forge server and craft world, with rotn-data's real dump recipes. A change to #162's reply contract fails it. The only fake is a console adapter over the fake server's state.
 
 | The scenario sends (`tell <bot> ...`) | The driver prints one line on stdout |
 | --- | --- |

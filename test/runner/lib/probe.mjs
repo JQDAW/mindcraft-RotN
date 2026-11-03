@@ -103,7 +103,8 @@ export const P1_PLAN = Object.freeze({
         { check: 'crafting_table', recipeId: 'crafttweaker:crafting_table', item: 'minecraft:crafting_table', grid: '2x2', counts: { 'minecraft:crafting_table': 1, 'minecraft:planks': 0 } },
         { check: 'stone_pickaxe', recipeId: 'crafttweaker:stone_pickaxe', item: 'minecraft:stone_pickaxe', grid: '3x3', atTable: true, counts: { 'minecraft:stone_pickaxe': 1, 'pyrotech:rock': 3 } },
     ],
-    // Five cobblestones on the floor, 2 blocks from the bot, away from the table (east of the bot). Each
+    // Five cobblestones on the floor, 2 blocks from the bot: west, north, south and the two western corners,
+    // away from the table, which stands 2 blocks EAST of the bot (x -43 against the bot's -45). Each
     // target cell is set to air and the floor under it to stone first, so the result depends on the
     // client, not on the terrain.
     place: { item: 'minecraft:cobblestone', face: 'up', targets: [[-47, 66, -66], [-45, 66, -68], [-45, 66, -64], [-47, 66, -68], [-47, 66, -64]] },

@@ -64,7 +64,8 @@ describe('the P1 driver protocol and console allowlist', () => {
  * ROTN_DRIVER_PROBE=1 in its start environment (as the real driver).
  *   opt.failCraft: a recipe id the driver fails; opt.silent: a command it never answers
  *   ('craft'|'place'|'eat'); opt.misplace: a placement index the server does not get; opt.exitAt: the
- *   command ('craft'|'place'|'eat') at which the driver exits instead of answering
+ *   command ('craft'|'place'|'eat') at which the driver exits instead of answering; opt.kickAt: the command
+ *   at which the server kicks the bot ("FRCFLD lost connection: ..." in the log; the driver still runs)
  */
 function sim(opt = {}) {
     const log = [];
@@ -93,6 +94,7 @@ function sim(opt = {}) {
         let m;
         const cmd = /^probe-(craft|place|eat) /.exec(msg)?.[1];
         if (cmd && opt.exitAt === cmd) { alive = false; return; }
+        if (cmd && opt.kickAt === cmd) { online = false; add(`${NAME} lost connection: Kicked by an operator`); return; }
         if ((m = /^probe-craft ([0-9a-f]{6,32}) (\S+)( (-?\d+),(-?\d+),(-?\d+))?$/.exec(msg))) {
             if (opt.silent === 'craft') return;
             const [, token, recipeId, table] = m;
@@ -207,7 +209,7 @@ describe('probe-craft-place on a simulated server', () => {
         const r = await run({ ...s, bot: { ...s.bot, start: () => start({}) } });
         const c = byName(r);
         assert.equal(c.craft_crude_axe.pass, false);
-        assert.match(c.craft_crude_axe.detail, /no reply within 3s/);
+        assert.match(c.craft_crude_axe.detail, /the driver printed nothing for 120s after probe-craft/);
         neverGate(r);
     });
 
@@ -217,9 +219,10 @@ describe('probe-craft-place on a simulated server', () => {
         assert.equal(c.craft_stone_pickaxe.pass, true);
         assert.equal(c.place_5.pass, false);
         assert.match(c.place_5.detail, /^0\/5 placed/);
-        assert.equal(r.notes.driverExited, true);
-        assert.equal(c.eat.pass, false, 'not reached');
-        assert.equal(r.notes.places[0].error, 'the driver exited');
+        assert.match(r.notes.aborted, /^the driver exited \(code 0\)$/);
+        assert.equal(c.eat.pass, false);
+        assert.equal(c.eat.detail, 'not reached');
+        assert.match(r.notes.places[0].error, /^the driver exited/);
         neverGate(r);
     });
 
@@ -229,15 +232,29 @@ describe('probe-craft-place on a simulated server', () => {
         assert.match(c.place_5.detail, /^4\/5 placed and confirmed; update latencies ms: 41, 42, 43, 44, 45$/);
     });
 
-    test('a driver that never answers (no probe commands yet) fails those checks after the timeout, never passes', async () => {
+    test('a driver silent for 120 s after a command aborts the run (net-forge\'s step abort); nothing later passes', async () => {
         for (const silent of ['craft', 'place', 'eat']) {
-            const r = await run(sim({ silent }));
+            const s = sim({ silent });
+            const r = await run(s);
             const c = byName(r);
             const k = { craft: 'craft_crude_axe', place: 'place_5', eat: 'eat' }[silent];
             assert.equal(c[k].pass, false, silent);
-            assert.match(c[k].detail, /no reply|0\/5/, silent);
+            assert.match(c[k].detail, new RegExp(`the driver printed nothing for 120s after probe-${silent}`), silent);
+            assert.match(r.notes.aborted, /printed nothing for 120s/);
+            if (silent === 'craft') assert.equal(c.place_5.detail, 'not reached');
             neverGate(r);
         }
+    });
+
+    test('a kick aborts at once with the kick reason; the later steps are not reached', async () => {
+        const r = await run(sim({ kickAt: 'place' }));
+        const c = byName(r);
+        assert.equal(c.craft_stone_pickaxe.pass, true);
+        assert.equal(c.place_5.pass, false);
+        assert.match(c.place_5.detail, /aborted: kicked \(lost\): Kicked by an operator/);
+        assert.equal(r.notes.aborted, 'kicked (lost): Kicked by an operator');
+        assert.equal(c.eat.detail, 'not reached');
+        neverGate(r);
     });
 
     test('the scenario sends nothing outside P1\'s allowlist', async () => {
