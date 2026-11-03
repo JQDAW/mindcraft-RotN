@@ -1,8 +1,49 @@
 # Status: net-forge
 
-Updated: 2026-11-02T17:09Z
+Updated: 2026-11-03T01:01Z
 
-Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1` (kept while paused).
+Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
+
+## Resumed 2026-11-03: skills-rotn Request 2 (crafting, placing, item use on 1.12.2 + REID)
+
+The human approved the resume on 2026-11-03, and the lead brought me back for skills-rotn's Request 2. Work is on branches from develop `49ec671`.
+
+**Answers, item by item:**
+
+1. **`window_click` with REID: the encoding works. The RotN crafting table does not, yet (see the gap below).**
+   - The REID `slot` override is a global type, so serverbound `window_click.item` and `set_creative_slot` get VarInt item ids too. The slot *index* stays an i16, as in vanilla (REID changes only the stack's item id).
+   - Proven offline in `packages/forge-bridge/test/serverbound.test.js` (PR 1). mineflayer's real `clickWindow` is injected into a stub bot. Its packet is encoded with the REID protocol and compared byte for byte with the vanilla 1.12.2 layout, then parsed back the way the server reads it. The test uses real Run A item ids (crude axe 9075, rock 8917, Crafting Tools 12510). It also covers:
+     - an empty slot (VarInt -1, 5 bytes), meta, a 3-byte VarInt id and NBT;
+     - all 7 click modes;
+     - the transaction confirm that mineflayer sends after a rejected click (a 1.12 server ignores further clicks in that window until it arrives).
+   - Turning REID off makes the two VarInt tests fail.
+   - The vanilla layout comes from `javap` on `minecraft_server.1.12.2.jar` (SHA-1 `886945bf...5b25f`) from the pinned zip, extracted to scratch only, never run.
+     - `CPacketClickWindow`: byte, short, byte, short, enum as a VarInt ordinal, item stack.
+     - `NetHandlerPlayServer.processClickWindow` runs `slotClick`, then compares the clicked item with the stack `slotClick` returned. A mismatch means `accepted=false`, a pending transaction and a window resync.
+   - The 2x2 grid is vanilla `ContainerPlayer`. FastWorkbench replaces only the server recipe book (`javap`, see below).
+2. **`block_place` and `use_item` on 1.12: they work (encoding level).**
+   - mineflayer 4.33 takes `blockPlaceHasHandAndFloatCursor` on 1.12.2 (position, face VarInt, hand VarInt, 3 f32). That matches vanilla `CPacketPlayerTryUseItemOnBlock` (`javap`).
+   - `use_item`: our patch adds the 1.21 `sequence` and `rotation` fields, but the 1.12.2 serializer writes only `hand` (2 bytes in all). The extra fields are harmless. Same for `block_dig` status 5 (`deactivateItem`).
+   - All of these are covered in the same test file through mineflayer's real `_genericPlace`, `activateItem` and `deactivateItem`.
+3. **The 500 ms `blockUpdate` wait: yes, it can be made configurable.** That is PR 3 (the mineflayer patch, plus an `initBot` option). Details are in that PR.
+
+**Gap found: the RotN crafting table opens through FML OpenGui, so `bot.craft(recipe, n, table)` hangs.**
+- Run A's RegistryData overrides `minecraft:crafting_table` (block and item) with **`fastbench`** (FastWorkbench 1.7.4).
+- `javap` on `FastWorkbench-1.12.2-1.7.4.jar` from the pinned zip:
+  - `BlockFastBench.onBlockActivated` calls `player.openGui(FastBench, 0, world, x, y, z)`.
+  - Its `Handler` returns a `ContainerFastBench` (a `ContainerWorkbench`, same slots) for gui id 0.
+- `javap` on Forge 14.23.5.2860 `FMLNetworkHandler.openGui`: it writes the FML OpenGui message (i32 windowId, modId, i32 gui id, x, y, z) **before** `addListener` sends `window_items`.
+- So the server never sends a vanilla `open_window`. mineflayer's `craftOnce` then waits on `once(bot, 'windowOpen')`, which has no timeout. forge-bridge only logs OpenGui today.
+- **The fix (PR 2, forge-bridge only):** on OpenGui `fastbench`/0, emit a synthetic `open_window` (`minecraft:crafting_table`) on the client before the `window_items` that follows. prismarine-windows already knows that window (result 0, grid 1-9, inventory 10-45). Unknown mod GUIs stay logged only.
+- Also from `javap`: `ContainerFastBench` sends the result slot (`set_slot` 0) only when the recipe or the result changes, plus an int recipe id on the `fastbench` channel. No reply is needed. mineflayer sets slot 0 from `recipe.result` before it clicks, so this does not matter for `bot.craft`.
+
+**Notes for skills-rotn (C1), from the same reading:**
+- mineflayer's `grabResult` clicks slot 0 holding an item built from `recipe.result` (id, count, meta, no NBT). The server accepts that click only if it equals the real result stack. Give `recipe.result` the exact count and meta from rotn-data. A result with NBT will be rejected (107 of the 6089 dumped recipes have NBT outputs; none of the early-game ones do).
+- Ingredient meta `32767` is the wildcard. Pass `metadata: null` for it, or `findInventoryItem` looks for meta 32767.
+- `remaining` items (container items) must become `outShape`. Otherwise mineflayer clears the grid locally while the server keeps them. The server's `set_slot`s fix this later. None of the early-game recipes have any.
+- `craftingcraft:portable_crafting_table` also opens through OpenGui (not handled; not needed for ready-to-try).
+
+**Live proof:** the encoding is checked against the vanilla jar and the real ids, and PR 2's flow against a fake server that follows the `javap` reading. A real-server check is still needed. The probe plan is under "Requests" (it needs a written GO).
 
 ## Paused 2026-11-02
 
@@ -456,7 +497,11 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 
 ## Doing
 
-- **Nothing: paused 2026-11-02** (see "Paused 2026-11-02" at the top). The notes below are historical. #50 and #56 are merged. The PR #54 nit (an explicit `source: 'fallback'` in `g2_adapter`) is in `tools/g1-driver.mjs`.
+- **2026-11-03: skills-rotn Request 2** (see the top section).
+  - PR 1: serverbound encoding tests, `agent/net-forge/craft-place-packets`.
+  - PR 2: FastWorkbench OpenGui as a mineflayer window, plus an offline end-to-end craft, place and use test through `initBot`.
+  - PR 3: a configurable `place_block` wait.
+- Historical: **Nothing: paused 2026-11-02** (see "Paused 2026-11-02" at the top). The notes below are historical. #50 and #56 are merged. The PR #54 nit (an explicit `source: 'fallback'` in `g2_adapter`) is in `tools/g1-driver.mjs`.
 - G1 PASSED. Phase 2 (G2): #25, #38, #46, #49 and #54 are merged. Open: #50 (PR #31 follow-ups) and #56 (mod-entity table).
 - Done in #56 too: serializers 14-18 and 256/257 from rotn-data's second dump (#55), through `loadRotnData(PACK_VERSION).serializers()`. 14 is confirmed, and the inferred-decode logging is removed. `javap` on the seven dumped classes matches every format except Charset's quaternion: the order on the wire is w, x, y, z, not x, y, z, w (same 16 bytes, so it was never misparsed; field names fixed).
 - Next: the PR #54 nits: log `g2_adapter source=fallback` explicitly, and assert no `null` census type once harness-ops' census fix lands.
@@ -511,6 +556,23 @@ The setup for both batches:
 - Batch B+C: approved; the driver is ready (below). Runs after Batch A, with the same preflight condition.
 
 ## Requests to other agents or the lead
+
+- **Lead: GO for one live probe batch (Request 2 proof), after PR 2 merges. Not started; it needs your written GO.**
+  - **What:** one disposable CPX42 from the pinned zip, with the usual watchdog (8 h) and delete-after. The estimate is under 45 min up, about EUR 0.10 plus IPv4 hours.
+  - **Setup:** harness-ops' runner gives the bot items with `/give` on the test server only: 4 `pyrotech:rock`, 4 `minecraft:stick`, 1 `minecraft:planks`, 1 bread, 8 `minecraft:cobblestone`. It also sets a `minecraft:crafting_table` (FastWorkbench) next to the bot with `/setblock`.
+  - **Steps:** a small net-forge probe driver (`packages/forge-bridge/tools/craft-probe.mjs`, on the g1-driver pattern) runs, using rotn-data's recipes:
+    1. 2x2: craft `pyrotech:crude_axe`, then `contenttweaker:crafting_tools`, then `minecraft:crafting_table`.
+    2. Table: `bot.craft` with the placed table, so FastWorkbench's OpenGui leads to the synthetic window; craft `minecraft:stone_pickaxe` from 3 rocks and 2 sticks.
+    3. Place cobblestone 5 times, recording the `block_place` -> `block_change` latency.
+    4. Eat bread (`use_item`) and check the food level.
+  - **Evidence:**
+    - every `window_click` and `transaction` both ways in the capture (I add `transaction` to the capture list);
+    - the inventory before and after, confirmed with `/clear <bot> <item> 0` counts on the server;
+    - the placement latencies (to pick the timeout default);
+    - the server log.
+  - **Pass:** all 4 crafts land in the server-side inventory, with no rejected transaction; 5/5 placements are confirmed; the food level rises.
+  - This can also be folded into harness-ops' G3 (a) scenario if you prefer. Then I only provide the driver.
+- **Lead (`settings.js`, after PR 3):** please add `place_block_timeout_ms` (PR 3 reads it in `initBot`; default 500, upstream Mindcraft's value). I suggest 2000 for RotN: a successful placement returns as soon as the server's `block_change` arrives, so a longer timeout only delays real failures. The probe's latencies can settle it.
 
 - ~~**rotn-data: the state-id remap table.**~~ Done in #80 (`stateMetaRemap().byBlock`), which `initBot` uses. A dumper 0.2.0 run on the test server is still needed for the real 3.3.4 table; until then the remap is inactive and the login line says so.
 
