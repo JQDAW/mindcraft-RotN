@@ -28,6 +28,9 @@
 //   ROTN_DRIVER_PING_TIMEOUT_MS          total status-ping budget -> FORGE_PING_TIMEOUT_MS
 //   ROTN_DRIVER_CHUNK_WAIT_MS            G2 census: how long attachG2 waits for the cube's chunks
 //                                        (default: scenario-protocol's, 30 s; 0 in loopback tests)
+//   ROTN_DRIVER_PROBE                    1 = also answer probe P1's probe-craft, -place and -eat
+//                                        (tools/probe-commands.mjs; auto-eat off). Not for gate runs.
+//   ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS   probe-place's wait for the block update (default 10000)
 //
 // Exit codes (ADR 0003 decision 5, DRIVER.md): 0 clean stop on SIGTERM/SIGINT,
 // 1 transient disconnect, 3 fatal (setup error, or a kick that the runner's
@@ -63,6 +66,10 @@ function fatalSetup(reason) {
 
 if (!host) fatalSetup('TEST_SERVER_HOST is not set');
 if (!['microsoft', 'offline'].includes(auth)) fatalSetup(`ROTN_DRIVER_AUTH must be microsoft or offline, not ${auth}`);
+const probeOn = process.env.ROTN_DRIVER_PROBE === '1';
+const probePlaceRaw = process.env.ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS;
+const probePlaceTimeoutMs = probePlaceRaw === undefined || probePlaceRaw === '' ? 10000 : Number(probePlaceRaw);
+if (!(Number.isInteger(probePlaceTimeoutMs) && probePlaceTimeoutMs >= 50 && probePlaceTimeoutMs <= 60000)) fatalSetup(`ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS must be a whole number of ms from 50 to 60000, not ${probePlaceRaw}`);
 if (chunkWaitMs !== undefined && !(Number.isInteger(chunkWaitMs) && chunkWaitMs >= 0)) fatalSetup(`ROTN_DRIVER_CHUNK_WAIT_MS must be a whole number of ms >= 0, not ${chunkWaitRaw}`);
 if (auth === 'microsoft' && !process.env.MINDCRAFT_PROFILES_FOLDER) {
     fatalSetup('MINDCRAFT_PROFILES_FOLDER is not set: the bot account needs its own token cache folder');
@@ -132,6 +139,16 @@ async function main() {
         else event('g2_adapter', { source: 'fallback', names: 'stockNames', reason: 'src/utils/mcdata.js could not be imported', translation: false, ...chunkWait });
         attachG2(bot, { names: m?.names ?? stockNames, chunkWaitMs: chunkWait.chunkWaitMs });
     }).catch((err) => event('g2_adapter_error', { message: String(err?.message ?? err) }));
+
+    // Probe P1 (not a gate): crafting, placing and eating on request, with rotn-data's dump recipes.
+    // Not awaited: the login, kick and end handlers below must be attached at once.
+    if (probeOn) {
+        Promise.all([import('./probe-commands.mjs'), import('../../rotn-data/index.js')]).then(([{ attachProbe }, rotn]) => {
+            const pack = rotn.loadRotnData(rotn.PACK_VERSION);
+            attachProbe(bot, { emit: event, dumpRecipes: () => pack.dump.recipes?.recipes ?? [], convertRecipe: rotn.convertRecipe, placeTimeoutMs: probePlaceTimeoutMs });
+            event('probe_attached', { placeTimeoutMs: probePlaceTimeoutMs });
+        }).catch((err) => event('probe_attach_error', { message: String(err?.message ?? err) }));
+    }
 
 
     closeCapture = () => { try { bot.forge?.capture?.close(); } catch { /* already closed */ } };

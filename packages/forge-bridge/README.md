@@ -316,6 +316,12 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - Switches: `ROTN_DRIVER_AUTH` (`offline` for loopback tests only), `ROTN_DRIVER_FORGE_BRIDGE` (default `on`), `ROTN_DRIVER_CAPTURE` (default `1`, `captures/raw/`), `ROTN_DRIVER_MODLIST_FILE`.
   - **G2:** it also answers the G2 protocol (`scenario-blocks`, `-blockat`, `-entities`, `-items`) through `attachG2` with `loadAgentNames`, the agent's own naming path. Names come from `bot.registry` as forge-bridge extends it, and translation from `src/utils/mcdata.js` `toNew`/`toOld`. It logs a `g2_adapter` event: its `source` is the mcdata.js module, or `fallback` (stock names, no translation) when mcdata.js cannot be imported. `ROTN_DRIVER_CHUNK_WAIT_MS` sets how long the census waits for the cube's chunks (scenario-protocol's default, 30 s, when unset). The effective value is logged in `g2_adapter` as `chunkWaitMs`, with `chunkWaitSource`. harness-ops' reference driver uses stock mineflayer, which a Forge server rejects at the handshake, so this is the driver for real G2 runs.
   - Its `DRIVER {json}` lines add the handshake result, registry sizes, `walkMethod` and the block under the bot with its Forge registry name. `walkMethod` is the scenario's: its `method` field if `walk()` reports one, otherwise `scenario-protocol walk()`.
+  - **Probe P1** (not a gate; plan in `coord/STATUS-net-forge.md`): with `ROTN_DRIVER_PROBE=1`, `tools/probe-commands.mjs` also answers three commands:
+    - `probe-craft TOKEN RECIPE_ID [X,Y,Z]`: rotn-data's dump recipe through `convertRecipe` and `bot.craft`, in the 2x2 grid or at the table at X,Y,Z;
+    - `probe-place TOKEN ITEM X,Y,Z FACE`: waits up to `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS` (default 10000) and reports `updateMs`;
+    - `probe-eat TOKEN ITEM`.
+
+    Each answer is a `DRIVER {"type":"probe",...}` line plus one chat line of at most 200 characters (`probe TOKEN CMD ok|fail k=v ...`). Auto-eat is off while the probe runs, and each token runs once. `test/probe-e2e.test.js` runs all three commands through `initBot` in the offline craft world.
 
 ## Tests
 
