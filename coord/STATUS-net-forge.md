@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-03T01:01Z
+Updated: 2026-11-03T01:13Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -27,14 +27,14 @@ The human approved the resume on 2026-11-03, and the lead brought me back for sk
    - All of these are covered in the same test file through mineflayer's real `_genericPlace`, `activateItem` and `deactivateItem`.
 3. **The 500 ms `blockUpdate` wait: yes, it can be made configurable.** That is PR 3 (the mineflayer patch, plus an `initBot` option). Details are in that PR.
 
-**Gap found: the RotN crafting table opens through FML OpenGui, so `bot.craft(recipe, n, table)` hangs.**
+**Gap found: the RotN crafting table opens through FML OpenGui, so `bot.craft(recipe, n, table)` fails.**
 - Run A's RegistryData overrides `minecraft:crafting_table` (block and item) with **`fastbench`** (FastWorkbench 1.7.4).
 - `javap` on `FastWorkbench-1.12.2-1.7.4.jar` from the pinned zip:
   - `BlockFastBench.onBlockActivated` calls `player.openGui(FastBench, 0, world, x, y, z)`.
   - Its `Handler` returns a `ContainerFastBench` (a `ContainerWorkbench`, same slots) for gui id 0.
 - `javap` on Forge 14.23.5.2860 `FMLNetworkHandler.openGui`: it writes the FML OpenGui message (i32 windowId, modId, i32 gui id, x, y, z) **before** `addListener` sends `window_items`.
-- So the server never sends a vanilla `open_window`. mineflayer's `craftOnce` then waits on `once(bot, 'windowOpen')`, which has no timeout. forge-bridge only logs OpenGui today.
-- **The fix (PR 2, forge-bridge only):** on OpenGui `fastbench`/0, emit a synthetic `open_window` (`minecraft:crafting_table`) on the client before the `window_items` that follows. prismarine-windows already knows that window (result 0, grid 1-9, inventory 10-45). Unknown mod GUIs stay logged only.
+- So the server never sends a vanilla `open_window`. mineflayer's `craftOnce` then waits on `once(bot, 'windowOpen')` and fails after 20 s ("Event windowOpen did not fire within timeout of 20000ms", reproduced in PR 2's mutation check). Before PR 2, forge-bridge only logged OpenGui.
+- **The fix (PR 2, forge-bridge only, done):** on OpenGui `fastbench`/0, emit a synthetic `open_window` (`minecraft:crafting_table`) on the client before the `window_items` that follows. prismarine-windows already knows that window (result 0, grid 1-9, inventory 10-45). Unknown mod GUIs stay logged only.
 - Also from `javap`: `ContainerFastBench` sends the result slot (`set_slot` 0) only when the recipe or the result changes, plus an int recipe id on the `fastbench` channel. No reply is needed. mineflayer sets slot 0 from `recipe.result` before it clicks, so this does not matter for `bot.craft`.
 
 **Notes for skills-rotn (C1), from the same reading:**
@@ -42,6 +42,14 @@ The human approved the resume on 2026-11-03, and the lead brought me back for sk
 - Ingredient meta `32767` is the wildcard. Pass `metadata: null` for it, or `findInventoryItem` looks for meta 32767.
 - `remaining` items (container items) must become `outShape`. Otherwise mineflayer clears the grid locally while the server keeps them. The server's `set_slot`s fix this later. None of the early-game recipes have any.
 - `craftingcraft:portable_crafting_table` also opens through OpenGui (not handled; not needed for ready-to-try).
+- **mineflayer-auto-eat (loaded by `initBot`) clicks the inventory too.** In PR 2's test, at food 15 it equipped bread in the middle of a 2x2 craft (with its default `offhand: true`, it moved stacks into slot 45), and mineflayer's craft then failed with a rejected click. `agent.js` sets `startAt: 14` without `offhand`, so the window is smaller, but it is still there. C1 should pause auto-eat during `bot.craft` (`bot.autoEat.disable()` / `enable()`), or not craft while hungry.
+
+**PR 2 (offline proof of the flow):** `packages/forge-bridge/test/craft-e2e.test.js`. The real `initBot` runs through forge-bridge and REID against the fake Forge server plus `test/fake-containers.js`, a model of `processClickWindow`, the crafting result slot, FastWorkbench's OpenGui, placing and eating as read with `javap`. It uses the real Run A ids and the `fastbench` override, and builds prismarine-recipe objects the way C1 will.
+- The bot crafts the crude axe (2x2 shaped), Crafting Tools and the crafting table (2x2 shapeless), and a stone pickaxe at the FastWorkbench table (3x3).
+- Every click is accepted on the first try, and the server-side inventory ends up right.
+- `bot.placeBlock` places cobblestone, confirmed by `block_change`.
+- `bot.consume` eats bread with `use_item` hand 0.
+- Mutation check: with the FastWorkbench mapping removed, the table craft fails with the 20 s `windowOpen` timeout.
 
 **Live proof:** the encoding is checked against the vanilla jar and the real ids, and PR 2's flow against a fake server that follows the `javap` reading. A real-server check is still needed. The probe plan is under "Requests" (it needs a written GO).
 
