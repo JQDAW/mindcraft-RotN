@@ -29,6 +29,8 @@ test('threat-reactions.json: well formed, cited, and every entity exists on the 
     }
     for (const r of reactions.classRules) {
         assert.ok(r.id && r.pattern && REACTIONS.includes(r.reaction), `class rule ${r.id}`);
+        assert.ok([undefined, 'inferred', 'verified'].includes(r.confidence), `class rule ${r.id}: confidence`);
+        if (r.confidence === 'verified') assert.ok(r.evidence.some((e) => /\.jar[ :(]/.test(e)), `class rule ${r.id}: verified cites a jar`);
         assert.ok(r.summary && r.evidence?.length > 0 && r.note, `class rule ${r.id}: summary, evidence, note`);
     }
 });
@@ -161,6 +163,32 @@ test('cited follow-up: the mobs the lead listed, read from the mods bytecode (or
     assert.ok(defaults.every((t) => t.share < 0.02), `every remaining default is under 2%: ${defaults.map((t) => t.name).join(', ')}`);
     // No inferred entry is left (the lead's review remark is not evidence).
     assert.deepEqual(Object.entries(reactions.entities).filter(([, r]) => r.confidence === 'inferred').map(([n]) => n), []);
+});
+
+// Follow-up 2 (#140 note): Special Mobs enderman and witch variants, about 25% of each overworld family.
+test('Special Mobs enderman and witch variants get the vanilla reaction (verified), witch spiders do not', () => {
+    for (const n of ['blindingenderman', 'icyenderman', 'lightningenderman', 'minienderman', 'mirageenderman', 'thiefenderman', 'specialenderman']) {
+        const t = pack.threatOf(`specialmobs:${n}`);
+        assert.deepEqual([t.reaction, t.source, t.rule], ['ignore-unless-provoked', 'verified', 'enderman-variants'], n);
+    }
+    for (const n of ['dominationwitch', 'shadowswitch', 'undeadwitch', 'wildswitch', 'windwitch', 'specialwitch']) {
+        const t = pack.threatOf(`specialmobs:${n}`);
+        assert.deepEqual([t.reaction, t.ranged, t.source, t.rule], ['take-cover', true, 'verified', 'witch-variants'], n);
+    }
+    // Witch spiders are spiders: no witch rule.
+    for (const n of ['witchspider', 'witchcavespider']) assert.equal(pack.threatOf(`specialmobs:${n}`).rule, undefined, n);
+    // Entries win over the rules.
+    assert.deepEqual([pack.threatOf('minecraft:enderman').source, pack.threatOf('minecraft:witch').source], ['vanilla', 'vanilla']);
+    assert.equal(pack.threatOf('ancientbeasts:rifted_enderman').source, 'verified');
+    assert.equal(pack.threatOf('ancientbeasts:rifted_enderman').rule, undefined);
+    // No hostile enderman or witch class in the dump is left to the default 'fight'.
+    for (const [n, e] of Object.entries(pack.dump.entities.entities)) {
+        const simple = (e.class ?? '').split('.').pop();
+        if (!/(Enderman|Witch)$/.test(simple) || !pack.entity(n).hostile) continue;
+        assert.notEqual(pack.threatOf(n).reaction, 'fight', n);
+    }
+    // The creeper and skeleton rules stay inferred.
+    assert.equal(pack.threatOf('specialmobs:specialcreeper').source, 'inferred');
 });
 
 test('nightThreats: one biome, from its monster spawn list, hostile only, most likely first', () => {

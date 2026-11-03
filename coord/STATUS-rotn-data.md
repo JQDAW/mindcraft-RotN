@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T00:04Z (from `date -u`)
+Updated: 2026-11-03T00:06Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -192,7 +192,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 - **Free** (lead, after #138). Low-priority offline task done: the research note below (STATUS only, no code).
 - **Lead's pick, follow-up 1 (`agent/rotn-data/ub-rock-piles`; G3 critical path, skills-rotn B2 #141 uses the world rules):** the `rock-pile` rule names the Underground Biomes rock piles (`pyrotech_compat:rock_igneous`, `_metamorphic`, `_sedimentary`), per-pair `inferred`, cited from the dump (no collision box, hardness 0.1, no tool, each state drops its own item at the same meta, state names match item names) and S1-A (the metas seen near the G3 spawn). `pyrotech:rock` stays `documented`. Blocks item 1 below is done by it.
-- **Next: follow-up 2** (class rules for the enderman and witch variants).
+- **Follow-up 2 (`agent/rotn-data/ender-witch-rules`, based on #142):** class rules `enderman-variants` (`Enderman$`, ignore unless provoked) and `witch-variants` (`Witch$`, take cover, ranged), both `verified` from `specialmobs-1.0.4_for_mc1.12.2.jar` in the pinned pack: every variant extends `Entity_SpecialEnderman`/`Entity_SpecialWitch`, which extend the vanilla classes and call the vanilla `initEntityAI`; no variant adds a targeting task. Witch spiders are not caught. Class rules may now carry a `confidence` (default `inferred`). Mobs item 1's inconsistency in the note below is fixed by it.
 
 ## G3 first-night path: what rotn-data has NOT cited yet (research note, 2026-11-02)
 
@@ -287,3 +287,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 - #140: the G3 research note (STATUS only).
 - `agent/rotn-data/ub-rock-piles`: follow-up 1 (see Doing; includes #140 until it merges).
+- `agent/rotn-data/ender-witch-rules`: follow-up 2 (see Doing; based on the follow-up 1 branch).

@@ -283,6 +283,33 @@
         "the dump: the class's simple name contains 'Skeleton' or 'Stray' (fathertoast.specialmobs.entity.skeleton.*, net.minecraft.entity.monster.EntityStray, ...); the skeleton reaction is documented in docs/research/rotn-progression.md section 2"
       ],
       "note": "Inferred from the class name: some variants fight in melee (brute, knight, ninja). Wither skeletons and their Special Mobs variants (Nether mobs, mostly melee) are excluded and get the default."
+    },
+    {
+      "id": "enderman-variants",
+      "pattern": "Enderman$",
+      "reaction": "ignore-unless-provoked",
+      "confidence": "verified",
+      "summary": "A Special Mobs enderman variant: like an enderman, it targets a player who looks at it or hits it. Do not look at it; do not attack it on the first night. Some variants add effects (blindness, slowness, mining fatigue).",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (from the pinned pack zip; javap -c -p, no mod code run): Entity_SpecialEnderman extends net.minecraft.entity.monster.EntityEnderman, and every variant (Blinding, Icy, Lightning, Mini, Mirage, Thief) extends Entity_SpecialEnderman; Entity_SpecialEnderman.initEntityAI (func_184651_r) calls EntityEnderman.func_184651_r (the vanilla stare-based targeting) and then initTypeAI; no variant overrides initEntityAI or adds a targeting task, and none refers to EntityPlayer",
+        "effects referenced: EntityBlindingEnderman Blindness and Night Vision; EntityIcyEnderman Slowness and Mining Fatigue (MCP stable-39 fields.csv names)",
+        "the vanilla enderman entry (minecraft:enderman) and Special Mobs' overworld chance 0.25 (the pinned pack's config/Special_Mobs.cfg, endermen _special_chance_exceptions dimension/overworld=0.25)"
+      ],
+      "note": "Matches classes whose simple name ends with 'Enderman'; entries win over class rules, so minecraft:enderman (vanilla) and ancientbeasts:rifted_enderman (verified) keep theirs. What each variant does when provoked was not traced."
+    },
+    {
+      "id": "witch-variants",
+      "pattern": "Witch$",
+      "reaction": "take-cover",
+      "ranged": true,
+      "confidence": "verified",
+      "summary": "A Special Mobs witch variant: like a witch, it throws harmful potions from range. Stay behind cover. Some variants add effects (levitation, wither, blindness, poison).",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (from the pinned pack zip; javap -c -p, no mod code run): Entity_SpecialWitch extends net.minecraft.entity.monster.EntityWitch, and every variant (Domination, Shadows, Undead, Wilds, Wind) extends Entity_SpecialWitch; Entity_SpecialWitch.initEntityAI calls EntityWitch.func_184651_r (the vanilla ranged potion attack) and then initTypeAI; no variant overrides initEntityAI or adds a targeting task",
+        "effects referenced: EntityDominationWitch Levitation and Weakness; EntityShadowsWitch Blindness, Night Vision and Wither; EntityWildsWitch and EntityUndeadWitch Speed, Fire Resistance, Water Breathing (and Poison for Wilds); Entity_SpecialWitch Slowness, Speed, Fire Resistance, Water Breathing, Poison and Weakness (MCP stable-39 fields.csv names)",
+        "the vanilla witch entry (minecraft:witch) and Special Mobs' overworld chance 0.25 (config/Special_Mobs.cfg, witches _special_chance_exceptions dimension/overworld=0.25)"
+      ],
+      "note": "Matches classes whose simple name ends with 'Witch', so Special Mobs' witch spiders (EntityWitchSpider, EntityWitchCaveSpider) are not caught. minecraft:witch keeps its own entry. Which potions each variant throws was not traced."
     }
   ]
 }

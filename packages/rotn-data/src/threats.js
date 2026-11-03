@@ -5,8 +5,10 @@
 // threatOf combines the entity facts (entity(): hostile = IMob or bytecode-cited player targeting,
 // dangerous = entity-overrides.json) with the hand-written reactions in threat-reactions.json.
 // Order, first match wins: dangerous -> 'avoid' (source 'override'); an 'entities' entry; a
-// 'classRules' entry matching the dumped class's simple name, for hostile mobs (source 'inferred':
-// the Special Mobs and other creeper variants keep distance, skeleton variants take cover); then a
+// 'classRules' entry matching the dumped class's simple name, for hostile mobs (source: the rule's
+// confidence, default 'inferred': the creeper variants keep distance and the skeleton variants take
+// cover (inferred); the Special Mobs enderman and witch variants, read from the mod's bytecode,
+// ignore unless provoked and take cover (verified)); then a
 // default from the level (hostile -> fight, otherwise ignore; source 'default').
 //
 // Not reflected by threatOf: a mob's custom name. It can change behaviour: an Animania rabbit named
@@ -63,7 +65,7 @@ export function threatOf(catalog, input) {
     const out = {
         ...base,
         reaction: r?.reaction ?? DEFAULT_REACTION[level],
-        source: entry ? entry.confidence : rule ? 'inferred' : 'default',
+        source: entry ? entry.confidence : rule ? (rule.confidence ?? 'inferred') : 'default',
         summary: r?.summary ?? null,
         explodes: !!r?.explodes,
         ranged: !!r?.ranged,
