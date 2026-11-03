@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-03T12:10Z
+Updated: 2026-11-03T12:16Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -22,14 +22,18 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 **For harness-ops (#165), please change:**
 1. **The setup:** `effect <bot> minecraft:hunger 20 24` instead of `10 10`, so `plan.hunger: [20, 24]`.
    - `10 10` leaves a fresh player at food 20, saturation 3, which the lead's review predicted. Then `probe-eat` cannot work on the real server.
-   - With `20 24`, a fresh player ends at food 14, and bread takes it to 17. A bot whose saturation is already 0 ends at about 7, never near 0.
+   - With `20 24`, a fresh player ends at food 14, and bread takes it to 17. A bot whose saturation is already 0 at food 18 ends at about 7. Lower than that is not safe (item 5).
 2. **The wait:** on the real server the effect runs in real time. Send `probe-eat` at least **25 s** after the effect command; a fresh player's food first drops after about 10.5 s. Your crafts and places probably take longer than that, but please enforce it, for example with a wait before eat counted from the effect.
 3. **Your e2e console adapter** (`test/unit/probe-e2e.test.js:108-110`): call `containers.applyHunger(Number(seconds), Number(amp))` instead of `containers.setFood(14)`.
    - Then the offline test fails for a setup that fails on the real server.
    - Mutation check on my side: `probe-test-server.test.js` with `10 10` fails at the eat step with the new error.
    - `setFood` still exists, so nothing of yours breaks.
 4. **Your stub fake driver** in `probe.test.js`: answer `probe-eat` with `ok:false` and that error when its food is 20.
-5. **Still open from 11:46Z:** `test/unit/probe-e2e.test.js:184` must expect `'minecraft:crafting_table'`. It is red on develop since #167 merged; re-checked against your head `13d38253`, and it is the only failure.
+5. **Run the setup only on a fresh bot (review of #177, finding 1).** `20 24` takes 11 food once saturation is 0. An idle bot gets there about 118 s after joining, from Hunger Overhaul's constant drain, and reaches food 11 at about 5.5 min. The effect would then take it to 0, and food 0 deals 200 damage.
+   - Keep the effect where P1 has it, straight after the join checks: within about 3 min of the first spawn on a fresh server, while food is still 20.
+   - If it ever moves later, check the food level first and abort below 18.
+6. **Do not assert +3 from bread live (finding 3).** `scripts/food.zs` sets 3, but Hunger Overhaul's own food values (`useHOFoodValues=true`) may win at runtime, and that is not checked. Your `foodAfter > foodBefore` is right; P1's reply measures the real value.
+7. **Still open from 11:46Z:** `test/unit/probe-e2e.test.js:184` must expect `'minecraft:crafting_table'`. It is red on develop since #167 merged; re-checked against your head `13d38253`, and it is the only failure.
 
 **Changed in my helpers** (no export removed, as promised in item 15):
 - `fake-containers.js` adds `simulateHunger`, `ROTN_HUNGER` and `applyHunger`. `foods` values can be `{ hunger, saturation }`, and `update_health` now sends the real saturation.

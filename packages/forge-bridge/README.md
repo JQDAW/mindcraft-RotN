@@ -356,10 +356,18 @@ What different setups do:
 | Setup | Fresh player (20/5) | Saturation already 0 (food 18) |
 | --- | --- | --- |
 | `effect <bot> minecraft:hunger 10 10` | food 20, saturation 3: cannot eat | 16 |
-| **`effect <bot> minecraft:hunger 20 24`** (P1) | **food 14**, saturation 0. RotN bread (`scripts/food.zs`: 3 hunger, saturation 0.2) then makes it 17 | 7 |
+| **`effect <bot> minecraft:hunger 20 24`** (P1) | **food 14**, saturation 0. Bread should then make it 17 (see "Bread" below) | 7 |
 
-- **Wait after the setup.** The effect runs in real time. With `20 24`, a fresh player's food first drops after about 10.5 s, and the whole effect takes 20 s. Send `probe-eat` at least 25 s after the effect command.
-- **Offline model.** `simulateHunger` and `applyHunger` in `test/fake-containers.js` compute the same thing; `probe-test-server.js` uses them for its `effect` command. They apply the effect at once and leave out the constant loss before and after it. So the real server's food can only be lower, never higher.
+- **Only on a fresh bot.** `20 24` takes 11 steps. Once saturation is 0, that is 11 food.
+  - An idle bot loses saturation to the constant drain: 0.2 exhaustion per second, so saturation is 0 after about 118 s. After that it loses 1 food every 23.5 s, and it is at food 11 about 5.5 min after joining. The setup would then take it to 0, which means 200 damage.
+  - So run the effect only while food is at least 18. On a fresh test server, that means within about 3 minutes of the bot's first spawn, where P1's setup already is (straight after the join checks).
+  - If the setup can come later, check the food level first and abort below 18.
+- **Wait after the setup.** The effect runs in real time. With `20 24`, a fresh player's food first drops after about 10.5 s, and the whole effect takes 20 s. Send `probe-eat` at least 25 s after the effect command. An earlier `probe-eat` meets the fail-fast at food 20.
+- **Bread: 3 points is expected, not measured.** `scripts/food.zs` (HungerTweaker) sets 3 hunger and saturation 0.2. But Hunger Overhaul also rewrites food values (`modifyFoodValues=true`, `useHOFoodValues=true`), and nobody has checked which one wins at runtime. Live checks should assert only that food rose. P1's `foodBefore`/`foodAfter` will measure it.
+- **Offline model.** `simulateHunger` and `applyHunger` in `test/fake-containers.js` compute the same thing; `probe-test-server.js` uses them for its `effect` command.
+  - They apply the effect at once, so the real-time wait above is **not** tested offline.
+  - They leave out the constant loss before and after the effect, and the bot's own exhaustion. So the real server's food can only be lower, never higher.
+  - Bread is the expected 3 points.
 
 **Timing.**
 - Commands run one at a time, in arrival order.

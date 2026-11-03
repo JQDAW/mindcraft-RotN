@@ -46,7 +46,7 @@ export { stack };
 export const ROTN_HUNGER = Object.freeze({
     effectPerTick: (amplifier) => 0.005 * (amplifier + 1),
     constantPerTick: 0.01,
-    stepCost: 4 / 0.85,
+    stepCost: Math.fround(4 / Math.fround(85 / 100)), // Java: 4.0f / (85f / 100f)
     cap: 40,
 });
 
@@ -67,7 +67,7 @@ export function simulateHunger(s, seconds, amplifier) {
     const cost = f(ROTN_HUNGER.stepCost);
     for (let tick = 0; tick < seconds * 20; tick++) {
         exhaustion = Math.min(f(exhaustion + add), ROTN_HUNGER.cap);
-        if (exhaustion >= cost) {
+        if (exhaustion >= cost) { // AppleCore onAppleCoreFoodStatsUpdate: a step unless exhaustion < cost (fcmpl; iflt), so >=
             exhaustion = f(exhaustion - cost);
             steps++;
             if (saturation > 0) saturation = Math.max(f(saturation - 1), 0);
