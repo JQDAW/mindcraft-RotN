@@ -1,25 +1,24 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (03:11 UTC, from `date -u`)
+Updated: 2026-11-03 (11:42 UTC, from `date -u`)
 
-## Restart handoff (2026-11-03 03:11 UTC; Orca restart by the human, lead's request)
+## After the Orca restart (2026-11-03 11:42 UTC)
 
-**State at the stop:** every change is committed and pushed. There are no uncommitted changes and no background shells. Nothing touches the CX23; GO 3 is done and merged (#163).
+**State:** respawned by the lead. Both of my open PRs have the same copy of this file, merged with develop at 6a6d9ee2 (#168, #171). Nothing touches the CX23. No paid batch is running or planned without a written GO.
 
 **Open PRs (mine):**
 - **#169** `agent/harness-ops/g3-model-pin`: every LLM run uses `openrouter/@preset/glm-5-1-mindcraft`.
   - The Mindcraft driver refuses other models, and `result.llm.models` records the model.
-  - CI had not finished at the stop: check it first (`gh pr checks 169`).
-  - It depends on Requests item 16: skills-rotn's RotN profile must set that model. Until then every Mindcraft-driver run is refused at the start (fail closed).
+  - CI is green at 609731ab, and the branch now has develop merged in. It has not been reviewed yet.
+  - Requests item 16 is open as skills-rotn's **#170** (the RotN profile uses the preset). Until #170 merges, every Mindcraft-driver run is refused at the start (fail closed).
 - **#165** `agent/harness-ops/probe-p1`: probe P1, the scenario `probe-craft-place` (never a gate).
-  - The #165 review fixes are in 857e7d82: #162's protocol, the kick, exit and 120 s aborts, and the offline e2e `test/unit/probe-e2e.test.js` against the real `g1-driver` (2 pass).
-  - CI was green and the PR merged cleanly at 857e7d82. It waits for the lead's re-review.
+  - The #165 review fixes are in 857e7d82: #162's protocol, the kick, exit and 120 s aborts, and the offline e2e `test/unit/probe-e2e.test.js` against the real `g1-driver` (2 pass). CI was green there.
+  - It conflicted with develop on this file only (#166's STATUS changes). Develop is now merged in, and this file is the same as on #169. It waits for the lead's re-review.
 
-**Exact next step after the restart:**
-1. Read this file and `docs/PLAN.md`.
-2. `git fetch origin`, then for each open PR: `gh pr view N --json state,mergeable` and `gh pr checks N`.
-3. **If a PR conflicts with develop:** it is almost always this STATUS file. Merge develop into the branch, keep one shared "Open PRs" list, and push. Never force-push.
-4. **Then wait for the lead.** The P1 batch needs #165 merged and the lead's written GO. The first G3 batch needs #169 merged, the RotN profile with the model (Requests item 16), the Orca restart for `OPENROUTER_API_KEY` (a Windows user environment variable now), and a written GO.
+**Next step:** wait for the lead.
+- The P1 batch needs #165 and net-forge's #167 merged, then the lead's written GO.
+- The first G3 batch needs #169 and #170 merged, the lead's check that a fresh Orca terminal sees `OPENROUTER_API_KEY` (set or not set only), and a written GO.
+- If a PR conflicts with develop again, it is almost always this file: merge develop in, keep one shared "Open PRs" list, and push. Never force-push.
 
 **Rules still in force:**
 - PC memory is tight: targeted test files only, one at a time; no `npm ci`, no full suite, no Docker. CI runs the full suite.
@@ -1150,16 +1149,16 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
     **A separate point for the human:** sshd allows password logins (`passwordauthentication yes`), and nothing filters the ports until GO 2 turns on ufw. With no lockdown (the human's decision), the `deploy` password from H2 will also work over SSH. Turning off `PasswordAuthentication` before H2 would close that. It is the human's call, and it is not part of my bootstrap.
 
-16. **skills-rotn (via the lead): the RotN profile's model.** The Mindcraft driver now refuses any profile whose `model` is not `"openrouter/@preset/glm-5-1-mindcraft"` (the human's decision; this PR). Until the RotN profile in `profiles/` sets it, every G3 or smoke run is refused at the start (exit 3, `refused`), which fails closed, as intended.
+16. **skills-rotn (via the lead): the RotN profile's model.** Open as skills-rotn's #170. The Mindcraft driver refuses any profile whose `model` is not `"openrouter/@preset/glm-5-1-mindcraft"` (the human's decision; #169). Until the RotN profile in `profiles/` sets it, every G3 or smoke run is refused at the start (exit 3, `refused`), which fails closed, as intended.
     - If the profile sets `code_model` or `vision_model`, they must be the same model.
     - The embedding model is not checked.
 ## Open PRs
 
-- This PR: **the model of every LLM run** (`agent/harness-ops/g3-model-pin`):
+- #169: **the model of every LLM run** (`agent/harness-ops/g3-model-pin`):
   - **The Mindcraft driver refuses** a profile whose model is not `openrouter/@preset/glm-5-1-mindcraft`, in any of its two profile forms, and the same for `code_model` and `vision_model` when set.
   - **The model is recorded:** each run's `result.json` has it in `llm.models`, from the driver's `mindcraft_start` event.
   - **Never a gate pass otherwise:** a G3 run whose recorded model is not the preset is not gate-valid.
-  - **The test key:** `OPENROUTER_API_KEY` is now a Windows user environment variable. Orca terminals see it only after an Orca restart, which the lead schedules before the first G3 batch.
+  - **The test key:** `OPENROUTER_API_KEY` is a Windows user environment variable. The human has restarted Orca (2026-11-03); the lead checks that a fresh terminal sees it (set or not set only).
 - #165: probe P1, the scenario `probe-craft-place` (never a gate), with the #165 review fixes and the offline e2e against the real driver (CI green).
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
 - Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b), #166 (`deploy.sh` refuses the test-only giver settings), and the lead's #134 (ADR 0007).
