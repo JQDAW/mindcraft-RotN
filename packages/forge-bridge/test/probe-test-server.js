@@ -103,7 +103,8 @@ export async function startProbeTestServer({ name = 'FRCFLD', placeDelayMs = 30 
             c.on('chat', (p) => add(`<${name}> ${p.message}`));
             c.on('position', (p) => { position = [p.x, p.y, p.z]; });
             c.on('position_look', (p) => { position = [p.x, p.y, p.z]; });
-            c.on('end', () => { add(`${name} lost connection: Disconnected`); add(`${name} left the game`); });
+            // The real server logs 'lost connection' under NetHandlerPlayServer; the harness parsers read only the message.
+            c.on('end', () => { add(`${name} lost connection: Disconnected`, 'net.minecraft.network.NetHandlerPlayServer'); add(`${name} left the game`); });
         },
     });
 
@@ -158,6 +159,8 @@ export async function startProbeTestServer({ name = 'FRCFLD', placeDelayMs = 30 
             else if (containers.state.table && containers.state.table.x === x && containers.state.table.y === y && containers.state.table.z === z) containers.setTable(null);
             return add('Block placed');
         }
+        // A failed testforblock prints registry names here; the real server prints display names. The
+        // harness parsers read only the success line and the 'The block at x, y, z ' prefix.
         if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) (\S+)(?: \d+)?$/.exec(cmd))) {
             const at = blockAt(Number(m[1]), Number(m[2]), Number(m[3]));
             return add(at === m[4] ? `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}` : `The block at ${m[1]}, ${m[2]}, ${m[3]} is ${at} (expected: ${m[4]})`);

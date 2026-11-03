@@ -387,8 +387,8 @@ This is the contract between `tools/probe-commands.mjs` (the bot side, net-forge
 - **Chat.** Besides the stdout line, one chat line `probe TOKEN CMD ok|fail k=v ...` goes into the server log (at most 200 characters; spaces in values become `_`). It is for people reading the log, not part of the contract.
 
 **Testing a scenario against the real module.**
-- `test/probe-test-server.js` is a fake RotN test server behind the runner's server interface: `console(cmd)` and `log(n)` in the 1.12 log format, for every command on P1's console allowlist.
-- `test/probe-test-server.test.js` drives the real g1-driver through harness-ops' `driverProcess` adapter with P1's steps, and checks every reply with `checkProbeReply`.
+- `packages/forge-bridge/test/probe-test-server.js` is a fake RotN test server behind the runner's server interface: `console(cmd)` and `log(n)` in the 1.12 log format, for every command on P1's console allowlist.
+- `packages/forge-bridge/test/probe-test-server.test.js` drives the real g1-driver through harness-ops' `driverProcess` adapter with P1's steps, and checks every reply with `checkProbeReply`.
 - For the scenario's own end-to-end test, pass that server and the adapter to `runScenario`.
 
 ## Tests

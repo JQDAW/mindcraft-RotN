@@ -40,6 +40,7 @@ test('registryName gives full names; checkProbeReply holds a reply to the contra
     assert.ok(checkProbeReply({ ...ok, v: 0 }).some(p => p.startsWith('v is')));
     assert.deepEqual(checkProbeReply({ v: 1, token: 'abcdef', cmd: 'craft', ok: false, error: 'time limit of 60000 ms reached', timedOut: true, limitMs: 60000 }), []);
     assert.ok(checkProbeReply({ v: 1, token: 'abcdef', cmd: 'eat', ok: false }).includes('failure without error'));
+    assert.ok(checkProbeReply({ v: 1, token: 'abcdef', cmd: 'eat', ok: false, error: 'x', timedOut: false }).some(p => p.startsWith('timedOut:')), 'timedOut is only ever true');
 });
 
 test('pickVariant never counts one stack for two cells (any meta plus a fixed meta of the same id)', () => {

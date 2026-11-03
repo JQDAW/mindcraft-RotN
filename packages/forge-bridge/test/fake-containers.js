@@ -241,6 +241,7 @@ export function attachFakeContainers(client, opts) {
         },
         /** Change the food level (update_health), as hunger would. */
         setFood(n) { state.food = n; client.write('update_health', { health: 20, food: n, foodSaturation: 0 }); },
+        // The main inventory and hotbar (9-44) only; the real /clear also counts armour, the offhand and the cursor.
         count(id, meta = -1) { return inv.slice(9, 45).reduce((n, s) => n + (s?.id === id && (meta === -1 || s.meta === meta) ? s.count : 0), 0); },
         /** /give: merge into matching stacks, then the first empty hotbar slot, then the main inventory (vanilla order). */
         give(id, count, meta = 0) {

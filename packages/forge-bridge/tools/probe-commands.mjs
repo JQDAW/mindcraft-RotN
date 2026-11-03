@@ -57,7 +57,7 @@ export const COMMAND_TIME_LIMIT_MS = 60000;
 export const PROBE_CONTRACT_VERSION = 1;
 export const PROBE_REPLY = Object.freeze({
     common: Object.freeze({ type: 'string', t: 'string', v: 'number', token: 'string', cmd: 'string', ok: 'boolean' }),
-    failure: Object.freeze({ error: 'string', timedOut: 'boolean', limitMs: 'number', line: 'string' }),
+    failure: Object.freeze({ error: 'string', timedOut: 'true', limitMs: 'number', line: 'string' }),
     craft: Object.freeze({
         base: Object.freeze({ recipe: 'string', table: 'pos|null' }),
         done: Object.freeze({ variant: 'number', variants: 'number', result: 'name', resultMeta: 'number|null', before: 'number', after: 'number', ms: 'number', tableBlock: 'name|null' }),
@@ -74,6 +74,7 @@ export const PROBE_REPLY = Object.freeze({
 
 const isType = (v, type) => type.split('|').some((t) => {
     if (t === 'null') return v === null;
+    if (t === 'true') return v === true;
     if (t === 'name') return typeof v === 'string' && /^[a-z0-9_.-]+:[a-z0-9_./-]+$/.test(v);
     if (t === 'pos') return Array.isArray(v) && v.length === 3 && v.every(Number.isInteger);
     if (t === 'number') return typeof v === 'number' && Number.isFinite(v);
@@ -306,10 +307,11 @@ export function attachProbe(bot, {
             const countBefore = held(bot, def.id, null);
             const t0 = Date.now();
             await bot.consume();
+            const ms = Date.now() - t0; // bot.consume only, not the wait below
             // The server's update_health and the item slot's set_slot can come just after the eating
             // status; wait (at most 2 s) for both before reading them.
             for (let waited = 0; (bot.food === foodBefore || held(bot, def.id, null) === countBefore) && waited < 2000; waited += 100) await sleep(100);
-            const data = { ...base, foodBefore, foodAfter: bot.food, countBefore, countAfter: held(bot, def.id, null), ms: Date.now() - t0 };
+            const data = { ...base, foodBefore, foodAfter: bot.food, countBefore, countAfter: held(bot, def.id, null), ms };
             const ok = data.foodAfter > foodBefore && data.countAfter === countBefore - 1;
             await answer(token, 'eat', ok, { ...data, ...(ok ? {} : { error: `food ${foodBefore} -> ${data.foodAfter}, ${name} ${countBefore} -> ${data.countAfter}` }), chat: { food: `${foodBefore}->${bot.food}`, left: data.countAfter } });
         } catch (err) {

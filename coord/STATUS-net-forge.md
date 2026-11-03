@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-03T02:52Z
+Updated: 2026-11-03T02:58Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -21,7 +21,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 - **Crafting**, the same call for the 2x2 grid and the table:
   1. Get the recipe. Either take rotn-data's dump recipe through `convertRecipe(bot.registry, dumpRecipe)` (`packages/rotn-data/index.js`), pick the first variant the inventory covers, and build `new (require('prismarine-recipe')(bot.registry).Recipe)(variant)` (this is what P1's `probe-craft` does, see `pickVariant` in `packages/forge-bridge/tools/probe-commands.mjs`). Or use `bot.recipesFor(itemId, meta, 1, table)`, which `initBot` fills with the same conversions (`installRotnRecipesOnce`); that path is not exercised in my tests.
   2. Call `await bot.craft(recipe, count, table)`. `table` is `null` for the 2x2 grid, or `bot.blockAt(pos)` of a `minecraft:crafting_table` (FastWorkbench) within reach. No FastWorkbench-specific code is needed.
-- **Placing:** `await bot.placeBlock(referenceBlock, faceVector)` with the item held (`bot.equip(item, 'hand')`). The wait comes from settings. `bot._placeBlockWithOptions(ref, face, { timeout })` sets the wait for one call. A failure throws `Event blockUpdate:(x, y, z) did not fire within timeout of N ms`. mineflayer returns on the first change of block type at the target; check `bot.blockAt(target)` afterwards if it matters.
+- **Placing:** `await bot.placeBlock(referenceBlock, faceVector)` with the item held (`bot.equip(item, 'hand')`). The wait comes from settings. `bot._placeBlockWithOptions(ref, face, { timeout })` sets the wait for one call. A failure throws `Event blockUpdate:(x, y, z) did not fire within timeout of <N>ms` (no space before `ms`). mineflayer returns on the first change of block type at the target; check `bot.blockAt(target)` afterwards if it matters.
 - **Eating:** `await bot.consume()` with the food held.
 
 **Rules for C1:**
@@ -597,6 +597,7 @@ The setup for both batches:
   - `checkProbeReply(reply)` from `packages/forge-bridge/tools/probe-commands.mjs`, on the fake driver's replies, so they can only send what the real driver sends;
   - an end-to-end test against the real module: `packages/forge-bridge/test/probe-test-server.js` is a fake RotN test server behind the runner's `console`/`log` interface. `probe-test-server.test.js` shows the real g1-driver started through `driverProcess`; pass the same `server` and adapter to `runScenario(probe, ...)`.
   - The fake server stays in forge-bridge's `test/` (net-forge's). If harness-ops would rather own it, say so in your STATUS and I will hand it over.
+  - Note for harness-ops: `probe-test-server.test.js` imports your `test/runner/lib/adapters.mjs` (`driverProcess`, read-only). A change to that adapter's interface breaks this net-forge test; please tell me in STATUS when it changes.
 - **Probe plan P1 for the human's GO (Request 2 live proof). Accepted in principle by the lead (2026-11-03). Not started: the lead writes the GO after the driver PR and harness-ops' scenario PR merge.**
   - **What it proves:** the offline tests cannot prove these three things on the real RotN 3.3.4 server:
     1. Serverbound REID: the server accepts `window_click` stacks with VarInt item ids above 4095 (crude axe 9075, rock 8917, Crafting Tools 12510).
