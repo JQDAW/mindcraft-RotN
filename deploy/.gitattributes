@@ -5,3 +5,7 @@
 *.yml      text eol=lf
 *.env      text eol=lf
 *.tmpl     text eol=lf
+# Everything under cx23/ is copied as a folder to the bot's server (deploy/cx23/README.md), so every
+# file there is LF, whatever its type: a Windows checkout with core.autocrlf=true gave CRLF copies of
+# bot.env.example, check-env.mjs and README.md (lead, after GO 2). test/unit/deploy-eol.test.js checks it.
+cx23/**    text eol=lf

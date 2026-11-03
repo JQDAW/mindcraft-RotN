@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (02:27 UTC, from `date -u`)
+Updated: 2026-11-03 (02:33 UTC, from `date -u`)
 
 ## Done
 
@@ -1127,9 +1127,8 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the #157 nit on the CX23 side (`agent/harness-ops/cx23-deploy-giver-check`). `deploy.sh` refuses a release whose `settings.js` turns on the test-only `allow_server_task_giver` (anything but `false` or absent), or names `Server` in a task-giver list. It checks this the same way as `allow_insecure_coding`: importing the file in an empty environment, before `npm ci`.
+- #163: the GO 3 CX23 post-bootstrap check evidence, with the lead's review nits. The terminal was closed at 02:16:21 UTC (CI green).
 - #165: probe P1, the scenario `probe-craft-place` (never a gate) and the protocol for net-forge (Requests item 15).
-- #163: the GO 3 CX23 post-bootstrap check evidence. The terminal was closed at 02:16:21 UTC (CI green).
-- #159: every file under `deploy/cx23/` is LF (CI green).
+- #166: the #157 nit. `deploy.sh` refuses a release with the test-only `allow_server_task_giver` or a `Server` task giver.
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
-- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), and the lead's #134 (ADR 0007).
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), and the lead's #134 (ADR 0007).
