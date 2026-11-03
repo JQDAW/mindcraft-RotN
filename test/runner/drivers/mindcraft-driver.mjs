@@ -15,7 +15,9 @@
 //         (forge-bridge's own rule);
 //       * the settings.js next to main.js (the file main.js really imports; there is no option to check
 //         another one) must evaluate to allow_insecure_coding === false, as deploy.sh checks;
-//       * the profile must exist, parse, carry no task, and be named as the runner's bot.
+//       * the profile must exist, parse, carry no task, and be named as the runner's bot;
+//       * the profile's model must be openrouter/@preset/glm-5-1-mindcraft (LLM_MODEL in lib/g3.mjs; the
+//         human's decision for every LLM run), and so must code_model and vision_model when set.
 //   - Starts `node main.js` with MINDCRAFT_SINGLE_BOT_SERVICE=1, PROFILES=[profile], a free local
 //     MINDSERVER_PORT, and SETTINGS_JSON={"host","port","auth":"microsoft","auto_open_ui":false,
 //     "allow_server_task_giver":true} from the runner's TEST_SERVER_HOST/PORT (the last is skills-rotn's
@@ -35,7 +37,7 @@ import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { giverProblems } from '../lib/g3.mjs';
+import { giverProblems, modelProblems, profileModels } from '../lib/g3.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const EXIT_FATAL = 3;
@@ -79,7 +81,10 @@ export function envProblems(env, { debugEnables = () => false } = {}) {
     return p;
 }
 
-/** Problems with the profile file: missing, not JSON, a task in it, or a different bot name. */
+/**
+ * Problems with the profile file: missing, not JSON, a task in it, a task-giver key, a different bot name,
+ * or a model other than LLM_MODEL (the human's decision for every LLM run, 2026-11-03).
+ */
 export function profileProblems(file, bot) {
     let prof;
     try {
@@ -94,6 +99,7 @@ export function profileProblems(file, bot) {
     // Task givers come from settings.js and, for the test-only "Server", from the driver alone (#146).
     for (const k of Object.keys(prof).filter((x) => /giver/i.test(x))) p.push(`profile ${file}: has '${k}' (task givers are settings, and the test-only Server giver is the driver's alone)`);
     if (bot && prof.name !== bot) p.push(`profile ${file}: name '${prof.name}' is not the runner's bot '${bot}'`);
+    for (const m of modelProblems(prof)) p.push(`profile ${file}: ${m}`);
     return p;
 }
 
@@ -166,7 +172,9 @@ async function main(argv) {
         detached: posix,   // POSIX: its own process group, so a stop reaches the agent too; never on Windows (job object)
     });
     // The paths of what runs and of the settings file that was checked (the one main.js imports).
-    event('mindcraft_start', { pid: child.pid, main: path.resolve(o.main), settings: o.settings, profile: o.profile, mindserverPort });
+    // The models the agent will use (checked above to be LLM_MODEL), for the run record (run.mjs, result.llm.models).
+    const models = profileModels(JSON.parse(fs.readFileSync(o.profile, 'utf8')));
+    event('mindcraft_start', { pid: child.pid, main: path.resolve(o.main), settings: o.settings, profile: o.profile, mindserverPort, models });
 
     let stopping = false;
     const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));
