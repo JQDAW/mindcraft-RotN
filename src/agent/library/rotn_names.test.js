@@ -129,3 +129,9 @@ test('craftRecipe asks recipesFor for the named variant ("planks:1" spruce), not
         assert.deepEqual([...metas], [expected], name);
     }
 });
+
+test('#131 nit: "minecraft:" is recognised after leading spaces too', () => {
+    assert.equal(names.canonicalName('  minecraft:snow', 'items'), 'snow', 'the 1.12 snow block, as written');
+    assert.equal(names.canonicalName('minecraft:snow', 'items'), 'snow');
+    assert.equal(names.canonicalName('snow', 'items'), 'snow_layer');
+});
