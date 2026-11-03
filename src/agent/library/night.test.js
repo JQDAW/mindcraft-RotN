@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
-import { nightPhase, minutesToSunset, isSturdy, shelterShell, shelterPlan, NIGHT_START, NIGHT_END, SHELTER_LEAD_MIN, TICKS_PER_MIN } from './night.js';
+import { nightPhase, minutesToSunset, isSturdy, shelterShell, shelterPlan, NightClock, NIGHT_START, NIGHT_END, SHELTER_LEAD_MIN, TICKS_PER_MIN, FREEZE_MIN, STUCK_BOUND_MIN } from './night.js';
 
 const reg = minecraftData('1.12.2');
 const block = (name) => {
@@ -70,4 +70,40 @@ test('a shelter: 10 shell blocks around a 1x2 space; in the open all 10 are miss
 
     const unloaded = shelterPlan(world('stone', { ...interior, '4,64,-4': null }), feet);
     assert.deepEqual(unloaded.missing.map(m => m.block), ['unloaded']);
+});
+
+test('lead decision on D2a: the server time first; stuck longer than the freeze bound plus a margin, the wall clock, logged once each way', () => {
+    const logs = [];
+    const clock = new NightClock({ log: (m) => logs.push(m) });
+    const MIN = 60_000;
+    assert.equal(clock.timeOfDay(0), null, 'no value yet');
+    assert.equal(clock.phase(0), null);
+    clock.observe(NaN, 0);
+    assert.equal(clock.timeOfDay(0), null, 'a bad value is ignored');
+
+    // Running normally, then Extended Days' 10 min morning freeze: still the server's time.
+    clock.observe(1800, 0);
+    clock.observe(3000, 1 * MIN);
+    assert.equal(clock.timeOfDay(1 * MIN + FREEZE_MIN * MIN), 3000);
+    assert.equal(clock.timeOfDay(1 * MIN + STUCK_BOUND_MIN * MIN), 3000, 'up to the bound');
+    assert.deepEqual(logs, []);
+
+    // Stuck past the bound: the wall clock, less the one freeze, at the measured rate.
+    const at = 1 * MIN + (STUCK_BOUND_MIN + 3) * MIN;
+    assert.equal(clock.timeOfDay(at), 3000 + (STUCK_BOUND_MIN + 3 - FREEZE_MIN) * TICKS_PER_MIN);
+    assert.equal(clock.fallback, true);
+    assert.equal(logs.length, 1);
+    assert.match(logs[0], /^\[night\] the time has stayed at 3000 for 18 min \(more than 15\); using the wall clock until it advances$/);
+    const late = 1 * MIN + 20 * MIN; // 10 min of running time after the freeze: 14990, night
+    assert.deepEqual([clock.timeOfDay(late), clock.phase(late)], [3000 + 10 * TICKS_PER_MIN, 'night']);
+    assert.equal(logs.length, 1, 'logged once');
+
+    // The value advances again: the server's time, logged once.
+    clock.observe(12700, late);
+    assert.deepEqual([clock.fallback, clock.timeOfDay(late)], [false, 12700]);
+    assert.match(logs[1], /^\[night\] the time advances again \(3000 -> 12700\); using the server's time$/);
+
+    // Stuck at a value that is no freeze point: the whole stuck time counts.
+    clock.observe(8000, 0);
+    assert.equal(clock.timeOfDay((STUCK_BOUND_MIN + 1) * MIN), (8000 + (STUCK_BOUND_MIN + 1) * TICKS_PER_MIN) % 24000);
 });

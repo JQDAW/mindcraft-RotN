@@ -7,7 +7,9 @@
 // 1,199 ticks per minute), but Extended Days freezes it for about 10 min at 3000
 // (morning) and at 16000 (early night). Night is 12542-23460, about 19 min. So the
 // time of day is a usable signal once these freezes are known. The brief's caution
-// ("do not rely on world time values") predates that measurement.
+// ("do not rely on world time values") predates that measurement. Lead decision (D2a):
+// world time with these bounds is the primary detector, with a fallback when the value
+// stops advancing (NightClock).
 //
 // A shelter (rotn-progression.md section 3, step 12): the bot stands in a 1x2
 // space, fully enclosed by sturdy blocks (stone or cobblestone, never dirt, sand,
@@ -17,6 +19,7 @@ import { Vec3 } from 'vec3';
 export const NIGHT_START = 12542;
 export const NIGHT_END = 23460;
 export const MORNING_FREEZE = 3000;
+export const NIGHT_FREEZE = 16000;
 export const TICKS_PER_MIN = 1199;
 export const FREEZE_MIN = 10;
 /** Start sheltering this long before sunset (the plan says 5 to 8 min). */
@@ -42,6 +45,59 @@ export function nightPhase(timeOfDay) {
     const t = norm(timeOfDay);
     if (t >= NIGHT_START && t < NIGHT_END) return 'night';
     return minutesToSunset(t) <= SHELTER_LEAD_MIN ? 'dusk' : 'day';
+}
+
+/** A time value stuck longer than this (the measured freeze plus a margin) is not trusted. */
+export const STUCK_BOUND_MIN = FREEZE_MIN + 5;
+
+/**
+ * The time of day the night detector uses (lead decision on D2a): the server's value, and a
+ * fallback when it has not advanced for longer than STUCK_BOUND_MIN.
+ *
+ * The fallback is the wall clock: the last value plus the measured rate for the time since,
+ * less one freeze if the value stuck at a freeze point. In 1.12 sky light and the sunset event
+ * are no independent signal: chunk sky light is fixed per block (the darkening is computed from
+ * the same world time), and the agent's 'sunset' event comes from the time packets. Each switch
+ * to and from the fallback is logged once.
+ */
+export class NightClock {
+    constructor({ log = (m) => console.warn(m) } = {}) {
+        this.log = log;
+        this.last = null; // {t, at}: the latest value and when it last changed
+        this.fallback = false;
+    }
+
+    /** Feed the server's time of day (bot.time.timeOfDay) with the wall-clock time in ms. */
+    observe(timeOfDay, at) {
+        if (!Number.isFinite(timeOfDay)) return;
+        const t = norm(timeOfDay);
+        if (this.last && this.last.t === t) return;
+        if (this.fallback) {
+            this.fallback = false;
+            this.log(`[night] the time advances again (${this.last?.t} -> ${t}); using the server's time`);
+        }
+        this.last = { t, at };
+    }
+
+    /** The time of day to judge by, or null before the first value. */
+    timeOfDay(at) {
+        if (!this.last) return null;
+        const stuckMin = (at - this.last.at) / 60_000;
+        if (stuckMin <= STUCK_BOUND_MIN) return this.last.t;
+        if (!this.fallback) {
+            this.fallback = true;
+            this.log(`[night] the time has stayed at ${this.last.t} for ${Math.round(stuckMin)} min (more than ${STUCK_BOUND_MIN}); using the wall clock until it advances`);
+        }
+        const atFreeze = this.last.t === MORNING_FREEZE || this.last.t === NIGHT_FREEZE;
+        const runMin = Math.max(0, stuckMin - (atFreeze ? FREEZE_MIN : 0));
+        return norm(this.last.t + runMin * TICKS_PER_MIN);
+    }
+
+    /** nightPhase of timeOfDay(at); null before the first value. */
+    phase(at) {
+        const t = this.timeOfDay(at);
+        return t === null ? null : nightPhase(t);
+    }
 }
 
 /** A block mobs cannot simply dig or burn through: rock, or a solid modded block as hard as stone. */
