@@ -1,6 +1,6 @@
 # CX23 bot runtime: bootstrap, unit, deploy (brief deliverable 5)
 
-Everything here runs **on the bot's CX23** (Ubuntu 24.04). Nothing in this folder connects to the CX23 from the PC, and no agent logs in to it: the first steps need the human's root login.
+Everything here runs **on the bot's CX23** (Ubuntu 26.04, ADR 0007; `bootstrap.sh` still accepts 24.04). Nothing in this folder connects to the CX23 from the PC, and no agent logs in to it: the first steps need the human's root login.
 
 So far these files are **tested offline only** (`test/unit/cx23.test.js`, with fake system commands, plus `shellcheck` and `systemd-analyze verify` in CI). The first real run, the 2-hour soak and the G4 acceptance run come later, with the lead's approval.
 
@@ -17,24 +17,49 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
 ## One-time bootstrap (human, with the root login)
 
 1. Copy this folder to the server: `scp -r deploy/cx23 root@<cx23>:/root/cx23`. Also copy the `deploy` user's **public** key (`deploy.pub`).
-2. `bash /root/cx23/bootstrap.sh setup --deploy-key-file /root/deploy.pub` (optionally `--ssh-from <your-ip>/32`). This step:
+2. `bash /root/cx23/bootstrap.sh setup --deploy-key-file /root/deploy.pub`.
+
+   **GO 2 runs without `--ssh-from`** (#137 review): SSH stays open to all addresses, by key only.
+   - A narrow rule ties SSH to one address. If that address changes later (a home IP, for example), every new SSH login is shut out, root's included. The current session lives on, so the lockout only shows the next day.
+   - If `--ssh-from <CIDR>` is ever used, setup refuses a CIDR that does not contain this SSH session's own client address (from `SSH_CONNECTION`), and refuses outright outside an IPv4 SSH session.
+
+   **Checks before it changes anything.** A mismatch stops setup with a message:
+   - the OS is Ubuntu 26.04 or 24.04;
+   - there is an `ssh.service` unit (setup reloads it, and lockdown reads its journal);
+   - `sshd` is installed;
+   - `/etc/ssh/sshd_config` includes `/etc/ssh/sshd_config.d/*.conf`;
+   - `sshd -T` reports port 22 and no other, since ufw opens only 22.
+
+   These are the system steps that the Ubuntu 26.04 CI job (`.github/workflows/ci-ubuntu-2604.yml`) cannot test in a container.
+
+   This step:
    - creates `deploy` (key login; groups `sudo` and `mindcraft-rotn`) and the system user `mindcraft-rotn` (no login, home `/var/lib/mindcraft-rotn`);
    - turns on unattended **security** upgrades (`20auto-upgrades`; Ubuntu's default `50unattended-upgrades` limits them to the security pocket);
-   - sets ufw to deny incoming except SSH. It allows SSH *before* enabling ufw, so the session survives;
+   - sets ufw to deny incoming except SSH. It allows SSH *before* enabling ufw, so the session survives. It also checks that the SSH rule is listed (`ufw show added`) before enabling, and that `ufw status` is active afterwards; a mismatch stops setup;
    - adds a 2 GB `/swapfile` (with `vm.swappiness=10`) if no swap exists;
    - installs **Node 22** from NodeSource's apt repo, then git. The repo key's fingerprint is pinned (see "NodeSource key" below), and setup refuses on a mismatch. Changing the pin needs both `NODESOURCE_KEY_FPR=<new>` and `--allow-fpr-override`;
-   - installs the unit, `check-env`, `mindcraft-rotn-ctl`, and a sudoers rule (checked with `visudo -c`) letting `deploy` run only `mindcraft-rotn-ctl` without a password;
+   - installs a sudoers rule letting `deploy` run only `mindcraft-rotn-ctl` without a password. It is checked twice:
+     - with `visudo -c` before it goes in place;
+     - with `sudo -l -U deploy` afterwards, because Ubuntu 26.04 ships **sudo-rs** as `sudo`.
+
+     If sudo does not show the rule, setup removes it and stops;
+   - **turns SSH password login off** (the human's decision for GO 2) with `/etc/ssh/sshd_config.d/10-mindcraft-rotn.conf`, which sets `PasswordAuthentication no` and `KbdInteractiveAuthentication no`.
+     - The file name must sort before cloud-init's `50-cloud-init.conf` (which may say `PasswordAuthentication yes`), because sshd keeps the first value it reads.
+     - Setup runs `sshd -t`, then checks the effective values with `sshd -T`, and only then reloads ssh.
+     - If either check fails, it puts back what was there, so sshd is never left half-configured.
+     - `PermitRootLogin` is not touched: root keeps its key login (`prohibit-password`);
+   - installs the unit, `check-env` and `mindcraft-rotn-ctl`;
    - creates `/opt/mindcraft-rotn` (`deploy:mindcraft-rotn`, 0750), `/var/lib/mindcraft-rotn` and `/etc/mindcraft-rotn` (`root:mindcraft-rotn`, 0750).
 
-   Root and password login stay **on** after `setup`.
+   After `setup`, SSH password login is **off**, and root login by key stays **on**.
 
    Re-running `setup` is safe. It appends a missing key to `deploy`'s `authorized_keys` and never drops keys already there. With `--ssh-from`, it adds the narrow SSH rule and then removes an earlier open `22/tcp` rule.
 3. In a **second** terminal: `ssh deploy@<cx23>`. It must work.
-4. As root: `passwd deploy`. This is `deploy`'s own sudo password for admin work once root login is off.
-5. **Optional, and not run on this project's CX23** (the human's decision on #101): the human keeps root SSH and instead swaps Orca's root target for a `deploy` target; see `coord/STATUS-harness-ops.md`, "CX23 first run". `bash /root/cx23/bootstrap.sh lockdown --i-tested-deploy-login`. This writes `/etc/ssh/sshd_config.d/00-mindcraft-rotn.conf` (no root login, no passwords, `AllowUsers deploy`). It checks the file with `sshd -t`, then reloads ssh. It refuses unless:
-   - `deploy` has a key;
-   - `deploy` has a sudo password;
-   - the ssh journal shows an `Accepted publickey for deploy` line since setup. The flag alone is not enough: step 3 must really have happened.
+4. As root: `passwd deploy`. This is `deploy`'s own **sudo** password. SSH never accepts it, because password login is off.
+5. **There is no step 5 on this project's CX23.** `bootstrap.sh` also has a `lockdown` subcommand. **It is not run here:** by the human's decisions on #101 and ADR 0007, root keeps key-only SSH (`PermitRootLogin prohibit-password`).
+   - **What it would do:** write `/etc/ssh/sshd_config.d/00-mindcraft-rotn.conf` with `PermitRootLogin no` and `AllowUsers deploy`, which cuts off root's SSH.
+   - **Why it is hard to run by accident:** it refuses unless it gets an explicit flag of its own that names that effect, *and* `deploy` has a key and a sudo password, *and* the ssh journal shows a real key login for `deploy` since setup.
+   - Its usage is in the header of `bootstrap.sh`. It runs only on the lead's written decision.
 
 ## Each bot
 
@@ -97,5 +122,12 @@ That is the pin in `bootstrap.sh`.
 
 ## Not verified yet
 
+- **The 26.04 system steps on a real server** (ADR 0007). Offline tests with fake commands cover the checks in `setup`, but these have not yet run on a real 26.04:
+  - the `ssh.service` unit;
+  - `sshd -T`, and the order in which the `sshd_config.d` files are read;
+  - sudo-rs's `visudo -c -f` and `sudo -l -U`;
+  - `ufw show added` and `ufw status`.
+
+  The probe (`test/evidence/cx23/`) did find `ssh.service` running on cx23, `ufw` 0.36.2 installed, and `/etc/sudoers.d` in place. Each check stops setup on a mismatch, so GO 2 is where they get proven. If one stops setup, the output says which.
 - **Resource caps** (`MemoryHigh=1G`, `MemoryMax=1536M`, `--max-old-space-size=768`) are ops.md estimates, to be confirmed in the 2-hour soak.
 - **The first device-code login** uses net-forge's `packages/forge-bridge/tools/msa-login.mjs`, the tool already used for the test bot's cache on the PC. It replaces the `login-bot.mjs` sketched in ops.md section 1. On the CX23, after the first deploy, as `deploy` (`ssh -t`): `sudo -u mindcraft-rotn env MINDCRAFT_PROFILES_FOLDER=/var/lib/mindcraft-rotn/<bot>/msa node /opt/mindcraft-rotn/current/packages/forge-bridge/tools/msa-login.mjs <MinecraftName>`, then the same with `--check`. It prints only Microsoft's instructions and the profile name, never a token. It has not been run on a CX23 yet.
