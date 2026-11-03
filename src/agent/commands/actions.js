@@ -1,6 +1,7 @@
 import * as skills from '../library/skills.js';
 import settings from '../settings.js';
 import convoManager from '../conversation.js';
+import { addTask, cancelTask } from '../task_queue.js';
 
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
@@ -358,6 +359,31 @@ export const actionsList = [
             return `Mode ${mode_name} is already ${on ? 'on' : 'off'}.`;
             modes.setOn(mode_name, on);
             return `Mode ${mode_name} is now ${on ? 'on' : 'off'}.`;
+        }
+    },
+    {
+        name: '!taskAdd',
+        description: 'A task giver types this to queue a task. Priority is "urgent" or "normal".',
+        // Only on the forced path: the giver is the sender of the typed command, passed per call,
+        // never shared state or a name the LLM writes; not offered to the LLM (#146 review).
+        forcedOnly: true,
+        params: {
+            'text': { type: 'string', description: 'The task, in the player\'s words.' },
+            'priority': { type: 'string', description: 'urgent or normal.' } // required: the parser has no optional params
+        },
+        perform: function (agent, text, priority, context) {
+            return addTask(agent.tasks, { giver: context?.sender ?? null, text, priority }, (name) => agent.isTaskGiver(name));
+        }
+    },
+    {
+        name: '!taskCancel',
+        description: 'A task giver types this to cancel an open task by its id (like t3).',
+        forcedOnly: true,
+        params: {
+            'id': { type: 'string', description: 'The task id, for example t3.' }
+        },
+        perform: function (agent, id, context) {
+            return cancelTask(agent.tasks, { by: context?.sender ?? null, id }, (name) => agent.isTaskGiver(name));
         }
     },
     {
