@@ -7,6 +7,7 @@ import { load } from 'cheerio';
 import { safeError } from '../safe_error.js';
 import * as names112 from '../library/names112.js';
 import { canonicalName, parseName } from '../library/rotn_names.js';
+import { listTasks } from '../task_queue.js';
 
 const pad = (str) => {
     return '\n' + str + '\n';
@@ -267,6 +268,13 @@ export const queryList = [
             let res = agent.task.blueprint.explainLevel(levelNum);
             console.log(res);
             return pad(res);
+        }
+    },
+    {
+        name: '!taskList',
+        description: 'List the open player tasks, one line each: task <id> <status> <priority> <giver>.',
+        perform: function (agent) {
+            return listTasks(agent.tasks);
         }
     },
     {
