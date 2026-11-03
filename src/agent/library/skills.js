@@ -405,11 +405,15 @@ export async function attackEntity(bot, entity, kill=true) {
     }
 }
 
-export async function defendSelf(bot, range=9) {
+export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(entity), keepFighting=() => true) {
     /**
      * Defend yourself from all nearby hostile mobs until there are no more.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {number} range, the range to look for mobs. Defaults to 8.
+     * @param {function} isEnemy, which mobs to fight (skills-rotn D2c: the modes pass rotn-data's
+     *   "fight" mobs, so an enderman or a creeper is never attacked). Defaults to mc.isHostile.
+     * @param {function} keepFighting, checked each round: false ends the fight (D2c, #186 review:
+     *   a creeper or more mobs arriving mid-fight must lead to a retreat). Defaults to always.
      * @returns {Promise<boolean>} true if the bot found any enemies and has killed them, false if no entities were found.
      * @example
      * await skills.defendSelf(bot);
@@ -417,7 +421,7 @@ export async function defendSelf(bot, range=9) {
     bot.modes.pause('self_defense');
     bot.modes.pause('cowardice');
     let attacked = false;
-    let enemy = world.getNearestEntityWhere(bot, entity => mc.isHostile(entity), range);
+    let enemy = world.getNearestEntityWhere(bot, isEnemy, range);
     while (enemy) {
         await equipHighestAttack(bot);
         if (bot.entity.position.distanceTo(enemy.position) >= 4 && enemy.name !== 'creeper' && enemy.name !== 'phantom') {
@@ -436,10 +440,14 @@ export async function defendSelf(bot, range=9) {
         bot.pvp.attack(enemy);
         attacked = true;
         await new Promise(resolve => setTimeout(resolve, 500));
-        enemy = world.getNearestEntityWhere(bot, entity => mc.isHostile(entity), range);
+        enemy = world.getNearestEntityWhere(bot, isEnemy, range);
         if (bot.interrupt_code) {
             bot.pvp.stop();
             return false;
+        }
+        if (enemy && !keepFighting()) {
+            log(bot, `Stopped fighting: the situation changed.`);
+            break;
         }
     }
     bot.pvp.stop();
@@ -1558,28 +1566,30 @@ export async function moveAwayFromEntity(bot, entity, distance=16) {
     return true;
 }
 
-export async function avoidEnemies(bot, distance=16) {
+export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHostile(entity), canHit=() => true) {
     /**
      * Move a given distance away from all nearby enemy mobs.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {number} distance, the distance to move away.
+     * @param {function} isEnemy, which mobs to move away from (skills-rotn D2c). Defaults to mc.isHostile.
+     * @param {function} canHit, whether a cornered bot may hit that mob (never a creeper or a dragon).
      * @returns {Promise<boolean>} true if the bot moved away, false otherwise.
      * @example
      * await skills.avoidEnemies(bot, 8);
      **/
     bot.modes.pause('self_preservation'); // prevents damage-on-low-health from interrupting the bot
-    let enemy = world.getNearestEntityWhere(bot, entity => mc.isHostile(entity), distance);
+    let enemy = world.getNearestEntityWhere(bot, isEnemy, distance);
     while (enemy) {
         const follow = new pf.goals.GoalFollow(enemy, distance+1); // move a little further away
         const inverted_goal = new pf.goals.GoalInvert(follow);
         bot.pathfinder.setMovements(new pf.Movements(bot));
         bot.pathfinder.setGoal(inverted_goal, true);
         await new Promise(resolve => setTimeout(resolve, 500));
-        enemy = world.getNearestEntityWhere(bot, entity => mc.isHostile(entity), distance);
+        enemy = world.getNearestEntityWhere(bot, isEnemy, distance);
         if (bot.interrupt_code) {
             break;
         }
-        if (enemy && bot.entity.position.distanceTo(enemy.position) < 3) {
+        if (enemy && bot.entity.position.distanceTo(enemy.position) < 3 && canHit(enemy)) {
             await attackEntity(bot, enemy, false);
         }
     }

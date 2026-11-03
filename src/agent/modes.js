@@ -4,6 +4,7 @@ import * as mc from '../utils/mcdata.js';
 import settings from './settings.js'
 import convoManager from './conversation.js';
 import * as names112 from './library/names112.js';
+import * as threats from './library/threats.js';
 import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
@@ -153,34 +154,45 @@ const modes_list = [
             this.prev_dig_block = null;
         }
     },
+    // skills-rotn D2c: both modes follow rotn-data's threat table (threats.js threatPlan) instead
+    // of fleeing or fighting anything with type 'mob'. cowardice flees what must not be fought
+    // (a dangerous mob, one that explodes, a ranged one, two or more melee mobs at once);
+    // self_defense fights only melee mobs, or a provoked enderman right after it hit the bot.
     {
         name: 'cowardice',
-        description: 'Run away from enemies. Interrupts all actions.',
+        description: 'Run away from mobs that must not be fought: dangerous ones, creepers, ranged ones, or several at once. Interrupts all actions.',
         interrupts: ['all'],
         on: true,
         active: false,
         update: async function (agent) {
-            const enemy = world.getNearestEntityWhere(agent.bot, entity => mc.isHostile(entity), 16);
-            if (enemy && await world.isClearPath(agent.bot, enemy)) {
-                say(agent, `Aaa! A ${enemy.name.replace("_", " ")}!`);
+            const plan = threats.threatPlan(agent.bot);
+            if (plan?.action === 'flee' && await world.isClearPath(agent.bot, plan.from)) {
+                say(agent, `Backing off: ${plan.from.name.replace("_", " ")} (${plan.why})!`);
                 execute(this, agent, async () => {
-                    await skills.avoidEnemies(agent.bot, 24);
+                    await skills.avoidEnemies(agent.bot, plan.away, plan.isEnemy, (e) => threats.threatFor(e)?.reaction === 'fight');
                 });
             }
         }
     },
     {
         name: 'self_defense',
-        description: 'Attack nearby enemies. Interrupts all actions.',
+        description: 'Fight nearby melee mobs (never creepers, endermen or dangerous mobs). Interrupts all actions.',
         interrupts: ['all'],
         on: true,
         active: false,
         update: async function (agent) {
-            const enemy = world.getNearestEntityWhere(agent.bot, entity => mc.isHostile(entity), 8);
-            if (enemy && await world.isClearPath(agent.bot, enemy)) {
-                say(agent, `Fighting ${enemy.name}!`);
+            const plan = threats.threatPlan(agent.bot);
+            if (plan?.action === 'fight' && await world.isClearPath(agent.bot, plan.from)) {
+                say(agent, `Fighting ${plan.from.name}!`);
                 execute(this, agent, async () => {
-                    await skills.defendSelf(agent.bot, 8);
+                    // defendSelf pauses cowardice, so the plan is checked each round: a creeper or more
+                    // mobs arriving end the fight, and the bot backs off (#186 review).
+                    await skills.defendSelf(agent.bot, 8, plan.isEnemy, () => threats.threatPlan(agent.bot)?.action === 'fight');
+                    const next = threats.threatPlan(agent.bot);
+                    if (next?.action === 'flee') {
+                        await say(agent, `Backing off: ${next.from.name.replace("_", " ")} (${next.why})!`);
+                        await skills.avoidEnemies(agent.bot, next.away, next.isEnemy, (e) => threats.threatFor(e)?.reaction === 'fight');
+                    }
                 });
             }
         }
@@ -284,7 +296,8 @@ const modes_list = [
         next_change: 0,
         update: function (agent) {
             const entity = agent.bot.nearestEntity();
-            let entity_in_view = entity && entity.position.distanceTo(agent.bot.entity.position) < 10 && entity.name !== 'enderman';
+            // Never stare at a mob that attacks whoever looks at it (enderman and the like, rotn-data; D2c).
+            let entity_in_view = entity && entity.position.distanceTo(agent.bot.entity.position) < 10 && !threats.doNotLook(entity);
             if (entity_in_view && entity !== this.last_entity) {
                 this.staring = true;
                 this.last_entity = entity;
@@ -297,7 +310,8 @@ const modes_list = [
             }
             if (!entity_in_view)
                 this.last_entity = null;
-            if (Date.now() > this.next_change) {
+            // No random looks either while a do-not-look mob is loaded nearby: one could land on it (#186 review).
+            if (Date.now() > this.next_change && !threats.doNotLookNear(agent.bot)) {
                 // look in random direction
                 this.staring = Math.random() < 0.3;
                 if (!this.staring) {
