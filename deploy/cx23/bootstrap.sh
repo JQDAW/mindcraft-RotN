@@ -1,18 +1,25 @@
 #!/usr/bin/env bash
-# One-time bootstrap of the bot's CX23 (Ubuntu 24.04), run as root (harness-ops, brief deliverable 5).
+# One-time bootstrap of the bot's CX23 (Ubuntu 26.04, ADR 0007; 24.04 is still accepted), run as root
+# (harness-ops, brief deliverable 5).
 # Copy this folder (deploy/cx23/) to the server and run it there; it never connects anywhere except
 # the Ubuntu and NodeSource apt mirrors.
 #
 #   bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override]
+#       --ssh-from must contain this SSH session's client address (SSH_CONNECTION); GO 2 runs without it.
 #       Users: `deploy` (SSH key login, in groups sudo and mindcraft-rotn) and the system user
 #       `mindcraft-rotn` (no login) that runs the bots. Unattended security upgrades. ufw: SSH only.
 #       2 GB swap. Node 22 from NodeSource (key fingerprint pinned). git. The unit template, check-env,
 #       mindcraft-rotn-ctl, a sudoers rule that lets `deploy` run only mindcraft-rotn-ctl without a
-#       password, and the folders under /opt, /etc and /var/lib. Root and password login stay ON.
+#       password, and the folders under /opt, /etc and /var/lib.
+#       SSH password login OFF (the human's decision for GO 2): the drop-in
+#       /etc/ssh/sshd_config.d/10-mindcraft-rotn.conf, checked with `sshd -t` and verified with `sshd -T`
+#       before ssh is reloaded. Root keeps its key login (PermitRootLogin is not touched); deploy's
+#       password is for sudo only.
 #   bootstrap.sh add-bot BOT [--mindserver-port N]
 #       Per-bot folders (token cache 0700) and /etc/mindcraft-rotn/BOT.env (0600 root:root) from bot.env.example.
 #       Never overwrites an existing env file.
-#   bootstrap.sh lockdown --i-tested-deploy-login
+#   bootstrap.sh lockdown --turn-off-root-ssh --i-tested-deploy-login
+#       NOT run on this project's CX23 (ADR 0007: root keeps key-only SSH); refuses without both flags.
 #       Also needs evidence: an "Accepted publickey for deploy" line in the ssh journal since setup.
 #       Turns root login and password login off (sshd drop-in, checked with `sshd -t`). Refuses until
 #       `deploy` has an authorized key and a sudo password, so nobody is locked out of admin access.
@@ -58,11 +65,56 @@ file_owned() {
 require_root_ubuntu() {
   [[ $(id -u) == 0 ]] || die "run as root (sudo bash bootstrap.sh ...)"
   local osr; osr=$(p /etc/os-release)
-  [[ -f $osr ]] && grep -q '^ID=ubuntu$' "$osr" && grep -q '^VERSION_ID="24.04"$' "$osr" \
-    || die "this is for Ubuntu 24.04 (see /etc/os-release)"
+  [[ -f $osr ]] && grep -q '^ID=ubuntu$' "$osr" && grep -Eq '^VERSION_ID="(26\.04|24\.04)"$' "$osr" \
+    || die "this is for Ubuntu 26.04 (ADR 0007) or 24.04 (see /etc/os-release)"
+}
+
+# The system steps the CI container cannot test (ADR 0007), checked on the real server before setup
+# changes anything: stop on a mismatch rather than guess.
+preflight_system() {
+  # The ssh unit is ssh.service on Ubuntu 24.04 and 26.04 (the cx23 probe, test/evidence/cx23/): setup
+  # reloads it, and lockdown reads its journal.
+  systemctl cat ssh.service > /dev/null 2>&1 \
+    || die "there is no ssh.service unit; this bootstrap reloads ssh.service and reads its journal (check the unit name)"
+  command -v sshd > /dev/null || die "no sshd on PATH; the SSH steps need sshd -t and sshd -T"
+  # The password-login drop-in works only if sshd_config includes sshd_config.d/*.conf.
+  grep -Eq '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf[[:space:]]*$' "$(p /etc/ssh/sshd_config)" 2> /dev/null \
+    || die "/etc/ssh/sshd_config does not include /etc/ssh/sshd_config.d/*.conf; the password-login drop-in would not be read"
+  # ufw opens only port 22, so sshd must listen on 22 and nothing else (#137 review nit 4). sshd -t and
+  # -T need the privilege separation folder, which ssh.service creates only while it runs.
+  dir_owned 0755 root:root /run/sshd
+  local ports
+  ports=$(sshd -T 2> /dev/null | awk 'tolower($1) == "port" { print $2 }' | sort -u | tr '\n' ' ') \
+    || die "sshd -T failed; cannot check sshd's port"
+  [[ $ports == '22 ' ]] || die "sshd listens on port(s) '${ports% }', but ufw will allow only 22; not changing anything"
 }
 
 user_exists() { getent passwd "$1" > /dev/null 2>&1; }
+
+# A dotted IPv4 address as a number; fails on anything else (octets read as decimal, even with a leading 0).
+ip_to_int() {
+  local a b c d o
+  [[ $1 =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+  a=$((10#${BASH_REMATCH[1]})) b=$((10#${BASH_REMATCH[2]})) c=$((10#${BASH_REMATCH[3]})) d=$((10#${BASH_REMATCH[4]}))
+  for o in "$a" "$b" "$c" "$d"; do (( o <= 255 )) || return 1; done
+  echo $(( (a << 24) | (b << 16) | (c << 8) | d ))
+}
+
+# --ssh-from must contain this SSH session's client address (#137 review): a CIDR that does not (a home
+# address that changed, a typo) lets this session live on through ufw's ESTABLISHED rule and then shuts
+# out every new SSH login, root included. Without an IPv4 SSH session to check against, it refuses.
+check_ssh_from() {
+  local cidr=$1 net bits client ni ci mask
+  net=${cidr%/*} bits=$((10#${cidr#*/}))
+  (( bits <= 32 )) || die "--ssh-from: the prefix /$bits is not 0..32"
+  ni=$(ip_to_int "$net") || die "--ssh-from: $net is not an IPv4 address"
+  client=${SSH_CONNECTION:-}; client=${client%% *}
+  ci=$(ip_to_int "$client") \
+    || die "--ssh-from needs this to run in an SSH session over IPv4 (SSH_CONNECTION), to check that the CIDR contains your own address; GO 2 runs without --ssh-from"
+  mask=$(( bits == 0 ? 0 : (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF ))
+  (( (ni & mask) == (ci & mask) )) \
+    || die "--ssh-from $cidr does not contain this SSH session's client address; it would shut out every new SSH login (root included) once this session ends. GO 2 runs without --ssh-from"
+}
 
 # ---------------------------------------------------------------- setup
 setup_users() {
@@ -106,6 +158,16 @@ EOF
   chown root:root "$tmp"; chmod 0440 "$tmp"
   visudo -c -f "$tmp" > /dev/null || { rm -f "$tmp"; die "visudo rejected the sudoers rule"; }
   mv -f "$tmp" "$f"
+  # Ubuntu 26.04 ships sudo-rs as sudo (ADR 0007): check that the rule really applies, not only that
+  # visudo accepts it (sudo-rs must read /etc/sudoers.d and grant exactly the wrapper without a password).
+  local which list
+  which=$(sudo --version 2> /dev/null | head -1) || true
+  list=$(sudo -l -U "$DEPLOY_USER" 2> /dev/null) || true
+  if ! grep -Eq "NOPASSWD:[[:space:]]*/usr/local/sbin/mindcraft-rotn-ctl([[:space:],]|$)" <<< "$list"; then
+    rm -f "$f"
+    die "sudo (${which:-unknown}) does not show the rule for $DEPLOY_USER after install (sudo -l -U $DEPLOY_USER); removed it"
+  fi
+  log "sudoers: $DEPLOY_USER may run only mindcraft-rotn-ctl without a password (${which:-sudo})"
 }
 
 setup_packages() {
@@ -171,8 +233,59 @@ setup_firewall() {
   else
     ufw allow 22/tcp > /dev/null
   fi
+  # Never enable a firewall whose SSH rule did not take (that would cut off the human's root login).
+  # `ufw show added` may print an extended rule in its own order, so both orders are accepted.
+  local want='ufw allow 22/tcp'
+  if [[ -n $from ]]; then
+    local f=${from//./\\.}
+    want="ufw allow (proto tcp from $f to any port 22|from $f to any port 22 proto tcp)"
+  fi
+  ufw show added 2> /dev/null | grep -Eqx -- "$want" \
+    || die "ufw does not list the SSH rule (ufw show added); not enabling the firewall"
   ufw --force enable > /dev/null
+  ufw status 2> /dev/null | grep -qx 'Status: active' || die "ufw is not active after 'ufw --force enable' (ufw status)"
   log "ufw: incoming SSH only${from:+ from $from}"
+}
+
+# SSH password login off (the human's decision for GO 2). cloud-init's 50-cloud-init.conf may say
+# PasswordAuthentication yes, and sshd keeps the FIRST value it reads, so this drop-in must sort before
+# 50-. Root login is not touched: root keeps its key login (prohibit-password).
+readonly SSHD_DROPIN=/etc/ssh/sshd_config.d/10-mindcraft-rotn.conf
+setup_sshd() {
+  local f bak=''
+  f=$(p "$SSHD_DROPIN")
+  if [[ -f $f ]]; then bak=$f.bak.$$; cp -p "$f" "$bak"; fi
+  # Put back what was there (or nothing) when the new config is rejected or does not take effect.
+  restore_dropin() { if [[ -n $bak ]]; then mv -f "$bak" "$f"; else rm -f "$f"; fi; }
+  file_owned 0644 root:root "$SSHD_DROPIN" <<'EOF'
+# mindcraft-rotn setup (deploy/cx23/bootstrap.sh): no SSH password login (the human's decision, GO 2).
+# Root keeps its key login (PermitRootLogin is not set here); deploy's password is for sudo only.
+# 10- sorts before cloud-init's 50-cloud-init.conf: sshd keeps the first value it reads.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+EOF
+  # sshd -t and -T need the privilege separation folder, which ssh.service creates only while it runs.
+  dir_owned 0755 root:root /run/sshd
+  if ! sshd -t; then
+    restore_dropin
+    die "sshd -t rejected the config; put back what was there, ssh not reloaded"
+  fi
+  local eff want
+  eff=$(sshd -T) || { restore_dropin; die "sshd -T failed; put back what was there, ssh not reloaded"; }
+  for want in 'passwordauthentication no' 'kbdinteractiveauthentication no'; do
+    if ! grep -qix -- "$want" <<< "$eff"; then
+      restore_dropin
+      die "sshd -T does not show '$want' (sshd_config or a file read before $SSHD_DROPIN sets it); put back what was there, ssh not reloaded"
+    fi
+  done
+  [[ -n $bak ]] && rm -f "$bak"
+  local root_login; root_login=$(awk 'tolower($1) == "permitrootlogin" { print $2; exit }' <<< "$eff")
+  if systemctl is-active --quiet ssh; then
+    systemctl reload ssh
+    log "sshd: password login off (verified with sshd -T); root login '${root_login:-unknown}' is unchanged; ssh reloaded"
+  else
+    log "sshd: password login off (verified with sshd -T); root login '${root_login:-unknown}' is unchanged; ssh.service is not running (socket activation), so the next connection reads it"
+  fi
 }
 
 setup_files() {
@@ -214,19 +327,22 @@ do_setup() {
   fi
   [[ -n $keyfile && -f $keyfile ]] || die "setup needs --deploy-key-file FILE (the deploy user's public key)"
   [[ -z $from || $from =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]] || die "--ssh-from must be an IPv4 CIDR"
+  [[ -z $from ]] || check_ssh_from "$from"
   [[ $swap =~ ^[1-9][0-9]*[MG]$ ]] || die "--swap-size like 2G"
   require_root_ubuntu
+  preflight_system
   setup_users "$keyfile"
   setup_sudoers
   setup_packages
   setup_node
   setup_swap "$swap"
   setup_firewall "$from"
+  setup_sshd
   setup_files
-  log "setup done. Root and password login are still ON. Next, as the human:"
-  log "  1. in a second terminal: ssh deploy@<cx23>   (must work)"
-  log "  2. as root: passwd deploy   (deploy's sudo password)"
-  log "  3. bootstrap.sh lockdown --i-tested-deploy-login"
+  log "setup done. SSH password login is OFF; root keeps its key login. Next, as the human:"
+  log "  1. in a second terminal: ssh deploy@<cx23>   (key login; must work)"
+  log "  2. as root: passwd deploy   (deploy's sudo password; SSH never accepts it)"
+  log "  (lockdown, which also turns root login off, is not run on this project's CX23: the human's decision)"
 }
 
 # ---------------------------------------------------------------- add-bot
@@ -266,7 +382,19 @@ do_add_bot() {
 
 # ---------------------------------------------------------------- lockdown
 do_lockdown() {
-  [[ ${1:-} == --i-tested-deploy-login ]] \
+  local tested=0 root_off=0
+  while (( $# )); do
+    case $1 in
+      --i-tested-deploy-login) tested=1; shift ;;
+      --turn-off-root-ssh) root_off=1; shift ;;
+      *) die "lockdown: unknown option $1" ;;
+    esac
+  done
+  # Not run on this project's CX23 (#101, ADR 0007: root keeps key-only SSH). It writes PermitRootLogin
+  # no and AllowUsers deploy, which cuts off root's SSH, so it needs a flag of its own (#137 review).
+  (( root_off )) \
+    || die "lockdown turns root SSH login off (PermitRootLogin no, AllowUsers $DEPLOY_USER); it is not run on this project's CX23 (ADR 0007). Only on the lead's written decision, add --turn-off-root-ssh"
+  (( tested )) \
     || die "lockdown turns root and password login off. First log in as deploy in a second terminal, then pass --i-tested-deploy-login"
   require_root_ubuntu
   local ak; ak=$(p "/home/$DEPLOY_USER/.ssh/authorized_keys")
@@ -274,7 +402,9 @@ do_lockdown() {
   local st; st=$(passwd --status "$DEPLOY_USER" | awk '{ print $2 }')
   [[ $st == P ]] || die "$DEPLOY_USER has no usable password (passwd --status says '$st'); set one with 'passwd $DEPLOY_USER' first, or nobody can sudo after lockdown"
   # Evidence, not just the flag: sshd must have logged a key login for deploy since setup
-  # (PR #30 review finding 3). Ubuntu 24.04 logs it under ssh.service; sshd.service is the alias.
+  # (PR #30 review finding 3). Ubuntu 24.04 and 26.04 log it under ssh.service (preflight_system checks
+  # that unit; on 26.04's OpenSSH the per-connection sshd-session process logs it in the same unit);
+  # sshd.service is the alias.
   local since ef; ef=$(p /etc/mindcraft-rotn/.setup-epoch)
   since=$(tr -d '\r' < "$ef" 2> /dev/null) && [[ $since =~ ^[0-9]{9,11}$ ]] || die "no setup timestamp in /etc/mindcraft-rotn/.setup-epoch (run setup first)"
   journalctl -u ssh -u sshd --since "@$since" --no-pager -o cat 2> /dev/null \
@@ -302,5 +432,5 @@ case ${1:-} in
   setup) shift; do_setup "$@" ;;
   add-bot) shift; do_add_bot "$@" ;;
   lockdown) shift; do_lockdown "$@" ;;
-  *) die "usage: bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override] | add-bot BOT [--mindserver-port N] | lockdown --i-tested-deploy-login" ;;
+  *) die "usage: bootstrap.sh setup --deploy-key-file FILE [--ssh-from CIDR] [--swap-size 2G] [--allow-fpr-override] | add-bot BOT [--mindserver-port N] | lockdown --turn-off-root-ssh --i-tested-deploy-login (not on this CX23)" ;;
 esac
