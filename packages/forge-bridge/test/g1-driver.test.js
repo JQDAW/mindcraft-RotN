@@ -57,6 +57,8 @@ test('g1-driver: hello, echo, walk and a clean SIGTERM stop through forge-bridge
                 ROTN_DRIVER_AUTH: 'offline', ROTN_DRIVER_CAPTURE: captureFile, ROTN_DRIVER_PING_TIMEOUT_MS: '60000',
                 // The fake world has one chunk: don't wait 30 s for the rest of the census cube.
                 ROTN_DRIVER_CHUNK_WAIT_MS: '0',
+                // Probe P1's commands load next to the G2 protocol (tools/probe-commands.mjs).
+                ROTN_DRIVER_PROBE: '1',
             }),
             stdio: ['ignore', 'pipe', 'pipe'],
         });
@@ -105,6 +107,11 @@ test('g1-driver: hello, echo, walk and a clean SIGTERM stop through forge-bridge
     assert.match(adapter.source, /src\/utils\/mcdata\.js/);
     assert.equal(adapter.translation, true, 'mcdata.js exports toNew/toOld (rotn-data #44)');
     assert.deepEqual([adapter.chunkWaitMs, adapter.chunkWaitSource], [0, 'ROTN_DRIVER_CHUNK_WAIT_MS'], 'the effective census chunk wait is logged');
+    const probe = await until(() => events().find(e => e.type === 'probe_attached'), 15000, 'probe_attached event');
+    assert.equal(probe.placeTimeoutMs, 10000);
+    const ready = await until(() => events().find(e => e.type === 'probe_ready'), 15000, 'probe_ready event');
+    assert.equal(ready.autoEat, 'off', 'auto-eat is off while the probe runs');
+    assert.ok(!events().some(e => e.type === 'probe_attach_error'));
     const reply = async (kind, token) => {
         const lines = await until(() => {
             const got = server.state.chats.filter(c => c.startsWith(`${kind} ${token} `));
@@ -161,6 +168,25 @@ test('g1-driver exits 3 without a token-cache folder, before connecting anywhere
 test('g1-driver exits 3 without TEST_SERVER_HOST', () => {
     const r = spawnSync(process.execPath, [DRIVER], { env: driverEnv({ ROTN_DRIVER_AUTH: 'offline' }), encoding: 'utf8', timeout: 120000 });
     assert.equal(r.status, 3);
+});
+
+test('g1-driver exits 3 on a bad ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS, before connecting anywhere', () => {
+    const r = spawnSync(process.execPath, [DRIVER], {
+        env: driverEnv({ TEST_SERVER_HOST: '127.0.0.1', TEST_SERVER_PORT: '1', ROTN_DRIVER_AUTH: 'offline', ROTN_DRIVER_PROBE: '1', ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS: '0' }),
+        encoding: 'utf8', timeout: 120000,
+    });
+    assert.equal(r.status, 3, r.stderr);
+    assert.match(r.stdout, /DRIVER .*"type":"fatal".*ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS must be a whole number of ms from 50 to 60000/);
+});
+
+test('with the probe off, a stray ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS is ignored (a gate run is not stopped)', () => {
+    const r = spawnSync(process.execPath, [DRIVER], {
+        env: driverEnv({ TEST_SERVER_HOST: '127.0.0.1', TEST_SERVER_PORT: '1', ROTN_DRIVER_AUTH: 'offline', ROTN_DRIVER_CAPTURE: '0', ROTN_DRIVER_PING_TIMEOUT_MS: '2000', ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS: '0' }),
+        encoding: 'utf8', timeout: 120000,
+    });
+    assert.doesNotMatch(r.stdout, /ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS must be/);
+    assert.notEqual(r.status, 3, 'it gets as far as connecting (and fails there, before join)');
+    assert.ok(!r.stdout.includes('"type":"probe_attached"'));
 });
 
 test('g1-driver exits 3 on a bad ROTN_DRIVER_CHUNK_WAIT_MS, before connecting anywhere', () => {
