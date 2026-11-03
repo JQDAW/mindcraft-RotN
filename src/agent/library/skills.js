@@ -3,6 +3,7 @@ import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta } from "./rotn_names.js";
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from "./rotn_sources.js";
+import { craftNeeds, describeNeeds } from "./craft_needs.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -103,7 +104,13 @@ export async function craftRecipe(bot, itemName, num=1) {
         }
     }
     if (!recipes || recipes.length === 0) {
-        log(bot, `You do not have the resources to craft a ${itemName}. It requires: ${Object.entries(mc.getItemCraftingRecipes(itemName)[0][0]).map(([key, value]) => `${key}: ${value}`).join(', ')}.`);
+        // Say what is missing by RotN's recipes (rotn-data), including "3 rocks of ONE kind":
+        // equal ingredients take the same stack, so a mixed haul is refused (C1, #145 nit 1).
+        const needs = craftNeeds(bot, itemName);
+        if (needs && !needs.ready)
+            log(bot, `You do not have the resources to craft ${itemName}. ${describeNeeds(itemName, needs)}`);
+        else
+            log(bot, `You do not have the resources to craft a ${itemName}. It requires: ${Object.entries(mc.getItemCraftingRecipes(itemName)[0][0]).map(([key, value]) => `${key}: ${value}`).join(', ')}.`);
         if (placedTable) {
             await collectBlock(bot, 'crafting_table', 1);
         }
