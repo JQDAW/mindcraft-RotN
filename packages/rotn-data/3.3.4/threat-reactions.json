@@ -1,7 +1,7 @@
 {
   "format": "rotn-threat-reactions/1",
   "pack": "3.3.4",
-  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source 'inferred'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
+  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source 'inferred'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Optional fields on an entry or class rule: 'ranged', 'explodes', and 'lookAt': false for a mob that is dangerous to look at: its targeting starts when a player looks at it (the enderman's stare check), or its gaze attack needs the player to look back (the gorgon), so the bot must not look at its head; threatOf returns lookAt true otherwise. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
   "general": {
     "summary": "At night stay sealed in a cobblestone or stone shelter with light only inside; a dirt shack is not safe because mobs dig and pillar. Retreat if two or more hostiles come at once.",
     "confidence": "documented",
@@ -84,6 +84,18 @@
         "docs/research/rotn-progression.md section 2, Creepers and Fire Creepers: [W-Tips] 'Fire Creepers explode and can burn dropped items', [W-Progression_Stages]; the dump's specialmobs:firecreeper has the display name 'Fire Creeper'"
       ]
     },
+    "specialmobs:endercreeper": {
+      "reaction": "keep-distance",
+      "lookAt": false,
+      "explodes": true,
+      "summary": "A Special Mobs creeper with an enderman's eyes: it targets a player who looks at it (or hits it), teleports like an enderman, and explodes like a creeper. Do not look at it, and back off at once if it comes for you; do not melee it.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125; javap -c -p, no mod code run): EntityEnderCreeper extends Entity_SpecialCreeper; initEntityAI (func_184651_r) adds EntityAICreeperSwell, EntityAIAttackMelee and, as its only player target task, EntityEnderCreeper$EntityAITargetBeholder (constructed at bytecode 141), an EntityAINearestAttackableTarget<EntityPlayer> whose shouldExecute predicate (lambda$shouldExecute$0) calls EntityEnderCreeper.shouldAttackPlayer; the other target task is EntityAIHurtByTarget",
+        "shouldAttackPlayer(EntityPlayer): no target while the player wears a carved pumpkin (armor slot, Blocks.PUMPKIN field_150423_aK at bytecode 26), otherwise the enderman's stare check, a look-vector dot product (Vec3d.dotProduct func_72430_b at bytecode 110); the class also has teleportRandomly()",
+        "It is a creeper class, so the creeper-variants rule would give keep-distance and explodes; this entry adds lookAt false (#187 review)"
+      ]
+    },
     "minecraft:witch": {
       "reaction": "take-cover",
       "ranged": true,
@@ -122,6 +134,7 @@
     },
     "minecraft:enderman": {
       "reaction": "ignore-unless-provoked",
+      "lookAt": false,
       "summary": "Neutral until you look at its head or hit it. Do not look at it; do not attack it on the first night.",
       "confidence": "vanilla",
       "evidence": [
@@ -199,6 +212,7 @@
     },
     "ancientbeasts:rifted_enderman": {
       "reaction": "ignore-unless-provoked",
+      "lookAt": false,
       "summary": "Like an enderman: it targets a player who looks at it, then teleports and hits for 6. 40 health. Do not look at it.",
       "confidence": "verified",
       "evidence": [
@@ -281,6 +295,73 @@
         "Minecraft 1.12 EntitySlime behaviour (melee by size, splits on death, the smallest size deals no damage; spawns in swamps at night and in slime chunks below Y 40); not in the RotN sources, unverified on this pack"
       ]
     },
+    "minecraft:ender_dragon": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "The End's boss: it flies, charges, breathes acid and shoots fireballs. Not on the first-night path (it lives in the End). Never engage it with early gear; leave.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityDragon behaviour (boss of the End; charges, dragon breath and dragon fireballs; heals from end crystals); unverified on this pack",
+        "The dump: net.minecraft.entity.boss.EntityDragon, IMob (so entity() calls it hostile); it is in no biome spawn list of the dump's spawns.json"
+      ]
+    },
+    "minecraft:wither": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "A summoned boss that shoots exploding wither skulls (Wither effect) and breaks blocks. It never spawns by itself (a player builds it from soul sand and wither skulls). Never fight it with early gear; leave the area.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityWither behaviour (summoned from soul sand and three wither skeleton skulls; ranged explosive wither skulls that inflict Wither; breaks blocks when hurt); unverified on this pack",
+        "The dump: net.minecraft.entity.boss.EntityWither, IMob; it is in no biome spawn list of the dump's spawns.json",
+        "The pinned pack makes it tougher: config/roughmobsrevamped.cfg attributes lines 233-235 (maxHealth operator 1 value 2, armor +6, movementSpeed operator 1 value 0.2; operator 0 = add, 1 = multiply and add, line 10) and wither.witherEnableKnockBackDamage=true (line 2867)"
+      ]
+    },
+    "minecraft:ghast": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A Nether flyer that shoots exploding fireballs from far away. Not on the first-night path (Nether only on this pack). Stay behind solid cover and out of its line of sight; do not stand in the open.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityGhast behaviour (flies; ranged explosive fireballs that can be knocked back); unverified on this pack",
+        "The dump lists it only in MultiMob's multimob_monster list, which the dump repeats in every biome (that list has no biome filter); MultiMob's own config keeps it in the Nether: config/multimob/multimob_spawns.cfg spawndimensions ghast = -1 (lines 1887-1889), spawnallowed ghast=true (line 1207), heightlevels -1 to 110 (lines 734-737)",
+        "config/roughmobsrevamped.cfg ghast.ghastExplosionRadius=3 (line 1014); config/Special_Mobs.cfg replaces vanilla ghasts with Special Mobs ghasts and variants (the ghasts section from line 522; Nether chance dimension/the_nether=0.33)"
+      ]
+    },
+    "minecraft:blaze": {
+      "reaction": "take-cover",
+      "ranged": true,
+      "summary": "A Nether fire spirit that shoots bursts of fireballs that set you alight; it pushes attackers away. Not on the first-night path (Nether biomes only). Stay behind cover; do not fight it in the open.",
+      "confidence": "vanilla",
+      "evidence": [
+        "Minecraft 1.12 EntityBlaze behaviour (flies slowly; bursts of three small fireballs that set the target on fire; spawns in Nether fortresses); unverified on this pack",
+        "The dump's spawns.json lists it only in Nether biomes' monster lists (minecraft:hell and Biomes O' Plenty's corrupted_sands, phantasmagoric_inferno and visceral_heap)",
+        "The pinned pack makes it tougher: config/roughmobsrevamped.cfg attributes lines 77, 86, 95 and 104 (blaze knockbackResistance +0.5, maxHealth +20, armor +3, attackDamage +3; operator 0 = add, line 10) and blaze.blazePushAttackersAway=true (line 701); config/Special_Mobs.cfg replaces vanilla blazes with Special Mobs blazes and variants (the blazes section from line 44; Nether chance dimension/the_nether=0.33, line 60)"
+      ]
+    },
+    "minecraft:zombie_horse": {
+      "reaction": "fight",
+      "summary": "On this pack an aggressive undead horse: The Hordes gives it zombie AI, so it hunts players from up to 35 blocks, hits for 3 and burns in daylight. Fight it like a zombie, at a choke point; it is not a mount to ignore.",
+      "confidence": "verified",
+      "evidence": [
+        "The-Hordes-1.12.2-1.1.7.jar (in the pack as mods/The-Hordes-1.12.2-1.1.7.jar, SHA-256 882e8a4563cd69964a71b0e4c7584069bd77844110d8fb256d856464fe0c4ed3; javap -c -p, no mod code run): MixinEntityZombieHorse makes net.minecraft.entity.passive.EntityZombieHorse implement IMob (which is why the dump records it hostile) and, at the tail of applyEntityAttributes when ConfigHandler.aggressiveZombieHorses is set, sets FOLLOW_RANGE (field_111265_b) to 35.0 (bytecode 7-13) and registers ATTACK_DAMAGE (field_111264_e, registerAttribute func_111150_b) at 3.0 (25-31)",
+        "MixinAbstractHorse.initEntityAI (tail): when aggressiveZombieHorses is set and the horse is an EntityZombieHorse (bytecode 0-7) it adds EntityAIAttackMelee (34-44), EntityAIHurtByTarget (144-162) and EntityAINearestAttackableTarget for EntityPlayer (170-181), villagers (189-200) and more",
+        "The pinned pack turns it on: config/hordes.cfg misc.aggressiveZombieHorses=true (line 131) and zombieHorsesBurn=true (line 143). config/Special_AI.cfg also lists minecraft:zombie_horse 1.0 in depacify_list (line 26) with depacify_aggressive_chance=1.0 (line 15): passive mobs on that list spawn aggressive",
+        "It is in no biome spawn list of the dump's spawns.json (vanilla zombie horses do not spawn naturally); config/roughmobsrevamped.cfg attributes lines 145-147 and config/dmgcontrol.cfg line 259 (MaxHealth 15.0) change its stats",
+        "Corrected in #188 after the lead asked for an override lowering its level: on this pack it is hostile, so its level stays hostile (#188 first had ignore, from vanilla behaviour)"
+      ]
+    },
+    "iceandfire:gorgon": {
+      "reaction": "avoid",
+      "lookAt": false,
+      "summary": "A temple monster whose gaze kills: if it looks at you while you look at it for about half a second, you die and become a stone statue. Never look at it; turn away and leave. Blindness or a blindfold protects you.",
+      "confidence": "verified",
+      "evidence": [
+        "IceAndFireRotN-1.9.1-1.2.1.jar (in the pack as mods/IceAndFireRotN-1.9.1-1.2.1.jar, SHA-256 6f8f6d7a12fbc207f2f0dc638d4b9901bab5b003e1793313be8c4aede00ca747; javap -c -p, no mod code run): EntityGorgon extends EntityMob; onLivingUpdate (func_70636_d) bytecode 124-147: with an attack target, isEntityLookingAt(gorgon, target, 0.4) and isEntityLookingAt(target, gorgon, 0.4) must both hold, the target must not be blindfolded (isBlindfolded, 150-154), and neither may have Blindness (MobEffects field_76440_q, 157-171); after more than 10 ticks of that (bipush 10 at 241) a player target takes 2.147E9 damage from IceAndFire.gorgon (attackEntityFrom func_70097_a, 263-270), and a stone statue (EntityStoneStatue) is spawned (296-344)",
+        "initEntityAI (func_184651_r) builds GorgonAIStare (bytecode 55-67 and 101-109) and EntityAINearestAttackableTarget tasks with predicates (201-249)",
+        "It is in no biome spawn list of the dump's spawns.json (Ice and Fire places gorgons in its temple structures); not on the first-night path",
+        "Not settled: the target tasks' predicates (201-249) and GorgonAIStare were not read further"
+      ]
+    },
     "charm:spectre": {
       "reaction": "fight",
       "summary": "An underground ghost (spawns only at depth 24 or below, in darkness): 0.5 health and 0.01 attack, but on this pack its touch curses the player's armor or items. Kill it with one hit before it touches you; it disappears in light (level 8) and after 120 s.",
@@ -355,7 +436,7 @@
         "Melee: attackEntityAsMob (func_70652_k) calls EntityMob.attackEntityAsMob at 2; if it has an empty main hand and is burning it may set the target on fire (bytecode 30-67). attackEntityFrom (func_70097_a) doubles fire damage (bytecode 1-12).",
         "Daylight: onLivingUpdate (func_70636_d) at bytecode 0-96: if !SunScreen_Mode, isDaytime (func_72935_r), server side, getBrightness (func_70013_c) > 0.5 and canSeeSky (func_175678_i) at eye height, randomly setFire (func_70015_d) 40 (= 8 s). cfg line 489 'sunscreen mode'=false.",
         "Spawn rate is low: cfg line 727 'sludge lord spawn rate'=3 (vs mummy 100, mycosis 40). getCanSpawnHere (func_70601_bi) also checks SpawnUtil.isAllowedDimension at 4. cfg line 486 'suicidal minion'=true: summons die with their summoner.",
-        "Parasite: not a host (cfg lines 606-610); onDeath (func_70645_a) only drops loot (UNDYINGHEART via LootTableHandler.dropRareLoot, bytecode 23-34); no parasite reference in EntitySludgeLord or its inner classes. scripts/fishsundeadrising.zs only changes the sludge_wand item (lines 101-119).",
+        "Parasite: not a host (cfg lines 606-610); onDeath (func_70645_a) only drops loot (UNDYINGHEART via LootTableHandler.dropRareLoot, bytecode 23-34); no parasite reference in EntitySludgeLord or its inner classes. scripts/fishsundeadrising.zs only changes the sludge_wand item (lines 180-198).",
         "Not settled: Ranged reach depends on its follow range (getFollowDistance); the base value was not read from vanilla, and no RoughMobs followRange line exists for it.",
         "Not settled: Lil'Sludge health: castSpell sets base 8.0, but config/roughmobsrevamped.cfg line 248 (maxHealth op 1, 3) may multiply it if RoughMobs applies modifiers after the summon; the order was not settled. AICastingApell was not disassembled (it is a casting-pose AI)."
       ]
@@ -532,6 +613,7 @@
       "id": "enderman-variants",
       "pattern": "Enderman$",
       "reaction": "ignore-unless-provoked",
+      "lookAt": false,
       "confidence": "inferred",
       "summary": "A Special Mobs enderman variant. Its targeting is the vanilla enderman's (it targets a player who looks at it or hits it), so do not look at it and do not attack it on the first night. Some variants do more (see variantNote): the thief enderman teleports its target, the blinding enderman blinds players within 12 blocks, the mirage enderman makes fake copies.",
       "evidence": [

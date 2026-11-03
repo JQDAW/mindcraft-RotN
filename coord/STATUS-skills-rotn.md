@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T03:11Z (from `date -u`)
+Updated: 2026-11-03T15:53Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -42,21 +42,70 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
 ## Doing
 
-**Restart handoff (2026-11-03T03:11Z; Orca restart, lead request):** everything is committed and pushed, with no uncommitted work. Open PRs and their state:
-- **#164 E2 agenda** (`agent/skills-rotn/agenda`): all six #164 review items are fixed and pushed, the PR body is updated and a review reply is posted. CI had not reported on the last push yet. **Next step:** check `gh pr checks 164`. If a check fails, run only that test file (memory rule) and fix it. Then wait for the lead’s re-review.
-- **#170 F1 start, RotN profile** (`agent/skills-rotn/rotn-profile`): CI was pending at the restart. Develop has since gained #168 (the lead’s model decision); merge develop into #170 if it conflicts. **Next step:** check `gh pr checks 170` and answer the review.
-- **After that, in order:**
-  1. E3 priority stack (requirements below), which also fixes the known limit that `!stop`/`!stfu` are undone by the agenda;
-  2. the #151 lead nit: `craft_needs.js` should match the exact slot stack list, because `choices[0]` finds the wrong slot for `soaking_pot` and `hamster_wheel`;
-  3. C1 crafting execution and C2 (first plank) after net-forge’s Request 2 report;
-  4. D2 night shelter, so that G3 (b) is served.
+**Session 2 (respawned after the Orca restart, 2026-11-03):** the branches matched origin, and CI was green on #164 and #170.
+- **#164 E2 agenda: merged** (`ebdc6b1`). Its merge nits went to E3 and are fixed in #174 (`51d4c5e9`).
+- **#170 F1 profile:** lead REQUEST CHANGES, fixed in `837cc2c6`: `"name": "FRCFLD"` (lead decision: the bot is FRCFLD, here and on the CX23), with a test of the exact name. The `speak_model` nit is left as is (`settings.speak` is false). Reply posted; CI green. **Approved** by the lead (2026-11-03), merge pending.
+- **#175 approved** by the lead (merge pending): the #151 nit (branch `agent/skills-rotn/craft-needs-slot`, base `develop`). `craft_needs.js` finds an input's own recipe slot by its exact stack list (size `choices + more`, every choice in it). Before, `soaking_pot`'s 1-stack slot counted string from the twine slot. The new test fails on the old code; library and command tests pass 57/57.
+- **#174 E3 priority stack: merged** (develop `5f8e460`). Also merged: #170 (the RotN profile, bot FRCFLD), #175 (the #151 slot nit), #181 (D2a) and #186 (D2c). From here STATUS lives on my current branch (#190). The #164 nits are fixed in `51d4c5e9`:
+  - someone else's `!goal` is not counted against the agenda, and the model's `!goal` is refused while the agenda or a task runs the self-prompter;
+  - a run carried into the next step counts as that step's run;
+  - LLM time is saved every 10 s. This also fixes the E2 bug that the time was never saved by the timer;
+  - a paused bot-to-bot conversation uses no run;
+  - `Agent.autostartAgenda()` is tested.
+
+  - **#174 review (REQUEST CHANGES), fixed in `5e7bd56b`:**
+    1. untrusted turns (a non-giver's words, the bot's reply and the results) carry a flag and never go into the `$MEMORY` summary; `saving_memory` says so;
+    2. a reply to a non-giver that asks for an action is not kept as an assistant turn;
+    3. only a goal a giver typed (`goal_by`) is exempt. The model's own `!goal` is refused whenever the agenda is on or a task is open; a model goal that runs anyway is taken over and counts; with nothing autonomous on it gets 5 min;
+    4. nit: a new task waits for a giver's goal;
+    5. nit: the spawn handler is `Agent.onSpawn`, and a test runs it.
+
+    Tests 1, 2 and 5 fail on the old code.
+  - **#174 re-review (lead):** items 1, 2, 4 and 5 are fixed, and no working non-giver channel was found. The one item left is fixed in `9fdc5d56`: the model's own goals share one 5 min count across `!goal` swaps, which reset it before. The count starts again only after self-prompting stopped, or after a giver's goal, a task or the agenda had the self-prompter. The goal-swap test fails on the old code. Tests: `src/agent/**` 185/185; lint 254.
+  - **#174 third review (lead), fixed in `3302d960`:** autonomy owns a goal by identity. `driveTo` records the prompt a driver set, and `ownsPrompt` compares against it; the text-prefix check is gone. A model `!goal` starting `Player task `/`RotN agenda, step ` is refused. The test fails on the old code; `src/agent/**` 186/186; lint 254.
+  - **Known limit (lead, #174 re-review): bot-to-bot messages are trusted.** `handleMessage` treats a message from another Mindcraft bot (`convoManager.isOtherAgent`) as neither a giver's nor an untrusted sender's: it is not marked untrusted, and its replies may run actions. Before a second bot joins (multi-bot, ready-to-try's last item), bot-to-bot messages need the E3 marking, or giver rules of their own.
+
+  Tests: `src/agent/**` 181/181; lint 254. The E3 contents:
+  - control holds: a giver's typed `!stop`, `!pause` (new), `!stfu` (now giver-only) and `!resume` (new), saved in `bots/<name>/control.json`; a giver's typed action holds autonomy while it runs;
+  - tasks before the agenda, switching at the checkpoint, with the step-sized budget, `!taskDone`/`!taskFailed`, and the agenda resuming with no new run;
+  - non-giver history and task text kept as quoted, marked data;
+  - the self-prompter interrupt fix.
+
+  This fixes #164's known limit (`!stop`/`!stfu` undone by the agenda). Tests: `src/agent/**` 170/170; lint 254.
+- **Next, in order:**
+  1. the #190 review;
+  2. C1 crafting execution and C2 (first plank). Net-forge's final Request 2 answer is in #167, which is not merged yet, and P1 (paid, lead GO) measures the place timing. Until then C1 stays blocked;
+  3. D2 night shelter, for G3 (b).
+     - **D2a, #181: merged** (wall-clock fallback accepted by the lead). Branch `agent/skills-rotn/night-shelter`: `library/night.js`, pure functions, not called yet. **Lead decision applied** (`c3cbc428`): world time first; when it is stuck longer than the freeze plus a margin (15 min), `NightClock` falls back and logs it.
+       - The fallback is the wall clock, not sky light: in 1.12 sky light and the sunset event come from the same world time. The PR asks the lead to overrule if wanted.
+       - Tests 5/5; `src/agent/**` 166/166 on develop.
+       - **#181 review (REQUEST CHANGES), fixed in `be24174c`:**
+         - `isSturdy` comes from rotn-data's dump: material rock, `fullCube`, hardness 1.5 or more. A block the dump lacks is not sturdy, so forge-bridge's defaults never pass. Slabs, stairs, walls, netherrack and silverfish stone are out. Tested on real dump entries.
+         - The freezes are the measured 3001 and 16001.
+         - Fallback: the wall clock, pushed earlier in `c3cbc428`. The reply explains why sky light is not independent, and asks the lead to name a signal if wanted.
+     - **D2c, #186: merged** (lead request on #181). the modes react by rotn-data's `threatOf`. `library/threats.js` `threatPlan`, first match wins:
+       1. flee a dangerous mob, one that explodes, two or more melee mobs, or a ranged mob;
+       2. fight a lone melee mob;
+       3. fight an enderman only right after it hit the bot.
+
+       `cowardice` (now on by default) and `self_defense` act on the plan; `idle_staring` never looks at do-not-look mobs. `nightThreatNote` is ready for D2b's night routine. Tests 6/6; `src/agent/**` 167/167; lint 254.
+       - **#186 review (REQUEST CHANGES), fixed in `3b65ebc4`:**
+         1. the fight re-checks the plan each round (`defendSelf` `keepFighting`) and backs off when a creeper or more mobs arrive;
+         2. "provoked" means that enderman is angry (its `screaming` flag, metadata 13), not any damage; a do-not-look mob whose anger cannot be read is never attacked, and the bot backs off after a hit next to it;
+         3. no random looks while a do-not-look mob is within 64 blocks.
+
+         The nits went into a comment and the PR, and the data notes to rotn-data. Tested during the P1 rerun with targeted files only (`threats.test.js` 9/9, `quiet_reflexes.test.js` 11/11). An old-code check of the mid-fight test hung (the old fight never ends). I stopped it at once, because the P1 rule forbids long node runs.
+       - `nightPhase`/`minutesToSunset` from S1-A's measured cycle (night 12542-23460; Extended Days freezes at 3000 and 16000). This deviates from the brief's "no world time" line, and the PR asks the lead.
+       - `shelterPlan` (a 1x2 space, 10 shell blocks, rock only).
+     - **D2b** (the shelter agenda step, placing, the night routine) comes after P1's placing results.
+- **P1 batch (lead, 2026-11-03):** attempt 1 failed at setup on a harness console-wait. The rerun ran (the lead's message came before 15:24Z by `date -u`). **It is over (lead, received before 2026-11-03T15:33Z): the server is gone and the memory rule is lifted.** Back to normal targeted testing. D2b waits for the lead's placing results from it.
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - **Merged:** E1 #146 (task queue), C1a #151 (craft needs; lead nit for later: `craft_needs.js` should match the exact slot stack list, as the slot found by `choices[0]` is wrong for `soaking_pot` and `hamster_wheel`), #156 (with rotn-data #153).
 - **C1 coordination (net-forge is back, working on Request 2):** I build only the C1 parts that need no `window_click`, `block_place` or `use_item`: choosing a RotN recipe the inventory can satisfy (by output and ingredients, never a CraftTweaker id), including #145 nit 1 (fixed in rotn-data #152: mixed rocks make a stone tool, and `canFill` judges the recipe; cobblestone still needs one rock type, one recipe per type). Executing crafts in the 2x2 grid or the table, placing the table and the first-plank interaction (C2) wait for net-forge's report in `coord/STATUS-net-forge.md`. **net-forge progress:** #154 (FastWorkbench crafting-table window for mineflayer, Request 2 item 1) merged; the lead set `place_block_timeout_ms: 2000` in settings.js.
 - E2 `agenda` (branch `agent/skills-rotn/agenda`): #164 open. Review REQUEST CHANGES, fixed: each step gets a bounded LLM budget (3 self-prompter runs with a doubling back-off of 30 s then 60 s, and 5 min of self-prompter time), then `agenda step <id> stuck: <why>; agenda paused`; the pause and the runs spent are saved, and a giver’s `!agendaStart` retries with a fresh budget. `!agenda` records nothing. Autostart happens only on a fresh bot (no `agenda.json`). The logs and planks steps count rotn-data’s `logWood`/`plankWood`. Chat failures are logged. Known limits for E3: `!stop`/`!stfu` are undone when the agenda restarts the self-prompter after the back-off (each costs one run of the step budget, so 3 of them make the step stuck); G3 (b) (night) is not served yet (no shelter step; D2).
 - **F1 start (human decision):** the RotN profile `profiles/rotn-bot.json` uses the OpenRouter preset `openrouter/@preset/glm-5-1-mindcraft`: #170 open (branch `agent/skills-rotn/rotn-profile`, with a test that it resolves to api openrouter and model `@preset/glm-5-1-mindcraft`; bot name `rotn_bot`).
-- **E3 requirements (lead, #146 review):** mark history entries from non-givers as untrusted data (review B); `!stfu` for task givers only; task text framed as untrusted when it goes into a prompt.
+- **E3 requirements (lead, #146 review):** non-giver history marked as untrusted data, `!stfu` for task givers only, task text framed as untrusted in a prompt. All three are in #174.
 - Next after B2c: those C1 parts, then E2 (agenda) and E3 (priority stack, task done/failed lines). Flag for G3 (#141 nit 5): with an axe, collecting log targets Dynamic Trees branches; the count is the real gain, but scattered drops may not all be picked up.
 
 ## G3 plan: small PRs, in order
@@ -135,7 +184,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Requests to other agents or the lead
 
-1. **Lead (`settings.js`):** add the task-giver setting. Proposed key `task_givers`, default `[]`, with `["JQDAW"]` set where the lead keeps per-deploy values. Add `pause_when_empty: false`. Add `!searchWiki` to `blocked_actions` (it returns vanilla 1.21 facts). Needed by E1/E2; until then the code reads the keys with these defaults. **E1 reads `settings.task_givers`** (default: nobody may give tasks or type commands). Also a **test-only** `allow_server_task_giver: false`: G3 sets it to true (with `SETTINGS_JSON`) so the console whisper sender "Server" is a giver; never true in a committed profile. Until both keys are in `settings.js`, the code reads them with these defaults. **E2 reads** `agenda_autostart` (default true: the agenda starts on a fresh bot) and `pause_when_empty` (default false), and optionally `agenda_step_attempts` (default 3) and `agenda_step_llm_ms` (default 300000), the per-step LLM budget.
+1. **Lead (`settings.js`):** add the task-giver setting. Proposed key `task_givers`, default `[]`, with `["JQDAW"]` set where the lead keeps per-deploy values. Add `pause_when_empty: false`. Add `!searchWiki` to `blocked_actions` (it returns vanilla 1.21 facts). Needed by E1/E2; until then the code reads the keys with these defaults. **E1 reads `settings.task_givers`** (default: nobody may give tasks or type commands). Also a **test-only** `allow_server_task_giver: false`: G3 sets it to true (with `SETTINGS_JSON`) so the console whisper sender "Server" is a giver; never true in a committed profile. Until both keys are in `settings.js`, the code reads them with these defaults. **E2 reads** `agenda_autostart` (default true: the agenda starts on a fresh bot) and `pause_when_empty` (default false), and optionally `agenda_step_attempts` (default 3) and `agenda_step_llm_ms` (default 300000), the per-step LLM budget. **E3 (#174) reads** optionally `task_attempts` (default 3) and `task_llm_ms` (default 600000), the per-task LLM budget.
 2. **net-forge (paused since 2026-11-02; route through the lead):** C1 and C2 need serverbound slot encoding with REID (VarInt slot ids in `window_click`) and `block_place`/`use_item` working on 1.12 (the `use_item` extra fields in the mineflayer patch). Please confirm that they work, or say what is missing. Also: can the `place_block.js` 500 ms `blockUpdate` wait be made configurable (seam-map C)? A lagging RotN server makes placements report failure. **I will tell the lead 1-2 PRs before C1** (that is, when B2 opens), so the lead can respawn net-forge or verify the current encoding in a probe first.
 3. **rotn-data:** for C1, does `recipesFor` give ingredients with oredict members and meta expanded, so that I can match by output and ingredients? For C2, which blocks are the surface rock piles (`pyrotech:rock_pile`?) and what do they drop? The 20 recipes with `matchesSample: false`: I will check whether any is in the early-game set and report back.
 4. **harness-ops:** G3 scenarios for (a), (b) and (c), plus "the queue survives a restart". I will post the command and log contract for each as my PRs land. A first exploratory probe batch for the open items above would de-risk C2/C3; that needs the lead's GO.
@@ -150,9 +199,10 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 8. ~~Lead: the skills name space for B1b~~: **accepted** (2026-11-02). The command boundary hands skills the bot's 1.12 names in rotn-data's `formatOld` convention; a 1.21 name maps to its exact variant (`oak_log` = `log:0`, oak only), a plain 1.12 `log` means any log. No ADR; documented in the B1b PR.
 9. ~~rotn-data: `isHuntable` reads the 1.21 baby flag~~: done in #125 (`mc.isBaby`, index 12). My follow-up: switch `names112.isBaby` callers to `mc.isBaby` (queued).
 10. ~~Lead: `getDetailedCraftingPlan` reading ingredient metas~~: decided (lead): it goes to rotn-data (the `mcdata.js` recipe helpers), low priority, after G3 unless C1 needs it.
+12. ~~rotn-data (from D2c, #186): a structured do-not-look field~~: **done in rotn-data #187** (`lookAt`). #190 switches `threats.js` to `lookAt === false`, which now also covers the ender creeper and the cockatrice. The data notes (the gorgon, ender dragon, wither, ghast, blaze, zombie horse) are **done in rotn-data #188**: the gorgon is now `avoid` with `lookAt: false`, rechecked on develop and asserted in #190's test.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
 
-- #164 E2 agenda (branch `agent/skills-rotn/agenda`). Serves brief item 6 and G3 (c), with harness-ops’ "the agenda at a fresh spawn".
-- #170 F1 start, the RotN profile on the OpenRouter preset (branch `agent/skills-rotn/rotn-profile`). Serves the human decision on the model and brief item 7.
+- #190 the D2c follow-up: do-not-look from rotn-data's `lookAt`, now also the gorgon (branch `agent/skills-rotn/threat-lookat`). Serves the lead's #186 follow-up and G3 (b). In review.
+- Next: D2b (the shelter agenda step, placing, the night routine with `NightClock` and `nightThreatNote`). It waits for the P1 rerun evidence (harness-ops #189, in review).

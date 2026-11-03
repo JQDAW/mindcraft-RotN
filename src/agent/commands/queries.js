@@ -278,7 +278,9 @@ export const queryList = [
         perform: function (agent) {
             // judge, not evaluate: a query records nothing, so the driver still posts "step <id> done".
             const { step, newlyDone } = agent.agenda.judge(agendaState(agent.bot));
-            return describeAgenda(agent.agenda, step, newlyDone);
+            const hold = agent.control?.hold; // E3: why nothing moves
+            const held = hold ? `; on hold (${hold.kind} by ${hold.by}; a task giver's !resume ends it)` : '';
+            return describeAgenda(agent.agenda, step, newlyDone) + held;
         }
     },
     {
