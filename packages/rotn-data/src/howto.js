@@ -51,7 +51,13 @@ function rulePairs(catalog, rule) {
     const g = rule.gives;
     if (!g) return [];
     if (rule.action === 'start-kit') return [{ block: null, item: { name: g.name, meta: g.meta } }];
-    return (rule.blocks ?? []).map((b) => ({ block: b, item: { name: g.name, meta: g.meta === 'block' ? (b.meta ?? null) : g.meta } }));
+    // A block may name its own item ("item"; the Underground Biomes rock piles drop their own rocks)
+    // and carry its own documented flag (per-pair confidence, like `pairs`).
+    return (rule.blocks ?? []).map((b) => ({
+        block: { name: b.name, ...(b.meta != null ? { meta: b.meta } : {}) },
+        item: { name: b.item ?? g.name, meta: g.meta === 'block' ? (b.meta ?? null) : g.meta },
+        documented: b.documented === true,
+    }));
 }
 
 function worldWays(catalog, want) {
@@ -78,7 +84,7 @@ function worldWays(catalog, want) {
         if (rule.action !== 'start-kit' && !blocks.length) continue;
         // Rules with pairs (stone families, trees, debarking, planks): documented only if a matching
         // pair is (#107 review); otherwise the rule's own value.
-        const perPair = !!(rule.stoneFamilies || rule.pairs);
+        const perPair = !!(rule.stoneFamilies || rule.pairs || (rule.blocks ?? []).some((b) => 'documented' in b));
         const confidence = perPair ? (pairs.some((p) => p.documented) ? 'documented' : 'inferred') : (rule.confidence ?? 'inferred');
         const way = {
             kind: 'world',
