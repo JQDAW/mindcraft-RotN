@@ -286,3 +286,34 @@ test('threat-reactions.json cites pack paths, not scratch paths', () => {
     }
     assert.ok(Object.values(reactions.entities).flatMap((e) => e.evidence).some((e) => e.startsWith('scripts/fishsundeadrising.zs')));
 });
+
+// #186 review (lead): a structured do-not-look field, so skills-rotn does not regex the summary.
+test('lookAt: false for the look-triggered mobs only (enderman family, ender creeper, cockatrice)', () => {
+    for (const n of ['minecraft:enderman', 'ancientbeasts:rifted_enderman', 'specialmobs:thiefenderman', 'specialmobs:blindingenderman', 'specialmobs:specialenderman', 'specialmobs:endercreeper', 'iceandfire:if_cockatrice']) {
+        assert.equal(pack.threatOf(n).lookAt, false, n);
+    }
+    for (const n of ['minecraft:zombie', 'minecraft:creeper', 'iceandfire:firedragon', 'animania:cow_holstein', 'minecraft:wither_skeleton']) {
+        assert.equal(pack.threatOf(n).lookAt, true, n);
+    }
+    // Every enderman class in the dump that a rule or entry covers says lookAt false.
+    const E = pack.dump.entities.entities;
+    const enders = Object.keys(E).filter((n) => /Enderman$/.test((E[n].class ?? '').slice((E[n].class ?? '').lastIndexOf('.') + 1)) && pack.entity(n).hostile);
+    assert.ok(enders.length >= 8, `enderman classes: ${enders.length}`);
+    for (const n of enders) assert.equal(pack.threatOf(n).lookAt, false, n);
+    // The field is data, not prose: every lookAt false entry or rule says why in its summary.
+    const withField = [...Object.values(reactions.entities), ...reactions.classRules].filter((r) => r.lookAt === false);
+    // At least these four carry it (more may follow, e.g. the gorgon in the bosses PR); each must say why.
+    const named = [...Object.entries(reactions.entities).filter(([, r]) => r.lookAt === false).map(([n]) => n), ...reactions.classRules.filter((r) => r.lookAt === false).map((r) => r.id)];
+    for (const n of ['minecraft:enderman', 'ancientbeasts:rifted_enderman', 'enderman-variants', 'specialmobs:endercreeper']) assert.ok(named.includes(n), n);
+    // #187 review: the dangerous-override path reads the override's lookAt (the cockatrice), and the
+    // ender creeper keeps the creeper rule's reaction while adding lookAt false.
+    const cock = pack.threatOf('iceandfire:if_cockatrice');
+    assert.deepEqual([cock.reaction, cock.source, cock.lookAt], ['avoid', 'override', false]);
+    assert.match(cock.evidence.join(' '), /CockatriceAIAggroLook.*isEntityLookingAt\(player, cockatrice, 0\.6\)/);
+    const ec = pack.threatOf('specialmobs:endercreeper');
+    assert.deepEqual([ec.reaction, ec.explodes, ec.lookAt, ec.source], ['keep-distance', true, false, 'verified']);
+    assert.match(ec.evidence.join(' '), /EntityAITargetBeholder.*shouldAttackPlayer/);
+    for (const r of withField) assert.match(r.summary, /look/i);
+    assert.ok(pack.nightThreats({ limit: 1000 }).every((t) => typeof t.lookAt === 'boolean'));
+    assert.match(reactions.description, /'lookAt': false/);
+});
