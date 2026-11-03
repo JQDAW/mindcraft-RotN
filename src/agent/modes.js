@@ -185,7 +185,14 @@ const modes_list = [
             if (plan?.action === 'fight' && await world.isClearPath(agent.bot, plan.from)) {
                 say(agent, `Fighting ${plan.from.name}!`);
                 execute(this, agent, async () => {
-                    await skills.defendSelf(agent.bot, 8, plan.isEnemy);
+                    // defendSelf pauses cowardice, so the plan is checked each round: a creeper or more
+                    // mobs arriving end the fight, and the bot backs off (#186 review).
+                    await skills.defendSelf(agent.bot, 8, plan.isEnemy, () => threats.threatPlan(agent.bot)?.action === 'fight');
+                    const next = threats.threatPlan(agent.bot);
+                    if (next?.action === 'flee') {
+                        await say(agent, `Backing off: ${next.from.name.replace("_", " ")} (${next.why})!`);
+                        await skills.avoidEnemies(agent.bot, next.away, next.isEnemy, (e) => threats.threatFor(e)?.reaction === 'fight');
+                    }
                 });
             }
         }
@@ -303,7 +310,8 @@ const modes_list = [
             }
             if (!entity_in_view)
                 this.last_entity = null;
-            if (Date.now() > this.next_change) {
+            // No random looks either while a do-not-look mob is loaded nearby: one could land on it (#186 review).
+            if (Date.now() > this.next_change && !threats.doNotLookNear(agent.bot)) {
                 // look in random direction
                 this.staring = Math.random() < 0.3;
                 if (!this.staring) {

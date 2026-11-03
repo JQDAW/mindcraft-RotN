@@ -12,9 +12,14 @@
 //   take-cover              ranged (skeletons, witches, ...): get out of its range
 //   fight                   melee: fight it, but retreat when two or more come at once
 //                           (rotn-progression.md hazard table, zombies)
-//   ignore-unless-provoked  endermen and the like: never attack, never look at it; fight
-//                           back only right after it hurt the bot
+//   ignore-unless-provoked  endermen and the like: never attack, never look at it. Fight back
+//                           only when that mob is angry (the enderman's "screaming" flag);
+//                           for one whose flag is unknown, back off after a hit nearby
 //   ignore                  not a threat
+//
+// rotn-data's sources (documented, vanilla, verified, inferred class rules) are treated the
+// same: the inferred rules lean cautious (every creeper variant keeps its distance, skeleton
+// variants take cover), so acting on them never makes the bot bolder (#186 review nit).
 import { threatOf, nightThreats } from '../../../packages/rotn-data/index.js';
 import * as mc from '../../utils/mcdata.js';
 
@@ -27,9 +32,15 @@ export const RANGES = {
 };
 /** Retreat instead of fighting when this many melee mobs are within RANGES.fight.near. */
 export const OUTNUMBERED = 2;
-/** A provoked mob (one the bot must not look at) may be fought back this soon after a hit. */
+/** A mob whose anger the bot cannot read: back off this soon after a hit, this close to it. */
 const PROVOKED_MS = 3000;
 const PROVOKED_DIST = 4;
+/**
+ * Where a do-not-look mob shows it is angry: the 1.12 enderman's metadata index 13 ("screaming",
+ * set while it targets a player; 12 is its carried block). Tied to the mob itself, not to any
+ * damage the bot took (#186 review: fall damage next to an enderman made the bot attack it).
+ */
+const ANGRY_FLAG = { enderman: 13 };
 
 const cache = new Map();
 
@@ -61,6 +72,20 @@ export function threatFor(entity) {
 
 /** Whether the bot must not look at this mob (an enderman's stare check). */
 export const doNotLook = (entity) => !!threatFor(entity)?.doNotLook;
+
+/** Whether a do-not-look mob is loaded within range (an enderman's stare check reaches 64 blocks). */
+export function doNotLookNear(bot, range = 64) {
+    const me = bot.entity?.position;
+    if (!me) return false;
+    return Object.values(bot.entities ?? {}).some(e => e !== bot.entity && e?.position && doNotLook(e) && e.position.distanceTo(me) <= range);
+}
+
+/** true: the mob is angry (it targets a player); false: calm; null: its anger cannot be read. */
+export function isAngry(entity) {
+    const i = ANGRY_FLAG[entity?.name];
+    if (i === undefined) return null;
+    return entity.metadata?.[i] === true;
+}
 
 /**
  * What to do about the mobs around the bot now. First match wins:
@@ -95,11 +120,17 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     if (ranged.length) return { action: 'flee', why: 'ranged', from: ranged[0].e, away: RANGES['take-cover'].away, isEnemy: is('take-cover') };
     if (melee.length) return { action: 'fight', why: 'melee', from: melee[0].e, isEnemy: is('fight') };
 
-    const hurtAt = bot.lastDamageTime ?? 0;
-    const provoked = near.find(x => x.t.reaction === 'ignore-unless-provoked' && x.d <= PROVOKED_DIST);
-    if (provoked && now - hurtAt <= PROVOKED_MS) {
-        const id = provoked.e.id;
-        return { action: 'fight', why: 'provoked', from: provoked.e, isEnemy: (e) => e.id === id };
+    const calmOnes = near.filter(x => x.t.reaction === 'ignore-unless-provoked' && x.d <= PROVOKED_DIST);
+    const angry = calmOnes.find(x => isAngry(x.e) === true);
+    if (angry) {
+        const id = angry.e.id;
+        return { action: 'fight', why: 'provoked', from: angry.e, isEnemy: (e) => e.id === id };
+    }
+    // Its anger cannot be read: never attack it; after a hit right next to it, back off.
+    const unread = calmOnes.find(x => isAngry(x.e) === null);
+    if (unread && now - (bot.lastDamageTime ?? 0) <= PROVOKED_MS) {
+        const id = unread.e.id;
+        return { action: 'flee', why: 'provoked', from: unread.e, away: RANGES.fight.away, isEnemy: (e) => e.id === id };
     }
     return null;
 }
