@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T11:46Z (from `date -u`)
+Updated: 2026-11-03T14:27Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -193,11 +193,12 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - blocks/items: `betterwithaddons:world_scale_ore` hardness 15 -> 225 and `randomthings:spectrecoil_number` names (world or random values, known).
 - entities, spawns and serializers: unchanged. `common-mobs.json`: only its dump stamp changed.
 
-## Restart point (respawned after the Orca restart; updated 2026-11-03T11:44Z)
+## Restart point (updated 2026-11-03T14:24Z)
 
-- **Worktree:** branch `agent/rotn-data/fill-nits` (#172), from origin/develop `6a6d9ee`, everything pushed. No background jobs.
-- **Open PR:** #172, the #152 nits (below). Waiting for the independent review and the lead.
-- **Then:** ask the lead for the next item. The G3 note's open items: 14 overworld night mobs still default to "fight", and the parasite and weta are not cited.
+- **Worktree:** branch `agent/rotn-data/parasite-weta` (#179), everything pushed. No background jobs except #179's independent review.
+- **Open PRs:** #178 (the 14 night defaults; reviewed, nits fixed, CI green) and #179 (parasite and weta; reviewed, nits fixed). They merge with each other cleanly (`git merge-tree`).
+- **Then:** after #178 merges, a one-line README follow-up naming the parasite and weta in the `threatOf` row (left out of #179 so the two PRs don't conflict). Then ask the lead.
+- **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
 - **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
   - `pack/pack.zip`: the pinned RotN 3.3.4 server pack, SHA-256 `90642fd5...f5205` (verify again before use), plus `charm.jar`, `specialmobs.jar`, `Frozen-Fiend-1.5.3.jar`;
@@ -205,11 +206,13 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
   - `bc/x/`: extracted classes;
   - the older mod jars are in session `2c454268-...`'s `scratchpad/modjars/`.
 
-  Nothing in them is needed for #172.
+  `pack/pack.zip` is the source of the jars and configs used in #178 and #179.
 
 ## Doing
 
-- **#172, the #152 nits** (see Follow-ups). The independent review approved it with nits; the STATUS nits are fixed and the test nit is left as is. It waits for the lead.
+- **#178, the last 14 overworld night defaults (lead's pick 1, G3 night survival).** Every mob `nightThreats()` listed with the default `fight` now has a cited entry: 12 `verified` from the mods' bytecode and the pack's configs, husk and zombie villager `vanilla`. Three workers did the first pass, one per mod group; I re-ran the deciding checks. The independent review re-checked 7 claims in the bytecode, and all held. APPROVE WITH NITS; the wording nits are fixed. Open points are in the evidence as "Not settled: ...". No overworld night threat is left to the default (test).
+- **#179, parasite and weta (lead's pick 2).** Both read from Fish's Undead Rising's bytecode by me. Parasite: `fight`. It latches on by touch, infests (a slow hunger drain), bites for 1 and dies by itself unattached. 0-4 spawn from a dead zombie, frozen zombie or mushroom zombie (5%), or from any mob that dies infested. Weta: `ignore-unless-provoked`. It only retaliates, and it does not spawn naturally on this pack (`weta spawn rate`=0). Independent review: APPROVE WITH NITS (6 claims re-checked in the bytecode; all held). Nits fixed: the sand source (a dry-biome sand block, 1%), now cited; advice to kill an attached parasite, since each bite renews Infested; infested deaths leave parasites.
+- **Done:** #172 merged (`81875ca`), the #152 nits.
 
 The entries below are done; they are kept here as the record of how they work.
 
@@ -293,7 +296,7 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Follow-ups (later PRs)
 
-- **#152 nits: in PR #172** (`agent/rotn-data/fill-nits`). The README's variant count is now 115,782, re-measured on develop `6a6d9ee` (209 recipes truncated; install about 0.3 s, building everything about 0.6 s). `canFill` drops stacks no slot accepts before the matching; results are unchanged (tested). The JSDoc says `assignment` covers the first craft only. Tests: `craft-fill.test.js` 5/5, skills-rotn's `craft_needs.test.js` 16/16, ESLint clean on the touched files.
+- **#152 nits: done in #172** (merged `81875ca`). The README's variant count is now 115,782, re-measured on develop `6a6d9ee` (209 recipes truncated; install about 0.3 s, building everything about 0.6 s). `canFill` drops stacks no slot accepts before the matching; results are unchanged (tested). The JSDoc says `assignment` covers the first craft only. Tests: `craft-fill.test.js` 5/5, skills-rotn's `craft_needs.test.js` 16/16, ESLint clean on the touched files.
 
 - **#102 review follow-ups:** the crafting table test (no planks-only variant) and the sticks test are in PR #112. `outShape` from the dump's `remaining` is **blocked** (Request 9): prismarine-recipe 1.5.0's `computeDelta` applies `outShape` with inShape's items, so those recipes would look free to `bot.recipesFor`. No G3 recipe has remaining items.
 
@@ -333,4 +336,5 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- #172 `agent/rotn-data/fill-nits`: the #152 nits (see Follow-ups).
+- #178 `agent/rotn-data/night-defaults`: the last 14 overworld night defaults (see Doing).
+- #179 `agent/rotn-data/parasite-weta`: parasite and weta (see Doing).
