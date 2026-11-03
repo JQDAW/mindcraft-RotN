@@ -9,6 +9,12 @@
 //       -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/<g3 test profile>.json
 //
 // What it does:
+//   0. The preflight (lead, #169 review): the driver must be the Mindcraft driver, and its arguments, the
+//      profile (its model must be LLM_MODEL: profileProblems and modelProblems) and settings.js are checked
+//      (driverPreflight). `deploy/test-server.sh run` runs `batch.mjs --preflight <same arguments>` BEFORE it
+//      creates the server: that runs these checks plus one usage reading, and exits 0 or 2 without running
+//      anything. Only after it passed does test-server.sh set ROTN_BATCH_PREFLIGHT=passed (never inherited),
+//      and inside a test-server run the batch refuses without it. The batch repeats the checks itself.
 //   1. Reads the OpenRouter key's usage (numbers only; lib/llm-spend.mjs). If it cannot, it refuses to
 //      start (exit 2): a batch whose spend cannot be watched does not run.
 //   2. Before each scenario, reads the usage again. If the batch has spent MORE than --max-batch-usd since
@@ -27,6 +33,7 @@
 //      it; the totals; why it stopped; testMode. Never the key.
 //   Exit: 0 if every scenario exited 0 (gate pass), 5 if the spend went over the limit (stop or end), 6 if
 //   the spend could not be read at the end, 2 if it could not start, else 1. The wrapper deletes the server.
+//   With --preflight: 0 if every check passed, else 2.
 //
 // Limits (#122 review nits): the spend is checked BETWEEN scenarios, not during one, so a single scenario
 // can run past the limit; and OpenRouter's usage figure can lag behind the newest requests by a little.
@@ -44,10 +51,39 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { keyFetch, readKeyUsage, spent, testOverridesAllowed, TEST_OVERRIDES } from './lib/llm-spend.mjs';
 import { findBash } from './lib/adapters.mjs';
+import { checkProfile, parseDriverArgs, settingsProblems } from './drivers/mindcraft-driver.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const EXIT_SPEND_STOP = 5;
 export const EXIT_SPEND_UNKNOWN = 6;
+const MINDCRAFT_DRIVER = path.join(HERE, 'drivers', 'mindcraft-driver.mjs');
+/** Set by deploy/test-server.sh run (never inherited) once `batch.mjs --preflight` passed, before the create. */
+export const PREFLIGHT_MARK = 'ROTN_BATCH_PREFLIGHT';
+
+const samePath = (a, b) => {
+    const [x, y] = [path.resolve(a), path.resolve(b)];
+    return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y;
+};
+
+/**
+ * The driver checks that need no server (lead, #169 review): the driver must be the Mindcraft driver, and
+ * its own refusals that depend only on files run here too: its arguments (parseDriverArgs), the profile
+ * with its model (checkProfile: profileProblems and modelProblems) and the settings.js main.js imports
+ * (settingsProblems). The profile's bot name and the driver's environment are checked per scenario, by
+ * the driver, because they come from the runner. Offline tests may use a fake driver (test mode only).
+ * Returns the problems (empty = go).
+ */
+export async function driverPreflight(driver, env) {
+    const i = driver.findIndex((a) => samePath(a, MINDCRAFT_DRIVER));
+    if (i < 0) {
+        return testOverridesAllowed(env) ? [] : [`the driver must be ${path.relative(process.cwd(), MINDCRAFT_DRIVER)} (a G3 batch runs the real agent, and only that driver checks its model)`];
+    }
+    const { options, problems } = parseDriverArgs(driver.slice(i + 1));
+    const p = [...problems];
+    if (options.profile) p.push(...checkProfile(options.profile).problems);
+    p.push(...(await settingsProblems(options.settings)));
+    return p.map((m) => `driver: ${m}`);
+}
 
 /** Test-mode overrides that would weaken a real batch: their names, if any is set while not allowed. */
 export function forbiddenOverrides(env) {
@@ -65,15 +101,16 @@ export function endVerdict(base, end, maxBatchUsd, exit) {
 }
 const log = (m) => console.error(`[batch ${new Date().toISOString().slice(11, 19)}] ${m}`);
 
-/** Arguments: --max-batch-usd N --logs-out DIR [--summary FILE] ([--timeout-min M] --scenario ID --out DIR)+ -- DRIVER... */
+/** Arguments: [--preflight] --max-batch-usd N --logs-out DIR [--summary FILE] ([--timeout-min M] --scenario ID --out DIR)+ -- DRIVER... */
 export function parseBatchArgs(argv) {
-    const o = { maxBatchUsd: null, logsOut: null, summary: null, scenarios: [], driver: [] };
+    const o = { preflight: false, maxBatchUsd: null, logsOut: null, summary: null, scenarios: [], driver: [] };
     const problems = [];
     let timeoutMin = 15;
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--') { o.driver = argv.slice(i + 1); break; }
-        if (a === '--max-batch-usd') o.maxBatchUsd = Number(argv[++i]);
+        if (a === '--preflight') o.preflight = true;
+        else if (a === '--max-batch-usd') o.maxBatchUsd = Number(argv[++i]);
         else if (a === '--logs-out') o.logsOut = argv[++i];
         else if (a === '--summary') o.summary = argv[++i];
         else if (a === '--timeout-min') timeoutMin = Number(argv[++i]);
@@ -148,6 +185,28 @@ async function main(argv) {
     const forbidden = forbiddenOverrides(process.env);
     if (forbidden.length) {
         log(`refused: ${forbidden.join(', ')} set inside a real test-server run; test-mode overrides are for the offline tests only`);
+        return 2;
+    }
+    // The driver's file checks (the model among them) run before the usage reading and, through
+    // test-server.sh's --preflight call, before any server exists (lead, #169 review).
+    const pre = await driverPreflight(o.driver, process.env);
+    if (pre.length) {
+        for (const p of pre) log(`refused: ${p}`);
+        return 2;
+    }
+    if (o.preflight) {
+        const u = await readKeyUsage({ key: process.env.OPENROUTER_API_KEY, fetchImpl: keyFetch(process.env) });
+        if (!u.ok) {
+            log(`preflight refused: the key's usage cannot be read (${u.error}); a batch whose spend cannot be watched does not run`);
+            return 2;
+        }
+        log(`preflight passed: driver, profile, model and settings checked; the key's usage can be read; ${o.scenarios.length} scenario(s)`);
+        return 0;
+    }
+    // Inside a test-server run, the server exists already: the same checks must have passed before it was
+    // created. deploy/test-server.sh run sets the mark only after `batch.mjs --preflight` exited 0.
+    if (process.env.TEST_SERVER_CTL && process.env[PREFLIGHT_MARK] !== 'passed') {
+        log(`refused: inside a test-server run without ${PREFLIGHT_MARK}=passed; start the batch as \`deploy/test-server.sh run ... -- node test/runner/batch.mjs ...\`, which runs its preflight before the create`);
         return 2;
     }
     const testMode = testOverridesAllowed(process.env);
