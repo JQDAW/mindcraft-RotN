@@ -1,14 +1,18 @@
 #!/usr/bin/env node
-// The G3 gate evidence cross-check (#122 review nit 1, #129 review): every G3 result.json must be vouched
-// for by the batch summary batch.mjs wrote (batch.json), because the ROTN_G3_BATCH marker alone can be forged.
+// The G3 gate evidence cross-check (#122 review nit 1, #129 review and re-review): every G3 result must be
+// vouched for by the batch summary batch.mjs wrote (batch.json), because the ROTN_G3_BATCH marker alone
+// can be forged.
 //
 //   node test/tools/g3-batch-check.mjs <batch.json> <result.json>...   one batch and its results
 //   node test/tools/g3-batch-check.mjs --tree <dir>                     every G3 result under <dir>
 //
-// --tree is compulsory for evidence: every G3 result.json under <dir> (gate G3 or a g3- scenario) must have
-// a batch.json in its own folder or a parent folder (up to <dir>), and that nearest batch.json must vouch for
-// it; an unreadable result.json is a problem too, since it could hide a G3 result. CI runs it over
-// test/evidence/ (test/unit/g3-spend.test.js).
+// --tree is compulsory for evidence. It reads EVERY *.json under <dir>, whatever its name (a result
+// committed as g3-result.json or Result.json counts too; #129 re-review nit 1). Each one that is a G3
+// result (isG3Result: gate G3 in any case, a g3- scenario, or a scenario loadScenarios marks G3) must
+// have a batch.json in its own folder or a parent folder (up to <dir>), and that nearest batch.json must
+// vouch for it. A *.json that cannot be read, or a batch.json that is itself a G3 result, is a problem
+// too, since either could hide a G3 result. CI runs it over test/evidence/ (test/unit/g3-spend.test.js).
+// Gate reviews accept G3 evidence only from test/evidence/g3/<batch>/ (test/runner/DRIVER.md).
 //
 // Prints one line per problem; exit 0 = consistent, 1 = not, 2 = usage. See crossCheckBatch in
 // test/runner/lib/g3.mjs.
@@ -19,9 +23,10 @@ import { fileURLToPath } from 'node:url';
 import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
 
 const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
+const isBatchFile = (f) => path.basename(f) === 'batch.json';
 
 /** Reads the files and runs the check: the problems. */
-export function checkFiles(summaryFile, resultFiles) {
+export function checkFiles(summaryFile, resultFiles, { g3Scenarios = [] } = {}) {
     let summary;
     try {
         summary = readJson(summaryFile);
@@ -37,14 +42,19 @@ export function checkFiles(summaryFile, resultFiles) {
             problems.push(`${f}: cannot be read as JSON (${e.code ?? 'parse error'})`);
         }
     }
-    return [...problems, ...crossCheckBatch(summary, results)];
+    return [...problems, ...crossCheckBatch(summary, results, { g3Scenarios })];
 }
 
-/** Every result.json under dir (recursive). */
-export function resultFilesUnder(dir) {
+/** Every *.json under dir (recursive, any name and case), batch.json files included. */
+export function jsonFilesUnder(dir) {
     return fs.readdirSync(dir, { recursive: true, withFileTypes: true })
-        .filter((d) => d.isFile() && d.name === 'result.json')
+        .filter((d) => d.isFile() && /\.json$/i.test(d.name))
         .map((d) => path.join(d.parentPath ?? d.path, d.name));
+}
+
+/** Every result file under dir: every *.json except the batch summaries (batch.json). */
+export function resultFilesUnder(dir) {
+    return jsonFilesUnder(dir).filter((f) => !isBatchFile(f));
 }
 
 /** The nearest batch.json in the file's folder or a parent folder, stopping at root; null if none. */
@@ -61,11 +71,11 @@ function nearestBatch(file, root) {
  * Every G3 result under root must be covered by its nearest batch.json, and each such batch.json must
  * vouch for all the G3 results it covers. Returns the problems (empty = consistent, or no G3 results).
  */
-export function checkEvidenceTree(root) {
+export function checkEvidenceTree(root, { g3Scenarios = [] } = {}) {
     if (!fs.existsSync(root)) return [];
     const problems = [];
     const byBatch = new Map();
-    for (const f of resultFilesUnder(root)) {
+    for (const f of jsonFilesUnder(root)) {
         let result;
         try {
             result = readJson(f);
@@ -73,7 +83,11 @@ export function checkEvidenceTree(root) {
             problems.push(`${f}: cannot be read as JSON (${e.code ?? 'parse error'}), so it may hide a G3 result`);
             continue;
         }
-        if (!isG3Result(result)) continue;
+        if (!isG3Result(result, g3Scenarios)) continue;
+        if (isBatchFile(f)) {
+            problems.push(`${f}: a batch.json that is itself a G3 result: not a batch summary, and not gate evidence`);
+            continue;
+        }
         const b = nearestBatch(f, root);
         if (!b) {
             problems.push(`${f}: a G3 result that no batch.json covers (none in its folder or a parent folder): not gate evidence`);
@@ -81,28 +95,39 @@ export function checkEvidenceTree(root) {
         }
         byBatch.set(b, [...(byBatch.get(b) ?? []), f]);
     }
-    for (const [b, files] of byBatch) problems.push(...checkFiles(b, files));
+    for (const [b, files] of byBatch) problems.push(...checkFiles(b, files, { g3Scenarios }));
     return problems;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-    const args = process.argv.slice(2);
-    let p;
-    let what;
+/** The ids of the scenarios that loadScenarios marks gate G3. */
+export async function g3ScenarioIds() {
+    const { loadScenarios } = await import('../runner/run.mjs');
+    return Object.values(await loadScenarios()).filter((s) => isG3Result({ gate: s.gate })).map((s) => s.id);
+}
+
+async function main(args) {
     if (args[0] === '--tree' && args.length === 2) {
-        p = checkEvidenceTree(args[1]);
-        what = `every G3 result under ${args[1]} is vouched for by its batch.json`;
-    } else if (args.length >= 2 && !args[0].startsWith('--')) {
-        const [summaryFile, ...resultFiles] = args;
-        p = checkFiles(summaryFile, resultFiles);
-        what = `${resultFiles.length} result(s) vouched for by ${summaryFile}`;
-    } else {
-        console.error('usage: g3-batch-check.mjs <batch.json> <result.json>... | --tree <dir>');
-        process.exitCode = 2;
+        return [checkEvidenceTree(args[1], { g3Scenarios: await g3ScenarioIds() }), `every G3 result under ${args[1]} is vouched for by its batch.json`];
     }
-    if (p) {
+    if (args.length >= 2 && !args[0].startsWith('--')) {
+        const [summaryFile, ...resultFiles] = args;
+        return [checkFiles(summaryFile, resultFiles, { g3Scenarios: await g3ScenarioIds() }), `${resultFiles.length} result(s) vouched for by ${summaryFile}`];
+    }
+    return [null, null];
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    main(process.argv.slice(2)).then(([p, what]) => {
+        if (!p) {
+            console.error('usage: g3-batch-check.mjs <batch.json> <result.json>... | --tree <dir>');
+            process.exitCode = 2;
+            return;
+        }
         for (const m of p) console.error(m);
         if (!p.length) console.log(`consistent: ${what}`);
         process.exitCode = p.length ? 1 : 0;
-    }
+    }, (e) => {
+        console.error(`error: ${e?.message ?? e}`);
+        process.exitCode = 2;
+    });
 }
