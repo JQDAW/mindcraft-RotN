@@ -2,6 +2,7 @@ import * as skills from '../library/skills.js';
 import settings from '../settings.js';
 import convoManager from '../conversation.js';
 import { addTask, cancelTask } from '../task_queue.js';
+import { finishTask } from '../priority.js';
 
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
@@ -54,11 +55,18 @@ export const actionsList = [
     {
         name: '!stop',
         description: 'Force stop all actions and commands that are currently executing.',
-        perform: async function (agent) {
+        perform: async function (agent, context) {
+            // A task giver who types it also puts autonomy on hold until !resume (E3), so the
+            // agenda or a task cannot undo it. When the model uses it, only the action stops.
+            if (context?.sender) {
+                agent.control.setHold('stop', context.sender);
+                if (agent.self_prompter.isActive()) agent.self_prompter.stop(false);
+            }
             await agent.actions.stop();
             agent.clearBotLogs();
             agent.actions.cancelResume();
             agent.bot.emit('idle');
+            if (context?.sender) return 'stopped; on hold until a task giver types !resume';
             let msg = 'Agent stopped.';
             if (agent.self_prompter.isActive())
                 msg += ' Self-prompting still active.';
@@ -67,11 +75,56 @@ export const actionsList = [
     },
     {
         name: '!stfu',
-        description: 'Stop all chatting and self prompting, but continue current action.',
-        perform: async function (agent) {
-            agent.openChat('Shutting up.');
+        description: 'A task giver types this to stop all chatting and self prompting, but continue the current action.',
+        forcedOnly: true, // task givers only (E3, lead's #146 review); it holds autonomy until !resume
+        perform: async function (agent, context) {
+            if (!context?.sender) return 'stfu: a task giver must type !stfu themselves';
+            agent.openChat('Shutting up until a task giver types !resume.');
+            agent.control.setHold('quiet', context.sender);
             agent.shutUp();
             return;
+        }
+    },
+    {
+        name: '!pause',
+        description: 'A task giver types this to pause tasks and the agenda: the current action finishes, then the bot waits for !resume.',
+        forcedOnly: true,
+        perform: function (agent, context) {
+            if (!context?.sender) return 'pause: a task giver must type !pause themselves';
+            agent.control.setHold('pause', context.sender);
+            if (agent.self_prompter.isActive()) agent.self_prompter.stop(false);
+            return 'paused; the current action finishes, then I wait until a task giver types !resume';
+        }
+    },
+    {
+        name: '!resume',
+        description: 'A task giver types this to end a !stop, !pause or !stfu: tasks and the agenda carry on.',
+        forcedOnly: true,
+        perform: function (agent, context) {
+            if (!context?.sender) return 'resume: a task giver must type !resume themselves';
+            const was = agent.control.release();
+            agent.shut_up = false;
+            return was ? `resumed (after ${was.kind} by ${was.by})` : 'resumed (nothing was on hold)';
+        }
+    },
+    {
+        name: '!taskDone',
+        description: 'Call when the player task you are working on is done. Say briefly what you did.',
+        params: {
+            'summary': { type: 'string', description: 'What you did, in a few words.' }
+        },
+        perform: function (agent, summary) {
+            return finishTask(agent, 'done', summary);
+        }
+    },
+    {
+        name: '!taskFailed',
+        description: 'Call when the player task you are working on cannot be done. Say why.',
+        params: {
+            'reason': { type: 'string', description: 'Why it cannot be done, in a few words.' }
+        },
+        perform: function (agent, reason) {
+            return finishTask(agent, 'failed', reason);
         }
     },
     {

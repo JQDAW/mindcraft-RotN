@@ -15,9 +15,10 @@ import { addBrowserViewer } from './vision/browser_viewer.js';
 import { serverProxy, sendOutputToServer } from './mindserver_proxy.js';
 import settings from './settings.js';
 import { Task } from './tasks/tasks.js';
-import { TaskQueue, isTaskGiver } from './task_queue.js';
+import { TaskQueue, isTaskGiver, markUntrusted } from './task_queue.js';
 import { Agenda } from './agenda.js';
-import { agendaTick } from './agenda_driver.js';
+import { Control } from './control.js';
+import { autonomyTick } from './priority.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
@@ -47,6 +48,8 @@ export class Agent {
         this.history = new History(this);
         this.tasks = new TaskQueue(this.name); // player tasks, ./bots/<name>/tasks.json (E1)
         this.agenda = new Agenda(this.name); // the RotN agenda, ./bots/<name>/agenda.json (E2)
+        this.control = new Control(this.name); // a giver's !stop/!pause/!stfu hold, ./bots/<name>/control.json (E3)
+        this.shut_up = this.control.hold?.kind === 'quiet';
         this.coder = new Coder(this);
         this.npc = new NPCContoller(this);
         this.memory_bank = new MemoryBank();
@@ -166,7 +169,8 @@ export class Agent {
             try {
                 if (ignore_messages.some((m) => message.startsWith(m))) return;
 
-                this.shut_up = false;
+                // Quiet only while a giver's !stfu holds (E3): a new message no longer undoes it.
+                this.shut_up = this.control?.hold?.kind === 'quiet';
 
                 console.log(this.name, 'received message from', username, ':', message);
 
@@ -296,7 +300,16 @@ export class Agent {
                     this.history.add(source, message);
                 }
                 // The sender travels with this one call (task commands read it; #146 review).
-                let execute_res = await executeCommand(this, message, { sender: source });
+                // A giver's typed action is a control command: tasks and the agenda wait while it
+                // runs (E3), so "come" is not cut short by the self-prompter's next command.
+                const typed_action = isAction(user_command_name);
+                if (typed_action) this.control?.beginTyped();
+                let execute_res;
+                try {
+                    execute_res = await executeCommand(this, message, { sender: source });
+                } finally {
+                    if (typed_action) this.control?.endTyped();
+                }
                 if (execute_res) 
                     this.routeResponse(source, execute_res);
                 return true;
@@ -322,8 +335,8 @@ export class Agent {
             await this.history.add('system', behavior_log);
         }
 
-        // Handle other user messages
-        await this.history.add(source, message);
+        // Handle other user messages. A non-giver's words are kept as marked, quoted data (E3).
+        await this.history.add(source, untrusted_sender ? markUntrusted(source, message) : message);
         this.history.save();
 
         if (!self_prompt && this.self_prompter.isActive()) // message is from user during self-prompting
@@ -535,7 +548,7 @@ export class Agent {
 
     async update(delta) {
         await this.bot.modes.update();
-        agendaTick(this); // throttled; no LLM call (E2)
+        autonomyTick(this); // control holds > tasks > agenda; no LLM call (E2, E3)
         this.self_prompter.update(delta);
         await this.checkTaskDone();
     }

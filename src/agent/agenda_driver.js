@@ -5,7 +5,8 @@
 // (#164 review): at most STEP_ATTEMPTS self-prompter runs, restarted after a
 // doubling back-off, and at most STEP_LLM_MS of self-prompter time. Then the
 // step is stuck: "agenda step <id> stuck: <why>", and the agenda pauses until a
-// giver types !agendaStart. Task preemption and resuming come with E3.
+// giver types !agendaStart. Holds, tasks preempting the agenda and its resuming
+// are in priority.js (E3), which calls agendaTick when no task and no hold is due.
 import settings from './settings.js';
 import * as world from './library/world.js';
 import { countItem, formatName } from './library/rotn_names.js';
@@ -64,7 +65,7 @@ export function agendaGoal(agenda, step) {
 const othersOnline = (agent) => Object.keys(agent.bot?.players ?? {}).some(n => n !== agent.name);
 
 // A chat line; a failed send is logged, never an unhandled rejection (#164 review nit).
-function say(agent, line) {
+export function say(agent, line) {
     try {
         Promise.resolve(agent.openChat(line)).catch(err => console.warn(`[agenda] chat failed: ${safeError(err)}`));
     } catch (err) {
@@ -72,7 +73,7 @@ function say(agent, line) {
     }
 }
 
-const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
+export const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
 
 /**
  * One agenda tick (throttled). Returns what it did, for tests and logs: null (not due or not
@@ -115,7 +116,10 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     if (agent._agenda_step !== step.id) {
         agent._agenda_step = step.id;
         agent._agenda_stopped_at = undefined;
-        say(agent, `agenda step ${step.id} started: ${step.short}`);
+        // After a task (E3) the agenda says it resumed, not that the step started anew.
+        const resumed = agent._agenda_preempted;
+        agent._agenda_preempted = false;
+        say(agent, resumed ? `agenda resumed: ${step.id}` : `agenda step ${step.id} started: ${step.short}`);
         sp.prompt = goal; // the self-prompter's next prompt uses it
     }
 
@@ -134,8 +138,9 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     }
 
     // Keep it going: start it, or restart it after it stopped, after BACKOFF_MS doubling per run.
-    // Resuming after a pause (pause_when_empty) is not a new run.
-    if (!sp.isActive()) {
+    // Resuming after a pause (pause_when_empty, an E3 hold or a task) is not a new run.
+    // A stopped loop still finishing its command is waited for (E3: the safe checkpoint).
+    if (!sp.isActive() && !sp.loop_active) {
         const resuming = !!agent._agenda_paused;
         if (agent._agenda_stopped_at === undefined) agent._agenda_stopped_at = now;
         const wait = resuming || spent.attempts === 0 ? 0 : BACKOFF_MS * 2 ** (spent.attempts - 1);
