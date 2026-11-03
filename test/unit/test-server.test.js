@@ -338,6 +338,40 @@ describe('up / run / down', () => {
         assert.doesNotMatch(r.stderr, /running: /, 'the command itself never ran (an inherited ROTN_BATCH_PREFLIGHT does not count)');
     });
 
+    // The batch command of the spend test above, with the script path and the run options as given.
+    const batchRun = (scriptPath, runOpts = [], extraEnv = {}) => run(['run', '--yes', ...runOpts, '--name', 'mcr-test-pre', '--', fwd(process.execPath), scriptPath,
+        '--max-batch-usd', '2', '--logs-out', fwd(path.join(tmp, 'g3-logs')), '--scenario', 'a', '--out', fwd(path.join(tmp, 'out-a')),
+        '--', 'node', 'driver.mjs'], {
+        ROTN_TEST_MODE: '1', ROTN_BATCH_RUNNER: fwd(path.join(fixtures, 'fake-batch-runner.mjs')), FAKE_DIR: fwd(tmp), OPENROUTER_API_KEY: 'not-a-real-key', ...extraEnv,
+    });
+
+    test('run + the G3 batch preflight: --dry-run checks the files only and never reads the key usage (#176 review nit)', () => {
+        // No usage file at all: a usage reading would refuse, so passing shows it was not read.
+        const r = batchRun(fwd(path.join(repo, 'test', 'runner', 'batch.mjs')), ['--dry-run'], { ROTN_OPENROUTER_USAGE_FILE: fwd(path.join(tmp, 'absent.json')) });
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, /G3 batch preflight \(no server yet\): .*batch\.mjs --preflight-files --max-batch-usd 2/);
+        assert.match(r.stderr, /preflight passed \(files only, a dry run\): .*the key's usage was not read/);
+        assert.deepEqual(mutating(), [], 'a dry run creates nothing');
+        assert.ok(!fs.existsSync(path.join(tmp, 'ran.txt')), 'no scenario ran');
+    });
+
+    test('run + the G3 batch preflight: the script is matched by its resolved path, not by how it ends (#176 review nit)', () => {
+        const usage = path.join(tmp, 'usage.json');
+        fs.writeFileSync(usage, JSON.stringify({ data: { usage: 0.25, limit: 5, limit_remaining: 4.75 } }));
+        // A path with a detour (which the old suffix match missed) still names the batch script: the preflight runs and passes.
+        const viaDetour = batchRun(`${fwd(path.join(repo, 'test', 'runner'))}/drivers/../batch.mjs`, [], { ROTN_OPENROUTER_USAGE_FILE: fwd(usage) });
+        assert.match(viaDetour.stderr, /G3 batch preflight \(no server yet\)/, viaDetour.all);
+        assert.match(viaDetour.stderr, /preflight passed: driver, profile, model and settings checked/);
+        // Another file whose path merely ends in test/runner/batch.mjs is not the batch: no preflight.
+        const decoy = path.join(tmp, 'elsewhere', 'test', 'runner', 'batch.mjs');
+        fs.mkdirSync(path.dirname(decoy), { recursive: true });
+        fs.writeFileSync(decoy, 'console.log("decoy ran");\n');
+        const other = batchRun(fwd(decoy), [], { ROTN_OPENROUTER_USAGE_FILE: fwd(usage) });
+        assert.equal(other.code, 0, other.all);
+        assert.doesNotMatch(other.stderr, /G3 batch preflight/);
+        assert.match(other.stdout, /decoy ran/);
+    });
+
     test('up: a failed server create cleans up the IP and key already created', () => {
         const r = run(['up', '--yes', '--name', 'mcr-test-crfail'], { FAKE_HCLOUD_FAIL: 'server create' });
         assert.notEqual(r.code, 0);
