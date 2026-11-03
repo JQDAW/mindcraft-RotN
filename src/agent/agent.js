@@ -133,9 +133,10 @@ export class Agent {
                     }
                 }
 
-                // The RotN agenda starts by itself at spawn (E2; harness-ops' G3 driver proposal),
-                // or resumes after a restart; a giver can stop it with !agendaStop.
-                if (!this.task.data && settings.agenda_autostart !== false)
+                // The RotN agenda starts by itself on a fresh bot (E2; harness-ops' G3 driver proposal).
+                // With an agenda.json it is left as saved: active resumes, while a giver's !agendaStop,
+                // a stuck step or "agenda done" survive a restart (#164 review).
+                if (!this.task.data && settings.agenda_autostart !== false && !this.agenda.existed)
                     this.agenda.start();
 
                 await new Promise((resolve) => setTimeout(resolve, 10000));
