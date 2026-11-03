@@ -897,6 +897,15 @@ describe('deploy.sh (real git and tar on a local repo)', () => {
         git(src, 'tag', 'vsneaky');
         commit(null, 'override', 'const settings = { "allow_insecure_coding": false };\nsettings.allow_insecure_coding = 0;\nexport default settings;\n');
         git(src, 'tag', 'vstring');
+        // skills-rotn's task givers (#146, #157 review): the test-only switch and a Server giver never reach the CX23.
+        commit(null, 'giverflag', 'export default { "allow_insecure_coding": false, "allow_server_task_giver": true };\n');
+        git(src, 'tag', 'vgiverflag');
+        commit(null, 'giverflagnull', 'export default { "allow_insecure_coding": false, "allow_server_task_giver": null };\n');
+        git(src, 'tag', 'vgiverflagnull');
+        commit(null, 'giverserver', 'export default { "allow_insecure_coding": false, "task_givers": ["JQDAW", "server"] };\n');
+        git(src, 'tag', 'vgiverserver');
+        commit(null, 'giverok', 'export default { "allow_insecure_coding": false, "allow_server_task_giver": false, "task_givers": ["JQDAW"] };\n');
+        git(src, 'tag', 'vgiverok');
         git(src, 'checkout', '-q', '-b', 'side', 'v1');
         commit('false', 'side'); git(src, 'tag', 'vside');
         git(src, 'checkout', '-q', 'develop');
@@ -961,6 +970,9 @@ describe('deploy.sh (real git and tar on a local repo)', () => {
             [['deploy', 'vinsecure'], /settings\.js does not evaluate to allow_insecure_coding === false; refusing/],
             [['deploy', 'vsneaky'], /settings\.js does not evaluate to allow_insecure_coding === false/],
             [['deploy', 'vstring'], /settings\.js does not evaluate to allow_insecure_coding === false/],
+            [['deploy', 'vgiverflag'], /settings\.js has allow_server_task_giver not false: it is test-only .* never on the CX23; refusing/],
+            [['deploy', 'vgiverflagnull'], /settings\.js has allow_server_task_giver not false/],
+            [['deploy', 'vgiverserver'], /settings\.js names "Server" as a task giver: the console sender is a test-only giver, never on the CX23; refusing/],
         ];
         for (const [args, re] of cases) {
             const r = dep(args);
@@ -971,6 +983,13 @@ describe('deploy.sh (real git and tar on a local repo)', () => {
         assert.ok(!exists(`${BASE}/state`));
         assert.equal(called('sudo').length, 0, 'no bot was touched');
         assert.ok(!exists(`${BASE}/.deploy.lock`), 'the lock is released');
+    });
+
+    test('the giver settings the lead keeps in settings.js deploy: task_givers with players, the switch false (#157 review)', () => {
+        setupRepo();
+        const r = dep(['deploy', 'vgiverok']);
+        assert.equal(r.code, 0, r.all);
+        assert.equal(state().current.startsWith('vgiverok-'), true, JSON.stringify(state()));
     });
 
     test('a failed health check switches back to the previous release by itself', () => {
