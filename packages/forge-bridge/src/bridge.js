@@ -194,7 +194,9 @@ export function attachForgeBridge(client, opts) {
                     bridge.stats.openGuis++;
                     // A mod GUI over a vanilla container: give mineflayer the open_window a
                     // vanilla server would send (mod-guis.js). Emitted now, so it comes before
-                    // the window_items that Forge sends right after OpenGui.
+                    // the window_items that Forge sends right after OpenGui. If mineflayer still
+                    // holds an unopened window_items with the same id (an ignored mod GUI's), the
+                    // window opens with those slots for a moment; the real window_items replaces them.
                     const win = modGuiWindow(msg);
                     if (win) {
                         bridge.stats.modWindows++;

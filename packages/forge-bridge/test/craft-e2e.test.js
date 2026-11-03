@@ -98,6 +98,7 @@ test('crafts in the 2x2 grid and at the FastWorkbench table, places a block and 
             ],
             blocks: { [I.cobble]: B.cobble },
             foods: { [I.bread]: 5 },
+            maxStack: { [I.crudeAxe]: 1, [I.craftingTools]: 1, [I.stonePickaxe]: 1 },
             inventory: {
                 36: { id: I.rock, count: 5 }, 37: { id: I.stick, count: 6 }, 38: { id: I.planks, count: 1 },
                 39: { id: I.bread, count: 2 }, 40: { id: I.cobble, count: 8 },

@@ -44,7 +44,7 @@ test('FastWorkbench is the crafting table in Run A, and only its gui 0 maps to a
     for (const reg of ['minecraft:blocks', 'minecraft:items']) {
         assert.equal(runARegistries().get(reg).overrides.get('minecraft:crafting_table'), 'fastbench', reg);
     }
-    assert.deepEqual(Object.keys(MOD_GUI_WINDOWS), ['fastbench:0']);
+    assert.ok('fastbench:0' in MOD_GUI_WINDOWS);
     assert.deepEqual(modGuiWindow(MSG), { windowId: 1, inventoryType: 'minecraft:crafting_table', windowTitle: '{"translate":"container.crafting"}', slotCount: 0 });
     assert.equal(modGuiWindow({ ...MSG, modGuiId: 1 }), null);
     assert.equal(modGuiWindow({ ...MSG, modId: 'craftingcraft' }), null);

@@ -13,11 +13,12 @@
 //
 // Only what bot.craft, bot.placeBlock, bot.activateBlock and bot.consume use is modelled:
 // click mode 0 (left and right button). Any other mode is rejected and recorded.
+// Max stack sizes come from opts.maxStack (64 otherwise); NBT is not modelled.
 // This is a model, not a server: the live probe batch is still the proof.
 
 import { encodeOpenGui } from '../src/channels.js';
 
-const MAX_STACK = 64;
+const DEFAULT_MAX_STACK = 64;
 const EMPTY = { blockId: -1 };
 
 const stack = (id, count = 1, meta = 0) => ({ id, count, meta });
@@ -36,7 +37,9 @@ export { stack };
  *   blocks: item id -> block id that placing it sets; foods: item id -> food points.
  */
 export function attachFakeContainers(client, opts) {
-    const { recipes, blocks, foods, table, placeDelayMs = 0, entityId = 1, food = 20 } = opts;
+    const { recipes, blocks, foods, table, placeDelayMs = 0, entityId = 1, food = 20, maxStack = {} } = opts;
+    // Item max stack size (tools are 1 on a real server), DEFAULT_MAX_STACK otherwise.
+    const max = (id) => maxStack[id] ?? DEFAULT_MAX_STACK;
     const inv = Array(46).fill(null); // ContainerPlayer: 0 result, 1-4 grid, 5-8 armour, 9-35 main, 36-44 hotbar, 45 offhand
     for (const [slot, s] of Object.entries(opts.inventory ?? {})) inv[Number(slot)] = stack(s.id, s.count, s.meta ?? 0);
     const state = {
@@ -116,7 +119,7 @@ export function attachFakeContainers(client, opts) {
         const before = copy(get(windowId, slot));
         if (slot === 0) { // the crafting result: take it all, or add it to a matching cursor
             const res = get(windowId, 0);
-            if (res && (!state.cursor || (state.cursor.id === res.id && state.cursor.meta === res.meta && state.cursor.count + res.count <= MAX_STACK))) {
+            if (res && (!state.cursor || (state.cursor.id === res.id && state.cursor.meta === res.meta && state.cursor.count + res.count <= max(res.id)))) {
                 state.cursor = state.cursor ? { ...state.cursor, count: state.cursor.count + res.count } : copy(res);
                 for (let s = 1; s <= gridEnd; s++) { const g = get(windowId, s); if (g) set(windowId, s, { ...g, count: g.count - 1 }); }
                 grid(windowId)[0] = null;
@@ -129,12 +132,12 @@ export function attachFakeContainers(client, opts) {
         const sameItem = s && c && s.id === c.id && s.meta === c.meta;
         if (button === 0) {
             if (!c && s) { state.cursor = s; set(windowId, slot, null); } else if (c && !s) { set(windowId, slot, c); state.cursor = null; } else if (sameItem) {
-                const moved = Math.min(MAX_STACK - s.count, c.count);
+                const moved = Math.min(max(s.id) - s.count, c.count);
                 set(windowId, slot, { ...s, count: s.count + moved });
                 state.cursor = c.count - moved ? { ...c, count: c.count - moved } : null;
             } else if (c && s) { set(windowId, slot, c); state.cursor = s; }
         } else {
-            if (!c && s) { const take = Math.ceil(s.count / 2); state.cursor = { ...s, count: take }; set(windowId, slot, { ...s, count: s.count - take }); } else if (c && (!s || (sameItem && s.count < MAX_STACK))) {
+            if (!c && s) { const take = Math.ceil(s.count / 2); state.cursor = { ...s, count: take }; set(windowId, slot, { ...s, count: s.count - take }); } else if (c && (!s || (sameItem && s.count < max(s.id)))) {
                 set(windowId, slot, s ? { ...s, count: s.count + 1 } : { ...c, count: 1 });
                 state.cursor = c.count > 1 ? { ...c, count: c.count - 1 } : null;
             } else if (c && s) { set(windowId, slot, c); state.cursor = s; }
@@ -145,7 +148,9 @@ export function attachFakeContainers(client, opts) {
 
     client.on('window_click', (p) => {
         state.clicks.push(p);
-        const open = p.windowId === 0 || p.windowId === state.tableWindow?.id;
+        // processClickWindow only acts on the open container: while the table is open, a
+        // window-0 click is dropped silently (no transaction), as on a real server.
+        const open = state.tableWindow ? p.windowId === state.tableWindow.id : p.windowId === 0;
         if (!open || (state.pending && state.pending.windowId === p.windowId)) { state.ignored.push(p); return; }
         if (p.mode !== 0) {
             state.unsupported.push(p);
@@ -166,7 +171,7 @@ export function attachFakeContainers(client, opts) {
     });
 
     client.on('transaction', (p) => {
-        if (state.pending && p.windowId === state.pending.windowId && p.action === state.pending.action && p.accepted) state.pending = null;
+        if (state.pending && p.windowId === state.pending.windowId && p.action === state.pending.action) state.pending = null; // processConfirmTransaction does not read 'accepted'
     });
 
     client.on('held_item_slot', (p) => { state.held = p.slotId; });

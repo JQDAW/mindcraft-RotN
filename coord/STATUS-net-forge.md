@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-03T01:13Z
+Updated: 2026-11-03T01:22Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -574,7 +574,7 @@ The setup for both batches:
     3. Place cobblestone 5 times, recording the `block_place` -> `block_change` latency.
     4. Eat bread (`use_item`) and check the food level.
   - **Evidence:**
-    - every `window_click` and `transaction` both ways in the capture (I add `transaction` to the capture list);
+    - every `window_click`, `transaction` (both ways) and `set_slot` in the capture, captured by default since PR 2 (#154). They show whether FastWorkbench's result-slot `set_slot` and its clicks behave as `fake-containers.js` assumes;
     - the inventory before and after, confirmed with `/clear <bot> <item> 0` counts on the server;
     - the placement latencies (to pick the timeout default);
     - the server log.
