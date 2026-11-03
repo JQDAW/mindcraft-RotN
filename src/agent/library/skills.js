@@ -1,7 +1,7 @@
 import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
-import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta } from "./rotn_names.js";
+import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from "./rotn_sources.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
@@ -474,15 +474,33 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         }
         for (const name of source.blocks)
             if (!blocktypes.includes(name)) blocktypes.push(name);
-        if (source.tool) ruleTools.push([blockMatcher(source.blocks), source.tool]);
+        if (source.tool) ruleTools.push([blockMatcher(source.blocks), source.tool, source.blocks]);
     }
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     // Count what the bot really gains, not a rule's yield (#141 review): the targets in the
     // inventory before and after each break. A block with no item (water) counts 1 per success.
     const countsItems = mc.getItemId(baseType) != null;
-    const held = () => targets.reduce((n, name) => n + countItem(bot, name), 0);
+    // The held targets by inventory key ("pyrotech_compat:rock_igneous:7"), so the bot can say
+    // which items it really gained (#145 review nit).
+    const heldByKey = () => {
+        const byKey = {};
+        for (const item of bot.inventory.items()) {
+            if (!targets.some(name => itemMatches(item, name))) continue;
+            const key = inventoryKey(item) ?? item.name;
+            byKey[key] = (byKey[key] ?? 0) + item.count;
+        }
+        return byKey;
+    };
+    const gainedByKey = {};
     const isLiquid = baseType === 'lava' || baseType === 'water';
-    const isWanted = blockMatcher(blocktypes); // the shared resolver: names and variants (#131 review)
+    let isWanted = blockMatcher(blocktypes); // the shared resolver: names and variants (#131 review)
+    // A rule's tool can break during the run: stop searching that rule's blocks (B2b).
+    const dropRule = (tool) => {
+        const gone = new Set(ruleTools.filter(([, t]) => t === tool).flatMap(([, , names]) => names));
+        blocktypes = blocktypes.filter(name => !gone.has(name) || targets.includes(name));
+        ruleTools.splice(0, ruleTools.length, ...ruleTools.filter(([, t]) => t !== tool));
+        isWanted = blockMatcher(blocktypes);
+    };
 
     let collected = 0;
 
@@ -527,8 +545,16 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         // A rule's tool decides what drops: below Sturdy stone gives rocks, a Sturdy pickaxe
         // cobblestone. So equip a tool the rule accepts, not the fastest (#141 review).
         const ruleTool = ruleToolFor(block);
-        if (ruleTool)
-            await bot.equip(allowedTool(bot, ruleTool), 'hand');
+        if (ruleTool) {
+            const ruleItem = allowedTool(bot, ruleTool);
+            if (!ruleItem) { // it broke or was dropped since the search began (lead, before G3)
+                log(bot, `No longer have ${describeTool(ruleTool)} to break ${block.name}; skipping those blocks.`);
+                dropRule(ruleTool);
+                i--; // finding the tool gone is not an attempt (#145 review nit); dropRule removes the rule, so this ends
+                continue;
+            }
+            await bot.equip(ruleItem, 'hand');
+        }
         else
             await bot.tool.equipForBlock(block);
         if (isLiquid) {
@@ -546,7 +572,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         }
         try {
             let success = false;
-            const before = held();
+            const before = heldByKey();
             if (isLiquid) {
                 success = await useToolOnBlock(bot, 'bucket', block);
             }
@@ -563,7 +589,17 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 success = true;
             }
             if (success) {
-                const gained = countsItems ? Math.max(0, held() - before) : 1;
+                let gained = 1; // a block with no item (water): one per success
+                if (countsItems) {
+                    gained = 0;
+                    for (const [key, n] of Object.entries(heldByKey())) {
+                        const d = n - (before[key] ?? 0);
+                        if (d > 0) {
+                            gained += d;
+                            gainedByKey[key] = (gainedByKey[key] ?? 0) + d;
+                        }
+                    }
+                }
                 collected += gained;
                 if (gained === 0)
                     log(bot, `Broke ${block.name} but got no ${blockType}.`);
@@ -584,7 +620,12 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         if (bot.interrupt_code)
             break;  
     }
-    log(bot, `Collected ${collected} ${blockType}.`);
+    // Name what was really gained when it is not just the asked-for name (a rock can be an
+    // Underground Biomes rock): "Collected 3 pyrotech:rock (2 pyrotech_compat:rock_metamorphic:0, ...)".
+    const gainedNames = Object.entries(gainedByKey);
+    const details = gainedNames.length && !(gainedNames.length === 1 && gainedNames[0][0] === blockType)
+        ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
+    log(bot, `Collected ${collected} ${blockType}${details}.`);
     return collected > 0;
 }
 
