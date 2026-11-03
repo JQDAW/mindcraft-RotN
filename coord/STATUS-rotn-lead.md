@@ -1,9 +1,19 @@
 # Status: rotn-lead
 
-Updated: 2026-11-02 22:42 UTC (from `date -u`)
+Updated: 2026-11-03 03:11 UTC (from `date -u`)
 
 
-## Current snapshot (2026-11-02 22:42 UTC): Phase 3 (G3)
+## Current snapshot (2026-11-03 03:11 UTC): before the human's Orca restart
+
+- **Team:** harness-ops (worktree harness-ops-g0), rotn-data (rotn-data-g2), skills-rotn (skills-rotn-g3), net-forge (net-forge-g1, back since 2026-11-03 on the human's approval: Request 2, crafting/placing packets and probe P1). All four were asked to push everything and update STATUS before the restart.
+- **CX23 (Ubuntu 26.04, ADR 0007):** GO 2 bootstrap done by the human; deploy key login confirmed; updated and rebooted (kernel 7.0.0-42); Orca has only the "cx23 deploy" environment (folder /tmp); the root target is removed. GO 3 read-only check as deploy merged (#163). Open: sshd -T after the reboot (needs root).
+- **LLM:** model is the human's OpenRouter preset `@preset/glm-5-1-mindcraft` (#168). The test key is a Windows user env var `OPENROUTER_API_KEY`; after this restart the lead checks (set/not set only) that a fresh Orca terminal sees it; if not, the human runs batch commands in their own PowerShell.
+- **Open PRs at the restart:** #164 (E2 agenda, REQUEST CHANGES: bounded LLM use per step, !agenda must not write, autostart only without agenda.json, wood from rotn-data); #165 (P1 scenario, REQUEST CHANGES: recipe ids, ROTN_DRIVER_PROBE=1, reply contract, kick abort, timeouts, e2e test against the real probe module); #167 (net-forge P1 reply contract + fake test server); #169 (harness-ops: pin the model in the driver); #170 (skills-rotn: RotN profile uses the preset). None reviewed yet except #164 and #165.
+- **Paid work pending:** probe P1 (about EUR 0.14, under 30 min) needs #165 and #167 merged, then the lead's written GO. The first G3 batch needs E2/E3, C1/C2, P1 results and the env var check.
+- **Lead decisions this session:** forced commands from non-task-givers are refused (#146); task_givers ["JQDAW"], allow_server_task_giver false, place_block_timeout_ms 2000 in settings.js (#158, #160); E3 must mark non-giver history as untrusted and make !stfu giver-only; P1 setup may use console give/effect/setblock (test server only, never a gate).
+- **Spend:** unchanged since S1-A (about EUR 2.26 plus IPv4-hours); no Hetzner server running.
+
+## Earlier snapshot (2026-11-02 22:42 UTC): Phase 3 (G3)
 
 - **Merged since 20:26 UTC:**
   - harness-ops: #122 (G3 spend stop), #128 (CX23 read-only probe findings);
