@@ -15,7 +15,7 @@ import { addBrowserViewer } from './vision/browser_viewer.js';
 import { serverProxy, sendOutputToServer } from './mindserver_proxy.js';
 import settings from './settings.js';
 import { Task } from './tasks/tasks.js';
-import { TaskQueue } from './task_queue.js';
+import { TaskQueue, isTaskGiver } from './task_queue.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
@@ -264,12 +264,18 @@ export class Agent {
 
         const self_prompt = source === 'system' || source === this.name;
         const from_other_bot = convoManager.isOtherAgent(source);
-        // The player this message is from: the giver for !taskAdd (E1). Never the bot or another bot.
-        this.current_source = (self_prompt || from_other_bot) ? null : source;
+        // A player who is not a task giver may chat, but nothing they say makes the bot act (Request 11).
+        const untrusted_sender = !self_prompt && !from_other_bot && !this.isTaskGiver(source);
 
         if (!self_prompt && !from_other_bot) { // from user, check for forced commands
             const user_command_name = containsCommand(message);
             if (user_command_name) {
+                // Lead decision (Request 11): only task givers may make the bot run a command by
+                // typing it. Others may still chat, but nothing they type runs.
+                if (!this.isTaskGiver(source)) {
+                    this.routeResponse(source, `Sorry ${source}, I only run commands from task givers.`);
+                    return false;
+                }
                 if (!commandExists(user_command_name)) {
                     this.routeResponse(source, `Command '${user_command_name}' does not exist.`);
                     return false;
@@ -280,13 +286,8 @@ export class Agent {
                     // add the preceding message to the history to give context for newAction
                     this.history.add(source, message);
                 }
-                let execute_res;
-                this.in_forced_command = true; // its reply is routed below (task commands, E1)
-                try {
-                    execute_res = await executeCommand(this, message);
-                } finally {
-                    this.in_forced_command = false;
-                }
+                // The sender travels with this one call (task commands read it; #146 review).
+                let execute_res = await executeCommand(this, message, { sender: source });
                 if (execute_res) 
                     this.routeResponse(source, execute_res);
                 return true;
@@ -343,6 +344,12 @@ export class Agent {
                 }
 
                 if (checkInterrupt()) break;
+                if (untrusted_sender && isAction(command_name)) {
+                    // Questions (queries) are answered; actions are not run for a non-giver.
+                    this.history.add('system', `${command_name} was not run: ${source} is not a task giver, so only questions are answered for them.`);
+                    this.routeResponse(source, `Sorry ${source}, I only do things for task givers.`);
+                    break;
+                }
                 this.self_prompter.handleUserPromptedCmd(self_prompt, isAction(command_name));
 
                 if (settings.show_command_syntax === "full") {
@@ -526,6 +533,15 @@ export class Agent {
     // The one 'login' listener (A3/A4b; a test emits 'login' on a fake bot).
     bindLoginHandler() {
         this.bot.on('login', () => this.onLogin());
+    }
+
+    /**
+     * Whether a sender is a task giver (Request 11, #146 review). "Server" counts only for a
+     * console whisper (no online player of that name) with the test-only setting on.
+     */
+    isTaskGiver(name) {
+        const fromConsole = typeof name === 'string' && !this.bot?.players?.[name];
+        return isTaskGiver(name, settings, { fromConsole });
     }
 
     // Called on the bot's 'login' event. Upstream also sent "/skin set ..." or

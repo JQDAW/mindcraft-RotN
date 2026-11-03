@@ -2,14 +2,18 @@
 //
 // One persistent JSON file per bot, ./bots/<name>/tasks.json next to its
 // memory, written atomically (temp file + rename), so the queue survives a
-// restart. Only players on the task-giver setting may add tasks (lead decision:
-// only_chat_with alone does not grant it). The giver is always the player whose
-// message is being handled, never a name the LLM writes.
+// restart. Only task givers may add tasks (lead decision: only_chat_with alone
+// does not grant it), and only by typing !taskAdd themselves: the giver is the
+// sender of that typed command, passed with the call; the LLM cannot add tasks
+// (#146 review). A corrupt file is moved aside and reported, not wiped.
+// Preempting the agenda and resuming it come with E2/E3; E3 must treat a task's
+// text as untrusted data when it goes into a prompt.
 //
 // Chat formats (agreed with harness-ops; the runner parses them from the server
 // log as "<bot> ..."):
 //   task <id> accepted: <text>
 //   task refused: <giver> is not a task giver
+//   task refused: a task giver must type !taskAdd themselves
 //   task <id> cancelled
 //   task <id> done            (E3 reports these)
 //   task <id> failed: <reason>
@@ -21,11 +25,27 @@ export const PRIORITIES = ['urgent', 'normal'];
 export const STATUSES = ['queued', 'active', 'done', 'failed', 'cancelled'];
 const OPEN = new Set(['queued', 'active']);
 
-/** Whether a player may give tasks: on settings.task_givers (case-insensitive). */
-export function isTaskGiver(name, settings) {
+/**
+ * Whether a sender may give tasks and type commands (lead decision on Request 11).
+ * - A player: on settings.task_givers (case-insensitive).
+ * - "Server", the console's whisper sender, which the G3 runner uses: only when the test-only
+ *   setting allow_server_task_giver is true (off by default, never in a committed profile)
+ *   AND the message really came from the console (fromConsole: no online player of that name),
+ *   so a player account named "Server" gets nothing (#146 review).
+ */
+export function isTaskGiver(name, settings, { fromConsole = false } = {}) {
     if (typeof name !== 'string' || !name) return false;
+    if (name.toLowerCase() === 'server') return settings?.allow_server_task_giver === true && fromConsole === true;
     const givers = Array.isArray(settings?.task_givers) ? settings.task_givers : [];
     return givers.some(g => typeof g === 'string' && g.toLowerCase() === name.toLowerCase());
+}
+
+// A stored task is used only if it is well formed (#146 review: one without an id broke sorting).
+function validTask(t) {
+    return t && typeof t === 'object' && typeof t.id === 'string' && /^t\d+$/.test(t.id)
+        && typeof t.text === 'string' && typeof t.giver === 'string'
+        && PRIORITIES.includes(t.priority) && STATUSES.includes(t.status)
+        && Number.isFinite(t.created_at);
 }
 
 export class TaskQueue {
@@ -43,16 +63,29 @@ export class TaskQueue {
     }
 
     load() {
+        this.loadProblem = null; // a sentence for the bot to report, or null
         if (!existsSync(this.file)) return;
+        let data;
         try {
-            const data = JSON.parse(readFileSync(this.file, 'utf8'));
-            this.tasks = Array.isArray(data.tasks) ? data.tasks : [];
-            this.nextId = Number.isInteger(data.nextId) ? data.nextId : this.tasks.length + 1;
+            data = JSON.parse(readFileSync(this.file, 'utf8'));
+            if (!data || typeof data !== 'object' || !Array.isArray(data.tasks)) throw new Error('no task list');
         } catch (err) {
-            console.warn(`[tasks] Could not read ${this.file} (${err.message}); starting with an empty queue.`);
+            // Keep the bad file for a human to look at, and say so (#146 review).
+            const aside = `${this.file}.corrupt-${this.now()}`;
+            try { renameSync(this.file, aside); } catch { /* left in place; the next save overwrites it */ }
+            this.loadProblem = `[tasks] ${this.file} could not be read (${err.message}); moved it to ${aside} and started an empty queue. Its tasks are lost unless restored.`;
+            console.warn(this.loadProblem);
             this.tasks = [];
             return;
         }
+        this.tasks = data.tasks.filter(validTask);
+        const dropped = data.tasks.length - this.tasks.length;
+        if (dropped > 0) {
+            this.loadProblem = `[tasks] ${dropped} malformed task entr${dropped === 1 ? 'y' : 'ies'} in ${this.file} ignored.`;
+            console.warn(this.loadProblem);
+        }
+        const highest = this.tasks.reduce((n, t) => Math.max(n, Number(t.id.slice(1))), 0);
+        this.nextId = Math.max(Number.isInteger(data.nextId) ? data.nextId : 1, highest + 1);
         // A task that was active when the process stopped is interrupted: queue it again.
         let requeued = false;
         for (const t of this.tasks) {
@@ -62,7 +95,10 @@ export class TaskQueue {
                 requeued = true;
             }
         }
-        if (requeued) this.save();
+        if (requeued) {
+            // A save failure here must not stop the agent from starting (#146 review).
+            try { this.save(); } catch (err) { console.warn(`[tasks] Could not save ${this.file} after re-queueing (${err.message}).`); }
+        }
     }
 
     save() {
@@ -132,10 +168,13 @@ export const formatTaskLine = (t) => `task ${t.id} ${t.status} ${t.priority} ${t
 
 // Command handlers (pure; the agent passes its queue, the sender and the settings).
 
-/** !taskAdd: the giver is the player whose message is being handled (null for the bot itself). */
-export function addTask(queue, { giver, text, priority }, settings) {
-    if (!giver) return 'task refused: tasks come from players, not from the bot itself';
-    if (!isTaskGiver(giver, settings)) return `task refused: ${giver} is not a task giver`;
+/**
+ * !taskAdd. giver is the sender of the typed command (the forced path); null when the LLM issued
+ * it, which is always refused (#146 review). isGiver(name) checks the sender.
+ */
+export function addTask(queue, { giver, text, priority }, isGiver) {
+    if (!giver) return 'task refused: a task giver must type !taskAdd themselves';
+    if (!isGiver(giver)) return `task refused: ${giver} is not a task giver`;
     if (typeof text !== 'string' || !text.trim()) return 'task refused: the task has no text';
     const p = String(priority ?? 'normal').trim().toLowerCase() || 'normal';
     if (!PRIORITIES.includes(p)) return `task refused: priority must be urgent or normal, not ${priority}`;
@@ -149,9 +188,10 @@ export function listTasks(queue) {
     return open.length ? open.map(formatTaskLine).join('\n') : 'no open tasks';
 }
 
-/** !taskCancel: any task giver may cancel an open task. */
-export function cancelTask(queue, { by, id }, settings) {
-    if (!by || !isTaskGiver(by, settings)) return `task refused: ${by || 'the bot'} is not a task giver`;
+/** !taskCancel: any task giver may cancel an open task, by typing the command. */
+export function cancelTask(queue, { by, id }, isGiver) {
+    if (!by) return 'task refused: a task giver must type !taskCancel themselves';
+    if (!isGiver(by)) return `task refused: ${by} is not a task giver`;
     const t = queue.get(String(id ?? '').trim());
     if (!t || !OPEN.has(t.status)) return `task ${id} is not an open task`;
     queue.cancel(t.id);

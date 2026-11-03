@@ -26,13 +26,6 @@ function runAsAction (actionFn, resume = false, timeout = -1) {
     return wrappedAction;
 }
 
-// The reply reaches public chat either way: a forced command (a player typed it) is routed
-// by handleMessage; an LLM-issued one is announced here (harness-ops parses these lines).
-function announced(agent, reply) {
-    if (!agent.in_forced_command) agent.openChat(reply);
-    return reply;
-}
-
 export const actionsList = [
     {
         name: '!newAction',
@@ -370,24 +363,27 @@ export const actionsList = [
     },
     {
         name: '!taskAdd',
-        description: 'Queue a task the player you are talking to asked for. Only players on the task-giver list may give tasks; others are refused. Priority is "urgent" or "normal".',
+        description: 'A task giver types this to queue a task. Priority is "urgent" or "normal".',
+        // Only on the forced path: the giver is the sender of the typed command, passed per call,
+        // never shared state or a name the LLM writes; not offered to the LLM (#146 review).
+        forcedOnly: true,
         params: {
             'text': { type: 'string', description: 'The task, in the player\'s words.' },
             'priority': { type: 'string', description: 'urgent or normal.' } // required: the parser has no optional params
         },
-        perform: function (agent, text, priority) {
-            // The giver is the player whose message is being handled, never a name the LLM writes (E1).
-            return announced(agent, addTask(agent.tasks, { giver: agent.current_source, text, priority }, settings));
+        perform: function (agent, text, priority, context) {
+            return addTask(agent.tasks, { giver: context?.sender ?? null, text, priority }, (name) => agent.isTaskGiver(name));
         }
     },
     {
         name: '!taskCancel',
-        description: 'Cancel an open task by its id (like t3). Only task givers may cancel tasks.',
+        description: 'A task giver types this to cancel an open task by its id (like t3).',
+        forcedOnly: true,
         params: {
             'id': { type: 'string', description: 'The task id, for example t3.' }
         },
-        perform: function (agent, id) {
-            return announced(agent, cancelTask(agent.tasks, { by: agent.current_source, id }, settings));
+        perform: function (agent, id, context) {
+            return cancelTask(agent.tasks, { by: context?.sender ?? null, id }, (name) => agent.isTaskGiver(name));
         }
     },
     {
