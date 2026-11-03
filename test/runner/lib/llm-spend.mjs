@@ -73,9 +73,26 @@ export function spent(before, after) {
     return Math.round((after.usage - before.usage) * 1e6) / 1e6;
 }
 
-/** result.llm for one scenario: calls, the two readings and the cost; error names a reading that failed. */
+/**
+ * The models the Mindcraft driver started the agent with, from its `mindcraft_start` event
+ * ({model, code_model, vision_model}), or null when the driver reported none.
+ */
+export function agentModels(outputLines) {
+    for (const l of outputLines ?? []) {
+        if (!l.startsWith('DRIVER ')) continue;
+        try {
+            const e = JSON.parse(l.slice(7));
+            if (e?.type === 'mindcraft_start' && e.models && typeof e.models === 'object') return e.models;
+        } catch { /* not an event */ }
+    }
+    return null;
+}
+
+/** result.llm for one scenario: the models, calls, the two readings and the cost; error names a reading that failed. */
 export function llmRecord(before, after, outputLines) {
     return {
+        // The model of the run (the human's decision: openrouter/@preset/glm-5-1-mindcraft for every LLM run).
+        models: agentModels(outputLines),
         calls: countLlmCalls(outputLines),
         usageBefore: before?.ok ? before.usage : null,
         usageAfter: after?.ok ? after.usage : null,

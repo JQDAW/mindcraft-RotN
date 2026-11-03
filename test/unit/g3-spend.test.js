@@ -10,12 +10,13 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL } from '../runner/lib/llm-spend.mjs';
+import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, agentModels, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL } from '../runner/lib/llm-spend.mjs';
+import { LLM_MODEL, modelId, modelProblems, profileModels } from '../runner/lib/g3.mjs';
 import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProblems, g3Policy } from '../runner/lib/g3.mjs';
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
-import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
+import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
 import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
 import { checkFiles, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds } from '../tools/g3-batch-check.mjs';
@@ -85,10 +86,27 @@ describe('the key usage read: numbers only, the key never leaves the header', ()
         assert.equal(countLlmCalls(['a', LLM_CALL_LINE, 'Received.', `x ${LLM_CALL_LINE}`]), 2);
         assert.equal(spent({ ok: true, usage: 1.1 }, { ok: true, usage: 1.4 }), 0.3);
         assert.equal(spent({ ok: true, usage: 1 }, { ok: false, error: 'http 401' }), null);
-        assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1.25 }, [LLM_CALL_LINE, LLM_CALL_LINE]),
-            { calls: 2, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
+        const start = `DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: LLM_MODEL, code_model: null, vision_model: null } })}`;
+        assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1.25 }, [start, LLM_CALL_LINE, LLM_CALL_LINE]),
+            { models: { model: LLM_MODEL, code_model: null, vision_model: null }, calls: 2, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
         assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: false, error: 'timeout' }, []),
-            { calls: 0, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
+            { models: null, calls: 0, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
+    });
+
+    test('the model of every LLM run: the OpenRouter preset (the human\'s decision, 2026-11-03), recorded from the driver', () => {
+        assert.equal(LLM_MODEL, 'openrouter/@preset/glm-5-1-mindcraft');
+        assert.equal(modelId('openrouter/@preset/glm-5-1-mindcraft'), LLM_MODEL);
+        assert.equal(modelId({ api: 'openrouter', model: '@preset/glm-5-1-mindcraft' }), LLM_MODEL, 'the object form is the same model');
+        assert.equal(modelId({ api: 'openrouter', model: 'openrouter/@preset/glm-5-1-mindcraft' }), LLM_MODEL, 'a prefixed model is not prefixed twice');
+        assert.equal(modelId({ model: 'openrouter/@preset/glm-5-1-mindcraft', params: { temperature: 0 } }), LLM_MODEL);
+        for (const bad of [undefined, null, '', 3, {}, { model: 3 }]) assert.equal(modelId(bad), null, JSON.stringify(bad));
+        assert.deepEqual(modelProblems({ model: LLM_MODEL }), []);
+        assert.deepEqual(modelProblems({ model: LLM_MODEL, code_model: LLM_MODEL, vision_model: { api: 'openrouter', model: '@preset/glm-5-1-mindcraft' } }), []);
+        assert.equal(modelProblems({ model: 'gpt-4o' }).length, 1);
+        assert.equal(modelProblems({ model: LLM_MODEL, code_model: 'claude-sonnet-4-6' }).length, 1);
+        assert.deepEqual(profileModels({ model: LLM_MODEL }), { model: LLM_MODEL, code_model: null, vision_model: null });
+        assert.equal(agentModels(['noise', 'DRIVER {bad', `DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: 'x' } })}`]).model, 'x');
+        assert.equal(agentModels(['DRIVER {"type":"refused"}']), null);
     });
 
     test('an unknown LLM cost makes a run not gate-valid', () => {
@@ -165,19 +183,22 @@ describe('maxBatchUsd: USD 2, an equal gate parameter of every G3 scenario', () 
 });
 
 /** batch.mjs with the fake runner, a fake key-usage file and a fake TEST_SERVER_CTL that records the fetch. */
-function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b', 'c'], key = KEY, usageFile = true, runExit = '0', fakeCloud = '1', breakUsage = '', hang = '', timeoutMin = null } = {}) {
+function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b', 'c'], key = KEY, usageFile = true, runExit = '0', fakeCloud = '1', breakUsage = '', hang = '', timeoutMin = null,
+    driver = ['node', 'driver.mjs'], preflight = false, mark = 'passed' } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-batch-'));
     const file = path.join(dir, 'usage.json');
     if (usageFile) fs.writeFileSync(file, JSON.stringify({ data: { usage, limit: 5, limit_remaining: 5 - usage } }));
     const ctl = path.join(dir, 'ctl.sh');
     fs.writeFileSync(ctl, `#!/usr/bin/env bash\necho "$*" >> "${fwd(path.join(dir, 'ctl.txt'))}"\n`);
-    const args = [BATCH, '--max-batch-usd', maxUsd, '--logs-out', fwd(path.join(dir, 'logs')), '--summary', path.join(dir, 'batch.json')];
+    const args = [BATCH, ...(preflight ? ['--preflight'] : []), '--max-batch-usd', maxUsd, '--logs-out', fwd(path.join(dir, 'logs')), '--summary', path.join(dir, 'batch.json')];
     if (timeoutMin) args.push('--timeout-min', timeoutMin);
     for (const s of scenarios) args.push('--scenario', s, '--out', path.join(dir, `out-${s}`));
-    args.push('--', 'node', 'driver.mjs');
+    args.push('--', ...driver);
     const env = { ...process.env, ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: file, ROTN_BATCH_RUNNER: FAKE_RUNNER,
-        FAKE_DIR: dir, FAKE_SPEND: spend, FAKE_RUN_EXIT: runExit, TEST_SERVER_CTL: fwd(ctl), TEST_SERVER_FAKE_CLOUD: fakeCloud, FAKE_BREAK_USAGE: breakUsage, FAKE_HANG: hang, OPENROUTER_API_KEY: key };
+        FAKE_DIR: dir, FAKE_SPEND: spend, FAKE_RUN_EXIT: runExit, TEST_SERVER_CTL: fwd(ctl), TEST_SERVER_FAKE_CLOUD: fakeCloud, FAKE_BREAK_USAGE: breakUsage, FAKE_HANG: hang, OPENROUTER_API_KEY: key,
+        ROTN_BATCH_PREFLIGHT: mark };
     if (!key) delete env.OPENROUTER_API_KEY;
+    if (!mark) delete env.ROTN_BATCH_PREFLIGHT;
     return new Promise((resolve) => {
         const child = spawn(process.execPath, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
         let out = '';
@@ -254,6 +275,70 @@ describe('batch.mjs: the spend stop', () => {
     });
 });
 
+describe('batch.mjs: the preflight before any server exists (lead, #169 review)', () => {
+    const DRIVER = path.join(HERE, '..', 'runner', 'drivers', 'mindcraft-driver.mjs');
+    const profiles = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-pre-'));
+    const prof = (name, body) => { const f = path.join(profiles, name); fs.writeFileSync(f, JSON.stringify(body)); return f; };
+    const good = prof('good.json', { name: 'FRCFLD', model: LLM_MODEL });
+    const other = prof('other.json', { name: 'FRCFLD', model: 'openrouter/openai/gpt-4o' });
+    const code = prof('code.json', { name: 'FRCFLD', model: LLM_MODEL, code_model: 'openrouter/x/y' });
+
+    test('driverPreflight: the Mindcraft driver with a profile on the preset passes; another model, a bad profile or a task argument refuses', async () => {
+        assert.deepEqual(await driverPreflight(['node', DRIVER, '--profile', good], {}), []);
+        assert.deepEqual(await driverPreflight(['node', fwd(DRIVER), '--profile', good], {}), [], 'forward slashes name the same driver');
+        assert.match((await driverPreflight(['node', DRIVER, '--profile', other], {})).join('; '), /^driver: profile .*model is 'openrouter\/openai\/gpt-4o', not openrouter\/@preset\/glm-5-1-mindcraft/);
+        assert.match((await driverPreflight(['node', DRIVER, '--profile', code], {})).join('; '), /code_model is 'openrouter\/x\/y'/);
+        assert.match((await driverPreflight(['node', DRIVER, '--profile', path.join(profiles, 'none.json')], {})).join('; '), /not found/);
+        assert.match((await driverPreflight(['node', DRIVER], {})).join('; '), /--profile is required/);
+        assert.match((await driverPreflight(['node', DRIVER, '--profile', good, '--task_path', 't.json'], {})).join('; '), /never loads Mindcraft task files/);
+    });
+
+    test('driverPreflight: any other driver is refused outside test mode, and allowed only with the offline test overrides', async () => {
+        assert.match((await driverPreflight(['node', 'driver.mjs'], {}))[0], /the driver must be .*mindcraft-driver\.mjs/);
+        assert.match((await driverPreflight(['node', 'mindcraft-driver.mjs'], {}))[0], /the driver must be/, 'a file of the same name elsewhere is not the driver');
+        assert.deepEqual(await driverPreflight(['node', 'driver.mjs'], { ROTN_TEST_MODE: '1' }), []);
+        assert.match((await driverPreflight(['node', 'driver.mjs'], { ROTN_TEST_MODE: '1', TEST_SERVER_CTL: 'ctl', TEST_SERVER_FAKE_CLOUD: '0' }))[0], /the driver must be/, 'not inside a real test-server run');
+    });
+
+    test('--preflight: passes with the preset and a usage reading, runs nothing, fetches nothing, writes no summary', { timeout: 60000 }, async () => {
+        const r = await runBatch({ preflight: true, mark: '', driver: ['node', DRIVER, '--profile', good] });
+        assert.equal(r.code, 0, r.out);
+        assert.match(r.out, /preflight passed: driver, profile, model and settings checked; the key's usage can be read; 3 scenario\(s\)/);
+        assert.deepEqual([r.ran, r.ctl, r.summary], [[], '', null]);
+        assert.ok(!r.out.includes(KEY), 'the key is never printed');
+    });
+
+    test('--preflight: another model, or no usage reading, refuses with 2 and runs nothing', { timeout: 60000 }, async () => {
+        const m = await runBatch({ preflight: true, mark: '', driver: ['node', DRIVER, '--profile', other] });
+        assert.equal(m.code, 2, m.out);
+        assert.match(m.out, /refused: driver: profile .*model is 'openrouter\/openai\/gpt-4o'/);
+        const u = await runBatch({ preflight: true, mark: '', usageFile: false, driver: ['node', DRIVER, '--profile', good] });
+        assert.equal(u.code, 2, u.out);
+        assert.match(u.out, /preflight refused: the key's usage cannot be read/);
+        for (const r of [m, u]) assert.deepEqual([r.ran, r.ctl, r.summary], [[], '', null]);
+    });
+
+    test('the batch itself repeats the checks, and inside a test-server run refuses without the preflight mark', { timeout: 60000 }, async () => {
+        const m = await runBatch({ driver: ['node', DRIVER, '--profile', other] });
+        assert.equal(m.code, 2, m.out);
+        assert.match(m.out, /refused: driver: profile .*model is/);
+        const n = await runBatch({ mark: '' });
+        assert.equal(n.code, 2, n.out);
+        assert.match(n.out, /refused: inside a test-server run without ROTN_BATCH_PREFLIGHT=passed/);
+        const w = await runBatch({ mark: 'yes' });
+        assert.equal(w.code, 2, 'only the exact value test-server.sh sets');
+        for (const r of [m, n, w]) assert.deepEqual(r.ran, [], 'no scenario started');
+    });
+
+    test('parseBatchArgs: --preflight is a flag; everything else is checked the same', () => {
+        const a = ['--max-batch-usd', '2', '--logs-out', 'l', '--scenario', 'a', '--out', 'o', '--', 'node', 'd.mjs'];
+        assert.equal(parseBatchArgs(a).options.preflight, false);
+        const p = parseBatchArgs(['--preflight', ...a]);
+        assert.deepEqual([p.options.preflight, p.problems], [true, []]);
+        assert.match(parseBatchArgs(['--preflight', '--logs-out', 'l']).problems.join('; '), /--max-batch-usd/);
+    });
+});
+
 describe('batch.mjs: timeouts, spawn errors and the summary (#122 nits 1, 3, 4)', () => {
     test('a scenario stopped by the batch\'s timeout is recorded as 124 (run.mjs itself exits 143)', { timeout: 60000 }, async () => {
         const r = await runBatch({ spend: '0', scenarios: ['a', 'b'], hang: 'a', timeoutMin: '0.02' });
@@ -327,7 +412,9 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
         assert.equal(isG3Result({ scenario: 'G3-First-Night' }), true);
         assert.equal(isG3Result({ scenario: 'first-night' }), false, 'no gate and no g3- prefix: only the scenario list can tell');
         assert.equal(isG3Result({ scenario: 'First-Night' }, ['first-night']), true, 'a scenario loadScenarios marks G3, without case');
+        assert.equal(isG3Result({ scenario: 'first-night' }, [' First-Night\n']), true, 'the scenario list ids are trimmed too (#139 review nit 1)');
         assert.equal(isG3Result({ scenario: '' }, ['']), false);
+        assert.equal(isG3Result({ scenario: ' ' }, [' ']), false, 'a blank id never matches a blank list entry');
         for (const notObject of [null, [], 'G3', 3]) assert.equal(isG3Result(notObject), false);
         // The review's case: gate 'g3' with an unprefixed scenario id and a forged marker is cross-checked.
         assert.match(crossCheckBatch(summary, [{ file: 'x', result: { gate: 'g3', scenario: 'first-night', batch: 'x-1:2' } }])[0], /marker 'x-1:2'/);

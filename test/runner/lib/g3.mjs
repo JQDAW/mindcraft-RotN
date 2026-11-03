@@ -5,6 +5,45 @@
 //   - the console is limited to G3's approved commands; give, summon, kill and every op command
 //     (gamemode, effect, op, ...) are refused before they reach the server.
 export const G3_DEFAULTS = Object.freeze({ maxBatchUsd: 2 });
+
+/**
+ * The model of every LLM run (the human's decision, 2026-11-03): the OpenRouter preset
+ * @preset/glm-5-1-mindcraft, written in a Mindcraft profile as "openrouter/@preset/glm-5-1-mindcraft".
+ */
+export const LLM_MODEL = 'openrouter/@preset/glm-5-1-mindcraft';
+
+/**
+ * A profile's model setting as one "api/model" id, the way Mindcraft's selectAPI reads it: a string
+ * ("openrouter/@preset/..."), or an object {api?, model} ({api: "openrouter", model: "@preset/..."} is
+ * the same model). Null when the setting is absent or not understood.
+ */
+export function modelId(setting) {
+    if (typeof setting === 'string') return setting.trim() || null;
+    if (!setting || typeof setting !== 'object' || typeof setting.model !== 'string') return null;
+    const m = setting.model.trim();
+    const api = typeof setting.api === 'string' ? setting.api.trim() : '';
+    return api && !m.startsWith(`${api}/`) ? `${api}/${m}` : m;
+}
+
+/**
+ * The model problems of a profile for an LLM run: "model" must be LLM_MODEL, set in the profile itself,
+ * and "code_model" and "vision_model", when set, must be the same model (Mindcraft uses them for code and
+ * images instead of "model"). The embedding model is not checked. Problems as text.
+ */
+export function modelProblems(profile) {
+    const p = [];
+    const main = modelId(profile?.model);
+    if (main !== LLM_MODEL) p.push(`model is '${main ?? 'not set'}', not ${LLM_MODEL} (the human's decision for every LLM run)`);
+    for (const k of ['code_model', 'vision_model']) {
+        if (profile && k in profile && modelId(profile[k]) !== LLM_MODEL) p.push(`${k} is '${modelId(profile[k]) ?? 'not understood'}', not ${LLM_MODEL}`);
+    }
+    return p;
+}
+
+/** The models a profile will use, for the run record: {model, code_model, vision_model} (null when unset). */
+export const profileModels = (profile) => ({
+    model: modelId(profile?.model), code_model: modelId(profile?.code_model), vision_model: modelId(profile?.vision_model),
+});
 export const G3_GATE_PARAMS = Object.freeze({ maxBatchUsd: 'equal' });
 export const TEST_TASK_GIVER = 'Server';
 
@@ -88,13 +127,15 @@ export function crossCheckBatch(summary, results, { g3Scenarios = [] } = {}) {
 /**
  * A G3 result, so that neither dropping nor re-spelling a field dodges the cross-check (#129 re-review nit 2):
  * its gate is G3 in any case or spacing, or its scenario starts with g3- (any case), or its scenario is one
- * that loadScenarios marks gate G3 (g3Scenarios: those ids, compared without case).
+ * that loadScenarios marks gate G3 (g3Scenarios: those ids, compared without case or surrounding spaces,
+ * #139 review nit 1). Only the top-level object is a result: one wrapped in an array or a parent object is
+ * not detected (#139 review nit 2; DRIVER.md says so, and the evidence review covers it).
  */
 export function isG3Result(result, g3Scenarios = []) {
     if (!result || typeof result !== 'object' || Array.isArray(result)) return false;
     if (String(result.gate ?? '').trim().toUpperCase() === 'G3') return true;
     const id = String(result.scenario ?? '').trim().toLowerCase();
-    return id.startsWith('g3-') || g3Scenarios.some((s) => String(s).toLowerCase() === id && id !== '');
+    return id.startsWith('g3-') || (id !== '' && g3Scenarios.some((s) => String(s).trim().toLowerCase() === id));
 }
 
 /** The verb of a console command, for error messages (never the arguments). */

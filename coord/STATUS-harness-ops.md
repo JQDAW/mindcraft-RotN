@@ -1,6 +1,33 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (02:33 UTC, from `date -u`)
+Updated: 2026-11-03 (12:16 UTC, from `date -u`)
+
+## After the Orca restart (2026-11-03)
+
+**State:** respawned by the lead at 11:42 UTC. **#169 (the model pin) and net-forge's #167 are merged.** Nothing touches the CX23. No paid batch is running or planned without a written GO. Only this PR (#176) edits this file, so #165 and #173 cannot conflict with it.
+
+**Open PRs (mine):**
+- **#176, the G3 model preflight** `agent/harness-ops/g3-model-preflight` (the lead's #169 review: required before the first G3 batch).
+  - `deploy/test-server.sh run` runs `batch.mjs --preflight` before it creates anything. That checks the driver, the profile, its model and `settings.js`, and reads the key's usage once. If it refuses, no server is created.
+  - Inside a test-server run, the batch refuses without the preflight's mark.
+  - The two #169 nits: the driver reads the profile once; the `llmRecord` JSDoc is back above `llmRecord`.
+- **#165** `agent/harness-ops/probe-p1`: probe P1, the scenario `probe-craft-place` (never a gate). The lead's requests after #167 are in 580716fe (develop merged in, not rebased: no force-push):
+  - `checkProbeReply` on every reply; a reply that breaks contract v1 fails its step (`notes.contractProblems`). The stub driver sends v1 replies and checks each one.
+  - The protocol notes describe the raw whisper component, not mineflayer's `whisper` event.
+  - The e2e runs on net-forge's `probe-test-server.js` with the real `g1-driver` (3 pass: full, food left at 20, lost connection).
+  - **Hunger:** `22 19` (44 exhaustion: about food 14 from a fresh 20/5). Before the eat, the server's `p1food` score (criterion `food`) must be below 20, or the eat is not sent; the driver's `foodBefore` must be below 20 as well.
+  - **Lead decision asked in the #165 comment:** three anchored `scoreboard` commands added to `P1_CONSOLE_ALLOW`, or instead a net-forge change that reports `bot.food` before the eat.
+- **#173**: the #139 re-review nits. CI is green.
+- Requests item 16 is open as skills-rotn's **#170** (the RotN profile uses the preset). Until #170 merges, every Mindcraft-driver run is refused, and with the preflight, before any server exists.
+
+**Next step:** wait for the lead.
+- The P1 batch needs #165 merged, then the lead's written GO.
+- The first G3 batch needs #176 and #170 merged, the lead's check that a fresh Orca terminal sees `OPENROUTER_API_KEY` (set or not set only), and a written GO.
+- If a PR conflicts with develop again, it is almost always this file: merge develop in, keep one shared "Open PRs" list, and push. Never force-push.
+
+**Rules still in force:**
+- PC memory is tight: targeted test files only, one at a time; no `npm ci`, no full suite, no Docker. CI runs the full suite.
+- Write markdown and code edits with the Write/Edit tools or script files, never inside double-quoted shell strings.
 
 ## Done
 
@@ -1125,9 +1152,29 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
     **A separate point for the human:** sshd allows password logins (`passwordauthentication yes`), and nothing filters the ports until GO 2 turns on ufw. With no lockdown (the human's decision), the `deploy` password from H2 will also work over SSH. Turning off `PasswordAuthentication` before H2 would close that. It is the human's call, and it is not part of my bootstrap.
 
+15. **net-forge: the P1 reply contract** (lead: coordinate it through STATUS). **#165 uses #162's protocol as it is** (`packages/forge-bridge/tools/probe-commands.mjs`), and **`test/unit/probe-e2e.test.js` holds it to the real code.** It runs the scenario against a real `g1-driver.mjs` process with `ROTN_DRIVER_PROBE=1` on your fake server and craft world (`packages/forge-bridge/test/craft-world.js`, `fake-containers.js`). What the scenario relies on, so a change on your side shows up in that test:
+    - **Commands:** `probe-craft TOKEN RECIPE_ID [x,y,z]` (P1: `crafttweaker:pyro_crude_axe`, `crafttweaker:crafting_tools`, `crafttweaker:crafting_table`, and `crafttweaker:stone_pickaxe` at the table), `probe-place TOKEN ITEM x,y,z FACE` and `probe-eat TOKEN ITEM`, as a console whisper from `Server`.
+    - **Replies:** exactly one `DRIVER {"type":"probe","token","cmd","ok",...}` per token, within your 60 s limit. Fields read:
+      - craft: `ok`, `error`, `result`, `before`, `after`, `ms`, `variant`, `tableBlock`;
+      - place: `ok`, `error`, `after`, `updateMs` (into `notes.placeLatencyMs`), `totalMs`;
+      - eat: `ok`, `error`, `foodBefore`, `foodAfter`, `countBefore`, `countAfter`, `ms`.
+    - **The capture path** comes from your `forge` event (`capture`). Rejected transactions and the `fastbench` mod window are read from the capture in the evidence step; the e2e test checks that the capture has the `fastbench` `mod_window`.
+    - **I use your test helpers** (`craft-world.js`, `fake-forge-server.js`, `stack` from `fake-containers.js`, `helpers.js`) from `test/unit/probe-e2e.test.js`. Please keep their exports, or tell me here before you change them.
+    - **Optional, later:** per-craft `modWindow` and `transactions` in the craft reply would let a scenario check them directly. They are not needed for P1.
+
+16. **skills-rotn (via the lead): the RotN profile's model.** Open as skills-rotn's #170. The Mindcraft driver refuses any profile whose `model` is not `"openrouter/@preset/glm-5-1-mindcraft"` (the human's decision; #169). Until the RotN profile in `profiles/` sets it, every G3 or smoke run is refused: by the batch preflight before any server exists, and by the driver at each start (exit 3, `refused`). That fails closed, as intended.
+    - If the profile sets `code_model` or `vision_model`, they must be the same model.
+    - The embedding model is not checked.
+17. **net-forge (info, via the lead):** on this PC, `packages/forge-bridge/test/probe-e2e.test.js` test 4 fails at :142 (`hung.timedOut` is undefined: the hung stick placement came back before its 6 s time limit), twice in a row. The file is the same as on develop, and develop's CI is green, so it looks timing- or Windows-dependent.
+
 ## Open PRs
 
-- #165: probe P1, the scenario `probe-craft-place` (never a gate) and the protocol for net-forge (Requests item 15). It is in final review with net-forge's #162 before the P1 GO.
-- #166: the #157 nit. `deploy.sh` refuses a release with the test-only `allow_server_task_giver` or a `Server` task giver.
-- Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
-- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b; the terminal was closed at 02:16:21 UTC), and the lead's #134 (ADR 0007).
+- #176: **the G3 model preflight** (`agent/harness-ops/g3-model-preflight`; the lead's #169 review):
+  - **Before the create:** when the run command's script is `test/runner/batch.mjs`, `deploy/test-server.sh run` first runs it with `--preflight` and the same arguments. It checks the driver (only the Mindcraft driver; a fake one only in offline test mode), its arguments, the profile and its model (profileProblems and modelProblems), and `settings.js`, and it reads the key's usage once. A refusal exits 1 with no hcloud create.
+  - **The mark:** only then does `test-server.sh` set `ROTN_BATCH_PREFLIGHT=passed` (never inherited). Inside a test-server run, `batch.mjs` refuses without it, so a command that hides the script fails closed.
+  - **#169 nits:** the driver reads the profile once (`checkProfile`), and the `llmRecord` JSDoc is back.
+- #169 merged (70cb5187): every LLM run uses `openrouter/@preset/glm-5-1-mindcraft`; the driver refuses other models, and `result.llm.models` records it. `OPENROUTER_API_KEY` is a Windows user environment variable; the lead checks that a fresh Orca terminal sees it (set or not set only).
+- #165: probe P1, the scenario `probe-craft-place` (never a gate), with the #165 review fixes and, since 580716fe, the lead's post-#167 requests: `checkProbeReply` on every reply, the e2e on `probe-test-server.js`, and hunger `22 19` with the server's food score below 20 before the eat (details at the top).
+- Merged since the last update: #169 (70cb5187) and net-forge's #167.
+- #173: the #139 re-review nits (`isG3Result` trims the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected). The new test fails on develop's code; this file is left out of it, so it cannot conflict.
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b; the terminal was closed at 02:16:21 UTC), #166 (`deploy.sh` refuses the test-only giver settings), and the lead's #134 (ADR 0007).

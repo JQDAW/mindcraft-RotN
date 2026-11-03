@@ -386,6 +386,15 @@ describe('waitFor', () => {
         assert.equal(await waitFor(clock, () => false, 25, 10), null);
         assert.equal(t, 55);
     });
+
+    test('a missing or bad poll interval is 1 s, so the deadline still comes (a scenario without pollMs once hung)', async () => {
+        for (const bad of [undefined, NaN, 0, -5]) {
+            let t = 0;
+            const clock = { now: () => t, sleep: (ms) => { t += ms; return Promise.resolve(); } };
+            assert.equal(await waitFor(clock, () => false, 3500, bad), null, String(bad));
+            assert.equal(t, 3500, `${bad}: three 1 s polls and a last 0.5 s one`);
+        }
+    });
 });
 
 describe('run.mjs', () => {

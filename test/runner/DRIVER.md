@@ -122,6 +122,7 @@ node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY 
   - a `settings.js` whose `allow_insecure_coding` is not exactly `false`, that names `Server` as a task giver, or whose skills-rotn `allow_server_task_giver` is anything but `false` or absent (#146). The file checked is always the one next to `main.js`, which `main.js` imports; there is no option to check another, and `--settings` is refused;
   - a profile that is not a JSON object (`null`, a number, a string or an array);
   - a profile that is missing, has a task in it, has any task-giver key (`task_givers`, `allow_server_task_giver`, ...), or names another bot than `ROTN_SCENARIO_BOT`.
+  - **a profile whose model is not `openrouter/@preset/glm-5-1-mindcraft`** (the human's decision for every LLM run, 2026-11-03; `LLM_MODEL` in `lib/g3.mjs`). It must be set in the profile itself, as a string or as `{api: "openrouter", model: "@preset/glm-5-1-mindcraft"}`. `code_model` and `vision_model` must be the same model when they are set.
 - **What `main.js` gets:**
   - `SETTINGS_JSON` with only these keys:
     - `host` and `port` (from `TEST_SERVER_HOST`/`PORT`);
@@ -145,6 +146,10 @@ node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY 
 ### G3 batches: the spend stop (`test/runner/batch.mjs`)
 
 G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
+- **The preflight, before any server exists** (lead, #169 review). When the run command's script is `test/runner/batch.mjs`, `test-server.sh run` first runs it with `--preflight` and the same arguments. That checks the driver, its profile, the profile's model (it must be `openrouter/@preset/glm-5-1-mindcraft`, and so must `code_model` and `vision_model` when set) and `settings.js`, and reads the key's usage once. If anything fails, no server is created (exit 1).
+  - The driver must be `test/runner/drivers/mindcraft-driver.mjs`; a fake driver is accepted only in the offline test mode.
+  - Only after the preflight passed does `test-server.sh` set `ROTN_BATCH_PREFLIGHT=passed` (never inherited). Inside a test-server run, `batch.mjs` refuses without it, so a command that hides the script (for example inside `bash -c`) fails closed, though only after the create.
+  - The batch repeats the same checks itself, and the driver checks the profile again in every scenario, together with the bot's name and its environment, which only the runner knows.
 - **The marker.** Every scenario it starts gets `ROTN_G3_BATCH=<batch id>:<limit>`. A G3 run without that marker, or whose marker limit differs from its `maxBatchUsd`, is not gate-valid.
 - **The batch cross-check** (#122 review, nit 1). Anyone can set an environment variable, so the marker alone does not prove that a run happened under the spend stop. A G3 gate claim therefore needs the batch summary (`--summary`, the `BATCH` JSON) next to its `result.json` files, plus:
   ```
@@ -161,7 +166,9 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
   **A result is G3** (#129 re-review nit 2) if any of these holds:
   - its gate is G3, in any case or spacing;
   - its scenario id starts with `g3-`, in any case;
-  - its scenario is one that `loadScenarios` marks gate G3.
+  - its scenario is one that `loadScenarios` marks gate G3 (ids compared without case or surrounding spaces).
+
+  Only a top-level JSON object counts as a result (#139 review nit 2). A G3 result wrapped in an array or inside a parent object is **not detected**, so this check alone does not catch it; the evidence review does. `run.mjs` and `batch.mjs` never write results in that shape.
 
   Results that are not G3 are ignored. The command exits 1 when a check fails or a file cannot be read as JSON, and 2 on a usage error.
 
@@ -188,7 +195,7 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
   - The spend is checked **between** scenarios, not during one, so a single scenario can run past the limit.
   - OpenRouter's usage figure can lag a little behind the newest requests.
   - The key's own credit limit (USD 5 for the test key) is the hard backstop.
-- **Records.** `result.json`'s `llm` (calls, the usage before and after, the cost) is in every record. Progress and killed records carry the calls so far.
+- **Records.** `result.json`'s `llm` (the models, the calls, the usage before and after, the cost) is in every record. `llm.models` is what the driver started the agent with (its `mindcraft_start` event), and a G3 run whose recorded model is not the preset is not gate-valid. Progress and killed records carry the calls so far.
 - **Test mode is for the offline tests only.** `ROTN_TEST_MODE`, `ROTN_OPENROUTER_USAGE_FILE` and `ROTN_BATCH_RUNNER` make `batch.mjs` refuse to start inside a real test-server run, and the usage read ignores the fake file there. `deploy/test-server.sh run` sets `TEST_SERVER_FAKE_CLOUD=1` only against the offline fakes. `BATCH` records `testMode`.
 
 ## S1: survey and smoke before G3
@@ -214,3 +221,60 @@ The reply forms parsed (from the 1.12 en_us lang file, to be confirmed on the Ro
 - `Added new objective '<name>' successfully`, `Invalid objective criteria type '<criteria>'`, `An objective with the name '<name>' already exists`;
 - `Showing N tracked objective(s) for <bot>:` with lines `- <display name>: <score> (<objective>)`, or `Player <bot> has no scores recorded`;
 - `Time is N`.
+
+## P1: the craft, place and eat probe (`test/scenarios/probe/probe-craft-place.mjs`)
+
+P1 is net-forge's "Probe plan P1" (`coord/STATUS-net-forge.md`), which the lead accepted in principle. It checks what the offline tests cannot on the real RotN 3.3.4 server:
+- **REID serverbound:** `window_click` stacks with item ids above 4095 are accepted;
+- **FastWorkbench:** FML's `fastbench` window opens, and a 3x3 craft works in it;
+- **Placing and eating** on 1.12, with the real `block_change` latency.
+
+**It is never a gate:** `run()` first records "P1 is a probe of crafting, placing and eating, never a gate pass", so its verdict is at best `SMOKE-PASS (not a gate pass)`. The driver is net-forge's `g1-driver.mjs` with the probe commands below. There is no LLM and no OpenRouter key.
+
+- **The console:** give, effect, setblock, testforblock and clear are allowed **for P1 only, on the disposable test server** (lead). So are three `scoreboard` commands for the one objective `p1food` (criterion `food`), which read the server's food level before the eat step. Every command goes through `guardP1Console` (`test/runner/lib/probe.mjs`), so nothing outside `P1_CONSOLE_ALLOW` is sent, and the bot never gets op.
+- **The steps:**
+  1. Log in.
+  2. `gamerule doDaylightCycle false`, `time set day`, `tp <bot> -45 66 -66`.
+  3. `clear <bot>`, then the gives, `scoreboard objectives add p1food food`, and `effect <bot> minecraft:hunger 22 19`.
+  4. Place the table at -43 66 -66 (`setblock`, then `testforblock`). Set each placement cell to air, with stone under it.
+  5. Four crafts, each checked by the server's count-only `clear <bot> <item> -1 0`.
+  6. Five placements, each checked by `testforblock`, with latencies.
+  7. Eat one bread, **only once the food is below 20**: bread cannot be eaten at 20, so the eat would only time out.
+     - The scenario reads `scoreboard players list <bot>` until the `p1food` score is below 20, for at most `foodWaitMs` (40 s) after the effect began.
+     - No score means the food never changed: 1.12 writes a `food` score only when the level changes after the objective exists.
+     - Without food below 20, the eat command is not sent and `eat` fails.
+     - With it, `eat` also needs the driver's own `foodBefore` (bot.food) below 20.
+  8. `clear <bot>`, `scoreboard objectives remove p1food`.
+
+  The data is `P1_PLAN`.
+
+- **The hunger sums** (`hungerFood`, 1.12's rules): Hunger adds `0.005 * (amplifier + 1)` exhaustion per tick. Every 4 exhaustion takes 1 saturation point while there is any, else 1 food point. A fresh player has food 20 and saturation 5.
+  - The old `10 10` gave 11 exhaustion: 2 points, both from saturation, so food stayed at 20 and the eat would hang.
+  - `22 19` gives 44 exhaustion: 11 points, 5 from saturation, so food is about 14 (15 if float rounding at the 4.0 threshold costs a point). Even with saturation 0, it would be 9: well above 6.
+
+**The protocol is net-forge's reply contract v1** (#162, #167: `packages/forge-bridge/tools/probe-commands.mjs`, and `packages/forge-bridge/README.md`, "Probe P1: commands and reply contract (v1)"), used as it is. `lib/probe.mjs` summarises it.
+- **Every reply is checked** with net-forge's `checkProbeReply`. A reply that breaks the contract fails its step, whatever its `ok` says, and is listed in `notes.contractProblems`.
+- **The opt-in:** the driver answers probes only with `ROTN_DRIVER_PROBE=1`. The scenario passes it when it starts the bot (`PROBE_DRIVER_ENV`).
+- **The sender:** a console `tell` reaches the bot as 1.12's raw chat component `{translate: "commands.message.display.incoming", with: ["Server", message]}`. The driver reads that component (mineflayer's `message` event), not mineflayer's `whisper` text pattern, which an op's `/say Server whispers to you: ...` would also match. It accepts only the sender `Server`, and the whole message must be the command.
+- **Tokens:** 6-32 hex characters; each runs once.
+- **Replies:** each command is answered within the driver's 60 s limit; the scenario waits up to 75 s.
+- **The run stops at once** (`notes.aborted`; the step's check fails with the reason, and later checks are "not reached") on any of these:
+  - a kick or lost connection in the server log, with its reason;
+  - a driver exit;
+  - 120 s with no driver output at all after a command (`stepAbortMs`, net-forge's plan).
+- **The offline end-to-end test** `test/unit/probe-e2e.test.js` runs this scenario through the runner against net-forge's REAL `g1-driver.mjs` and `probe-commands.mjs` (a driver process with `ROTN_DRIVER_PROBE=1`), on net-forge's fake RotN test server `packages/forge-bridge/test/probe-test-server.js` (#167). A change to the reply contract or to that server fails it.
+  - Its thin wrapper adds only what that server lacks: P1's three `scoreboard` commands, answered from the fake server's own food level as 1.12 does; and version digit 4 in the logged login UUID, because the fake server runs offline.
+  - It covers a full pass, food left at 20 (the eat is not sent), and a lost connection.
+
+| The scenario sends (`tell <bot> ...`) | The driver prints one line on stdout (contract v1) |
+| --- | --- |
+| `probe-craft TOKEN RECIPE_ID [x,y,z]`: one craft with rotn-data's dump recipe (P1: `crafttweaker:pyro_crude_axe`, `crafttweaker:crafting_tools`, `crafttweaker:crafting_table`, and `crafttweaker:stone_pickaxe` at the table) | `DRIVER {"type":"probe","v":1,"cmd":"craft","token":T,"ok":...,"recipe","table","variant","variants","result","resultMeta","before","after","ms","tableBlock"}` (ok: `after > before`) |
+| `probe-place TOKEN ITEM x,y,z FACE`: place ITEM against the block x,y,z on FACE | `... "cmd":"place", "item","ref","face","target","before","after","expected","otherUpdates","totalMs","updateMs","timeoutMs"` (ok: the block became the item) |
+| `probe-eat TOKEN ITEM` | `... "cmd":"eat", "item","foodBefore","foodAfter","countBefore","countAfter","ms"` (ok: food up, one item fewer) |
+
+- **Names:** every item and block name in a reply is a full registry name (`minecraft:crafting_table`).
+
+- On a failure, the reply has `error`, plus `timedOut` when the 60 s limit was hit.
+- **Each check needs two confirmations:** the driver's `ok`, and the server's own count (`clear ... 0`) or `testforblock`.
+- **Recorded as notes:** `notes.placeLatencyMs` holds each `updateMs`. `notes.capture` holds the capture file from the driver's `forge` event.
+- **Not in the replies:** window-click transactions (REID: none rejected) and the FastWorkbench window (`mod_window` with `fastbench`). The evidence step reads them from that capture, as net-forge's plan says.
