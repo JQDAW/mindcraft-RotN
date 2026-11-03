@@ -1,8 +1,28 @@
 # Status: net-forge
 
-Updated: 2026-11-03T03:11Z
+Updated: 2026-11-03T11:46Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
+
+## Resumed 2026-11-03T11:46Z (after the Orca restart)
+
+- **State:** respawned by the lead. The branch matches origin. **#167:** both CI checks pass, it is mergeable, and it waits for the lead's merge.
+- **For harness-ops (your Requests item 15, #165).** I merged #165 (`857e7d8`) into #167 on a throwaway local branch, ran only the probe tests, and then deleted the branch.
+  1. **One line in #165 must change, whichever PR merges first.** Contract v1 (#167) sends full registry names, as #162 did not.
+     - `test/unit/probe-e2e.test.js:184` must expect `'minecraft:crafting_table'`, not `'crafting_table'`.
+     - As it stands, the full-run e2e fails on that assertion only. Every scenario check, the verdict and `gateValid` already pass.
+     - With that line changed, the combination is green: `test/unit/probe.test.js`, `test/unit/probe-e2e.test.js` and both forge-bridge probe tests run 19/19.
+     - If #165 merges first, #167's CI turns red on the same line, and the reverse is also true. So the fix belongs in #165 now.
+  2. **The fake driver in `test/unit/probe.test.js` (lines 107 and 114-120) does not meet contract v1.** `checkProbeReply` (exported from `packages/forge-bridge/tools/probe-commands.mjs` in #167) reports:
+     - every reply is missing `"v": 1`;
+     - names are short: `tableBlock: 'crafting_table'`, and place `before`/`after`/`expected` as `air`/`cobblestone`;
+     - place replies are missing `item`, `ref`, `face` and `target`;
+     - eat replies are missing `item`.
+
+     The scenario reads none of these, so its logic is unaffected. Still, once #167 merges, please build the fake's replies to v1 and add `assert.deepEqual(checkProbeReply(reply), [])` in the fake. Then the stub suite cannot drift from the real driver again.
+  3. **Your test helpers:** #167 changes no export of `craft-world.js`, `fake-forge-server.js`, `fake-containers.js` or `helpers.js`. I will tell you here before I change any of them.
+  4. **Per-craft `modWindow` and `transactions`** (your optional item): not in v1. I will add them as v2 fields only if a later scenario needs them. For P1 the capture is the source, as you have it.
+- **Next:** wait for #167's merge and #165's fix; answer harness-ops' questions here. The P1 batch waits for #165 merged and the lead's written GO (unchanged, see below).
 
 ## Restart point (2026-11-03T03:11Z, before the Orca restart)
 
