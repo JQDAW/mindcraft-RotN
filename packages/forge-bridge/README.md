@@ -316,12 +316,80 @@ Redaction happens at write time. The bot's username and UUID become same-length 
   - Switches: `ROTN_DRIVER_AUTH` (`offline` for loopback tests only), `ROTN_DRIVER_FORGE_BRIDGE` (default `on`), `ROTN_DRIVER_CAPTURE` (default `1`, `captures/raw/`), `ROTN_DRIVER_MODLIST_FILE`.
   - **G2:** it also answers the G2 protocol (`scenario-blocks`, `-blockat`, `-entities`, `-items`) through `attachG2` with `loadAgentNames`, the agent's own naming path. Names come from `bot.registry` as forge-bridge extends it, and translation from `src/utils/mcdata.js` `toNew`/`toOld`. It logs a `g2_adapter` event: its `source` is the mcdata.js module, or `fallback` (stock names, no translation) when mcdata.js cannot be imported. `ROTN_DRIVER_CHUNK_WAIT_MS` sets how long the census waits for the cube's chunks (scenario-protocol's default, 30 s, when unset). The effective value is logged in `g2_adapter` as `chunkWaitMs`, with `chunkWaitSource`. harness-ops' reference driver uses stock mineflayer, which a Forge server rejects at the handshake, so this is the driver for real G2 runs.
   - Its `DRIVER {json}` lines add the handshake result, registry sizes, `walkMethod` and the block under the bot with its Forge registry name. `walkMethod` is the scenario's: its `method` field if `walk()` reports one, otherwise `scenario-protocol walk()`.
-  - **Probe P1** (not a gate; plan in `coord/STATUS-net-forge.md`): with `ROTN_DRIVER_PROBE=1`, `tools/probe-commands.mjs` also answers three commands:
-    - `probe-craft TOKEN RECIPE_ID [X,Y,Z]`: rotn-data's dump recipe through `convertRecipe` and `bot.craft`, in the 2x2 grid or at the table at X,Y,Z;
-    - `probe-place TOKEN ITEM X,Y,Z FACE`: waits up to `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS` (default 10000) and reports `updateMs`;
-    - `probe-eat TOKEN ITEM`.
+  - **Probe P1** (not a gate): with `ROTN_DRIVER_PROBE=1`, `tools/probe-commands.mjs` also answers `probe-craft`, `probe-place` and `probe-eat`. The input and the exact reply contract are in "Probe P1: commands and reply contract" below.
 
-    Commands are accepted only as a console whisper (`tell <bot> probe-...`, a whisper from `Server`), anchored on the whole text; public chat and players' whispers are ignored. Each command has a 60 s time limit, answered `ok:false, timedOut:true`; a later result is only logged (`probe_late`). Each answer is a `DRIVER {"type":"probe",...}` line plus one chat line of at most 200 characters (`probe TOKEN CMD ok|fail k=v ...`). Auto-eat is off while the probe runs, and each token runs once. A command whose line does not match its format exactly (a bad position, extra text) is answered `fail` as malformed, never run another way. `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS` is only checked when the probe is on. `test/probe-e2e.test.js` runs all three commands through `initBot` in the offline craft world.
+## Probe P1: commands and reply contract (v1)
+
+This is the contract between `tools/probe-commands.mjs` (the bot side, net-forge) and harness-ops' P1 scenario (`test/scenarios/probe/probe-craft-place.mjs`, `test/runner/lib/probe.mjs`).
+- The code holds it as `PROBE_REPLY` and `PROBE_CONTRACT_VERSION`.
+- `checkProbeReply(reply)` lists every way a reply breaks it, so a fake driver can be tested against it.
+- P1 is a probe, never a gate. The plan is in `coord/STATUS-net-forge.md`.
+
+**Switch.** The commands exist only with `ROTN_DRIVER_PROBE=1` in the driver's environment, which the scenario sets. Auto-eat is turned off at spawn (`DRIVER {"type":"probe_ready","autoEat":"off"}`).
+
+**Input: console whispers only.**
+- **The sender.** A command is the whole text of a console `tell <bot> ...`. The bot accepts only the 1.12 chat component `{"translate":"commands.message.display.incoming","with":["Server", <text>]}`, so the sender must be `Server` (the console; S1 check d).
+  - Public chat and players' whispers start nothing; a player's whisper is logged as `probe_ignored`.
+  - mineflayer's `whisper` text pattern is not used, because it also matches an op's `/say Server whispers to you: ...`. That shows as `[JQDAW] Server whispers to you: ...`, with translate `chat.type.announcement`.
+  - Only an op could forge the exact component (`/tellraw <bot> {"translate":"commands.message.display.incoming",...}`). On the P1 test server the only op is the human, and no agent has op.
+- **The form.** The pattern is anchored at both ends. A line that starts like a command but does not match its form exactly is answered `ok:false` as malformed, and is never run another way.
+  - TOKEN is 6-32 lower-case hex characters, and each token runs once.
+  - A position is `x,y,z`: integers, no spaces.
+  - ITEM and the names in replies are full registry names (`minecraft:cobblestone`, `pyrotech:crude_axe`).
+
+| Command | Does |
+| --- | --- |
+| `probe-craft TOKEN RECIPE_ID` | One craft in the 2x2 grid with rotn-data's dump recipe RECIPE_ID (e.g. `crafttweaker:pyro_crude_axe`). It goes through `convertRecipe` (the first variant the inventory covers) and mineflayer's `bot.craft`. |
+| `probe-craft TOKEN RECIPE_ID x,y,z` | The same at the crafting table at x,y,z (RotN's FastWorkbench: FML OpenGui, then the synthetic window). |
+| `probe-place TOKEN ITEM x,y,z FACE` | Holds ITEM and places it against the block at x,y,z on FACE (`up`, `down`, `north`, `south`, `east` or `west`). The block lands at x,y,z plus FACE (`up`: y+1). It waits up to `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS` (default 10000, range 50-60000) for the server's update of that block to the placed block. |
+| `probe-eat TOKEN ITEM` | Holds ITEM and eats one (`bot.consume`). |
+
+**Timing.**
+- Commands run one at a time, in arrival order.
+- Each has a **60 s** time limit (`COMMAND_TIME_LIMIT_MS`). At the limit the answer is `ok:false` with `timedOut: true` and `limitMs`.
+- A result that finishes later is logged as `probe_late` and never answered.
+- The next command waits until the hung one settles, at most 10 s more. After that, `probe_stuck` is logged and any open window is closed.
+- Chat answers are spaced 1.2 s apart.
+
+**Reply.** Exactly one stdout line per command, which is the line the scenario reads:
+
+    DRIVER {"t":"<ISO time>","type":"probe","v":1,"token":"<TOKEN>","cmd":"craft"|"place"|"eat","ok":true|false, ...}
+
+| Field | In | Type | Meaning |
+| --- | --- | --- | --- |
+| `t`, `type` | all | string | From the driver's event line: the time, and `"probe"`. |
+| `v` | all | number | The contract version, `1`. |
+| `token`, `cmd`, `ok` | all | string, string, boolean | The command's token; `craft`, `place` or `eat`; whether it worked, as seen from the bot. |
+| `error` | every `ok:false` | string | Why (at most 300 characters). |
+| `timedOut`, `limitMs` | time limit only | true, number | The 60 s limit was reached. Only the common fields come with it. |
+| `line` | malformed only | string | The command text (at most 200 characters). |
+| `recipe` | craft | string | RECIPE_ID as sent. |
+| `table` | craft | [x,y,z] or null | The table position as sent, or null for the 2x2 grid. |
+| `variant`, `variants` | craft, ok | number | The index of the variant used, and how many `convertRecipe` gave. |
+| `result`, `resultMeta` | craft, ok | name; number or null | The result item and its meta. |
+| `before`, `after` | craft, ok | number | How many of the result the bot held before and after. `ok` means `after > before`. |
+| `ms` | craft and eat, ok | number | How long `bot.craft` or `bot.consume` took. |
+| `tableBlock` | craft, ok | name or null | The block at the table position (`minecraft:crafting_table`), or null. |
+| `item` | place, eat | name | ITEM as sent. |
+| `ref`, `face`, `target` | place | [x,y,z], string, [x,y,z] | The block placed against, FACE, and where the block lands. |
+| `before`, `after` | place, ok | name or null | The block at `target` before and after, as the bot sees it (null if not loaded). `ok` means it changed, and to `expected` when that is not null. |
+| `expected` | place, ok | name or null | The block of the same name as ITEM if there is one, else null (then any change counts). |
+| `updateMs` | place, ok | number or null | **The placement latency**: from the call to the server's update of `target` to `expected`. It includes the look (up to one tick). Null if the update never came. |
+| `totalMs` | place, ok | number | The whole placement call. |
+| `otherUpdates` | place, ok | number | Updates of `target` to something other than `expected` during the call. |
+| `timeoutMs` | place, ok | number | The placement wait used. |
+| `foodBefore`, `foodAfter` | eat, ok | number | The bot's food level before and after. It waits at most 2 s for the update. |
+| `countBefore`, `countAfter` | eat, ok | number | How many ITEM the bot held. `ok` means food rose and the count fell by exactly 1. |
+
+- **No other field is ever sent.** The driver does not report window clicks, transactions or the FastWorkbench window per command. Those are in the capture (`ROTN_DRIVER_CAPTURE=1`): `window_click`, `transaction`, `set_slot`, `block_place`, `block_change`, `use_item` and the `mod_window` event.
+- **Verdicts.** Pass or fail is the scenario's, from the server's own commands: `clear <bot> <item> <meta> 0` counts and `testforblock`.
+- **Failures.** `ok:false` replies carry the base fields of their command: `recipe` and `table` for craft; `item`, `ref`, `face` and `target` for place; `item` for eat. They may also carry the done fields, when the command ran to the end but did not work.
+- **Chat.** Besides the stdout line, one chat line `probe TOKEN CMD ok|fail k=v ...` goes into the server log (at most 200 characters; spaces in values become `_`). It is for people reading the log, not part of the contract.
+
+**Testing a scenario against the real module.**
+- `packages/forge-bridge/test/probe-test-server.js` is a fake RotN test server behind the runner's server interface: `console(cmd)` and `log(n)` in the 1.12 log format, for every command on P1's console allowlist.
+- `packages/forge-bridge/test/probe-test-server.test.js` drives the real g1-driver through harness-ops' `driverProcess` adapter with P1's steps, and checks every reply with `checkProbeReply`.
+- For the scenario's own end-to-end test, pass that server and the adapter to `runScenario`.
 
 ## Tests
 
