@@ -51,7 +51,39 @@ function rulePairs(catalog, rule) {
     const g = rule.gives;
     if (!g) return [];
     if (rule.action === 'start-kit') return [{ block: null, item: { name: g.name, meta: g.meta } }];
-    return (rule.blocks ?? []).map((b) => ({ block: b, item: { name: g.name, meta: g.meta === 'block' ? (b.meta ?? null) : g.meta } }));
+    // A block may name its own item ("item"; the Underground Biomes rock piles drop their own rocks)
+    // and carry its own documented flag (per-pair confidence, like `pairs`).
+    return (rule.blocks ?? []).map((b) => ({
+        block: { name: b.name, ...(b.meta != null ? { meta: b.meta } : {}) },
+        item: { name: b.item ?? g.name, meta: g.meta === 'block' ? (b.meta ?? null) : g.meta },
+        documented: b.documented === true,
+    }));
+}
+
+/**
+ * For a rule with `ore` (rock piles, stone for rocks): which of its blocks, at which metas, give an
+ * item in that ore dictionary (the dump's oredict.json; wildcard members mean every meta). skills-rotn
+ * needs this: a bare pyrotech:rock pile also covers metas 4, 5, 7 and 9 (dirt clump, sand pile, wood
+ * chips, red sand), which are not rocks, so the crude axe craft would fail with them (lead, #142).
+ * @returns {{name: string, members: Array<{name, meta}>, blocks: Array<{name: string, metas: number[]}>}|null}
+ */
+export function oreInfo(catalog, rule) {
+    if (!rule?.ore) return null;
+    const members = (catalog.oreDict(rule.ore) ?? []).map((s) => ({ name: s.name, meta: s.meta === WILDCARD_META ? null : s.meta }));
+    const inOre = (name, meta) => members.some((m) => m.name === name && (m.meta === null || m.meta === meta));
+    const byBlock = new Map();
+    for (const p of rulePairs(catalog, rule)) {
+        if (!p.block) continue;
+        const states = catalog.dump.blocks?.blocks?.[p.block.name]?.states ?? [];
+        const blockMetas = p.block.meta != null ? [p.block.meta] : states.map((s) => s.meta);
+        for (const bm of blockMetas) {
+            const im = rule.gives?.meta === 'block' && p.item.meta == null ? bm : p.item.meta;
+            if (!inOre(p.item.name, im)) continue;
+            if (!byBlock.has(p.block.name)) byBlock.set(p.block.name, new Set());
+            byBlock.get(p.block.name).add(bm);
+        }
+    }
+    return { name: rule.ore, members, blocks: [...byBlock].map(([name, ms]) => ({ name, metas: [...ms].sort((a, b) => a - b) })) };
 }
 
 function worldWays(catalog, want) {
@@ -78,7 +110,7 @@ function worldWays(catalog, want) {
         if (rule.action !== 'start-kit' && !blocks.length) continue;
         // Rules with pairs (stone families, trees, debarking, planks): documented only if a matching
         // pair is (#107 review); otherwise the rule's own value.
-        const perPair = !!(rule.stoneFamilies || rule.pairs);
+        const perPair = !!(rule.stoneFamilies || rule.pairs || (rule.blocks ?? []).some((b) => 'documented' in b));
         const confidence = perPair ? (pairs.some((p) => p.documented) ? 'documented' : 'inferred') : (rule.confidence ?? 'inferred');
         const way = {
             kind: 'world',
@@ -92,6 +124,11 @@ function worldWays(catalog, want) {
             evidence: rule.evidence ?? [],
             unverified: rule.unverified ?? [],
         };
+        if (rule.ore) {
+            way.ore = oreInfo(catalog, rule);
+            // Per listed block: does this block at this meta give an item in the ore?
+            for (const b of way.blocks) if (b.meta != null) b.inOre = way.ore.blocks.some((x) => x.name === b.name && x.metas.includes(b.meta));
+        }
         if (rule.inferred) way.inferred = rule.inferred;
         if (rule.note) way.note = rule.note;
         ways.push(way);

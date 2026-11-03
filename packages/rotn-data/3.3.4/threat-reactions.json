@@ -283,6 +283,50 @@
         "the dump: the class's simple name contains 'Skeleton' or 'Stray' (fathertoast.specialmobs.entity.skeleton.*, net.minecraft.entity.monster.EntityStray, ...); the skeleton reaction is documented in docs/research/rotn-progression.md section 2"
       ],
       "note": "Inferred from the class name: some variants fight in melee (brute, knight, ninja). Wither skeletons and their Special Mobs variants (Nether mobs, mostly melee) are excluded and get the default."
+    },
+    {
+      "id": "enderman-variants",
+      "pattern": "Enderman$",
+      "reaction": "ignore-unless-provoked",
+      "confidence": "inferred",
+      "summary": "A Special Mobs enderman variant. Its targeting is the vanilla enderman's (it targets a player who looks at it or hits it), so do not look at it and do not attack it on the first night. Some variants do more (see variantNote): the thief enderman teleports its target, the blinding enderman blinds players within 12 blocks, the mirage enderman makes fake copies.",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (from the SHA-256-checked pinned pack zip; javap -c -p, no mod code run): verified only that the targeting AI is vanilla. Entity_SpecialEnderman extends net.minecraft.entity.monster.EntityEnderman; every variant (Blinding, Icy, Lightning, Mini, Mirage, Thief) extends Entity_SpecialEnderman; Entity_SpecialEnderman.func_184651_r (initEntityAI) calls EntityEnderman.func_184651_r and then initTypeAI; no variant overrides func_184651_r",
+        "not verified: that the vanilla reaction suits each variant; the extra behaviours are listed per variant in 'variants' (#143 review, re-read in the same jar)",
+        "the vanilla enderman entry (minecraft:enderman) and Special Mobs' overworld chance 0.25 (config/Special_Mobs.cfg in the pinned pack zip, line 435)"
+      ],
+      "variants": {
+        "specialmobs:thiefenderman": "Teleports its target: onTypeAttack calls teleportTargetRandomly(EntityLivingBase) (posts an EnderTeleportEvent; constant 32.0). Being hit by it can move the bot out of its shelter.",
+        "specialmobs:blindingenderman": "Blinds: func_70636_d (onLivingUpdate) applies a potion effect (Blindness; Night Vision is also referenced) through EntityLivingBase.func_70690_d to players within 12 blocks (squared distance 144.0).",
+        "specialmobs:mirageenderman": "Makes fake copies: mirage(double, double, double) spawns new EntityMirageEnderman with setFake() (World.func_72838_d); it also overrides onTypeAttack and attackEntityFrom (func_70097_a).",
+        "specialmobs:icyenderman": "Slows: references Slowness and Mining Fatigue (not traced further).",
+        "specialmobs:lightningenderman": "No extra behaviour traced.",
+        "specialmobs:minienderman": "No extra behaviour traced.",
+        "specialmobs:specialenderman": "The base class: vanilla behaviour plus Special Mobs' generic options."
+      },
+      "note": "Matches classes whose simple name ends with 'Enderman'; entries win over class rules, so minecraft:enderman (vanilla) and ancientbeasts:rifted_enderman (verified) keep theirs."
+    },
+    {
+      "id": "witch-variants",
+      "pattern": "Witch$",
+      "reaction": "take-cover",
+      "ranged": true,
+      "confidence": "inferred",
+      "summary": "A Special Mobs witch variant. Its targeting and potion throwing are the vanilla witch's, so stay behind cover. Several variants do more (see variantNote): the undead witch spawns skeletons, the wilds witch spawns baby spiders and mounts, the domination witch pulls its target in from 10-14 blocks (so cover alone may not hold), the wind witch teleports itself.",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (from the SHA-256-checked pinned pack zip; javap -c -p, no mod code run): verified only that the targeting AI is vanilla. Entity_SpecialWitch extends net.minecraft.entity.monster.EntityWitch; every variant (Domination, Shadows, Undead, Wilds, Wind) extends Entity_SpecialWitch; Entity_SpecialWitch.func_184651_r (initEntityAI) calls EntityWitch.func_184651_r and then initTypeAI; no variant overrides func_184651_r",
+        "not verified: that the vanilla reaction suits each variant; the extra behaviours are listed per variant in 'variants' (#143 review, re-read in the same jar)",
+        "the vanilla witch entry (minecraft:witch) and Special Mobs' overworld chance 0.25 (config/Special_Mobs.cfg in the pinned pack zip, line 1246)"
+      ],
+      "variants": {
+        "specialmobs:undeadwitch": "Spawns skeletons: creates net.minecraft.entity.monster.EntitySkeleton and spawns it (World.func_72838_d), within about 11 blocks (squared distance 121.0); overrides tryDrinkPotion and pickThrownPotionByType.",
+        "specialmobs:wildswitch": "Spawns baby spiders and spider mounts: creates fathertoast.specialmobs.entity.spider.EntityBabySpider and Entity_SpecialSpider and spawns them (World.func_72838_d); overrides tryDrinkPotion, tryDrinkPotionByType and pickThrownPotionByType.",
+        "specialmobs:dominationwitch": "Pulls its target in: func_70636_d (onLivingUpdate) sends SPacketEntityVelocity toward itself for a target between 10 and 14 blocks away (squared distances 100.0 and 196.0); throws Levitation and Weakness (pickThrownPotionByType). Cover alone may not hold against it.",
+        "specialmobs:windwitch": "Teleports itself: teleportRandomly(), teleportToEntity(Entity) and teleportTo(double, double, double) (EnderTeleportEvent), also from attackEntityFrom (func_70097_a); references Invisibility.",
+        "specialmobs:shadowswitch": "Throws Blindness and Wither (also references Night Vision; not traced further).",
+        "specialmobs:specialwitch": "The base class: vanilla behaviour plus Special Mobs' generic options."
+      },
+      "note": "Matches classes whose simple name ends with 'Witch', so Special Mobs' witch spiders (EntityWitchSpider, EntityWitchCaveSpider) are not caught. minecraft:witch keeps its own entry."
     }
   ]
 }
