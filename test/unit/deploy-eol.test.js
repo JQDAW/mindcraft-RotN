@@ -1,0 +1,40 @@
+// deploy/cx23/ is copied as a folder to the bot's server and run there (deploy/cx23/README.md), so every
+// file in it must be LF (lead, after GO 2: a Windows checkout with core.autocrlf=true gave CRLF copies of
+// bot.env.example, check-env.mjs and README.md, and the human had to strip the CRs on the server).
+// Two checks, so the rule holds on Linux CI too, where autocrlf is off and a missing attribute would
+// not show as CRLF:
+//   1. git's attributes say eol=lf for every tracked file under deploy/cx23/ (deploy/.gitattributes);
+//   2. no file in the folder as it is on disk (what gets copied) contains a carriage return.
+// Offline: git only.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const CX = path.join(ROOT, 'deploy', 'cx23');
+const git = (...args) => {
+    const r = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+    assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout;
+};
+
+test('every tracked file under deploy/cx23/ has eol=lf (deploy/.gitattributes)', () => {
+    const files = git('ls-files', '-z', '--', 'deploy/cx23').split('\0').filter(Boolean);
+    assert.ok(files.length >= 9, `deploy/cx23 has its files (${files.length})`);
+    const attrs = git('check-attr', '-z', 'eol', '--', ...files).split('\0');
+    const notLf = [];
+    for (let i = 0; i + 2 < attrs.length; i += 3) if (attrs[i + 2] !== 'lf') notLf.push(`${attrs[i]} (eol: ${attrs[i + 2]})`);
+    assert.deepEqual(notLf, [], 'files that a Windows checkout could write with CRLF');
+});
+
+test('no file in deploy/cx23/ as it is on disk contains a carriage return (the copied set)', () => {
+    const withCr = fs.readdirSync(CX, { recursive: true, withFileTypes: true })
+        .filter((d) => d.isFile())
+        .map((d) => path.join(d.parentPath ?? d.path, d.name))
+        .filter((f) => fs.readFileSync(f).includes(13))
+        .map((f) => path.relative(ROOT, f));
+    assert.deepEqual(withCr, [], 'refresh a checkout made before deploy/.gitattributes covered cx23/** (see deploy/cx23/README.md)');
+});

@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (01:42 UTC, from `date -u`)
+Updated: 2026-11-03 (02:13 UTC, from `date -u`)
 
 ## Done
 
@@ -1127,13 +1127,14 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: G3's test-only Server task giver, for skills-rotn's #146 (`agent/harness-ops/g3-server-giver`):
-  - the G3 driver writes `allow_server_task_giver: true` into its own `SETTINGS_JSON` for `main.js`, and nowhere else;
-  - the production `settings.js` must have it `false` or absent, which the driver checks and CI checks;
-  - a profile with any task-giver key is refused;
-  - the CX23's `check-env.mjs` keeps refusing `allow_server_task_giver` and `task_givers` in `SETTINGS_JSON` (explicit tests).
-  - `task_givers` (the players) is left to the lead's `settings.js`; per #146, `Server` needs no entry there.
-- #159: every file under `deploy/cx23/` is LF (the attribute, a unit check, and a README note for Windows copies).
+- This PR: every file under `deploy/cx23/` is LF (`agent/harness-ops/cx23-eol-lf`), after the GO 2 finding that a Windows checkout copied CRLF files:
+  - `deploy/.gitattributes` adds `cx23/** text eol=lf`;
+  - `test/unit/deploy-eol.test.js` checks both the attribute and that no file on disk has a CR;
+  - the README says how to copy from Windows (`git archive`) and how to check a copy.
+- Next:
+  - **GO 3** (lead, 2026-11-03): the post-bootstrap read-only check of the CX23 as `deploy`, through the Orca environment "cx23 deploy".
+  - **Probe P1:** the scenario `test/scenarios/probe/probe-craft-place.mjs` and its driver protocol with net-forge (WIP on `agent/harness-ops/probe-p1`).
+  - **The #157 nit:** check the deployed `settings.js` for `allow_server_task_giver` on the CX23 side.
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
-- **The CX23:** GO 2 is done (the human ran setup; every step reported OK). Nothing of mine touches it. The post-bootstrap read-only check needs the lead's written GO after the human adds the `cx23-deploy` Orca target.
-- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), and the lead's #134 (ADR 0007).
+- **The CX23:** GO 2 is done (the human ran setup; every step reported OK), and the human applied updates, rebooted, added the Orca environment "cx23 deploy" and removed the root target. GO 3, the read-only check as `deploy`, is next.
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), and the lead's #134 (ADR 0007).
