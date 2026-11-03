@@ -34,6 +34,7 @@ test('threatFor reads rotn-data: zombie fight, creeper keep-distance, skeleton t
     // rotn-data #187's lookAt, beyond the ignore-unless-provoked mobs the old summary regex covered:
     assert.deepEqual([r('specialmobs:endercreeper').reaction, r('specialmobs:endercreeper').doNotLook], ['keep-distance', true], 'the ender creeper');
     assert.deepEqual([r('iceandfire:if_cockatrice').reaction, r('iceandfire:if_cockatrice').doNotLook], ['avoid', true], 'the cockatrice');
+    assert.deepEqual([r('iceandfire:gorgon').reaction, r('iceandfire:gorgon').doNotLook], ['avoid', true], 'the gorgon (rotn-data #188)');
     assert.equal(r('creeper').doNotLook, false);
 });
 
