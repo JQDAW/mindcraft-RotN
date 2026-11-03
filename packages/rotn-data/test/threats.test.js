@@ -275,3 +275,12 @@ test('the last 14 overworld night defaults are cited; no overworld night threat 
     // What the workers could not settle stays visible in the evidence.
     assert.ok(Object.keys(want).filter((n) => /Not settled: /.test(ev(n))).length >= 10);
 });
+
+// #178/#179 review (lead): citations name the pack's own paths (scripts/..., config/..., the jar's
+// file name in mods/), never the author's scratch folders.
+test('threat-reactions.json cites pack paths, not scratch paths', () => {
+    const text = JSON.stringify(reactions);
+    for (const re of [/packfiles\//, /SCRATCH/, /scratchpad/i, /fishs-undead-rising/]) assert.doesNotMatch(text, re);
+    assert.match(pack.threatOf('mod_lavacow:mummy').evidence[0], /^Fish's Undead Rising-1\.3\.2\.jar \(in the pack as mods\//);
+    assert.ok(Object.values(reactions.entities).flatMap((e) => e.evidence).some((e) => e.startsWith('scripts/fishsundeadrising.zs')));
+});
