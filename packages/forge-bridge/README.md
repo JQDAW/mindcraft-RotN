@@ -335,14 +335,31 @@ This is the contract between `tools/probe-commands.mjs` (the bot side, net-forge
 - **The form.** The pattern is anchored at both ends. A line that starts like a command but does not match its form exactly is answered `ok:false` as malformed, and is never run another way.
   - TOKEN is 6-32 lower-case hex characters, and each token runs once.
   - A position is `x,y,z`: integers, no spaces.
-  - ITEM and the names in replies are full registry names (`minecraft:cobblestone`, `pyrotech:crude_axe`).
+  - ITEM and the names in replies are full registry names (`minecraft:cobblestone`, `pyrotech:crude_axe`). Commands take **lower case only**: `[a-z0-9_.-]` before the colon and `[a-z0-9_./-]` after it. A name with a capital letter (`Pyrotech:Rock`) does not match, so the command is answered as malformed.
 
 | Command | Does |
 | --- | --- |
 | `probe-craft TOKEN RECIPE_ID` | One craft in the 2x2 grid with rotn-data's dump recipe RECIPE_ID (e.g. `crafttweaker:pyro_crude_axe`). It goes through `convertRecipe` (the first variant the inventory covers) and mineflayer's `bot.craft`. |
 | `probe-craft TOKEN RECIPE_ID x,y,z` | The same at the crafting table at x,y,z (RotN's FastWorkbench: FML OpenGui, then the synthetic window). |
 | `probe-place TOKEN ITEM x,y,z FACE` | Holds ITEM and places it against the block at x,y,z on FACE (`up`, `down`, `north`, `south`, `east` or `west`). The block lands at x,y,z plus FACE (`up`: y+1). It waits up to `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS` (default 10000, range 50-60000) for the server's update of that block to the placed block. |
-| `probe-eat TOKEN ITEM` | Holds ITEM and eats one (`bot.consume`). |
+| `probe-eat TOKEN ITEM` | Holds ITEM and eats one (`bot.consume`). At food 20 it fails at once, with no `use_item` sent. The error starts `food is 20, not below 20:`, because a 1.12 player cannot eat bread at full food. See the hunger setup below. |
+
+**Hunger setup for `probe-eat`.** A new player starts at food 20 and saturation 5, so the scenario must lower food first. RotN 3.3.4 on normal difficulty works like this per server tick, read with `javap` from the pinned zip's jars:
+- The Hunger effect adds `0.005 * (amplifier + 1)` exhaustion (vanilla 1.12.2).
+- Hunger Overhaul's constant loss adds `0.01` exhaustion (`constantHungerLoss=true`).
+- One step costs `4 / 0.85` ≈ 4.706 exhaustion (`hungerLossRatePercentage=85`), and at most one step is taken per tick (AppleCore; exhaustion is capped at 40).
+- Each step takes 1 saturation; only when saturation is 0 does it take 1 food.
+- At food 0, Hunger Overhaul deals 200 damage (`damageOnStarve`), so the setup must never get there.
+
+What different setups do:
+
+| Setup | Fresh player (20/5) | Saturation already 0 (food 18) |
+| --- | --- | --- |
+| `effect <bot> minecraft:hunger 10 10` | food 20, saturation 3: cannot eat | 16 |
+| **`effect <bot> minecraft:hunger 20 24`** (P1) | **food 14**, saturation 0. RotN bread (`scripts/food.zs`: 3 hunger, saturation 0.2) then makes it 17 | 7 |
+
+- **Wait after the setup.** The effect runs in real time. With `20 24`, a fresh player's food first drops after about 10.5 s, and the whole effect takes 20 s. Send `probe-eat` at least 25 s after the effect command.
+- **Offline model.** `simulateHunger` and `applyHunger` in `test/fake-containers.js` compute the same thing; `probe-test-server.js` uses them for its `effect` command. They apply the effect at once and leave out the constant loss before and after it. So the real server's food can only be lower, never higher.
 
 **Timing.**
 - Commands run one at a time, in arrival order.

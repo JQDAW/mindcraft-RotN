@@ -67,7 +67,8 @@ test('P1 through the runner interface: the real driver crafts, places and eats; 
     for (const [item, n] of [['pyrotech:rock', 8], ['minecraft:stick', 6], ['minecraft:planks', 1], ['minecraft:bread', 2], ['minecraft:cobblestone', 8]]) {
         assert.ok(con(`give ${BOT} ${item} ${n} 0`).some(l => / Given .+ \* \d+ to FRCFLD$/.test(l)), item);
     }
-    con(`effect ${BOT} minecraft:hunger 10 10`);
+    // P1's hunger setup (README, "Probe P1", hunger setup). 10 s at amplifier 10 would leave food at 20.
+    assert.ok(con(`effect ${BOT} minecraft:hunger 20 24`).some(l => l.endsWith('Given Hunger (ID 17) * 24 to FRCFLD for 20 seconds')));
     con('setblock -43 66 -66 minecraft:crafting_table');
     assert.ok(con('testforblock -43 66 -66 minecraft:crafting_table').some(l => l.endsWith('Successfully found the block at -43, 66, -66')));
     await sleep(1500); // the inventory and the table reach the bot
@@ -116,7 +117,7 @@ test('P1 through the runner interface: the real driver crafts, places and eats; 
     // Eat one bread (the hunger effect put food under 20).
     const eat = await ask('eat', 'minecraft:bread');
     assert.equal(eat.ok, true, JSON.stringify(eat));
-    assert.ok(eat.foodAfter > eat.foodBefore);
+    assert.deepEqual([eat.foodBefore, eat.foodAfter], [14, 17], 'food 14 after the setup; RotN bread is +3');
     assert.deepEqual([eat.countBefore, eat.countAfter, items('minecraft:bread')], [2, 1, 1]);
 
     // A failure meets the contract too.

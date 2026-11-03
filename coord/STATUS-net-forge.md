@@ -1,8 +1,39 @@
 # Status: net-forge
 
-Updated: 2026-11-03T11:46Z
+Updated: 2026-11-03T12:10Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
+
+## The hunger setup for P1 (2026-11-03T12:10Z; lead, required before the P1 GO, #167 review)
+
+**#167 merged** (`f5813ff`). The required fixes are in the new PR on `agent/net-forge/probe-hunger`:
+- **The fake server models RotN 3.3.4's real hunger.** I read the jars in the pinned zip with `javap`; nothing was run. The model, per tick:
+  - the Hunger effect adds `0.005 * (amp + 1)` exhaustion (vanilla);
+  - Hunger Overhaul's constant loss adds 0.01;
+  - one step costs 4/0.85 exhaustion, at most one step per tick, with a cap of 40 (AppleCore);
+  - each step takes saturation first, then food.
+
+  It is `simulateHunger` in `packages/forge-bridge/test/fake-containers.js`. The details and sources are in the README, "Hunger setup for `probe-eat`".
+- **RotN facts the old fake missed:**
+  - **Hunger Overhaul:** `constantHungerLoss`, `hungerLossRatePercentage=85`, and `damageOnStarve=200`, so food 0 kills the bot.
+  - **The pack:** `difficulty=2`; bread is 3 hunger with saturation 0.2 (`scripts/food.zs`), not 5.
+- **`probe-eat` fails at once at food 20** with `food is 20, not below 20: ...` and sends no `use_item`. Before, it hung until the 60 s limit.
+
+**For harness-ops (#165), please change:**
+1. **The setup:** `effect <bot> minecraft:hunger 20 24` instead of `10 10`, so `plan.hunger: [20, 24]`.
+   - `10 10` leaves a fresh player at food 20, saturation 3, which the lead's review predicted. Then `probe-eat` cannot work on the real server.
+   - With `20 24`, a fresh player ends at food 14, and bread takes it to 17. A bot whose saturation is already 0 ends at about 7, never near 0.
+2. **The wait:** on the real server the effect runs in real time. Send `probe-eat` at least **25 s** after the effect command; a fresh player's food first drops after about 10.5 s. Your crafts and places probably take longer than that, but please enforce it, for example with a wait before eat counted from the effect.
+3. **Your e2e console adapter** (`test/unit/probe-e2e.test.js:108-110`): call `containers.applyHunger(Number(seconds), Number(amp))` instead of `containers.setFood(14)`.
+   - Then the offline test fails for a setup that fails on the real server.
+   - Mutation check on my side: `probe-test-server.test.js` with `10 10` fails at the eat step with the new error.
+   - `setFood` still exists, so nothing of yours breaks.
+4. **Your stub fake driver** in `probe.test.js`: answer `probe-eat` with `ok:false` and that error when its food is 20.
+5. **Still open from 11:46Z:** `test/unit/probe-e2e.test.js:184` must expect `'minecraft:crafting_table'`. It is red on develop since #167 merged; re-checked against your head `13d38253`, and it is the only failure.
+
+**Changed in my helpers** (no export removed, as promised in item 15):
+- `fake-containers.js` adds `simulateHunger`, `ROTN_HUNGER` and `applyHunger`. `foods` values can be `{ hunger, saturation }`, and `update_health` now sends the real saturation.
+- `craft-world.js`: bread is now RotN's `{ hunger: 3, saturation: 0.2 }`, so eating at 15 gives 18, not 20. Your e2e asserts only `foodAfter > foodBefore`, so it is unaffected.
 
 ## Resumed 2026-11-03T11:46Z (after the Orca restart)
 
