@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (11:42 UTC, from `date -u`)
+Updated: 2026-11-03 (11:45 UTC, from `date -u`)
 
 ## After the Orca restart (2026-11-03 11:42 UTC)
 
@@ -24,7 +24,7 @@ Updated: 2026-11-03 (11:42 UTC, from `date -u`)
 - PC memory is tight: targeted test files only, one at a time; no `npm ci`, no full suite, no Docker. CI runs the full suite.
 - Write markdown and code edits with the Write/Edit tools or script files, never inside double-quoted shell strings.
 
-**Queued (not started):** the #139 nits: trim the `loadScenarios` ids, and a DRIVER.md line saying that a G3 result wrapped in an array or a parent object is not detected.
+**Also open:** **#173**, the #139 re-review nits (`isG3Result` trims the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected). It does not touch this file.
 
 ## Done
 
@@ -1170,5 +1170,5 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
   - **Never a gate pass otherwise:** a G3 run whose recorded model is not the preset is not gate-valid.
   - **The test key:** `OPENROUTER_API_KEY` is a Windows user environment variable. The human has restarted Orca (2026-11-03); the lead checks that a fresh terminal sees it (set or not set only).
 - #165: probe P1, the scenario `probe-craft-place` (never a gate), with the #165 review fixes and the offline e2e against the real driver (CI green).
-- Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
+- #173: the #139 re-review nits (`isG3Result` trims the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected). The new test fails on develop's code; this file is left out of it, so it cannot conflict.
 - Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b; the terminal was closed at 02:16:21 UTC), #166 (`deploy.sh` refuses the test-only giver settings), and the lead's #134 (ADR 0007).
