@@ -6,7 +6,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
 ## The hunger setup for P1 (2026-11-03T12:10Z; lead, required before the P1 GO, #167 review)
 
-**#167 merged** (`f5813ff`). The required fixes are in the new PR on `agent/net-forge/probe-hunger`:
+**#167 merged** (`f5813ff`). The required fixes are in **#177** (`agent/net-forge/probe-hunger`):
 - **The fake server models RotN 3.3.4's real hunger.** I read the jars in the pinned zip with `javap`; nothing was run. The model, per tick:
   - the Hunger effect adds `0.005 * (amp + 1)` exhaustion (vanilla);
   - Hunger Overhaul's constant loss adds 0.01;
