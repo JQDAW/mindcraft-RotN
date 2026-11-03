@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (02:33 UTC, from `date -u`)
+Updated: 2026-11-03 (02:37 UTC, from `date -u`)
 
 ## Done
 
@@ -1125,25 +1125,17 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
     **A separate point for the human:** sshd allows password logins (`passwordauthentication yes`), and nothing filters the ports until GO 2 turns on ufw. With no lockdown (the human's decision), the `deploy` password from H2 will also work over SSH. Turning off `PasswordAuthentication` before H2 would close that. It is the human's call, and it is not part of my bootstrap.
 
-15. **net-forge (via the lead): the P1 probe protocol in `g1-driver.mjs`** (net-forge's "Probe plan P1"). The scenario is in this PR (`test/scenarios/probe/probe-craft-place.mjs`). The protocol is written in `test/runner/lib/probe.mjs` and in DRIVER.md's "P1" section. Please confirm it, or tell me what to change:
-    - **Commands** arrive as a console `tell`, so the sender is `Server`. Please act only on whispers from `Server`. TOKEN is 6-32 lowercase hex digits; a position is `x,y,z`.
-      - `probe-craft TOKEN RECIPE [x,y,z]`: one craft of RECIPE (the output's registry name) with rotn-data's recipe; with `x,y,z`, at that crafting table.
-      - `probe-place TOKEN ITEM x,y,z FACE`: place ITEM against the block `x,y,z` on FACE (`up`, `down`, `north`, `south`, `east` or `west`). P1 places on `up`, against a stone floor the scenario sets.
-      - `probe-eat TOKEN ITEM`: `bot.consume` of one ITEM.
-    - **Exactly one reply line per command** on stdout: `DRIVER {"type":"probe","cmd":"craft"|"place"|"eat","token":T,"ok":bool,"error":null|"...", ...}`, with:
-      - **craft:** `recipe`; `window` (`"inventory"`, or the mod window's id, e.g. `"fastbench"`); `modWindow` (`null`, or `{"modId","modGuiId"}` of an FML OpenGui seen during this craft); `transactions` (`{"accepted":N,"rejected":M}` for this craft's clicks).
-      - **place:** `placed` (`[x,y,z]`); `ms` (from `block_place` to that position's `block_change`, or `null`); `name` (what `bot.blockAt` reads there afterwards).
-      - **eat:** `foodBefore`, `foodAfter` (`bot.food` after `update_health`), `ms`.
-    - **Why the craft reply carries the window and transaction fields:** the `mod_window` event goes only to the capture file, which the scenario cannot read. The capture stays the evidence underneath.
-    - **Four small additions to your plan,** so the result depends on the client and not on the terrain:
-      - the scenario `setblock`s each placement cell to air, with stone under it;
-      - the five cells are 2 blocks from the landing spot (west, north, south and the two western corners), away from the table to the east;
-      - the console is limited to P1's own allowlist (`P1_CONSOLE_ALLOW`);
-      - the expected counts after each craft are your plan's (`P1_PLAN`). If RotN's recipes differ (for example the rocks a stone pickaxe takes), tell me and I change the numbers.
+15. ~~net-forge (via the lead): the P1 probe protocol~~ **Settled: #165 uses net-forge's protocol from #162 as it is** (`packages/forge-bridge/tools/probe-commands.mjs`); nothing is asked of net-forge.
+    - **The scenario sends** rotn-data's recipe ids (`crafttweaker:pyro_crude_axe`, `crafttweaker:crafting_tools`, `crafttweaker:crafting_table`, and `crafttweaker:stone_pickaxe` at the table), and checks the results by the item names the server counts.
+    - **It starts the driver with `ROTN_DRIVER_PROBE=1`.**
+    - **It reads #162's reply fields:** craft `ok`/`before`/`after`/`tableBlock`; place `ok`/`updateMs`/`totalMs`; eat `ok`/`foodBefore`/`foodAfter`/`countBefore`/`countAfter`.
+    - **It waits 75 s per reply** (the driver's limit is 60 s), and stops if the driver exits.
+    - **Two of the plan's pass criteria come from the capture in the evidence step:** zero rejected transactions, and the `fastbench` mod window. #162 does not report them per command, so they are notes, not scenario checks; `notes.capture` records the capture path.
+    - **Optional, later, not needed for P1:** per-craft `modWindow` and `transactions` in #162's craft reply would let a scenario check them directly.
 
 ## Open PRs
 
-- #165: probe P1, the scenario `probe-craft-place` (never a gate) and the protocol for net-forge (Requests item 15). It is in final review with net-forge's #162 before the P1 GO.
+- #165: probe P1, the scenario `probe-craft-place` (never a gate), now aligned with net-forge's #162 protocol as it is (Requests item 15). It is in final review with #162 before the P1 GO.
 - #166: the #157 nit. `deploy.sh` refuses a release with the test-only `allow_server_task_giver` or a `Server` task giver.
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
 - Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b; the terminal was closed at 02:16:21 UTC), and the lead's #134 (ADR 0007).

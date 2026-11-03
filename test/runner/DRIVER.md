@@ -237,14 +237,19 @@ P1 is net-forge's "Probe plan P1" (`coord/STATUS-net-forge.md`), which the lead 
 
   The data is `P1_PLAN`.
 
-**The protocol** (harness-ops and net-forge agree on it through STATUS; `lib/probe.mjs` is the reference):
+**The protocol is net-forge's** (#162, `packages/forge-bridge/tools/probe-commands.mjs`), used as it is. `lib/probe.mjs` summarises it.
+- **The opt-in:** the driver answers probes only with `ROTN_DRIVER_PROBE=1`. The scenario passes it when it starts the bot (`PROBE_DRIVER_ENV`).
+- **The sender:** commands are accepted only as a console whisper (the sender `Server`), and the whole whisper text must be the command.
+- **Tokens:** 6-32 hex characters; each runs once.
+- **Replies:** each command is answered within the driver's 60 s limit (the scenario waits up to 75 s). The scenario stops early if the driver exits.
 
-| The scenario sends (a console `tell`, so the sender is `Server`) | The driver prints exactly one line on stdout |
+| The scenario sends (`tell <bot> ...`) | The driver prints one line on stdout |
 | --- | --- |
-| `probe-craft TOKEN RECIPE [x,y,z]`: craft one of RECIPE (the output's registry name) with rotn-data's recipe; with x,y,z, at that crafting table | `DRIVER {"type":"probe","cmd":"craft","token":T,"ok":bool,"error":null\|"...","recipe":R,"window":"inventory"\|"fastbench"\|...,"modWindow":null\|{"modId","modGuiId"},"transactions":{"accepted":N,"rejected":M}}` |
-| `probe-place TOKEN ITEM x,y,z FACE`: place ITEM against the block x,y,z on FACE (up, down, north, south, east or west) | `DRIVER {"type":"probe","cmd":"place","token":T,"ok":bool,"error":...,"placed":[x,y,z],"ms":N\|null,"name":"..."}` (ms: from `block_place` to the `block_change` for that position) |
-| `probe-eat TOKEN ITEM`: eat one ITEM (`bot.consume`) | `DRIVER {"type":"probe","cmd":"eat","token":T,"ok":bool,"error":...,"foodBefore":N,"foodAfter":N,"ms":N}` |
+| `probe-craft TOKEN RECIPE_ID [x,y,z]`: one craft with rotn-data's dump recipe (P1: `crafttweaker:pyro_crude_axe`, `crafttweaker:crafting_tools`, `crafttweaker:crafting_table`, and `crafttweaker:stone_pickaxe` at the table) | `DRIVER {"type":"probe","cmd":"craft","token":T,"ok":...,"recipe","table","variant","variants","result","resultMeta","before","after","ms","tableBlock"}` (ok: `after > before`) |
+| `probe-place TOKEN ITEM x,y,z FACE`: place ITEM against the block x,y,z on FACE | `... "cmd":"place", "before","after","expected","otherUpdates","totalMs","updateMs","timeoutMs"` (ok: the block became the item) |
+| `probe-eat TOKEN ITEM` | `... "cmd":"eat", "foodBefore","foodAfter","countBefore","countAfter","ms"` (ok: food up, one item fewer) |
 
-- TOKEN is 6-32 lowercase hex digits.
-- The driver acts only on whispers from `Server`, and auto-eat stays off during the probe.
-- The capture (`ROTN_DRIVER_CAPTURE=1`) stays the evidence underneath, but the scenario checks these fields: `transactions.rejected` (all 0), and `window`/`modWindow` (`fastbench` for the table craft).
+- On a failure, the reply has `error`, plus `timedOut` when the 60 s limit was hit.
+- **Each check needs two confirmations:** the driver's `ok`, and the server's own count (`clear ... 0`) or `testforblock`.
+- **Recorded as notes:** `notes.placeLatencyMs` holds each `updateMs`. `notes.capture` holds the capture file from the driver's `forge` event.
+- **Not in the replies:** window-click transactions (REID: none rejected) and the FastWorkbench window (`mod_window` with `fastbench`). The evidence step reads them from that capture, as net-forge's plan says.

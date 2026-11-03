@@ -7,8 +7,8 @@
 //   - placing and eating on 1.12, with the real block_change latency (it sets place_block_timeout_ms).
 // NEVER a gate: run() records P1_NOT_GATE first, so the verdict is at best "SMOKE-PASS (not a gate pass)".
 //
-// Driver: net-forge's packages/forge-bridge/tools/g1-driver.mjs with the probe commands in
-// test/runner/lib/probe.mjs (the protocol is written there). No LLM, no OpenRouter key.
+// Driver: net-forge's packages/forge-bridge/tools/g1-driver.mjs with its probe commands (#162), started
+// with ROTN_DRIVER_PROBE=1. The protocol is summarised in test/runner/lib/probe.mjs. No LLM, no key.
 //
 // Console (lead: give, effect, setblock, testforblock and clear are allowed for P1 only, on the disposable
 // test server): every command goes through guardP1Console, so nothing outside P1_CONSOLE_ALLOW is sent.
@@ -18,24 +18,38 @@
 //   1. login_online, as in G1/G2; `gamerule doDaylightCycle false`, `time set day`, `tp <bot> -45 66 -66`.
 //   2. setup: `clear <bot>`, the gives, `effect <bot> minecraft:hunger 10 10`; the table at -43 66 -66
 //      (setblock, then testforblock); each placement cell set to air with stone under it.
-//   3. craft_*: probe-craft for each of the four recipes; the driver's reply must be ok, and the
-//      server's own count-only `clear <bot> <item> -1 0` must show the plan's counts afterwards.
-//      transactions_accepted: no craft had a rejected transaction. fastbench_window: the table craft
-//      ran in FML's "fastbench" window.
-//   4. place_5: probe-place five cobblestones; the driver's reply must be ok and `testforblock` must
-//      find minecraft:cobblestone at each. notes.placeLatencyMs records each latency.
-//   5. eat: probe-eat bread; ok, foodAfter > foodBefore, and the server counts 1 bread left.
+//   3. craft_*: probe-craft for each of the four recipes (rotn-data's recipe ids); the driver's reply must
+//      be ok, and the server's own count-only `clear <bot> <item> -1 0` must show the plan's counts.
+//   4. place_5: probe-place five cobblestones; the driver's reply must be ok and `testforblock` must find
+//      minecraft:cobblestone at each. notes.placeLatencyMs records each updateMs.
+//   5. eat: probe-eat bread; the driver's ok (food up, one bread fewer) and the server counts 1 bread left.
 //   6. `clear <bot>`, the end.
+// Window-click transactions and the FastWorkbench window are not in the driver's replies: the evidence
+// step reads them from the capture, whose path notes.capture records (the driver's `forge` event).
+// The scenario stops early if the driver exits (notes.driverExited).
 import crypto from 'node:crypto';
 import { startSession } from '../../runner/lib/session.mjs';
 import { lastTeleport } from '../../runner/lib/server-log.mjs';
 import { giveVerdict, testforblockVerdict } from '../../runner/lib/g2.mjs';
 import { clearTestCommand, clearTestCount } from '../../runner/lib/s1.mjs';
-import { P1_NOT_GATE, P1_PLAN, below, guardP1Console, probeCraft, probeEat, probePlace, probeReply } from '../../runner/lib/probe.mjs';
+import {
+    P1_NOT_GATE, P1_PLAN, PROBE_DRIVER_ENV, below, guardP1Console, probeCraft, probeEat, probePlace, probeReply,
+} from '../../runner/lib/probe.mjs';
 
 const MS = 1000;
 const newToken = () => crypto.randomBytes(6).toString('hex');
-const short = (id) => id.split(':')[1];
+
+/** The capture file the driver reports in its `forge` event, or null. */
+export function captureOf(output) {
+    for (const l of output) {
+        if (!l.startsWith('DRIVER ')) continue;
+        try {
+            const e = JSON.parse(l.slice(7));
+            if (e?.type === 'forge' && e.capture) return e.capture;
+        } catch { /* not an event */ }
+    }
+    return null;
+}
 
 export default {
     id: 'probe-craft-place',
@@ -44,20 +58,18 @@ export default {
     checks: {
         login_online: 'The bot logs in with its own account (online mode)',
         setup: 'The test server set the probe up: the items were given and the crafting table stands at its place',
-        craft_crude_axe: 'pyrotech:crude_axe (2x2) crafted: the driver reports it, and the server counts the result and the rocks used',
-        craft_crafting_tools: 'contenttweaker:crafting_tools (2x2) crafted, confirmed by the server\'s counts',
-        craft_crafting_table: 'minecraft:crafting_table (2x2) crafted, confirmed by the server\'s counts',
-        craft_stone_pickaxe: 'minecraft:stone_pickaxe (3x3) crafted at the placed table, confirmed by the server\'s counts',
-        transactions_accepted: 'No craft had a window click the server rejected (REID item ids above 4095 accepted)',
-        fastbench_window: 'The table craft ran in FML\'s FastWorkbench window ("fastbench")',
-        place_5: 'Five cobblestones placed, each confirmed by testforblock; the block_change latency recorded',
+        craft_crude_axe: 'crafttweaker:pyro_crude_axe (2x2) crafted: the driver reports it, and the server counts the crude axe and the rocks left',
+        craft_crafting_tools: 'crafttweaker:crafting_tools (2x2) crafted, confirmed by the server\'s counts',
+        craft_crafting_table: 'crafttweaker:crafting_table (2x2) crafted, confirmed by the server\'s counts',
+        craft_stone_pickaxe: 'crafttweaker:stone_pickaxe (3x3) crafted at the placed table, confirmed by the server\'s counts',
+        place_5: 'Five cobblestones placed, each confirmed by testforblock; the block update latency recorded',
         eat: 'Bread eaten: food went up and the server counts one bread less',
     },
     defaults: {
         bot: 'FRCFLD',
         loginTimeoutMs: 240 * MS,
         settleMs: 10 * MS,
-        replyTimeoutMs: 30 * MS,
+        replyTimeoutMs: 75 * MS,   // the driver answers within its own 60 s limit per command
         pollMs: 1 * MS,
         tpSettleMs: 3 * MS,
         logTail: 20000,
@@ -73,17 +85,29 @@ export default {
         const plan = P1_PLAN;
         const con = (cmd) => server.console(cmd, p.consoleWaitS);
         const count = (item) => clearTestCount(con(clearTestCommand(name, item, -1)), name)?.count ?? null;
-        const ask = (cmd, line) => {
+        let exited = false;
+        const ask = async (cmd, line) => {
+            if (!bot.alive()) {
+                exited = true;
+                return null;
+            }
             const t = newToken();
             con(line(t));
-            return ctx.waitFor(() => probeReply(bot.output(), cmd, t), p.replyTimeoutMs);
+            const r = await ctx.waitFor(() => probeReply(bot.output(), cmd, t) ?? (bot.alive() ? null : { exited: true }), p.replyTimeoutMs);
+            if (r?.exited) {
+                exited = true;
+                return null;
+            }
+            return r;
         };
+        const noReply = () => (exited ? 'the driver exited' : `no reply within ${p.replyTimeoutMs / MS}s`);
 
-        // 1. login, the fixed time and the landing spot
-        const s = await startSession(ctx, { name });
+        // 1. login (the driver with its probe commands on), the fixed time and the landing spot
+        const s = await startSession(ctx, { name, env: { ...PROBE_DRIVER_ENV } });
         ctx.check('login_online', s.ok, s.why);
         if (!s.ok) return;
         await clock.sleep(p.settleMs);
+        ctx.note('capture', captureOf(bot.output()));
         con('gamerule doDaylightCycle false');
         con('time set day');
         const teleported = lastTeleport(con(`tp ${name} ${plan.landing.join(' ')}`), name);
@@ -108,43 +132,47 @@ export default {
         // 3. the four crafts, each confirmed by the server's own counts
         const crafts = [];
         for (const c of plan.crafts) {
-            const reply = await ask('craft', (t) => probeCraft(name, t, c.recipe, c.atTable ? plan.table : null));
+            const reply = await ask('craft', (t) => probeCraft(name, t, c.recipeId, c.atTable ? plan.table : null));
             const counts = Object.fromEntries(Object.keys(c.counts).map((item) => [item, count(item)]));
             const countsOk = Object.entries(c.counts).every(([item, want]) => counts[item] === want);
-            crafts.push({ recipe: c.recipe, grid: c.grid, ok: reply?.ok ?? null, error: reply?.error ?? (reply ? null : 'no reply'),
-                window: reply?.window ?? null, modWindow: reply?.modWindow ?? null, transactions: reply?.transactions ?? null, counts, want: c.counts });
-            ctx.check(`craft_${short(c.recipe)}`, reply?.ok === true && countsOk,
-                `${reply ? `driver ok=${reply.ok}${reply.error ? ` (${reply.error})` : ''}` : `no reply within ${p.replyTimeoutMs / MS}s`}; ` +
+            crafts.push({
+                recipeId: c.recipeId, grid: c.grid, ok: reply?.ok ?? null, error: reply?.error ?? (reply ? null : noReply()),
+                result: reply?.result ?? null, before: reply?.before ?? null, after: reply?.after ?? null, ms: reply?.ms ?? null,
+                variant: reply?.variant ?? null, tableBlock: reply?.tableBlock ?? null, counts, want: c.counts,
+            });
+            ctx.check(`craft_${c.check}`, reply?.ok === true && countsOk,
+                `${reply ? `driver ok=${reply.ok}${reply.error ? ` (${reply.error})` : ''}` : noReply()}; ` +
                 Object.entries(c.counts).map(([item, want]) => `${item} ${counts[item] ?? '?'} (want ${want})`).join(', '));
+            if (exited) break;
         }
         ctx.note('crafts', crafts);
-        const rejected = crafts.map((c) => c.transactions?.rejected).filter((n) => n !== undefined);
-        const allCounted = crafts.every((c) => Number.isInteger(c.transactions?.rejected));
-        ctx.check('transactions_accepted', allCounted && rejected.every((n) => n === 0),
-            allCounted ? `rejected per craft: ${rejected.join(', ')}` : 'a craft reply has no transaction counts');
-        const atTable = crafts.find((c) => plan.crafts.find((x) => x.recipe === c.recipe)?.atTable);
-        const fastbench = atTable?.window === 'fastbench' && atTable?.modWindow?.modId === 'fastbench';
-        ctx.check('fastbench_window', fastbench, `table craft window: ${atTable?.window ?? 'none'}, mod window: ${JSON.stringify(atTable?.modWindow ?? null)}`);
+        if (exited) return ctx.note('driverExited', true);
 
         // 4. five placements, each confirmed by testforblock
         const places = [];
         for (const cell of plan.place.targets) {
             const reply = await ask('place', (t) => probePlace(name, t, plan.place.item, below(cell), plan.place.face));
             const found = testforblockVerdict(con(`testforblock ${cell.join(' ')} ${plan.place.item}`), cell);
-            places.push({ cell, ok: reply?.ok ?? null, ms: reply?.ms ?? null, name: reply?.name ?? null, error: reply?.error ?? (reply ? null : 'no reply'), server: found.ok });
+            places.push({ cell, ok: reply?.ok ?? null, updateMs: reply?.updateMs ?? null, totalMs: reply?.totalMs ?? null,
+                after: reply?.after ?? null, error: reply?.error ?? (reply ? null : noReply()), server: found.ok });
+            if (exited) break;
         }
         ctx.note('places', places);
-        ctx.note('placeLatencyMs', places.map((x) => x.ms));
+        ctx.note('placeLatencyMs', places.map((x) => x.updateMs));
         const placed = places.filter((x) => x.ok === true && x.server).length;
         ctx.check('place_5', placed === plan.place.targets.length,
-            `${placed}/${plan.place.targets.length} placed and confirmed; latencies ms: ${places.map((x) => x.ms ?? '?').join(', ')}`);
+            `${placed}/${plan.place.targets.length} placed and confirmed; update latencies ms: ${places.map((x) => x.updateMs ?? '?').join(', ')}`);
+        if (exited) return ctx.note('driverExited', true);
 
         // 5. eat
         const eat = await ask('eat', (t) => probeEat(name, t, plan.eat.item));
         const breadLeft = count(plan.eat.item);
-        ctx.note('eat', eat ? { ok: eat.ok, foodBefore: eat.foodBefore, foodAfter: eat.foodAfter, ms: eat.ms, error: eat.error ?? null, breadLeft } : { reply: null, breadLeft });
-        const ate = eat?.ok === true && Number(eat.foodAfter) > Number(eat.foodBefore) && breadLeft === plan.eat.after;
-        ctx.check('eat', ate, eat ? `food ${eat.foodBefore} -> ${eat.foodAfter}; bread left ${breadLeft ?? '?'} (want ${plan.eat.after})` : `no reply within ${p.replyTimeoutMs / MS}s; bread left ${breadLeft ?? '?'}`);
+        ctx.note('eat', eat
+            ? { ok: eat.ok, foodBefore: eat.foodBefore, foodAfter: eat.foodAfter, countBefore: eat.countBefore, countAfter: eat.countAfter, ms: eat.ms, error: eat.error ?? null, breadLeft }
+            : { reply: null, why: noReply(), breadLeft });
+        ctx.check('eat', eat?.ok === true && breadLeft === plan.eat.after,
+            eat ? `driver ok=${eat.ok}; food ${eat.foodBefore} -> ${eat.foodAfter}; bread left ${breadLeft ?? '?'} (want ${plan.eat.after})` : `${noReply()}; bread left ${breadLeft ?? '?'}`);
+        if (exited) return ctx.note('driverExited', true);
 
         // 6. the end
         con(`clear ${name}`);
