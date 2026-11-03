@@ -40,9 +40,11 @@ const COMMANDS = {
 };
 // Any probe command at all, to answer a malformed one instead of leaving the scenario waiting.
 const ANY_COMMAND = new RegExp(`^probe-(craft|place|eat) ${TOKEN}(?!\\S)`);
-// The only accepted sender: the test server's console (`tell <bot> ...`), which mineflayer reports
-// as a 'whisper' from "Server" (S1 check d, coord/STATUS-harness-ops.md). Public chat and whispers
-// from players are ignored. The P1 test server's whitelist holds only the bot and the human.
+// The only accepted sender: the test server's console (`tell <bot> ...`), "Server" (S1 check d,
+// coord/STATUS-harness-ops.md). It is matched on the raw 1.12 chat component
+// (commands.message.display.incoming, see the message handler below), not on mineflayer's 'whisper'
+// event. Public chat and whispers from players are ignored. The P1 test server's whitelist holds
+// only the bot and the human.
 export const PROBE_SENDER = 'Server';
 export const COMMAND_TIME_LIMIT_MS = 60000;
 
@@ -301,6 +303,10 @@ export function attachProbe(bot, {
 
     async function eat(token, name) {
         const base = { item: name };
+        // A 1.12 player eats only below the maximum food level (AppleCore needFood: food < 20; bread
+        // is not always edible). At 20 the server never finishes the eating, so bot.consume would
+        // hang until the time limit. Fail at once and say why (lead, #167 review).
+        if (!(bot.food < 20)) return fail(token, 'eat', base, `food is ${bot.food}, not below 20: a 1.12 player cannot eat ${name} at full food; the hunger setup did not lower food (README, "Probe P1", hunger setup)`);
         try {
             const def = await equip(name);
             const foodBefore = bot.food;
