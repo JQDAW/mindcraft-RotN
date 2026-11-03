@@ -1,0 +1,44 @@
+P1 batch start 2026-11-03T15:20:16Z
+[test-server 15:20:25] sweeper OK (via cadence): cadence of 4 dispatch runs on develop in the last 50 min, gaps 14.7, 15.4, 14.5 min, newest 41661991634 4.8 min ago
+[test-server 15:20:25] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 15:20:26] creating mcr-test-20261103-152018: delete-after 2026-11-03T17:20:25Z (TTL 2h)
+Waiting for create_server (server: 174338336, image: 161547269) ...
+Waiting for start_server (server: 174338336) ...
+Waiting for create_server (server: 174338336, image: 161547269) ... done
+Waiting for start_server (server: 174338336) ... done
+Server 174338336 created
+[test-server 15:20:40] server mcr-test-20261103-152018 is at <ip>
+[test-server 15:20:40] waiting for SSH and the build (up to 120 min)
+[test-server 15:20:50] phase: unreachable
+[test-server 15:21:10] phase: booting:running
+[test-server 15:21:59] phase: unpack
+[test-server 15:22:16] phase: starting
+[test-server 15:25:30] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 15:25:33] READY: mcr-test-20261103-152018 at <ip>:25565 (delete-after 2026-11-03T17:20:25Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261103-152018
+[test-server 15:25:33] running: bash -c 
+  timeout 20m node test/runner/run.mjs --scenario probe-craft-place --out captures/raw/p1a2 -- node packages/forge-bridge/tools/g1-driver.mjs; p=$?;
+  bash "$TEST_SERVER_CTL" fetch logs --out captures/raw/p1a2/server;
+  echo "P1 run.mjs exit $p (never 0: P1 is never a gate pass)"; exit 0
+[scenario 15:25:33] probe-craft-place (P1) run 20261103t152533-995167; git defbaa6931d75a6ed9aa02b125eea64bbbbf65ff; driver: node packages/forge-bridge/tools/g1-driver.mjs; out: captures/raw/p1a2
+[scenario 15:25:33] not a gate run: P1 is a probe of crafting, placing and eating, never a gate pass
+[scenario 15:25:50] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 15:26:51] PASS setup: 5/5 gives confirmed; table: found; food objective: added
+[scenario 15:27:02] PASS craft_crude_axe: driver ok=true; pyrotech:crude_axe 1 (want 1), pyrotech:rock 7 (want 7)
+[scenario 15:27:13] PASS craft_crafting_tools: driver ok=true; contenttweaker:crafting_tools 1 (want 1), pyrotech:crude_axe 0 (want 0)
+[scenario 15:27:24] PASS craft_crafting_table: driver ok=true; minecraft:crafting_table 1 (want 1), minecraft:planks 0 (want 0)
+[scenario 15:27:35] PASS craft_stone_pickaxe: driver ok=true; minecraft:stone_pickaxe 1 (want 1), pyrotech:rock 3 (want 3)
+[scenario 15:28:21] PASS place_5: 5/5 placed and confirmed; update latencies ms: 1158, 589, 1095, 904, 634
+[scenario 15:28:34] PASS eat: server food 15; driver ok=true; food 15 -> 18; bread left 1 (want 1)
+[scenario 15:28:38] SMOKE run, not a P1 pass: P1 is a probe of crafting, placing and eating, never a gate pass
+[scenario 15:28:40] probe-craft-place: SMOKE-PASS (not a gate pass); 8 passed, 0 failed (captures/raw/p1a2/result.json)
+captures/raw/p1a2/server
+P1 run.mjs exit 4 (never 0: P1 is never a gate pass)
+[test-server 15:28:50] command exited with 0
+[test-server 15:28:50] EXIT trap: tearing down mcr-test-20261103-152018
+[test-server 15:28:50] deleting batch mcr-test-20261103-152018 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261103-152018)
+Waiting for delete_server (server: 174338336) ...
+Waiting for delete_server (server: 174338336) ... done
+[test-server 15:29:05] batch mcr-test-20261103-152018: ran 8 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 15:29:05] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261103-152018
+P1 batch end 2026-11-03T15:29:05Z (test-server.sh exit 0)
