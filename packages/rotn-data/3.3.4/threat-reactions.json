@@ -344,7 +344,7 @@
       "summary": "NetherEx's Ghast Queen, a Nether boss that shoots fireballs. Not on the first-night path. Never fight it with early gear; leave.",
       "confidence": "verified",
       "evidence": [
-        "NetherEx-1.12.2-2.2.5.jar (in the pack as mods/NetherEx-1.12.2-2.2.5.jar, SHA-256 ab71d3f63d8905727c769ddfe8c4849d735a4d9feb502a9135ce27e16bca815e): logictechcorp.netherex.entity.boss.EntityGhastQueen (a boss package class) extends net.minecraft.entity.monster.EntityGhast and uses a FireballAttack",
+        "NetherEx-1.12.2-2.2.5.jar (in the pack as mods/NetherEx-1.12.2-2.2.5.jar, SHA-256 ab71d3f63d8905727c769ddfe8c4849d735a4d9feb502a9135ce27e16bca815e): logictechcorp.netherex.entity.boss.EntityGhastQueen (a boss package class) extends net.minecraft.entity.monster.EntityGhast and uses EntityAIGhastQueenFireballAttack",
         "Not settled: its attack strength, health and summons"
       ]
     },
@@ -675,18 +675,33 @@
       "note": "Matches classes whose simple name ends with 'Witch', so Special Mobs' witch spiders (EntityWitchSpider, EntityWitchCaveSpider) are not caught. minecraft:witch keeps its own entry."
     },
     {
+      "id": "melee-ghast-blaze-variants",
+      "pattern": "^Entity(Fighter|Baby|Unholy)Ghast$|^Entity(Cinder|Ember|Jolt)Blaze$",
+      "reaction": "fight",
+      "confidence": "verified",
+      "summary": "A Special Mobs ghast or blaze variant that has no ranged attack: it flies at you and hits in melee (the fighter ghast and ember blaze drain life, the cinder blaze sets you on fire). Fight it, ideally with your back covered; it is a Nether mob, not on the first-night path.",
+      "note": "Matched before ghast-blaze-variants (first match wins). The six classes call disableRangedAI() in initTypeAI; the other Special Mobs ghasts and blazes keep their ranged attack.",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125; javap -c -p, no mod code run): EntityFighterGhast, EntityBabyGhast, EntityUnholyGhast, EntityCinderBlaze, EntityEmberBlaze and EntityJoltBlaze each call disableRangedAI() in initTypeAI (no other Special Mobs ghast or blaze does; #191 review)",
+        "Ghasts: Entity_SpecialGhast.disableRangedAI sets SpecialMobData.rangedAttackMaxRange to 0 (bytecode 1-5), and Entity_SpecialGhast.initEntityAI (func_184651_r) adds EntityAIFlyingAttackRanged only while rangedAttackMaxRange > 0, else EntityAIFlyingAttackMelee (bytecode 34-63)",
+        "Blazes: Entity_SpecialBlaze.disableRangedAI calls setRangedAI(0, 6, 60, 100, 0.0f) (bytecode 1-9), and EntityAISpecialAttackBlaze.updateTask (func_75246_d) compares the distance with rangedAttackMaxRange (bytecode 36-45) and attacks with attackEntityAsMob (func_70652_k, bytecode 77)",
+        "onTypeAttack: EntityFighterGhast and EntityEmberBlaze call causeLifeLoss; EntityCinderBlaze sets the target on fire (setFire func_70015_d). EntityFighterGhast.adjustTypeAttributes: +20 health, +10 armor, +2 attack, speed x1.3, half size",
+        "Not settled: what the baby and unholy ghasts and the jolt blaze add on hit"
+      ]
+    },
+    {
       "id": "ghast-blaze-variants",
       "pattern": "(Ghast|Ghastling|GhastQueen|Blaze)$",
       "reaction": "take-cover",
       "ranged": true,
       "confidence": "inferred",
       "summary": "A ghast or blaze variant (Special Mobs, NetherEx, Twilight Forest): it fights from range with fireballs like the vanilla ghast or blaze it is built on. Stay behind solid cover and out of its line of sight. Nether and Twilight Forest mobs; not on the first-night path.",
-      "note": "Matched on the dumped class's simple name; class rules apply to hostile mobs only, so the fireball projectiles (not hostile) are not matched. Bosses get their own entries (NetherEx ghast queen, Twilight Forest ur-ghast: avoid). Each variant's extra behaviour was not read.",
+      "note": "Matched on the dumped class's simple name; class rules apply to hostile mobs only, so the fireball projectiles (not hostile) are not matched. The six Special Mobs variants that disable their ranged attack match the melee-ghast-blaze-variants rule first. Bosses get their own entries (NetherEx ghast queen, Twilight Forest ur-ghast: avoid). Each variant's extra behaviour was not read.",
       "evidence": [
-        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125; javap -c -p, no mod code run): every *Ghast variant (Baby, Fighter, King, Queen, Unholy) extends Entity_SpecialGhast, which extends net.minecraft.entity.monster.EntityGhast and implements IRangedAttackMob with EntityLargeFireball; every *Blaze variant (Cinder, Conflagration, Ember, Hellfire, Inferno, Jolt, Wildfire) extends Entity_SpecialBlaze, which extends net.minecraft.entity.monster.EntityBlaze and implements IRangedAttackMob with EntitySmallFireball bursts (FireballBurstCount, FireballBurstDelay). EntityFighterGhast only adjusts attributes (adjustTypeAttributes: +20 health, +10 armor, +2 attack, speed x1.3) and is half size; its ranged attack is the base class's",
-        "NetherEx-1.12.2-2.2.5.jar (in the pack as mods/NetherEx-1.12.2-2.2.5.jar, SHA-256 ab71d3f63d8905727c769ddfe8c4849d735a4d9feb502a9135ce27e16bca815e): EntityGhastling extends EntityGhast and uses a FireballAttack",
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125; javap -c -p, no mod code run): every *Ghast variant (Baby, Fighter, King, Queen, Unholy) extends Entity_SpecialGhast, which extends net.minecraft.entity.monster.EntityGhast and implements IRangedAttackMob with EntityLargeFireball; every *Blaze variant (Cinder, Conflagration, Ember, Hellfire, Inferno, Jolt, Wildfire) extends Entity_SpecialBlaze, which extends net.minecraft.entity.monster.EntityBlaze and implements IRangedAttackMob with EntitySmallFireball bursts (FireballBurstCount, FireballBurstDelay). Six variants turn the ranged attack off and are matched first by the melee-ghast-blaze-variants rule (fight): the fighter, baby and unholy ghasts and the cinder, ember and jolt blazes; this rule covers the other 8 Special Mobs ghasts and blazes, which keep it",
+        "NetherEx-1.12.2-2.2.5.jar (in the pack as mods/NetherEx-1.12.2-2.2.5.jar, SHA-256 ab71d3f63d8905727c769ddfe8c4849d735a4d9feb502a9135ce27e16bca815e): EntityGhastling extends EntityGhast and uses EntityAIGhastlingFireballAttack",
         "twilightforest-1.12.2-3.14.jar (in the pack as mods/twilightforest-1.12.2-3.14.jar, SHA-256 cf9f7798d50c70097ece08a8822d58b0f43547ea57cb620fd798b33ec5762c61): EntityTFTowerGhast extends EntityGhast with EntityLargeFireball; EntityTFMiniGhast extends EntityTFTowerGhast",
-        "Not checked: each variant's own extra behaviour (for example Special Mobs' unholy or king ghast) and whether any variant disables its ranged attack through Special Mobs' config"
+        "Not checked: each variant's own extra behaviour (for example the king or queen ghast) and whether Special Mobs' config changes a variant's ranged attack"
       ]
     }
   ]

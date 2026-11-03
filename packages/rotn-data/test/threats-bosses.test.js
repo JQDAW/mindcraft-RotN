@@ -56,7 +56,7 @@ test('gorgon: its gaze kills a player who looks back; the entry marks it do-not-
 
 // #188 review follow-up (lead): the ghast and blaze variants from Special Mobs, NetherEx and Twilight
 // Forest still returned 'fight'. A class rule covers them; the two bosses get 'avoid' entries.
-test('every hostile ghast or blaze class in the dump takes cover or is avoided; none is left to the default', () => {
+test('every hostile ghast or blaze class in the dump is covered; ranged ones take cover, the six melee Special Mobs variants are fought', () => {
     const E = pack.dump.entities.entities;
     const simple = (c) => (c ?? '').slice((c ?? '').lastIndexOf('.') + 1);
     const names = Object.keys(E).filter((n) => /Ghast|Blaze/.test(simple(E[n].class)) && pack.entity(n).hostile);
@@ -64,15 +64,21 @@ test('every hostile ghast or blaze class in the dump takes cover or is avoided; 
     for (const n of names) {
         const t = pack.threatOf(n);
         assert.notEqual(t.source, 'default', n);
+        if (t.rule === 'melee-ghast-blaze-variants') continue;
         assert.ok(['take-cover', 'avoid'].includes(t.reaction), `${n}: ${t.reaction}`);
         assert.equal(t.ranged, true, n);
     }
-    // The rule matches NetherEx's ghastling (not ending in Ghast); the fighter ghast stays ranged.
-    for (const n of ['netherex:ghastling', 'specialmobs:fighterghast', 'specialmobs:kingghast', 'specialmobs:wildfireblaze', 'twilightforest:tower_ghast', 'twilightforest:mini_ghast']) {
+    // #191 review: six Special Mobs variants call disableRangedAI(); they melee, so they are fought.
+    const melee = names.filter((n) => pack.threatOf(n).rule === 'melee-ghast-blaze-variants').sort();
+    assert.deepEqual(melee, ['specialmobs:babyghast', 'specialmobs:cinderblaze', 'specialmobs:emberblaze', 'specialmobs:fighterghast', 'specialmobs:joltblaze', 'specialmobs:unholyghast']);
+    for (const n of melee) assert.deepEqual([pack.threatOf(n).reaction, pack.threatOf(n).ranged, pack.threatOf(n).source], ['fight', false, 'verified'], n);
+    assert.match(pack.threatOf('specialmobs:fighterghast').evidence.join(' '), /disableRangedAI.*EntityAIFlyingAttackMelee/);
+    assert.equal(names.filter((n) => pack.threatOf(n).rule === 'ghast-blaze-variants').length, 11);
+    // The ranged rule matches NetherEx's ghastling (not ending in Ghast) and the ranged Special Mobs variants.
+    for (const n of ['netherex:ghastling', 'specialmobs:kingghast', 'specialmobs:specialblaze', 'specialmobs:wildfireblaze', 'twilightforest:tower_ghast', 'twilightforest:mini_ghast']) {
         const t = pack.threatOf(n);
         assert.deepEqual([t.reaction, t.ranged, t.source, t.rule], ['take-cover', true, 'inferred', 'ghast-blaze-variants'], n);
     }
-    assert.match(pack.threatOf('specialmobs:fighterghast').evidence.join(' '), /EntityFighterGhast only adjusts attributes/);
     // The bosses are avoided (entries win over the rule).
     for (const n of ['netherex:ghast_queen', 'twilightforest:ur_ghast']) {
         const t = pack.threatOf(n);
