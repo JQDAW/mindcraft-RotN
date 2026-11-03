@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-03T01:31Z
+Updated: 2026-11-03T02:22Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -506,9 +506,9 @@ The lead's GO was recorded at 17:05 UTC, after PR #28 merged. The batch ran from
 ## Doing
 
 - **2026-11-03: skills-rotn Request 2** (see the top section).
-  - PR 1: serverbound encoding tests, `agent/net-forge/craft-place-packets`.
-  - PR 2: FastWorkbench OpenGui as a mineflayer window, plus an offline end-to-end craft, place and use test through `initBot`.
-  - PR 3: a configurable `place_block` wait.
+  - Merged: #149 (encoding tests), #154 (the FastWorkbench window), #155 (the configurable placement wait).
+  - Open: #161 (the #155 nits: the clamp) and the probe driver PR (P1's commands).
+  - Next: the GO for P1 is with the lead and the human after both P1 PRs merge. I do not start the batch.
 - Historical: **Nothing: paused 2026-11-02** (see "Paused 2026-11-02" at the top). The notes below are historical. #50 and #56 are merged. The PR #54 nit (an explicit `source: 'fallback'` in `g2_adapter`) is in `tools/g1-driver.mjs`.
 - G1 PASSED. Phase 2 (G2): #25, #38, #46, #49 and #54 are merged. Open: #50 (PR #31 follow-ups) and #56 (mod-entity table).
 - Done in #56 too: serializers 14-18 and 256/257 from rotn-data's second dump (#55), through `loadRotnData(PACK_VERSION).serializers()`. 14 is confirmed, and the inferred-decode logging is removed. `javap` on the seven dumped classes matches every format except Charset's quaternion: the order on the wire is w, x, y, z, not x, y, z, w (same 16 bytes, so it was never misparsed; field names fixed).
@@ -565,7 +565,8 @@ The setup for both batches:
 
 ## Requests to other agents or the lead
 
-- **Probe plan P1 for the human's GO (Request 2 live proof). Not started: it needs a written GO.** The lead takes it to the human.
+- **harness-ops: the P1 scenario** `test/scenarios/probe/probe-craft-place.mjs`, following the plan below (lead-accepted 2026-11-03). It sets `ROTN_DRIVER_PROBE=1`, uses the command formats under "Code needed first", aborts on a driver exit or a 120 s silence, and is never a gate. The driver side is in the probe driver PR. `packages/forge-bridge/test/probe-e2e.test.js` shows the exact chat lines and answers.
+- **Probe plan P1 for the human's GO (Request 2 live proof). Accepted in principle by the lead (2026-11-03). Not started: the lead writes the GO after the driver PR and harness-ops' scenario PR merge.**
   - **What it proves:** the offline tests cannot prove these three things on the real RotN 3.3.4 server:
     1. Serverbound REID: the server accepts `window_click` stacks with VarInt item ids above 4095 (crude axe 9075, rock 8917, Crafting Tools 12510).
     2. FastWorkbench: right-clicking `minecraft:crafting_table` sends FML OpenGui `fastbench`/0, then `window_items`. A 3x3 craft in it works through the synthetic window. The result slot's `set_slot` behaves as `fake-containers.js` assumes.
@@ -574,13 +575,30 @@ The setup for both batches:
     - fixed world seed `1880465901402976865`;
     - `--ttl-hours 2` (the delete-after watchdog; the sweeper preflight must pass, and nothing is skipped);
     - deleted by the EXIT trap.
+  - **Lead decisions (2026-11-03):**
+    - The plan is accepted in principle.
+    - The console `give`/`effect`/`setblock`/`clear` setup steps are allowed **in P1 only**, on the disposable test server, as in S1. P1 is not a gate: `gateValid: false`.
+    - The lead writes the GO after both code PRs merge. net-forge never starts the batch.
   - **Code needed first (none of it touches the live server):**
-    - **net-forge:** probe commands in `packages/forge-bridge/tools/g1-driver.mjs` (scenario protocol, whispered by the scenario):
-      - `probe-craft <recipe>`: `bot.craft` with rotn-data's recipe; for the table recipe, `bot.blockAt` of the table;
-      - `probe-place <x y z face>`: `bot.placeBlock`, recording the ms until `blockUpdate`;
-      - `probe-eat`: `bot.consume`.
-      - Each answers with a JSON line. Auto-eat is off during the probe. `ROTN_DRIVER_CAPTURE=1` keeps the capture, with `window_click`, `transaction`, `set_slot`, `block_place`, `block_change` and `use_item` captured by default since #154.
-    - **harness-ops:** a scenario `test/scenarios/probe/probe-craft-place.mjs`. It is not a gate: `gateValid: false` always.
+    - **net-forge: done in PR "probe driver"** (`packages/forge-bridge/tools/probe-commands.mjs`). It is wired into `tools/g1-driver.mjs` only when the scenario sets **`ROTN_DRIVER_PROBE=1`**; G1/G2 runs are unchanged. While the probe runs, auto-eat is off (`probe_ready {autoEat:"off"}`).
+      - Commands come **only as a console whisper** (`tell FRCFLD probe-...`), which mineflayer reports as a whisper from `Server` (lead, #162 review). The whole whisper text must be the command (anchored). Public chat, players' whispers and anything else are ignored (`probe_ignored` is logged for a player's whisper). TOKEN is 6-32 hex characters, and each token runs once:
+        - `probe-craft TOKEN RECIPE_ID [X,Y,Z]`: crafts once with rotn-data's dump recipe (through `convertRecipe`, taking the first variant the inventory covers). X,Y,Z is the crafting table; without it, the 2x2 grid is used.
+        - `probe-place TOKEN ITEM X,Y,Z FACE`: holds ITEM and places it against X,Y,Z on FACE (`up|down|north|south|east|west`). The wait is 10 s, `ROTN_DRIVER_PROBE_PLACE_TIMEOUT_MS`, 50-60000.
+        - `probe-eat TOKEN ITEM`: `bot.consume`.
+      - Answers come one at a time:
+        - a `DRIVER {"type":"probe","token":...,"cmd":...,"ok":...}` JSON line with the full result (craft: recipe, variant, result, before/after counts, ms, table block; place: before/after block, `updateMs`, `totalMs`; eat: food and counts before and after);
+        - one chat line, at most 200 characters: `probe TOKEN CMD ok|fail k=v ...`.
+      - Failures are answered (`ok:false`, `error`), never thrown. Each command has a **60 s time limit** (lead, #162 review): at the limit it is answered `ok:false, timedOut:true`, and a later result is only logged (`probe_late`). The next command waits until the hung one settles, at most 10 s more (then `probe_stuck` is logged and any open window is closed). Each token gets exactly one answer.
+      - `probe-place` counts only a block update whose new state is the placed block (`expected`, `otherUpdates`).
+      - The recipe ids for P1: `crafttweaker:pyro_crude_axe`, `crafttweaker:crafting_tools`, `crafttweaker:crafting_table`, `crafttweaker:stone_pickaxe` (with the table's X,Y,Z).
+    - **harness-ops:** a scenario `test/scenarios/probe/probe-craft-place.mjs`. It sets `ROTN_DRIVER_PROBE=1` for the driver, and it is not a gate: `gateValid: false` always.
+  - **Abort on a kick (lead):** if the bot is kicked or disconnected, the run stops and the server is torn down. Nothing reconnects.
+    - The g1-driver never reconnects. On a kick it logs a `kicked` event and exits 1 (3 if fatal), following the exit contract (`driver-exit.mjs`).
+    - The one relaunch anywhere is the runner's: if the driver exits **before joining** with the profile-fetch failure ("Failed to obtain profile data"), `test/runner/lib/session.mjs` starts it once more (lead, #71). A kick after join, or any second failure, is never retried.
+    - harness-ops' scenario must treat a driver exit before the last answer as an abort: send no more commands, record FAIL with the kick reason, and end at once.
+    - `run.mjs` then returns, and `deploy/test-server.sh run`'s EXIT trap deletes the server, its Primary IPv4 and its SSH key, so nothing waits for the 2 h TTL.
+    - The same applies to a probe step that gets no answer within 120 s.
+  - **Evidence redaction (lead):** every file goes through `node test/tools/redact-evidence.mjs IN OUT --bot FRCFLD` before it is committed. That covers `result.json`, `driver.log`, the capture summary and the server log. `node test/tools/redact-evidence.mjs --check test/evidence/probe/` must exit 0 before the evidence PR, and CI's leak check runs over `test/evidence/**` too. The raw capture stays git-ignored under `captures/raw/`.
   - **Scenario steps** (server console on the test server only; no op for the bot):
     1. Log in as in G1. `gamerule doDaylightCycle false`, `time set day`, `tp FRCFLD -45 66 -66` (batch 8's landing spot).
     2. `clear FRCFLD`, then:
@@ -591,13 +609,13 @@ The setup for both batches:
        - `give FRCFLD minecraft:cobblestone 8 0`
        - `effect FRCFLD minecraft:hunger 10 10` (food under 20 for the eat step)
     3. `setblock -43 66 -66 minecraft:crafting_table`; check it with `testforblock -43 66 -66 minecraft:crafting_table`.
-    4. Run `probe-craft` for each recipe, and check each with the server's own count (`clear FRCFLD <item> <meta> 0` reports the count without removing anything):
+    4. Run `probe-craft` for each recipe (`tell FRCFLD probe-craft <token> crafttweaker:pyro_crude_axe`, ...; the stone pickaxe with ` -43,66,-66`), and check each with the server's own count (`clear FRCFLD <item> <meta> 0` reports the count without removing anything):
        - `pyrotech:crude_axe` (2x2): crude axe 1, rock 7;
        - `contenttweaker:crafting_tools` (2x2): Crafting Tools 1, crude axe 0;
        - `minecraft:crafting_table` (2x2): table 1, planks 0;
        - `minecraft:stone_pickaxe` at the placed table (3x3): pickaxe 1, rock 3.
-    5. `probe-place` 5 times: cobblestone on the floor around the bot. Check each with `testforblock`, and record each latency.
-    6. `probe-eat`: bread 1 left, food up (`data get` is not in 1.12, so use the driver's `bot.food` after `update_health`, plus the bread count).
+    5. `probe-place` 5 times (`probe-place <token> minecraft:cobblestone X,65,Z up`: against the floor block at y 65, so the cobblestone lands at y 66; check it with `testforblock X 66 Z minecraft:cobblestone`): cobblestone on the floor around the bot. Check each with `testforblock`, and record each latency.
+    6. `probe-eat <token> minecraft:bread`: bread 1 left, food up (`data get` is not in 1.12, so use the driver's `bot.food` after `update_health`, plus the bread count).
     7. `clear FRCFLD`, then the end.
   - **Pass (for the record, not a gate):**
     - all 4 crafts are confirmed by server counts;
@@ -649,8 +667,10 @@ The setup for both batches:
 
 - **2026-11-03 (Request 2):**
   - **#149** merged (`ba07cce`).
-  - **#154**: FastWorkbench window. Retargeted to develop, develop merged in, and the lead's nit is done (the `open_window` emit has its own try/catch, with a test). The lead merges it on green CI.
-  - **#155**: configurable placement wait, default unchanged. Independent re-review: APPROVE.
+  - **#154** merged (`db77934`): the FastWorkbench window.
+  - **#155** merged (`0a5347f`): the configurable placement wait. The lead's #160 sets `place_block_timeout_ms: 2000`.
+  - **#161** (open): the #155 nits. Runtime and per-call timeouts are clamped to 50-60000 ms, and a bad value falls through to the next source. Independent review: APPROVE WITH NITS, nits fixed.
+  - **Probe driver PR** (open, `agent/net-forge/probe-driver`): `probe-craft`, `probe-place` and `probe-eat` for P1 (see the plan under Requests).
 - **At the pause (2026-11-02): none** except this STATUS PR. The lines below are historical; all of those PRs are merged.
 - Merged: #15, #16, #18, #19, #23, #24 and #26 (G1 Batch A: real handshake fixture and replay test).
 - #25: brief item 4, `bot.registry` extension, on `agent/net-forge/registry-extension`. Being updated for its REQUEST CHANGES review, plus the PR #28 nits.
