@@ -58,6 +58,7 @@ export default {
         loginTimeoutMs: 240 * MS,
         settleMs: 10 * MS,
         replyTimeoutMs: 30 * MS,
+        pollMs: 1 * MS,
         tpSettleMs: 3 * MS,
         logTail: 20000,
         consoleWaitS: 1,
@@ -72,7 +73,7 @@ export default {
         const plan = P1_PLAN;
         const con = (cmd) => server.console(cmd, p.consoleWaitS);
         const count = (item) => clearTestCount(con(clearTestCommand(name, item, -1)), name)?.count ?? null;
-        const ask = async (cmd, line) => {
+        const ask = (cmd, line) => {
             const t = newToken();
             con(line(t));
             return ctx.waitFor(() => probeReply(bot.output(), cmd, t), p.replyTimeoutMs);

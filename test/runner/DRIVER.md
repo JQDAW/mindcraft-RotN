@@ -205,3 +205,37 @@ The reply forms parsed (from the 1.12 en_us lang file, to be confirmed on the Ro
 - `Added new objective '<name>' successfully`, `Invalid objective criteria type '<criteria>'`, `An objective with the name '<name>' already exists`;
 - `Showing N tracked objective(s) for <bot>:` with lines `- <display name>: <score> (<objective>)`, or `Player <bot> has no scores recorded`;
 - `Time is N`.
+
+## P1: the craft, place and eat probe (`test/scenarios/probe/probe-craft-place.mjs`)
+
+P1 is net-forge's "Probe plan P1" (`coord/STATUS-net-forge.md`), which the lead accepted in principle. It checks what the offline tests cannot on the real RotN 3.3.4 server:
+- **REID serverbound:** `window_click` stacks with item ids above 4095 are accepted;
+- **FastWorkbench:** FML's `fastbench` window opens, and a 3x3 craft works in it;
+- **Placing and eating** on 1.12, with the real `block_change` latency.
+
+**It is never a gate:** `run()` first records "P1 is a probe of crafting, placing and eating, never a gate pass", so its verdict is at best `SMOKE-PASS (not a gate pass)`. The driver is net-forge's `g1-driver.mjs` with the probe commands below. There is no LLM and no OpenRouter key.
+
+- **The console:** give, effect, setblock, testforblock and clear are allowed **for P1 only, on the disposable test server** (lead). Every command goes through `guardP1Console` (`test/runner/lib/probe.mjs`), so nothing outside `P1_CONSOLE_ALLOW` is sent, and the bot never gets op.
+- **The steps:**
+  1. Log in.
+  2. `gamerule doDaylightCycle false`, `time set day`, `tp <bot> -45 66 -66`.
+  3. `clear <bot>`, then the gives and `effect <bot> minecraft:hunger 10 10`.
+  4. Place the table at -43 66 -66 (`setblock`, then `testforblock`). Set each placement cell to air, with stone under it.
+  5. Four crafts, each checked by the server's count-only `clear <bot> <item> -1 0`.
+  6. Five placements, each checked by `testforblock`, with latencies.
+  7. Eat one bread.
+  8. `clear <bot>`.
+
+  The data is `P1_PLAN`.
+
+**The protocol** (harness-ops and net-forge agree on it through STATUS; `lib/probe.mjs` is the reference):
+
+| The scenario sends (a console `tell`, so the sender is `Server`) | The driver prints exactly one line on stdout |
+| --- | --- |
+| `probe-craft TOKEN RECIPE [x,y,z]`: craft one of RECIPE (the output's registry name) with rotn-data's recipe; with x,y,z, at that crafting table | `DRIVER {"type":"probe","cmd":"craft","token":T,"ok":bool,"error":null\|"...","recipe":R,"window":"inventory"\|"fastbench"\|...,"modWindow":null\|{"modId","modGuiId"},"transactions":{"accepted":N,"rejected":M}}` |
+| `probe-place TOKEN ITEM x,y,z FACE`: place ITEM against the block x,y,z on FACE (up, down, north, south, east or west) | `DRIVER {"type":"probe","cmd":"place","token":T,"ok":bool,"error":...,"placed":[x,y,z],"ms":N\|null,"name":"..."}` (ms: from `block_place` to the `block_change` for that position) |
+| `probe-eat TOKEN ITEM`: eat one ITEM (`bot.consume`) | `DRIVER {"type":"probe","cmd":"eat","token":T,"ok":bool,"error":...,"foodBefore":N,"foodAfter":N,"ms":N}` |
+
+- TOKEN is 6-32 lowercase hex digits.
+- The driver acts only on whispers from `Server`, and auto-eat stays off during the probe.
+- The capture (`ROTN_DRIVER_CAPTURE=1`) stays the evidence underneath, but the scenario checks these fields: `transactions.rejected` (all 0), and `window`/`modWindow` (`fastbench` for the table craft).

@@ -145,7 +145,7 @@ function sim(opt = {}) {
     return { server, bot, clock, inv, blocks, sent: log };
 }
 
-const fast = { settleMs: 1000, tpSettleMs: 1000, consoleWaitS: 0, replyTimeoutMs: 3000 };
+const fast = { settleMs: 1000, tpSettleMs: 1000, consoleWaitS: 0, replyTimeoutMs: 3000, pollMs: 1000 };
 const run = (s, params = {}) => runScenario(probe, { ...s, runId: 'r1', params: { ...fast, ...params } });
 const byName = (r) => Object.fromEntries(r.checks.map((c) => [c.check, c]));
 const neverGate = (r) => {
