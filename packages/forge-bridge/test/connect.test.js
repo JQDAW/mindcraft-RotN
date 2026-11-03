@@ -122,12 +122,28 @@ test('off: no ping, no bridge', async () => {
 
 test('env switches', () => {
     const now = new Date('2026-11-01T02:03:04.567Z');
-    assert.deepEqual(forgeOptionsFromEnv('FRCFLD', {}, now), { mode: 'auto', captureFile: null, modListFile: null, profilesFolder: null, pingTimeoutMs: null });
-    const e = forgeOptionsFromEnv('FRCFLD', { FORGE_BRIDGE: 'on', FORGE_CAPTURE: '1', FORGE_MODLIST_FILE: 'p.json', MINDCRAFT_PROFILES_FOLDER: 'C:/x/msa', FORGE_PING_TIMEOUT_MS: '60000' }, now);
-    assert.deepEqual(e, { mode: 'on', captureFile: 'captures/raw/FRCFLD-2026-11-01T02-03-04-567Z.jsonl', modListFile: 'p.json', profilesFolder: 'C:/x/msa', pingTimeoutMs: 60000 });
+    assert.deepEqual(forgeOptionsFromEnv('FRCFLD', {}, now), { mode: 'auto', captureFile: null, modListFile: null, profilesFolder: null, pingTimeoutMs: null, placeBlockTimeoutRaw: null });
+    const e = forgeOptionsFromEnv('FRCFLD', { FORGE_BRIDGE: 'on', FORGE_CAPTURE: '1', FORGE_MODLIST_FILE: 'p.json', MINDCRAFT_PROFILES_FOLDER: 'C:/x/msa', FORGE_PING_TIMEOUT_MS: '60000', MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS: '2000' }, now);
+    assert.deepEqual(e, { mode: 'on', captureFile: 'captures/raw/FRCFLD-2026-11-01T02-03-04-567Z.jsonl', modListFile: 'p.json', profilesFolder: 'C:/x/msa', pingTimeoutMs: 60000, placeBlockTimeoutRaw: '2000' });
     assert.equal(forgeOptionsFromEnv('b', { FORGE_PING_TIMEOUT_MS: 'nope' }).pingTimeoutMs, null);
     assert.equal(forgeOptionsFromEnv('b', { FORGE_BRIDGE: 'bogus', FORGE_CAPTURE: '0' }).mode, 'auto');
     assert.equal(forgeOptionsFromEnv('b', { FORGE_CAPTURE: 'C:/tmp/c.jsonl' }).captureFile, 'C:/tmp/c.jsonl');
+});
+
+test('placeBlockTimeout: env wins over the setting; out-of-range or non-integer values warn and keep the default', async () => {
+    const { placeBlockTimeout } = await import('../src/env.js');
+    assert.deepEqual(placeBlockTimeout(null, undefined), { ms: null, warning: null });
+    assert.deepEqual(placeBlockTimeout(null, 2000), { ms: 2000, warning: null });
+    assert.deepEqual(placeBlockTimeout('1500', 2000), { ms: 1500, warning: null });
+    assert.deepEqual(placeBlockTimeout('', 2000), { ms: 2000, warning: null }, 'an empty env var does not count');
+    // A bad env value falls back to a valid setting, and the warning names the env var.
+    assert.deepEqual(placeBlockTimeout('soon', 2000), { ms: 2000, warning: 'MINDCRAFT_PLACE_BLOCK_TIMEOUT_MS "soon" ignored (integer 50-60000 expected)' });
+    assert.equal(placeBlockTimeout(null, 'x').warning, 'place_block_timeout_ms "x" ignored (integer 50-60000 expected); using 500 ms');
+    for (const bad of ['soon', '2.5', '49', '60001', -1]) {
+        const r = placeBlockTimeout(String(bad), undefined);
+        assert.equal(r.ms, null, String(bad));
+        assert.match(r.warning, /ignored \(integer 50-60000 expected\); using 500 ms/);
+    }
 });
 
 test('SRV lookup follows nmp: only for port 25565 and a non-IP hostname', async () => {

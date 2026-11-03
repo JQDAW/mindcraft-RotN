@@ -13,6 +13,7 @@ fs.writeFileSync(path.join(dir, 'seen.json'), JSON.stringify({
     argv: process.argv.slice(2),
     settingsKeys: Object.keys(settings).sort(),
     settings: { host: settings.host, port: settings.port, auth: settings.auth, auto_open_ui: settings.auto_open_ui },
+    allowServerTaskGiver: settings.allow_server_task_giver ?? null,
     profiles: JSON.parse(process.env.PROFILES ?? '[]'),
     singleBot: process.env.MINDCRAFT_SINGLE_BOT_SERVICE ?? null,
     mindserverPort: Number(process.env.MINDSERVER_PORT),
