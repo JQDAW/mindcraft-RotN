@@ -58,15 +58,16 @@ export function g3Policy(scenario, env, maxBatchUsd) {
  *     run.mjs exits 0 only for a gate pass).
  * test/tools/g3-batch-check.mjs checkEvidenceTree makes it compulsory: every G3 result under test/evidence/
  * must sit under a folder with a batch.json that vouches for it.
- * results: [{file, result}] with each result.json's contents. Returns the problems (empty = consistent).
+ * results: [{file, result}] with each result.json's contents; g3Scenarios: the ids loadScenarios marks
+ * gate G3 (isG3Result). Returns the problems (empty = consistent).
  */
-export function crossCheckBatch(summary, results) {
+export function crossCheckBatch(summary, results, { g3Scenarios = [] } = {}) {
     if (!summary || typeof summary.batchId !== 'string' || !summary.batchId) return ['no batch summary with a batchId (batch.json from batch.mjs)'];
     const p = [];
     if (summary.testMode !== false) p.push(`batch ${summary.batchId} ran in test mode (or does not say): not gate evidence`);
     const marker = `${summary.batchId}:${summary.maxBatchUsd}`;
     const ran = (summary.scenarios ?? []).reduce((m, s) => m.set(s.id, [...(m.get(s.id) ?? []), s]), new Map());
-    const g3 = results.filter(({ result }) => isG3Result(result));
+    const g3 = results.filter(({ result }) => isG3Result(result, g3Scenarios));
     if (!g3.length) p.push('no G3 result.json to check');
     for (const { file, result } of g3) {
         if (result.batch !== marker) p.push(`${file}: its batch marker '${result.batch ?? 'none'}' is not this batch's '${marker}'`);
@@ -84,9 +85,16 @@ export function crossCheckBatch(summary, results) {
     return p;
 }
 
-/** A G3 result: gate G3, or a g3- scenario (so dropping the gate field does not dodge the cross-check). */
-export function isG3Result(result) {
-    return result?.gate === 'G3' || /^g3-/i.test(String(result?.scenario ?? ''));
+/**
+ * A G3 result, so that neither dropping nor re-spelling a field dodges the cross-check (#129 re-review nit 2):
+ * its gate is G3 in any case or spacing, or its scenario starts with g3- (any case), or its scenario is one
+ * that loadScenarios marks gate G3 (g3Scenarios: those ids, compared without case).
+ */
+export function isG3Result(result, g3Scenarios = []) {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) return false;
+    if (String(result.gate ?? '').trim().toUpperCase() === 'G3') return true;
+    const id = String(result.scenario ?? '').trim().toLowerCase();
+    return id.startsWith('g3-') || g3Scenarios.some((s) => String(s).toLowerCase() === id && id !== '');
 }
 
 /** The verb of a console command, for error messages (never the arguments). */
