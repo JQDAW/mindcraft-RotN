@@ -19,6 +19,8 @@ test('the RotN profile resolves to api openrouter and model @preset/glm-5-1-mind
 test('the RotN profile: a valid bot name, no cheats, no embedding API that needs another key', async () => {
     const { validateNameFormat } = await import('./connection_handler.js');
     assert.equal(validateNameFormat(profile.name).success, true, profile.name);
+    // Lead decision (#170 review): the bot is FRCFLD, its Minecraft account, here and on the CX23.
+    assert.equal(profile.name, 'FRCFLD');
     assert.notEqual(profile.cheat, true);
     assert.equal(profile.embedding, undefined, 'OpenRouter has no embeddings; Mindcraft falls back to word overlap');
     for (const key of ['code_model', 'vision_model'])
