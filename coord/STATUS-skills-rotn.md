@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T15:24Z (from `date -u`)
+Updated: 2026-11-03T15:33Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -98,7 +98,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
        - `nightPhase`/`minutesToSunset` from S1-A's measured cycle (night 12542-23460; Extended Days freezes at 3000 and 16000). This deviates from the brief's "no world time" line, and the PR asks the lead.
        - `shelterPlan` (a 1x2 space, 10 shell blocks, rock only).
      - **D2b** (the shelter agenda step, placing, the night routine) comes after P1's placing results.
-- **P1 batch (lead, 2026-11-03):** attempt 1 failed at setup on a harness console-wait. **The rerun is running** (lead message, received before 15:24Z by `date -u`). Until the lead says it is over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
+- **P1 batch (lead, 2026-11-03):** attempt 1 failed at setup on a harness console-wait. The rerun ran (the lead's message came before 15:24Z by `date -u`). **It is over (lead, received before 2026-11-03T15:33Z): the server is gone and the memory rule is lifted.** Back to normal targeted testing. D2b waits for the lead's placing results from it.
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - **Merged:** E1 #146 (task queue), C1a #151 (craft needs; lead nit for later: `craft_needs.js` should match the exact slot stack list, as the slot found by `choices[0]` is wrong for `soaking_pot` and `hamster_wheel`), #156 (with rotn-data #153).
