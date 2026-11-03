@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (01:00 UTC, from `date -u`)
+Updated: 2026-11-03 (01:30 UTC, from `date -u`)
 
 ## Done
 
@@ -1127,15 +1127,10 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the #128 and #135 review nits (`agent/harness-ops/review-nits-128-135`):
-  - **#128:**
-    - the redactor keeps loopback (`127.x.x.x`) and the wildcard (`0.0.0.0`), so the cx23 probe's `ss` lines are regenerated from the raw capture and show them;
-    - the README marks "MainThread is Orca" as an inference;
-    - the README cites where the 997da58, terminal-time and other-terminal facts came from;
-    - the README notes the lost space at line 186.
-  - **#135:**
-    - a comment that the load step proves linking, not rendering;
-    - each npm and node step changes to `$GITHUB_WORKSPACE`.
-- Next: a research note on Java 8 packages on Ubuntu 26.04 (for the lead to file).
+- This PR: the research note on Java 8 on Ubuntu 26.04 (`deploy/test-server/JAVA8-ON-UBUNTU-2604.md`; `agent/harness-ops/java8-2604-note`). The lead may file it under `docs/research/`.
+  - **Answer:** 26.04 publishes `openjdk-8-jre-headless` 8u504 in universe with security updates, the same build as 24.04, and Hetzner has `ubuntu-26.04` images.
+  - **Recommendation:** one G0-style build batch with `--image ubuntu-26.04`. The lead says it waits until after the first G3 smoke batch.
+- Next: the G3 runner sets skills-rotn's `allow_server_task_giver` and `task_givers` (#146) in a test-only way, on the test server only. The CX23's `check-env.mjs` keeps refusing both in `SETTINGS_JSON`.
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
-- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (the #137 re-review nits, 655bcaa), and the lead's #134 (ADR 0007).
+- **The CX23:** the human has run GO 2. Nothing of mine touches it until the lead's word.
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), and the lead's #134 (ADR 0007).
