@@ -84,6 +84,18 @@
         "docs/research/rotn-progression.md section 2, Creepers and Fire Creepers: [W-Tips] 'Fire Creepers explode and can burn dropped items', [W-Progression_Stages]; the dump's specialmobs:firecreeper has the display name 'Fire Creeper'"
       ]
     },
+    "specialmobs:endercreeper": {
+      "reaction": "keep-distance",
+      "lookAt": false,
+      "explodes": true,
+      "summary": "A Special Mobs creeper with an enderman's eyes: it targets a player who looks at it (or hits it), teleports like an enderman, and explodes like a creeper. Do not look at it, and back off at once if it comes for you; do not melee it.",
+      "confidence": "verified",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125; javap -c -p, no mod code run): EntityEnderCreeper extends Entity_SpecialCreeper; initEntityAI (func_184651_r) adds EntityAICreeperSwell, EntityAIAttackMelee and, as its only player target task, EntityEnderCreeper$EntityAITargetBeholder (constructed at bytecode 141), an EntityAINearestAttackableTarget<EntityPlayer> whose shouldExecute predicate (lambda$shouldExecute$0) calls EntityEnderCreeper.shouldAttackPlayer; the other target task is EntityAIHurtByTarget",
+        "shouldAttackPlayer(EntityPlayer): no target while the player wears a carved pumpkin (armor slot, Blocks.PUMPKIN field_150423_aK at bytecode 26), otherwise the enderman's stare check, a look-vector dot product (Vec3d.dotProduct func_72430_b at bytecode 110); the class also has teleportRandomly()",
+        "It is a creeper class, so the creeper-variants rule would give keep-distance and explodes; this entry adds lookAt false (#187 review)"
+      ]
+    },
     "minecraft:witch": {
       "reaction": "take-cover",
       "ranged": true,

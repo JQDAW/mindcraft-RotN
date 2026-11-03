@@ -288,8 +288,8 @@ test('threat-reactions.json cites pack paths, not scratch paths', () => {
 });
 
 // #186 review (lead): a structured do-not-look field, so skills-rotn does not regex the summary.
-test('lookAt: false for the stare-triggered mobs only (enderman, rifted enderman, Special Mobs enderman variants)', () => {
-    for (const n of ['minecraft:enderman', 'ancientbeasts:rifted_enderman', 'specialmobs:thiefenderman', 'specialmobs:blindingenderman', 'specialmobs:specialenderman']) {
+test('lookAt: false for the look-triggered mobs only (enderman family, ender creeper, cockatrice)', () => {
+    for (const n of ['minecraft:enderman', 'ancientbeasts:rifted_enderman', 'specialmobs:thiefenderman', 'specialmobs:blindingenderman', 'specialmobs:specialenderman', 'specialmobs:endercreeper', 'iceandfire:if_cockatrice']) {
         assert.equal(pack.threatOf(n).lookAt, false, n);
     }
     for (const n of ['minecraft:zombie', 'minecraft:creeper', 'iceandfire:firedragon', 'animania:cow_holstein', 'minecraft:wither_skeleton']) {
@@ -302,7 +302,15 @@ test('lookAt: false for the stare-triggered mobs only (enderman, rifted enderman
     for (const n of enders) assert.equal(pack.threatOf(n).lookAt, false, n);
     // The field is data, not prose: every lookAt false entry or rule says why in its summary.
     const withField = [...Object.values(reactions.entities), ...reactions.classRules].filter((r) => r.lookAt === false);
-    assert.equal(withField.length, 3);
+    assert.equal(withField.length, 4);
+    // #187 review: the dangerous-override path reads the override's lookAt (the cockatrice), and the
+    // ender creeper keeps the creeper rule's reaction while adding lookAt false.
+    const cock = pack.threatOf('iceandfire:if_cockatrice');
+    assert.deepEqual([cock.reaction, cock.source, cock.lookAt], ['avoid', 'override', false]);
+    assert.match(cock.evidence.join(' '), /CockatriceAIAggroLook.*isEntityLookingAt\(player, cockatrice, 0\.6\)/);
+    const ec = pack.threatOf('specialmobs:endercreeper');
+    assert.deepEqual([ec.reaction, ec.explodes, ec.lookAt, ec.source], ['keep-distance', true, false, 'verified']);
+    assert.match(ec.evidence.join(' '), /EntityAITargetBeholder.*shouldAttackPlayer/);
     for (const r of withField) assert.match(r.summary, /look/i);
     assert.ok(pack.nightThreats({ limit: 1000 }).every((t) => typeof t.lookAt === 'boolean'));
     assert.match(reactions.description, /'lookAt': false/);

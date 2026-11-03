@@ -60,7 +60,7 @@ export function threatOf(catalog, input) {
     const base = { name: e.name, displayName: e.displayName ?? null, level };
     // A dangerous mob is avoided whatever else applies (entity-overrides.json wins).
     if (level === 'dangerous') {
-        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, lookAt: true, evidence: overrideEvidence };
+        return { ...base, reaction: 'avoid', source: 'override', summary: e.threat?.note ?? null, explodes: false, ranged: false, lookAt: e.threat?.lookAt !== false, evidence: overrideEvidence };
     }
     const entry = catalog.threatReactions?.entities?.[e.name];
     const rule = !entry && level === 'hostile' ? classRule(catalog, e) : null;
