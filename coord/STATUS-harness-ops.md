@@ -1,20 +1,18 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (14:50 UTC, from `date -u`)
+Updated: 2026-11-03 (15:33 UTC, from `date -u`)
 
 ## Now (2026-11-03 afternoon)
 
-**State:** P1 attempt 1 ran under the lead's written GO and failed at setup, a harness timing false negative (below). The server is deleted, and the spend was about EUR 0.14. Nothing is running. Nothing touches the CX23. Merged since the restart: #165, #169, #170 (skills-rotn's profile with the preset), #172, #173, #176 and net-forge's #167 and #177. Only this PR edits this file.
+**State:** **P1 is done: the rerun (attempt 2) was a SMOKE-PASS, 8 of 8 checks** (below). Attempt 1 had failed at setup on a late console reply, fixed by #183. Both servers are deleted. P1's spend was about EUR 0.28 plus 2 IPv4-hours. Nothing is running. Nothing touches the CX23. Merged since the restart: #165, #169, #170, #172, #173, #176, #180, #183, #184 and net-forge's #167 and #177. Only this PR edits this file.
 
 **Open PRs (mine):**
-- **This PR: the P1 attempt 1 evidence**, `test/evidence/probe/p1-20261103-a1/` (README with the timeline, the 3 s console delay after `clear`, the first-join starter items; redacted `result.json`, server log, driver log, run log).
-- **#183: the attempt 1 fix.** A console reply missing from its own 1 s wait is looked up in the later server log lines for up to 5 s (`test/runner/lib/late-console.mjs`), and recorded in `notes.lateReplies`. Its unit test replays attempt 1's exact lines.
-- **#180: the #176 review nits.** The batch script is matched by its resolved path, and `--dry-run` runs `--preflight-files`, which never reads the key usage.
+- **This PR: the P1 rerun evidence**, `test/evidence/probe/p1-20261103-a2/`. The README covers each pass check, the serverbound REID ids, the FastWorkbench window, the placement latencies, the bread's food gain and the spend. The capture summary comes from the new `test/tools/p1-capture-summary.mjs` (unit-tested).
 
 **Next step:**
-- **P1 rerun:** one, on a fresh server, under the same GO terms (the human approved it). It starts only after the lead has reviewed and merged #183 and written "P1 rerun: go".
-- **#165 follow-ups (lead's nits), one small PR after the rerun:** use net-forge's RotN hunger model (`simulateHunger`, #177: Hunger Overhaul and AppleCore; `20 24` with at least 25 s before eating) instead of my vanilla sums; the lead's rule that each P1 attempt uses a fresh server; and the lead's approval of the `p1food` scoreboard commands, recorded at `P1_CONSOLE_ALLOW` and in DRIVER.md.
-- **The first G3 batch** needs #180, the lead's check that a fresh Orca terminal sees `OPENROUTER_API_KEY` (set or not set only), and a written GO.
+- **#165 follow-ups (lead's nits), one small PR:** use net-forge's RotN hunger model (`simulateHunger`, #177: Hunger Overhaul and AppleCore; `20 24` with at least 25 s before eating) instead of my vanilla sums; the lead's rule that each P1 attempt uses a fresh server; and the lead's approval of the `p1food` scoreboard commands, recorded at `P1_CONSOLE_ALLOW` and in DRIVER.md.
+- **For net-forge (via the lead):** the measured placement latencies (589-1158 ms) are under `place_block_timeout_ms` 2000; the capture's 300-record caps for `block_change` and `entity_metadata` ran out during the login, so a placement's `block_change` is never in a P1 capture.
+- **The first G3 batch** needs the lead's check that a fresh Orca terminal sees `OPENROUTER_API_KEY` (set or not set only), and a written GO.
 - If a PR conflicts with develop, it is almost always this file: merge develop in and push. Never force-push.
 
 **Rules still in force:**
@@ -23,9 +21,22 @@ Updated: 2026-11-03 (14:50 UTC, from `date -u`)
 
 ## Real P1 batches
 
+### P1 attempt 2, the rerun (2026-11-03): SMOKE-PASS, 8 of 8 (a probe, never a gate); the server is deleted
+
+The full record is in `test/evidence/probe/p1-20261103-a2/README.md` (this PR).
+- **Run:** the lead's "P1 rerun: go"; a new clean detached worktree of develop at defbaa69 (with #183) after `npm ci`; `msa-login --check` exit 0; an empty project; the preflight on its own passed (cadence path); `--ttl-hours 2`, no skip flags, a fresh server; no LLM key in the batch's environment.
+- **Times (UTC):** start 15:20:16, created 15:20:26, ready 15:25:33, scenario 15:25:33-15:28:40, "verified gone" 15:29:05. Project empty at 15:29:12.
+- **Checks, all PASS:** `login_online`, `setup` (5/5 gives), the four crafts (crude axe, Crafting Tools, crafting table, and the 3x3 stone pickaxe at the placed table), `place_5` and `eat`. No late replies, no contract problems, no kicks.
+- **REID:** 33/33 serverbound window clicks accepted, 7 of them with item ids above 4095 (8917 `pyrotech:rock`, 9075 `pyrotech:crude_axe`, 12510 `contenttweaker:crafting_tools`).
+- **FastWorkbench:** the table's right-click opened FML's `fastbench` mod window after 138 ms; the 3x3 craft ran in it (10 clicks, all accepted, 10 fastbench payloads).
+- **Placement latencies:** 1158, 589, 1095, 904 and 634 ms (median 904).
+- **Bread:** food 15 -> 18 (+3, RotN's bread). The food before it was 15, exactly what net-forge's RotN model (#177) predicts for `22 19`.
+- **Also seen:** a 2.16 s server lag spike (CoFH cascading worldgen) during the food wait; the same first-join commands as attempt 1, plus a `lifescroll:spawnscroll` in the hotbar.
+- **Spend:** 1 billed hour, about **EUR 0.14** plus 1 Primary IPv4-hour.
+
 ### P1 attempt 1 (2026-11-03): FAIL at setup (a harness timing false negative); the server is deleted
 
-The full record is in `test/evidence/probe/p1-20261103-a1/README.md` (this PR).
+The full record is in `test/evidence/probe/p1-20261103-a1/README.md` (#184).
 - **Run:** the lead's written GO (approved by the human); a clean detached worktree of develop at e6196244 after `npm ci`; `msa-login --check` exit 0; the preflight on its own passed (cadence path); `--ttl-hours 2`, no skip flags; no LLM key in the batch's environment.
 - **Times (UTC):** start 14:34:07, created 14:34:20, ready 14:39:42, scenario 14:39:42-14:41:02, "verified gone" 14:41:33. Project empty at 14:41:47.
 - **Checks:** `login_online` PASS; `setup` FAIL (4/5 gives confirmed); the four crafts, `place_5` and `eat` not reached.
@@ -1174,8 +1185,6 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the P1 attempt 1 evidence (`test/evidence/probe/p1-20261103-a1/`).
-- #183: the attempt 1 fix (late console replies looked up in the later server log lines, up to 5 s).
-- #180: the #176 review nits (the batch script matched by its resolved path; `--dry-run` never reads the key usage).
-- Merged since the restart: #165 (P1 scenario), #169 (model pin), #173 (#139 nits), #176 (G3 batch preflight), and the others' #167, #170, #172 and #177.
+- This PR: the P1 rerun evidence (`test/evidence/probe/p1-20261103-a2/`) and `test/tools/p1-capture-summary.mjs`.
+- Merged since the restart: #165 (P1 scenario), #169 (model pin), #173 (#139 nits), #176 (G3 batch preflight), #180 (#176 nits), #183 (late console replies), #184 (P1 attempt 1 evidence), and the others' #167, #170, #172 and #177.
 - Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), #163 (the GO 3 CX23 post-bootstrap check, 54d653b; the terminal was closed at 02:16:21 UTC), #166 (`deploy.sh` refuses the test-only giver settings), and the lead's #134 (ADR 0007).
