@@ -1,0 +1,82 @@
+deploy@ubuntu-4gb-hel1-2:/tmp$cat /etc/os-release
+PRETTY_NAME="Ubuntu 26.04.1 LTS"
+NAME="Ubuntu"
+VERSION_ID="26.04"
+VERSION="26.04.1 LTS (Resolute Raccoon)"
+VERSION_CODENAME=resolute
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=resolute
+LOGO=ubuntu-logo
+deploy@ubuntu-4gb-hel1-2:/tmp$uname -r
+7.0.0-42-generic
+deploy@ubuntu-4gb-hel1-2:/tmp$uptime
+ 02:14:46 up 24 min,  1 user,  load average: 0.05, 0.11, 0.09
+deploy@ubuntu-4gb-hel1-2:/tmp$node --version
+v22.23.4
+deploy@ubuntu-4gb-hel1-2:/tmp$npm --version
+10.9.9
+deploy@ubuntu-4gb-hel1-2:/tmp$git --version
+git version 2.53.0
+deploy@ubuntu-4gb-hel1-2:/tmp$command -v jq unzip
+deploy@ubuntu-4gb-hel1-2:/tmp$id
+uid=1000(deploy) gid=1000(deploy) groups=1000(deploy),27(sudo),983(mindcraft-rotn)
+deploy@ubuntu-4gb-hel1-2:/tmp$id mindcraft-rotn
+uid=999(mindcraft-rotn) gid=983(mindcraft-rotn) groups=983(mindcraft-rotn)
+deploy@ubuntu-4gb-hel1-2:/tmp$getent passwd deploy mindcraft-rotn
+deploy:x:<ip>/home/deploy:/bin/bash
+mindcraft-rotn:x:<ip>/var/lib/mindcraft-rotn:/usr/sbin/nologin
+deploy@ubuntu-4gb-hel1-2:/tmp$ls -ld /opt/mindcraft-rotn /var/lib/mindcraft-rotn /etc/mindcraft-rotn /usr/local/lib/mindcraft-rotn
+drwxr-x--- 2 root           mindcraft-rotn 4096 Nov  3 01:23 /etc/mindcraft-rotn
+drwxr-x--- 3 deploy         mindcraft-rotn 4096 Nov  3 01:23 /opt/mindcraft-rotn
+drwxr-xr-x 2 root           root           4096 Nov  3 01:23 /usr/local/lib/mindcraft-rotn
+drwxr-x--- 3 mindcraft-rotn mindcraft-rotn 4096 Nov  3 01:23 /var/lib/mindcraft-rotn
+deploy@ubuntu-4gb-hel1-2:/tmp$ls -l /usr/local/sbin/mindcraft-rotn-ctl /etc/systemd/system/mindcraft-rotn@.service
+-rw-r--r-- 1 root root 2870 Nov  3 01:23 /etc/systemd/system/mindcraft-rotn@.service
+-rwxr-xr-x 1 root root 1999 Nov  3 01:23 /usr/local/sbin/mindcraft-rotn-ctl
+deploy@ubuntu-4gb-hel1-2:/tmp$swapon --show
+NAME      TYPE SIZE USED PRIO
+/swapfile file   2G   0B   -1
+deploy@ubuntu-4gb-hel1-2:/tmp$free -m
+               total        used        free      shared  buff/cache   available
+Mem:            3814         678        2752           5         613        3136
+Swap:           2047           0        2047
+deploy@ubuntu-4gb-hel1-2:/tmp$df -h /
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda1        38G  4.8G   31G  14% /
+deploy@ubuntu-4gb-hel1-2:/tmp$ss -tln
+State          Recv-Q          Send-Q                   Local Address:Port                    Peer Address:Port
+LISTEN         0               511                          127.0.0.1:43159                        0.0.0.0:*
+LISTEN         0               511                          127.0.0.1:6770                         0.0.0.0:*
+LISTEN         0               4096                        127.0.0.54:53                           0.0.0.0:*
+LISTEN         0               4096                           0.0.0.0:22                           0.0.0.0:*
+LISTEN         0               4096                     127.0.0.53%lo:53                           0.0.0.0:*
+LISTEN         0               4096                              [::]:22                              [::]:*
+deploy@ubuntu-4gb-hel1-2:/tmp$systemctl is-active ssh ufw unattended-upgrades
+active
+active
+active
+deploy@ubuntu-4gb-hel1-2:/tmp$systemctl is-enabled ufw
+enabled
+deploy@ubuntu-4gb-hel1-2:/tmp$cat /etc/ssh/sshd_config.d/10-mindcraft-rotn.conf
+# mindcraft-rotn setup (deploy/cx23/bootstrap.sh): no SSH password login (the human's decision, GO 2).
+# Root keeps its key login (PermitRootLogin is not set here); deploy's password is for sudo only.
+# 10- sorts before cloud-init's 50-cloud-init.conf: sshd keeps the first value it reads.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+deploy@ubuntu-4gb-hel1-2:/tmp$ls -l /etc/ssh/sshd_config.d/
+total 4
+-rw-r--r-- 1 root root 348 Nov  3 01:23 10-mindcraft-rotn.conf
+deploy@ubuntu-4gb-hel1-2:/tmp$cat /etc/apt/apt.conf.d/20auto-upgrades
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+deploy@ubuntu-4gb-hel1-2:/tmp$sudo -n -l
+User deploy may run the following commands on ubuntu-4gb-hel1-2:
+    (ALL : ALL) ALL
+    (root) NOPASSWD: /usr/local/sbin/mindcraft-rotn-ctl
+deploy@ubuntu-4gb-hel1-2:/tmp$sudo -n /usr/local/sbin/mindcraft-rotn-ctl status nonexistent-bot
+mindcraft-rotn-ctl: no env file for 'nonexistent-bot' (run bootstrap.sh add-bot nonexistent-bot)

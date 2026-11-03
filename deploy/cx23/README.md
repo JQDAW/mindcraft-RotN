@@ -57,7 +57,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
      - If either check fails, it puts back what was there, so sshd is never left half-configured.
      - `PermitRootLogin` is not touched: root keeps its key login (`prohibit-password`);
    - installs the unit, `check-env` and `mindcraft-rotn-ctl`;
-   - creates `/opt/mindcraft-rotn` (`deploy:mindcraft-rotn`, 0750), `/var/lib/mindcraft-rotn` and `/etc/mindcraft-rotn` (`root:mindcraft-rotn`, 0750).
+   - creates `/opt/mindcraft-rotn` (`deploy:mindcraft-rotn`, 0750), `/var/lib/mindcraft-rotn` and `/var/lib/mindcraft-rotn/bots` (`mindcraft-rotn:mindcraft-rotn`, 0750), and `/etc/mindcraft-rotn` (`root:mindcraft-rotn`, 0750).
 
    After `setup`, SSH password login is **off**, and root login by key stays **on**.
 

@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (02:13 UTC, from `date -u`)
+Updated: 2026-11-03 (02:27 UTC, from `date -u`)
 
 ## Done
 
@@ -1127,14 +1127,22 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: every file under `deploy/cx23/` is LF (`agent/harness-ops/cx23-eol-lf`), after the GO 2 finding that a Windows checkout copied CRLF files:
-  - `deploy/.gitattributes` adds `cx23/** text eol=lf`;
-  - `test/unit/deploy-eol.test.js` checks both the attribute and that no file on disk has a CR;
-  - the README says how to copy from Windows (`git archive`) and how to check a copy.
-- Next:
-  - **GO 3** (lead, 2026-11-03): the post-bootstrap read-only check of the CX23 as `deploy`, through the Orca environment "cx23 deploy".
-  - **Probe P1:** the scenario `test/scenarios/probe/probe-craft-place.mjs` and its driver protocol with net-forge (WIP on `agent/harness-ops/probe-p1`).
-  - **The #157 nit:** check the deployed `settings.js` for `allow_server_task_giver` on the CX23 side.
+- This PR: **GO 3, the CX23 post-bootstrap read-only check, as `deploy`: DONE. The terminal is closed: created 02:14:17, closed 02:16:21 UTC on 2026-11-03** (`ptyKilled: true`).
+  - Evidence: `test/evidence/cx23/post-bootstrap-20261103/` (`agent/harness-ops/cx23-post-bootstrap`).
+  - **Only the lead's listed commands ran**, typed one per line with no extra markers. No password, no write, nothing under `~/.ssh` or in any env file.
+  - **Everything setup reported holds after the updates and the reboot:**
+    - Ubuntu 26.04.1, with the new kernel 7.0.0-42;
+    - Node v22.23.4;
+    - the 2 GB swap;
+    - only SSH public;
+    - ssh, ufw and unattended-upgrades active;
+    - the password-off drop-in in place, and the only file in `sshd_config.d`;
+    - the NOPASSWD ctl rule listed by `sudo -n -l`;
+    - the ctl refusing an unknown bot cleanly.
+  - **Open (needs root):** the ufw rule list, and `sshd -T` after the reboot. `jq` and `unzip` are not installed, and nothing in `deploy/cx23/` needs them.
+  - **The lead's review nit is done here:** `deploy/cx23/README.md` now says `/var/lib/mindcraft-rotn` is `mindcraft-rotn:mindcraft-rotn` 0750, as `bootstrap.sh` creates it and as the server shows.
+  - One other terminal (`term_c12ffc1c...`, not this check's) stays open in "cx23 deploy"; it was left alone.
+- #165: probe P1, the scenario `probe-craft-place` (never a gate) and the protocol for net-forge (Requests item 15).
+- #166: the #157 nit. `deploy.sh` refuses a release with the test-only `allow_server_task_giver` or a `Server` task giver.
 - Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
-- **The CX23:** GO 2 is done (the human ran setup; every step reported OK), and the human applied updates, rebooted, added the Orca environment "cx23 deploy" and removed the root target. GO 3, the read-only check as `deploy`, is next.
-- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), and the lead's #134 (ADR 0007).
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (655bcaa), #147 (the #128 and #135 review nits), #150 (the Java 8 on Ubuntu 26.04 note), #157 (the G3 test-only Server giver), #159 (every file under `deploy/cx23/` is LF), and the lead's #134 (ADR 0007).
