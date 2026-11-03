@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T01:06Z (from `date -u`)
+Updated: 2026-11-03T01:10Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -201,7 +201,11 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
     So one slot accepts any meta of one item, but not two items. A mix of rock families needs recipe entries whose slots name different items, which the table can hold.
   - **Fix (rotn-data only):** `registry-recipes.js` also emits mixed variants for an ingredient that fills n >= 2 slots (multisets of its likeliest candidates, K as large as `C(K+n-1, n) <= 64` allows), ordered by cost after the uniform ones. Within a rank, wildcard candidates (a whole rock family) come first, so the three Underground Biomes families are among the K. Stone pickaxe and axe: 1 igneous + 2 metamorphic rocks and 2 sticks are now craftable by mineflayer's rule. Cobblestone still needs 4 rocks of one type (one recipe per type).
-- **Next: Request 10** (`getDetailedCraftingPlan` reading ingredient metas).
+- **Request 10, the plan reads ingredient metas (`agent/rotn-data/plan-metas`, based on #152):**
+  - **How it works:** `getDetailedCraftingPlan` now keys ingredients like `world.getInventoryCounts` does (`name:meta` for items with subtypes, bare otherwise; a bare recipe key means any variant), and plans with the first recipe variant the inventory and leftovers can supply.
+  - **Results:** a dirt clump (`pyrotech:rock:4`) no longer counts as a rock; a metamorphic rock does; 1 igneous + 2 metamorphic make a stone pickaxe (with #152).
+  - **New export:** `getItemCraftingRecipeVariants(key)`. `getItemCraftingRecipes` (bare names, upstream shape) is unchanged.
+  - **For skills-rotn (via the lead):** `!getCraftingPlan` (`src/agent/commands/queries.js:292`) passes `world.getInventoryTotals` (bare totals). A bare total of an item with subtypes cannot vouch for one variant, so it counts only towards any-variant needs (planks, sticks still plan as before; `names_e2e.test.js` passes). To get variant-checked plans for rocks, pass `world.getInventoryCounts(bot)` (variant keys). The target can stay bare.
 
 - **Free** (lead, after #138). Low-priority offline task done: the research note below (STATUS only, no code).
 - **Lead's pick, follow-up 1 (`agent/rotn-data/ub-rock-piles`; G3 critical path, skills-rotn B2 #141 uses the world rules):** the `rock-pile` rule names the Underground Biomes rock piles (`pyrotech_compat:rock_igneous`, `_metamorphic`, `_sedimentary`), per-pair `inferred`, cited from the dump (no collision box, hardness 0.1, no tool, each state drops its own item at the same meta, state names match item names) and S1-A (the metas seen near the G3 spawn). `pyrotech:rock` stays `documented`. Blocks item 1 below is done by it. Lead (for skills-rotn B2): the rock-pile and stone rules carry `ore: rock`, and `howToGet` ways list per block the metas that give a rock in the dump's `rock` ore dictionary (`pyrotech:rock` 0, 6, 8; the Underground Biomes piles every meta), with `inOre` on each listed block; the metas 4, 5, 7, 9 of a bare `pyrotech:rock` pile are not rocks. Cross-checked against the dump's drops and the crude axe's rock slot.
@@ -302,4 +306,5 @@ Findings for skills-rotn (via the lead): see Request 8.
 ## Open PRs
 
 - #143 `agent/rotn-data/ender-witch-rules`: follow-up 2 (see Doing).
-- `agent/rotn-data/mixed-ore-slots`: mixed ore-dictionary slots (see Doing).
+- #152 `agent/rotn-data/mixed-ore-slots`: mixed ore-dictionary slots (see Doing).
+- `agent/rotn-data/plan-metas`: Request 10 (see Doing; includes #152 until it merges).

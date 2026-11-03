@@ -185,12 +185,41 @@ test('getItemCraftingRecipes and getDetailedCraftingPlan follow RotN recipes', (
     assert.deepEqual(mc.getItemCraftingRecipes('crafting_table')[0], [{ planks: 1, 'contenttweaker:crafting_tools': 1 }, { craftedCount: 1 }]);
     // Rocks and cobblestone make each other; both are gathered, not crafted (no endless recursion).
     const pick = mc.getDetailedCraftingPlan('stone_pickaxe', 1, {});
-    assert.match(pick, /- 3 pyrotech:rock\n- 1 log\n/);
-    assert.match(pick, /Craft 1 log -> 3 planks\nCraft 2 planks -> 4 stick\nCraft 3 pyrotech:rock \+ 2 stick -> 1 stone_pickaxe/);
+    // Request 10: the plan names variants as inventory keys ("pyrotech:rock:0", "log:0"); a bare
+    // key (planks, stick) means any variant.
+    assert.match(pick, /- 3 pyrotech:rock:0\n- 1 log:0\n/);
+    assert.match(pick, /Craft 1 log:0 -> 3 planks\nCraft 2 planks -> 4 stick\nCraft 3 pyrotech:rock:0 \+ 2 stick -> 1 stone_pickaxe/);
     const table = mc.getDetailedCraftingPlan('crafting_table', 1, {});
-    assert.match(table, /Craft 1 pyrotech:rock \+ 2 stick -> 1 pyrotech:crude_axe\nCraft 1 pyrotech:crude_axe \+ 1 pyrotech:rock \+ 1 stick -> 1 contenttweaker:crafting_tools\nCraft 1 planks \+ 1 contenttweaker:crafting_tools -> 1 crafting_table/);
+    assert.match(table, /Craft 1 pyrotech:rock:0 \+ 2 stick -> 1 pyrotech:crude_axe\nCraft 1 pyrotech:crude_axe \+ 1 pyrotech:rock:0 \+ 1 stick -> 1 contenttweaker:crafting_tools\nCraft 1 planks \+ 1 contenttweaker:crafting_tools -> 1 crafting_table/);
     assert.equal(mc.getDetailedCraftingPlan('cobblestone', 1, {}), 'cobblestone is a base item, you need to find 1 more in the world');
-    assert.match(mc.getDetailedCraftingPlan('furnace', 1, { 'pyrotech:rock': 2 }), /- 6 pyrotech:rock/);
+    assert.match(mc.getDetailedCraftingPlan('furnace', 1, { 'pyrotech:rock:0': 2 }), /- 6 pyrotech:rock:0/);
+});
+
+// Request 10 (#131 nit): the plan reads ingredient metas against a variant-keyed inventory
+// (world.getInventoryCounts: "name:meta" for items with subtypes), so the wrong variant is not "everything".
+test('getDetailedCraftingPlan: a dirt clump is not a rock; any rock in the ore is; mixed rocks make a stone pickaxe', () => {
+    const everything = /^You have all items required to craft this item!/;
+    // A dirt clump (pyrotech:rock:4) is not in the rock ore dictionary: the crude axe still needs a rock.
+    const clump = mc.getDetailedCraftingPlan('pyrotech:crude_axe', 1, { 'pyrotech:rock:4': 1, stick: 2 });
+    assert.doesNotMatch(clump, everything);
+    assert.match(clump, /- 1 pyrotech:rock:0/);
+    // A metamorphic rock (any meta) is in the ore: everything is there, and the plan names it.
+    const meta6 = mc.getDetailedCraftingPlan('pyrotech:crude_axe', 1, { 'pyrotech_compat:rock_metamorphic:6': 1, stick: 2 });
+    assert.match(meta6, everything);
+    assert.match(meta6, /Craft 1 pyrotech_compat:rock_metamorphic \+ 2 stick -> 1 pyrotech:crude_axe/);
+    // Mixed families (the G3 spawn): 1 igneous + 2 metamorphic make a stone pickaxe (#152's mixed variants).
+    const mixed = mc.getDetailedCraftingPlan('stone_pickaxe', 1, { 'pyrotech_compat:rock_igneous:3': 1, 'pyrotech_compat:rock_metamorphic:0': 2, stick: 2 });
+    assert.match(mixed, everything);
+    assert.match(mixed, /1 pyrotech_compat:rock_igneous \+ 2 pyrotech_compat:rock_metamorphic \+ 2 stick -> 1 stone_pickaxe/);
+    // Not enough of the right variants: 2 good rocks and a clump are not 3 rocks.
+    assert.doesNotMatch(mc.getDetailedCraftingPlan('stone_pickaxe', 1, { 'pyrotech_compat:rock_igneous:0': 2, 'pyrotech:rock:4': 1, stick: 2 }), everything);
+    // A bare total of an item with subtypes cannot vouch for a variant: callers pass variant keys.
+    assert.doesNotMatch(mc.getDetailedCraftingPlan('pyrotech:crude_axe', 1, { 'pyrotech:rock': 1, stick: 2 }), everything);
+    // Items without subtypes keep bare keys, and a bare need takes any variant ("planks" from "planks:2").
+    assert.match(mc.getDetailedCraftingPlan('stick', 4, { 'planks:2': 2 }), everything);
+    // The variant-aware recipes: the stone pickaxe's first variant, keyed like the inventory.
+    assert.deepEqual(mc.getItemCraftingRecipeVariants('stone_pickaxe')[0], [{ 'pyrotech:rock:0': 3, stick: 2 }, { craftedCount: 1 }]);
+    assert.equal(mc.getItemCraftingRecipeVariants('nosuchmod:thing'), null);
 });
 
 test('the plan cycle guard has no depth limit: a 12-step cycle is found (#102 review)', () => {
