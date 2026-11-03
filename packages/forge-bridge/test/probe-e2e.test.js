@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { tmpFile } from './helpers.js';
 import { I, B, TABLE, within, startCraftWorld, stopCraftWorld } from './craft-world.js';
+import { simulateHunger, ROTN_HUNGER } from './fake-containers.js';
 import { attachProbe, chatLine, itemByName, pickVariant, checkProbeReply, registryName } from '../tools/probe-commands.mjs';
 
 let world;
@@ -41,6 +42,24 @@ test('registryName gives full names; checkProbeReply holds a reply to the contra
     assert.deepEqual(checkProbeReply({ v: 1, token: 'abcdef', cmd: 'craft', ok: false, error: 'time limit of 60000 ms reached', timedOut: true, limitMs: 60000 }), []);
     assert.ok(checkProbeReply({ v: 1, token: 'abcdef', cmd: 'eat', ok: false }).includes('failure without error'));
     assert.ok(checkProbeReply({ v: 1, token: 'abcdef', cmd: 'eat', ok: false, error: 'x', timedOut: false }).some(p => p.startsWith('timedOut:')), 'timedOut is only ever true');
+});
+
+test('RotN 3.3.4 hunger: exhaustion, saturation and the P1 setup (normal difficulty, Hunger Overhaul 85 %)', () => {
+    const fresh = { food: 20, saturation: 5 };
+    // The #167 review: 10 s at amplifier 10 is 11 exhaustion from the effect plus 2 constant, two
+    // steps of 4.706, which only take saturation 5 -> 3. Food stays 20, so the eat step cannot run.
+    const weak = simulateHunger(fresh, 10, 10);
+    assert.deepEqual([weak.food, weak.saturation, weak.steps], [20, 3, 2]);
+    // P1's setup: 20 s at amplifier 24 = 54 exhaustion, 11 steps: saturation 5 -> 0, then food 20 -> 14.
+    const p1 = simulateHunger(fresh, 20, 24);
+    assert.deepEqual([p1.food, p1.saturation, p1.steps], [14, 0, 11]);
+    // A bot that already idled to saturation 0 ends far above 0 (Hunger Overhaul: 200 damage at food 0).
+    assert.equal(simulateHunger({ food: 18, saturation: 0 }, 20, 24).food, 7);
+    // Saturation never goes below 0, food never below 0, and exhaustion never above the cap.
+    const max = simulateHunger(fresh, 60, 255);
+    assert.deepEqual([max.food, max.saturation], [0, 0]);
+    assert.ok(max.exhaustion <= ROTN_HUNGER.cap);
+    assert.equal(simulateHunger(fresh, 0, 24).food, 20);
 });
 
 test('pickVariant never counts one stack for two cells (any meta plus a fixed meta of the same id)', () => {
@@ -152,12 +171,23 @@ test('probe-craft, probe-place and probe-eat through initBot, answered as JSON a
     await sleep(1500);
     assert.equal(heard(), sayBefore, 'the /say lookalike starts nothing');
 
-    // Eat bread (food under 20 first, as the scenario's hunger effect does).
-    containers.setFood(15);
-    for (let waited = 0; bot.food !== 15 && waited < 5000; waited += 50) await sleep(50);
+    // At full food a 1.12 player cannot eat bread: the probe fails at once and says why (it never
+    // starts eating, so it does not hang until the time limit).
+    assert.equal(bot.food, 20);
+    const t0 = Date.now();
+    const full = await send('probe-eat TOKEN minecraft:bread');
+    assert.equal(full.ok, false);
+    assert.match(full.error, /^food is 20, not below 20: .*the hunger setup did not lower food/);
+    assert.ok(Date.now() - t0 < 3000, `failed fast (${Date.now() - t0} ms)`);
+    assert.deepEqual(checkProbeReply(full), []);
+    assert.deepEqual(st.uses, [], 'no use_item was sent');
+
+    // Eat bread after P1's hunger setup (RotN's exhaustion model: 20 s at amplifier 24 -> food 14).
+    assert.deepEqual(containers.applyHunger(20, 24).food, 14);
+    for (let waited = 0; bot.food !== 14 && waited < 5000; waited += 50) await sleep(50);
     const eat = await send('probe-eat TOKEN minecraft:bread');
     assert.equal(eat.ok, true, JSON.stringify(eat));
-    assert.deepEqual([eat.foodBefore, eat.foodAfter, eat.countBefore, eat.countAfter], [15, 20, 2, 1]);
+    assert.deepEqual([eat.foodBefore, eat.foodAfter, eat.countBefore, eat.countAfter], [14, 17, 2, 1], 'RotN bread: +3 food');
     assert.deepEqual(st.uses.map(u => u.hand), [0]);
 
     // A repeated token runs once.

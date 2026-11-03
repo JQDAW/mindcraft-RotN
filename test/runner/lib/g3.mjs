@@ -127,13 +127,15 @@ export function crossCheckBatch(summary, results, { g3Scenarios = [] } = {}) {
 /**
  * A G3 result, so that neither dropping nor re-spelling a field dodges the cross-check (#129 re-review nit 2):
  * its gate is G3 in any case or spacing, or its scenario starts with g3- (any case), or its scenario is one
- * that loadScenarios marks gate G3 (g3Scenarios: those ids, compared without case).
+ * that loadScenarios marks gate G3 (g3Scenarios: those ids, compared without case or surrounding spaces,
+ * #139 review nit 1). Only the top-level object is a result: one wrapped in an array or a parent object is
+ * not detected (#139 review nit 2; DRIVER.md says so, and the evidence review covers it).
  */
 export function isG3Result(result, g3Scenarios = []) {
     if (!result || typeof result !== 'object' || Array.isArray(result)) return false;
     if (String(result.gate ?? '').trim().toUpperCase() === 'G3') return true;
     const id = String(result.scenario ?? '').trim().toLowerCase();
-    return id.startsWith('g3-') || g3Scenarios.some((s) => String(s).toLowerCase() === id && id !== '');
+    return id.startsWith('g3-') || (id !== '' && g3Scenarios.some((s) => String(s).trim().toLowerCase() === id));
 }
 
 /** The verb of a console command, for error messages (never the arguments). */
