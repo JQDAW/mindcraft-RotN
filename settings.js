@@ -29,6 +29,8 @@ const settings = {
     "load_memory": false, // load memory from previous session
     "init_message": "Respond with hello world and your name", // sends to all on spawn
     "only_chat_with": [], // users that the bots listen to and send general messages to. if empty it will chat publicly
+    "task_givers": ["JQDAW"], // RotN: players whose typed commands and tasks the bot accepts; everyone else may only chat (#146)
+    "allow_server_task_giver": false, // RotN: test servers only; lets the console whisper sender "Server" give tasks. Never true in a committed file
 
     "speak": false,
     // allows all bots to speak through text-to-speech. 
