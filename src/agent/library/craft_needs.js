@@ -27,12 +27,26 @@ function recipeCells(recipeId) {
     return cells.filter(c => c && Array.isArray(c.stacks) && c.stacks.length > 0);
 }
 
+// The recipe slot an input came from. rotn-data groups slots by their exact stack list and
+// lists its stacks as choices (at most 6, likeliest first) plus `more`, so the slot is the one
+// with that many stacks that holds every choice (#151 nit: the first slot holding choices[0]
+// was wrong for crafttweaker:soaking_pot, whose 1-stack twine slot sits beside a 4-stack one).
+// Else, as before, the first slot that holds choices[0].
+const stackKey = (s) => `${s.name}:${WILD(s.meta) ? '*' : s.meta}`;
+function inputCell(input, cells) {
+    const choices = Array.isArray(input.choices) ? input.choices : [];
+    if (choices.length === 0) return null;
+    const want = choices.map(stackKey);
+    const size = choices.length + (Number.isInteger(input.more) ? input.more : 0);
+    const exact = cells.find(c => c.stacks.length === size && want.every(k => c.stacks.some(s => stackKey(s) === k)));
+    return exact ?? cells.find(c => c.stacks.some(s => sameStack(s, choices[0]))) ?? null;
+}
+
 // Every stack that fits an input. Prefer the recipe slot's own stacks: the crude axe's rock slot
 // also takes flint, which is not in the rock ore list (#151 re-review). Else the full ore
 // dictionary (a way lists at most 6 choices), else its choices.
 function inputMembers(input, cells) {
-    const c0 = input.choices?.[0];
-    const cell = c0 ? cells.find(c => c.stacks.some(s => sameStack(s, c0))) : null;
+    const cell = inputCell(input, cells);
     const plain = cell ? cell.stacks.filter(s => !s.nbt) : [];
     if (plain.length > 0) {
         const seen = new Set();
