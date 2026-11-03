@@ -6,11 +6,12 @@ Agents add items here when they need something only the human can do. The human 
 
 - [ ] **CX23: swap the Orca targets** (rotn-lead, 2026-11-02 18:12 UTC; the human's decision). The bootstrap is done (see Done). Add a new Orca SSH target `cx23-deploy` for `deploy` with its new key, then **remove the root `cx23` target**. Root SSH stays enabled on the server (no lockdown), for you only.
 - [ ] **CX23: reboot for the pending kernel** (rotn-lead, 2026-11-03 01:37 UTC). Setup reported "System restart required" (running 7.0.0-30, installed 7.0.0-38). As root: optionally `apt update && apt full-upgrade` first (37 packages were pending), then `reboot`. Afterwards check that `ssh root@<cx23>` and `ssh -i ~/.ssh/cx23_deploy deploy@<cx23>` both still log in.
-- [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key above): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
+- [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key, which is under Done): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
 - [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
 - [ ] **Whitelist the bot** on the live server when the lead asks (after G3).
 
 ## Done
+
 - [x] **OpenRouter test key (USD 5 limit) for G3 batches:** stored by the human as the Windows user environment variable `OPENROUTER_API_KEY` (2026-11-03 about 02:50 UTC; the lead checked only that it is set). Orca terminals see it after an Orca restart, scheduled by the lead before the first G3 batch; if Orca filters it, the human runs the batch command in their own PowerShell. Model for all LLM runs: `@preset/glm-5-1-mindcraft`.
 
 - [x] **CX23 bootstrap (GO 2)**, run by the human as root, 2026-11-03 about 01:20-01:35 UTC, from develop with #144. The human first stripped Windows CR line endings from the copied files. Read-only check first: only `Include /etc/ssh/sshd_config.d/*.conf`, no Match. `setup` completed:

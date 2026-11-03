@@ -94,7 +94,7 @@ At most three dev agents run at once. Phase 1 starts net-forge; rotn-data starts
 | AggroTP and invasions break pathing | Mode that detects position jumps and threat spikes, cancels and re-plans |
 | LLM uses 1.21 names | Translate at the command boundary; `!lookup` command over the RotN catalog; RotN examples in the profile |
 | Anti-cheat or admin kicks | Whitelist; normal movement limits; `block_place_delay` if needed |
-| OpenRouter model quality varies | Benchmark 3-4 models on the same scenarios; primary + fallback model in the profile |
+| OpenRouter model quality varies | The human adjusts the OpenRouter preset (`@preset/glm-5-1-mindcraft`); a fallback model can be set inside the preset. Each run records the model it used |
 | Embeddings | OpenRouter now has `/api/v1/embeddings` (`docs/research/ops.md` D), but Mindcraft's `openrouter.js` does not use it, so word overlap runs today. Wire it in only if scenarios show harm |
 | RoughlyEnoughIDs 2.2.2 changes the wire format (VarInt slot ids, a VarInt biome array inside chunk data, int effect ids, its own `jeid` channel) | forge-bridge protocol overrides plus a prismarine-chunk patch when REID is in the ModList (ADR 0003, `fml-spec.md` section R); the G1 spike checks chunk and inventory parsing first |
 | Mod-local entity IDs are not sent to clients | rotn-data's server-side dumper mod exports the table (ADR 0004) |
