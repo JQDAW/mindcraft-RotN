@@ -14,7 +14,7 @@ An autonomous LLM bot that joins the human's Rebirth of the Night 3.3.4 server (
 | Test server | Hetzner CPX42 (8 vCPU, 16 GB, 320 GB), EUR 0.138/h, EUR 86.17/month cap. Built from scratch for every test batch from the RotN 3.3.4 server pack zip (pinned SHA-256, ADR 0005) with Java 8, then deleted along with its IPv4. Delete-after watchdog, default 8 h. Nothing is copied from the live host. |
 | Data dump | Runs on the test server, which runs the same default pack as live. |
 | Bot VPS | Hetzner CX23, Ubuntu 26.04 LTS (ADR 0007), Node 22 LTS (ADR 0002). The bootstrap creates a key-based `deploy` user and turns SSH password login off; the human keeps root SSH, by key only. |
-| LLM | OpenRouter via Mindcraft's `openrouter` provider (`OPENROUTER_API_KEY`, model `openrouter/<vendor>/<model>`). One key per bot with a credit limit. Models chosen by scenario benchmark. Embeddings fall back to word overlap. |
+| LLM | OpenRouter via Mindcraft's `openrouter` provider (`OPENROUTER_API_KEY`). One key per bot with a credit limit. **Model: the human's OpenRouter preset `@preset/glm-5-1-mindcraft`** (2026-11-03), written in profiles as `openrouter/@preset/glm-5-1-mindcraft`; the preset itself is configured on OpenRouter by the human. Changing it is the human's decision. Embeddings fall back to word overlap. |
 | Behavior | Autonomous, player tasks take priority (see priority stack). |
 | Scale | One bot at launch. Everything per-bot is configuration. |
 | Safety | `allow_insecure_coding` stays false. |
@@ -94,7 +94,7 @@ At most three dev agents run at once. Phase 1 starts net-forge; rotn-data starts
 | AggroTP and invasions break pathing | Mode that detects position jumps and threat spikes, cancels and re-plans |
 | LLM uses 1.21 names | Translate at the command boundary; `!lookup` command over the RotN catalog; RotN examples in the profile |
 | Anti-cheat or admin kicks | Whitelist; normal movement limits; `block_place_delay` if needed |
-| OpenRouter model quality varies | Benchmark 3-4 models on the same scenarios; primary + fallback model in the profile |
+| OpenRouter model quality varies | The human adjusts the OpenRouter preset (`@preset/glm-5-1-mindcraft`); a fallback model can be set inside the preset. Each run records the model it used |
 | Embeddings | OpenRouter now has `/api/v1/embeddings` (`docs/research/ops.md` D), but Mindcraft's `openrouter.js` does not use it, so word overlap runs today. Wire it in only if scenarios show harm |
 | RoughlyEnoughIDs 2.2.2 changes the wire format (VarInt slot ids, a VarInt biome array inside chunk data, int effect ids, its own `jeid` channel) | forge-bridge protocol overrides plus a prismarine-chunk patch when REID is in the ModList (ADR 0003, `fml-spec.md` section R); the G1 spike checks chunk and inventory parsing first |
 | Mod-local entity IDs are not sent to clients | rotn-data's server-side dumper mod exports the table (ADR 0004) |
