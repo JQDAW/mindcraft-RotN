@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T14:32Z (from `date -u`)
+Updated: 2026-11-03T14:48Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -60,7 +60,9 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
     4. nit: a new task waits for a giver's goal;
     5. nit: the spawn handler is `Agent.onSpawn`, and a test runs it.
 
-    Tests 1, 2 and 5 fail on the old code. Reply posted; waiting for the re-review.
+    Tests 1, 2 and 5 fail on the old code.
+  - **#174 re-review (lead):** items 1, 2, 4 and 5 are fixed, and no working non-giver channel was found. The one item left is fixed in `9fdc5d56`: the model's own goals share one 5 min count across `!goal` swaps, which reset it before. The count starts again only after self-prompting stopped, or after a giver's goal, a task or the agenda had the self-prompter. The goal-swap test fails on the old code. Tests: `src/agent/**` 185/185; lint 254.
+  - **Known limit (lead, #174 re-review): bot-to-bot messages are trusted.** `handleMessage` treats a message from another Mindcraft bot (`convoManager.isOtherAgent`) as neither a giver's nor an untrusted sender's: it is not marked untrusted, and its replies may run actions. Before a second bot joins (multi-bot, ready-to-try's last item), bot-to-bot messages need the E3 marking, or giver rules of their own.
 
   Tests: `src/agent/**` 181/181; lint 254. The E3 contents:
   - control holds: a giver's typed `!stop`, `!pause` (new), `!stfu` (now giver-only) and `!resume` (new), saved in `bots/<name>/control.json`; a giver's typed action holds autonomy while it runs;
@@ -73,11 +75,13 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
   1. the #174 re-review;
   2. C1 crafting execution and C2 (first plank). Net-forge's final Request 2 answer is in #167, which is not merged yet, and P1 (paid, lead GO) measures the place timing. Until then C1 stays blocked;
   3. D2 night shelter, for G3 (b).
-     - **D2a, #181 opened** (branch `agent/skills-rotn/night-shelter`): `library/night.js`, pure functions, not called yet.
+     - **D2a, #181** (branch `agent/skills-rotn/night-shelter`): `library/night.js`, pure functions, not called yet. **Lead decision applied** (`c3cbc428`): world time first; when it is stuck longer than the freeze plus a margin (15 min), `NightClock` falls back and logs it.
+       - The fallback is the wall clock, not sky light: in 1.12 sky light and the sunset event come from the same world time. The PR asks the lead to overrule if wanted.
+       - Tests 5/5; `src/agent/**` 166/166 on develop.
        - `nightPhase`/`minutesToSunset` from S1-A's measured cycle (night 12542-23460; Extended Days freezes at 3000 and 16000). This deviates from the brief's "no world time" line, and the PR asks the lead.
        - `shelterPlan` (a 1x2 space, 10 shell blocks, rock only).
      - **D2b** (the shelter agenda step, placing, the night routine) comes after P1's placing results.
-- **P1 batch running (lead, 2026-11-03):** until the lead says it is over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time. D2a was tested that way (`night.test.js` 4/4); CI runs the full suite.
+- **P1 batch (lead, 2026-11-03):** attempt 1 failed at setup on a harness console-wait; the rerun comes later. The memory rule for P1 is lifted.
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
 - **Merged:** E1 #146 (task queue), C1a #151 (craft needs; lead nit for later: `craft_needs.js` should match the exact slot stack list, as the slot found by `choices[0]` is wrong for `soaking_pot` and `hamster_wheel`), #156 (with rotn-data #153).
