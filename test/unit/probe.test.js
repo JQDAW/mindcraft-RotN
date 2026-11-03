@@ -71,7 +71,8 @@ describe('the P1 driver protocol and console allowlist', () => {
  *   command ('craft'|'place'|'eat') at which the driver exits instead of answering; opt.kickAt: the command
  *   at which the server kicks the bot ("FRCFLD lost connection: ..." in the log; the driver still runs);
  *   opt.noHunger: the hunger effect changes nothing (food stays 20); opt.breakContract: a command whose
- *   reply breaks contract v1 (no "v"). Food starts at 20; the hunger effect sets it to hungerFood(...), and
+ *   reply breaks contract v1 (no "v"); opt.late: a command prefix answered only after the console's wait.
+ *   Food starts at 20; the hunger effect sets it to hungerFood(...), and
  *   the p1food score, as 1.12 keeps it, exists only once the food changed after the objective was added.
  */
 function sim(opt = {}) {
@@ -134,8 +135,22 @@ function sim(opt = {}) {
             reply('eat', m[1], { ok: true, item: m[2], foodBefore: food, foodAfter: (food += 5), countBefore, countAfter: countBefore - 1, ms: 1700 });
         }
     };
+    // opt.late: a command prefix whose reply is written AFTER the console's wait (P1 attempt 1): the
+    // call returns nothing, and the reply reaches the log before the next console or log call.
+    let pending = [];
+    const flush = () => { log.push(...pending); pending = []; };
     const server = {
         console(cmd, waitS = 1) {
+            flush();
+            const out = this.console0(cmd, waitS);
+            if (opt.late && cmd.startsWith(opt.late)) {
+                pending = log.splice(log.length - out.length, out.length);
+                if (opt.dropLate) pending = [];
+                return [];
+            }
+            return out;
+        },
+        console0(cmd, waitS = 1) {
             const before = log.length;
             let m;
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
@@ -169,7 +184,7 @@ function sim(opt = {}) {
             t += waitS * 1000;
             return log.slice(before);
         },
-        log: (n) => log.slice(-n),
+        log: (n) => { flush(); return log.slice(-n); },
     };
     const bot = {
         start(env = {}) {
@@ -262,6 +277,20 @@ describe('probe-craft-place on a simulated server', () => {
         assert.ok(seen.filter((x) => x === `scoreboard players list ${NAME}`).length > 1, 'it polled until foodWaitMs');
         assert.ok(r.notes.foodBeforeEat.waitedMs >= probe.defaults.foodWaitMs);
         assert.ok(seen.includes(`scoreboard objectives remove ${P1_PLAN.foodObjective}`), 'the objective is removed at the end');
+        neverGate(r);
+    });
+
+    test('P1 attempt 1: a give answered after the console wait is confirmed from the later log lines, and recorded', async () => {
+        const r = await run(sim({ late: `give ${NAME} pyrotech:rock` }));
+        const c = byName(r);
+        assert.equal(c.setup.pass, true, c.setup.detail);
+        for (const k of Object.keys(probe.checks)) assert.equal(c[k].pass, true, `${k}: ${c[k].detail}`);
+        assert.deepEqual(r.notes.lateReplies.map((x) => x.cmd), [`give ${NAME} pyrotech:rock`]);
+        assert.match(r.notes.lateReplies[0].line, /Given \[pyrotech:rock\] \* 8 to FRCFLD/);
+        // A reply that never comes at all still fails setup, as before.
+        const never = await run(sim({ late: `give ${NAME} pyrotech:rock`, dropLate: true }));
+        assert.equal(byName(never).setup.pass, false);
+        assert.match(byName(never).setup.detail, /^4\/5 gives confirmed/);
         neverGate(r);
     });
 

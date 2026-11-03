@@ -148,6 +148,8 @@ node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY 
 G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
 - **The preflight, before any server exists** (lead, #169 review). When the run command's script is `test/runner/batch.mjs`, `test-server.sh run` first runs it with `--preflight` and the same arguments. That checks the driver, its profile, the profile's model (it must be `openrouter/@preset/glm-5-1-mindcraft`, and so must `code_model` and `vision_model` when set) and `settings.js`, and reads the key's usage once. If anything fails, no server is created (exit 1).
   - The driver must be `test/runner/drivers/mindcraft-driver.mjs`; a fake driver is accepted only in the offline test mode.
+  - The script is recognised by its resolved path, so a path with `..` in it or a Windows path counts, and another file whose path merely ends in `test/runner/batch.mjs` does not (#176 review nit).
+  - With `--dry-run`, `test-server.sh` passes `--preflight-files` instead: the same file checks, without the key's usage reading, so a dry run never contacts OpenRouter (#176 review nit).
   - Only after the preflight passed does `test-server.sh` set `ROTN_BATCH_PREFLIGHT=passed` (never inherited). Inside a test-server run, `batch.mjs` refuses without it, so a command that hides the script (for example inside `bash -c`) fails closed, though only after the create.
   - The batch repeats the same checks itself, and the driver checks the profile again in every scenario, together with the bot's name and its environment, which only the runner knows.
 - **The marker.** Every scenario it starts gets `ROTN_G3_BATCH=<batch id>:<limit>`. A G3 run without that marker, or whose marker limit differs from its `maxBatchUsd`, is not gate-valid.
@@ -276,5 +278,9 @@ P1 is net-forge's "Probe plan P1" (`coord/STATUS-net-forge.md`), which the lead 
 
 - On a failure, the reply has `error`, plus `timedOut` when the 60 s limit was hit.
 - **Each check needs two confirmations:** the driver's `ok`, and the server's own count (`clear ... 0`) or `testforblock`.
+- **Late console replies** (`test/runner/lib/late-console.mjs`, after P1 attempt 1): `rotn-test console` returns only the log lines written during its own 1 s wait. In attempt 1 the server answered a `give` about 3 s after a `clear`, which made two mods save, so a give it had done was read as unconfirmed.
+  - Every reply the scenario checks (gives, counts, `testforblock`, `tp`, scoreboard) is now looked for again in the server log lines written after the newest lines any console call has returned, for up to `lateReplyMs` (5 s).
+  - Lines at or before that anchor belong to earlier commands and are never used.
+  - Each late reply is recorded in `notes.lateReplies`, with how long after the call it was found.
 - **Recorded as notes:** `notes.placeLatencyMs` holds each `updateMs`. `notes.capture` holds the capture file from the driver's `forge` event.
 - **Not in the replies:** window-click transactions (REID: none rejected) and the FastWorkbench window (`mod_window` with `fastbench`). The evidence step reads them from that capture, as net-forge's plan says.
