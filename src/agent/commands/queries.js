@@ -288,14 +288,17 @@ export const queryList = [
         perform: function (agent, targetItem, quantity = 1) {
             let bot = agent.bot;
 
-            // mcdata's planner works on bare recipe names ("planks"), so it gets bare-name
-            // totals and a bare target, not the variant keys of !inventory (B1b, #131 re-review).
-            const curr_inventory = world.getInventoryTotals(bot);
+            // mcdata's planner reads ingredient metas against a variant-keyed inventory (rotn-data
+            // #153), so it gets the keys of !inventory ("planks:0", "pyrotech:rock:4") and a bare
+            // target: a dirt clump no longer counts as the rock a recipe needs (#131 nit).
+            const curr_inventory = world.getInventoryCounts(bot);
             const target_item = parseName(canonicalName(targetItem, 'items') ?? targetItem)?.name ?? targetItem;
-            let existingCount = curr_inventory[target_item] || 0;
+            // Every variant of the target the bot already holds (the target is bare).
+            const targetKeys = Object.keys(curr_inventory).filter(key => parseName(key)?.name === target_item);
+            let existingCount = targetKeys.reduce((n, key) => n + curr_inventory[key], 0);
             let prefixMessage = '';
             if (existingCount > 0) {
-                curr_inventory[target_item] -= existingCount;
+                for (const key of targetKeys) curr_inventory[key] = 0;
                 prefixMessage = `You already have ${existingCount} ${target_item} in your inventory. If you need to craft more,\n`;
             }
 
