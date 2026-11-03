@@ -27,7 +27,8 @@ const accepts = (ingredient, stack) => (ingredient.stacks ?? []).some((s) => !s.
  *        (bot item names like "stick" or full names like "minecraft:stick")
  * @param {{times?: number}} [opts]
  * @returns {{ok: boolean, missing: number, assignment: Array<{name: string, meta: number}|null>, recipeId: string|null}|null}
- *          assignment: per slot of one craft, the stack it takes (null if none); null for an unknown recipe
+ *          assignment: per slot of the first craft only (with times > 1, the slots of the later crafts
+ *          are matched too, but not listed), the stack it takes (null if none); null for an unknown recipe
  */
 export function canFill(catalog, recipe, stacks, { times = 1 } = {}) {
     const r = typeof recipe === 'string' ? catalog.recipeById(recipe)
@@ -35,10 +36,12 @@ export function canFill(catalog, recipe, stacks, { times = 1 } = {}) {
     if (!r) return null;
     const slots = slotsOf(r);
     const need = slots.length * Math.max(1, times);
-    // Item units, at most as many per stack as there are slots to fill.
+    // Item units, at most as many per stack as there are slots to fill. Stacks no slot accepts are
+    // dropped first, so a full inventory of unrelated items does not slow the matching (#152 nit).
     const units = [];
     for (const s of stacks ?? []) {
         const stack = { name: fullName(s.name), meta: s.meta ?? s.metadata ?? 0 };
+        if (!slots.some((slot) => accepts(slot, stack))) continue;
         for (let i = 0; i < Math.min(s.count ?? 0, need); i++) units.push(stack);
     }
     // Kuhn's augmenting paths: slot k (of `times` copies) -> a unit it accepts.
