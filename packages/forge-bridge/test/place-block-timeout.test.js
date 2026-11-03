@@ -70,6 +70,37 @@ test('a value set on the bot before the plugin loads is kept over the createBot 
     assert.equal(bot.placeBlockTimeout, 700);
 });
 
+// #155 nit: a runtime or per-call value is clamped into the configured range (50-60000 ms).
+// Before the clamp, 0, a negative number or a non-number meant onceWithCleanup set no
+// timer at all, so placeBlock could wait forever.
+test('runtime and per-call values are clamped to 50 ms at the low end; non-numbers use 500 ms', async () => {
+    const low = stubBot(1500);
+    low.placeBlockTimeout = 10;
+    await assert.rejects(low.placeBlock(floor, up), /did not fire within timeout of 50ms/);
+    await assert.rejects(stubBot(1500)._placeBlockWithOptions(floor, up, { timeout: 0 }), /did not fire within timeout of 50ms/, '0 no longer means "no timeout"');
+    await assert.rejects(stubBot(1500)._placeBlockWithOptions(floor, up, { timeout: -5 }), /did not fire within timeout of 50ms/);
+    await assert.rejects(stubBot(1500)._placeBlockWithOptions(floor, up, { timeout: '2000' }), /did not fire within timeout of 500ms/, 'a string is not a timeout');
+    const nan = stubBot(1500);
+    nan.placeBlockTimeout = NaN;
+    await assert.rejects(nan.placeBlock(floor, up), /did not fire within timeout of 500ms/);
+});
+
+test('values above 60000 ms are clamped to 60000 ms (mock timers)', async (t) => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const bot = stubBot(1e9); // the server never answers within the test
+    const placing = bot._placeBlockWithOptions(floor, up, { timeout: 120000 });
+    const result = placing.then(() => 'placed', (e) => e.message);
+    await new Promise((resolve) => setImmediate(resolve)); // let placeBlock start its timer
+    t.mock.timers.tick(60000);
+    assert.match(await result, /did not fire within timeout of 60000ms/);
+    const inf = stubBot(1e9);
+    inf.placeBlockTimeout = Infinity;
+    const r2 = inf.placeBlock(floor, up).then(() => 'placed', (e) => e.message);
+    await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(500);
+    assert.match(await r2, /did not fire within timeout of 500ms/, 'Infinity is not finite: the default');
+});
+
 test('a fast server still returns at once, whatever the timeout', async () => {
     // mineflayer's onceWithCleanup leaves its timeout timer running after success, so a
     // large value here would only keep the test process alive; 2500 ms shows the point.
