@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T14:25Z (from `date -u`)
+Updated: 2026-11-03T14:27Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -196,7 +196,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 ## Restart point (updated 2026-11-03T14:24Z)
 
 - **Worktree:** branch `agent/rotn-data/parasite-weta` (#179), everything pushed. No background jobs except #179's independent review.
-- **Open PRs:** #178 (the 14 night defaults; reviewed, nits fixed, CI green) and #179 (parasite and weta; in review). They merge with each other cleanly (`git merge-tree`).
+- **Open PRs:** #178 (the 14 night defaults; reviewed, nits fixed, CI green) and #179 (parasite and weta; reviewed, nits fixed). They merge with each other cleanly (`git merge-tree`).
 - **Then:** after #178 merges, a one-line README follow-up naming the parasite and weta in the `threatOf` row (left out of #179 so the two PRs don't conflict). Then ask the lead.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
@@ -211,7 +211,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 ## Doing
 
 - **#178, the last 14 overworld night defaults (lead's pick 1, G3 night survival).** Every mob `nightThreats()` listed with the default `fight` now has a cited entry: 12 `verified` from the mods' bytecode and the pack's configs, husk and zombie villager `vanilla`. Three workers did the first pass, one per mod group; I re-ran the deciding checks. The independent review re-checked 7 claims in the bytecode, and all held. APPROVE WITH NITS; the wording nits are fixed. Open points are in the evidence as "Not settled: ...". No overworld night threat is left to the default (test).
-- **#179, parasite and weta (lead's pick 2).** Both read from Fish's Undead Rising's bytecode by me. Parasite: `fight`. It latches on by touch, infests (a slow hunger drain), bites for 1 and dies by itself unattached. 0-4 spawn from a dead zombie, frozen zombie or mushroom zombie (5%), or from any mob that dies infested. Weta: `ignore-unless-provoked`. It only retaliates, and it does not spawn naturally on this pack (`weta spawn rate`=0). In independent review.
+- **#179, parasite and weta (lead's pick 2).** Both read from Fish's Undead Rising's bytecode by me. Parasite: `fight`. It latches on by touch, infests (a slow hunger drain), bites for 1 and dies by itself unattached. 0-4 spawn from a dead zombie, frozen zombie or mushroom zombie (5%), or from any mob that dies infested. Weta: `ignore-unless-provoked`. It only retaliates, and it does not spawn naturally on this pack (`weta spawn rate`=0). Independent review: APPROVE WITH NITS (6 claims re-checked in the bytecode; all held). Nits fixed: the sand source (a dry-biome sand block, 1%), now cited; advice to kill an attached parasite, since each bite renews Infested; infested deaths leave parasites.
 - **Done:** #172 merged (`81875ca`), the #152 nits.
 
 The entries below are done; they are kept here as the record of how they work.
