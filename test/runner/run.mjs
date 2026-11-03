@@ -31,7 +31,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runScenario, addNotGate } from './lib/runner.mjs';
 import { ctlServer, driverProcess, wallClock } from './lib/adapters.mjs';
 import { linesAfter } from './lib/server-log.mjs';
-import { guardConsole, g3Policy } from './lib/g3.mjs';
+import { guardConsole, g3Policy, LLM_MODEL } from './lib/g3.mjs';
 import { keyFetch, llmRecord, readKeyUsage } from './lib/llm-spend.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -187,6 +187,12 @@ async function main(argv) {
         result.llm = llmRecord(usageBefore, await readUsage(), bot.output());
         log(`${scenario.id}: ${result.llm.calls} LLM calls, USD ${result.llm.usd ?? 'unknown'}`);
         if (result.llm.usd === null) addNotGate(result, `the LLM cost is unknown (${result.llm.error}): a G3 run must record its spend`);
+        // Every LLM run uses the preset model (the human's decision, 2026-11-03). The Mindcraft driver refuses
+        // any other; a G3 run whose recorded model is not it (or is unknown) is never a gate run.
+        log(`${scenario.id}: model ${result.llm.models?.model ?? 'not reported by the driver'}`);
+        if (scenario.gate === 'G3' && result.llm.models?.model !== LLM_MODEL) {
+            addNotGate(result, `the run's model is ${result.llm.models?.model ?? 'not reported'}, not ${LLM_MODEL}`);
+        }
     }
     if (policy.notGate) addNotGate(result, policy.notGate);
     try {
