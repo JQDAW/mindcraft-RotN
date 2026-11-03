@@ -41,7 +41,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 ## Doing
 
 - **Net-forge heads-up sent to the lead** (B2 opened; C1 follows): Request 2 below must be answered (net-forge back, or a probe) before C1.
-- B2b `rock-ore` (branch `agent/skills-rotn/rock-ore`, on develop `89f3ef6` with rotn-data #142; lead: required before the first G3 batch): PR open, see Open PRs. A bare `pyrotech:rock` covers the whole rock ore dictionary from rotn-data #142 (`way.ore`): the Underground Biomes piles near the G3 spawn, not dirt clumps; a pickaxe that breaks mid-run no longer throws; the #131 regex nit.
+- B2b `rock-ore` (branch `agent/skills-rotn/rock-ore`, on develop `89f3ef6` with rotn-data #142; lead: required before the first G3 batch): #145 open. A bare `pyrotech:rock` covers the whole rock ore dictionary from rotn-data #142 (`way.ore`): the Underground Biomes piles near the G3 spawn, not dirt clumps; a pickaxe that breaks mid-run no longer throws; the #131 regex nit.
 - Next: C1 when Request 2 is settled (net-forge back, or a probe). Flag for G3 (#141 nit 5): with an axe, collecting log targets Dynamic Trees branches and the tree falls; the count is the real gain, but scattered drops may not all be picked up.
 
 ## G3 plan: small PRs, in order
@@ -138,4 +138,4 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- B2b rock ore (branch `agent/skills-rotn/rock-ore`). Serves the lead's required follow-up before the first G3 batch (G3 (a), rocks at the G3 spawn).
+- #145 B2b rock ore (branch `agent/skills-rotn/rock-ore`). Serves the lead's required follow-up before the first G3 batch (G3 (a), rocks at the G3 spawn).
