@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-02 (00:10 UTC, from `date -u`)
+Updated: 2026-11-03 (01:00 UTC, from `date -u`)
 
 ## Done
 
@@ -119,7 +119,7 @@ Updated: 2026-11-02 (00:10 UTC, from `date -u`)
     - **Where:** in the human's workspace `/tmp/mindcraft-RotN`. Only the approved read-only commands ran, with `ls -la /root` last. No installs or writes. Nothing under `/root/.ssh` was read.
     - **The human's other workspaces** were left alone: `/tmp/mindcraft` and `/root/orca/workspaces/mindcraft/tunicate`, plus their two terminals.
     - **Evidence:** `test/evidence/cx23/`. The findings table is in its README.
-    - **Ubuntu: 26.04.1 LTS.** The human chose to keep it (ADR 0007, #134). The bootstrap accepts it (#137, f028e9b), and the 26.04 CI job (#135, 05b1a5b) passes. GO 2 waits for the #137 re-review nits and the lead's GO.
+    - **Ubuntu: 26.04.1 LTS.** The human chose to keep it (ADR 0007, #134). The bootstrap accepts it (#137, f028e9b; its re-review nits in #144, 655bcaa), and the 26.04 CI job (#135, 05b1a5b) passes. All GO 2 prerequisites are merged; the lead is handing the bootstrap steps to the human.
     - **RAM and swap:** 2 vCPU, 3,814 MB RAM, **no swap**.
     - **Disk:** 38 GB, 6% used.
     - **What setup will change:**
@@ -134,7 +134,7 @@ Updated: 2026-11-02 (00:10 UTC, from `date -u`)
       - **only SSH (port 22) is public.** Orca's server listens on loopback only.
       - The users are root and nobody only. The running services are a standard cloud set. Nothing of ours is there yet.
     - GO 2 waits on the human (Ubuntu 26.04 against the 24.04 pin, and sshd password logins); the lead is asking.
-  - **Merged (#129, c2d6867): the #122 review nits**, with the #129 review fixes (its re-review nits 1-3 are in this PR):
+  - **Merged (#129, c2d6867): the #122 review nits**, with the #129 review fixes (its re-review nits 1-3: #139, f1fd589):
     1. **The G3 gate evidence is cross-checked against `batch.mjs`'s summary** (`test/tools/g3-batch-check.mjs`), because the `ROTN_G3_BATCH` marker alone can be forged.
        - The check is forced: CI fails on any G3 `result.json` anywhere under `test/evidence/` that no `batch.json` in its own folder or a parent folder covers.
        - Each result is bound to its batch by its `runId`, which `batch.mjs` reads back from the scenario's `result.json`. A second, hand-run result under a reused batch id therefore fails.
@@ -1127,16 +1127,15 @@ The exception was `testforblock`: it prints `x, y, z` with no full stop, which #
 
 ## Open PRs
 
-- This PR: the #129 re-review nits 1-3, required before the first G3 gate batch (`agent/harness-ops/g3-evidence-scan`):
-  1. the tree check reads every `*.json` under `test/evidence/`, whatever its name; a `batch.json` that is itself a G3 result fails it;
-  2. a G3 result is found by its gate in any case or spacing, a `g3-` scenario in any case, or a scenario `loadScenarios` marks G3;
-  3. DRIVER.md says gate reviews accept G3 evidence only from `test/evidence/g3/<batch>/`.
-- Next, before GO 2: the #137 re-review nits:
-  1. the `--ssh-from` refusal says to run setup from a root SSH login, not through sudo;
-  2. the drop-in is put back if `/run/sshd` cannot be created;
-  3. setup refuses an sshd config with a `Match` line.
-- Later:
-  - the #135 nits (a comment that the load step proves linking, not rendering; an explicit working directory);
-  - the #128 review nits (the redactor keeps loopback and wildcard addresses; the README cites where the Orca facts came from);
-  - a research note on Java 8 packages on Ubuntu 26.04.
-- Merged since the last update: #122 (the G3 spend stop, 2b30405), #128 (the CX23 GO 1 probe, 8fcec45), #129 (the G3 batch cross-check, c2d6867), #135 (the CI job on Ubuntu 26.04, 05b1a5b), #137 (the bootstrap for Ubuntu 26.04, f028e9b), and the lead's #134 (ADR 0007).
+- This PR: the #128 and #135 review nits (`agent/harness-ops/review-nits-128-135`):
+  - **#128:**
+    - the redactor keeps loopback (`127.x.x.x`) and the wildcard (`0.0.0.0`), so the cx23 probe's `ss` lines are regenerated from the raw capture and show them;
+    - the README marks "MainThread is Orca" as an inference;
+    - the README cites where the 997da58, terminal-time and other-terminal facts came from;
+    - the README notes the lost space at line 186.
+  - **#135:**
+    - a comment that the load step proves linking, not rendering;
+    - each npm and node step changes to `$GITHUB_WORKSPACE`.
+- Next: a research note on Java 8 packages on Ubuntu 26.04 (for the lead to file).
+- Later: the #139 nits (trim the `loadScenarios` ids; DRIVER.md says a G3 result wrapped in an array or a parent object is not detected).
+- Merged since the last update: #122 (2b30405), #128 (8fcec45), #129 (c2d6867), #135 (05b1a5b), #137 (f028e9b), #139 (f1fd589), #144 (the #137 re-review nits, 655bcaa), and the lead's #134 (ADR 0007).

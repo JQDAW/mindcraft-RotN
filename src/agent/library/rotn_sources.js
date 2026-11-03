@@ -17,16 +17,27 @@ function lookup(name) {
     }
 }
 
+// An ore member as a canonical name: a wildcard member (meta null) is the bare name, any variant.
+const memberName = (m) => (m.meta == null ? botName(m.name) : formatName(botName(m.name), m.meta));
+
 /**
- * The item variants a name stands for when collecting: rotn-data narrows a bare
- * rock name to the variants that are rocks (the "rock" ore dictionary, e.g.
- * pyrotech:rock 0, 6, 8), so dirt clumps, sand piles and wood chips are not
- * rocks (#141 review). Anything else is just the name.
+ * The items a name stands for when collecting. A bare name whose world rule carries
+ * an ore dictionary (rotn-data #142: the rock-pile and stone rules carry ore "rock")
+ * stands for every member of that ore, because the recipes that need it (crude axe,
+ * Crafting Tools, stone tools) accept any member: pyrotech:rock 0, 6, 8 and every
+ * Underground Biomes rock (pyrotech_compat:rock_igneous, _metamorphic,
+ * _sedimentary). Dirt clumps, sand piles and wood chips are not members (#141
+ * review). Without ore data, rotn-data's narrowed item metas are used. An explicit
+ * variant ("pyrotech:rock:0") is just itself.
  */
 export function itemVariants(name) {
     const p = parseName(name);
-    const metas = lookup(name)?.item?.metas;
-    if (!p || p.meta != null || !Array.isArray(metas) || metas.length === 0) return [name];
+    if (!p || p.meta != null) return [name];
+    const result = lookup(name);
+    const ore = (result?.ways ?? []).find(w => w.kind === 'world' && w.ore?.members?.some(m => botName(m.name) === p.name))?.ore;
+    if (ore) return [...new Set(ore.members.map(memberName))];
+    const metas = result?.item?.metas;
+    if (!Array.isArray(metas) || metas.length === 0) return [name];
     return metas.map(meta => formatName(p.name, meta));
 }
 
@@ -44,7 +55,11 @@ export function worldSources(name) {
         // Only rules that break a block; item-on-block rules (debark a log) are skills of their own (C2).
         .filter(w => w.kind === 'world' && w.action === 'break' && Array.isArray(w.blocks) && w.blocks.length > 0)
         .map(w => ({
-            blocks: w.blocks.map(b => formatName(botName(b.name), b.meta ?? null)),
+            // With an ore (rotn-data #142), the blocks and metas whose drop is in it: the
+            // Underground Biomes piles at every meta, pyrotech:rock only at 0, 6 and 8.
+            blocks: w.ore?.blocks?.length
+                ? w.ore.blocks.flatMap(b => b.metas.map(meta => formatName(botName(b.name), meta)))
+                : w.blocks.map(b => formatName(botName(b.name), b.meta ?? null)),
             tool: w.tool ?? null,
             count: typeof w.count === 'number' && w.count > 0 ? w.count : 1,
             text: w.summary ?? w.action ?? '',

@@ -234,3 +234,30 @@ describe('one rule for the tool and the check (lead, after G2 batch 6: a bare ad
         }
     });
 });
+
+describe('loopback and the wildcard name no host: kept by the tool and the check (#128 review nit 1)', () => {
+    test('the cx23 probe\'s ss lines keep 127.x.x.x and 0.0.0.0, and still redact the host\'s own address', () => {
+        const ss = [
+            'udp UNCONN 0 0 127.0.0.53%lo:53 0.0.0.0:* users:(("systemd-resolve",pid=1,fd=13))',
+            'udp UNCONN 0 0 203.0.113.7%eth0:68 0.0.0.0:* users:(("systemd-network",pid=2,fd=21))',
+            'tcp LISTEN 0 511 127.0.0.1:6768 0.0.0.0:* users:(("MainThread",pid=3,fd=20))',
+            'tcp LISTEN 0 4096 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=4,fd=3))',
+        ].join('\n');
+        const want = ss.replace('203.0.113.7', '<ip>');
+        assert.equal(redact(ss), want);
+        assert.deepEqual(findLeaks(ss).map((l) => [l.kind, l.line]), [['ipv4', 2]], 'only the host address is flagged');
+        assert.deepEqual(kinds(want), []);
+    });
+
+    test('all of 127.0.0.0/8 is loopback; anything else, even close to it, is still redacted', () => {
+        for (const keep of ['127.0.0.1', '127.0.0.53', '127.255.255.254', '0.0.0.0']) {
+            assert.equal(redact(`bound to ${keep}:22`), `bound to ${keep}:22`, keep);
+            assert.deepEqual(kinds(keep), [], keep);
+        }
+        for (const flag of ['128.0.0.1', '0.0.0.1', '10.127.0.1', '1.127.0.0', '203.0.113.127']) {
+            both(`bound to ${flag}:22`, 'bound to <ip>:22', 'ipv4');
+        }
+        // Glued to more digits or dots, it is no quad at all (unchanged rule), so no partial leftover either.
+        assert.equal(redact('127.0.0.1.5'), '127.0.0.1.5');
+    });
+});

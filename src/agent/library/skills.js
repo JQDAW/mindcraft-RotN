@@ -474,7 +474,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         }
         for (const name of source.blocks)
             if (!blocktypes.includes(name)) blocktypes.push(name);
-        if (source.tool) ruleTools.push([blockMatcher(source.blocks), source.tool]);
+        if (source.tool) ruleTools.push([blockMatcher(source.blocks), source.tool, source.blocks]);
     }
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     // Count what the bot really gains, not a rule's yield (#141 review): the targets in the
@@ -482,7 +482,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const countsItems = mc.getItemId(baseType) != null;
     const held = () => targets.reduce((n, name) => n + countItem(bot, name), 0);
     const isLiquid = baseType === 'lava' || baseType === 'water';
-    const isWanted = blockMatcher(blocktypes); // the shared resolver: names and variants (#131 review)
+    let isWanted = blockMatcher(blocktypes); // the shared resolver: names and variants (#131 review)
+    // A rule's tool can break during the run: stop searching that rule's blocks (B2b).
+    const dropRule = (tool) => {
+        const gone = new Set(ruleTools.filter(([, t]) => t === tool).flatMap(([, , names]) => names));
+        blocktypes = blocktypes.filter(name => !gone.has(name) || targets.includes(name));
+        ruleTools.splice(0, ruleTools.length, ...ruleTools.filter(([, t]) => t !== tool));
+        isWanted = blockMatcher(blocktypes);
+    };
 
     let collected = 0;
 
@@ -527,8 +534,15 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         // A rule's tool decides what drops: below Sturdy stone gives rocks, a Sturdy pickaxe
         // cobblestone. So equip a tool the rule accepts, not the fastest (#141 review).
         const ruleTool = ruleToolFor(block);
-        if (ruleTool)
-            await bot.equip(allowedTool(bot, ruleTool), 'hand');
+        if (ruleTool) {
+            const ruleItem = allowedTool(bot, ruleTool);
+            if (!ruleItem) { // it broke or was dropped since the search began (lead, before G3)
+                log(bot, `No longer have ${describeTool(ruleTool)} to break ${block.name}; skipping those blocks.`);
+                dropRule(ruleTool);
+                continue;
+            }
+            await bot.equip(ruleItem, 'hand');
+        }
         else
             await bot.tool.equipForBlock(block);
         if (isLiquid) {
