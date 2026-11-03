@@ -302,7 +302,9 @@ test('lookAt: false for the look-triggered mobs only (enderman family, ender cre
     for (const n of enders) assert.equal(pack.threatOf(n).lookAt, false, n);
     // The field is data, not prose: every lookAt false entry or rule says why in its summary.
     const withField = [...Object.values(reactions.entities), ...reactions.classRules].filter((r) => r.lookAt === false);
-    assert.equal(withField.length, 4);
+    // At least these four carry it (more may follow, e.g. the gorgon in the bosses PR); each must say why.
+    const named = [...Object.entries(reactions.entities).filter(([, r]) => r.lookAt === false).map(([n]) => n), ...reactions.classRules.filter((r) => r.lookAt === false).map((r) => r.id)];
+    for (const n of ['minecraft:enderman', 'ancientbeasts:rifted_enderman', 'enderman-variants', 'specialmobs:endercreeper']) assert.ok(named.includes(n), n);
     // #187 review: the dangerous-override path reads the override's lookAt (the cockatrice), and the
     // ender creeper keeps the creeper rule's reaction while adding lookAt false.
     const cock = pack.threatOf('iceandfire:if_cockatrice');
