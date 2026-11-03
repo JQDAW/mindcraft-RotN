@@ -314,6 +314,28 @@ describe('up / run / down', () => {
         const st = state();
         assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0, 'the server is deleted');
         assert.ok(!r.all.includes('not-a-real-key'), 'the key is never printed');
+        // The preflight ran first, with --preflight right after the script, and passed before the create.
+        assert.match(r.stderr, /G3 batch preflight \(no server yet\): .*batch\.mjs --preflight --max-batch-usd 2/);
+        assert.ok(r.stderr.indexOf('preflight passed') < r.stderr.indexOf('creating mcr-test-spend'), 'the preflight passed before the create');
+    });
+
+    test('run + the G3 batch preflight: a profile with another model is refused before anything is created (#169 review)', () => {
+        const usage = path.join(tmp, 'usage.json');
+        fs.writeFileSync(usage, JSON.stringify({ data: { usage: 0.25, limit: 5, limit_remaining: 4.75 } }));
+        const profile = path.join(tmp, 'other-model.json');
+        fs.writeFileSync(profile, JSON.stringify({ name: 'FRCFLD', model: 'openrouter/openai/gpt-4o' }));
+        const r = run(['run', '--yes', '--name', 'mcr-test-model', '--', fwd(process.execPath), fwd(path.join(repo, 'test', 'runner', 'batch.mjs')),
+            '--max-batch-usd', '2', '--logs-out', fwd(path.join(tmp, 'g3-logs')), '--scenario', 'a', '--out', fwd(path.join(tmp, 'out-a')),
+            '--', 'node', fwd(path.join(repo, 'test', 'runner', 'drivers', 'mindcraft-driver.mjs')), '--profile', fwd(profile)], {
+            ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: fwd(usage), ROTN_BATCH_RUNNER: fwd(path.join(fixtures, 'fake-batch-runner.mjs')),
+            FAKE_DIR: fwd(tmp), OPENROUTER_API_KEY: 'not-a-real-key', ROTN_BATCH_PREFLIGHT: 'passed',
+        });
+        assert.equal(r.code, 1, r.all);
+        assert.match(r.stderr, /refused: driver: profile .*model is 'openrouter\/openai\/gpt-4o', not openrouter\/@preset\/glm-5-1-mindcraft/);
+        assert.match(r.stderr, /the G3 batch preflight refused \(exit 2\): no server was created/);
+        assert.deepEqual(mutating(), [], 'no hcloud create or delete at all');
+        assert.ok(!fs.existsSync(path.join(tmp, 'ran.txt')), 'no scenario ran');
+        assert.doesNotMatch(r.stderr, /running: /, 'the command itself never ran (an inherited ROTN_BATCH_PREFLIGHT does not count)');
     });
 
     test('up: a failed server create cleans up the IP and key already created', () => {

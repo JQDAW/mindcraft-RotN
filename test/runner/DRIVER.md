@@ -146,6 +146,10 @@ node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY 
 ### G3 batches: the spend stop (`test/runner/batch.mjs`)
 
 G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
+- **The preflight, before any server exists** (lead, #169 review). When the run command's script is `test/runner/batch.mjs`, `test-server.sh run` first runs it with `--preflight` and the same arguments. That checks the driver, its profile, the profile's model (it must be `openrouter/@preset/glm-5-1-mindcraft`, and so must `code_model` and `vision_model` when set) and `settings.js`, and reads the key's usage once. If anything fails, no server is created (exit 1).
+  - The driver must be `test/runner/drivers/mindcraft-driver.mjs`; a fake driver is accepted only in the offline test mode.
+  - Only after the preflight passed does `test-server.sh` set `ROTN_BATCH_PREFLIGHT=passed` (never inherited). Inside a test-server run, `batch.mjs` refuses without it, so a command that hides the script (for example inside `bash -c`) fails closed, though only after the create.
+  - The batch repeats the same checks itself, and the driver checks the profile again in every scenario, together with the bot's name and its environment, which only the runner knows.
 - **The marker.** Every scenario it starts gets `ROTN_G3_BATCH=<batch id>:<limit>`. A G3 run without that marker, or whose marker limit differs from its `maxBatchUsd`, is not gate-valid.
 - **The batch cross-check** (#122 review, nit 1). Anyone can set an environment variable, so the marker alone does not prove that a run happened under the spend stop. A G3 gate claim therefore needs the batch summary (`--summary`, the `BATCH` JSON) next to its `result.json` files, plus:
   ```
@@ -162,7 +166,9 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
   **A result is G3** (#129 re-review nit 2) if any of these holds:
   - its gate is G3, in any case or spacing;
   - its scenario id starts with `g3-`, in any case;
-  - its scenario is one that `loadScenarios` marks gate G3.
+  - its scenario is one that `loadScenarios` marks gate G3 (ids compared without case or surrounding spaces).
+
+  Only a top-level JSON object counts as a result (#139 review nit 2). A G3 result wrapped in an array or inside a parent object is **not detected**, so this check alone does not catch it; the evidence review does. `run.mjs` and `batch.mjs` never write results in that shape.
 
   Results that are not G3 are ignored. The command exits 1 when a check fails or a file cannot be read as JSON, and 2 on a usage error.
 
