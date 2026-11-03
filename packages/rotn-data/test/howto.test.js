@@ -68,10 +68,10 @@ test('rocks: rock piles and mined stone first, with tool, count and confidence',
     const r = pack.howToGet('pyrotech:rock:0');
     assert.deepEqual(r.item, { name: 'pyrotech:rock', meta: 0 });
     assert.deepEqual(r.ways.slice(0, 2).map((w) => w.id), ['rock-pile', 'mine-stone-for-rocks']);
-    assert.deepEqual(way(r, 'rock-pile').blocks, [{ name: 'pyrotech:rock', meta: 0 }]);
+    assert.deepEqual(way(r, 'rock-pile').blocks, [{ name: 'pyrotech:rock', meta: 0, inOre: true }]);
     assert.equal(way(r, 'rock-pile').tool, null);
     const mine = way(r, 'mine-stone-for-rocks');
-    assert.deepEqual(mine.blocks, [{ name: 'minecraft:stone', meta: 0 }]);
+    assert.deepEqual(mine.blocks, [{ name: 'minecraft:stone', meta: 0, inOre: true }]);
     assert.deepEqual(mine.tool, { type: 'pickaxe', maxLevel: 0 });
     assert.equal(mine.count, 4);
     assert.equal(mine.confidence, 'documented');
@@ -79,7 +79,7 @@ test('rocks: rock piles and mined stone first, with tool, count and confidence',
     assert.ok(r.ways.some((w) => w.kind === 'craft' && w.inputs[0].choices[0].name === 'minecraft:cobblestone'), 'cobblestone -> 4 rocks');
 
     const ub = pack.howToGet('pyrotech_compat:rock_igneous:3');
-    assert.deepEqual(way(ub, 'mine-stone-for-rocks').blocks, [{ name: 'undergroundbiomes:igneous_stone', meta: 3 }]);
+    assert.deepEqual(way(ub, 'mine-stone-for-rocks').blocks, [{ name: 'undergroundbiomes:igneous_stone', meta: 3, inOre: true }]);
     assert.equal(way(ub, 'mine-stone-for-rocks').confidence, 'inferred');
     // A meta the pile block does not have is no way.
     assert.equal(way(pack.howToGet('pyrotech:rock', { meta: 15 }), 'rock-pile'), undefined);
@@ -138,11 +138,11 @@ test('#107 nit: a bare rock name means its rock variants (the rock ore dictionar
     const metas = pack.oreDict('rock').filter((s) => s.name === 'pyrotech:rock').map((s) => s.meta).sort((a, b) => a - b);
     assert.deepEqual(r.item, { name: 'pyrotech:rock', meta: null, metas });
     assert.ok(!metas.includes(4) && !metas.includes(5) && !metas.includes(7), 'no dirt clump, sand pile or wood chips');
-    assert.deepEqual(way(r, 'rock-pile').blocks, metas.map((m) => ({ name: 'pyrotech:rock', meta: m })));
+    assert.deepEqual(way(r, 'rock-pile').blocks, metas.map((m) => ({ name: 'pyrotech:rock', meta: m, inOre: true })));
     for (const w of r.ways.filter((x) => x.kind === 'craft')) assert.ok(metas.includes(w.gives.meta), `craft gives meta ${w.gives.meta}`);
     for (const b of way(r, 'mine-stone-for-rocks').blocks) assert.ok(b.name === 'minecraft:stone' || b.name === 'undergroundbiomes:sedimentary_stone');
-    // An explicit meta still works, rock or not.
-    assert.deepEqual(way(pack.howToGet('pyrotech:rock:4'), 'rock-pile').blocks, [{ name: 'pyrotech:rock', meta: 4 }]);
+    // An explicit meta still works, rock or not (and says it is not a rock).
+    assert.deepEqual(way(pack.howToGet('pyrotech:rock:4'), 'rock-pile').blocks, [{ name: 'pyrotech:rock', meta: 4, inOre: false }]);
 });
 
 // The Underground Biomes rock piles: the main rock source at the G3 spawn (S1-A).
@@ -167,7 +167,7 @@ test('Underground Biomes rock piles: the dump backs every claim, and howToGet of
         ['pyrotech_compat:rock_igneous', 7], ['pyrotech_compat:rock_sedimentary', 0], ['pyrotech_compat:rock_sedimentary', 2]]) {
         const r = pack.howToGet(n, { meta: m });
         const pile = way(r, 'rock-pile');
-        assert.deepEqual(pile.blocks, [{ name: n, meta: m }], `${n}:${m}`);
+        assert.deepEqual(pile.blocks, [{ name: n, meta: m, inOre: true }], `${n}:${m}`);
         assert.equal(pile.confidence, 'inferred', 'the research does not name them');
         assert.equal(pile.tool, null);
         assert.equal(r.ways[0].id, 'rock-pile', 'the pile comes first');
@@ -175,11 +175,47 @@ test('Underground Biomes rock piles: the dump backs every claim, and howToGet of
     }
     // pyrotech:rock stays documented and only names its own block.
     const stone = way(pack.howToGet('pyrotech:rock:0'), 'rock-pile');
-    assert.deepEqual([stone.blocks, stone.confidence], [[{ name: 'pyrotech:rock', meta: 0 }], 'documented']);
+    assert.deepEqual([stone.blocks, stone.confidence], [[{ name: 'pyrotech:rock', meta: 0, inOre: true }], 'documented']);
     // A bare name: any meta of that pile.
     assert.deepEqual(way(pack.howToGet('pyrotech_compat:rock_igneous'), 'rock-pile').blocks, [{ name: 'pyrotech_compat:rock_igneous' }]);
     // The Grass Clump is not a rock pile in this rule.
     assert.equal(way(pack.howToGet('pyrotech:rock_grass'), 'rock-pile'), undefined);
+});
+
+// Lead (#142): which rock-pile metas count as rock (the 'rock' ore dictionary), for skills-rotn B2.
+test('rock piles and stone: the ways say which block metas give a rock in the rock ore dictionary', () => {
+    const pile = way(pack.howToGet('pyrotech:rock'), 'rock-pile');
+    assert.equal(pile.ore.name, 'rock');
+    assert.deepEqual(pile.ore.members, pack.oreDict('rock').map((s) => ({ name: s.name, meta: s.meta === 32767 ? null : s.meta })));
+    assert.deepEqual(pile.ore.blocks, [
+        { name: 'pyrotech:rock', metas: [0, 6, 8] },
+        { name: 'pyrotech_compat:rock_igneous', metas: [0, 1, 2, 3, 4, 5, 6, 7] },
+        { name: 'pyrotech_compat:rock_metamorphic', metas: [0, 1, 2, 3, 4, 5, 6, 7] },
+        { name: 'pyrotech_compat:rock_sedimentary', metas: [0, 1, 2, 3, 4, 5] },
+    ]);
+    // Cross-check against the dump: each listed block meta drops an item in the ore dictionary,
+    // and the crude axe's rock slot accepts exactly those items.
+    const ore = pack.oreDict('rock');
+    const inOre = (d) => ore.some((m) => m.name === d.name && (m.meta === 32767 || m.meta === d.meta));
+    const axeRock = pack.recipesFor('pyrotech:crude_axe')[0].inShape.flat().find((c) => c?.ores?.includes('rock')).stacks;
+    for (const { name, metas } of pile.ore.blocks) {
+        for (const s of pack.dump.blocks.blocks[name].states) {
+            assert.equal(inOre(s.drops[0]), metas.includes(s.meta), `${name}:${s.meta}`);
+            const accepted = axeRock.some((x) => x.name === s.drops[0].name && (x.meta === 32767 || x.meta === s.drops[0].meta));
+            assert.equal(accepted, metas.includes(s.meta), `crude axe accepts ${name}:${s.meta}`);
+        }
+    }
+    // Per listed block: inOre. Clumps and piles that are not rocks are false, rocks true.
+    for (const m of [4, 5, 7, 9]) assert.deepEqual(way(pack.howToGet('pyrotech:rock', { meta: m }), 'rock-pile').blocks, [{ name: 'pyrotech:rock', meta: m, inOre: false }], `pyrotech:rock:${m}`);
+    for (const m of [0, 6, 8]) assert.equal(way(pack.howToGet('pyrotech:rock', { meta: m }), 'rock-pile').blocks[0].inOre, true);
+    assert.equal(way(pack.howToGet('pyrotech_compat:rock_metamorphic', { meta: 6 }), 'rock-pile').blocks[0].inOre, true);
+    // Stone: only plain stone (meta 0) gives a rock in the ore; granite gives pyrotech:rock 1, which is not.
+    const mine = way(pack.howToGet('pyrotech:rock', { meta: 1 }), 'mine-stone-for-rocks');
+    assert.deepEqual(mine.blocks, [{ name: 'minecraft:stone', meta: 1, inOre: false }]);
+    assert.deepEqual(mine.ore.blocks.find((b) => b.name === 'minecraft:stone').metas, [0]);
+    assert.deepEqual(mine.ore.blocks.find((b) => b.name === 'undergroundbiomes:igneous_stone').metas, [0, 1, 2, 3, 4, 5, 6, 7]);
+    // A way from a rule without 'ore' has no ore field.
+    assert.equal(way(pack.howToGet('stick'), 'sticks-from-leaves').ore, undefined);
 });
 
 test('recipes that differ only in their id are listed once', () => {

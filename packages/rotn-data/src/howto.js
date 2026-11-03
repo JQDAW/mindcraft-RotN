@@ -60,6 +60,32 @@ function rulePairs(catalog, rule) {
     }));
 }
 
+/**
+ * For a rule with `ore` (rock piles, stone for rocks): which of its blocks, at which metas, give an
+ * item in that ore dictionary (the dump's oredict.json; wildcard members mean every meta). skills-rotn
+ * needs this: a bare pyrotech:rock pile also covers metas 4, 5, 7 and 9 (dirt clump, sand pile, wood
+ * chips, red sand), which are not rocks, so the crude axe craft would fail with them (lead, #142).
+ * @returns {{name: string, members: Array<{name, meta}>, blocks: Array<{name: string, metas: number[]}>}|null}
+ */
+export function oreInfo(catalog, rule) {
+    if (!rule?.ore) return null;
+    const members = (catalog.oreDict(rule.ore) ?? []).map((s) => ({ name: s.name, meta: s.meta === WILDCARD_META ? null : s.meta }));
+    const inOre = (name, meta) => members.some((m) => m.name === name && (m.meta === null || m.meta === meta));
+    const byBlock = new Map();
+    for (const p of rulePairs(catalog, rule)) {
+        if (!p.block) continue;
+        const states = catalog.dump.blocks?.blocks?.[p.block.name]?.states ?? [];
+        const blockMetas = p.block.meta != null ? [p.block.meta] : states.map((s) => s.meta);
+        for (const bm of blockMetas) {
+            const im = rule.gives?.meta === 'block' && p.item.meta == null ? bm : p.item.meta;
+            if (!inOre(p.item.name, im)) continue;
+            if (!byBlock.has(p.block.name)) byBlock.set(p.block.name, new Set());
+            byBlock.get(p.block.name).add(bm);
+        }
+    }
+    return { name: rule.ore, members, blocks: [...byBlock].map(([name, ms]) => ({ name, metas: [...ms].sort((a, b) => a - b) })) };
+}
+
 function worldWays(catalog, want) {
     const ways = [];
     for (const rule of catalog.worldSources ?? []) {
@@ -98,6 +124,11 @@ function worldWays(catalog, want) {
             evidence: rule.evidence ?? [],
             unverified: rule.unverified ?? [],
         };
+        if (rule.ore) {
+            way.ore = oreInfo(catalog, rule);
+            // Per listed block: does this block at this meta give an item in the ore?
+            for (const b of way.blocks) if (b.meta != null) b.inOre = way.ore.blocks.some((x) => x.name === b.name && x.metas.includes(b.meta));
+        }
         if (rule.inferred) way.inferred = rule.inferred;
         if (rule.note) way.note = rule.note;
         ways.push(way);
