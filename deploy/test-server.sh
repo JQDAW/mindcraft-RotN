@@ -17,6 +17,8 @@
 #                 If CMD runs test/runner/batch.mjs (the G3 batch), `batch.mjs --preflight` with the same
 #                 arguments runs first, BEFORE anything is created: the driver, profile, model and settings
 #                 checks, and one key-usage reading. If it refuses, no server is created (exit 1).
+#                 The script is matched by its resolved path. With --dry-run, only the file checks run
+#                 (`--preflight-files`); the key's usage is not read.
 #   up [options]  Create and build a server and leave it running until `down` or delete-after.
 #                 Deleted at once if the build fails (unless --keep-on-failure).
 #   down          Delete the server, then its Primary IPv4, then its SSH key; verify all are gone.
@@ -995,16 +997,35 @@ do_list() {
 # test/runner/batch.mjs, run it once with --preflight inserted right after the script, with the same
 # TEST_SERVER_CTL and TEST_SERVER_FAKE_CLOUD the real run will get (so its test-mode rules are the same).
 # It refuses before anything is created. Sets ROTN_BATCH_PREFLIGHT=passed only when it passed.
+#
+# The script is found by its resolved path (#176 review nit), so `./test/runner/../runner/batch.mjs`, an
+# absolute path or a Windows path all count, and another file that merely ends in test/runner/batch.mjs
+# does not. --dry-run checks the files only (`--preflight-files`) and never reads the key's usage.
+canon_path() {
+  local p=${1//\\//} d
+  # Git Bash: realpath keeps a C:/ path in that form but gives /c/ for others; make them one form first.
+  if command -v cygpath >/dev/null 2>&1; then p=$(cygpath -u -- "$p" 2>/dev/null) || return 1; fi
+  if command -v realpath >/dev/null 2>&1; then
+    realpath -- "$p" 2>/dev/null || return 1
+  else
+    [[ -f $p ]] || return 1
+    d=$(cd "$(dirname -- "$p")" 2>/dev/null && pwd -P) || return 1
+    printf '%s/%s\n' "$d" "$(basename -- "$p")"
+  fi
+}
+same_path() {
+  if [[ $OSTYPE == msys* || $OSTYPE == cygwin* ]]; then [[ ${1,,} == "${2,,}" ]]; else [[ $1 == "$2" ]]; fi
+}
 batch_preflight() {
   local -a cmd=("$@")
-  local i a
+  local i a batch
+  batch=$(canon_path "$(dirname "$SELF")/../test/runner/batch.mjs") || die "cannot resolve test/runner/batch.mjs"
   for (( i = 0; i < ${#cmd[@]}; i++ )); do
-    a=${cmd[i]//\\//}
-    case $a in
-      test/runner/batch.mjs|*/test/runner/batch.mjs) ;;
-      *) continue ;;
-    esac
-    local -a pre=("${cmd[@]:0:i+1}" --preflight "${cmd[@]:i+1}")
+    a=$(canon_path "${cmd[i]}") || continue
+    same_path "$a" "$batch" || continue
+    local flag=--preflight
+    (( DRY_RUN )) && flag=--preflight-files
+    local -a pre=("${cmd[@]:0:i+1}" "$flag" "${cmd[@]:i+1}")
     log "G3 batch preflight (no server yet): ${pre[*]}"
     local st=0
     TEST_SERVER_CTL=$SELF TEST_SERVER_FAKE_CLOUD=$TEST_SERVER_FAKE_CLOUD "${pre[@]}" || st=$?
