@@ -45,11 +45,7 @@ export function isDoorOpen(bot, block) {
     return !!lower && (lower.metadata & 4) !== 0;
 }
 
-/** 1.12 Ageable "is baby" is entity metadata index 12, a boolean (1.21: index 16). */
-export function isBaby(entity) {
-    const m = entity?.metadata;
-    return !!m && (m[12] === true || m[12] === 1);
-}
+// The 1.12 baby flag (metadata index 12) is mc.isBaby in src/utils/mcdata.js (#125).
 
 // 1.12 villager profession, entity metadata index 13 (an int).
 export const VILLAGER_PROFESSIONS_112 = ['Farmer', 'Librarian', 'Priest', 'Blacksmith', 'Butcher', 'Nitwit'];

@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T00:13Z (from `date -u`)
+Updated: 2026-11-03T00:36Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -18,6 +18,8 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief 
 - **#80 merged** (`ef84946`): the `state-meta-remap` dumper part (dumper 0.2.0), `stateMetaRemap()`/`clientMeta()`/`networkRemap()`, and the importer checks.
 - **Third dump batch (state-meta-remap): PASS** (lead's written GO 02:33 UTC; record below).
 - **#82 merged** (`761e954`): the third dump's import (replaces the second) and the #80 import nits (`stateNetworkId >> 4 === blockId`; `clientMeta` checks `idMeta`).
+- **#142 merged** (`89f3ef6`): the rock-pile rule names the Underground Biomes rock piles, and the rock-pile and stone rules say which metas give a rock (`ore`, `inOre`).
+- **#140 merged** (`c114b44`): the G3 research note (STATUS only).
 - **#138 merged** (`27403a2`): the initBot recipe tests restore the shared recipe table after each test.
 - **#136 merged** (`fedab3d`): atomic recipe install with restore, fail-soft lazy build, injected catalog used.
 - **#130 merged** (`8557060`): `initBot` installs RotN recipes once per login (lead exception, Request 7), with the #127 nits.
@@ -192,7 +194,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 - **Free** (lead, after #138). Low-priority offline task done: the research note below (STATUS only, no code).
 - **Lead's pick, follow-up 1 (`agent/rotn-data/ub-rock-piles`; G3 critical path, skills-rotn B2 #141 uses the world rules):** the `rock-pile` rule names the Underground Biomes rock piles (`pyrotech_compat:rock_igneous`, `_metamorphic`, `_sedimentary`), per-pair `inferred`, cited from the dump (no collision box, hardness 0.1, no tool, each state drops its own item at the same meta, state names match item names) and S1-A (the metas seen near the G3 spawn). `pyrotech:rock` stays `documented`. Blocks item 1 below is done by it. Lead (for skills-rotn B2): the rock-pile and stone rules carry `ore: rock`, and `howToGet` ways list per block the metas that give a rock in the dump's `rock` ore dictionary (`pyrotech:rock` 0, 6, 8; the Underground Biomes piles every meta), with `inOre` on each listed block; the metas 4, 5, 7, 9 of a bare `pyrotech:rock` pile are not rocks. Cross-checked against the dump's drops and the crude axe's rock slot.
-- **Follow-up 2 (`agent/rotn-data/ender-witch-rules`, based on #142):** class rules `enderman-variants` (`Enderman$`, ignore unless provoked) and `witch-variants` (`Witch$`, take cover, ranged), both `verified` from `specialmobs-1.0.4_for_mc1.12.2.jar` in the pinned pack: every variant extends `Entity_SpecialEnderman`/`Entity_SpecialWitch`, which extend the vanilla classes and call the vanilla `initEntityAI`; no variant adds a targeting task. Witch spiders are not caught. Class rules may now carry a `confidence` (default `inferred`). Mobs item 1's inconsistency in the note below is fixed by it.
+- **Follow-up 2 (`agent/rotn-data/ender-witch-rules`, #143; rebased onto develop after #142):** class rules `enderman-variants` (`Enderman$`, ignore unless provoked) and `witch-variants` (`Witch$`, take cover, ranged), confidence `inferred`. Verified from `specialmobs-1.0.4_for_mc1.12.2.jar` only that the targeting AI is vanilla. Each variant's extra behaviour, re-read in the bytecode after the #143 review, is in the rule's `variants` and `threatOf().variantNote`: the thief enderman teleports its target, the blinding enderman blinds within 12, the mirage enderman makes fakes, the undead witch spawns skeletons, the wilds witch spawns baby spiders and mounts, the domination witch pulls its target in from 10-14, the wind witch teleports itself. Witch spiders are not caught. Nothing in `src/agent` calls `threatOf` yet.
 
 ## G3 first-night path: what rotn-data has NOT cited yet (research note, 2026-11-02)
 
@@ -288,6 +290,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- #140: the G3 research note (STATUS only).
-- `agent/rotn-data/ub-rock-piles`: follow-up 1 (see Doing; includes #140 until it merges).
-- `agent/rotn-data/ender-witch-rules`: follow-up 2 (see Doing; based on the follow-up 1 branch).
+- #143 `agent/rotn-data/ender-witch-rules`: follow-up 2 (see Doing).
