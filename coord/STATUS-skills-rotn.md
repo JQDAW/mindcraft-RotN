@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T23:11Z (from `date -u`)
+Updated: 2026-11-04T23:21Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -229,6 +229,16 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - a solid floor is kept even when it is not rock (known limit).
 
   `unstuck` now leaves `action:buildShelter` alone; that test fails on the old `modes.js`. Tests: `shelter.test.js` 6/6; `src/agent/**` 206/206; lint 254.
+  - **#195 review (REQUEST CHANGES), fixed in `1db6abf3`:**
+    1. each site is dry-run first: no digging under a falling block or next to a liquid outside the shell;
+    2. a pickaxe that can dig the walls is required before sealing in;
+    3. only sites where every cell has a support face are chosen;
+    4. a cell is retried once after `LATE_UPDATE_MS` (1200 ms) and a fresh `blockAt` look;
+    5. nit: no build when centring fails;
+    6. nit: `unstuck` is off only while the bot builds at the site (the `bot.rotnStationary` flag);
+    7. the fake world models the hitbox, reach, falling blocks, liquids, a ledge and late updates.
+
+    Reply posted. Tests: `shelter.test.js` 10/10; `src/agent/**` 210/210; lint 254.
 - **Next:**
   1. the #198 and #195 reviews;
   2. D2b-2, the night routine: a shelter step at dusk (`NightClock`, `SHELTER_LEAD_MIN`); stay in at night; repair with `buildShelter({ site })`; fight only at the opening (`nightThreatNote`); leave at daylight; `torch_placing` kept off in the shelter (it is on by default); the shortfall over the cobblestone step's 8 gathered.
