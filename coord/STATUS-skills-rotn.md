@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T23:52Z (from `date -u`)
+Updated: 2026-11-04T23:51Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
