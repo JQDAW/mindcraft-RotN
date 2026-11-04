@@ -240,7 +240,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
     Reply posted. Tests: `shelter.test.js` 10/10; `src/agent/**` 210/210; lint 254.
 - **Next:**
-  1. the #195 review, and the #198 follow-up (branch `agent/skills-rotn/craft-table-finally`, lead request on #198):
+  1. the #195 review, and the #198 follow-up **#202** (branch `agent/skills-rotn/craft-table-finally`, lead request on #198):
      - `craftRecipe`'s own path places its table through `CRAFT_TABLE_OPS.place`, which guards a missing free space;
      - a table it placed is picked up in a `finally`, also when `bot.craft` throws, and only once when `craftByFill` takes over;
      - tests: placed and picked up after a craft and after a throw; a found table stays; placed and then the canFill craft (one pick-up); no free space; a 4-stick result on a held stack, counted by the gain.
