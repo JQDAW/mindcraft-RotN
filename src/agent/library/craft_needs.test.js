@@ -257,7 +257,7 @@ function fillBot(start, serve) {
     let items = start;
     const crafts = [];
     const bot = {
-        inventory: { items: () => items, slots: [] },
+        inventory: { items: () => items, get slots() { return [null, ...items]; } },
         get _items() { return items; },
         registry: fillReg,
         output: '',
@@ -348,4 +348,96 @@ test('#194 nits 3 and 4: no recipe id says so; no free space for a table says so
     bot.output = '';
     assert.equal(await CRAFT_TABLE_OPS.place(bot, 'stone_pickaxe'), null);
     assert.match(bot.output, /Could not place a crafting table to craft stone_pickaxe: no free space nearby\./);
+});
+
+// #198 review: craftRecipe's own path picks a table it placed up again however it ends; a table it
+// found stays; a missing free space is guarded; results with a count over 1, on top of a held stack.
+const tablePos = new Vec3(1, 64, 0);
+const tableBlock = { name: 'crafting_table', position: tablePos };
+function tableOps({ place = tableBlock } = {}) {
+    const ops = { placed: 0, picked: 0 };
+    ops.place = () => { ops.placed++; return Promise.resolve(place); };
+    ops.pickUp = () => { ops.picked++; return Promise.resolve(); };
+    return ops;
+}
+/** A bot for craftRecipe: recipesFor finds the vanilla recipe only at a table (none at all with `fill`). */
+function craftRecipeBot({ items, tableNear = false, fill = false, serve, registry = reg }) {
+    const { Recipe } = prismarineRecipe(reg);
+    const recipe = Recipe.find(reg.itemsByName.stone_pickaxe.id, null)[0];
+    const { bot, crafts } = fillBot(items, serve);
+    Object.assign(bot, {
+        registry,
+        modes: { isOn: () => false },
+        armorManager: { equipAll() {} },
+        findBlocks: () => (tableNear ? [tablePos] : []),
+        blockAt: (p) => (tableNear && p.equals(tablePos) ? tableBlock : null),
+        recipesFor: (id, meta, n, table) => (table === null || (fill && table !== true) ? [] : [recipe]),
+    });
+    return { bot, crafts };
+}
+const pickInputs = () => [stack('cobblestone', 0, 3), stack('stick', 0, 2), stack('crafting_table', 0, 1)];
+
+test('#198 review: a table craftRecipe placed is picked up after the craft, and when bot.craft throws', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftRecipe } = await import('./skills.js');
+    const ok = craftRecipeBot({ items: pickInputs(), serve: () => [stack('stone_pickaxe', 0, 1)] });
+    const okOps = tableOps();
+    const okRes = await craftRecipe(ok.bot, 'stone_pickaxe', 1, okOps);
+    assert.equal(okRes, true);
+    assert.equal(ok.crafts[0].table, tableBlock);
+    assert.deepEqual([okOps.placed, okOps.picked], [1, 1]);
+
+    const bad = craftRecipeBot({ items: pickInputs(), serve: () => { throw new Error('click rejected'); } });
+    const badOps = tableOps();
+    await assert.rejects(craftRecipe(bad.bot, 'stone_pickaxe', 1, badOps), /click rejected/);
+    assert.deepEqual([badOps.placed, badOps.picked], [1, 1], 'picked up although the craft threw');
+});
+
+test('#198 review: a table the bot found nearby is used and left where it is', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftRecipe } = await import('./skills.js');
+    const { bot, crafts } = craftRecipeBot({ items: pickInputs(), tableNear: true, serve: () => [stack('stone_pickaxe', 0, 1)] });
+    const ops = tableOps();
+    assert.equal(await craftRecipe(bot, 'stone_pickaxe', 1, ops), true);
+    assert.equal(crafts[0].table, tableBlock);
+    assert.deepEqual([ops.placed, ops.picked], [0, 0]);
+});
+
+test('#198 review: placed by craftRecipe, then crafted by canFill: the table is picked up once, not twice', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftRecipe } = await import('./skills.js');
+    const { bot, crafts } = craftRecipeBot({ items: [...mixed(), stack('crafting_table', 0, 1)], fill: true,
+        registry: { ...fillReg, itemsByName: { ...fillReg.itemsByName, ...modReg.itemsByName } },
+        serve: () => [stack('stone_pickaxe', 0, 1)] });
+    const ops = tableOps();
+    assert.equal(await craftRecipe(bot, 'stone_pickaxe', 1, ops), true);
+    assert.equal(crafts[0].table, tableBlock, 'craftByFill used the table craftRecipe placed');
+    assert.deepEqual([ops.placed, ops.picked], [1, 1]);
+    assert.match(bot.output, /Successfully crafted stone_pickaxe from mixed items/);
+});
+
+test('#198 review: when no table can be placed, craftRecipe says so and crafts nothing', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftRecipe, CRAFT_TABLE_OPS } = await import('./skills.js');
+    const { bot, crafts } = craftRecipeBot({ items: pickInputs(), serve: () => [] });
+    const ops = { ...tableOps(), place: CRAFT_TABLE_OPS.place }; // the real one: no free space (findBlocks finds none)
+    assert.equal(await craftRecipe(bot, 'stone_pickaxe', 1, ops), false);
+    assert.deepEqual(crafts, []);
+    assert.equal(ops.picked, 0);
+    assert.match(bot.output, /Could not place a crafting table to craft stone_pickaxe: no free space nearby\./);
+});
+
+test('#198 review: a result with a count over 1, on top of a stack already held, counts each craft by the gain', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftByFill } = await import('./skills.js');
+    // RotN's stick recipe gives 4; the bot already holds 3 sticks.
+    const { bot, crafts } = fillBot([stack('planks', 0, 4), stack('stick', 0, 3)], (r, items) => {
+        const sticks = items.find(i => i.name === 'stick')?.count ?? 0;
+        return [...take(items.filter(i => i.name !== 'stick'), 'planks', 2), stack('stick', 0, sticks + 4)];
+    });
+    const needs = craftNeeds(bot, 'stick');
+    assert.equal(needs.gives.count, 4);
+    assert.equal(await craftByFill(bot, 'stick', 3, needs), true);
+    assert.equal(crafts.length, 2, 'two crafts; then the planks run out');
+    assert.match(bot.output, /Crafted 2 of 3 stick from mixed items; not enough for more\. You now have 11 stick\./);
 });

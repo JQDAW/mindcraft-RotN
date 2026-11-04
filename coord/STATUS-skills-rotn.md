@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T23:21Z (from `date -u`)
+Updated: 2026-11-04T23:30Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -214,7 +214,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 - **C1, crafting execution: #194 merged** (`06ad75f`). When `bot.recipesFor` finds no variant (bot.registry's RotN variants are capped, so a mix of rock kinds can be missing) but rotn-data's `canFill` says the items fit, `craftByFill` crafts from canFill's assigned stacks: `filledRecipe` + `fillNow` (craft_needs.js) and a prismarine-recipe `Recipe`, one craft at a time, re-judged each time, at a found or placed crafting table (`bot.craft(recipe, 1, table)` at the FastWorkbench table, as P1's probe did).
   - Added on resume, from net-forge's Request 2 rules: auto-eat is paused around every `bot.craft` (`craftPausingAutoEat`, both paths; an eat under way gets up to 3 s); a recipe with an NBT result or container items left in the grid is refused with a clear error; a table `craftRecipe` already placed is reused, not placed twice.
   - Tests: `craft_needs.test.js` 21/21 (the full mixed-rock `!craftRecipe` test fails on the old skills.js); `src/agent/**` 204/204; lint 254 (baseline OK).
-- **#194 review follow-up, #198** (lead: items 1, 2 and 5 are required before the G3 (a) batch), branch `agent/skills-rotn/craft-fill-followup`:
+- **#194 review follow-up, #198: merged** (`6cd1f66`) (lead: items 1, 2 and 5 are required before the G3 (a) batch), branch `agent/skills-rotn/craft-fill-followup`:
   1. each craft counts only when the item's real inventory count grew, and the loop stops when it did not;
   2. a table placed for the craft (by `craftByFill` or `craftRecipe`) is picked up in a `finally`, so also when `bot.craft` throws; the throw is logged with `safeError`;
   3. nit 3: a missing recipe id logs that cause;
@@ -240,5 +240,10 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
     Reply posted. Tests: `shelter.test.js` 10/10; `src/agent/**` 210/210; lint 254.
 - **Next:**
-  1. the #198 and #195 reviews;
+  1. the #195 review, and the #198 follow-up (branch `agent/skills-rotn/craft-table-finally`, lead request on #198):
+     - `craftRecipe`'s own path places its table through `CRAFT_TABLE_OPS.place`, which guards a missing free space;
+     - a table it placed is picked up in a `finally`, also when `bot.craft` throws, and only once when `craftByFill` takes over;
+     - tests: placed and picked up after a craft and after a throw; a found table stays; placed and then the canFill craft (one pick-up); no free space; a 4-stick result on a held stack, counted by the gain.
+
+     `craft_needs.test.js` 31/31 (the 3 placed-table tests fail on the old `skills.js`); `src/agent/**` 214/214; lint 254;
   2. D2b-2, the night routine: a shelter step at dusk (`NightClock`, `SHELTER_LEAD_MIN`); stay in at night; repair with `buildShelter({ site })`; fight only at the opening (`nightThreatNote`); leave at daylight; `torch_placing` kept off in the shelter (it is on by default); the shortfall over the cobblestone step's 8 gathered.
