@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-04T23:08Z
+Updated: 2026-11-04T23:13Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -8,8 +8,8 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
 - **Done:**
   - I checked E1's open claim in the mineflayer 4.33.0 code. `bot.consume` has its own 2500 ms timeout and refuses at food 20. Rule E1 below is corrected.
-  - **PR #192** (Request 2 final answer) is approved by the lead.
-- **Doing:** the lead's #192 STATUS nits, on branch `agent/net-forge/request2-nits` (2026-11-04T23:08Z):
+  - **PR #192** (Request 2 final answer) is merged (`a24f1d3`).
+- **In review:** PR #199, the lead's #192 STATUS nits, on branch `agent/net-forge/request2-nits` (2026-11-04T23:08Z):
   - 1736 ms is about 35 ticks, not 32;
   - the 2160 ms stall (`server.log:201`) came during the bread eat, not at a time with nothing running;
   - `convertRecipe` emits no `outShape` (rule C2).
