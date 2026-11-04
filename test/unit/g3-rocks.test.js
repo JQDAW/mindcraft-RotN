@@ -99,7 +99,7 @@ function sim(opt = {}) {
                     add(`Showing ${shown.length} tracked objective(s) for ${NAME}:`);
                     for (const [o, c] of shown) add(`- ${o}: ${stats.get(c)} (${o})`);
                 }
-            } else if (cmd === `tp ${NAME} ~ ~ ~`) add(online ? `Teleported ${NAME} to -44.5, 66.0, -65.5` : 'That player cannot be found');
+            }
             t += waitS * 1000;
             return log.slice(before);
         },
@@ -185,7 +185,8 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
         assert.deepEqual(Object.keys(r.notes.milestonesMin).sort(), ['g3a_c_crude', 'g3a_c_ctools', 'g3a_c_saxe', 'g3a_c_spick', 'g3a_c_table', 'g3a_u_table']);
         assert.deepEqual(r.notes.cobbleHeld, [{ name: COBBLE, meta: 0, count: 8 }]);
         assert.deepEqual(r.notes.packFirstJoin, PACK_FIRST_JOIN.map((x) => x.id));
-        assert.ok(r.notes.track.length >= 18, 'a position every minute');
+        assert.ok(r.notes.track.length >= 18, 'a deaths sample every minute');
+        assert.ok(!s.sent.some((cmd) => /^tp /.test(cmd)), 'no tp in G3 (#201 review)');
         for (const cmd of s.sent) assert.ok(G3_CONSOLE_ALLOW.some((re) => re.test(cmd)), `not approved: ${cmd}`);
         assert.equal(s.objectives.size, 0, 'the objectives are removed at the end');
         assert.equal(r.gateValid, true, r.weakenedParams.join('; '));
@@ -224,6 +225,22 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
         const r = await run(sim({ start: { 'minecraft:stone_pickaxe:0': 1 } }));
         assert.equal(byName(r).fresh_start.pass, false);
         assert.match(byName(r).fresh_start.detail, /minecraft:stone_pickaxe 1/);
+    });
+
+    test('no first-join Bread and Bundle in the log (not a fresh player): fresh_start fails (#201 review)', async () => {
+        const r = await run(sim({ noPack: true }));
+        assert.equal(byName(r).fresh_start.pass, false);
+        assert.match(byName(r).fresh_start.detail, /not a first join: the pack's give_bread and give_bundle not in this run's log/);
+        assert.match(byName(r).fresh_start.detail, /^none of \d+ target items held/);
+    });
+
+    test('the use stat is rejected and the table is placed, not held: crafting_table fails and says why (#201 review)', async () => {
+        const r = await run(sim({ badCriterion: statCriterion('useItem', 'minecraft:crafting_table') }));
+        const c = byName(r);
+        assert.equal(c.crafting_table.pass, false);
+        assert.equal(c.crafting_table.detail, 'held 0, placed (use stat) 0 (the use stat objective: invalid)');
+        assert.deepEqual(r.notes.craftingTablePath, { path: 'none', useStat: 'invalid', fallback: true, held: 0, placed: 0 });
+        assert.equal(c.crafted_by_bot.pass, true, 'the table was still crafted');
     });
 
     test('nothing happens: the run ends at maxMinutes and the item checks fail', async () => {

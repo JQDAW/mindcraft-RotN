@@ -12,11 +12,12 @@
 //   2. Stat objectives (approved on #101: scoreboard objectives add|remove, players list), added right
 //      after the join: the craft stats of the five crafted items and cobblestone, the crafting table's
 //      use stat (1.12 counts a placed block as a use of its item), deaths and play time.
-//   3. fresh_start: the count-only `clear <bot> <item> -1 0` finds none of the target items: the stone
+//   3. fresh_start: the pack's first-join Bread and Bundle gives are in this run's log (a first join), and
+//      the count-only `clear <bot> <item> -1 0` finds none of the target items: the stone
 //      tools, the table, the crude axe, Crafting Tools and every block a 4-rocks recipe makes (rotn-data's
 //      rockRecipes; RotN's rocks make different cobbles, so no name is hard-coded).
 //   4. Every milestonePollMs (60 s): `scoreboard players list <bot>` (milestones: the minute each craft
-//      stat first reaches 1) and `tp <bot> ~ ~ ~` (a position track). The run ends when both stone tools
+//      stat first reaches 1; deaths). No tp of any form (lead, #201 review). The run ends when both stone tools
 //      have a craft stat and the agent says "agenda step cobblestone done" or "agenda done", when it says
 //      "agenda step <id> stuck" (its agenda pauses; nothing more would happen), when the bot leaves or its
 //      driver exits, or at maxMinutes (25, 'equal': a longer limit would be a weaker run).
@@ -34,7 +35,7 @@ import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED } from '../../runner/lib/g2.mjs';
 import { G3_DEFAULTS, G3_GATE_PARAMS, cheatProblems, guardConsole, statCriterion } from '../../runner/lib/g3.mjs';
 import { clearTestCommand, clearTestCount, playerScores, scoreboardAddResult } from '../../runner/lib/s1.mjs';
-import { lastTeleport, chatLines } from '../../runner/lib/server-log.mjs';
+import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
 import { rockRecipes } from '../../../packages/rotn-data/index.js';
 
@@ -61,6 +62,8 @@ export function cobbleOutputs(recipes = rockRecipes()) {
 }
 
 const TOOLS = ['minecraft:stone_pickaxe', 'minecraft:stone_axe'];
+/** The pack's first-join gives that fresh_start requires (PACK_FIRST_JOIN ids). */
+const FIRST_JOIN_KIT = ['give_bread', 'give_bundle'];
 const START_EMPTY = [...TOOLS, 'minecraft:crafting_table', 'pyrotech:crude_axe', 'contenttweaker:crafting_tools'];
 const ENDS = (t) => /^agenda (step cobblestone done|done)$/.test(t);
 const STUCK = /^agenda step (\S+) stuck: (.*)$/;
@@ -112,7 +115,11 @@ export default {
         const scores = async () => playerScores(await confirm(`scoreboard players list ${name}`, (l) => playerScores(l, name) !== null), name);
         const score = (sc, obj) => (sc ? sc[obj] ?? 0 : null);   // an objective with no score yet is absent: 0 (S1-A)
 
-        // 2. stat objectives; a leftover from an earlier run is removed first, so 'exists' never hides a bad criterion
+        // 2. stat objectives; a leftover from an earlier run is removed first, so 'exists' never hides a bad criterion.
+        // THE UNCOUNTED GAP (#201 review): 1.12 raises a stat objective's score only by later increments
+        // (EntityPlayerMP.addStat -> increaseScore); a new objective starts at 0 and is never backfilled. A craft or
+        // death between the join and these adds (seconds; the first craft needs rocks and sticks, minutes) is not
+        // counted. That fails safe: a missed craft can only fail crafted_by_bot, never pass it.
         for (const st of G3A_STATS) lc.con(`scoreboard objectives remove ${st.obj}`);
         const added = {};
         for (const st of G3A_STATS) {
@@ -121,15 +128,19 @@ export default {
         }
         ctx.note('objectives', G3A_STATS.map((st) => ({ obj: st.obj, criteria: st.criteria, result: added[st.obj] })));
 
-        // 3. a fresh start
+        // 3. a fresh start: none of the targets held, and the pack's first-join gives seen in this run's log, which
+        //    only a fresh player's first join makes (#201 review)
         const outputs = cobbleOutputs();
         const startNames = [...START_EMPTY, ...new Set(outputs.map((o) => o.name))];
         const start = {};
         for (const item of startNames) start[item] = await count(item);
         const held = Object.entries(start).filter(([, n]) => n !== 0);
         ctx.note('startCounts', start);
-        ctx.check('fresh_start', held.length === 0,
-            held.length ? `held at the start: ${held.map(([i, n]) => `${i} ${n ?? 'no reply'}`).join(', ')}` : `none of ${startNames.length} target items held`);
+        const firstJoin = cheatProblems(s.sinceMarker(), name).packFirstJoin;
+        const kit = FIRST_JOIN_KIT.filter((id) => !firstJoin.includes(id));
+        ctx.check('fresh_start', held.length === 0 && kit.length === 0,
+            [held.length ? `held at the start: ${held.map(([i, n]) => `${i} ${n ?? 'no reply'}`).join(', ')}` : `none of ${startNames.length} target items held`,
+                kit.length ? `not a first join: the pack's ${kit.join(' and ')} not in this run's log` : 'the pack\'s first-join Bread and Bundle seen'].join('; '));
 
         // 4. the run
         const joinedAt = s.joinedAt;
@@ -144,8 +155,7 @@ export default {
             for (const st of G3A_STATS.filter((x) => x.obj.startsWith('g3a_c_') || x.obj === 'g3a_u_table')) {
                 if (milestones[st.obj] === undefined && score(sc, st.obj) >= 1) milestones[st.obj] = minutes();
             }
-            const pos = lastTeleport(server.console(`tp ${name} ~ ~ ~`, p.consoleWaitS), name);
-            track.push({ min: minutes(), pos: pos ?? null, deaths: score(sc, 'g3a_deaths') });
+            track.push({ min: minutes(), deaths: score(sc, 'g3a_deaths') });   // no position: no tp in G3 (#201 review)
             ctx.note('milestonesMin', milestones);
             ctx.note('track', track);
             const said = agendaLines();

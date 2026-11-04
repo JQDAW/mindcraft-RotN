@@ -1,19 +1,25 @@
 # Status: harness-ops
 
-Updated: 2026-11-04 (23:28 UTC, from `date -u`)
+Updated: 2026-11-04 (23:41 UTC, from `date -u`)
 
 ## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
 The lead's order: one scenario per small PR, (a) first, then (b) first night, (c) a task preempts the agenda and it resumes, (d) untrusted players refused. Each gets server-side pass checks, maxBatchUsd 2 and an offline test against fakes. **No batch:** nothing is running, no paid work is pending, and nothing touches the CX23.
 
-**This PR: G3 (a), `g3-rocks-to-stone-tools`** (branch `agent/harness-ops/g3a-early-game`).
+**PR #201: G3 (a), `g3-rocks-to-stone-tools`** (branch `agent/harness-ops/g3a-early-game`).
+- **The lead's review (REQUEST CHANGES), fixed:**
+  - **No tp in G3 at all:** the position track is dropped, and `G3_CONSOLE_ALLOW` has no `tp`. Life evidence comes from `stat.deaths` and the log. G2 keeps its own `tp`.
+  - `fresh_start` also needs the pack's first-join `give_bread` and `give_bundle`.
+  - A test for the rejected use stat with the table placed but not held.
+  - A comment on the uncounted gap before the objectives exist (fails safe).
+  - Approved: the `stat.useItem.minecraft.crafting_table` objective, with the "held" fallback. `notes.craftingTablePath` records the path used.
 - **The scenario:** `test/scenarios/g3/g3-rocks-to-stone-tools.mjs`, run with the real agent (`llm: true`, the Mindcraft driver, the pinned model). `maxMinutes` 25 and `maxBatchUsd` 2 are compared 'equal', and the world is the G2 seed.
 - **Checks:** `login_online`, `fresh_start`, `stone_tools`, `crafting_table`, `cobblestone` (rotn-data's 4-rocks outputs, exact name and meta), `crafted_by_bot` (gating, all five craft stats) and `no_cheat`.
 - **Shared arbiters in `lib/g3.mjs`** (for b-d too): `cheatProblems` (allows only the pack's first-join gamerules and the Bread and Bundle gives, once each, within 10 s of the join) and `statCriterion`.
 - **For the lead:** the crafting-table check also accepts "placed", read from `stat.useItem.minecraft.crafting_table` (1.12 counts a placed block as a use of its item). That is the approved `scoreboard objectives add` command, but a new criterion. S1 did not check it, and the first G3 smoke batch confirms it.
 - **Tested:** `g3-rocks.test.js` 12/12, `runner.test.js` 42/42 (1 Windows skip), `g3-spend.test.js` 45/45, `mindcraft-driver.test.js` 13/13. ESLint is clean on the changed files.
 
-**Next:** (b) `g3-first-night`, in its own PR, with the provisional dawn bound (the wrap past 24000, limit 55 min).
+**Next:** (b) `g3-first-night` (branch `agent/harness-ops/g3b-first-night`, stacked on #201), with the provisional dawn bound (the wrap past 24000, limit 55 min) and the same no-tp rule.
 
 ## Done just before (2026-11-04)
 
@@ -790,7 +796,7 @@ The brief adds "the queue survives a restart": offline in G3, real on the CX23 i
    - Read them with `scoreboard players list <bot>`.
    - They prove that the bot itself crafted, which the inventory alone cannot (the crude axe may be used up by Crafting Tools).
 3. **Placed blocks:** `testforblock` (as in G2), for example the placed crafting table that the bot reports.
-4. **Position:** `tp <bot> ~ ~ ~` (as in G2).
+4. **Position:** none. There is no `tp` in G3 at all (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12.
 5. **Life:** the server log's join, leave and death lines for the bot (the vanilla death messages "<bot> was slain by", "<bot> died", and so on, and Corpse Complex's lines), plus `stat.deaths`.
 6. **No cheating:** the scenario fails if, during the run:
    - the log shows a `Given [` line or a gamemode change for the bot;
@@ -804,7 +810,7 @@ The brief adds "the queue survives a restart": offline in G3, real on the CX23 i
 - `time query daytime`;
 - `setblock` **only** for the task marker.
 
-G2's list (`say`, `seed`, `tp`, `tell`, `testforblock`, `testfor`, `time set day`, `gamerule doDaylightCycle`) stays. Not `give`, `summon` or `kill` in G3, except in S1.
+G2's list without `tp` (`say`, `seed`, `tell`, `testforblock`, `testfor`, `time set day`, `gamerule doDaylightCycle`) stays. Not `give`, `summon` or `kill` in G3, except in S1.
 
 **Pinned before any gate batch (lead, #101):** these become gate parameters compared 'equal', fixed after S1 and before the first G3 gate batch.
 - the dawn bound for `g3-first-night` (from S1's day/night measurement);

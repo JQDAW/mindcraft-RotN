@@ -204,8 +204,10 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
 
 The real agent plays its early-game agenda from a fresh spawn, and the runner whispers nothing. The server is the arbiter. The agent's chat only decides when the run ends early.
 - **Start:** `login_online` in the G3 world (the G2 seed). Then the stat objectives `g3a_*`: the craft stats of the crude axe, Crafting Tools, the table, both stone tools and cobblestone, plus the table's use stat (1.12 counts a placed block as a use of its item), deaths and play time.
-- **`fresh_start`:** the count-only `clear` finds none of the target items. These include every block a 4-rocks recipe makes (rotn-data's `rockRecipes`; RotN's rocks make different cobbles).
-- **Every minute:** `scoreboard players list <bot>` (milestones: the minute each stat first reaches 1) and `tp <bot> ~ ~ ~` (a position track).
+- **`fresh_start`:** the pack's first-join Bread and Bundle gives are in this run's log (only a first join makes them), and the count-only `clear` finds none of the target items. These include every block a 4-rocks recipe makes (rotn-data's `rockRecipes`; RotN's rocks make different cobbles).
+- **The uncounted gap:** 1.12 raises a stat objective's score only by later increments, and a new objective is never backfilled. So a craft or death between the join and the objectives being added is not counted. This fails safe: it can only fail a check, never pass one.
+- **Every minute:** `scoreboard players list <bot>` (milestones: the minute each stat first reaches 1, and deaths).
+- **No `tp` in G3 at all** (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12 (it dismounts, zeroes motionY, sets onGround and forces a position packet). `G3_CONSOLE_ALLOW` has no `tp`, and life evidence comes from `stat.deaths` and the log. G2 keeps its own `tp`.
 - **The end** comes at the first of:
   - both stone tools have a craft stat, and the agent says `agenda step cobblestone done` or `agenda done`;
   - the agent says `agenda step <id> stuck: ...`;

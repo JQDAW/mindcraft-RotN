@@ -53,8 +53,8 @@ const N = '-?\\d+';
 export const G3_CONSOLE_ALLOW = [
     /^say scenario-[0-9a-z-]+-begin$/,                                     // the runner's begin marker
     /^seed$/,
-    new RegExp(`^tp ${NAME} ~ ~ ~$`),                                      // read the bot's position
-    new RegExp(`^tp ${NAME} ${N} ${N} ${N}$`),                             // the fixed G2 cube centre
+    // No tp of any form (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12 (it dismounts, zeroes
+    // motionY, sets onGround and forces a position packet). Life evidence comes from stat.deaths and the log.
     new RegExp(`^tell ${NAME} .+$`),                                       // the test-only task giver `Server`
     new RegExp(`^testforblock ${N} ${N} ${N} \\S+ \\d+$`),
     /^testfor @[aep]\[[^\]]*\]$/,
