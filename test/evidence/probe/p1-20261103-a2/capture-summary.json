@@ -1,6 +1,7 @@
 {
   "windowClicks": {
     "total": 33,
+    "complete": true,
     "accepted": 33,
     "rejected": 0,
     "unanswered": 0,
@@ -482,6 +483,11 @@
       "answerMs": 62
     }
   ],
+  "transactions": {
+    "total": 33,
+    "paired": 33,
+    "unpaired": []
+  },
   "fastbench": {
     "modWindows": [
       {
@@ -849,6 +855,34 @@
       "dir": "S2C",
       "channel": "aether_legacy",
       "limit": 2000
+    },
+    {
+      "name": "packet_cap",
+      "dir": "S2C",
+      "packet": "map_chunk",
+      "limit": 40,
+      "lastT": 4616
+    },
+    {
+      "name": "packet_cap",
+      "dir": "S2C",
+      "packet": "spawn_entity_living",
+      "limit": 100,
+      "lastT": 142234
+    },
+    {
+      "name": "packet_cap",
+      "dir": "S2C",
+      "packet": "entity_metadata",
+      "limit": 300,
+      "lastT": 17453
+    },
+    {
+      "name": "packet_cap",
+      "dir": "S2C",
+      "packet": "block_change",
+      "limit": 300,
+      "lastT": 25722
     }
   ],
   "packetCounts": {

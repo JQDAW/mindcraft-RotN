@@ -55,7 +55,8 @@ export const P1_CONSOLE_ALLOW = [
     new RegExp(`^clear ${NAME} ${ITEM} ${N} 0$`),                          // count only
     new RegExp(`^give ${NAME} ${ITEM} \\d{1,2} \\d{1,2}$`),
     new RegExp(`^effect ${NAME} minecraft:hunger \\d{1,3} \\d{1,3}$`),
-    // The server's own food level before the eat step (the 1.12 `food` criterion; only P1's objective).
+    // The server's own food level before and after the eat step (the 1.12 `food` criterion; only P1's
+    // objective). The lead approved these three scoreboard commands for P1 (#165 review).
     /^scoreboard objectives add p1food food$/,
     /^scoreboard objectives remove p1food$/,
     new RegExp(`^scoreboard players list ${NAME}$`),
@@ -107,9 +108,12 @@ export const P1_PLAN = Object.freeze({
         ['minecraft:bread', 2, 0],
         ['minecraft:cobblestone', 8, 0],
     ],
-    // Hunger for the eat step: `effect <bot> minecraft:hunger SECONDS AMPLIFIER` (hungerFood shows the sums).
-    // 22 s at amplifier 19 is 44 exhaustion: 11 points, 5 of them taken by a fresh player's saturation,
-    // so food 20 -> about 14. The old 10 s at amplifier 10 (11 exhaustion, 2 points) left food at 20.
+    // Hunger for the eat step: `effect <bot> minecraft:hunger SECONDS AMPLIFIER`. RotN 3.3.4 runs Hunger
+    // Overhaul and AppleCore: 0.01 exhaustion a tick on top of the effect's 0.005 * (amplifier + 1), and a
+    // step costs 4 / 0.85 exhaustion, not 4. net-forge's model of it is simulateHunger
+    // (packages/forge-bridge/test/fake-containers.js, #177): 22 s at amplifier 19 is 10 steps, 5 of them
+    // taken by a fresh player's saturation, so food 20 -> 15. P1 attempt 2 (2026-11-03) measured exactly 15.
+    // The old 10 s at amplifier 10 (2 steps) left food at 20.
     hunger: [22, 19],
     foodObjective: 'p1food',
     table: [-43, 66, -66],
@@ -130,17 +134,6 @@ export const P1_PLAN = Object.freeze({
 
 /** The driver's opt-in (#162): it answers probe commands only with this in its environment. */
 export const PROBE_DRIVER_ENV = Object.freeze({ ROTN_DRIVER_PROBE: '1' });
-
-/**
- * The food level after a Hunger effect, by 1.12's rules (PotionHunger.performEffect, FoodStats.onUpdate):
- * every tick it adds 0.005 * (amplifier + 1) exhaustion; each 4 exhaustion takes 1 saturation point while
- * there is saturation, else 1 food point. A fresh player has food 20 and saturation 5. Other exhaustion
- * (walking, placing) is ignored here, and so is natural regeneration, which needs health below its maximum.
- */
-export function hungerFood(seconds, amplifier, { food = 20, saturation = 5 } = {}) {
-    const points = Math.floor((seconds * 20 * 0.005 * (amplifier + 1)) / 4 + 1e-9);
-    return Math.max(0, food - Math.max(0, points - Math.ceil(saturation)));
-}
 
 /** The bot's food score from `scoreboard players list <bot>`: a number, or null when it has none yet. */
 export function foodScore(lines, bot, objective = P1_PLAN.foodObjective) {

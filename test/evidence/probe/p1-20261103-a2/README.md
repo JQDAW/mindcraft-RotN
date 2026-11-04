@@ -30,7 +30,7 @@ Attempt 1 (`../p1-20261103-a1/`) failed at setup on a late console reply. Its fi
 | `eat` | 15:28:34 |
 | Scenario end | 15:28:40 |
 | EXIT-trap teardown | started 15:28:50; "verified gone" 15:29:05 |
-| Project checked empty | 15:29:12 (`hcloud server list` and `primary-ip list` empty; the only SSH key is the human's unlabelled one) |
+| Project checked empty | 15:29:12, by hand after the batch: `hcloud server list` and `primary-ip list` empty, and the only SSH key is the human's unlabelled one. That output is **not in a committed log** (#189 review nit 4). The committed record of the deletion is `run.log`'s "verified gone: server, Primary IPv4 and SSH key" at 15:29:05. |
 
 ## Checks (each needs the driver's reply AND the server's own confirmation)
 
@@ -52,6 +52,7 @@ Attempt 1 (`../p1-20261103-a1/`) failed at setup on a late console reply. Its fi
 **Serverbound REID item ids: accepted.**
 - 33 `window_click` packets went to the server: 23 in the player inventory (window 0) and 10 in the table's window (window 1).
 - The server answered every one with a `transaction`, all `accepted: true`: 0 rejected, 0 unanswered. Answer times were 39-136 ms (median 60 ms).
+- All 33 transactions were paired with a click, so none is unpaired (`transactions.unpaired` is empty). Neither the click stream nor the transaction stream reached its capture cap (300 each), so these counts are complete (`windowClicks.complete: true`).
 - **7 clicks carried REID item ids above 4095**, all accepted: `pyrotech:rock` 8917 (3 clicks), `pyrotech:crude_axe` 9075 (2), and `contenttweaker:crafting_tools` 12510 (2). The highest clicked id was 12510.
 - The names come from rotn-data's Run A id table and are only labels; the ids are the server's. They match the items the server counted at each step.
 
@@ -66,7 +67,14 @@ Attempt 1 (`../p1-20261103-a1/`) failed at setup on a late console reply. Its fi
   5. While the grid emptied, the result slot briefly showed `minecraft:stone_hoe` and then `contenttweaker:broken_stick` ×2, and ended empty.
   6. After the close, window 0 shows stone pickaxe ×1 and rock ×3, as the server's counts say.
 
-**Not in the capture:** the five placements' `block_change` packets. The capture keeps at most 300 `block_change` records (and 300 `entity_metadata`, 100 `spawn_entity_living`), and the login's chunks used them up by t = 25.7 s, before the first placement at t = 119.9 s. The 6 serverbound `block_place` packets (the table click and the five placements) are there.
+**Not in the capture:** the five placements' `block_change` packets.
+- forge-bridge keeps at most a fixed number of records per packet type and drops the rest silently. In this capture four streams reached their cap (`limits`, `packet_cap`):
+  - `block_change`: 300, the last at t = 25.7 s;
+  - `entity_metadata`: 300;
+  - `spawn_entity_living`: 100;
+  - `map_chunk`: 40.
+- The login's chunks used up the `block_change` records before the first placement at t = 119.9 s, so the placement latencies come from the driver.
+- The 6 serverbound `block_place` packets (the table click and the five placements) are there.
 
 ## Placement latencies (the driver's `updateMs`, from the place call to the server's block update for the placed block)
 
@@ -86,6 +94,9 @@ The range was 589-1158 ms, median 904 ms. All five were below `place_block_timeo
 - **Model:** net-forge's RotN hunger model (`simulateHunger`, #177: Hunger Overhaul's step cost of 4/0.85 and AppleCore's one step per tick) predicts **food 15** for that setup.
 - **Measured:** the server's `food` score was **15** at the first read, 117 s after the effect began. The driver's own `bot.food` was also 15 before eating.
 - **Eating one bread:** food went **15 -> 18 (+3)**, which is RotN's bread (3 hunger, `scripts/food.zs`, as #177 found). The bread count went 2 -> 1.
+- **What the server confirmed** (#189 review nit 3): the food **before** the eat (score 15) and the bread count **after** it (1 left).
+  - The **+3 itself rests on the driver's reading** (`bot.food`, from the server's `update_health`). This run did not read the server's food score after eating.
+  - From the #165 follow-up PR on, the scenario also reads the score after the eat, and `eat` needs it to rise.
 
 ## Other lines from the server log
 
