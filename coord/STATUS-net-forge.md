@@ -7,7 +7,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 ## Resumed 2026-11-04T22:51Z (lead respawn after the usage-limit pause of 2026-11-03T16:07Z)
 
 - **Done:** I checked E1's open claim in the mineflayer 4.33.0 code. `bot.consume` has its own 2500 ms timeout and refuses at food 20. Rule E1 below is corrected.
-- **Doing:** the PR for `agent/net-forge/request2-final` (STATUS only): "net-forge STATUS: Request 2 final answer, proven live by P1; keep place_block_timeout_ms 2000". It serves the lead's request after #189, for skills-rotn's C1 and D2b.
+- **In review:** PR #192 for `agent/net-forge/request2-final` (STATUS only): "net-forge STATUS: Request 2 final answer, proven live by P1; keep place_block_timeout_ms 2000". It serves the lead's request after #189, for skills-rotn's C1 and D2b.
 - **Next:** wait for the lead's review and merge. No other net-forge work is open, and nothing is running.
 - **Blocked / requests:** none.
 
