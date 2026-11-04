@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T23:51Z (from `date -u`)
+Updated: 2026-11-04T23:56Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -255,5 +255,12 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     2. night above tasks is accepted; typed commands, `!stop` and `!pause` still act at once.
 - **Next (lead order):**
   1. the #204 review (and #202's merge);
-  2. D1: eating, and re-planning after teleports (AggroTP) or invasions;
+  2. D1: eating, and re-planning after teleports (AggroTP) or invasions:
+     - **D1a, eating: #206 open** (branch `agent/skills-rotn/eating`). An `eating` mode eats by rotn-data's food values (auto-eat sees only vanilla foods and ate the bread first; it is off now):
+       - at food 12 or lower when idle, and at 6 or lower during an action;
+       - never hawthorn berries, cloudsbluff or the vanilla bad foods;
+       - bread only when nothing else is left.
+
+       Tests: `food.test.js` 5/5; `src/agent/**` 224/224; lint 254. Request to rotn-data (via the lead) in the PR: a structured "harmful food" field.
+     - **D1b next:** re-plan after a position jump of 5 or more blocks (AggroTP), and after a title message (a possible invasion);
   3. D3: the death report.
