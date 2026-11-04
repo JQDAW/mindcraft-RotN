@@ -152,6 +152,10 @@ function registryItem(registry, name) {
 export function filledRecipe(registry, recipeId, assignment) {
     const r = loadRotnData(PACK_VERSION).recipeById(recipeId);
     if (!r) throw new Error(`recipe ${recipeId} is not in rotn-data's dump`);
+    // The server rejects the result-slot click unless the result matches exactly, so a result with
+    // NBT cannot be sent; container items would need an outShape (net-forge, Request 2 answer).
+    if (r.result?.nbt) throw new Error(`${recipeId} has an NBT result, which cannot be crafted this way`);
+    if (r.remaining?.some(Boolean)) throw new Error(`${recipeId} leaves items in the grid, which cannot be crafted this way`);
     let k = 0;
     const toItem = (cell) => {
         if (!cell) return null;

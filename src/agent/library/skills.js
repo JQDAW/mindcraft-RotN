@@ -114,8 +114,7 @@ export async function craftRecipe(bot, itemName, num=1) {
         else if (needs) {
             // canFill says the items fit a RotN recipe, but bot.registry has no variant for this mix
             // (its variants are capped): craft from the bot's own stacks (C1).
-            if (placedTable) await collectBlock(bot, 'crafting_table', 1);
-            return await craftByFill(bot, itemName, num, needs);
+            return await craftByFill(bot, itemName, num, needs, craftingTable, placedTable);
         }
         else {
             // No RotN craft way: upstream's text from the registry recipes, guarded (#151 review).
@@ -142,7 +141,7 @@ export async function craftRecipe(bot, itemName, num=1) {
     const inventory = Object.fromEntries(Object.keys(requiredIngredients).map(name => [name, countItem(bot, name)]));
     const craftLimit = mc.calculateLimitingResource(inventory, requiredIngredients);
     
-    await bot.craft(recipe, Math.min(craftLimit.num, num), craftingTable);
+    await craftPausingAutoEat(bot, recipe, Math.min(craftLimit.num, num), craftingTable);
     if(craftLimit.num<num) log(bot, `Not enough ${craftLimit.limitingResource} to craft ${num}, crafted ${craftLimit.num}. You now have ${countItem(bot, itemName)} ${itemName}.`);
     else log(bot, `Successfully crafted ${itemName}, you now have ${countItem(bot, itemName)} ${itemName}.`);
     if (placedTable) {
@@ -157,16 +156,38 @@ export async function craftRecipe(bot, itemName, num=1) {
 }
 
 /**
+ * bot.craft with mineflayer-auto-eat paused: it clicks the inventory too, and an eat in the middle of
+ * a craft got a click rejected in net-forge's offline test (Request 2 answer). It is enabled again
+ * afterwards only if it was on before. An eat already under way is given up to `eatWaitMs` to finish.
+ */
+export async function craftPausingAutoEat(bot, recipe, count, table, eatWaitMs = 3000) {
+    const autoEat = bot.autoEat;
+    const wasOn = !!autoEat && typeof autoEat.disable === 'function' && !autoEat.disabled;
+    if (wasOn) autoEat.disable();
+    try {
+        for (let waited = 0; autoEat?.isEating && waited < eatWaitMs; waited += 100)
+            await new Promise(resolve => setTimeout(resolve, 100));
+        await bot.craft(recipe, count, table);
+    } finally {
+        if (wasOn) autoEat.enable?.();
+    }
+}
+
+/**
  * Craft by rotn-data's recipe with the stacks canFill assigns (C1): for a mix of kinds (1 igneous and
  * 2 metamorphic rocks for a stone pickaxe) that bot.registry's capped variants leave out. One craft at
  * a time, judged afresh each time, at a crafting table when the recipe needs one.
+ * `table` and `placed` carry a table craftRecipe already found or placed, so it is not placed twice.
  * @returns {Promise<boolean>} true if at least one was crafted.
  */
-async function craftByFill(bot, itemName, num, needs) {
-    let table = null;
-    let placed = false;
-    if (needs.requiresTable) {
-        table = world.getNearestBlock(bot, 'crafting_table', 16);
+async function craftByFill(bot, itemName, num, needs, table = null, placed = false) {
+    if (!needs.requiresTable) {
+        if (placed) await collectBlock(bot, 'crafting_table', 1);
+        table = null;
+        placed = false;
+    }
+    else {
+        table ??= world.getNearestBlock(bot, 'crafting_table', 16);
         if (!table) {
             if (countItem(bot, 'crafting_table') < 1) {
                 log(bot, `Crafting ${itemName} requires a crafting table.`);
@@ -197,7 +218,7 @@ async function craftByFill(bot, itemName, num, needs) {
             why = err.message;
             break;
         }
-        await bot.craft(recipe, 1, table);
+        await craftPausingAutoEat(bot, recipe, 1, table);
         made++;
     }
     if (placed) await collectBlock(bot, 'crafting_table', 1);

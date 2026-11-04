@@ -218,3 +218,27 @@ test('C1: !craftRecipe with mixed rocks and no registry variant crafts at the ne
     assert.deepEqual(crafts[0].recipe.inShape[0].map(c => `${c.id}:${c.metadata}`), [`${MET}:0`, `${MET}:0`, `${IGN}:0`]);
     assert.match(bot.output, /Crafted 1 of 2 stone_pickaxe from mixed items; not enough for more\. You now have 1 stone_pickaxe\./);
 });
+
+test('C1: filledRecipe refuses an NBT result and a recipe that leaves items in the grid (net-forge rules)', () => {
+    assert.throws(() => filledRecipe(modReg, 'betterwithmods:baiting_recipe', []), /has an NBT result/);
+    assert.throws(() => filledRecipe(modReg, 'aether_legacy:poison_dart', []), /leaves items in the grid/);
+});
+
+test('C1: craftPausingAutoEat disables auto-eat for the craft, waits out an eat, and restores it', async () => {
+    const { craftPausingAutoEat } = await import('./skills.js');
+    const autoEat = { disabled: false, isEating: true, disable() { this.disabled = true; }, enable() { this.disabled = false; } };
+    const seen = [];
+    const bot = { autoEat, craft: () => { seen.push({ disabled: autoEat.disabled, eating: autoEat.isEating }); return Promise.resolve(); } };
+    setTimeout(() => { autoEat.isEating = false; }, 150);
+    await craftPausingAutoEat(bot, {}, 1, null);
+    assert.deepEqual(seen, [{ disabled: true, eating: false }]);
+    assert.equal(autoEat.disabled, false, 'on again after the craft');
+
+    const failing = { autoEat, craft: () => Promise.reject(new Error('click rejected')) };
+    await assert.rejects(craftPausingAutoEat(failing, {}, 1, null), /click rejected/);
+    assert.equal(autoEat.disabled, false, 'on again after a failed craft');
+
+    autoEat.disabled = true; // turned off by someone else: stays off
+    await craftPausingAutoEat(bot, {}, 1, null);
+    assert.equal(autoEat.disabled, true);
+});
