@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T23:30Z (from `date -u`)
+Updated: 2026-11-04T23:46Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -221,7 +221,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   4. nit 4: no free space for a table logs that, instead of a TypeError.
 
   Item 5: tests for the 2x2-grid canFill crafts (the crude axe twice; Crafting Tools from a damaged crude axe, never the wildcard meta), the stop on no gain, and the table picked up once after a throw and after a craft. Tests: `craft_needs.test.js` 26/26 (the 5 new ones fail on the old `skills.js`); `src/agent/**` 209/209; lint 254.
-- **D2b-1, `!buildShelter`: #195 open** (branch `agent/skills-rotn/shelter-build`, base develop). `library/shelter.js` builds a closed 1x2 space with sturdy walls and roof from inside:
+- **D2b-1, `!buildShelter`: #195 merged** (branch `agent/skills-rotn/shelter-build`, base develop). `library/shelter.js` builds a closed 1x2 space with sturdy walls and roof from inside:
   - it picks the site within 4 blocks that needs the fewest blocks;
   - it counts first: 10 blocks on open ground, including a roof prop;
   - it digs and replaces dirt or wood in the walls;
@@ -239,11 +239,17 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     7. the fake world models the hitbox, reach, falling blocks, liquids, a ledge and late updates.
 
     Reply posted. Tests: `shelter.test.js` 10/10; `src/agent/**` 210/210; lint 254.
+- **#202** (the #198 follow-up: `craftRecipe` picks up a table it placed in a `finally`, and guards a missing free space): approved by the lead, merge pending.
+- **D2b-2, the night routine: PR open** (branch `agent/skills-rotn/night-routine`). `src/agent/night_routine.js`, `nightTick`, sits in the priority stack after control holds and before tasks. No LLM calls.
+  - **Dusk:** at `SHELTER_LEAD_MIN` before sunset (by `NightClock`), it stops the self-prompter at the checkpoint and builds a shelter. A task or the agenda that was running resumes later with no new run.
+  - **Inside:** every 10 s it repairs a breach at the same site. If the bot was pushed, teleported or walked out, it builds a new shelter where the bot is.
+  - **Full daylight:** after the sunrise, it digs out one side with no liquid outside and hands back to tasks and the agenda.
+  - **No shelter:** after 3 tries (30 s apart) the bot stays put until morning ("exposed").
+  - **Modes:** while sheltered, the modes that would walk, dig or light the bot out are quiet (`SHELTER_QUIET_MODES`). `self_defense` comes back while a wall is open; `self_preservation` always acts.
+  - **Agenda:** the cobblestone step aims for 10, the open-ground shelter.
+  - `settings.night_shelter: false` turns the routine off (lead-owned settings; default on).
+  - **Review nits folded in:** a crafting table whose block update comes late is found on a second look; tests for placed=true into `craftByFill` with no recipe id and with a 2x2 recipe; a site the caller names is refused when a cell has no support.
+  - Tests: `night_routine.test.js` 9/9; `shelter.test.js` 11/11; `craft_needs.test.js` 33/33; `src/agent/**` 236/236; lint 254.
 - **Next:**
-  1. the #195 review, and the #198 follow-up **#202** (branch `agent/skills-rotn/craft-table-finally`, lead request on #198):
-     - `craftRecipe`'s own path places its table through `CRAFT_TABLE_OPS.place`, which guards a missing free space;
-     - a table it placed is picked up in a `finally`, also when `bot.craft` throws, and only once when `craftByFill` takes over;
-     - tests: placed and picked up after a craft and after a throw; a found table stays; placed and then the canFill craft (one pick-up); no free space; a 4-stick result on a held stack, counted by the gain.
-
-     `craft_needs.test.js` 31/31 (the 3 placed-table tests fail on the old `skills.js`); `src/agent/**` 214/214; lint 254;
-  2. D2b-2, the night routine: a shelter step at dusk (`NightClock`, `SHELTER_LEAD_MIN`); stay in at night; repair with `buildShelter({ site })`; fight only at the opening (`nightThreatNote`); leave at daylight; `torch_placing` kept off in the shelter (it is on by default); the shortfall over the cobblestone step's 8 gathered.
+  1. the D2b-2 review (and #202's merge);
+  2. after G3 (b) evidence: D1 (eat, AggroTP and invasion re-plan) and D3 (death report), as the lead orders them.
