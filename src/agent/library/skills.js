@@ -3,7 +3,8 @@ import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from "./rotn_sources.js";
-import { craftNeeds, describeNeeds } from "./craft_needs.js";
+import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
+import prismarineRecipe from "prismarine-recipe";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -110,9 +111,11 @@ export async function craftRecipe(bot, itemName, num=1) {
         const needs = craftNeeds(bot, itemName);
         if (needs && !needs.ready)
             log(bot, `You do not have the resources to craft ${itemName}. ${describeNeeds(itemName, needs)}`);
-        else if (needs)
-            // canFill says the items fit a RotN recipe, but mineflayer's recipesFor found no variant.
-            log(bot, `Could not craft ${itemName}: your items fit a RotN recipe, but no matching recipe variant was found. ${describeNeeds(itemName, needs)}`);
+        else if (needs) {
+            // canFill says the items fit a RotN recipe, but bot.registry has no variant for this mix
+            // (its variants are capped): craft from the bot's own stacks (C1).
+            return await craftByFill(bot, itemName, num, needs, craftingTable, placedTable);
+        }
         else {
             // No RotN craft way: upstream's text from the registry recipes, guarded (#151 review).
             let first = null;
@@ -138,7 +141,7 @@ export async function craftRecipe(bot, itemName, num=1) {
     const inventory = Object.fromEntries(Object.keys(requiredIngredients).map(name => [name, countItem(bot, name)]));
     const craftLimit = mc.calculateLimitingResource(inventory, requiredIngredients);
     
-    await bot.craft(recipe, Math.min(craftLimit.num, num), craftingTable);
+    await craftPausingAutoEat(bot, recipe, Math.min(craftLimit.num, num), craftingTable);
     if(craftLimit.num<num) log(bot, `Not enough ${craftLimit.limitingResource} to craft ${num}, crafted ${craftLimit.num}. You now have ${countItem(bot, itemName)} ${itemName}.`);
     else log(bot, `Successfully crafted ${itemName}, you now have ${countItem(bot, itemName)} ${itemName}.`);
     if (placedTable) {
@@ -149,6 +152,83 @@ export async function craftRecipe(bot, itemName, num=1) {
     //There is probablly a more efficient method than checking the entire inventory but this is all mineflayer-armor-manager provides. :P
     bot.armorManager.equipAll(); 
 
+    return true;
+}
+
+/**
+ * bot.craft with mineflayer-auto-eat paused: it clicks the inventory too, and an eat in the middle of
+ * a craft got a click rejected in net-forge's offline test (Request 2 answer). It is enabled again
+ * afterwards only if it was on before. An eat already under way is given up to `eatWaitMs` to finish.
+ */
+export async function craftPausingAutoEat(bot, recipe, count, table, eatWaitMs = 3000) {
+    const autoEat = bot.autoEat;
+    const wasOn = !!autoEat && typeof autoEat.disable === 'function' && !autoEat.disabled;
+    if (wasOn) autoEat.disable();
+    try {
+        for (let waited = 0; autoEat?.isEating && waited < eatWaitMs; waited += 100)
+            await new Promise(resolve => setTimeout(resolve, 100));
+        await bot.craft(recipe, count, table);
+    } finally {
+        if (wasOn) autoEat.enable?.();
+    }
+}
+
+/**
+ * Craft by rotn-data's recipe with the stacks canFill assigns (C1): for a mix of kinds (1 igneous and
+ * 2 metamorphic rocks for a stone pickaxe) that bot.registry's capped variants leave out. One craft at
+ * a time, judged afresh each time, at a crafting table when the recipe needs one.
+ * `table` and `placed` carry a table craftRecipe already found or placed, so it is not placed twice.
+ * @returns {Promise<boolean>} true if at least one was crafted.
+ */
+async function craftByFill(bot, itemName, num, needs, table = null, placed = false) {
+    if (!needs.requiresTable) {
+        if (placed) await collectBlock(bot, 'crafting_table', 1);
+        table = null;
+        placed = false;
+    }
+    else {
+        table ??= world.getNearestBlock(bot, 'crafting_table', 16);
+        if (!table) {
+            if (countItem(bot, 'crafting_table') < 1) {
+                log(bot, `Crafting ${itemName} requires a crafting table.`);
+                return false;
+            }
+            const pos = world.getNearestFreeSpace(bot, 1, 6);
+            await placeBlock(bot, 'crafting_table', pos.x, pos.y, pos.z);
+            table = world.getNearestBlock(bot, 'crafting_table', 16);
+            placed = !!table;
+            if (!table) {
+                log(bot, `Could not place a crafting table to craft ${itemName}.`);
+                return false;
+            }
+        }
+        if (bot.entity.position.distanceTo(table.position) > 4)
+            await goToNearestBlock(bot, 'crafting_table', 4, 16);
+    }
+    const { Recipe } = prismarineRecipe(bot.registry);
+    let made = 0;
+    let why = null;
+    while (made < num && !bot.interrupt_code) {
+        const fill = fillNow(bot, needs.recipeId);
+        if (!fill?.ok) { why = made === 0 ? 'the items no longer fit the recipe' : null; break; }
+        let recipe;
+        try {
+            recipe = new Recipe(filledRecipe(bot.registry, needs.recipeId, fill.assignment));
+        } catch (err) {
+            why = err.message;
+            break;
+        }
+        await craftPausingAutoEat(bot, recipe, 1, table);
+        made++;
+    }
+    if (placed) await collectBlock(bot, 'crafting_table', 1);
+    if (made === 0) {
+        log(bot, `Could not craft ${itemName}: ${why ?? 'nothing was crafted'}. ${describeNeeds(itemName, needs)}`);
+        return false;
+    }
+    if (made < num) log(bot, `Crafted ${made} of ${num} ${itemName} from mixed items; not enough for more. You now have ${countItem(bot, itemName)} ${itemName}.`);
+    else log(bot, `Successfully crafted ${itemName} from mixed items, you now have ${countItem(bot, itemName)} ${itemName}.`);
+    bot.armorManager?.equipAll();
     return true;
 }
 
