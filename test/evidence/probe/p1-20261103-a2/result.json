@@ -1,0 +1,329 @@
+{
+  "scenario": "probe-craft-place",
+  "gate": "P1",
+  "title": "Probe P1: crafting (REID ids, FastWorkbench), placing and eating on the real RotN server (a probe, never a gate)",
+  "runId": "20261103t152533-995167",
+  "pass": false,
+  "checksPassed": true,
+  "gateValid": false,
+  "weakenedParams": [
+    "P1 is a probe of crafting, placing and eating, never a gate pass"
+  ],
+  "verdict": "SMOKE-PASS (not a gate pass)",
+  "passed": 8,
+  "failed": 0,
+  "durationS": 185,
+  "params": {
+    "bot": "<bot>",
+    "loginTimeoutMs": 240000,
+    "settleMs": 10000,
+    "replyTimeoutMs": 75000,
+    "stepAbortMs": 120000,
+    "pollMs": 1000,
+    "tpSettleMs": 3000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "lateReplyMs": 5000,
+    "latePollMs": 1000,
+    "foodWaitMs": 40000,
+    "foodPollMs": 2000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "The bot logs in with its own account (online mode)"
+    },
+    {
+      "check": "setup",
+      "pass": true,
+      "detail": "5/5 gives confirmed; table: found; food objective: added",
+      "readyToTry": "The test server set the probe up: the items were given and the crafting table stands at its place"
+    },
+    {
+      "check": "craft_crude_axe",
+      "pass": true,
+      "detail": "driver ok=true; pyrotech:crude_axe 1 (want 1), pyrotech:rock 7 (want 7)",
+      "readyToTry": "crafttweaker:pyro_crude_axe (2x2) crafted: the driver reports it, and the server counts the crude axe and the rocks left"
+    },
+    {
+      "check": "craft_crafting_tools",
+      "pass": true,
+      "detail": "driver ok=true; contenttweaker:crafting_tools 1 (want 1), pyrotech:crude_axe 0 (want 0)",
+      "readyToTry": "crafttweaker:crafting_tools (2x2) crafted, confirmed by the server's counts"
+    },
+    {
+      "check": "craft_crafting_table",
+      "pass": true,
+      "detail": "driver ok=true; minecraft:crafting_table 1 (want 1), minecraft:planks 0 (want 0)",
+      "readyToTry": "crafttweaker:crafting_table (2x2) crafted, confirmed by the server's counts"
+    },
+    {
+      "check": "craft_stone_pickaxe",
+      "pass": true,
+      "detail": "driver ok=true; minecraft:stone_pickaxe 1 (want 1), pyrotech:rock 3 (want 3)",
+      "readyToTry": "crafttweaker:stone_pickaxe (3x3) crafted at the placed table, confirmed by the server's counts"
+    },
+    {
+      "check": "place_5",
+      "pass": true,
+      "detail": "5/5 placed and confirmed; update latencies ms: 1158, 589, 1095, 904, 634",
+      "readyToTry": "Five cobblestones placed, each confirmed by testforblock; the block update latency recorded"
+    },
+    {
+      "check": "eat",
+      "pass": true,
+      "detail": "server food 15; driver ok=true; food 15 -> 18; bread left 1 (want 1)",
+      "readyToTry": "Bread eaten: the food was below 20 first (server and driver), went up, and the server counts one bread less"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "capture": "captures\\raw\\<bot>-2026-11-03T15-25-39-823Z.jsonl",
+    "landing": {
+      "planned": [
+        -45,
+        66,
+        -66
+      ],
+      "teleportedTo": [
+        -44.5,
+        66,
+        -65.5
+      ],
+      "botPosition": [
+        -44.5,
+        66,
+        -65.5
+      ]
+    },
+    "setup": {
+      "gives": [
+        {
+          "item": "pyrotech:rock",
+          "n": 8,
+          "ok": true
+        },
+        {
+          "item": "minecraft:stick",
+          "n": 6,
+          "ok": true
+        },
+        {
+          "item": "minecraft:planks",
+          "n": 1,
+          "ok": true
+        },
+        {
+          "item": "minecraft:bread",
+          "n": 2,
+          "ok": true
+        },
+        {
+          "item": "minecraft:cobblestone",
+          "n": 8,
+          "ok": true
+        }
+      ],
+      "table": "found",
+      "foodObjective": "added",
+      "hunger": [
+        22,
+        19
+      ]
+    },
+    "crafts": [
+      {
+        "recipeId": "crafttweaker:pyro_crude_axe",
+        "grid": "2x2",
+        "ok": true,
+        "error": null,
+        "result": "pyrotech:crude_axe",
+        "before": 0,
+        "after": 1,
+        "ms": 589,
+        "variant": 0,
+        "tableBlock": null,
+        "counts": {
+          "pyrotech:crude_axe": 1,
+          "pyrotech:rock": 7
+        },
+        "want": {
+          "pyrotech:crude_axe": 1,
+          "pyrotech:rock": 7
+        }
+      },
+      {
+        "recipeId": "crafttweaker:crafting_tools",
+        "grid": "2x2",
+        "ok": true,
+        "error": null,
+        "result": "contenttweaker:crafting_tools",
+        "before": 0,
+        "after": 1,
+        "ms": 513,
+        "variant": 0,
+        "tableBlock": null,
+        "counts": {
+          "contenttweaker:crafting_tools": 1,
+          "pyrotech:crude_axe": 0
+        },
+        "want": {
+          "contenttweaker:crafting_tools": 1,
+          "pyrotech:crude_axe": 0
+        }
+      },
+      {
+        "recipeId": "crafttweaker:crafting_table",
+        "grid": "2x2",
+        "ok": true,
+        "error": null,
+        "result": "minecraft:crafting_table",
+        "before": 0,
+        "after": 1,
+        "ms": 490,
+        "variant": 0,
+        "tableBlock": null,
+        "counts": {
+          "minecraft:crafting_table": 1,
+          "minecraft:planks": 0
+        },
+        "want": {
+          "minecraft:crafting_table": 1,
+          "minecraft:planks": 0
+        }
+      },
+      {
+        "recipeId": "crafttweaker:stone_pickaxe",
+        "grid": "3x3",
+        "ok": true,
+        "error": null,
+        "result": "minecraft:stone_pickaxe",
+        "before": 0,
+        "after": 1,
+        "ms": 1271,
+        "variant": 0,
+        "tableBlock": "minecraft:crafting_table",
+        "counts": {
+          "minecraft:stone_pickaxe": 1,
+          "pyrotech:rock": 3
+        },
+        "want": {
+          "minecraft:stone_pickaxe": 1,
+          "pyrotech:rock": 3
+        }
+      }
+    ],
+    "places": [
+      {
+        "cell": [
+          -47,
+          66,
+          -66
+        ],
+        "ok": true,
+        "updateMs": 1158,
+        "totalMs": 1158,
+        "after": "minecraft:cobblestone",
+        "error": null,
+        "server": true
+      },
+      {
+        "cell": [
+          -45,
+          66,
+          -68
+        ],
+        "ok": true,
+        "updateMs": 589,
+        "totalMs": 589,
+        "after": "minecraft:cobblestone",
+        "error": null,
+        "server": true
+      },
+      {
+        "cell": [
+          -45,
+          66,
+          -64
+        ],
+        "ok": true,
+        "updateMs": 1095,
+        "totalMs": 1095,
+        "after": "minecraft:cobblestone",
+        "error": null,
+        "server": true
+      },
+      {
+        "cell": [
+          -47,
+          66,
+          -68
+        ],
+        "ok": true,
+        "updateMs": 904,
+        "totalMs": 904,
+        "after": "minecraft:cobblestone",
+        "error": null,
+        "server": true
+      },
+      {
+        "cell": [
+          -47,
+          66,
+          -64
+        ],
+        "ok": true,
+        "updateMs": 634,
+        "totalMs": 634,
+        "after": "minecraft:cobblestone",
+        "error": null,
+        "server": true
+      }
+    ],
+    "placeLatencyMs": [
+      1158,
+      589,
+      1095,
+      904,
+      634
+    ],
+    "foodBeforeEat": {
+      "server": 15,
+      "read": true,
+      "waitedMs": 116877
+    },
+    "eat": {
+      "ok": true,
+      "foodBefore": 15,
+      "foodAfter": 18,
+      "countBefore": 2,
+      "countAfter": 1,
+      "ms": 1736,
+      "error": null,
+      "breadLeft": 1,
+      "serverFoodBefore": 15
+    }
+  },
+  "botExitCode": 128,
+  "botExitSignal": "SIGTERM",
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "defbaa6931d75a6ed9aa02b125eea64bbbbf65ff",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261103-152018",
+  "driver": "node packages/forge-bridge/tools/g1-driver.mjs"
+}

@@ -1,0 +1,872 @@
+{
+  "windowClicks": {
+    "total": 33,
+    "accepted": 33,
+    "rejected": 0,
+    "unanswered": 0,
+    "reidClicks": 7,
+    "reidRejected": 0,
+    "maxItemId": 12510,
+    "items": [
+      {
+        "id": 5,
+        "name": "minecraft:planks",
+        "clicks": 1,
+        "reid": false
+      },
+      {
+        "id": 58,
+        "name": "minecraft:crafting_table",
+        "clicks": 1,
+        "reid": false
+      },
+      {
+        "id": 274,
+        "name": "minecraft:stone_pickaxe",
+        "clicks": 1,
+        "reid": false
+      },
+      {
+        "id": 280,
+        "name": "minecraft:stick",
+        "clicks": 3,
+        "reid": false
+      },
+      {
+        "id": 8917,
+        "name": "pyrotech:rock",
+        "clicks": 3,
+        "reid": true
+      },
+      {
+        "id": 9075,
+        "name": "pyrotech:crude_axe",
+        "clicks": 2,
+        "reid": true
+      },
+      {
+        "id": 12510,
+        "name": "contenttweaker:crafting_tools",
+        "clicks": 2,
+        "reid": true
+      }
+    ]
+  },
+  "clicks": [
+    {
+      "t": 74858,
+      "windowId": 0,
+      "slot": 36,
+      "button": 0,
+      "mode": 0,
+      "action": 1,
+      "item": {
+        "id": 8917,
+        "count": 8,
+        "damage": 0,
+        "name": "pyrotech:rock"
+      },
+      "accepted": true,
+      "answerMs": 66
+    },
+    {
+      "t": 74925,
+      "windowId": 0,
+      "slot": 1,
+      "button": 1,
+      "mode": 0,
+      "action": 2,
+      "item": null,
+      "accepted": true,
+      "answerMs": 78
+    },
+    {
+      "t": 75003,
+      "windowId": 0,
+      "slot": 37,
+      "button": 0,
+      "mode": 0,
+      "action": 3,
+      "item": {
+        "id": 280,
+        "count": 6,
+        "damage": 0,
+        "name": "minecraft:stick"
+      },
+      "accepted": true,
+      "answerMs": 49
+    },
+    {
+      "t": 75052,
+      "windowId": 0,
+      "slot": 2,
+      "button": 1,
+      "mode": 0,
+      "action": 4,
+      "item": null,
+      "accepted": true,
+      "answerMs": 96
+    },
+    {
+      "t": 75149,
+      "windowId": 0,
+      "slot": 3,
+      "button": 1,
+      "mode": 0,
+      "action": 5,
+      "item": null,
+      "accepted": true,
+      "answerMs": 60
+    },
+    {
+      "t": 75210,
+      "windowId": 0,
+      "slot": 9,
+      "button": 0,
+      "mode": 0,
+      "action": 6,
+      "item": null,
+      "accepted": true,
+      "answerMs": 61
+    },
+    {
+      "t": 75272,
+      "windowId": 0,
+      "slot": 0,
+      "button": 0,
+      "mode": 0,
+      "action": 7,
+      "item": {
+        "id": 9075,
+        "count": 1,
+        "damage": 0,
+        "name": "pyrotech:crude_axe"
+      },
+      "accepted": true,
+      "answerMs": 117
+    },
+    {
+      "t": 75389,
+      "windowId": 0,
+      "slot": 10,
+      "button": 0,
+      "mode": 0,
+      "action": 8,
+      "item": null,
+      "accepted": true,
+      "answerMs": 58
+    },
+    {
+      "t": 85608,
+      "windowId": 0,
+      "slot": 10,
+      "button": 0,
+      "mode": 0,
+      "action": 9,
+      "item": {
+        "id": 9075,
+        "count": 1,
+        "damage": 0,
+        "name": "pyrotech:crude_axe"
+      },
+      "accepted": true,
+      "answerMs": 70
+    },
+    {
+      "t": 85678,
+      "windowId": 0,
+      "slot": 4,
+      "button": 1,
+      "mode": 0,
+      "action": 10,
+      "item": null,
+      "accepted": true,
+      "answerMs": 56
+    },
+    {
+      "t": 85734,
+      "windowId": 0,
+      "slot": 37,
+      "button": 0,
+      "mode": 0,
+      "action": 11,
+      "item": {
+        "id": 8917,
+        "count": 7,
+        "damage": 0,
+        "name": "pyrotech:rock"
+      },
+      "accepted": true,
+      "answerMs": 47
+    },
+    {
+      "t": 85781,
+      "windowId": 0,
+      "slot": 3,
+      "button": 1,
+      "mode": 0,
+      "action": 12,
+      "item": null,
+      "accepted": true,
+      "answerMs": 53
+    },
+    {
+      "t": 85834,
+      "windowId": 0,
+      "slot": 9,
+      "button": 0,
+      "mode": 0,
+      "action": 13,
+      "item": {
+        "id": 280,
+        "count": 4,
+        "damage": 0,
+        "name": "minecraft:stick"
+      },
+      "accepted": true,
+      "answerMs": 47
+    },
+    {
+      "t": 85882,
+      "windowId": 0,
+      "slot": 2,
+      "button": 1,
+      "mode": 0,
+      "action": 14,
+      "item": null,
+      "accepted": true,
+      "answerMs": 47
+    },
+    {
+      "t": 85929,
+      "windowId": 0,
+      "slot": 10,
+      "button": 0,
+      "mode": 0,
+      "action": 15,
+      "item": null,
+      "accepted": true,
+      "answerMs": 49
+    },
+    {
+      "t": 85979,
+      "windowId": 0,
+      "slot": 0,
+      "button": 0,
+      "mode": 0,
+      "action": 16,
+      "item": {
+        "id": 12510,
+        "count": 1,
+        "damage": 0,
+        "name": "contenttweaker:crafting_tools"
+      },
+      "accepted": true,
+      "answerMs": 87
+    },
+    {
+      "t": 86066,
+      "windowId": 0,
+      "slot": 11,
+      "button": 0,
+      "mode": 0,
+      "action": 17,
+      "item": null,
+      "accepted": true,
+      "answerMs": 55
+    },
+    {
+      "t": 96548,
+      "windowId": 0,
+      "slot": 38,
+      "button": 0,
+      "mode": 0,
+      "action": 18,
+      "item": {
+        "id": 5,
+        "count": 1,
+        "damage": 0,
+        "name": "minecraft:planks"
+      },
+      "accepted": true,
+      "answerMs": 77
+    },
+    {
+      "t": 96625,
+      "windowId": 0,
+      "slot": 4,
+      "button": 1,
+      "mode": 0,
+      "action": 19,
+      "item": null,
+      "accepted": true,
+      "answerMs": 55
+    },
+    {
+      "t": 96680,
+      "windowId": 0,
+      "slot": 11,
+      "button": 0,
+      "mode": 0,
+      "action": 20,
+      "item": {
+        "id": 12510,
+        "count": 1,
+        "damage": 0,
+        "name": "contenttweaker:crafting_tools"
+      },
+      "accepted": true,
+      "answerMs": 99
+    },
+    {
+      "t": 96780,
+      "windowId": 0,
+      "slot": 3,
+      "button": 1,
+      "mode": 0,
+      "action": 21,
+      "item": null,
+      "accepted": true,
+      "answerMs": 62
+    },
+    {
+      "t": 96842,
+      "windowId": 0,
+      "slot": 0,
+      "button": 0,
+      "mode": 0,
+      "action": 22,
+      "item": {
+        "id": 58,
+        "count": 1,
+        "damage": 0,
+        "name": "minecraft:crafting_table"
+      },
+      "accepted": true,
+      "answerMs": 136
+    },
+    {
+      "t": 96978,
+      "windowId": 0,
+      "slot": 11,
+      "button": 0,
+      "mode": 0,
+      "action": 23,
+      "item": null,
+      "accepted": true,
+      "answerMs": 60
+    },
+    {
+      "t": 108376,
+      "windowId": 1,
+      "slot": 10,
+      "button": 0,
+      "mode": 0,
+      "action": 24,
+      "item": {
+        "id": 8917,
+        "count": 6,
+        "damage": 0,
+        "name": "pyrotech:rock"
+      },
+      "accepted": true,
+      "answerMs": 49
+    },
+    {
+      "t": 108426,
+      "windowId": 1,
+      "slot": 1,
+      "button": 1,
+      "mode": 0,
+      "action": 25,
+      "item": null,
+      "accepted": true,
+      "answerMs": 84
+    },
+    {
+      "t": 108510,
+      "windowId": 1,
+      "slot": 2,
+      "button": 1,
+      "mode": 0,
+      "action": 26,
+      "item": null,
+      "accepted": true,
+      "answerMs": 71
+    },
+    {
+      "t": 108581,
+      "windowId": 1,
+      "slot": 3,
+      "button": 1,
+      "mode": 0,
+      "action": 27,
+      "item": null,
+      "accepted": true,
+      "answerMs": 61
+    },
+    {
+      "t": 108642,
+      "windowId": 1,
+      "slot": 11,
+      "button": 0,
+      "mode": 0,
+      "action": 28,
+      "item": {
+        "id": 280,
+        "count": 3,
+        "damage": 0,
+        "name": "minecraft:stick"
+      },
+      "accepted": true,
+      "answerMs": 39
+    },
+    {
+      "t": 108681,
+      "windowId": 1,
+      "slot": 5,
+      "button": 1,
+      "mode": 0,
+      "action": 29,
+      "item": null,
+      "accepted": true,
+      "answerMs": 55
+    },
+    {
+      "t": 108737,
+      "windowId": 1,
+      "slot": 8,
+      "button": 1,
+      "mode": 0,
+      "action": 30,
+      "item": null,
+      "accepted": true,
+      "answerMs": 49
+    },
+    {
+      "t": 108786,
+      "windowId": 1,
+      "slot": 10,
+      "button": 0,
+      "mode": 0,
+      "action": 31,
+      "item": null,
+      "accepted": true,
+      "answerMs": 43
+    },
+    {
+      "t": 108829,
+      "windowId": 1,
+      "slot": 0,
+      "button": 0,
+      "mode": 0,
+      "action": 32,
+      "item": {
+        "id": 274,
+        "count": 1,
+        "damage": 0,
+        "name": "minecraft:stone_pickaxe"
+      },
+      "accepted": true,
+      "answerMs": 76
+    },
+    {
+      "t": 108906,
+      "windowId": 1,
+      "slot": 13,
+      "button": 0,
+      "mode": 0,
+      "action": 33,
+      "item": null,
+      "accepted": true,
+      "answerMs": 62
+    }
+  ],
+  "fastbench": {
+    "modWindows": [
+      {
+        "t": 108374,
+        "modId": "fastbench",
+        "windowId": 1,
+        "inventoryType": "minecraft:crafting_table",
+        "windowTitle": "{\"translate\":\"container.crafting\"}"
+      }
+    ],
+    "payloads": 10
+  },
+  "tableCraft": {
+    "windowId": 1,
+    "openedT": 108374,
+    "closedT": 108968,
+    "clicks": [
+      {
+        "t": 108376,
+        "windowId": 1,
+        "slot": 10,
+        "button": 0,
+        "mode": 0,
+        "action": 24,
+        "item": {
+          "id": 8917,
+          "count": 6,
+          "damage": 0,
+          "name": "pyrotech:rock"
+        },
+        "accepted": true,
+        "answerMs": 49
+      },
+      {
+        "t": 108426,
+        "windowId": 1,
+        "slot": 1,
+        "button": 1,
+        "mode": 0,
+        "action": 25,
+        "item": null,
+        "accepted": true,
+        "answerMs": 84
+      },
+      {
+        "t": 108510,
+        "windowId": 1,
+        "slot": 2,
+        "button": 1,
+        "mode": 0,
+        "action": 26,
+        "item": null,
+        "accepted": true,
+        "answerMs": 71
+      },
+      {
+        "t": 108581,
+        "windowId": 1,
+        "slot": 3,
+        "button": 1,
+        "mode": 0,
+        "action": 27,
+        "item": null,
+        "accepted": true,
+        "answerMs": 61
+      },
+      {
+        "t": 108642,
+        "windowId": 1,
+        "slot": 11,
+        "button": 0,
+        "mode": 0,
+        "action": 28,
+        "item": {
+          "id": 280,
+          "count": 3,
+          "damage": 0,
+          "name": "minecraft:stick"
+        },
+        "accepted": true,
+        "answerMs": 39
+      },
+      {
+        "t": 108681,
+        "windowId": 1,
+        "slot": 5,
+        "button": 1,
+        "mode": 0,
+        "action": 29,
+        "item": null,
+        "accepted": true,
+        "answerMs": 55
+      },
+      {
+        "t": 108737,
+        "windowId": 1,
+        "slot": 8,
+        "button": 1,
+        "mode": 0,
+        "action": 30,
+        "item": null,
+        "accepted": true,
+        "answerMs": 49
+      },
+      {
+        "t": 108786,
+        "windowId": 1,
+        "slot": 10,
+        "button": 0,
+        "mode": 0,
+        "action": 31,
+        "item": null,
+        "accepted": true,
+        "answerMs": 43
+      },
+      {
+        "t": 108829,
+        "windowId": 1,
+        "slot": 0,
+        "button": 0,
+        "mode": 0,
+        "action": 32,
+        "item": {
+          "id": 274,
+          "count": 1,
+          "damage": 0,
+          "name": "minecraft:stone_pickaxe"
+        },
+        "accepted": true,
+        "answerMs": 76
+      },
+      {
+        "t": 108906,
+        "windowId": 1,
+        "slot": 13,
+        "button": 0,
+        "mode": 0,
+        "action": 33,
+        "item": null,
+        "accepted": true,
+        "answerMs": 62
+      }
+    ],
+    "setSlots": [
+      {
+        "t": 108375,
+        "windowId": -1,
+        "slot": -1,
+        "item": null
+      },
+      {
+        "t": 108375,
+        "windowId": 1,
+        "slot": 10,
+        "item": {
+          "id": 8917,
+          "count": 6,
+          "damage": 0,
+          "name": "pyrotech:rock"
+        }
+      },
+      {
+        "t": 108375,
+        "windowId": 1,
+        "slot": 11,
+        "item": {
+          "id": 280,
+          "count": 3,
+          "damage": 0,
+          "name": "minecraft:stick"
+        }
+      },
+      {
+        "t": 108375,
+        "windowId": 1,
+        "slot": 12,
+        "item": {
+          "id": 58,
+          "count": 1,
+          "damage": 0,
+          "name": "minecraft:crafting_table"
+        }
+      },
+      {
+        "t": 108375,
+        "windowId": 1,
+        "slot": 40,
+        "item": {
+          "id": 297,
+          "count": 2,
+          "damage": 0,
+          "name": "minecraft:bread"
+        }
+      },
+      {
+        "t": 108375,
+        "windowId": 1,
+        "slot": 41,
+        "item": {
+          "id": 4,
+          "count": 8,
+          "damage": 0,
+          "name": "minecraft:cobblestone"
+        }
+      },
+      {
+        "t": 108508,
+        "windowId": 1,
+        "slot": 0,
+        "item": {
+          "id": 77,
+          "count": 1,
+          "damage": 0,
+          "name": "minecraft:stone_button"
+        }
+      },
+      {
+        "t": 108580,
+        "windowId": 1,
+        "slot": 0,
+        "item": null
+      },
+      {
+        "t": 108786,
+        "windowId": 1,
+        "slot": 0,
+        "item": {
+          "id": 274,
+          "count": 1,
+          "damage": 0,
+          "name": "minecraft:stone_pickaxe"
+        }
+      },
+      {
+        "t": 108883,
+        "windowId": 1,
+        "slot": 0,
+        "item": {
+          "id": 291,
+          "count": 1,
+          "damage": 0,
+          "name": "minecraft:stone_hoe"
+        }
+      },
+      {
+        "t": 108889,
+        "windowId": 1,
+        "slot": 0,
+        "item": null
+      },
+      {
+        "t": 108903,
+        "windowId": 1,
+        "slot": 0,
+        "item": {
+          "id": 12617,
+          "count": 2,
+          "damage": 0,
+          "name": "contenttweaker:broken_stick"
+        }
+      },
+      {
+        "t": 108905,
+        "windowId": 1,
+        "slot": 0,
+        "item": null
+      },
+      {
+        "t": 109045,
+        "windowId": 0,
+        "slot": 9,
+        "item": {
+          "id": 280,
+          "count": 1,
+          "damage": 0,
+          "name": "minecraft:stick"
+        }
+      },
+      {
+        "t": 109046,
+        "windowId": 0,
+        "slot": 10,
+        "item": {
+          "id": 8917,
+          "count": 3,
+          "damage": 0,
+          "name": "pyrotech:rock"
+        }
+      },
+      {
+        "t": 109048,
+        "windowId": 0,
+        "slot": 12,
+        "item": {
+          "id": 274,
+          "count": 1,
+          "damage": 0,
+          "name": "minecraft:stone_pickaxe"
+        }
+      }
+    ],
+    "fastbenchPayloads": 10
+  },
+  "blockPlaces": [
+    {
+      "t": 108236,
+      "location": {
+        "x": -43,
+        "y": 66,
+        "z": -66
+      },
+      "direction": 1
+    },
+    {
+      "t": 119860,
+      "location": {
+        "x": -47,
+        "y": 65,
+        "z": -66
+      },
+      "direction": 1
+    },
+    {
+      "t": 128578,
+      "location": {
+        "x": -45,
+        "y": 65,
+        "z": -68
+      },
+      "direction": 1
+    },
+    {
+      "t": 138140,
+      "location": {
+        "x": -45,
+        "y": 65,
+        "z": -64
+      },
+      "direction": 1
+    },
+    {
+      "t": 146993,
+      "location": {
+        "x": -47,
+        "y": 65,
+        "z": -68
+      },
+      "direction": 1
+    },
+    {
+      "t": 155761,
+      "location": {
+        "x": -47,
+        "y": 65,
+        "z": -64
+      },
+      "direction": 1
+    }
+  ],
+  "limits": [
+    {
+      "t": 13287,
+      "name": "channel_limit",
+      "kind": "event",
+      "dir": "S2C",
+      "channel": "aether_legacy",
+      "limit": 2000
+    }
+  ],
+  "packetCounts": {
+    "S2C login": 1,
+    "C2S held_item_slot": 3,
+    "S2C window_items": 2,
+    "S2C set_slot": 67,
+    "S2C entity_effect": 8,
+    "S2C map_chunk": 40,
+    "S2C spawn_entity": 35,
+    "S2C entity_metadata": 300,
+    "S2C block_change": 300,
+    "S2C spawn_entity_living": 100,
+    "S2C remove_entity_effect": 2,
+    "C2S window_click": 33,
+    "S2C transaction": 33,
+    "C2S block_place": 6,
+    "C2S close_window": 1,
+    "C2S use_item": 1
+  }
+}

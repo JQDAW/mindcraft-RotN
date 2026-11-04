@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-03T15:42Z (from `date -u`)
+Updated: 2026-11-03T15:53Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -46,7 +46,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 - **#164 E2 agenda: merged** (`ebdc6b1`). Its merge nits went to E3 and are fixed in #174 (`51d4c5e9`).
 - **#170 F1 profile:** lead REQUEST CHANGES, fixed in `837cc2c6`: `"name": "FRCFLD"` (lead decision: the bot is FRCFLD, here and on the CX23), with a test of the exact name. The `speak_model` nit is left as is (`settings.speak` is false). Reply posted; CI green. **Approved** by the lead (2026-11-03), merge pending.
 - **#175 approved** by the lead (merge pending): the #151 nit (branch `agent/skills-rotn/craft-needs-slot`, base `develop`). `craft_needs.js` finds an input's own recipe slot by its exact stack list (size `choices + more`, every choice in it). Before, `soaking_pot`'s 1-stack slot counted string from the twine slot. The new test fails on the old code; library and command tests pass 57/57.
-- **#174 E3 priority stack** (branch `agent/skills-rotn/priority-stack`, now based on `develop`, with develop merged in). The #164 nits are fixed in `51d4c5e9`:
+- **#174 E3 priority stack: merged** (develop `5f8e460`). Also merged: #170 (the RotN profile, bot FRCFLD), #175 (the #151 slot nit), #181 (D2a) and #186 (D2c). From here STATUS lives on my current branch (#190). The #164 nits are fixed in `51d4c5e9`:
   - someone else's `!goal` is not counted against the agenda, and the model's `!goal` is refused while the agenda or a task runs the self-prompter;
   - a run carried into the next step counts as that step's run;
   - LLM time is saved every 10 s. This also fixes the E2 bug that the time was never saved by the timer;
@@ -73,7 +73,7 @@ G3 (PLAN): **(a)** rocks to stone tools on a fresh spawn; **(b)** survives the f
 
   This fixes #164's known limit (`!stop`/`!stfu` undone by the agenda). Tests: `src/agent/**` 170/170; lint 254.
 - **Next, in order:**
-  1. the #174 re-review;
+  1. the #190 review;
   2. C1 crafting execution and C2 (first plank). Net-forge's final Request 2 answer is in #167, which is not merged yet, and P1 (paid, lead GO) measures the place timing. Until then C1 stays blocked;
   3. D2 night shelter, for G3 (b).
      - **D2a, #181: merged** (wall-clock fallback accepted by the lead). Branch `agent/skills-rotn/night-shelter`: `library/night.js`, pure functions, not called yet. **Lead decision applied** (`c3cbc428`): world time first; when it is stuck longer than the freeze plus a margin (15 min), `NightClock` falls back and logs it.
@@ -199,12 +199,10 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 8. ~~Lead: the skills name space for B1b~~: **accepted** (2026-11-02). The command boundary hands skills the bot's 1.12 names in rotn-data's `formatOld` convention; a 1.21 name maps to its exact variant (`oak_log` = `log:0`, oak only), a plain 1.12 `log` means any log. No ADR; documented in the B1b PR.
 9. ~~rotn-data: `isHuntable` reads the 1.21 baby flag~~: done in #125 (`mc.isBaby`, index 12). My follow-up: switch `names112.isBaby` callers to `mc.isBaby` (queued).
 10. ~~Lead: `getDetailedCraftingPlan` reading ingredient metas~~: decided (lead): it goes to rotn-data (the `mcdata.js` recipe helpers), low priority, after G3 unless C1 needs it.
-12. ~~rotn-data (from D2c, #186): a structured do-not-look field~~: **done in rotn-data #187** (`lookAt`). #190 switches `threats.js` to `lookAt === false`, which now also covers the ender creeper and the cockatrice. **Still open (data):** on develop `threatOf('iceandfire:gorgon')` is `fight` with `lookAt: true`, but its gaze petrifies a player who looks at it. Also, data notes from the #186 review: `ender_dragon`, `wither`, `ghast` and `blaze` come back as `fight`, and `zombie_horse` as hostile. None is a first-night overworld mob.
+12. ~~rotn-data (from D2c, #186): a structured do-not-look field~~: **done in rotn-data #187** (`lookAt`). #190 switches `threats.js` to `lookAt === false`, which now also covers the ender creeper and the cockatrice. The data notes (the gorgon, ender dragon, wither, ghast, blaze, zombie horse) are **done in rotn-data #188**: the gorgon is now `avoid` with `lookAt: false`, rechecked on develop and asserted in #190's test.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
 
-- #170 F1 start, the RotN profile on the OpenRouter preset (branch `agent/skills-rotn/rotn-profile`). Serves the human decision on the model and brief item 7. Bot name FRCFLD (#170 review).
-- #175 the #151 nit: craft_needs matches each input's recipe slot by its exact stack list (branch `agent/skills-rotn/craft-needs-slot`).
-- #174 E3 priority stack (branch `agent/skills-rotn/priority-stack`, base `develop`). Serves brief item 4, G3 (c) and the lead's E3 requirements.
-- #190 the D2c follow-up: do-not-look from rotn-data's `lookAt` (branch `agent/skills-rotn/threat-lookat`). Serves the lead's #186 follow-up and G3 (b). #186 was squash-merged before this commit could be pushed (it waited for #187), so it is a new PR.
+- #190 the D2c follow-up: do-not-look from rotn-data's `lookAt`, now also the gorgon (branch `agent/skills-rotn/threat-lookat`). Serves the lead's #186 follow-up and G3 (b). In review.
+- Next: D2b (the shelter agenda step, placing, the night routine with `NightClock` and `nightThreatNote`). It waits for the P1 rerun evidence (harness-ops #189, in review).
