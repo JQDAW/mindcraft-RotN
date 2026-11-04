@@ -23,9 +23,6 @@ async function say(agent, message) {
 // update: the function that is called every tick (if on is true)
 // when a mode is active, it will trigger an action to be performed but won't wait for it to return output
 
-/** Actions that stand still on purpose, so unstuck leaves them alone (D2b: the shelter build). */
-export const STATIONARY_ACTIONS = ['action:buildShelter'];
-
 // the order of this list matters! first modes will be prioritized
 // while update functions are async, they should *not* be awaited longer than ~100ms as it will block the update loop
 // to perform longer actions, use the execute function which won't block the update loop
@@ -109,8 +106,9 @@ const modes_list = [
         free_timeout_ms: 10_000,
         prev_dig_block: null,
         update: async function (agent) {
-            // Building a shelter keeps the bot in its cell on purpose (D2b): not stuck.
-            if (agent.isIdle() || STATIONARY_ACTIONS.includes(agent.actions?.currentActionLabel)) {
+            // A skill that keeps the bot in place on purpose sets bot.rotnStationary while it does
+            // (D2b: the shelter build, once at the site; not the walk there, #195 review 6).
+            if (agent.isIdle() || agent.bot?.rotnStationary === true) {
                 this.prev_location = null;
                 this.stuck_time = 0;
                 return; // don't get stuck when idle
