@@ -197,7 +197,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 - **Worktree:** branch `agent/rotn-data/depacify-line`, from develop after #193 (`4432cef`). No background jobs, no subagents (the lead reviews).
 - **#193 merged** (`4432cef`), **skeleton horse (lead's GO: hostile with a cited override):** `entity-overrides.json` `minecraft:skeleton_horse` (targetsPlayers, verified from specialai-1.1.0 `AIHandler` depacify bytecode; Special_AI.cfg lines 16 and 25, hordes.cfg line 134) and a `fight` entry in `threat-reactions.json`. Tests: the entity-threats pinned list (14 entries); threats.test.js's "class rules apply to hostile mobs only" check now uses a temporary probe rule (wither skeleton gets it, villager does not), because no non-hostile class in the dump matches a rule once the horse is hostile (a dump-derived list would have been empty). entity-threats 6/6, threats 14/14, ESLint clean.
-- **#193 follow-up (lead), this branch:** `depacify_aggressive_chance=1.0` is on Special_AI.cfg line **16**, not 15 (checked in the pinned zip, SHA-256 `90642fd5...`): fixed in both skeleton horse citations (`entity-overrides.json`, `threat-reactions.json`), the zombie horse's (`threat-reactions.json`) and the entity-threats test comment. The other Special_AI.cfg and hordes.cfg line citations were checked against the zip; all correct.
+- **#193 follow-up (lead), PR #200 (this branch):** `depacify_aggressive_chance=1.0` is on Special_AI.cfg line **16**, not 15 (checked in the pinned zip, SHA-256 `90642fd5...`): fixed in both skeleton horse citations (`entity-overrides.json`, `threat-reactions.json`), the zombie horse's (`threat-reactions.json`) and the entity-threats test comment. The other Special_AI.cfg and hordes.cfg line citations were checked against the zip; all correct.
 - **Then:** wait for the lead's review of this PR.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
@@ -341,4 +341,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/depacify-line`: the #193 follow-up, Special_AI.cfg line 16 (Restart point).
+- #200 `agent/rotn-data/depacify-line`: the #193 follow-up, Special_AI.cfg line 16 (Restart point).
