@@ -16,11 +16,13 @@ const MARKED = {
     'iceandfire:deathworm': true, 'iceandfire:firedragon': true, 'iceandfire:icedragon': true, 'iceandfire:if_cockatrice': true,
     'iceandfire:seaserpent': true, 'mod_lavacow:salamander': false, 'mod_lavacow:scarecrow': false, 'mod_lavacow:unburied': false,
     'primitivemobs:grovesprite': false, 'primitivemobs:lily_lurker': false,
+    // Lead's GO (2026-11-03): Special AI's depacify makes it aggressive on this pack (Special_AI.cfg lines 16, 25).
+    'minecraft:skeleton_horse': false,
 }; // name -> dangerous
 
-test('the override list is exactly the reviewed one (13 entries, 33 reviewed and not marked)', () => {
+test('the override list is exactly the reviewed one (14 entries, 33 reviewed and not marked)', () => {
     assert.deepEqual(Object.keys(overrides.entities).sort(), Object.keys(MARKED).sort());
-    assert.equal(Object.keys(overrides.entities).length, 13);
+    assert.equal(Object.keys(overrides.entities).length, 14);
     for (const [name, dangerous] of Object.entries(MARKED)) {
         assert.equal(overrides.entities[name].dangerous, dangerous, name);
         assert.equal(overrides.entities[name].targetsPlayers, true, name);

@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T15:24Z (from `date -u`)
+Updated: 2026-11-04T23:17Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -193,11 +193,12 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - blocks/items: `betterwithaddons:world_scale_ore` hardness 15 -> 225 and `randomthings:spectrecoil_number` names (world or random values, known).
 - entities, spawns and serializers: unchanged. `common-mobs.json`: only its dump stamp changed.
 
-## Restart point (updated 2026-11-03T15:24Z)
+## Restart point (resumed 2026-11-04T22:51Z after the usage-limit pause)
 
-- **Worktree:** branches `agent/rotn-data/threat-look-bosses` (#187) and `agent/rotn-data/threat-bosses` (#188), both pushed. No background jobs except reviews.
-- **Open PRs:** #187 (structured `lookAt`, the sludge_wand lines) and #188 (bosses). They merge with each other cleanly, and both test files pass on the merged tree (checked in a temporary worktree).
-- **Then:** ask the lead. skills-rotn #186 can switch `doNotLook` to `t.lookAt === false` once #187 is in.
+- **Worktree:** branch `agent/rotn-data/depacify-line`, from develop after #193 (`4432cef`). No background jobs, no subagents (the lead reviews).
+- **#193 merged** (`4432cef`), **skeleton horse (lead's GO: hostile with a cited override):** `entity-overrides.json` `minecraft:skeleton_horse` (targetsPlayers, verified from specialai-1.1.0 `AIHandler` depacify bytecode; Special_AI.cfg lines 16 and 25, hordes.cfg line 134) and a `fight` entry in `threat-reactions.json`. Tests: the entity-threats pinned list (14 entries); threats.test.js's "class rules apply to hostile mobs only" check now uses a temporary probe rule (wither skeleton gets it, villager does not), because no non-hostile class in the dump matches a rule once the horse is hostile (a dump-derived list would have been empty). entity-threats 6/6, threats 14/14, ESLint clean.
+- **#193 follow-up (lead), PR #200 (this branch):** `depacify_aggressive_chance=1.0` is on Special_AI.cfg line **16**, not 15 (checked in the pinned zip, SHA-256 `90642fd5...`): fixed in both skeleton horse citations (`entity-overrides.json`, `threat-reactions.json`), the zombie horse's (`threat-reactions.json`) and the entity-threats test comment. The other Special_AI.cfg and hordes.cfg line citations were checked against the zip; all correct.
+- **Then:** wait for the lead's review of this PR.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
 - **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
@@ -210,7 +211,9 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
-- **#186 review data requests (lead).** (1) #187: `threatOf` and `nightThreats` return `lookAt` (false: enderman, rifted enderman, Special Mobs enderman variants and ender creeper, cockatrice via its override, all cited); it also carries the sludge_wand line fix (180-198; my push to #185 came after it had merged). Review: REQUEST CHANGES (the override path), fixed. (2) #188: ender dragon and wither `avoid`, ghast and blaze `take-cover` (ranged), zombie horse `ignore` (vanilla, with the pack configs that change them), gorgon `avoid` + `lookAt: false` (verified: its gaze kills a player who looks back).
+- **#188 follow-up (lead, agreed as drafted).** A class rule `ghast-blaze-variants` (pattern `(Ghast|Ghastling|GhastQueen|Blaze)$`, take-cover, ranged, inferred: every class extends vanilla EntityGhast or EntityBlaze and its base fires fireballs, read from the three jars) covers 11 ranged variants (8 Special Mobs, NetherEx's ghastling, Twilight Forest's tower and mini ghasts); after the #191 review (REQUEST CHANGES: my fighter-ghast claim was wrong, I had read only adjustTypeAttributes) a verified rule `melee-ghast-blaze-variants`, matched first, makes the six Special Mobs variants that call disableRangedAI() (fighter, baby, unholy ghasts; cinder, ember, jolt blazes) `fight`. NetherEx's Ghast Queen and Twilight Forest's Ur-Ghast (boss package classes) are `avoid` entries. README `threatOf` row updated; the cockatrice evidence names CockatriceAIAggroLook.shouldContinueExecuting (func_75253_b).
+- **#191 merged** (`b586626`): the ghast/blaze rules above.
+- **#187 merged** (`e600de0`) and **#188 merged** (`944c7b2`, with the zombie horse corrected to fight: The Hordes' MixinAbstractHorse gives it zombie AI, hordes.cfg line 131). **#186 review data requests (lead).** (1) #187: `threatOf` and `nightThreats` return `lookAt` (false: enderman, rifted enderman, Special Mobs enderman variants and ender creeper, cockatrice via its override, all cited); it also carries the sludge_wand line fix (180-198; my push to #185 came after it had merged). Review: REQUEST CHANGES (the override path), fixed. (2) #188: ender dragon and wither `avoid`, ghast and blaze `take-cover` (ranged), zombie horse `fight` (first `ignore`, corrected before merge: The Hordes makes it aggressive), gorgon `avoid` + `lookAt: false` (verified: its gaze kills a player who looks back).
 - **#185 merged** (`ec75f23`), **the #178/#179 follow-up (lead, after merging both).** The two PR bodies are corrected: nothing calls `threatOf` yet, and the parasite fire line is described as a mechanism, not advice. In `threat-reactions.json`: the 4 `packfiles/scripts/fishsundeadrising.zs` citations now read `scripts/fishsundeadrising.zs`, the 4 Fish's entries from #178 name the jar as it is in the pack (`Fish's Undead Rising-1.3.2.jar`, not my scratch copy's name), and one "no vanilla jar in SCRATCH" is reworded. A test keeps scratch paths out. The README `threatOf` row names the parasite and weta.
 - **#178 merged** (`38728f2`), **the last 14 overworld night defaults (lead's pick 1, G3 night survival).** Every mob `nightThreats()` listed with the default `fight` now has a cited entry: 12 `verified` from the mods' bytecode and the pack's configs, husk and zombie villager `vanilla`. Three workers did the first pass, one per mod group; I re-ran the deciding checks. The independent review re-checked 7 claims in the bytecode, and all held. APPROVE WITH NITS; the wording nits are fixed. Open points are in the evidence as "Not settled: ...". No overworld night threat is left to the default (test).
 - **#179 merged** (`b66a2a8`), **parasite and weta (lead's pick 2).** Both read from Fish's Undead Rising's bytecode by me. Parasite: `fight`. It latches on by touch, infests (a slow hunger drain), bites for 1 and dies by itself unattached. 0-4 spawn from a dead zombie, frozen zombie or mushroom zombie (5%), or from any mob that dies infested. Weta: `ignore-unless-provoked`. It only retaliates, and it does not spawn naturally on this pack (`weta spawn rate`=0). Independent review: APPROVE WITH NITS (6 claims re-checked in the bytecode; all held). Nits fixed: the sand source (a dry-biome sand block, 1%), now cited; advice to kill an attached parasite, since each bite renews Infested; infested deaths leave parasites.
@@ -338,5 +341,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- #187 `agent/rotn-data/threat-look-bosses`: structured `lookAt` (see Doing).
-- #188 `agent/rotn-data/threat-bosses`: bosses, ghast, blaze, zombie horse, gorgon (see Doing).
+- #200 `agent/rotn-data/depacify-line`: the #193 follow-up, Special_AI.cfg line 16 (Restart point).

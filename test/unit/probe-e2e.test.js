@@ -134,6 +134,7 @@ test('P1 against the real g1-driver and probe-test-server.js: every check passes
     assert.ok(r.notes.foodBeforeEat.server < 20, JSON.stringify(r.notes.foodBeforeEat));
     assert.ok(r.notes.eat.foodBefore < 20, JSON.stringify(r.notes.eat));
     assert.ok(r.notes.eat.foodAfter > r.notes.eat.foodBefore && r.notes.eat.breadLeft === 1, JSON.stringify(r.notes.eat));
+    assert.ok(r.notes.eat.serverFoodAfter > r.notes.eat.serverFoodBefore, `the server's p1food rose too (#165 review): ${JSON.stringify(r.notes.eat)}`);
     // What the evidence step reads from the capture: no rejected click (the fake server's own record
     // agrees) and FastWorkbench's mod window.
     assert.equal(w.containers().state.rejected.length, 0, 'no window click rejected');

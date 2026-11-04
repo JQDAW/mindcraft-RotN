@@ -35,6 +35,7 @@
         "prismarine-auth": "3.1.1",
         "prismarine-item": "^1.15.0",
         "prismarine-nbt": "2.8.0",
+        "prismarine-recipe": "1.5.0",
         "prismarine-viewer": "^1.32.0",
         "protodef": "1.19.0",
         "replicate": "^0.29.4",

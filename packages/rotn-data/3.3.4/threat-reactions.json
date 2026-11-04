@@ -1,7 +1,7 @@
 {
   "format": "rotn-threat-reactions/1",
   "pack": "3.3.4",
-  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source 'inferred'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Optional fields on an entry or class rule: 'ranged', 'explodes', and 'lookAt': false for a mob that is dangerous to look at: its targeting starts when a player looks at it (the enderman's stare check), or its gaze attack needs the player to look back (the gorgon), so the bot must not look at its head; threatOf returns lookAt true otherwise. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
+  "description": "How the bot should react to the mobs it meets on its first nights, for threatOf and nightThreats. Hand-written; each entry names its evidence. confidence: 'documented' = docs/research/rotn-progression.md section 2 (hazard table), which cites the RotN wiki ([W-...]); 'vanilla' = Minecraft 1.12 behaviour that the RotN sources do not mention, unverified on this pack; 'verified' = read from the mod's bytecode in the pinned pack (javap -c -p (reads class files; runs no mod code) on the jar from the pinned server pack zip (SHA-256 90642fd5...f5205); SRG names checked against MCP stable-39-1.12 fields.csv), each entry citing the jar, class and methods; 'inferred' = not checked against the mod's code (each such entry says so in its evidence). Order (first match wins): a dangerous mob (entity-overrides.json) is always 'avoid' (source 'override'); then an entry in 'entities'; then the first 'classRules' entry whose pattern matches the dumped class's simple name (source: the rule's confidence, 'inferred' unless the rule says 'verified'); then a default from the threat level (entity(): hostile = IMob or bytecode-cited player targeting): hostile -> fight, otherwise ignore (source 'default'). Class rules apply to hostile mobs only. Optional fields on an entry or class rule: 'ranged', 'explodes', and 'lookAt': false for a mob that is dangerous to look at: its targeting starts when a player looks at it (the enderman's stare check), or its gaze attack needs the player to look back (the gorgon), so the bot must not look at its head; threatOf returns lookAt true otherwise. Reactions: 'fight' (fight, ideally at a choke point; retreat when outnumbered), 'keep-distance' (back off at once, do not melee), 'take-cover' (ranged attacker: stay behind cover), 'avoid' (do not engage; move away), 'ignore-unless-provoked' (neutral until attacked or provoked), 'ignore'.",
   "general": {
     "summary": "At night stay sealed in a cobblestone or stone shelter with light only inside; a dirt shack is not safe because mobs dig and pillar. Retreat if two or more hostiles come at once.",
     "confidence": "documented",
@@ -338,6 +338,26 @@
         "The pinned pack makes it tougher: config/roughmobsrevamped.cfg attributes lines 77, 86, 95 and 104 (blaze knockbackResistance +0.5, maxHealth +20, armor +3, attackDamage +3; operator 0 = add, line 10) and blaze.blazePushAttackersAway=true (line 701); config/Special_Mobs.cfg replaces vanilla blazes with Special Mobs blazes and variants (the blazes section from line 44; Nether chance dimension/the_nether=0.33, line 60)"
       ]
     },
+    "netherex:ghast_queen": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "NetherEx's Ghast Queen, a Nether boss that shoots fireballs. Not on the first-night path. Never fight it with early gear; leave.",
+      "confidence": "verified",
+      "evidence": [
+        "NetherEx-1.12.2-2.2.5.jar (in the pack as mods/NetherEx-1.12.2-2.2.5.jar, SHA-256 ab71d3f63d8905727c769ddfe8c4849d735a4d9feb502a9135ce27e16bca815e): logictechcorp.netherex.entity.boss.EntityGhastQueen (a boss package class) extends net.minecraft.entity.monster.EntityGhast and uses EntityAIGhastQueenFireballAttack",
+        "Not settled: its attack strength, health and summons"
+      ]
+    },
+    "twilightforest:ur_ghast": {
+      "reaction": "avoid",
+      "ranged": true,
+      "summary": "Twilight Forest's Ur-Ghast, a boss that shoots fireballs. Not on the first-night path. Never fight it with early gear; leave.",
+      "confidence": "verified",
+      "evidence": [
+        "twilightforest-1.12.2-3.14.jar (in the pack as mods/twilightforest-1.12.2-3.14.jar, SHA-256 cf9f7798d50c70097ece08a8822d58b0f43547ea57cb620fd798b33ec5762c61): twilightforest.entity.boss.EntityTFUrGhast (a boss package class) extends EntityTFTowerGhast, which extends net.minecraft.entity.monster.EntityGhast with EntityLargeFireball",
+        "Not settled: its attack strength, health and summons"
+      ]
+    },
     "minecraft:zombie_horse": {
       "reaction": "fight",
       "summary": "On this pack an aggressive undead horse: The Hordes gives it zombie AI, so it hunts players from up to 35 blocks, hits for 3 and burns in daylight. Fight it like a zombie, at a choke point; it is not a mount to ignore.",
@@ -345,7 +365,7 @@
       "evidence": [
         "The-Hordes-1.12.2-1.1.7.jar (in the pack as mods/The-Hordes-1.12.2-1.1.7.jar, SHA-256 882e8a4563cd69964a71b0e4c7584069bd77844110d8fb256d856464fe0c4ed3; javap -c -p, no mod code run): MixinEntityZombieHorse makes net.minecraft.entity.passive.EntityZombieHorse implement IMob (which is why the dump records it hostile) and, at the tail of applyEntityAttributes when ConfigHandler.aggressiveZombieHorses is set, sets FOLLOW_RANGE (field_111265_b) to 35.0 (bytecode 7-13) and registers ATTACK_DAMAGE (field_111264_e, registerAttribute func_111150_b) at 3.0 (25-31)",
         "MixinAbstractHorse.initEntityAI (tail): when aggressiveZombieHorses is set and the horse is an EntityZombieHorse (bytecode 0-7) it adds EntityAIAttackMelee (34-44), EntityAIHurtByTarget (144-162) and EntityAINearestAttackableTarget for EntityPlayer (170-181), villagers (189-200) and more",
-        "The pinned pack turns it on: config/hordes.cfg misc.aggressiveZombieHorses=true (line 131) and zombieHorsesBurn=true (line 143). config/Special_AI.cfg also lists minecraft:zombie_horse 1.0 in depacify_list (line 26) with depacify_aggressive_chance=1.0 (line 15): passive mobs on that list spawn aggressive",
+        "The pinned pack turns it on: config/hordes.cfg misc.aggressiveZombieHorses=true (line 131) and zombieHorsesBurn=true (line 143). config/Special_AI.cfg also lists minecraft:zombie_horse 1.0 in depacify_list (line 26) with depacify_aggressive_chance=1.0 (line 16): passive mobs on that list spawn aggressive",
         "It is in no biome spawn list of the dump's spawns.json (vanilla zombie horses do not spawn naturally); config/roughmobsrevamped.cfg attributes lines 145-147 and config/dmgcontrol.cfg line 259 (MaxHealth 15.0) change its stats",
         "Corrected in #188 after the lead asked for an override lowering its level: on this pack it is hostile, so its level stays hostile (#188 first had ignore, from vanilla behaviour)"
       ]
@@ -360,6 +380,17 @@
         "initEntityAI (func_184651_r) builds GorgonAIStare (bytecode 55-67 and 101-109) and EntityAINearestAttackableTarget tasks with predicates (201-249)",
         "It is in no biome spawn list of the dump's spawns.json (Ice and Fire places gorgons in its temple structures); not on the first-night path",
         "Not settled: the target tasks' predicates (201-249) and GorgonAIStare were not read further"
+      ]
+    },
+    "minecraft:skeleton_horse": {
+      "reaction": "fight",
+      "summary": "On this pack an aggressive undead horse: Special AI makes every skeleton horse spawn aggressive, so it targets players and bites in melee; it burns in daylight. Fight it like a zombie, at a choke point.",
+      "confidence": "verified",
+      "evidence": [
+        "specialai-1.1.0_for_mc1.12.2.jar (in the pack as mods/specialai-1.1.0_for_mc1.12.2.jar, SHA-256 1915e47feddcca746d66f921d9675855325c26565f6c9d7e6fc7fe5a2d991c1b; javap -c -p, no mod code run): AIHandler.onEntityJoinWorld, for an EntityCreature (bytecode 81-84) on Config.GENERAL.DEPACIFY_LIST (EntityListConfig.rollChance, 273-280), sets the Depacify byte to 2 when nextDouble() < AGGRESSIVE_CHANCE, else 1 (284-316), and then calls addHurtByTargetAI(creature, byte, false) (318-331; the flag is set only after the villager defend-village AI). addHurtByTargetAI adds EntityAIAttackMeleePassive (bytecode 0-34; it deals damage with causeMobDamage, from the ATTACK_DAMAGE attribute or a fallback, EntityAIAttackMeleePassive.attackEntityAsMob 4-124), EntityAIHurtByTarget (37-63), and, when the byte is above 1, EntityAINearestAttackableTarget(EntityPlayer, checkSight true) (66-88)",
+        "The pinned pack: config/Special_AI.cfg depacify_list lists minecraft:skeleton_horse 1.0 (line 25) and depacify_aggressive_chance=1.0 (line 16), so every skeleton horse spawns aggressive and targets players. config/hordes.cfg skeletonHorsesBurn=true (line 134)",
+        "It is in no biome spawn list of the dump's spawns.json (vanilla skeleton horses come from skeleton traps in thunderstorms)",
+        "Not settled: how much damage a hit does (its ATTACK_DAMAGE attribute or EntityAIAttackMeleePassive's fallback)"
       ]
     },
     "charm:spectre": {
@@ -653,6 +684,36 @@
         "specialmobs:specialwitch": "The base class: vanilla behaviour plus Special Mobs' generic options."
       },
       "note": "Matches classes whose simple name ends with 'Witch', so Special Mobs' witch spiders (EntityWitchSpider, EntityWitchCaveSpider) are not caught. minecraft:witch keeps its own entry."
+    },
+    {
+      "id": "melee-ghast-blaze-variants",
+      "pattern": "^Entity(Fighter|Baby|Unholy)Ghast$|^Entity(Cinder|Ember|Jolt)Blaze$",
+      "reaction": "fight",
+      "confidence": "verified",
+      "summary": "A Special Mobs ghast or blaze variant that has no ranged attack: it flies at you and hits in melee (the fighter ghast and ember blaze drain life, the cinder blaze sets you on fire). Fight it, ideally with your back covered; it is a Nether mob, not on the first-night path.",
+      "note": "Matched before ghast-blaze-variants (first match wins). The six classes call disableRangedAI() in initTypeAI; the other Special Mobs ghasts and blazes keep their ranged attack.",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125; javap -c -p, no mod code run): EntityFighterGhast, EntityBabyGhast, EntityUnholyGhast, EntityCinderBlaze, EntityEmberBlaze and EntityJoltBlaze each call disableRangedAI() in initTypeAI (no other Special Mobs ghast or blaze does; #191 review)",
+        "Ghasts: Entity_SpecialGhast.disableRangedAI sets SpecialMobData.rangedAttackMaxRange to 0 (bytecode 1-5), and Entity_SpecialGhast.setCombatTask (called from initEntityAI func_184651_r at bytecode 82, after initTypeAI) adds EntityAIFlyingAttackRanged only while rangedAttackMaxRange > 0, else EntityAIFlyingAttackMelee (setCombatTask bytecode 34-63)",
+        "Blazes: Entity_SpecialBlaze.disableRangedAI calls setRangedAI(0, 6, 60, 100, 0.0f) (bytecode 1-9), and EntityAISpecialAttackBlaze.updateTask (func_75246_d) compares the distance (getDistanceSq func_70068_e at bytecode 36) with rangedAttackMaxRange (41-45) and attacks with attackEntityAsMob (func_70652_k, bytecode 77)",
+        "onTypeAttack: EntityFighterGhast and EntityEmberBlaze call causeLifeLoss; EntityCinderBlaze sets the target on fire (setFire func_70015_d). EntityFighterGhast.adjustTypeAttributes: +20 health, +10 armor, +2 attack, speed x1.3, half size",
+        "Not settled: what the baby and unholy ghasts and the jolt blaze add on hit"
+      ]
+    },
+    {
+      "id": "ghast-blaze-variants",
+      "pattern": "(Ghast|Ghastling|GhastQueen|Blaze)$",
+      "reaction": "take-cover",
+      "ranged": true,
+      "confidence": "inferred",
+      "summary": "A ghast or blaze variant (Special Mobs, NetherEx, Twilight Forest): it fights from range with fireballs like the vanilla ghast or blaze it is built on. Stay behind solid cover and out of its line of sight. Nether and Twilight Forest mobs; not on the first-night path.",
+      "note": "Matched on the dumped class's simple name; class rules apply to hostile mobs only, so the fireball projectiles (not hostile) are not matched. The six Special Mobs variants that disable their ranged attack match the melee-ghast-blaze-variants rule first. Bosses get their own entries (NetherEx ghast queen, Twilight Forest ur-ghast: avoid). Each variant's extra behaviour was not read.",
+      "evidence": [
+        "specialmobs-1.0.4_for_mc1.12.2.jar (in the pack as mods/specialmobs-1.0.4_for_mc1.12.2.jar, SHA-256 15959e17268e105bae4d2686c448249dd36e19e5a870b3a6726001506e594125; javap -c -p, no mod code run): every *Ghast variant (Baby, Fighter, King, Queen, Unholy) extends Entity_SpecialGhast, which extends net.minecraft.entity.monster.EntityGhast and implements IRangedAttackMob with EntityLargeFireball; every *Blaze variant (Cinder, Conflagration, Ember, Hellfire, Inferno, Jolt, Wildfire) extends Entity_SpecialBlaze, which extends net.minecraft.entity.monster.EntityBlaze and implements IRangedAttackMob with EntitySmallFireball bursts (FireballBurstCount, FireballBurstDelay). Six variants turn the ranged attack off and are matched first by the melee-ghast-blaze-variants rule (fight): the fighter, baby and unholy ghasts and the cinder, ember and jolt blazes; this rule covers the other 8 Special Mobs ghasts and blazes, which keep it",
+        "NetherEx-1.12.2-2.2.5.jar (in the pack as mods/NetherEx-1.12.2-2.2.5.jar, SHA-256 ab71d3f63d8905727c769ddfe8c4849d735a4d9feb502a9135ce27e16bca815e): EntityGhastling extends EntityGhast and uses EntityAIGhastlingFireballAttack",
+        "twilightforest-1.12.2-3.14.jar (in the pack as mods/twilightforest-1.12.2-3.14.jar, SHA-256 cf9f7798d50c70097ece08a8822d58b0f43547ea57cb620fd798b33ec5762c61): EntityTFTowerGhast extends EntityGhast with EntityLargeFireball; EntityTFMiniGhast extends EntityTFTowerGhast",
+        "Not checked: each variant's own extra behaviour (for example the king or queen ghast) and whether Special Mobs' config changes a variant's ranged attack"
+      ]
     }
   ]
 }
