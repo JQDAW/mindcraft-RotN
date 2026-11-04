@@ -226,6 +226,23 @@ The real agent plays its early-game agenda from a fresh spawn, and the runner wh
   - The only exception is the pack's own first-join commands (P1's server logs): the two gamerules, 1 Bread and 1 Bundle, once each, within 10 s of the first join.
 - **Offline test:** `test/unit/g3-rocks.test.js`, a simulated server with a scripted fake agent. No batch has run this scenario yet.
 
+### G3 (b): `g3-first-night` (`test/scenarios/g3/`)
+
+The real agent lives through its first full night from a fresh spawn. The runner whispers nothing and never touches the time: no `time set` and no `gamerule` (a unit test checks both), and no `tp`.
+- **The dawn rule (provisional, lead after S1-A):** `time query daytime` every minute.
+  - The night is seen at the first sample at or above `nightFrom` (13000). Dawn is the first sample below `dawnBelow` (12000) after that, so the time has wrapped past 24000.
+  - S1-A measured a cycle of about 40 min with Extended Days, so dawn is expected about 40 min after the join.
+  - `maxMinutes` (55), `nightFrom` and `dawnBelow` are compared 'equal'. The first G3 smoke batch confirms the rule before it is pinned.
+- **Every minute:** `scoreboard players list <bot>` for `stat.deaths` (objective `g3b_deaths`, plus `g3b_played`), and the log's death lines (`deathLines` in `lib/g3.mjs`: the 1.12 death messages, and a raw `death.attack.*` key from a mod).
+- **The end** comes at the first of: dawn, a death (stat or line), the bot leaving, its driver exiting, or `maxMinutes`.
+- **Checks:**
+  - `survived_night`: dawn reached, `stat.deaths` 0 and no death line;
+  - `stayed_online`: no leave, lost-connection or kick line;
+  - `no_cheat`: as in (a).
+- **The uncounted gap:** a death before the objective exists is not in the stat, but its log line still fails survival.
+- **Not taken:** the plan's midnight shelter snapshot. It needed the bot's position, and G3 has no `tp`. It was evidence, never gating, and `notes.shelterAtMidnight` says why. The bot's hunger at dawn is not recorded either (`food` is not an approved criterion).
+- **Offline test:** `test/unit/g3-night.test.js`, on S1-A's measured cycle. No batch has run this scenario yet.
+
 ## S1: survey and smoke before G3
 
 S1 (`test/scenarios/s1/`) is a survey, not a gate. **Every S1 run is not gate-valid:** `run()` first records "S1 is a survey/smoke, never a gate pass" as a notGate reason, so its verdict is at best `SMOKE-PASS (not a gate pass)`. Its findings are data the lead uses to pin G3's world, dawn bound and arbiters (`coord/STATUS-harness-ops.md`, "G3 batches"). The driver is the G2 one (`g1-driver.mjs` with `attachScenario` and `attachG2`); S1 needs one more behaviour:

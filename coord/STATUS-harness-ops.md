@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-04 (23:41 UTC, from `date -u`)
+Updated: 2026-11-04 (23:42 UTC, from `date -u`)
 
 ## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
@@ -19,7 +19,14 @@ The lead's order: one scenario per small PR, (a) first, then (b) first night, (c
 - **For the lead:** the crafting-table check also accepts "placed", read from `stat.useItem.minecraft.crafting_table` (1.12 counts a placed block as a use of its item). That is the approved `scoreboard objectives add` command, but a new criterion. S1 did not check it, and the first G3 smoke batch confirms it.
 - **Tested:** `g3-rocks.test.js` 12/12, `runner.test.js` 42/42 (1 Windows skip), `g3-spend.test.js` 45/45, `mindcraft-driver.test.js` 13/13. ESLint is clean on the changed files.
 
-**Next:** (b) `g3-first-night` (branch `agent/harness-ops/g3b-first-night`, stacked on #201), with the provisional dawn bound (the wrap past 24000, limit 55 min) and the same no-tp rule.
+**PR (b): G3 (b), `g3-first-night`** (branch `agent/harness-ops/g3b-first-night`; stacked on #201, its base is #201's branch until #201 merges).
+- **The scenario:** `test/scenarios/g3/g3-first-night.mjs`, with the real agent. Nothing about time is set, and there is no `tp`.
+- **The dawn rule (provisional):** night is a sample at or above 13000; dawn is the next one below 12000. `maxMinutes` 55, `nightFrom` and `dawnBelow` are compared 'equal'; `maxBatchUsd` is 2.
+- **Checks:** `login_online`, `survived_night` (dawn reached, `stat.deaths` 0 and no death line), `stayed_online` and `no_cheat`. The new shared `deathLines` is in `lib/g3.mjs`.
+- **For the lead:** with no `tp`, the plan's midnight shelter snapshot (evidence only) cannot be taken, so it is dropped and `notes.shelterAtMidnight` says why.
+- **Tested:** `g3-night.test.js` 9/9 on S1-A's measured cycle. ESLint is clean.
+
+**Next:** (c) `g3-task-preempts-agenda`, then (d) `g3-untrusted-refused`.
 
 ## Done just before (2026-11-04)
 

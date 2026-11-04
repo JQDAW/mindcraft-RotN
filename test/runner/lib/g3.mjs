@@ -232,3 +232,27 @@ export function cheatProblems(lines, bot, { windowS = FIRST_JOIN_WINDOW_S } = {}
     }
     return { problems, packFirstJoin };
 }
+
+/**
+ * The 1.12 death messages ("death.attack.*" and "death.fell.*" in en_us.lang) all start with the
+ * player's name and one of these phrases. A mod's own death type that the dedicated server cannot
+ * translate is logged as its raw key ("death.attack.<type>"), so that form counts too.
+ */
+const DEATH_PHRASE = /^(was |died|drowned|blew up|hit the ground|fell |went up in flames|walked into|burned to death|tried to swim in lava|suffocated|starved|withered away|experienced kinetic energy|discovered (the )?floor was lava|didn't want to live)/;
+
+/**
+ * The bot's death lines in the log: [{time, msg}]. stat.deaths is the main arbiter (G3 plan, arbiter 5);
+ * these lines are the second, independent one, so a death the stat missed still fails survival.
+ */
+export function deathLines(lines, bot) {
+    const out = [];
+    const prefix = `${bot} `;
+    for (const line of lines) {
+        const m = LOG_LINE.exec(String(line).replace(/\r$/, ''));
+        if (!m) continue;
+        const msg = m[4];
+        const rawKey = /\bdeath\.(attack|fell)\.\S+/.test(msg) && msg.includes(bot);
+        if (rawKey || (msg.startsWith(prefix) && DEATH_PHRASE.test(msg.slice(prefix.length)))) out.push({ time: `${m[1]}:${m[2]}:${m[3]}`, msg });
+    }
+    return out;
+}
