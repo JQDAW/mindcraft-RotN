@@ -206,7 +206,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#195** (D2b-1, `!buildShelter`), waiting for the lead's review; the #194 follow-up (branch `agent/skills-rotn/craft-fill-followup`). Merged: #194 (C1, `06ad75f`), #190 (do-not-look from `lookAt`), and #189 (P1 passed: 4/4 RotN crafts, including the stone pickaxe at a FastWorkbench table; modded item ids accepted in clicks; 5/5 placements in 589-1158 ms).
+- **#195** (D2b-1, `!buildShelter`), waiting for the lead's review; **#198**, the #194 follow-up (branch `agent/skills-rotn/craft-fill-followup`). Merged: #194 (C1, `06ad75f`), #190 (do-not-look from `lookAt`), and #189 (P1 passed: 4/4 RotN crafts, including the stone pickaxe at a FastWorkbench table; modded item ids accepted in clicks; 5/5 placements in 589-1158 ms).
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
@@ -214,7 +214,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 - **C1, crafting execution: #194 merged** (`06ad75f`). When `bot.recipesFor` finds no variant (bot.registry's RotN variants are capped, so a mix of rock kinds can be missing) but rotn-data's `canFill` says the items fit, `craftByFill` crafts from canFill's assigned stacks: `filledRecipe` + `fillNow` (craft_needs.js) and a prismarine-recipe `Recipe`, one craft at a time, re-judged each time, at a found or placed crafting table (`bot.craft(recipe, 1, table)` at the FastWorkbench table, as P1's probe did).
   - Added on resume, from net-forge's Request 2 rules: auto-eat is paused around every `bot.craft` (`craftPausingAutoEat`, both paths; an eat under way gets up to 3 s); a recipe with an NBT result or container items left in the grid is refused with a clear error; a table `craftRecipe` already placed is reused, not placed twice.
   - Tests: `craft_needs.test.js` 21/21 (the full mixed-rock `!craftRecipe` test fails on the old skills.js); `src/agent/**` 204/204; lint 254 (baseline OK).
-- **#194 review follow-up** (lead: items 1, 2 and 5 are required before the G3 (a) batch), branch `agent/skills-rotn/craft-fill-followup`:
+- **#194 review follow-up, #198** (lead: items 1, 2 and 5 are required before the G3 (a) batch), branch `agent/skills-rotn/craft-fill-followup`:
   1. each craft counts only when the item's real inventory count grew, and the loop stops when it did not;
   2. a table placed for the craft (by `craftByFill` or `craftRecipe`) is picked up in a `finally`, so also when `bot.craft` throws; the throw is logged with `safeError`;
   3. nit 3: a missing recipe id logs that cause;
@@ -230,5 +230,5 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
   `unstuck` now leaves `action:buildShelter` alone; that test fails on the old `modes.js`. Tests: `shelter.test.js` 6/6; `src/agent/**` 206/206; lint 254.
 - **Next:**
-  1. the #195 review;
+  1. the #198 and #195 reviews;
   2. D2b-2, the night routine: a shelter step at dusk (`NightClock`, `SHELTER_LEAD_MIN`); stay in at night; repair with `buildShelter({ site })`; fight only at the opening (`nightThreatNote`); leave at daylight; `torch_placing` kept off in the shelter (it is on by default); the shortfall over the cobblestone step's 8 gathered.
