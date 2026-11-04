@@ -5,6 +5,7 @@ import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, 
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import prismarineRecipe from "prismarine-recipe";
+import { safeError } from "../safe_error.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -173,60 +174,100 @@ export async function craftPausingAutoEat(bot, recipe, count, table, eatWaitMs =
     }
 }
 
+/** Place a crafting table near the bot for a craft: the table block, or null (logged). */
+async function placeTableNear(bot, itemName) {
+    const pos = world.getNearestFreeSpace(bot, 1, 6);
+    if (!pos) {
+        log(bot, `Could not place a crafting table to craft ${itemName}: no free space nearby.`);
+        return null;
+    }
+    await placeBlock(bot, 'crafting_table', pos.x, pos.y, pos.z);
+    const table = world.getNearestBlock(bot, 'crafting_table', 16);
+    if (!table) log(bot, `Could not place a crafting table to craft ${itemName}.`);
+    return table;
+}
+
+/** Pick up a crafting table the bot placed for a craft; a failure is logged, never thrown. */
+async function pickUpTable(bot) {
+    try {
+        await collectBlock(bot, 'crafting_table', 1);
+    } catch (err) {
+        log(bot, `Could not pick up the crafting table again (${safeError(err)}).`);
+    }
+}
+
+/** How craftByFill places and picks up a table (tests pass their own). */
+export const CRAFT_TABLE_OPS = { place: placeTableNear, pickUp: pickUpTable };
+
 /**
  * Craft by rotn-data's recipe with the stacks canFill assigns (C1): for a mix of kinds (1 igneous and
  * 2 metamorphic rocks for a stone pickaxe) that bot.registry's capped variants leave out. One craft at
  * a time, judged afresh each time, at a crafting table when the recipe needs one.
  * `table` and `placed` carry a table craftRecipe already found or placed, so it is not placed twice.
+ * A craft counts only when the item's count in the inventory grew; the loop stops when it did not.
+ * A table placed here or by craftRecipe is picked up again, also when bot.craft throws (#194 review).
  * @returns {Promise<boolean>} true if at least one was crafted.
  */
-async function craftByFill(bot, itemName, num, needs, table = null, placed = false) {
-    if (!needs.requiresTable) {
-        if (placed) await collectBlock(bot, 'crafting_table', 1);
-        table = null;
-        placed = false;
+export async function craftByFill(bot, itemName, num, needs, table = null, placed = false, ops = CRAFT_TABLE_OPS) {
+    if (!needs.recipeId) {
+        if (placed) await ops.pickUp(bot);
+        log(bot, `Could not craft ${itemName}: rotn-data names no recipe for these items. ${describeNeeds(itemName, needs)}`);
+        return false;
     }
-    else {
-        table ??= world.getNearestBlock(bot, 'crafting_table', 16);
-        if (!table) {
-            if (countItem(bot, 'crafting_table') < 1) {
-                log(bot, `Crafting ${itemName} requires a crafting table.`);
-                return false;
-            }
-            const pos = world.getNearestFreeSpace(bot, 1, 6);
-            await placeBlock(bot, 'crafting_table', pos.x, pos.y, pos.z);
-            table = world.getNearestBlock(bot, 'crafting_table', 16);
-            placed = !!table;
-            if (!table) {
-                log(bot, `Could not place a crafting table to craft ${itemName}.`);
-                return false;
-            }
-        }
-        if (bot.entity.position.distanceTo(table.position) > 4)
-            await goToNearestBlock(bot, 'crafting_table', 4, 16);
-    }
-    const { Recipe } = prismarineRecipe(bot.registry);
     let made = 0;
     let why = null;
-    while (made < num && !bot.interrupt_code) {
-        const fill = fillNow(bot, needs.recipeId);
-        if (!fill?.ok) { why = made === 0 ? 'the items no longer fit the recipe' : null; break; }
-        let recipe;
-        try {
-            recipe = new Recipe(filledRecipe(bot.registry, needs.recipeId, fill.assignment));
-        } catch (err) {
-            why = err.message;
-            break;
+    try {
+        if (!needs.requiresTable) {
+            if (placed) await ops.pickUp(bot);
+            table = null;
+            placed = false;
         }
-        await craftPausingAutoEat(bot, recipe, 1, table);
-        made++;
+        else {
+            table ??= world.getNearestBlock(bot, 'crafting_table', 16);
+            if (!table) {
+                if (countItem(bot, 'crafting_table') < 1) {
+                    log(bot, `Crafting ${itemName} requires a crafting table.`);
+                    return false;
+                }
+                table = await ops.place(bot, itemName);
+                placed = !!table;
+                if (!table) return false;
+            }
+            if (bot.entity.position.distanceTo(table.position) > 4)
+                await goToNearestBlock(bot, 'crafting_table', 4, 16);
+        }
+        const { Recipe } = prismarineRecipe(bot.registry);
+        while (made < num && !bot.interrupt_code) {
+            const fill = fillNow(bot, needs.recipeId);
+            if (!fill?.ok) { why = made === 0 ? 'the items no longer fit the recipe' : null; break; }
+            let recipe;
+            try {
+                recipe = new Recipe(filledRecipe(bot.registry, needs.recipeId, fill.assignment));
+            } catch (err) {
+                why = err.message;
+                break;
+            }
+            const before = countItem(bot, itemName);
+            try {
+                await craftPausingAutoEat(bot, recipe, 1, table);
+            } catch (err) {
+                why = `the craft failed (${safeError(err)})`;
+                break;
+            }
+            if (countItem(bot, itemName) <= before) {
+                why = `the craft gave no ${itemName}`;
+                break;
+            }
+            made++;
+        }
+    } finally {
+        if (placed) await ops.pickUp(bot);
     }
-    if (placed) await collectBlock(bot, 'crafting_table', 1);
     if (made === 0) {
         log(bot, `Could not craft ${itemName}: ${why ?? 'nothing was crafted'}. ${describeNeeds(itemName, needs)}`);
         return false;
     }
-    if (made < num) log(bot, `Crafted ${made} of ${num} ${itemName} from mixed items; not enough for more. You now have ${countItem(bot, itemName)} ${itemName}.`);
+    if (made < num) log(bot, `Crafted ${made} of ${num} ${itemName} from mixed items; ${why ?? 'not enough for more'}. You now have ${countItem(bot, itemName)} ${itemName}.`);
     else log(bot, `Successfully crafted ${itemName} from mixed items, you now have ${countItem(bot, itemName)} ${itemName}.`);
     bot.armorManager?.equipAll();
     return true;
