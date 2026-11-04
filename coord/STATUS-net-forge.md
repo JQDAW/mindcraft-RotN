@@ -1,16 +1,15 @@
 # Status: net-forge
 
-Updated: 2026-11-03T16:07Z
+Updated: 2026-11-04T22:51Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## PAUSED (2026-11-03T16:07Z, the human's decision: weekly usage at 93%)
+## Resumed 2026-11-04T22:51Z (lead respawn after the usage-limit pause of 2026-11-03T16:07Z)
 
-- **Branch:** `agent/net-forge/request2-final`, pushed, STATUS only. No PR is open for it yet, nothing is uncommitted and nothing is running.
-- **Exact next step on resume:**
-  1. Open the PR for this branch: "net-forge STATUS: Request 2 final answer, proven live by P1; keep place_block_timeout_ms 2000". It serves the lead's request after #189.
-  2. Before that, check one open claim in rule E1: whether mineflayer 4.33's `bot.consume` (`node_modules/mineflayer/lib/plugins/inventory.js`) has its own timeout.
-  3. Then wait for the lead's review and merge.
+- **Done:** I checked E1's open claim in the mineflayer 4.33.0 code. `bot.consume` has its own 2500 ms timeout and refuses at food 20. Rule E1 below is corrected.
+- **Doing:** the PR for `agent/net-forge/request2-final` (STATUS only): "net-forge STATUS: Request 2 final answer, proven live by P1; keep place_block_timeout_ms 2000". It serves the lead's request after #189, for skills-rotn's C1 and D2b.
+- **Next:** wait for the lead's review and merge. No other net-forge work is open, and nothing is running.
+- **Blocked / requests:** none.
 
 ## Request 2: FINAL answer for skills-rotn, proven live by P1 (2026-11-03T16:06Z)
 
@@ -67,7 +66,11 @@ Rerun evidence #189 (`88c02bc`, `test/evidence/probe/p1-20261103-a2/`). The lead
 - **P1 (what success means).** mineflayer returns on the first change of block type at the target. Check `bot.blockAt(target)` afterwards when the exact block matters.
 - **P2 (a placement timeout means "unknown", not "failed").** Wait about 1 s, then read `bot.blockAt(target)`. If it is the block, it worked. Retry only if the target is still empty. A blind retry is harmless on an occupied target, but it costs another head turn and another wait.
 - **P3 (head turns cost time).** Each placement costs up to about 1 s of head turn before the packet. For D2b, order the cells so that the head turns little between them (go round, not back and forth). mineflayer can skip the smooth turn with `forceLook: true` in the options, but that is **not tested live**; do not depend on it without a probe.
-- **E1 (eating at full food).** A 1.12 player cannot eat bread at food 20. The server then never sends the "eating done" status, so `bot.consume()` waits for nothing (not checked: whether mineflayer has its own timeout there). Check `bot.food < 20` first. P1's driver does that and fails at once.
+- **E1 (eating: full food and the 2500 ms timeout).** Checked in mineflayer 4.33.0, `node_modules/mineflayer/lib/plugins/inventory.js`:
+  - **At food 20,** `bot.consume()` throws `Food is full` at once, before it sends anything (L103-105; survival mode and non-"always" foods; bread is not one). A 1.12 player cannot eat bread at food 20 anyway. Check `bot.food < 20` first so you do not depend on the throw. P1's driver does that.
+  - **Its own timeout:** it waits at most `CONSUME_TIMEOUT` = **2500 ms** (L13, L111), then throws `Promise timed out.` (`lib/promise_utils.js:79-86`). The wait ends early on the server's "eating done" `entity_status` 9 (L68-71), on a change of held item type or count (L76-88), or on `set_cooldown` (L90-96).
+  - **Margin:** live, bread took **1736 ms** (P1), so 2500 ms leaves only about 760 ms. A server stall like the one P1 logged (2160 ms behind) can make it throw even though the bot did eat.
+  - **So, as with P2: a `Promise timed out.` means "unknown".** Compare `bot.food` (or the food item's count) with the value from before the call, about 1 s later. Retry only if neither changed. The timeout is a module constant, not an option, so it cannot be raised without a mineflayer patch. I only make that patch on request, if a scenario shows that this harms the bot.
 - **E2 (bread).** Bread is +3 food in RotN, so plan with that.
 
 ### Still not proven live (not needed for C1 or D2b)
