@@ -21,6 +21,20 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export const REID_MIN_ID = 4096;   // vanilla 1.12 item ids fit in 12 bits; REID's do not
 
+/**
+ * forge-bridge's per-packet record caps (packages/forge-bridge/src/bridge.js DEFAULT_CAPTURED_PACKETS and
+ * DEFAULT_CAPTURED_C2S, which it does not export). A packet past its cap is dropped silently, with no
+ * event, so the summary compares the counts with these. test/unit/p1-capture-summary.test.js fails when
+ * bridge.js changes them (#189 review nit 1).
+ */
+export const CAPTURE_CAPS = Object.freeze({
+    S2C: Object.freeze({
+        login: 5, map_chunk: 40, window_items: 50, set_slot: 300, entity_effect: 100, remove_entity_effect: 100, kick_disconnect: 5,
+        spawn_entity_living: 100, spawn_entity: 100, entity_metadata: 300, open_window: 20, transaction: 300, close_window: 20, block_change: 300,
+    }),
+    C2S: Object.freeze({ window_click: 300, set_creative_slot: 20, held_item_slot: 50, transaction: 300, close_window: 20, block_place: 100, use_item: 50 }),
+});
+
 /** The capture's records, skipping lines that are not JSON. */
 export function readCapture(text) {
     return String(text).split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
@@ -70,10 +84,25 @@ export function summarize(records, { names = null } = {}) {
     }
 
     const counts = {};
-    for (const e of records) if (e.kind === 'packet') counts[`${e.dir} ${e.name}`] = (counts[`${e.dir} ${e.name}`] ?? 0) + 1;
+    const lastT = {};
+    for (const e of records) {
+        if (e.kind !== 'packet') continue;
+        const k = `${e.dir} ${e.name}`;
+        counts[k] = (counts[k] ?? 0) + 1;
+        lastT[k] = e.t;
+    }
+    // Every packet stream that reached its cap: records after it were dropped without a trace (#189 nit 1).
+    const capped = Object.entries(CAPTURE_CAPS).flatMap(([dir, caps]) => Object.entries(caps)
+        .filter(([n, limit]) => (counts[`${dir} ${n}`] ?? 0) >= limit)
+        .map(([n, limit]) => ({ name: 'packet_cap', dir, packet: n, limit, lastT: lastT[`${dir} ${n}`] })));
+    const isCapped = (dir, n) => capped.some((c) => c.dir === dir && c.packet === n);
+    // Transactions no click claimed (#189 nit 2): server-initiated, or a click the capture lost.
+    const unpaired = answers.filter((_, k) => !used.has(k)).map((a) => ({ t: a.t, windowId: a.params?.windowId, action: a.params?.action, accepted: a.params?.accepted }));
     return {
         windowClicks: {
             total: clicks.length,
+            // false when the click or the transaction stream hit its cap: then the counts below are incomplete.
+            complete: !isCapped('C2S', 'window_click') && !isCapped('S2C', 'transaction'),
             accepted: clicks.filter((c) => c.accepted === true).length,
             rejected: clicks.filter((c) => c.accepted === false).length,
             unanswered: clicks.filter((c) => c.accepted === null).length,
@@ -83,10 +112,15 @@ export function summarize(records, { names = null } = {}) {
             items,
         },
         clicks,
+        transactions: { total: answers.length, paired: used.size, unpaired },
         fastbench: { modWindows, payloads: fastbenchPayloads.length },
         tableCraft,
         blockPlaces: pk('C2S', 'block_place').map((e) => ({ t: e.t, location: e.params?.location, direction: e.params?.direction })),
-        limits: records.filter((e) => e.kind === 'event' && /limit|full/.test(e.name ?? '')).map(({ t, name: n, ...rest }) => ({ t, name: n, ...rest })),
+        // The capture's own limit events (channels, a full file) and every packet cap reached.
+        limits: [
+            ...records.filter((e) => e.kind === 'event' && /limit|full/.test(e.name ?? '')).map(({ t, name: n, ...rest }) => ({ t, name: n, ...rest })),
+            ...capped,
+        ],
         packetCounts: counts,
     };
 }

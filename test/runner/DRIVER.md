@@ -233,7 +233,8 @@ P1 is net-forge's "Probe plan P1" (`coord/STATUS-net-forge.md`), which the lead 
 
 **It is never a gate:** `run()` first records "P1 is a probe of crafting, placing and eating, never a gate pass", so its verdict is at best `SMOKE-PASS (not a gate pass)`. The driver is net-forge's `g1-driver.mjs` with the probe commands below. There is no LLM and no OpenRouter key.
 
-- **The console:** give, effect, setblock, testforblock and clear are allowed **for P1 only, on the disposable test server** (lead). So are three `scoreboard` commands for the one objective `p1food` (criterion `food`), which read the server's food level before the eat step. Every command goes through `guardP1Console` (`test/runner/lib/probe.mjs`), so nothing outside `P1_CONSOLE_ALLOW` is sent, and the bot never gets op.
+- **A fresh server for each attempt** (lead, #165 review): a fresh world's first join runs the pack's own commands and gives, so a rerun on a used world would start from a different inventory and food state.
+- **The console:** give, effect, setblock, testforblock and clear are allowed **for P1 only, on the disposable test server** (lead). So are three `scoreboard` commands for the one objective `p1food` (criterion `food`), which read the server's food level before and after the eat step; the lead approved them in the #165 review. Every command goes through `guardP1Console` (`test/runner/lib/probe.mjs`), so nothing outside `P1_CONSOLE_ALLOW` is sent, and the bot never gets op.
 - **The steps:**
   1. Log in.
   2. `gamerule doDaylightCycle false`, `time set day`, `tp <bot> -45 66 -66`.
@@ -245,14 +246,15 @@ P1 is net-forge's "Probe plan P1" (`coord/STATUS-net-forge.md`), which the lead 
      - The scenario reads `scoreboard players list <bot>` until the `p1food` score is below 20, for at most `foodWaitMs` (40 s) after the effect began.
      - No score means the food never changed: 1.12 writes a `food` score only when the level changes after the objective exists.
      - Without food below 20, the eat command is not sent and `eat` fails.
-     - With it, `eat` also needs the driver's own `foodBefore` (bot.food) below 20.
+     - With it, `eat` also needs the driver's own `foodBefore` (bot.food) below 20, 1 bread left, and the server's `p1food` score, read again after the eat for up to `foodAfterWaitMs` (6 s), above the score before it (#165 review). RotN's bread is +3.
   8. `clear <bot>`, `scoreboard objectives remove p1food`.
 
   The data is `P1_PLAN`.
 
-- **The hunger sums** (`hungerFood`, 1.12's rules): Hunger adds `0.005 * (amplifier + 1)` exhaustion per tick. Every 4 exhaustion takes 1 saturation point while there is any, else 1 food point. A fresh player has food 20 and saturation 5.
-  - The old `10 10` gave 11 exhaustion: 2 points, both from saturation, so food stayed at 20 and the eat would hang.
-  - `22 19` gives 44 exhaustion: 11 points, 5 from saturation, so food is about 14 (15 if float rounding at the 4.0 threshold costs a point). Even with saturation 0, it would be 9: well above 6.
+- **The hunger model** (RotN 3.3.4: Hunger Overhaul and AppleCore). net-forge's `simulateHunger` (`packages/forge-bridge/test/fake-containers.js`, #177) models it, and the unit tests use it.
+  - Hunger adds `0.005 * (amplifier + 1)` exhaustion per tick, and Hunger Overhaul adds 0.01 more. A step costs `4 / 0.85` exhaustion (not vanilla's 4) and takes 1 saturation point while there is any, else 1 food point. A fresh player has food 20 and saturation 5.
+  - `22 19` gives 10 steps, 5 from saturation, so food 20 -> 15. P1 attempt 2 (2026-11-03) measured exactly 15. Even with saturation 0 it would be 10: well above 6.
+  - The old `10 10` gave 2 steps, both from saturation, so food stayed at 20 and the eat would hang.
 
 **The protocol is net-forge's reply contract v1** (#162, #167: `packages/forge-bridge/tools/probe-commands.mjs`, and `packages/forge-bridge/README.md`, "Probe P1: commands and reply contract (v1)"), used as it is. `lib/probe.mjs` summarises it.
 - **Every reply is checked** with net-forge's `checkProbeReply`. A reply that breaks the contract fails its step, whatever its `ok` says, and is listed in `notes.contractProblems`.

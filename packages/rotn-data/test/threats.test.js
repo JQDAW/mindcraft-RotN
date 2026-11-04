@@ -89,7 +89,21 @@ test('#111 review: skeleton variants take cover; wither skeletons and the skelet
         const t = pack.threatOf(n);
         assert.deepEqual([t.reaction, t.source], ['fight', 'default'], n);
     }
-    assert.deepEqual([pack.threatOf('minecraft:skeleton_horse').level, pack.threatOf('minecraft:skeleton_horse').reaction], ['none', 'ignore'], 'class rules apply to hostile mobs only');
+    // Class rules apply to hostile mobs only. The skeleton horse was the example here until it became
+    // hostile on this pack, and no non-hostile class in the dump matches a rule now, so a temporary
+    // rule matches one hostile class without an entry (wither skeleton) and one passive (villager).
+    const rules = pack.threatReactions.classRules;
+    const probe = { id: 'test-probe', pattern: '^Entity(WitherSkeleton|Villager)$', reaction: 'avoid' };
+    rules.push(probe);
+    try {
+        assert.equal(pack.threatOf('minecraft:wither_skeleton').rule, 'test-probe', 'the probe rule matches a hostile mob');
+        assert.equal(pack.entity('minecraft:villager').hostile, false);
+        assert.deepEqual([pack.threatOf('minecraft:villager').rule, pack.threatOf('minecraft:villager').reaction], [undefined, 'ignore'], 'no class rule for a non-hostile mob');
+    } finally {
+        rules.splice(rules.indexOf(probe), 1);
+    }
+    // The skeleton horse is hostile on this pack (Special AI's depacify; entity-overrides.json), and its entry says fight.
+    assert.deepEqual([pack.threatOf('minecraft:skeleton_horse').level, pack.threatOf('minecraft:skeleton_horse').reaction, pack.threatOf('minecraft:skeleton_horse').source], ['hostile', 'fight', 'verified']);
 });
 
 test('#111 review: what threatOf and nightThreats do not reflect is stated', () => {

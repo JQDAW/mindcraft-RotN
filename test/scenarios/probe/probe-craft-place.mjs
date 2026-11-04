@@ -25,7 +25,8 @@
 // Steps:
 //   1. login_online, as in G1/G2; `gamerule doDaylightCycle false`, `time set day`, `tp <bot> -45 66 -66`.
 //   2. setup: `clear <bot>`, the gives, `scoreboard objectives add p1food food` (the server's own food
-//      level), `effect <bot> minecraft:hunger 22 19` (about food 14; see hungerFood in lib/probe.mjs); the
+//      level), `effect <bot> minecraft:hunger 22 19` (food 15 on RotN's Hunger Overhaul and AppleCore; see
+//      P1_PLAN.hunger in lib/probe.mjs, and P1 attempt 2 measured 15); the
 //      table at -43 66 -66 (setblock, then testforblock); each placement cell set to air with stone under it.
 //   3. craft_*: probe-craft for each of the four recipes (rotn-data's recipe ids); the driver's reply must
 //      be ok, and the server's own count-only `clear <bot> <item> -1 0` must show the plan's counts.
@@ -35,7 +36,9 @@
 //      The scenario reads the server's p1food score (`scoreboard players list <bot>`) until it is below 20,
 //      at most until foodWaitMs after the effect began. No score means the food never changed. Without
 //      food below 20 the eat command is not sent and the check fails. Then probe-eat bread: the driver's ok
-//      (food up, one bread fewer), its foodBefore below 20, and the server counts 1 bread left.
+//      (food up, one bread fewer), its foodBefore below 20, the server counts 1 bread left, and the server's
+//      p1food score, read again after the eat (for up to foodAfterWaitMs), is above the one before it
+//      (#165 review). RotN's bread is +3.
 //   6. `clear <bot>`, `scoreboard objectives remove p1food`, the end.
 // Window-click transactions and the FastWorkbench window are not in the driver's replies: the evidence
 // step reads them from the capture, whose path notes.capture records (the driver's `forge` event).
@@ -44,6 +47,8 @@
 // the driver prints nothing for stepAbortMs (120 s) after a command (net-forge's plan).
 // test/unit/probe-e2e.test.js runs it against net-forge's REAL g1-driver and probe-commands.mjs, on net-forge's
 // fake RotN test server (packages/forge-bridge/test/probe-test-server.js, #167).
+// Each P1 attempt uses a fresh server (lead, #165 review): a fresh world's first join runs the pack's own
+// commands and gives, and a rerun on a used world would start from a different inventory and food state.
 import crypto from 'node:crypto';
 import { startSession } from '../../runner/lib/session.mjs';
 import { lastTeleport } from '../../runner/lib/server-log.mjs';
@@ -101,6 +106,7 @@ export default {
         latePollMs: 1 * MS,
         foodWaitMs: 40 * MS,       // from the hunger effect's start: its 22 s plus margin for the food to fall
         foodPollMs: 2 * MS,
+        foodAfterWaitMs: 6 * MS,   // after the eat: how long the server's p1food score may take to rise
     },
     gateParams: {},
 
@@ -263,13 +269,22 @@ export default {
         } else {
             const eat = await ask('eat', (t) => probeEat(name, t, plan.eat.item));
             const breadLeft = await count(plan.eat.item);
+            // The server's own food level must rise too (#165 review), not only the driver's bot.food.
+            const eatenAt = clock.now();
+            let after = await listFood();
+            while (!(typeof after.food === 'number' && after.food > food.food) && clock.now() - eatenAt < p.foodAfterWaitMs && !stopReason()) {
+                await clock.sleep(p.foodPollMs);
+                after = await listFood();
+            }
+            const serverFoodAfter = after.food;
+            const serverRose = typeof serverFoodAfter === 'number' && serverFoodAfter > food.food;
             // The driver's own view (bot.food) must agree that the food was below 20 when it ate.
             const driverBelow = typeof eat?.foodBefore === 'number' && eat.foodBefore < 20;
             ctx.note('eat', eat
-                ? { ok: eat.ok, foodBefore: eat.foodBefore, foodAfter: eat.foodAfter, countBefore: eat.countBefore, countAfter: eat.countAfter, ms: eat.ms, error: eat.error ?? null, breadLeft, serverFoodBefore: food.food }
-                : { reply: null, why: noReply(), breadLeft, serverFoodBefore: food.food });
-            ctx.check('eat', eat?.ok === true && driverBelow && breadLeft === plan.eat.after,
-                eat ? `server food ${food.food}; driver ok=${eat.ok}${eat.error ? ` (${eat.error})` : ''}; food ${eat.foodBefore} -> ${eat.foodAfter}${driverBelow ? '' : ' (the driver\'s food was not below 20)'}; bread left ${breadLeft ?? '?'} (want ${plan.eat.after})`
+                ? { ok: eat.ok, foodBefore: eat.foodBefore, foodAfter: eat.foodAfter, countBefore: eat.countBefore, countAfter: eat.countAfter, ms: eat.ms, error: eat.error ?? null, breadLeft, serverFoodBefore: food.food, serverFoodAfter }
+                : { reply: null, why: noReply(), breadLeft, serverFoodBefore: food.food, serverFoodAfter });
+            ctx.check('eat', eat?.ok === true && driverBelow && breadLeft === plan.eat.after && serverRose,
+                eat ? `server food ${food.food} -> ${serverFoodAfter ?? '?'}${serverRose ? '' : ' (the server\'s food did not rise)'}; driver ok=${eat.ok}${eat.error ? ` (${eat.error})` : ''}; food ${eat.foodBefore} -> ${eat.foodAfter}${driverBelow ? '' : ' (the driver\'s food was not below 20)'}; bread left ${breadLeft ?? '?'} (want ${plan.eat.after})`
                     : `${noReply()}; bread left ${breadLeft ?? '?'}`);
         }
         if (aborted) return;

@@ -3,7 +3,12 @@
 // payload bytes reach the summary.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readCapture, summarize, REID_MIN_ID } from '../tools/p1-capture-summary.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readCapture, summarize, CAPTURE_CAPS, REID_MIN_ID } from '../tools/p1-capture-summary.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const click = (t, windowId, action, id, slot = 1) => ({ t, kind: 'packet', dir: 'C2S', name: 'window_click', params: { windowId, slot, mouseButton: 0, action, mode: 0, item: id === null ? { blockId: -1 } : { blockId: id, itemCount: 1, itemDamage: 0 } } });
 const answer = (t, windowId, action, accepted) => ({ t, kind: 'packet', dir: 'S2C', name: 'transaction', params: { windowId, action, accepted }, b64: 'EQAAAQE=' });
@@ -41,6 +46,44 @@ test('the fastbench window bounds the table craft: its clicks, its set_slots (to
     assert.deepEqual(s.tableCraft.setSlots.map((x) => [x.windowId, x.slot, x.item.id]), [[1, 0, 274]], 'the set_slot at t 5000 is outside the window');
     assert.deepEqual(s.blockPlaces, [{ t: 40, location: { x: -43, y: 66, z: -66 }, direction: 1 }]);
     assert.deepEqual(s.limits.map((l) => [l.name, l.channel]), [['channel_limit', 'aether_legacy']]);
+});
+
+test('CAPTURE_CAPS is exactly forge-bridge\'s default caps in bridge.js (it does not export them)', () => {
+    const src = fs.readFileSync(path.join(HERE, '..', '..', 'packages', 'forge-bridge', 'src', 'bridge.js'), 'utf8');
+    const table = (name) => {
+        const m = new RegExp(`const ${name} = \\{([^}]*)\\};`).exec(src);
+        assert.ok(m, `${name} is in bridge.js`);
+        return Object.fromEntries([...m[1].matchAll(/([a-z_]+):\s*(\d+)/g)].map(([, k, v]) => [k, Number(v)]));
+    };
+    assert.deepEqual({ ...CAPTURE_CAPS.S2C }, table('DEFAULT_CAPTURED_PACKETS'));
+    assert.deepEqual({ ...CAPTURE_CAPS.C2S }, table('DEFAULT_CAPTURED_C2S'));
+});
+
+test('a packet stream at its cap is reported (block_change included); a capped click stream makes the counts incomplete (#189 nit 1)', () => {
+    const changes = Array.from({ length: CAPTURE_CAPS.S2C.block_change }, (_, i) => ({ t: i, kind: 'packet', dir: 'S2C', name: 'block_change', params: {} }));
+    const s = summarize([...changes, ...CAPTURE]);
+    assert.deepEqual(s.limits.filter((l) => l.name === 'packet_cap').map((l) => [l.dir, l.packet, l.limit, l.lastT]), [['S2C', 'block_change', 300, 299]]);
+    assert.equal(s.windowClicks.complete, true, 'the click and transaction streams are below their caps');
+    const many = Array.from({ length: CAPTURE_CAPS.C2S.window_click }, (_, i) => click(100 + i, 0, 100 + i, 280));
+    const c = summarize([...CAPTURE, ...many]);
+    assert.equal(c.windowClicks.complete, false);
+    assert.ok(c.limits.some((l) => l.packet === 'window_click' && l.dir === 'C2S'));
+    assert.equal(summarize(readCapture(text)).limits.filter((l) => l.name === 'packet_cap').length, 0);
+});
+
+test('transactions no click claimed are listed as unpaired (#189 nit 2)', () => {
+    const s = summarize([...CAPTURE, answer(50, 0, 99, true), answer(51, 1, 1, false)]);
+    assert.deepEqual([s.transactions.total, s.transactions.paired], [5, 3]);
+    assert.deepEqual(s.transactions.unpaired.map((u) => [u.windowId, u.action, u.accepted]), [[0, 99, true], [1, 1, false]], 'a second answer to an already answered click is unpaired too');
+    assert.deepEqual(summarize(readCapture(text)).transactions.unpaired, []);
+});
+
+test('no close_window: the table craft ends 10 s after the window opened (#189 nit 5)', () => {
+    const noClose = CAPTURE.filter((e) => e.name !== 'close_window');
+    const slot = (t, id) => ({ t, kind: 'packet', dir: 'S2C', name: 'set_slot', params: { windowId: 1, slot: 0, item: { blockId: id, itemCount: 1, itemDamage: 0 } } });
+    const s = summarize([...noClose, slot(41 + 9999, 77), slot(41 + 10001, 291)]);
+    assert.equal(s.tableCraft.closedT, null);
+    assert.deepEqual(s.tableCraft.setSlots.map((x) => x.item.id), [274, 4, 77], 'everything inside 10 s is kept (the t 5000 slot too), nothing after it');
 });
 
 test('--names labels ids from a table and leaves unknown ids null; no payload bytes in the summary', () => {

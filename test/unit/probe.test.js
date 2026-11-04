@@ -7,9 +7,10 @@ import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import {
-    P1_CONSOLE_ALLOW, P1_NOT_GATE, P1_PLAN, PROBE_DRIVER_ENV, below, foodScore, guardP1Console, hungerFood, probeCraft, probeEat, probePlace, probeReply,
+    P1_CONSOLE_ALLOW, P1_NOT_GATE, P1_PLAN, PROBE_DRIVER_ENV, below, foodScore, guardP1Console, probeCraft, probeEat, probePlace, probeReply,
 } from '../runner/lib/probe.mjs';
 import { checkProbeReply } from '../../packages/forge-bridge/tools/probe-commands.mjs';
+import { simulateHunger } from '../../packages/forge-bridge/test/fake-containers.js';
 import probe, { captureOf } from '../scenarios/probe/probe-craft-place.mjs';
 
 const NAME = 'FRCFLD';
@@ -72,8 +73,10 @@ describe('the P1 driver protocol and console allowlist', () => {
  *   at which the server kicks the bot ("FRCFLD lost connection: ..." in the log; the driver still runs);
  *   opt.noHunger: the hunger effect changes nothing (food stays 20); opt.breakContract: a command whose
  *   reply breaks contract v1 (no "v"); opt.late: a command prefix answered only after the console's wait.
- *   Food starts at 20; the hunger effect sets it to hungerFood(...), and
- *   the p1food score, as 1.12 keeps it, exists only once the food changed after the objective was added.
+ *   opt.serverFoodStuck: the server's p1food score keeps its value from before the eat.
+ *   Food starts at 20 with saturation 5; the hunger effect applies net-forge's RotN model (simulateHunger,
+ *   #177: Hunger Overhaul and AppleCore), and bread is +3 (RotN's scripts/food.zs). The p1food score, as
+ *   1.12 keeps it, exists only once the food changed after the objective was added.
  */
 function sim(opt = {}) {
     const log = [];
@@ -102,6 +105,8 @@ function sim(opt = {}) {
     let startEnv = null;
     let alive = false;
     let food = 20;
+    let saturation = 5;
+    let stuckScore = null;
     let objective = false;
     let foodAtAdd = null;
     let placeN = 0;
@@ -132,7 +137,7 @@ function sim(opt = {}) {
             if (opt.silent === 'eat') return;
             const countBefore = inv.get(m[2]) ?? 0;
             take(m[2], 1);
-            reply('eat', m[1], { ok: true, item: m[2], foodBefore: food, foodAfter: (food += 5), countBefore, countAfter: countBefore - 1, ms: 1700 });
+            reply('eat', m[1], { ok: true, item: m[2], foodBefore: (stuckScore = food), foodAfter: (food += 3), countBefore, countAfter: countBefore - 1, ms: 1700 });
         }
     };
     // opt.late: a command prefix whose reply is written AFTER the console's wait (P1 attempt 1): the
@@ -162,7 +167,7 @@ function sim(opt = {}) {
                 const n = inv.get(m[2]) ?? 0;
                 add(n ? `${m[1]} has ${n} items that match the criteria` : `Could not clear the inventory of ${m[1]}, no items to remove`);
             } else if ((m = /^effect \S+ minecraft:hunger (\d+) (\d+)$/.exec(cmd))) {
-                if (!opt.noHunger) food = hungerFood(Number(m[1]), Number(m[2]), { food });
+                if (!opt.noHunger) ({ food, saturation } = simulateHunger({ food, saturation }, Number(m[1]), Number(m[2])));
                 add(`Given Hunger (ID 17) * ${m[2]} to ${NAME} for ${m[1]} seconds`);
             } else if (cmd === `scoreboard objectives add ${P1_PLAN.foodObjective} food`) {
                 objective = true;
@@ -171,7 +176,7 @@ function sim(opt = {}) {
             } else if (cmd === `scoreboard players list ${NAME}`) {
                 if (objective && food !== foodAtAdd) {
                     add(`Showing 1 tracked objective(s) for ${NAME}:`);
-                    add(`- ${P1_PLAN.foodObjective}: ${food} (${P1_PLAN.foodObjective})`);
+                    add(`- ${P1_PLAN.foodObjective}: ${opt.serverFoodStuck && stuckScore !== null ? stuckScore : food} (${P1_PLAN.foodObjective})`);
                 } else add(`Player ${NAME} has no scores recorded`);
             } else if (cmd === `scoreboard objectives remove ${P1_PLAN.foodObjective}`) {
                 objective = false;
@@ -220,17 +225,15 @@ test('captureOf reads the capture path from the driver\'s forge event', () => {
 });
 
 describe('the hunger step (lead, #165: food must be below 20 before the eat, but well above 6)', () => {
-    test('hungerFood follows 1.12: 0.005 * (amplifier + 1) exhaustion per tick, 4 exhaustion per point, saturation first', () => {
-        assert.equal(hungerFood(10, 10), 20, 'the old 10 s at amplifier 10: 11 exhaustion, 2 points, all from saturation 5');
-        assert.equal(hungerFood(22, 19), 14, 'P1: 44 exhaustion, 11 points, 5 from saturation');
+    test('P1_PLAN.hunger on RotN (net-forge\'s simulateHunger, #177): food 15, as P1 attempt 2 measured; below 20 and well above 6', () => {
         assert.deepEqual(P1_PLAN.hunger, [22, 19]);
+        assert.equal(simulateHunger({ food: 20, saturation: 5 }, ...P1_PLAN.hunger).food, 15, 'P1 attempt 2 (2026-11-03): 15 before the eat');
+        assert.equal(simulateHunger({ food: 20, saturation: 5 }, 10, 10).food, 20, 'the old 10 s at amplifier 10 left food at 20');
         // Whatever the saturation of a fresh player turns out to be (0 to 5), the food lands below 20 and well above 6.
         for (let sat = 0; sat <= 5; sat++) {
-            const f = hungerFood(...P1_PLAN.hunger, { saturation: sat });
-            assert.ok(f < 20 && f >= 9, `saturation ${sat}: food ${f}`);
+            const { food } = simulateHunger({ food: 20, saturation: sat }, ...P1_PLAN.hunger);
+            assert.ok(food < 20 && food >= 9, `saturation ${sat}: food ${food}`);
         }
-        // With one point fewer (float rounding at the 4.0 threshold), still below 20.
-        assert.ok(hungerFood(20, 19) < 20);
     });
 
     test('foodScore reads p1food from `scoreboard players list`; no score is null, never 0', () => {
@@ -257,12 +260,23 @@ describe('probe-craft-place on a simulated server', () => {
         assert.deepEqual(r.notes.crafts.map((c) => [c.result, c.before, c.after]), [['pyrotech:crude_axe', 0, 1], ['contenttweaker:crafting_tools', 0, 1],
             ['minecraft:crafting_table', 0, 1], ['minecraft:stone_pickaxe', 0, 1]]);
         assert.equal(r.notes.crafts[3].tableBlock, 'minecraft:crafting_table');
-        assert.deepEqual(r.notes.eat, { ok: true, foodBefore: 14, foodAfter: 19, countBefore: 2, countAfter: 1, ms: 1700, error: null, breadLeft: 1, serverFoodBefore: 14 });
-        assert.equal(r.notes.foodBeforeEat.server, 14);
+        assert.deepEqual(r.notes.eat, { ok: true, foodBefore: 15, foodAfter: 18, countBefore: 2, countAfter: 1, ms: 1700, error: null, breadLeft: 1, serverFoodBefore: 15, serverFoodAfter: 18 });
+        assert.equal(r.notes.foodBeforeEat.server, 15);
         assert.equal(r.notes.contractProblems, undefined);
         assert.equal(s.inv.size, 0, 'the inventory is cleared at the end');
         assert.equal(s.blocks.get('-43,66,-66'), 'minecraft:crafting_table');
         assert.equal(s.blocks.get('-47,65,-66'), 'minecraft:stone', 'the floor under each placement is stone');
+    });
+
+    test('the driver ate, but the server\'s p1food score did not rise: eat fails, after polling foodAfterWaitMs (#165 review)', async () => {
+        const s = sim({ serverFoodStuck: true });
+        const r = await run(s);
+        const c = byName(r);
+        assert.equal(c.place_5.pass, true);
+        assert.equal(c.eat.pass, false);
+        assert.match(c.eat.detail, /^server food 15 -> 15 \(the server's food did not rise\); driver ok=true; food 15 -> 18; bread left 1/);
+        assert.equal(r.notes.eat.serverFoodAfter, 15);
+        neverGate(r);
     });
 
     test('food still at 20 before the eat step: the eat is not sent (it would only time out), and the check fails', async () => {
