@@ -60,6 +60,7 @@ export const G3_CONSOLE_ALLOW = [
     /^testfor @[aep]\[[^\]]*\]$/,
     new RegExp(`^clear ${NAME} \\S+ ${N} 0$`),                             // count only: maxCount 0, never a real clear
     /^scoreboard objectives add [A-Za-z0-9_]{1,16} stat\.[A-Za-z0-9_.]+$/,
+    /^scoreboard objectives add [A-Za-z0-9_]{1,16} food$/,                 // read-only food level, evidence only (lead, #203)
     /^scoreboard objectives remove [A-Za-z0-9_]{1,16}$/,
     new RegExp(`^scoreboard players list ${NAME}$`),
     /^time query daytime$/,

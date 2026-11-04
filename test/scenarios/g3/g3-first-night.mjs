@@ -15,7 +15,8 @@
 //
 // Steps:
 //   1. login_online (startSession; the G3 world, the G2 seed).
-//   2. Objectives g3b_deaths (stat.deaths) and g3b_played (stat.playOneMinute). The uncounted gap: 1.12
+//   2. Objectives g3b_deaths (stat.deaths), g3b_played (stat.playOneMinute) and g3b_food (the read-only `food`
+//      criterion, approved for G3 as evidence only, lead #203; as in P1). The uncounted gap: 1.12
 //      never backfills a new objective, so a death between the join and the add is not in the stat; the
 //      log's death line still catches it (deathLines), so it fails safe.
 //   3. Every pollMs (60 s): `time query daytime` and `scoreboard players list <bot>` (deaths). No tp of any
@@ -28,7 +29,8 @@
 //   survived_night  dawn after a full night was reached, stat.deaths is 0 and no death line is in the log;
 //   stayed_online   no leave, lost-connection or kick line for the bot from the join to the end;
 //   no_cheat        cheatProblems (lib/g3.mjs), as in (a).
-// Not recorded: the bot's hunger at dawn (the `food` criterion is not on G3's approved list).
+// Evidence, never gating: the bot's food level at the end (notes.foodAtEnd). 1.12 writes a `food` score only
+// once the level changes after the objective exists (P1), so no score means "unchanged since the add", not 0.
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED } from '../../runner/lib/g2.mjs';
 import { G3_DEFAULTS, G3_GATE_PARAMS, cheatProblems, deathLines, guardConsole } from '../../runner/lib/g3.mjs';
@@ -40,6 +42,7 @@ const MS = 1000;
 export const G3B_STATS = Object.freeze([
     { obj: 'g3b_deaths', criteria: 'stat.deaths' },
     { obj: 'g3b_played', criteria: 'stat.playOneMinute' },
+    { obj: 'g3b_food', criteria: 'food' },
 ]);
 /**
  * The dawn rule over the daytime samples so far ([{min, daytime}], null daytimes skipped):
@@ -114,7 +117,8 @@ export default {
             const daytime = timeQuery(await confirm('time query daytime', (l) => timeQuery(l) !== null));
             const sc = playerScores(await confirm(`scoreboard players list ${name}`, (l) => playerScores(l, name) !== null), name);
             if (sc) deaths = sc.g3b_deaths ?? 0;   // no score yet is 0 (S1-A)
-            samples.push({ min: minutes(), daytime, deaths });
+            const food = sc ? sc.g3b_food ?? null : null;   // no food score: unchanged since the add (not 0)
+            samples.push({ min: minutes(), daytime, deaths, food });
             ctx.note('samples', samples);
             dn = dawnOf(samples, p);
             const died = deathLines(s.sinceMarker(), name);
@@ -128,6 +132,9 @@ export default {
         }
         ctx.note('end', { reason: end, minutes: minutes() });
         ctx.note('night', dn);
+        const lastFood = samples.at(-1)?.food;
+        ctx.note('foodAtEnd', { food: lastFood ?? null, objective: added.g3b_food ?? null, gating: false,
+            why: lastFood == null ? (added.g3b_food === 'added' ? 'no food score: the level has not changed since the objective was added (1.12)' : 'the food objective was not added') : 'the last food score before the end' });
         const log = s.sinceMarker();
         const died = deathLines(log, name);
         ctx.note('deathLines', died);

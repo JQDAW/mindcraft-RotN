@@ -33,7 +33,8 @@ function daytimeAt(ms, start = 0) {
 
 /**
  * opt.dieAt: the minute the bot dies (a death line and stat.deaths 1); opt.statOnly / opt.lineOnly: only one
- * of the two; opt.kickAt: the minute it is kicked;
+ * of the two; opt.kickAt: the minute it is kicked; opt.hungry: the food level falls 1 point every 10 min
+ * (otherwise it stays 20, so 1.12 never writes a food score);
  * opt.frozen: the time never moves (a freeze that never ends).
  */
 function sim(opt = {}) {
@@ -43,6 +44,8 @@ function sim(opt = {}) {
     let online = false;
     let alive = false;
     let deaths = 0;
+    let foodAtAdd = null;
+    const foodNow = () => (opt.hungry && joinT !== null ? 20 - Math.floor((t - joinT) / (10 * MIN)) : 20);
     const objectives = new Map();
     const sent = [];
     const add = (msg) => log.push(line(t, msg));
@@ -71,13 +74,16 @@ function sim(opt = {}) {
             else if (cmd === 'time query daytime') add(`Time is ${opt.frozen ? 6000 : daytimeAt(t)}`);
             else if ((m = /^scoreboard objectives add (\S+) (\S+)$/.exec(cmd))) {
                 objectives.set(m[1], m[2]);
+                if (m[2] === 'food') foodAtAdd = foodNow();
                 add(`Added new objective '${m[1]}' successfully`);
             } else if ((m = /^scoreboard objectives remove (\S+)$/.exec(cmd))) {
                 if (objectives.delete(m[1])) add(`Removed objective '${m[1]}' successfully`);
                 else add(`No objective was found by the name '${m[1]}'`);
             } else if (cmd === `scoreboard players list ${NAME}`) {
                 const played = Math.floor((t - joinT) / 50);
-                const shown = [...objectives].map(([o, c]) => [o, c === 'stat.deaths' ? deaths : played]).filter(([, v]) => v > 0);
+                // 1.12: a food score exists only once the level changed after the objective was added (P1).
+                const val = (c) => (c === 'stat.deaths' ? deaths : c === 'food' ? (foodNow() !== foodAtAdd ? foodNow() : 0) : played);
+                const shown = [...objectives].map(([o, c]) => [o, val(c)]).filter(([, v]) => v > 0);
                 if (!shown.length) add(`Player ${NAME} has no scores recorded`);
                 else {
                     add(`Showing ${shown.length} tracked objective(s) for ${NAME}:`);
@@ -144,12 +150,21 @@ describe('g3-first-night on a simulated server', () => {
         assert.match(r.notes.end.reason, /^dawn: /);
         assert.ok(r.notes.end.minutes >= 39 && r.notes.end.minutes <= 42, String(r.notes.end.minutes));
         assert.equal(r.notes.shelterAtMidnight.taken, false, 'no position without tp (lead, #201 review)');
+        assert.deepEqual(r.notes.foodAtEnd, { food: null, objective: 'added', gating: false, why: 'no food score: the level has not changed since the objective was added (1.12)' });
         for (const cmd of s.sent) {
             assert.ok(G3_CONSOLE_ALLOW.some((re) => re.test(cmd)), `not approved: ${cmd}`);
             assert.ok(!/^(time set|gamerule)/.test(cmd), `the scenario touched the time: ${cmd}`);
             assert.ok(!/^tp /.test(cmd), `no tp in G3: ${cmd}`);
         }
         assert.equal(r.gateValid, true, r.weakenedParams.join('; '));
+    });
+
+    test('hunger at dawn is recorded as evidence, never gating (lead, #203)', async () => {
+        const r = await run(sim({ hungry: true }));
+        assert.equal(byName(r).survived_night.pass, true);
+        assert.equal(r.notes.foodAtEnd.food, 16, JSON.stringify(r.notes.foodAtEnd));
+        assert.equal(r.notes.foodAtEnd.gating, false);
+        assert.ok(r.notes.samples.some((x) => x.food === null) && r.notes.samples.at(-1).food === 16, 'no score until the level first changes');
     });
 
     test('a death at night ends the run early and fails survived_night; the stat or the line alone is enough', async () => {

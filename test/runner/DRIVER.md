@@ -240,7 +240,10 @@ The real agent lives through its first full night from a fresh spawn. The runner
   - `stayed_online`: no leave, lost-connection or kick line;
   - `no_cheat`: as in (a).
 - **The uncounted gap:** a death before the objective exists is not in the stat, but its log line still fails survival.
-- **Not taken:** the plan's midnight shelter snapshot. It needed the bot's position, and G3 has no `tp`. It was evidence, never gating, and `notes.shelterAtMidnight` says why. The bot's hunger at dawn is not recorded either (`food` is not an approved criterion).
+- **Dropped (lead, #203):** the plan's midnight shelter snapshot. It needed the bot's position, and G3 has no `tp`; `notes.shelterAtMidnight` says why.
+- **Hunger at the end, evidence only (lead, #203):** the objective `g3b_food` uses the read-only `food` criterion, as in P1. `G3_CONSOLE_ALLOW` allows exactly that criterion besides `stat.*`.
+  - `notes.foodAtEnd` and each sample record it.
+  - 1.12 writes a food score only once the level changes after the objective exists, so no score means "unchanged since the add", recorded as null, never 0.
 - **Offline test:** `test/unit/g3-night.test.js`, on S1-A's measured cycle. No batch has run this scenario yet.
 
 ## S1: survey and smoke before G3
