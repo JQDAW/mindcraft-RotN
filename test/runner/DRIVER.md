@@ -246,6 +246,25 @@ The real agent lives through its first full night from a fresh spawn. The runner
   - 1.12 writes a food score only once the level changes after the objective exists, so no score means "unchanged since the add", recorded as null, never 0.
 - **Offline test:** `test/unit/g3-night.test.js`, on S1-A's measured cycle. No batch has run this scenario yet.
 
+### G3 (c): `g3-task-preempts-agenda` (`test/scenarios/g3/`)
+
+A task from the test-only giver `Server` interrupts the real agent's agenda. The agent does the task and reports it, and then its agenda resumes. The server checks every step, and there is no `tp`.
+- **Pinned before a gate batch (lead, #101):**
+  - the marker `x,y,z` (no default: without it the task steps fail with "not reached");
+  - the agenda counter: a comma-separated list of stat criteria, summed. The **provisional** list is the early game's rock piles, logs, sticks and five crafts.
+
+  Until both are pinned, `PINNED` is false and no run is gate-valid. An objective the server rejects is recorded and not counted.
+- **The steps and checks** (`warmMinutes` 5, `acceptS` 60, `taskMinutes` 5 and `resumeMinutes` 5 are compared 'equal'):
+  - `agenda_active`: the counter rises over the warm-up.
+  - The runner places `setblock <marker> minecraft:gold_block` and whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and stand on it", "normal")`.
+  - `task_accepted`: `task <id> accepted: ...` in the bot's chat.
+  - `task_done`: the server finds the bot standing on the marker (`testfor @a[name=<bot>,x=X,y=Y+1,z=Z,dx=0,dy=1,dz=0]`, 1.12's volume selector), **and** the bot says `task <id> done`. The agent's word alone never passes. `task <id> failed: ...` ends the step.
+  - `agenda_resumed`: the counter rises within 5 min after the done line.
+  - `no_cheat`.
+  - Notes: `agenda paused for task <id>`, `agenda resumed: <step>` and the counter readings.
+- **The agent's replies go to public chat** (`bot.chat`, with `only_chat_with` empty), so they are in the server log. The gold block stays: the server is disposable, and setting the old block back is not an approved command.
+- **Offline test:** `test/unit/g3-task.test.js`. The `testfor` reply forms (`Found <name>`, `Selector '...' found nothing`) come from the G2 logs, but the volume selector is not yet confirmed on the real server (the G3 smoke batch does that).
+
 ## S1: survey and smoke before G3
 
 S1 (`test/scenarios/s1/`) is a survey, not a gate. **Every S1 run is not gate-valid:** `run()` first records "S1 is a survey/smoke, never a gate pass" as a notGate reason, so its verdict is at best `SMOKE-PASS (not a gate pass)`. Its findings are data the lead uses to pin G3's world, dawn bound and arbiters (`coord/STATUS-harness-ops.md`, "G3 batches"). The driver is the G2 one (`g1-driver.mjs` with `attachScenario` and `attachG2`); S1 needs one more behaviour:

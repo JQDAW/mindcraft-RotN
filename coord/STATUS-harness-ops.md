@@ -26,7 +26,12 @@ The lead's order: one scenario per small PR, (a) first, then (b) first night, (c
 - **The lead's decisions (#203):** the shelter snapshot is dropped. The `food` criterion is approved as a read-only objective: hunger at the end is recorded as evidence only, and `G3_CONSOLE_ALLOW` allows only that criterion besides `stat.*`.
 - **Tested:** `g3-night.test.js` 10/10 on S1-A's measured cycle, `g3-spend.test.js` 45/45 and `g3-rocks.test.js` 15/15. ESLint is clean.
 
-**Next:** (c) `g3-task-preempts-agenda`, then (d) `g3-untrusted-refused`.
+**PR (c): G3 (c), `g3-task-preempts-agenda`** (branch `agent/harness-ops/g3c-task-preempts`; stacked on #203).
+- **Checks:** `agenda_active`, `task_accepted`, `task_done` (the server's `testfor` volume on the marker AND the bot's done line), `agenda_resumed` and `no_cheat`. There is no `tp`.
+- **For the lead to pin:** the marker `x,y,z` (no default) and the agenda counter (a provisional list of early-game stats). Until then every run is not gate-valid.
+- **Tested:** `g3-task.test.js` 7/7. ESLint is clean.
+
+**Next:** (d) `g3-untrusted-refused`. It needs a driver switch to run with the production giver list (`allow_server_task_giver` false); the switch can only turn the test giver off.
 
 ## Done just before (2026-11-04)
 
