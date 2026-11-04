@@ -1,36 +1,33 @@
 # Status: harness-ops
 
-Updated: 2026-11-03 (16:06 UTC, from `date -u`)
+Updated: 2026-11-04 (23:04 UTC, from `date -u`)
 
-## PAUSED (2026-11-03 16:06 UTC; the lead, for the human: the weekly usage limit is at 93%)
+## Now (resumed 2026-11-04 after the 2026-11-03 usage-limit pause)
 
-**Branch:** `agent/harness-ops/p1-followups` (WIP, pushed, no PR yet). Nothing is running, and no paid work is pending.
+**This PR: `agent/harness-ops/p1-followups`** (serves the #189 review nits and the #165 review follow-ups). Nothing is running, no paid work is pending, and nothing touches the CX23.
 
-**Done on it (the #189 review nits):**
+**The #189 nits (the first commit):**
 - `test/tools/p1-capture-summary.mjs` reports every packet cap reached (`block_change` included) as `packet_cap` in `limits`, and `windowClicks.complete` is false when the click or transaction stream is capped. `CAPTURE_CAPS` is a copy of bridge.js's defaults, and a unit test fails if they differ.
 - Unpaired transactions are listed (`transactions.unpaired`).
-- Tests for the 10 s no-`close_window` fallback and for an unpaired transaction: `test/unit/p1-capture-summary.test.js`, 7 pass; ESLint clean.
+- Tests for the 10 s no-`close_window` fallback and for an unpaired transaction (`test/unit/p1-capture-summary.test.js`).
 - `test/evidence/probe/p1-20261103-a2/capture-summary.json` is regenerated with the new tool from the raw capture and redacted. Its `--check` is clean.
 - The a2 README: the caps, the pairing, "the +3 rests on the driver's reading", and the 15:29:12 check marked as not in a committed log.
 
-**Exact next step after resume (all on this branch, then one PR):**
-1. **#165 follow-ups in the scenario and its tests:**
-   - After the eat, read the server's `p1food` score again, record `serverFoodAfter`, and require it to rise in `eat`.
-   - Replace my vanilla `hungerFood` (`test/runner/lib/probe.mjs`) with net-forge's `simulateHunger` (`packages/forge-bridge/test/fake-containers.js`, #177) in `test/unit/probe.test.js`'s sim. RotN bread is +3 there. The new stub expectations: food 15 before and 18 after.
-   - Keep `P1_PLAN.hunger` at `22 19`: the real server measured 15, exactly the model's value.
-2. **Docs** (scenario header, `lib/probe.mjs`, DRIVER.md P1 section):
-   - the RotN hunger comments (Hunger Overhaul, AppleCore);
-   - the lead's rule that each P1 attempt uses a fresh server;
-   - the lead's approval of the three `p1food` scoreboard commands, at `P1_CONSOLE_ALLOW`.
-3. Run `probe.test.js`, `probe-e2e.test.js`, `late-console.test.js` and `p1-capture-summary.test.js` one at a time; ESLint on the changed files.
-4. Open the PR (serves #165's and #189's nits). Then remove the worktrees `../harness-ops-p1` and `../harness-ops-p1b` (`git worktree remove`): the lead said the raw captures are no longer needed once the a2 summary is regenerated, which is done.
+**The #165 follow-ups (the second commit):**
+- `eat` now also needs the server's own food to rise. After the eat, the scenario reads `p1food` again, for up to `foodAfterWaitMs` (6 s), and records `serverFoodAfter`.
+- My vanilla `hungerFood` is gone from `lib/probe.mjs`. The unit sim uses net-forge's `simulateHunger` (#177) and RotN's +3 bread. The stub now goes 15 -> 18, the same as the real server in P1 attempt 2. `P1_PLAN.hunger` stays `22 19`.
+- A new unit test: the driver ate, but the server's score did not rise, so `eat` fails. The e2e test also asserts that the server's score rose.
+- Docs (scenario header, `lib/probe.mjs`, DRIVER.md P1): the RotN hunger model (Hunger Overhaul, AppleCore, `4 / 0.85` per step), the lead's rule that each P1 attempt uses a fresh server, and the lead's approval of the three `p1food` commands at `P1_CONSOLE_ALLOW`.
+- **Tested, one file at a time:** `probe.test.js` 18/18, `probe-e2e.test.js` 3/3, `late-console.test.js` 4/4, `p1-capture-summary.test.js` 7/7. ESLint is clean on every changed JS file.
+
+**Next:** after this PR, remove the worktrees `../harness-ops-p1` and `../harness-ops-p1b` (`git worktree remove`; the lead said the raw captures are no longer needed now that the a2 summary is regenerated). Then wait for the lead's next item. The first G3 batch still needs the `OPENROUTER_API_KEY` terminal check and a written GO.
 
 ## Before the pause (2026-11-03 afternoon)
 
 **State:** **P1 is done: the rerun (attempt 2) was a SMOKE-PASS, 8 of 8 checks** (below). Attempt 1 had failed at setup on a late console reply, fixed by #183. Both servers are deleted. P1's spend was about EUR 0.28 plus 2 IPv4-hours. Nothing is running. Nothing touches the CX23. Merged since the restart: #165, #169, #170, #172, #173, #176, #180, #183, #184 and net-forge's #167 and #177. Only this PR edits this file.
 
-**Open PRs (mine):**
-- **This PR: the P1 rerun evidence**, `test/evidence/probe/p1-20261103-a2/`. The README covers each pass check, the serverbound REID ids, the FastWorkbench window, the placement latencies, the bread's food gain and the spend. The capture summary comes from the new `test/tools/p1-capture-summary.mjs` (unit-tested).
+**PRs (mine):**
+- **#189 (merged): the P1 rerun evidence**, `test/evidence/probe/p1-20261103-a2/`. The README covers each pass check, the serverbound REID ids, the FastWorkbench window, the placement latencies, the bread's food gain and the spend. The capture summary comes from the new `test/tools/p1-capture-summary.mjs` (unit-tested).
 
 **Next step:**
 - **#165 follow-ups (lead's nits), one small PR:** use net-forge's RotN hunger model (`simulateHunger`, #177: Hunger Overhaul and AppleCore; `20 24` with at least 25 s before eating) instead of my vanilla sums; the lead's rule that each P1 attempt uses a fresh server; and the lead's approval of the `p1food` scoreboard commands, recorded at `P1_CONSOLE_ALLOW` and in DRIVER.md.
