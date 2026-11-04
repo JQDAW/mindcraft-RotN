@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T22:53Z (from `date -u`)
+Updated: 2026-11-04T23:00Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -206,7 +206,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#194** (C1, crafting execution), waiting for the lead's review. Merged before: #190 (do-not-look from `lookAt`), and #189 (P1 passed: 4/4 RotN crafts, including the stone pickaxe at a FastWorkbench table; modded item ids accepted in clicks; 5/5 placements in 589-1158 ms).
+- **#194** (C1, crafting execution) and **#195** (D2b-1, `!buildShelter`), waiting for the lead's review. Merged before: #190 (do-not-look from `lookAt`), and #189 (P1 passed: 4/4 RotN crafts, including the stone pickaxe at a FastWorkbench table; modded item ids accepted in clicks; 5/5 placements in 589-1158 ms).
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
@@ -214,4 +214,14 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 - **C1, crafting execution: #194 open** (this branch, base develop). When `bot.recipesFor` finds no variant (bot.registry's RotN variants are capped, so a mix of rock kinds can be missing) but rotn-data's `canFill` says the items fit, `craftByFill` crafts from canFill's assigned stacks: `filledRecipe` + `fillNow` (craft_needs.js) and a prismarine-recipe `Recipe`, one craft at a time, re-judged each time, at a found or placed crafting table (`bot.craft(recipe, 1, table)` at the FastWorkbench table, as P1's probe did).
   - Added on resume, from net-forge's Request 2 rules: auto-eat is paused around every `bot.craft` (`craftPausingAutoEat`, both paths; an eat under way gets up to 3 s); a recipe with an NBT result or container items left in the grid is refused with a clear error; a table `craftRecipe` already placed is reused, not placed twice.
   - Tests: `craft_needs.test.js` 21/21 (the full mixed-rock `!craftRecipe` test fails on the old skills.js); `src/agent/**` 204/204; lint 254 (baseline OK).
-- **Next:** the C1 review; then D2b (the shelter agenda step, placing with the measured 589-1158 ms, the night routine with `NightClock` and `nightThreatNote`), in small PRs.
+- **D2b-1, `!buildShelter`: #195 open** (branch `agent/skills-rotn/shelter-build`, base develop). `library/shelter.js` builds a closed 1x2 space with sturdy walls and roof from inside:
+  - it picks the site within 4 blocks that needs the fewest blocks;
+  - it counts first: 10 blocks on open ground, including a roof prop;
+  - it digs and replaces dirt or wood in the walls;
+  - run again inside a breached shelter, it repairs it;
+  - a solid floor is kept even when it is not rock (known limit).
+
+  `unstuck` now leaves `action:buildShelter` alone; that test fails on the old `modes.js`. Tests: `shelter.test.js` 6/6; `src/agent/**` 206/206; lint 254.
+- **Next:**
+  1. the #194 and #195 reviews;
+  2. D2b-2, the night routine: a shelter step at dusk (`NightClock`, `SHELTER_LEAD_MIN`); stay in at night; repair with `buildShelter({ site })`; fight only at the opening (`nightThreatNote`); leave at daylight; `torch_placing` kept off in the shelter (it is on by default); the shortfall over the cobblestone step's 8 gathered.
