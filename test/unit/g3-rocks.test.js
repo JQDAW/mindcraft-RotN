@@ -189,6 +189,17 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
         for (const cmd of s.sent) assert.ok(G3_CONSOLE_ALLOW.some((re) => re.test(cmd)), `not approved: ${cmd}`);
         assert.equal(s.objectives.size, 0, 'the objectives are removed at the end');
         assert.equal(r.gateValid, true, r.weakenedParams.join('; '));
+        assert.deepEqual(r.notes.craftingTablePath, { path: 'placed', useStat: 'added', fallback: false, held: 0, placed: 1 });
+    });
+
+    test('the server rejects the table\'s use stat: crafting_table falls back to "held", and the result says so (lead, #201)', async () => {
+        const play = PLAY.map(([m, e]) => (e.use ? [m, { craft: e.craft, inv: { 'minecraft:crafting_table:0': 1 } }] : [m, e]));
+        const r = await run(sim({ play, badCriterion: statCriterion('useItem', 'minecraft:crafting_table') }));
+        const c = byName(r);
+        assert.equal(c.crafting_table.pass, true, c.crafting_table.detail);
+        assert.match(c.crafting_table.detail, /\(the use stat objective: invalid\)/);
+        assert.deepEqual(r.notes.craftingTablePath, { path: 'held', useStat: 'invalid', fallback: true, held: 1, placed: 0 });
+        assert.equal(c.crafted_by_bot.pass, true, 'the use stat is not part of crafted_by_bot');
     });
 
     test('looted tools (held, never crafted): stone_tools passes, crafted_by_bot fails', async () => {

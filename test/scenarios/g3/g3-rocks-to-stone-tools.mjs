@@ -177,6 +177,13 @@ export default {
 
         ctx.check('stone_tools', TOOLS.every((t) => fin[t] >= 1), TOOLS.map((t) => `${t} ${fin[t] ?? 'no reply'}`).join(', ') + `; ${end}`);
         const placed = score(sc, 'g3a_u_table');
+        // Which path decided it (lead, #201): the use stat ("placed", approved for G3 (a)) or the count ("held");
+        // useStat: the objective's add result, so a rejected criterion shows as the "held" fallback.
+        const heldN = fin['minecraft:crafting_table'];
+        ctx.note('craftingTablePath', {
+            path: placed >= 1 ? 'placed' : heldN >= 1 ? 'held' : 'none',
+            useStat: added.g3a_u_table ?? null, fallback: added.g3a_u_table !== 'added', held: heldN, placed,
+        });
         ctx.check('crafting_table', fin['minecraft:crafting_table'] >= 1 || placed >= 1,
             `held ${fin['minecraft:crafting_table'] ?? 'no reply'}, placed (use stat) ${placed ?? 'no scores'}${added.g3a_u_table === 'added' ? '' : ` (the use stat objective: ${added.g3a_u_table ?? 'no reply'})`}`);
         const cobbleN = cobble.reduce((n, c) => n + (c.count ?? 0), 0);
