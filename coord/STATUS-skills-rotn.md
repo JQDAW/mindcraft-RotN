@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T23:46Z (from `date -u`)
+Updated: 2026-11-04T23:52Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -250,6 +250,10 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - `settings.night_shelter: false` turns the routine off (lead-owned settings; default on).
   - **Review nits folded in:** a crafting table whose block update comes late is found on a second look; tests for placed=true into `craftByFill` with no recipe id and with a 2x2 recipe; a site the caller names is refused when a cell has no support.
   - Tests: `night_routine.test.js` 9/9; `shelter.test.js` 11/11; `craft_needs.test.js` 33/33; `src/agent/**` 236/236; lint 254.
-- **Next:**
-  1. the D2b-2 review (and #202's merge);
-  2. after G3 (b) evidence: D1 (eat, AggroTP and invasion re-plan) and D3 (death report), as the lead orders them.
+  - **Lead decisions on #204 (2026-11-04), recorded in the PR:**
+    1. no shelter possible: idle until morning with reflexes is accepted for now; the G3 (b) smoke run shows whether a dig-into-a-hillside fallback is needed;
+    2. night above tasks is accepted; typed commands, `!stop` and `!pause` still act at once.
+- **Next (lead order):**
+  1. the #204 review (and #202's merge);
+  2. D1: eating, and re-planning after teleports (AggroTP) or invasions;
+  3. D3: the death report.
