@@ -4,7 +4,7 @@ Updated: 2026-11-04 (23:04 UTC, from `date -u`)
 
 ## Now (resumed 2026-11-04 after the 2026-11-03 usage-limit pause)
 
-**This PR: `agent/harness-ops/p1-followups`** (serves the #189 review nits and the #165 review follow-ups). Nothing is running, no paid work is pending, and nothing touches the CX23.
+**PR #196: `agent/harness-ops/p1-followups`** (serves the #189 review nits and the #165 review follow-ups). Nothing is running, no paid work is pending, and nothing touches the CX23.
 
 **The #189 nits (the first commit):**
 - `test/tools/p1-capture-summary.mjs` reports every packet cap reached (`block_change` included) as `packet_cap` in `limits`, and `windowClicks.complete` is false when the click or transaction stream is capped. `CAPTURE_CAPS` is a copy of bridge.js's defaults, and a unit test fails if they differ.
@@ -20,7 +20,8 @@ Updated: 2026-11-04 (23:04 UTC, from `date -u`)
 - Docs (scenario header, `lib/probe.mjs`, DRIVER.md P1): the RotN hunger model (Hunger Overhaul, AppleCore, `4 / 0.85` per step), the lead's rule that each P1 attempt uses a fresh server, and the lead's approval of the three `p1food` commands at `P1_CONSOLE_ALLOW`.
 - **Tested, one file at a time:** `probe.test.js` 18/18, `probe-e2e.test.js` 3/3, `late-console.test.js` 4/4, `p1-capture-summary.test.js` 7/7. ESLint is clean on every changed JS file.
 
-**Next:** after this PR, remove the worktrees `../harness-ops-p1` and `../harness-ops-p1b` (`git worktree remove`; the lead said the raw captures are no longer needed now that the a2 summary is regenerated). Then wait for the lead's next item. The first G3 batch still needs the `OPENROUTER_API_KEY` terminal check and a written GO.
+**Next:** wait for the lead's review of #196 and the next item. The first G3 batch still needs the `OPENROUTER_API_KEY` terminal check and a written GO.
+- The worktrees `../harness-ops-p1` and `../harness-ops-p1b` were removed on 2026-11-04 (both clean; the lead said the raw captures were no longer needed).
 
 ## Before the pause (2026-11-03 afternoon)
 
