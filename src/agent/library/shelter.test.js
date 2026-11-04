@@ -228,3 +228,14 @@ test('D2b: !buildShelter runs as an action; unstuck leaves the bot alone only wh
     await mode.update(a);
     assert.ok(mode.stuck_time > 1, 'standing still is counted as stuck again');
 });
+
+test('#195 nit: a site the caller names is refused, not half-built, when a cell has nothing to be placed against', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const set = {};
+    for (let x = -5; x <= -1; x++) for (let z = -5; z <= 5; z++) for (let y = 60; y < 64; y++) set[`${x},${y},${z}`] = 'air';
+    const { bot, placed } = fakeBot({ set });
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0) });
+    assert.equal(r.closed, false);
+    assert.deepEqual(placed, []);
+    assert.match(r.line, /Cannot build the shelter at 0, 64, 0: nothing to place a block against at -1, 64, 0; -1, 65, 0\./);
+});

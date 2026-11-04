@@ -27,6 +27,7 @@
 import settings from './settings.js';
 import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData } from './task_queue.js';
+import { nightTick } from './night_routine.js';
 
 /** Self-prompter time per task, over all its runs. */
 export const TASK_LLM_MS = 10 * 60_000;
@@ -99,6 +100,11 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
         agent._task_tick_at = undefined; // no LLM time while held
         return `held:${hold}`;
     }
+
+    // 2b. Night (D2b-2): from dusk to full daylight the bot shelters; tasks and the agenda wait
+    // and resume afterwards without a new run. Control holds above still win.
+    const night = nightTick(agent, { now });
+    if (night) return night;
 
     // 3. Player tasks.
     if (agent._task_id && agent.tasks?.get(agent._task_id)?.status !== 'active') {

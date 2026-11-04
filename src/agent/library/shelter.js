@@ -193,16 +193,19 @@ async function fillCell(bot, target, interior) {
  * It needs a pickaxe that can dig the walls, so the bot can always get out again (#195 review 2).
  * Each line it logs comes from the bot's own view of the world, never from a command's chat reply.
  * @param {{site?: Vec3, radius?: number}} [opts] site: repair the shelter at this feet position.
- * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[]}>}
+ * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], line: string}>} line: what it logged.
  */
 export async function buildShelter(bot, { site = null, radius = 4 } = {}) {
     const plan = site ? siteNeeds(bot, site) : chooseSite(bot, radius);
-    const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing }; };
+    const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, line }; };
     if (!plan)
         return refuse(null, [], site ? `Cannot repair the shelter at ${at(site.floored())}: the space or its floor is not usable.`
             : `Found no place for a shelter within ${radius} blocks (needs a solid floor, a free 1x2 space, safe digging and a face for every block).`);
     const { feet } = plan;
     if (plan.unsafe) return refuse(feet, plan.todo, `Cannot build the shelter at ${at(feet)}: ${plan.unsafe}.`);
+    // chooseSite never returns such a site; a site the caller names is checked too (#195 nit).
+    if (plan.unsupported.length > 0)
+        return refuse(feet, plan.todo, `Cannot build the shelter at ${at(feet)}: nothing to place a block against at ${plan.unsupported.map(at).join('; ')}.`);
     const level = exitLevel(bot, feet);
     if (!toolLevels(bot, 'pickaxe').some(l => l >= level))
         return refuse(feet, plan.todo, `Not building a shelter at ${at(feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`);
@@ -244,9 +247,9 @@ export async function buildShelter(bot, { site = null, radius = 4 } = {}) {
     const missing = wallsAndRoof(feet).filter(q => !isSturdy(bot.blockAt(q)));
     const floor = bot.blockAt(feet.offset(0, -1, 0));
     const floorNote = isSturdy(floor) ? '' : ` The floor is ${floor?.name ?? 'unknown'}, not rock.`;
-    if (missing.length === 0)
-        log(bot, `Shelter closed at ${at(feet)}: placed ${placed} blocks.${floorNote}`);
-    else
-        log(bot, `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(at).join('; ')}); placed ${placed}.`);
-    return { closed: missing.length === 0, feet, placed, missing };
+    const line = missing.length === 0
+        ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${floorNote}`
+        : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(at).join('; ')}); placed ${placed}.`;
+    log(bot, line);
+    return { closed: missing.length === 0, feet, placed, missing, line };
 }
