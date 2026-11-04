@@ -195,7 +195,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Restart point (resumed 2026-11-04T22:51Z after the usage-limit pause)
 
-- **Worktree:** branch `agent/rotn-data/skeleton-horse`, pushed, PR open (see Open PRs). No background jobs, no subagents (the lead reviews).
+- **Worktree:** branch `agent/rotn-data/skeleton-horse`, pushed, PR #193 open. No background jobs, no subagents (the lead reviews).
 - **Skeleton horse PR (lead's GO: hostile with a cited override):** `entity-overrides.json` `minecraft:skeleton_horse` (targetsPlayers, verified from specialai-1.1.0 `AIHandler` depacify bytecode; Special_AI.cfg lines 15 and 25, hordes.cfg line 134) and a `fight` entry in `threat-reactions.json`. Tests: the entity-threats pinned list (14 entries); threats.test.js's "class rules apply to hostile mobs only" check now uses a temporary probe rule (wither skeleton gets it, villager does not), because no non-hostile class in the dump matches a rule once the horse is hostile (a dump-derived list would have been empty). entity-threats 6/6, threats 14/14, ESLint clean.
 - **Merge with #191:** data files auto-merge; only this STATUS file conflicts. On a temporary merge commit of both branches (scratch worktree, removed): entity-threats 6/6, threats 14/14, threats-bosses 4/4. Whichever merges second must keep both STATUS texts (#191 has Doing and the #187/#188 merges).
 - **Then:** wait for the lead's review of #191 and this PR; fix findings.
@@ -340,4 +340,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 ## Open PRs
 
 - #191 `agent/rotn-data/ghast-blaze-rule`: ghast/blaze class rules, Ghast Queen and Ur-Ghast avoid (lead reviewing).
-- `agent/rotn-data/skeleton-horse`: the skeleton horse is hostile on this pack (Restart point).
+- #193 `agent/rotn-data/skeleton-horse`: the skeleton horse is hostile on this pack (Restart point).
