@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-03T16:07Z (from `date -u`)
+Updated: 2026-11-04T22:51Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -193,15 +193,12 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - blocks/items: `betterwithaddons:world_scale_ore` hardness 15 -> 225 and `randomthings:spectrecoil_number` names (world or random values, known).
 - entities, spawns and serializers: unchanged. `common-mobs.json`: only its dump stamp changed.
 
-## Restart point (PAUSED by the lead, usage limit; 2026-11-03T16:07Z)
+## Restart point (resumed 2026-11-04T22:51Z after the usage-limit pause)
 
-- **Worktree:** branch `agent/rotn-data/skeleton-horse` (WIP, pushed, no PR yet), from develop after #188. Clean. No background jobs, no subagents.
-- **Open PRs:** #191 (`agent/rotn-data/ghast-blaze-rule`: ghast/blaze class rules, Ghast Queen and Ur-Ghast avoid, README, cockatrice method name). Reviewed twice; all findings fixed; waiting for its CI and the lead's review.
-- **Exact next step on resume:** open the PR for `agent/rotn-data/skeleton-horse` (lead's GO: raise the skeleton horse to hostile with a cited override). Its content is done and tested:
-  - `entity-overrides.json`: `minecraft:skeleton_horse` with targetsPlayers true, verified. Evidence: specialai-1.1.0_for_mc1.12.2.jar `AIHandler.onEntityJoinWorld`, where the depacify list with `AGGRESSIVE_CHANCE` gives byte 2, and `addHurtByTargetAI` then adds `EntityAIAttackMeleePassive` and `EntityAINearestAttackableTarget(EntityPlayer)`. Config: Special_AI.cfg lines 15 and 25, plus hordes.cfg line 134.
-  - `threat-reactions.json`: a `fight` entry, verified.
-  - Tests updated: the entity-threats pinned list (14 entries), and the threats.test.js example of a non-hostile mob. entity-threats 6/6, threats 14/14, ESLint clean.
-  - Then: check that it merges with #191 (`git merge-tree`), run one independent reviewer, and update this STATUS on the branch. #191's STATUS text (Doing and the #187/#188 merges) is on its own branch; whichever merges second must keep both.
+- **Worktree:** branch `agent/rotn-data/skeleton-horse`, pushed, PR open (see Open PRs). No background jobs, no subagents (the lead reviews).
+- **Skeleton horse PR (lead's GO: hostile with a cited override):** `entity-overrides.json` `minecraft:skeleton_horse` (targetsPlayers, verified from specialai-1.1.0 `AIHandler` depacify bytecode; Special_AI.cfg lines 15 and 25, hordes.cfg line 134) and a `fight` entry in `threat-reactions.json`. Tests: the entity-threats pinned list (14 entries); threats.test.js's "class rules apply to hostile mobs only" check now uses a temporary probe rule (wither skeleton gets it, villager does not), because no non-hostile class in the dump matches a rule once the horse is hostile (a dump-derived list would have been empty). entity-threats 6/6, threats 14/14, ESLint clean.
+- **Merge with #191:** data files auto-merge; only this STATUS file conflicts. On a temporary merge commit of both branches (scratch worktree, removed): entity-threats 6/6, threats 14/14, threats-bosses 4/4. Whichever merges second must keep both STATUS texts (#191 has Doing and the #187/#188 merges).
+- **Then:** wait for the lead's review of #191 and this PR; fix findings.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
 - **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
@@ -342,5 +339,5 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- #187 `agent/rotn-data/threat-look-bosses`: structured `lookAt` (see Doing).
-- #188 `agent/rotn-data/threat-bosses`: bosses, ghast, blaze, zombie horse, gorgon (see Doing).
+- #191 `agent/rotn-data/ghast-blaze-rule`: ghast/blaze class rules, Ghast Queen and Ur-Ghast avoid (lead reviewing).
+- `agent/rotn-data/skeleton-horse`: the skeleton horse is hostile on this pack (Restart point).
