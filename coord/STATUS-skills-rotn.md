@@ -240,7 +240,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
     Reply posted. Tests: `shelter.test.js` 10/10; `src/agent/**` 210/210; lint 254.
 - **#202** (the #198 follow-up: `craftRecipe` picks up a table it placed in a `finally`, and guards a missing free space): approved by the lead, merge pending.
-- **D2b-2, the night routine: PR open** (branch `agent/skills-rotn/night-routine`). `src/agent/night_routine.js`, `nightTick`, sits in the priority stack after control holds and before tasks. No LLM calls.
+- **D2b-2, the night routine: #204 open** (branch `agent/skills-rotn/night-routine`). `src/agent/night_routine.js`, `nightTick`, sits in the priority stack after control holds and before tasks. No LLM calls.
   - **Dusk:** at `SHELTER_LEAD_MIN` before sunset (by `NightClock`), it stops the self-prompter at the checkpoint and builds a shelter. A task or the agenda that was running resumes later with no new run.
   - **Inside:** every 10 s it repairs a breach at the same site. If the bot was pushed, teleported or walked out, it builds a new shelter where the bot is.
   - **Full daylight:** after the sunrise, it digs out one side with no liquid outside and hands back to tasks and the agenda.
