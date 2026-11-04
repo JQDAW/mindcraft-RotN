@@ -5,6 +5,7 @@ import settings from './settings.js'
 import convoManager from './conversation.js';
 import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
+import * as food from './library/food.js';
 import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
@@ -197,6 +198,34 @@ const modes_list = [
                     }
                 });
             }
+        }
+    },
+    {
+        // D1: RotN foods come from rotn-data's dump (mineflayer-auto-eat sees only vanilla foods and
+        // eats the bread first); auto-eat is off (agent.js).
+        name: 'eating',
+        description: 'Eat at food 12 or lower when idle, and at 6 or lower during any action. Never hawthorn berries or cloudsbluff; bread only when nothing else is left.',
+        interrupts: ['all'],
+        on: true,
+        active: false,
+        retry_ms: 30_000,
+        last_miss_at: -Infinity,
+        update: function (agent) {
+            const bot = agent.bot;
+            if (!food.wantsToEat(bot.food, agent.isIdle())) return;
+            if (Date.now() - this.last_miss_at < this.retry_ms) return;
+            const item = food.chooseFood(bot);
+            if (!item) {
+                this.last_miss_at = Date.now();
+                console.warn(`[reflex] eating: food ${bot.food}, but no safe food in the inventory`);
+                return;
+            }
+            const before = bot.food;
+            // Not awaited, so the update loop is not held up by the eat (execute never rejects).
+            execute(this, agent, async () => {
+                const eaten = await food.eatFood(bot);
+                if (eaten) console.log(`[reflex] ate ${eaten.name}${eaten.metadata ? ':' + eaten.metadata : ''} at food ${before}`);
+            }).catch(err => reportModeError('eating', err));
         }
     },
     {

@@ -201,6 +201,9 @@ export class Agent {
             startAt: 14,
             bannedFood: ["rotten_flesh", "spider_eye", "poisonous_potato", "pufferfish", "chicken"]
         };
+        // Off: it sees only vanilla foods and eats the bread first. The 'eating' mode eats by
+        // rotn-data's food values instead (skills-rotn D1).
+        this.bot.autoEat.disable?.();
 
         if (save_data?.self_prompt) {
             if (init_message) {
