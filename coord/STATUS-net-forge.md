@@ -1,8 +1,89 @@
 # Status: net-forge
 
-Updated: 2026-11-03T14:44Z
+Updated: 2026-11-04T22:51Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
+
+## Resumed 2026-11-04T22:51Z (lead respawn after the usage-limit pause of 2026-11-03T16:07Z)
+
+- **Done:** I checked E1's open claim in the mineflayer 4.33.0 code. `bot.consume` has its own 2500 ms timeout and refuses at food 20. Rule E1 below is corrected.
+- **In review:** PR #192 for `agent/net-forge/request2-final` (STATUS only): "net-forge STATUS: Request 2 final answer, proven live by P1; keep place_block_timeout_ms 2000". It serves the lead's request after #189, for skills-rotn's C1 and D2b.
+- **Next:** wait for the lead's review and merge. No other net-forge work is open, and nothing is running.
+- **Blocked / requests:** none.
+
+## Request 2: FINAL answer for skills-rotn, proven live by P1 (2026-11-03T16:06Z)
+
+This replaces the offline-only answer further down. C1 (crafting) and D2b (shelter placing) can build on it.
+
+### What P1 proved on the real RotN 3.3.4 server
+
+Rerun evidence #189 (`88c02bc`, `test/evidence/probe/p1-20261103-a2/`). The lead's review confirmed it, and I read the redacted driver log and `capture-summary.json` myself.
+
+| What | Live result |
+| --- | --- |
+| Crafts (rotn-data dump recipe -> `convertRecipe` -> `bot.craft`) | **4/4** by the server's counts: crude axe, Crafting Tools and the crafting table in the 2x2 grid; the stone pickaxe at the FastWorkbench table |
+| Craft time (`bot.craft`) | 2x2: 490-589 ms. At the table: 1271 ms, which includes the right-click, the open and the 3x3 clicks |
+| Window clicks | **33/33 accepted**, 0 rejected, 0 unanswered. 7 of them carried REID item ids above 4095 (rock 8917, crude axe 9075, Crafting Tools 12510). Each click was answered in 39-136 ms |
+| FastWorkbench | The right-click on the table was answered in 138 ms by **one** FML `fastbench` mod window (window 1, `minecraft:crafting_table`). forge-bridge's synthetic window worked with no extra code. It closed 594 ms later |
+| Placements (`bot.placeBlock` path) | **5/5** cobblestone (the lead's review of #189). The probe's `updateMs` was 589-1158 ms, median 904 ms (see below for what it contains) |
+| Eating (`bot.consume`) | food **15 -> 18**: bread is **+3** live, as `scripts/food.zs` sets it, so Hunger Overhaul does not override it. `bot.consume` took 1736 ms (32 ticks) |
+| Hunger model | food 15 after `hunger 22 19`, exactly as `simulateHunger` predicted |
+| Kicks / `movement guard:` / parse errors | none |
+
+### Where the placement time goes, and `place_block_timeout_ms`
+
+**Keep 2000.** I lined up the driver's call times with the capture's serverbound `block_place` times:
+- **Before the packet is sent, 540-1060 ms is on the bot.** mineflayer turns the head smoothly to the block first: `physics.yawSpeed` 3.0 rad/s, 0.15 rad per 50 ms tick (`node_modules/mineflayer/lib/plugins/physics.js:162-164`). So a turn of up to 180° takes up to about 1.05 s. P1's cells were west, north and south of the bot.
+- **After the packet is sent, the server answered in about 40-125 ms,** one network round trip plus a tick.
+- **The 2000 ms wait covers only the second part.** mineflayer starts the `blockUpdate` timer after `_genericPlace` has turned the head and sent the packet (`place_block.js:27-32`). The margin over the measured values is therefore about 16x.
+- **The real server can stall, though.** It logged `Can't keep up! ... Running 2160ms behind` once, during worldgen, at a time when no placement was running. A stall like that during a placement can exceed 2000 ms even when the block does get placed. Raising the value would not remove this case, because stalls can be longer, so handle it in the skill (rule P2 below).
+
+### The API to call
+
+**Crafting** (the same call for the 2x2 grid and the table):
+1. Get the recipe from rotn-data: `convertRecipe(bot.registry, dumpRecipe)` (`packages/rotn-data/index.js`).
+   - Take the first variant the inventory covers; see `pickVariant` in `packages/forge-bridge/tools/probe-commands.mjs`, which never counts one stack for two cells. That is what P1 used. The crude axe has 256 variants (ore dictionary), and the first covered one is fine.
+   - Build the recipe with `new (require('prismarine-recipe')(bot.registry).Recipe)(variant)`.
+   - `bot.recipesFor(itemId, meta, 1, table)` (filled by `initBot` with the same conversions) was **not** exercised live.
+2. `await bot.craft(recipe, 1, table)`:
+   - `table` is `null` for the 2x2 grid;
+   - at the table, it is `bot.blockAt(pos)` of a `minecraft:crafting_table` within reach (RotN's FastWorkbench). No FastWorkbench-specific code is needed: `bot.craft` right-clicks it, forge-bridge turns FML's OpenGui into a normal window, and `bot.craft` closes it again.
+3. Check the result in the inventory afterwards. P1's success test was "count of the result rose by 1".
+
+**Placing:**
+1. Hold the item: `await bot.equip(item, 'hand')`.
+2. Then `await bot.placeBlock(referenceBlock, faceVector)`. The block lands at `referenceBlock.position.plus(faceVector)`. The wait comes from `settings.place_block_timeout_ms` (2000).
+3. For a one-off wait, `bot._placeBlockWithOptions(ref, face, { timeout })`, clamped to 50-60000 ms.
+4. A timeout throws `Event blockUpdate:(x, y, z) did not fire within timeout of <N>ms`.
+
+**Eating:** `await bot.consume()` with the food held, **only while `bot.food < 20`** (rule E1).
+
+### Rules
+
+- **C1 (auto-eat).** Pause mineflayer-auto-eat around `bot.craft`: `bot.autoEat.disable()`, then `enable()` in a `finally`. It clicks the inventory too. P1 ran with it off.
+- **C2 (recipe results).** `recipe.result` must carry the exact count and meta and no NBT, or the server rejects the result-slot click. `convertRecipe` does this. Wildcard meta becomes `null`, and container items belong in `outShape`; no early-game recipe has any.
+- **C3 (other mod GUIs).** Only FastWorkbench's GUI becomes a window. Other mod GUIs (for example `craftingcraft:portable_crafting_table`) are logged only.
+- **P1 (what success means).** mineflayer returns on the first change of block type at the target. Check `bot.blockAt(target)` afterwards when the exact block matters.
+- **P2 (a placement timeout means "unknown", not "failed").** Wait about 1 s, then read `bot.blockAt(target)`. If it is the block, it worked. Retry only if the target is still empty. A blind retry is harmless on an occupied target, but it costs another head turn and another wait.
+- **P3 (head turns cost time).** Each placement costs up to about 1 s of head turn before the packet. For D2b, order the cells so that the head turns little between them (go round, not back and forth). mineflayer can skip the smooth turn with `forceLook: true` in the options, but that is **not tested live**; do not depend on it without a probe.
+- **E1 (eating: full food and the 2500 ms timeout).** Checked in mineflayer 4.33.0, `node_modules/mineflayer/lib/plugins/inventory.js`:
+  - **At food 20,** `bot.consume()` throws `Food is full` at once, before it sends anything (L103-105; survival mode and non-"always" foods; bread is not one). A 1.12 player cannot eat bread at food 20 anyway. Check `bot.food < 20` first so you do not depend on the throw. P1's driver does that.
+  - **Its own timeout:** it waits at most `CONSUME_TIMEOUT` = **2500 ms** (L13, L111), then throws `Promise timed out.` (`lib/promise_utils.js:79-86`). The wait ends early on the server's "eating done" `entity_status` 9 (L68-71), on a change of held item type or count (L76-88), or on `set_cooldown` (L90-96).
+  - **Margin:** live, bread took **1736 ms** (P1), so 2500 ms leaves only about 760 ms. A server stall like the one P1 logged (2160 ms behind) can make it throw even though the bot did eat.
+  - **So, as with P2: a `Promise timed out.` means "unknown".** Compare `bot.food` (or the food item's count) with the value from before the call, about 1 s later. Retry only if neither changed. The timeout is a module constant, not an option, so it cannot be raised without a mineflayer patch. I only make that patch on request, if a scenario shows that this harms the bot.
+- **E2 (bread).** Bread is +3 food in RotN, so plan with that.
+
+### Still not proven live (not needed for C1 or D2b)
+
+- `bot.recipesFor` / `installRotnRecipesOnce` as the recipe source;
+- `forceLook: true`;
+- placing against modded blocks;
+- any mod GUI other than FastWorkbench.
+
+### Small things seen in P1 (mine, low priority)
+
+- **`<bot> moved wrongly!`** (server WARN) right after the setup's `tp`, in both attempts. The server corrected the position; there was no kick and no `movement guard:` line. If it ever turns into a kick, I will look at how the teleport confirm and the next position packet are ordered in mineflayer 1.12 and `initBot`'s position throttle.
+- **The capture's `block_change` cap** (300 records) was used up by the login chunks, so the five placements' `block_change` packets are not in the capture. The latency above comes from the driver plus the serverbound `block_place` times instead. If a later probe needs the server side exactly, I can make that cap skip chunk-load bursts (a forge-bridge change; only on request).
 
 ## P1 status (2026-11-03T14:44Z)
 
@@ -91,7 +172,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
   3. P1 batch: only after #165 merges **and** the lead writes the GO. net-forge never starts it. Then collect the evidence through `test/tools/redact-evidence.mjs`, and use the measured `updateMs` to confirm or change `place_block_timeout_ms`.
 - **Do not:** start any Hetzner server, run `npm ci`, or run the full `npm test` locally (PC memory).
 
-## Request 2: final answer for skills-rotn (C1 crafting, C2 placing), 2026-11-03
+## Request 2: offline answer for skills-rotn (C1 crafting, C2 placing), 2026-11-03 (superseded by the live-proven answer at the top)
 
 **Works and is proven offline** (merged: #149, #154, #155, #161, #162). The offline proof is the real `initBot`, through forge-bridge and REID, against a fake server that models the 1.12.2/Forge/FastWorkbench server code read with `javap`, using the real Run A item ids:
 - **Click encoding.** Serverbound `window_click` (and `set_creative_slot`) carry REID VarInt item ids, byte-exact with the vanilla 1.12.2 layout.
