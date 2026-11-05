@@ -80,8 +80,8 @@ export const ROTN_EARLY_GAME = [
     },
     {
         id: 'cobblestone', short: 'make cobblestone from rocks',
-        goal: 'Mine stone with the stone pickaxe for rocks (!collectBlocks("pyrotech:rock", 8)), then make cobblestone from 4 rocks of one type with !craftRecipe("cobblestone", 1). Aim for 8 cobblestone for a shelter.',
-        done: (s) => s.count('cobblestone') >= 8,
+        goal: 'Mine stone with the stone pickaxe for rocks (!collectBlocks("pyrotech:rock", 8)), then make cobblestone from 4 rocks of one type with !craftRecipe("cobblestone", 1). Aim for 10 cobblestone: a night shelter on open ground takes 10 (!buildShelter).',
+        done: (s) => s.count('cobblestone') >= 10, // D2b-2: the open-ground shelter's 10 blocks
     },
 ];
 

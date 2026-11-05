@@ -64,6 +64,8 @@ export class RotnData {
         // Which blocks fall (gravity), from the pack's bytecode and configs (falling-blocks.json,
         // built by tools/build-falling-blocks.mjs).
         this.fallingBlocks = readJson(dir, 'falling-blocks')?.blocks ?? null;
+        // Food values on this pack and foods to avoid (food-values.json, tools/build-food-values.mjs).
+        this.foodData = readJson(dir, 'food-values') ?? null;
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
@@ -162,6 +164,44 @@ export class RotnData {
         if (!it) return { name: r.name, meta: r.meta, propertiesKnown: false };
         const variant = (it.variants ?? []).find(v => v.meta === (r.meta ?? 0)) ?? null;
         return { name: r.name, meta: r.meta ?? 0, propertiesKnown: true, ...it, variant };
+    }
+
+    /**
+     * What a food gives on this pack: { name, meta, hunger, saturationModifier, saturation, source,
+     * vanilla, script?, avoid? }. `saturation` = hunger * saturationModifier * 2 (what eating adds,
+     * capped at the food level). `source`: 'crafttweaker' (a pack script, cited in `script` by line),
+     * 'hungeroverhaul-table' or 'hungeroverhaul-rule' (Hunger Overhaul's change of the vanilla value).
+     * A food whose value is not computed (Hunger Overhaul's HarvestCraft and Biomes O' Plenty tables)
+     * gives hunger and saturation null with `source: 'not-computed'`. Null for an item that is not food.
+     * @param {number} [meta] default: the input's metadata, else 0
+     */
+    foodValues(input, meta) {
+        const r = this.resolve(input, 'items');
+        if (!r || !this.foodData) return null;
+        const m = meta ?? r.meta ?? 0;
+        const e = this.foodData.foods[r.name]?.[m];
+        const avoid = this.avoidFood(r.name, m);
+        if (e) return { name: r.name, meta: m, ...e, ...(avoid ? { avoid } : {}) };
+        if (this.foodData.notComputed[r.name]?.includes(m)) {
+            const v = this.dump.items?.items?.[r.name]?.variants?.find((x) => x.meta === m)?.food;
+            return { name: r.name, meta: m, hunger: null, saturationModifier: null, saturation: null, source: 'not-computed', vanilla: v ? { hunger: v.hunger, saturationModifier: v.saturation } : null, ...(avoid ? { avoid } : {}) };
+        }
+        return null;
+    }
+
+    /**
+     * Why not to eat a food: { effects: [{ effect, seconds, level, chance }], confidence, evidence,
+     * note?, ore? } (vanilla effects from the server jar, the pack's eating effects from
+     * scripts/events.zs, cloudsbluff from the research), or null.
+     */
+    avoidFood(input, meta) {
+        const r = this.resolve(input, 'items');
+        const a = r && this.foodData?.avoid?.[r.name];
+        if (!a) return null;
+        const m = meta ?? r.meta ?? 0;
+        if (a.metas && !a.metas.includes(m)) return null;
+        const { metas: _metas, ...rest } = a;
+        return rest;
     }
 
     /**
