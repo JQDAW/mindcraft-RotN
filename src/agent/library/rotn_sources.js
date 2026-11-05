@@ -73,22 +73,64 @@ export function worldSources(name) {
 /** The levels of every tool of this type the bot holds ("pickaxe" -> [0] for a stone pickaxe). */
 export function toolLevels(bot, type) {
     const levels = [];
-    for (const item of carriedItems(bot)) {
+    // inventory.items() only: the same stacks allowedTool and mineflayer-tool's equipForBlock can
+    // equip (#229 review). A stack on the cursor or in the off hand is moved back first (stowCarried).
+    for (const item of bot.inventory.items()) {
         const level = getItem(registryName(item.name))?.toolClasses?.[type];
         if (typeof level === 'number' && level >= 0) levels.push(level);
     }
     return levels;
 }
 
-/**
- * Every stack the bot carries: bot.inventory.items() covers slots 9-44 only, so the off hand
- * (slot 45), the held item and a stack left on the cursor (an equip cut short; G3 round 2 B: the
- * night routine said "without a pickaxe" while the bot owned a stone pickaxe) are added.
- */
-export function carriedItems(bot) {
+/** Where the bot's stacks are: the inventory (slots 9-44), the off hand (slot 45), the cursor. */
+function carriedPlaces(bot) {
     const inv = bot?.inventory;
-    const all = [...(inv?.items?.() ?? []), bot?.heldItem, inv?.slots?.[45], inv?.selectedItem];
-    return [...new Set(all.filter(i => i && typeof i.name === 'string'))];
+    const ok = (i) => i && typeof i.name === 'string';
+    return {
+        inventory: (inv?.items?.() ?? []).filter(ok),
+        offHand: ok(inv?.slots?.[45]) ? inv.slots[45] : null,
+        cursor: ok(inv?.selectedItem) ? inv.selectedItem : null,
+    };
+}
+
+/**
+ * A log line of where the matching stacks are (G3 round 2 B: the night routine said "without a
+ * pickaxe" while the bot owned a stone pickaxe; the log could not tell why).
+ */
+export function describeCarried(bot, want = () => true) {
+    const p = carriedPlaces(bot);
+    const names = (list) => (list.length ? list.map(i => i.name).join(', ') : 'none');
+    return `inventory: ${names(p.inventory.filter(want))}; off hand: ${p.offHand ? p.offHand.name : 'empty'}; `
+        + `cursor: ${p.cursor ? p.cursor.name : 'empty'}; held: ${bot?.heldItem?.name ?? 'nothing'}`;
+}
+
+/** Wait for pending slot updates (after a rejected click the server resends every slot). */
+export const RESYNC_MS = 600;
+
+/**
+ * Move a matching stack from the cursor (an equip cut short) or the off hand back into the
+ * inventory, so the check and every equip path (allowedTool, equipForBlock) see the same stacks
+ * (#229 review). Then wait RESYNC_MS for pending slot updates. Returns what was moved.
+ */
+export async function stowCarried(bot, want = () => true, { resyncMs = RESYNC_MS } = {}) {
+    const inv = bot?.inventory;
+    const moved = [];
+    const empty = () => inv?.firstEmptyInventorySlot?.() ?? null;
+    const p = carriedPlaces(bot);
+    try {
+        if (p.cursor && want(p.cursor) && empty() != null) {
+            await bot.clickWindow(empty(), 0, 0); // drop the cursor stack into an empty slot
+            moved.push(`${p.cursor.name} from the cursor`);
+        }
+        if (p.offHand && want(p.offHand) && empty() != null) {
+            await bot.moveSlotItem(45, empty());
+            moved.push(`${p.offHand.name} from the off hand`);
+        }
+    } catch (err) {
+        console.warn(`[inventory] could not move a stack back into the inventory: ${err?.message}`);
+    }
+    if (resyncMs > 0) await new Promise(resolve => setTimeout(resolve, resyncMs));
+    return moved;
 }
 
 const levelOk = (tool, level) => (tool.minLevel == null || level >= tool.minLevel) && (tool.maxLevel == null || level <= tool.maxLevel);

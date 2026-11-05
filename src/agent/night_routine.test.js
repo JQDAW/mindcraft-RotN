@@ -390,3 +390,41 @@ test('#204 nit: a typed command during a stored !stfu or !pause hold also turns 
         assert.equal(nightState(agent).state, 'building');
     }
 });
+
+// #229 review: the bot built its shelter with a pickaxe in the off hand, then could not dig out:
+// mineflayer-tool's equipForBlock looks in inventory.items() only. digOut moves it back first.
+test('#229 review: digOut with the pickaxe in the off hand moves it back, equips it and digs', async (t) => {
+    quiet(t);
+    const key = (p) => `${p.x},${p.y},${p.z}`;
+    const world = new Map();
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { world.set(`${x},64,${z}`, 'cobblestone'); world.set(`${x},65,${z}`, 'cobblestone'); }
+    const dug = [];
+    const blockOf = (name, position) => ({ name, metadata: 0, boundingBox: reg.blocksByName[name].boundingBox, position, canHarvest: () => true });
+    const slots = new Array(46).fill(null);
+    slots[45] = { name: 'stone_pickaxe', count: 1, metadata: 0 };
+    const inventory = {
+        slots, selectedItem: null,
+        items: () => slots.slice(9, 45).filter(Boolean),
+        firstEmptyInventorySlot: () => { const i = slots.findIndex((x, k) => k >= 9 && k < 45 && !x); return i < 0 ? null : i; },
+    };
+    const bot = {
+        output: '', inventory,
+        entity: { position: new Vec3(0.5, 64, 0.5) },
+        modes: { isOn: () => false },
+        game: { gameMode: 'survival' },
+        heldItem: null,
+        // like mineflayer-tool: the best tool among inventory.items() only
+        tool: { equipForBlock: async () => { bot.heldItem = inventory.items().find(i => /pickaxe/.test(i.name)) ?? null; } },
+        moveSlotItem: async (from, to) => { slots[to] = slots[from]; slots[from] = null; },
+        blockAt: (p) => blockOf(world.get(key(p.floored())) ?? (p.y < 64 ? 'dirt' : 'air'), p.floored()),
+        // like the server: cobblestone does not break by hand
+        dig: (b) => {
+            if (!/pickaxe/.test(bot.heldItem?.name ?? '')) return Promise.reject(new Error('no pickaxe in hand'));
+            world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve();
+        },
+    };
+    const side = await digOut(bot, SITE);
+    assert.ok(side, 'it got out');
+    assert.equal(dug.length, 2);
+    assert.equal(slots[45], null, 'the pickaxe left the off hand');
+});

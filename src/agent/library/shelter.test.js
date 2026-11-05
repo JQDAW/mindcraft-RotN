@@ -285,18 +285,50 @@ test('G3 round 2 B: the real dump: a stone pickaxe is level 0; metamorphic cobbl
         assert.equal(dumpState({ name: 'undergroundbiomes:metamorphic_cobble', metadata: meta })?.harvestLevel, 0);
 });
 
-test('G3 round 2 B: a pickaxe on the cursor or in the off hand counts; the refusal says what it saw', async (t) => {
+/**
+ * Slots like mineflayer's player window: 9-44 the inventory (items()), 45 the off hand, plus the
+ * cursor (selectedItem). clickWindow drops the cursor stack into a slot; moveSlotItem moves one.
+ */
+function slotInventory(bot, { cursor = null, offHand = null } = {}) {
+    const slots = new Array(46).fill(null);
+    bot.inventory.items().forEach((it, i) => { slots[9 + i] = it; });
+    slots[45] = offHand;
+    const inv = {
+        slots, selectedItem: cursor,
+        items: () => slots.slice(9, 45).filter(i => i && i.count > 0),
+        firstEmptyInventorySlot: () => { const i = slots.findIndex((x, k) => k >= 9 && k < 45 && !x); return i < 0 ? null : i; },
+    };
+    bot.inventory = inv;
+    bot.clickWindow = async (slot) => { slots[slot] = inv.selectedItem; inv.selectedItem = null; };
+    bot.moveSlotItem = async (from, to) => { slots[to] = slots[from]; slots[from] = null; };
+    return inv;
+}
+
+test('#229 review: a pickaxe on the cursor or in the off hand is moved back into the inventory first', async (t) => {
     t.mock.method(console, 'log', () => {});
-    const pick = { name: 'stone_pickaxe', metadata: 3, count: 1 };
+    const pick = () => ({ name: 'stone_pickaxe', metadata: 3, count: 1 });
     const cursor = fakeBot({ pickaxe: false });
-    cursor.bot.inventory.selectedItem = pick;
-    assert.equal((await buildShelter(cursor.bot)).closed, true, 'on the cursor');
+    const ci = slotInventory(cursor.bot, { cursor: pick() });
+    assert.equal((await buildShelter(cursor.bot)).closed, true, cursor.bot.output);
+    assert.equal(ci.selectedItem, null);
+    assert.ok(ci.items().some(i => i.name === 'stone_pickaxe'), 'in the inventory, where allowedTool and equipForBlock look');
+    assert.match(cursor.bot.output, /Moved stone_pickaxe from the cursor back into the inventory\./);
+
     const off = fakeBot({ pickaxe: false });
-    off.bot.inventory.slots = Object.assign(new Array(46).fill(null), { 45: pick });
-    assert.equal((await buildShelter(off.bot)).closed, true, 'in the off hand');
+    const oi = slotInventory(off.bot, { offHand: pick() });
+    assert.equal((await buildShelter(off.bot)).closed, true, off.bot.output);
+    assert.equal(oi.slots[45], null);
+    assert.ok(oi.items().some(i => i.name === 'stone_pickaxe'));
+});
+
+test('#229 review: with no pickaxe anywhere the refusal (after the resync wait) logs every place it looked', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
     const none = fakeBot({ pickaxe: false });
+    slotInventory(none.bot, { offHand: { name: 'torch', count: 1 } });
     await buildShelter(none.bot);
-    assert.match(none.bot.output, /without a pickaxe you could not dig out of it again\. Pickaxes carried: none; the walls need level 0\./);
+    assert.match(none.bot.output, /without a pickaxe you could not dig out of it again\. Pickaxes: inventory: none; off hand: torch; cursor: empty; held: nothing\./);
+    assert.ok(lines.some(l => /^\[shelter\] pickaxe check: need level 0; inventory: none; off hand: torch/.test(l)));
 });
 
 test('G3 round 2 B: the model\'s !buildShelter is refused by day (the night routine builds at dusk); a giver\'s is obeyed', async (t) => {
