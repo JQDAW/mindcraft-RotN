@@ -20,6 +20,13 @@ export function toRegistryFood(item, fv) {
  * registry item that has computed food values (meta 0; the registry has one entry per item id).
  * Items with no computed value (food-values.json notComputed) are left out rather than given
  * vanilla values. Returns { installed, left: [names of the old table's foods not installed] }.
+ *
+ * It does NOT ban anything (#209 review): harmful foods (rotten flesh, spider eye, ...) are
+ * installed like any other, and the table has one entry per item id at meta 0, so the pufferfish
+ * (minecraft:fish meta 3, Poison IV) shares the cod's entry and looks like cod. The eating code
+ * must check avoidFood(name, meta) on the actual stack before eating, and set mineflayer-auto-eat's
+ * bannedFood from avoidFood. bannedFood is per item name, so it cannot ban fish meta 3 without
+ * banning every fish: a pufferfish needs the meta-aware check.
  * @param {object} registry bot.registry (minecraft-data shape, after forge-bridge's extendRegistry)
  * @param {(name: string, meta: number) => object|null} foodValues the catalog's foodValues
  */

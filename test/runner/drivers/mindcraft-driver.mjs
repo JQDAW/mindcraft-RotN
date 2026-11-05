@@ -128,13 +128,18 @@ export async function settingsProblems(file) {
  * This is the one place it is turned on: it never sits in a committed settings.js (settingsProblems) or
  * profile (profileProblems), and the CX23 refuses it (deploy/cx23/check-env.mjs). task_givers (players)
  * stay as the lead's settings.js has them; "Server" needs no entry there.
+ * PRODUCTION_GIVERS_ENV=1 (set by g3-untrusted-refused through the runner's start env) turns the switch OFF,
+ * so the agent runs with the production giver list and `Server` is refused. It can only turn the test giver
+ * off, never on.
  */
+export const PRODUCTION_GIVERS_ENV = 'ROTN_G3_PRODUCTION_GIVERS';
+export const serverGiverOn = (env) => env[PRODUCTION_GIVERS_ENV] !== '1';
 export function mindcraftEnv(env, { profile, mindserverPort }) {
     const out = { ...env };
-    for (const k of ['TEST_SERVER_HOST', 'TEST_SERVER_PORT']) delete out[k];
+    for (const k of ['TEST_SERVER_HOST', 'TEST_SERVER_PORT', PRODUCTION_GIVERS_ENV]) delete out[k];
     out.SETTINGS_JSON = JSON.stringify({
         host: env.TEST_SERVER_HOST, port: Number(env.TEST_SERVER_PORT), auth: 'microsoft', auto_open_ui: false,
-        allow_server_task_giver: true,
+        allow_server_task_giver: serverGiverOn(env),
     });
     out.PROFILES = JSON.stringify([profile]);
     out.MINDSERVER_PORT = String(mindserverPort);
@@ -208,7 +213,9 @@ async function main(argv) {
     // The paths of what runs and of the settings file that was checked (the one main.js imports).
     // The models the agent will use (checked above to be LLM_MODEL), for the run record (run.mjs, result.llm.models).
     const models = profileModels(checked.profile);
-    event('mindcraft_start', { pid: child.pid, main: path.resolve(o.main), settings: o.settings, profile: o.profile, mindserverPort, models, botState });
+    // serverTaskGiver: whether the test-only console giver `Server` is on (g3-untrusted-refused needs it off);
+    // botState: the tasks.json and agenda.json moved aside before the start (#207 review).
+    event('mindcraft_start', { pid: child.pid, main: path.resolve(o.main), settings: o.settings, profile: o.profile, mindserverPort, models, serverTaskGiver: serverGiverOn(process.env), botState });
 
     let stopping = false;
     const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));
