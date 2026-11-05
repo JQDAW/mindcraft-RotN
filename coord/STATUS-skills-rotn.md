@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T23:56Z (from `date -u`)
+Updated: 2026-11-05T00:38Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -250,6 +250,16 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - `settings.night_shelter: false` turns the routine off (lead-owned settings; default on).
   - **Review nits folded in:** a crafting table whose block update comes late is found on a second look; tests for placed=true into `craftByFill` with no recipe id and with a 2x2 recipe; a site the caller names is refused when a cell has no support.
   - Tests: `night_routine.test.js` 9/9; `shelter.test.js` 11/11; `craft_needs.test.js` 33/33; `src/agent/**` 236/236; lint 254.
+  - **#204 review (REQUEST CHANGES), fixed in `a36c3cd1`, reply posted:**
+    1. while a reflex acts nothing starts, and an interrupted build is not a try;
+    2. an unusable shelter (fire, lava, a block inside) is left for a new one;
+    3. at dusk a running action gets 60 s, then it is stopped; at night at once;
+    4. a giver's typed `!goal` runs first, and the giver is told once;
+    5. `digOut` uses the build's safety checks and verifies the exit;
+    6. reset on death and spawn (`Agent.bindNightReset`) and when the routine is off;
+    7. nit: a mob in a wall cell is named.
+
+    Tests: `night_routine.test.js` 16/16; `shelter.test.js` 12/12; `src/agent/**` 244/244; lint 254.
   - **Lead decisions on #204 (2026-11-04), recorded in the PR:**
     1. no shelter possible: idle until morning with reflexes is accepted for now; the G3 (b) smoke run shows whether a dig-into-a-hillside fallback is needed;
     2. night above tasks is accepted; typed commands, `!stop` and `!pause` still act at once.
