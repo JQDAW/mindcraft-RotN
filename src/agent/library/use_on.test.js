@@ -239,3 +239,17 @@ test('collectBlock: a collect that never returns gives the block up at COLLECT_L
     assert.match(bot.output, /Gave up on dirt at 3, 64, 0: time limit of 0\.3 s reached\./);
     assert.match(bot.output, /No more dirt nearby to collect\.|No dirt nearby to collect\./, 'the given-up block is not tried again');
 });
+
+// G3 round 2: the flee (moveAway) threw "PathStopped" when something stopped the pathfinder,
+// and the mode reported "Code threw exception". A stopped walk is an interrupt now.
+test('moveAway: a stopped walk (PathStopped) returns false with a plain line, no exception', T, async () => {
+    const bot = fakeBot();
+    bot.pathfinder.goto = () => {
+        const err = new Error('Path was stopped before it could be completed! Thus, the desired goal was not reached.');
+        err.name = 'PathStopped';
+        return Promise.reject(err);
+    };
+    assert.equal(await skills.moveAway(bot, 20), false);
+    assert.match(bot.output, /Walk stopped \(interrupted\)\./);
+    assert.doesNotMatch(bot.output, /Moved away/);
+});

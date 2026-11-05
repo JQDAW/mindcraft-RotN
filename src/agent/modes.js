@@ -39,6 +39,31 @@ export function shelterQuiet(name, bot) {
     return false;
 }
 
+/**
+ * One owner per threat (G3 round 2 batch A: self_preservation and self_defense kept interrupting
+ * each other while a Grove Sprite attacked; each switch stopped the other action, so the bot
+ * neither fled nor fought, and died). A threat mode (the low-health flee, cowardice,
+ * self_defense) claims the threat when it acts and holds it for THREAT_HOLD_MS: in that time no
+ * other threat mode starts or interrupts it; the owner may act again, which renews the hold.
+ * Hazards (fire, lava, a falling block, drowning) are not threats here: they always act.
+ */
+export const THREAT_HOLD_MS = 6000;
+const threatLease = { owner: null, until: 0 };
+
+/** Claim the threat for this mode, or false when another threat mode holds it. */
+export function claimThreat(modeName, now = Date.now()) {
+    if (threatLease.owner && threatLease.owner !== modeName && now < threatLease.until) return false;
+    threatLease.owner = modeName;
+    threatLease.until = now + THREAT_HOLD_MS;
+    return true;
+}
+
+/** Tests only. */
+export function __resetThreatLease() {
+    threatLease.owner = null;
+    threatLease.until = 0;
+}
+
 // the order of this list matters! first modes will be prioritized
 // while update functions are async, they should *not* be awaited longer than ~100ms as it will block the update loop
 // to perform longer actions, use the execute function which won't block the update loop
@@ -97,7 +122,9 @@ const modes_list = [
                     });
                 }
             }
-            else if (Date.now() - bot.lastDamageTime < 3000 && (bot.health < 5 || bot.lastDamageTaken >= bot.health)) {
+            else if (bot.health > 0 && bot.isAlive !== false // not while dead (it fled from the death hit)
+                && Date.now() - bot.lastDamageTime < 3000 && (bot.health < 5 || bot.lastDamageTaken >= bot.health)) {
+                if (!claimThreat(this.name)) return; // a fight or a retreat owns the threat (round 2)
                 say(agent, 'I\'m dying!');
                 execute(this, agent, async () => {
                     await skills.moveAway(bot, 20);
@@ -233,6 +260,7 @@ const modes_list = [
         update: async function (agent) {
             const plan = threats.threatPlan(agent.bot);
             if (plan?.action === 'flee' && await world.isClearPath(agent.bot, plan.from)) {
+                if (!claimThreat(this.name)) return; // checked after the await: another mode may own it now
                 say(agent, `Backing off: ${plan.from.name.replace("_", " ")} (${plan.why})!`);
                 execute(this, agent, async () => {
                     await skills.avoidEnemies(agent.bot, plan.away, plan.isEnemy, (e) => threats.threatFor(e)?.reaction === 'fight');
@@ -249,6 +277,7 @@ const modes_list = [
         update: async function (agent) {
             const plan = threats.threatPlan(agent.bot);
             if (plan?.action === 'fight' && await world.isClearPath(agent.bot, plan.from)) {
+                if (!claimThreat(this.name)) return; // checked after the await: another mode may own it now
                 say(agent, `Fighting ${plan.from.name}!`);
                 execute(this, agent, async () => {
                     // defendSelf pauses cowardice, so the plan is checked each round: a creeper or more

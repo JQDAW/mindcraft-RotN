@@ -12,6 +12,8 @@
 
 import { requestReplan } from '../replan.js';
 import { safeError } from '../safe_error.js';
+import { nightPhase } from './night.js';
+import { namedAfter } from './threats.js';
 
 /** Samples kept while alive (one a second). */
 export const SAMPLES_KEPT = 3;
@@ -28,6 +30,14 @@ export const CHAT_GAP_MS = 60_000;
 /** This many deaths in STREAK_MS: the bot stops chatting about deaths (log only). */
 export const STREAK_DEATHS = 3;
 export const STREAK_MS = 10 * 60_000;
+/**
+ * The death spot (G3 round 2: the LLM sent the bot straight back to 'last_death_position', where
+ * a zombie carrying its name killed it again). Within DEATH_SPOT_RADIUS of the last death the bot
+ * does not walk for DEATH_SPOT_WAIT_MS, never at dusk or night, and never while a mob carrying
+ * its name is loaded within DEATH_SPOT_RADIUS of the spot.
+ */
+export const DEATH_SPOT_WAIT_MS = 5 * 60_000;
+export const DEATH_SPOT_RADIUS = 24;
 
 /** {key: count} over every slot (inventory, armor, off hand). The key keeps 1.12 variants apart. */
 export function inventoryCounts(bot) {
@@ -91,6 +101,7 @@ export class DeathReporter {
         this.samples = [];
         this.deaths = this.deaths.filter(t => now - t < STREAK_MS);
         this.deaths.push(now);
+        if (this.pending.pos) this.last = { at: now, pos: this.pending.pos };
         return this.pending;
     }
 
@@ -137,6 +148,31 @@ export class DeathReporter {
 }
 
 const where = (p) => (p ? `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}` : 'unknown');
+
+/**
+ * Why the bot must not walk to `pos` now because it is near its last death spot, or null.
+ * Used by the walking commands (!goToRememberedPlace, !goToCoordinates).
+ */
+export function deathSpotBlocked(agent, pos, { now = Date.now() } = {}) {
+    const last = agent?._death?.last;
+    if (!last?.pos || !pos) return null;
+    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    if (dist(pos, last.pos) > DEATH_SPOT_RADIUS) return null;
+    const ago = now - last.at;
+    if (ago < DEATH_SPOT_WAIT_MS) {
+        const left = Math.ceil((DEATH_SPOT_WAIT_MS - ago) / 60_000);
+        return `you died there ${Math.round(ago / 1000)} s ago and what killed you may still be there; wait ${left} more min`;
+    }
+    const bot = agent.bot;
+    let phase = null;
+    try { phase = agent._night?.clock?.phase?.(now) ?? null; } catch { phase = null; }
+    if (!phase && typeof bot?.time?.timeOfDay === 'number') phase = nightPhase(bot.time.timeOfDay);
+    if (phase === 'night' || phase === 'dusk') return `it is ${phase}; go back to where you died only by day`;
+    const named = Object.values(bot?.entities ?? {}).find(e => e !== bot.entity && e?.position
+        && namedAfter(e, bot.username) && dist(e.position, last.pos) <= DEATH_SPOT_RADIUS);
+    if (named) return 'a mob carrying your name (a risen player zombie) is there; it is a strong threat';
+    return null;
+}
 
 /**
  * Wire the death report to an agent (called once at login). Samples once a second while alive;
@@ -208,7 +244,9 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
     // death streak: then the note waits for the next prompt, so deaths cannot drive LLM calls.
     requestReplan(agent, 'death', r.label, {
         now, due: !r.streak,
-        note: `You died at ${where(r.pos)} and respawned. ${items} The spot is saved as 'last_death_position'.`,
+        note: `You died at ${where(r.pos)} and respawned. ${items} The spot is saved as 'last_death_position'. `
+            + `Do not go back there for ${DEATH_SPOT_WAIT_MS / 60_000} min, nor at dusk or night: what killed you may still be there, `
+            + 'and a zombie carrying your name may rise there.',
     });
     return r;
 }

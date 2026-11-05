@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { threatFor, threatPlan, doNotLook, doNotLookNear, isAngry, nightThreatNote, RANGES } from './threats.js';
-import { __modeForTest } from '../modes.js';
+import { __modeForTest, __resetThreatLease } from '../modes.js';
 
 let nextId = 1;
 const mob = (name, x, type = 'mob') => ({ id: nextId++, name, type, position: new Vec3(x, 64, 0), height: 1.8 });
@@ -70,6 +70,7 @@ test('nightThreats becomes one line for the night routine (D2b)', () => {
 
 // The modes act on the plan. isClearPath runs on a fake pathfinder; the skill itself is not run.
 function modeAgent(entities) {
+    __resetThreatLease(); // one fake agent per case; the lease is per process
     const bot = fakeBot(entities, {
         registry: minecraftData('1.12.2'), version: '1.12.2',
         pathfinder: { getPathFromTo: function* () { yield { result: { status: 'success', path: [] } }; } },

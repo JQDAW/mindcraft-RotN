@@ -73,6 +73,19 @@ export function threatFor(entity) {
         : null;
 }
 
+/**
+ * A mob that carries the bot's name (G3 round 2: "Zombie FRCFLD" killed the bot at its death
+ * spot; a pack mod raises a zombie from a dead player, carrying its items; rotn-data is naming
+ * the mod). Read from the custom name (1.12 metadata 2), a player-like username or the display
+ * name, never the bot itself. Such a mob is a strong threat: flee, never fight.
+ */
+export function namedAfter(entity, username) {
+    if (!entity || !username || (entity.type === 'player' && entity.username === username)) return false;
+    const want = String(username).toLowerCase();
+    const names = [entity.customName, entity.metadata?.[2], entity.username, entity.displayName, entity.nametag];
+    return names.some(n => typeof n === 'string' && n.toLowerCase().includes(want));
+}
+
 /** Whether the bot must not look at this mob (an enderman's stare check). */
 export const doNotLook = (entity) => !!threatFor(entity)?.doNotLook;
 
@@ -108,6 +121,14 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
         near.push({ e, t, d: e.position.distanceTo(me) });
     }
     near.sort((a, b) => a.d - b.d);
+    // A mob carrying the bot's name comes first: it killed the bot before (round 2).
+    const mine = bot.username ? Object.values(bot.entities ?? {})
+        .filter(e => e !== bot.entity && e?.position && namedAfter(e, bot.username) && e.position.distanceTo(me) <= RANGES.avoid.near)
+        .sort((a, b) => a.position.distanceTo(me) - b.position.distanceTo(me)) : [];
+    if (mine.length) {
+        return { action: 'flee', why: 'it carries your name (a risen player zombie)', from: mine[0], away: RANGES.avoid.away,
+            isEnemy: (e) => namedAfter(e, bot.username) };
+    }
     const within = (reaction) => near.filter(x => x.t.reaction === reaction && x.d <= RANGES[reaction].near);
     const is = (reaction) => (e) => threatFor(e)?.reaction === reaction;
 
