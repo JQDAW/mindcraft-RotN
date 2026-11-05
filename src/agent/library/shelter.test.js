@@ -243,7 +243,7 @@ test('#195 nit: a site the caller names is refused, not half-built, when a cell 
 test('#204 nit 7: a mob standing in a wall cell is named, and that cell stays open', async (t) => {
     t.mock.method(console, 'log', () => {});
     const { bot, placed } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
-    bot.entities = { 1: bot.entity, 7: { name: 'zombie', position: new Vec3(1.5, 64, 0.5), height: 1.95 } };
+    bot.entities = { 1: bot.entity, 7: { name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95 } };
     const r = await buildShelter(bot);
     assert.equal(r.closed, false);
     assert.deepEqual(placed, []);
@@ -257,4 +257,17 @@ test('isFalling uses rotn-data falls() (#205): soul sand (material sand) does no
     assert.equal(isFalling(b('anvil')), true);
     assert.equal(isFalling(b('soul_sand')), false, 'the material rule alone said it falls');
     assert.equal(isFalling(b('cobblestone')), false);
+});
+
+test('#204 re-review 2: only mobs and players block a cell, not dropped items, XP orbs or arrows', async () => {
+    const { mobIn } = await import('./shelter.js');
+    const cell = new Vec3(1, 64, 0);
+    const at = new Vec3(1.5, 64, 0.5);
+    const self = { type: 'player', position: new Vec3(0.5, 64, 0.5) };
+    const bot = (e) => ({ entity: self, entities: { 0: self, 1: e } });
+    for (const type of ['object', 'orb', 'global', 'other'])
+        assert.equal(mobIn(bot({ type, name: type === 'object' ? 'item' : 'xp_orb', position: at }), cell), null, type);
+    assert.equal(mobIn(bot({ type: 'mob', name: 'zombie', position: at }), cell)?.name, 'zombie');
+    assert.equal(mobIn(bot({ type: 'player', username: 'JQDAW', position: at }), cell)?.username, 'JQDAW');
+    assert.equal(mobIn(bot({ type: 'hostile', name: 'skeleton', position: at }), cell)?.name, 'skeleton');
 });

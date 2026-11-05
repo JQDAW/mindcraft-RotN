@@ -161,9 +161,15 @@ async function centerIn(bot, p, { timeoutMs = 2000 } = {}) {
     return off() <= 0.15;
 }
 
-/** A mob (not the bot) standing in the cell, which a block cannot be placed into. */
+/** Entity types that block a placement: mobs and players (mineflayer's 1.12 'mob', and the newer names). */
+const BODY_TYPES = ['player', 'mob', 'hostile', 'animal', 'passive', 'ambient', 'water_creature'];
+
+/**
+ * A mob or player (not the bot) standing in the cell, which a block cannot be placed into.
+ * Dropped items, XP orbs and arrows do not count (#204 re-review 2).
+ */
 export function mobIn(bot, cell) {
-    return Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position
+    return Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position && BODY_TYPES.includes(e.type)
         && Math.floor(e.position.x) === cell.x && Math.floor(e.position.z) === cell.z
         && e.position.y > cell.y - (e.height ?? 1.8) && e.position.y < cell.y + 1) ?? null;
 }

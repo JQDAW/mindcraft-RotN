@@ -343,3 +343,33 @@ test('#204 review 6: the agent clears the shelter on death and on spawn', async 
         assert.equal(agent._night.gen, 1, `${event}: a job still running changes nothing`);
     }
 });
+
+test("#204 re-review 1: a giver's !goal or typed command from inside the shelter turns the shelter's rules off; afterwards it shelters again", async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    assert.equal(agent.bot.rotnSheltered, true);
+
+    agent.self_prompter.goal_by = 'JQDAW'; // the giver typed !goal: it runs the self-prompter
+    agent.self_prompter.active = true;
+    assert.equal(nightTick(agent, { now: 1, ops: o }), 'night:yield');
+    assert.equal(agent.bot.rotnSheltered, false, 'cowardice and self_defense act again outside');
+    assert.equal(nightState(agent).state, 'building');
+    agent.self_prompter.goal_by = null; // the goal is done
+    agent.self_prompter.active = false;
+    nightTick(agent, { now: 2, ops: o });
+    await settle(agent);
+    assert.equal(o.builds.length, 2, 'built again (or found closed) after the goal');
+    assert.equal(agent.bot.rotnSheltered, true);
+
+    // A typed command (a control hold of kind 'command') does the same; !stop does not.
+    agent.control = { blocking: () => 'stop' };
+    assert.equal(autonomyTick(agent, { now: 3 }), 'held:stop');
+    assert.equal(agent.bot.rotnSheltered, true, '!stop keeps it in place, so still sheltered');
+    agent.control = { blocking: () => 'command' };
+    assert.equal(autonomyTick(agent, { now: 4 }), 'held:command');
+    assert.equal(agent.bot.rotnSheltered, false);
+    assert.equal(nightState(agent).state, 'building');
+});

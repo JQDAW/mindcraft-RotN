@@ -64,6 +64,20 @@ export function resetNight(agent, why) {
     n.gen++;
 }
 
+/**
+ * A giver's typed command or !goal takes over while the bot is in its shelter (#204 re-review 1):
+ * it may walk the bot out, so the shelter's rules end (cowardice and self_defense act again), and
+ * the shelter is built again (or found closed) once the giver's work is done.
+ */
+export function leaveShelterFor(agent, why) {
+    const n = agent?._night;
+    if (!n || n.state !== 'inside') return false;
+    if (agent.bot) agent.bot.rotnSheltered = false;
+    console.log(`[night] ${why} takes over: the shelter's rules are off until it is done`);
+    Object.assign(n, { state: 'building', attempts: 0, nextAt: 0, site: null });
+    return true;
+}
+
 /** Stop autonomy at its checkpoint; what ran keeps its place and resumes without a new run. */
 function holdAutonomy(agent) {
     const sp = agent.self_prompter;
@@ -151,6 +165,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
     // A giver's typed !goal runs first (#204 review 4), as it does over a task; say once that
     // the shelter waits for it.
     if (isGiverGoal(agent)) {
+        leaveShelterFor(agent, "a task giver's goal");
         if (!n.toldGiver) {
             n.toldGiver = true;
             line(agent, `[night] ${phase === 'day' ? 'the night is over' : 'it is night'}; your goal runs first, and I see to the shelter when it is done`);
