@@ -15,7 +15,7 @@ import { TICK_MS, BACKOFF_MS, STEP_LLM_MS, SAVE_EVERY_MS } from './agenda_driver
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { setImmediate } from 'node:timers';
-import { autonomyTick, taskGoal, finishTask } from './priority.js';
+import { autonomyTick, taskGoal, finishTask, PREEMPT_GRACE_MS } from './priority.js';
 import { Control } from './control.js';
 import { TaskQueue, markUntrusted } from './task_queue.js';
 import { SelfPrompter } from './self_prompter.js';
@@ -102,6 +102,39 @@ test('a task preempts the agenda at the next checkpoint; after "task done" the a
     assert.equal(sp.isActive(), true);
     assert.match(sp.prompt, /^RotN agenda, step 1 of 11 \(rocks\)/);
     assert.equal(agent.agenda.spentOn('rocks').attempts, 1, 'resuming after a task is not a new run');
+});
+
+test('G3 smoke: a new task stops an action that never returns after PREEMPT_GRACE_MS, then starts', async (t) => {
+    const agent = fakeAgent(t);
+    const sp = agent.self_prompter;
+    assert.equal(autonomyTick(agent, { now: 0 }), 'rocks');
+    // The agenda's !searchForBlock walks forever: its action never returns until stopped.
+    const actions = { executing: true, currentActionLabel: 'action:searchForBlock', stops: 0 };
+    actions.stop = () => { actions.stops++; actions.executing = false; sp.loop_active = false; return Promise.resolve(); };
+    agent.actions = actions;
+    sp.loop_active = true;
+
+    agent.tasks.add({ text: 'come to me', priority: 'normal', giver: 'JQDAW' });
+    let now = TICK_MS;
+    assert.equal(autonomyTick(agent, { now }), 'task:t1:waiting');
+    now += TICK_MS;
+    assert.equal(autonomyTick(agent, { now }), 'task:t1:waiting');
+    assert.equal(actions.stops, 0, 'the command in flight gets its grace first');
+    while (actions.stops === 0 && now < 60_000) { now += TICK_MS; autonomyTick(agent, { now }); }
+    assert.equal(actions.stops, 1, 'stopped once');
+    assert.ok(now - TICK_MS <= TICK_MS + PREEMPT_GRACE_MS, `stopped at ${now} ms`);
+    assert.equal(agent.said.at(-1), 'task t1: stopping searchForBlock to start it');
+    await new Promise(setImmediate);
+    assert.equal(autonomyTick(agent, { now: now + TICK_MS }), 'task:t1');
+    assert.equal(agent.tasks.get('t1').status, 'active');
+
+    // A reflex (mode:) is not stopped; it finishes on its own.
+    const b = fakeAgent(t, { agenda: false });
+    b.actions = { executing: true, currentActionLabel: 'mode:self_defense', stops: 0, stop() { this.stops++; } };
+    b.self_prompter.loop_active = true;
+    b.tasks.add({ text: 'wave', priority: 'normal', giver: 'JQDAW' });
+    for (let n = 0; n < 20; n++) assert.equal(autonomyTick(b, { now: n * TICK_MS }), 'task:t1:waiting');
+    assert.equal(b.actions.stops, 0);
 });
 
 test('the agenda restarts the self-prompter only after its stopped loop has finished its command', (t) => {

@@ -6,6 +6,10 @@ import { addTask, cancelTask } from '../task_queue.js';
 import { finishTask } from '../priority.js';
 import { hasAutonomyPrefix } from '../agenda_driver.js';
 
+// Walking commands: each walk is bounded inside goToGoal (GO_TO_LIMITS, 3 min); this action
+// timeout is the backstop (G3 smoke C+D: !searchForBlock never returned).
+const WALK_BACKSTOP_MIN = 5;
+
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
     let actionLabel = null;  // Will be set on first use
@@ -153,7 +157,7 @@ export const actionsList = [
         },
         perform: runAsAction(async (agent, player_name, closeness) => {
             await skills.goToPlayer(agent.bot, player_name, closeness);
-        })
+        }, false, WALK_BACKSTOP_MIN)
     },
     {
         name: '!followPlayer',
@@ -177,7 +181,7 @@ export const actionsList = [
         },
         perform: runAsAction(async (agent, x, y, z, closeness) => {
             await skills.goToPosition(agent.bot, x, y, z, closeness);
-        })
+        }, false, WALK_BACKSTOP_MIN)
     },
     {
         name: '!searchForBlock',
@@ -192,7 +196,7 @@ export const actionsList = [
                 range = 32;
             }
             await skills.goToNearestBlock(agent.bot, block_type, 4, range);
-        })
+        }, false, WALK_BACKSTOP_MIN)
     },
     {
         name: '!searchForEntity',
@@ -203,7 +207,7 @@ export const actionsList = [
         },
         perform: runAsAction(async (agent, entity_type, range) => {
             await skills.goToNearestEntity(agent.bot, entity_type, 4, range);
-        })
+        }, false, WALK_BACKSTOP_MIN)
     },
     {
         name: '!moveAway',
@@ -211,7 +215,7 @@ export const actionsList = [
         params: {'distance': { type: 'float', description: 'The distance to move away.', domain: [0, Infinity] }},
         perform: runAsAction(async (agent, distance) => {
             await skills.moveAway(agent.bot, distance);
-        })
+        }, false, WALK_BACKSTOP_MIN)
     },
     {
         name: '!rememberHere',
@@ -234,7 +238,7 @@ export const actionsList = [
             return;
             }
             await skills.goToPosition(agent.bot, pos[0], pos[1], pos[2], 1);
-        })
+        }, false, WALK_BACKSTOP_MIN)
     },
     {
         name: '!givePlayer',
@@ -396,7 +400,7 @@ export const actionsList = [
         description: 'Go to the nearest bed and sleep.',
         perform: runAsAction(async (agent) => {
             await skills.goToBed(agent.bot);
-        })
+        }, false, WALK_BACKSTOP_MIN)
     },
     {
         name: '!stay',
@@ -606,7 +610,7 @@ export const actionsList = [
         params: {},
         perform: runAsAction(async (agent) => {
             await skills.goToSurface(agent.bot);
-        })
+        }, false, WALK_BACKSTOP_MIN)
     },
     {
         name: '!useOn',

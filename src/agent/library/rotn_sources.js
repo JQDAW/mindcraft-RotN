@@ -64,6 +64,7 @@ export function worldSources(name) {
                 ? w.ore.blocks.flatMap(b => b.metas.map(meta => formatName(botName(b.name), meta)))
                 : w.blocks.map(b => formatName(botName(b.name), b.meta ?? null)),
             tool: w.tool ?? null,
+            id: w.id ?? null, // the rule ("fell-tree": a Dynamic Trees branch fells the tree)
             count: typeof w.count === 'number' && w.count > 0 ? w.count : 1,
             text: w.summary ?? w.action ?? '',
         }));
