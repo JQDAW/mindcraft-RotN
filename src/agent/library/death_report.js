@@ -3,7 +3,8 @@
 //
 // RotN (rotn-progression.md, hazard table; config/corpsecomplex.cfg, config/respawntimer.cfg):
 // respawn after 7 s; the bot keeps its main hand, off hand, armor and baubles; everything else
-// drops where it died and does not despawn; half the XP is lost.
+// drops where it died and does not despawn; half the XP is lost. (Research, not yet seen live:
+// the LLM note hedges it until the G3 (b) run.)
 //
 // What was lost is measured, never assumed: the inventory while alive against the inventory a
 // few seconds after the respawn. The server clears the slots one tick before it sends health 0,
@@ -131,7 +132,7 @@ export class DeathReporter {
             if (now - this.lastChatAt >= CHAT_GAP_MS) chat = `I ${line}.`;
         }
         if (chat) this.lastChatAt = now;
-        return { line, chat, lost, pos: p.pos, cause: p.cause, dimension: p.dimension };
+        return { line, chat, lost, pos: p.pos, cause: p.cause, dimension: p.dimension, label: p.label || '', streak: streak >= STREAK_DEATHS };
     }
 }
 
@@ -160,6 +161,9 @@ export function bindDeathReport(agent, { setTimer = setTimeout, clearTimer = cle
     bot.on('death', () => {
         const rec = d.died({ pos: bot.entity?.position, dimension: bot.game?.dimension, now: now() });
         if (!rec) return;
+        // The action the death interrupted; this listener runs before the agent's own death
+        // listener stops it (#215 review 1).
+        rec.label = agent.actions?.currentActionLabel || '';
         if (rec.pos) {
             try { agent.memory_bank?.rememberPlace?.('last_death_position', rec.pos.x, rec.pos.y, rec.pos.z); }
             catch (err) { console.warn(`[death] remember place: ${safeError(err)}`); }
@@ -195,10 +199,16 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
         Promise.resolve().then(() => agent.openChat(r.chat)).catch(err => console.warn(`[death] chat: ${safeError(err)}`));
     }
     // The LLM gets the bot's own state only, never the server's death text (it can carry a mob's
-    // or player's custom name).
-    const items = r.lost.length ? `You lost ${formatLoss(r.lost)}; they lie at the death spot and do not despawn.` : 'You lost no items.';
-    requestReplan(agent, 'death', agent.actions?.currentActionLabel || '', {
-        now, note: `You died at ${where(r.pos)} and respawned. ${items} The spot is saved as 'last_death_position'.`,
+    // or player's custom name). Where the items went is hedged until G3 (b) shows how Corpse
+    // Complex behaves (#215 review 2).
+    const items = r.lost.length
+        ? `You no longer have ${formatLoss(r.lost)}; they may lie at the death spot (unconfirmed).`
+        : 'Your inventory looks unchanged.';
+    // A death is due for a prompt even when nothing was running (#215 review 1), except in a
+    // death streak: then the note waits for the next prompt, so deaths cannot drive LLM calls.
+    requestReplan(agent, 'death', r.label, {
+        now, due: !r.streak,
+        note: `You died at ${where(r.pos)} and respawned. ${items} The spot is saved as 'last_death_position'.`,
     });
     return r;
 }

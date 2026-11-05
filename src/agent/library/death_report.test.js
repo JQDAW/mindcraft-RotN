@@ -2,11 +2,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { setImmediate } from 'node:timers';
 import {
     inventoryCounts, lossDiff, formatLoss, DeathReporter, bindDeathReport,
     SETTLE_MS, RESPAWN_RETRY_MS, RESPAWN_RETRY_EVERY_MS, CHAT_GAP_MS, STREAK_MS,
 } from './death_report.js';
-import { takeReplanNote } from '../replan.js';
+import { takeReplanNote, replanPromptDue, clearReplan, QUIET_MS } from '../replan.js';
 
 const item = (name, count, metadata = 0) => ({ name, count, metadata });
 // Corpse Complex keeps the main hand (slot 36 = hotbar 0 held), off hand (45) and armor (5-8).
@@ -89,7 +90,7 @@ function fakeAgent() {
     const calls = { respawn: 0, chat: [], places: [] };
     bot.respawn = () => { calls.respawn++; };
     const agent = {
-        bot, shut_up: false, actions: { currentActionLabel: '' },
+        bot, shut_up: false, actions: { currentActionLabel: 'action:collectBlocks' },
         openChat: (m) => { calls.chat.push(m); },
         memory_bank: { rememberPlace: (...a) => calls.places.push(a) },
     };
@@ -108,6 +109,7 @@ test('D3: the agent samples while alive, retries a refused respawn, reports once
     agent._death.cause('FRCFLD was blown up by Creeper', { now: timers.now() });
     bot.health = 0; bot.isAlive = false;
     bot.emit('death');
+    agent.actions.currentActionLabel = ''; // the agent's own death listener stops the action
     bot.inventory.slots = invBot(kept()).inventory.slots;
     assert.deepEqual(calls.places, [['last_death_position', 100.5, 70, 200.5]]);
     timers.advance(RESPAWN_RETRY_MS - 1);
@@ -127,8 +129,13 @@ test('D3: the agent samples while alive, retries a refused respawn, reports once
     assert.deepEqual(calls.chat, ['I died at 100, 70, 200 (FRCFLD was blown up by Creeper); lost 12 cobblestone, 5 bread, 3 log:1, 2 log.']);
     assert.ok(logs.includes('[death] died at 100, 70, 200 (FRCFLD was blown up by Creeper); lost 12 cobblestone, 5 bread, 3 log:1, 2 log'), logs.join('\n'));
     assert.equal(agent.replan.modes.death, 1);
+    assert.equal(agent.replan.interrupted, 'action:collectBlocks', 'the label captured at death');
+    // Not self-prompting, idle: the coalesced prompt is due (#215 review 1).
+    const quiet = { now: timers.now() + QUIET_MS, idle: true, reflexActive: false, selfPrompting: false, lastPromptAt: -Infinity };
+    assert.equal(replanPromptDue(agent, quiet), true);
     const note = takeReplanNote(agent);
-    assert.match(note, /You died at 100, 70, 200 and respawned\. You lost 12 cobblestone, 5 bread, 3 log:1, 2 log; they lie at the death spot and do not despawn\. The spot is saved as 'last_death_position'\./);
+    assert.match(note, /^Reflexes \(death\) interrupted 'action:collectBlocks'\. You died at 100, 70, 200 and respawned\. You no longer have 12 cobblestone, 5 bread, 3 log:1, 2 log; they may lie at the death spot \(unconfirmed\)\. The spot is saved as 'last_death_position'\. Check your state/);
+    assert.ok(!/do not despawn/.test(note), 'no unconfirmed Corpse Complex claim');
     assert.ok(!note.includes('Creeper'), 'the server text never reaches the LLM');
 
     // A later spawn with no death (e.g. a dimension change): no report.
@@ -155,4 +162,35 @@ test('D3: a quiet hold (!stfu) keeps the death report out of chat, not out of th
     assert.equal(calls.chat.length, 0);
     assert.equal(agent.replan.modes.death, 1);
     assert.equal(calls.respawn, 0, 'respawned in time: no retry');
+});
+
+test('D3: an idle death is still due; a streak death is a note only; a new action keeps the note', (t) => {
+    t.mock.method(console, 'log', () => {});
+    const timers = fakeTimers();
+    const { agent, bot } = fakeAgent();
+    agent.actions.currentActionLabel = '';
+    bindDeathReport(agent, timers);
+    const die = () => {
+        bot.emit('physicsTick');
+        bot.health = 0; bot.isAlive = false; bot.emit('death');
+        bot.health = 20; bot.isAlive = true; bot.emit('spawn');
+        timers.advance(SETTLE_MS + 1000);
+    };
+    const quiet = () => ({ now: timers.now() + QUIET_MS, idle: true, reflexActive: false, selfPrompting: false, lastPromptAt: -Infinity });
+
+    die();
+    assert.equal(agent.replan.interrupted, null, 'nothing was running');
+    assert.equal(replanPromptDue(agent, quiet()), true, 'a death is due anyway');
+
+    // An action starts right after the respawn (A4b): the request goes, the note stays.
+    clearReplan(agent, 'a new action started (action:collectBlocks)', { log: () => {} });
+    assert.equal(replanPromptDue(agent, quiet()), false, 'no longer due');
+    assert.match(takeReplanNote(agent), /^You died at 100, 70, 200 and respawned\. Your inventory looks unchanged\./);
+
+    die();
+    assert.equal(replanPromptDue(agent, quiet()), true, 'the second death: due');
+    takeReplanNote(agent);
+    die();
+    assert.equal(replanPromptDue(agent, quiet()), false, 'the third death in 10 min: no prompt of its own');
+    assert.match(takeReplanNote(agent), /You died at/);
 });
