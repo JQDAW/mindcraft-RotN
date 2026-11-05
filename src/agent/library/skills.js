@@ -64,6 +64,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
      * await skills.craftRecipe(bot, "stick");
      **/
     // ops: how a table is placed and picked up (tests pass their own; CRAFT_TABLE_OPS below).
+    const run = currentRun(bot); // checked after each await (#225 review)
     let placedTable = false;
     // The variant to craft: "planks:1" asks for spruce planks; a bare "planks" any (B1b).
     // A null meta would let bot.recipesFor return oak planks for spruce.
@@ -94,6 +95,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
                 craftingTable = await ops.place(bot, itemName);
                 if (!craftingTable) return false;
                 placedTable = true;
+                if (run.aborted) { await ops.pickUp(bot); return false; } // take the table back, then stop
                 recipes = bot.recipesFor(mc.getItemId(itemName), craftMeta, 1, craftingTable);
             }
             else {
@@ -119,7 +121,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
             // (its variants are capped): craft from the bot's own stacks (C1).
             const placed = placedTable;
             placedTable = false; // craftByFill picks it up
-            return await craftByFill(bot, itemName, num, needs, craftingTable, placed, ops);
+            return await craftByFill(bot, itemName, num, needs, craftingTable, placed, ops, run);
         }
         else {
             // No RotN craft way: upstream's text from the registry recipes, guarded (#151 review).
@@ -133,6 +135,7 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
     
     if (craftingTable && bot.entity.position.distanceTo(craftingTable.position) > 4) {
         await goToNearestBlock(bot, 'crafting_table', 4, craftingTableRange);
+        if (run.aborted) return false; // the finally picks a placed table up
     }
 
     const recipe = recipes[0];
@@ -218,7 +221,7 @@ export const CRAFT_TABLE_OPS = { place: placeTableNear, pickUp: pickUpTable };
  * A table placed here or by craftRecipe is picked up again, also when bot.craft throws (#194 review).
  * @returns {Promise<boolean>} true if at least one was crafted.
  */
-export async function craftByFill(bot, itemName, num, needs, table = null, placed = false, ops = CRAFT_TABLE_OPS) {
+export async function craftByFill(bot, itemName, num, needs, table = null, placed = false, ops = CRAFT_TABLE_OPS, run = currentRun(bot)) {
     if (!needs.recipeId) {
         if (placed) await ops.pickUp(bot);
         log(bot, `Could not craft ${itemName}: rotn-data names no recipe for these items. ${describeNeeds(itemName, needs)}`);
@@ -243,11 +246,12 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
                 placed = !!table;
                 if (!table) return false;
             }
+            if (run.aborted) return false; // the finally picks a placed table up
             if (bot.entity.position.distanceTo(table.position) > 4)
                 await goToNearestBlock(bot, 'crafting_table', 4, 16);
         }
         const { Recipe } = prismarineRecipe(bot.registry);
-        while (made < num && !bot.interrupt_code) {
+        while (made < num && !bot.interrupt_code && !run.aborted) {
             const fill = fillNow(bot, needs.recipeId);
             if (!fill?.ok) { why = made === 0 ? 'the items no longer fit the recipe' : null; break; }
             let recipe;
@@ -319,6 +323,7 @@ export async function smeltItem(bot, itemName, num=1) {
      * await skills.smeltItem(bot, "raw_iron");
      * await skills.smeltItem(bot, "beef");
      **/
+    const run = currentRun(bot); // first: a limit during the walk must stop it too (#225 review)
 
     // isSmeltable checks bare names; "sand:0" from !inventory is sand (#131 re-review).
     if (!mc.isSmeltable(parseName(itemName)?.name ?? itemName)) {
@@ -336,6 +341,7 @@ export async function smeltItem(bot, itemName, num=1) {
         if (hasFurnace) {
             let pos = world.getNearestFreeSpace(bot, 1, furnaceRange);
             await placeBlock(bot, 'furnace', pos.x, pos.y, pos.z);
+            if (run.aborted) return false;
             furnaceBlock = world.getNearestBlock(bot, names112.FURNACE_BLOCKS, furnaceRange);
             placedFurnace = true;
         }
@@ -346,12 +352,15 @@ export async function smeltItem(bot, itemName, num=1) {
     }
     if (bot.entity.position.distanceTo(furnaceBlock.position) > 4) {
         await goToNearestBlock(bot, names112.FURNACE_BLOCKS, 4, furnaceRange);
+        if (run.aborted) return false;
     }
     bot.modes.pause('unstuck');
     await bot.lookAt(furnaceBlock.position);
+    if (run.aborted) return false;
 
     console.log('smelting...');
     const furnace = await bot.openFurnace(furnaceBlock);
+    if (run.aborted) { closeQuietly(bot, furnace); return false; }
     // check if the furnace is already smelting something
     let input_item = furnace.inputItem();
     if (input_item && input_item.type !== mc.getItemId(itemName) && input_item.count > 0) {
@@ -412,7 +421,7 @@ export async function smeltItem(bot, itemName, num=1) {
         if (Date.now() - last_collected > 11000) {
             break; // if nothing has been collected in 11 seconds, stop
         }
-        if (bot.interrupt_code) {
+        if (bot.interrupt_code || run.aborted) {
             break;
         }
     }
@@ -449,6 +458,7 @@ export async function clearNearestFurnace(bot) {
      * @example
      * await skills.clearNearestFurnace(bot);
      **/
+    const run = currentRun(bot); // first: a limit during the walk must stop it too (#225 review)
     let furnaceBlock = world.getNearestBlock(bot, names112.FURNACE_BLOCKS, 32);
     if (!furnaceBlock) {
         log(bot, `No furnace nearby to clear.`);
@@ -456,10 +466,12 @@ export async function clearNearestFurnace(bot) {
     }
     if (bot.entity.position.distanceTo(furnaceBlock.position) > 4) {
         await goToNearestBlock(bot, names112.FURNACE_BLOCKS, 4, 32);
+        if (run.aborted) return false;
     }
 
     console.log('clearing furnace...');
     const furnace = await bot.openFurnace(furnaceBlock);
+    if (run.aborted) { closeQuietly(bot, furnace); return false; }
     console.log('opened furnace...')
     // take the items out of the furnace
     let smelted_item, intput_item, fuel_item;
@@ -672,9 +684,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Bounded (G3 review of #221): bot.collectBlock.collect has no time limit. Each block gets
     // COLLECT_LIMITS.blockMs (then it is given up and skipped), the whole run totalMs.
     const CL = COLLECT_LIMITS;
+    const run = currentRun(bot);
     const runStart = Date.now();
     const givenUp = [];
     for (let i=0; i<num && collected<num; i++) { // collected counts the items really gained (a stone can give 4 rocks)
+        if (run.aborted) break;
         if (Date.now() - runStart >= CL.totalMs) {
             log(bot, `Stopped collecting ${blockType}: time limit of ${secsText(CL.totalMs)} reached.`);
             break;
@@ -725,6 +739,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         }
         else
             await bot.tool.equipForBlock(block);
+        if (run.aborted) break;
         if (isLiquid) {
             const bucket = bot.inventory.findInventoryItem('bucket');
             if (!bucket) {
@@ -747,7 +762,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 // stay equipped: bot.collectBlock.collect would re-equip the fastest tool (B2).
                 if (ruleTool || mc.mustCollectManually(block.name)) {
                     await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
+                    if (run.aborted) return false;
                     await bot.dig(block);
+                    if (run.aborted) return true; // broken; the gain is still counted below
                     // A Dynamic Trees branch fells the tree: its logs drop around it after the fall,
                     // not at the bot (G3 smoke C+D: "Broke dynamictrees:sprucebranch but got no log").
                     if (fellsTree(block)) await collectFelledDrops(bot, block.position);
@@ -758,12 +775,15 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 return true;
             };
             const blockMs = Math.min(CL.blockMs, CL.totalMs - (Date.now() - runStart));
-            const res = await within(breakIt(), blockMs, () => {
+            const breaking = breakIt();
+            const res = await within(breaking, blockMs, () => {
                 try { Promise.resolve(bot.collectBlock?.cancelTask?.()).catch(() => {}); } catch { /* best effort */ }
                 try { bot.stopDigging?.(); } catch { /* best effort */ }
                 stopWalking(bot);
             });
             if (res === TIMED_OUT) {
+                // Let the cancelled break end before the next block (#224 review 2), at most STOP_SETTLE_MS.
+                await within(breaking.catch(() => {}), STOP_SETTLE_MS);
                 givenUp.push(block.position.clone ? block.position.clone() : block.position);
                 log(bot, `Gave up on ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: time limit of ${secsText(blockMs)} reached.`);
             }
@@ -784,6 +804,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 if (gained === 0)
                     log(bot, `Broke ${block.name} but got no ${blockType}.`);
             }
+            if (run.aborted) break;
             await autoLight(bot);
         }
         catch (err) {
@@ -1224,8 +1245,11 @@ export async function putInChest(bot, itemName, num=-1) {
         return false;
     }
     let to_put = num === -1 ? item.count : Math.min(num, item.count);
+    const run = currentRun(bot);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
+    if (run.aborted) return false;
     const chestContainer = await bot.openContainer(chest);
+    if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
     await chestContainer.deposit(item.type, variantMeta(itemName), to_put);
     await chestContainer.close();
     log(bot, `Successfully put ${to_put} ${itemName} in the chest.`);
@@ -1247,8 +1271,11 @@ export async function takeFromChest(bot, itemName, num=-1) {
         log(bot, `Could not find a chest nearby.`);
         return false;
     }
+    const run = currentRun(bot);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
+    if (run.aborted) return false;
     const chestContainer = await bot.openContainer(chest);
+    if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
     
     // Find all matching items in the chest
     let matchingItems = chestContainer.containerItems().filter(item => itemMatches(item, itemName));
@@ -1264,7 +1291,7 @@ export async function takeFromChest(bot, itemName, num=-1) {
     
     // Take items from each slot until we've taken enough or run out
     for (const item of matchingItems) {
-        if (remaining <= 0) break;
+        if (remaining <= 0 || run.aborted) break;
         
         let toTakeFromSlot = Math.min(remaining, item.count);
         await chestContainer.withdraw(item.type, variantMeta(itemName), toTakeFromSlot);
@@ -1291,8 +1318,11 @@ export async function viewChest(bot) {
         log(bot, `Could not find a chest nearby.`);
         return false;
     }
+    const run = currentRun(bot);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
+    if (run.aborted) return false;
     const chestContainer = await bot.openContainer(chest);
+    if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
     let items = chestContainer.containerItems();
     if (items.length === 0) {
         log(bot, `The chest is empty.`);
@@ -1540,6 +1570,7 @@ export async function goToPosition(bot, x, y, z, min_distance=2) {
      * let position = world.world.getNearestBlock(bot, "oak_log", 64).position;
      * await skills.goToPosition(bot, position.x, position.y, position.x + 20);
      **/
+    const run = currentRun(bot); // checked after the walk (#225 review)
     if (x == null || y == null || z == null) {
         log(bot, `Missing coordinates, given x:${x} y:${y} z:${z}`);
         return false;
@@ -1567,6 +1598,7 @@ export async function goToPosition(bot, x, y, z, min_distance=2) {
     try {
         await goToGoal(bot, new pf.goals.GoalNear(x, y, z, min_distance));
         clearInterval(progressInterval);
+        if (run.aborted) return false; // its command already reported failure
         const distance = bot.entity.position.distanceTo(new Vec3(x, y, z));
         if (distance <= min_distance+1) {
             log(bot, `You have reached at ${x}, ${y}, ${z}.`);
@@ -2341,8 +2373,25 @@ export const USE_ON_LIMITS = { range: 32, candidates: 4, walkMs: 20_000, totalMs
  * The total time one goToGoal walk may take (G3 smoke C+D). 3 min covers a 512-block
  * !searchForBlock walk with detours; every goTo* skill and command walks through goToGoal.
  */
+/** How long a cancelled step may take to end before the skill moves on (#224 review 2). */
+const STOP_SETTLE_MS = 5000;
+
 /** collectBlock (G3 review of #221): per block, and for the whole run (!collectBlocks has 10 min). */
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000 };
+
+/**
+ * The command run this skill belongs to (#224 review 1). A command that hit its total limit
+ * (actions.js withinLimit) is marked aborted; it has already reported failure. A skill whose
+ * await settles only after that (a late chest window) checks this after its awaits and stops,
+ * closing what it opened. The interrupt flag cannot be used: the next command clears it.
+ */
+export function currentRun(bot) {
+    // `in` first: a bot without the property (a strict test double) is never read for it.
+    return (bot && 'action_run' in bot ? bot.action_run : null) ?? { aborted: false };
+}
+function closeQuietly(bot, window) {
+    try { if (typeof window?.close === 'function') window.close(); else bot.closeWindow?.(window); } catch { /* best effort */ }
+}
 
 export const GO_TO_LIMITS = { totalMs: 180_000, stepMs: 15_000, fleeMs: 30_000 };
 

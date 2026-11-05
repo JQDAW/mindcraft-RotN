@@ -27,7 +27,7 @@ export const ACTION_LIMITS_MIN = {
     goToPlayer: 5, goToCoordinates: 5, searchForBlock: 5, searchForEntity: 5, moveAway: 5,
     goToRememberedPlace: 5, goToBed: 5, goToSurface: 5, useOn: 2,
     collectBlocks: 10, attack: 3, attackPlayer: 3, buildShelter: 5, digDown: 5,
-    craftRecipe: 3, smeltItem: 12, clearFurnace: 2, putInChest: 2, takeFromChest: 2, viewChest: 1,
+    craftRecipe: 4, smeltItem: 12, clearFurnace: 2, putInChest: 2, takeFromChest: 2, viewChest: 1,
     givePlayer: 2, placeHere: 1,
 };
 export const STOP_GRACE = { ms: 5000 };
@@ -41,13 +41,21 @@ const limitText = (ms) => (ms >= 60_000 ? `${+(ms / 60_000).toFixed(1)} min` : `
  */
 export async function withinLimit(agent, name, fn, ms) {
     const TIMED_OUT = Symbol('timed out');
+    // This command's run: skills take it at their start and check run.aborted after their awaits
+    // (skills.currentRun). It is cleared when the command ends, so a later skill outside a limited
+    // command (a reflex) never sees an old aborted run.
+    const token = { aborted: false };
+    agent.bot.action_run = token;
+    const release = () => { if (agent.bot.action_run === token) agent.bot.action_run = null; };
     const run = Promise.resolve().then(fn);
     let timer;
     const limit = new Promise(resolve => { timer = setTimeout(() => resolve(TIMED_OUT), ms); });
     let res;
     try { res = await Promise.race([run, limit]); }
-    finally { clearTimeout(timer); }
+    finally { clearTimeout(timer); if (res !== TIMED_OUT) release(); }
     if (res !== TIMED_OUT) return;
+    token.aborted = true; // the skill still holds it; stays set after the interrupt flag is cleared below
+    release();
     run.catch(() => {}); // a late throw after the limit is not an unhandled rejection
     try { agent.requestInterrupt(); } catch (err) { console.warn(`[actions] interrupt failed: ${err?.message}`); }
     let grace;

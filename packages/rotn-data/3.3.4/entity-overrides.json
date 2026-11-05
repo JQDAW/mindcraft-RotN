@@ -1,6 +1,6 @@
 {
  "description": "Entity threat overrides for RotN 3.3.4, beyond the dump's `hostile` (= the class implements IMob). Read by catalog.entity(): `hostile` becomes true for every entry with targetsPlayers, and `dangerous` marks threats to avoid rather than fight. Every entry cites the mod's own bytecode. An entry may set lookAt false (the mob is dangerous to look at: looking at it makes it target you or lets its gaze attack hit; threatOf returns it).",
- "method": "javap -c -p (reads class files; no mod code is run) on the mod jars of the pinned server pack zip (SHA-256 90642fd5...f5205), extracted to a scratch folder outside the repo, 2026-11-01. Scope: every modded living entity whose class does not implement IMob (317 in the second dump). For each, the entity class and its mod superclasses were scanned for a targeting AI task (class name containing 'Target') whose constructor receives EntityPlayer.class; tasks that target EntityLivingBase with a predicate were reviewed by reading the predicate's apply(). EntityAIHurtByTarget (retaliation) is not counted. Conditions (added after the PR #62 review): for each entry, every branch instruction (if*, goto, *switch) before the task's `new` in the same method was checked for a jump target past the task, and the method's callers were checked: initEntityAI is called by EntityLiving's constructor; Undead Rising's func_175456_n is called from initEntityAI with no branch before the call; the death worm's task is in its own constructor. Only the grove sprite (onUpdate branch) is conditional among the marked entries.",
+ "method": "javap -c -p (reads class files; no mod code is run) on the mod jars of the pinned server pack zip (SHA-256 90642fd5...f5205), extracted to a scratch folder outside the repo, 2026-11-01. Scope: every modded living entity whose class does not implement IMob (317 in the second dump). For each, the entity class and its mod superclasses were scanned for a targeting AI task (class name containing 'Target') whose constructor receives EntityPlayer.class; tasks that target EntityLivingBase with a predicate were reviewed by reading the predicate's apply(). EntityAIHurtByTarget (retaliation) is not counted. Conditions (added after the PR #62 review): for each entry, every branch instruction (if*, goto, *switch) before the task's `new` in the same method was checked for a jump target past the task, and the method's callers were checked: initEntityAI is called by EntityLiving's constructor; Undead Rising's func_175456_n is called from initEntityAI with no branch before the call; the death worm's task is in its own constructor. No marked entry is conditional. The grove sprite was (its onUpdate branch) until a re-read on 2026-11-05 found that branch runs on the client only; it is now in reviewedNotMarked.",
  "confidence": {
   "verified": "The bytecode shows players are targeted (an EntityPlayer target class without a predicate, or a predicate read and found to accept players).",
   "task": "A targeting task with EntityPlayer or EntityLivingBase as its target class; its predicate or shouldExecute was not inspected.",
@@ -81,12 +81,6 @@
    "confidence": "verified",
    "evidence": "Fish's Undead Rising-1.3.2.jar: EntityUnburied (func_175456_n, applyEntityAI) adds EntityAINearestAttackableTarget(EntityPlayer.class) with no predicate."
   },
-  "primitivemobs:grovesprite": {
-   "targetsPlayers": true,
-   "dangerous": false,
-   "confidence": "conditional",
-   "evidence": "primitivemobs-1.2.3a.jar: EntityGroveSprite.onUpdate (func_70071_h_) adds EntityAINearestAttackableTarget(EntityPlayer.class) inside a branch after its tree-log handling (bytecode 436), i.e. only in some state; initEntityAI itself has only EntityAIHurtByTarget."
-  },
   "primitivemobs:lily_lurker": {
    "targetsPlayers": true,
    "dangerous": false,
@@ -133,7 +127,8 @@
   "iceandfire:myrmex_sentinel": "Same pattern as the soldier (EntityLiving target class); retaliates.",
   "iceandfire:myrmex_soldier": "EntityAINearestAttackableTarget(EntityLiving.class, ...): players are not EntityLiving; retaliates (EntityAIHurtByTarget).",
   "iceandfire:myrmex_worker": "EntityAINearestAttackableTarget(EntityLiving.class, EntityMyrmexWorker$1): EntityPlayer is not an EntityLiving, so players are not targeted; only EntityAIHurtByTarget (retaliation).",
-  "mod_lavacow:mimic": "Targets EntityItem only (EntityAITargetItem); retaliates (EntityAIHurtByTarget)."
+  "mod_lavacow:mimic": "Targets EntityItem only (EntityAITargetItem); retaliates (EntityAIHurtByTarget).",
+  "primitivemobs:grovesprite": "primitivemobs-1.2.3a.jar (in the pack as mods/primitivemobs-1.2.3a.jar, SHA-256 ef8c0625e566abe714796a15d108680f48919387abda6386d58ea42ca9c9f673): not marked (re-read 2026-11-05 after G3 smoke round 2, batch A; it was a conditional entry from PR #62). EntityGroveSprite extends EntityCreature (not IMob); initEntityAI (func_184651_r) adds only EntityAIHurtByTarget as a target task (bytecode 196-216, no help call). onUpdate (func_70071_h_) adds EntityAINearestAttackableTarget(EntityPlayer, checkSight true) at bytecode 431-447, but only inside world.isRemote (199-205: World.field_72995_K, ifeq 472) with changedColor unset (208-212) and only for a cinder sprite (221-224: isCinderSprite, ifne 365; the other path leaves with goto 472 at 362). A dedicated server never adds it, and the client copy runs no AI: on a server a grove sprite attacks only a player who hurt it. threat-reactions.json has its reaction (ignore-unless-provoked)."
  },
  "replacedByMod": {
   "description": "Vanilla animals that Animania removes and replaces with its own breeds on this pack. The server refuses to spawn or summon them, so the bot will not meet them and scenarios must not expect them. catalog.entity() adds `replacedBy` (with the replacing breeds from the dump, by class package); build-common-mobs.mjs leaves them out. replaceVanillaHorses=false (config/animania.cfg:110), so horses stay.",
