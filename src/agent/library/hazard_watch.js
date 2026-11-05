@@ -1,34 +1,43 @@
 // Re-plan after a teleport or a horde warning (skills-rotn D1b; brief deliverable 3; PLAN priority 1).
 //
 // AggroTP (rotn-progression.md hazard table): a Quazar teleports the player it aggroes about 7
-// blocks every 21 to 29 s. "Re-plan after any position jump of 5 or more blocks." Walking moves
-// the bot at most about 2 blocks between two mode updates (300 ms), so a horizontal jump of
-// JUMP_BLOCKS or more is a teleport. Vertical moves (falling) are not counted.
+// blocks every 21 to 29 s. "Re-plan after any position jump of 5 or more blocks." A teleport is a
+// server position packet: mineflayer emits 'forcedMove' after it. Only then is the position
+// compared with the one at the last physics tick, so the bot's own walking (a mode's moveAway, the
+// pathfinder) is never taken for a teleport (#212 review 3). Vertical moves are not counted.
 //
-// Hordes (the `hordes` mod, 1.1.7 in the pack): "a title message and sound when a wave spawns".
-// Only a title whose text or translation key names a horde counts (lead, #206 review 5), not any
-// title. The exact key is not known yet (requested from rotn-data, which has the pack's jars).
+// Hordes (`hordes` 1.1.7): the wave warning is the lang key `message.hordes.EventStart` ("You hear
+// the howls of a nearby horde"), sent on the Forge channel `hordes_hordeevent` (#212 review 1;
+// forge-bridge will decode it). Only that key counts (review 2), not EventEnd or TrySleep.
 
-/** A horizontal jump between two samples this long or more is a teleport. */
+/** A forced move this long or more (horizontally) is a teleport. */
 export const JUMP_BLOCKS = 5;
-/** Two samples further apart in time than this are not compared (a stall, a reconnect). */
-export const MAX_SAMPLE_GAP_MS = 2_000;
+/** The hordes mod's wave warning (its en_us.lang: "You hear the howls of a nearby horde"). */
+export const HORDE_START_KEY = 'message.hordes.EventStart';
 
-/** Tracks the bot's position; observe() returns the jump when one happened, else null. */
+/** The bot's position at the last physics tick, against which a forced move is measured. */
 export class JumpWatch {
     constructor() { this.last = null; }
 
     reset() { this.last = null; }
 
-    /** @returns {{from, to, blocks: number}|null} */
-    observe(pos, now, { riding = false } = {}) {
+    /** Every physics tick: where the bot is. */
+    sample(pos) {
+        if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.z)) this.last = { x: pos.x, y: pos.y, z: pos.z };
+    }
+
+    /**
+     * On 'forcedMove' (the server set the position): the jump when it is JUMP_BLOCKS or more from
+     * the last tick's position, else null. The new position becomes the sample.
+     * @returns {{from, to, blocks: number}|null}
+     */
+    forced(pos, { riding = false } = {}) {
         if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.z)) return null;
         const prev = this.last;
-        this.last = { x: pos.x, y: pos.y, z: pos.z, at: now };
-        if (!prev || riding || now - prev.at > MAX_SAMPLE_GAP_MS) return null;
+        this.sample(pos);
+        if (!prev || riding) return null;
         const blocks = Math.hypot(pos.x - prev.x, pos.z - prev.z);
-        if (blocks < JUMP_BLOCKS) return null;
-        return { from: prev, to: this.last, blocks };
+        return blocks >= JUMP_BLOCKS ? { from: prev, to: this.last, blocks } : null;
     }
 }
 
@@ -53,16 +62,13 @@ function componentParts(component) {
     return { texts, keys };
 }
 
-const oneLine = (s, max = 120) => String(s).replace(/\s+/g, ' ').trim().slice(0, max);
-
 /**
- * A horde warning in a title component: {key, text} when a translation key or the text names a
- * horde (the hordes mod's own messages), else null.
+ * Whether a lang key, or a chat component (the title fallback), is the horde wave warning:
+ * exactly HORDE_START_KEY. {key} or null.
  */
-export function hordeWarning(component) {
-    const { texts, keys } = componentParts(component);
-    const key = keys.find(k => /horde/i.test(k)) ?? null;
-    const text = oneLine(texts.join(''));
-    if (key || /\bhordes?\b/i.test(text)) return { key, text };
-    return null;
+export function hordeWarning(keyOrComponent) {
+    if (keyOrComponent === HORDE_START_KEY) return { key: HORDE_START_KEY };
+    if (typeof keyOrComponent === 'string' && /^[\w.]+$/.test(keyOrComponent)) return null; // another key
+    const { keys } = componentParts(keyOrComponent);
+    return keys.includes(HORDE_START_KEY) ? { key: HORDE_START_KEY } : null;
 }
