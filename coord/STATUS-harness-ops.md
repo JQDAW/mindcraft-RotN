@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (00:36 UTC, from `date -u`)
+Updated: 2026-11-05 (01:05 UTC, from `date -u`)
 
 ## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
@@ -32,7 +32,20 @@ The lead's order: one scenario per small PR, (a) first, then (b) first night, (c
 - **The lead's decisions (#203):** the shelter snapshot is dropped. The `food` criterion is approved as a read-only objective: hunger at the end is recorded as evidence only, and `G3_CONSOLE_ALLOW` allows only that criterion besides `stat.*`.
 - **Tested:** `g3-night.test.js` 10/10 on S1-A's measured cycle, `g3-spend.test.js` 45/45 and `g3-rocks.test.js` 15/15. ESLint is clean.
 
-**Next:** (c) `g3-task-preempts-agenda`, then (d) `g3-untrusted-refused`.
+**PR #207: G3 (c), `g3-task-preempts-agenda`** (branch `agent/harness-ops/g3c-task-preempts`; #203 merged, so #207 now targets develop).
+- **The #207 review, fixed:**
+  - **State:** the driver moves `tasks.json` and `agenda.json` aside before every G3 run (`fresh_bot_state`), and (c) cancels any task still open at the end.
+  - **Preemption:** "agenda paused for task <id>" is now required for `task_done`.
+  - **Counter:** the stick pickup stat is dropped, and every criterion must be added, or the run is not gate-valid.
+- **Pinned (the lead's decision), `PINNED` true:**
+  - the marker `-42,68,-50` (S1-A's rock pile about 19 blocks from spawn; the nearest sample to the 20-30 band), with a read-only air preflight for Y+1 and Y+2;
+  - the counter: the rock and log mine stats plus the five craft stats.
+- **Requested from skills-rotn (via the lead):** re-check `isTaskGiver` when a stored task runs.
+- **Checks:** `agenda_active`, `task_accepted`, `task_done` (the server's `testfor` volume on the marker AND the bot's done line), `agenda_resumed` and `no_cheat`. There is no `tp`.
+- **For the lead to pin:** the marker `x,y,z` (no default) and the agenda counter (a provisional list of early-game stats). Until then every run is not gate-valid.
+- **Tested:** `g3-task.test.js` 7/7. ESLint is clean.
+
+**Next:** (d) `g3-untrusted-refused`. It needs a driver switch to run with the production giver list (`allow_server_task_giver` false); the switch can only turn the test giver off.
 
 ## Done just before (2026-11-04)
 
