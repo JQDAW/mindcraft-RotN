@@ -1,6 +1,21 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (01:37 UTC, from `date -u`)
+Updated: 2026-11-05 (01:49 UTC, from `date -u`)
+
+## PAUSED for the Orca restart (2026-11-05 01:49 UTC, the lead's request)
+
+**Branch:** `agent/harness-ops/g3d-untrusted-refused` (PR #208, targets develop), pushed and clean. Nothing is running, and no paid work is pending.
+
+**State:** #201 (a), #203 (b) and #207 (c) are merged. #208 (d) has both re-review fixes pushed (f097de1e) and awaits the lead's merge.
+
+**Exact next step after the restart:**
+1. `git fetch`. If #208 is merged, branch from develop for the #207 nits PR; if not, answer any new review on #208 (merge develop in, never force-push).
+2. The #207 nits PR (small, `test/` only):
+   - gate the driver's `clearBotState` to G3 runs (or fix its comment), and prune old `.bak` files;
+   - confirm the gold block with `testforblock <marker> minecraft:gold_block 0` after the `setblock` in (c) and (d).
+   - Tests: `mindcraft-driver.test.js`, `g3-task.test.js` and `g3-untrusted.test.js`, one at a time; ESLint on the changed files.
+3. Open question for the lead: #208 nit (2), measuring the refusal deadline from the chat line's timestamp instead of the 5 s poll.
+4. The G3 batches (A alone, B alone, C+D together) each need a written GO. Not started.
 
 ## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
