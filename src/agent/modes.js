@@ -94,6 +94,54 @@ const modes_list = [
         }
     },
     {
+        // D1: RotN foods by rotn-data (mineflayer-auto-eat sees only vanilla foods and eats the bread
+        // first; it is off, agent.js). Before cowardice and self_defense in this list, so the bot
+        // can eat at food 6 or lower in a fight: the loop stops at the first active mode (#206 review 4).
+        name: 'eating',
+        description: 'Eat at food 12 or lower when idle and no threat is near, and at 6 or lower always, in a fight too. Never hawthorn berries or cloudsbluff; bread only when nothing else is left.',
+        interrupts: ['all'],
+        on: true,
+        active: false,
+        miss_ms: 30_000, // no safe food: look again after this
+        backoff_ms: 10_000, // after an eat that did not happen: 10 s, then 20 s
+        max_fails: 3, // a food that fails this often is not tried again
+        check_ms: food.CONSUME_CHECK_MS, // after a consume that threw, judge the eat this long later
+        wait_until: -Infinity,
+        fails: {},
+        given_up: new Set(),
+        update: function (agent) {
+            const bot = agent.bot;
+            if (Date.now() < this.wait_until) return;
+            let threatened = false;
+            try { threatened = !!threats.threatPlan(bot); } catch { threatened = false; }
+            if (!food.wantsToEat(bot.food, { idle: agent.isIdle(), threatened })) return;
+            const item = food.chooseFood(bot, { skip: this.given_up });
+            if (!item) {
+                this.wait_until = Date.now() + this.miss_ms;
+                console.warn(`[reflex] eating: food ${bot.food}, but no safe food in the inventory`);
+                return;
+            }
+            const key = food.foodKey(item);
+            // Not awaited, so the update loop is not held up by the eat (execute never rejects).
+            execute(this, agent, async () => {
+                const r = await food.eatFood(bot, item, { checkMs: this.check_ms });
+                if (r.ate) {
+                    delete this.fails[key];
+                    console.log(`[reflex] ate ${key} at food ${r.before}${r.threw ? ' (the eat timed out, but it went through)' : ''}`);
+                    return;
+                }
+                const n = this.fails[key] = (this.fails[key] ?? 0) + 1;
+                if (n >= this.max_fails) {
+                    this.given_up.add(key);
+                    console.warn(`[reflex] eating: ${key} could not be eaten ${n} times; not trying it again`);
+                } else {
+                    this.wait_until = Date.now() + this.backoff_ms * 2 ** (n - 1);
+                    console.warn(`[reflex] eating: ${key} was not eaten (${r.threw?.message ?? 'no change'}); trying again in ${this.backoff_ms * 2 ** (n - 1) / 1000} s`);
+                }
+            }).catch(err => reportModeError('eating', err));
+        }
+    },
+    {
         name: 'unstuck',
         description: 'Attempt to get unstuck when in the same place for a while. Interrupts some actions.',
         interrupts: ['all'],
@@ -198,34 +246,6 @@ const modes_list = [
                     }
                 });
             }
-        }
-    },
-    {
-        // D1: RotN foods come from rotn-data's dump (mineflayer-auto-eat sees only vanilla foods and
-        // eats the bread first); auto-eat is off (agent.js).
-        name: 'eating',
-        description: 'Eat at food 12 or lower when idle, and at 6 or lower during any action. Never hawthorn berries or cloudsbluff; bread only when nothing else is left.',
-        interrupts: ['all'],
-        on: true,
-        active: false,
-        retry_ms: 30_000,
-        last_miss_at: -Infinity,
-        update: function (agent) {
-            const bot = agent.bot;
-            if (!food.wantsToEat(bot.food, agent.isIdle())) return;
-            if (Date.now() - this.last_miss_at < this.retry_ms) return;
-            const item = food.chooseFood(bot);
-            if (!item) {
-                this.last_miss_at = Date.now();
-                console.warn(`[reflex] eating: food ${bot.food}, but no safe food in the inventory`);
-                return;
-            }
-            const before = bot.food;
-            // Not awaited, so the update loop is not held up by the eat (execute never rejects).
-            execute(this, agent, async () => {
-                const eaten = await food.eatFood(bot);
-                if (eaten) console.log(`[reflex] ate ${eaten.name}${eaten.metadata ? ':' + eaten.metadata : ''} at food ${before}`);
-            }).catch(err => reportModeError('eating', err));
         }
     },
     {
