@@ -1,14 +1,19 @@
 # Status: net-forge
 
-Updated: 2026-11-04T22:51Z
+Updated: 2026-11-04T23:13Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
 ## Resumed 2026-11-04T22:51Z (lead respawn after the usage-limit pause of 2026-11-03T16:07Z)
 
-- **Done:** I checked E1's open claim in the mineflayer 4.33.0 code. `bot.consume` has its own 2500 ms timeout and refuses at food 20. Rule E1 below is corrected.
-- **In review:** PR #192 for `agent/net-forge/request2-final` (STATUS only): "net-forge STATUS: Request 2 final answer, proven live by P1; keep place_block_timeout_ms 2000". It serves the lead's request after #189, for skills-rotn's C1 and D2b.
-- **Next:** wait for the lead's review and merge. No other net-forge work is open, and nothing is running.
+- **Done:**
+  - I checked E1's open claim in the mineflayer 4.33.0 code. `bot.consume` has its own 2500 ms timeout and refuses at food 20. Rule E1 below is corrected.
+  - **PR #192** (Request 2 final answer) is merged (`a24f1d3`).
+- **In review:** PR #199, the lead's #192 STATUS nits, on branch `agent/net-forge/request2-nits` (2026-11-04T23:08Z):
+  - 1736 ms is about 35 ticks, not 32;
+  - the 2160 ms stall (`server.log:201`) came during the bread eat, not at a time with nothing running;
+  - `convertRecipe` emits no `outShape` (rule C2).
+- **Next:** wait for the lead's merge. No other net-forge work is open, and nothing is running.
 - **Blocked / requests:** none.
 
 ## Request 2: FINAL answer for skills-rotn, proven live by P1 (2026-11-03T16:06Z)
@@ -26,7 +31,7 @@ Rerun evidence #189 (`88c02bc`, `test/evidence/probe/p1-20261103-a2/`). The lead
 | Window clicks | **33/33 accepted**, 0 rejected, 0 unanswered. 7 of them carried REID item ids above 4095 (rock 8917, crude axe 9075, Crafting Tools 12510). Each click was answered in 39-136 ms |
 | FastWorkbench | The right-click on the table was answered in 138 ms by **one** FML `fastbench` mod window (window 1, `minecraft:crafting_table`). forge-bridge's synthetic window worked with no extra code. It closed 594 ms later |
 | Placements (`bot.placeBlock` path) | **5/5** cobblestone (the lead's review of #189). The probe's `updateMs` was 589-1158 ms, median 904 ms (see below for what it contains) |
-| Eating (`bot.consume`) | food **15 -> 18**: bread is **+3** live, as `scripts/food.zs` sets it, so Hunger Overhaul does not override it. `bot.consume` took 1736 ms (32 ticks) |
+| Eating (`bot.consume`) | food **15 -> 18**: bread is **+3** live, as `scripts/food.zs` sets it, so Hunger Overhaul does not override it. `bot.consume` took 1736 ms (about 35 ticks), and that includes a server stall (see E1) |
 | Hunger model | food 15 after `hunger 22 19`, exactly as `simulateHunger` predicted |
 | Kicks / `movement guard:` / parse errors | none |
 
@@ -36,7 +41,7 @@ Rerun evidence #189 (`88c02bc`, `test/evidence/probe/p1-20261103-a2/`). The lead
 - **Before the packet is sent, 540-1060 ms is on the bot.** mineflayer turns the head smoothly to the block first: `physics.yawSpeed` 3.0 rad/s, 0.15 rad per 50 ms tick (`node_modules/mineflayer/lib/plugins/physics.js:162-164`). So a turn of up to 180° takes up to about 1.05 s. P1's cells were west, north and south of the bot.
 - **After the packet is sent, the server answered in about 40-125 ms,** one network round trip plus a tick.
 - **The 2000 ms wait covers only the second part.** mineflayer starts the `blockUpdate` timer after `_genericPlace` has turned the head and sent the packet (`place_block.js:27-32`). The margin over the measured values is therefore about 16x.
-- **The real server can stall, though.** It logged `Can't keep up! ... Running 2160ms behind` once, during worldgen, at a time when no placement was running. A stall like that during a placement can exceed 2000 ms even when the block does get placed. Raising the value would not remove this case, because stalls can be longer, so handle it in the skill (rule P2 below).
+- **The real server can stall, though.** It logged `Can't keep up! ... Running 2160ms behind, skipping 43 tick(s)` once (`server.log:201`, 15:28:28). That was in the same second as the bread eat (`probe-eat` whispered at 15:28:27, `eat ok` at 15:28:29), not during a placement. A stall like that during a placement can exceed 2000 ms even when the block does get placed. Raising the value would not remove this case, because stalls can be longer, so handle it in the skill (rule P2 below).
 
 ### The API to call
 
@@ -61,7 +66,7 @@ Rerun evidence #189 (`88c02bc`, `test/evidence/probe/p1-20261103-a2/`). The lead
 ### Rules
 
 - **C1 (auto-eat).** Pause mineflayer-auto-eat around `bot.craft`: `bot.autoEat.disable()`, then `enable()` in a `finally`. It clicks the inventory too. P1 ran with it off.
-- **C2 (recipe results).** `recipe.result` must carry the exact count and meta and no NBT, or the server rejects the result-slot click. `convertRecipe` does this. Wildcard meta becomes `null`, and container items belong in `outShape`; no early-game recipe has any.
+- **C2 (recipe results).** `recipe.result` must carry the exact count and meta and no NBT, or the server rejects the result-slot click. `convertRecipe` does this, and wildcard meta becomes `null`. **`convertRecipe` emits no `outShape` at all**, so a recipe that leaves a container item in the grid (a bucket, for example) would leave mineflayer's local grid out of step with the server until the server's `set_slot`s correct it. No early-game recipe has one. The older offline sections below, which say container items "belong in `outShape`", describe what a recipe would need, not what `convertRecipe` does.
 - **C3 (other mod GUIs).** Only FastWorkbench's GUI becomes a window. Other mod GUIs (for example `craftingcraft:portable_crafting_table`) are logged only.
 - **P1 (what success means).** mineflayer returns on the first change of block type at the target. Check `bot.blockAt(target)` afterwards when the exact block matters.
 - **P2 (a placement timeout means "unknown", not "failed").** Wait about 1 s, then read `bot.blockAt(target)`. If it is the block, it worked. Retry only if the target is still empty. A blind retry is harmless on an occupied target, but it costs another head turn and another wait.
@@ -69,7 +74,7 @@ Rerun evidence #189 (`88c02bc`, `test/evidence/probe/p1-20261103-a2/`). The lead
 - **E1 (eating: full food and the 2500 ms timeout).** Checked in mineflayer 4.33.0, `node_modules/mineflayer/lib/plugins/inventory.js`:
   - **At food 20,** `bot.consume()` throws `Food is full` at once, before it sends anything (L103-105; survival mode and non-"always" foods; bread is not one). A 1.12 player cannot eat bread at food 20 anyway. Check `bot.food < 20` first so you do not depend on the throw. P1's driver does that.
   - **Its own timeout:** it waits at most `CONSUME_TIMEOUT` = **2500 ms** (L13, L111), then throws `Promise timed out.` (`lib/promise_utils.js:79-86`). The wait ends early on the server's "eating done" `entity_status` 9 (L68-71), on a change of held item type or count (L76-88), or on `set_cooldown` (L90-96).
-  - **Margin:** live, bread took **1736 ms** (P1), so 2500 ms leaves only about 760 ms. A server stall like the one P1 logged (2160 ms behind) can make it throw even though the bot did eat.
+  - **Margin:** live, bread took **1736 ms** (about 35 ticks, P1), so 2500 ms leaves only about 760 ms. That eat already overlapped P1's one logged stall (2160 ms behind, 43 ticks skipped, `server.log:201`) and still finished in time. A longer stall can make it throw even though the bot did eat.
   - **So, as with P2: a `Promise timed out.` means "unknown".** Compare `bot.food` (or the food item's count) with the value from before the call, about 1 s later. Retry only if neither changed. The timeout is a module constant, not an option, so it cannot be raised without a mineflayer patch. I only make that patch on request, if a scenario shows that this harms the bot.
 - **E2 (bread).** Bread is +3 food in RotN, so plan with that.
 

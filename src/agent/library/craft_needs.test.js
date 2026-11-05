@@ -242,3 +242,110 @@ test('C1: craftPausingAutoEat disables auto-eat for the craft, waits out an eat,
     await craftPausingAutoEat(bot, {}, 1, null);
     assert.equal(autoEat.disabled, true);
 });
+
+// #194 review (lead, required before the G3 (a) batch): 2x2-grid canFill crafts, real inventory
+// gain per craft, and a placed table picked up also when bot.craft throws. Nits 3 and 4.
+const CRUDE = 5101, TOOLS = 5102, ROCK = 5103;
+const fillReg = { ...reg, itemsByName: { ...reg.itemsByName,
+    'pyrotech:crude_axe': { id: CRUDE, name: 'pyrotech:crude_axe' },
+    'contenttweaker:crafting_tools': { id: TOOLS, name: 'contenttweaker:crafting_tools' },
+    'pyrotech:rock': { id: ROCK, name: 'pyrotech:rock' } } };
+const cellIds = (r) => (r.inShape ? r.inShape.flat() : r.ingredients).map(c => (c && c.id !== -1 ? `${c.id}:${c.metadata}` : null)); // prismarine-recipe: id -1 is an empty cell
+
+/** A bot whose bot.craft runs `serve(recipe, items)`, which returns the inventory after the craft. */
+function fillBot(start, serve) {
+    let items = start;
+    const crafts = [];
+    const bot = {
+        inventory: { items: () => items, slots: [] },
+        get _items() { return items; },
+        registry: fillReg,
+        output: '',
+        entity: { position: new Vec3(0, 64, 0) },
+        craft: (recipe, count, table) => {
+            crafts.push({ recipe, count, table });
+            try { items = serve(recipe, items); } catch (err) { return Promise.reject(err); }
+            return Promise.resolve();
+        },
+    };
+    return { bot, crafts };
+}
+const take = (items, name, n) => items.map(i => (i.name === name ? { ...i, count: i.count - n } : i)).filter(i => i.count > 0);
+
+test('#194 review 5: a crude axe in the 2x2 grid from canFill stacks, twice, each counted by the real gain', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftByFill } = await import('./skills.js');
+    const { bot, crafts } = fillBot([stack('pyrotech:rock', 0, 2), stack('stick', 0, 4)],
+        (r, items) => { // the server takes 1 rock and 2 sticks and gives one more axe
+            const axes = items.find(i => i.name === 'pyrotech:crude_axe')?.count ?? 0;
+            const rest = take(take(items.filter(i => i.name !== 'pyrotech:crude_axe'), 'pyrotech:rock', 1), 'stick', 2);
+            return [...rest, stack('pyrotech:crude_axe', 0, axes + 1)];
+        });
+    const needs = craftNeeds(bot, 'pyrotech:crude_axe');
+    assert.equal(needs.ready, true);
+    assert.equal(needs.requiresTable, false);
+    assert.equal(await craftByFill(bot, 'pyrotech:crude_axe', 2, needs), true);
+    assert.equal(crafts.length, 2);
+    assert.ok(crafts.every(c => c.table === null && c.count === 1), 'the 2x2 grid, one at a time');
+    const stick = reg.itemsByName.stick.id;
+    assert.deepEqual(cellIds(crafts[0].recipe), [`${ROCK}:0`, `${stick}:0`, `${stick}:0`, null]);
+    assert.match(bot.output, /Successfully crafted pyrotech:crude_axe from mixed items, you now have 2 pyrotech:crude_axe\./);
+});
+
+test('#194 review 5: Crafting Tools (shapeless, 2x2) uses the damaged crude axe the bot has, not the wildcard meta', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftByFill } = await import('./skills.js');
+    const { bot, crafts } = fillBot([stack('pyrotech:crude_axe', 3, 1), stack('pyrotech:rock', 0, 1), stack('stick', 0, 1)],
+        () => [stack('contenttweaker:crafting_tools', 0, 1)]);
+    const needs = craftNeeds(bot, 'contenttweaker:crafting_tools');
+    assert.equal(needs.requiresTable, false);
+    assert.equal(await craftByFill(bot, 'contenttweaker:crafting_tools', 1, needs), true);
+    assert.equal(crafts[0].table, null);
+    assert.ok(cellIds(crafts[0].recipe).includes(`${CRUDE}:3`), `cells ${cellIds(crafts[0].recipe)}`);
+    assert.match(bot.output, /Successfully crafted contenttweaker:crafting_tools/);
+});
+
+test('#194 review 1: a craft that gives nothing is not counted, and the loop stops there', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftByFill } = await import('./skills.js');
+    const { bot, crafts } = fillBot([stack('pyrotech:rock', 0, 3), stack('stick', 0, 6)], (r, items) => items);
+    const needs = craftNeeds(bot, 'pyrotech:crude_axe');
+    assert.equal(await craftByFill(bot, 'pyrotech:crude_axe', 3, needs), false);
+    assert.equal(crafts.length, 1, 'no second try after a craft that gave nothing');
+    assert.match(bot.output, /Could not craft pyrotech:crude_axe: the craft gave no pyrotech:crude_axe\./);
+});
+
+test('#194 review 2: a table placed for the craft is picked up again when bot.craft throws, and after a craft', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftByFill } = await import('./skills.js');
+    const table = { name: 'crafting_table', position: new Vec3(1, 64, 0) };
+    const mixedIn = () => [...mixed(), stack('crafting_table', 0, 1)];
+    for (const [serve, result, line] of [
+        [() => { throw new Error('click rejected'); }, false, /Could not craft stone_pickaxe: the craft failed \(Error: click rejected\)/],
+        [() => [stack('stone_pickaxe', 0, 1)], true, /Successfully crafted stone_pickaxe from mixed items/],
+    ]) {
+        const { bot, crafts } = fillBot(mixedIn(), serve);
+        bot.registry = { ...fillReg, itemsByName: { ...fillReg.itemsByName, ...modReg.itemsByName } };
+        bot.findBlocks = () => []; // no table nearby
+        const ops = { placed: 0, picked: 0 };
+        ops.place = () => { ops.placed++; return Promise.resolve(table); };
+        ops.pickUp = () => { ops.picked++; return Promise.resolve(); };
+        const needs = craftNeeds(bot, 'stone_pickaxe');
+        assert.equal(await craftByFill(bot, 'stone_pickaxe', 1, needs, null, false, ops), result);
+        assert.equal(crafts[0].table, table);
+        assert.deepEqual([ops.placed, ops.picked], [1, 1], 'placed once, picked up once');
+        assert.match(bot.output, line);
+    }
+});
+
+test('#194 nits 3 and 4: no recipe id says so; no free space for a table says so', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftByFill, CRAFT_TABLE_OPS } = await import('./skills.js');
+    const { bot } = fillBot([], () => []);
+    assert.equal(await craftByFill(bot, 'stone_pickaxe', 1, { requiresTable: true, recipeId: null, inputs: [], short: 0, ready: true }), false);
+    assert.match(bot.output, /Could not craft stone_pickaxe: rotn-data names no recipe for these items\./);
+    bot.findBlocks = () => [];
+    bot.output = '';
+    assert.equal(await CRAFT_TABLE_OPS.place(bot, 'stone_pickaxe'), null);
+    assert.match(bot.output, /Could not place a crafting table to craft stone_pickaxe: no free space nearby\./);
+});
