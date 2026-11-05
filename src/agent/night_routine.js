@@ -16,6 +16,7 @@ import { Vec3 } from 'vec3';
 import { NightClock, nightPhase, NIGHT_START } from './library/night.js';
 import { buildShelter, siteNeeds, isLiquid, isFalling, isEmpty } from './library/shelter.js';
 import { breakBlockAt } from './library/skills.js';
+import { stowCarried } from './library/rotn_sources.js';
 import { say, isGiverGoal } from './agenda_driver.js';
 import settings from './settings.js';
 
@@ -111,6 +112,9 @@ function startJob(agent, n, label, fn, then) {
  * checked after digging. Returns the side's lower wall position, or null.
  */
 export async function digOut(bot, feet) {
+    // The pickaxe must be where breakBlockAt's equipForBlock looks (#229 review).
+    const moved = await stowCarried(bot, (i) => /pickaxe/.test(i.name), { resyncMs: 0 }); // no wait: it is night
+    if (moved.length) console.log(`[night] moved ${moved.join(' and ')} back into the inventory to dig out`);
     for (const d of HORIZONTAL) {
         const lower = feet.plus(d), upper = lower.offset(0, 1, 0);
         const outside = [lower.plus(d), upper.plus(d)];

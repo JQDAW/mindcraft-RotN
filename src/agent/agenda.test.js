@@ -273,3 +273,12 @@ test('a step once done stays done: crafting the crude axe uses up sticks, the ag
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'logs');
     assert.ok(!agent.said.some(m => m === 'agenda step sticks started: collect 4 sticks'), 'never back to sticks');
 });
+
+test('G3 round 2 B: the cobblestone step counts rotn-data\'s cobblestone ore (Underground Biomes cobble too)', () => {
+    const tools = [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1)];
+    assert.equal(stepOf([...tools, stack('undergroundbiomes:metamorphic_cobble', 0, 9)], { tableNear: true }), 'cobblestone');
+    assert.equal(stepOf([...tools, stack('undergroundbiomes:metamorphic_cobble', 0, 10)], { tableNear: true }), null,
+        '10 metamorphic cobble (what the bot made in round 2) finish the step');
+    assert.equal(stepOf([...tools, stack('undergroundbiomes:metamorphic_cobble', 0, 6), stack('cobblestone', 0, 4)], { tableNear: true }), null, 'mixed kinds add up');
+    assert.doesNotMatch(ROTN_EARLY_GAME.find(s => s.id === 'cobblestone').goal, /!buildShelter/, 'the goal no longer invites a daytime shelter');
+});

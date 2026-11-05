@@ -14,7 +14,7 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isSturdy, shelterShell, dumpState } from './night.js';
 import { loadRotnData, PACK_VERSION, registryName } from '../../../packages/rotn-data/index.js';
-import { toolLevels } from './rotn_sources.js';
+import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { log, breakBlockAt, goToGoal } from './skills.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -233,8 +233,19 @@ export async function buildShelter(bot, { site = null, radius = 4 } = {}) {
     if (plan.unsupported.length > 0)
         return refuse(feet, plan.todo, `Cannot build the shelter at ${at(feet)}: nothing to place a block against at ${plan.unsupported.map(at).join('; ')}.`);
     const level = exitLevel(bot, feet);
-    if (!toolLevels(bot, 'pickaxe').some(l => l >= level))
-        return refuse(feet, plan.todo, `Not building a shelter at ${at(feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`);
+    if (!toolLevels(bot, 'pickaxe').some(l => l >= level)) {
+        // G3 round 2 B: a pickaxe on the cursor or in the off hand is moved back into the inventory
+        // (where every equip path looks), and pending slot updates are awaited, before concluding.
+        const isPick = (i) => /pickaxe/.test(i.name);
+        const moved = await stowCarried(bot, isPick);
+        if (moved.length) log(bot, `Moved ${moved.join(' and ')} back into the inventory.`);
+        if (!toolLevels(bot, 'pickaxe').some(l => l >= level)) {
+            const where = describeCarried(bot, isPick);
+            console.log(`[shelter] pickaxe check: need level ${level}; ${where}`);
+            return refuse(feet, plan.todo, `Not building a shelter at ${at(feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`
+                + ` Pickaxes: ${where}.`);
+        }
+    }
     const have = countOf(shelterItems(bot));
     if (have < plan.blocks)
         return refuse(feet, plan.todo, `A shelter at ${at(feet)} needs ${plan.blocks} sturdy blocks (cobblestone or stone); you have ${have}.`);

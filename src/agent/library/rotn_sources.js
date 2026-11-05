@@ -73,11 +73,97 @@ export function worldSources(name) {
 /** The levels of every tool of this type the bot holds ("pickaxe" -> [0] for a stone pickaxe). */
 export function toolLevels(bot, type) {
     const levels = [];
+    // inventory.items() only: the same stacks allowedTool and mineflayer-tool's equipForBlock can
+    // equip (#229 review). A stack on the cursor or in the off hand is moved back first (stowCarried).
     for (const item of bot.inventory.items()) {
         const level = getItem(registryName(item.name))?.toolClasses?.[type];
         if (typeof level === 'number' && level >= 0) levels.push(level);
     }
     return levels;
+}
+
+/** Where the bot's stacks are: the inventory (slots 9-44), the off hand (slot 45), the cursor. */
+function carriedPlaces(bot) {
+    const inv = bot?.inventory;
+    const ok = (i) => i && typeof i.name === 'string';
+    return {
+        inventory: (inv?.items?.() ?? []).filter(ok),
+        offHand: ok(inv?.slots?.[45]) ? inv.slots[45] : null,
+        cursor: ok(inv?.selectedItem) ? inv.selectedItem : null,
+    };
+}
+
+/**
+ * A log line of where the matching stacks are (G3 round 2 B: the night routine said "without a
+ * pickaxe" while the bot owned a stone pickaxe; the log could not tell why).
+ */
+export function describeCarried(bot, want = () => true) {
+    const p = carriedPlaces(bot);
+    const names = (list) => (list.length ? list.map(i => i.name).join(', ') : 'none');
+    return `inventory: ${names(p.inventory.filter(want))}; off hand: ${p.offHand ? p.offHand.name : 'empty'}; `
+        + `cursor: ${p.cursor ? p.cursor.name : 'empty'}; held: ${bot?.heldItem?.name ?? 'nothing'}`;
+}
+
+/** Wait for pending slot updates (after a rejected click the server resends every slot). */
+export const RESYNC_MS = 600;
+
+/**
+ * Move a matching stack from the cursor (an equip cut short) or the off hand back into the
+ * inventory, so the check and every equip path (allowedTool, equipForBlock) see the same stacks
+ * (#229 review). Then wait RESYNC_MS for pending slot updates. Returns what was moved.
+ */
+/** How long one window click may take before stowCarried gives up on it (#229 review). */
+export const STOW_CLICK_MS = 3000;
+
+/** The click's promise, or a rejection after ms (a click the server never answers). */
+function clickWithin(promise, ms, what) {
+    let timer;
+    const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${what} got no answer within ${ms / 1000} s`)), ms); });
+    return Promise.race([Promise.resolve(promise), limit]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Move a matching stack from the cursor (an equip cut short) or the off hand back into the
+ * inventory, so the check and every equip path (allowedTool, equipForBlock) see the same stacks
+ * (#229 review). Then wait RESYNC_MS for pending slot updates. Returns what was moved.
+ * An open window (a chest, a table) is closed first, as clickWindow would act on it (#229 review 2).
+ * Its cursor stack is dropped into one of that window's inventory slots before: closing a 1.12
+ * container throws whatever is on the cursor onto the ground. Each click has STOW_CLICK_MS.
+ */
+export async function stowCarried(bot, want = () => true, { resyncMs = RESYNC_MS, clickMs = STOW_CLICK_MS } = {}) {
+    const inv = bot?.inventory;
+    const moved = [];
+    try {
+        const open = bot?.currentWindow;
+        if (open && open !== inv) {
+            const held = open.selectedItem;
+            const slot = open.firstEmptyInventorySlot?.() ?? null;
+            if (held && slot == null) {
+                // Closing now would drop the stack on the ground: leave the window and the stack alone.
+                console.warn(`[inventory] a window is open with ${held.name} on the cursor and no free slot; not closing it`);
+                return moved;
+            }
+            if (held) {
+                await clickWithin(bot.clickWindow(slot, 0, 0), clickMs, 'putting the cursor stack down');
+                if (want(held)) moved.push(`${held.name} from the cursor`);
+            }
+            bot.closeWindow(open);
+        }
+        const empty = () => inv?.firstEmptyInventorySlot?.() ?? null;
+        const p = carriedPlaces(bot);
+        if (p.cursor && want(p.cursor) && empty() != null) {
+            await clickWithin(bot.clickWindow(empty(), 0, 0), clickMs, 'putting the cursor stack down'); // into an empty slot
+            moved.push(`${p.cursor.name} from the cursor`);
+        }
+        if (p.offHand && want(p.offHand) && empty() != null) {
+            await clickWithin(bot.moveSlotItem(45, empty()), clickMs, 'moving the off-hand stack');
+            moved.push(`${p.offHand.name} from the off hand`);
+        }
+    } catch (err) {
+        console.warn(`[inventory] could not move a stack back into the inventory: ${err?.message}`);
+    }
+    if (resyncMs > 0) await new Promise(resolve => setTimeout(resolve, resyncMs));
+    return moved;
 }
 
 const levelOk = (tool, level) => (tool.minLevel == null || level >= tool.minLevel) && (tool.maxLevel == null || level <= tool.maxLevel);
