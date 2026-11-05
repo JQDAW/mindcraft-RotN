@@ -103,6 +103,11 @@ describe('mindcraft-driver: checks before anything starts', () => {
         assert.equal(e.OPENROUTER_API_KEY, 'not-a-key', 'the key the runner passed through');
         assert.ok(!('TEST_SERVER_HOST' in e) && !('TEST_SERVER_PORT' in e));
         assert.ok(!('INSECURE_CODING' in e) && !('BLOCKED_ACTIONS' in e));
+        // g3-untrusted-refused: ROTN_G3_PRODUCTION_GIVERS=1 turns the test giver off (and only exactly '1' does).
+        const prod = mindcraftEnv(runnerEnv({ ROTN_G3_PRODUCTION_GIVERS: '1' }), { profile: 'profiles/g3.json', mindserverPort: 40123 });
+        assert.equal(JSON.parse(prod.SETTINGS_JSON).allow_server_task_giver, false);
+        assert.ok(!('ROTN_G3_PRODUCTION_GIVERS' in prod), 'the switch is not passed on to main.js');
+        for (const v of ['0', 'true', '']) assert.equal(JSON.parse(mindcraftEnv(runnerEnv({ ROTN_G3_PRODUCTION_GIVERS: v }), { profile: 'p.json', mindserverPort: 1 }).SETTINGS_JSON).allow_server_task_giver, true, v);
         const port = await freePort();
         assert.ok(port > 0 && port < 65536);
     });
@@ -205,6 +210,7 @@ describe('mindcraft-driver end to end with a fake main.js', () => {
         assert.equal(start.settings, path.join(app, 'settings.js'), 'the settings file main.js imports was the one checked');
         assert.deepEqual(start.models, { model: 'openrouter/@preset/glm-5-1-mindcraft', code_model: null, vision_model: null },
             'the model goes into the run record (run.mjs result.llm.models)');
+        assert.equal(start.serverTaskGiver, true, 'the start event says whether the test-only Server giver is on');
         assert.ok(alive(pids.main) && alive(pids.agent));
         // The runner's stop: SIGTERM (on Windows node turns this into TerminateProcess of the driver alone).
         child.kill('SIGTERM');

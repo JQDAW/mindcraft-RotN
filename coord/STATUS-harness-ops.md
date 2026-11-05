@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-04 (23:42 UTC, from `date -u`)
+Updated: 2026-11-05 (00:00 UTC, from `date -u`)
 
 ## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
@@ -31,7 +31,12 @@ The lead's order: one scenario per small PR, (a) first, then (b) first night, (c
 - **For the lead to pin:** the marker `x,y,z` (no default) and the agenda counter (a provisional list of early-game stats). Until then every run is not gate-valid.
 - **Tested:** `g3-task.test.js` 7/7. ESLint is clean.
 
-**Next:** (d) `g3-untrusted-refused`. It needs a driver switch to run with the production giver list (`allow_server_task_giver` false); the switch can only turn the test giver off.
+**PR (d): G3 (d), `g3-untrusted-refused`** (branch `agent/harness-ops/g3d-untrusted-refused`; stacked on (c)).
+- **Checks:** `production_givers` (the driver's start event says `serverTaskGiver` false), `refused_politely` (skills-rotn's refusal line), `no_task` (no accepted, started, paused or "used taskAdd" line for 90 s) and `no_cheat`.
+- **The driver:** `ROTN_G3_PRODUCTION_GIVERS=1` turns the test-only `Server` giver off (only off, never on), and `mindcraft_start` reports `serverTaskGiver`.
+- **Tested:** `g3-untrusted.test.js` 4/4, `mindcraft-driver.test.js` 13/13, `runner.test.js` 42/42 (1 Windows skip), `g3-spend.test.js` 45/45 and `g3-rocks`/`night`/`task` 15/10/7. ESLint is clean.
+
+**The stack:** #201 (a) <- #203 (b) <- #207 (c) <- (d). Each PR retargets to develop as the one below it merges; never force-pushed. **Next:** the lead's reviews, then pinning the marker and agenda counter for (c), and the G3 smoke batch (needs a written GO).
 
 ## Done just before (2026-11-04)
 
