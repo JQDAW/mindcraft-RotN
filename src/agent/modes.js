@@ -106,7 +106,9 @@ const modes_list = [
         free_timeout_ms: 10_000,
         prev_dig_block: null,
         update: async function (agent) {
-            if (agent.isIdle()) { 
+            // A skill that keeps the bot in place on purpose sets bot.rotnStationary while it does
+            // (D2b: the shelter build, once at the site; not the walk there, #195 review 6).
+            if (agent.isIdle() || agent.bot?.rotnStationary === true) {
                 this.prev_location = null;
                 this.stuck_time = 0;
                 return; // don't get stuck when idle
