@@ -19,6 +19,7 @@ import { TaskQueue, isTaskGiver, markUntrusted } from './task_queue.js';
 import { Agenda } from './agenda.js';
 import { Control } from './control.js';
 import { autonomyTick } from './priority.js';
+import { resetNight } from './night_routine.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
@@ -503,6 +504,7 @@ export class Agent {
             this.actions.cancelResume();
             this.actions.stop();
         });
+        this.bindNightReset();
         this.bot.on('kicked', (reason) => {
             if (!this._disconnectHandled) {
                 const { msg } = handleDisconnection(this.name, reason);
@@ -558,6 +560,13 @@ export class Agent {
     }
 
     // The one 'login' listener (A3/A4b; a test emits 'login' on a fake bot).
+    // Not sheltered any more after a death, or after a spawn (mineflayer emits 'spawn' again after
+    // a respawn, and the bot is elsewhere) (#204 review 6).
+    bindNightReset() {
+        this.bot.on('death', () => resetNight(this, 'death'));
+        this.bot.on('spawn', () => resetNight(this, 'spawn'));
+    }
+
     bindLoginHandler() {
         this.bot.on('login', () => this.onLogin());
     }
