@@ -1,3 +1,5 @@
+import { testforblockVerdict } from './g2.mjs';
+
 // G3 rules the runner enforces for every G3 scenario (coord/STATUS-harness-ops.md, "G3 batches";
 // lead, #101 and #116 review):
 //   - the batch spend stop: maxBatchUsd (USD 2) is a gate parameter compared 'equal';
@@ -295,4 +297,21 @@ export function startEvent(output) {
         } catch { /* not an event */ }
     }
     return null;
+}
+
+const SETBLOCK_REPLY = /Block placed|could not be placed|couldn't be placed/i;
+
+/**
+ * Place a task marker (gold block) with the allowlisted `setblock` and confirm it read-only with
+ * `testforblock <marker> minecraft:gold_block 0` (#207 review nit). confirm(cmd, done) is the scenario's
+ * lateConsole confirm. reply is the setblock answer line itself (smoke batch C+D: the last returned line
+ * could be a later chat line). Returns {at, reply, goldBlock, detail}; goldBlock false means the marker is
+ * not proven, and the scenario must not count on it.
+ */
+export async function placeGoldMarker(confirm, marker) {
+    const placed = await confirm(`setblock ${marker.join(' ')} minecraft:gold_block`, (l) => l.some((x) => SETBLOCK_REPLY.test(x)));
+    const reply = placed.find((x) => SETBLOCK_REPLY.test(x)) ?? null;
+    const v = testforblockVerdict(await confirm(`testforblock ${marker.join(' ')} minecraft:gold_block 0`,
+        (l) => { const x = testforblockVerdict(l, marker); return x.ok || /^The block at /.test(x.detail ?? ''); }), marker);
+    return { at: marker, reply, goldBlock: v.ok, detail: v.ok ? 'found' : v.detail };
 }
