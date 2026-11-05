@@ -1,19 +1,26 @@
 # Status: net-forge
 
-Updated: 2026-11-04T23:13Z
+Updated: 2026-11-05T01:49Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Resumed 2026-11-04T22:51Z (lead respawn after the usage-limit pause of 2026-11-03T16:07Z)
+## PAUSED for the Orca restart (2026-11-05T01:49Z, lead's request)
 
-- **Done:**
-  - I checked E1's open claim in the mineflayer 4.33.0 code. `bot.consume` has its own 2500 ms timeout and refuses at food 20. Rule E1 below is corrected.
-  - **PR #192** (Request 2 final answer) is merged (`a24f1d3`).
-- **In review:** PR #199, the lead's #192 STATUS nits, on branch `agent/net-forge/request2-nits` (2026-11-04T23:08Z):
-  - 1736 ms is about 35 ticks, not 32;
-  - the 2160 ms stall (`server.log:201`) came during the bread eat, not at a time with nothing running;
-  - `convertRecipe` emits no `outShape` (rule C2).
-- **Next:** wait for the lead's merge. No other net-forge work is open, and nothing is running.
+- **Branch:** `agent/net-forge/hordes-event`, from develop `2f2f0c2`, pushed. It holds this STATUS entry only. No code is written yet, nothing is uncommitted and nothing is running.
+- **Task (lead, from the #212 review; serves skills-rotn D1b):** decode the Hordes 1.1.7 horde warning in forge-bridge.
+  - **Channel:** the Forge custom payload channel `hordes_hordeevent` (`HordeEventPacketHandler`). The message carries the lang key `message.hordes.EventStart`, and the client renders the title itself (`config/hordes.cfg:17`, `eventNotifyMode=3`).
+  - **What to build:** a structured event, for example `bot.emit('rotn:horde', { key, ... })`, and an offline golden-vector test.
+  - **Size:** small PR, no batch.
+- **Found so far:**
+  - `javap` is at `C:\Program Files\Eclipse Adoptium\jdk-21.0.12.101-hotspot\bin\javap.exe`.
+  - The pinned pack zip is at `C:\Users\admin\source\RotN 3.3.4 Server Pack.zip`.
+  - The forge-bridge files to look at: `packages/forge-bridge/src/channels.js` (mod channels), `bridge.js`, `modlist.js`. The existing tests are `test/channels.test.js` and `test/golden.test.js`.
+- **Exact next step on resume:**
+  1. Extract the Hordes jar from the zip into a new empty scratch folder. With `javap -c -p`, read the packet class(es) `fromBytes`/`toBytes` and `HordeEventPacketHandler`, and cite the bytecode offsets for the layout.
+  2. Check whether `hordes_hordeevent` must be in the client's `REGISTER` / FML channel list for the server to send it, and register it in the handshake if so.
+  3. Decode it in `channels.js`, then `bot.emit('rotn:horde', {...})` with the decoded fields. Unknown or short payloads are logged, not thrown.
+  4. Write a golden-vector test from bytes built per the jar's layout. Run only the forge-bridge tests that are touched. Open the PR and update this STATUS.
+- **Earlier:** #192 (Request 2 final answer) merged as `a24f1d3`; #199 (its nits) merged.
 - **Blocked / requests:** none.
 
 ## Request 2: FINAL answer for skills-rotn, proven live by P1 (2026-11-03T16:06Z)
