@@ -9,7 +9,8 @@ import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
 import { installRecipes } from '../../../packages/rotn-data/index.js';
-import { cobbleRecipes, cobbleChoices, isGenericCobble } from './cobble.js';
+import prismarineRecipe from 'prismarine-recipe';
+import { cobbleRecipes, cobbleChoices, isGenericCobble, __resetCobbleCache } from './cobble.js';
 
 const vanilla = minecraftData('1.12.2');
 const reg = { ...vanilla, items: { ...vanilla.items }, itemsByName: { ...vanilla.itemsByName }, recipes: { ...vanilla.recipes } };
@@ -114,4 +115,30 @@ test('round 3 A: too few rocks of any one kind: a clear line, no craft', async (
     assert.equal(await craftRecipe(bot, 'cobblestone', 1), false);
     assert.deepEqual(crafts, []);
     assert.match(bot.output, /Cobblestone takes 4 rocks of one kind, and each kind makes its own cobblestone; you have 3 pyrotech_compat:rock_sedimentary:0, 2 pyrotech_compat:rock_igneous:1\./);
+});
+
+// #233 review 1: bot.recipesFor can offer another recipe for the same output
+// (undergroundbiomes:regular_cobblestone: 4 modded cobbles into vanilla cobblestone). The craft
+// must use the rock's own recipe, and only what it really made counts.
+test('#233 review 1: plain rocks make cobblestone by the rock recipe, never from the bot\'s modded cobble', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftRecipe } = await import('./skills.js');
+    const { bot, crafts } = craftBot([stack('pyrotech:rock', 0, 4), stack('undergroundbiomes:metamorphic_cobble', 0, 4)]);
+    const { Recipe } = prismarineRecipe(reg);
+    // what mineflayer's recipesFor could return for vanilla cobblestone: the cobble-converting recipe
+    const cobbleId = reg.itemsByName['undergroundbiomes:metamorphic_cobble'].id;
+    bot.recipesFor = () => Recipe.find(reg.itemsByName.cobblestone.id, null)
+        .filter(r => (r.ingredients ?? r.inShape?.flat() ?? []).some(c => c && c.id === cobbleId));
+    assert.equal(await craftRecipe(bot, 'cobblestone', 1), true, bot.output);
+    assert.deepEqual(crafts, ['cobblestone:0']);
+    const left = (name) => bot.inventory.items().filter(i => i.name === name).reduce((n, i) => n + i.count, 0);
+    assert.equal(left('undergroundbiomes:metamorphic_cobble'), 4, 'the modded cobble is untouched');
+    assert.equal(left('pyrotech:rock'), 0, 'the rocks were used');
+});
+
+test('#233 review 4: a failed oredict load is not cached', () => {
+    __resetCobbleCache();
+    assert.deepEqual(cobbleRecipes(() => { throw new Error('dump not readable'); }), []);
+    assert.equal(cobbleRecipes().length, 26, 'the next call loads again');
+    assert.equal(cobbleRecipes(() => { throw new Error('not called: cached now'); }).length, 26);
 });
