@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T00:38Z (from `date -u`)
+Updated: 2026-11-05T00:46Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -202,6 +202,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 12. ~~rotn-data (from D2c, #186): a structured do-not-look field~~: **done in rotn-data #187** (`lookAt`). #190 switches `threats.js` to `lookAt === false`, which now also covers the ender creeper and the cockatrice. The data notes (the gorgon, ender dragon, wither, ghast, blaze, zombie horse) are **done in rotn-data #188**: the gorgon is now `avoid` with `lookAt: false`, rechecked on develop and asserted in #190's test.
 13. ~~Lead: `prismarine-recipe` as a direct dependency~~: the lead is adding 1.5.0 in a lead PR (2026-11-04).
 14. **net-forge (FYI, via the lead):** C1 follows your Request 2 rules: `bot.craft(recipe, 1, table)` with a prismarine-recipe `Recipe` built from bot.registry ids and canFill's real stack metas (never 32767), the result with rotn-data's exact count and meta, NBT results and `remaining` refused, and auto-eat paused around the craft.
+14. **rotn-data (via the lead, #206 review 1):** export `foodOf(name, meta)`, returning `{ hunger, saturation }` with the pack's `scripts/food.zs` values on top of the dump (bread 3, not 5), or `null` for a non-food. `food.js` uses it as soon as it exists, and a skipped test then checks bread 3. Also wanted: a structured "harmful food" field with sources, so `AVOID_FOODS` can leave the code.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
@@ -272,5 +273,11 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
        - bread only when nothing else is left.
 
        Tests: `food.test.js` 5/5; `src/agent/**` 224/224; lint 254. Request to rotn-data (via the lead) in the PR: a structured "harmful food" field.
-     - **D1b next:** re-plan after a position jump of 5 or more blocks (AggroTP), and after a title message (a possible invasion);
+       - **#206 review (REQUEST CHANGES), fixed in `cd765ae6`, reply posted:**
+         1. pack food values through rotn-data's `foodOf` when it exists; until then the dump's vanilla values, said once; no test pins vanilla values; the pack check (bread 3) is skipped until `foodOf` exists (Request 14);
+         2. a consume that times out is judged by the food level and the item count after 1 s; the mode backs off 10 s, then 20 s, and gives up a food after 3 failures;
+         3. `eating` now comes before `cowardice` and `self_defense`, so the bot eats at food 6 or lower in a fight; at 12 or lower only when idle with no threat near.
+
+         Tests: `food.test.js` 8/8 plus 1 skipped; `src/agent/**` 227/227 plus 1 skipped; lint 254.
+     - **D1b next:** re-plan after a position jump of 5 or more blocks (AggroTP), and after the **hordes title text** (lead: match that text, not any title);
   3. D3: the death report.
