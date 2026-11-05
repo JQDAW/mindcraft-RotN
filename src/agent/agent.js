@@ -579,11 +579,17 @@ export class Agent {
     // 'forcedMove'. Measured against the position at the last physics tick, so the bot's own
     // walking never counts (#212 review 3). A jump of 5 or more blocks stops the running action
     // and asks for a re-plan (no LLM call now).
+    // Not a teleport (#212 re-review): a respawn or a dimension change (mineflayer's 'respawn'; the
+    // position packet that follows comes while isAlive is false), or a ride (physics stops on
+    // mount, and the dismount position packet can come after bot.vehicle clears).
     bindTeleportWatch() {
-        this._jumpWatch = new JumpWatch();
-        this.bot.on('physicsTick', () => this._jumpWatch.sample(this.bot.entity?.position));
+        const w = this._jumpWatch = new JumpWatch();
+        const dead = () => this.bot.isAlive === false || !(this.bot.health > 0);
+        this.bot.on('physicsTick', () => { if (dead()) w.reset(); else w.sample(this.bot.entity?.position); });
+        for (const ev of ['respawn', 'mount', 'dismount']) this.bot.on(ev, () => w.reset());
         this.bot.on('forcedMove', () => {
-            const jump = this._jumpWatch.forced(this.bot.entity?.position, { riding: !!this.bot.vehicle });
+            if (dead()) { w.reset(); return; }
+            const jump = w.forced(this.bot.entity?.position, { riding: !!this.bot.vehicle });
             if (jump) this.onTeleport(jump);
         });
     }
@@ -599,8 +605,8 @@ export class Agent {
 
     // D1b: the hordes mod's wave warning (lang key message.hordes.EventStart) asks for a re-plan; at
     // night the bot is in its shelter anyway. At most once a minute. The mod sends it on the Forge
-    // channel hordes_hordeevent (#212 review 1): forge-bridge will decode it, and its event calls
-    // onHordeMessage. Until then, and as a fallback, a vanilla title carrying the key counts.
+    // channel hordes_hordeevent (#212 review 1); forge-bridge emits it as 'rotn:horde' (#214). A
+    // vanilla title carrying the key is the fallback.
     onHordeMessage(keyOrComponent, { now = Date.now(), via = 'forge' } = {}) {
         const w = hordeWarning(keyOrComponent);
         if (!w) return false;
@@ -612,6 +618,11 @@ export class Agent {
     }
 
     bindHordeWatch({ now = () => Date.now() } = {}) {
+        // forge-bridge (#214) decodes hordes_hordeevent: {kind: 'start'|'end'|'message', key} or
+        // {kind: 'wave', ...} (no key, ignored). hordeWarning keeps EventStart only.
+        this.bot.on('rotn:horde', (ev) => {
+            if (typeof ev?.key === 'string') this.onHordeMessage(ev.key, { now: now(), via: 'forge' });
+        });
         // Fallback: a vanilla 1.12 title packet carrying the key (mineflayer's 'title' event drops keys).
         this.bot._client?.on('title', (packet) => {
             if (packet?.action !== 0 && packet?.action !== 1) return;

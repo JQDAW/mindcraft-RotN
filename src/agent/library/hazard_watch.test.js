@@ -39,6 +39,8 @@ function fakeAgent() {
     agent.bot = new EventEmitter();
     agent.bot._client = new EventEmitter();
     agent.bot.entity = { position: new Vec3(0.5, 64, 0.5) };
+    agent.bot.health = 20;
+    agent.bot.isAlive = true;
     agent.bot.pathfinder = { stop: () => { calls.pathStops++; } };
     agent.actions = { currentActionLabel: 'action:collectBlocks', stop: () => { calls.stops++; return Promise.resolve(); } };
     return { agent, calls };
@@ -72,16 +74,46 @@ test('D1b: the agent re-plans on a forced move of 5+ blocks, never on its own wa
     assert.equal(calls.pathStops, 1, 'the pathfinder stopped');
     assert.ok(logs.includes('[reflex] teleported 7.0 blocks (9, 64, 0 -> 16, 64, 0); re-planning'), logs.join('\n'));
 
-    // Death, then the respawn position packet far away: no teleport.
+    // Death (#212 re-review 1): physics keeps ticking while dead; then the respawn packet, then
+    // the far position packet (forcedMove) before update_health sends 'spawn'. No teleport.
+    agent.bot.health = 0; agent.bot.isAlive = false;
     agent.bot.emit('death');
+    agent.bot.emit('physicsTick');
+    agent.bot.emit('respawn');
     agent.bot.entity.position = new Vec3(300, 70, 300);
     agent.bot.emit('forcedMove');
+    agent.bot.health = 20; agent.bot.isAlive = true;
     agent.bot.emit('spawn');
     agent.bot.emit('physicsTick');
     agent.bot.entity.position = new Vec3(300, 70, 302);
     agent.bot.emit('forcedMove');
     assert.equal(agent.replan.modes.teleport, 1, 'the respawn is no teleport');
-    assert.equal(calls.stops, 1);
+
+    // A dimension change: 'respawn' with no death; the position packet comes while isAlive is false.
+    agent.bot.isAlive = false;
+    agent.bot.emit('respawn');
+    agent.bot.entity.position = new Vec3(37, 40, 37);
+    agent.bot.emit('forcedMove');
+    agent.bot.isAlive = true;
+    agent.bot.emit('physicsTick');
+    assert.equal(agent.replan.modes.teleport, 1, 'a dimension change is no teleport');
+
+    // A ride (re-review 3): physics stops on mount; the dismount packet comes after bot.vehicle clears.
+    agent.bot.emit('physicsTick');
+    agent.bot.vehicle = { id: 7 };
+    agent.bot.emit('mount');
+    agent.bot.vehicle = null;
+    agent.bot.emit('dismount');
+    agent.bot.entity.position = new Vec3(90, 40, 37);
+    agent.bot.emit('forcedMove');
+    assert.equal(agent.replan.modes.teleport, 1, 'a ride is no teleport');
+
+    // After all that, a real teleport still counts.
+    agent.bot.emit('physicsTick');
+    agent.bot.entity.position = new Vec3(98, 40, 37);
+    agent.bot.emit('forcedMove');
+    assert.equal(agent.replan.modes.teleport, 2);
+    assert.equal(calls.stops, 2);
 });
 
 test('D1b: horde warnings by forge-bridge or the title fallback, at most once a minute', (t) => {
@@ -94,8 +126,15 @@ test('D1b: horde warnings by forge-bridge or the title fallback, at most once a 
     agent.bot._client.emit('title', { action: 0, text: '{"translate":"message.hordes.EventEnd"}' });
     assert.equal(agent.replan, undefined, 'any other title: nothing');
 
-    assert.equal(agent.onHordeMessage(HORDE_START_KEY, { now, via: 'forge' }), true);
+    // forge-bridge's decoded event (#214): end, wave and other messages do nothing; start does.
+    agent.bot.emit('rotn:horde', { kind: 'end', key: 'message.hordes.EventEnd' });
+    agent.bot.emit('rotn:horde', { kind: 'wave', sound: 'hordes:horde', direction: { x: 1, z: 0 } });
+    agent.bot.emit('rotn:horde', { kind: 'message', key: 'some.other.text' });
+    agent.bot.emit('rotn:horde', null);
+    assert.equal(agent.replan, undefined, 'only the start counts');
+    agent.bot.emit('rotn:horde', { kind: 'start', key: HORDE_START_KEY });
     assert.equal(agent.replan.modes.horde_warning, 1);
+    assert.equal(agent.onHordeMessage(HORDE_START_KEY, { now, via: 'forge' }), false, 'once a minute');
     assert.ok(logs.includes('[reflex] horde warning (message.hordes.EventStart, by forge): re-planning'), logs.join('\n'));
 
     now = 30_000;
