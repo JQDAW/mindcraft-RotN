@@ -154,6 +154,11 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`.
 
 Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
 
+**Smoke or gate, always said (lead, #218 review).** `batch.mjs` needs exactly one of `--smoke` or `--gate`. Without one, or with both, it refuses before anything starts (exit 2, and `test-server.sh run`'s preflight stops before the create).
+- `batch.json` records it as `smoke: true` or `smoke: false`. The batch logs `a SMOKE batch (smoke: true, never gate evidence)` or `a GATE batch (smoke: false)` at its preflight and at its start.
+- **A smoke batch is never gate evidence,** whatever its results say. In a smoke batch, a result's `gateValid: true` or `pass: true` only says that the run's parameters and checks were gate-strength.
+- The first smoke batches (`test/evidence/g3/g3a-20261105/`, `g3b-20261105/`, `g3cd-20261105/`) ran before the flag existed. Their `batch.json` got `"smoke": true` by hand, at the lead's request.
+
 - **The preflight, before any server exists** (lead, #169 review). When the run command's script is `test/runner/batch.mjs`, `test-server.sh run` first runs it with `--preflight` and the same arguments. That checks the driver, its profile, the profile's model (it must be `openrouter/@preset/glm-5-1-mindcraft`, and so must `code_model` and `vision_model` when set) and `settings.js`, and reads the key's usage once. If anything fails, no server is created (exit 1).
   - The driver must be `test/runner/drivers/mindcraft-driver.mjs`; a fake driver is accepted only in the offline test mode.
   - The script is recognised by its resolved path, so a path with `..` in it or a Windows path counts, and another file whose path merely ends in `test/runner/batch.mjs` does not (#176 review nit).
@@ -165,8 +170,8 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
   ```
   node test/tools/g3-batch-check.mjs <batch.json> <result.json>...
   ```
-  That command exits 0 only if all of these hold:
-  - the summary has a batch id and `testMode: false`;
+  That command is the **gate claim check**. It exits 0 only if all of these hold:
+  - the summary has a batch id, `testMode: false` and **`smoke: false`** (a smoke batch, or a summary that does not say, is never gate evidence);
   - at least one G3 result is given;
   - every G3 result's `batch` is exactly `<that batch id>:<its maxBatchUsd>`;
   - the summary ran each of those scenarios exactly once;
@@ -182,7 +187,7 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
 
   Results that are not G3 are ignored. The command exits 1 when a check fails or a file cannot be read as JSON, and 2 on a usage error.
 
-  **The check is compulsory for evidence** (#129 review). `node test/tools/g3-batch-check.mjs --tree test/evidence` makes two demands:
+  **The check is compulsory for evidence** (#129 review). `node test/tools/g3-batch-check.mjs --tree test/evidence` checks only that the records agree, so a smoke batch passes it. It names every smoke batch in its output (`N smoke batch(es), never gate evidence: ...`). It makes two demands:
   - every G3 result anywhere under `test/evidence/` has a `batch.json` in its own folder or a parent folder;
   - the nearest such `batch.json` vouches for it.
 
@@ -193,7 +198,7 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
 
   CI runs the check on every PR (`test/unit/g3-spend.test.js`).
 
-  **Where G3 evidence goes** (#129 re-review nit 3): commit a G3 batch as `test/evidence/g3/<batch>/batch.json`, with its results in folders below it. **Gate reviews accept G3 evidence only from `test/evidence/g3/<batch>/`.** The CI check scans only `test/evidence/`, so a G3 result anywhere else in the repo is never gate evidence.
+  **Where G3 evidence goes** (#129 re-review nit 3): commit a G3 batch as `test/evidence/g3/<batch>/batch.json`, with its results in folders below it. **Gate reviews accept G3 evidence only from `test/evidence/g3/<batch>/`, and only from a batch whose `batch.json` says `smoke: false` and that passes the single-batch gate claim check above.** The CI check scans only `test/evidence/`, so a G3 result anywhere else in the repo is never gate evidence.
 
   A `batch.json` written by hand cannot be told from a real one; the independent evidence review is the safeguard there.
 - **G3 scenario requirements.** Every G3 scenario has `llm: true` and `maxBatchUsd` 2 compared 'equal' (a unit test checks this). The console allowlist applies whenever `llm` is true or the gate is G3.

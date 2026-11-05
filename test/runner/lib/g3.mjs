@@ -107,12 +107,19 @@ export function g3Policy(scenario, env, maxBatchUsd) {
  * test/tools/g3-batch-check.mjs checkEvidenceTree makes it compulsory: every G3 result under test/evidence/
  * must sit under a folder with a batch.json that vouches for it.
  * results: [{file, result}] with each result.json's contents; g3Scenarios: the ids loadScenarios marks
- * gate G3 (isG3Result). Returns the problems (empty = consistent).
+ * gate G3 (isG3Result). gate: true for a gate claim (lead, #218 review): the summary must also say
+ * smoke: false, so a smoke batch (smoke: true, batch.mjs --smoke) or one that does not say is never gate
+ * evidence. The --tree consistency check (CI) runs with gate false, so committed smoke batches stay valid
+ * records. Returns the problems (empty = consistent).
  */
-export function crossCheckBatch(summary, results, { g3Scenarios = [] } = {}) {
+export function crossCheckBatch(summary, results, { g3Scenarios = [], gate = false } = {}) {
     if (!summary || typeof summary.batchId !== 'string' || !summary.batchId) return ['no batch summary with a batchId (batch.json from batch.mjs)'];
     const p = [];
     if (summary.testMode !== false) p.push(`batch ${summary.batchId} ran in test mode (or does not say): not gate evidence`);
+    if (gate && summary.smoke !== false) {
+        p.push(summary.smoke === true ? `batch ${summary.batchId} is a smoke batch (smoke: true): never gate evidence`
+            : `batch ${summary.batchId} does not say smoke: false: not gate evidence`);
+    }
     const marker = `${summary.batchId}:${summary.maxBatchUsd}`;
     const ran = (summary.scenarios ?? []).reduce((m, s) => m.set(s.id, [...(m.get(s.id) ?? []), s]), new Map());
     const g3 = results.filter(({ result }) => isG3Result(result, g3Scenarios));

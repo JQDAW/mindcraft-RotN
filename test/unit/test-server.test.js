@@ -299,7 +299,7 @@ describe('up / run / down', () => {
         fs.writeFileSync(usage, JSON.stringify({ data: { usage: 0.25, limit: 5, limit_remaining: 4.75 } }));
         const out = (s) => fwd(path.join(tmp, `out-${s}`));
         const r = run(['run', '--yes', '--name', 'mcr-test-spend', '--', fwd(process.execPath), fwd(path.join(repo, 'test', 'runner', 'batch.mjs')),
-            '--max-batch-usd', '2', '--logs-out', fwd(path.join(tmp, 'g3-logs')),
+            '--max-batch-usd', '2', '--smoke', '--logs-out', fwd(path.join(tmp, 'g3-logs')),
             '--scenario', 'a', '--out', out('a'), '--scenario', 'b', '--out', out('b'), '--scenario', 'c', '--out', out('c'),
             '--', 'node', 'driver.mjs'], {
             ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: fwd(usage), ROTN_BATCH_RUNNER: fwd(path.join(fixtures, 'fake-batch-runner.mjs')),
@@ -325,7 +325,7 @@ describe('up / run / down', () => {
         const profile = path.join(tmp, 'other-model.json');
         fs.writeFileSync(profile, JSON.stringify({ name: 'FRCFLD', model: 'openrouter/openai/gpt-4o' }));
         const r = run(['run', '--yes', '--name', 'mcr-test-model', '--', fwd(process.execPath), fwd(path.join(repo, 'test', 'runner', 'batch.mjs')),
-            '--max-batch-usd', '2', '--logs-out', fwd(path.join(tmp, 'g3-logs')), '--scenario', 'a', '--out', fwd(path.join(tmp, 'out-a')),
+            '--max-batch-usd', '2', '--smoke', '--logs-out', fwd(path.join(tmp, 'g3-logs')), '--scenario', 'a', '--out', fwd(path.join(tmp, 'out-a')),
             '--', 'node', fwd(path.join(repo, 'test', 'runner', 'drivers', 'mindcraft-driver.mjs')), '--profile', fwd(profile)], {
             ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: fwd(usage), ROTN_BATCH_RUNNER: fwd(path.join(fixtures, 'fake-batch-runner.mjs')),
             FAKE_DIR: fwd(tmp), OPENROUTER_API_KEY: 'not-a-real-key', ROTN_BATCH_PREFLIGHT: 'passed',
@@ -340,7 +340,7 @@ describe('up / run / down', () => {
 
     // The batch command of the spend test above, with the script path and the run options as given.
     const batchRun = (scriptPath, runOpts = [], extraEnv = {}) => run(['run', '--yes', ...runOpts, '--name', 'mcr-test-pre', '--', fwd(process.execPath), scriptPath,
-        '--max-batch-usd', '2', '--logs-out', fwd(path.join(tmp, 'g3-logs')), '--scenario', 'a', '--out', fwd(path.join(tmp, 'out-a')),
+        '--max-batch-usd', '2', '--smoke', '--logs-out', fwd(path.join(tmp, 'g3-logs')), '--scenario', 'a', '--out', fwd(path.join(tmp, 'out-a')),
         '--', 'node', 'driver.mjs'], {
         ROTN_TEST_MODE: '1', ROTN_BATCH_RUNNER: fwd(path.join(fixtures, 'fake-batch-runner.mjs')), FAKE_DIR: fwd(tmp), OPENROUTER_API_KEY: 'not-a-real-key', ...extraEnv,
     });

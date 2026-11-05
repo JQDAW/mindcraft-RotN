@@ -161,6 +161,33 @@ describe('the shared G3 arbiters (lib/g3.mjs)', () => {
         }
         // Repeats count without any first-join match too (a later join on a used world).
         assert.deepEqual(cheatProblems([L(0, `${NAME} joined the game`), L(60000, gr('commandBlockOutput'))], NAME).problems, []);
+        // "At any time" includes before the join line (#219 review: consistent with the decision).
+        assert.deepEqual(cheatProblems([L(0, gr('sendCommandFeedback'))], NAME).problems, []);
+    });
+
+    test('#219 review nit: prefix and suffix tricks around the allowed gamerule lines are still problems', () => {
+        const j = L(0, `${NAME} joined the game`);
+        const one = (msg) => cheatProblems([j, L(60000, msg)], NAME).problems;
+        for (const inner of [
+            'Game rule commandBlockOutput has been updated to falsey',                 // suffix glued to the value
+            'Game rule commandBlockOutput has been updated to false] x',               // a bracket inside the message
+            'Game rule commandBlockOutput has been updated to false; gamemode 1',      // a second command after it
+            'Game rule commandBlockOutput has been updated to false ',                 // trailing space
+            'Game rule sendCommandFeedback has been updated to FALSE',                 // another spelling of the value
+            'xGame rule sendCommandFeedback has been updated to false',                // prefix glued on
+            ' Game rule sendCommandFeedback has been updated to false',                // leading space
+            'Game rule commandBlockOutputs has been updated to false',                 // a longer rule name
+            'Game rule commandBlockOutput  has been updated to false',                 // doubled space
+            'Game rule keepInventory has been updated to false',                       // another rule, value false
+        ]) {
+            assert.equal(one(`[${NAME}: ${inner}]`).length, 1, JSON.stringify(inner));
+        }
+        // The exact line from another sender is not the pack's: it names no bot, so it is not this arbiter's business,
+        // and the bot's own chat that quotes it is not a command at all.
+        assert.deepEqual(one('[JQDAW: Game rule commandBlockOutput has been updated to false]'), []);
+        assert.deepEqual(one(`<${NAME}> [${NAME}: Game rule commandBlockOutput has been updated to false]`), []);
+        // A bracketed command wrapping the allowed text is still the bot's command.
+        assert.equal(one(`[${NAME}: [${NAME}: Game rule commandBlockOutput has been updated to false]]`).length, 1);
     });
 
     test('cheatProblems finds console gives, other senders\' commands on the bot, game mode changes and op', () => {
