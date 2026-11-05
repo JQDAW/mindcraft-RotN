@@ -1,0 +1,39 @@
+[test-server 20:32:13] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --max-batch-usd 2 --logs-out captures/raw/r2-g3b/server --summary captures/raw/r2-g3b/batch.json --timeout-min 62 --scenario g3-first-night --out captures/raw/r2-g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 20:32:13] preflight passed: driver, profile, model and settings checked; the key's usage can be read; 1 scenario(s); a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[test-server 20:32:25] sweeper OK (via cadence): cadence of 4 dispatch runs on develop in the last 50 min, gaps 15.4, 14.5, 15.2 min, newest 42104053303 1.5 min ago
+[test-server 20:32:25] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 3h, sweeper deletes it) ~4 billed hours, EUR 0.55 plus Primary IPv4
+[test-server 20:32:26] creating mcr-test-20261105-203218: delete-after 2026-11-05T23:32:25Z (TTL 3h)
+Waiting for create_server (server: 174677012, image: 161547269) ...
+Waiting for start_server (server: 174677012) ...
+Waiting for create_server (server: 174677012, image: 161547269) ... done
+Waiting for start_server (server: 174677012) ... done
+Server 174677012 created
+[test-server 20:32:36] server mcr-test-20261105-203218 is at <ip>
+[test-server 20:32:36] waiting for SSH and the build (up to 120 min)
+[test-server 20:32:46] phase: unreachable
+[test-server 20:33:03] phase: booting:running
+[test-server 20:33:35] phase: starting
+[test-server 20:35:27] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 20:35:29] READY: mcr-test-20261105-203218 at <ip>:25565 (delete-after 2026-11-05T23:32:25Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261105-203218
+[test-server 20:35:29] running: node test/runner/batch.mjs --max-batch-usd 2 --logs-out captures/raw/r2-g3b/server --summary captures/raw/r2-g3b/batch.json --timeout-min 62 --scenario g3-first-night --out captures/raw/r2-g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 20:35:29] batch 20261105T203529-31384: a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[batch 20:35:29] g3-first-night: start (spent so far USD 0 of 2)
+[scenario 20:35:29] g3-first-night (G3) run 20261105t203529-94baad; git 139239f28615dd2b1edfdff25e2c87a693e1901b; driver: node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json; out: captures/raw/r2-g3b/night
+[scenario 20:36:42] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 20:37:42] PASS fresh_start: none of 24 target items held; the pack's first-join Bread and Bundle seen
+[scenario 21:16:42] PASS survived_night: dawn reached; stat.deaths 0; death lines 0
+[scenario 21:16:44] PASS stayed_online: online from the join to the end (40.1 min)
+[scenario 21:16:44] PASS no_cheat: nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)
+[scenario 21:16:45] g3-first-night: 63 LLM calls, USD 0.201801
+[scenario 21:16:45] g3-first-night: model openrouter/@preset/glm-5-1-mindcraft
+[scenario 21:16:47] g3-first-night: PASS; 5 passed, 0 failed (captures/raw/r2-g3b/night/result.json)
+captures/raw/r2-g3b/server
+BATCH {"batchId":"20261105T203529-31384","testMode":false,"gate":false,"smoke":true,"maxBatchUsd":2,"scenarios":[{"id":"g3-first-night","out":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r2-g3b\\night","runId":"20261105t203529-94baad","exit":0,"spentBefore":0}],"stopped":null,"usageAtStart":0.299486305,"usageAtEnd":0.501287366,"spentUsd":0.201801,"exit":0,"logsFetched":true}
+[test-server 21:16:57] command exited with 0
+[test-server 21:16:57] EXIT trap: tearing down mcr-test-20261105-203218
+[test-server 21:16:58] deleting batch mcr-test-20261105-203218 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261105-203218)
+Waiting for delete_server (server: 174677012) ...
+Waiting for delete_server (server: 174677012) ... done
+[test-server 21:17:10] batch mcr-test-20261105-203218: ran 44 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 21:17:10] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261105-203218

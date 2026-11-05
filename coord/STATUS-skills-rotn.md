@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T20:21Z (from `date -u`)
+Updated: 2026-11-05T21:38Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -358,15 +358,28 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Tests: `action_limits` 3/3 (new), `use_on` 11/11, `fell_tree` 4/4; on develop the new tests hang or fail. Related: 11 files pass. Lint 254.
 - **Tracked (#222 review 3, not done):** stepping aside from a falling tree. Dynamic Trees can hurt entities in the fall path, and the rule says "Stand to the side". Check the damage in the next G3 (a) run before building it (chop from the side, then walk around).
-  4. **Open PR** (branch `agent/skills-rotn/limits-followup`; STATUS lives here now; does not block G3 smoke round 2), the #224 review follow-ups:
+  4. **#225 merged** (lead, 2026-11-05, `a7aecd0`), the #224 review follow-ups:
      - each limited command gets a run token (`bot.action_run`), marked aborted at the limit and cleared when the command ends. The chest, furnace and collect skills take it at their start and check it after their awaits: a late window is closed and nothing more is done;
      - `collectBlock` waits up to 5 s for a timed-out, cancelled break to end before it moves on;
      - `!craftRecipe`'s limit is now 4 min.
 
      Tests: `action_limits` 5/5 (the late-window test deposits on develop), `use_on` 11/11 (the collect test goes on before the break ends on develop). Related: 10 files pass. Lint 254.
      - #225 review fixes: `smeltItem` and `clearNearestFurnace` take the run on their first line, so a limit hit during the walk stops them before the furnace opens. Checks after the awaits were added in `craftRecipe`/`craftByFill` (a table placed after the abort is picked up again), in `goToPosition` (after the walk) and inside `collectBlock` (after the equip, the walk and the dig, before `autoLight`). Tests: `action_limits` 8/8 (the 3 new ones fail on the previous code); related 8 files pass; per-file lint unchanged.
-- **Next (lead):** review #225 again; G3 smoke round 2.
 - **G3 smoke round 2 running (lead, received before 2026-11-05T20:13Z by `date -u`, about 2 hours):** until the lead says it is over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
+- **#227 open, REQUEST CHANGES addressed** (branch `agent/skills-rotn/threat-arbitration`; STATUS lives here; develop merged in, no force-push), the round 2 batch A findings:
+  1. **Arbitration:** cowardice and self_defense claim the threat and hold it for `THREAT_HOLD_MS` (6 s) while their action runs; neither interrupts the other in that time. The low-health flee overrides the hold at once. The hold is released when the owner's action ends or fails (`execute`'s finally). `self_preservation` does not flee while dead. `PathStopped` is an interrupt (`goToGoal` returns false).
+  2. **Player zombie** (`zombie_players:zombie_player`, matched by entity type; rotn-data #226): fought only with a weapon (a sword or axe, not a pickaxe) and health above half (> 10); otherwise avoided from 24 blocks. The name rule is gone.
+  3. **Death spot** (`deathSpotBlocked`, for `!goToRememberedPlace` and `!goToCoordinates`, within 24 blocks of the last death, same dimension only): refused for 5 min; at dusk or night only within 20 min (one Minecraft day) of the death; and while a player zombie is loaded near the spot. The bot's shelter or home (places named home, shelter, bed or base, or the night site, within 4 blocks) is always allowed.
+  4. **`!attack`** refuses an ignore-unless-provoked mob (a grove sprite) unless it hurt the bot (angry, or a hit within 3 s while it was within 4 blocks), with a logged reason.
+
+     Tests: `threat_arbitration` 8/8. On develop, 7 fail, and the flap test shows cowardice interrupting self_defense 1 s after each start. Against the previous #227 head, the override and release tests fail. Also `use_on` 12/12 (PathStopped); related 10 files pass; lint per file unchanged.
+- **#229 open** (branch `agent/skills-rotn/night-pickaxe`, from develop), the round 2 batch B findings:
+  1. The night routine's "without a pickaxe": the real dump rules out the level and name hypotheses. `items()` misses the cursor and the off hand, so `toolLevels` now counts every carried stack, and the refusal names the pickaxes it saw.
+  2. The cobblestone step counts rotn-data's `cobblestone` ore (the bot's 10 metamorphic cobble never counted). The model's daytime `!buildShelter` is refused unless a giver typed it.
+  3. A #224 regression is fixed: `collectBlock` threw on position-less blocks after a give-up.
+
+     Tests: `shelter` 17, `agenda` 15, `use_on` 12; on develop the new tests fail (the real-dump test passes by design); related 8 files pass; lint per file unchanged.
+- **Next (lead):** re-review #227; review #229.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

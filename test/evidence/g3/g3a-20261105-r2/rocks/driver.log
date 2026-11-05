@@ -1,0 +1,939 @@
+DRIVER {"t":"2026-11-05T20:19:04.150Z","type":"mindcraft_start","pid":7552,"main":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\main.js","settings":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\settings.js","profile":"profiles/rotn-bot.json","mindserverPort":50584,"models":{"model":"openrouter/@preset/glm-5-1-mindcraft","code_model":null,"vision_model":null},"serverTaskGiver":true,"botState":{"dir":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\bots\\<bot>","movedAside":["agenda.json.g3-2026-11-05T20-19-04-138Z.bak"],"pruned":[],"fresh":true}}
+MindServer running on port 50584 on host localhost
+MC server found. (Host: <ip>, Port: 25565, Version: 1.12.2)
+keys.json not found. Defaulting to environment variables.
+Connecting to MindServer
+Client connected
+<bot> connected to MindServer
+Starting agent
+Initializing agent <bot>...
+Error with embedding model, using word-overlap instead.
+Error with embedding model, using word-overlap instead.
+Error with embedding model, using word-overlap instead.
+Examples initialized.
+No task.
+<bot> logging into minecraft...
+<bot> updating available agents
+[forge-bridge] attached; 346 mods; REID 2.2.2; Triumph 3.19.2
+[forge-bridge] registries: aetherapi:accessories=31 aetherapi:enchantment_fuels=3 aetherapi:enchantments=879 aetherapi:freezable_fuels=1 aetherapi:freezables=11 aetherapi:moa_types=4 arcaneworld:rituals=10 artisanworktables:recipe_registry=15 artisanworktables:requirement_builder_supplier=1 artisanworktables:requirement_context_supplier=1 charset:wire=34 doggytalents:talents=17 dynamictrees:species=136 livingenchantment:personalityregistry=14 livingenchantment:talentregistry=0 mcmultipart:micro_material=0 mcmultipart:micro_type=0 mcmultipart:slots=27 minecraft:biomes=175 minecraft:blocks=4896 minecraft:dataserializers=2 minecraft:enchantments=178 minecraft:entities=971 minecraft:items=9710 minecraft:potions=263 minecraft:potiontypes=298 minecraft:recipes=10687 minecraft:soundevents=1867 minecraft:villagerprofessions=19 netherex:pigtificate_professions=5 pyrotech:bloomery_recipe=12 pyrotech:campfire_recipe=21 pyrotech:chopping_block_recipe=0 pyrotech:compacting_bin_recipe=25 pyrotech:compost_bin_recipe=1437 pyrotech:crucible_brick_recipe=11 pyrotech:crucible_stone_recipe=7 pyrotech:crude_drying_rack_recipe=7 pyrotech:drying_rack_recipe=9 pyrotech:granite_anvil_recipe=206 pyrotech:kiln_brick_recipe=122 pyrotech:kiln_pit_recipe=24 pyrotech:kiln_stone_recipe=121 pyrotech:mechanical_compacting_bin_recipe=25 pyrotech:mill_brick_recipe=324 pyrotech:mill_stone_recipe=0 pyrotech:oven_brick_recipe=10 pyrotech:oven_stone_recipe=10 pyrotech:pit_recipe=41 pyrotech:soaking_pot_recipe=55 pyrotech:wither_forge_recipe=13 pyrotech:worktable_recipe=0
+[forge-bridge] RotN recipes installed: 6089 recipes for 3666 items
+[forge-bridge] handshake complete (overrideDimension 0)
+[forge-bridge] state-id remap active: applied 506 state ids in 132 of the table's 132 blocks; conflicts 0 skipped
+<bot> logged in!
+<bot> updating available agents
+Initializing vision intepreter...
+<bot> spawned.
+received message from system : Respond with hello world and your name
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: You are self-prompting with the goal: 'Build a house'. Respond:
+Example: trade something with zorro_34
+Awaiting openrouter api response...
+Self-prompting started.
+starting self-prompt loop
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+Received.
+Generated response: Hello world! I'm <bot>.
+<bot> full response to system: """"
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Hey, I'm <bot>! Time to grab some rocks.
+
+!collectBlocks("pyrotech:rock", 6)
+<bot> full response to system: ""Hey, I'm <bot>! Time to grab some rocks.
+
+!collectBlocks("pyrotech:rock", 6)""
+parsed command: { commandName: '!collectBlocks', args: [ 'pyrotech:rock', 6 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output is very long (865 chars) and has been shortened.
+
+          First outputs:
+Path not found, but attempting to navigate anyway using destructive movements.
+You have reached at -37, 68, -74.
+Picked up 0 items.
+Broke pyrotech_compat:rock_metamorphic but got no pyrotech:rock.
+Found non-destructive path.
+You have reached at -36, 
+...skipping many lines.
+Final outputs:
+ 0, -68.
+Picked up 0 items.
+Found non-destructive path.
+You have reached at -28, 69, -66.
+Picked up 0 items.
+Collected 5 pyrotech:rock (2 pyrotech_compat:rock_metamorphic:0, 2 pyrotech_compat:rock_metamorphic:6, 1 pyrotech_compat:rock_sedimentary:0).
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Got 5 so far, need 1 more. !collectBlocks("pyrotech:rock", 1)
+<bot> full response to system: ""Got 5 so far, need 1 more. !collectBlocks("pyrotech:rock", 1)""
+parsed command: { commandName: '!collectBlocks', args: [ 'pyrotech:rock', 1 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+Found non-destructive path.
+You have reached at -26, 70, -67.
+Picked up 0 items.
+Broke pyrotech_compat:rock_metamorphic but got no pyrotech:rock.
+Collected 0 pyrotech:rock.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Hmm, that one didn't drop anything. Let me try again nearby. !collectBlocks("pyrotech:rock", 2)
+<bot> full response to system: ""Hmm, that one didn't drop anything. Let me try again nearby. !collectBlocks("pyrotech:rock", 2)""
+parsed command: { commandName: '!collectBlocks', args: [ 'pyrotech:rock', 2 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+Found non-destructive path.
+You have reached at -25, 70, -65.
+Picked up 0 items.
+Broke pyrotech_compat:rock_igneous but got no pyrotech:rock.
+Found non-destructive path.
+You have reached at -25, 70, -72.
+Found non-destructive path.
+Found non-destructive path.
+Picked up 2 items.
+Collected 2 pyrotech:rock (1 pyrotech_compat:rock_sedimentary:0, 1 pyrotech_compat:rock_igneous:7).
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Got 'em! That should be enough rocks. !agenda()
+<bot> full response to system: ""Got 'em! That should be enough rocks. !agenda()""
+parsed command: { commandName: '!agenda', args: [] }
+Agent executed: !agenda and got: agenda: active, step sticks (collect 4 sticks); done: rocks
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Alright, step 2 - I need sticks. I've got 2 already, so let me grab a couple more from leaves. !collectBlocks("stick", 2)
+<bot> full response to system: ""Alright, step 2 - I need sticks. I've got 2 already, so let me grab a couple more from leaves. !collectBlocks("stick", 2)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 2 ] }
+executing code...
+
+<bot> received new message while generating, discarding old response.
+no response
+Agent executed: !collectBlocks and got: Action output:
+Broke dynamictrees:leaves0 but got no stick.
+Broke dynamictrees:leaves0 but got no stick.
+Collected 0 stick.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Low drop rate, let me try a bigger batch. !collectBlocks("stick", 4)
+<bot> full response to system: ""Low drop rate, let me try a bigger batch. !collectBlocks("stick", 4)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 4 ] }
+executing code...
+
+[forge-bridge] movement guard: bot state became invalid (position NaN 70 NaN) at physicsTick; restored the last good state (logged once; trace in the capture as movement_trace)
+executing code...
+
+action "mode:self_defense" trying to interrupt current action "action:collectBlocks"
+waiting for code to finish executing...
+Agent executed: !collectBlocks and got: undefined
+Unpausing mode cowardice
+Unpausing mode self_defense
+Mode self_defense finished executing, code_return: Action output:
+No enemies nearby to defend self from.
+
+[reflex] self_defense interrupted 'action:collectBlocks'; re-plan requested (no LLM call now).
+received message from system : Reflexes (self_defense) interrupted 'action:collectBlocks'. Check your state and re-plan from here. You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Storing memories...
+Awaiting openrouter api response...
+executing code...
+
+Mode item_collecting finished executing, code_return: Action output:
+Found non-destructive path.
+Picked up 1 items.
+
+Received.
+Memory updated to:  Name: <bot>. Working on RotN agenda step 1/11: collect 6 pyrotech:rock. Rock piles on ground near spawn, break by hand. Got 5 so far (variants: rock_metamorphic, rock_sedimentary). Need 1 more. Breaking rocks sometimes gives 0 initially but eventually drops collect. Spawn area around coords -37,-74 to -28,-68.
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !attack("primitivemobs:grovesprite")
+<bot> full response to system: ""!attack("primitivemobs:grovesprite")""
+parsed command: { commandName: '!attack', args: [ 'primitivemobs:grovesprite' ] }
+executing code...
+
+executing code...
+
+action "mode:self_defense" trying to interrupt current action "action:attack"
+waiting for code to finish executing...
+Agent executed: !attack and got: undefined
+Unpausing mode cowardice
+executing code...
+
+action "mode:self_preservation" trying to interrupt current action "mode:self_defense"
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+Mode self_defense finished executing, code_return: 
+[death] died at -23, 71, -75; waiting for the respawn
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+Code execution triggered catch: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+    at resetPath (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:144:29)
+    at EventEmitter.<anonymous> (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:429:9)
+    at EventEmitter.emit (node:events:519:28)
+    at WorldSync.<anonymous> (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\blocks.js:590:44)
+Mode self_preservation finished executing, code_return: !!Code threw exception!!
+Error: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Unpausing mode cowardice
+Unpausing mode self_defense
+executing code...
+
+waiting for code to finish executing...
+Code execution triggered catch: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+    at EventEmitter.monitorMovement (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:603:9)
+    at EventEmitter.emit (node:events:531:35)
+    at tickPhysics (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\physics.js:82:11)
+    at Timeout.doPhysics [as _onTimeout] (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\physics.js:71:7)
+Mode self_preservation finished executing, code_return: !!Code threw exception!!
+Error: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+
+executing code...
+
+[death] died at -23, 71, -75 (<bot> was slain by Grove Sprite); lost 6 stick, 3 pyrotech_compat:rock_metamorphic:6, 2 pyrotech_compat:rock_igneous:7, 2 pyrotech_compat:rock_metamorphic, 2 pyrotech_compat:rock_sedimentary, 1 bread and 1 more kinds
+[reflex] death interrupted 'mode:self_preservation'; re-plan requested (no LLM call now).
+Received.
+Generated response: !moveAway(10)
+<bot> full response to system: ""!moveAway(10)""
+Mode self_preservation finished executing, code_return: Action output:
+Found non-destructive path.
+Moved away from (-47, 65, -60) to (-54, 66, -79).
+
+[reflex] eating: food 12, but no safe food in the inventory
+received message from system : Reflexes (death) interrupted 'mode:self_preservation'. You died at -23, 71, -75 and respawned. You no longer have 6 stick, 3 pyrotech_compat:rock_metamorphic:6, 2 pyrotech_compat:rock_igneous:7, 2 pyrotech_compat:rock_metamorphic, 2 pyrotech_compat:rock_sedimentary, 1 bread and 1 more kinds; they may lie at the death spot (unconfirmed). The spot is saved as 'last_death_position'. Check your state and re-plan from here. You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Storing memories...
+Awaiting openrouter api response...
+Received.
+Memory updated to:  Name: <bot>. RotN agenda step 2/11: collect 4 sticks (have 2, need 2 more). Step 1 done: 6 pyrotech:rock collected. Rocks near spawn -37,-74 to -25,-72, break by hand, sometimes 0 drops initially. Sticks from leaves.
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !goToRememberedPlace("last_death_position")
+<bot> full response to system: ""!goToRememberedPlace("last_death_position")""
+parsed command: {
+  commandName: '!goToRememberedPlace',
+  args: [ 'last_death_position' ]
+}
+executing code...
+
+Agent executed: !goToRememberedPlace and got: Action output:
+Found non-destructive path.
+You have reached at -22.821292830711595, 71, -74.3999347415797.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+executing code...
+
+Received.
+Generated response: !inventory
+<bot> full response to system: ""!inventory""
+attacking mob...
+attacking mob...
+attacking mob...
+attacking mob...
+attacking mob...
+Unpausing mode self_preservation
+Unpausing mode cowardice
+Unpausing mode self_defense
+Mode self_defense finished executing, code_return: Action output:
+Stopped fighting: the situation changed.
+Successfully defended self.
+Moved 16 away from enemies.
+
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Storing memories...
+Awaiting openrouter api response...
+[reflex] eating: food 12, but no safe food in the inventory
+executing code...
+
+Received.
+Memory updated to:  Name: <bot>. RotN agenda step 3/11: craft crude_axe (1 rock+2 sticks). Have 2 sticks, 6 rocks. Leaves(dynamictrees:leaves0) have low/no stick drop rate. Rocks near spawn -37,-74 to -25,-72. Grovesprites attack and interrupt actions. Axe breaks ~8 uses, keep spare.
+Saved memory to: ./bots/<bot>/memory.json
+executing code...
+
+action "mode:self_preservation" trying to interrupt current action "mode:self_defense"
+waiting for code to finish executing...
+waiting for code to finish executing...
+Mode self_defense finished executing, code_return: 
+Unpausing mode cowardice
+Unpausing mode self_defense
+Mode self_preservation finished executing, code_return: Action output:
+Found non-destructive path.
+Moved away from (-4, 81, -90) to (-19, 73, -78).
+
+[reflex] self_preservation interrupted 'mode:self_defense'; re-plan requested (no LLM call now).
+executing code...
+
+attacking mob...
+Unpausing mode self_preservation
+Unpausing mode cowardice
+Unpausing mode self_defense
+Mode self_defense finished executing, code_return: Action output:
+Stopped fighting: the situation changed.
+Successfully defended self.
+Moved 16 away from enemies.
+
+received message from system : Reflexes (self_preservation) interrupted 'mode:self_defense'. Check your state and re-plan from here. You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !inventory
+<bot> full response to system: ""!inventory""
+parsed command: { commandName: '!inventory', args: [] }
+Agent executed: !inventory and got: 
+INVENTORY
+- lifescroll:spawnscroll: 1
+WEARING: Nothing
+
+Saved memory to: ./bots/<bot>/memory.json
+[reflex] eating: food 12, but no safe food in the inventory
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !collectBlocks("pyrotech:rock_metamorphic", 2)
+<bot> full response to system: ""!collectBlocks("pyrotech:rock_metamorphic", 2)""
+Storing memories...
+Agent executed: !collectBlocks and got: Invalid block or item type: pyrotech:rock_metamorphic.
+Saved memory to: ./bots/<bot>/memory.json
+Awaiting openrouter api response...
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !collectBlocks("pyrotech_compat:rock_metamorphic", 2)
+<bot> full response to system: ""!collectBlocks("pyrotech_compat:rock_metamorphic", 2)""
+parsed command: {
+  commandName: '!collectBlocks',
+  args: [ 'pyrotech_compat:rock_metamorphic', 2 ]
+}
+executing code...
+
+Received.
+Memory updated to:  Name: <bot>. RotN step 3/11: craft crude_axe(1 rock+2 sticks). DIED at -23,71,-75 from grovesprites, lost all items. Recover at last_death_position. Rocks near spawn -37,-74 to -25,-72. Leaves(dynamictrees:leaves0) low stick drop. Grovesprites deadly-avoid or fight cautiously. Axe ~8 uses, keep spare.
+executing code...
+
+action "mode:self_defense" trying to interrupt current action "action:collectBlocks"
+waiting for code to finish executing...
+Agent executed: !collectBlocks and got: undefined
+executing code...
+
+action "mode:self_preservation" trying to interrupt current action "mode:self_defense"
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+Mode self_defense finished executing, code_return: 
+[death] died at -34, 70, -81; waiting for the respawn
+Unpausing mode cowardice
+Unpausing mode self_defense
+[death] died at -34, 70, -81 (<bot> was slain by Zombie <bot>); lost 1 pyrotech_compat:rock_metamorphic
+[reflex] death interrupted 'nothing'; re-plan requested (no LLM call now).
+Mode self_preservation finished executing, code_return: Action output:
+Path not found, but attempting to navigate anyway using destructive movements.
+Moved away from (-48, 65, -62) to (-54, 67, -81).
+
+[reflex] self_preservation interrupted 'mode:self_defense'; re-plan requested (no LLM call now).
+received message from system : Reflexes (death, self_preservation) interrupted 'mode:self_defense'. You died at -34, 70, -81 and respawned. You no longer have 1 pyrotech_compat:rock_metamorphic; they may lie at the death spot (unconfirmed). The spot is saved as 'last_death_position'. Check your state and re-plan from here. You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !stats
+<bot> full response to system: ""!stats""
+parsed command: { commandName: '!stats', args: [] }
+Agent executed: !stats and got: 
+STATS
+- Position: x: -53.49, y: 67.00, z: -80.59
+- Gamemode: survival
+- Health: 20 / 20
+- Hunger: 12 / 20
+- Biome: biomesoplenty:seasonal_forest
+- Weather: Clear
+- Time: Morning- Current Action: Idle
+- Nearby Human Players: None.
+- Nearby Bot Players: None.
+Agent Modes:
+- self_preservation(ON)
+- eating(ON)
+- unstuck(ON)
+- cowardice(OFF)
+- self_defense(ON)
+- hunting(OFF)
+- item_collecting(ON)
+- torch_placing(ON)
+- elbow_room(ON)
+- idle_staring(ON)
+
+
+Storing memories...
+Saved memory to: ./bots/<bot>/memory.json
+Awaiting openrouter api response...
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !nearbyBlocks
+<bot> full response to system: ""!nearbyBlocks""
+parsed command: { commandName: '!nearbyBlocks', args: [] }
+Agent executed: !nearbyBlocks and got: 
+NEARBY_BLOCKS
+- biomesoplenty:plant_0
+- grass
+- dirt
+- pyrotech_compat:rock_metamorphic
+- biomesoplenty:mushroom
+- undergroundbiomes:metamorphic_stone
+- dynamictrees:oakbranch
+- dynamictrees:rootydirtspecies
+- dynamictreesbop:leaves0
+- dynamictrees:birchbranch
+- dynamictreesbop:leaves2
+- dynamictrees:leaves0
+- Block Below: biomesoplenty:plant_0
+- Block at Legs: air
+- Block at Head: air
+- First Solid Block Above Head: none
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[reflex] eating: food 12, but no safe food in the inventory
+Received.
+Memory updated to:  Name:<bot>. RotN step3/11:craft crude_axe(1 rock+2 sticks). Died at -23,71,-75 from grovesprites, lost all items. Back at death loc, fighting zombie_players&grovesprites, dying again. Rocks near spawn -37,-74 to -25,-72. Leaves(dynamictrees:leaves0) low stick drop. Grovesprites&zombie_players deadly-avoid or fight cautiously. Axe ~8 uses, keep spare.
+Received.
+Generated response: Good, I'm back at full health. Let me grab those rocks again - they're right nearby. !collectBlocks("pyrotech_compat:rock_metamorphic", 2)
+<bot> full response to system: ""Good, I'm back at full health. Let me grab those rocks again - they're right nearby. !collectBlocks("pyrotech_compat:rock_metamorphic", 2)""
+parsed command: {
+  commandName: '!collectBlocks',
+  args: [ 'pyrotech_compat:rock_metamorphic', 2 ]
+}
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+Found non-destructive path.
+You have reached at -50, 66, -85.
+Picked up 0 items.
+Broke pyrotech_compat:rock_metamorphic but got no pyrotech_compat:rock_metamorphic.
+Found non-destructive path.
+You have reached at -59, 65, -90.
+Picked up 0 items.
+Broke pyrotech_compat:rock_igneous but got no pyrotech_compat:rock_metamorphic.
+Collected 0 pyrotech_compat:rock_metamorphic.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+executing code...
+
+Mode item_collecting finished executing, code_return: Action output:
+Found non-destructive path.
+Picked up 0 items.
+
+Received.
+Generated response: Hmm, breaking the rocks isn't dropping items. Let me try a different approach and collect sticks first, then figure out the rock issue. !collectBlocks("stick", 2)
+<bot> full response to system: ""Hmm, breaking the rocks isn't dropping items. Let me try a different approach and collect sticks first, then figure out the rock issue. !collectBlocks("stick", 2)""
+Storing memories...
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 2 ] }
+executing code...
+
+Awaiting openrouter api response...
+Received.
+Memory updated to:  Name:<bot>. RotN step3/11:craft crude_axe(1 rock+2 sticks). Died at -23,71,-75 from grovesprites, lost all items again-only spawn scroll left. Rocks near spawn -37,-74 to -25,-72. Rock id:pyrotech_compat:rock_metamorphic(wrong:pyrotech:rock_metamorphic). Leaves(dynamictrees:leaves0) low stick drop. Grovesprites&zombie_players deadly-avoid. Axe ~8 uses, keep spare.
+Agent executed: !collectBlocks and got: Action output:
+Collected 2 stick.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[reflex] eating: food 12, but no safe food in the inventory
+executing code...
+
+Received.
+Generated response: !inventory
+<bot> full response to system: ""!inventory""
+Unpausing mode self_preservation
+Unpausing mode cowardice
+Unpausing mode self_defense
+Mode self_defense finished executing, code_return: Action output:
+Stopped fighting: the situation changed.
+Successfully defended self.
+Moved 10 away from enemies.
+
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+executing code...
+
+Received.
+Generated response: !inventory
+<bot> full response to system: ""!inventory""
+Unpausing mode self_preservation
+Unpausing mode cowardice
+Unpausing mode self_defense
+Mode self_defense finished executing, code_return: Action output:
+Stopped fighting: the situation changed.
+Successfully defended self.
+Moved 10 away from enemies.
+
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Storing memories...
+Awaiting openrouter api response...
+executing code...
+
+[death] died at -35, 76, -97; waiting for the respawn
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+Code execution triggered catch: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+    at resetPath (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:144:29)
+    at EventEmitter.<anonymous> (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:429:9)
+    at EventEmitter.emit (node:events:519:28)
+    at WorldSync.<anonymous> (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\blocks.js:590:44)
+Mode self_preservation finished executing, code_return: !!Code threw exception!!
+Error: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+
+executing code...
+
+waiting for code to finish executing...
+Code execution triggered catch: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+    at resetPath (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:144:29)
+    at EventEmitter.<anonymous> (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:429:9)
+    at EventEmitter.emit (node:events:519:28)
+    at WorldSync.<anonymous> (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\blocks.js:590:44)
+Mode self_preservation finished executing, code_return: !!Code threw exception!!
+Error: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+
+executing code...
+
+waiting for code to finish executing...
+Code execution triggered catch: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+    at EventEmitter.monitorMovement (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:603:9)
+    at EventEmitter.emit (node:events:531:35)
+    at tickPhysics (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\physics.js:82:11)
+    at Timeout.doPhysics [as _onTimeout] (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\physics.js:71:7)
+Mode self_preservation finished executing, code_return: !!Code threw exception!!
+Error: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+
+executing code...
+
+Received.
+Memory updated to:  Name:<bot>. RotN step3/11:craft crude_axe(1 rock+2 sticks). Died again at -34,70,-81 from zombie_players-lost rock&all items. Total deaths:3x. Rock id:pyrotech_compat:rock_metamorphic. Rocks near spawn -37,-74 to -25,-72. Leaves(dynamictrees:leaves0) low stick drop. Grovesprites&zombie_players deadly-avoid. Axe ~8 uses,keep spare. Curr pos:-53,67,-80 seasonal_forest. Need to recollect rocks&sticks.
+Saved memory to: ./bots/<bot>/memory.json
+[death] died at -35, 76, -97 (<bot> was slain by Zombie <bot>); lost 2 stick, 1 dirt, 1 dynamictrees:oakseed
+[reflex] death interrupted 'mode:self_preservation'; re-plan requested (no LLM call now).
+Mode self_preservation finished executing, code_return: Action output:
+Found non-destructive path.
+Moved away from (-48, 65, -62) to (-54, 67, -81).
+
+received message from system : Reflexes (death) interrupted 'mode:self_preservation'. You died at -35, 76, -97 and respawned. You no longer have 2 stick, 1 dirt, 1 dynamictrees:oakseed; they may lie at the death spot (unconfirmed). The spot is saved as 'last_death_position'. Check your state and re-plan from here. You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !stats
+<bot> full response to system: ""!stats""
+parsed command: { commandName: '!stats', args: [] }
+Agent executed: !stats and got: 
+STATS
+- Position: x: -53.49, y: 67.00, z: -80.59
+- Gamemode: survival
+- Health: 20 / 20
+- Hunger: 12 / 20
+- Biome: biomesoplenty:seasonal_forest
+- Weather: Clear
+- Time: Morning- Current Action: Idle
+- Nearby Human Players: None.
+- Nearby Bot Players: None.
+Agent Modes:
+- self_preservation(ON)
+- eating(ON)
+- unstuck(ON)
+- cowardice(OFF)
+- self_defense(ON)
+- hunting(OFF)
+- item_collecting(ON)
+- torch_placing(ON)
+- elbow_room(ON)
+- idle_staring(ON)
+
+
+Storing memories...
+Saved memory to: ./bots/<bot>/memory.json
+executing code...
+
+Awaiting openrouter api response...
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Mode item_collecting finished executing, code_return: Action output:
+Found non-destructive path.
+Picked up 1 items.
+
+Received.
+Generated response: !inventory
+<bot> full response to system: ""!inventory""
+parsed command: { commandName: '!inventory', args: [] }
+Agent executed: !inventory and got: 
+INVENTORY
+- lifescroll:spawnscroll: 1
+- pyrotech_compat:rock_metamorphic:0: 1
+WEARING: Nothing
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[reflex] eating: food 12, but no safe food in the inventory
+Received.
+Generated response: Lost my sticks again. Need to recollect. Let me grab sticks from nearby leaves. !collectBlocks("stick", 4)
+<bot> full response to system: ""Lost my sticks again. Need to recollect. Let me grab sticks from nearby leaves. !collectBlocks("stick", 4)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 4 ] }
+executing code...
+
+Received.
+Memory updated to:  Name:<bot>. RotN step3/11:craft crude_axe(1 rock+2 sticks). Died3x. Rock id:pyrotech_compat:rock_metamorphic. BREAKING ROCKS GIVES NO DROPS(tried metamorphic&igneous at -50,-85&-59,-90). Have 2 sticks. Need alt rock source-maybe try spawn area rocks -37,-74 to -25,-72. Leaves low stick drop. Grovesprites&zombie_players deadly-avoid. Axe~8uses,keep spare. Pos:~-55,66,-87 seasonal_forest. Full health.
+executing code...
+
+action "mode:self_defense" trying to interrupt current action "action:collectBlocks"
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+Agent executed: !collectBlocks and got: undefined
+attacking mob...
+(node:4064) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 error listeners added to [EventEmitter]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+(Use `node --trace-warnings ...` to show where the warning was created)
+attacking mob...
+Unpausing mode self_preservation
+Unpausing mode cowardice
+Unpausing mode self_defense
+Mode self_defense finished executing, code_return: Action output:
+Stopped fighting: the situation changed.
+Successfully defended self.
+Moved 16 away from enemies.
+
+[reflex] self_defense interrupted 'action:collectBlocks'; re-plan requested (no LLM call now).
+received message from system : Reflexes (self_defense) interrupted 'action:collectBlocks'. Check your state and re-plan from here. You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+executing code...
+
+Received.
+Generated response: !inventory
+<bot> full response to system: ""!inventory""
+Storing memories...
+Awaiting openrouter api response...
+Mode item_collecting finished executing, code_return: Action output:
+Found non-destructive path.
+Picked up 0 items.
+
+received message from system : Reflexes (self_defense) interrupted 'action:collectBlocks'. Check your state and re-plan from here. You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+[reflex] eating: food 12, but no safe food in the inventory
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Memory updated to:  Name:<bot>. RotN step3/11:craft crude_axe(1 rock+2 sticks). Died3x. Rock id:pyrotech_compat:rock_metamorphic. BREAKING ROCKS NO DROPS(tried metamorphic&igneous). Have 2 sticks. Need alt rock source. Leaves low stick drop. Grovesprites,zombie_players&creepers deadly-avoid. Axe~8uses,keep spare. Pos~-55,66,-87 seasonal_forest. Still fighting mobs,checked inventory,no rock yet.
+Received.
+Generated response: !collectBlocks("stick", 4)
+<bot> full response to system: ""!collectBlocks("stick", 4)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 4 ] }
+executing code...
+
+executing code...
+
+action "mode:self_defense" trying to interrupt current action "action:collectBlocks"
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+Agent executed: !collectBlocks and got: undefined
+executing code...
+
+action "mode:self_preservation" trying to interrupt current action "mode:self_defense"
+waiting for code to finish executing...
+Mode self_defense finished executing, code_return: 
+Unpausing mode cowardice
+Unpausing mode self_defense
+Mode self_preservation finished executing, code_return: Action output:
+Found non-destructive path.
+Moved away from (-54, 65, -87) to (-58, 64, -65).
+
+[reflex] self_preservation interrupted 'mode:self_defense'; re-plan requested (no LLM call now).
+received message from system : Reflexes (self_preservation) interrupted 'mode:self_defense'. Check your state and re-plan from here. You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Storing memories...
+Awaiting openrouter api response...
+executing code...
+
+[death] died at -58, 64, -71; waiting for the respawn
+waiting for code to finish executing...
+executing code...
+
+action "mode:self_preservation" trying to interrupt current action "mode:self_defense"
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+Mode self_defense finished executing, code_return: 
+Unpausing mode cowardice
+Unpausing mode self_defense
+waiting for code to finish executing...
+Code execution triggered catch: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+    at EventEmitter.monitorMovement (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:603:9)
+    at EventEmitter.emit (node:events:531:35)
+    at tickPhysics (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\physics.js:82:11)
+    at Timeout.doPhysics [as _onTimeout] (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\physics.js:71:7)
+Mode self_preservation finished executing, code_return: !!Code threw exception!!
+Error: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+
+executing code...
+
+Received.
+Memory updated to:  Name:<bot>. RotN step3/11:crude_axe(1rock+2sticks). Died4x. Rocks:pyrotech_compat:rock_metamorphic. Breaking rocks=NO DROPS(metamorphic&igneous). Need alt rock src. Lost 2sticks+dirt+oakseed@death(-35,76,-97). Need sticks again. Leaves low drop. Grovesprites,zombies,creepers=deadly. Axe~8uses,keep spare. Pos~-53,67,-81 seasonal_forest.
+Saved memory to: ./bots/<bot>/memory.json
+[death] died at -58, 64, -71 (<bot> was slain by Zombie <bot>); lost 2 pyrotech_compat:rock_metamorphic, 1 stick, 1 yellow_flower
+[reflex] death interrupted 'mode:self_defense'; re-plan requested (no LLM call now).
+Mode self_preservation finished executing, code_return: Action output:
+Found non-destructive path.
+Moved away from (-48, 65, -63) to (-66, 63, -72).
+
+received message from system : Reflexes (death) interrupted 'mode:self_defense'. You died at -58, 64, -71 and respawned. You no longer have 2 pyrotech_compat:rock_metamorphic, 1 stick, 1 yellow_flower; they may lie at the death spot (unconfirmed). The spot is saved as 'last_death_position'. Check your state and re-plan from here. You are self-prompting with the goal: 'RotN agenda, step 3 of 11 (crude_axe): Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !moveAway(30)
+<bot> full response to system: ""!moveAway(30)""
+parsed command: { commandName: '!moveAway', args: [ 30 ] }
+executing code...
+
+executing code...
+
+action "mode:self_defense" trying to interrupt current action "action:moveAway"
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+Code execution triggered catch: PathStopped: Path was stopped before it could be completed! Thus, the desired goal was not reached.
+    at error (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:2:15)
+    at EventEmitter.pathStopped (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\lib\goto.js:39:15)
+    at EventEmitter.emit (node:events:519:28)
+    at stop (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:409:9)
+    at EventEmitter.monitorMovement (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer-pathfinder\index.js:603:9)
+    at EventEmitter.emit (node:events:531:35)
+    at tickPhysics (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\physics.js:82:11)
+    at Timeout.doPhysics [as _onTimeout] (<local>\orca\workspaces\mindcraft-RotN\harness-ops-g0\node_modules\mineflayer\lib\plugins\physics.js:71:7)
+Agent executed: !moveAway and got: undefined
+self prompt loop stopped
+Unpausing mode self_preservation
+Unpausing mode cowardice
+Unpausing mode self_defense
+Mode self_defense finished executing, code_return: Action output:
+Stopped fighting: the situation changed.
+Successfully defended self.
+Moved 16 away from enemies.
+
+[reflex] self_defense interrupted 'action:moveAway'; re-plan requested (no LLM call now).
+[reflex] eating: food 12, but no safe food in the inventory
+[reflex] re-plan prompt: Reflexes (self_defense) interrupted 'action:moveAway'. Check your state and re-plan from here.
+received message from system : (AUTO MESSAGE) Reflexes (self_defense) interrupted 'action:moveAway'. Check your state and re-plan from here.
+Storing memories...
+Awaiting openrouter api response...
+Received.
+Memory updated to:  Name:<bot>. RotN step3/11:crude_axe(1rock+2sticks). Died4x. Rocks:pyrotech_compat:rock_metamorphic. Breaking rocks=NO DROPS(metamorphic&igneous). Need alt rock src. Have 1 rock, need 2 sticks. Lost items@death(-35,76,-97). Leaves low drop. Grovesprites,zombies,creepers,zombie_players=deadly(outnumbered). Axe~8uses,keep spare. Pos~-53,67,-81 seasonal_forest.
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: !moveAway(50)
+<bot> full response to system: ""!moveAway(50)""
+parsed command: { commandName: '!moveAway', args: [ 50 ] }
+executing code...
+
+Agent executed: !moveAway and got: Action output:
+Path not found, but attempting to navigate anyway using destructive movements.
+Moved away from (-102, 70, -115) to (-149, 65, -133).
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[reflex] eating: food 12, but no safe food in the inventory
+Received.
+Generated response: Good, got some distance. Need sticks and a rock for the crude axe. Let me gather sticks. !collectBlocks("stick", 4)
+<bot> full response to system: ""Good, got some distance. Need sticks and a rock for the crude axe. Let me gather sticks. !collectBlocks("stick", 4)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 4 ] }
+executing code...
+
+executing code...
+
+action "mode:unstuck" trying to interrupt current action "action:collectBlocks"
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+waiting for code to finish executing...
+Agent executed: !collectBlocks and got: undefined
+Mode unstuck finished executing, code_return: Action output:
+Found non-destructive path.
+Moved away from (-145, 66, -141) to (-150, 65, -144).
+
+[reflex] unstuck interrupted 'action:collectBlocks'; re-plan requested (no LLM call now).
+[reflex] re-plan prompt: Reflexes (unstuck) interrupted 'action:collectBlocks'. Check your state and re-plan from here.
+received message from system : (AUTO MESSAGE) Reflexes (unstuck) interrupted 'action:collectBlocks'. Check your state and re-plan from here.
+Storing memories...
+Awaiting openrouter api response...
+Received.
+Memory updated to:  Name:<bot>. RotN step3/11:crude_axe(1rock+2sticks). Died5x. Rocks:pyrotech_compat:rock_metamorphic. Breaking rocks=NO DROPS(metamorphic&igneous). Need alt rock src. Have 1 rock, need sticks. Lost items@death(-35,76,-97). Leaves low drop. Grovesprites,zombies,creepers,zombie_players=deadly,active attacks. Axe~8uses,keep spare. Pos~-53,67,-81 seasonal_forest. Stick collection interrupted by combat.
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Stuck but free now. Let me try collecting sticks again. !collectBlocks("stick", 4)
+<bot> full response to system: ""Stuck but free now. Let me try collecting sticks again. !collectBlocks("stick", 4)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 4 ] }
+executing code...
+
+[reflex] eating: food 12, but no safe food in the inventory
