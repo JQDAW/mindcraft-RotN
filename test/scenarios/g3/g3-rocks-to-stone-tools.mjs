@@ -206,6 +206,7 @@ export default {
             crafted.map((c) => `${c.item} ${c.added === 'added' ? c.n ?? 'no scores' : `objective ${c.added ?? 'no reply'}`}`).join(', '));
         const cheat = cheatProblems(s.sinceMarker(), name);
         ctx.note('packFirstJoin', cheat.packFirstJoin);
+        ctx.note('packRepeats', cheat.packRepeats);
         ctx.check('no_cheat', cheat.problems.length === 0, cheat.problems.length ? cheat.problems.slice(0, 5).join('; ') : `nothing found (the pack's first-join commands: ${cheat.packFirstJoin.join(', ') || 'none'})`);
     },
 };
