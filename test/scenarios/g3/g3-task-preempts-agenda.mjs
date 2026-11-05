@@ -43,7 +43,7 @@
 // the counter readings, the minute the server first saw the bot on the marker.
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED, parseCentre, testforVerdict, testforblockVerdict } from '../../runner/lib/g2.mjs';
-import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, cheatProblems, guardConsole, startEvent, statCriterion } from '../../runner/lib/g3.mjs';
+import { G3_DEFAULTS, G3_GATE_PARAMS, G3_MARKERS, TEST_TASK_GIVER, cheatProblems, guardConsole, startEvent, statCriterion } from '../../runner/lib/g3.mjs';
 import { playerScores, scoreboardAddResult } from '../../runner/lib/s1.mjs';
 import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
@@ -54,7 +54,7 @@ const MIN = 60 * MS;
 /** The marker and the agenda counter are pinned (lead, #207 review). */
 export const PINNED = true;
 /** S1-A's confirmed surface rock pile nearest the 20-30 block band (about 19 blocks from the spawn). */
-export const MARKER = '-42,68,-50';
+export const MARKER = G3_MARKERS.task;
 
 /** The agenda counter (lead, #207 review): mineBlock for the rock piles and logs, craftItem for the five crafts. */
 export const AGENDA_COUNTER = [
