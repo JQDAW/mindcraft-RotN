@@ -11,6 +11,7 @@ import settings from './settings.js';
 import * as world from './library/world.js';
 import { countItem, formatName } from './library/rotn_names.js';
 import { itemVariants } from './library/rotn_sources.js';
+import { cobbleChoices } from './library/cobble.js';
 import { safeError } from './safe_error.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
@@ -54,13 +55,19 @@ export function agendaState(bot) {
         count: (name) => itemVariants(name).reduce((n, v) => n + countItem(bot, v), 0),
         countOre: (ore) => oreMemberNames(ore).reduce((n, v) => n + countItem(bot, v), 0),
         near: (block) => !!world.getNearestBlock(bot, block, 16),
+        // the cobblestones the held rocks make, most rocks first (G3 round 3 A)
+        cobble: () => cobbleChoices(bot),
     };
 }
 
-/** The self-prompt goal for a step. */
-export function agendaGoal(agenda, step) {
+/** The self-prompt goal for a step; a step's goalNow(state) names what the bot holds now. */
+export function agendaGoal(agenda, step, state = null) {
     const n = agenda.steps.indexOf(step) + 1;
-    return `RotN agenda, step ${n} of ${agenda.steps.length} (${step.id}): ${step.goal} `
+    let text = step.goal;
+    if (state && typeof step.goalNow === 'function') {
+        try { text = step.goalNow(state) || step.goal; } catch { text = step.goal; }
+    }
+    return `RotN agenda, step ${n} of ${agenda.steps.length} (${step.id}): ${text} `
         + 'When this step is done, the agenda moves on by itself.';
 }
 
@@ -140,7 +147,8 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         }
     }
 
-    const { step, newlyDone } = agenda.evaluate(agendaState(agent.bot));
+    const state = agendaState(agent.bot);
+    const { step, newlyDone } = agenda.evaluate(state);
     for (const s of newlyDone) say(agent, `agenda step ${s.id} done`);
     if (!step) {
         say(agent, 'agenda done');
@@ -150,7 +158,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         return 'done';
     }
 
-    const goal = agendaGoal(agenda, step);
+    const goal = agendaGoal(agenda, step, state);
     if (agent._agenda_step !== step.id) {
         agent._agenda_step = step.id;
         agent._agenda_stopped_at = undefined;

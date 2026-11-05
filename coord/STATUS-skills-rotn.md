@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T22:11Z (from `date -u`)
+Updated: 2026-11-05T23:36Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -373,7 +373,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   4. **`!attack`** refuses an ignore-unless-provoked mob (a grove sprite) unless it hurt the bot (angry, or a hit within 3 s while it was within 4 blocks), with a logged reason.
 
      Tests: `threat_arbitration` 8/8. On develop, 7 fail, and the flap test shows cowardice interrupting self_defense 1 s after each start. Against the previous #227 head, the override and release tests fail. Also `use_on` 12/12 (PathStopped); related 10 files pass; lint per file unchanged.
-- **#229 open, REQUEST CHANGES addressed** (branch `agent/skills-rotn/night-pickaxe`; STATUS lives here now; develop merged in, no force-push), the round 2 batch B findings:
+- **#229 merged** (lead, 2026-11-05), the round 2 batch B findings:
   1. The night routine's "without a pickaxe": the real dump rules out the level and name hypotheses. `items()` misses the cursor and the off hand, so `toolLevels` now counts every carried stack, and the refusal names the pickaxes it saw.
   2. The cobblestone step counts rotn-data's `cobblestone` ore (the bot's 10 metamorphic cobble never counted). The model's daytime `!buildShelter` is refused unless a giver typed it.
   3. A #224 regression is fixed: `collectBlock` threw on position-less blocks after a give-up.
@@ -383,7 +383,13 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Tests: `shelter` 18 (cursor and off hand moved back; the refusal lists every place), `night_routine` 19 (digOut from the off hand; it fails with "no pickaxe in hand" on the previous head). Related files pass; lint per file unchanged.
   5. **#229 review 2:** `stowCarried` deals with an open window (a chest or a table) first. It puts that window's cursor stack into one of its inventory slots, then closes the window; closing a 1.12 container drops a cursor stack on the ground. With no free slot it leaves the window open. Each click has `STOW_CLICK_MS` (3 s). The passive 600 ms resync wait was accepted by the lead. Tests: `shelter` 21/21 (an open chest with the pickaxe on its cursor; no free slot; a click never answered, which hangs on the previous head).
-- **Next (lead):** re-review #229.
+- **G3 smoke round 3 running** (lead, received before 2026-11-05T23:06Z by `date -u`, about 2 hours): until the lead says it is over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only.
+- **Round 3 batch A finding, open PR** (branch `agent/skills-rotn/next`; STATUS lives here). `!craftRecipe("cobblestone")` with 8 sedimentary rocks asked for Twilight Forest's giant cobblestone.
+  - Now "cobblestone" means the cobblestone the held rocks make. The new `library/cobble.js` takes rotn-data's `rockRecipes()`, keeps the outputs in the `cobblestone` ore (26 of the 35; not the sandstones, holystone or defiled stone), and chooses the kinds the bot has 4 of, most first.
+  - `craftRecipe` crafts those outputs until the count is reached, with a clear line when no kind has 4.
+  - The cobblestone step's goal names that output (`goalNow(state)`; `agendaGoal` takes the state).
+  - Tests: `cobble` 5/5, with sedimentary, igneous, metamorphic and plain rocks, mixed kinds, and too few. On develop the craft tests fail with "1 twilightforest:giant_cobblestone", as in round 3. `agenda` 16/16 (the goal names the output). Related 8 files pass; lint per file unchanged.
+- **Next (lead):** review the round 3 A PR.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

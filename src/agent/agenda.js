@@ -80,7 +80,15 @@ export const ROTN_EARLY_GAME = [
     },
     {
         id: 'cobblestone', short: 'make cobblestone from rocks',
-        goal: 'Mine stone with the stone pickaxe for rocks (!collectBlocks("pyrotech:rock", 8)), then make cobblestone from 4 rocks of one type with !craftRecipe("cobblestone", 1). Aim for 10 cobblestone: at dusk the night routine builds the shelter from them (10 on open ground), so do not use them by day.',
+        goal: 'Mine stone with the stone pickaxe for rocks (!collectBlocks("pyrotech:rock", 8)), then make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1): each rock kind makes its own cobblestone. Aim for 10 cobblestone: at dusk the night routine builds the shelter from them (10 on open ground), so do not use them by day.',
+        // G3 round 3 A: name the cobblestone the rocks the bot holds make (rotn-data rock recipes).
+        goalNow: (s) => {
+            const c = s.cobble?.()[0];
+            if (!c) return null;
+            const n = Math.floor(c.have / 4);
+            return `Your ${c.have} ${c.rock} make ${c.gives} (4 rocks each): craft it with !craftRecipe("${c.gives}", ${n}) or !craftRecipe("cobblestone", ${n}). `
+                + 'Mine more rocks with !collectBlocks("pyrotech:rock", 8) when you run short. Aim for 10 cobblestone: at dusk the night routine builds the shelter from them (10 on open ground), so do not use them by day.';
+        },
         // D2b-2: the open-ground shelter's 10 blocks. Any cobblestone of the ore counts (G3 round 2 B:
         // 10 undergroundbiomes:metamorphic_cobble held never finished the step).
         done: (s) => s.countOre('cobblestone') >= 10,
