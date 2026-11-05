@@ -193,3 +193,49 @@ test('goToGoal: a walk that never arrives ends at GO_TO_LIMITS; the search repor
     const b2 = fakeBot({ blocks: [block('log', at(20))] });
     assert.equal(await skills.goToNearestBlock(b2, 'log', 4, 64), true, 'a walk that arrives is unchanged');
 });
+
+// #221 review: the raw pathfinder.goto calls (defendSelf, moveAwayFromEntity) and
+// bot.collectBlock.collect had no time limit.
+test('moveAwayFromEntity: a flee that never ends stops at GO_TO_LIMITS.fleeMs', T, async (t) => {
+    const saved = skills.GO_TO_LIMITS.fleeMs;
+    t.after(() => { skills.GO_TO_LIMITS.fleeMs = saved; });
+    skills.GO_TO_LIMITS.fleeMs = 300;
+    const bot = fakeBot({ arrive: 'never' });
+    const t0 = Date.now();
+    assert.equal(await skills.moveAwayFromEntity(bot, { name: 'zombie', position: at(2) }, 16), false);
+    assert.ok(Date.now() - t0 < 1500, `took ${Date.now() - t0} ms`);
+    assert.ok(bot.calls.stop >= 1);
+});
+
+test('defendSelf: a step toward an enemy that never ends stops at GO_TO_LIMITS.stepMs; the fight goes on', T, async (t) => {
+    const saved = skills.GO_TO_LIMITS.stepMs;
+    t.after(() => { skills.GO_TO_LIMITS.stepMs = saved; });
+    skills.GO_TO_LIMITS.stepMs = 300;
+    const bot = fakeBot({ arrive: 'never' });
+    bot.entities[7] = { id: 7, name: 'zombie', type: 'mob', position: at(6), height: 1.8, isValid: true };
+    let hits = 0;
+    bot.pvp = { attack: () => { hits++; delete bot.entities[7]; }, stop() {} };
+    bot.nearestEntity = (pred) => Object.values(bot.entities).find(pred) ?? null;
+    const t0 = Date.now();
+    assert.equal(await skills.defendSelf(bot, 9, () => true), true);
+    assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+    assert.equal(hits, 1);
+});
+
+test('collectBlock: a collect that never returns gives the block up at COLLECT_LIMITS.blockMs', T, async (t) => {
+    const saved = { ...skills.COLLECT_LIMITS };
+    t.after(() => Object.assign(skills.COLLECT_LIMITS, saved));
+    Object.assign(skills.COLLECT_LIMITS, { blockMs: 300, totalMs: 1000 });
+    const dirt = { ...block('dirt', at(3)), canHarvest: () => true };
+    const bot = fakeBot({ blocks: [dirt] });
+    let cancelled = 0;
+    bot.collectBlock = { collect: () => new Promise(() => {}), cancelTask: () => { cancelled++; return Promise.resolve(); } };
+    bot.tool = { equipForBlock: () => Promise.resolve() };
+    bot.stopDigging = () => {};
+    const t0 = Date.now();
+    assert.equal(await skills.collectBlock(bot, 'dirt', 2), false);
+    assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+    assert.ok(cancelled >= 1, 'the collect was cancelled');
+    assert.match(bot.output, /Gave up on dirt at 3, 64, 0: time limit of 0\.3 s reached\./);
+    assert.match(bot.output, /No more dirt nearby to collect\.|No dirt nearby to collect\./, 'the given-up block is not tried again');
+});

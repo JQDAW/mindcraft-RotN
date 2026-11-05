@@ -6,10 +6,48 @@ import { addTask, cancelTask } from '../task_queue.js';
 import { finishTask } from '../priority.js';
 import { hasAutonomyPrefix } from '../agenda_driver.js';
 
-// Walking commands: each walk is bounded inside goToGoal (GO_TO_LIMITS, 3 min); this action
-// timeout is the backstop (G3 smoke C+D: !searchForBlock never returned).
-const WALK_BACKSTOP_MIN = 5;
+/**
+ * Total time limits per command, in minutes (G3 smoke C+D and the #221 review). The limit is
+ * kept inside the action: at the limit the bot is interrupted (pathfinder, collect, pvp and
+ * digging stop), gets STOP_GRACE.ms (5 s) to end, and the command ends with a line the model sees,
+ * instead of the upstream manager's kill after 10 s. The manager's own timeout (limit + 1 min)
+ * stays the backstop. Walks inside are also bounded (GO_TO_LIMITS, COLLECT_LIMITS, USE_ON_LIMITS).
+ * Commands not listed keep their own timeout; !followPlayer and !stay run until stopped.
+ */
+export const ACTION_LIMITS_MIN = {
+    goToPlayer: 5, goToCoordinates: 5, searchForBlock: 5, searchForEntity: 5, moveAway: 5,
+    goToRememberedPlace: 5, goToBed: 5, goToSurface: 5, useOn: 2,
+    collectBlocks: 10, attack: 3, attackPlayer: 3, buildShelter: 5, digDown: 5,
+    craftRecipe: 3, smeltItem: 12, clearFurnace: 2, putInChest: 2, takeFromChest: 2, viewChest: 1,
+    givePlayer: 2, placeHere: 1,
+};
+export const STOP_GRACE = { ms: 5000 };
 
+const limitText = (ms) => (ms >= 60_000 ? `${+(ms / 60_000).toFixed(1)} min` : `${+(ms / 1000).toFixed(1)} s`);
+
+/**
+ * Run fn with a total limit of ms. At the limit: interrupt the bot, wait up to STOP_GRACE.ms for
+ * fn to end, then end the command with "!<name> failed: time limit of <t> reached; stopped."
+ * A throw from fn before the limit is passed on, as before.
+ */
+export async function withinLimit(agent, name, fn, ms) {
+    const TIMED_OUT = Symbol('timed out');
+    const run = Promise.resolve().then(fn);
+    let timer;
+    const limit = new Promise(resolve => { timer = setTimeout(() => resolve(TIMED_OUT), ms); });
+    let res;
+    try { res = await Promise.race([run, limit]); }
+    finally { clearTimeout(timer); }
+    if (res !== TIMED_OUT) return;
+    run.catch(() => {}); // a late throw after the limit is not an unhandled rejection
+    try { agent.requestInterrupt(); } catch (err) { console.warn(`[actions] interrupt failed: ${err?.message}`); }
+    let grace;
+    await Promise.race([run.catch(() => {}), new Promise(resolve => { grace = setTimeout(resolve, STOP_GRACE.ms); })]);
+    clearTimeout(grace);
+    // Clear the interrupt so the manager reports the output (an interrupted action reports nothing).
+    agent.bot.interrupt_code = false;
+    skills.log(agent.bot, `!${name} failed: time limit of ${limitText(ms)} reached; stopped.`);
+}
 
 function runAsAction (actionFn, resume = false, timeout = -1) {
     let actionLabel = null;  // Will be set on first use
@@ -21,10 +59,12 @@ function runAsAction (actionFn, resume = false, timeout = -1) {
             actionLabel = actionObj.name.substring(1); // Remove the ! prefix
         }
 
-        const actionFnWithAgent = async () => {
-            await actionFn(agent, ...args);
-        };
-        const code_return = await agent.actions.runAction(`action:${actionLabel}`, actionFnWithAgent, { timeout, resume });
+        const limitMin = ACTION_LIMITS_MIN[actionLabel] ?? 0;
+        const actionFnWithAgent = limitMin > 0
+            ? () => withinLimit(agent, actionLabel, () => actionFn(agent, ...args), limitMin * 60_000)
+            : async () => { await actionFn(agent, ...args); };
+        const code_return = await agent.actions.runAction(`action:${actionLabel}`, actionFnWithAgent,
+            { timeout: limitMin > 0 ? limitMin + 1 : timeout, resume });
         if (code_return.interrupted && !code_return.timedout)
             return;
         return code_return.message;
@@ -157,7 +197,7 @@ export const actionsList = [
         },
         perform: runAsAction(async (agent, player_name, closeness) => {
             await skills.goToPlayer(agent.bot, player_name, closeness);
-        }, false, WALK_BACKSTOP_MIN)
+        })
     },
     {
         name: '!followPlayer',
@@ -181,7 +221,7 @@ export const actionsList = [
         },
         perform: runAsAction(async (agent, x, y, z, closeness) => {
             await skills.goToPosition(agent.bot, x, y, z, closeness);
-        }, false, WALK_BACKSTOP_MIN)
+        })
     },
     {
         name: '!searchForBlock',
@@ -196,7 +236,7 @@ export const actionsList = [
                 range = 32;
             }
             await skills.goToNearestBlock(agent.bot, block_type, 4, range);
-        }, false, WALK_BACKSTOP_MIN)
+        })
     },
     {
         name: '!searchForEntity',
@@ -207,7 +247,7 @@ export const actionsList = [
         },
         perform: runAsAction(async (agent, entity_type, range) => {
             await skills.goToNearestEntity(agent.bot, entity_type, 4, range);
-        }, false, WALK_BACKSTOP_MIN)
+        })
     },
     {
         name: '!moveAway',
@@ -215,7 +255,7 @@ export const actionsList = [
         params: {'distance': { type: 'float', description: 'The distance to move away.', domain: [0, Infinity] }},
         perform: runAsAction(async (agent, distance) => {
             await skills.moveAway(agent.bot, distance);
-        }, false, WALK_BACKSTOP_MIN)
+        })
     },
     {
         name: '!rememberHere',
@@ -238,7 +278,7 @@ export const actionsList = [
             return;
             }
             await skills.goToPosition(agent.bot, pos[0], pos[1], pos[2], 1);
-        }, false, WALK_BACKSTOP_MIN)
+        })
     },
     {
         name: '!givePlayer',
@@ -322,7 +362,7 @@ export const actionsList = [
         },
         perform: runAsAction(async (agent, type, num) => {
             await skills.collectBlock(agent.bot, type, num);
-        }, false, 10) // 10 minute timeout
+        })
     },
     {
         name: '!craftRecipe',
@@ -400,7 +440,7 @@ export const actionsList = [
         description: 'Go to the nearest bed and sleep.',
         perform: runAsAction(async (agent) => {
             await skills.goToBed(agent.bot);
-        }, false, WALK_BACKSTOP_MIN)
+        })
     },
     {
         name: '!stay',
@@ -610,7 +650,7 @@ export const actionsList = [
         params: {},
         perform: runAsAction(async (agent) => {
             await skills.goToSurface(agent.bot);
-        }, false, WALK_BACKSTOP_MIN)
+        })
     },
     {
         name: '!useOn',
@@ -619,9 +659,9 @@ export const actionsList = [
             'tool_name': { type: 'string', description: 'Name of the tool to use, or "hand" for no tool.' },
             'target': { type: 'string', description: 'The target as an entity type, block type, or "nothing" for no target.' }
         },
-        // Bounded inside useToolOn (60 s); 2 min is the backstop (G3 batch A: it hung).
+        // Bounded inside useToolOn (60 s); ACTION_LIMITS_MIN (2 min) is the backstop (G3 batch A: it hung).
         perform: runAsAction(async (agent, tool_name, target) => {
             await skills.useToolOn(agent.bot, tool_name, target);
-        }, false, 2)
+        })
     },
 ];

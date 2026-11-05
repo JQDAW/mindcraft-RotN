@@ -25,7 +25,7 @@ const at = (x, y = 64, z = 0) => new Vec3(x, y, z);
  * fallMs: the drops appear this long after the break; drops: where they land (log:1 each);
  * reach: a drop is picked up when the bot ends a walk within this distance of it.
  */
-function fakeBot({ fallMs = 400, drops = [at(9), at(10), at(11, 64, 2)], unreachable = [] } = {}) {
+function fakeBot({ fallMs = 400, drops = [at(9), at(10), at(11, 64, 2)], unreachable = [], onGround = [] } = {}) {
     const items = [{ name: 'stone_axe', metadata: 0, count: 1, type: reg.itemsByName.stone_axe.id }];
     const branch = {
         name: BRANCH.name, metadata: 0, type: BRANCH.id, position: at(3),
@@ -34,11 +34,14 @@ function fakeBot({ fallMs = 400, drops = [at(9), at(10), at(11, 64, 2)], unreach
     const remaining = [branch];
     let nextId = 1;
     const calls = { dug: 0, goto: 0 };
+    // Items already on the ground before the break (an old drop): they are sticks.
+    const entities = {};
+    for (const pos of onGround) { const id = nextId++; entities[id] = { id, name: 'item', position: pos, drop: 'stick' }; }
     const bot = {
         calls, registry: reg, version: '1.12.2', output: '', interrupt_code: false,
         game: { gameMode: 'survival' },
         entity: { position: at(0), height: 1.8 },
-        entities: {}, heldItem: null,
+        entities, heldItem: null,
         modes: { isOn: () => false, pause() {}, unpause() {} },
         inventory: { items: () => items.filter(i => i.count > 0), slots: [] },
         findBlocks({ matching, maxDistance = 16, count = 1 }) {
@@ -54,25 +57,28 @@ function fakeBot({ fallMs = 400, drops = [at(9), at(10), at(11, 64, 2)], unreach
             remaining.splice(remaining.indexOf(b), 1);
             // The tree falls; its logs drop where it lands, fallMs later.
             setTimeout(() => {
-                for (const pos of drops) { const id = nextId++; bot.entities[id] = { id, name: 'item', position: pos }; }
+                for (const pos of drops) { const id = nextId++; bot.entities[id] = { id, name: 'item', position: pos, drop: 'log' }; }
             }, fallMs);
             return Promise.resolve();
         },
         lookAt: () => Promise.resolve(),
         nearestEntity: () => null,
         pathfinder: {
-            setMovements() {}, setGoal() {}, isMoving: () => false, stop() {},
+            setMovements() {}, setGoal() {}, isMoving: () => false,
+            // Like mineflayer-pathfinder: stop() rejects the pending goto.
+            stop() { const r = bot._pending; bot._pending = null; r?.(new Error('Path was stopped before it could be completed!')); },
             getPathTo: () => ({ status: 'success', path: [] }),
             goto(goal) {
                 calls.goto++;
                 const target = at(goal.x, goal.y, goal.z);
-                if (unreachable.some(p => p.equals(target))) return new Promise(() => {}); // never arrives
+                if (unreachable.some(p => p.equals(target))) return new Promise((_, reject) => { bot._pending = reject; }); // never arrives
                 bot.entity.position = at(goal.x + 1, goal.y, goal.z);
                 for (const [id, e] of Object.entries(bot.entities)) {
                     if (e.name === 'item' && e.position.distanceTo(bot.entity.position) <= 1.5) {
                         delete bot.entities[id];
-                        const log = items.find(i => i.name === 'log' && i.metadata === 1);
-                        if (log) log.count++; else items.push({ name: 'log', metadata: 1, count: 1, type: reg.itemsByName.log.id });
+                        const meta = e.drop === 'log' ? 1 : 0;
+                        const got = items.find(i => i.name === e.drop && i.metadata === meta);
+                        if (got) got.count++; else items.push({ name: e.drop, metadata: meta, count: 1, type: reg.itemsByName[e.drop].id });
                     }
                 }
                 return Promise.resolve();
@@ -96,7 +102,7 @@ test('a branch break: the logs that drop away from the bot after the fall are pi
     assert.equal(await skills.collectBlock(bot, 'log', 1), true);
     assert.equal(bot.calls.dug, 1);
     assert.doesNotMatch(bot.output, /got no log/);
-    assert.match(bot.output, /Felled the tree at 3, 64, 0: 3 drops within 12 blocks, 0 left behind\./);
+    assert.match(bot.output, /Felled the tree at 3, 64, 0: 3 drops within 12 blocks \(3 new\), 0 left behind\./);
     assert.match(bot.output, /Collected 3 log/);
 });
 
@@ -108,7 +114,8 @@ test('the wait for the drops and each walk are bounded: no drops, and a drop tha
     let t0 = Date.now();
     assert.equal(await skills.collectBlock(none, 'log', 1), false);
     assert.ok(Date.now() - t0 < 3000, `took ${Date.now() - t0} ms`);
-    assert.match(none.output, /0 drops within 12 blocks, 0 left behind/);
+    assert.match(none.output, /Broke the tree at 3, 64, 0: no drops appeared within 1\.5 s\./);
+    assert.doesNotMatch(none.output, /Felled/);
     assert.match(none.output, /Broke dynamictrees:sprucebranch but got no log\./);
 
     // One drop never reached: its walk ends at walkMs; the others are still picked up.
@@ -116,6 +123,17 @@ test('the wait for the drops and each walk are bounded: no drops, and a drop tha
     t0 = Date.now();
     assert.equal(await skills.collectBlock(stuck, 'log', 1), true);
     assert.ok(Date.now() - t0 < 4000, `took ${Date.now() - t0} ms`);
-    assert.match(stuck.output, /3 drops within 12 blocks, 1 left behind/);
+    assert.match(stuck.output, /3 drops within 12 blocks \(3 new\), 1 left behind/);
     assert.match(stuck.output, /Collected 2 log/);
+});
+
+test('#222 review: drops already on the ground do not end the wait; it waits for new ones', T, async (t) => {
+    Object.assign(skills.FELL_LIMITS, LIMITS);
+    t.after(() => Object.assign(skills.FELL_LIMITS, { settleMs: 6000, quietMs: 1000, walkMs: 8000, totalMs: 30_000 }));
+    // An old stick lies 4 blocks from the branch; the tree's logs land 1 s after the break
+    // (longer than quietMs). The old code stopped waiting after quietMs and missed them.
+    const bot = fakeBot({ fallMs: 1000, onGround: [at(3, 64, 4)] });
+    assert.equal(await skills.collectBlock(bot, 'log', 1), true);
+    assert.match(bot.output, /Felled the tree at 3, 64, 0: 4 drops within 12 blocks \(3 new\), 0 left behind\./);
+    assert.match(bot.output, /Collected 3 log/);
 });

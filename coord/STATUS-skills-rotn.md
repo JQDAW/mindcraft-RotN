@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T19:27Z (from `date -u`)
+Updated: 2026-11-05T19:59Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -347,9 +347,18 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   Tests, one file at a time: `use_on` 7/7 (on the #216 code, 3 new tests hang or fail); `agenda` 14/14. Per-file lint: `skills.js` 20 (unchanged), the tests 0.
 - **#217 merged** (lead, 2026-11-05, `c62f63d`). The G3 smoke batches are over (lead, received before 2026-11-05T19:23Z by `date -u`); normal targeted testing again.
 - **G3 smoke findings (harness-ops #218, C+D evidence; they block G3 (a) and (c)):**
-  1. **#221 open** (branch `agent/skills-rotn/preempt-timeouts`; STATUS for #221 and #222 lives here): a queued task stops the self-prompter's action in flight after `PREEMPT_GRACE_MS` (5 s) (`action:` labels only; a reflex finishes on its own), then starts; every `goToGoal` walk has a total limit (`GO_TO_LIMITS`, 3 min) and the eight walking commands a 5 min action backstop; `goToNearestBlock`/`goToNearestEntity` return the real result. Tests: `priority` 29/29, `use_on` 8/8; on develop the new tests fail (priority) or hang (goToGoal). Related: `shelter` 14/14, `collect_rotn` 13/13, `names_e2e` 7/7, `night_routine` 18/18. Per-file lint unchanged.
-  2. **#222 open** (branch `agent/skills-rotn/dt-branch-drops`, from develop): rotn-data's `fell-tree` rule id now reaches `collectBlock`. After a branch break it waits for the fall (at most 6 s, until the drops settle), then walks to each drop within 12 blocks of the **branch** (8 s per walk, 30 s total) and counts the real gain from the inventory. Tests: `fell_tree` 3/3 (all fail on develop); `collect_rotn` 13/13, `rotn_names` 9/9, `names_e2e` 7/7, `use_on` 7/7. Per-file lint unchanged. Unconfirmed live: the fall time, how far the logs land, and the drop entity name.
-- **Next (lead):** review #221 and #222; then the next C/D batch.
+  1. **#221 merged** (lead, 2026-11-05): a queued task stops the self-prompter's action in flight after `PREEMPT_GRACE_MS` (5 s) (`action:` labels only; a reflex finishes on its own), then starts; every `goToGoal` walk has a total limit (`GO_TO_LIMITS`, 3 min) and the eight walking commands a 5 min action backstop; `goToNearestBlock`/`goToNearestEntity` return the real result. Tests: `priority` 29/29, `use_on` 8/8; on develop the new tests fail (priority) or hang (goToGoal). Related: `shelter` 14/14, `collect_rotn` 13/13, `names_e2e` 7/7, `night_routine` 18/18. Per-file lint unchanged.
+  2. **#222 merged** (lead, 2026-11-05): rotn-data's `fell-tree` rule id now reaches `collectBlock`. After a branch break it waits for the fall (at most 6 s, until the drops settle), then walks to each drop within 12 blocks of the **branch** (8 s per walk, 30 s total) and counts the real gain from the inventory. Tests: `fell_tree` 3/3 (all fail on develop); `collect_rotn` 13/13, `rotn_names` 9/9, `names_e2e` 7/7, `use_on` 7/7. Per-file lint unchanged. Unconfirmed live: the fall time, how far the logs land, and the drop entity name.
+  3. **Open PR** (branch `agent/skills-rotn/action-limits`; STATUS lives here now), the lead's required follow-ups from the #221/#222 reviews before the next G3 round:
+     - per-command total limits kept inside the action (`ACTION_LIMITS_MIN`: `!collectBlocks` 10 min, `!attack`/`!attackPlayer` 3, `!buildShelter` 5, `!digDown` 5, `!craftRecipe` 3, `!smeltItem` 12, `!putInChest`/`!takeFromChest` 2, the walks 5, `!useOn` 2, and a few small ones). At the limit: interrupt, 5 s grace, then `!<name> failed: time limit of <t> reached; stopped.` The manager's timeout (limit + 1 min) stays the backstop;
+     - `collectBlock`: each block is bounded (`COLLECT_LIMITS.blockMs` 90 s; then it is cancelled, given up and skipped), and so is the whole run (8 min);
+     - the raw `pathfinder.goto` calls in `defendSelf`, `placeBlock` (step back: 15 s) and `moveAwayFromEntity` (30 s) are bounded;
+     - `collectFelledDrops` waits for a count above the starting one, and logs "no drops appeared" instead of "Felled" when none came;
+     - #221 nit: a giver's typed action is never preempted.
+
+     Tests: `action_limits` 3/3 (new), `use_on` 11/11, `fell_tree` 4/4; on develop the new tests hang or fail. Related: 11 files pass. Lint 254.
+- **Tracked (#222 review 3, not done):** stepping aside from a falling tree. Dynamic Trees can hurt entities in the fall path, and the rule says "Stand to the side". Check the damage in the next G3 (a) run before building it (chop from the side, then walk around).
+- **Next (lead):** review the action-limits PR; then the next G3 round.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
