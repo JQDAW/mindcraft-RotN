@@ -1,27 +1,29 @@
 # Status: harness-ops
 
-Updated: 2026-11-04 (23:04 UTC, from `date -u`)
+Updated: 2026-11-04 (23:41 UTC, from `date -u`)
 
-## Now (resumed 2026-11-04 after the 2026-11-03 usage-limit pause)
+## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
-**PR #196: `agent/harness-ops/p1-followups`** (serves the #189 review nits and the #165 review follow-ups). Nothing is running, no paid work is pending, and nothing touches the CX23.
+The lead's order: one scenario per small PR, (a) first, then (b) first night, (c) a task preempts the agenda and it resumes, (d) untrusted players refused. Each gets server-side pass checks, maxBatchUsd 2 and an offline test against fakes. **No batch:** nothing is running, no paid work is pending, and nothing touches the CX23.
 
-**The #189 nits (the first commit):**
-- `test/tools/p1-capture-summary.mjs` reports every packet cap reached (`block_change` included) as `packet_cap` in `limits`, and `windowClicks.complete` is false when the click or transaction stream is capped. `CAPTURE_CAPS` is a copy of bridge.js's defaults, and a unit test fails if they differ.
-- Unpaired transactions are listed (`transactions.unpaired`).
-- Tests for the 10 s no-`close_window` fallback and for an unpaired transaction (`test/unit/p1-capture-summary.test.js`).
-- `test/evidence/probe/p1-20261103-a2/capture-summary.json` is regenerated with the new tool from the raw capture and redacted. Its `--check` is clean.
-- The a2 README: the caps, the pairing, "the +3 rests on the driver's reading", and the 15:29:12 check marked as not in a committed log.
+**PR #201: G3 (a), `g3-rocks-to-stone-tools`** (branch `agent/harness-ops/g3a-early-game`).
+- **The lead's review (REQUEST CHANGES), fixed:**
+  - **No tp in G3 at all:** the position track is dropped, and `G3_CONSOLE_ALLOW` has no `tp`. Life evidence comes from `stat.deaths` and the log. G2 keeps its own `tp`.
+  - `fresh_start` also needs the pack's first-join `give_bread` and `give_bundle`.
+  - A test for the rejected use stat with the table placed but not held.
+  - A comment on the uncounted gap before the objectives exist (fails safe).
+  - Approved: the `stat.useItem.minecraft.crafting_table` objective, with the "held" fallback. `notes.craftingTablePath` records the path used.
+- **The scenario:** `test/scenarios/g3/g3-rocks-to-stone-tools.mjs`, run with the real agent (`llm: true`, the Mindcraft driver, the pinned model). `maxMinutes` 25 and `maxBatchUsd` 2 are compared 'equal', and the world is the G2 seed.
+- **Checks:** `login_online`, `fresh_start`, `stone_tools`, `crafting_table`, `cobblestone` (rotn-data's 4-rocks outputs, exact name and meta), `crafted_by_bot` (gating, all five craft stats) and `no_cheat`.
+- **Shared arbiters in `lib/g3.mjs`** (for b-d too): `cheatProblems` (allows only the pack's first-join gamerules and the Bread and Bundle gives, once each, within 10 s of the join) and `statCriterion`.
+- **For the lead:** the crafting-table check also accepts "placed", read from `stat.useItem.minecraft.crafting_table` (1.12 counts a placed block as a use of its item). That is the approved `scoreboard objectives add` command, but a new criterion. S1 did not check it, and the first G3 smoke batch confirms it.
+- **Tested:** `g3-rocks.test.js` 12/12, `runner.test.js` 42/42 (1 Windows skip), `g3-spend.test.js` 45/45, `mindcraft-driver.test.js` 13/13. ESLint is clean on the changed files.
 
-**The #165 follow-ups (the second commit):**
-- `eat` now also needs the server's own food to rise. After the eat, the scenario reads `p1food` again, for up to `foodAfterWaitMs` (6 s), and records `serverFoodAfter`.
-- My vanilla `hungerFood` is gone from `lib/probe.mjs`. The unit sim uses net-forge's `simulateHunger` (#177) and RotN's +3 bread. The stub now goes 15 -> 18, the same as the real server in P1 attempt 2. `P1_PLAN.hunger` stays `22 19`.
-- A new unit test: the driver ate, but the server's score did not rise, so `eat` fails. The e2e test also asserts that the server's score rose.
-- Docs (scenario header, `lib/probe.mjs`, DRIVER.md P1): the RotN hunger model (Hunger Overhaul, AppleCore, `4 / 0.85` per step), the lead's rule that each P1 attempt uses a fresh server, and the lead's approval of the three `p1food` commands at `P1_CONSOLE_ALLOW`.
-- **Tested, one file at a time:** `probe.test.js` 18/18, `probe-e2e.test.js` 3/3, `late-console.test.js` 4/4, `p1-capture-summary.test.js` 7/7. ESLint is clean on every changed JS file.
+**Next:** (b) `g3-first-night` (branch `agent/harness-ops/g3b-first-night`, stacked on #201), with the provisional dawn bound (the wrap past 24000, limit 55 min) and the same no-tp rule.
 
-**Next:** wait for the lead's review of #196 and the next item. The first G3 batch still needs the `OPENROUTER_API_KEY` terminal check and a written GO.
-- The worktrees `../harness-ops-p1` and `../harness-ops-p1b` were removed on 2026-11-04 (both clean; the lead said the raw captures were no longer needed).
+## Done just before (2026-11-04)
+
+- **#196 merged (a92faf0):** the #189 review nits, and the #165 follow-ups (the server's food must rise after the eat; RotN's hunger model in the P1 sim; docs). The worktrees `../harness-ops-p1` and `../harness-ops-p1b` were removed (both clean; the lead said the raw captures were no longer needed).
 
 ## Before the pause (2026-11-03 afternoon)
 
@@ -794,7 +796,7 @@ The brief adds "the queue survives a restart": offline in G3, real on the CX23 i
    - Read them with `scoreboard players list <bot>`.
    - They prove that the bot itself crafted, which the inventory alone cannot (the crude axe may be used up by Crafting Tools).
 3. **Placed blocks:** `testforblock` (as in G2), for example the placed crafting table that the bot reports.
-4. **Position:** `tp <bot> ~ ~ ~` (as in G2).
+4. **Position:** none. There is no `tp` in G3 at all (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12.
 5. **Life:** the server log's join, leave and death lines for the bot (the vanilla death messages "<bot> was slain by", "<bot> died", and so on, and Corpse Complex's lines), plus `stat.deaths`.
 6. **No cheating:** the scenario fails if, during the run:
    - the log shows a `Given [` line or a gamemode change for the bot;
@@ -808,7 +810,7 @@ The brief adds "the queue survives a restart": offline in G3, real on the CX23 i
 - `time query daytime`;
 - `setblock` **only** for the task marker.
 
-G2's list (`say`, `seed`, `tp`, `tell`, `testforblock`, `testfor`, `time set day`, `gamerule doDaylightCycle`) stays. Not `give`, `summon` or `kill` in G3, except in S1.
+G2's list without `tp` (`say`, `seed`, `tell`, `testforblock`, `testfor`, `time set day`, `gamerule doDaylightCycle`) stays. Not `give`, `summon` or `kill` in G3, except in S1.
 
 **Pinned before any gate batch (lead, #101):** these become gate parameters compared 'equal', fixed after S1 and before the first G3 gate batch.
 - the dawn bound for `g3-first-night` (from S1's day/night measurement);

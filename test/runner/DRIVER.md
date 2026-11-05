@@ -200,6 +200,32 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
 - **Records.** `result.json`'s `llm` (the models, the calls, the usage before and after, the cost) is in every record. `llm.models` is what the driver started the agent with (its `mindcraft_start` event), and a G3 run whose recorded model is not the preset is not gate-valid. Progress and killed records carry the calls so far.
 - **Test mode is for the offline tests only.** `ROTN_TEST_MODE`, `ROTN_OPENROUTER_USAGE_FILE` and `ROTN_BATCH_RUNNER` make `batch.mjs` refuse to start inside a real test-server run, and the usage read ignores the fake file there. `deploy/test-server.sh run` sets `TEST_SERVER_FAKE_CLOUD=1` only against the offline fakes. `BATCH` records `testMode`.
 
+### G3 (a): `g3-rocks-to-stone-tools` (`test/scenarios/g3/`)
+
+The real agent plays its early-game agenda from a fresh spawn, and the runner whispers nothing. The server is the arbiter. The agent's chat only decides when the run ends early.
+- **Start:** `login_online` in the G3 world (the G2 seed). Then the stat objectives `g3a_*`: the craft stats of the crude axe, Crafting Tools, the table, both stone tools and cobblestone, plus the table's use stat (1.12 counts a placed block as a use of its item), deaths and play time.
+- **`fresh_start`:** the pack's first-join Bread and Bundle gives are in this run's log (only a first join makes them), and the count-only `clear` finds none of the target items. These include every block a 4-rocks recipe makes (rotn-data's `rockRecipes`; RotN's rocks make different cobbles).
+- **The uncounted gap:** 1.12 raises a stat objective's score only by later increments, and a new objective is never backfilled. So a craft or death between the join and the objectives being added is not counted. This fails safe: it can only fail a check, never pass one.
+- **Every minute:** `scoreboard players list <bot>` (milestones: the minute each stat first reaches 1, and deaths).
+- **No `tp` in G3 at all** (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12 (it dismounts, zeroes motionY, sets onGround and forces a position packet). `G3_CONSOLE_ALLOW` has no `tp`, and life evidence comes from `stat.deaths` and the log. G2 keeps its own `tp`.
+- **The end** comes at the first of:
+  - both stone tools have a craft stat, and the agent says `agenda step cobblestone done` or `agenda done`;
+  - the agent says `agenda step <id> stuck: ...`;
+  - the bot leaves or its driver exits;
+  - `maxMinutes` (25, compared 'equal').
+- **Checks** (the final counts and scores):
+  - `stone_tools`: at least 1 stone pickaxe and 1 stone axe held;
+  - `crafting_table`: at least 1 held, or placed (its use stat is at least 1);
+  - `cobblestone`: at least 1 of the 4-rocks outputs held, by exact name and meta;
+  - `crafted_by_bot` (gating, lead #101): the craft stat is at least 1 for all five items;
+  - `no_cheat`.
+- **`no_cheat`** (`cheatProblems` in `lib/g3.mjs`, shared by the G3 scenarios) fails on any of these:
+  - a command the bot ran (`[<bot>: ...]`);
+  - another sender's logged command that names the bot;
+  - a console give to the bot, a game mode change or `Opped <bot>`.
+  - The only exception is the pack's own first-join commands (P1's server logs): the two gamerules, 1 Bread and 1 Bundle, once each, within 10 s of the first join.
+- **Offline test:** `test/unit/g3-rocks.test.js`, a simulated server with a scripted fake agent. No batch has run this scenario yet.
+
 ## S1: survey and smoke before G3
 
 S1 (`test/scenarios/s1/`) is a survey, not a gate. **Every S1 run is not gate-valid:** `run()` first records "S1 is a survey/smoke, never a gate pass" as a notGate reason, so its verdict is at best `SMOKE-PASS (not a gate pass)`. Its findings are data the lead uses to pin G3's world, dawn bound and arbiters (`coord/STATUS-harness-ops.md`, "G3 batches"). The driver is the G2 one (`g1-driver.mjs` with `attachScenario` and `attachG2`); S1 needs one more behaviour:

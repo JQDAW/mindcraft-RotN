@@ -53,8 +53,8 @@ const N = '-?\\d+';
 export const G3_CONSOLE_ALLOW = [
     /^say scenario-[0-9a-z-]+-begin$/,                                     // the runner's begin marker
     /^seed$/,
-    new RegExp(`^tp ${NAME} ~ ~ ~$`),                                      // read the bot's position
-    new RegExp(`^tp ${NAME} ${N} ${N} ${N}$`),                             // the fixed G2 cube centre
+    // No tp of any form (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12 (it dismounts, zeroes
+    // motionY, sets onGround and forces a position packet). Life evidence comes from stat.deaths and the log.
     new RegExp(`^tell ${NAME} .+$`),                                       // the test-only task giver `Server`
     new RegExp(`^testforblock ${N} ${N} ${N} \\S+ \\d+$`),
     /^testfor @[aep]\[[^\]]*\]$/,
@@ -172,4 +172,63 @@ export function giverProblems(settings) {
         }
     }
     return p;
+}
+
+// ---- Server-side arbiters shared by the G3 scenarios (coord/STATUS-harness-ops.md, "Server-side arbiters") ----
+
+/** A 1.12 stat criterion for an item: stat.<kind>.<mod>.<item> (kind craftItem, useItem, mineBlock, ...). */
+export const statCriterion = (kind, item) => `stat.${kind}.${item.replace(':', '.')}`;
+
+/**
+ * The pack's own commands on a fresh world's first join, which the server logs as the bot's
+ * ("[<bot>: ...]"; P1 attempts 1 and 2, test/evidence/probe/p1-20261103-a2/server.log lines 20-24).
+ * They are allowed once each, within FIRST_JOIN_WINDOW_S of the bot's first join; nothing else is.
+ */
+export const PACK_FIRST_JOIN = Object.freeze([
+    { id: 'gamerule_commandBlockOutput', re: () => /^Game rule commandBlockOutput has been updated to false$/ },
+    { id: 'gamerule_sendCommandFeedback', re: () => /^Game rule sendCommandFeedback has been updated to false$/ },
+    { id: 'give_bread', re: (bot) => new RegExp(`^Given\\s+\\[Bread\\] \\* 1 to ${esc(bot)}$`) },
+    { id: 'give_bundle', re: (bot) => new RegExp(`^Given\\s+\\[Bundle\\] \\* 1 to ${esc(bot)}$`) },
+]);
+export const FIRST_JOIN_WINDOW_S = 10;
+
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const LOG_LINE = /^\[(\d\d):(\d\d):(\d\d)\] \[[^\]]*\/[A-Z]+\](?: \[[^\]]*\])?: (.*)$/;
+const secs = (h, m, s) => Number(h) * 3600 + Number(m) * 60 + Number(s);
+
+/**
+ * The no_cheat arbiter (G3 plan, arbiter 6): in the log lines of the run, any of these is a problem:
+ *   - a command the bot ran, which 1.12 logs as "[<bot>: ...]" (only an op can run one), except the
+ *     pack's first-join commands (PACK_FIRST_JOIN, once each, within the window after the first join);
+ *   - another sender's logged command that names the bot ("[<other>: ... <bot> ...]");
+ *   - a console give to the bot ("Given [x] * n to <bot>"), a game mode change or "Opped <bot>".
+ * The runner itself gives nothing in G3 (guardConsole refuses give). Returns {problems, packFirstJoin}.
+ */
+export function cheatProblems(lines, bot, { windowS = FIRST_JOIN_WINDOW_S } = {}) {
+    const b = esc(bot);
+    const named = new RegExp(`(^|[^A-Za-z0-9_])${b}([^A-Za-z0-9_]|$)`);
+    const problems = [];
+    const packFirstJoin = [];
+    const used = new Set();
+    let joinedAt = null;
+    for (const line of lines) {
+        const m = LOG_LINE.exec(String(line).replace(/\r$/, ''));
+        if (!m) continue;
+        const [, h, mi, s, msg] = m;
+        const t = secs(h, mi, s);
+        if (joinedAt === null && msg === `${bot} joined the game`) joinedAt = t;
+        const admin = /^\[([^\]:]+): (.*)\]$/.exec(msg);
+        if (admin && admin[1] === bot) {
+            const inWindow = joinedAt !== null && ((t - joinedAt + 86400) % 86400) <= windowS;
+            const pack = inWindow && PACK_FIRST_JOIN.find((x) => !used.has(x.id) && x.re(bot).test(admin[2]));
+            if (pack) {
+                used.add(pack.id);
+                packFirstJoin.push(pack.id);
+            } else problems.push(`the bot ran a command: ${msg}`);
+        } else if (admin && named.test(admin[2])) problems.push(`a logged command names the bot: ${msg}`);
+        else if (new RegExp(`^Given\\s+\\[.*\\] \\* \\d+ to ${b}$`).test(msg)) problems.push(`a give to the bot: ${msg}`);
+        else if (/game mode/i.test(msg) && named.test(msg)) problems.push(`a game mode change: ${msg}`);
+        else if (new RegExp(`^Opped ${b}$`).test(msg)) problems.push(`the bot was opped: ${msg}`);
+    }
+    return { problems, packFirstJoin };
 }
