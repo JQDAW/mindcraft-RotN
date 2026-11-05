@@ -187,6 +187,7 @@ function preemptAction(agent, task, now) {
     const actions = agent.actions;
     const label = String(actions?.currentActionLabel ?? '');
     if (!actions?.executing || !label.startsWith('action:')) return;
+    if (agent.control?.typed > 0) return; // a giver's typed action is never stopped (#221 review nit)
     const w = agent._task_wait;
     if (!w || w.id !== task.id || w.label !== label) {
         agent._task_wait = { id: task.id, label, since: now, stopped: false };
