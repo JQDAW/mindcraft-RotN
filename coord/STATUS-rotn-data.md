@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-04T23:17Z (from `date -u`)
+Updated: 2026-11-04T23:51Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -195,10 +195,11 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Restart point (resumed 2026-11-04T22:51Z after the usage-limit pause)
 
-- **Worktree:** branch `agent/rotn-data/depacify-line`, from develop after #193 (`4432cef`). No background jobs, no subagents (the lead reviews).
+- **Worktree:** branch `agent/rotn-data/falling-blocks`, from develop after #200 (`a0c16d29`). No background jobs, no subagents (the lead reviews).
 - **#193 merged** (`4432cef`), **skeleton horse (lead's GO: hostile with a cited override):** `entity-overrides.json` `minecraft:skeleton_horse` (targetsPlayers, verified from specialai-1.1.0 `AIHandler` depacify bytecode; Special_AI.cfg lines 16 and 25, hordes.cfg line 134) and a `fight` entry in `threat-reactions.json`. Tests: the entity-threats pinned list (14 entries); threats.test.js's "class rules apply to hostile mobs only" check now uses a temporary probe rule (wither skeleton gets it, villager does not), because no non-hostile class in the dump matches a rule once the horse is hostile (a dump-derived list would have been empty). entity-threats 6/6, threats 14/14, ESLint clean.
-- **#193 follow-up (lead), PR #200 (this branch):** `depacify_aggressive_chance=1.0` is on Special_AI.cfg line **16**, not 15 (checked in the pinned zip, SHA-256 `90642fd5...`): fixed in both skeleton horse citations (`entity-overrides.json`, `threat-reactions.json`), the zombie horse's (`threat-reactions.json`) and the entity-threats test comment. The other Special_AI.cfg and hordes.cfg line citations were checked against the zip; all correct.
-- **Then:** wait for the lead's review of this PR.
+- **#200 merged** (`a0c16d29`), the #193 follow-up: `depacify_aggressive_chance=1.0` is on Special_AI.cfg line **16**, not 15 (checked in the pinned zip, SHA-256 `90642fd5...`): fixed in both skeleton horse citations (`entity-overrides.json`, `threat-reactions.json`), the zombie horse's (`threat-reactions.json`) and the entity-threats test comment. The other Special_AI.cfg and hordes.cfg line citations were checked against the zip; all correct.
+- **Lead request: a structured `falls` (gravity) field per block (this branch, PR #205).** `3.3.4/falling-blocks.json`, built by `tools/build-falling-blocks.mjs --pack <pinned zip>` (reads every jar's class headers; the vanilla and Forge jars mapped with Forge's notch-to-SRG table; chains to `BlockFalling`). 144 falling blocks: 23 BlockFalling subclasses, 59 blocks of 15 reviewed classes with their own falling code (UB sands and gravels, Earthworks gabions, dragon egg, candle, bloom, lanterns, chandelier, scaffolding, PHC fruit, gravisand; offsets cited), 60 ContentTweaker blocks a script gives gravity (`scripts/contentweaker/simpleExtraBlocks.zs`, by line), 2 OSV ores on gravel/sand (`config/osv.cfg` line 282). 849 candidates ruled out with cited rules; 0 unreviewed. API: `falls()`, `fallInfo()`, `getBlock().falls`/`fallsWhen`. Tests: falling-blocks 5/5, all 12 rotn-data test files pass, ESLint clean, `--check` reproduces the file.
+- **Then:** wait for the lead's review of #205.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
 - **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
@@ -341,4 +342,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- #200 `agent/rotn-data/depacify-line`: the #193 follow-up, Special_AI.cfg line 16 (Restart point).
+- #205 `agent/rotn-data/falling-blocks`: the `falls` field (Restart point).
