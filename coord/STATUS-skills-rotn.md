@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T17:17Z (from `date -u`)
+Updated: 2026-11-05T17:57Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -338,6 +338,10 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     - Fixed 3 lint errors (`setImmediate`) that my earlier baseline run missed because the file was untracked.
     - Tests: `death_report` 6/6 (2 fail on the old code); related 81/81; lint 254.
 - **Next:** the #212 and #215 re-reviews.
+- **#216 open (lead, G3 batch A finding; needed before the next batch A):** `!useOn("pyrotech:crude_axe", "log")` hung at the agenda's `crafting_table` step (upstream `goToPosition` awaits `pathfinder.goto` with no limit).
+  - Branch `agent/skills-rotn/useon-bound`. Bounds: the 4 nearest targets within 32 blocks, 20 s per walk (the pathfinder is stopped), 60 s in total, and a 2 min action backstop.
+  - Clear `useOn failed: ...` lines. Success is an inventory gain (e.g. `gained 2 planks`) or a changed block; no effect is a failure.
+  - Tests, one file at a time: `use_on` 4/4 (on the old code tests 1-2 time out, i.e. hang, and 3-4 fail); `collect_rotn` 13/13; `names_e2e` 7/7. Per-file lint unchanged.
 - **G3 smoke batches running (lead, received before 2026-11-05T17:17Z by `date -u`):** until the lead says they are over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
