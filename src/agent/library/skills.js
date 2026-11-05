@@ -351,7 +351,9 @@ export async function smeltItem(bot, itemName, num=1) {
     await bot.lookAt(furnaceBlock.position);
 
     console.log('smelting...');
+    const run = currentRun(bot);
     const furnace = await bot.openFurnace(furnaceBlock);
+    if (run.aborted) { closeQuietly(bot, furnace); return false; }
     // check if the furnace is already smelting something
     let input_item = furnace.inputItem();
     if (input_item && input_item.type !== mc.getItemId(itemName) && input_item.count > 0) {
@@ -412,7 +414,7 @@ export async function smeltItem(bot, itemName, num=1) {
         if (Date.now() - last_collected > 11000) {
             break; // if nothing has been collected in 11 seconds, stop
         }
-        if (bot.interrupt_code) {
+        if (bot.interrupt_code || run.aborted) {
             break;
         }
     }
@@ -459,7 +461,9 @@ export async function clearNearestFurnace(bot) {
     }
 
     console.log('clearing furnace...');
+    const run = currentRun(bot);
     const furnace = await bot.openFurnace(furnaceBlock);
+    if (run.aborted) { closeQuietly(bot, furnace); return false; }
     console.log('opened furnace...')
     // take the items out of the furnace
     let smelted_item, intput_item, fuel_item;
@@ -672,9 +676,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Bounded (G3 review of #221): bot.collectBlock.collect has no time limit. Each block gets
     // COLLECT_LIMITS.blockMs (then it is given up and skipped), the whole run totalMs.
     const CL = COLLECT_LIMITS;
+    const run = currentRun(bot);
     const runStart = Date.now();
     const givenUp = [];
     for (let i=0; i<num && collected<num; i++) { // collected counts the items really gained (a stone can give 4 rocks)
+        if (run.aborted) break;
         if (Date.now() - runStart >= CL.totalMs) {
             log(bot, `Stopped collecting ${blockType}: time limit of ${secsText(CL.totalMs)} reached.`);
             break;
@@ -758,12 +764,15 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 return true;
             };
             const blockMs = Math.min(CL.blockMs, CL.totalMs - (Date.now() - runStart));
-            const res = await within(breakIt(), blockMs, () => {
+            const breaking = breakIt();
+            const res = await within(breaking, blockMs, () => {
                 try { Promise.resolve(bot.collectBlock?.cancelTask?.()).catch(() => {}); } catch { /* best effort */ }
                 try { bot.stopDigging?.(); } catch { /* best effort */ }
                 stopWalking(bot);
             });
             if (res === TIMED_OUT) {
+                // Let the cancelled break end before the next block (#224 review 2), at most STOP_SETTLE_MS.
+                await within(breaking.catch(() => {}), STOP_SETTLE_MS);
                 givenUp.push(block.position.clone ? block.position.clone() : block.position);
                 log(bot, `Gave up on ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: time limit of ${secsText(blockMs)} reached.`);
             }
@@ -1224,8 +1233,11 @@ export async function putInChest(bot, itemName, num=-1) {
         return false;
     }
     let to_put = num === -1 ? item.count : Math.min(num, item.count);
+    const run = currentRun(bot);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
+    if (run.aborted) return false;
     const chestContainer = await bot.openContainer(chest);
+    if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
     await chestContainer.deposit(item.type, variantMeta(itemName), to_put);
     await chestContainer.close();
     log(bot, `Successfully put ${to_put} ${itemName} in the chest.`);
@@ -1247,8 +1259,11 @@ export async function takeFromChest(bot, itemName, num=-1) {
         log(bot, `Could not find a chest nearby.`);
         return false;
     }
+    const run = currentRun(bot);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
+    if (run.aborted) return false;
     const chestContainer = await bot.openContainer(chest);
+    if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
     
     // Find all matching items in the chest
     let matchingItems = chestContainer.containerItems().filter(item => itemMatches(item, itemName));
@@ -1264,7 +1279,7 @@ export async function takeFromChest(bot, itemName, num=-1) {
     
     // Take items from each slot until we've taken enough or run out
     for (const item of matchingItems) {
-        if (remaining <= 0) break;
+        if (remaining <= 0 || run.aborted) break;
         
         let toTakeFromSlot = Math.min(remaining, item.count);
         await chestContainer.withdraw(item.type, variantMeta(itemName), toTakeFromSlot);
@@ -1291,8 +1306,11 @@ export async function viewChest(bot) {
         log(bot, `Could not find a chest nearby.`);
         return false;
     }
+    const run = currentRun(bot);
     await goToPosition(bot, chest.position.x, chest.position.y, chest.position.z, 2);
+    if (run.aborted) return false;
     const chestContainer = await bot.openContainer(chest);
+    if (run.aborted) { closeQuietly(bot, chestContainer); return false; }
     let items = chestContainer.containerItems();
     if (items.length === 0) {
         log(bot, `The chest is empty.`);
@@ -2334,8 +2352,24 @@ export const USE_ON_LIMITS = { range: 32, candidates: 4, walkMs: 20_000, totalMs
  * The total time one goToGoal walk may take (G3 smoke C+D). 3 min covers a 512-block
  * !searchForBlock walk with detours; every goTo* skill and command walks through goToGoal.
  */
+/** How long a cancelled step may take to end before the skill moves on (#224 review 2). */
+const STOP_SETTLE_MS = 5000;
+
 /** collectBlock (G3 review of #221): per block, and for the whole run (!collectBlocks has 10 min). */
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000 };
+
+/**
+ * The command run this skill belongs to (#224 review 1). A command that hit its total limit
+ * (actions.js withinLimit) is marked aborted; it has already reported failure. A skill whose
+ * await settles only after that (a late chest window) checks this after its awaits and stops,
+ * closing what it opened. The interrupt flag cannot be used: the next command clears it.
+ */
+export function currentRun(bot) {
+    return bot.action_run ?? { aborted: false };
+}
+function closeQuietly(bot, window) {
+    try { if (typeof window?.close === 'function') window.close(); else bot.closeWindow?.(window); } catch { /* best effort */ }
+}
 
 export const GO_TO_LIMITS = { totalMs: 180_000, stepMs: 15_000, fleeMs: 30_000 };
 

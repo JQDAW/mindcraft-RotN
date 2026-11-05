@@ -84,3 +84,24 @@ test('a command that ends in time is unchanged; a throw is still reported', T, a
     const b = fakeAgent();
     await assert.rejects(withinLimit(b, 'x', () => Promise.reject(new Error('boom')), 1000), /boom/);
 });
+
+// #224 review: a skill whose await settles after its command reported failure must stop there.
+test('a chest window that opens after the limit is closed again; nothing is deposited', T, async (t) => {
+    const saved = [ACTION_LIMITS_MIN.putInChest, STOP_GRACE.ms];
+    t.after(() => { [ACTION_LIMITS_MIN.putInChest, STOP_GRACE.ms] = saved; });
+    ACTION_LIMITS_MIN.putInChest = 0.005; // 0.3 s
+    STOP_GRACE.ms = 200;
+    const window = { deposits: 0, closes: 0, deposit() { this.deposits++; return Promise.resolve(); }, close() { this.closes++; } };
+    const agent = fakeAgent({ openContainer: () => new Promise(resolve => setTimeout(() => resolve(window), 900)) });
+    const out = await perform('!putInChest')(agent, 'cobblestone', 2);
+    assert.match(out, /!putInChest failed: time limit of 0\.3 s reached; stopped\./);
+    await new Promise(resolve => setTimeout(resolve, 1000)); // the late window opens
+    assert.equal(window.deposits, 0, 'nothing deposited after the command failed');
+    assert.equal(window.closes, 1, 'the late window was closed');
+    assert.doesNotMatch(agent.bot.output, /Successfully put/);
+    assert.equal(agent.bot.action_run, null, 'a later skill does not see this aborted run');
+});
+
+test('#224 review 3: !craftRecipe has more time than one 3 min walk', () => {
+    assert.equal(ACTION_LIMITS_MIN.craftRecipe, 4);
+});
