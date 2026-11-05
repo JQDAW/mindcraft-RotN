@@ -89,11 +89,23 @@ test('installFoods puts the pack values into a minecraft-data registry, in place
     assert.deepEqual(r.left.sort(), ['cake', 'carrots', 'melon_block', 'potatoes'], 'only the block entries of minecraft-data\'s table drop out');
 });
 
+test('#209 review: overridden foods say which line won', () => {
+    // food.zs sets the baked beets twice; the later pair (lines 466, 468) wins.
+    const b = pack.foodValues('harvestcraft:bakedbeetsitem');
+    assert.deepEqual(b.scriptWon, { hunger: 'scripts/food.zs:466', saturationModifier: 'scripts/food.zs:468' });
+    assert.equal(pack.foodValues('bread').scriptWon, undefined, 'set once: no scriptWon');
+    for (const m of Object.values(data.foods)) for (const e of Object.values(m)) if (e.scriptWon) assert.ok(Object.values(e.scriptWon).every((l) => e.script.includes(l)));
+});
+
 test('the script parser: comments, metas, last line wins, unreadable lines refused', () => {
     assert.equal(stripComments('a // b\n/* c\nd */ e "//x"'), 'a \n\n e "//x"');
     const ct = parseFoodScripts([['s.zs', '<a:b>.foodValues.hunger = 1;\n/*\n<a:b>.foodValues.hunger = 9;\n*/\n<a:b:2>.foodValues.saturationModifier = 0.5;\n<a:b>.foodValues.hunger = 4;']]);
-    assert.deepEqual(ct.get('a:b|0'), { hunger: 4, lines: ['s.zs:1', 's.zs:6'] });
-    assert.deepEqual(ct.get('a:b|2'), { saturationModifier: 0.5, lines: ['s.zs:5'] });
+    assert.deepEqual(ct.get('a:b|0'), { hunger: 4, lines: ['s.zs:1', 's.zs:6'], won: { hunger: 's.zs:6' } });
+    assert.deepEqual(ct.get('a:b|2'), { saturationModifier: 0.5, lines: ['s.zs:5'], won: { saturationModifier: 's.zs:5' } });
+    // #209 review: a food-value event handler in a script stops the build (a commented one does not).
+    assert.throws(() => parseFoodScripts([['e.zs', 'import x;\nHungerEvents.onGetFoodValues(function(event) {});']]), /e\.zs line 2: a HungerEvents\.onGetFoodValues handler/);
+    assert.throws(() => parseFoodScripts([['e.zs', 'HungerEvents.onGetPlayerFoodValues(function(e) {});']]), /onGetPlayerFoodValues/);
+    assert.equal(parseFoodScripts([['e.zs', '// HungerEvents.onGetFoodValues(f);\nHungerEvents.onFoodEaten(function(e) {});']]).size, 0);
     assert.throws(() => parseFoodScripts([['s.zs', 'val x = <a:b>.foodValues;']]), /cannot read/);
     assert.throws(() => parseFoodScripts([['a.zs', '<a:b>.foodValues.hunger = 1;'], ['b.zs', '<a:b>.foodValues.hunger = 2;']]), /load order/);
 });

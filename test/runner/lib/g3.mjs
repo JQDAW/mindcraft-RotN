@@ -49,6 +49,13 @@ export const TEST_TASK_GIVER = 'Server';
 
 const NAME = '[A-Za-z0-9_]{3,16}';
 const N = '-?\\d+';
+/**
+ * The two pinned task markers (lead, #207 and #208 reviews; S1-A's confirmed surface rock piles in the G2 world):
+ * (c)'s task marker and (d)'s untrusted-task marker. `setblock` is allowed at exactly these cells.
+ */
+export const G3_MARKERS = Object.freeze({ task: '-42,68,-50', untrusted: '-20,70,-56' });
+const markerCells = Object.values(G3_MARKERS).map((m) => m.split(',').join(' ')).join('|');
+
 /** G3's approved console commands (lead, #101), anchored. Nothing else reaches the test server. */
 export const G3_CONSOLE_ALLOW = [
     /^say scenario-[0-9a-z-]+-begin$/,                                     // the runner's begin marker
@@ -67,7 +74,7 @@ export const G3_CONSOLE_ALLOW = [
     new RegExp(`^scoreboard players list ${NAME}$`),
     /^time query daytime$/,
     /^gamerule [A-Za-z]+$/,                                                // read-only: the query form only, never a value
-    new RegExp(`^setblock ${N} ${N} ${N} minecraft:gold_block$`),          // the task marker only
+    new RegExp(`^setblock (${markerCells}) minecraft:gold_block$`),        // the two pinned task markers only (#208 review)
 ];
 
 /**
