@@ -174,6 +174,7 @@ export default {
             left.length ? left.map((e) => `${e.type}${e.reason ? ` (${e.reason})` : ''}`).join('; ') : bot.alive() ? `online from the join to the end (${minutes()} min)` : `the driver exited with code ${bot.exitCode()}`);
         const cheat = cheatProblems(log, name);
         ctx.note('packFirstJoin', cheat.packFirstJoin);
+        ctx.note('packRepeats', cheat.packRepeats);
         ctx.check('no_cheat', cheat.problems.length === 0, cheat.problems.length ? cheat.problems.slice(0, 5).join('; ') : `nothing found (the pack's first-join commands: ${cheat.packFirstJoin.join(', ') || 'none'})`);
     },
 };

@@ -101,6 +101,7 @@ export default {
         const finish = () => {
             const cheat = cheatProblems(s.sinceMarker(), name);
             ctx.note('packFirstJoin', cheat.packFirstJoin);
+            ctx.note('packRepeats', cheat.packRepeats);
             ctx.check('no_cheat', cheat.problems.length === 0, cheat.problems.length ? cheat.problems.slice(0, 5).join('; ') : `nothing found (the pack's first-join commands: ${cheat.packFirstJoin.join(', ') || 'none'})`);
         };
         const notReached = (why) => { for (const k of ['refused_politely', 'not_on_marker', 'no_task']) ctx.check(k, false, `not reached: ${why}`); finish(); };
