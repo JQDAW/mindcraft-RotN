@@ -106,7 +106,7 @@ export class NightClock {
 }
 
 /** The dump's state for a block the bot sees (its name and metadata), or null when the dump lacks it. */
-function dumpState(block) {
+export function dumpState(block) {
     if (typeof block?.name !== 'string' || !block.name) return null;
     let entry = null;
     try { entry = getBlock(registryName(block.name)); } catch { return null; }
