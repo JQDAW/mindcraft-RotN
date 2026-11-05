@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T00:46Z (from `date -u`)
+Updated: 2026-11-05T00:53Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -261,6 +261,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     7. nit: a mob in a wall cell is named.
 
     Tests: `night_routine.test.js` 16/16; `shelter.test.js` 12/12; `src/agent/**` 244/244; lint 254.
+  - **Develop merged in** (`28c2bbfc`, after #202's squash merge; I kept this branch's side, which only adds to the #202 tip); GitHub reports the PR as mergeable. `isFalling` now uses rotn-data's `falls()` from #205 (`2d653a4d`). `src/agent/**` 245/245; lint 254.
   - **Lead decisions on #204 (2026-11-04), recorded in the PR:**
     1. no shelter possible: idle until morning with reflexes is accepted for now; the G3 (b) smoke run shows whether a dig-into-a-hillside fallback is needed;
     2. night above tasks is accepted; typed commands, `!stop` and `!pause` still act at once.
@@ -279,5 +280,6 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
          3. `eating` now comes before `cowardice` and `self_defense`, so the bot eats at food 6 or lower in a fight; at 12 or lower only when idle with no threat near.
 
          Tests: `food.test.js` 8/8 plus 1 skipped; `src/agent/**` 227/227 plus 1 skipped; lint 254.
+       - **Lead (2026-11-05):** #206 waits for rotn-data's pack food values PR. When that merges, I bring #206 up to date by **merging** develop in, not rebasing: rebasing a pushed branch needs a force-push, which the rules forbid. Then I drop the `foodOf` fallback check if the API differs, and the skipped bread-3 test runs.
      - **D1b next:** re-plan after a position jump of 5 or more blocks (AggroTP), and after the **hordes title text** (lead: match that text, not any title);
   3. D3: the death report.
