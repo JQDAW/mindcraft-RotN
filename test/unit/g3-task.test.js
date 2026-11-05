@@ -81,7 +81,9 @@ function sim(opt = {}) {
                     for (const [o, v] of shown) add(`- ${o}: ${v} (${o})`);
                 }
             } else if ((m = /^setblock (-?\d+) (-?\d+) (-?\d+) minecraft:gold_block$/.exec(cmd))) add('Block placed');
-            else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) minecraft:air 0$/.exec(cmd))) {
+            else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) minecraft:gold_block 0$/.exec(cmd))) {
+                add(opt.noGold ? `The block at ${m[1]}, ${m[2]}, ${m[3]} is Air (expected: Gold Block).` : `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}`);
+            } else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) minecraft:air 0$/.exec(cmd))) {
                 add(opt.blocked && Number(m[2]) === MARKER[1] + 1 ? `The block at ${m[1]}, ${m[2]}, ${m[3]} is Water (expected: Air).` : `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}`);
             } else if ((m = /^tell (\S+) !taskCancel\("(t\d+)"\)$/.exec(cmd)) && online) {
                 if (task && !task.closed) { say(`task ${m[2]} cancelled`); task.closed = true; task.phase = 'done'; }
@@ -149,6 +151,11 @@ describe('g3-task-preempts-agenda on a simulated server', () => {
         assert.ok(s.sent.includes(`tell ${NAME} !taskAdd("go to the gold block at -42 68 -50 and stand on it", "normal")`));
         assert.ok(s.sent.indexOf('testforblock -42 69 -50 minecraft:air 0') < s.sent.indexOf('setblock -42 68 -50 minecraft:gold_block'), 'the preflight comes first');
         assert.ok(s.sent.includes('testforblock -42 70 -50 minecraft:air 0'));
+        // #207 review nit: the gold block is confirmed read-only after the setblock, before the whisper.
+        const gold = s.sent.indexOf('testforblock -42 68 -50 minecraft:gold_block 0');
+        assert.ok(gold > s.sent.indexOf('setblock -42 68 -50 minecraft:gold_block') && gold < s.sent.findIndex((x) => x.startsWith('tell ')), 'confirm after the setblock, before the task');
+        assert.deepEqual({ ...r.notes.marker, reply: undefined }, { at: [-42, 68, -50], reply: undefined, goldBlock: true, detail: 'found' });
+        assert.match(r.notes.marker.reply, /: Block placed$/);
         assert.ok(!s.sent.some((x) => x.includes('!taskCancel')), 'a done task needs no cancel');
         for (const cmd of s.sent) {
             assert.ok(G3_CONSOLE_ALLOW.some((re) => re.test(cmd)), `not approved: ${cmd}`);
@@ -200,6 +207,14 @@ describe('g3-task-preempts-agenda on a simulated server', () => {
         assert.match(byName(blocked).task_accepted.detail, /^not reached: site not clear: -42 69 -50: The block at -42, 69, -50 is Water/);
         assert.ok(!sb.sent.some((x) => x.startsWith('setblock ') || x.startsWith('tell ')), 'nothing placed or whispered');
         assert.equal(byName(await run(sim({ stale: true }))).fresh_bot_state.pass, false);
+    });
+
+    test('#207 review nit: a gold block the server does not confirm stops the task steps, and nothing is whispered', async () => {
+        const s = sim({ noGold: true });
+        const r = await run(s);
+        assert.match(byName(r).task_accepted.detail, /^not reached: the gold block is not at the marker: The block at -42, 68, -50 is Air/);
+        assert.equal(r.notes.marker.goldBlock, false);
+        assert.ok(!s.sent.some((x) => x.startsWith('tell ')), 'no task without a proven marker');
     });
 
     test('#207 review: a task left open at the end is cancelled by the giver; a rejected counter criterion makes the run not gate-valid', async () => {
