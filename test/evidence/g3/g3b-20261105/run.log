@@ -1,0 +1,38 @@
+[test-server 17:52:44] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --max-batch-usd 2 --logs-out captures/raw/g3b/server --summary captures/raw/g3b/batch.json --timeout-min 62 --scenario g3-first-night --out captures/raw/g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 17:52:44] preflight passed: driver, profile, model and settings checked; the key's usage can be read; 1 scenario(s)
+[test-server 17:52:52] sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15.2, 14.7 min, newest 42077718130 7.3 min ago
+[test-server 17:52:52] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 3h, sweeper deletes it) ~4 billed hours, EUR 0.55 plus Primary IPv4
+[test-server 17:52:53] creating mcr-test-20261105-175245: delete-after 2026-11-05T20:52:52Z (TTL 3h)
+Waiting for create_server (server: 174655514, image: 161547269) ...
+Waiting for start_server (server: 174655514) ...
+Waiting for create_server (server: 174655514, image: 161547269) ... done
+Waiting for start_server (server: 174655514) ... done
+Server 174655514 created
+[test-server 17:53:03] server mcr-test-20261105-175245 is at <ip>
+[test-server 17:53:03] waiting for SSH and the build (up to 120 min)
+[test-server 17:53:13] phase: unreachable
+[test-server 17:53:30] phase: booting:running
+[test-server 17:54:02] phase: starting
+[test-server 17:56:10] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 17:56:12] READY: mcr-test-20261105-175245 at <ip>:25565 (delete-after 2026-11-05T20:52:52Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261105-175245
+[test-server 17:56:12] running: node test/runner/batch.mjs --max-batch-usd 2 --logs-out captures/raw/g3b/server --summary captures/raw/g3b/batch.json --timeout-min 62 --scenario g3-first-night --out captures/raw/g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 17:56:12] g3-first-night: start (spent so far USD 0 of 2)
+[scenario 17:56:12] g3-first-night (G3) run 20261105t175612-95d68c; git 202b826395de1757aef135e5fdad0444c76d7f7d; driver: node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json; out: captures/raw/g3b/night
+[scenario 17:57:25] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 17:58:25] PASS fresh_start: none of 24 target items held; the pack's first-join Bread and Bundle seen
+[scenario 18:37:25] PASS survived_night: dawn reached; stat.deaths 0; death lines 0
+[scenario 18:37:27] PASS stayed_online: online from the join to the end (40.1 min)
+[scenario 18:37:27] FAIL no_cheat: the bot ran a command: [<bot>: Game rule commandBlockOutput has been updated to false]; the bot ran a command: [<bot>: Game rule sendCommandFeedback has been updated to false]
+[scenario 18:37:28] g3-first-night: 17 LLM calls, USD 0.052627
+[scenario 18:37:28] g3-first-night: model openrouter/@preset/glm-5-1-mindcraft
+[scenario 18:37:30] g3-first-night: FAIL; 4 passed, 1 failed (captures/raw/g3b/night/result.json)
+captures/raw/g3b/server
+BATCH {"batchId":"20261105T175612-17488","testMode":false,"maxBatchUsd":2,"scenarios":[{"id":"g3-first-night","out":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\g3b\\night","runId":"20261105t175612-95d68c","exit":1,"spentBefore":0}],"stopped":null,"usageAtStart":0.076470743,"usageAtEnd":0.129097299,"spentUsd":0.052627,"exit":1,"logsFetched":true}
+[test-server 18:37:40] command exited with 1
+[test-server 18:37:40] EXIT trap: tearing down mcr-test-20261105-175245
+[test-server 18:37:41] deleting batch mcr-test-20261105-175245 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261105-175245)
+Waiting for delete_server (server: 174655514) ...
+Waiting for delete_server (server: 174655514) ... done
+[test-server 18:37:53] batch mcr-test-20261105-175245: ran 45 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 18:37:53] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261105-175245

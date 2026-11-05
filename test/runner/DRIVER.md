@@ -231,8 +231,10 @@ The real agent plays its early-game agenda from a fresh spawn, and the runner wh
   - a command the bot ran (`[<bot>: ...]`);
   - another sender's logged command that names the bot;
   - a console give to the bot, a game mode change or `Opped <bot>`.
-  - The only exception is the pack's own first-join commands (P1's server logs): the two gamerules, 1 Bread and 1 Bundle, once each, within 10 s of the first join.
-- **Offline test:** `test/unit/g3-rocks.test.js`, a simulated server with a scripted fake agent. No batch has run this scenario yet.
+  - The exceptions are only the pack's own commands:
+    - its first-join commands (P1's server logs): the two gamerules, 1 Bread and 1 Bundle, once each, within 10 s of the first join (`notes.packFirstJoin`);
+    - exactly `Game rule commandBlockOutput has been updated to false` and `Game rule sendCommandFeedback has been updated to false`, at any time (`PACK_ANY_TIME`; the lead, 2026-11-05). The pack re-ran both as the bot about 2.5 min after the join in smoke batches A and B. Each repeat is recorded in `notes.packRepeats`. Any other value or rule is still a problem.
+- **Offline test:** `test/unit/g3-rocks.test.js`, a simulated server with a scripted fake agent. The first smoke batch is in `test/evidence/g3/g3a-20261105/`.
 
 ### G3 (b): `g3-first-night` (`test/scenarios/g3/`)
 
