@@ -110,7 +110,7 @@ test('useOn: a use with no gain and no block change is a failure; one too far is
     // A debarked log (the block changed, no item): a success.
     const b2 = fakeBot({ blocks: [block('log', at(3))], onUse: (b) => { b.metadata = 12; } });
     assert.equal(await skills.useToolOn(b2, 'pyrotech:crude_axe', 'log', LIMITS), true);
-    assert.match(b2.output, /it is now log; no item gained\./);
+    assert.match(b2.output, /it is now log; no item gained \(not a plank or any other item yet\)\./);
 
     // The walk "succeeds" but leaves the bot far away: not used.
     const b3 = fakeBot({ blocks: [block('log', at(8))] });
@@ -122,4 +122,56 @@ test('useOn: a use with no gain and no block change is a failure; one too far is
     const b4 = fakeBot({ blocks: [block('log', at(40))] });
     assert.equal(await skills.useToolOn(b4, 'pyrotech:crude_axe', 'log', LIMITS), false);
     assert.match(b4.output, /Could not find any log within 32 blocks\./);
+});
+
+// #216 review follow-ups: the entity path is bounded and interruptible; the upstream creative check.
+function entityBot(opts = {}) {
+    const bot = fakeBot(opts);
+    const cow = { name: 'cow', position: at(3) };
+    bot.nearestEntity = (pred) => (pred(cow) ? cow : null);
+    bot.calls.useOn = 0;
+    bot.useOn = () => { bot.calls.useOn++; return Promise.resolve(); };
+    return bot;
+}
+
+test('useOn entity: an equip that never answers ends at the total limit; nothing is used', T, async () => {
+    const bot = entityBot();
+    bot.equip = () => new Promise(() => {});
+    const t0 = Date.now();
+    assert.equal(await skills.useToolOn(bot, 'pyrotech:crude_axe', 'cow', { ...LIMITS, totalMs: 400 }), false);
+    assert.ok(Date.now() - t0 < 1000);
+    assert.equal(bot.calls.useOn, 0);
+    assert.match(bot.output, /useOn failed: time limit of 0\.4 s reached\./);
+
+    const b2 = entityBot();
+    b2.unequip = () => new Promise(() => {});
+    assert.equal(await skills.useToolOn(b2, 'hand', 'cow', { ...LIMITS, totalMs: 400 }), false, 'unequip is bounded too');
+    assert.equal(b2.calls.useOn, 0);
+});
+
+test('useOn entity: an interrupt during the walk stops before the use; the walk message gives the real limit', T, async () => {
+    const bot = entityBot();
+    bot.pathfinder.goto = (goal) => { bot.interrupt_code = true; bot.entity.position = at(goal.x + 1); return Promise.resolve(); };
+    assert.equal(await skills.useToolOn(bot, 'pyrotech:crude_axe', 'cow', LIMITS), false);
+    assert.equal(bot.calls.useOn, 0);
+
+    const b2 = entityBot({ arrive: 'never' });
+    assert.equal(await skills.useToolOn(b2, 'pyrotech:crude_axe', 'cow', { walkMs: 2000, totalMs: 300, settleMs: 100 }), false);
+    assert.match(b2.output, /useOn failed: could not reach the cow within 0\.3 s \(the 0\.3 s limit\)\./);
+
+    const b3 = entityBot();
+    assert.equal(await skills.useToolOn(b3, 'pyrotech:crude_axe', 'cow', LIMITS), true);
+    assert.equal(b3.calls.useOn, 1);
+});
+
+test('useOn: a missing tool is refused at once (the upstream check was always false); "hand" needs none', T, async () => {
+    const bot = fakeBot({ blocks: [block('log', at(3))] });
+    bot.inventory.slots[36] = null;
+    assert.equal(await skills.useToolOn(bot, 'pyrotech:crude_axe', 'log', LIMITS), false);
+    assert.match(bot.output, /^You do not have any pyrotech:crude_axe to use\.\n$/);
+    assert.equal(bot.calls.goto, 0, 'no walk');
+
+    const b2 = entityBot();
+    b2.inventory.slots[36] = null;
+    assert.equal(await skills.useToolOn(b2, 'hand', 'cow', LIMITS), true);
 });
