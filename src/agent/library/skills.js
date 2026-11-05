@@ -2379,7 +2379,8 @@ export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000 };
  * closing what it opened. The interrupt flag cannot be used: the next command clears it.
  */
 export function currentRun(bot) {
-    return bot.action_run ?? { aborted: false };
+    // `in` first: a bot without the property (a strict test double) is never read for it.
+    return (bot && 'action_run' in bot ? bot.action_run : null) ?? { aborted: false };
 }
 function closeQuietly(bot, window) {
     try { if (typeof window?.close === 'function') window.close(); else bot.closeWindow?.(window); } catch { /* best effort */ }
