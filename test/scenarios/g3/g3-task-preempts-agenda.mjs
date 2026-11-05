@@ -29,7 +29,11 @@
 //      `setblock <marker> minecraft:gold_block` (approved for the task marker only), confirmed read-only with
 //      `testforblock <marker> minecraft:gold_block 0` (placeGoldMarker; no proof: the task steps fail), then the test-only
 //      giver whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and
-//      stand on it", "normal")`.
+//      stand on it", "normal")`, but only while the agenda is active (lead, after smoke round 2: there the
+//      agenda had paused itself as stuck 13 s before the task, so there was no preemption to see). The
+//      agenda's state is read from its own chat (agendaActive). It waits up to activeWaitMinutes (5); if
+//      the agenda is not active by then, the task steps are "not reached: agenda not active at the task"
+//      (not a pass, and not a task failure), and no task is whispered.
 //   4. task_accepted: "task <id> accepted: ..." in the bot's chat within acceptS (60 s).
 //   5. task_done: within taskMinutes (5), the server finds the bot standing on the marker, by
 //      `testfor @a[name=<bot>,x=X,y=Y+1,z=Z,dx=0,dy=1,dz=0]` (1.12's volume selector: the bot's box is in the
@@ -37,14 +41,14 @@
 //      said "agenda paused for task <id>" (the preemption itself, #207 review).
 //      "task <id> failed: ..." ends the step early.
 //   6. agenda_resumed: within resumeMinutes (5) after the done line, the counter rises above its value at
-//      the done line.
+//      the done line. When task_done failed, it is "not reached" with the part of task_done that was missing.
 //   7. no_cheat (cheatProblems). The objectives are removed; the gold block stays (the server is disposable,
 //      and setting the old block back is not an approved command).
 // Notes: "agenda paused for task <id>" and "agenda resumed: <step>" (the agent's own view of the preemption),
 // the counter readings, the minute the server first saw the bot on the marker.
 import { startSession } from '../../runner/lib/session.mjs';
-import { G2_WORLD_SEED, parseCentre, testforVerdict, testforblockVerdict } from '../../runner/lib/g2.mjs';
-import { G3_DEFAULTS, G3_GATE_PARAMS, G3_MARKERS, TEST_TASK_GIVER, cheatProblems, guardConsole, placeGoldMarker, startEvent, statCriterion } from '../../runner/lib/g3.mjs';
+import { G2_WORLD_SEED, parseCentre, testforVerdict } from '../../runner/lib/g2.mjs';
+import { G3_DEFAULTS, G3_GATE_PARAMS, G3_MARKERS, TEST_TASK_GIVER, airAbove, cheatProblems, guardConsole, notClearText, placeGoldMarker, startEvent, statCriterion } from '../../runner/lib/g3.mjs';
 import { playerScores, scoreboardAddResult } from '../../runner/lib/s1.mjs';
 import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
@@ -77,6 +81,23 @@ export const taskText = ([x, y, z]) => `go to the gold block at ${x} ${y} ${z} a
 /** The server's check that the bot stands on the marker: its box in the two cells above the block. */
 export const onMarkerCommand = (bot, [x, y, z]) => `testfor @a[name=${bot},x=${x},y=${y + 1},z=${z},dx=0,dy=1,dz=0]`;
 
+/**
+ * The agenda's state from its own chat lines (skills-rotn's agenda_driver.js, priority.js, actions.js), the
+ * last relevant line wins: active after "agenda step <id> started: ...", "agenda resumed: <id>" or "agenda
+ * started"; not active after "agenda step <id> stuck: ...; agenda paused", "agenda paused for task <id>",
+ * "agenda done" or "agenda stopped". "agenda step <id> done" changes nothing. No such line yet: not active.
+ * Returns {active, last} (last: the deciding line, or null).
+ */
+export function agendaActive(lines) {
+    let active = false;
+    let last = null;
+    for (const t of lines) {
+        if (/^agenda step \S+ started: /.test(t) || /^agenda resumed: \S+$/.test(t) || t === 'agenda started') { active = true; last = t; }
+        else if (/^agenda step \S+ stuck: .*; agenda paused$/.test(t) || /^agenda paused for task \S+$/.test(t) || t === 'agenda done' || t === 'agenda stopped') { active = false; last = t; }
+    }
+    return { active, last };
+}
+
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export default {
@@ -100,6 +121,7 @@ export default {
         agendaCounter: AGENDA_COUNTER,
         cancelS: 30,
         warmMinutes: 5,
+        activeWaitMinutes: 5,
         acceptS: 60,
         taskMinutes: 5,
         resumeMinutes: 5,
@@ -113,7 +135,7 @@ export default {
         lateReplyMs: 5 * MS,
         latePollMs: 1 * MS,
     },
-    gateParams: { marker: 'equal', agendaCounter: 'equal', warmMinutes: 'equal', acceptS: 'equal', taskMinutes: 'equal', resumeMinutes: 'equal', ...G3_GATE_PARAMS },
+    gateParams: { marker: 'equal', agendaCounter: 'equal', warmMinutes: 'equal', activeWaitMinutes: 'equal', acceptS: 'equal', taskMinutes: 'equal', resumeMinutes: 'equal', ...G3_GATE_PARAMS },
 
     async run(ctx) {
         const { bot, clock, params: p } = ctx;
@@ -186,18 +208,26 @@ export default {
         if (!marker) { notReached(`no task marker: '${p.marker}' is not "x,y,z" (the lead pins it, #101)`); return finish(); }
 
         // 3. the preflight (read-only): the two cells above the marker must be air, then the marker and the task
-        const above = [];
-        for (const dy of [1, 2]) {
-            const cell = [marker[0], marker[1] + dy, marker[2]];
-            const v = testforblockVerdict(await confirm(`testforblock ${cell.join(' ')} minecraft:air 0`,
-                (l) => { const x = testforblockVerdict(l, cell); return x.ok || /^The block at /.test(x.detail ?? ''); }), cell);
-            above.push({ cell, air: v.ok, detail: v.ok ? 'air' : v.detail });
-        }
+        const above = await airAbove(confirm, marker);
         ctx.note('markerPreflight', above);
-        if (!above.every((c) => c.air)) { notReached(`site not clear: ${above.filter((c) => !c.air).map((c) => `${c.cell.join(' ')}: ${c.detail}`).join('; ')}`); return finish(); }
+        if (!above.every((c) => c.air)) { notReached(`site not clear: ${notClearText(above)}`); return finish(); }
         const placed = await placeGoldMarker(confirm, marker);
         ctx.note('marker', placed);
         if (!placed.goldBlock) { notReached(`the gold block is not at the marker: ${placed.detail}`); return finish(); }
+        // only while the agenda is active (lead, after smoke round 2), bounded by activeWaitMinutes
+        const waitFrom = clock.now();
+        const activeEnd = waitFrom + p.activeWaitMinutes * MIN;
+        let ag = agendaActive(said());
+        while (!ag.active && clock.now() < activeEnd && !gone()) {
+            await clock.sleep(Math.min(p.pollMs, Math.max(MS, activeEnd - clock.now())));
+            ag = agendaActive(said());
+        }
+        ctx.note('agendaAtTask', { active: ag.active, waitedS: Math.round((clock.now() - waitFrom) / MS), last: ag.last });
+        if (gone()) { notReached(goneText(gone())); return finish(); }
+        if (!ag.active) {
+            notReached(`agenda not active at the task (not active for ${p.activeWaitMinutes} min; its last agenda line: ${ag.last ? `"${ag.last}"` : 'none'})`);
+            return finish();
+        }
         const chatBefore = said().length;
         const text = taskText(marker);
         lc.con(`tell ${name} !taskAdd("${text}", "normal")`);
@@ -234,7 +264,13 @@ export default {
         ctx.note('taskResult', { id, onMarkerMin, report, preempted });
         const done = onMarkerMin !== null && report !== null && doneRe.test(report) && preempted;
         ctx.check('task_done', done, `${onMarkerMin !== null ? `the server found the bot on the marker at minute ${onMarkerMin}` : 'the server never found the bot on the marker'}; ${report ? `the bot said "${report}"` : 'no done report'}; ${preempted ? 'the agenda was paused for it' : `no "agenda paused for task ${id}" line`}${gone() ? `; ${goneText(gone())}` : ''}`);
-        if (!done) { ctx.check('agenda_resumed', false, 'not reached: the task was not done'); return finish(); }
+        if (!done) {
+            const missing = [onMarkerMin === null && 'the server never found the bot on the marker', !report && 'no done report',
+                report && !doneRe.test(report) && `the bot said "${report}"`,
+                !preempted && `no "agenda paused for task ${id}" line (no preemption seen)`].filter(Boolean);
+            ctx.check('agenda_resumed', false, `not reached: task_done failed (${missing.join('; ') || 'see task_done'})`);
+            return finish();
+        }
 
         // 6. the agenda resumes
         const c2 = await counter('at the done line');
