@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T17:02Z (from `date -u`)
+Updated: 2026-11-05T17:09Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -326,7 +326,18 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - The upstream LLM prompt per death is gone. A re-plan note gives the bot's own state only, never the server's death text.
   - If the bot is not alive 9 s after death, it asks for the respawn again every 3 s.
   - Tests: `death_report` 5/5; related tests 72/72; lint 254.
-- **Next:** the #212 and #215 reviews; the `hordes_hordeevent` wiring when forge-bridge has it.
+- **Lead REQUEST CHANGES on both; fixed, replies posted (2026-11-05):**
+  - **#212, `29dba5e8`:**
+    - The teleport watch resets on `respawn`, `mount` and `dismount`, and ignores forced moves and samples while dead (it was a false teleport on every death).
+    - `bindHordeWatch` listens to net-forge's `rotn:horde` (#214), with the title as the fallback.
+    - Tests: `hazard_watch` 4/4 (2 fail on the old code); related 40/40; lint 254.
+  - **#215, `9c3cb655`:**
+    - A death re-plan is due even when nothing ran (label captured at death; a `due` flag), except in a death streak.
+    - The LLM note hedges the Corpse Complex claim.
+    - `clearReplan` keeps notes for the next prompt.
+    - Fixed 3 lint errors (`setImmediate`) that my earlier baseline run missed because the file was untracked.
+    - Tests: `death_report` 6/6 (2 fail on the old code); related 81/81; lint 254.
+- **Next:** the #212 and #215 re-reviews.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
