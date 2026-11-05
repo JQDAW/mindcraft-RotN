@@ -112,13 +112,21 @@ const log = (m) => console.error(`[batch ${new Date().toISOString().slice(11, 19
 /** Minutes added to a scenario's runMinutes for its runner timeout: the runner's own console setup and teardown
  *  (the begin marker, objectives and their removal, late console replies, the closing cancel). */
 export const TIMEOUT_MARGIN_MIN = 8;
+/** An explicit --timeout-min may raise the derived timeout up to this many times it, no further (lead, after #231). */
+export const TIMEOUT_CAP_FACTOR = 3;
+/** The TTL check (lead, after #231): minutes allowed for the server build before the batch starts (observed
+ *  3-5 min), and for the log fetch and teardown after its last scenario. */
+export const BUILD_ALLOWANCE_MIN = 20;
+export const END_ALLOWANCE_MIN = 5;
 /** The runner timeout of a scenario without runMinutes, in the offline test mode only (fake scenario ids). */
 export const TEST_DEFAULT_TIMEOUT_MIN = 15;
 
 /**
  * Each scenario's runner timeout, derived from the scenario itself (lead, after #230): ceil(runMinutes(its
- * defaults, with this batch's maxBatchUsd) + TIMEOUT_MARGIN_MIN). An explicit --timeout-min may only raise it:
- * one below the derived value would stop the scenario before its own limits, so it is a problem. A scenario
+ * defaults, with this batch's maxBatchUsd) + TIMEOUT_MARGIN_MIN). An explicit --timeout-min may only raise it,
+ * up to TIMEOUT_CAP_FACTOR times the derived value: one below would stop the scenario before its own limits, and
+ * one above lets a hung scenario run on (spend and server time), so both are problems. A --timeout-min applies
+ * to its following --scenario AND every later one, until the next --timeout-min (parseBatchArgs). A scenario
  * without runMinutes is a problem too, except in the offline test mode (fake ids), where --timeout-min or
  * TEST_DEFAULT_TIMEOUT_MIN is used. registry: loadScenarios() output. Returns {timeouts: [{id, timeoutMin,
  * derivedMin, runMinutes}], problems}; the scenarios are not changed.
@@ -140,12 +148,40 @@ export function scenarioTimeouts(scenarios, registry, { maxBatchUsd, testMode = 
             problems.push(`scenario ${sc.id}: --timeout-min ${sc.timeoutMin} is below its derived ${derivedMin} (runMinutes ${Math.round(runMinutes * 10) / 10} + margin ${TIMEOUT_MARGIN_MIN}); it would be stopped before its own limits`);
             continue;
         }
+        if (sc.timeoutMin !== null && sc.timeoutMin > TIMEOUT_CAP_FACTOR * derivedMin) {
+            problems.push(`scenario ${sc.id}: --timeout-min ${sc.timeoutMin} is more than ${TIMEOUT_CAP_FACTOR}x its derived ${derivedMin} (cap ${TIMEOUT_CAP_FACTOR * derivedMin}); a --timeout-min carries over to later scenarios`);
+            continue;
+        }
         timeouts.push({ id: sc.id, timeoutMin: sc.timeoutMin ?? derivedMin, derivedMin, runMinutes });
     }
     return { timeouts, problems };
 }
 
+/**
+ * Whether the server lives long enough for this batch (lead, after #231). The scenarios run one after another,
+ * so the batch needs the sum of their runner timeouts plus END_ALLOWANCE_MIN.
+ * - ttlMinutes (the preflight, before the create: test-server.sh passes ROTN_BATCH_TTL_MINUTES): the TTL must
+ *   also cover BUILD_ALLOWANCE_MIN for the build.
+ * - remainingMinutes (the batch start, inside the run: minutes left before the server's delete-after): the time
+ *   left must cover it, whatever the build really took.
+ * Returns {needMin, problems}; a null input is not checked.
+ */
+export function ttlProblems(timeouts, { ttlMinutes = null, remainingMinutes = null } = {}) {
+    const sum = timeouts.reduce((n, t) => n + t.timeoutMin, 0);
+    const needMin = sum + END_ALLOWANCE_MIN;
+    const parts = `its runner timeouts sum to ${sum} min, plus ${END_ALLOWANCE_MIN} for the logs and teardown`;
+    const problems = [];
+    if (ttlMinutes !== null && needMin + BUILD_ALLOWANCE_MIN > ttlMinutes) {
+        problems.push(`--ttl-hours ${Math.round((ttlMinutes / 60) * 100) / 100} (${ttlMinutes} min) cannot cover this batch: ${parts} and ${BUILD_ALLOWANCE_MIN} for the build, ${needMin + BUILD_ALLOWANCE_MIN} min`);
+    }
+    if (remainingMinutes !== null && needMin > remainingMinutes) {
+        problems.push(`only ${Math.floor(remainingMinutes)} min are left before the server's delete-after, and this batch needs ${needMin} (${parts})`);
+    }
+    return { needMin, problems };
+}
+
 /** Arguments: [--preflight | --preflight-files] [--gate] --max-batch-usd N --logs-out DIR [--summary FILE] ([--timeout-min M] --scenario ID --out DIR)+ -- DRIVER... */
+/*  A --timeout-min applies to the --scenario after it and to every later one, until the next --timeout-min. */
 export function parseBatchArgs(argv) {
     const o = { preflight: false, readUsage: true, gate: false, maxBatchUsd: null, logsOut: null, summary: null, scenarios: [], driver: [] };
     const problems = [];
@@ -252,6 +288,23 @@ async function main(argv) {
         o.scenarios[i].derivedMin = t.derivedMin;
     }
     const timeoutText = tos.timeouts.map((t) => `${t.id} ${t.timeoutMin} min`).join(', ');
+    // The server must live long enough (lead, after #231): the TTL before the create, the time left at the start.
+    const realRun = Boolean(process.env.TEST_SERVER_CTL) && process.env.TEST_SERVER_FAKE_CLOUD !== '1' && !o.preflight;
+    const ttlEnv = process.env.ROTN_BATCH_TTL_MINUTES;
+    // TEST_SERVER_SECONDS_LEFT: the seconds before the server's delete-after, by test-server.sh's own clock.
+    const leftEnv = process.env.TEST_SERVER_SECONDS_LEFT;
+    if (realRun && !/^-?\d+$/.test(leftEnv ?? '')) {
+        log(`refused: inside a test-server run without the time left before the server's delete-after (TEST_SERVER_SECONDS_LEFT), so it cannot be checked`);
+        return 2;
+    }
+    const ttl = ttlProblems(tos.timeouts, {
+        ttlMinutes: o.preflight && /^\d+$/.test(ttlEnv ?? '') ? Number(ttlEnv) : null,
+        remainingMinutes: !o.preflight && /^-?\d+$/.test(leftEnv ?? '') ? Number(leftEnv) / 60 : null,
+    });
+    if (ttl.problems.length) {
+        for (const p of ttl.problems) log(`refused: ${p}`);
+        return 2;
+    }
     if (o.preflight && !o.readUsage) {
         log(`preflight passed (files only, a dry run): driver, profile, model and settings checked; the key's usage was not read; ${o.scenarios.length} scenario(s) (timeouts: ${timeoutText}); ${modeText(o)}`);
         return 0;

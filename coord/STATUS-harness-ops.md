@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (22:22 UTC, from `date -u`)
+Updated: 2026-11-05 (22:59 UTC, from `date -u`)
 
 ## Done: G3 smoke round 2 (the lead's written GO, 2026-11-05)
 
@@ -27,12 +27,19 @@ Round 2 LLM total: USD 0.3699. Cumulative with round 1: USD 0.5505 of the 4.50 s
 - (c) sends its task only while the agenda is active (bounded wait, else not reached), and the `agenda_resumed` wording is fixed;
 - (d) uses pinned S1 candidate markers, and the first clear one wins.
 
-**Open (required before the next G3 batch):** the derived runner timeouts PR.
+**Merged:** #231, the derived runner timeouts:
 - `batch.mjs` gives each scenario `ceil(runMinutes + 8)` from the scenario itself: (a) 37, (b) 67, (c) 34, (d) 16 min.
 - `--timeout-min` may only raise it; a lower value is refused in the preflight.
 - No `--timeout-min` is needed in the next GO's commands.
 
-**Next:** the lead's review. Any new batch needs a new GO.
+**Open (the lead's follow-up to #231):** the TTL and timeout-cap PR.
+- A batch is refused when its TTL cannot cover the sum of its derived timeouts plus 20 min of build and 5 min of logs and teardown. This is checked in the preflight, before the create.
+- At the batch start, it is refused when the seconds left before delete-after cannot cover the same sum plus 5 min.
+- An explicit `--timeout-min` is capped at 3x the derived value.
+- DRIVER.md now says that `--timeout-min` carries over to later scenarios.
+- Round 2's layout fits: A 62 of 120 min, B 92 of 180, C+D 75 of 120.
+
+**Next:** the lead's review, then the GO for G3 smoke round 3.
 
 ## Done: the first G3 smoke batches (the lead's written GO, 2026-11-05)
 
