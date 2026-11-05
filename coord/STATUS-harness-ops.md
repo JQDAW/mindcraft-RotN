@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (21:33 UTC, from `date -u`)
+Updated: 2026-11-05 (22:22 UTC, from `date -u`)
 
 ## Done: G3 smoke round 2 (the lead's written GO, 2026-11-05)
 
@@ -23,7 +23,16 @@ Round 2 LLM total: USD 0.3699. Cumulative with round 1: USD 0.5505 of the 4.50 s
 - In B, the night shelter said "without a pickaxe" while the bot held a stone pickaxe.
 - In A, `self_preservation` threw 6 times around the deaths.
 
-**harness-ops next:** the `agenda_resumed` wording in (c) when the task was done but not preempted.
+**Merged:** #228 (round 2 evidence) and #230 (the lead's decisions):
+- (c) sends its task only while the agenda is active (bounded wait, else not reached), and the `agenda_resumed` wording is fixed;
+- (d) uses pinned S1 candidate markers, and the first clear one wins.
+
+**Open (required before the next G3 batch):** the derived runner timeouts PR.
+- `batch.mjs` gives each scenario `ceil(runMinutes + 8)` from the scenario itself: (a) 37, (b) 67, (c) 34, (d) 16 min.
+- `--timeout-min` may only raise it; a lower value is refused in the preflight.
+- No `--timeout-min` is needed in the next GO's commands.
+
+**Next:** the lead's review. Any new batch needs a new GO.
 
 ## Done: the first G3 smoke batches (the lead's written GO, 2026-11-05)
 

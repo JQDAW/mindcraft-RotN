@@ -136,6 +136,10 @@ export default {
         latePollMs: 1 * MS,
     },
     gateParams: { marker: 'equal', agendaCounter: 'equal', warmMinutes: 'equal', activeWaitMinutes: 'equal', acceptS: 'equal', taskMinutes: 'equal', resumeMinutes: 'equal', ...G3_GATE_PARAMS },
+    // The most minutes a run can take from its start (batch.mjs derives its runner timeout from it, plus a margin):
+    // the login wait, the warm-up, the wait for an active agenda, the accept window, the task, the resume window
+    // and the closing cancel.
+    runMinutes: (p) => p.loginTimeoutMs / MIN + p.warmMinutes + p.activeWaitMinutes + p.acceptS / 60 + p.taskMinutes + p.resumeMinutes + p.cancelS / 60,
 
     async run(ctx) {
         const { bot, clock, params: p } = ctx;

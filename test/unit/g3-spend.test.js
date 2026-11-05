@@ -4,7 +4,7 @@
 // Addresses and keys here are fakes; no network.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,7 +16,7 @@ import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProble
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
-import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
+import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN, scenarioTimeouts, TIMEOUT_MARGIN_MIN, TEST_DEFAULT_TIMEOUT_MIN } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
 import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
 import { checkFiles, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds, smokeBatchesUnder, batchKind } from '../tools/g3-batch-check.mjs';
@@ -173,7 +173,7 @@ describe('maxBatchUsd: USD 2, an equal gate parameter of every G3 scenario', () 
     test('batch arguments', () => {
         const ok = parseBatchArgs(['--max-batch-usd', '2', '--logs-out', 'L', '--scenario', 'a', '--out', 'A', '--timeout-min', '55', '--scenario', 'b', '--out', 'B', '--', 'node', 'd.mjs']);
         assert.deepEqual(ok.problems, []);
-        assert.deepEqual(ok.options.scenarios, [{ id: 'a', out: 'A', timeoutMin: 15 }, { id: 'b', out: 'B', timeoutMin: 55 }]);
+        assert.deepEqual(ok.options.scenarios, [{ id: 'a', out: 'A', timeoutMin: null }, { id: 'b', out: 'B', timeoutMin: 55 }], 'no --timeout-min: null, derived later (scenarioTimeouts)');
         assert.deepEqual(ok.options.driver, ['node', 'd.mjs']);
         const bad = parseBatchArgs(['--scenario', 'a', '--bogus']);
         for (const m of [/unknown argument '--bogus'/, /--max-batch-usd must be a positive/, /--logs-out is required/, /--scenario a has no --out/, /driver comes after --/]) {
@@ -627,5 +627,71 @@ describe('smoke is the default; only --gate makes gate evidence (lead, #218 revi
             assert.equal(batchKind(JSON.parse(fs.readFileSync(b, 'utf8'))), 'smoke', name);
             assert.match(checkFiles(b, resultFilesUnder(path.join(root, name)), { gate: true }).join('; '), /smoke batch/, name);
         }
+    });
+});
+
+describe('batch.mjs derives each runner timeout from the scenario (lead, after #230)', () => {
+    const DRIVER = path.join(HERE, '..', 'runner', 'drivers', 'mindcraft-driver.mjs');
+    // A plain environment, as outside the offline tests: no test-mode override and no test-server run.
+    const realEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ROTN_TEST_MODE|ROTN_OPENROUTER_USAGE_FILE|ROTN_BATCH_RUNNER|TEST_SERVER_.*|ROTN_BATCH_PREFLIGHT)$/.test(k)));
+    const G3 = ['g3-rocks-to-stone-tools', 'g3-first-night', 'g3-task-preempts-agenda', 'g3-untrusted-refused'];
+    const sc = (id, timeoutMin = null) => ({ id, out: 'o', timeoutMin });
+
+    test('every G3 scenario has runMinutes; the derived timeouts cover their own limits plus the margin', async () => {
+        const reg = await loadScenarios();
+        for (const id of G3) assert.equal(typeof reg[id]?.runMinutes, 'function', id);
+        const { timeouts, problems } = scenarioTimeouts(G3.map((id) => sc(id)), reg, { maxBatchUsd: 2 });
+        assert.deepEqual(problems, []);
+        assert.equal(TIMEOUT_MARGIN_MIN, 8);
+        assert.deepEqual(timeouts.map((t) => [t.id, t.timeoutMin]), [['g3-rocks-to-stone-tools', 37], ['g3-first-night', 67], ['g3-task-preempts-agenda', 34], ['g3-untrusted-refused', 16]]);
+        // (c) used to need --timeout-min 33 by hand; derived it is above that, and above each scenario's own limits.
+        const c = reg['g3-task-preempts-agenda'].defaults;
+        const cOwn = 4 + c.warmMinutes + c.activeWaitMinutes + c.acceptS / 60 + c.taskMinutes + c.resumeMinutes + c.cancelS / 60;
+        assert.ok(timeouts[2].timeoutMin >= 33 && timeouts[2].timeoutMin > cOwn);
+        for (const id of ['g3-rocks-to-stone-tools', 'g3-first-night']) {
+            const t = timeouts.find((x) => x.id === id);
+            assert.ok(t.timeoutMin > reg[id].defaults.maxMinutes + reg[id].defaults.loginTimeoutMs / 60000, `${id}: beyond maxMinutes and the login wait`);
+        }
+    });
+
+    test('a longer scenario gets a longer timeout (it follows the parameters, e.g. maxMinutes)', () => {
+        const reg = { x: { defaults: { maxMinutes: 25, loginTimeoutMs: 240000 }, runMinutes: (p) => p.loginTimeoutMs / 60000 + p.maxMinutes } };
+        assert.equal(scenarioTimeouts([sc('x')], reg).timeouts[0].timeoutMin, 37);
+        reg.x.defaults.maxMinutes = 55;
+        assert.equal(scenarioTimeouts([sc('x')], reg).timeouts[0].timeoutMin, 67);
+    });
+
+    test('--timeout-min may only raise it; below the derived value it is refused', async () => {
+        const reg = await loadScenarios();
+        assert.equal(scenarioTimeouts([sc('g3-task-preempts-agenda', 40)], reg).timeouts[0].timeoutMin, 40);
+        const low = scenarioTimeouts([sc('g3-task-preempts-agenda', 28)], reg);
+        assert.deepEqual(low.timeouts, []);
+        assert.match(low.problems[0], /^scenario g3-task-preempts-agenda: --timeout-min 28 is below its derived 34 \(runMinutes 25\.5 \+ margin 8\); it would be stopped before its own limits$/);
+    });
+
+    test('an unknown scenario, or one without runMinutes, is refused outside the offline test mode', () => {
+        const reg = { y: { defaults: {} } };
+        assert.match(scenarioTimeouts([sc('nope')], reg).problems[0], /^scenario nope: unknown, so its runner timeout cannot be derived$/);
+        assert.match(scenarioTimeouts([sc('y')], reg).problems[0], /^scenario y: no runMinutes/);
+        assert.match(scenarioTimeouts([sc('z')], { z: { defaults: {}, runMinutes: () => NaN } }).problems[0], /runMinutes is NaN/);
+        const test = scenarioTimeouts([sc('nope'), sc('y', 3)], reg, { testMode: true });
+        assert.deepEqual([test.problems, test.timeouts.map((t) => t.timeoutMin)], [[], [TEST_DEFAULT_TIMEOUT_MIN, 3]]);
+    });
+
+    test('the preflight shows the derived timeouts and refuses a low --timeout-min before anything runs', { timeout: 60000 }, () => {
+        const ok = spawnSync(process.execPath, [BATCH, '--preflight-files', '--max-batch-usd', '2', '--logs-out', 'l', '--scenario', 'g3-task-preempts-agenda', '--out', 'o',
+            '--scenario', 'g3-untrusted-refused', '--out', 'o2', '--', 'node', DRIVER, '--profile', 'profiles/rotn-bot.json'], { encoding: 'utf8', env: realEnv() });
+        assert.equal(ok.status, 0, ok.stderr);
+        assert.match(ok.stderr, /\(timeouts: g3-task-preempts-agenda 34 min, g3-untrusted-refused 16 min\)/);
+        const low = spawnSync(process.execPath, [BATCH, '--preflight-files', '--max-batch-usd', '2', '--logs-out', 'l', '--timeout-min', '28', '--scenario', 'g3-task-preempts-agenda', '--out', 'o',
+            '--', 'node', DRIVER, '--profile', 'profiles/rotn-bot.json'], { encoding: 'utf8', env: realEnv() });
+        assert.equal(low.status, 2);
+        assert.match(low.stderr, /refused: scenario g3-task-preempts-agenda: --timeout-min 28 is below its derived 34/);
+    });
+
+    test('the batch summary records each scenario\'s timeout', { timeout: 60000 }, async () => {
+        const r = await runBatch({ scenarios: ['a'], timeoutMin: '3' });
+        assert.equal(r.summary.scenarios[0].timeoutMin, 3, r.out);
+        assert.match(r.out, /a: start \(spent so far USD [\d.]+ of 2; runner timeout 3 min\)/);
     });
 });

@@ -206,7 +206,12 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
 - **When the spend is checked.** The key's usage is read, numbers only, at the start (none: refuse, exit 2), before each scenario, and after the last one.
   - Over `maxBatchUsd` stops the batch, or ends it with exit 5. A failed reading before a scenario stops it; a failed reading at the end exits 6.
   - The logs are always fetched.
-  - A scenario that hits its `--timeout-min` is recorded with exit **124**, whatever run.mjs exits after the SIGTERM. A runner that cannot be started is recorded with exit **127**. The summary records each scenario's `out` folder and its `exit`, and the batch's own `exit`.
+  - **The runner timeout is derived from the scenario** (lead, after #230). Each G3 scenario has `runMinutes(params)`: the most minutes it can run from its start, login wait included. For (a) and (b) that is the login wait plus `maxMinutes`; (c) and (d) add up their own steps.
+    - `batch.mjs` gives each scenario `ceil(runMinutes(its defaults) + TIMEOUT_MARGIN_MIN)` (8 min, for the runner's own console setup and teardown). Today: (a) 37, (b) 67, (c) 34, (d) 16 min.
+    - An explicit `--timeout-min` may only raise it. A value below the derived one is refused (exit 2, in the preflight too, so before any server exists), because it would stop the scenario before its own limits.
+    - A scenario without `runMinutes`, or an unknown id, is refused, except in the offline test mode (fake ids: `--timeout-min` or 15).
+    - The preflight log lists the timeouts, the start line of each scenario shows its own, and the summary records `timeoutMin` for each scenario.
+  - A scenario that hits its runner timeout is recorded with exit **124**, whatever run.mjs exits after the SIGTERM. A runner that cannot be started is recorded with exit **127**. The summary records each scenario's `out` folder and its `exit`, and the batch's own `exit`.
 - **Limits:**
   - The spend is checked **between** scenarios, not during one, so a single scenario can run past the limit.
   - OpenRouter's usage figure can lag a little behind the newest requests.
@@ -284,7 +289,7 @@ A task from the test-only giver `Server` interrupts the real agent's agenda. The
     - Not active after `agenda step <id> stuck: ...; agenda paused`, `agenda paused for task <id>`, `agenda done` or `agenda stopped`.
     - After the marker is placed, the runner waits up to `activeWaitMinutes` (5) for an active agenda. `notes.agendaAtTask` records `active`, `waitedS` and the deciding line.
     - Not active by then: the three task checks are "not reached: agenda not active at the task (...)". That is neither a pass nor a task failure, and no task is whispered.
-    - The wait makes (c) up to 5 min longer: give it `--timeout-min 33` in `batch.mjs` (was 28).
+    - The wait makes (c) up to 5 min longer. Its runner timeout follows from `runMinutes` (34 min); no `--timeout-min` is needed.
   - The runner places `setblock <marker> minecraft:gold_block`, confirms it read-only with `testforblock <marker> minecraft:gold_block 0` (`placeGoldMarker` in `lib/g3.mjs`, #207 review nit; without that proof the task steps fail and nothing is whispered; `notes.marker` keeps the `setblock` answer line itself, matched as the whole server message, so a chat line never counts), and whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and stand on it", "normal")`.
   - `task_accepted`: `task <id> accepted: ...` in the bot's chat.
   - `task_done`: the bot said `agenda paused for task <id>` (the preemption, #207 review), and the server finds the bot standing on the marker (`testfor @a[name=<bot>,x=X,y=Y+1,z=Z,dx=0,dy=1,dz=0]`, 1.12's volume selector), **and** the bot says `task <id> done`. The agent's word alone never passes. `task <id> failed: ...` ends the step.
