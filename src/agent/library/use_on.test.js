@@ -228,8 +228,14 @@ test('collectBlock: a collect that never returns gives the block up at COLLECT_L
     Object.assign(skills.COLLECT_LIMITS, { blockMs: 300, totalMs: 1000 });
     const dirt = { ...block('dirt', at(3)), canHarvest: () => true };
     const bot = fakeBot({ blocks: [dirt] });
+    // Like mineflayer-collectblock: the collect never ends by itself; cancelTask ends it (a moment later).
     let cancelled = 0;
-    bot.collectBlock = { collect: () => new Promise(() => {}), cancelTask: () => { cancelled++; return Promise.resolve(); } };
+    let settled = false;
+    let endCollect = null;
+    bot.collectBlock = {
+        collect: () => new Promise((_, reject) => { endCollect = () => { settled = true; reject(new Error('Cancelled')); }; }),
+        cancelTask: () => { cancelled++; setTimeout(() => endCollect?.(), 150); return Promise.resolve(); },
+    };
     bot.tool = { equipForBlock: () => Promise.resolve() };
     bot.stopDigging = () => {};
     const t0 = Date.now();
@@ -238,4 +244,5 @@ test('collectBlock: a collect that never returns gives the block up at COLLECT_L
     assert.ok(cancelled >= 1, 'the collect was cancelled');
     assert.match(bot.output, /Gave up on dirt at 3, 64, 0: time limit of 0\.3 s reached\./);
     assert.match(bot.output, /No more dirt nearby to collect\.|No dirt nearby to collect\./, 'the given-up block is not tried again');
+    assert.equal(settled, true, 'the cancelled collect ended before collectBlock went on (#224 review 2)');
 });
