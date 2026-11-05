@@ -63,8 +63,9 @@ export function cobbleOutputs(recipes = rockRecipes()) {
 
 const TOOLS = ['minecraft:stone_pickaxe', 'minecraft:stone_axe'];
 /** The pack's first-join gives that fresh_start requires (PACK_FIRST_JOIN ids). */
-const FIRST_JOIN_KIT = ['give_bread', 'give_bundle'];
-const START_EMPTY = [...TOOLS, 'minecraft:crafting_table', 'pyrotech:crude_axe', 'contenttweaker:crafting_tools'];
+export const FIRST_JOIN_KIT = ['give_bread', 'give_bundle'];
+/** The target items a fresh spawn holds none of (also g3-first-night's fresh_start). */
+export const START_EMPTY = [...TOOLS, 'minecraft:crafting_table', 'pyrotech:crude_axe', 'contenttweaker:crafting_tools'];
 const ENDS = (t) => /^agenda (step cobblestone done|done)$/.test(t);
 const STUCK = /^agenda step (\S+) stuck: (.*)$/;
 
