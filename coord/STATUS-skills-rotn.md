@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T16:57Z (from `date -u`)
+Updated: 2026-11-05T17:02Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -320,7 +320,13 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     - `EventEnd` and `TrySleep` do not match (review 2);
     - `onHordeMessage` works by forge and by the title fallback, once a minute.
 - **Open:** forge-bridge's `hordes_hordeevent` event is not on develop yet. When it lands, `bindHordeWatch` calls `onHordeMessage(key, { via: 'forge' })` from it (review 1).
-- **Next:** D3, the death report.
+- **D3, the death report: #215 open** (branch `agent/skills-rotn/death-report`, from develop; merges cleanly with #212).
+  - `library/death_report.js`: the loss is measured (the fullest of the last 3 samples taken while alive, against the inventory 3 s after the respawn), with the XP level and the cause.
+  - One report per death: a `[death] died at ...; lost ...` log line, and chat at most once a minute. After 3 deaths in 10 min, one line, then log only.
+  - The upstream LLM prompt per death is gone. A re-plan note gives the bot's own state only, never the server's death text.
+  - If the bot is not alive 9 s after death, it asks for the respawn again every 3 s.
+  - Tests: `death_report` 5/5; related tests 72/72; lint 254.
+- **Next:** the #212 and #215 reviews; the `hordes_hordeevent` wiring when forge-bridge has it.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
