@@ -102,7 +102,11 @@ export function parseFoodScripts(files) {
     const out = new Map();
     const owner = new Map(); // "key|field" -> file, to refuse cross-file conflicts (load order is not modelled)
     for (const [file, text] of files) {
-        stripComments(text).split(/\r?\n/).forEach((l, i) => {
+        const code = stripComments(text);
+        // A script handler on the food-value events would change values at run time (#209 review).
+        const h = code.match(/HungerEvents\s*\.\s*onGet(?:Player)?FoodValues/);
+        if (h) throw new Error(`${file} line ${code.slice(0, h.index).split('\n').length}: a ${h[0].replace(/\s/g, '')} handler changes food values at run time; this tool does not model it`);
+        code.split(/\r?\n/).forEach((l, i) => {
             if (!l.includes('foodValues')) return;
             const m = l.match(/^\s*<([a-z0-9_.-]+:[a-z0-9_./-]+)(?::(\d+|\*))?>\.foodValues\.(hunger|saturationModifier)\s*=\s*(-?\d+(?:\.\d+)?)\s*;\s*$/);
             if (!m) throw new Error(`${file} line ${i + 1}: a foodValues line this tool cannot read: ${l.trim()}`);
@@ -110,9 +114,10 @@ export function parseFoodScripts(files) {
             const prev = owner.get(`${key}|${m[3]}`);
             if (prev && prev !== file) throw new Error(`${key} ${m[3]} is set in ${prev} and ${file}; script load order is not modelled`);
             owner.set(`${key}|${m[3]}`, file);
-            const e = out.get(key) ?? { lines: [] };
+            const e = out.get(key) ?? { lines: [], won: {} };
             e[m[3]] = Number(m[4]);
             e.lines.push(`${file}:${i + 1}`);
+            e.won[m[3]] = `${file}:${i + 1}`; // the last line for a field wins
             out.set(key, e);
         });
     }
@@ -188,6 +193,8 @@ export function buildFoodValues(packPath) {
             if (hunger == null || sm == null) { (notComputed[name] ??= []).push(v.meta); continue; }
             const e = { hunger, saturationModifier: round4(sm), saturation: round4(hunger * sm * 2), source: s ? (h ? 'crafttweaker+' + h.source : 'crafttweaker') : h.source, vanilla: { hunger: v.food.hunger, saturationModifier: v.food.saturation } };
             if (s) e.script = s.lines;
+            // Overridden in the script (a field set more than once): which line won, per field (#209 review).
+            if (s && s.lines.length > Object.keys(s.won).length) e.scriptWon = s.won;
             if (s?.hunger != null && s.hunger !== hunger) e.scriptHunger = s.hunger;
             if (h?.at != null) e.hoTableAt = h.at;
             (foods[name] ??= {})[v.meta] = e;

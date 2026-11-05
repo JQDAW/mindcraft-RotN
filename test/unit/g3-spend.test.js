@@ -527,7 +527,7 @@ describe('G3 console: only the approved commands reach the server (no give, summ
         const ok = ['say scenario-20261102t1-abc-begin', 'seed', 'tell FRCFLD !task add go to the gold block',
             'testforblock -45 65 -66 minecraft:dirt 2', 'testfor @e[tag=t1,type=minecraft:zombie,x=1,y=2,z=3,r=3]', 'clear FRCFLD minecraft:stone_pickaxe -1 0',
             'scoreboard objectives add g3_c_table stat.craftItem.minecraft.crafting_table', 'scoreboard objectives add g3b_food food', 'scoreboard objectives remove g3_c_table',
-            'scoreboard players list FRCFLD', 'time query daytime', 'gamerule doDaylightCycle', 'gamerule keepInventory', 'setblock -20 70 -40 minecraft:gold_block'];
+            'scoreboard players list FRCFLD', 'time query daytime', 'gamerule doDaylightCycle', 'gamerule keepInventory', 'setblock -42 68 -50 minecraft:gold_block', 'setblock -20 70 -56 minecraft:gold_block'];
         for (const c of ok) g.console(c);
         assert.deepEqual(sent, ok);
     });
@@ -535,7 +535,7 @@ describe('G3 console: only the approved commands reach the server (no give, summ
         sent.length = 0;
         const refused = ['give FRCFLD minecraft:stone_pickaxe 1 0', 'summon minecraft:zombie 0 64 0', 'kill @e[type=minecraft:zombie]', 'op FRCFLD',
             'gamemode creative FRCFLD', 'effect FRCFLD minecraft:regeneration 30', 'clear FRCFLD minecraft:stone_pickaxe -1 1', 'clear FRCFLD',
-            'time set night', 'time set day', 'time add 1000', 'gamerule doDaylightCycle false', 'gamerule keepInventory true', 'setblock 0 64 0 minecraft:chest', 'difficulty peaceful', 'tp FRCFLD @p',
+            'time set night', 'time set day', 'time add 1000', 'gamerule doDaylightCycle false', 'gamerule keepInventory true', 'setblock 0 64 0 minecraft:chest', 'setblock -20 70 -40 minecraft:gold_block', 'setblock -42 68 -51 minecraft:gold_block', 'difficulty peaceful', 'tp FRCFLD @p',
             'tp FRCFLD ~ ~ ~', 'tp FRCFLD -45 66 -66',   // no tp in G3 at all (lead, #201 review)
             'scoreboard objectives add g3_h health', 'scoreboard objectives add g3_f food x', 'scoreboard objectives add g3_d dummy',   // only the food criterion besides stat.*
             'say hello', 'xp 30 FRCFLD'];

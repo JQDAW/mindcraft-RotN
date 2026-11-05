@@ -368,8 +368,25 @@ test("#204 re-review 1: a giver's !goal or typed command from inside the shelter
     agent.control = { blocking: () => 'stop' };
     assert.equal(autonomyTick(agent, { now: 3 }), 'held:stop');
     assert.equal(agent.bot.rotnSheltered, true, '!stop keeps it in place, so still sheltered');
-    agent.control = { blocking: () => 'command' };
+    agent.control = { typed: 1, blocking: () => 'command' }; // a real Control: 'command' means typed > 0
     assert.equal(autonomyTick(agent, { now: 4 }), 'held:command');
     assert.equal(agent.bot.rotnSheltered, false);
     assert.equal(nightState(agent).state, 'building');
+});
+
+test('#204 nit: a typed command during a stored !stfu or !pause hold also turns the shelter rules off', async (t) => {
+    quiet(t);
+    for (const kind of ['quiet', 'pause', 'stop']) {
+        const agent = fakeAgent({ t: NIGHT });
+        nightTick(agent, { now: 0, ops: ops() });
+        await settle(agent);
+        assert.equal(agent.bot.rotnSheltered, true);
+        agent.control = { typed: 0, blocking() { return kind; } };
+        assert.equal(autonomyTick(agent, { now: 1 }), `held:${kind}`);
+        assert.equal(agent.bot.rotnSheltered, true, `${kind} alone keeps it sheltered`);
+        agent.control.typed = 1; // a giver's typed action runs under the hold
+        assert.equal(autonomyTick(agent, { now: 2 }), `held:${kind}`);
+        assert.equal(agent.bot.rotnSheltered, false, `${kind} + a typed action: the rules are off`);
+        assert.equal(nightState(agent).state, 'building');
+    }
 });

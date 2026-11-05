@@ -21,6 +21,8 @@ import { Control } from './control.js';
 import { autonomyTick } from './priority.js';
 import { autoEatBannedFood } from './library/food.js';
 import { resetNight } from './night_routine.js';
+import { hordeWarning, JumpWatch } from './library/hazard_watch.js';
+import { requestReplan } from './replan.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
@@ -512,6 +514,8 @@ export class Agent {
             this.actions.stop();
         });
         this.bindNightReset();
+        this.bindTeleportWatch();
+        this.bindHordeWatch();
         this.bot.on('kicked', (reason) => {
             if (!this._disconnectHandled) {
                 const { msg } = handleDisconnection(this.name, reason);
@@ -564,8 +568,63 @@ export class Agent {
     // Not sheltered any more after a death, or after a spawn (mineflayer emits 'spawn' again after
     // a respawn, and the bot is elsewhere) (#204 review 6).
     bindNightReset() {
-        this.bot.on('death', () => resetNight(this, 'death'));
-        this.bot.on('spawn', () => resetNight(this, 'spawn'));
+        this.bot.on('death', () => { resetNight(this, 'death'); this._jumpWatch?.reset(); });
+        this.bot.on('spawn', () => { resetNight(this, 'spawn'); this._jumpWatch?.reset(); });
+    }
+
+    // D1b: a teleport (AggroTP) is a server position packet, after which mineflayer emits
+    // 'forcedMove'. Measured against the position at the last physics tick, so the bot's own
+    // walking never counts (#212 review 3). A jump of 5 or more blocks stops the running action
+    // and asks for a re-plan (no LLM call now).
+    // Not a teleport (#212 re-review): a respawn or a dimension change (mineflayer's 'respawn'; the
+    // position packet that follows comes while isAlive is false), or a ride (physics stops on
+    // mount, and the dismount position packet can come after bot.vehicle clears).
+    bindTeleportWatch() {
+        const w = this._jumpWatch = new JumpWatch();
+        const dead = () => this.bot.isAlive === false || !(this.bot.health > 0);
+        this.bot.on('physicsTick', () => { if (dead()) w.reset(); else w.sample(this.bot.entity?.position); });
+        for (const ev of ['respawn', 'mount', 'dismount']) this.bot.on(ev, () => w.reset());
+        this.bot.on('forcedMove', () => {
+            if (dead()) { w.reset(); return; }
+            const jump = w.forced(this.bot.entity?.position, { riding: !!this.bot.vehicle });
+            if (jump) this.onTeleport(jump);
+        });
+    }
+
+    onTeleport(jump) {
+        const at = (p) => `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
+        const label = this.actions?.currentActionLabel || '';
+        console.log(`[reflex] teleported ${jump.blocks.toFixed(1)} blocks (${at(jump.from)} -> ${at(jump.to)}); re-planning`);
+        try { this.bot.pathfinder?.stop?.(); } catch (err) { console.warn(`[reflex] teleport: ${safeError(err)}`); }
+        if (label) Promise.resolve(this.actions.stop?.()).catch(err => console.warn(`[reflex] teleport: ${safeError(err)}`));
+        requestReplan(this, 'teleport', label);
+    }
+
+    // D1b: the hordes mod's wave warning (lang key message.hordes.EventStart) asks for a re-plan; at
+    // night the bot is in its shelter anyway. At most once a minute. The mod sends it on the Forge
+    // channel hordes_hordeevent (#212 review 1); forge-bridge emits it as 'rotn:horde' (#214). A
+    // vanilla title carrying the key is the fallback.
+    onHordeMessage(keyOrComponent, { now = Date.now(), via = 'forge' } = {}) {
+        const w = hordeWarning(keyOrComponent);
+        if (!w) return false;
+        if (now - (this._horde_warned_at ?? -Infinity) < 60_000) return false;
+        this._horde_warned_at = now;
+        console.log(`[reflex] horde warning (${w.key}, by ${via}): re-planning`);
+        requestReplan(this, 'horde_warning', this.actions?.currentActionLabel || '');
+        return true;
+    }
+
+    bindHordeWatch({ now = () => Date.now() } = {}) {
+        // forge-bridge (#214) decodes hordes_hordeevent: {kind: 'start'|'end'|'message', key} or
+        // {kind: 'wave', ...} (no key, ignored). hordeWarning keeps EventStart only.
+        this.bot.on('rotn:horde', (ev) => {
+            if (typeof ev?.key === 'string') this.onHordeMessage(ev.key, { now: now(), via: 'forge' });
+        });
+        // Fallback: a vanilla 1.12 title packet carrying the key (mineflayer's 'title' event drops keys).
+        this.bot._client?.on('title', (packet) => {
+            if (packet?.action !== 0 && packet?.action !== 1) return;
+            this.onHordeMessage(packet.text, { now: now(), via: 'title' });
+        });
     }
 
     bindLoginHandler() {
