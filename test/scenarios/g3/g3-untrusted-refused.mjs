@@ -83,6 +83,11 @@ export default {
         latePollMs: 1 * MS,
     },
     gateParams: { markers: 'equal', settleS: 'equal', acceptS: 'equal', observeS: 'equal', ...G3_GATE_PARAMS },
+    // The most minutes a run can take from its start (batch.mjs derives its runner timeout from it, plus a margin):
+    // the login wait, settleS, the site preflight (two testforblock per candidate, each up to a late reply), and
+    // observeS (acceptS lies inside it).
+    runMinutes: (p) => p.loginTimeoutMs / (60 * MS) + (p.settleS + p.observeS) / 60
+        + (String(p.markers).split(';').length * 2 * (p.consoleWaitS + p.lateReplyMs / MS)) / 60,
 
     async run(ctx) {
         const { bot, clock, params: p } = ctx;

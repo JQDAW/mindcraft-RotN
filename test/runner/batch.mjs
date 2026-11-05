@@ -4,8 +4,8 @@
 //
 //   deploy/test-server.sh run --yes --ttl-hours 4 --seed 1880465901402976865 -- \
 //     node test/runner/batch.mjs --gate --max-batch-usd 2 --logs-out captures/raw/g3/server --summary captures/raw/g3/batch.json \
-//       --timeout-min 15 --scenario g3-rocks-to-stone-tools --out captures/raw/g3-rocks \
-//       --timeout-min 55 --scenario g3-first-night --out captures/raw/g3-night \
+//       --scenario g3-rocks-to-stone-tools --out captures/raw/g3-rocks \
+//       --scenario g3-first-night --out captures/raw/g3-night \
 //       -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/<g3 test profile>.json
 //
 // What it does:
@@ -24,7 +24,9 @@
 //      its start, or the usage cannot be read, it stops: no further scenario starts.
 //   3. Runs each scenario through run.mjs with --param maxBatchUsd=<the limit> (an 'equal' gate parameter
 //      of every G3 scenario, so a batch with another limit is never a gate pass) and --pass-env
-//      OPENROUTER_API_KEY, under that scenario's timeout (--timeout-min before it). A scenario stopped by that
+//      OPENROUTER_API_KEY, under that scenario's runner timeout: ceil(its runMinutes + TIMEOUT_MARGIN_MIN),
+//      derived from the scenario itself (lead, after #230; scenarioTimeouts). A --timeout-min before it may only
+//      raise it; a lower one is refused, in the preflight too. A scenario stopped by that
 //      timeout is recorded as 124 whatever run.mjs exits with (143 on SIGTERM); one whose runner cannot start
 //      at all is recorded as 127. Each is recorded with its output folder and the runId from its
 //      result.json, so the gate evidence check
@@ -56,6 +58,7 @@ import { fileURLToPath } from 'node:url';
 import { keyFetch, readKeyUsage, spent, testOverridesAllowed, TEST_OVERRIDES } from './lib/llm-spend.mjs';
 import { findBash } from './lib/adapters.mjs';
 import { checkProfile, parseDriverArgs, settingsProblems } from './drivers/mindcraft-driver.mjs';
+import { loadScenarios } from './run.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const EXIT_SPEND_STOP = 5;
@@ -106,11 +109,47 @@ export function endVerdict(base, end, maxBatchUsd, exit) {
 const modeText = (o) => (o.gate ? 'a GATE batch (gate: true)' : 'a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)');
 const log = (m) => console.error(`[batch ${new Date().toISOString().slice(11, 19)}] ${m}`);
 
+/** Minutes added to a scenario's runMinutes for its runner timeout: the runner's own console setup and teardown
+ *  (the begin marker, objectives and their removal, late console replies, the closing cancel). */
+export const TIMEOUT_MARGIN_MIN = 8;
+/** The runner timeout of a scenario without runMinutes, in the offline test mode only (fake scenario ids). */
+export const TEST_DEFAULT_TIMEOUT_MIN = 15;
+
+/**
+ * Each scenario's runner timeout, derived from the scenario itself (lead, after #230): ceil(runMinutes(its
+ * defaults, with this batch's maxBatchUsd) + TIMEOUT_MARGIN_MIN). An explicit --timeout-min may only raise it:
+ * one below the derived value would stop the scenario before its own limits, so it is a problem. A scenario
+ * without runMinutes is a problem too, except in the offline test mode (fake ids), where --timeout-min or
+ * TEST_DEFAULT_TIMEOUT_MIN is used. registry: loadScenarios() output. Returns {timeouts: [{id, timeoutMin,
+ * derivedMin, runMinutes}], problems}; the scenarios are not changed.
+ */
+export function scenarioTimeouts(scenarios, registry, { maxBatchUsd, testMode = false } = {}) {
+    const timeouts = [];
+    const problems = [];
+    for (const sc of scenarios) {
+        const def = registry?.[sc.id];
+        if (!def || typeof def.runMinutes !== 'function') {
+            if (testMode) timeouts.push({ id: sc.id, timeoutMin: sc.timeoutMin ?? TEST_DEFAULT_TIMEOUT_MIN, derivedMin: null, runMinutes: null });
+            else problems.push(`scenario ${sc.id}: ${def ? 'no runMinutes' : 'unknown'}, so its runner timeout cannot be derived`);
+            continue;
+        }
+        const runMinutes = def.runMinutes({ ...def.defaults, maxBatchUsd });
+        if (!(runMinutes > 0)) { problems.push(`scenario ${sc.id}: runMinutes is ${runMinutes}, not a positive number`); continue; }
+        const derivedMin = Math.ceil(runMinutes + TIMEOUT_MARGIN_MIN);
+        if (sc.timeoutMin !== null && sc.timeoutMin < derivedMin) {
+            problems.push(`scenario ${sc.id}: --timeout-min ${sc.timeoutMin} is below its derived ${derivedMin} (runMinutes ${Math.round(runMinutes * 10) / 10} + margin ${TIMEOUT_MARGIN_MIN}); it would be stopped before its own limits`);
+            continue;
+        }
+        timeouts.push({ id: sc.id, timeoutMin: sc.timeoutMin ?? derivedMin, derivedMin, runMinutes });
+    }
+    return { timeouts, problems };
+}
+
 /** Arguments: [--preflight | --preflight-files] [--gate] --max-batch-usd N --logs-out DIR [--summary FILE] ([--timeout-min M] --scenario ID --out DIR)+ -- DRIVER... */
 export function parseBatchArgs(argv) {
     const o = { preflight: false, readUsage: true, gate: false, maxBatchUsd: null, logsOut: null, summary: null, scenarios: [], driver: [] };
     const problems = [];
-    let timeoutMin = 15;
+    let timeoutMin = null;   // explicit --timeout-min only; the timeout is derived (scenarioTimeouts)
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--') { o.driver = argv.slice(i + 1); break; }
@@ -134,7 +173,7 @@ export function parseBatchArgs(argv) {
     if (!o.scenarios.length) problems.push('at least one --scenario is required');
     for (const s of o.scenarios) {
         if (!s.out) problems.push(`--scenario ${s.id} has no --out`);
-        if (!(s.timeoutMin > 0)) problems.push(`--scenario ${s.id}: --timeout-min must be positive`);
+        if (s.timeoutMin !== null && !(s.timeoutMin > 0)) problems.push(`--scenario ${s.id}: --timeout-min must be positive`);
     }
     if (!o.driver.length) problems.push('the driver comes after --');
     return { options: o, problems };
@@ -202,8 +241,19 @@ async function main(argv) {
         for (const p of pre) log(`refused: ${p}`);
         return 2;
     }
+    // Each scenario's runner timeout comes from the scenario (lead, after #230), in the preflight too.
+    const tos = scenarioTimeouts(o.scenarios, await loadScenarios(), { maxBatchUsd: o.maxBatchUsd, testMode: testOverridesAllowed(process.env) });
+    if (tos.problems.length) {
+        for (const p of tos.problems) log(`refused: ${p}`);
+        return 2;
+    }
+    for (const [i, t] of tos.timeouts.entries()) {
+        o.scenarios[i].timeoutMin = t.timeoutMin;
+        o.scenarios[i].derivedMin = t.derivedMin;
+    }
+    const timeoutText = tos.timeouts.map((t) => `${t.id} ${t.timeoutMin} min`).join(', ');
     if (o.preflight && !o.readUsage) {
-        log(`preflight passed (files only, a dry run): driver, profile, model and settings checked; the key's usage was not read; ${o.scenarios.length} scenario(s); ${modeText(o)}`);
+        log(`preflight passed (files only, a dry run): driver, profile, model and settings checked; the key's usage was not read; ${o.scenarios.length} scenario(s) (timeouts: ${timeoutText}); ${modeText(o)}`);
         return 0;
     }
     if (o.preflight) {
@@ -212,7 +262,7 @@ async function main(argv) {
             log(`preflight refused: the key's usage cannot be read (${u.error}); a batch whose spend cannot be watched does not run`);
             return 2;
         }
-        log(`preflight passed: driver, profile, model and settings checked; the key's usage can be read; ${o.scenarios.length} scenario(s); ${modeText(o)}`);
+        log(`preflight passed: driver, profile, model and settings checked; the key's usage can be read; ${o.scenarios.length} scenario(s) (timeouts: ${timeoutText}); ${modeText(o)}`);
         return 0;
     }
     // Inside a test-server run, the server exists already: the same checks must have passed before it was
@@ -246,11 +296,11 @@ async function main(argv) {
             exit = EXIT_SPEND_STOP;
             break;
         }
-        log(`${s.id}: start (spent so far USD ${gate.spent} of ${o.maxBatchUsd})`);
+        log(`${s.id}: start (spent so far USD ${gate.spent} of ${o.maxBatchUsd}; runner timeout ${s.timeoutMin} min${s.derivedMin ? `, derived ${s.derivedMin}` : ''})`);
         const code = await runOne(s, o, env);
         // The output folder and the run's own runId tie this batch to the result.json it wrote
         // (crossCheckBatch; #122 nit 1, #129 review).
-        summary.scenarios.push({ id: s.id, out: path.resolve(s.out), runId: runIdOf(s.out), exit: code, spentBefore: gate.spent });
+        summary.scenarios.push({ id: s.id, out: path.resolve(s.out), runId: runIdOf(s.out), exit: code, spentBefore: gate.spent, timeoutMin: s.timeoutMin });
         if (code !== 0 && exit === 0) exit = 1;
     }
     const end = await read();

@@ -95,6 +95,9 @@ export default {
         latePollMs: 1 * MS,
     },
     gateParams: { maxMinutes: 'equal', nightFrom: 'equal', dawnBelow: 'equal', ...G3_GATE_PARAMS },
+    // The most minutes a run can take from its start (batch.mjs derives its runner timeout from it, plus a margin):
+    // the login wait, then maxMinutes from the join.
+    runMinutes: (p) => p.loginTimeoutMs / (60 * MS) + p.maxMinutes,
 
     async run(ctx) {
         const { bot, clock, params: p } = ctx;
