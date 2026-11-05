@@ -441,3 +441,49 @@ test('#198 review: a result with a count over 1, on top of a stack already held,
     assert.equal(crafts.length, 2, 'two crafts; then the planks run out');
     assert.match(bot.output, /Crafted 2 of 3 stick from mixed items; not enough for more\. You now have 11 stick\./);
 });
+
+// #202 review nits: a table placed by the caller is picked up when craftByFill ends early (no
+// recipe id) or needs no table (a 2x2 craft); a late block update after placing a table.
+test('#202 nit: placed=true into craftByFill with no recipe id, or a 2x2 recipe, is picked up once', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftByFill } = await import('./skills.js');
+    const a = fillBot([], () => []);
+    const aOps = tableOps();
+    assert.equal(await craftByFill(a.bot, 'stone_pickaxe', 1, { requiresTable: true, recipeId: null, inputs: [], short: 0, ready: true }, tableBlock, true, aOps), false);
+    assert.deepEqual([aOps.placed, aOps.picked], [0, 1]);
+
+    const b = fillBot([stack('pyrotech:rock', 0, 1), stack('stick', 0, 2)], () => [stack('pyrotech:crude_axe', 0, 1)]);
+    const bOps = tableOps();
+    const needs = craftNeeds(b.bot, 'pyrotech:crude_axe');
+    assert.equal(await craftByFill(b.bot, 'pyrotech:crude_axe', 1, needs, tableBlock, true, bOps), true);
+    assert.equal(b.crafts[0].table, null, 'the 2x2 grid, not the table');
+    assert.deepEqual([bOps.placed, bOps.picked], [0, 1]);
+});
+
+test('#202 nit: a crafting table whose block update comes late is found on a second look, not left behind', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { CRAFT_TABLE_OPS } = await import('./skills.js');
+    const free = new Vec3(3, 64, 0);
+    let standing = false;
+    const air = (p) => ({ name: 'air', boundingBox: 'empty', position: p, drops: [], diggable: false });
+    const bot = {
+        output: '',
+        inventory: { items: () => [stack('crafting_table', 0, 1)], slots: [null, stack('crafting_table', 0, 1)] },
+        entity: { position: new Vec3(0.5, 64, 0.5) },
+        modes: { isOn: () => false },
+        game: { gameMode: 'survival' },
+        // Air search (a function) for the free space; the table search (ids) finds it once it stands.
+        findBlocks: ({ matching }) => (typeof matching === 'function' ? [free] : standing ? [free] : []),
+        blockAt: (p) => (p.equals(free) && standing ? { name: 'crafting_table', boundingBox: 'block', position: p }
+            : p.equals(free.offset(0, -1, 0)) ? { name: 'dirt', boundingBox: 'block', position: p, drops: [1], diggable: true } : air(p)),
+        equip: async () => {},
+        lookAt: async () => {},
+        // The server places it, but the update arrives after mineflayer gave up.
+        placeBlock: () => { setTimeout(() => { standing = true; }, 20); return Promise.reject(new Error('Event blockUpdate did not fire within timeout of 2000ms')); },
+    };
+    const place = CRAFT_TABLE_OPS.place;
+    const table = await place(bot, 'stone_pickaxe', 100);
+    assert.ok(table, bot.output);
+    assert.ok(table.position.equals(free));
+    assert.doesNotMatch(bot.output, /Could not place a crafting table to craft/);
+});

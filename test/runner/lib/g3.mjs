@@ -258,3 +258,15 @@ export function deathLines(lines, bot) {
     }
     return out;
 }
+
+/** The Mindcraft driver's mindcraft_start event in its output ({serverTaskGiver, botState, models, ...}), or null. */
+export function startEvent(output) {
+    for (const l of output) {
+        if (!l.startsWith('DRIVER ')) continue;
+        try {
+            const e = JSON.parse(l.slice(7));
+            if (e?.type === 'mindcraft_start') return e;
+        } catch { /* not an event */ }
+    }
+    return null;
+}

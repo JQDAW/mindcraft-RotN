@@ -175,15 +175,24 @@ export async function craftPausingAutoEat(bot, recipe, count, table, eatWaitMs =
     }
 }
 
+/** How long a crafting table's block update may come late before it counts as not placed. */
+export const TABLE_LATE_UPDATE_MS = 1200;
+
 /** Place a crafting table near the bot for a craft: the table block, or null (logged). */
-async function placeTableNear(bot, itemName) {
+async function placeTableNear(bot, itemName, lateMs = TABLE_LATE_UPDATE_MS) {
     const pos = world.getNearestFreeSpace(bot, 1, 6);
     if (!pos) {
         log(bot, `Could not place a crafting table to craft ${itemName}: no free space nearby.`);
         return null;
     }
     await placeBlock(bot, 'crafting_table', pos.x, pos.y, pos.z);
-    const table = world.getNearestBlock(bot, 'crafting_table', 16);
+    let table = world.getNearestBlock(bot, 'crafting_table', 16);
+    if (!table) {
+        // The block update can come late (P1: up to 1158 ms), and placeBlock then reports a failure
+        // although the table stands: look again, so it is used and picked up, not left behind.
+        await new Promise(resolve => setTimeout(resolve, lateMs));
+        table = world.getNearestBlock(bot, 'crafting_table', 16);
+    }
     if (!table) log(bot, `Could not place a crafting table to craft ${itemName}.`);
     return table;
 }
