@@ -58,7 +58,8 @@ export const networkRemap = (blockIds) => pack().networkRemap(blockIds);
 export const installRecipes = (registry, { recipes, ...opts } = {}) => installRecipesInto(registry, recipes ?? pack().dump.recipes?.recipes ?? [], opts);
 /**
  * Replace bot.registry.foods / foodsByName / foodsArray, in place, with this pack's food values
- * (mineflayer-auto-eat and bot.registry readers then see them). See src/foods.js.
+ * (mineflayer-auto-eat and bot.registry readers then see them). See src/foods.js. It bans nothing and
+ * is meta 0 only (a pufferfish looks like cod): the eating code must check avoidFood(name, meta).
  */
 export const installFoods = (registry) => installFoodsInto(registry, (n, m) => pack().foodValues(n, m));
 export { convertRecipe, choiceTuples, DEFAULT_MAX_VARIANTS, snapshotRecipeTable, restoreRecipeTable } from './src/registry-recipes.js';
