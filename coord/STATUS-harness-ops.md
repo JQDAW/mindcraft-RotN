@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (19:05 UTC, from `date -u`)
+Updated: 2026-11-05 (19:37 UTC, from `date -u`)
 
 ## Done: the first G3 smoke batches (the lead's written GO, 2026-11-05)
 
@@ -23,7 +23,18 @@ Total LLM USD 0.1805, and 3 billed server hours (about EUR 0.41 plus 3 Primary I
 - In (c), a long-running action (`!searchForBlock("log", 64)`) blocked a newly accepted task. Accepting a task should interrupt the current action, or every action needs a bound.
 - In C+D (3 times in each scenario), breaking Dynamic Trees branches gave no log ("Broke dynamictrees:sprucebranch but got no log"). It did not appear in A or B.
 
-**Open PRs:** #218 (this evidence) and #219 (the `cheatProblems` change, the lead's decision 1). **Next:** the #207 nits PR, which adds: (d)'s `notes.marker.reply` holds a later chat line instead of the `setblock` answer (fixed by the `testforblock` confirm).
+**Merged:** #218 (this evidence) and #219 (the `cheatProblems` change).
+
+**Open PRs (in the lead's review):**
+- #220: the #207 nits: the gold marker confirmed with `testforblock`, the `notes.marker.reply` fix, and `.bak` pruning;
+- #223: the lead's #218 requirement before the first gate batch:
+  - `batch.mjs --smoke|--gate` (required) records `smoke` in `batch.json`;
+  - the gate claim check needs `smoke: false`;
+  - `--tree` names the smoke batches;
+  - the three smoke folders are marked;
+  - plus the #219 prefix/suffix tests.
+
+#220 and #223 merge cleanly together. **Next:** the lead's reviews. A gate batch's command needs `--gate`, and any new batch needs a new GO.
 
 ## Resumed after the Orca restart (2026-11-05 16:55 UTC)
 
