@@ -35,7 +35,9 @@ function daytimeAt(ms, start = 0) {
  * opt.dieAt: the minute the bot dies (a death line and stat.deaths 1); opt.statOnly / opt.lineOnly: only one
  * of the two; opt.kickAt: the minute it is kicked; opt.hungry: the food level falls 1 point every 10 min
  * (otherwise it stays 20, so 1.12 never writes a food score);
- * opt.frozen: the time never moves (a freeze that never ends).
+ * opt.frozen: the time never moves (a freeze that never ends); opt.offsetS: where in the cycle the server is at
+ * t=0 (1300 s is daytime 14000, mid-night); opt.start: inventory at the join ({item: n}); opt.noPack: no
+ * first-join kit lines.
  */
 function sim(opt = {}) {
     const log = [];
@@ -71,7 +73,11 @@ function sim(opt = {}) {
             let m;
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
             else if (cmd === 'seed') add('Seed: 1880465901402976865');
-            else if (cmd === 'time query daytime') add(`Time is ${opt.frozen ? 6000 : daytimeAt(t)}`);
+            else if (cmd === 'time query daytime') add(`Time is ${opt.frozen ? 6000 : daytimeAt(t + (opt.offsetS ?? 0) * 1000)}`);
+            else if ((m = /^clear (\S+) (\S+) -?\d+ 0$/.exec(cmd))) {
+                const n = (opt.start ?? {})[m[2]] ?? 0;
+                add(n ? `${m[1]} has ${n} items that match the criteria` : `Could not clear the inventory of ${m[1]}, no items to remove`);
+            }
             else if ((m = /^scoreboard objectives add (\S+) (\S+)$/.exec(cmd))) {
                 objectives.set(m[1], m[2]);
                 if (m[2] === 'food') foodAtAdd = foodNow();
@@ -102,7 +108,10 @@ function sim(opt = {}) {
             joinT = t;
             log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`);
             add(`${NAME} joined the game`);
-            add(`[${NAME}: Given    [Bread] * 1 to ${NAME}]`);
+            if (!opt.noPack) {
+                add(`[${NAME}: Given    [Bread] * 1 to ${NAME}]`);
+                add(`[${NAME}: Given    [Bundle] * 1 to ${NAME}]`);
+            }
         },
         alive: () => alive,
         exitCode: () => (alive ? null : 0),
@@ -120,9 +129,12 @@ const byName = (r) => Object.fromEntries(r.checks.map((c) => [c.check, c]));
 describe('the night helpers', () => {
     test('dawnOf: the night is the first sample at 13000 or more, dawn the first below 12000 after it', () => {
         const s = (min, daytime) => ({ min, daytime });
-        assert.deepEqual(dawnOf([s(0, 100), s(10, 3000), s(30, 16000), s(41, 300)]), { night: s(30, 16000), dawn: s(41, 300) });
-        assert.deepEqual(dawnOf([s(0, 100), s(10, 11000)]), { night: null, dawn: null }, 'a daytime below 12000 before any night is not dawn');
-        assert.deepEqual(dawnOf([s(0, 14000), s(5, 20000), s(6, null)]), { night: s(0, 14000), dawn: null });
+        assert.deepEqual(dawnOf([s(0, 100), s(10, 3000), s(30, 16000), s(41, 300)]), { dusk: s(10, 3000), night: s(30, 16000), dawn: s(41, 300) });
+        assert.deepEqual(dawnOf([s(0, 100), s(10, 11000)]), { dusk: s(10, 11000), night: null, dawn: null }, 'a daytime below 12000 before any night is not dawn');
+        // A mid-night start (#203 review): no dusk yet, so these night samples and the next dawn do not count.
+        assert.deepEqual(dawnOf([s(0, 14000), s(5, 20000), s(6, null)]), { dusk: null, night: null, dawn: null });
+        assert.deepEqual(dawnOf([s(0, 14000), s(5, 20000), s(10, 500), s(20, 3000), s(30, 13500), s(40, 600)]),
+            { dusk: s(20, 3000), night: s(30, 13500), dawn: s(40, 600) }, 'the first full night after the join');
     });
 
     test('deathLines: vanilla death messages and raw modded keys for the bot only', () => {
@@ -196,6 +208,23 @@ describe('g3-first-night on a simulated server', () => {
         assert.match(r.notes.end.reason, /^maxMinutes \(55\) reached before dawn/);
         assert.equal(byName(r).survived_night.pass, false);
         assert.equal(r.notes.shelterAtMidnight.taken, false);
+    });
+
+    test('a run that joins mid-night: the partial night and its dawn do not count, so survived_night fails within maxMinutes (#203 review)', async () => {
+        const r = await run(sim({ offsetS: 1300 }));
+        assert.equal(r.notes.samples[0].daytime >= 13000, true, String(r.notes.samples[0].daytime));
+        assert.ok(r.notes.samples.some((x) => x.daytime < 12000), 'the wrap past 24000 happened, but without a dusk before it');
+        assert.match(r.notes.end.reason, /^maxMinutes \(55\) reached before dawn/);
+        assert.equal(byName(r).survived_night.pass, false);
+    });
+
+    test('fresh_start: a target item at the start, or no first-join kit in the log, fails it (#203 review)', async () => {
+        const held = await run(sim({ start: { 'minecraft:stone_pickaxe': 1 } }));
+        assert.equal(byName(held).fresh_start.pass, false);
+        assert.match(byName(held).fresh_start.detail, /held at the start: minecraft:stone_pickaxe 1/);
+        const noKit = await run(sim({ noPack: true }));
+        assert.equal(byName(noKit).fresh_start.pass, false);
+        assert.match(byName(noKit).fresh_start.detail, /not a first join: the pack's give_bread and give_bundle/);
     });
 
     test('a weaker dawn rule or a longer limit is never a gate pass', async () => {
