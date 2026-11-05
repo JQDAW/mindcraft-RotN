@@ -239,3 +239,13 @@ test('#195 nit: a site the caller names is refused, not half-built, when a cell 
     assert.deepEqual(placed, []);
     assert.match(r.line, /Cannot build the shelter at 0, 64, 0: nothing to place a block against at -1, 64, 0; -1, 65, 0\./);
 });
+
+test('#204 nit 7: a mob standing in a wall cell is named, and that cell stays open', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, placed } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+    bot.entities = { 1: bot.entity, 7: { name: 'zombie', position: new Vec3(1.5, 64, 0.5), height: 1.95 } };
+    const r = await buildShelter(bot);
+    assert.equal(r.closed, false);
+    assert.deepEqual(placed, []);
+    assert.match(bot.output, /Cannot close 1, 64, 0: zombie stands in it\./);
+});

@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { nightTick, nightState, isFullDay, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS } from './night_routine.js';
+import { nightTick, nightState, resetNight, isFullDay, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS } from './night_routine.js';
+import settings from './settings.js';
 import { autonomyTick } from './priority.js';
 import { shelterQuiet, SHELTER_QUIET_MODES } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
@@ -23,9 +24,18 @@ function fakeAgent({ t = MORNING } = {}) {
     const agent = {
         chat, calls,
         openChat: (l) => { chat.push(l); },
-        bot: { time: { timeOfDay: t }, entity: { position: new Vec3(0.5, 64, 0.5) }, output: '' },
+        modeActive: false,
+        bot: { time: { timeOfDay: t }, entity: { position: new Vec3(0.5, 64, 0.5) }, output: '', modes: { anyActive: () => agent.modeActive } },
         self_prompter: { active: true, loop_active: false, isActive() { return this.active; }, stop() { this.active = false; calls.stop++; }, isPaused: () => false },
-        actions: { runAction: async (label, fn) => { await fn(); return { message: '', interrupted: false }; } },
+        actions: {
+            executing: false, currentActionLabel: '', stops: 0, interruptNext: false,
+            stop() { this.stops++; this.executing = false; return Promise.resolve(); },
+            async runAction(label, fn) {
+                if (this.interruptNext) { this.interruptNext = false; return { message: '', interrupted: true }; } // stopped before fn finished
+                await fn();
+                return { message: '', interrupted: false };
+            },
+        },
         control: { blocking: () => null },
     };
     return agent;
@@ -194,4 +204,142 @@ test('D2b-2: digOut opens the lower and upper wall on a side with no water or la
     const side = await digOut(bot, SITE);
     assert.ok(side.equals(new Vec3(-1, 64, 0)), `opened ${side}`);
     assert.deepEqual(dug, ['-1,65,0', '-1,64,0']);
+});
+
+// #204 review.
+test('#204 review 1: while a reflex acts nothing starts; an interrupted build is not a try', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    agent.modeActive = true; // self_defense is fighting
+    assert.equal(nightTick(agent, { now: 0, ops: o }), 'night:day');
+    assert.deepEqual(o.builds, [], 'no build while the fight runs');
+    agent.modeActive = false;
+    agent.actions.interruptNext = true; // the next build is stopped by a reflex
+    nightTick(agent, { now: 1, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).attempts, 0, 'not counted');
+    assert.equal(nightState(agent).state, 'building');
+    nightTick(agent, { now: 2, ops: o }); // at once, no RETRY_MS wait
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'inside');
+});
+
+test('#204 review 2: a shelter that is no longer usable (fire, lava, a block inside) is left for a new one', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    o.siteNeeds = () => null;
+    assert.equal(nightTick(agent, { now: CHECK_MS + 1, ops: o }), 'night:building');
+    assert.equal(agent.bot.rotnSheltered, false, 'the movers are back on');
+    assert.match(agent.chat.at(-1), /the shelter at 0, 64, 0 is no longer usable \(fire, lava or a block inside\): building a new one/);
+});
+
+test('#204 review 3: at dusk a running action gets DUSK_WAIT_MS, then it is stopped; by night at once', (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: DUSK });
+    const o = ops();
+    agent.actions.executing = true;
+    agent.actions.currentActionLabel = 'action:collectBlocks';
+    agent.actions.stop = function () { this.stops++; return Promise.resolve(); }; // it takes a moment to stop
+    assert.equal(nightTick(agent, { now: 0, ops: o }), 'night:waiting');
+    assert.equal(nightTick(agent, { now: DUSK_WAIT_MS - 1, ops: o }), 'night:waiting');
+    assert.equal(agent.actions.stops, 0);
+    nightTick(agent, { now: DUSK_WAIT_MS, ops: o });
+    nightTick(agent, { now: DUSK_WAIT_MS + 1, ops: o });
+    assert.equal(agent.actions.stops, 1, 'stopped once');
+
+    const late = fakeAgent({ t: NIGHT });
+    late.actions.executing = true;
+    nightTick(late, { now: 0, ops: o });
+    assert.equal(late.actions.stops, 1, 'at night at once');
+    assert.equal(nightTick(late, { now: 1, ops: o }), 'night:building', 'then it builds');
+});
+
+test("#204 review 4: a giver's typed !goal runs first at night, and the giver is told once", (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent.self_prompter.goal_by = 'JQDAW'; // isGiverGoal: active, not the routine's prompt, typed by a giver
+    const o = ops();
+    assert.equal(nightTick(agent, { now: 0, ops: o }), 'night:yield');
+    assert.equal(nightTick(agent, { now: 1, ops: o }), 'night:yield');
+    assert.equal(agent.calls.stop, 0, 'the goal is not stopped');
+    assert.deepEqual(o.builds, []);
+    assert.deepEqual(agent.chat, ['[night] it is night; your goal runs first, and I see to the shelter when it is done']);
+    agent.self_prompter.goal_by = null;
+    assert.match(nightTick(agent, { now: 2, ops: o }), /^night:/);
+    assert.equal(agent.calls.stop, 1, 'its goal done, the routine takes over');
+});
+
+test('#204 review 6: death, spawn and turning the routine off clear the shelter; a job ending after a reset changes nothing', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    let finish;
+    const o = ops();
+    o.buildShelter = () => new Promise(resolve => { finish = resolve; });
+    nightTick(agent, { now: 0, ops: o });
+    await new Promise(resolve => setTimeout(resolve, 0)); // the build is under way
+    resetNight(agent, 'death');
+    finish({ closed: true, feet: SITE, line: 'Shelter closed' });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'day', 'the build finished after the death: no shelter recorded');
+    assert.equal(agent.bot.rotnSheltered, false);
+
+    const off = fakeAgent({ t: NIGHT });
+    nightTick(off, { now: 0, ops: ops() });
+    await settle(off);
+    assert.equal(off.bot.rotnSheltered, true);
+    settings.night_shelter = false;
+    try {
+        assert.equal(nightTick(off, { now: 1, ops: ops() }), null);
+        assert.equal(off.bot.rotnSheltered, false);
+        assert.equal(nightState(off).state, 'day');
+    } finally {
+        delete settings.night_shelter;
+    }
+});
+
+test('#204 review 5: digOut skips a side under gravel, a hillside and a side it cannot open, and opens a safe one', async (t) => {
+    quiet(t);
+    const key = (p) => `${p.x},${p.y},${p.z}`;
+    const world = new Map();
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { world.set(`${x},64,${z}`, 'cobblestone'); world.set(`${x},65,${z}`, 'cobblestone'); }
+    world.set('1,66,0', 'gravel'); // east: gravel above the upper opening
+    world.set('-2,64,0', 'stone'); world.set('-2,65,0', 'stone'); // west: a hillside
+    world.set('0,64,1', 'bedrock'); // south: cannot be dug
+    const blockOf = (name, position) => ({ name, metadata: 0, boundingBox: reg.blocksByName[name].boundingBox, position, canHarvest: () => name !== 'bedrock' });
+    const dug = [];
+    const bot = {
+        output: '',
+        entity: { position: new Vec3(0.5, 64, 0.5) },
+        modes: { isOn: () => false },
+        game: { gameMode: 'survival' },
+        tool: { equipForBlock: async () => {} },
+        heldItem: null,
+        blockAt: (p) => blockOf(world.get(key(p.floored())) ?? (p.y < 64 ? 'dirt' : 'air'), p.floored()),
+        dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
+    };
+    const side = await digOut(bot, SITE);
+    assert.ok(side.equals(new Vec3(0, 64, -1)), `opened ${side}`);
+    assert.ok(!dug.includes('1,65,0') && !dug.includes('-1,65,0'), 'east and west untouched');
+    assert.ok(dug.includes('0,64,-1') && dug.includes('0,65,-1'));
+});
+
+test('#204 review 6: the agent clears the shelter on death and on spawn', async () => {
+    const { EventEmitter } = await import('node:events');
+    const { Agent } = await import('./agent.js');
+    const agent = Object.create(Agent.prototype);
+    agent.bot = new EventEmitter();
+    agent.bindNightReset();
+    for (const event of ['death', 'spawn']) {
+        agent.bot.rotnSheltered = true;
+        agent._night = { state: 'inside', site: SITE, gen: 0 };
+        agent.bot.emit(event);
+        assert.equal(agent.bot.rotnSheltered, false, event);
+        assert.equal(agent._night.state, 'day', event);
+        assert.equal(agent._night.gen, 1, `${event}: a job still running changes nothing`);
+    }
 });

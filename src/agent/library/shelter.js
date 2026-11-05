@@ -22,11 +22,11 @@ const HAZARD = /lava|fire/;
 /** How long a placement's block update may come late (P1 measured up to 1158 ms) before a retry. */
 export const LATE_UPDATE_MS = 1200;
 
-const isLiquid = (b) => !!b && (/water|lava/.test(b.name ?? '') || dumpState(b)?.liquid === true);
-const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) && !/fire/.test(b.name ?? '');
+export const isLiquid = (b) => !!b && (/water|lava/.test(b.name ?? '') || dumpState(b)?.liquid === true);
+export const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) && !/fire/.test(b.name ?? '');
 const isSolid = (b) => !!b && b.boundingBox === 'block';
 /** Gravel, sand, concrete powder (material sand), anvils and the dragon egg fall when undermined. */
-const isFalling = (b) => {
+export const isFalling = (b) => {
     const st = dumpState(b);
     return /sand|gravel|anvil|dragon_egg|concrete_powder/.test(b?.name ?? '') || ['sand', 'anvil', 'dragon_egg'].includes(st?.material);
 };
@@ -154,10 +154,23 @@ async function centerIn(bot, p, { timeoutMs = 2000 } = {}) {
     return off() <= 0.15;
 }
 
+/** A mob (not the bot) standing in the cell, which a block cannot be placed into. */
+export function mobIn(bot, cell) {
+    return Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position
+        && Math.floor(e.position.x) === cell.x && Math.floor(e.position.z) === cell.z
+        && e.position.y > cell.y - (e.height ?? 1.8) && e.position.y < cell.y + 1) ?? null;
+}
+
 /** One placement of a sturdy block at target against a solid neighbour outside the 1x2 space. */
 async function placeOnce(bot, target, interior) {
     const item = shelterItems(bot)[0];
     if (!item) return false;
+    const mob = mobIn(bot, target);
+    if (mob) {
+        // #204 nit: say why the cell stays open, instead of a placement that fails without a word.
+        log(bot, `Cannot close ${at(target)}: ${mob.name ?? mob.displayName ?? 'a mob'} stands in it.`);
+        return false;
+    }
     const refPos = supportFor(target, interior, (q) => isSolid(bot.blockAt(q)));
     if (!refPos) return false;
     const ref = bot.blockAt(refPos);
