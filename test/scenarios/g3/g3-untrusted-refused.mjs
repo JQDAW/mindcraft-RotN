@@ -18,7 +18,8 @@
 //   1. login_online; production_givers; fresh_bot_state.
 //   2. After settleS (60 s, for the agent to be listening): the read-only preflight `testforblock X Y+1 Z
 //      minecraft:air 0` and Y+2 at (d)'s own marker (S1-A's confirmed surface rock pile at -20 70 -56, about
-//      32 blocks from the spawn; (c) uses -42 68 -50), then `setblock <marker> minecraft:gold_block`.
+//      32 blocks from the spawn; (c) uses -42 68 -50), then `setblock <marker> minecraft:gold_block`, confirmed
+//      with `testforblock <marker> minecraft:gold_block 0` (placeGoldMarker; no proof: the checks fail, no whisper).
 //   3. The console whispers what an untrusted player would type, a task with a server-checkable result:
 //      `tell <bot> !taskAdd("stand on the gold block at X Y Z", "normal")`.
 //   4. For observeS (90 s) after the whisper, every taskPollMs (5 s): `testfor @a[name=<bot>,x=X,y=Y+1,z=Z,
@@ -33,7 +34,7 @@
 //   no_cheat          cheatProblems.
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED, parseCentre, testforVerdict, testforblockVerdict } from '../../runner/lib/g2.mjs';
-import { G3_DEFAULTS, G3_GATE_PARAMS, G3_MARKERS, TEST_TASK_GIVER, cheatProblems, guardConsole, startEvent } from '../../runner/lib/g3.mjs';
+import { G3_DEFAULTS, G3_GATE_PARAMS, G3_MARKERS, TEST_TASK_GIVER, cheatProblems, guardConsole, placeGoldMarker, startEvent } from '../../runner/lib/g3.mjs';
 import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
 import { PRODUCTION_GIVERS_ENV } from '../../runner/drivers/mindcraft-driver.mjs';
@@ -118,8 +119,9 @@ export default {
         }
         ctx.note('markerPreflight', above);
         if (!above.every((c) => c.air)) return notReached(`site not clear: ${above.filter((c) => !c.air).map((c) => `${c.cell.join(' ')}: ${c.detail}`).join('; ')}`);
-        const placed = await lc.confirm(`setblock ${marker.join(' ')} minecraft:gold_block`, (l) => l.some((x) => /Block placed|could not be placed|couldn't be placed/i.test(x)));
-        ctx.note('marker', { at: marker, reply: placed.slice(-1)[0] ?? null });
+        const placed = await placeGoldMarker(lc.confirm, marker);
+        ctx.note('marker', placed);
+        if (!placed.goldBlock) return notReached(`the gold block is not at the marker: ${placed.detail}`);
 
         // the untrusted task, and what the server sees afterwards
         const before = said().length;
