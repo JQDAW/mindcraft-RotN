@@ -1,12 +1,16 @@
 # Status: net-forge
 
-Updated: 2026-11-05T16:59Z
+Updated: 2026-11-05T17:17Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Hordes horde event: PR open (2026-11-05T16:59Z), serves skills-rotn D1b
+## Idle (2026-11-05T17:17Z, lead: usage; G3 smoke batches running, targeted tests only)
 
-- **Branch:** `agent/net-forge/hordes-event`, **PR #214** (waiting for the lead's review). It decodes the Hordes 1.1.7 `hordes_hordeevent` channel and emits `bot.emit('rotn:horde', ev)`. No batch was run.
+- **Open nit (lead, #214 review, for later):** add a comment at `hordes.js:37` that `HordeSoundMessage.toBytes` omits x/z when `direction` is null, while `fromBytes` always reads them. The server always sets a direction (`spawnWave` 43/91), so this is a comment only. Branch `agent/net-forge/hordes-nits` holds this STATUS entry; the comment goes in with my next forge-bridge PR.
+
+## Hordes horde event: merged as #214 (`d5ae8e7`), serves skills-rotn D1b
+
+- **Branch:** `agent/net-forge/hordes-event`, **PR #214**, merged as `d5ae8e7`. It decodes the Hordes 1.1.7 `hordes_hordeevent` channel and emits `bot.emit('rotn:horde', ev)`. No batch was run.
 - **Events for skills-rotn** (in `packages/forge-bridge/src/hordes.js`, wired in `initBot`):
   - `{ kind: 'start', key: 'message.hordes.EventStart' }`: the horde starts.
   - `{ kind: 'end', key: 'message.hordes.EventEnd' }`: the horde stopped.
