@@ -7,11 +7,11 @@ import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { G3_CONSOLE_ALLOW, statCriterion } from '../runner/lib/g3.mjs';
-import g3c, { PINNED, PROVISIONAL_COUNTER, onMarkerCommand, taskText } from '../scenarios/g3/g3-task-preempts-agenda.mjs';
+import g3c, { AGENDA_COUNTER, MARKER as PINNED_MARKER, PINNED, onMarkerCommand, taskText } from '../scenarios/g3/g3-task-preempts-agenda.mjs';
 
 const NAME = 'FRCFLD';
 const MIN = 60000;
-const MARKER = [-20, 70, -40];
+const MARKER = PINNED_MARKER.split(',').map(Number);
 const tick = () => new Promise((r) => setImmediate(r));
 const stamp = (ms) => {
     const s = 12 * 3600 + Math.floor(ms / 1000);
@@ -23,7 +23,9 @@ const ROCK = statCriterion('mineBlock', 'pyrotech_compat:rock_igneous');
 /**
  * opt.noAgenda: the agenda stat never rises; opt.noResume: it stops rising once the task starts;
  * opt.ignore: the bot never answers the task; opt.neverThere: it says done but never stands on the marker;
- * opt.fail: it reports the task failed; opt.wrongId: its done line names another task.
+ * opt.fail: it reports the task failed; opt.wrongId: its done line names another task; opt.noPause: it never
+ * says "agenda paused for task t1"; opt.blocked: the cell above the marker is water; opt.stale: the driver
+ * reports bot state it could not clear; opt.badCriterion: a counter criterion the server rejects.
  */
 function sim(opt = {}) {
     const log = [];
@@ -34,6 +36,7 @@ function sim(opt = {}) {
     const stats = new Map();
     const objectives = new Map();
     const sent = [];
+    const output = [];
     const add = (msg) => log.push(line(t, msg));
     const say = (msg) => add(`<${NAME}> ${msg}`);
     let task = null;   // {at, phase}
@@ -48,10 +51,11 @@ function sim(opt = {}) {
         }
         if (task && task.phase === 'going' && t - task.at >= 2 * MIN) {
             task.phase = 'there';
-            if (opt.fail) { say('task t1 failed: no path to the gold block'); task.phase = 'done'; }
+            if (opt.fail) { say('task t1 failed: no path to the gold block'); task.phase = 'done'; task.closed = true; }
         }
         if (task && task.phase === 'there' && t - task.at >= 2.5 * MIN) {
             say(opt.wrongId ? 'task t9 done' : 'task t1 done');
+            if (!opt.wrongId) task.closed = true;
             say('agenda resumed: logs');
             task.phase = 'done';
         }
@@ -65,8 +69,8 @@ function sim(opt = {}) {
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
             else if (cmd === 'seed') add('Seed: 1880465901402976865');
             else if ((m = /^scoreboard objectives add (\S+) (\S+)$/.exec(cmd))) {
-                objectives.set(m[1], m[2]);
-                add(`Added new objective '${m[1]}' successfully`);
+                if (m[2] === opt.badCriterion) add(`Invalid objective criteria type '${m[2]}'`);
+                else { objectives.set(m[1], m[2]); add(`Added new objective '${m[1]}' successfully`); }
             } else if ((m = /^scoreboard objectives remove (\S+)$/.exec(cmd))) {
                 add(objectives.delete(m[1]) ? `Removed objective '${m[1]}' successfully` : `No objective was found by the name '${m[1]}'`);
             } else if (cmd === `scoreboard players list ${NAME}`) {
@@ -77,13 +81,18 @@ function sim(opt = {}) {
                     for (const [o, v] of shown) add(`- ${o}: ${v} (${o})`);
                 }
             } else if ((m = /^setblock (-?\d+) (-?\d+) (-?\d+) minecraft:gold_block$/.exec(cmd))) add('Block placed');
+            else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) minecraft:air 0$/.exec(cmd))) {
+                add(opt.blocked && Number(m[2]) === MARKER[1] + 1 ? `The block at ${m[1]}, ${m[2]}, ${m[3]} is Water (expected: Air).` : `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}`);
+            } else if ((m = /^tell (\S+) !taskCancel\("(t\d+)"\)$/.exec(cmd)) && online) {
+                if (task && !task.closed) { say(`task ${m[2]} cancelled`); task.closed = true; task.phase = 'done'; }
+            }
             else if (cmd.startsWith('testfor ')) {
                 const there = task && ['there', 'done'].includes(task.phase) && !opt.neverThere && !opt.fail && cmd === onMarkerCommand(NAME, MARKER);
                 add(there ? `Found ${NAME}` : `Selector '${cmd.slice(8)}' found nothing`);
             } else if ((m = /^tell (\S+) !taskAdd\("(.*)", "normal"\)$/.exec(cmd)) && online && !opt.ignore) {
                 say(`*Server used taskAdd*`);
                 say(`task t1 accepted: ${m[2]}`);
-                say('agenda paused for task t1');
+                if (!opt.noPause) say('agenda paused for task t1');
                 task = { at: t, phase: 'going' };
             }
             t += waitS * 1000;
@@ -96,32 +105,37 @@ function sim(opt = {}) {
             alive = true;
             online = true;
             joinT = t;
+            output.push(`DRIVER ${JSON.stringify({ type: 'mindcraft_start', botState: { dir: 'bots/FRCFLD', movedAside: opt.stale ? [] : ['tasks.json.g3-S.bak'], fresh: !opt.stale } })}`);
             log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`);
             add(`${NAME} joined the game`);
         },
         alive: () => alive,
         exitCode: () => (alive ? null : 0),
-        output: () => [],
+        output: () => output,
         stop() { alive = false; online = false; return Promise.resolve(); },
     };
     const clock = { now: () => t, sleep: async (ms) => { t += ms; for (let i = 0; i < 3; i++) await tick(); } };
     return { server, bot, clock, sent };
 }
 
-const fast = { consoleWaitS: 0, lateReplyMs: 2000, latePollMs: 1000, marker: MARKER.join(',') };
+const fast = { consoleWaitS: 0, lateReplyMs: 2000, latePollMs: 1000 };
 const run = (s, params = {}) => runScenario(g3c, { ...s, runId: 'r1', params: { ...fast, ...params } });
 const byName = (r) => Object.fromEntries(r.checks.map((c) => [c.check, c]));
 
 describe('g3-task-preempts-agenda on a simulated server', () => {
-    test('the module: G3, the real agent, the step limits, marker and counter compared equal; provisional until pinned', () => {
+    test('the module: G3, the real agent, the step limits, marker and counter compared equal; pinned (lead, #207 review)', () => {
         assert.equal(g3c.gate, 'G3');
         assert.equal(g3c.llm, true);
         for (const k of ['marker', 'agendaCounter', 'warmMinutes', 'acceptS', 'taskMinutes', 'resumeMinutes', 'maxBatchUsd']) assert.equal(g3c.gateParams[k], 'equal', k);
-        assert.equal(g3c.defaults.marker, '', 'no marker until the lead pins one');
-        assert.equal(g3c.defaults.agendaCounter, PROVISIONAL_COUNTER);
-        assert.equal(PINNED, false);
-        assert.equal(taskText(MARKER), 'go to the gold block at -20 70 -40 and stand on it');
-        assert.equal(onMarkerCommand(NAME, MARKER), 'testfor @a[name=FRCFLD,x=-20,y=71,z=-40,dx=0,dy=1,dz=0]');
+        assert.equal(PINNED, true);
+        assert.equal(g3c.defaults.marker, '-42,68,-50', "S1-A's confirmed surface rock pile");
+        assert.equal(g3c.defaults.agendaCounter, AGENDA_COUNTER);
+        const crit = AGENDA_COUNTER.split(',');
+        assert.equal(crit.length, 11);
+        assert.ok(crit.every((c) => /^stat\.(mineBlock|craftItem)\./.test(c)), 'mineBlock and craftItem only: no pickup stat (#207 review)');
+        assert.equal(crit.filter((c) => c.startsWith('stat.craftItem.')).length, 5);
+        assert.equal(taskText(MARKER), 'go to the gold block at -42 68 -50 and stand on it');
+        assert.equal(onMarkerCommand(NAME, MARKER), 'testfor @a[name=FRCFLD,x=-42,y=69,z=-50,dx=0,dy=1,dz=0]');
     });
 
     test('the task preempts the agenda, is done on the marker and reported, and the agenda resumes: every check passes', async () => {
@@ -132,15 +146,16 @@ describe('g3-task-preempts-agenda on a simulated server', () => {
         assert.equal(r.notes.taskResult.id, 't1');
         assert.equal(r.notes.taskResult.preempted, true, 'the agent said "agenda paused for task t1"');
         assert.match(c.agenda_resumed.detail, /the agent said "agenda resumed"/);
-        assert.ok(s.sent.includes(`tell ${NAME} !taskAdd("go to the gold block at -20 70 -40 and stand on it", "normal")`));
-        assert.ok(s.sent.includes('setblock -20 70 -40 minecraft:gold_block'));
+        assert.ok(s.sent.includes(`tell ${NAME} !taskAdd("go to the gold block at -42 68 -50 and stand on it", "normal")`));
+        assert.ok(s.sent.indexOf('testforblock -42 69 -50 minecraft:air 0') < s.sent.indexOf('setblock -42 68 -50 minecraft:gold_block'), 'the preflight comes first');
+        assert.ok(s.sent.includes('testforblock -42 70 -50 minecraft:air 0'));
+        assert.ok(!s.sent.some((x) => x.includes('!taskCancel')), 'a done task needs no cancel');
         for (const cmd of s.sent) {
             assert.ok(G3_CONSOLE_ALLOW.some((re) => re.test(cmd)), `not approved: ${cmd}`);
             assert.ok(!/^tp /.test(cmd), `no tp in G3: ${cmd}`);
         }
-        // Provisional marker and counter: never a gate pass yet.
-        assert.equal(r.gateValid, false);
-        assert.ok(r.weakenedParams.some((w) => /provisional/.test(w)), r.weakenedParams.join('; '));
+        // Pinned marker and counter, every objective added: gate-valid (under batch.mjs's spend stop in a real run).
+        assert.equal(r.gateValid, true, r.weakenedParams.join('; '));
     });
 
     test('no marker given: the task steps cannot run and fail, and no task is whispered', async () => {
@@ -174,6 +189,27 @@ describe('g3-task-preempts-agenda on a simulated server', () => {
         const wrong = await run(sim({ wrongId: true }));
         assert.equal(byName(wrong).task_done.pass, false);
         assert.match(byName(wrong).task_done.detail, /no done report/);
+    });
+
+    test('#207 review: no "agenda paused" line fails task_done; a blocked site stops before the setblock; stale state fails fresh_bot_state', async () => {
+        const noPause = await run(sim({ noPause: true }));
+        assert.equal(byName(noPause).task_done.pass, false);
+        assert.match(byName(noPause).task_done.detail, /no "agenda paused for task t1" line/);
+        const sb = sim({ blocked: true });
+        const blocked = await run(sb);
+        assert.match(byName(blocked).task_accepted.detail, /^not reached: site not clear: -42 69 -50: The block at -42, 69, -50 is Water/);
+        assert.ok(!sb.sent.some((x) => x.startsWith('setblock ') || x.startsWith('tell ')), 'nothing placed or whispered');
+        assert.equal(byName(await run(sim({ stale: true }))).fresh_bot_state.pass, false);
+    });
+
+    test('#207 review: a task left open at the end is cancelled by the giver; a rejected counter criterion makes the run not gate-valid', async () => {
+        const s = sim({ wrongId: true });
+        const r = await run(s);
+        assert.ok(s.sent.includes(`tell ${NAME} !taskCancel("t1")`));
+        assert.deepEqual(r.notes.openTaskAtEnd, { id: 't1', cancelled: true });
+        const bad = await run(sim({ badCriterion: statCriterion('mineBlock', 'minecraft:log2') }));
+        assert.equal(bad.gateValid, false);
+        assert.ok(bad.weakenedParams.some((w) => /agenda counter objectives not added: stat\.mineBlock\.minecraft\.log2 \(invalid\)/.test(w)), bad.weakenedParams.join('; '));
     });
 
     test('the agenda does not resume after the task: agenda_resumed fails after resumeMinutes', async () => {

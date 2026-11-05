@@ -61,6 +61,9 @@ export class RotnData {
         this.worldSources = readJson(dir, 'world-sources')?.sources ?? [];
         // How to react to first-night mobs, hand-written with evidence (threat-reactions.json).
         this.threatReactions = readJson(dir, 'threat-reactions') ?? null;
+        // Which blocks fall (gravity), from the pack's bytecode and configs (falling-blocks.json,
+        // built by tools/build-falling-blocks.mjs).
+        this.fallingBlocks = readJson(dir, 'falling-blocks')?.blocks ?? null;
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
@@ -116,7 +119,34 @@ export class RotnData {
         const b = this.dump.blocks?.blocks?.[r.name];
         if (!b) return { name: r.name, meta: r.meta, propertiesKnown: false };
         const state = this._state(b, r.meta);
-        return { name: r.name, meta: r.meta ?? b.defaultMeta ?? 0, propertiesKnown: true, ...b, state };
+        return { name: r.name, meta: r.meta ?? b.defaultMeta ?? 0, propertiesKnown: true, ...b, state, ...this._fallFields(r.name) };
+    }
+
+    _fallFields(name) {
+        if (!this.fallingBlocks) return {};
+        const f = this.fallingBlocks[name];
+        return { falls: !!f, fallsWhen: f?.when ?? null };
+    }
+
+    /**
+     * Whether a block falls (gravity): sand, gravel, concrete powder, anvils, and the modded ones
+     * (BlockFalling subclasses, blocks that make their own falling entity, ContentTweaker blocks a
+     * pack script gives gravity, Ore Stone Variants ores on sand or gravel). Per block, not per state.
+     * @returns {boolean|null} null for an unknown block or without falling-blocks.json
+     */
+    falls(input) {
+        const b = this.getBlock(input);
+        return b && 'falls' in b ? b.falls : null;
+    }
+
+    /**
+     * The falling-blocks.json entry: { via: 'BlockFalling'|'own-code'|'contenttweaker-gravity'|'osv-background',
+     *   when: 'unsupported-below'|'loses-support'|'player-nearby'|'redstone-powered', class, ...evidence },
+     * or null when the block does not fall (or is unknown).
+     */
+    fallInfo(input) {
+        const r = this.resolve(input, 'blocks');
+        return (r && this.fallingBlocks?.[r.name]) ?? null;
     }
 
     _state(b, meta) {

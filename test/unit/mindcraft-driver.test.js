@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { parseDriverArgs, envProblems, profileProblems, settingsProblems, settingsFileOf, mindcraftEnv, freePort, EXIT_FATAL } from '../runner/drivers/mindcraft-driver.mjs';
+import { parseDriverArgs, envProblems, profileProblems, settingsProblems, settingsFileOf, mindcraftEnv, freePort, clearBotState, EXIT_FATAL } from '../runner/drivers/mindcraft-driver.mjs';
 
 // A profile as skills-rotn's RotN profile sets it: the bot's name and the preset model (lib/g3.mjs LLM_MODEL).
 const GOOD_PROFILE = JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-1-mindcraft' });
@@ -129,6 +129,7 @@ function startDriver({ env = {}, args = [], profileBody = GOOD_PROFILE, settings
     const child = spawn(process.execPath, [DRIVER, '--profile', profile, '--main', path.join(app, 'main.js'), '--grace-ms', '2000', ...args], {
         env: { ...base, ...runnerEnv({ MINDCRAFT_PROFILES_FOLDER: dir, OPENROUTER_API_KEY: 'not-a-key' }), FAKE_DIR: dir, ...env },
         stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: dir,   // the driver clears <cwd>/bots/<name>/ state: never the repo's own folder in a test
     });
     let out = '';
     child.stdout.on('data', (b) => { out += b; });
@@ -151,6 +152,21 @@ async function waitFor(fn, ms = 15000) {
     return null;
 }
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+
+describe('mindcraft-driver: no bot state from an earlier run (#207 review)', () => {
+    test('clearBotState moves tasks.json and agenda.json aside (renamed, never deleted) and leaves the rest', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcd-state-'));
+        fs.writeFileSync(path.join(dir, 'tasks.json'), '{"tasks":[{"id":"t1","status":"active"}]}');
+        fs.writeFileSync(path.join(dir, 'agenda.json'), '{}');
+        fs.writeFileSync(path.join(dir, 'memory.json'), '{}');
+        const r = clearBotState(dir, { stamp: 'S' });
+        assert.deepEqual(r, { dir, movedAside: ['tasks.json.g3-S.bak', 'agenda.json.g3-S.bak'], fresh: true });
+        assert.deepEqual(fs.readdirSync(dir).sort(), ['agenda.json.g3-S.bak', 'memory.json', 'tasks.json.g3-S.bak']);
+        assert.match(fs.readFileSync(path.join(dir, 'tasks.json.g3-S.bak'), 'utf8'), /"t1"/, 'the old queue is kept for the record');
+        // Nothing there (a first run, or no bot folder yet): nothing to do, and still fresh.
+        assert.deepEqual(clearBotState(path.join(dir, 'none')), { dir: path.join(dir, 'none'), movedAside: [], fresh: true });
+    });
+});
 
 describe('mindcraft-driver end to end with a fake main.js', () => {
     test('a refused start exits 3 and starts nothing', async (t) => {
@@ -211,6 +227,7 @@ describe('mindcraft-driver end to end with a fake main.js', () => {
         assert.deepEqual(start.models, { model: 'openrouter/@preset/glm-5-1-mindcraft', code_model: null, vision_model: null },
             'the model goes into the run record (run.mjs result.llm.models)');
         assert.equal(start.serverTaskGiver, true, 'the start event says whether the test-only Server giver is on');
+        assert.equal(start.botState.fresh, true, 'no tasks.json or agenda.json from an earlier run (#207 review)');
         assert.ok(alive(pids.main) && alive(pids.agent));
         // The runner's stop: SIGTERM (on Windows node turns this into TerminateProcess of the driver alone).
         child.kill('SIGTERM');

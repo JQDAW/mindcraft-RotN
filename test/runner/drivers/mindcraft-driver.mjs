@@ -147,6 +147,28 @@ export function mindcraftEnv(env, { profile, mindserverPort }) {
     return out;
 }
 
+/** The bot state files that must not carry over between G3 runs (#207 review): an open task or agenda progress. */
+export const BOT_STATE_FILES = ['tasks.json', 'agenda.json'];
+
+/**
+ * Before main.js starts, move the bot's tasks.json and agenda.json aside (renamed to <file>.g3-<stamp>.bak,
+ * never deleted), so a run never inherits an open task from an earlier one (a (c) task must not run in (d)
+ * under the production giver list) and the agenda autostarts as on a fresh bot. dir is ./bots/<name>
+ * relative to the cwd main.js and its agent run in (they inherit the driver's). Returns {dir, movedAside}.
+ */
+export function clearBotState(dir, { stamp = new Date().toISOString().replace(/[:.]/g, '-') } = {}) {
+    const movedAside = [];
+    for (const f of BOT_STATE_FILES) {
+        const p = path.join(dir, f);
+        if (!fs.existsSync(p)) continue;
+        const to = `${p}.g3-${stamp}.bak`;
+        fs.renameSync(p, to);
+        movedAside.push(path.basename(to));
+    }
+    const left = BOT_STATE_FILES.filter((f) => fs.existsSync(path.join(dir, f)));
+    return { dir, movedAside, fresh: left.length === 0 };
+}
+
 /** A free local TCP port for the MindServer (bound to localhost by Mindcraft). */
 export function freePort() {
     return new Promise((resolve, reject) => {
@@ -171,12 +193,16 @@ async function main(argv) {
     const checked = o.profile ? checkProfile(o.profile, process.env.ROTN_SCENARIO_BOT) : { profile: null, problems: [] };
     problems.push(...checked.problems);
     problems.push(...(await settingsProblems(o.settings)));
+    const bot = process.env.ROTN_SCENARIO_BOT ?? '';
+    if (bot && !/^[A-Za-z0-9_]{3,16}$/.test(bot)) problems.push(`ROTN_SCENARIO_BOT '${bot}' is not a player name`);
     if (problems.length) {
         for (const m of problems) console.error(`mindcraft-driver: refused: ${m}`);
         event('refused', { problems });
         return EXIT_FATAL;
     }
 
+    // No state from an earlier run (#207 review): no open task, and the agenda starts as on a fresh bot.
+    const botState = clearBotState(path.resolve(process.cwd(), 'bots', bot));
     const mindserverPort = await freePort();
     const posix = process.platform !== 'win32';
     const child = spawn(process.execPath, [o.main], {
@@ -187,8 +213,9 @@ async function main(argv) {
     // The paths of what runs and of the settings file that was checked (the one main.js imports).
     // The models the agent will use (checked above to be LLM_MODEL), for the run record (run.mjs, result.llm.models).
     const models = profileModels(checked.profile);
-    // serverTaskGiver: whether the test-only console giver `Server` is on (g3-untrusted-refused needs it off).
-    event('mindcraft_start', { pid: child.pid, main: path.resolve(o.main), settings: o.settings, profile: o.profile, mindserverPort, models, serverTaskGiver: serverGiverOn(process.env) });
+    // serverTaskGiver: whether the test-only console giver `Server` is on (g3-untrusted-refused needs it off);
+    // botState: the tasks.json and agenda.json moved aside before the start (#207 review).
+    event('mindcraft_start', { pid: child.pid, main: path.resolve(o.main), settings: o.settings, profile: o.profile, mindserverPort, models, serverTaskGiver: serverGiverOn(process.env), botState });
 
     let stopping = false;
     const exited = new Promise((resolve) => child.on('exit', (code, signal) => resolve({ code, signal })));

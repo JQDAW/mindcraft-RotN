@@ -7,22 +7,33 @@
 // only (never in production; g3-untrusted-refused shows it is refused there). Gate-valid only under
 // batch.mjs's spend stop (maxBatchUsd 2, 'equal').
 //
-// Pinned before any gate batch (lead, #101): the marker position (a surface block 20-30 blocks from the
-// spawn area) and the agenda counter. Until the lead pins both, `marker` has no default (the task steps
-// cannot run and fail) and `agendaCounter` is a PROVISIONAL sum of the early-game stats, and every run is
-// marked not gate-valid (PINNED is false).
+// Pinned (lead, #207 review; PINNED is true):
+//   - the marker: S1-A's server-confirmed surface rock pile at -42 68 -50 in the G2 world, about 19 blocks
+//     from the spawn (-50.5 64 -66.5), inside the spawn chunks. No sampled surface cell lies exactly 20-30
+//     blocks out; this is the nearest (the next is 32 blocks, (d)'s marker). The gold block replaces the
+//     pile, so it is the top solid block. "Dry and reachable" is checked at run time by the preflight: the
+//     two cells above it must be air (water is not air), or the task steps fail with "site not clear";
+//   - the agenda counter: stat.mineBlock for the rock piles and logs, plus stat.craftItem for the five
+//     early-game crafts. No pickup stat (item-collecting modes raise those). Every criterion must be added,
+//     or the run is not gate-valid.
+//
+// State (#207 review): the driver moves the bot's tasks.json and agenda.json aside before main.js starts
+// (fresh_bot_state checks its start event), and this scenario ends with no open task: a task still open at
+// the end is cancelled with the giver's `!taskCancel("<id>")`.
 //
 // Steps (no tp of any form, lead #201; the server is the arbiter, the agent's chat is checked against it):
-//   1. login_online; objectives g3c_a<n> for every criterion of agendaCounter (the counter is their sum; an
-//      objective the server rejects is recorded and simply not counted).
+//   1. login_online, fresh_bot_state; objectives g3c_a<n> for every criterion of agendaCounter (the counter
+//      is their sum; one the server rejects is recorded, not counted, and makes the run not gate-valid).
 //   2. Warm-up: the agent plays its agenda for warmMinutes (5). agenda_active: the counter rose.
-//   3. `setblock <marker> minecraft:gold_block` (approved for the task marker only), then the test-only
+//   3. The preflight, read-only: `testforblock X Y+1 Z minecraft:air 0` and the same for Y+2. Then
+//      `setblock <marker> minecraft:gold_block` (approved for the task marker only), then the test-only
 //      giver whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and
 //      stand on it", "normal")`.
 //   4. task_accepted: "task <id> accepted: ..." in the bot's chat within acceptS (60 s).
 //   5. task_done: within taskMinutes (5), the server finds the bot standing on the marker, by
 //      `testfor @a[name=<bot>,x=X,y=Y+1,z=Z,dx=0,dy=1,dz=0]` (1.12's volume selector: the bot's box is in the
-//      two cells above the gold block), polled every taskPollMs, AND the bot says "task <id> done".
+//      two cells above the gold block), polled every taskPollMs, AND the bot says "task <id> done", AND it
+//      said "agenda paused for task <id>" (the preemption itself, #207 review).
 //      "task <id> failed: ..." ends the step early.
 //   6. agenda_resumed: within resumeMinutes (5) after the done line, the counter rises above its value at
 //      the done line.
@@ -31,8 +42,8 @@
 // Notes: "agenda paused for task <id>" and "agenda resumed: <step>" (the agent's own view of the preemption),
 // the counter readings, the minute the server first saw the bot on the marker.
 import { startSession } from '../../runner/lib/session.mjs';
-import { G2_WORLD_SEED, parseCentre, testforVerdict } from '../../runner/lib/g2.mjs';
-import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, cheatProblems, guardConsole, statCriterion } from '../../runner/lib/g3.mjs';
+import { G2_WORLD_SEED, parseCentre, testforVerdict, testforblockVerdict } from '../../runner/lib/g2.mjs';
+import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, cheatProblems, guardConsole, startEvent, statCriterion } from '../../runner/lib/g3.mjs';
 import { playerScores, scoreboardAddResult } from '../../runner/lib/s1.mjs';
 import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
@@ -40,18 +51,19 @@ import { lateConsole } from '../../runner/lib/late-console.mjs';
 const MS = 1000;
 const MIN = 60 * MS;
 
-/** The lead pins the marker and the agenda counter before any gate batch (#101); until then no run is a gate pass. */
-export const PINNED = false;
+/** The marker and the agenda counter are pinned (lead, #207 review). */
+export const PINNED = true;
+/** S1-A's confirmed surface rock pile nearest the 20-30 block band (about 19 blocks from the spawn). */
+export const MARKER = '-42,68,-50';
 
-/** PROVISIONAL: the early-game stats the agenda raises (rock piles, logs, sticks, the five crafts), summed. */
-export const PROVISIONAL_COUNTER = [
+/** The agenda counter (lead, #207 review): mineBlock for the rock piles and logs, craftItem for the five crafts. */
+export const AGENDA_COUNTER = [
     statCriterion('mineBlock', 'pyrotech:rock'),
     statCriterion('mineBlock', 'pyrotech_compat:rock_igneous'),
     statCriterion('mineBlock', 'pyrotech_compat:rock_metamorphic'),
     statCriterion('mineBlock', 'pyrotech_compat:rock_sedimentary'),
     statCriterion('mineBlock', 'minecraft:log'),
     statCriterion('mineBlock', 'minecraft:log2'),
-    statCriterion('pickup', 'minecraft:stick'),
     statCriterion('craftItem', 'pyrotech:crude_axe'),
     statCriterion('craftItem', 'contenttweaker:crafting_tools'),
     statCriterion('craftItem', 'minecraft:crafting_table'),
@@ -73,6 +85,7 @@ export default {
     title: 'A task giver\'s task interrupts the agent\'s agenda; the agent does it, reports, and its agenda resumes (the server checks)',
     checks: {
         login_online: 'Starting the bot makes it log in with its own account (online mode)',
+        fresh_bot_state: 'The bot starts with no task queue or agenda state from an earlier run',
         agenda_active: 'Left alone, it pursues its agenda (the server\'s agenda counter rises)',
         task_accepted: 'A task giver\'s task is accepted in chat',
         task_done: 'It does the task (the server finds it on the marker) and reports it done',
@@ -82,8 +95,9 @@ export default {
     defaults: {
         bot: 'FRCFLD',
         worldSeed: G2_WORLD_SEED,
-        marker: '',                    // "x,y,z" of a surface block; pinned by the lead before any gate batch
-        agendaCounter: PROVISIONAL_COUNTER,
+        marker: MARKER,
+        agendaCounter: AGENDA_COUNTER,
+        cancelS: 30,
         warmMinutes: 5,
         acceptS: 60,
         taskMinutes: 5,
@@ -109,6 +123,9 @@ export default {
         const s = await startSession(ctx, { name, checkNaming: false });   // say and seed only
         ctx.check('login_online', s.ok, s.why);
         if (!s.ok) return;
+        const start = startEvent(typeof bot.output === 'function' ? bot.output() : []);
+        ctx.check('fresh_bot_state', start?.botState?.fresh === true,
+            start?.botState ? `the driver moved aside: ${start.botState.movedAside.join(', ') || 'nothing (none there)'}` : 'no botState in the driver\'s start event');
         const lc = lateConsole(server, clock, { waitS: p.consoleWaitS, lateMs: p.lateReplyMs, pollMs: p.latePollMs });
         const confirm = async (cmd, accept) => {
             const n = lc.late().length;
@@ -126,6 +143,8 @@ export default {
         }
         ctx.note('counterObjectives', stats);
         const counted = stats.filter((st) => st.result === 'added');
+        const missing = stats.filter((st) => st.result !== 'added');
+        if (missing.length) ctx.notGate(`agenda counter objectives not added: ${missing.map((st) => `${st.criteria} (${st.result ?? 'no reply'})`).join(', ')}`);
         const readings = [];
         const counter = async (label) => {
             const sc = playerScores(await confirm(`scoreboard players list ${name}`, (l) => playerScores(l, name) !== null), name);
@@ -137,7 +156,15 @@ export default {
         const gone = () => s.events().find(s.gone) ?? (!bot.alive() ? { type: 'exited', reason: `code ${bot.exitCode()}` } : null);
         const goneText = (g) => `the bot is gone: ${g.type}${g.reason ? ` (${g.reason})` : ''}`;
         const said = () => chatLines(s.sinceMarker(), name).map((c) => c.text);
-        const finish = () => {
+        let openTask = null;   // accepted, with no done or failed line yet
+        const finish = async () => {
+            if (openTask) {
+                // End with no open task (#207 review): the giver cancels it, so nothing carries over.
+                const before = said().length;
+                lc.con(`tell ${name} !taskCancel("${openTask}")`);
+                const cancelled = await ctx.waitFor(() => said().slice(before).includes(`task ${openTask} cancelled`), p.cancelS * MS);
+                ctx.note('openTaskAtEnd', { id: openTask, cancelled: Boolean(cancelled) });
+            }
             for (const st of stats) lc.con(`scoreboard objectives remove ${st.obj}`);
             ctx.note('agendaChat', said().filter((t) => /^(agenda|task) /.test(t)));
             const cheat = cheatProblems(s.sinceMarker(), name);
@@ -156,7 +183,16 @@ export default {
         if (gone()) { notReached(goneText(gone())); return finish(); }
         if (!marker) { notReached(`no task marker: '${p.marker}' is not "x,y,z" (the lead pins it, #101)`); return finish(); }
 
-        // 3. the marker and the task
+        // 3. the preflight (read-only): the two cells above the marker must be air, then the marker and the task
+        const above = [];
+        for (const dy of [1, 2]) {
+            const cell = [marker[0], marker[1] + dy, marker[2]];
+            const v = testforblockVerdict(await confirm(`testforblock ${cell.join(' ')} minecraft:air 0`,
+                (l) => { const x = testforblockVerdict(l, cell); return x.ok || /^The block at /.test(x.detail ?? ''); }), cell);
+            above.push({ cell, air: v.ok, detail: v.ok ? 'air' : v.detail });
+        }
+        ctx.note('markerPreflight', above);
+        if (!above.every((c) => c.air)) { notReached(`site not clear: ${above.filter((c) => !c.air).map((c) => `${c.cell.join(' ')}: ${c.detail}`).join('; ')}`); return finish(); }
         const placed = await confirm(`setblock ${marker.join(' ')} minecraft:gold_block`, (l) => l.some((x) => /Block placed|could not be placed|couldn't be placed/i.test(x)));
         ctx.note('marker', { at: marker, reply: placed.slice(-1)[0] ?? null });
         const chatBefore = said().length;
@@ -170,6 +206,7 @@ export default {
         const id = acc && !acc.gone ? acc[1] : null;
         ctx.check('task_accepted', Boolean(id), id ? `task ${id} accepted: ${acc[2]}` : acc?.gone ? goneText(gone()) : `no "task <id> accepted" within ${p.acceptS}s`);
         if (!id) { ctx.check('task_done', false, 'not reached: the task was not accepted'); ctx.check('agenda_resumed', false, 'not reached: the task was not accepted'); return finish(); }
+        openTask = id;
 
         // 5. done: the server's view and the agent's report
         const doneRe = new RegExp(`^task ${esc(id)} done$`);
@@ -189,9 +226,11 @@ export default {
             await clock.sleep(Math.min(p.taskPollMs, Math.max(MS, taskEnd - clock.now())));
         }
         const doneAt = clock.now();
-        ctx.note('taskResult', { id, onMarkerMin, report, preempted: said().some((t) => t === `agenda paused for task ${id}`) });
-        const done = onMarkerMin !== null && report !== null && doneRe.test(report);
-        ctx.check('task_done', done, `${onMarkerMin !== null ? `the server found the bot on the marker at minute ${onMarkerMin}` : 'the server never found the bot on the marker'}; ${report ? `the bot said "${report}"` : 'no done report'}${gone() ? `; ${goneText(gone())}` : ''}`);
+        if (report) openTask = null;   // done or failed: closed
+        const preempted = said().slice(chatBefore).includes(`agenda paused for task ${id}`);
+        ctx.note('taskResult', { id, onMarkerMin, report, preempted });
+        const done = onMarkerMin !== null && report !== null && doneRe.test(report) && preempted;
+        ctx.check('task_done', done, `${onMarkerMin !== null ? `the server found the bot on the marker at minute ${onMarkerMin}` : 'the server never found the bot on the marker'}; ${report ? `the bot said "${report}"` : 'no done report'}; ${preempted ? 'the agenda was paused for it' : `no "agenda paused for task ${id}" line`}${gone() ? `; ${goneText(gone())}` : ''}`);
         if (!done) { ctx.check('agenda_resumed', false, 'not reached: the task was not done'); return finish(); }
 
         // 6. the agenda resumes
@@ -203,6 +242,6 @@ export default {
             c3 = await counter('after the task');
         }
         ctx.check('agenda_resumed', c2 !== null && c3 > c2, `counter ${c2 ?? '?'} -> ${c3 ?? '?'} within ${p.resumeMinutes} min after the done line${said().some((t) => /^agenda resumed: /.test(t)) ? ' (the agent said "agenda resumed")' : ''}`);
-        finish();
+        await finish();
     },
 };

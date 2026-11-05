@@ -260,16 +260,19 @@ The real agent lives through its first full night from a fresh spawn. The runner
 ### G3 (c): `g3-task-preempts-agenda` (`test/scenarios/g3/`)
 
 A task from the test-only giver `Server` interrupts the real agent's agenda. The agent does the task and reports it, and then its agenda resumes. The server checks every step, and there is no `tp`.
-- **Pinned before a gate batch (lead, #101):**
-  - the marker `x,y,z` (no default: without it the task steps fail with "not reached");
-  - the agenda counter: a comma-separated list of stat criteria, summed. The **provisional** list is the early game's rock piles, logs, sticks and five crafts.
-
-  Until both are pinned, `PINNED` is false and no run is gate-valid. An objective the server rejects is recorded and not counted.
+- **Pinned (lead, #207 review; `PINNED` is true):**
+  - **The marker** `-42,68,-50`: S1-A's server-confirmed surface rock pile in the G2 world, about 19 blocks from the spawn (-50.5 64 -66.5) and inside the spawn chunks. No sampled surface cell lies exactly 20-30 blocks out, and this is the nearest. The gold block replaces the pile, so it is the top solid block.
+  - **The agenda counter:** `stat.mineBlock` for `pyrotech:rock`, the three `pyrotech_compat` rock piles, `minecraft:log` and `log2`, plus `stat.craftItem` for the five early-game crafts. There is no pickup stat, because item-collecting modes raise those.
+  - **Every counter criterion must be added,** or the run is not gate-valid.
+- **The preflight, read-only:** `testforblock X Y+1 Z minecraft:air 0` and the same for Y+2, before the `setblock`. If either cell is not air (water included), the task steps fail with "site not clear", and nothing is placed or whispered.
+- **No state carries over** (#207 review):
+  - The driver moves `bots/<bot>/tasks.json` and `agenda.json` aside before `main.js` starts, renaming them to `.g3-<stamp>.bak`; nothing is deleted. Its start event's `botState` reports this, and `fresh_bot_state` checks it. This applies to every G3 run, so (a) and (b) get the fresh-bot agenda autostart too.
+  - (c) ends with no open task: a task still open at the end is cancelled with the giver's `!taskCancel("<id>")` (`notes.openTaskAtEnd`).
 - **The steps and checks** (`warmMinutes` 5, `acceptS` 60, `taskMinutes` 5 and `resumeMinutes` 5 are compared 'equal'):
   - `agenda_active`: the counter rises over the warm-up.
   - The runner places `setblock <marker> minecraft:gold_block` and whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and stand on it", "normal")`.
   - `task_accepted`: `task <id> accepted: ...` in the bot's chat.
-  - `task_done`: the server finds the bot standing on the marker (`testfor @a[name=<bot>,x=X,y=Y+1,z=Z,dx=0,dy=1,dz=0]`, 1.12's volume selector), **and** the bot says `task <id> done`. The agent's word alone never passes. `task <id> failed: ...` ends the step.
+  - `task_done`: the bot said `agenda paused for task <id>` (the preemption, #207 review), and the server finds the bot standing on the marker (`testfor @a[name=<bot>,x=X,y=Y+1,z=Z,dx=0,dy=1,dz=0]`, 1.12's volume selector), **and** the bot says `task <id> done`. The agent's word alone never passes. `task <id> failed: ...` ends the step.
   - `agenda_resumed`: the counter rises within 5 min after the done line.
   - `no_cheat`.
   - Notes: `agenda paused for task <id>`, `agenda resumed: <step>` and the counter readings.
