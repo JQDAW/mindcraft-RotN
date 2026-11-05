@@ -53,11 +53,20 @@ export const TEST_TASK_GIVER = 'Server';
 const NAME = '[A-Za-z0-9_]{3,16}';
 const N = '-?\\d+';
 /**
- * The two pinned task markers (lead, #207 and #208 reviews; S1-A's confirmed surface rock piles in the G2 world):
- * (c)'s task marker and (d)'s untrusted-task marker. `setblock` is allowed at exactly these cells.
+ * The pinned task markers, all S1-A's confirmed surface rock piles in the G2 world
+ * (test/evidence/s1/s1a-20261102/survey/result.json, notes.confirmed, group rocks):
+ * - task: (c)'s task marker (lead, #207 review);
+ * - untrusted: (d)'s candidates in order (lead, after smoke round 2: -20,70,-56 had Leaves above it). Each
+ *   goes through the same read-only air preflight, and the first clear one is used (pickClearMarker).
+ * `setblock` of the gold block is allowed at exactly these cells (G3_CONSOLE_ALLOW).
  */
-export const G3_MARKERS = Object.freeze({ task: '-42,68,-50', untrusted: '-20,70,-56' });
-const markerCells = Object.values(G3_MARKERS).map((m) => m.split(',').join(' ')).join('|');
+export const G3_MARKERS = Object.freeze({
+    task: '-42,68,-50',
+    untrusted: Object.freeze(['-20,70,-56', '-25,71,-28', '-57,70,-32', '-5,74,-68']),
+});
+/** Every cell where G3 may place its gold block, as "x y z". */
+export const G3_MARKER_CELLS = Object.freeze([G3_MARKERS.task, ...G3_MARKERS.untrusted].map((m) => m.split(',').join(' ')));
+const markerCells = G3_MARKER_CELLS.join('|');
 
 /** G3's approved console commands (lead, #101), anchored. Nothing else reaches the test server. */
 export const G3_CONSOLE_ALLOW = [
@@ -77,7 +86,7 @@ export const G3_CONSOLE_ALLOW = [
     new RegExp(`^scoreboard players list ${NAME}$`),
     /^time query daytime$/,
     /^gamerule [A-Za-z]+$/,                                                // read-only: the query form only, never a value
-    new RegExp(`^setblock (${markerCells}) minecraft:gold_block$`),        // the two pinned task markers only (#208 review)
+    new RegExp(`^setblock (${markerCells}) minecraft:gold_block$`),        // the pinned task markers only (#208 review, G3_MARKERS)
 ];
 
 /**
@@ -307,6 +316,44 @@ export function startEvent(output) {
  */
 const SETBLOCK_ANSWERS = /^(?:Block placed|The block couldn't be placed|Cannot place block outside of the world)$/;
 export const isSetblockReply = (line) => SETBLOCK_ANSWERS.test(parseLine(String(line))?.msg ?? String(line).replace(/\r$/, ''));
+
+/** The read-only site preflight (#207 review): `testforblock` air at Y+1 and Y+2 above the marker. Returns [{cell, air, detail}]. */
+export async function airAbove(confirm, marker) {
+    const above = [];
+    for (const dy of [1, 2]) {
+        const cell = [marker[0], marker[1] + dy, marker[2]];
+        const v = testforblockVerdict(await confirm(`testforblock ${cell.join(' ')} minecraft:air 0`,
+            (l) => { const x = testforblockVerdict(l, cell); return x.ok || /^The block at /.test(x.detail ?? ''); }), cell);
+        above.push({ cell, air: v.ok, detail: v.ok ? 'air' : v.detail });
+    }
+    return above;
+}
+
+/** The "site not clear" text: each cell above a marker that is not air, with what the server found there. */
+export const notClearText = (above) => above.filter((c) => !c.air).map((c) => `${c.cell.join(' ')}: ${c.detail}`).join('; ');
+
+/**
+ * (d)'s marker (lead, after smoke round 2): try the candidates in order, each through the same read-only air
+ * preflight (airAbove), and take the first whose two cells above are air. Nothing is placed here.
+ * Returns {marker, index, tried: [{at, clear, above}]}; marker is null when no candidate is clear.
+ */
+export async function pickClearMarker(confirm, candidates) {
+    const tried = [];
+    for (const [index, at] of candidates.entries()) {
+        const above = await airAbove(confirm, at);
+        const clear = above.every((c) => c.air);
+        tried.push({ at, clear, above });
+        if (clear) return { marker: at, index, tried };
+    }
+    return { marker: null, index: null, tried };
+}
+
+/** Parse a ";"-separated list of "x,y,z" markers; null if empty or any entry is not "x,y,z". */
+export function parseMarkerList(text, parse) {
+    const parts = String(text ?? '').split(';').map((x) => x.trim()).filter(Boolean);
+    const cells = parts.map((x) => parse(x));
+    return parts.length && cells.every(Boolean) ? cells : null;
+}
 
 /**
  * Place a task marker (gold block) with the allowlisted `setblock` and confirm it read-only with

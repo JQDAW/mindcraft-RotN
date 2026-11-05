@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { G3_CONSOLE_ALLOW, statCriterion } from '../runner/lib/g3.mjs';
-import g3c, { AGENDA_COUNTER, MARKER as PINNED_MARKER, PINNED, onMarkerCommand, taskText } from '../scenarios/g3/g3-task-preempts-agenda.mjs';
+import g3c, { AGENDA_COUNTER, MARKER as PINNED_MARKER, PINNED, agendaActive, onMarkerCommand, taskText } from '../scenarios/g3/g3-task-preempts-agenda.mjs';
 
 const NAME = 'FRCFLD';
 const MIN = 60000;
@@ -25,7 +25,9 @@ const ROCK = statCriterion('mineBlock', 'pyrotech_compat:rock_igneous');
  * opt.ignore: the bot never answers the task; opt.neverThere: it says done but never stands on the marker;
  * opt.fail: it reports the task failed; opt.wrongId: its done line names another task; opt.noPause: it never
  * says "agenda paused for task t1"; opt.blocked: the cell above the marker is water; opt.stale: the driver
- * reports bot state it could not clear; opt.badCriterion: a counter criterion the server rejects.
+ * reports bot state it could not clear; opt.badCriterion: a counter criterion the server rejects;
+ * opt.stuckAt (minutes after the join): the agenda says its step is stuck and pauses (the counter stops);
+ * opt.restartAt: later it starts its next step (the counter runs again); opt.noAgendaLine: no agenda chat at all.
  */
 function sim(opt = {}) {
     const log = [];
@@ -41,13 +43,17 @@ function sim(opt = {}) {
     const say = (msg) => add(`<${NAME}> ${msg}`);
     let task = null;   // {at, phase}
     let lastMinute = 0;
+    let stuck = false;
+    let restarted = false;
     const advance = () => {
         if (joinT === null || !online) return;
+        if (opt.stuckAt !== undefined && !stuck && t - joinT >= opt.stuckAt * MIN) { say('agenda step rocks stuck: 5 min of self-prompting; agenda paused'); stuck = true; }
+        if (opt.restartAt !== undefined && stuck && !restarted && t - joinT >= opt.restartAt * MIN) { say('agenda step sticks started: collect 4 sticks'); restarted = true; }
         const m = Math.floor((t - joinT) / MIN);
         for (; lastMinute < m; lastMinute++) {
             const busy = task && task.phase !== 'done';
             const stopped = opt.noResume && task;
-            if (!opt.noAgenda && !busy && !stopped) stats.set(ROCK, (stats.get(ROCK) ?? 0) + 1);
+            if (!opt.noAgenda && !busy && !stopped && !(stuck && !restarted)) stats.set(ROCK, (stats.get(ROCK) ?? 0) + 1);
         }
         if (task && task.phase === 'going' && t - task.at >= 2 * MIN) {
             task.phase = 'there';
@@ -110,13 +116,14 @@ function sim(opt = {}) {
             output.push(`DRIVER ${JSON.stringify({ type: 'mindcraft_start', botState: { dir: 'bots/FRCFLD', movedAside: opt.stale ? [] : ['tasks.json.g3-S.bak'], fresh: !opt.stale } })}`);
             log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`);
             add(`${NAME} joined the game`);
+            if (!opt.noAgendaLine) say('agenda step rocks started: collect 6 rocks');
         },
         alive: () => alive,
         exitCode: () => (alive ? null : 0),
         output: () => output,
         stop() { alive = false; online = false; return Promise.resolve(); },
     };
-    const clock = { now: () => t, sleep: async (ms) => { t += ms; for (let i = 0; i < 3; i++) await tick(); } };
+    const clock = { now: () => t, sleep: async (ms) => { t += ms; advance(); for (let i = 0; i < 3; i++) await tick(); } };
     return { server, bot, clock, sent };
 }
 
@@ -128,7 +135,7 @@ describe('g3-task-preempts-agenda on a simulated server', () => {
     test('the module: G3, the real agent, the step limits, marker and counter compared equal; pinned (lead, #207 review)', () => {
         assert.equal(g3c.gate, 'G3');
         assert.equal(g3c.llm, true);
-        for (const k of ['marker', 'agendaCounter', 'warmMinutes', 'acceptS', 'taskMinutes', 'resumeMinutes', 'maxBatchUsd']) assert.equal(g3c.gateParams[k], 'equal', k);
+        for (const k of ['marker', 'agendaCounter', 'warmMinutes', 'activeWaitMinutes', 'acceptS', 'taskMinutes', 'resumeMinutes', 'maxBatchUsd']) assert.equal(g3c.gateParams[k], 'equal', k);
         assert.equal(PINNED, true);
         assert.equal(g3c.defaults.marker, '-42,68,-50', "S1-A's confirmed surface rock pile");
         assert.equal(g3c.defaults.agendaCounter, AGENDA_COUNTER);
@@ -233,5 +240,60 @@ describe('g3-task-preempts-agenda on a simulated server', () => {
         assert.equal(c.task_done.pass, true);
         assert.equal(c.agenda_resumed.pass, false);
         assert.match(c.agenda_resumed.detail, /within 5 min after the done line/);
+    });
+});
+
+describe('g3-task-preempts-agenda: the task only while the agenda is active (lead, after smoke round 2)', () => {
+    test('agendaActive reads the agenda\'s own chat; the last relevant line wins', () => {
+        const a = (lines) => agendaActive(lines).active;
+        assert.equal(a([]), false, 'no agenda line yet');
+        assert.equal(a(['agenda step rocks started: collect 6 rocks']), true);
+        assert.equal(a(['agenda step rocks started: x', 'agenda step rocks done']), true, 'a done step changes nothing');
+        assert.equal(a(['agenda step rocks started: x', 'agenda step rocks stuck: 5 min of self-prompting; agenda paused']), false);
+        assert.equal(a(['agenda step rocks started: x', 'agenda paused for task t1']), false);
+        assert.equal(a(['agenda paused for task t1', 'agenda resumed: logs']), true);
+        assert.equal(a(['agenda started']), true);
+        for (const end of ['agenda done', 'agenda stopped']) assert.equal(a(['agenda step rocks started: x', end]), false, end);
+        assert.equal(a(['agenda step rocks started: x', 'I think the agenda paused']), true, 'free chat is not an agenda line');
+        assert.deepEqual(agendaActive(['agenda step rocks started: x', 'agenda done']), { active: false, last: 'agenda done' });
+    });
+
+    test('round 2\'s case: the agenda paused itself before the task and never restarts: not reached, no task whispered', async () => {
+        const s = sim({ stuckAt: 4.9 });
+        const r = await run(s);
+        const c = byName(r);
+        for (const k of ['task_accepted', 'task_done', 'agenda_resumed']) {
+            assert.match(c[k].detail, /^not reached: agenda not active at the task \(not active for 5 min; its last agenda line: "agenda step rocks stuck: 5 min of self-prompting; agenda paused"\)$/, k);
+            assert.equal(c[k].pass, false, k);
+        }
+        assert.ok(!s.sent.some((x) => x.startsWith('tell ')), 'no task without an active agenda');
+        assert.equal(r.notes.agendaAtTask.active, false);
+        assert.ok(r.notes.agendaAtTask.waitedS >= 300, `waited the full bound: ${r.notes.agendaAtTask.waitedS}s`);
+        assert.equal(c.no_cheat.pass, true);
+    });
+
+    test('the agenda paused, then started its next step within the bound: the task waits for it and every check passes', async () => {
+        const s = sim({ stuckAt: 4.9, restartAt: 7 });
+        const r = await run(s);
+        const c = byName(r);
+        for (const k of Object.keys(g3c.checks)) assert.equal(c[k].pass, true, `${k}: ${c[k].detail}`);
+        assert.equal(r.notes.agendaAtTask.active, true);
+        assert.equal(r.notes.agendaAtTask.last, 'agenda step sticks started: collect 4 sticks');
+        assert.ok(r.notes.agendaAtTask.waitedS > 0, 'it waited');
+        assert.ok(r.notes.task.sentMin >= 7, `sent after the restart: minute ${r.notes.task.sentMin}`);
+    });
+
+    test('an agenda that never said anything is not active: not reached', async () => {
+        const r = await run(sim({ noAgendaLine: true }));
+        assert.match(byName(r).task_done.detail, /^not reached: agenda not active at the task \(.*its last agenda line: none\)$/);
+    });
+
+    test('agenda_resumed names what task_done missed (no longer "the task was not done")', async () => {
+        const noPause = byName(await run(sim({ noPause: true })));
+        assert.equal(noPause.agenda_resumed.detail, 'not reached: task_done failed (no "agenda paused for task t1" line (no preemption seen))');
+        const never = byName(await run(sim({ neverThere: true })));
+        assert.equal(never.agenda_resumed.detail, 'not reached: task_done failed (the server never found the bot on the marker)');
+        const failed = byName(await run(sim({ fail: true })));
+        assert.match(failed.agenda_resumed.detail, /^not reached: task_done failed \(the server never found the bot on the marker; the bot said "task t1 failed: no path to the gold block"\)$/);
     });
 });
