@@ -13,7 +13,7 @@
 import { requestReplan } from '../replan.js';
 import { safeError } from '../safe_error.js';
 import { nightPhase } from './night.js';
-import { namedAfter } from './threats.js';
+import { isPlayerZombie } from './threats.js';
 
 /** Samples kept while alive (one a second). */
 export const SAMPLES_KEPT = 3;
@@ -32,12 +32,20 @@ export const STREAK_DEATHS = 3;
 export const STREAK_MS = 10 * 60_000;
 /**
  * The death spot (G3 round 2: the LLM sent the bot straight back to 'last_death_position', where
- * a zombie carrying its name killed it again). Within DEATH_SPOT_RADIUS of the last death the bot
- * does not walk for DEATH_SPOT_WAIT_MS, never at dusk or night, and never while a mob carrying
- * its name is loaded within DEATH_SPOT_RADIUS of the spot.
+ * the player zombie Zombie Players raised there killed it again). Within DEATH_SPOT_RADIUS of the
+ * last death, in the same dimension, the bot does not walk:
+ *   - for DEATH_SPOT_WAIT_MS after the death;
+ *   - at dusk or night within DEATH_SPOT_NIGHT_MS (one Minecraft day) of the death, so the rule
+ *     ends (#227 review 4);
+ *   - while a player zombie is loaded within DEATH_SPOT_RADIUS of the spot.
+ * The bot's shelter or home is always allowed (review 4): the places named like home, shelter,
+ * bed or base, and the night routine's shelter site, within HOME_RADIUS of the target.
  */
 export const DEATH_SPOT_WAIT_MS = 5 * 60_000;
+export const DEATH_SPOT_NIGHT_MS = 20 * 60_000;
 export const DEATH_SPOT_RADIUS = 24;
+export const HOME_RADIUS = 4;
+const HOME_NAMES = /home|shelter|bed|base/i;
 
 /** {key: count} over every slot (inventory, armor, off hand). The key keeps 1.12 variants apart. */
 export function inventoryCounts(bot) {
@@ -101,7 +109,7 @@ export class DeathReporter {
         this.samples = [];
         this.deaths = this.deaths.filter(t => now - t < STREAK_MS);
         this.deaths.push(now);
-        if (this.pending.pos) this.last = { at: now, pos: this.pending.pos };
+        if (this.pending.pos) this.last = { at: now, pos: this.pending.pos, dimension };
         return this.pending;
     }
 
@@ -156,22 +164,42 @@ const where = (p) => (p ? `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(
 export function deathSpotBlocked(agent, pos, { now = Date.now() } = {}) {
     const last = agent?._death?.last;
     if (!last?.pos || !pos) return null;
+    const bot = agent.bot;
+    const dimension = bot?.game?.dimension;
+    if (last.dimension != null && dimension != null && last.dimension !== dimension) return null;
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
     if (dist(pos, last.pos) > DEATH_SPOT_RADIUS) return null;
+    if (isHome(agent, pos, dist)) return null;
     const ago = now - last.at;
     if (ago < DEATH_SPOT_WAIT_MS) {
         const left = Math.ceil((DEATH_SPOT_WAIT_MS - ago) / 60_000);
         return `you died there ${Math.round(ago / 1000)} s ago and what killed you may still be there; wait ${left} more min`;
     }
-    const bot = agent.bot;
-    let phase = null;
-    try { phase = agent._night?.clock?.phase?.(now) ?? null; } catch { phase = null; }
-    if (!phase && typeof bot?.time?.timeOfDay === 'number') phase = nightPhase(bot.time.timeOfDay);
-    if (phase === 'night' || phase === 'dusk') return `it is ${phase}; go back to where you died only by day`;
-    const named = Object.values(bot?.entities ?? {}).find(e => e !== bot.entity && e?.position
-        && namedAfter(e, bot.username) && dist(e.position, last.pos) <= DEATH_SPOT_RADIUS);
-    if (named) return 'a mob carrying your name (a risen player zombie) is there; it is a strong threat';
+    const zombie = Object.values(bot?.entities ?? {}).find(e => e !== bot.entity && e?.position
+        && isPlayerZombie(e) && dist(e.position, last.pos) <= DEATH_SPOT_RADIUS);
+    if (zombie) return 'a player zombie (it rises where a player died) is there';
+    if (ago < DEATH_SPOT_NIGHT_MS) {
+        let phase = null;
+        try { phase = agent._night?.clock?.phase?.(now) ?? null; } catch { phase = null; }
+        if (!phase && typeof bot?.time?.timeOfDay === 'number') phase = nightPhase(bot.time.timeOfDay);
+        if (phase === 'night' || phase === 'dusk') return `it is ${phase}; go back to where you died only by day`;
+    }
     return null;
+}
+
+/** The target is the bot's shelter or home (a remembered place, or the night routine's site). */
+function isHome(agent, pos, dist) {
+    const homes = [];
+    const mem = agent.memory_bank?.memory;
+    if (mem && typeof mem === 'object') {
+        for (const [name, p] of Object.entries(mem)) {
+            if (HOME_NAMES.test(name) && Array.isArray(p) && p.length === 3) homes.push({ x: p[0], y: p[1], z: p[2] });
+        }
+    }
+    const site = agent._night?.site;
+    const s = site?.feet ?? site?.pos ?? site;
+    if (s && [s.x, s.y, s.z].every(Number.isFinite)) homes.push(s);
+    return homes.some(h => dist(h, pos) <= HOME_RADIUS);
 }
 
 /**
@@ -246,7 +274,7 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
         now, due: !r.streak,
         note: `You died at ${where(r.pos)} and respawned. ${items} The spot is saved as 'last_death_position'. `
             + `Do not go back there for ${DEATH_SPOT_WAIT_MS / 60_000} min, nor at dusk or night: what killed you may still be there, `
-            + 'and a zombie carrying your name may rise there.',
+            + 'and a zombie rises where a player dies.',
     });
     return r;
 }

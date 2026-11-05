@@ -42,20 +42,34 @@ export function shelterQuiet(name, bot) {
 /**
  * One owner per threat (G3 round 2 batch A: self_preservation and self_defense kept interrupting
  * each other while a Grove Sprite attacked; each switch stopped the other action, so the bot
- * neither fled nor fought, and died). A threat mode (the low-health flee, cowardice,
- * self_defense) claims the threat when it acts and holds it for THREAT_HOLD_MS: in that time no
- * other threat mode starts or interrupts it; the owner may act again, which renews the hold.
+ * neither fled nor fought, and died). A threat mode (cowardice, self_defense) claims the threat
+ * when it acts and holds it for THREAT_HOLD_MS while its action runs: in that time no other
+ * threat mode starts or interrupts it; the owner may act again, which renews the hold.
+ * The low-health flee (self_preservation) overrides the hold at once (#227 review 2); the
+ * lower modes respect its hold. The hold ends when the owner's action ends or fails (review 3),
+ * so a flee with no path does not leave the bot doing nothing while hurt.
  * Hazards (fire, lava, a falling block, drowning) are not threats here: they always act.
  */
 export const THREAT_HOLD_MS = 6000;
 const threatLease = { owner: null, until: 0 };
 
-/** Claim the threat for this mode, or false when another threat mode holds it. */
-export function claimThreat(modeName, now = Date.now()) {
-    if (threatLease.owner && threatLease.owner !== modeName && now < threatLease.until) return false;
+/**
+ * Claim the threat for this mode, or false when another threat mode holds it.
+ * override: the low-health flee, which takes the threat from any lower mode at once.
+ */
+export function claimThreat(modeName, now = Date.now(), { override = false } = {}) {
+    if (!override && threatLease.owner && threatLease.owner !== modeName && now < threatLease.until) return false;
     threatLease.owner = modeName;
     threatLease.until = now + THREAT_HOLD_MS;
     return true;
+}
+
+/** The owner's action ended or failed: the threat is free again (#227 review 3). */
+export function releaseThreat(modeName) {
+    if (threatLease.owner === modeName) {
+        threatLease.owner = null;
+        threatLease.until = 0;
+    }
 }
 
 /** Tests only. */
@@ -124,7 +138,7 @@ const modes_list = [
             }
             else if (bot.health > 0 && bot.isAlive !== false // not while dead (it fled from the death hit)
                 && Date.now() - bot.lastDamageTime < 3000 && (bot.health < 5 || bot.lastDamageTaken >= bot.health)) {
-                if (!claimThreat(this.name)) return; // a fight or a retreat owns the threat (round 2)
+                claimThreat(this.name, Date.now(), { override: true }); // the low-health flee wins at once (#227 review 2)
                 say(agent, 'I\'m dying!');
                 execute(this, agent, async () => {
                     await skills.moveAway(bot, 20);
@@ -467,6 +481,7 @@ export async function execute(mode, agent, func, timeout=-1) {
         reportModeError(mode.name, err);
     } finally {
         mode.active = false;
+        releaseThreat(mode.name); // the hold ends with the owner's action (#227 review 3)
     }
 }
 

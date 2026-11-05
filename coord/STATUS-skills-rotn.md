@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T20:56Z (from `date -u`)
+Updated: 2026-11-05T21:16Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -366,12 +366,14 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
      Tests: `action_limits` 5/5 (the late-window test deposits on develop), `use_on` 11/11 (the collect test goes on before the break ends on develop). Related: 10 files pass. Lint 254.
      - #225 review fixes: `smeltItem` and `clearNearestFurnace` take the run on their first line, so a limit hit during the walk stops them before the furnace opens. Checks after the awaits were added in `craftRecipe`/`craftByFill` (a table placed after the abort is picked up again), in `goToPosition` (after the walk) and inside `collectBlock` (after the equip, the walk and the dig, before `autoLight`). Tests: `action_limits` 8/8 (the 3 new ones fail on the previous code); related 8 files pass; per-file lint unchanged.
 - **G3 smoke round 2 running (lead, received before 2026-11-05T20:13Z by `date -u`, about 2 hours):** until the lead says it is over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
-- **Round 2 batch A findings, open PR** (branch `agent/skills-rotn/threat-arbitration`; STATUS lives here now):
-  1. **Flap:** one owner per threat (`claimThreat`, `THREAT_HOLD_MS` 6 s) for the low-health flee, cowardice and self_defense. The claim is checked right before `execute`, after the `isClearPath` await. Hazards (fire, lava, a falling block) are unchanged. `self_preservation` does not flee while the bot is dead. A stopped walk (`PathStopped`) makes `goToGoal` return false with "Walk stopped (interrupted)." instead of throwing; `moveAway` returns false.
-  2. **Death spot:** a mob carrying the bot's name (custom name, username or display name) is a strong threat, and `threatPlan` flees from it within 24 blocks. `!goToRememberedPlace` and `!goToCoordinates` refuse a target within 24 blocks of the last death for 5 min, at dusk or night, or while such a mob is loaded there (`deathSpotBlocked`). The death re-plan note says so.
+- **#227 open, REQUEST CHANGES addressed** (branch `agent/skills-rotn/threat-arbitration`; STATUS lives here; develop merged in, no force-push), the round 2 batch A findings:
+  1. **Arbitration:** cowardice and self_defense claim the threat and hold it for `THREAT_HOLD_MS` (6 s) while their action runs; neither interrupts the other in that time. The low-health flee overrides the hold at once. The hold is released when the owner's action ends or fails (`execute`'s finally). `self_preservation` does not flee while dead. `PathStopped` is an interrupt (`goToGoal` returns false).
+  2. **Player zombie** (`zombie_players:zombie_player`, matched by entity type; rotn-data #226): fought only with a weapon (a sword or axe, not a pickaxe) and health above half (> 10); otherwise avoided from 24 blocks. The name rule is gone.
+  3. **Death spot** (`deathSpotBlocked`, for `!goToRememberedPlace` and `!goToCoordinates`, within 24 blocks of the last death, same dimension only): refused for 5 min; at dusk or night only within 20 min (one Minecraft day) of the death; and while a player zombie is loaded near the spot. The bot's shelter or home (places named home, shelter, bed or base, or the night site, within 4 blocks) is always allowed.
+  4. **`!attack`** refuses an ignore-unless-provoked mob (a grove sprite) unless it hurt the bot (angry, or a hit within 3 s while it was within 4 blocks), with a logged reason.
 
-     Tests: `threat_arbitration` 5/5 (new; all fail on develop, and the flap test shows self_preservation interrupting self_defense 1 s after each start, as in the log), `use_on` 12/12 (PathStopped, which throws on develop); related 10 files pass; lint per file unchanged.
-- **Next (lead):** review #225 and the round 2 PR. rotn-data is naming the player-zombie mod; `namedAfter` checks names only, so it does not depend on the mob's id.
+     Tests: `threat_arbitration` 8/8. On develop, 7 fail, and the flap test shows cowardice interrupting self_defense 1 s after each start. Against the previous #227 head, the override and release tests fail. Also `use_on` 12/12 (PathStopped); related 10 files pass; lint per file unchanged.
+- **Next (lead):** re-review #227.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

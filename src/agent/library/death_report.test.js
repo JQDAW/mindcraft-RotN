@@ -134,7 +134,7 @@ test('D3: the agent samples while alive, retries a refused respawn, reports once
     const quiet = { now: timers.now() + QUIET_MS, idle: true, reflexActive: false, selfPrompting: false, lastPromptAt: -Infinity };
     assert.equal(replanPromptDue(agent, quiet), true);
     const note = takeReplanNote(agent);
-    assert.match(note, /^Reflexes \(death\) interrupted 'action:collectBlocks'\. You died at 100, 70, 200 and respawned\. You no longer have 12 cobblestone, 5 bread, 3 log:1, 2 log; they may lie at the death spot \(unconfirmed\)\. The spot is saved as 'last_death_position'\. Do not go back there for 5 min, nor at dusk or night: what killed you may still be there, and a zombie carrying your name may rise there\. Check your state/);
+    assert.match(note, /^Reflexes \(death\) interrupted 'action:collectBlocks'\. You died at 100, 70, 200 and respawned\. You no longer have 12 cobblestone, 5 bread, 3 log:1, 2 log; they may lie at the death spot \(unconfirmed\)\. The spot is saved as 'last_death_position'\. Do not go back there for 5 min, nor at dusk or night: what killed you may still be there, and a zombie rises where a player dies. Check your state/);
     assert.ok(!/do not despawn/.test(note), 'no unconfirmed Corpse Complex claim');
     assert.ok(!note.includes('Creeper'), 'the server text never reaches the LLM');
 
