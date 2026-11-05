@@ -1,10 +1,31 @@
 # Status: net-forge
 
-Updated: 2026-11-05T01:49Z
+Updated: 2026-11-05T16:59Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## PAUSED for the Orca restart (2026-11-05T01:49Z, lead's request)
+## Hordes horde event: PR open (2026-11-05T16:59Z), serves skills-rotn D1b
+
+- **Branch:** `agent/net-forge/hordes-event`. The PR is linked in the lead's PR list. It decodes the Hordes 1.1.7 `hordes_hordeevent` channel and emits `bot.emit('rotn:horde', ev)`. No batch was run.
+- **Events for skills-rotn** (in `packages/forge-bridge/src/hordes.js`, wired in `initBot`):
+  - `{ kind: 'start', key: 'message.hordes.EventStart' }`: the horde starts.
+  - `{ kind: 'end', key: 'message.hordes.EventEnd' }`: the horde stopped.
+  - `{ kind: 'wave', sound: 'hordes:horde_spawn', direction: { x, z } }`: a wave spawns. `direction` is the random XZ vector from the player along which the wave spawns.
+  - `{ kind: 'message', key }`: some other text, for example if a listener changed the message.
+  - Only the event's own player gets these (`OngoingHordeEvent.sendMessage`, `sendTo`). The client draws the title from the lang key, so **no chat line** reaches the bot.
+- **Layout (javap on the pinned jars):**
+  - SimpleNetworkWrapper channel: disc 0 is HordeSoundMessage (double x, double z, UTF-8 string sound).
+  - Disc 1 is AtlasLib 1.1.6 SimpleStringMessage (UTF-8 string).
+  - The offsets are cited in the header of `hordes.js`.
+- **Registration:** no handshake change is needed. `hordes_hordeevent` is in the server's REGISTER list (`captures/raw/g1-runB2/summary.json`), and the bridge echoes those channels back by default (`bridge.js`, `echoServerChannels`).
+- **Errors:** short payloads are logged as `decode error on hordes_hordeevent`. Unknown discriminators are logged and ignored. A throwing `rotn:horde` listener is logged and does not break the bridge.
+- **Tests:** `test/hordes.test.js` has hand-written golden vectors and the custom_payload-to-`bot.emit` path. Run with the touched suites (hordes, bridge, channels, e2e-initbot): 25/25 pass. Lint is 254, the baseline, and the touched files add no new errors.
+- **Not proven live:** no server run has sent a horde yet. The bytes come from the jar, not from a capture.
+  - Pack defaults (`config/hordes.cfg`): `hordeSpawnDays=15`, `hordeStartTime=13000`, `spawnFirstDay=false`, `hordeSpawnDuration=20000`, `hordeSpawnSound=true`. So the first horde comes on day 15 at dusk, not on the first night.
+  - A live check would need `/hordes` debug commands (`CommandDebugHordeEvent`) on the test server.
+- **Blocked / requests:** none.
+
+## (Earlier) PAUSED for the Orca restart (2026-11-05T01:49Z, lead's request)
 
 - **Branch:** `agent/net-forge/hordes-event`, from develop `2f2f0c2`, pushed. It holds this STATUS entry only. No code is written yet, nothing is uncommitted and nothing is running.
 - **Task (lead, from the #212 review; serves skills-rotn D1b):** decode the Hordes 1.1.7 horde warning in forge-bridge.

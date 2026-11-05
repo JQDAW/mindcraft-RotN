@@ -12,6 +12,7 @@ import { hasReid, findMod, REID_MODID } from './modlist.js';
 import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, rotnMetadataSerializers, MC_VERSION } from './reid.js';
 import { classifyKick, classifySocketError } from './kicks.js';
 import { modGuiWindow } from './mod-guis.js';
+import { HORDES_CHANNEL, decodeHordes } from './hordes.js';
 
 const require = createRequire(import.meta.url);
 
@@ -70,6 +71,7 @@ export function attachForgeBridge(client, opts) {
         payloadsIn: 0, payloadsOut: 0, byChannel: {},
         parseErrors: 0, partialReadErrors: 0, partialPackets: {}, droppedPackets: {},
         entitySpawns: 0, openGuis: 0, modWindows: 0, modWindowErrors: 0, jeidMessages: 0, reidEffectTails: 0,
+        hordeMessages: 0,
     };
     bridge.handshakeDone = false;
 
@@ -226,6 +228,14 @@ export function attachForgeBridge(client, opts) {
                 bridge.stats.jeidMessages++;
                 if (decoded.type === 'BiomeChunkChange') decoded = { ...decoded, biomes: decoded.biomes.length };
                 bridge.emit('jeid', decoded);
+                break;
+            case HORDES_CHANNEL:
+                // The Hordes horde start/end and wave messages (hordes.js). Short payloads
+                // throw a WireError, which the catch below logs.
+                decoded = decodeHordes(data);
+                bridge.stats.hordeMessages++;
+                if (decoded.type === 'Unknown') log(`${HORDES_CHANNEL}: unknown discriminator ${decoded.disc} (${data.length} bytes); ignored`);
+                else bridge.emit('horde', decoded);
                 break;
             default:
                 bridge.emit('modPayload', { channel, data });
