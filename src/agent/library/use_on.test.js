@@ -247,6 +247,32 @@ test('collectBlock: a collect that never returns gives the block up at COLLECT_L
     assert.equal(settled, true, 'the cancelled collect ended before collectBlock went on (#224 review 2)');
 });
 
+// G3 round 2 B: after the first give-up, every !collectBlocks threw "Cannot read properties of
+// null (reading 'x')": mineflayer's findBlocks also calls the matcher with position-less blocks
+// while it scans a chunk section.
+test('collectBlock: a given-up block with a section scan (blocks without a position) does not throw', T, async (t) => {
+    const saved = { ...skills.COLLECT_LIMITS };
+    t.after(() => Object.assign(skills.COLLECT_LIMITS, saved));
+    Object.assign(skills.COLLECT_LIMITS, { blockMs: 200, totalMs: 1000 });
+    const dirt = { ...block('dirt', at(3)), canHarvest: () => true };
+    const bot = fakeBot({ blocks: [dirt] });
+    const find = bot.findBlocks;
+    bot.findBlocks = (opts) => {
+        const m = opts.matching;
+        if (typeof m === 'function') m({ ...dirt, position: null }); // the section scan
+        return find(opts);
+    };
+    let end = null;
+    bot.collectBlock = {
+        collect: () => new Promise((_, reject) => { end = () => reject(new Error('Cancelled')); }),
+        cancelTask: () => { setTimeout(() => end?.(), 10); return Promise.resolve(); },
+    };
+    bot.tool = { equipForBlock: () => Promise.resolve() };
+    bot.stopDigging = () => {};
+    assert.equal(await skills.collectBlock(bot, 'dirt', 2), false);
+    assert.match(bot.output, /Gave up on dirt at 3, 64, 0/);
+});
+
 // G3 round 2: the flee (moveAway) threw "PathStopped" when something stopped the pathfinder,
 // and the mode reported "Code threw exception". A stopped walk is an interrupt now.
 test('moveAway: a stopped walk (PathStopped) returns false with a plain line, no exception', T, async () => {

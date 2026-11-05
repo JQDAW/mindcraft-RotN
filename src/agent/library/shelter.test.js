@@ -271,3 +271,141 @@ test('#204 re-review 2: only mobs and players block a cell, not dropped items, X
     assert.equal(mobIn(bot({ type: 'player', username: 'JQDAW', position: at }), cell)?.username, 'JQDAW');
     assert.equal(mobIn(bot({ type: 'hostile', name: 'skeleton', position: at }), cell)?.name, 'skeleton');
 });
+
+// G3 round 2 B: at sunset the night routine said "without a pickaxe" while the bot owned a stone
+// pickaxe. The real dump: the pickaxe is level 0 by either name form, and the shell blocks the bot
+// used (Underground Biomes metamorphic cobble) need level 0. bot.inventory.items() covers slots
+// 9-44 only: a pickaxe on the cursor (an equip cut short) or in the off hand was not seen.
+test('G3 round 2 B: the real dump: a stone pickaxe is level 0; metamorphic cobble needs level 0', async () => {
+    const { toolLevels } = await import('./rotn_sources.js');
+    const { dumpState } = await import('./night.js');
+    for (const name of ['stone_pickaxe', 'minecraft:stone_pickaxe'])
+        assert.deepEqual(toolLevels({ inventory: { items: () => [{ name, count: 1, metadata: 17 }] } }, 'pickaxe'), [0], name);
+    for (const meta of [0, 1, 7])
+        assert.equal(dumpState({ name: 'undergroundbiomes:metamorphic_cobble', metadata: meta })?.harvestLevel, 0);
+});
+
+/**
+ * Slots like mineflayer's player window: 9-44 the inventory (items()), 45 the off hand, plus the
+ * cursor (selectedItem). clickWindow drops the cursor stack into a slot; moveSlotItem moves one.
+ */
+function slotInventory(bot, { cursor = null, offHand = null } = {}) {
+    const slots = new Array(46).fill(null);
+    bot.inventory.items().forEach((it, i) => { slots[9 + i] = it; });
+    slots[45] = offHand;
+    const inv = {
+        slots, selectedItem: cursor,
+        items: () => slots.slice(9, 45).filter(i => i && i.count > 0),
+        firstEmptyInventorySlot: () => { const i = slots.findIndex((x, k) => k >= 9 && k < 45 && !x); return i < 0 ? null : i; },
+    };
+    bot.inventory = inv;
+    bot.clickWindow = (slot) => { slots[slot] = inv.selectedItem; inv.selectedItem = null; return Promise.resolve(); };
+    bot.moveSlotItem = (from, to) => { slots[to] = slots[from]; slots[from] = null; return Promise.resolve(); };
+    return inv;
+}
+
+test('#229 review: a pickaxe on the cursor or in the off hand is moved back into the inventory first', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const pick = () => ({ name: 'stone_pickaxe', metadata: 3, count: 1 });
+    const cursor = fakeBot({ pickaxe: false });
+    const ci = slotInventory(cursor.bot, { cursor: pick() });
+    assert.equal((await buildShelter(cursor.bot)).closed, true, cursor.bot.output);
+    assert.equal(ci.selectedItem, null);
+    assert.ok(ci.items().some(i => i.name === 'stone_pickaxe'), 'in the inventory, where allowedTool and equipForBlock look');
+    assert.match(cursor.bot.output, /Moved stone_pickaxe from the cursor back into the inventory\./);
+
+    const off = fakeBot({ pickaxe: false });
+    const oi = slotInventory(off.bot, { offHand: pick() });
+    assert.equal((await buildShelter(off.bot)).closed, true, off.bot.output);
+    assert.equal(oi.slots[45], null);
+    assert.ok(oi.items().some(i => i.name === 'stone_pickaxe'));
+});
+
+test('#229 review: with no pickaxe anywhere the refusal (after the resync wait) logs every place it looked', async (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
+    const none = fakeBot({ pickaxe: false });
+    slotInventory(none.bot, { offHand: { name: 'torch', count: 1 } });
+    await buildShelter(none.bot);
+    assert.match(none.bot.output, /without a pickaxe you could not dig out of it again\. Pickaxes: inventory: none; off hand: torch; cursor: empty; held: nothing\./);
+    assert.ok(lines.some(l => /^\[shelter\] pickaxe check: need level 0; inventory: none; off hand: torch/.test(l)));
+});
+
+test('G3 round 2 B: the model\'s !buildShelter is refused by day (the night routine builds at dusk); a giver\'s is obeyed', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { ActionManager } = await import('../action_manager.js');
+    const make = (timeOfDay, typed = 0) => {
+        const { bot, placed } = fakeBot();
+        Object.assign(bot, { time: { timeOfDay }, emit() {}, interrupt_code: false });
+        const agent = {
+            bot, control: { typed },
+            clearBotLogs() { bot.output = ''; bot.interrupt_code = false; },
+            requestInterrupt() {}, cleanKill() {}, history: { add() {} },
+        };
+        agent.actions = new ActionManager(agent);
+        return { agent, placed };
+    };
+    const perform = getCommand('!buildShelter').perform;
+    const day = make(1000);
+    assert.match(await perform(day.agent), /Not building a shelter by day: the night routine builds one at dusk\./);
+    assert.deepEqual(day.placed, [], 'no cobblestone spent');
+    const dusk = make(12000);
+    await perform(dusk.agent);
+    assert.ok(dusk.placed.length > 0, 'at dusk it builds');
+    const giver = make(1000, 1);
+    await perform(giver.agent);
+    assert.ok(giver.placed.length > 0, 'a task giver who typed it is obeyed by day');
+});
+
+// #229 review 2: with a chest or table open, clickWindow acts on that window and the cursor is its
+// selectedItem. stowCarried puts that stack into the window's inventory part, closes the window
+// (closing a 1.12 container throws a cursor stack on the ground), and bounds each click.
+function openWindow(bot, inv, { cursor = null, freeSlot = 54 } = {}) {
+    const win = { selectedItem: cursor, firstEmptyInventorySlot: () => freeSlot, dropped: [] };
+    bot.currentWindow = win;
+    const playerClick = bot.clickWindow;
+    bot.clickWindow = (slot, ...rest) => {
+        if (bot.currentWindow !== win) return playerClick(slot, ...rest);
+        // a chest window's slot 54 is the player's first inventory slot
+        const free = inv.firstEmptyInventorySlot();
+        inv.slots[free] = win.selectedItem; win.selectedItem = null;
+        return Promise.resolve();
+    };
+    bot.closeWindow = (w) => { if (w.selectedItem) w.dropped.push(w.selectedItem); bot.currentWindow = null; };
+    return win;
+}
+
+test('#229 review 2: an open chest with the pickaxe on its cursor: put down, the chest closed, nothing dropped', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot } = fakeBot({ pickaxe: false });
+    const inv = slotInventory(bot);
+    const win = openWindow(bot, inv, { cursor: { name: 'stone_pickaxe', metadata: 0, count: 1 } });
+    assert.equal((await buildShelter(bot)).closed, true, bot.output);
+    assert.equal(bot.currentWindow, null, 'the chest was closed');
+    assert.deepEqual(win.dropped, [], 'nothing thrown on the ground');
+    assert.ok(inv.items().some(i => i.name === 'stone_pickaxe'));
+});
+
+test('#229 review 2: with no free slot the open window is left open (closing would drop the stack)', async (t) => {
+    t.mock.method(console, 'warn', () => {});
+    const { stowCarried } = await import('./rotn_sources.js');
+    const { bot } = fakeBot({ pickaxe: false });
+    const inv = slotInventory(bot);
+    const win = openWindow(bot, inv, { cursor: { name: 'stone_pickaxe', count: 1 }, freeSlot: null });
+    assert.deepEqual(await stowCarried(bot, () => true, { resyncMs: 0 }), []);
+    assert.equal(bot.currentWindow, win);
+    assert.deepEqual(win.dropped, []);
+});
+
+test('#229 review 2: a click the server never answers ends at STOW_CLICK_MS; no hang', { timeout: 5000 }, async (t) => {
+    const warns = [];
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+    const { stowCarried } = await import('./rotn_sources.js');
+    const { bot } = fakeBot({ pickaxe: false });
+    slotInventory(bot, { offHand: { name: 'stone_pickaxe', count: 1 } });
+    bot.moveSlotItem = () => new Promise(() => {}); // never answered
+    const t0 = Date.now();
+    assert.deepEqual(await stowCarried(bot, () => true, { resyncMs: 0, clickMs: 200 }), []);
+    assert.ok(Date.now() - t0 < 1000, `took ${Date.now() - t0} ms`);
+    assert.ok(warns.some(w => /moving the off-hand stack got no answer within 0\.2 s/.test(w)));
+});

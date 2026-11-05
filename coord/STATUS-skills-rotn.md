@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T21:38Z (from `date -u`)
+Updated: 2026-11-05T22:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -366,20 +366,24 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
      Tests: `action_limits` 5/5 (the late-window test deposits on develop), `use_on` 11/11 (the collect test goes on before the break ends on develop). Related: 10 files pass. Lint 254.
      - #225 review fixes: `smeltItem` and `clearNearestFurnace` take the run on their first line, so a limit hit during the walk stops them before the furnace opens. Checks after the awaits were added in `craftRecipe`/`craftByFill` (a table placed after the abort is picked up again), in `goToPosition` (after the walk) and inside `collectBlock` (after the equip, the walk and the dig, before `autoLight`). Tests: `action_limits` 8/8 (the 3 new ones fail on the previous code); related 8 files pass; per-file lint unchanged.
 - **G3 smoke round 2 running (lead, received before 2026-11-05T20:13Z by `date -u`, about 2 hours):** until the lead says it is over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
-- **#227 open, REQUEST CHANGES addressed** (branch `agent/skills-rotn/threat-arbitration`; STATUS lives here; develop merged in, no force-push), the round 2 batch A findings:
+- **#227 merged** (lead, 2026-11-05), the round 2 batch A findings:
   1. **Arbitration:** cowardice and self_defense claim the threat and hold it for `THREAT_HOLD_MS` (6 s) while their action runs; neither interrupts the other in that time. The low-health flee overrides the hold at once. The hold is released when the owner's action ends or fails (`execute`'s finally). `self_preservation` does not flee while dead. `PathStopped` is an interrupt (`goToGoal` returns false).
   2. **Player zombie** (`zombie_players:zombie_player`, matched by entity type; rotn-data #226): fought only with a weapon (a sword or axe, not a pickaxe) and health above half (> 10); otherwise avoided from 24 blocks. The name rule is gone.
   3. **Death spot** (`deathSpotBlocked`, for `!goToRememberedPlace` and `!goToCoordinates`, within 24 blocks of the last death, same dimension only): refused for 5 min; at dusk or night only within 20 min (one Minecraft day) of the death; and while a player zombie is loaded near the spot. The bot's shelter or home (places named home, shelter, bed or base, or the night site, within 4 blocks) is always allowed.
   4. **`!attack`** refuses an ignore-unless-provoked mob (a grove sprite) unless it hurt the bot (angry, or a hit within 3 s while it was within 4 blocks), with a logged reason.
 
      Tests: `threat_arbitration` 8/8. On develop, 7 fail, and the flap test shows cowardice interrupting self_defense 1 s after each start. Against the previous #227 head, the override and release tests fail. Also `use_on` 12/12 (PathStopped); related 10 files pass; lint per file unchanged.
-- **#229 open** (branch `agent/skills-rotn/night-pickaxe`, from develop), the round 2 batch B findings:
+- **#229 open, REQUEST CHANGES addressed** (branch `agent/skills-rotn/night-pickaxe`; STATUS lives here now; develop merged in, no force-push), the round 2 batch B findings:
   1. The night routine's "without a pickaxe": the real dump rules out the level and name hypotheses. `items()` misses the cursor and the off hand, so `toolLevels` now counts every carried stack, and the refusal names the pickaxes it saw.
   2. The cobblestone step counts rotn-data's `cobblestone` ore (the bot's 10 metamorphic cobble never counted). The model's daytime `!buildShelter` is refused unless a giver typed it.
   3. A #224 regression is fixed: `collectBlock` threw on position-less blocks after a give-up.
 
      Tests: `shelter` 17, `agenda` 15, `use_on` 12; on develop the new tests fail (the real-dump test passes by design); related 8 files pass; lint per file unchanged.
-- **Next (lead):** re-review #227; review #229.
+  4. **#229 review:** one source for the pickaxe. `stowCarried` moves a pickaxe on the cursor or in the off hand back into the inventory before the shelter check and before digging out, and `toolLevels` reads `inventory.items()` only again, as `allowedTool` and `equipForBlock` do. Before refusing, the check waits 600 ms for pending slot updates (after a rejected click the server resends every slot) and logs the inventory, off hand, cursor and held item.
+
+     Tests: `shelter` 18 (cursor and off hand moved back; the refusal lists every place), `night_routine` 19 (digOut from the off hand; it fails with "no pickaxe in hand" on the previous head). Related files pass; lint per file unchanged.
+  5. **#229 review 2:** `stowCarried` deals with an open window (a chest or a table) first. It puts that window's cursor stack into one of its inventory slots, then closes the window; closing a 1.12 container drops a cursor stack on the ground. With no free slot it leaves the window open. Each click has `STOW_CLICK_MS` (3 s). The passive 600 ms resync wait was accepted by the lead. Tests: `shelter` 21/21 (an open chest with the pickaxe on its cursor; no free slot; a click never answered, which hangs on the previous head).
+- **Next (lead):** re-review #229.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

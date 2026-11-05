@@ -5,9 +5,18 @@ import convoManager from '../conversation.js';
 import { addTask, cancelTask } from '../task_queue.js';
 import { finishTask } from '../priority.js';
 import { hasAutonomyPrefix } from '../agenda_driver.js';
+import { nightPhase } from '../library/night.js';
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
 import { threatFor, hurtBy } from '../library/threats.js';
+
+/** 'day', 'dusk' or 'night' by the night routine's clock (else the server time), or null. */
+function phaseNow(agent, now = Date.now()) {
+    let phase = null;
+    try { phase = agent._night?.clock?.phase?.(now) ?? null; } catch { phase = null; }
+    const t = agent.bot?.time?.timeOfDay;
+    return phase ?? (typeof t === 'number' ? nightPhase(t) : null);
+}
 
 /** False (with a log line) when the walk would lead back to the death spot too soon (G3 round 2). */
 function deathSpotOk(agent, x, y, z) {
@@ -432,6 +441,13 @@ export const actionsList = [
         description: 'Build a closed 1x2 night shelter of cobblestone or stone around yourself, from inside (up to 10 blocks; walls you stand next to that are already rock are kept). Run it again inside the shelter to repair an open wall.',
         params: { },
         perform: runAsAction(async (agent) => {
+            // By day the model's own !buildShelter only spends blocks: the night routine builds the
+            // shelter at dusk (G3 round 2 B: it used 9 of the 10 cobblestone the agenda's step needs).
+            // A task giver who types it is obeyed.
+            if (phaseNow(agent) === 'day' && !(agent.control?.typed > 0)) {
+                skills.log(agent.bot, 'Not building a shelter by day: the night routine builds one at dusk. Keep your cobblestone for it.');
+                return;
+            }
             await buildShelter(agent.bot);
         })
     },
