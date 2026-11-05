@@ -10,7 +10,8 @@
 // Interrupts happen only at a safe checkpoint: a higher level stops the
 // self-prompter without stopping the running action (stop(false)), so the command
 // in flight finishes and the next one is for the new work. Only a giver's !stop
-// stops the action at once.
+// stops the action at once. A new task waits PREEMPT_GRACE_MS for that command, then
+// stops it (G3 smoke: a walk that never ended blocked a task).
 //
 // A task runs on the self-prompter with the same bounded budget as an agenda step
 // (#164): at most task_attempts runs (default 3), restarted after a doubling
@@ -28,6 +29,12 @@ import settings from './settings.js';
 import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData, isTaskGiver } from './task_queue.js';
 import { nightTick, leaveShelterFor } from './night_routine.js';
+
+/**
+ * A task waits this long for the self-prompter's command in flight; then that action is stopped
+ * (G3 smoke C+D: a !searchForBlock that never returned blocked task t1 for the whole scenario).
+ */
+export const PREEMPT_GRACE_MS = 5_000;
 
 /** Self-prompter time per task, over all its runs. */
 export const TASK_LLM_MS = 10 * 60_000;
@@ -171,6 +178,28 @@ function dropTask(agent, task) {
     return `task:${task.id}:dropped`;
 }
 
+/**
+ * The task waits for the stopped self-prompter's command in flight. After PREEMPT_GRACE_MS the
+ * action is stopped once, as a giver's !stop stops it: interrupt_code, which skills check at
+ * their checkpoints, and the pathfinder stops. A reflex ("mode:...") finishes on its own.
+ */
+function preemptAction(agent, task, now) {
+    const actions = agent.actions;
+    const label = String(actions?.currentActionLabel ?? '');
+    if (!actions?.executing || !label.startsWith('action:')) return;
+    const w = agent._task_wait;
+    if (!w || w.id !== task.id || w.label !== label) {
+        agent._task_wait = { id: task.id, label, since: now, stopped: false };
+        return;
+    }
+    if (w.stopped || now - w.since < PREEMPT_GRACE_MS) return;
+    w.stopped = true;
+    say(agent, `task ${task.id}: stopping ${label.slice('action:'.length)} to start it`);
+    try {
+        Promise.resolve(actions.stop()).catch(err => console.warn(`[tasks] Could not stop the action (${err?.message}).`));
+    } catch (err) { console.warn(`[tasks] Could not stop the action (${err?.message}).`); }
+}
+
 function taskTick(agent, task, now) {
     if (now - (agent._task_tick_at ?? -Infinity) < TICK_MS) return null;
     const last = agent._task_tick_at;
@@ -194,7 +223,11 @@ function taskTick(agent, task, now) {
     if (task.status === 'queued') {
         // A safe checkpoint: let the self-prompter's command in flight finish first.
         if (sp.isActive()) sp.stop(false);
-        if (sp.loop_active) return `task:${task.id}:waiting`;
+        if (sp.loop_active) {
+            preemptAction(agent, task, now);
+            return `task:${task.id}:waiting`;
+        }
+        agent._task_wait = undefined;
         queue.start(task.id);
         agent._task_id = task.id;
         agent._task_stopped_at = undefined;

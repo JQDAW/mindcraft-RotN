@@ -622,6 +622,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // drops rocks, not cobblestone.
     const ruleTools = []; // [matcher, tool] for rules that need a tool
     const needsTool = [];
+    const fellMatchers = []; // rotn-data "fell-tree": breaking a branch fells the whole tree
     for (const source of worldSources(blockType)) {
         if (!toolAllows(bot, source.tool)) {
             needsTool.push(source);
@@ -630,7 +631,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         for (const name of source.blocks)
             if (!blocktypes.includes(name)) blocktypes.push(name);
         if (source.tool) ruleTools.push([blockMatcher(source.blocks), source.tool, source.blocks]);
+        if (source.id === 'fell-tree') fellMatchers.push(blockMatcher(source.blocks));
     }
+    const fellsTree = (block) => fellMatchers.some(matches => matches(block));
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     // Count what the bot really gains, not a rule's yield (#141 review): the targets in the
     // inventory before and after each break. A block with no item (water) counts 1 per success.
@@ -736,7 +739,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             else if (ruleTool || mc.mustCollectManually(block.name)) {
                 await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                 await bot.dig(block);
-                await pickupNearbyItems(bot);
+                // A Dynamic Trees branch fells the tree: its logs drop around it after the fall,
+                // not at the bot (G3 smoke C+D: "Broke dynamictrees:sprucebranch but got no log").
+                if (fellsTree(block)) await collectFelledDrops(bot, block.position);
+                else await pickupNearbyItems(bot);
                 success = true;
             }
             else {
@@ -813,6 +819,57 @@ export async function pickupNearbyItems(bot) {
     return true;
 }
 
+
+/**
+ * Bounds for picking up a felled tree's drops (G3 smoke C+D). On this pack a branch break fells
+ * the whole tree, which falls in the chop direction and drops its logs where it lands, a few
+ * seconds later. The search is around the broken branch, not the bot.
+ */
+export const FELL_LIMITS = { radius: 12, settleMs: 6000, quietMs: 1000, walkMs: 8000, totalMs: 30_000 };
+
+/**
+ * After a branch break: wait (bounded) for the drops to appear and settle, then walk to each
+ * item within `radius` of the branch, nearest first, each walk and the whole run bounded.
+ * The caller counts the real gain from the inventory. Returns the number of walks that arrived.
+ */
+async function collectFelledDrops(bot, center, limits = {}) {
+    const L = { ...FELL_LIMITS, ...limits };
+    const start = Date.now();
+    const left = () => L.totalMs - (Date.now() - start);
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, Math.max(0, ms)));
+    const dropsNear = () => Object.values(bot.entities ?? {})
+        .filter(e => e && e.name === 'item' && e.position && e.position.distanceTo(center) <= L.radius);
+    // Wait for the fall: until drops have appeared and stayed the same for quietMs, at most settleMs.
+    let seen = dropsNear().length;
+    let changedAt = Date.now();
+    while (Date.now() - start < L.settleMs && !bot.interrupt_code) {
+        await sleep(200);
+        const n = dropsNear().length;
+        if (n !== seen) { seen = n; changedAt = Date.now(); }
+        else if (n > 0 && Date.now() - changedAt >= L.quietMs) break;
+    }
+    const tried = new Set();
+    let walked = 0;
+    while (!bot.interrupt_code && left() > 0) {
+        const here = bot.entity.position;
+        const item = dropsNear().filter(e => !tried.has(e.id ?? e))
+            .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))[0];
+        if (!item) break;
+        tried.add(item.id ?? item);
+        const p = item.position;
+        try {
+            const walk = await within(goToGoal(bot, new pf.goals.GoalNear(p.x, p.y, p.z, 1)),
+                Math.min(L.walkMs, left()), () => stopWalking(bot));
+            if (walk !== TIMED_OUT) walked++;
+        } catch { /* a walk that failed: try the next drop */ }
+        await sleep(Math.min(250, left()));
+    }
+    const where = `${Math.round(center.x)}, ${Math.round(center.y)}, ${Math.round(center.z)}`;
+    const leftBehind = dropsNear().length;
+    log(bot, `Felled the tree at ${where}: ${seen} drops within ${L.radius} blocks, ${leftBehind} left behind`
+        + `${leftBehind && left() <= 0 ? ` (the ${secsText(L.totalMs)} limit)` : ''}.`);
+    return walked;
+}
 
 export async function breakBlockAt(bot, x, y, z) {
     /**
@@ -1357,8 +1414,13 @@ export async function goToGoal(bot, goal) {
 
     bot.pathfinder.setMovements(final_movements);
     try {
-        await bot.pathfinder.goto(goal);
+        // Bounded (G3 smoke C+D: !searchForBlock("log", 64) never returned): pathfinder.goto has
+        // no time limit and can keep going on partial paths. At the limit the walk is stopped
+        // and this throws, as a stopped walk does; goToPosition reports it.
+        const limitMs = GO_TO_LIMITS.totalMs;
+        const walked = await within(bot.pathfinder.goto(goal), limitMs, () => stopWalking(bot));
         clearInterval(doorCheckInterval);
+        if (walked === TIMED_OUT) throw new Error(`time limit of ${secsText(limitMs)} reached`);
         return true;
     } catch (err) {
         clearInterval(doorCheckInterval);
@@ -1522,8 +1584,7 @@ export async function goToNearestBlock(bot, blockType,  min_distance=2, range=64
         return false;
     }
     log(bot, `Found ${blockType} at ${block.position}. Navigating...`);
-    await goToPosition(bot, block.position.x, block.position.y, block.position.z, min_distance);
-    return true;
+    return await goToPosition(bot, block.position.x, block.position.y, block.position.z, min_distance);
 }
 
 export async function goToNearestEntity(bot, entityType, min_distance=2, range=64) {
@@ -1542,8 +1603,7 @@ export async function goToNearestEntity(bot, entityType, min_distance=2, range=6
     }
     let distance = bot.entity.position.distanceTo(entity.position);
     log(bot, `Found ${entityType} ${distance} blocks away.`);
-    await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z, min_distance);
-    return true;
+    return await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z, min_distance);
 }
 
 export async function goToPlayer(bot, username, distance=3) {
@@ -2245,12 +2305,19 @@ export async function goToSurface(bot) {
  */
 export const USE_ON_LIMITS = { range: 32, candidates: 4, walkMs: 20_000, totalMs: 60_000, settleMs: 1500, reach: 4.5 };
 
+/**
+ * The total time one goToGoal walk may take (G3 smoke C+D). 3 min covers a 512-block
+ * !searchForBlock walk with detours; every goTo* skill and command walks through goToGoal.
+ */
+export const GO_TO_LIMITS = { totalMs: 180_000 };
+
 const TIMED_OUT = Symbol('timed out');
 /** The promise's value, or TIMED_OUT after `ms` (then `onTimeout` runs). A later rejection is swallowed. */
 function within(promise, ms, onTimeout = () => {}) {
     let timer;
     const limit = new Promise(resolve => {
-        timer = setTimeout(() => { try { onTimeout(); } catch { /* best effort */ } resolve(TIMED_OUT); }, Math.max(0, ms));
+        // Resolve first: onTimeout (a pathfinder stop) rejects the work, which must not win the race.
+        timer = setTimeout(() => { resolve(TIMED_OUT); try { onTimeout(); } catch { /* best effort */ } }, Math.max(0, ms));
     });
     const work = Promise.resolve(promise);
     work.catch(() => {});
