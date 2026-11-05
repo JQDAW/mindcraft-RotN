@@ -124,7 +124,7 @@ let RULES = rules();
 
 // ---- zip (stored and deflated entries; no ZIP64: the pack and its jars are below 4 GB) ----
 
-function zipEntries(buf) {
+export function zipEntries(buf) {
     let eocd = -1;
     for (let i = buf.length - 22; i >= Math.max(0, buf.length - 65557); i--) {
         if (buf.readUInt32LE(i) === 0x06054b50) { eocd = i; break; }
@@ -146,7 +146,7 @@ function zipEntries(buf) {
     return out;
 }
 
-function zipRead(buf, e) {
+export function zipRead(buf, e) {
     const start = e.local + 30 + buf.readUInt16LE(e.local + 26) + buf.readUInt16LE(e.local + 28);
     const data = buf.subarray(start, start + e.csize);
     if (e.method === 0) return data;
@@ -196,7 +196,7 @@ export function parseClass(buf) {
 
 // ---- Forge's notch -> SRG table ----
 
-function parseSrg(text) {
+export function parseSrg(text) {
     const cl = new Map(), md = new Map();
     for (const line of text.split('\n')) {
         const f = line.trim().split(' ');
