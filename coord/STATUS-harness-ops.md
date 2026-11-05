@@ -1,6 +1,29 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (19:49 UTC, from `date -u`)
+Updated: 2026-11-05 (21:33 UTC, from `date -u`)
+
+## Done: G3 smoke round 2 (the lead's written GO, 2026-11-05)
+
+All SMOKE batches (no `--gate`; `batch.json` says `gate: false, smoke: true`). Evidence is in `test/evidence/g3/*-20261105-r2/`, one PR for all three. Every server was verified deleted, and the project was checked empty after each batch. There was no retry.
+
+| Batch | develop | Verdict | LLM USD | Hetzner |
+| --- | --- | --- | --- | --- |
+| A rocks to stone tools | 139239f2 | FAIL: slain 4 times (Grove Sprite, then "Zombie <bot>" 3 times); agenda stuck at `crude_axe` | 0.1189 | 13 min, 1 h billed |
+| B first night | 139239f2 | PASS, 5/5: survived the night; agenda reached stone_axe | 0.2018 | 44 min, 1 h billed |
+| C task preempts agenda | eb9b5657 | FAIL: task done (server-confirmed at minute 5.9), but the agenda had already paused itself as stuck, so there was no preemption to see | 0.0438 | 11 min, 1 h billed (C+D) |
+| D untrusted refused | eb9b5657 | FAIL, not reached: Leaves above the pinned marker `-20,70,-56` (site not clear) | 0.0054 | with C |
+
+Round 2 LLM total: USD 0.3699. Cumulative with round 1: USD 0.5505 of the 4.50 stop.
+
+**For the lead (decisions):**
+- (c) should send its task only while the agenda runs, or record "agenda not active at the task" as not reached.
+- (d)'s marker needs re-pinning, or a short list of pinned candidates.
+
+**Requests (for skills-rotn, via the lead):**
+- In B, the night shelter said "without a pickaxe" while the bot held a stone pickaxe.
+- In A, `self_preservation` threw 6 times around the deaths.
+
+**harness-ops next:** the `agenda_resumed` wording in (c) when the task was done but not preempted.
 
 ## Done: the first G3 smoke batches (the lead's written GO, 2026-11-05)
 
