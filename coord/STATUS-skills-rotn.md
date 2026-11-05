@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T01:42Z (from `date -u`)
+Updated: 2026-11-05T01:49Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -306,3 +306,22 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
        Tests: `hazard_watch.test.js` 4/4; `night_routine.test.js` 18/18; `src/agent/**` 255/255; lint 254. Request 15 (below): the exact hordes 1.1.7 message keys.
   3. D3: the death report.
+
+## PAUSED (lead: Orca restart, received before 2026-11-05T01:49Z by `date -u`)
+
+- **Merged since the last entry:** #204 (`f84efaa`), #206 (D1a eating), #211 (security).
+- **Branch `agent/skills-rotn/replan-jumps`** (#212, lead REQUEST CHANGES) holds a **WIP** commit `22232274`, pushed. The PR is not ready for review.
+  - Done in the WIP:
+    1. the `teleport_watch` mode is gone. `Agent.bindTeleportWatch()` samples the position on `physicsTick` and judges a jump only on mineflayer's `forcedMove` (the server's position packet), so walking by `self_preservation` never counts (review 3). `onTeleport` logs `[reflex] teleported N blocks (...); re-planning`, stops the action, and requests a re-plan. Death and spawn reset `this._jumpWatch`;
+    2. `hordeWarning` matches `message.hordes.EventStart` only (review 2). `Agent.onHordeMessage(keyOrComponent, { via })` is the handler for forge-bridge's coming `hordes_hordeevent` event (review 1). The vanilla title packet is the fallback only.
+  - **Not done:** `src/agent/library/hazard_watch.test.js` still tests the old API (`JumpWatch.observe`, the `teleport_watch` mode, `resetJumpWatch`). It fails now. No test was run after the WIP edits; the edited files only passed `node --check`.
+- **Exact next step on resume:**
+  1. rewrite `hazard_watch.test.js` for the new API:
+     - `JumpWatch.sample`/`forced`: walking with no forced move is not a jump; a forced move of 7 blocks is; a forced move while riding is not; a reset;
+     - `hordeWarning`: `EventStart` as a key and inside a component matches; `EventEnd`, `TrySleep` and other titles do not;
+     - `Agent.bindTeleportWatch` with an EventEmitter bot: `physicsTick`, then a walk of 8 blocks with no `forcedMove`, gives no re-plan (the `self_preservation` case); a `forcedMove` of 7 blocks gives a re-plan and stops the action; `death` resets;
+     - `Agent.onHordeMessage` via forge and via the title fallback, with the once-a-minute limit;
+  2. then run the targeted tests (`hazard_watch`, `night_routine`, `quiet_reflexes`, `update_loop`), lint the touched files, push, and reply on #212;
+  3. when net-forge's forge-bridge `hordes_hordeevent` event lands, wire it to `onHordeMessage(key, { via: 'forge' })` in `bindHordeWatch`;
+  4. then D3 (the death report).
+
