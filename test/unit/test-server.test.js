@@ -355,6 +355,19 @@ describe('up / run / down', () => {
         assert.ok(!fs.existsSync(path.join(tmp, 'ran.txt')), 'no scenario ran');
     });
 
+    test('run + the G3 batch preflight: a --ttl-hours that cannot cover the batch is refused before any create (lead, after #231)', () => {
+        // One fake scenario at --timeout-min 45: 45 + 5 (logs, teardown) + 20 (build) = 70 min > the 60 of --ttl-hours 1.
+        const r = run(['run', '--yes', '--dry-run', '--ttl-hours', '1', '--name', 'mcr-test-pre', '--', fwd(process.execPath), fwd(path.join(repo, 'test', 'runner', 'batch.mjs')),
+            '--max-batch-usd', '2', '--logs-out', fwd(path.join(tmp, 'g3-logs')), '--timeout-min', '45', '--scenario', 'a', '--out', fwd(path.join(tmp, 'out-a')),
+            '--', 'node', 'driver.mjs'], {
+            ROTN_TEST_MODE: '1', ROTN_BATCH_RUNNER: fwd(path.join(fixtures, 'fake-batch-runner.mjs')), FAKE_DIR: fwd(tmp), OPENROUTER_API_KEY: 'not-a-real-key',
+        });
+        assert.notEqual(r.code, 0, r.all);
+        assert.match(r.stderr, /refused: --ttl-hours 1 \(60 min\) cannot cover this batch: its runner timeouts sum to 45 min, plus 5 for the logs and teardown and 20 for the build, 70 min/);
+        assert.match(r.stderr, /the G3 batch preflight refused \(exit 2\): no server was created/);
+        assert.deepEqual(mutating(), [], 'nothing created');
+    });
+
     test('run + the G3 batch preflight: the script is matched by its resolved path, not by how it ends (#176 review nit)', () => {
         const usage = path.join(tmp, 'usage.json');
         fs.writeFileSync(usage, JSON.stringify({ data: { usage: 0.25, limit: 5, limit_remaining: 4.75 } }));

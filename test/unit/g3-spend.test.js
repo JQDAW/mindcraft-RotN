@@ -16,7 +16,7 @@ import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProble
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
-import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN, scenarioTimeouts, TIMEOUT_MARGIN_MIN, TEST_DEFAULT_TIMEOUT_MIN } from '../runner/batch.mjs';
+import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN, scenarioTimeouts, TIMEOUT_MARGIN_MIN, TEST_DEFAULT_TIMEOUT_MIN, TIMEOUT_CAP_FACTOR, ttlProblems, BUILD_ALLOWANCE_MIN, END_ALLOWANCE_MIN } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
 import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
 import { checkFiles, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds, smokeBatchesUnder, batchKind } from '../tools/g3-batch-check.mjs';
@@ -184,7 +184,7 @@ describe('maxBatchUsd: USD 2, an equal gate parameter of every G3 scenario', () 
 
 /** batch.mjs with the fake runner, a fake key-usage file and a fake TEST_SERVER_CTL that records the fetch. */
 function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b', 'c'], key = KEY, usageFile = true, runExit = '0', fakeCloud = '1', breakUsage = '', hang = '', timeoutMin = null,
-    driver = ['node', 'driver.mjs'], preflight = false, mark = 'passed', mode = null } = {}) {
+    driver = ['node', 'driver.mjs'], preflight = false, mark = 'passed', mode = null, extraEnv = {} } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-batch-'));
     const file = path.join(dir, 'usage.json');
     if (usageFile) fs.writeFileSync(file, JSON.stringify({ data: { usage, limit: 5, limit_remaining: 5 - usage } }));
@@ -198,6 +198,7 @@ function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b
     const env = { ...process.env, ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: file, ROTN_BATCH_RUNNER: FAKE_RUNNER,
         FAKE_DIR: dir, FAKE_SPEND: spend, FAKE_RUN_EXIT: runExit, TEST_SERVER_CTL: fwd(ctl), TEST_SERVER_FAKE_CLOUD: fakeCloud, FAKE_BREAK_USAGE: breakUsage, FAKE_HANG: hang, OPENROUTER_API_KEY: key,
         ROTN_BATCH_PREFLIGHT: mark };
+    Object.assign(env, extraEnv);
     if (!key) delete env.OPENROUTER_API_KEY;
     if (!mark) delete env.ROTN_BATCH_PREFLIGHT;
     return new Promise((resolve) => {
@@ -693,5 +694,72 @@ describe('batch.mjs derives each runner timeout from the scenario (lead, after #
         const r = await runBatch({ scenarios: ['a'], timeoutMin: '3' });
         assert.equal(r.summary.scenarios[0].timeoutMin, 3, r.out);
         assert.match(r.out, /a: start \(spent so far USD [\d.]+ of 2; runner timeout 3 min\)/);
+    });
+});
+
+describe('batch.mjs: the --timeout-min cap, its carry-over, and the TTL check (lead, after #231)', () => {
+    const DRIVER = path.join(HERE, '..', 'runner', 'drivers', 'mindcraft-driver.mjs');
+    const realEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ROTN_TEST_MODE|ROTN_OPENROUTER_USAGE_FILE|ROTN_BATCH_RUNNER|TEST_SERVER_.*|ROTN_BATCH_PREFLIGHT|ROTN_BATCH_TTL_MINUTES)$/.test(k)));
+    const sc = (id, timeoutMin = null) => ({ id, out: 'o', timeoutMin });
+
+    test('an explicit --timeout-min is capped at 3x the derived value', async () => {
+        const reg = await loadScenarios();
+        assert.equal(TIMEOUT_CAP_FACTOR, 3);
+        assert.equal(scenarioTimeouts([sc('g3-task-preempts-agenda', 102)], reg).timeouts[0].timeoutMin, 102, '3 x 34: allowed');
+        const over = scenarioTimeouts([sc('g3-task-preempts-agenda', 103)], reg);
+        assert.deepEqual(over.timeouts, []);
+        assert.equal(over.problems[0], 'scenario g3-task-preempts-agenda: --timeout-min 103 is more than 3x its derived 34 (cap 102); a --timeout-min carries over to later scenarios');
+    });
+
+    test('a --timeout-min carries over to every later scenario, so it must suit each of them', async () => {
+        const a = ['--max-batch-usd', '2', '--logs-out', 'l', '--timeout-min', '40', '--scenario', 'g3-task-preempts-agenda', '--out', 'c',
+            '--scenario', 'g3-untrusted-refused', '--out', 'd', '--', 'node', 'd.mjs'];
+        const parsed = parseBatchArgs(a).options.scenarios;
+        assert.deepEqual(parsed.map((x) => x.timeoutMin), [40, 40], 'one value before (c) also applies to (d)');
+        const reg = await loadScenarios();
+        assert.deepEqual(scenarioTimeouts(parsed, reg).problems, [], '40: at least 34 for (c), at most 3 x 16 = 48 for (d)');
+        const fifty = parseBatchArgs(a.map((x) => (x === '40' ? '50' : x))).options.scenarios;
+        assert.match(scenarioTimeouts(fifty, reg).problems.join('; '), /^scenario g3-untrusted-refused: --timeout-min 50 is more than 3x its derived 16 \(cap 48\)/);
+        const reset = parseBatchArgs(['--max-batch-usd', '2', '--logs-out', 'l', '--timeout-min', '40', '--scenario', 'x', '--out', 'x', '--timeout-min', '20', '--scenario', 'y', '--out', 'y', '--', 'n']).options.scenarios;
+        assert.deepEqual(reset.map((x) => x.timeoutMin), [40, 20], 'until the next --timeout-min');
+    });
+
+    test('ttlProblems: the TTL covers the timeouts plus the build and the end; the time left covers the timeouts plus the end', () => {
+        const t = [{ timeoutMin: 34 }, { timeoutMin: 16 }];
+        assert.deepEqual([BUILD_ALLOWANCE_MIN, END_ALLOWANCE_MIN], [20, 5]);
+        assert.equal(ttlProblems(t).needMin, 55);
+        assert.deepEqual(ttlProblems(t, { ttlMinutes: 75 }).problems, [], '50 + 5 + 20 = 75 fits exactly');
+        assert.equal(ttlProblems(t, { ttlMinutes: 74 }).problems[0], '--ttl-hours 1.23 (74 min) cannot cover this batch: its runner timeouts sum to 50 min, plus 5 for the logs and teardown and 20 for the build, 75 min');
+        assert.deepEqual(ttlProblems(t, { remainingMinutes: 55 }).problems, []);
+        assert.equal(ttlProblems(t, { remainingMinutes: 54.6 }).problems[0], 'only 54 min are left before the server\'s delete-after, and this batch needs 55 (its runner timeouts sum to 50 min, plus 5 for the logs and teardown)');
+        // Round 2's layout with its TTLs fits: A 37 of 2 h, B 67 of 3 h, C+D 34 + 16 of 2 h.
+        for (const [mins, ttl] of [[[37], 120], [[67], 180], [[34, 16], 120]]) assert.deepEqual(ttlProblems(mins.map((m) => ({ timeoutMin: m })), { ttlMinutes: ttl }).problems, [], `${mins} in ${ttl}`);
+    });
+
+    test('the preflight refuses a TTL that cannot cover the batch, before anything exists', { timeout: 60000 }, () => {
+        const args = (extra = []) => [BATCH, '--preflight-files', '--max-batch-usd', '2', '--logs-out', 'l', ...extra, '--scenario', 'g3-task-preempts-agenda', '--out', 'o',
+            '--scenario', 'g3-untrusted-refused', '--out', 'o2', '--', 'node', DRIVER, '--profile', 'profiles/rotn-bot.json'];
+        const short = spawnSync(process.execPath, args(), { encoding: 'utf8', env: { ...realEnv(), ROTN_BATCH_TTL_MINUTES: '60' } });
+        assert.equal(short.status, 2, short.stderr);
+        assert.match(short.stderr, /refused: --ttl-hours 1 \(60 min\) cannot cover this batch: its runner timeouts sum to 50 min, plus 5 for the logs and teardown and 20 for the build, 75 min/);
+        const ok = spawnSync(process.execPath, args(), { encoding: 'utf8', env: { ...realEnv(), ROTN_BATCH_TTL_MINUTES: '120' } });
+        assert.equal(ok.status, 0, ok.stderr);
+    });
+
+    test('at the start, too little time before the server\'s delete-after refuses the batch before any scenario', { timeout: 60000 }, async () => {
+        // 10 min left (test-server.sh's own count); one fake scenario needs 15 + 5.
+        const r = await runBatch({ scenarios: ['a'], extraEnv: { TEST_SERVER_SECONDS_LEFT: String(10 * 60) } });
+        assert.equal(r.code, 2, r.out);
+        assert.match(r.out, /refused: only 10 min are left before the server's delete-after, and this batch needs 20/);
+        assert.deepEqual(r.ran, [], 'no scenario started');
+        assert.equal((await runBatch({ scenarios: ['a'], extraEnv: { TEST_SERVER_SECONDS_LEFT: '-60' } })).code, 2, 'already past it');
+        assert.equal((await runBatch({ scenarios: ['a'], extraEnv: { TEST_SERVER_SECONDS_LEFT: String(60 * 60) } })).code, 0);
+    });
+
+    test('a real test-server run without the server\'s delete-after is refused (fails closed), before anything is read', { timeout: 60000 }, () => {
+        const r = spawnSync(process.execPath, [BATCH, '--max-batch-usd', '2', '--logs-out', 'l', '--scenario', 'g3-untrusted-refused', '--out', 'o',
+            '--', 'node', DRIVER, '--profile', 'profiles/rotn-bot.json'], { encoding: 'utf8', env: { ...realEnv(), TEST_SERVER_CTL: 'ctl.sh' } });
+        assert.equal(r.status, 2, r.stderr);
+        assert.match(r.stderr, /refused: inside a test-server run without the time left before the server's delete-after \(TEST_SERVER_SECONDS_LEFT\)/);
     });
 });

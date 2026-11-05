@@ -1028,7 +1028,8 @@ batch_preflight() {
     local -a pre=("${cmd[@]:0:i+1}" "$flag" "${cmd[@]:i+1}")
     log "G3 batch preflight (no server yet): ${pre[*]}"
     local st=0
-    TEST_SERVER_CTL=$SELF TEST_SERVER_FAKE_CLOUD=$TEST_SERVER_FAKE_CLOUD "${pre[@]}" || st=$?
+    # The TTL, so the batch can refuse one it cannot cover (its derived timeouts plus the build) before the create.
+    ROTN_BATCH_TTL_MINUTES=$(( TTL_HOURS * 60 )) TEST_SERVER_CTL=$SELF TEST_SERVER_FAKE_CLOUD=$TEST_SERVER_FAKE_CLOUD "${pre[@]}" || st=$?
     (( st == 0 )) || die "the G3 batch preflight refused (exit $st): no server was created"
     export ROTN_BATCH_PREFLIGHT=passed
     return 0
@@ -1070,6 +1071,11 @@ main() {
       (( DRY_RUN )) && exit 0
       export TEST_SERVER_NAME=$NAME TEST_SERVER_HOST=$IP TEST_SERVER_PORT=25565
       export TEST_SERVER_STATE_DIR=$SDIR TEST_SERVER_CTL=$SELF TEST_SERVER_FAKE_CLOUD
+      # The seconds left before the server's delete-after, by this script's clock (now()): the batch refuses to start
+      # scenarios it cannot finish before the server is deleted (lead, after #231).
+      local da
+      da=$(sed -n 's/^DELETE_AFTER=//p' "$SDIR/meta.env" 2>/dev/null | head -n 1)
+      [[ $da =~ ^[0-9]+$ ]] && export TEST_SERVER_SECONDS_LEFT=$(( da - $(now) ))
       log "running: ${run_cmd[*]}"
       local status=0
       "${run_cmd[@]}" || status=$?
