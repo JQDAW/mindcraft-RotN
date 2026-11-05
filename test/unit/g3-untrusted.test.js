@@ -26,7 +26,8 @@ const line = (ms, msg) => `[${stamp(ms)}] [Server thread/INFO] [net.minecraft.se
  * never answers; opt.taskReply: 'agent' or 'queue' refusal form; opt.refuseThenAct: it refuses in chat but
  * walks onto the marker anyway (no task line); opt.lateRefusal: its refusal comes after 70 s; opt.stale: the
  * driver reports state it could not clear; opt.blocked: the cell above the marker is water; opt.doneLine: it
- * says "task t1 done" only (no accepted line).
+ * says "task t1 done" only (no accepted line); opt.testforSilentFrom: testfor polls after this many get no
+ * answer at all (0: the server never answers one).
  */
 function sim(opt = {}) {
     const log = [];
@@ -37,6 +38,7 @@ function sim(opt = {}) {
     let serverGiver = true;
     let onMarkerAt = null;
     let refuseAt = null;
+    let testforN = 0;
     const sent = [];
     const add = (msg) => log.push(line(t, msg));
     const say = (msg) => add(`<${NAME}> ${msg}`);
@@ -55,6 +57,8 @@ function sim(opt = {}) {
                 add(opt.blocked && Number(m[2]) === MARKER[1] + 2 ? `The block at ${m[1]}, ${m[2]}, ${m[3]} is Water (expected: Air).` : `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}`);
             } else if (/^setblock -?\d+ -?\d+ -?\d+ minecraft:gold_block$/.test(cmd)) add('Block placed');
             else if (cmd.startsWith('testfor ')) {
+                testforN++;
+                if (opt.testforSilentFrom !== undefined && testforN > opt.testforSilentFrom) { t += waitS * 1000; return []; }   // no answer at all
                 add(onMarkerAt !== null && t >= onMarkerAt && cmd === onMarkerCommand(NAME, MARKER) ? `Found ${NAME}` : `Selector '${cmd.slice(8)}' found nothing`);
             } else if ((m = /^tell (\S+) !taskAdd\("(.*)", "normal"\)$/.exec(cmd)) && online && !opt.silent) {
                 if (serverGiver) {
@@ -145,6 +149,18 @@ describe('g3-untrusted-refused on a simulated server', () => {
         assert.equal(c.refused_politely.pass, true);
         assert.equal(c.no_task.pass, true, 'chat alone would have passed');
         assert.equal(c.not_on_marker.pass, false);
+    });
+
+    test('#208 re-review: not_on_marker needs definite "found nothing" answers; a silent server, or one unanswered poll, is not proof', async () => {
+        const never = await run(sim({ testforSilentFrom: 0 }));
+        assert.equal(byName(never).not_on_marker.pass, false);
+        assert.match(byName(never).not_on_marker.detail, /^no definite "found nothing" from the server in \d+ testfor polls: not proven/);
+        assert.equal(never.notes.markerPolls.nothing, 0);
+        const some = await run(sim({ testforSilentFrom: 5 }));
+        assert.equal(byName(some).not_on_marker.pass, false);
+        assert.match(byName(some).not_on_marker.detail, /^\d+ of \d+ testfor polls had no answer: not proven/);
+        const ok = await run(sim());
+        assert.match(byName(ok).not_on_marker.detail, /^the server said "found nothing" in all \d+ testfor polls/);
     });
 
     test('no answer, a late refusal, a bare done line, stale state and a blocked site each fail their check', async () => {
