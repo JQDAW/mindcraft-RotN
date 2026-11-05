@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T01:25Z (from `date -u`)
+Updated: 2026-11-05T17:17Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -203,6 +203,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 13. ~~Lead: `prismarine-recipe` as a direct dependency~~: the lead is adding 1.5.0 in a lead PR (2026-11-04).
 14. **net-forge (FYI, via the lead):** C1 follows your Request 2 rules: `bot.craft(recipe, 1, table)` with a prismarine-recipe `Recipe` built from bot.registry ids and canFill's real stack metas (never 32767), the result with rotn-data's exact count and meta, NBT results and `remaining` refused, and auto-eat paused around the craft.
 14. ~~rotn-data (via the lead, #206 review 1)~~ (answered by rotn-data #209: `foodValues`, `avoidFood`, `installFoods`): export `foodOf(name, meta)`, returning `{ hunger, saturation }` with the pack's `scripts/food.zs` values on top of the dump (bread 3, not 5), or `null` for a non-food. `food.js` uses it as soon as it exists, and a skipped test then checks bread 3. Also wanted: a structured "harmful food" field with sources, so `AVOID_FOODS` can leave the code.
+15. **rotn-data (via the lead, D1b #212):** from the pack's `hordes-1.1.7` jar (`assets/hordes/lang/en_us.lang`) and any pack override, list the message keys and English texts sent at a wave or horde start, and whether each is a title, a subtitle or chat. The matcher then narrows from "names a horde" to exactly those.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
@@ -241,7 +242,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
     Reply posted. Tests: `shelter.test.js` 10/10; `src/agent/**` 210/210; lint 254.
 - **#202** (the #198 follow-up: `craftRecipe` picks up a table it placed in a `finally`, and guards a missing free space): approved by the lead, merge pending.
-- **D2b-2, the night routine: #204 open** (branch `agent/skills-rotn/night-routine`). `src/agent/night_routine.js`, `nightTick`, sits in the priority stack after control holds and before tasks. No LLM calls.
+- **D2b-2, the night routine: #204 merged** (`f84efaa`) (branch `agent/skills-rotn/night-routine`). `src/agent/night_routine.js`, `nightTick`, sits in the priority stack after control holds and before tasks. No LLM calls.
   - **Dusk:** at `SHELTER_LEAD_MIN` before sunset (by `NightClock`), it stops the self-prompter at the checkpoint and builds a shelter. A task or the agenda that was running resumes later with no new run.
   - **Inside:** every 10 s it repairs a breach at the same site. If the bot was pushed, teleported or walked out, it builds a new shelter where the bot is.
   - **Full daylight:** after the sunrise, it digs out one side with no liquid outside and hands back to tasks and the agenda.
@@ -276,8 +277,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - A takeover now says `task <id> started: …`.
   - Tests: `priority.test.js` 28/28 (the 3 new ones fail on the old code); `src/agent/**` 227/227; lint 254.
 - **Next (lead order):**
-  1. #204's merge and #206's re-review;
-  2. D1: eating, and re-planning after teleports (AggroTP) or invasions:
+  1. the #206 and #212 reviews (#204 is merged);
+  2. D1: eating, and re-planning after teleports (AggroTP) or invasions (then D3, the death report):
      - **D1a, eating: #206 open** (branch `agent/skills-rotn/eating`). An `eating` mode eats by rotn-data's food values (auto-eat sees only vanilla foods and ate the bread first; it is off now):
        - at food 12 or lower when idle, and at 6 or lower during an action;
        - never hawthorn berries, cloudsbluff or the vanilla bad foods;
@@ -298,5 +299,62 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
          Tests: `food.test.js` 10/10; `src/agent/**` 237/237; lint 254; mergeable. Request 14 is answered by #209.
        - **Lead (2026-11-05):** #206 waits for rotn-data's pack food values PR. When that merges, I bring #206 up to date by **merging** develop in, not rebasing: rebasing a pushed branch needs a force-push, which the rules forbid. Then I drop the `foodOf` fallback check if the API differs, and the skipped bread-3 test runs.
-     - **D1b next:** re-plan after a position jump of 5 or more blocks (AggroTP), and after the **hordes title text** (lead: match that text, not any title);
+     - **D1b: #212 open** (branch `agent/skills-rotn/replan-jumps`; develop with #204 merged in, so its diff is D1b only).
+       - A `teleport_watch` mode: a horizontal jump of 5 or more blocks between mode updates stops the action and requests a re-plan; death and spawn reset it.
+       - A horde warning: a title whose translation key or text names a horde, read from the raw 1.12 title packet, at most once a minute.
+       - The #204 nit: a typed command under a stored stop, pause or quiet hold also ends the shelter rules (`typed > 0`).
+
+       Tests: `hazard_watch.test.js` 4/4; `night_routine.test.js` 18/18; `src/agent/**` 255/255; lint 254. Request 15 (below): the exact hordes 1.1.7 message keys.
   3. D3: the death report.
+
+## Session 3 (respawned after the Orca restart, 2026-11-05)
+
+- The branch matched origin (`d60d9008`).
+- **#212 review fixed, ready for re-review:**
+  - `adf8420b` rewrites `hazard_watch.test.js` for the new API, then develop (#206) was merged in (`c5373dbc`).
+  - Tests: `hazard_watch` 4/4; with `night_routine`, `quiet_reflexes`, `update_loop` and `food`, 47/47. Lint 254 (baseline OK).
+  - The tests cover:
+    - walking 8 blocks with no `forcedMove` gives no re-plan (review 3);
+    - a forced move of 7 blocks stops the action and the pathfinder and requests a re-plan;
+    - a respawn after a death is no teleport;
+    - `EventEnd` and `TrySleep` do not match (review 2);
+    - `onHordeMessage` works by forge and by the title fallback, once a minute.
+- **Open:** forge-bridge's `hordes_hordeevent` event is not on develop yet. When it lands, `bindHordeWatch` calls `onHordeMessage(key, { via: 'forge' })` from it (review 1).
+- **D3, the death report: #215 open** (branch `agent/skills-rotn/death-report`, from develop; merges cleanly with #212).
+  - `library/death_report.js`: the loss is measured (the fullest of the last 3 samples taken while alive, against the inventory 3 s after the respawn), with the XP level and the cause.
+  - One report per death: a `[death] died at ...; lost ...` log line, and chat at most once a minute. After 3 deaths in 10 min, one line, then log only.
+  - The upstream LLM prompt per death is gone. A re-plan note gives the bot's own state only, never the server's death text.
+  - If the bot is not alive 9 s after death, it asks for the respawn again every 3 s.
+  - Tests: `death_report` 5/5; related tests 72/72; lint 254.
+- **Lead REQUEST CHANGES on both; fixed, replies posted (2026-11-05):**
+  - **#212, `29dba5e8`:**
+    - The teleport watch resets on `respawn`, `mount` and `dismount`, and ignores forced moves and samples while dead (it was a false teleport on every death).
+    - `bindHordeWatch` listens to net-forge's `rotn:horde` (#214), with the title as the fallback.
+    - Tests: `hazard_watch` 4/4 (2 fail on the old code); related 40/40; lint 254.
+  - **#215, `9c3cb655`:**
+    - A death re-plan is due even when nothing ran (label captured at death; a `due` flag), except in a death streak.
+    - The LLM note hedges the Corpse Complex claim.
+    - `clearReplan` keeps notes for the next prompt.
+    - Fixed 3 lint errors (`setImmediate`) that my earlier baseline run missed because the file was untracked.
+    - Tests: `death_report` 6/6 (2 fail on the old code); related 81/81; lint 254.
+- **Next:** the #212 and #215 re-reviews.
+- **G3 smoke batches running (lead, received before 2026-11-05T17:17Z by `date -u`):** until the lead says they are over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
+
+## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
+
+- **Merged since the last entry:** #204 (`f84efaa`), #206 (D1a eating), #211 (security).
+- **Branch `agent/skills-rotn/replan-jumps`** (#212, lead REQUEST CHANGES) held a **WIP** commit `22232274`, pushed.
+  - Done in the WIP:
+    1. the `teleport_watch` mode is gone. `Agent.bindTeleportWatch()` samples the position on `physicsTick` and judges a jump only on mineflayer's `forcedMove` (the server's position packet), so walking by `self_preservation` never counts (review 3). `onTeleport` logs `[reflex] teleported N blocks (...); re-planning`, stops the action, and requests a re-plan. Death and spawn reset `this._jumpWatch`;
+    2. `hordeWarning` matches `message.hordes.EventStart` only (review 2). `Agent.onHordeMessage(keyOrComponent, { via })` is the handler for forge-bridge's coming `hordes_hordeevent` event (review 1). The vanilla title packet is the fallback only.
+  - **Not done:** `src/agent/library/hazard_watch.test.js` still tests the old API (`JumpWatch.observe`, the `teleport_watch` mode, `resetJumpWatch`). It fails now. No test was run after the WIP edits; the edited files only passed `node --check`.
+- **Exact next step on resume:**
+  1. rewrite `hazard_watch.test.js` for the new API:
+     - `JumpWatch.sample`/`forced`: walking with no forced move is not a jump; a forced move of 7 blocks is; a forced move while riding is not; a reset;
+     - `hordeWarning`: `EventStart` as a key and inside a component matches; `EventEnd`, `TrySleep` and other titles do not;
+     - `Agent.bindTeleportWatch` with an EventEmitter bot: `physicsTick`, then a walk of 8 blocks with no `forcedMove`, gives no re-plan (the `self_preservation` case); a `forcedMove` of 7 blocks gives a re-plan and stops the action; `death` resets;
+     - `Agent.onHordeMessage` via forge and via the title fallback, with the once-a-minute limit;
+  2. then run the targeted tests (`hazard_watch`, `night_routine`, `quiet_reflexes`, `update_loop`), lint the touched files, push, and reply on #212;
+  3. when net-forge's forge-bridge `hordes_hordeevent` event lands, wire it to `onHordeMessage(key, { via: 'forge' })` in `bindHordeWatch`;
+  4. then D3 (the death report).
+
