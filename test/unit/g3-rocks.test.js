@@ -137,12 +137,30 @@ describe('the shared G3 arbiters (lib/g3.mjs)', () => {
     test('cheatProblems allows only the pack\'s first-join commands, once each, right after the first join', () => {
         const lines = [L(0, `${NAME} joined the game`),
             L(1000, `[${NAME}: Game rule commandBlockOutput has been updated to false]`), L(1000, `[${NAME}: Given    [Bread] * 1 to ${NAME}]`)];
-        assert.deepEqual(cheatProblems(lines, NAME), { problems: [], packFirstJoin: ['gamerule_commandBlockOutput', 'give_bread'] });
+        assert.deepEqual(cheatProblems(lines, NAME), { problems: [], packFirstJoin: ['gamerule_commandBlockOutput', 'give_bread'], packRepeats: [] });
         // The same bread give later, or twice, is a command by the bot.
         const later = cheatProblems([...lines, L(60000, `[${NAME}: Given    [Bread] * 1 to ${NAME}]`)], NAME);
         assert.deepEqual(later.problems, [`the bot ran a command: [${NAME}: Given    [Bread] * 1 to ${NAME}]`]);
-        // Before any join line nothing is allowed.
-        assert.equal(cheatProblems([L(0, `[${NAME}: Game rule commandBlockOutput has been updated to false]`)], NAME).problems.length, 1);
+        // Before any join line no give is allowed.
+        assert.equal(cheatProblems([L(0, `[${NAME}: Given    [Bread] * 1 to ${NAME}]`)], NAME).problems.length, 1);
+    });
+
+    test('cheatProblems allows the pack\'s two gamerule lines (false only) again at any time (lead, 2026-11-05)', () => {
+        // Batch A's sequence: both at the join, then both again 2 min 18 s later (test/evidence/g3/g3a-20261105).
+        const gr = (rule, v = 'false') => `[${NAME}: Game rule ${rule} has been updated to ${v}]`;
+        const lines = [L(0, `${NAME} joined the game`), L(0, gr('commandBlockOutput')), L(0, gr('sendCommandFeedback')),
+            L(138000, gr('commandBlockOutput')), L(138000, gr('sendCommandFeedback'))];
+        const r = cheatProblems(lines, NAME);
+        assert.deepEqual(r.problems, []);
+        assert.deepEqual(r.packFirstJoin, ['gamerule_commandBlockOutput', 'gamerule_sendCommandFeedback']);
+        assert.equal(r.packRepeats.length, 2);
+        assert.match(r.packRepeats[0], /^gamerule_commandBlockOutput at \d\d:\d\d:\d\d$/);
+        // Another value or another rule is still a problem.
+        for (const msg of [gr('commandBlockOutput', 'true'), gr('sendCommandFeedback', 'true'), gr('keepInventory', 'true'), gr('doDaylightCycle', 'false')]) {
+            assert.equal(cheatProblems([...lines, L(200000, msg)], NAME).problems.length, 1, msg);
+        }
+        // Repeats count without any first-join match too (a later join on a used world).
+        assert.deepEqual(cheatProblems([L(0, `${NAME} joined the game`), L(60000, gr('commandBlockOutput'))], NAME).problems, []);
     });
 
     test('cheatProblems finds console gives, other senders\' commands on the bot, game mode changes and op', () => {

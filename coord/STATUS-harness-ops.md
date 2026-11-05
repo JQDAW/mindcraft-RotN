@@ -1,6 +1,29 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (16:55 UTC, from `date -u`)
+Updated: 2026-11-05 (19:05 UTC, from `date -u`)
+
+## Done: the first G3 smoke batches (the lead's written GO, 2026-11-05)
+
+Evidence is in `test/evidence/g3/` (branch `agent/harness-ops/g3-smoke-evidence`, one PR for all three batches). Every server was verified deleted, and the project was checked empty after each batch. There was no retry.
+
+| Batch | Code | Verdict | LLM USD | Hetzner |
+| --- | --- | --- | --- | --- |
+| A `g3-rocks-to-stone-tools` | d5ae8e75 | FAIL (gate-valid): agenda stuck at `crafting_table` (`!useOn` hang); `no_cheat` false positive | 0.0765 | 13 min, 1 h billed |
+| B `g3-first-night` | 202b8263 | FAIL (gate-valid) on `no_cheat` only (the same false positive); survived the night, 0 deaths | 0.0526 | 45 min, 1 h billed |
+| C `g3-task-preempts-agenda` | c62f63d5 | FAIL (gate-valid): task accepted, never run (`!searchForBlock("log", 64)` never returned) | 0.0354 | 20 min, 1 h billed (C+D) |
+| D `g3-untrusted-refused` | c62f63d5 | PASS (gate-valid), 7/7 | 0.0160 | (with C) |
+
+Total LLM USD 0.1805, and 3 billed server hours (about EUR 0.41 plus 3 Primary IPv4-hours).
+
+**The lead's decisions (2026-11-05):**
+1. `cheatProblems` allows exactly `gamerule commandBlockOutput false` and `gamerule sendCommandFeedback false` (value false only) at any time. Small `test/` PR, recorded in DRIVER.md.
+2. The `!useOn` hang goes to skills-rotn (the lead routes it).
+
+**Requests (for skills-rotn, via the lead):**
+- In (c), a long-running action (`!searchForBlock("log", 64)`) blocked a newly accepted task. Accepting a task should interrupt the current action, or every action needs a bound.
+- In C+D (3 times in each scenario), breaking Dynamic Trees branches gave no log ("Broke dynamictrees:sprucebranch but got no log"). It did not appear in A or B.
+
+**Open PRs:** #218 (this evidence) and #219 (the `cheatProblems` change, the lead's decision 1). **Next:** the #207 nits PR, which adds: (d)'s `notes.marker.reply` holds a later chat line instead of the `setblock` answer (fixed by the `testforblock` confirm).
 
 ## Resumed after the Orca restart (2026-11-05 16:55 UTC)
 

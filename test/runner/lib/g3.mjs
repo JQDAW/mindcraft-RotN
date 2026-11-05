@@ -1,3 +1,5 @@
+import { testforblockVerdict } from './g2.mjs';
+
 // G3 rules the runner enforces for every G3 scenario (coord/STATUS-harness-ops.md, "G3 batches";
 // lead, #101 and #116 review):
 //   - the batch spend stop: maxBatchUsd (USD 2) is a gate parameter compared 'equal';
@@ -191,7 +193,8 @@ export const statCriterion = (kind, item) => `stat.${kind}.${item.replace(':', '
 /**
  * The pack's own commands on a fresh world's first join, which the server logs as the bot's
  * ("[<bot>: ...]"; P1 attempts 1 and 2, test/evidence/probe/p1-20261103-a2/server.log lines 20-24).
- * They are allowed once each, within FIRST_JOIN_WINDOW_S of the bot's first join; nothing else is.
+ * They are allowed once each, within FIRST_JOIN_WINDOW_S of the bot's first join; the two gamerules
+ * also at any time (PACK_ANY_TIME). Nothing else is.
  */
 export const PACK_FIRST_JOIN = Object.freeze([
     { id: 'gamerule_commandBlockOutput', re: () => /^Game rule commandBlockOutput has been updated to false$/ },
@@ -200,6 +203,12 @@ export const PACK_FIRST_JOIN = Object.freeze([
     { id: 'give_bundle', re: (bot) => new RegExp(`^Given\\s+\\[Bundle\\] \\* 1 to ${esc(bot)}$`) },
 ]);
 export const FIRST_JOIN_WINDOW_S = 10;
+/**
+ * The pack re-runs its two gamerules as the bot later on (G3 smoke batches A and B, 2026-11-05: about
+ * 2.5 min after the join, as the bot finished collecting logs). The lead allowed exactly these two lines,
+ * value false only, at any time (2026-11-05). They are recorded in packRepeats, never as a problem.
+ */
+export const PACK_ANY_TIME = Object.freeze(PACK_FIRST_JOIN.filter((x) => x.id.startsWith('gamerule_')));
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const LOG_LINE = /^\[(\d\d):(\d\d):(\d\d)\] \[[^\]]*\/[A-Z]+\](?: \[[^\]]*\])?: (.*)$/;
@@ -208,16 +217,19 @@ const secs = (h, m, s) => Number(h) * 3600 + Number(m) * 60 + Number(s);
 /**
  * The no_cheat arbiter (G3 plan, arbiter 6): in the log lines of the run, any of these is a problem:
  *   - a command the bot ran, which 1.12 logs as "[<bot>: ...]" (only an op can run one), except the
- *     pack's first-join commands (PACK_FIRST_JOIN, once each, within the window after the first join);
+ *     pack's first-join commands (PACK_FIRST_JOIN, once each, within the window after the first join)
+ *     and the pack's two gamerule lines at any time (PACK_ANY_TIME);
  *   - another sender's logged command that names the bot ("[<other>: ... <bot> ...]");
  *   - a console give to the bot ("Given [x] * n to <bot>"), a game mode change or "Opped <bot>".
- * The runner itself gives nothing in G3 (guardConsole refuses give). Returns {problems, packFirstJoin}.
+ * The runner itself gives nothing in G3 (guardConsole refuses give).
+ * Returns {problems, packFirstJoin, packRepeats}; packRepeats lists "<id> at hh:mm:ss" for each allowed repeat.
  */
 export function cheatProblems(lines, bot, { windowS = FIRST_JOIN_WINDOW_S } = {}) {
     const b = esc(bot);
     const named = new RegExp(`(^|[^A-Za-z0-9_])${b}([^A-Za-z0-9_]|$)`);
     const problems = [];
     const packFirstJoin = [];
+    const packRepeats = [];
     const used = new Set();
     let joinedAt = null;
     for (const line of lines) {
@@ -230,16 +242,18 @@ export function cheatProblems(lines, bot, { windowS = FIRST_JOIN_WINDOW_S } = {}
         if (admin && admin[1] === bot) {
             const inWindow = joinedAt !== null && ((t - joinedAt + 86400) % 86400) <= windowS;
             const pack = inWindow && PACK_FIRST_JOIN.find((x) => !used.has(x.id) && x.re(bot).test(admin[2]));
+            const repeat = !pack && PACK_ANY_TIME.find((x) => x.re(bot).test(admin[2]));
             if (pack) {
                 used.add(pack.id);
                 packFirstJoin.push(pack.id);
-            } else problems.push(`the bot ran a command: ${msg}`);
+            } else if (repeat) packRepeats.push(`${repeat.id} at ${h}:${mi}:${s}`);
+            else problems.push(`the bot ran a command: ${msg}`);
         } else if (admin && named.test(admin[2])) problems.push(`a logged command names the bot: ${msg}`);
         else if (new RegExp(`^Given\\s+\\[.*\\] \\* \\d+ to ${b}$`).test(msg)) problems.push(`a give to the bot: ${msg}`);
         else if (/game mode/i.test(msg) && named.test(msg)) problems.push(`a game mode change: ${msg}`);
         else if (new RegExp(`^Opped ${b}$`).test(msg)) problems.push(`the bot was opped: ${msg}`);
     }
-    return { problems, packFirstJoin };
+    return { problems, packFirstJoin, packRepeats };
 }
 
 /**
@@ -276,4 +290,21 @@ export function startEvent(output) {
         } catch { /* not an event */ }
     }
     return null;
+}
+
+const SETBLOCK_REPLY = /Block placed|could not be placed|couldn't be placed/i;
+
+/**
+ * Place a task marker (gold block) with the allowlisted `setblock` and confirm it read-only with
+ * `testforblock <marker> minecraft:gold_block 0` (#207 review nit). confirm(cmd, done) is the scenario's
+ * lateConsole confirm. reply is the setblock answer line itself (smoke batch C+D: the last returned line
+ * could be a later chat line). Returns {at, reply, goldBlock, detail}; goldBlock false means the marker is
+ * not proven, and the scenario must not count on it.
+ */
+export async function placeGoldMarker(confirm, marker) {
+    const placed = await confirm(`setblock ${marker.join(' ')} minecraft:gold_block`, (l) => l.some((x) => SETBLOCK_REPLY.test(x)));
+    const reply = placed.find((x) => SETBLOCK_REPLY.test(x)) ?? null;
+    const v = testforblockVerdict(await confirm(`testforblock ${marker.join(' ')} minecraft:gold_block 0`,
+        (l) => { const x = testforblockVerdict(l, marker); return x.ok || /^The block at /.test(x.detail ?? ''); }), marker);
+    return { at: marker, reply, goldBlock: v.ok, detail: v.ok ? 'found' : v.detail };
 }

@@ -26,7 +26,8 @@
 //      is their sum; one the server rejects is recorded, not counted, and makes the run not gate-valid).
 //   2. Warm-up: the agent plays its agenda for warmMinutes (5). agenda_active: the counter rose.
 //   3. The preflight, read-only: `testforblock X Y+1 Z minecraft:air 0` and the same for Y+2. Then
-//      `setblock <marker> minecraft:gold_block` (approved for the task marker only), then the test-only
+//      `setblock <marker> minecraft:gold_block` (approved for the task marker only), confirmed read-only with
+//      `testforblock <marker> minecraft:gold_block 0` (placeGoldMarker; no proof: the task steps fail), then the test-only
 //      giver whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and
 //      stand on it", "normal")`.
 //   4. task_accepted: "task <id> accepted: ..." in the bot's chat within acceptS (60 s).
@@ -43,7 +44,7 @@
 // the counter readings, the minute the server first saw the bot on the marker.
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED, parseCentre, testforVerdict, testforblockVerdict } from '../../runner/lib/g2.mjs';
-import { G3_DEFAULTS, G3_GATE_PARAMS, G3_MARKERS, TEST_TASK_GIVER, cheatProblems, guardConsole, startEvent, statCriterion } from '../../runner/lib/g3.mjs';
+import { G3_DEFAULTS, G3_GATE_PARAMS, G3_MARKERS, TEST_TASK_GIVER, cheatProblems, guardConsole, placeGoldMarker, startEvent, statCriterion } from '../../runner/lib/g3.mjs';
 import { playerScores, scoreboardAddResult } from '../../runner/lib/s1.mjs';
 import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
@@ -169,6 +170,7 @@ export default {
             ctx.note('agendaChat', said().filter((t) => /^(agenda|task) /.test(t)));
             const cheat = cheatProblems(s.sinceMarker(), name);
             ctx.note('packFirstJoin', cheat.packFirstJoin);
+            ctx.note('packRepeats', cheat.packRepeats);
             ctx.check('no_cheat', cheat.problems.length === 0, cheat.problems.length ? cheat.problems.slice(0, 5).join('; ') : `nothing found (the pack's first-join commands: ${cheat.packFirstJoin.join(', ') || 'none'})`);
         };
         const notReached = (why) => { for (const k of ['task_accepted', 'task_done', 'agenda_resumed']) ctx.check(k, false, `not reached: ${why}`); };
@@ -193,8 +195,9 @@ export default {
         }
         ctx.note('markerPreflight', above);
         if (!above.every((c) => c.air)) { notReached(`site not clear: ${above.filter((c) => !c.air).map((c) => `${c.cell.join(' ')}: ${c.detail}`).join('; ')}`); return finish(); }
-        const placed = await confirm(`setblock ${marker.join(' ')} minecraft:gold_block`, (l) => l.some((x) => /Block placed|could not be placed|couldn't be placed/i.test(x)));
-        ctx.note('marker', { at: marker, reply: placed.slice(-1)[0] ?? null });
+        const placed = await placeGoldMarker(confirm, marker);
+        ctx.note('marker', placed);
+        if (!placed.goldBlock) { notReached(`the gold block is not at the marker: ${placed.detail}`); return finish(); }
         const chatBefore = said().length;
         const text = taskText(marker);
         lc.con(`tell ${name} !taskAdd("${text}", "normal")`);

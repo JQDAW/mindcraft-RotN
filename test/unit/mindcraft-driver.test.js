@@ -154,17 +154,32 @@ async function waitFor(fn, ms = 15000) {
 const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
 
 describe('mindcraft-driver: no bot state from an earlier run (#207 review)', () => {
-    test('clearBotState moves tasks.json and agenda.json aside (renamed, never deleted) and leaves the rest', () => {
+    test('clearBotState moves tasks.json and agenda.json aside (renamed) and leaves the rest', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcd-state-'));
         fs.writeFileSync(path.join(dir, 'tasks.json'), '{"tasks":[{"id":"t1","status":"active"}]}');
         fs.writeFileSync(path.join(dir, 'agenda.json'), '{}');
         fs.writeFileSync(path.join(dir, 'memory.json'), '{}');
         const r = clearBotState(dir, { stamp: 'S' });
-        assert.deepEqual(r, { dir, movedAside: ['tasks.json.g3-S.bak', 'agenda.json.g3-S.bak'], fresh: true });
+        assert.deepEqual(r, { dir, movedAside: ['tasks.json.g3-S.bak', 'agenda.json.g3-S.bak'], pruned: [], fresh: true });
         assert.deepEqual(fs.readdirSync(dir).sort(), ['agenda.json.g3-S.bak', 'memory.json', 'tasks.json.g3-S.bak']);
         assert.match(fs.readFileSync(path.join(dir, 'tasks.json.g3-S.bak'), 'utf8'), /"t1"/, 'the old queue is kept for the record');
         // Nothing there (a first run, or no bot folder yet): nothing to do, and still fresh.
-        assert.deepEqual(clearBotState(path.join(dir, 'none')), { dir: path.join(dir, 'none'), movedAside: [], fresh: true });
+        assert.deepEqual(clearBotState(path.join(dir, 'none')), { dir: path.join(dir, 'none'), movedAside: [], pruned: [], fresh: true });
+    });
+
+    test('clearBotState keeps only the newest backups per state file (#207 review nit) and touches nothing else', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcd-prune-'));
+        const stamp = (i) => `2026-11-0${i}T10-00-00-000Z`;
+        for (let i = 1; i <= 4; i++) fs.writeFileSync(path.join(dir, `tasks.json.g3-${stamp(i)}.bak`), '{}');
+        fs.writeFileSync(path.join(dir, `agenda.json.g3-${stamp(1)}.bak`), '{}');
+        for (const other of ['memory.json', 'tasks.json.bak', 'tasks.json.old.bak', 'histories.g3-x.bak']) fs.writeFileSync(path.join(dir, other), '{}');
+        fs.writeFileSync(path.join(dir, 'tasks.json'), '{}');
+        const r = clearBotState(dir, { stamp: stamp(5), keep: 2 });
+        assert.deepEqual(r.movedAside, [`tasks.json.g3-${stamp(5)}.bak`]);
+        assert.deepEqual(r.pruned, [`tasks.json.g3-${stamp(1)}.bak`, `tasks.json.g3-${stamp(2)}.bak`, `tasks.json.g3-${stamp(3)}.bak`]);
+        assert.deepEqual(fs.readdirSync(dir).sort(), [`agenda.json.g3-${stamp(1)}.bak`, 'histories.g3-x.bak', 'memory.json', 'tasks.json.bak',
+            `tasks.json.g3-${stamp(4)}.bak`, `tasks.json.g3-${stamp(5)}.bak`, 'tasks.json.old.bak'].sort());
+        assert.equal(r.fresh, true);
     });
 });
 

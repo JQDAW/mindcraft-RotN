@@ -231,8 +231,10 @@ The real agent plays its early-game agenda from a fresh spawn, and the runner wh
   - a command the bot ran (`[<bot>: ...]`);
   - another sender's logged command that names the bot;
   - a console give to the bot, a game mode change or `Opped <bot>`.
-  - The only exception is the pack's own first-join commands (P1's server logs): the two gamerules, 1 Bread and 1 Bundle, once each, within 10 s of the first join.
-- **Offline test:** `test/unit/g3-rocks.test.js`, a simulated server with a scripted fake agent. No batch has run this scenario yet.
+  - The exceptions are only the pack's own commands:
+    - its first-join commands (P1's server logs): the two gamerules, 1 Bread and 1 Bundle, once each, within 10 s of the first join (`notes.packFirstJoin`);
+    - exactly `Game rule commandBlockOutput has been updated to false` and `Game rule sendCommandFeedback has been updated to false`, at any time (`PACK_ANY_TIME`; the lead, 2026-11-05). The pack re-ran both as the bot about 2.5 min after the join in smoke batches A and B. Each repeat is recorded in `notes.packRepeats`. Any other value or rule is still a problem.
+- **Offline test:** `test/unit/g3-rocks.test.js`, a simulated server with a scripted fake agent. The first smoke batch is in `test/evidence/g3/g3a-20261105/`.
 
 ### G3 (b): `g3-first-night` (`test/scenarios/g3/`)
 
@@ -266,11 +268,11 @@ A task from the test-only giver `Server` interrupts the real agent's agenda. The
   - **Every counter criterion must be added,** or the run is not gate-valid.
 - **The preflight, read-only:** `testforblock X Y+1 Z minecraft:air 0` and the same for Y+2, before the `setblock`. If either cell is not air (water included), the task steps fail with "site not clear", and nothing is placed or whispered.
 - **No state carries over** (#207 review):
-  - The driver moves `bots/<bot>/tasks.json` and `agenda.json` aside before `main.js` starts, renaming them to `.g3-<stamp>.bak`; nothing is deleted. Its start event's `botState` reports this, and `fresh_bot_state` checks it. This applies to every G3 run, so (a) and (b) get the fresh-bot agenda autostart too.
+  - The driver moves `bots/<bot>/tasks.json` and `agenda.json` aside before `main.js` starts, renaming them to `.g3-<stamp>.bak`. It does this on every start: there is no G3 gate inside, because only the G3 scenarios use this driver, so (a) and (b) get the fresh-bot agenda autostart too. It then keeps the newest 5 of its own backups per file (`KEEP_BACKUPS`) and deletes older ones; nothing else in the folder is touched (#207 review nit). Its start event's `botState` reports `movedAside` and `pruned`, and `fresh_bot_state` checks it.
   - (c) ends with no open task: a task still open at the end is cancelled with the giver's `!taskCancel("<id>")` (`notes.openTaskAtEnd`).
 - **The steps and checks** (`warmMinutes` 5, `acceptS` 60, `taskMinutes` 5 and `resumeMinutes` 5 are compared 'equal'):
   - `agenda_active`: the counter rises over the warm-up.
-  - The runner places `setblock <marker> minecraft:gold_block` and whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and stand on it", "normal")`.
+  - The runner places `setblock <marker> minecraft:gold_block`, confirms it read-only with `testforblock <marker> minecraft:gold_block 0` (`placeGoldMarker` in `lib/g3.mjs`, #207 review nit; without that proof the task steps fail and nothing is whispered; `notes.marker` keeps the `setblock` answer line itself), and whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and stand on it", "normal")`.
   - `task_accepted`: `task <id> accepted: ...` in the bot's chat.
   - `task_done`: the bot said `agenda paused for task <id>` (the preemption, #207 review), and the server finds the bot standing on the marker (`testfor @a[name=<bot>,x=X,y=Y+1,z=Z,dx=0,dy=1,dz=0]`, 1.12's volume selector), **and** the bot says `task <id> done`. The agent's word alone never passes. `task <id> failed: ...` ends the step.
   - `agenda_resumed`: the counter rises within 5 min after the done line.
@@ -288,7 +290,7 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **The switch:** the scenario starts the driver with `ROTN_G3_PRODUCTION_GIVERS=1`, which turns `allow_server_task_giver` off. It can only turn the test giver off, never on, and it is not passed on to `main.js`.
   - The driver's `mindcraft_start` event reports `serverTaskGiver` (`production_givers` requires false) and `botState` (`fresh_bot_state`).
   - `tasks.json` and `agenda.json` are moved aside before the start, so no task from (c) can run here. (c) and (d) may share one server.
-- **The marker:** `G3_MARKERS` in `lib/g3.mjs` holds both pinned markers, and `G3_CONSOLE_ALLOW` allows `setblock ... minecraft:gold_block` at exactly those two cells (#208 re-review). (d) has its own: `-20,70,-56`, S1-A's other confirmed surface rock pile, about 32 blocks from the spawn (not (c)'s `-42,68,-50`). The same read-only air preflight for Y+1 and Y+2 runs, then `setblock` of the gold block.
+- **The marker:** `G3_MARKERS` in `lib/g3.mjs` holds both pinned markers, and `G3_CONSOLE_ALLOW` allows `setblock ... minecraft:gold_block` at exactly those two cells (#208 re-review). (d) has its own: `-20,70,-56`, S1-A's other confirmed surface rock pile, about 32 blocks from the spawn (not (c)'s `-42,68,-50`). The same read-only air preflight for Y+1 and Y+2 runs, then `setblock` of the gold block, confirmed with `testforblock` as in (c). Without that proof the checks fail and nothing is whispered.
 - **The whisper:** after `settleS` (60 s), what an untrusted player would type, a task with a server-checkable result: `tell <bot> !taskAdd("stand on the gold block at X Y Z", "normal")`.
 - **Checks** (`marker`, `settleS`, `acceptS` and `observeS` are compared 'equal'):
   - `refused_politely`: within 60 s, one of skills-rotn's refusals: `Sorry Server, I only run commands from task givers.` (agent.js) or `task refused: Server is not a task giver` (task_queue.js). A later refusal fails, and is reported as late.
