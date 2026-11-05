@@ -1,0 +1,125 @@
+// Offline tests for the bounded !useOn (skills-rotn; G3 batch A finding: !useOn("pyrotech:crude_axe",
+// "log") walked to a log and never returned). A fake bot on the 1.12.2 registry plus the crude axe;
+// its pathfinder can be told never to arrive (as mineflayer-pathfinder's goto can keep going). No
+// server, no LLM. On the old code the "never arrives" tests hang until the per-test timeout.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import minecraftData from 'minecraft-data';
+import { Vec3 } from 'vec3';
+import { __setRegistryForTest } from '../../utils/mcdata.js';
+import * as skills from './skills.js';
+
+const vanilla = minecraftData('1.12.2');
+const reg = { ...vanilla, items: { ...vanilla.items }, itemsByName: { ...vanilla.itemsByName } };
+const AXE = { id: 5100, name: 'pyrotech:crude_axe', stackSize: 1 };
+reg.items[AXE.id] = AXE; reg.itemsByName[AXE.name] = AXE;
+__setRegistryForTest(reg);
+
+const LIMITS = { walkMs: 200, totalMs: 1000, settleMs: 200 };
+const T = { timeout: 5000 }; // the old code hangs here: fail instead of stalling the run
+
+const at = (x, y = 64, z = 0) => new Vec3(x, y, z);
+const block = (name, position, metadata = 0) => ({
+    name, metadata, type: reg.blocksByName[name].id, position,
+    boundingBox: 'block', transparent: false, shapes: [[0, 0, 0, 1, 1, 1]],
+});
+const stack = (name, count, metadata = 0) => ({ name, count, metadata, type: reg.itemsByName[name].id });
+
+/**
+ * arrive: 'never' (goto pends until pathfinder.stop, which rejects it as the real one does),
+ * or 'yes' (the bot ends next to the goal). onUse(block, bot) simulates the server's answer.
+ */
+function fakeBot({ blocks = [], arrive = 'yes', onUse = () => {} } = {}) {
+    const calls = { goto: 0, stop: 0, used: [] };
+    const slots = new Array(46).fill(null);
+    slots[36] = stack('pyrotech:crude_axe', 1);
+    let pending = null;
+    const bot = {
+        calls, registry: reg, version: '1.12.2', output: '', interrupt_code: false,
+        game: { gameMode: 'survival' },
+        entity: { position: at(0), height: 1.8 },
+        entities: {}, heldItem: null,
+        modes: { isOn: () => false, pause() {}, unpause() {} },
+        inventory: { slots, items: () => slots.filter(Boolean) },
+        findBlocks({ matching, maxDistance = 16, count = 1 }) {
+            return blocks.filter(b => (typeof matching === 'function' ? matching(b) : [].concat(matching).includes(b.type)))
+                .filter(b => b.position.distanceTo(bot.entity.position) <= maxDistance)
+                .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))
+                .slice(0, count).map(b => b.position);
+        },
+        blockAt: (pos) => blocks.find(b => b.position.equals(pos)) ?? null,
+        blockAtCursor: () => null,
+        equip: (item) => { bot.heldItem = item; return Promise.resolve(); },
+        unequip: () => Promise.resolve(),
+        lookAt: () => Promise.resolve(),
+        activateBlock: (b) => { calls.used.push(b.position); onUse(b, bot); return Promise.resolve(); },
+        activateItem: () => Promise.resolve(),
+        pathfinder: {
+            setMovements() {}, setGoal() {}, isMoving: () => false,
+            getPathTo: () => ({ status: arrive === 'yes' ? 'success' : 'noPath', path: [] }),
+            stop() { calls.stop++; if (pending) { const r = pending; pending = null; r(new Error('Path was stopped before it could be completed!')); } },
+            goto(goal) {
+                calls.goto++;
+                if (arrive === 'yes') { bot.entity.position = at(goal.x + 1, goal.y, goal.z); return Promise.resolve(); }
+                return new Promise((_, reject) => { pending = reject; });
+            },
+        },
+    };
+    return bot;
+}
+
+test('useOn: no reachable log ends with a clear failure, not a hang', T, async () => {
+    const bot = fakeBot({ blocks: [block('log', at(20)), block('log', at(-25))], arrive: 'never' });
+    const t0 = Date.now();
+    const ok = await skills.useToolOn(bot, 'pyrotech:crude_axe', 'log', LIMITS);
+    assert.equal(ok, false);
+    assert.ok(Date.now() - t0 < 1500, 'within the total limit');
+    assert.equal(bot.calls.goto, 2, 'each candidate tried once');
+    assert.ok(bot.calls.stop >= 2, 'each timed-out walk stopped the pathfinder');
+    assert.equal(bot.calls.used.length, 0, 'never used from afar');
+    assert.match(bot.output, /Could not reach the log at 20, 64, 0 within 0\.2 s\./);
+    assert.match(bot.output, /useOn failed: could not reach any of the 2 nearest log within 32 blocks \(20, 64, 0; -25, 64, 0\) in \d+ s\./);
+});
+
+test('useOn: the total time limit holds over many unreachable logs', T, async () => {
+    const logs = [10, 12, 14, 16].map(x => block('log', at(x)));
+    const bot = fakeBot({ blocks: logs, arrive: 'never' });
+    const t0 = Date.now();
+    const ok = await skills.useToolOn(bot, 'pyrotech:crude_axe', 'log', { walkMs: 400, totalMs: 600, settleMs: 100 });
+    assert.equal(ok, false);
+    assert.ok(Date.now() - t0 < 1200, `stopped near 600 ms, took ${Date.now() - t0}`);
+    assert.equal(bot.calls.goto, 2, 'the third walk never started');
+    assert.match(bot.output, /useOn failed: time limit of 0\.6 s reached \(tried 2 of the 4 nearest log\)\./);
+});
+
+test('useOn: success is the plank gain counted in the inventory', T, async () => {
+    const bot = fakeBot({
+        blocks: [block('log', at(3))],
+        onUse: (_b, b) => { b.inventory.slots[9] = stack('planks', 2); },
+    });
+    const ok = await skills.useToolOn(bot, 'pyrotech:crude_axe', 'log', LIMITS);
+    assert.equal(ok, true);
+    assert.match(bot.output, /Used pyrotech:crude_axe on log at 3, 64, 0: gained 2 planks\./);
+});
+
+test('useOn: a use with no gain and no block change is a failure; one too far is never used', T, async () => {
+    const bot = fakeBot({ blocks: [block('log', at(3))] });
+    assert.equal(await skills.useToolOn(bot, 'pyrotech:crude_axe', 'log', LIMITS), false);
+    assert.match(bot.output, /no effect \(no item gained, the block is unchanged\)\./);
+
+    // A debarked log (the block changed, no item): a success.
+    const b2 = fakeBot({ blocks: [block('log', at(3))], onUse: (b) => { b.metadata = 12; } });
+    assert.equal(await skills.useToolOn(b2, 'pyrotech:crude_axe', 'log', LIMITS), true);
+    assert.match(b2.output, /it is now log; no item gained\./);
+
+    // The walk "succeeds" but leaves the bot far away: not used.
+    const b3 = fakeBot({ blocks: [block('log', at(8))] });
+    b3.pathfinder.goto = () => Promise.resolve();
+    assert.equal(await skills.useToolOn(b3, 'pyrotech:crude_axe', 'log', LIMITS), false);
+    assert.equal(b3.calls.used.length, 0);
+    assert.match(b3.output, /Could not reach the log at 8, 64, 0\./);
+
+    const b4 = fakeBot({ blocks: [block('log', at(40))] });
+    assert.equal(await skills.useToolOn(b4, 'pyrotech:crude_axe', 'log', LIMITS), false);
+    assert.match(b4.output, /Could not find any log within 32 blocks\./);
+});

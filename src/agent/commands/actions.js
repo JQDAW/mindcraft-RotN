@@ -615,8 +615,9 @@ export const actionsList = [
             'tool_name': { type: 'string', description: 'Name of the tool to use, or "hand" for no tool.' },
             'target': { type: 'string', description: 'The target as an entity type, block type, or "nothing" for no target.' }
         },
+        // Bounded inside useToolOn (60 s); 2 min is the backstop (G3 batch A: it hung).
         perform: runAsAction(async (agent, tool_name, target) => {
             await skills.useToolOn(agent.bot, tool_name, target);
-        })
+        }, false, 2)
     },
 ];
