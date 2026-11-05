@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T17:17Z (from `date -u`)
+Updated: 2026-11-05T18:02Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -337,7 +337,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     - `clearReplan` keeps notes for the next prompt.
     - Fixed 3 lint errors (`setImmediate`) that my earlier baseline run missed because the file was untracked.
     - Tests: `death_report` 6/6 (2 fail on the old code); related 81/81; lint 254.
-- **Next:** the #212 and #215 re-reviews.
+- **Merged (lead, 2026-11-05):** #212 D1b (`70b1bb5`) and #215 D3 (`202b826`). STATUS now lives on `agent/skills-rotn/useon-bound` (#216), with develop merged in.
+- **Next (lead):** the #216 review; then idle until the lead assigns work. Targeted tests only while the G3 batches run.
 - **G3 smoke batches running (lead, received before 2026-11-05T17:17Z by `date -u`):** until the lead says they are over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
