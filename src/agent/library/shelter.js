@@ -13,6 +13,7 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isSturdy, shelterShell, dumpState } from './night.js';
+import { loadRotnData, PACK_VERSION, registryName } from '../../../packages/rotn-data/index.js';
 import { toolLevels } from './rotn_sources.js';
 import { log, breakBlockAt, goToGoal } from './skills.js';
 
@@ -25,10 +26,16 @@ export const LATE_UPDATE_MS = 1200;
 export const isLiquid = (b) => !!b && (/water|lava/.test(b.name ?? '') || dumpState(b)?.liquid === true);
 export const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) && !/fire/.test(b.name ?? '');
 const isSolid = (b) => !!b && b.boundingBox === 'block';
-/** Gravel, sand, concrete powder (material sand), anvils and the dragon egg fall when undermined. */
+/** A block that falls when undermined: rotn-data's falls() (#205), else gravel, sand, concrete powder, anvils, the dragon egg. */
 export const isFalling = (b) => {
+    if (typeof b?.name !== 'string' || !b.name) return false;
+    // rotn-data's per-block gravity (#205: BlockFalling and the pack's modded falling blocks).
+    let falls = null;
+    try { falls = loadRotnData(PACK_VERSION).falls(registryName(b.name)); } catch { falls = null; }
+    if (typeof falls === 'boolean') return falls;
+    // A block rotn-data does not know: judged by name and material, as before.
     const st = dumpState(b);
-    return /sand|gravel|anvil|dragon_egg|concrete_powder/.test(b?.name ?? '') || ['sand', 'anvil', 'dragon_egg'].includes(st?.material);
+    return /sand|gravel|anvil|dragon_egg|concrete_powder/.test(b.name) || ['sand', 'anvil', 'dragon_egg'].includes(st?.material);
 };
 const key = (p) => `${p.x},${p.y},${p.z}`;
 const at = (p) => `${p.x}, ${p.y}, ${p.z}`;

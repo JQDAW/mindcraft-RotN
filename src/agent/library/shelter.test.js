@@ -249,3 +249,12 @@ test('#204 nit 7: a mob standing in a wall cell is named, and that cell stays op
     assert.deepEqual(placed, []);
     assert.match(bot.output, /Cannot close 1, 64, 0: zombie stands in it\./);
 });
+
+test('isFalling uses rotn-data falls() (#205): soul sand (material sand) does not fall, gravel and anvils do', async () => {
+    const { isFalling } = await import('./shelter.js');
+    const b = (name) => ({ name, metadata: 0 });
+    assert.equal(isFalling(b('gravel')), true);
+    assert.equal(isFalling(b('anvil')), true);
+    assert.equal(isFalling(b('soul_sand')), false, 'the material rule alone said it falls');
+    assert.equal(isFalling(b('cobblestone')), false);
+});
