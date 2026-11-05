@@ -1,4 +1,5 @@
 import * as skills from '../library/skills.js';
+import { buildShelter } from '../library/shelter.js';
 import settings from '../settings.js';
 import convoManager from '../conversation.js';
 import { addTask, cancelTask } from '../task_queue.js';
@@ -359,6 +360,14 @@ export const actionsList = [
         perform: runAsAction(async (agent, type) => {
             let pos = agent.bot.entity.position;
             await skills.placeBlock(agent.bot, type, pos.x, pos.y, pos.z);
+        })
+    },
+    {
+        name: '!buildShelter',
+        description: 'Build a closed 1x2 night shelter of cobblestone or stone around yourself, from inside (up to 10 blocks; walls you stand next to that are already rock are kept). Run it again inside the shelter to repair an open wall.',
+        params: { },
+        perform: runAsAction(async (agent) => {
+            await buildShelter(agent.bot);
         })
     },
     {
