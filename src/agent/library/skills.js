@@ -1357,8 +1357,13 @@ export async function goToGoal(bot, goal) {
 
     bot.pathfinder.setMovements(final_movements);
     try {
-        await bot.pathfinder.goto(goal);
+        // Bounded (G3 smoke C+D: !searchForBlock("log", 64) never returned): pathfinder.goto has
+        // no time limit and can keep going on partial paths. At the limit the walk is stopped
+        // and this throws, as a stopped walk does; goToPosition reports it.
+        const limitMs = GO_TO_LIMITS.totalMs;
+        const walked = await within(bot.pathfinder.goto(goal), limitMs, () => stopWalking(bot));
         clearInterval(doorCheckInterval);
+        if (walked === TIMED_OUT) throw new Error(`time limit of ${secsText(limitMs)} reached`);
         return true;
     } catch (err) {
         clearInterval(doorCheckInterval);
@@ -1522,8 +1527,7 @@ export async function goToNearestBlock(bot, blockType,  min_distance=2, range=64
         return false;
     }
     log(bot, `Found ${blockType} at ${block.position}. Navigating...`);
-    await goToPosition(bot, block.position.x, block.position.y, block.position.z, min_distance);
-    return true;
+    return await goToPosition(bot, block.position.x, block.position.y, block.position.z, min_distance);
 }
 
 export async function goToNearestEntity(bot, entityType, min_distance=2, range=64) {
@@ -1542,8 +1546,7 @@ export async function goToNearestEntity(bot, entityType, min_distance=2, range=6
     }
     let distance = bot.entity.position.distanceTo(entity.position);
     log(bot, `Found ${entityType} ${distance} blocks away.`);
-    await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z, min_distance);
-    return true;
+    return await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z, min_distance);
 }
 
 export async function goToPlayer(bot, username, distance=3) {
@@ -2245,12 +2248,19 @@ export async function goToSurface(bot) {
  */
 export const USE_ON_LIMITS = { range: 32, candidates: 4, walkMs: 20_000, totalMs: 60_000, settleMs: 1500, reach: 4.5 };
 
+/**
+ * The total time one goToGoal walk may take (G3 smoke C+D). 3 min covers a 512-block
+ * !searchForBlock walk with detours; every goTo* skill and command walks through goToGoal.
+ */
+export const GO_TO_LIMITS = { totalMs: 180_000 };
+
 const TIMED_OUT = Symbol('timed out');
 /** The promise's value, or TIMED_OUT after `ms` (then `onTimeout` runs). A later rejection is swallowed. */
 function within(promise, ms, onTimeout = () => {}) {
     let timer;
     const limit = new Promise(resolve => {
-        timer = setTimeout(() => { try { onTimeout(); } catch { /* best effort */ } resolve(TIMED_OUT); }, Math.max(0, ms));
+        // Resolve first: onTimeout (a pathfinder stop) rejects the work, which must not win the race.
+        timer = setTimeout(() => { resolve(TIMED_OUT); try { onTimeout(); } catch { /* best effort */ } }, Math.max(0, ms));
     });
     const work = Promise.resolve(promise);
     work.catch(() => {});

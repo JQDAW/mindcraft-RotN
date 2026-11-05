@@ -175,3 +175,21 @@ test('useOn: a missing tool is refused at once (the upstream check was always fa
     b2.inventory.slots[36] = null;
     assert.equal(await skills.useToolOn(b2, 'hand', 'cow', LIMITS), true);
 });
+
+// G3 smoke C+D: !searchForBlock("log", 64) never returned (goToNearestBlock -> goToPosition ->
+// goToGoal, whose pathfinder.goto has no time limit). Every goToGoal walk is bounded now.
+test('goToGoal: a walk that never arrives ends at GO_TO_LIMITS; the search reports failure', T, async (t) => {
+    const saved = skills.GO_TO_LIMITS.totalMs;
+    t.after(() => { skills.GO_TO_LIMITS.totalMs = saved; });
+    skills.GO_TO_LIMITS.totalMs = 300;
+    const bot = fakeBot({ blocks: [block('log', at(20))], arrive: 'never' });
+    const t0 = Date.now();
+    assert.equal(await skills.goToNearestBlock(bot, 'log', 4, 64), false);
+    assert.ok(Date.now() - t0 < 1500, `took ${Date.now() - t0} ms`);
+    assert.ok(bot.calls.stop >= 1, 'the walk was stopped');
+    assert.match(bot.output, /Found log at .*Navigating\.\.\./s);
+    assert.match(bot.output, /Pathfinding stopped: time limit of 0\.3 s reached\./);
+
+    const b2 = fakeBot({ blocks: [block('log', at(20))] });
+    assert.equal(await skills.goToNearestBlock(b2, 'log', 4, 64), true, 'a walk that arrives is unchanged');
+});

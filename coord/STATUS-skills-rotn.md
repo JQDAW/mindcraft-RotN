@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T18:09Z (from `date -u`)
+Updated: 2026-11-05T19:23Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -345,8 +345,10 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   4. the upstream `!bot.game.gameMode === 'creative'` (always false) is now `gameMode !== 'creative'`: a missing tool is refused at once, `hand` needs none.
 
   Tests, one file at a time: `use_on` 7/7 (on the #216 code, 3 new tests hang or fail); `agenda` 14/14. Per-file lint: `skills.js` 20 (unchanged), the tests 0.
-- **Next (lead):** the follow-up review; then idle until assigned. Targeted tests only while the G3 batches run.
-- **G3 smoke batches running (lead, received before 2026-11-05T17:17Z by `date -u`):** until the lead says they are over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
+- **#217 merged** (lead, 2026-11-05, `c62f63d`). The G3 smoke batches are over (lead, received before 2026-11-05T19:23Z by `date -u`); normal targeted testing again.
+- **G3 smoke findings (harness-ops #218, C+D evidence; they block G3 (a) and (c)):**
+  1. **Open PR** (branch `agent/skills-rotn/preempt-timeouts`; STATUS lives here now): a queued task stops the self-prompter's action in flight after `PREEMPT_GRACE_MS` (5 s) (`action:` labels only; a reflex finishes on its own), then starts; every `goToGoal` walk has a total limit (`GO_TO_LIMITS`, 3 min) and the eight walking commands a 5 min action backstop; `goToNearestBlock`/`goToNearestEntity` return the real result. Tests: `priority` 29/29, `use_on` 8/8; on develop the new tests fail (priority) or hang (goToGoal). Related: `shelter` 14/14, `collect_rotn` 13/13, `names_e2e` 7/7, `night_routine` 18/18. Per-file lint unchanged.
+  2. **Next:** Dynamic Trees: a branch break fells the tree and the logs drop around it; collect the dropped log items in a bounded radius and count the real gain (check rotn-data's fell-tree rule). A separate small PR.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
