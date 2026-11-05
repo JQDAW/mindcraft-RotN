@@ -1,10 +1,10 @@
 # Status: net-forge
 
-Updated: 2026-11-05T17:17Z
+Updated: 2026-11-05T19:17Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Idle (2026-11-05T17:17Z, lead: usage; G3 smoke batches running, targeted tests only)
+## Idle (since 2026-11-05T17:17Z, lead: usage; the G3 smoke batches ended at 2026-11-05T19:17Z, test limits lifted)
 
 - **Open nit (lead, #214 review, for later):** add a comment at `hordes.js:37` that `HordeSoundMessage.toBytes` omits x/z when `direction` is null, while `fromBytes` always reads them. The server always sets a direction (`spawnWave` 43/91), so this is a comment only. Branch `agent/net-forge/hordes-nits` holds this STATUS entry; the comment goes in with my next forge-bridge PR.
 
