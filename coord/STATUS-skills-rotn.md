@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T01:29Z (from `date -u`)
+Updated: 2026-11-05T01:42Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -242,7 +242,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
     Reply posted. Tests: `shelter.test.js` 10/10; `src/agent/**` 210/210; lint 254.
 - **#202** (the #198 follow-up: `craftRecipe` picks up a table it placed in a `finally`, and guards a missing free space): approved by the lead, merge pending.
-- **D2b-2, the night routine: #204 open** (branch `agent/skills-rotn/night-routine`). `src/agent/night_routine.js`, `nightTick`, sits in the priority stack after control holds and before tasks. No LLM calls.
+- **D2b-2, the night routine: #204 merged** (`f84efaa`) (branch `agent/skills-rotn/night-routine`). `src/agent/night_routine.js`, `nightTick`, sits in the priority stack after control holds and before tasks. No LLM calls.
   - **Dusk:** at `SHELTER_LEAD_MIN` before sunset (by `NightClock`), it stops the self-prompter at the checkpoint and builds a shelter. A task or the agenda that was running resumes later with no new run.
   - **Inside:** every 10 s it repairs a breach at the same site. If the bot was pushed, teleported or walked out, it builds a new shelter where the bot is.
   - **Full daylight:** after the sunrise, it digs out one side with no liquid outside and hands back to tasks and the agenda.
@@ -277,7 +277,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - A takeover now says `task <id> started: …`.
   - Tests: `priority.test.js` 28/28 (the 3 new ones fail on the old code); `src/agent/**` 227/227; lint 254.
 - **Next (lead order):**
-  1. #204's merge (the lead reported it merged; GitHub still shows it open), #206's re-review and #212;
+  1. the #206 and #212 reviews (#204 is merged);
   2. D1: eating, and re-planning after teleports (AggroTP) or invasions (then D3, the death report):
      - **D1a, eating: #206 open** (branch `agent/skills-rotn/eating`). An `eating` mode eats by rotn-data's food values (auto-eat sees only vanilla foods and ate the bread first; it is off now):
        - at food 12 or lower when idle, and at 6 or lower during an action;
@@ -299,7 +299,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
          Tests: `food.test.js` 10/10; `src/agent/**` 237/237; lint 254; mergeable. Request 14 is answered by #209.
        - **Lead (2026-11-05):** #206 waits for rotn-data's pack food values PR. When that merges, I bring #206 up to date by **merging** develop in, not rebasing: rebasing a pushed branch needs a force-push, which the rules forbid. Then I drop the `foodOf` fallback check if the API differs, and the skipped bread-3 test runs.
-     - **D1b: #212 open** (branch `agent/skills-rotn/replan-jumps`; it contains #204, which GitHub still shows open).
+     - **D1b: #212 open** (branch `agent/skills-rotn/replan-jumps`; develop with #204 merged in, so its diff is D1b only).
        - A `teleport_watch` mode: a horizontal jump of 5 or more blocks between mode updates stops the action and requests a re-plan; death and spawn reset it.
        - A horde warning: a title whose translation key or text names a horde, read from the raw 1.12 title packet, at most once a minute.
        - The #204 nit: a typed command under a stored stop, pause or quiet hold also ends the shelter rules (`typed > 0`).
