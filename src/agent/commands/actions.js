@@ -6,6 +6,9 @@ import { addTask, cancelTask } from '../task_queue.js';
 import { finishTask } from '../priority.js';
 import { hasAutonomyPrefix } from '../agenda_driver.js';
 import { nightPhase } from '../library/night.js';
+import { deathSpotBlocked } from '../library/death_report.js';
+import * as world from '../library/world.js';
+import { threatFor, hurtBy } from '../library/threats.js';
 
 /** 'day', 'dusk' or 'night' by the night routine's clock (else the server time), or null. */
 function phaseNow(agent, now = Date.now()) {
@@ -14,10 +17,6 @@ function phaseNow(agent, now = Date.now()) {
     const t = agent.bot?.time?.timeOfDay;
     return phase ?? (typeof t === 'number' ? nightPhase(t) : null);
 }
-
-import { deathSpotBlocked } from '../library/death_report.js';
-import * as world from '../library/world.js';
-import { threatFor, hurtBy } from '../library/threats.js';
 
 /** False (with a log line) when the walk would lead back to the death spot too soon (G3 round 2). */
 function deathSpotOk(agent, x, y, z) {

@@ -414,8 +414,8 @@ test('#229 review: digOut with the pickaxe in the off hand moves it back, equips
         game: { gameMode: 'survival' },
         heldItem: null,
         // like mineflayer-tool: the best tool among inventory.items() only
-        tool: { equipForBlock: async () => { bot.heldItem = inventory.items().find(i => /pickaxe/.test(i.name)) ?? null; } },
-        moveSlotItem: async (from, to) => { slots[to] = slots[from]; slots[from] = null; },
+        tool: { equipForBlock: () => { bot.heldItem = inventory.items().find(i => /pickaxe/.test(i.name)) ?? null; return Promise.resolve(); } },
+        moveSlotItem: (from, to) => { slots[to] = slots[from]; slots[from] = null; return Promise.resolve(); },
         blockAt: (p) => blockOf(world.get(key(p.floored())) ?? (p.y < 64 ? 'dirt' : 'air'), p.floored()),
         // like the server: cobblestone does not break by hand
         dig: (b) => {

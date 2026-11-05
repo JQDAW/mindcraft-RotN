@@ -299,8 +299,8 @@ function slotInventory(bot, { cursor = null, offHand = null } = {}) {
         firstEmptyInventorySlot: () => { const i = slots.findIndex((x, k) => k >= 9 && k < 45 && !x); return i < 0 ? null : i; },
     };
     bot.inventory = inv;
-    bot.clickWindow = async (slot) => { slots[slot] = inv.selectedItem; inv.selectedItem = null; };
-    bot.moveSlotItem = async (from, to) => { slots[to] = slots[from]; slots[from] = null; };
+    bot.clickWindow = (slot) => { slots[slot] = inv.selectedItem; inv.selectedItem = null; return Promise.resolve(); };
+    bot.moveSlotItem = (from, to) => { slots[to] = slots[from]; slots[from] = null; return Promise.resolve(); };
     return inv;
 }
 
