@@ -2321,7 +2321,7 @@ async function useToolOnBlockBounded(bot, toolName, block, L, left) {
     }
     const changed = !now || now.name !== was.name || now.metadata !== was.metadata;
     if (gained.length) log(bot, `Used ${toolName} on ${block.name} at ${where}: gained ${gained.join(', ')}.`);
-    else if (changed) log(bot, `Used ${toolName} on ${block.name} at ${where}: it is now ${now ? now.name : 'gone'}; no item gained.`);
+    else if (changed) log(bot, `Used ${toolName} on ${block.name} at ${where}: it is now ${now ? now.name : 'gone'}; no item gained (not a plank or any other item yet).`);
     else log(bot, `Used ${toolName} on ${block.name} at ${where}: no effect (no item gained, the block is unchanged).`);
     return gained.length || changed ? 'used' : 'no_effect';
 }
@@ -2331,6 +2331,9 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
      * Equip a tool and use it on the nearest target. Bounded (USE_ON_LIMITS): a few nearest
      * targets within range, a time limit per walk and in total; a block use is judged by the
      * inventory gain or the block's change.
+     * True does not mean an item was gained: a block change alone (debarking a log) is a success
+     * too. A caller that needs an item counts the inventory itself; the agenda judges its steps
+     * from the inventory only (first_plank needs a plankWood item; a debarked log is logWood).
      * @param {MinecraftBot} bot
      * @param {string} toolName - item name of the tool to equip, or "hand" for no tool.
      * @param {string} targetName - entity type, block type, or "nothing" for no target
@@ -2339,18 +2342,21 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
     const L = { ...USE_ON_LIMITS, ...limits };
     const start = Date.now();
     const left = () => L.totalMs - (Date.now() - start);
-    if (!bot.inventory.slots.find(slot => slot && itemMatches(slot, toolName)) && !bot.game.gameMode === 'creative') {
+    if (toolName !== 'hand' && bot.game.gameMode !== 'creative'
+        && !bot.inventory.slots.find(slot => slot && itemMatches(slot, toolName))) {
         log(bot, `You do not have any ${toolName} to use.`);
         return false;
     }
 
     targetName = targetName.toLowerCase();
+    const timeUp = () => { log(bot, `useOn failed: time limit of ${secsText(L.totalMs)} reached.`); return false; };
     if (targetName === 'nothing') {
-        const equipped = await equip(bot, toolName);
+        const equipped = await within(equip(bot, toolName), left());
+        if (equipped === TIMED_OUT) return timeUp();
         if (!equipped) {
             return false;
         }
-        await bot.activateItem();
+        if (await within(bot.activateItem(), left()) === TIMED_OUT) return timeUp();
         log(bot, `Used ${toolName}.`);
     } else if (world.isEntityType(targetName)) {
         const entity = world.getNearestEntityWhere(bot, e => e.name === targetName, L.range);
@@ -2358,23 +2364,19 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
             log(bot, `Could not find any ${targetName} within ${L.range} blocks.`);
             return false;
         }
+        const walkMs = Math.min(L.walkMs, left());
         const walk = await within(goToPosition(bot, entity.position.x, entity.position.y, entity.position.z),
-            Math.min(L.walkMs, left()), () => stopWalking(bot));
+            walkMs, () => stopWalking(bot));
+        if (bot.interrupt_code) return false;
         if (walk === TIMED_OUT) {
-            log(bot, `useOn failed: could not reach the ${targetName} within ${secsText(L.walkMs)}.`);
+            log(bot, `useOn failed: could not reach the ${targetName} within ${secsText(walkMs)}${walkMs < L.walkMs ? ` (the ${secsText(L.totalMs)} limit)` : ''}.`);
             return false;
         }
-        if (toolName === 'hand') {
-            await bot.unequip('hand');
-        }
-        else {
-            const equipped = await equip(bot, toolName);
-            if (!equipped) return false;
-        }
-        if (await within(bot.useOn(entity), left()) === TIMED_OUT) {
-            log(bot, `useOn failed: time limit of ${secsText(L.totalMs)} reached.`);
-            return false;
-        }
+        const equipped = await within(toolName === 'hand' ? Promise.resolve(bot.unequip('hand')).then(() => true) : equip(bot, toolName), left());
+        if (equipped === TIMED_OUT) return timeUp();
+        if (!equipped) return false;
+        if (bot.interrupt_code) return false;
+        if (await within(bot.useOn(entity), left()) === TIMED_OUT) return timeUp();
         log(bot, `Used ${toolName} on ${targetName}.`);
     } else {
         let blocks;

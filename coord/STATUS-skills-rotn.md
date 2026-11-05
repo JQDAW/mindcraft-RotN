@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T18:02Z (from `date -u`)
+Updated: 2026-11-05T18:09Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -338,7 +338,14 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     - Fixed 3 lint errors (`setImmediate`) that my earlier baseline run missed because the file was untracked.
     - Tests: `death_report` 6/6 (2 fail on the old code); related 81/81; lint 254.
 - **Merged (lead, 2026-11-05):** #212 D1b (`70b1bb5`) and #215 D3 (`202b826`). STATUS now lives on `agent/skills-rotn/useon-bound` (#216), with develop merged in.
-- **Next (lead):** the #216 review; then idle until the lead assigns work. Targeted tests only while the G3 batches run.
+- **#216 merged** (lead, 2026-11-05). **The #216 follow-up PR is open** (branch `agent/skills-rotn/useon-followup`; STATUS lives here now):
+  1. plank gain: the agenda judges `first_plank` from the inventory only (`plankWood`). A debarked log, a block change with `!useOn` returning true, is `logWood` and does not finish the step (new agenda test). `useToolOn` documents that true does not mean an item was gained, and the block-change line says "no item gained (not a plank or any other item yet)";
+  2. the entity path: `equip`/`unequip` and `useOn` are bounded by the time left; `interrupt_code` is checked after the walk and before the use; the `nothing` path is bounded too;
+  3. the walk timeout message gives the real limit (`within 0.3 s (the 0.3 s limit)` when the total limit cuts it);
+  4. the upstream `!bot.game.gameMode === 'creative'` (always false) is now `gameMode !== 'creative'`: a missing tool is refused at once, `hand` needs none.
+
+  Tests, one file at a time: `use_on` 7/7 (on the #216 code, 3 new tests hang or fail); `agenda` 14/14. Per-file lint: `skills.js` 20 (unchanged), the tests 0.
+- **Next (lead):** the follow-up review; then idle until assigned. Targeted tests only while the G3 batches run.
 - **G3 smoke batches running (lead, received before 2026-11-05T17:17Z by `date -u`):** until the lead says they are over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)

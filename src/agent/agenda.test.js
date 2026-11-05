@@ -56,6 +56,16 @@ function fakeAgent(t, items = [], opts = {}) {
 }
 const stepOf = (items, opts) => new Agenda('x', { dir: path.join(tmpdir(), `rotn-none-${Math.random()}`) }).evaluate(agendaState(fakeBot(items, opts))).step?.id ?? null;
 
+test('first_plank needs a plank in the inventory: a debarked log (a !useOn block change) is not one (#216 review)', () => {
+    const before = [stack('pyrotech:rock', 0, 6), stack('stick', 0, 4), stack('pyrotech:crude_axe', 0, 1), stack('log', 0, 3)];
+    assert.equal(stepOf(before), 'first_plank');
+    // !useOn debarked a placed log and returned true: the world changed, the inventory did not.
+    assert.equal(stepOf(before), 'first_plank', 'a block change alone does not finish the step');
+    // A debarked log picked up is logWood (rotn-data), not plankWood.
+    assert.equal(stepOf([...before, stack('hitwithaxe:debarked_oak', 0, 1)]), 'first_plank');
+    assert.equal(stepOf([...before, stack('planks', 0, 2)]), 'crafting_tools', 'a real plank gain does');
+});
+
 test('the steps follow the RotN first day, judged from the inventory', () => {
     assert.equal(stepOf([]), 'rocks');
     const rocks = [stack('pyrotech_compat:rock_metamorphic', 0, 4), stack('pyrotech:rock', 0, 2)]; // any rock counts
