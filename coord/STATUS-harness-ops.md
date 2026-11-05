@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (19:37 UTC, from `date -u`)
+Updated: 2026-11-05 (19:49 UTC, from `date -u`)
 
 ## Done: the first G3 smoke batches (the lead's written GO, 2026-11-05)
 
@@ -25,16 +25,16 @@ Total LLM USD 0.1805, and 3 billed server hours (about EUR 0.41 plus 3 Primary I
 
 **Merged:** #218 (this evidence) and #219 (the `cheatProblems` change).
 
-**Open PRs (in the lead's review):**
-- #220: the #207 nits: the gold marker confirmed with `testforblock`, the `notes.marker.reply` fix, and `.bak` pruning;
-- #223: the lead's #218 requirement before the first gate batch:
-  - `batch.mjs --smoke|--gate` (required) records `smoke` in `batch.json`;
-  - the gate claim check needs `smoke: false`;
-  - `--tree` names the smoke batches;
-  - the three smoke folders are marked;
-  - plus the #219 prefix/suffix tests.
+**Merged:** #220 (the #207 nits).
 
-#220 and #223 merge cleanly together. **Next:** the lead's reviews. A gate batch's command needs `--gate`, and any new batch needs a new GO.
+**Open PR (in the lead's review):** #223, reworked to the lead's #220 decision:
+- smoke is the default, and only `batch.mjs --gate` writes `gate: true` into `batch.json`;
+- the gate claim check needs `gate: true`;
+- the evidence check (`--tree`) rejects G3 results without `gate: true`, except explicit `smoke: true` records. That exception is my reading of the decision, flagged for the lead, because CI would otherwise fail on the three marked smoke folders;
+- the three 2026-11-05 folders are marked `smoke: true`;
+- the setblock answer is anchored (#220 nit), and the #219 prefix/suffix tests are added.
+
+**Next:** the lead's review of #223. A gate batch's command needs `--gate` right after `batch.mjs`, and any new batch needs a new GO.
 
 ## Resumed after the Orca restart (2026-11-05 16:55 UTC)
 
