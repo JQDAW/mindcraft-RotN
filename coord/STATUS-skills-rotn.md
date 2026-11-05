@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T21:16Z (from `date -u`)
+Updated: 2026-11-05T21:38Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -373,7 +373,13 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   4. **`!attack`** refuses an ignore-unless-provoked mob (a grove sprite) unless it hurt the bot (angry, or a hit within 3 s while it was within 4 blocks), with a logged reason.
 
      Tests: `threat_arbitration` 8/8. On develop, 7 fail, and the flap test shows cowardice interrupting self_defense 1 s after each start. Against the previous #227 head, the override and release tests fail. Also `use_on` 12/12 (PathStopped); related 10 files pass; lint per file unchanged.
-- **Next (lead):** re-review #227.
+- **#229 open** (branch `agent/skills-rotn/night-pickaxe`, from develop), the round 2 batch B findings:
+  1. The night routine's "without a pickaxe": the real dump rules out the level and name hypotheses. `items()` misses the cursor and the off hand, so `toolLevels` now counts every carried stack, and the refusal names the pickaxes it saw.
+  2. The cobblestone step counts rotn-data's `cobblestone` ore (the bot's 10 metamorphic cobble never counted). The model's daytime `!buildShelter` is refused unless a giver typed it.
+  3. A #224 regression is fixed: `collectBlock` threw on position-less blocks after a give-up.
+
+     Tests: `shelter` 17, `agenda` 15, `use_on` 12; on develop the new tests fail (the real-dump test passes by design); related 8 files pass; lint per file unchanged.
+- **Next (lead):** re-review #227; review #229.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
