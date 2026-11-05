@@ -73,11 +73,22 @@ export function worldSources(name) {
 /** The levels of every tool of this type the bot holds ("pickaxe" -> [0] for a stone pickaxe). */
 export function toolLevels(bot, type) {
     const levels = [];
-    for (const item of bot.inventory.items()) {
+    for (const item of carriedItems(bot)) {
         const level = getItem(registryName(item.name))?.toolClasses?.[type];
         if (typeof level === 'number' && level >= 0) levels.push(level);
     }
     return levels;
+}
+
+/**
+ * Every stack the bot carries: bot.inventory.items() covers slots 9-44 only, so the off hand
+ * (slot 45), the held item and a stack left on the cursor (an equip cut short; G3 round 2 B: the
+ * night routine said "without a pickaxe" while the bot owned a stone pickaxe) are added.
+ */
+export function carriedItems(bot) {
+    const inv = bot?.inventory;
+    const all = [...(inv?.items?.() ?? []), bot?.heldItem, inv?.slots?.[45], inv?.selectedItem];
+    return [...new Set(all.filter(i => i && typeof i.name === 'string'))];
 }
 
 const levelOk = (tool, level) => (tool.minLevel == null || level >= tool.minLevel) && (tool.maxLevel == null || level <= tool.maxLevel);

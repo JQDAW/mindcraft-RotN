@@ -14,7 +14,7 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isSturdy, shelterShell, dumpState } from './night.js';
 import { loadRotnData, PACK_VERSION, registryName } from '../../../packages/rotn-data/index.js';
-import { toolLevels } from './rotn_sources.js';
+import { toolLevels, carriedItems } from './rotn_sources.js';
 import { log, breakBlockAt, goToGoal } from './skills.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
@@ -233,8 +233,12 @@ export async function buildShelter(bot, { site = null, radius = 4 } = {}) {
     if (plan.unsupported.length > 0)
         return refuse(feet, plan.todo, `Cannot build the shelter at ${at(feet)}: nothing to place a block against at ${plan.unsupported.map(at).join('; ')}.`);
     const level = exitLevel(bot, feet);
-    if (!toolLevels(bot, 'pickaxe').some(l => l >= level))
-        return refuse(feet, plan.todo, `Not building a shelter at ${at(feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`);
+    if (!toolLevels(bot, 'pickaxe').some(l => l >= level)) {
+        // Say what the bot does carry, so a log shows why (G3 round 2 B).
+        const picks = carriedItems(bot).filter(i => /pickaxe/.test(i.name)).map(i => i.name);
+        return refuse(feet, plan.todo, `Not building a shelter at ${at(feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`
+            + ` Pickaxes carried: ${picks.length ? picks.join(', ') : 'none'}; the walls need level ${level}.`);
+    }
     const have = countOf(shelterItems(bot));
     if (have < plan.blocks)
         return refuse(feet, plan.todo, `A shelter at ${at(feet)} needs ${plan.blocks} sturdy blocks (cobblestone or stone); you have ${have}.`);

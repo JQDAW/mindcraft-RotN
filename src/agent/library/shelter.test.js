@@ -271,3 +271,56 @@ test('#204 re-review 2: only mobs and players block a cell, not dropped items, X
     assert.equal(mobIn(bot({ type: 'player', username: 'JQDAW', position: at }), cell)?.username, 'JQDAW');
     assert.equal(mobIn(bot({ type: 'hostile', name: 'skeleton', position: at }), cell)?.name, 'skeleton');
 });
+
+// G3 round 2 B: at sunset the night routine said "without a pickaxe" while the bot owned a stone
+// pickaxe. The real dump: the pickaxe is level 0 by either name form, and the shell blocks the bot
+// used (Underground Biomes metamorphic cobble) need level 0. bot.inventory.items() covers slots
+// 9-44 only: a pickaxe on the cursor (an equip cut short) or in the off hand was not seen.
+test('G3 round 2 B: the real dump: a stone pickaxe is level 0; metamorphic cobble needs level 0', async () => {
+    const { toolLevels } = await import('./rotn_sources.js');
+    const { dumpState } = await import('./night.js');
+    for (const name of ['stone_pickaxe', 'minecraft:stone_pickaxe'])
+        assert.deepEqual(toolLevels({ inventory: { items: () => [{ name, count: 1, metadata: 17 }] } }, 'pickaxe'), [0], name);
+    for (const meta of [0, 1, 7])
+        assert.equal(dumpState({ name: 'undergroundbiomes:metamorphic_cobble', metadata: meta })?.harvestLevel, 0);
+});
+
+test('G3 round 2 B: a pickaxe on the cursor or in the off hand counts; the refusal says what it saw', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const pick = { name: 'stone_pickaxe', metadata: 3, count: 1 };
+    const cursor = fakeBot({ pickaxe: false });
+    cursor.bot.inventory.selectedItem = pick;
+    assert.equal((await buildShelter(cursor.bot)).closed, true, 'on the cursor');
+    const off = fakeBot({ pickaxe: false });
+    off.bot.inventory.slots = Object.assign(new Array(46).fill(null), { 45: pick });
+    assert.equal((await buildShelter(off.bot)).closed, true, 'in the off hand');
+    const none = fakeBot({ pickaxe: false });
+    await buildShelter(none.bot);
+    assert.match(none.bot.output, /without a pickaxe you could not dig out of it again\. Pickaxes carried: none; the walls need level 0\./);
+});
+
+test('G3 round 2 B: the model\'s !buildShelter is refused by day (the night routine builds at dusk); a giver\'s is obeyed', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { ActionManager } = await import('../action_manager.js');
+    const make = (timeOfDay, typed = 0) => {
+        const { bot, placed } = fakeBot();
+        Object.assign(bot, { time: { timeOfDay }, emit() {}, interrupt_code: false });
+        const agent = {
+            bot, control: { typed },
+            clearBotLogs() { bot.output = ''; bot.interrupt_code = false; },
+            requestInterrupt() {}, cleanKill() {}, history: { add() {} },
+        };
+        agent.actions = new ActionManager(agent);
+        return { agent, placed };
+    };
+    const perform = getCommand('!buildShelter').perform;
+    const day = make(1000);
+    assert.match(await perform(day.agent), /Not building a shelter by day: the night routine builds one at dusk\./);
+    assert.deepEqual(day.placed, [], 'no cobblestone spent');
+    const dusk = make(12000);
+    await perform(dusk.agent);
+    assert.ok(dusk.placed.length > 0, 'at dusk it builds');
+    const giver = make(1000, 1);
+    await perform(giver.agent);
+    assert.ok(giver.placed.length > 0, 'a task giver who typed it is obeyed by day');
+});

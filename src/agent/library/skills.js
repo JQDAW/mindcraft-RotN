@@ -697,7 +697,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (!isWanted(block)) {
                 return false;
             }
-            if (givenUp.some(p => p.equals(block.position))) return false;
+            // findBlocks' section scan passes blocks without a position (G3 round 2 B: "Cannot read
+            // properties of null (reading 'x')" after the first give-up).
+            if (block.position && givenUp.some(p => p.equals(block.position))) return false;
             if (exclude) {
                 for (let position of exclude) {
                     if (block.position.x === position.x && block.position.y === position.y && block.position.z === position.z) {
