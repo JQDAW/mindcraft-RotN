@@ -27,6 +27,7 @@
 import settings from './settings.js';
 import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData, isTaskGiver } from './task_queue.js';
+import { nightTick, leaveShelterFor } from './night_routine.js';
 
 /** Self-prompter time per task, over all its runs. */
 export const TASK_LLM_MS = 10 * 60_000;
@@ -92,6 +93,8 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
     // 2. Control: checked on every update, not throttled, so a typed command wins at once.
     const hold = agent.control?.blocking();
     if (hold) {
+        // A giver's typed command may walk the bot out of its night shelter (#204 re-review 1).
+        if (hold === 'command') leaveShelterFor(agent, "a task giver's command");
         if (sp.isActive()) sp.stop(false);
         // Whatever ran keeps its place and resumes after !resume without using a run of its budget.
         agent._agenda_paused = true;
@@ -99,6 +102,11 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
         agent._task_tick_at = undefined; // no LLM time while held
         return `held:${hold}`;
     }
+
+    // 2b. Night (D2b-2): from dusk to full daylight the bot shelters; tasks and the agenda wait
+    // and resume afterwards without a new run. Control holds above still win.
+    const night = nightTick(agent, { now });
+    if (night) return night;
 
     // 3. Player tasks.
     if (agent._task_id && agent.tasks?.get(agent._task_id)?.status !== 'active') {

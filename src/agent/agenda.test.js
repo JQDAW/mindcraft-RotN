@@ -69,7 +69,8 @@ test('the steps follow the RotN first day, judged from the inventory', () => {
     assert.equal(stepOf([...logs, stack('planks', 0, 1)], { tableNear: true }), 'planks_sticks', 'a placed table counts');
     assert.equal(stepOf([stack('stone_pickaxe', 0, 1), stack('stick', 0, 2)], { tableNear: true }), 'stone_axe');
     assert.equal(stepOf([stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1)], { tableNear: true }), 'cobblestone');
-    assert.equal(stepOf([stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, 8)], { tableNear: true }), null);
+    assert.equal(stepOf([stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, 9)], { tableNear: true }), 'cobblestone', '9 do not make a shelter');
+    assert.equal(stepOf([stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, 10)], { tableNear: true }), null);
     assert.ok(ROTN_EARLY_GAME.every(s => /^[a-z_]+$/.test(s.id) && s.goal.length > 20));
 });
 
@@ -199,7 +200,7 @@ test('pause_when_empty: no other player online pauses the agenda; a player back 
 });
 
 test('all steps done: "agenda done", the agenda stops', (t) => {
-    const agent = fakeAgent(t, [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, 8)], { tableNear: true });
+    const agent = fakeAgent(t, [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, 10)], { tableNear: true });
     assert.equal(agendaTick(agent, { now: 0 }), 'done');
     assert.equal(agent.said.at(-1), 'agenda done');
     assert.equal(agent.agenda.active, false);
