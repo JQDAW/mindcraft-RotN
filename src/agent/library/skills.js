@@ -54,7 +54,7 @@ function recipeIngredients(recipe) {
     return out;
 }
 
-export async function craftRecipe(bot, itemName, num=1) {
+export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
     /**
      * Attempt to craft the given item name from a recipe. May craft many items.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -63,6 +63,7 @@ export async function craftRecipe(bot, itemName, num=1) {
      * @example
      * await skills.craftRecipe(bot, "stick");
      **/
+    // ops: how a table is placed and picked up (tests pass their own; CRAFT_TABLE_OPS below).
     let placedTable = false;
     // The variant to craft: "planks:1" asks for spruce planks; a bare "planks" any (B1b).
     // A null meta would let bot.recipesFor return oak planks for spruce.
@@ -89,13 +90,11 @@ export async function craftRecipe(bot, itemName, num=1) {
             // Try to place crafting table
             let hasTable = world.getInventoryCounts(bot)['crafting_table'] > 0;
             if (hasTable) {
-                let pos = world.getNearestFreeSpace(bot, 1, 6);
-                await placeBlock(bot, 'crafting_table', pos.x, pos.y, pos.z);
-                craftingTable = world.getNearestBlock(bot, 'crafting_table', craftingTableRange);
-                if (craftingTable) {
-                    recipes = bot.recipesFor(mc.getItemId(itemName), craftMeta, 1, craftingTable);
-                    placedTable = true;
-                }
+                // ops.place guards a missing free space and logs why it failed (#198 review).
+                craftingTable = await ops.place(bot, itemName);
+                if (!craftingTable) return false;
+                placedTable = true;
+                recipes = bot.recipesFor(mc.getItemId(itemName), craftMeta, 1, craftingTable);
             }
             else {
                 log(bot, `Crafting ${itemName} requires a crafting table.`)
@@ -106,6 +105,9 @@ export async function craftRecipe(bot, itemName, num=1) {
             recipes = bot.recipesFor(mc.getItemId(itemName), craftMeta, 1, craftingTable);
         }
     }
+    // From here a table placed above is picked up again however this ends, also when bot.craft
+    // throws (#198 review); craftByFill takes that over when it is called.
+    try {
     if (!recipes || recipes.length === 0) {
         // Say what is missing by RotN's recipes, judged by rotn-data's canFill (C1): slots are
         // independent, so mixed rocks are fine; cobblestone has one recipe per rock type.
@@ -115,7 +117,9 @@ export async function craftRecipe(bot, itemName, num=1) {
         else if (needs) {
             // canFill says the items fit a RotN recipe, but bot.registry has no variant for this mix
             // (its variants are capped): craft from the bot's own stacks (C1).
-            return await craftByFill(bot, itemName, num, needs, craftingTable, placedTable);
+            const placed = placedTable;
+            placedTable = false; // craftByFill picks it up
+            return await craftByFill(bot, itemName, num, needs, craftingTable, placed, ops);
         }
         else {
             // No RotN craft way: upstream's text from the registry recipes, guarded (#151 review).
@@ -123,9 +127,6 @@ export async function craftRecipe(bot, itemName, num=1) {
             try { first = mc.getItemCraftingRecipes(itemName)?.[0]?.[0] ?? null; } catch { first = null; }
             const requires = first ? ` It requires: ${Object.entries(first).map(([key, value]) => `${key}: ${value}`).join(', ')}.` : '';
             log(bot, `You do not have the resources to craft a ${itemName}.${requires}`);
-        }
-        if (placedTable) {
-            await collectBlock(bot, 'crafting_table', 1);
         }
         return false;
     }
@@ -145,8 +146,8 @@ export async function craftRecipe(bot, itemName, num=1) {
     await craftPausingAutoEat(bot, recipe, Math.min(craftLimit.num, num), craftingTable);
     if(craftLimit.num<num) log(bot, `Not enough ${craftLimit.limitingResource} to craft ${num}, crafted ${craftLimit.num}. You now have ${countItem(bot, itemName)} ${itemName}.`);
     else log(bot, `Successfully crafted ${itemName}, you now have ${countItem(bot, itemName)} ${itemName}.`);
-    if (placedTable) {
-        await collectBlock(bot, 'crafting_table', 1);
+    } finally {
+        if (placedTable) await ops.pickUp(bot);
     }
 
     //Equip any armor the bot may have crafted.
