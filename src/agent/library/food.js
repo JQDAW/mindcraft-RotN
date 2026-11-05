@@ -1,13 +1,10 @@
-// What to eat in RotN (skills-rotn D1). mineflayer-auto-eat only knows the vanilla foods in
-// bot.registry.foodsByName, so it cannot see RotN's foods (rustic berries, ginseng, ...), and it
-// would eat the bread first (the most food points). Which foods to avoid is not in the dump, so the
-// list below cites docs/research/rotn-progression.md (hazard table and first-day script).
+// What to eat in RotN (skills-rotn D1). mineflayer-auto-eat only knows the foods in
+// bot.registry.foodsByName, one entry per item id (meta 0), so it cannot tell a pufferfish
+// (fish:3) from a cod, and it would eat the bread first. The 'eating' mode (modes.js) chooses here.
 //
-// Food values (#206 review 1): the pack's scripts/food.zs changes hunger on about 300 foods (bread
-// gives 3, not 5; P1 measured +3). The dump's `variants[].food` holds the vanilla values. Until
-// rotn-data exposes the pack's values (requested: `foodOf(name, meta)`), the ranking falls back to
-// the dump and says so once. The rules that keep the bot safe (the avoid list, bread last, the
-// food levels) do not depend on the values.
+// Food values are the pack's, from rotn-data (#209): foodValues(item, meta) applies Hunger
+// Overhaul and the pack scripts (bread 3, cooked beef 2; P1 measured bread +3). Foods to avoid
+// come from rotn-data's avoidFood(item, meta), plus the few it does not cover (LOCAL_AVOID).
 
 import * as rotnData from '../../../packages/rotn-data/index.js';
 
@@ -19,21 +16,15 @@ export const EAT_NOW_AT = 6;
 export const CONSUME_CHECK_MS = 1000;
 
 /**
- * Never eaten. RotN: hawthorn berries (`biomesoplenty:berries`, poisonous) and cloudsbluff (makes
- * you float upward), rotn-progression.md hazard table. Vanilla, as mineflayer-auto-eat bans them:
- * pufferfish (1.12 `fish:3`), spider eye, poisonous potato, rotten flesh, chorus fruit, raw
- * chicken, golden apples. `meta` null means every variant.
+ * Never eaten, on top of rotn-data's avoidFood. Hawthorn berries (`biomesoplenty:berries`): the
+ * thorns are poisonous (rotn-progression.md hazard table). Chorus fruit teleports the bot at
+ * random, and golden apples are kept (both banned by mineflayer-auto-eat's defaults).
+ * `meta` null means every variant.
  */
-export const AVOID_FOODS = [
-    { name: 'biomesoplenty:berries', meta: null },
-    { name: 'rustic:cloudsbluff', meta: null },
-    { name: 'minecraft:fish', meta: 3 },
-    { name: 'minecraft:spider_eye', meta: null },
-    { name: 'minecraft:poisonous_potato', meta: null },
-    { name: 'minecraft:rotten_flesh', meta: null },
-    { name: 'minecraft:chorus_fruit', meta: null },
-    { name: 'minecraft:chicken', meta: null },
-    { name: 'minecraft:golden_apple', meta: null },
+export const LOCAL_AVOID = [
+    { name: 'biomesoplenty:berries', meta: null, why: 'hawthorn: the thorns are poisonous (rotn-progression.md)' },
+    { name: 'minecraft:chorus_fruit', meta: null, why: 'teleports at random' },
+    { name: 'minecraft:golden_apple', meta: null, why: 'kept, not eaten as food' },
 ];
 
 /** Eaten only when nothing else is left: "Keep the starting bread as a last resort". */
@@ -44,37 +35,51 @@ const metaOf = (item) => (Number.isInteger(item.metadata) ? item.metadata : 0);
 /** A food's key, for counting and for the foods given up on: "rustic:wildberries:0". */
 export const foodKey = (item) => `${fullName(item) ?? item.name}:${metaOf(item)}`;
 
-let warnedVanilla = false;
-
 /**
- * {hunger, saturation, source} of an inventory stack, or null when it is no food. source is
- * 'pack' (rotn-data's foodOf, the food.zs values) or 'dump' (vanilla values, a fallback).
+ * {hunger, saturation, source} of an inventory stack on this pack, or null when it is no food.
+ * source is rotn-data's ('crafttweaker', 'hungeroverhaul-table', 'hungeroverhaul-rule'). For a food
+ * whose value rotn-data could not compute ('not-computed': HarvestCraft and Biomes O' Plenty foods
+ * no script sets), the vanilla value with Hunger Overhaul's rule (hunger / 2, at least 1) is an
+ * estimate, marked 'estimate', so the food still counts but ranks low.
  */
 export function foodValue(item) {
     const name = fullName(item);
     if (!name) return null;
-    const meta = metaOf(item);
-    if (typeof rotnData.foodOf === 'function') {
-        let f = null;
-        try { f = rotnData.foodOf(name, meta); } catch { f = null; }
-        return f && Number(f.hunger) > 0 ? { hunger: Number(f.hunger), saturation: Number(f.saturation) || 0, source: 'pack' } : null;
-    }
-    let entry = null;
-    try { entry = rotnData.getItem(name); } catch { return null; }
-    const variants = Array.isArray(entry?.variants) ? entry.variants : [];
-    const v = variants.find(x => x.meta === meta) ?? (entry?.hasSubtypes ? null : variants[0]);
-    const food = v?.food;
-    if (!food || !(Number(food.hunger) > 0)) return null;
-    if (!warnedVanilla) {
-        warnedVanilla = true;
-        console.warn('[food] rotn-data has no pack food values yet (foodOf); ranking foods by the dump\'s vanilla values');
-    }
-    return { hunger: Number(food.hunger), saturation: Number(food.saturation) || 0, source: 'dump' };
+    let f = null;
+    try { f = rotnData.foodValues(name, metaOf(item)); } catch { f = null; }
+    if (!f) return null;
+    if (Number(f.hunger) > 0) return { hunger: Number(f.hunger), saturation: Number(f.saturation) || 0, source: f.source };
+    const vanilla = Number(f.vanilla?.hunger);
+    if (f.source === 'not-computed' && vanilla > 0) return { hunger: Math.max(1, Math.round(vanilla / 2)), saturation: 0, source: 'estimate' };
+    return null;
 }
 
-export function isAvoided(item) {
+/** Why a stack must not be eaten (rotn-data's avoidFood, or LOCAL_AVOID), or null. */
+export function avoidReason(item) {
     const name = fullName(item);
-    return AVOID_FOODS.some(f => f.name === name && (f.meta === null || f.meta === metaOf(item)));
+    if (!name) return null;
+    const local = LOCAL_AVOID.find(f => f.name === name && (f.meta === null || f.meta === metaOf(item)));
+    if (local) return local.why;
+    let a = null;
+    try { a = rotnData.avoidFood(name, metaOf(item)); } catch { a = null; }
+    if (!a) return null;
+    const effects = (a.effects ?? []).map(e => e.effect).filter(Boolean);
+    return effects.length ? effects.join(', ') : (a.note ?? 'harmful');
+}
+
+export const isAvoided = (item) => avoidReason(item) !== null;
+
+/**
+ * mineflayer-auto-eat's bannedFood (bot item names). It matches by name only, so a food that is
+ * harmful at any meta is banned by name: all of `fish`, as a pufferfish (fish:3) and a cod share
+ * the name. The 'eating' mode eats by meta and still eats cod.
+ */
+export function autoEatBannedFood() {
+    const names = new Set(LOCAL_AVOID.map(f => f.name));
+    let avoid = {};
+    try { avoid = rotnData.loadRotnData(rotnData.PACK_VERSION).foodData?.avoid ?? {}; } catch { avoid = {}; }
+    for (const name of Object.keys(avoid)) names.add(name);
+    return [...names].map(n => { try { return rotnData.botName(n); } catch { return n; } }).sort();
 }
 
 /**

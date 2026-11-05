@@ -1,11 +1,10 @@
-// skills-rotn D1: eating, offline (the real 3.3.4 dump, a fake bot). Food values: the pack's
-// food.zs values once rotn-data exposes them (foodOf); until then the dump's vanilla values, so
-// no test here pins a value (#206 review 1), except the pack check that waits for foodOf.
+// skills-rotn D1: eating, offline (the real 3.3.4 data, a fake bot). Food values are the pack's,
+// from rotn-data's foodValues (#209): Hunger Overhaul, then the pack scripts.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Vec3 } from 'vec3';
 import * as rotnData from '../../../packages/rotn-data/index.js';
-import { chooseFood, foodValue, foodKey, isAvoided, wantsToEat, eatFood, EAT_AT, EAT_NOW_AT } from './food.js';
+import { chooseFood, foodValue, foodKey, isAvoided, avoidReason, autoEatBannedFood, wantsToEat, eatFood, EAT_AT, EAT_NOW_AT } from './food.js';
 import { __modeForTest, initModes } from '../modes.js';
 
 const stack = (name, metadata, count = 1) => ({ name, metadata, count });
@@ -14,27 +13,41 @@ const invBot = (items, food = 20) => ({ food, inventory: { items: () => items } 
 const settled = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
 const quiet = (t) => { t.mock.method(console, 'log', () => {}); t.mock.method(console, 'warn', () => {}); };
 
-test('D1: RotN foods and vanilla foods have a food value; non-foods have none', (t) => {
-    quiet(t);
-    for (const s of [stack('rustic:wildberries', 0), stack('bread', 0), stack('fish', 0)]) {
-        const v = foodValue(s);
-        assert.ok(v && v.hunger > 0, s.name);
-        assert.equal(v.source, typeof rotnData.foodOf === 'function' ? 'pack' : 'dump');
-    }
+test('#206 review 1: the pack food values are used (bread 3 and cooked beef 2 by scripts/food.zs, berries by Hunger Overhaul)', () => {
+    assert.deepEqual(foodValue(stack('bread', 0)), { hunger: 3, saturation: rotnData.foodValues('minecraft:bread', 0).saturation, source: 'crafttweaker' });
+    assert.equal(foodValue(stack('cooked_beef', 0)).hunger, 2);
+    assert.equal(foodValue(stack('rustic:wildberries', 0)).hunger, 1);
+    assert.equal(foodValue(stack('rustic:wildberries', 0)).source, 'hungeroverhaul-rule');
+    // A food rotn-data could not compute counts, with an estimate (vanilla / 2, at least 1).
+    const juice = foodValue(stack('harvestcraft:applejuiceitem', 0));
+    assert.equal(juice.source, 'estimate');
+    assert.ok(juice.hunger >= 1);
     for (const s of [stack('cobblestone', 0), stack('pyrotech:rock', 0), stack('no_such_mod:thing', 0)])
         assert.equal(foodValue(s), null, s.name);
 });
 
-test('D1: the pack food values are used (bread 3, scripts/food.zs:21)', { skip: typeof rotnData.foodOf !== 'function' && 'waits for rotn-data foodOf (pack food values)' }, () => {
-    assert.equal(foodValue(stack('bread', 0)).hunger, 3);
-    assert.equal(foodValue(stack('bread', 0)).source, 'pack');
-});
-
-test('D1: hawthorn berries, cloudsbluff, pufferfish and the vanilla bad foods are never chosen', () => {
-    for (const s of [stack('biomesoplenty:berries', 0), stack('rustic:cloudsbluff', 0), stack('fish', 3), stack('rotten_flesh', 0), stack('spider_eye', 0), stack('chicken', 0), stack('golden_apple', 1)])
+test('D1: rotn-data avoidFood (by meta) and the local list: never chosen', () => {
+    for (const s of [stack('biomesoplenty:berries', 0), stack('rustic:cloudsbluff', 0), stack('fish', 3), stack('rotten_flesh', 0), stack('spider_eye', 0), stack('chicken', 0), stack('golden_apple', 1), stack('rustic:ironberries', 0), stack('iceandfire:pixie_dust', 0), stack('chorus_fruit', 0)])
         assert.equal(isAvoided(s), true, s.name);
+    assert.ok(avoidReason(stack('fish', 3)).length > 0, 'the pufferfish has its effects as the reason');
+    assert.match(avoidReason(stack('biomesoplenty:berries', 0)), /hawthorn/);
     assert.equal(isAvoided(stack('fish', 0)), false, 'raw cod is fine');
     assert.equal(chooseFood(invBot([stack('biomesoplenty:berries', 0, 5), stack('rustic:cloudsbluff', 0, 5), stack('fish', 3, 2)])), null);
+});
+
+test('#206 review: auto-eat (it sees names only) bans every food harmful at any meta, by name: all of fish', () => {
+    const banned = autoEatBannedFood();
+    for (const n of ['fish', 'rotten_flesh', 'spider_eye', 'chicken', 'poisonous_potato', 'biomesoplenty:berries', 'rustic:cloudsbluff', 'rustic:ironberries', 'golden_apple', 'chorus_fruit'])
+        assert.ok(banned.includes(n), n);
+    for (const n of ['bread', 'cooked_beef', 'rustic:wildberries']) assert.ok(!banned.includes(n), n);
+});
+
+test('D1: with the pack values, cooked beef (2) before berries (1), bread (3) only as the last resort', () => {
+    const bread = stack('bread', 0, 3), berries = stack('rustic:wildberries', 0, 4), beef = stack('cooked_beef', 0, 1);
+    assert.equal(chooseFood(invBot([bread, berries, beef])), beef);
+    assert.equal(chooseFood(invBot([bread, berries])), berries);
+    assert.equal(chooseFood(invBot([bread, stack('fish', 3, 2)])), bread, 'a pufferfish is never the alternative');
+    assert.equal(chooseFood(invBot([stack('fish', 0, 1), stack('fish', 3, 1)])).metadata, 0, 'cod, by meta');
 });
 
 test('D1: the most hunger first, the bread only as the last resort, given-up foods skipped', () => {
