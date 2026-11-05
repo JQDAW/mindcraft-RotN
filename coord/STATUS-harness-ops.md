@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-04 (23:41 UTC, from `date -u`)
+Updated: 2026-11-05 (00:36 UTC, from `date -u`)
 
 ## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
@@ -19,7 +19,20 @@ The lead's order: one scenario per small PR, (a) first, then (b) first night, (c
 - **For the lead:** the crafting-table check also accepts "placed", read from `stat.useItem.minecraft.crafting_table` (1.12 counts a placed block as a use of its item). That is the approved `scoreboard objectives add` command, but a new criterion. S1 did not check it, and the first G3 smoke batch confirms it.
 - **Tested:** `g3-rocks.test.js` 12/12, `runner.test.js` 42/42 (1 Windows skip), `g3-spend.test.js` 45/45, `mindcraft-driver.test.js` 13/13. ESLint is clean on the changed files.
 
-**Next:** (b) `g3-first-night` (branch `agent/harness-ops/g3b-first-night`, stacked on #201), with the provisional dawn bound (the wrap past 24000, limit 55 min) and the same no-tp rule.
+**PR #203: G3 (b), `g3-first-night`** (branch `agent/harness-ops/g3b-first-night`; #201 merged, so #203 now targets develop).
+- **The #203 review, fixed:**
+  - dusk must be seen before a night counts (`dawnOf`), with a mid-night start test;
+  - a `fresh_start` check as in (a);
+  - `time set day` is removed from `G3_CONSOLE_ALLOW`.
+  - Approved read-only for G3: the `gamerule <rule>` query, `testfor` and `testforblock`, as commented in the allowlist.
+  - The batch layout is updated here and in DRIVER.md: A alone, B alone, and C+D together.
+- **The scenario:** `test/scenarios/g3/g3-first-night.mjs`, with the real agent. Nothing about time is set, and there is no `tp`.
+- **The dawn rule (provisional):** night is a sample at or above 13000; dawn is the next one below 12000. `maxMinutes` 55, `nightFrom` and `dawnBelow` are compared 'equal'; `maxBatchUsd` is 2.
+- **Checks:** `login_online`, `survived_night` (dawn reached, `stat.deaths` 0 and no death line), `stayed_online` and `no_cheat`. The new shared `deathLines` is in `lib/g3.mjs`.
+- **The lead's decisions (#203):** the shelter snapshot is dropped. The `food` criterion is approved as a read-only objective: hunger at the end is recorded as evidence only, and `G3_CONSOLE_ALLOW` allows only that criterion besides `stat.*`.
+- **Tested:** `g3-night.test.js` 10/10 on S1-A's measured cycle, `g3-spend.test.js` 45/45 and `g3-rocks.test.js` 15/15. ESLint is clean.
+
+**Next:** (c) `g3-task-preempts-agenda`, then (d) `g3-untrusted-refused`.
 
 ## Done just before (2026-11-04)
 
@@ -936,10 +949,11 @@ What skills-rotn provides (to agree):
     - Hard stop at 90 min (1.5x).
   - **S1-B, batch 5's world** (`--seed 8796110535854059511`): `s1-site-survey` only, with the same command minus the other two scenarios. About 15 min, 1 billed hour, about **EUR 0.14** plus IPv4. Hard stop at 25 min.
   - **After both:** the evidence goes through the redaction tool into `test/evidence/s1/`, and the findings go into STATUS: the world proposal, the dawn bound, which RotN stats exist (so where `crafted_by_bot` gates), and the whisper sender.
-- **G3 batch:** `g3-rocks-to-stone-tools`, `g3-first-night`, `g3-task-preempts-agenda` and `g3-untrusted-refused` on one server (the restart check is offline in G3).
-  - About 25 + 45 + 15 + 5 = 90 min plus the build: about 2 h, so 2 billed hours, about **EUR 0.28** plus IPv4.
-  - A hard stop at 1.5 times the plan; `--ttl-hours 4`.
-  - Worst case 5 billed hours, about EUR 0.69, plus the LLM spend (below).
+- **G3 batches: the layout (lead, #203 review).** Three batches, each on its own newly built server with its own written GO and its own spend stop (`maxBatchUsd` USD 2). The restart check is offline in G3.
+  - **Batch A, `g3-rocks-to-stone-tools` alone,** on a fresh server: it needs FRCFLD's first join on a fresh world. About 25 min plus about 5 min of build: 1 billed hour, about **EUR 0.14** plus IPv4. Hard stop at 45 min.
+  - **Batch B, `g3-first-night` alone,** on a fresh server, for the same reason. About 55 min plus the build: 1-2 billed hours, about **EUR 0.14-0.28** plus IPv4. Hard stop at 90 min.
+  - **Batch C+D, `g3-task-preempts-agenda` then `g3-untrusted-refused`,** on one server (neither needs a fresh spawn). About 15 + 4 min plus the build: 1 billed hour, about **EUR 0.14** plus IPv4. Hard stop at 45 min.
+  - **In all:** 3-4 billed hours, about EUR 0.42-0.56 plus 3 IPv4-hours, plus the LLM spend (at most USD 2 per batch).
 
 #### LLM spend (lead, #101)
 

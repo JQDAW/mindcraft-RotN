@@ -55,16 +55,18 @@ export const G3_CONSOLE_ALLOW = [
     /^seed$/,
     // No tp of any form (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12 (it dismounts, zeroes
     // motionY, sets onGround and forces a position packet). Life evidence comes from stat.deaths and the log.
+    // No time change of any form either (lead, #203 review): `time set day` is gone; only the query below.
     new RegExp(`^tell ${NAME} .+$`),                                       // the test-only task giver `Server`
-    new RegExp(`^testforblock ${N} ${N} ${N} \\S+ \\d+$`),
-    /^testfor @[aep]\[[^\]]*\]$/,
+    // Read-only checks approved for G3 (lead, #203 review): testforblock and testfor, and the gamerule query.
+    new RegExp(`^testforblock ${N} ${N} ${N} \\S+ \\d+$`),                 // read-only: does the block match
+    /^testfor @[aep]\[[^\]]*\]$/,                                          // read-only: does a selector match
     new RegExp(`^clear ${NAME} \\S+ ${N} 0$`),                             // count only: maxCount 0, never a real clear
     /^scoreboard objectives add [A-Za-z0-9_]{1,16} stat\.[A-Za-z0-9_.]+$/,
+    /^scoreboard objectives add [A-Za-z0-9_]{1,16} food$/,                 // read-only food level, evidence only (lead, #203)
     /^scoreboard objectives remove [A-Za-z0-9_]{1,16}$/,
     new RegExp(`^scoreboard players list ${NAME}$`),
     /^time query daytime$/,
-    /^time set day$/,                                                      // G2's list; never in the first-night scenario
-    /^gamerule doDaylightCycle$/,                                          // the query form only, no value
+    /^gamerule [A-Za-z]+$/,                                                // read-only: the query form only, never a value
     new RegExp(`^setblock ${N} ${N} ${N} minecraft:gold_block$`),          // the task marker only
 ];
 
@@ -231,4 +233,28 @@ export function cheatProblems(lines, bot, { windowS = FIRST_JOIN_WINDOW_S } = {}
         else if (new RegExp(`^Opped ${b}$`).test(msg)) problems.push(`the bot was opped: ${msg}`);
     }
     return { problems, packFirstJoin };
+}
+
+/**
+ * The 1.12 death messages ("death.attack.*" and "death.fell.*" in en_us.lang) all start with the
+ * player's name and one of these phrases. A mod's own death type that the dedicated server cannot
+ * translate is logged as its raw key ("death.attack.<type>"), so that form counts too.
+ */
+const DEATH_PHRASE = /^(was |died|drowned|blew up|hit the ground|fell |went up in flames|walked into|burned to death|tried to swim in lava|suffocated|starved|withered away|experienced kinetic energy|discovered (the )?floor was lava|didn't want to live)/;
+
+/**
+ * The bot's death lines in the log: [{time, msg}]. stat.deaths is the main arbiter (G3 plan, arbiter 5);
+ * these lines are the second, independent one, so a death the stat missed still fails survival.
+ */
+export function deathLines(lines, bot) {
+    const out = [];
+    const prefix = `${bot} `;
+    for (const line of lines) {
+        const m = LOG_LINE.exec(String(line).replace(/\r$/, ''));
+        if (!m) continue;
+        const msg = m[4];
+        const rawKey = /\bdeath\.(attack|fell)\.\S+/.test(msg) && msg.includes(bot);
+        if (rawKey || (msg.startsWith(prefix) && DEATH_PHRASE.test(msg.slice(prefix.length)))) out.push({ time: `${m[1]}:${m[2]}:${m[3]}`, msg });
+    }
+    return out;
 }

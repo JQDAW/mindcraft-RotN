@@ -51,6 +51,9 @@ function fakeSelfPrompter() {
     return sp;
 }
 function fakeAgent(t, { agenda = true } = {}) {
+    // A stored task's giver is checked again when it runs (G3 (c)/(d) review): the givers these
+    // tests use. JQDAW is a player here; "Server" is the console sender (a test-server setting).
+    Object.assign(settings, { task_givers: ['JQDAW'], allow_server_task_giver: true });
     const dir = tempDir(t);
     const said = [];
     const agent = {
@@ -564,3 +567,61 @@ async function withChatHandlers(agent) {
     await agent._setupEventHandlers(null, null);
     return agent;
 }
+
+// G3 (c)/(d) security review: a stored task runs only while its giver is still a task giver.
+test('a stored task whose giver is no longer a task giver is cancelled with a log line, never run', (t) => {
+    const warns = [];
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+    const agent = fakeAgent(t, { agenda: false });
+    agent.tasks.add({ text: 'dig a hole', priority: 'normal', giver: 'JQDAW' });
+    agent.tasks.add({ text: 'wave', priority: 'normal', giver: 'JQDAW' });
+    // After a restart the settings no longer name JQDAW.
+    settings.task_givers = [];
+    const reloaded = new TaskQueue('FRCFLD', { dir: agent.dir });
+    agent.tasks = reloaded;
+    assert.equal(autonomyTick(agent, { now: 0 }), 'task:t1:dropped');
+    assert.deepEqual([reloaded.get('t1').status, reloaded.get('t1').result], ['cancelled', 'dropped: JQDAW is no longer a task giver']);
+    assert.equal(agent.self_prompter.starts.length, 0, 'never started');
+    assert.equal(agent.said.at(-1), 'task t1 dropped: its giver JQDAW is no longer a task giver');
+    assert.ok(warns.includes('[tasks] task t1 dropped: its giver JQDAW is no longer a task giver'));
+    assert.doesNotMatch(agent.said.join(' | '), /dig a hole/, 'the task text is not repeated');
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'task:t2:dropped', 'the next one too');
+    assert.equal(new TaskQueue('FRCFLD', { dir: agent.dir }).get('t1').status, 'cancelled', 'saved');
+    settings.task_givers = ['JQDAW'];
+});
+
+test('a task stored as active and taken over after a restart: its giver is checked, and it says started', (t) => {
+    const agent = fakeAgent(t, { agenda: false });
+    agent.tasks.add({ text: 'build a hut', priority: 'normal', giver: 'JQDAW' });
+    agent.tasks.start('t1');
+    // A restart: a new process with the same files, the task still active, the self-prompter
+    // restored with its prompt.
+    agent.tasks = new TaskQueue('FRCFLD', { dir: agent.dir });
+    agent._task_id = null;
+    assert.equal(autonomyTick(agent, { now: 0 }), 'task:t1');
+    assert.equal(agent.said.at(-1), 'task t1 started: build a hut');
+    assert.equal(agent.tasks.get('t1').status, 'active');
+
+    // The same, but the giver was removed: dropped, and its restored self-prompter goal stopped.
+    const other = fakeAgent(t, { agenda: false });
+    other.tasks.add({ text: 'build a hut', priority: 'normal', giver: 'JQDAW' });
+    other.tasks.start('t1');
+    other.self_prompter.start(taskGoal(other.tasks.get('t1')));
+    settings.task_givers = [];
+    t.mock.method(console, 'warn', () => {});
+    other.tasks = new TaskQueue('FRCFLD', { dir: other.dir });
+    assert.equal(autonomyTick(other, { now: 0 }), 'task:t1:dropped');
+    assert.equal(other.self_prompter.isActive(), false, 'the restored task goal is stopped');
+    assert.equal(other.tasks.get('t1').status, 'cancelled');
+    settings.task_givers = ['JQDAW'];
+});
+
+test('the console sender "Server" stays a giver only while allow_server_task_giver is on', (t) => {
+    t.mock.method(console, 'warn', () => {});
+    const agent = fakeAgent(t, { agenda: false });
+    agent.tasks.add({ text: 'stand still', priority: 'normal', giver: 'Server' });
+    settings.allow_server_task_giver = false;
+    agent.tasks = new TaskQueue('FRCFLD', { dir: agent.dir });
+    assert.equal(autonomyTick(agent, { now: 0 }), 'task:t1:dropped');
+    settings.allow_server_task_giver = true;
+});
