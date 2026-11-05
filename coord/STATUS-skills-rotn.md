@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T23:00Z (from `date -u`)
+Updated: 2026-11-04T23:21Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -200,20 +200,27 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 9. ~~rotn-data: `isHuntable` reads the 1.21 baby flag~~: done in #125 (`mc.isBaby`, index 12). My follow-up: switch `names112.isBaby` callers to `mc.isBaby` (queued).
 10. ~~Lead: `getDetailedCraftingPlan` reading ingredient metas~~: decided (lead): it goes to rotn-data (the `mcdata.js` recipe helpers), low priority, after G3 unless C1 needs it.
 12. ~~rotn-data (from D2c, #186): a structured do-not-look field~~: **done in rotn-data #187** (`lookAt`). #190 switches `threats.js` to `lookAt === false`, which now also covers the ender creeper and the cockatrice. The data notes (the gorgon, ender dragon, wither, ghast, blaze, zombie horse) are **done in rotn-data #188**: the gorgon is now `avoid` with `lookAt: false`, rechecked on develop and asserted in #190's test.
-13. **Lead (`package.json` + lockfile):** add `prismarine-recipe` as a direct dependency, at the version mineflayer 4.33.0 already installs. C1's `skills.js` and `craft_needs.test.js` import it; today it resolves only because mineflayer pulls it in.
+13. ~~Lead: `prismarine-recipe` as a direct dependency~~: the lead is adding 1.5.0 in a lead PR (2026-11-04).
 14. **net-forge (FYI, via the lead):** C1 follows your Request 2 rules: `bot.craft(recipe, 1, table)` with a prismarine-recipe `Recipe` built from bot.registry ids and canFill's real stack metas (never 32767), the result with rotn-data's exact count and meta, NBT results and `remaining` refused, and auto-eat paused around the craft.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
 
-- **#194** (C1, crafting execution) and **#195** (D2b-1, `!buildShelter`), waiting for the lead's review. Merged before: #190 (do-not-look from `lookAt`), and #189 (P1 passed: 4/4 RotN crafts, including the stone pickaxe at a FastWorkbench table; modded item ids accepted in clicks; 5/5 placements in 589-1158 ms).
+- **#195** (D2b-1, `!buildShelter`), waiting for the lead's review; **#198**, the #194 follow-up (branch `agent/skills-rotn/craft-fill-followup`). Merged: #194 (C1, `06ad75f`), #190 (do-not-look from `lookAt`), and #189 (P1 passed: 4/4 RotN crafts, including the stone pickaxe at a FastWorkbench table; modded item ids accepted in clicks; 5/5 placements in 589-1158 ms).
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
 - `agent/skills-rotn/rotn-crafting` matched origin (`89e1b694`); develop had not moved (`88c02bc`).
-- **C1, crafting execution: #194 open** (this branch, base develop). When `bot.recipesFor` finds no variant (bot.registry's RotN variants are capped, so a mix of rock kinds can be missing) but rotn-data's `canFill` says the items fit, `craftByFill` crafts from canFill's assigned stacks: `filledRecipe` + `fillNow` (craft_needs.js) and a prismarine-recipe `Recipe`, one craft at a time, re-judged each time, at a found or placed crafting table (`bot.craft(recipe, 1, table)` at the FastWorkbench table, as P1's probe did).
+- **C1, crafting execution: #194 merged** (`06ad75f`). When `bot.recipesFor` finds no variant (bot.registry's RotN variants are capped, so a mix of rock kinds can be missing) but rotn-data's `canFill` says the items fit, `craftByFill` crafts from canFill's assigned stacks: `filledRecipe` + `fillNow` (craft_needs.js) and a prismarine-recipe `Recipe`, one craft at a time, re-judged each time, at a found or placed crafting table (`bot.craft(recipe, 1, table)` at the FastWorkbench table, as P1's probe did).
   - Added on resume, from net-forge's Request 2 rules: auto-eat is paused around every `bot.craft` (`craftPausingAutoEat`, both paths; an eat under way gets up to 3 s); a recipe with an NBT result or container items left in the grid is refused with a clear error; a table `craftRecipe` already placed is reused, not placed twice.
   - Tests: `craft_needs.test.js` 21/21 (the full mixed-rock `!craftRecipe` test fails on the old skills.js); `src/agent/**` 204/204; lint 254 (baseline OK).
+- **#194 review follow-up, #198** (lead: items 1, 2 and 5 are required before the G3 (a) batch), branch `agent/skills-rotn/craft-fill-followup`:
+  1. each craft counts only when the item's real inventory count grew, and the loop stops when it did not;
+  2. a table placed for the craft (by `craftByFill` or `craftRecipe`) is picked up in a `finally`, so also when `bot.craft` throws; the throw is logged with `safeError`;
+  3. nit 3: a missing recipe id logs that cause;
+  4. nit 4: no free space for a table logs that, instead of a TypeError.
+
+  Item 5: tests for the 2x2-grid canFill crafts (the crude axe twice; Crafting Tools from a damaged crude axe, never the wildcard meta), the stop on no gain, and the table picked up once after a throw and after a craft. Tests: `craft_needs.test.js` 26/26 (the 5 new ones fail on the old `skills.js`); `src/agent/**` 209/209; lint 254.
 - **D2b-1, `!buildShelter`: #195 open** (branch `agent/skills-rotn/shelter-build`, base develop). `library/shelter.js` builds a closed 1x2 space with sturdy walls and roof from inside:
   - it picks the site within 4 blocks that needs the fewest blocks;
   - it counts first: 10 blocks on open ground, including a roof prop;
@@ -222,6 +229,16 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - a solid floor is kept even when it is not rock (known limit).
 
   `unstuck` now leaves `action:buildShelter` alone; that test fails on the old `modes.js`. Tests: `shelter.test.js` 6/6; `src/agent/**` 206/206; lint 254.
+  - **#195 review (REQUEST CHANGES), fixed in `1db6abf3`:**
+    1. each site is dry-run first: no digging under a falling block or next to a liquid outside the shell;
+    2. a pickaxe that can dig the walls is required before sealing in;
+    3. only sites where every cell has a support face are chosen;
+    4. a cell is retried once after `LATE_UPDATE_MS` (1200 ms) and a fresh `blockAt` look;
+    5. nit: no build when centring fails;
+    6. nit: `unstuck` is off only while the bot builds at the site (the `bot.rotnStationary` flag);
+    7. the fake world models the hitbox, reach, falling blocks, liquids, a ledge and late updates.
+
+    Reply posted. Tests: `shelter.test.js` 10/10; `src/agent/**` 210/210; lint 254.
 - **Next:**
-  1. the #194 and #195 reviews;
+  1. the #198 and #195 reviews;
   2. D2b-2, the night routine: a shelter step at dusk (`NightClock`, `SHELTER_LEAD_MIN`); stay in at night; repair with `buildShelter({ site })`; fight only at the opening (`nightThreatNote`); leave at daylight; `torch_placing` kept off in the shelter (it is on by default); the shortfall over the cobblestone step's 8 gathered.

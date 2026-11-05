@@ -16,7 +16,7 @@ const MARKED = {
     'iceandfire:deathworm': true, 'iceandfire:firedragon': true, 'iceandfire:icedragon': true, 'iceandfire:if_cockatrice': true,
     'iceandfire:seaserpent': true, 'mod_lavacow:salamander': false, 'mod_lavacow:scarecrow': false, 'mod_lavacow:unburied': false,
     'primitivemobs:grovesprite': false, 'primitivemobs:lily_lurker': false,
-    // Lead's GO (2026-11-03): Special AI's depacify makes it aggressive on this pack (Special_AI.cfg lines 15, 25).
+    // Lead's GO (2026-11-03): Special AI's depacify makes it aggressive on this pack (Special_AI.cfg lines 16, 25).
     'minecraft:skeleton_horse': false,
 }; // name -> dangerous
 
