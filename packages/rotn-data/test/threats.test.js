@@ -331,3 +331,21 @@ test('lookAt: false for the look-triggered mobs only (enderman family, ender cre
     assert.ok(pack.nightThreats({ limit: 1000 }).every((t) => typeof t.lookAt === 'boolean'));
     assert.match(reactions.description, /'lookAt': false/);
 });
+
+// G3 smoke round 2, batch A: the bot died to a grove sprite and to "Zombie FRCFLD" (Zombie Players).
+test('grove sprite only retaliates; the zombie player is a plain zombie at the death spot', () => {
+    const sprite = pack.threatOf('primitivemobs:grovesprite');
+    assert.equal(sprite.level, 'none', 'its player targeting is client-side only, so it is not hostile');
+    assert.equal(pack.entity('primitivemobs:grovesprite').hostile, false);
+    assert.deepEqual([sprite.reaction, sprite.source], ['ignore-unless-provoked', 'verified']);
+    assert.match(sprite.evidence.join(' '), /primitivemobs-1\.2\.3a\.jar.*world\.isRemote/);
+    assert.match(sprite.evidence.join(' '), /roughmobsrevamped\.cfg.*line 437 attackDamage \+2\.5/);
+    const zombie = pack.threatOf('zombie_players:zombie_player');
+    assert.equal(zombie.level, 'hostile');
+    assert.equal(zombie.displayName, 'Zombie Player');
+    assert.deepEqual([zombie.reaction, zombie.source, zombie.ranged, zombie.lookAt], ['fight', 'verified', false, true]);
+    assert.match(zombie.evidence.join(' '), /zombie_players-1\.12\.1-1\.2\.7\.jar.*onLivingDeath/);
+    assert.match(zombie.evidence.join(' '), /'Zombie ' \+ the GameProfile name/);
+    assert.match(zombie.summary, /never despawns/);
+    assert.match(zombie.evidence.join(' '), /corpsecomplex\.cfg.*'Drop Despawn Timer'=600/);
+});
