@@ -5,6 +5,17 @@ import convoManager from '../conversation.js';
 import { addTask, cancelTask } from '../task_queue.js';
 import { finishTask } from '../priority.js';
 import { hasAutonomyPrefix } from '../agenda_driver.js';
+import { deathSpotBlocked } from '../library/death_report.js';
+import * as world from '../library/world.js';
+import { threatFor, hurtBy } from '../library/threats.js';
+
+/** False (with a log line) when the walk would lead back to the death spot too soon (G3 round 2). */
+function deathSpotOk(agent, x, y, z) {
+    const why = deathSpotBlocked(agent, { x, y, z });
+    if (!why) return true;
+    skills.log(agent.bot, `Not going to ${Math.floor(x)}, ${Math.floor(y)}, ${Math.floor(z)}: it is near where you died, and ${why}.`);
+    return false;
+}
 
 /**
  * Total time limits per command, in minutes (G3 smoke C+D and the #221 review). The limit is
@@ -228,6 +239,7 @@ export const actionsList = [
             'closeness': {type: 'float', description: 'How close to get to the location.', domain: [0, Infinity]}
         },
         perform: runAsAction(async (agent, x, y, z, closeness) => {
+            if (!deathSpotOk(agent, x, y, z)) return;
             await skills.goToPosition(agent.bot, x, y, z, closeness);
         })
     },
@@ -285,6 +297,7 @@ export const actionsList = [
             skills.log(agent.bot, `No location named "${name}" saved.`);
             return;
             }
+            if (!deathSpotOk(agent, pos[0], pos[1], pos[2])) return;
             await skills.goToPosition(agent.bot, pos[0], pos[1], pos[2], 1);
         })
     },
@@ -427,6 +440,13 @@ export const actionsList = [
         description: 'Attack and kill the nearest entity of a given type.',
         params: {'type': { type: 'string', description: 'The type of entity to attack.'}},
         perform: runAsAction(async (agent, type) => {
+            // A mob that only fights back is not attacked unless it hurt the bot (#226 review: the
+            // model attacked a grove sprite; rotn-data marks it ignore-unless-provoked).
+            const mob = world.getNearbyEntities(agent.bot, 24).find(e => e.name === type);
+            if (mob && threatFor(mob)?.reaction === 'ignore-unless-provoked' && !hurtBy(agent.bot, mob)) {
+                skills.log(agent.bot, `Not attacking ${type}: it attacks only when hurt, and it has not hurt you. Leave it alone; if it attacks you, the bot defends itself.`);
+                return;
+            }
             await skills.attackNearest(agent.bot, type, true);
         })
     },

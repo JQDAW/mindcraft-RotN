@@ -73,6 +73,36 @@ export function threatFor(entity) {
         : null;
 }
 
+/**
+ * Zombie Players' zombie (G3 round 2: "Zombie FRCFLD" killed the bot at its death spot). The mod
+ * raises one where any player died; its name is not readable here (it is in the undecoded FML
+ * spawn data), so it is matched by its entity type (rotn-data #226: a zombie that never despawns).
+ */
+export const PLAYER_ZOMBIE = 'zombie_players:zombie_player';
+export const isPlayerZombie = (entity) => entity?.name === PLAYER_ZOMBIE;
+
+/** A sword or an axe (not a pickaxe) in the inventory. */
+export function hasWeapon(bot) {
+    const items = bot?.inventory?.items?.() ?? [];
+    return items.some(i => typeof i?.name === 'string' && /sword|(^|[:_])axe$/.test(i.name));
+}
+
+/**
+ * The lead's policy for a player zombie (#227 review 1): fight only with a weapon and health
+ * above half; otherwise get away.
+ */
+export const canFightHard = (bot) => hasWeapon(bot) && bot?.health > 10;
+
+/**
+ * Whether this mob hurt the bot: it is angry, or the bot was hit within PROVOKED_MS while it
+ * was within PROVOKED_DIST (1.12 does not say who dealt the damage).
+ */
+export function hurtBy(bot, entity, { now = Date.now() } = {}) {
+    if (!entity?.position || !bot?.entity?.position) return false;
+    if (isAngry(entity) === true) return true;
+    return now - (bot.lastDamageTime ?? -Infinity) <= PROVOKED_MS && entity.position.distanceTo(bot.entity.position) <= PROVOKED_DIST;
+}
+
 /** Whether the bot must not look at this mob (an enderman's stare check). */
 export const doNotLook = (entity) => !!threatFor(entity)?.doNotLook;
 
@@ -108,6 +138,13 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
         near.push({ e, t, d: e.position.distanceTo(me) });
     }
     near.sort((a, b) => a.d - b.d);
+    // A player zombie (round 2): fought like a zombie only with a weapon and health above half;
+    // otherwise avoided from the avoid range (#227 review 1).
+    const zombies = near.filter(x => isPlayerZombie(x.e) && x.d <= RANGES.avoid.near);
+    if (zombies.length && !canFightHard(bot)) {
+        return { action: 'flee', why: 'a player zombie, and no weapon or health at half or less', from: zombies[0].e,
+            away: RANGES.avoid.away, isEnemy: isPlayerZombie };
+    }
     const within = (reaction) => near.filter(x => x.t.reaction === reaction && x.d <= RANGES[reaction].near);
     const is = (reaction) => (e) => threatFor(e)?.reaction === reaction;
 

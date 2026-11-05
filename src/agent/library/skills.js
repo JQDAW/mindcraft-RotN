@@ -1479,6 +1479,13 @@ export async function goToGoal(bot, goal) {
         return true;
     } catch (err) {
         clearInterval(doorCheckInterval);
+        // A stopped walk is an interrupt, not an error (G3 round 2: the flee threw "PathStopped"
+        // twice and the mode reported "Code threw exception"): something stopped the pathfinder
+        // (a new action, a death, a reflex). Returns false; the caller decides what that means.
+        if (err?.name === 'PathStopped') {
+            log(bot, 'Walk stopped (interrupted).');
+            return false;
+        }
         // we need to catch so we can clean up the door check interval, then rethrow the error
         throw err;
     }
@@ -1793,7 +1800,7 @@ export async function moveAway(bot, distance) {
         }
     }
 
-    await goToGoal(bot, inverted_goal);
+    if (!await goToGoal(bot, inverted_goal)) return false; // stopped: an interrupt (round 2)
     let new_pos = bot.entity.position;
     log(bot, `Moved away from ${pos.floored()} to ${new_pos.floored()}.`);
     return true;
