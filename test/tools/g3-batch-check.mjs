@@ -3,8 +3,14 @@
 // vouched for by the batch summary batch.mjs wrote (batch.json), because the ROTN_G3_BATCH marker alone
 // can be forged.
 //
-//   node test/tools/g3-batch-check.mjs <batch.json> <result.json>...   one batch and its results
-//   node test/tools/g3-batch-check.mjs --tree <dir>                     every G3 result under <dir>
+//   node test/tools/g3-batch-check.mjs <batch.json> <result.json>...   a GATE claim: one batch and its results
+//   node test/tools/g3-batch-check.mjs --tree <dir>                     every G3 result under <dir> (consistency)
+//
+// Smoke is the default (lead, #218 review and #220 decision): only `batch.mjs --gate` writes `gate: true`.
+// - The single-batch form is the gate claim check: it needs `gate: true` (and not `smoke: true`).
+// - --tree, the evidence check, rejects every G3 result whose batch.json does not say `gate: true`, unless
+//   that batch.json is explicitly a smoke record (`smoke: true`, never gate evidence): those are kept as
+//   records, checked for consistency and named in the output ("N smoke batch(es), never gate evidence").
 //
 // --tree is compulsory for evidence. It reads EVERY *.json under <dir>, whatever its name (a result
 // committed as g3-result.json or Result.json counts too; #129 re-review nit 1). Each one that is a G3
@@ -26,7 +32,7 @@ const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const isBatchFile = (f) => path.basename(f) === 'batch.json';
 
 /** Reads the files and runs the check: the problems. */
-export function checkFiles(summaryFile, resultFiles, { g3Scenarios = [] } = {}) {
+export function checkFiles(summaryFile, resultFiles, { g3Scenarios = [], gate = false } = {}) {
     let summary;
     try {
         summary = readJson(summaryFile);
@@ -42,7 +48,7 @@ export function checkFiles(summaryFile, resultFiles, { g3Scenarios = [] } = {}) 
             problems.push(`${f}: cannot be read as JSON (${e.code ?? 'parse error'})`);
         }
     }
-    return [...problems, ...crossCheckBatch(summary, results, { g3Scenarios })];
+    return [...problems, ...crossCheckBatch(summary, results, { g3Scenarios, gate })];
 }
 
 /** Every *.json under dir (recursive, any name and case), batch.json files included. */
@@ -95,8 +101,29 @@ export function checkEvidenceTree(root, { g3Scenarios = [] } = {}) {
         }
         byBatch.set(b, [...(byBatch.get(b) ?? []), f]);
     }
-    for (const [b, files] of byBatch) problems.push(...checkFiles(b, files, { g3Scenarios }));
+    for (const [b, files] of byBatch) {
+        problems.push(...checkFiles(b, files, { g3Scenarios }));
+        let kind = null;
+        try { kind = batchKind(readJson(b)); } catch { /* checkFiles reported it */ }
+        if (kind === 'neither') problems.push(`${b}: says neither gate: true nor smoke: true, so its ${files.length} G3 result(s) are rejected (only batch.mjs --gate writes gate: true)`);
+        if (kind === 'both') problems.push(`${b}: says both gate: true and smoke: true, so its ${files.length} G3 result(s) are rejected`);
+    }
     return problems;
+}
+
+/** What a batch summary is: 'gate' (gate: true only), 'smoke' (smoke: true only), 'both' or 'neither'. */
+export function batchKind(summary) {
+    const g = summary?.gate === true;
+    const s = summary?.smoke === true;
+    return g && s ? 'both' : g ? 'gate' : s ? 'smoke' : 'neither';
+}
+
+/** The batch.json files under dir that say smoke: true (relative paths, sorted). */
+export function smokeBatchesUnder(dir) {
+    if (!fs.existsSync(dir)) return [];
+    return jsonFilesUnder(dir).filter(isBatchFile).filter((f) => {
+        try { return readJson(f).smoke === true; } catch { return false; }
+    }).map((f) => path.relative(dir, f).split(path.sep).join('/')).sort();
 }
 
 /** The ids of the scenarios that loadScenarios marks gate G3. */
@@ -107,11 +134,13 @@ export async function g3ScenarioIds() {
 
 async function main(args) {
     if (args[0] === '--tree' && args.length === 2) {
-        return [checkEvidenceTree(args[1], { g3Scenarios: await g3ScenarioIds() }), `every G3 result under ${args[1]} is vouched for by its batch.json`];
+        const smoke = smokeBatchesUnder(args[1]);
+        return [checkEvidenceTree(args[1], { g3Scenarios: await g3ScenarioIds() }),
+            `every G3 result under ${args[1]} is vouched for by a gate: true or smoke: true batch.json; ${smoke.length} smoke batch(es), never gate evidence${smoke.length ? `: ${smoke.join(', ')}` : ''}`];
     }
     if (args.length >= 2 && !args[0].startsWith('--')) {
         const [summaryFile, ...resultFiles] = args;
-        return [checkFiles(summaryFile, resultFiles, { g3Scenarios: await g3ScenarioIds() }), `${resultFiles.length} result(s) vouched for by ${summaryFile}`];
+        return [checkFiles(summaryFile, resultFiles, { g3Scenarios: await g3ScenarioIds(), gate: true }), `${resultFiles.length} result(s) vouched for by ${summaryFile}, a gate batch (gate: true)`];
     }
     return [null, null];
 }
