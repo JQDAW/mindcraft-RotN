@@ -2,7 +2,7 @@ import { History } from './history.js';
 import { Coder } from './coder.js';
 import { VisionInterpreter } from './vision/vision_interpreter.js';
 import { Prompter } from '../models/prompter.js';
-import { initModes } from './modes.js';
+import { initModes, resetJumpWatch } from './modes.js';
 import { initBot } from '../utils/mcdata.js';
 import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands } from './commands/index.js';
 import { ActionManager } from './action_manager.js';
@@ -20,6 +20,8 @@ import { Agenda } from './agenda.js';
 import { Control } from './control.js';
 import { autonomyTick } from './priority.js';
 import { resetNight } from './night_routine.js';
+import { hordeWarning } from './library/hazard_watch.js';
+import { requestReplan } from './replan.js';
 import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
@@ -505,6 +507,7 @@ export class Agent {
             this.actions.stop();
         });
         this.bindNightReset();
+        this.bindHordeWatch();
         this.bot.on('kicked', (reason) => {
             if (!this._disconnectHandled) {
                 const { msg } = handleDisconnection(this.name, reason);
@@ -563,8 +566,24 @@ export class Agent {
     // Not sheltered any more after a death, or after a spawn (mineflayer emits 'spawn' again after
     // a respawn, and the bot is elsewhere) (#204 review 6).
     bindNightReset() {
-        this.bot.on('death', () => resetNight(this, 'death'));
-        this.bot.on('spawn', () => resetNight(this, 'spawn'));
+        this.bot.on('death', () => { resetNight(this, 'death'); resetJumpWatch(); });
+        this.bot.on('spawn', () => { resetNight(this, 'spawn'); resetJumpWatch(); });
+    }
+
+    // D1b: a horde warning (a title naming a horde; the hordes mod) asks for a re-plan; at night the
+    // bot is in its shelter anyway. The raw 1.12 title packet is read, because mineflayer's 'title'
+    // event drops the translation key when the component has a text. At most once a minute.
+    bindHordeWatch({ now = () => Date.now() } = {}) {
+        this.bot._client?.on('title', (packet) => {
+            if (packet?.action !== 0 && packet?.action !== 1) return;
+            const w = hordeWarning(packet.text);
+            if (!w) return;
+            const t = now();
+            if (t - (this._horde_warned_at ?? -Infinity) < 60_000) return;
+            this._horde_warned_at = t;
+            console.log(`[reflex] horde warning: "${w.text}"${w.key ? ` (${w.key})` : ''}; re-planning`);
+            requestReplan(this, 'horde_warning', this.actions?.currentActionLabel || '');
+        });
     }
 
     bindLoginHandler() {

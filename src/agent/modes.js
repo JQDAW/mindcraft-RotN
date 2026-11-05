@@ -5,6 +5,7 @@ import settings from './settings.js'
 import convoManager from './conversation.js';
 import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
+import { JumpWatch } from './library/hazard_watch.js';
 import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
@@ -105,6 +106,27 @@ const modes_list = [
             else if (agent.isIdle()) {
                 bot.clearControlStates(); // clear jump if not in danger or doing anything else
             }
+        }
+    },
+    {
+        // D1b: AggroTP teleports the bot about 7 blocks; the plan in hand no longer fits. It never
+        // becomes active, so the modes after it still run in the same update.
+        name: 'teleport_watch',
+        description: 'Notice a position jump of 5 or more blocks (a teleport, such as AggroTP): stop the running action and re-plan.',
+        interrupts: ['all'],
+        on: true,
+        active: false,
+        watch: new JumpWatch(),
+        update: function (agent) {
+            const bot = agent.bot;
+            const jump = this.watch.observe(bot.entity?.position, Date.now(), { riding: !!bot.vehicle });
+            if (!jump) return;
+            const at = (p) => `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
+            const label = agent.actions?.currentActionLabel || '';
+            console.log(`[reflex] position jumped ${jump.blocks.toFixed(1)} blocks (${at(jump.from)} -> ${at(jump.to)}): a teleport; re-planning`);
+            try { bot.pathfinder?.stop?.(); } catch (err) { reportModeError('teleport_watch', err); }
+            if (label) Promise.resolve(agent.actions.stop?.()).catch(err => reportModeError('teleport_watch', err));
+            requestReplan(agent, 'teleport_watch', label);
         }
     },
     {
@@ -408,6 +430,11 @@ for (let mode of modes_list) {
 }
 
 // Tests only: a mode object by name (modes.js keeps them module-private).
+/** Forget the last position: after a death or a respawn the bot is elsewhere, which is no teleport. */
+export function resetJumpWatch() {
+    modes_map.teleport_watch?.watch.reset();
+}
+
 export function __modeForTest(name) {
     return modes_map[name];
 }
