@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T01:17Z (from `date -u`)
+Updated: 2026-11-05T01:25Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -202,7 +202,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 12. ~~rotn-data (from D2c, #186): a structured do-not-look field~~: **done in rotn-data #187** (`lookAt`). #190 switches `threats.js` to `lookAt === false`, which now also covers the ender creeper and the cockatrice. The data notes (the gorgon, ender dragon, wither, ghast, blaze, zombie horse) are **done in rotn-data #188**: the gorgon is now `avoid` with `lookAt: false`, rechecked on develop and asserted in #190's test.
 13. ~~Lead: `prismarine-recipe` as a direct dependency~~: the lead is adding 1.5.0 in a lead PR (2026-11-04).
 14. **net-forge (FYI, via the lead):** C1 follows your Request 2 rules: `bot.craft(recipe, 1, table)` with a prismarine-recipe `Recipe` built from bot.registry ids and canFill's real stack metas (never 32767), the result with rotn-data's exact count and meta, NBT results and `remaining` refused, and auto-eat paused around the craft.
-14. **rotn-data (via the lead, #206 review 1):** export `foodOf(name, meta)`, returning `{ hunger, saturation }` with the pack's `scripts/food.zs` values on top of the dump (bread 3, not 5), or `null` for a non-food. `food.js` uses it as soon as it exists, and a skipped test then checks bread 3. Also wanted: a structured "harmful food" field with sources, so `AVOID_FOODS` can leave the code.
+14. ~~rotn-data (via the lead, #206 review 1)~~ (answered by rotn-data #209: `foodValues`, `avoidFood`, `installFoods`): export `foodOf(name, meta)`, returning `{ hunger, saturation }` with the pack's `scripts/food.zs` values on top of the dump (bread 3, not 5), or `null` for a non-food. `food.js` uses it as soon as it exists, and a skipped test then checks bread 3. Also wanted: a structured "harmful food" field with sources, so `AVOID_FOODS` can leave the code.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
@@ -276,7 +276,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - A takeover now says `task <id> started: …`.
   - Tests: `priority.test.js` 28/28 (the 3 new ones fail on the old code); `src/agent/**` 227/227; lint 254.
 - **Next (lead order):**
-  1. #204's merge, and #206 (waits for rotn-data's food values);
+  1. #204's merge and #206's re-review;
   2. D1: eating, and re-planning after teleports (AggroTP) or invasions:
      - **D1a, eating: #206 open** (branch `agent/skills-rotn/eating`). An `eating` mode eats by rotn-data's food values (auto-eat sees only vanilla foods and ate the bread first; it is off now):
        - at food 12 or lower when idle, and at 6 or lower during an action;
@@ -290,6 +290,13 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
          3. `eating` now comes before `cowardice` and `self_defense`, so the bot eats at food 6 or lower in a fight; at 12 or lower only when idle with no threat near.
 
          Tests: `food.test.js` 8/8 plus 1 skipped; `src/agent/**` 227/227 plus 1 skipped; lint 254.
+       - **On rotn-data #209 (merged), in `bb57f4e4`:**
+         - develop merged in (not rebased: no force-push);
+         - pack food values from `foodValues` (bread 3, beef 2, berries 1; an estimate for not-computed foods);
+         - foods to avoid from `avoidFood` by meta, plus a short cited local list (hawthorn, chorus fruit, golden apples);
+         - auto-eat's `bannedFood` from the same list, by name (all of `fish`, as auto-eat cannot see `fish:3`); auto-eat stays off.
+
+         Tests: `food.test.js` 10/10; `src/agent/**` 237/237; lint 254; mergeable. Request 14 is answered by #209.
        - **Lead (2026-11-05):** #206 waits for rotn-data's pack food values PR. When that merges, I bring #206 up to date by **merging** develop in, not rebasing: rebasing a pushed branch needs a force-push, which the rules forbid. Then I drop the `foodOf` fallback check if the API differs, and the skipped bread-3 test runs.
      - **D1b next:** re-plan after a position jump of 5 or more blocks (AggroTP), and after the **hordes title text** (lead: match that text, not any title);
   3. D3: the death report.
