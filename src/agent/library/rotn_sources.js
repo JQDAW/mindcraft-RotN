@@ -112,18 +112,51 @@ export const RESYNC_MS = 600;
  * inventory, so the check and every equip path (allowedTool, equipForBlock) see the same stacks
  * (#229 review). Then wait RESYNC_MS for pending slot updates. Returns what was moved.
  */
-export async function stowCarried(bot, want = () => true, { resyncMs = RESYNC_MS } = {}) {
+/** How long one window click may take before stowCarried gives up on it (#229 review). */
+export const STOW_CLICK_MS = 3000;
+
+/** The click's promise, or a rejection after ms (a click the server never answers). */
+function clickWithin(promise, ms, what) {
+    let timer;
+    const limit = new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${what} got no answer within ${ms / 1000} s`)), ms); });
+    return Promise.race([Promise.resolve(promise), limit]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Move a matching stack from the cursor (an equip cut short) or the off hand back into the
+ * inventory, so the check and every equip path (allowedTool, equipForBlock) see the same stacks
+ * (#229 review). Then wait RESYNC_MS for pending slot updates. Returns what was moved.
+ * An open window (a chest, a table) is closed first, as clickWindow would act on it (#229 review 2).
+ * Its cursor stack is dropped into one of that window's inventory slots before: closing a 1.12
+ * container throws whatever is on the cursor onto the ground. Each click has STOW_CLICK_MS.
+ */
+export async function stowCarried(bot, want = () => true, { resyncMs = RESYNC_MS, clickMs = STOW_CLICK_MS } = {}) {
     const inv = bot?.inventory;
     const moved = [];
-    const empty = () => inv?.firstEmptyInventorySlot?.() ?? null;
-    const p = carriedPlaces(bot);
     try {
+        const open = bot?.currentWindow;
+        if (open && open !== inv) {
+            const held = open.selectedItem;
+            const slot = open.firstEmptyInventorySlot?.() ?? null;
+            if (held && slot == null) {
+                // Closing now would drop the stack on the ground: leave the window and the stack alone.
+                console.warn(`[inventory] a window is open with ${held.name} on the cursor and no free slot; not closing it`);
+                return moved;
+            }
+            if (held) {
+                await clickWithin(bot.clickWindow(slot, 0, 0), clickMs, 'putting the cursor stack down');
+                if (want(held)) moved.push(`${held.name} from the cursor`);
+            }
+            bot.closeWindow(open);
+        }
+        const empty = () => inv?.firstEmptyInventorySlot?.() ?? null;
+        const p = carriedPlaces(bot);
         if (p.cursor && want(p.cursor) && empty() != null) {
-            await bot.clickWindow(empty(), 0, 0); // drop the cursor stack into an empty slot
+            await clickWithin(bot.clickWindow(empty(), 0, 0), clickMs, 'putting the cursor stack down'); // into an empty slot
             moved.push(`${p.cursor.name} from the cursor`);
         }
         if (p.offHand && want(p.offHand) && empty() != null) {
-            await bot.moveSlotItem(45, empty());
+            await clickWithin(bot.moveSlotItem(45, empty()), clickMs, 'moving the off-hand stack');
             moved.push(`${p.offHand.name} from the off hand`);
         }
     } catch (err) {

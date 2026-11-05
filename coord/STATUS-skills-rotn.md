@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T22:00Z (from `date -u`)
+Updated: 2026-11-05T22:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -382,6 +382,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   4. **#229 review:** one source for the pickaxe. `stowCarried` moves a pickaxe on the cursor or in the off hand back into the inventory before the shelter check and before digging out, and `toolLevels` reads `inventory.items()` only again, as `allowedTool` and `equipForBlock` do. Before refusing, the check waits 600 ms for pending slot updates (after a rejected click the server resends every slot) and logs the inventory, off hand, cursor and held item.
 
      Tests: `shelter` 18 (cursor and off hand moved back; the refusal lists every place), `night_routine` 19 (digOut from the off hand; it fails with "no pickaxe in hand" on the previous head). Related files pass; lint per file unchanged.
+  5. **#229 review 2:** `stowCarried` deals with an open window (a chest or a table) first. It puts that window's cursor stack into one of its inventory slots, then closes the window; closing a 1.12 container drops a cursor stack on the ground. With no free slot it leaves the window open. Each click has `STOW_CLICK_MS` (3 s). The passive 600 ms resync wait was accepted by the lead. Tests: `shelter` 21/21 (an open chest with the pickaxe on its cursor; no free slot; a click never answered, which hangs on the previous head).
 - **Next (lead):** re-review #229.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
