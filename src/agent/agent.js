@@ -25,6 +25,7 @@ import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
 import { runUpdateLoop, createErrorReporter } from './update_loop.js';
+import { bindDeathReport } from './library/death_report.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -504,6 +505,8 @@ export class Agent {
                 this.cleanKill(msg);
             }
         });
+        // D3: one death report per death (loss diff, rate-limited chat, respawn retry, re-plan note).
+        bindDeathReport(this);
         this.bot.on('death', () => {
             this.actions.cancelResume();
             this.actions.stop();
@@ -516,16 +519,10 @@ export class Agent {
             }
         });
         this.bot.on('messagestr', async (message, _, jsonMsg) => {
+            // D3: the server's death message only names the cause in the death report. The upstream
+            // LLM prompt per death is gone (a chat-spam loop risk); bindDeathReport reports once.
             if (jsonMsg.translate && jsonMsg.translate.startsWith('death') && message.startsWith(this.name)) {
-                console.log('Agent died: ', message);
-                let death_pos = this.bot.entity.position;
-                this.memory_bank.rememberPlace('last_death_position', death_pos.x, death_pos.y, death_pos.z);
-                let death_pos_text = null;
-                if (death_pos) {
-                    death_pos_text = `x: ${death_pos.x.toFixed(2)}, y: ${death_pos.y.toFixed(2)}, z: ${death_pos.z.toFixed(2)}`;
-                }
-                let dimention = this.bot.game.dimension;
-                this.handleMessage('system', `You died at position ${death_pos_text || "unknown"} in the ${dimention} dimension with the final message: '${message}'. Your place of death is saved as 'last_death_position' if you want to return. Previous actions were stopped and you have respawned.`);
+                this._death?.cause(message);
             }
         });
         this.bot.on('idle', () => {

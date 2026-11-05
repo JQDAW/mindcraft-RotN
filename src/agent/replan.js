@@ -14,11 +14,12 @@ export const QUIET_MS = 5_000;
 export const MIN_GAP_MS = 60_000;
 
 /** Record that a reflex (mode) interrupted `interruptedAction`. No LLM call. */
-export function requestReplan(agent, modeName, interruptedAction, { now = Date.now(), log = (l) => console.log(l) } = {}) {
+export function requestReplan(agent, modeName, interruptedAction, { now = Date.now(), log = (l) => console.log(l), note = null } = {}) {
     if (!agent.replan) agent.replan = { modes: {}, interrupted: null, first_at: now, last_at: now };
     const r = agent.replan;
     r.modes[modeName] = (r.modes[modeName] || 0) + 1;
     if (interruptedAction) r.interrupted = interruptedAction;
+    if (note) r.notes = [...(r.notes || []).slice(-2), note]; // D3: what happened (the bot's own state only)
     r.last_at = now;
     log(`[reflex] ${modeName} interrupted '${interruptedAction || 'nothing'}'; re-plan requested (no LLM call now).`);
 }
@@ -46,7 +47,8 @@ export function takeReplanNote(agent) {
     agent.replan = null;
     const modes = Object.entries(r.modes).map(([m, n]) => (n > 1 ? `${m} x${n}` : m)).join(', ');
     const what = r.interrupted ? `interrupted '${r.interrupted}'` : 'ran';
-    return `Reflexes (${modes}) ${what}. Check your state and re-plan from here.`;
+    const notes = r.notes?.length ? ` ${r.notes.join(' ')}` : '';
+    return `Reflexes (${modes}) ${what}.${notes} Check your state and re-plan from here.`;
 }
 
 /**
