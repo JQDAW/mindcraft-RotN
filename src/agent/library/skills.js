@@ -2238,14 +2238,107 @@ export async function goToSurface(bot) {
     return false;
 }
 
-export async function useToolOn(bot, toolName, targetName) {
+/**
+ * Bounds for !useOn (skills-rotn; G3 batch A: !useOn("pyrotech:crude_axe", "log") walked to a log
+ * and never returned, because pathfinder.goto has no time limit). The search looks at the few
+ * nearest targets within `range`; each walk has `walkMs`; the whole use has `totalMs`.
+ */
+export const USE_ON_LIMITS = { range: 32, candidates: 4, walkMs: 20_000, totalMs: 60_000, settleMs: 1500, reach: 4.5 };
+
+const TIMED_OUT = Symbol('timed out');
+/** The promise's value, or TIMED_OUT after `ms` (then `onTimeout` runs). A later rejection is swallowed. */
+function within(promise, ms, onTimeout = () => {}) {
+    let timer;
+    const limit = new Promise(resolve => {
+        timer = setTimeout(() => { try { onTimeout(); } catch { /* best effort */ } resolve(TIMED_OUT); }, Math.max(0, ms));
+    });
+    const work = Promise.resolve(promise);
+    work.catch(() => {});
+    return Promise.race([work, limit]).finally(() => clearTimeout(timer));
+}
+function stopWalking(bot) {
+    try { bot.pathfinder?.stop?.(); } catch { /* best effort */ }
+    try { bot.pathfinder?.setGoal?.(null); } catch { /* best effort */ }
+}
+/** {name[:meta]: count} over every inventory slot. */
+function slotCounts(bot) {
+    const counts = {};
+    for (const it of bot.inventory?.slots || []) {
+        if (!it || !it.name || !(it.count > 0)) continue;
+        const key = it.metadata ? `${it.name}:${it.metadata}` : it.name;
+        counts[key] = (counts[key] || 0) + it.count;
+    }
+    return counts;
+}
+function gains(before, after) {
+    return Object.entries(after).filter(([k, n]) => n > (before[k] || 0)).map(([k, n]) => `${n - (before[k] || 0)} ${k}`);
+}
+const secsText = (ms) => `${+(ms / 1000).toFixed(1)} s`;
+const posText = (p) => `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}`;
+
+/**
+ * Walk to a block and use the tool on it, every step bounded. Returns one of
+ * 'used' (an item was gained or the block changed), 'no_effect', 'unreachable', 'blocked',
+ * 'no_tool', 'interrupted', 'timeout'.
+ */
+async function useToolOnBlockBounded(bot, toolName, block, L, left) {
+    const where = posText(block.position);
+    const distance = toolName === 'water_bucket' && !names112.isLava(block.name) ? 1.5 : 2;
+    const walkMs = Math.min(L.walkMs, left());
+    const walk = await within(goToPosition(bot, block.position.x, block.position.y, block.position.z, distance),
+        walkMs, () => stopWalking(bot));
+    if (bot.interrupt_code) return 'interrupted';
+    const headPos = () => bot.entity.position.offset(0, bot.entity.height ?? 1.62, 0);
+    const center = block.position.offset(0.5, 0.5, 0.5);
+    if (walk === TIMED_OUT || headPos().distanceTo(center) > L.reach) {
+        log(bot, `Could not reach the ${block.name} at ${where}${walk === TIMED_OUT ? ` within ${secsText(walkMs)}` : ''}.`);
+        // A walk cut short by the total limit means time is up.
+        return walk === TIMED_OUT && walkMs < L.walkMs ? 'timeout' : 'unreachable';
+    }
+    if (await within(bot.lookAt(center), left()) === TIMED_OUT) return 'timeout';
+    const blockInView = bot.blockAtCursor?.(5);
+    if (blockInView && !blockInView.position.equals(block.position)
+        && blockInView.position.distanceTo(headPos()) < block.position.distanceTo(headPos())) {
+        log(bot, `Block ${blockInView.name} is in the way of the ${block.name} at ${where}.`);
+        return 'blocked';
+    }
+    const equipped = await within(equip(bot, toolName), left());
+    if (equipped === TIMED_OUT) return 'timeout';
+    if (!equipped) { log(bot, `Could not equip ${toolName}.`); return 'no_tool'; }
+
+    const before = slotCounts(bot);
+    const was = { name: block.name, metadata: block.metadata };
+    const use = toolName.includes('bucket') ? bot.activateItem() : bot.activateBlock(block);
+    if (await within(use, left()) === TIMED_OUT) return 'timeout';
+    // The result: an inventory gain, or the block changed (a debarked log, a tilled field).
+    const until = Date.now() + Math.min(L.settleMs, Math.max(0, left()));
+    let gained = [], now = null;
+    for (;;) {
+        gained = gains(before, slotCounts(bot));
+        now = bot.blockAt(block.position);
+        if (gained.length || !now || now.name !== was.name || now.metadata !== was.metadata || Date.now() >= until) break;
+        await new Promise(r => setTimeout(r, 100));
+    }
+    const changed = !now || now.name !== was.name || now.metadata !== was.metadata;
+    if (gained.length) log(bot, `Used ${toolName} on ${block.name} at ${where}: gained ${gained.join(', ')}.`);
+    else if (changed) log(bot, `Used ${toolName} on ${block.name} at ${where}: it is now ${now ? now.name : 'gone'}; no item gained.`);
+    else log(bot, `Used ${toolName} on ${block.name} at ${where}: no effect (no item gained, the block is unchanged).`);
+    return gained.length || changed ? 'used' : 'no_effect';
+}
+
+export async function useToolOn(bot, toolName, targetName, limits = {}) {
     /**
-     * Equip a tool and use it on the nearest target.
+     * Equip a tool and use it on the nearest target. Bounded (USE_ON_LIMITS): a few nearest
+     * targets within range, a time limit per walk and in total; a block use is judged by the
+     * inventory gain or the block's change.
      * @param {MinecraftBot} bot
      * @param {string} toolName - item name of the tool to equip, or "hand" for no tool.
      * @param {string} targetName - entity type, block type, or "nothing" for no target
      * @returns {Promise<boolean>} true if action succeeded
      */
+    const L = { ...USE_ON_LIMITS, ...limits };
+    const start = Date.now();
+    const left = () => L.totalMs - (Date.now() - start);
     if (!bot.inventory.slots.find(slot => slot && itemMatches(slot, toolName)) && !bot.game.gameMode === 'creative') {
         log(bot, `You do not have any ${toolName} to use.`);
         return false;
@@ -2260,12 +2353,17 @@ export async function useToolOn(bot, toolName, targetName) {
         await bot.activateItem();
         log(bot, `Used ${toolName}.`);
     } else if (world.isEntityType(targetName)) {
-        const entity = world.getNearestEntityWhere(bot, e => e.name === targetName, 64);
+        const entity = world.getNearestEntityWhere(bot, e => e.name === targetName, L.range);
         if (!entity) {
-            log(bot, `Could not find any ${targetName}.`);
+            log(bot, `Could not find any ${targetName} within ${L.range} blocks.`);
             return false;
         }
-        await goToPosition(bot, entity.position.x, entity.position.y, entity.position.z);
+        const walk = await within(goToPosition(bot, entity.position.x, entity.position.y, entity.position.z),
+            Math.min(L.walkMs, left()), () => stopWalking(bot));
+        if (walk === TIMED_OUT) {
+            log(bot, `useOn failed: could not reach the ${targetName} within ${secsText(L.walkMs)}.`);
+            return false;
+        }
         if (toolName === 'hand') {
             await bot.unequip('hand');
         }
@@ -2273,28 +2371,43 @@ export async function useToolOn(bot, toolName, targetName) {
             const equipped = await equip(bot, toolName);
             if (!equipped) return false;
         }
-        await bot.useOn(entity);
+        if (await within(bot.useOn(entity), left()) === TIMED_OUT) {
+            log(bot, `useOn failed: time limit of ${secsText(L.totalMs)} reached.`);
+            return false;
+        }
         log(bot, `Used ${toolName} on ${targetName}.`);
     } else {
-        let block = null;
+        let blocks;
         if (targetName === 'water' || targetName === 'lava') {
             // we want to get liquid source blocks, not flowing blocks
             // so search for blocks with metadata 0 (not flowing)
-            let blocks = world.getNearestBlocksWhere(bot, block => block.name === targetName && block.metadata === 0, 64, 1);
-            if (blocks.length === 0) {
-                log(bot, `Could not find any source ${targetName}.`);
-                return false;
-            }
-            block = blocks[0];
+            blocks = world.getNearestBlocksWhere(bot, block => block.name === targetName && block.metadata === 0, L.range, L.candidates);
         }
         else {
-            block = world.getNearestBlock(bot, targetName, 64);
+            blocks = world.getNearestBlocks(bot, targetName, L.range, L.candidates);
         }
-        if (!block) {
-            log(bot, `Could not find any ${targetName}.`);
+        blocks = (blocks || []).filter(Boolean);
+        if (blocks.length === 0) {
+            log(bot, `Could not find any ${targetName === 'water' || targetName === 'lava' ? 'source ' : ''}${targetName} within ${L.range} blocks.`);
             return false;
         }
-        return await useToolOnBlock(bot, toolName, block);
+        const unreachable = [];
+        let timeUp = false, tried = 0;
+        for (const block of blocks) {
+            if (left() <= 0) { timeUp = true; break; }
+            tried++;
+            const r = await useToolOnBlockBounded(bot, toolName, block, L, left);
+            if (r === 'used') return true;
+            if (r === 'interrupted') return false;
+            if (r === 'unreachable' || r === 'blocked') { unreachable.push(posText(block.position)); continue; }
+            if (r === 'timeout') { timeUp = true; break; }
+            return false; // no_effect, no_tool: another block of the same kind would do the same
+        }
+        stopWalking(bot);
+        const secs = Math.round((Date.now() - start) / 1000);
+        if (timeUp) log(bot, `useOn failed: time limit of ${secsText(L.totalMs)} reached (tried ${tried} of the ${blocks.length} nearest ${targetName}).`);
+        else log(bot, `useOn failed: could not reach any of the ${blocks.length} nearest ${targetName} within ${L.range} blocks (${unreachable.join('; ')}) in ${secs} s.`);
+        return false;
     }
 
     return true;
