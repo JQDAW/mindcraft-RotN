@@ -26,7 +26,7 @@
 //   agenda resumed: <step id>
 import settings from './settings.js';
 import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
-import { quoteData } from './task_queue.js';
+import { quoteData, isTaskGiver } from './task_queue.js';
 
 /** Self-prompter time per task, over all its runs. */
 export const TASK_LLM_MS = 10 * 60_000;
@@ -142,6 +142,26 @@ function modelGoalTick(agent, now) {
     return 'goal:stopped';
 }
 
+/** The task's giver is a task giver now (agent.isTaskGiver when there is one: it knows the console sender). */
+function giverStillAllowed(agent, task) {
+    if (typeof agent.isTaskGiver === 'function') return agent.isTaskGiver(task.giver);
+    const fromConsole = typeof task.giver === 'string' && !agent.bot?.players?.[task.giver];
+    return isTaskGiver(task.giver, settings, { fromConsole });
+}
+
+/** Cancel a task whose giver is no longer a task giver, with a log line; its text is not repeated. */
+function dropTask(agent, task) {
+    const giver = oneLine(String(task.giver ?? ''), 32);
+    agent.tasks.setStatus(task.id, 'cancelled', `dropped: ${giver} is no longer a task giver`);
+    const line = `task ${task.id} dropped: its giver ${giver} is no longer a task giver`;
+    console.warn(`[tasks] ${line}`);
+    say(agent, line);
+    if (agent._task_id === task.id) agent._task_id = null;
+    const sp = agent.self_prompter;
+    if (sp.isActive() && typeof sp.prompt === 'string' && sp.prompt.startsWith(`Player task ${task.id} `)) sp.stop(false);
+    return `task:${task.id}:dropped`;
+}
+
 function taskTick(agent, task, now) {
     if (now - (agent._task_tick_at ?? -Infinity) < TICK_MS) return null;
     const last = agent._task_tick_at;
@@ -156,6 +176,12 @@ function taskTick(agent, task, now) {
         return `task:${task.id}:yield`;
     }
 
+    // A task about to start, or one stored as active and taken over (after a restart, or from
+    // tasks.json): its giver must still be a task giver under the current settings (G3 (c)/(d)
+    // security review). Otherwise it is cancelled, never run.
+    if ((task.status === 'queued' || agent._task_id !== task.id) && !giverStillAllowed(agent, task))
+        return dropTask(agent, task);
+
     if (task.status === 'queued') {
         // A safe checkpoint: let the self-prompter's command in flight finish first.
         if (sp.isActive()) sp.stop(false);
@@ -166,8 +192,9 @@ function taskTick(agent, task, now) {
         agent._task_paused = false;
         say(agent, `task ${task.id} started: ${oneLine(task.text, 120)}`);
     } else if (agent._task_id !== task.id) {
-        agent._task_id = task.id; // active already (taken over within this process)
+        agent._task_id = task.id; // active already (stored as active, or taken over within this process)
         agent._task_stopped_at = undefined;
+        say(agent, `task ${task.id} started: ${oneLine(task.text, 120)}`);
     }
 
     // Any other goal (the model's own, or one restored after a restart): the task takes the

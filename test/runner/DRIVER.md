@@ -145,7 +145,15 @@ node test/runner/run.mjs --scenario <g3 scenario> --pass-env OPENROUTER_API_KEY 
 
 ### G3 batches: the spend stop (`test/runner/batch.mjs`)
 
-G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
+G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`.
+
+**The batch layout (lead, #203 review).** Each batch is its own `test-server.sh run` on a newly built server.
+- **(a) `g3-rocks-to-stone-tools`:** a batch of its own, on a fresh server. It needs FRCFLD's first join on a fresh world.
+- **(b) `g3-first-night`:** a batch of its own, on a fresh server, for the same reason.
+- **(c) `g3-task-preempts-agenda` and (d) `g3-untrusted-refused`:** may share one server. Neither needs a fresh spawn.
+
+Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
+
 - **The preflight, before any server exists** (lead, #169 review). When the run command's script is `test/runner/batch.mjs`, `test-server.sh run` first runs it with `--preflight` and the same arguments. That checks the driver, its profile, the profile's model (it must be `openrouter/@preset/glm-5-1-mindcraft`, and so must `code_model` and `vision_model` when set) and `settings.js`, and reads the key's usage once. If anything fails, no server is created (exit 1).
   - The driver must be `test/runner/drivers/mindcraft-driver.mjs`; a fake driver is accepted only in the offline test mode.
   - The script is recognised by its resolved path, so a path with `..` in it or a Windows path counts, and another file whose path merely ends in `test/runner/batch.mjs` does not (#176 review nit).
@@ -199,6 +207,55 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`:
   - The key's own credit limit (USD 5 for the test key) is the hard backstop.
 - **Records.** `result.json`'s `llm` (the models, the calls, the usage before and after, the cost) is in every record. `llm.models` is what the driver started the agent with (its `mindcraft_start` event), and a G3 run whose recorded model is not the preset is not gate-valid. Progress and killed records carry the calls so far.
 - **Test mode is for the offline tests only.** `ROTN_TEST_MODE`, `ROTN_OPENROUTER_USAGE_FILE` and `ROTN_BATCH_RUNNER` make `batch.mjs` refuse to start inside a real test-server run, and the usage read ignores the fake file there. `deploy/test-server.sh run` sets `TEST_SERVER_FAKE_CLOUD=1` only against the offline fakes. `BATCH` records `testMode`.
+
+### G3 (a): `g3-rocks-to-stone-tools` (`test/scenarios/g3/`)
+
+The real agent plays its early-game agenda from a fresh spawn, and the runner whispers nothing. The server is the arbiter. The agent's chat only decides when the run ends early.
+- **Start:** `login_online` in the G3 world (the G2 seed). Then the stat objectives `g3a_*`: the craft stats of the crude axe, Crafting Tools, the table, both stone tools and cobblestone, plus the table's use stat (1.12 counts a placed block as a use of its item), deaths and play time.
+- **`fresh_start`:** the pack's first-join Bread and Bundle gives are in this run's log (only a first join makes them), and the count-only `clear` finds none of the target items. These include every block a 4-rocks recipe makes (rotn-data's `rockRecipes`; RotN's rocks make different cobbles).
+- **The uncounted gap:** 1.12 raises a stat objective's score only by later increments, and a new objective is never backfilled. So a craft or death between the join and the objectives being added is not counted. This fails safe: it can only fail a check, never pass one.
+- **Every minute:** `scoreboard players list <bot>` (milestones: the minute each stat first reaches 1, and deaths).
+- **No `tp` in G3 at all** (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12 (it dismounts, zeroes motionY, sets onGround and forces a position packet). `G3_CONSOLE_ALLOW` has no `tp`, and life evidence comes from `stat.deaths` and the log. G2 keeps its own `tp`.
+- **The end** comes at the first of:
+  - both stone tools have a craft stat, and the agent says `agenda step cobblestone done` or `agenda done`;
+  - the agent says `agenda step <id> stuck: ...`;
+  - the bot leaves or its driver exits;
+  - `maxMinutes` (25, compared 'equal').
+- **Checks** (the final counts and scores):
+  - `stone_tools`: at least 1 stone pickaxe and 1 stone axe held;
+  - `crafting_table`: at least 1 held, or placed (its use stat is at least 1);
+  - `cobblestone`: at least 1 of the 4-rocks outputs held, by exact name and meta;
+  - `crafted_by_bot` (gating, lead #101): the craft stat is at least 1 for all five items;
+  - `no_cheat`.
+- **`no_cheat`** (`cheatProblems` in `lib/g3.mjs`, shared by the G3 scenarios) fails on any of these:
+  - a command the bot ran (`[<bot>: ...]`);
+  - another sender's logged command that names the bot;
+  - a console give to the bot, a game mode change or `Opped <bot>`.
+  - The only exception is the pack's own first-join commands (P1's server logs): the two gamerules, 1 Bread and 1 Bundle, once each, within 10 s of the first join.
+- **Offline test:** `test/unit/g3-rocks.test.js`, a simulated server with a scripted fake agent. No batch has run this scenario yet.
+
+### G3 (b): `g3-first-night` (`test/scenarios/g3/`)
+
+The real agent lives through its first full night from a fresh spawn. The runner whispers nothing and never touches the time: no `time set` (not on `G3_CONSOLE_ALLOW` at all since the #203 review) and no `gamerule` (a unit test checks both), and no `tp`.
+- **`fresh_start`, as in (a):** none of (a)'s target items held (count-only `clear`), and the pack's first-join Bread and Bundle in this run's log.
+- **The dawn rule (provisional, lead after S1-A):** `time query daytime` every minute.
+  - **Dusk first** (#203 review): a night counts only after a sample below `nightFrom` (13000). The night is then the first sample at or above it, and dawn is the first sample below `dawnBelow` (12000) after that, so the time has wrapped past 24000.
+  - A run that joins mid-night waits for the next full night, which a fresh server's 55 min limit does not reach, so it fails. A unit test starts mid-night.
+  - S1-A measured a cycle of about 40 min with Extended Days, so dawn is expected about 40 min after the join.
+  - `maxMinutes` (55), `nightFrom` and `dawnBelow` are compared 'equal'. The first G3 smoke batch confirms the rule before it is pinned.
+- **Every minute:** `scoreboard players list <bot>` for `stat.deaths` (objective `g3b_deaths`, plus `g3b_played`), and the log's death lines (`deathLines` in `lib/g3.mjs`: the 1.12 death messages, and a raw `death.attack.*` key from a mod).
+- **The end** comes at the first of: dawn, a death (stat or line), the bot leaving, its driver exiting, or `maxMinutes`.
+- **Checks:**
+  - `fresh_start`: as above;
+  - `survived_night`: dawn after dusk and a night reached, `stat.deaths` 0 and no death line;
+  - `stayed_online`: no leave, lost-connection or kick line;
+  - `no_cheat`: as in (a).
+- **The uncounted gap:** a death before the objective exists is not in the stat, but its log line still fails survival.
+- **Dropped (lead, #203):** the plan's midnight shelter snapshot. It needed the bot's position, and G3 has no `tp`; `notes.shelterAtMidnight` says why.
+- **Hunger at the end, evidence only (lead, #203):** the objective `g3b_food` uses the read-only `food` criterion, as in P1. `G3_CONSOLE_ALLOW` allows exactly that criterion besides `stat.*`.
+  - `notes.foodAtEnd` and each sample record it.
+  - 1.12 writes a food score only once the level changes after the objective exists, so no score means "unchanged since the add", recorded as null, never 0.
+- **Offline test:** `test/unit/g3-night.test.js`, on S1-A's measured cycle. No batch has run this scenario yet.
 
 ## S1: survey and smoke before G3
 

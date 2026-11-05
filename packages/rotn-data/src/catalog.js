@@ -61,6 +61,11 @@ export class RotnData {
         this.worldSources = readJson(dir, 'world-sources')?.sources ?? [];
         // How to react to first-night mobs, hand-written with evidence (threat-reactions.json).
         this.threatReactions = readJson(dir, 'threat-reactions') ?? null;
+        // Which blocks fall (gravity), from the pack's bytecode and configs (falling-blocks.json,
+        // built by tools/build-falling-blocks.mjs).
+        this.fallingBlocks = readJson(dir, 'falling-blocks')?.blocks ?? null;
+        // Food values on this pack and foods to avoid (food-values.json, tools/build-food-values.mjs).
+        this.foodData = readJson(dir, 'food-values') ?? null;
 
         this.dump = {};
         for (const f of DUMP_FILES) this.dump[f] = readJson(dir, f);
@@ -116,7 +121,34 @@ export class RotnData {
         const b = this.dump.blocks?.blocks?.[r.name];
         if (!b) return { name: r.name, meta: r.meta, propertiesKnown: false };
         const state = this._state(b, r.meta);
-        return { name: r.name, meta: r.meta ?? b.defaultMeta ?? 0, propertiesKnown: true, ...b, state };
+        return { name: r.name, meta: r.meta ?? b.defaultMeta ?? 0, propertiesKnown: true, ...b, state, ...this._fallFields(r.name) };
+    }
+
+    _fallFields(name) {
+        if (!this.fallingBlocks) return {};
+        const f = this.fallingBlocks[name];
+        return { falls: !!f, fallsWhen: f?.when ?? null };
+    }
+
+    /**
+     * Whether a block falls (gravity): sand, gravel, concrete powder, anvils, and the modded ones
+     * (BlockFalling subclasses, blocks that make their own falling entity, ContentTweaker blocks a
+     * pack script gives gravity, Ore Stone Variants ores on sand or gravel). Per block, not per state.
+     * @returns {boolean|null} null for an unknown block or without falling-blocks.json
+     */
+    falls(input) {
+        const b = this.getBlock(input);
+        return b && 'falls' in b ? b.falls : null;
+    }
+
+    /**
+     * The falling-blocks.json entry: { via: 'BlockFalling'|'own-code'|'contenttweaker-gravity'|'osv-background',
+     *   when: 'unsupported-below'|'loses-support'|'player-nearby'|'redstone-powered', class, ...evidence },
+     * or null when the block does not fall (or is unknown).
+     */
+    fallInfo(input) {
+        const r = this.resolve(input, 'blocks');
+        return (r && this.fallingBlocks?.[r.name]) ?? null;
     }
 
     _state(b, meta) {
@@ -132,6 +164,44 @@ export class RotnData {
         if (!it) return { name: r.name, meta: r.meta, propertiesKnown: false };
         const variant = (it.variants ?? []).find(v => v.meta === (r.meta ?? 0)) ?? null;
         return { name: r.name, meta: r.meta ?? 0, propertiesKnown: true, ...it, variant };
+    }
+
+    /**
+     * What a food gives on this pack: { name, meta, hunger, saturationModifier, saturation, source,
+     * vanilla, script?, avoid? }. `saturation` = hunger * saturationModifier * 2 (what eating adds,
+     * capped at the food level). `source`: 'crafttweaker' (a pack script, cited in `script` by line),
+     * 'hungeroverhaul-table' or 'hungeroverhaul-rule' (Hunger Overhaul's change of the vanilla value).
+     * A food whose value is not computed (Hunger Overhaul's HarvestCraft and Biomes O' Plenty tables)
+     * gives hunger and saturation null with `source: 'not-computed'`. Null for an item that is not food.
+     * @param {number} [meta] default: the input's metadata, else 0
+     */
+    foodValues(input, meta) {
+        const r = this.resolve(input, 'items');
+        if (!r || !this.foodData) return null;
+        const m = meta ?? r.meta ?? 0;
+        const e = this.foodData.foods[r.name]?.[m];
+        const avoid = this.avoidFood(r.name, m);
+        if (e) return { name: r.name, meta: m, ...e, ...(avoid ? { avoid } : {}) };
+        if (this.foodData.notComputed[r.name]?.includes(m)) {
+            const v = this.dump.items?.items?.[r.name]?.variants?.find((x) => x.meta === m)?.food;
+            return { name: r.name, meta: m, hunger: null, saturationModifier: null, saturation: null, source: 'not-computed', vanilla: v ? { hunger: v.hunger, saturationModifier: v.saturation } : null, ...(avoid ? { avoid } : {}) };
+        }
+        return null;
+    }
+
+    /**
+     * Why not to eat a food: { effects: [{ effect, seconds, level, chance }], confidence, evidence,
+     * note?, ore? } (vanilla effects from the server jar, the pack's eating effects from
+     * scripts/events.zs, cloudsbluff from the research), or null.
+     */
+    avoidFood(input, meta) {
+        const r = this.resolve(input, 'items');
+        const a = r && this.foodData?.avoid?.[r.name];
+        if (!a) return null;
+        const m = meta ?? r.meta ?? 0;
+        if (a.metas && !a.metas.includes(m)) return null;
+        const { metas: _metas, ...rest } = a;
+        return rest;
     }
 
     /**

@@ -1,27 +1,42 @@
 # Status: harness-ops
 
-Updated: 2026-11-04 (23:04 UTC, from `date -u`)
+Updated: 2026-11-05 (00:36 UTC, from `date -u`)
 
-## Now (resumed 2026-11-04 after the 2026-11-03 usage-limit pause)
+## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
-**PR #196: `agent/harness-ops/p1-followups`** (serves the #189 review nits and the #165 review follow-ups). Nothing is running, no paid work is pending, and nothing touches the CX23.
+The lead's order: one scenario per small PR, (a) first, then (b) first night, (c) a task preempts the agenda and it resumes, (d) untrusted players refused. Each gets server-side pass checks, maxBatchUsd 2 and an offline test against fakes. **No batch:** nothing is running, no paid work is pending, and nothing touches the CX23.
 
-**The #189 nits (the first commit):**
-- `test/tools/p1-capture-summary.mjs` reports every packet cap reached (`block_change` included) as `packet_cap` in `limits`, and `windowClicks.complete` is false when the click or transaction stream is capped. `CAPTURE_CAPS` is a copy of bridge.js's defaults, and a unit test fails if they differ.
-- Unpaired transactions are listed (`transactions.unpaired`).
-- Tests for the 10 s no-`close_window` fallback and for an unpaired transaction (`test/unit/p1-capture-summary.test.js`).
-- `test/evidence/probe/p1-20261103-a2/capture-summary.json` is regenerated with the new tool from the raw capture and redacted. Its `--check` is clean.
-- The a2 README: the caps, the pairing, "the +3 rests on the driver's reading", and the 15:29:12 check marked as not in a committed log.
+**PR #201: G3 (a), `g3-rocks-to-stone-tools`** (branch `agent/harness-ops/g3a-early-game`).
+- **The lead's review (REQUEST CHANGES), fixed:**
+  - **No tp in G3 at all:** the position track is dropped, and `G3_CONSOLE_ALLOW` has no `tp`. Life evidence comes from `stat.deaths` and the log. G2 keeps its own `tp`.
+  - `fresh_start` also needs the pack's first-join `give_bread` and `give_bundle`.
+  - A test for the rejected use stat with the table placed but not held.
+  - A comment on the uncounted gap before the objectives exist (fails safe).
+  - Approved: the `stat.useItem.minecraft.crafting_table` objective, with the "held" fallback. `notes.craftingTablePath` records the path used.
+- **The scenario:** `test/scenarios/g3/g3-rocks-to-stone-tools.mjs`, run with the real agent (`llm: true`, the Mindcraft driver, the pinned model). `maxMinutes` 25 and `maxBatchUsd` 2 are compared 'equal', and the world is the G2 seed.
+- **Checks:** `login_online`, `fresh_start`, `stone_tools`, `crafting_table`, `cobblestone` (rotn-data's 4-rocks outputs, exact name and meta), `crafted_by_bot` (gating, all five craft stats) and `no_cheat`.
+- **Shared arbiters in `lib/g3.mjs`** (for b-d too): `cheatProblems` (allows only the pack's first-join gamerules and the Bread and Bundle gives, once each, within 10 s of the join) and `statCriterion`.
+- **For the lead:** the crafting-table check also accepts "placed", read from `stat.useItem.minecraft.crafting_table` (1.12 counts a placed block as a use of its item). That is the approved `scoreboard objectives add` command, but a new criterion. S1 did not check it, and the first G3 smoke batch confirms it.
+- **Tested:** `g3-rocks.test.js` 12/12, `runner.test.js` 42/42 (1 Windows skip), `g3-spend.test.js` 45/45, `mindcraft-driver.test.js` 13/13. ESLint is clean on the changed files.
 
-**The #165 follow-ups (the second commit):**
-- `eat` now also needs the server's own food to rise. After the eat, the scenario reads `p1food` again, for up to `foodAfterWaitMs` (6 s), and records `serverFoodAfter`.
-- My vanilla `hungerFood` is gone from `lib/probe.mjs`. The unit sim uses net-forge's `simulateHunger` (#177) and RotN's +3 bread. The stub now goes 15 -> 18, the same as the real server in P1 attempt 2. `P1_PLAN.hunger` stays `22 19`.
-- A new unit test: the driver ate, but the server's score did not rise, so `eat` fails. The e2e test also asserts that the server's score rose.
-- Docs (scenario header, `lib/probe.mjs`, DRIVER.md P1): the RotN hunger model (Hunger Overhaul, AppleCore, `4 / 0.85` per step), the lead's rule that each P1 attempt uses a fresh server, and the lead's approval of the three `p1food` commands at `P1_CONSOLE_ALLOW`.
-- **Tested, one file at a time:** `probe.test.js` 18/18, `probe-e2e.test.js` 3/3, `late-console.test.js` 4/4, `p1-capture-summary.test.js` 7/7. ESLint is clean on every changed JS file.
+**PR #203: G3 (b), `g3-first-night`** (branch `agent/harness-ops/g3b-first-night`; #201 merged, so #203 now targets develop).
+- **The #203 review, fixed:**
+  - dusk must be seen before a night counts (`dawnOf`), with a mid-night start test;
+  - a `fresh_start` check as in (a);
+  - `time set day` is removed from `G3_CONSOLE_ALLOW`.
+  - Approved read-only for G3: the `gamerule <rule>` query, `testfor` and `testforblock`, as commented in the allowlist.
+  - The batch layout is updated here and in DRIVER.md: A alone, B alone, and C+D together.
+- **The scenario:** `test/scenarios/g3/g3-first-night.mjs`, with the real agent. Nothing about time is set, and there is no `tp`.
+- **The dawn rule (provisional):** night is a sample at or above 13000; dawn is the next one below 12000. `maxMinutes` 55, `nightFrom` and `dawnBelow` are compared 'equal'; `maxBatchUsd` is 2.
+- **Checks:** `login_online`, `survived_night` (dawn reached, `stat.deaths` 0 and no death line), `stayed_online` and `no_cheat`. The new shared `deathLines` is in `lib/g3.mjs`.
+- **The lead's decisions (#203):** the shelter snapshot is dropped. The `food` criterion is approved as a read-only objective: hunger at the end is recorded as evidence only, and `G3_CONSOLE_ALLOW` allows only that criterion besides `stat.*`.
+- **Tested:** `g3-night.test.js` 10/10 on S1-A's measured cycle, `g3-spend.test.js` 45/45 and `g3-rocks.test.js` 15/15. ESLint is clean.
 
-**Next:** wait for the lead's review of #196 and the next item. The first G3 batch still needs the `OPENROUTER_API_KEY` terminal check and a written GO.
-- The worktrees `../harness-ops-p1` and `../harness-ops-p1b` were removed on 2026-11-04 (both clean; the lead said the raw captures were no longer needed).
+**Next:** (c) `g3-task-preempts-agenda`, then (d) `g3-untrusted-refused`.
+
+## Done just before (2026-11-04)
+
+- **#196 merged (a92faf0):** the #189 review nits, and the #165 follow-ups (the server's food must rise after the eat; RotN's hunger model in the P1 sim; docs). The worktrees `../harness-ops-p1` and `../harness-ops-p1b` were removed (both clean; the lead said the raw captures were no longer needed).
 
 ## Before the pause (2026-11-03 afternoon)
 
@@ -794,7 +809,7 @@ The brief adds "the queue survives a restart": offline in G3, real on the CX23 i
    - Read them with `scoreboard players list <bot>`.
    - They prove that the bot itself crafted, which the inventory alone cannot (the crude axe may be used up by Crafting Tools).
 3. **Placed blocks:** `testforblock` (as in G2), for example the placed crafting table that the bot reports.
-4. **Position:** `tp <bot> ~ ~ ~` (as in G2).
+4. **Position:** none. There is no `tp` in G3 at all (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12.
 5. **Life:** the server log's join, leave and death lines for the bot (the vanilla death messages "<bot> was slain by", "<bot> died", and so on, and Corpse Complex's lines), plus `stat.deaths`.
 6. **No cheating:** the scenario fails if, during the run:
    - the log shows a `Given [` line or a gamemode change for the bot;
@@ -808,7 +823,7 @@ The brief adds "the queue survives a restart": offline in G3, real on the CX23 i
 - `time query daytime`;
 - `setblock` **only** for the task marker.
 
-G2's list (`say`, `seed`, `tp`, `tell`, `testforblock`, `testfor`, `time set day`, `gamerule doDaylightCycle`) stays. Not `give`, `summon` or `kill` in G3, except in S1.
+G2's list without `tp` (`say`, `seed`, `tell`, `testforblock`, `testfor`, `time set day`, `gamerule doDaylightCycle`) stays. Not `give`, `summon` or `kill` in G3, except in S1.
 
 **Pinned before any gate batch (lead, #101):** these become gate parameters compared 'equal', fixed after S1 and before the first G3 gate batch.
 - the dawn bound for `g3-first-night` (from S1's day/night measurement);
@@ -934,10 +949,11 @@ What skills-rotn provides (to agree):
     - Hard stop at 90 min (1.5x).
   - **S1-B, batch 5's world** (`--seed 8796110535854059511`): `s1-site-survey` only, with the same command minus the other two scenarios. About 15 min, 1 billed hour, about **EUR 0.14** plus IPv4. Hard stop at 25 min.
   - **After both:** the evidence goes through the redaction tool into `test/evidence/s1/`, and the findings go into STATUS: the world proposal, the dawn bound, which RotN stats exist (so where `crafted_by_bot` gates), and the whisper sender.
-- **G3 batch:** `g3-rocks-to-stone-tools`, `g3-first-night`, `g3-task-preempts-agenda` and `g3-untrusted-refused` on one server (the restart check is offline in G3).
-  - About 25 + 45 + 15 + 5 = 90 min plus the build: about 2 h, so 2 billed hours, about **EUR 0.28** plus IPv4.
-  - A hard stop at 1.5 times the plan; `--ttl-hours 4`.
-  - Worst case 5 billed hours, about EUR 0.69, plus the LLM spend (below).
+- **G3 batches: the layout (lead, #203 review).** Three batches, each on its own newly built server with its own written GO and its own spend stop (`maxBatchUsd` USD 2). The restart check is offline in G3.
+  - **Batch A, `g3-rocks-to-stone-tools` alone,** on a fresh server: it needs FRCFLD's first join on a fresh world. About 25 min plus about 5 min of build: 1 billed hour, about **EUR 0.14** plus IPv4. Hard stop at 45 min.
+  - **Batch B, `g3-first-night` alone,** on a fresh server, for the same reason. About 55 min plus the build: 1-2 billed hours, about **EUR 0.14-0.28** plus IPv4. Hard stop at 90 min.
+  - **Batch C+D, `g3-task-preempts-agenda` then `g3-untrusted-refused`,** on one server (neither needs a fresh spawn). About 15 + 4 min plus the build: 1 billed hour, about **EUR 0.14** plus IPv4. Hard stop at 45 min.
+  - **In all:** 3-4 billed hours, about EUR 0.42-0.56 plus 3 IPv4-hours, plus the LLM spend (at most USD 2 per batch).
 
 #### LLM spend (lead, #101)
 

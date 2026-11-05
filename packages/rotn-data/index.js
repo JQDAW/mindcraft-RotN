@@ -2,6 +2,7 @@
 // (rotn-data brief, deliverables 2 and 3). See README.md for the API and data format.
 import { loadRotnData, RotnData, DUMP_FORMAT } from './src/catalog.js';
 import { installRecipes as installRecipesInto } from './src/registry-recipes.js';
+import { installFoods as installFoodsInto } from './src/foods.js';
 
 export { loadRotnData, RotnData, DUMP_FORMAT };
 export { createTranslator } from './src/translate.js';
@@ -24,6 +25,9 @@ export const getItem = (name) => pack().getItem(name);
 export const recipesFor = (item, opts) => pack().recipesFor(item, opts);
 export const smeltingFor = (item) => pack().smeltingFor(item);
 export const harvestInfo = (block, meta) => pack().harvestInfo(block, meta);
+export const foodValues = (item, meta) => pack().foodValues(item, meta);
+export const avoidFood = (item, meta) => pack().avoidFood(item, meta);
+export const falls = (block) => pack().falls(block);
 export const lookup = (query, opts) => pack().lookup(query, opts);
 // "How do I get X" (Phase 3): world rules (3.3.4/world-sources.json), recipes, smelting, plain drops.
 export const howToGet = (item, opts) => pack().howToGet(item, opts);
@@ -52,4 +56,9 @@ export const networkRemap = (blockIds) => pack().networkRemap(blockIds);
  *        (default: the pinned pack's); mcdata.installRotnRecipesOnce passes its injected catalog's
  */
 export const installRecipes = (registry, { recipes, ...opts } = {}) => installRecipesInto(registry, recipes ?? pack().dump.recipes?.recipes ?? [], opts);
+/**
+ * Replace bot.registry.foods / foodsByName / foodsArray, in place, with this pack's food values
+ * (mineflayer-auto-eat and bot.registry readers then see them). See src/foods.js.
+ */
+export const installFoods = (registry) => installFoodsInto(registry, (n, m) => pack().foodValues(n, m));
 export { convertRecipe, choiceTuples, DEFAULT_MAX_VARIANTS, snapshotRecipeTable, restoreRecipeTable } from './src/registry-recipes.js';
