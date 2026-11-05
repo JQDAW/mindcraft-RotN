@@ -58,6 +58,7 @@ function sim(opt = {}) {
             } else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) minecraft:gold_block 0$/.exec(cmd))) {
                 add(opt.noGold ? `The block at ${m[1]}, ${m[2]}, ${m[3]} is Air (expected: Gold Block).` : `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}`);
             } else if (/^setblock -?\d+ -?\d+ -?\d+ minecraft:gold_block$/.test(cmd)) {
+                if (opt.chatBeforeSetblock) say('Block placed');   // the bot's chat, not the server's answer
                 add('Block placed');
                 if (opt.chatAfterSetblock) say('No logs in 32 blocks, let me search wider.');
             }
@@ -192,6 +193,10 @@ describe('g3-untrusted-refused on a simulated server', () => {
         assert.match(r.notes.marker.reply, /: Block placed$/);
         // Smoke batch C+D: a chat line right after the answer was recorded as the reply. The answer itself is kept.
         const chat = await run(sim({ chatAfterSetblock: true }));
+        // #220 review nit: the answer is anchored, so the bot's chat line "<bot> Block placed" just before it is not taken.
+        const before = await run(sim({ chatBeforeSetblock: true }));
+        assert.match(before.notes.marker.reply, /]: Block placed$/);
+        assert.doesNotMatch(before.notes.marker.reply, /<FRCFLD>/);
         assert.match(chat.notes.marker.reply, /: Block placed$/);
         const sn = sim({ noGold: true });
         const none = await run(sn);

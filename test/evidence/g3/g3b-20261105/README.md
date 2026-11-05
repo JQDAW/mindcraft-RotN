@@ -2,7 +2,7 @@
 
 **Result in one line:** the real agent survived its first RotN night: dusk, night and dawn were seen, `stat.deaths` stayed 0, there were no death lines, and it was online for all 40.1 min. The only failing check is `no_cheat`, on the same false positive as batch A: the pack's own two `gamerule` lines, repeated.
 
-This is a smoke batch, not the gate. `batch.json` says `"smoke": true` (the lead, #218 review), so `g3-batch-check.mjs <batch.json> <result.json>...` (the gate claim check) refuses it, whatever a `result.json` here says about `gateValid` or `pass`. That field was added by hand after the run, the only hand edit here, because these batches ran before `batch.mjs --smoke` existed.
+This is a smoke batch, not the gate. `batch.json` says `"smoke": true` (the lead, #218 review), so `g3-batch-check.mjs <batch.json> <result.json>...` (the gate claim check) refuses it, whatever a `result.json` here says about `gateValid` or `pass`. That field was added by hand after the run, the only hand edit here, because these batches ran before the field existed. Smoke is now the default, and only `batch.mjs --gate` writes `gate: true` (the lead, #220 decision).
 
 ## Run conditions
 
