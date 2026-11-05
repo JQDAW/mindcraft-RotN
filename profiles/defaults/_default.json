@@ -18,6 +18,7 @@
         "unstuck": true,
         "cowardice": true,
         "self_defense": true,
+        "eating": true,
         "hunting": true,
         "item_collecting": true,
         "torch_placing": true,

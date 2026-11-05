@@ -20,8 +20,15 @@
   "betterwithmods.common.entity.EntityFallingGourd",
   "betterwithmods.common.entity.item.EntityFallingBlockCustom",
   "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockBloom$1",
+  "com.ferreusveritas.dynamictrees.entities.EntityFallingTree",
   "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit$1",
+  "de.ellpeck.nyx.entities.FallingMeteor",
+  "de.ellpeck.nyx.entities.FallingStar",
+  "lumien.randomthings.entitys.EntityFallingBlockSpecial",
+  "mod.acgaming.universaltweaks.bugfixes.blocks.fallingblockdamage.mixin.UTFallingBlockDamageMixin",
+  "mod.acgaming.universaltweaks.bugfixes.entities.horse.mixin.UTHorseFallingMixin",
   "net.minecraft.entity.item.EntityFallingBlock",
+  "snownee.snow.FallingSnowEntity",
   "twilightforest.entity.boss.EntityTFFallingIce",
   "vazkii.quark.automation.entity.EntityGravisand"
  ],
@@ -571,6 +578,270 @@
    ],
    "jar": "mods/DungeonTactics-1.12.2-0.16.9.jar"
   },
+  "dynamictrees:acaciabranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:birchbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:cactusbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchCactus",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:darkoakbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:darkoakbranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:junglebranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:junglebranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:oakbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:oakbranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:sprucebranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictrees:sprucebranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:bamboobranch": {
+   "via": "own-code",
+   "class": "dynamictreesbop.trees.TreeBamboo$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:cherrybranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:deadbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:ebonybranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:eucalyptusbranch": {
+   "via": "own-code",
+   "class": "dynamictreesbop.trees.TreeEucalyptus$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:firbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:firbranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:hellbarkbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:jacarandabranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:magicbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:mahoganybranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:mangrovebranch": {
+   "via": "own-code",
+   "class": "dynamictreesbop.trees.TreeMangrove$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:palmbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:pinebranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:redwoodbranch": {
+   "via": "own-code",
+   "class": "dynamictreesbop.trees.TreeRedwood$BlockBranchRedwood",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:redwoodbranchx": {
+   "via": "own-code",
+   "class": "dynamictreesbop.trees.TreeRedwood$BlockBranchRedwood",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:umbranbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:umbranbranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesbop:willowbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesdefiledlands:tenebrabranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesphc:cinnamonbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockBranchPamSpecial",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesphc:dragonfruitbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
   "dynamictreesphc:fruitalmond": {
    "via": "own-code",
    "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
@@ -907,6 +1178,278 @@
    "evidence": "DynamicTreesPHC-1.12.2-2.0.6.jar: BlockPamFruit.updateTick (func_180650_b, bytecode 53) and neighborChanged (func_189540_a, 48) call its private blockFall, which returns when distanceFromPlayerToFall is 0, needs a player within that distance unless it is -1 (World.getClosestPlayer, 9-43), and the block below to be air (World.isAirBlock, 49-52); it then spawns BlockPamFruit$1, an EntityFallingBlock subclass (113-144). The pack: config/dynamictreesphc.cfg line 5 S:fallingFruitFallChance=10, whose comment (line 4) describes it as that distance (default 10; 0 disables). Which field the key loads into was not traced",
    "jar": "mods/DynamicTreesPHC-1.12.2-2.0.6.jar"
   },
+  "dynamictreesphc:maplebranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictreesphc.trees.TreeMaple$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesphc:palmbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesphc:paperbarkbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockBranchPamPaper",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesphc:paperbarkcutbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockBranchPamPaper",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesquark:blossomingbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesquark:swampoakbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreestheaether:crystalbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreestheaether:goldenoakbranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreestheaether.blocks.BlockBranchGoldenOak",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreestheaether:holidaybranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreestheaether:skyrootbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:canopybranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.blocks.BlockBranchTwilight",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:darkwoodbranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.blocks.BlockBranchTwilight",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:mangrovebranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.trees.TreeMangrove$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:minerstreebranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.trees.TreeMagicMiners$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:minerstreecorebranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.ModContent$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:minerstreecorebranchoff": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.ModContent$2",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:rainbowoakbranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.blocks.BlockBranchTwilight",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:robusttwilightoakbranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.trees.TreeRobustTwilightOak$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:robusttwilightoakbranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:sicklytwilightoakbranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.trees.TreeSicklyTwilightOak$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:sortingtreebranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.trees.TreeMagicSorting$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:sortingtreecorebranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.ModContent$3",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:sortingtreecorebranchoff": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.ModContent$4",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:treeoftimebranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.trees.TreeMagicTime$1",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:treeoftimebranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:treeoftimecorebranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.ModContent$5",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:treeoftimecorebranchoff": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.ModContent$6",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:treeoftimecorebranchoffx": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.blocks.BlockBranchMagicCoreThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:treeoftimecorebranchx": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.blocks.BlockBranchMagicCoreThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:treeoftransformationbranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.trees.TreeMagicTransformation$2",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:treeoftransformationcorebranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.ModContent$7",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:treeoftransformationcorebranchoff": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.ModContent$8",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:twilightoakbranch": {
+   "via": "own-code",
+   "class": "maxhyper.dynamictreesttf.blocks.BlockBranchTwilightThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "dynamictreesttf:twilightoakbranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
   "earthworks:block_gabion_falling_dirt": {
    "via": "own-code",
    "class": "alsender.earthworks.block.Block_Gabion_Falling",
@@ -1018,6 +1561,14 @@
    ],
    "jar": "minecraft_server.1.12.2.jar"
   },
+  "minecraft:snow_layer": {
+   "via": "own-code",
+   "class": "snownee.snow.ModSnowBlock",
+   "reviewed": "snownee.snow.ModSnowBlock",
+   "when": "unsupported-below",
+   "evidence": "SnowRealMagic-1.12.2-0.7.4.jar: ModSnowBlock replaces minecraft:snow_layer (it is the dumped class); onBlockAdded (func_176213_c) and neighborChanged (func_189540_a) read ModConfig.snowGravity first (bytecode 0), updateTick (func_180650_b, 12) calls checkFallable, which spawns a snownee.snow.FallingSnowEntity (an Entity, not an EntityFallingBlock; 83-126). The pack: config/snowrealmagic.cfg line 10: B:SnowGravity=true",
+   "jar": "mods/SnowRealMagic-1.12.2-0.7.4.jar"
+  },
   "minetraps:quicksand": {
    "via": "BlockFalling",
    "when": "unsupported-below",
@@ -1119,6 +1670,30 @@
     "net.minecraft.block.BlockFalling"
    ],
    "jar": "mods/rustic-1.1.7.jar"
+  },
+  "rustic:ironwoodbranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "rustic:ironwoodbranchx": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchThick",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
+  },
+  "rustic:olivebranch": {
+   "via": "own-code",
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic",
+   "reviewed": "com.ferreusveritas.dynamictrees.blocks.BlockBranch",
+   "when": "tree-felled",
+   "evidence": "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise",
+   "jar": "mods/DramaticTrees-1.12.2-0.13.4.jar"
   },
   "undergroundbiomes:igneous_gravel": {
    "via": "own-code",
@@ -1518,6 +2093,78 @@
     "contenttweaker:wyrmwood_lacquered",
     "contenttweaker:yeast",
     "contenttweaker:yeast_flour"
+   ]
+  },
+  "com.ferreusveritas.dynamictrees.blocks.BlockSurfaceRoot": {
+   "falls": false,
+   "evidence": [
+    "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockSurfaceRoot names EntityFallingTree only in addCollisionBoxToList (func_185477_a, bytecode 2), a collision check"
+   ],
+   "blocks": [
+    "dynamictrees:darkoakroot",
+    "dynamictrees:jungleroot",
+    "dynamictreesbop:redwoodroot",
+    "dynamictreesttf:time_roots",
+    "dynamictreesttf:twilight_roots",
+    "rustic:ironwoodroot"
+   ]
+  },
+  "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves": {
+   "falls": false,
+   "evidence": [
+    "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockDynamicLeaves names EntityFallingTree only in addCollisionBoxToList (func_185477_a, bytecode 53), a collision check; the leaves do not fall by themselves (whether a felled tree entity carries them was not traced)"
+   ],
+   "blocks": [
+    "dynamictrees:leaves0",
+    "dynamictrees:leaves1",
+    "dynamictreesbop:leaves_flowering",
+    "dynamictreesbop:leaves_flowering_peach",
+    "dynamictreesbop:leaves_palm",
+    "dynamictreesbop:leaves0",
+    "dynamictreesbop:leaves1",
+    "dynamictreesbop:leaves2",
+    "dynamictreesbop:leaves3",
+    "dynamictreesbop:leaves4",
+    "dynamictreesbop:leaves5",
+    "dynamictreesbop:leaves6",
+    "dynamictreesbop:leaves7",
+    "dynamictreesdefiledlands:leaves0",
+    "dynamictreesphc:leaves_dragonfruit",
+    "dynamictreesphc:leaves_palm",
+    "dynamictreesphc:leaves0",
+    "dynamictreesquark:leaves0",
+    "dynamictreestheaether:leaves_crystal",
+    "dynamictreestheaether:leaves0",
+    "dynamictreesttf:leaves_darkwood",
+    "dynamictreesttf:leaves_of_transformation",
+    "dynamictreesttf:leaves0",
+    "dynamictreesttf:leaves1",
+    "dynamictreesttf:leaves2",
+    "rustic:leaves0"
+   ]
+  },
+  "com.ferreusveritas.dynamictrees.blocks.BlockRooty": {
+   "falls": false,
+   "evidence": [
+    "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockRooty.destroyTree drops the tree with DestroyType.BLAST (bytecode 72-75); the rooty block itself does not fall"
+   ],
+   "blocks": [
+    "dynamictrees:rootydirt",
+    "dynamictrees:rootydirtspecies",
+    "dynamictrees:rootysand",
+    "dynamictreesbop:rootywater",
+    "dynamictreesdefiledlands:rootydefileddirt",
+    "dynamictreestheaether:rootydirtaether",
+    "dynamictreesttf:rootywater"
+   ]
+  },
+  "com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell": {
+   "falls": false,
+   "evidence": [
+    "DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockTrunkShell names EntityFallingTree only in addCollisionBoxToList (func_185477_a, bytecode 2), a collision check"
+   ],
+   "blocks": [
+    "dynamictrees:trunkshell"
    ]
   },
   "osv-background": {
@@ -2098,5 +2745,10 @@
   }
  },
  "unreviewed": {},
- "unresolved": []
+ "unresolved": [],
+ "notReflected": [
+  "Forge binpatches: minecraft_server.1.12.2.jar is read as shipped; binpatches.pack.lzma in the Forge jar (pack200 inside LZMA) patches vanilla classes at load time and is not applied here, so a Forge change to a vanilla block class (its superclass or the methods that start a fall) is not seen",
+  "coremod and mixin changes to gravity (the class files are read as shipped, before any transformer)",
+  "blocks that fall through a helper class outside their own class chain (the falling-entity reference must be in the block class or a superclass below net.minecraft.block.Block)"
+ ]
 }

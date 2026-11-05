@@ -143,7 +143,7 @@ export class RotnData {
 
     /**
      * The falling-blocks.json entry: { via: 'BlockFalling'|'own-code'|'contenttweaker-gravity'|'osv-background',
-     *   when: 'unsupported-below'|'loses-support'|'player-nearby'|'redstone-powered', class, ...evidence },
+     *   when: 'unsupported-below'|'loses-support'|'player-nearby'|'redstone-powered'|'tree-felled', class, ...evidence },
      * or null when the block does not fall (or is unknown).
      */
     fallInfo(input) {
