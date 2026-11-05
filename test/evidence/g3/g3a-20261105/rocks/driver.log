@@ -1,0 +1,445 @@
+DRIVER {"t":"2026-11-05T17:24:33.328Z","type":"mindcraft_start","pid":27600,"main":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\main.js","settings":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\settings.js","profile":"profiles/rotn-bot.json","mindserverPort":62908,"models":{"model":"openrouter/@preset/glm-5-1-mindcraft","code_model":null,"vision_model":null},"serverTaskGiver":true,"botState":{"dir":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\bots\\<bot>","movedAside":[],"fresh":true}}
+MindServer running on port 62908 on host localhost
+MC server found. (Host: <ip>, Port: 25565, Version: 1.12.2)
+keys.json not found. Defaulting to environment variables.
+Connecting to MindServer
+Client connected
+<bot> connected to MindServer
+Starting agent
+Initializing agent <bot>...
+Error with embedding model, using word-overlap instead.
+Error with embedding model, using word-overlap instead.
+Error with embedding model, using word-overlap instead.
+Examples initialized.
+No task.
+<bot> logging into minecraft...
+<bot> updating available agents
+[forge-bridge] attached; 346 mods; REID 2.2.2; Triumph 3.19.2
+[forge-bridge] registries: aetherapi:accessories=31 aetherapi:enchantment_fuels=3 aetherapi:enchantments=879 aetherapi:freezable_fuels=1 aetherapi:freezables=11 aetherapi:moa_types=4 arcaneworld:rituals=10 artisanworktables:recipe_registry=15 artisanworktables:requirement_builder_supplier=1 artisanworktables:requirement_context_supplier=1 charset:wire=34 doggytalents:talents=17 dynamictrees:species=136 livingenchantment:personalityregistry=14 livingenchantment:talentregistry=0 mcmultipart:micro_material=0 mcmultipart:micro_type=0 mcmultipart:slots=27 minecraft:biomes=175 minecraft:blocks=4896 minecraft:dataserializers=2 minecraft:enchantments=178 minecraft:entities=971 minecraft:items=9710 minecraft:potions=263 minecraft:potiontypes=298 minecraft:recipes=10687 minecraft:soundevents=1867 minecraft:villagerprofessions=19 netherex:pigtificate_professions=5 pyrotech:bloomery_recipe=12 pyrotech:campfire_recipe=21 pyrotech:chopping_block_recipe=0 pyrotech:compacting_bin_recipe=25 pyrotech:compost_bin_recipe=1437 pyrotech:crucible_brick_recipe=11 pyrotech:crucible_stone_recipe=7 pyrotech:crude_drying_rack_recipe=7 pyrotech:drying_rack_recipe=9 pyrotech:granite_anvil_recipe=206 pyrotech:kiln_brick_recipe=122 pyrotech:kiln_pit_recipe=24 pyrotech:kiln_stone_recipe=121 pyrotech:mechanical_compacting_bin_recipe=25 pyrotech:mill_brick_recipe=324 pyrotech:mill_stone_recipe=0 pyrotech:oven_brick_recipe=10 pyrotech:oven_stone_recipe=10 pyrotech:pit_recipe=41 pyrotech:soaking_pot_recipe=55 pyrotech:wither_forge_recipe=13 pyrotech:worktable_recipe=0
+[forge-bridge] RotN recipes installed: 6089 recipes for 3666 items
+[forge-bridge] handshake complete (overrideDimension 0)
+[forge-bridge] state-id remap active: applied 506 state ids in 132 of the table's 132 blocks; conflicts 0 skipped
+<bot> logged in!
+<bot> updating available agents
+Initializing vision intepreter...
+<bot> spawned.
+received message from system : Respond with hello world and your name
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: You are self-prompting with the goal: 'Build a house'. Respond:
+Example: trade something with zorro_34
+Awaiting openrouter api response...
+Self-prompting started.
+starting self-prompt loop
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+Received.
+Generated response: Hello world, I'm <bot>! 🤖
+<bot> full response to system: """"
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Hey, I'm <bot>! Time to grab some rocks. !collectBlocks("pyrotech:rock", 6)
+<bot> full response to system: ""Hey, I'm <bot>! Time to grab some rocks. !collectBlocks("pyrotech:rock", 6)""
+parsed command: { commandName: '!collectBlocks', args: [ 'pyrotech:rock', 6 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output is very long (836 chars) and has been shortened.
+
+          First outputs:
+Found non-destructive path.
+You have reached at -64, 63, -70.
+Picked up 0 items.
+Broke pyrotech_compat:rock_igneous but got no pyrotech:rock.
+Found non-destructive path.
+You have reached at -64, 63, -71.
+Found non-destructive path.
+Found non-destruct
+...skipping many lines.
+Final outputs:
+ nd non-destructive path.
+You have reached at -67, 63, -74.
+Picked up 0 items.
+Collected 5 pyrotech:rock (2 pyrotech_compat:rock_igneous:0, 1 pyrotech_compat:rock_metamorphic:6, 1 pyrotech_compat:rock_igneous:7, 1 pyrotech_compat:rock_metamorphic:0).
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Got 5 so far, need one more. !collectBlocks("pyrotech:rock", 1)
+<bot> full response to system: ""Got 5 so far, need one more. !collectBlocks("pyrotech:rock", 1)""
+parsed command: { commandName: '!collectBlocks', args: [ 'pyrotech:rock', 1 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+Found non-destructive path.
+You have reached at -69, 63, -72.
+Picked up 0 items.
+Broke pyrotech_compat:rock_igneous but got no pyrotech:rock.
+Collected 0 pyrotech:rock.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Still need one more rock. !collectBlocks("pyrotech:rock", 1)
+<bot> full response to system: ""Still need one more rock. !collectBlocks("pyrotech:rock", 1)""
+parsed command: { commandName: '!collectBlocks', args: [ 'pyrotech:rock', 1 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+Found non-destructive path.
+You have reached at -71, 63, -79.
+Found non-destructive path.
+Found non-destructive path.
+Picked up 2 items.
+Collected 2 pyrotech:rock (2 pyrotech_compat:rock_igneous:0).
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: That's 7 rocks total, step 1 done! Now on to sticks. !collectBlocks("stick", 4)
+<bot> full response to system: ""That's 7 rocks total, step 1 done! Now on to sticks. !collectBlocks("stick", 4)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 4 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+Failed to collect stick: Error: Digging aborted.
+Failed to collect stick: Error: Digging aborted.
+Failed to collect stick: Error: Digging aborted.
+Failed to collect stick: Error: Digging aborted.
+Collected 0 stick.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: Hmm, digging got interrupted. Let me try again. !collectBlocks("stick", 4)
+<bot> full response to system: ""Hmm, digging got interrupted. Let me try again. !collectBlocks("stick", 4)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 4 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+Failed to collect stick: Error: Digging aborted.
+Failed to collect stick: Error: Digging aborted.
+Failed to collect stick: Error: Digging aborted.
+Failed to collect stick: Error: Digging aborted.
+Collected 0 stick.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: greg: Collect 10 wood
+Awaiting openrouter api response...
+Received.
+Generated response: Let me check what's around me first. !nearbyBlocks
+<bot> full response to system: ""Let me check what's around me first. !nearbyBlocks""
+parsed command: { commandName: '!nearbyBlocks', args: [] }
+Agent executed: !nearbyBlocks and got: 
+NEARBY_BLOCKS
+- dynamictrees:trunkshell
+- biomesoplenty:plant_0
+- dirt
+- dynamictrees:sprucebranch
+- grass
+- tallgrass
+- dynamictrees:rootydirt
+- water (source)
+- rustic:cohosh
+- dynamictrees:leaves0
+- undergroundbiomes:metamorphic_stone
+- mossy_cobblestone
+- dynamictrees:oakbranch
+- pyrotech_compat:rock_igneous
+- osv:simpleores_tin_ore_undergroundbiomes_metamorphic_stone_6
+- Block Below: biomesoplenty:plant_0
+- Block at Legs: air
+- Block at Head: air
+- First Solid Block Above Head: dynamictrees:sprucebranch (5 blocks up)
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: greg: Collect 10 wood
+Awaiting openrouter api response...
+Received.
+Generated response: I see leaves nearby but they might be too high. Let me search for closer ones. !searchForBlock("dynamictrees:leaves0", 32)
+<bot> full response to system: ""I see leaves nearby but they might be too high. Let me search for closer ones. !searchForBlock("dynamictrees:leaves0", 32)""
+Storing memories...
+parsed command: {
+  commandName: '!searchForBlock',
+  args: [ 'dynamictrees:leaves0', 32 ]
+}
+executing code...
+
+Awaiting openrouter api response...
+Agent executed: !searchForBlock and got: Action output:
+Found dynamictrees:leaves0 at (-65, 72, -72). Navigating...
+Path not found, but attempting to navigate anyway using destructive movements.
+Unable to reach -65, 72, -72, you are 8 blocks away.
+
+Saved memory to: ./bots/<bot>/memory.json
+Received.
+Memory updated to:  <bot> bot. Following RotN agenda (11 steps). Step1: collect 6 pyrotech:rock. Breaking pyrotech_compat:rock_igneous & rock_metamorphic yields pyrotech:rock. Rocks found on ground near spawn(-64,-70 area). Got 5, need 1 more.
+selected examples:
+Example: work together with the other bot to build a house
+Example: greg: Collect 10 wood
+Awaiting openrouter api response...
+Received.
+Generated response: Leaves are too high up. Let me try climbing the tree trunk first. !searchForBlock("dynamictrees:trunkshell", 16)
+<bot> full response to system: ""Leaves are too high up. Let me try climbing the tree trunk first. !searchForBlock("dynamictrees:trunkshell", 16)""
+parsed command: {
+  commandName: '!searchForBlock',
+  args: [ 'dynamictrees:trunkshell', 16 ]
+}
+executing code...
+
+Agent executed: !searchForBlock and got: Action output:
+Minimum search range is 32.
+Found dynamictrees:trunkshell at (-65, 64, -71). Navigating...
+Found non-destructive path.
+You have reached at -65, 64, -71.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: greg: Collect 10 wood
+Awaiting openrouter api response...
+Received.
+Generated response: At the trunk now. Let me try collecting sticks from here. !collectBlocks("stick", 4)
+<bot> full response to system: ""At the trunk now. Let me try collecting sticks from here. !collectBlocks("stick", 4)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 4 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+Failed to collect stick: Error: Digging aborted.
+Failed to collect stick: Error: Digging aborted.
+Failed to collect stick: Error: Digging aborted.
+Failed to collect stick: Error: Digging aborted.
+Collected 0 stick.
+
+Storing memories...
+Saved memory to: ./bots/<bot>/memory.json
+Awaiting openrouter api response...
+selected examples:
+Example: work together with the other bot to build a house
+Example: greg: Collect 10 wood
+Awaiting openrouter api response...
+Received.
+Memory updated to:  <bot> bot. RotN agenda (11 steps). Step1 DONE: collected 7 pyrotech:rock (need 6). Break pyrotech_compat:rock_igneous/metamorphic for rocks near spawn(-64,-70). Step2: collect 4 sticks - dig keeps aborting, retrying. Stick collection problematic.
+Received.
+Generated response: Can't reach them from here. Let me try building up to the leaves. !newAction("Build a dirt pillar up to reach the leaves at y=72, then break leaves to collect sticks. Current position is around x=-65, y=64, z=-72. Place blocks below yourself to go up until you're at the same level as the leaves, then break nearby leaves blocks to collect sticks.")
+<bot> full response to system: ""Can't reach them from here. Let me try building up to the leaves. !newAction("Build a dirt pillar up to reach the leaves at y=72, then break leaves to collect sticks. Current position is around x=-65, y=64, z=-72. Place blocks below yourself to go up until you're at the same level as the leaves, then break nearby leaves blocks to collect sticks.")""
+parsed command: {
+  commandName: '!newAction',
+  args: [
+    "Build a dirt pillar up to reach the leaves at y=72, then break leaves to collect sticks. Current position is around x=-65, y=64, z=-72. Place blocks below yourself to go up until you're at the same level as the leaves, then break nearby leaves blocks to collect sticks."
+  ]
+}
+Agent executed: !newAction and got: newAction not allowed! Code writing is disabled in settings. Notify the user.
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: greg: Collect 10 wood
+Awaiting openrouter api response...
+<bot> received new message while generating, discarding old response.
+no response
+Received.
+Generated response: No custom actions allowed. Let me try finding a tree with leaves closer to the ground. !searchForBlock("dynamictrees:leaves0", 64)
+<bot> full response to system: ""No custom actions allowed. Let me try finding a tree with leaves closer to the ground. !searchForBlock("dynamictrees:leaves0", 64)""
+parsed command: {
+  commandName: '!searchForBlock',
+  args: [ 'dynamictrees:leaves0', 64 ]
+}
+executing code...
+
+Agent executed: !searchForBlock and got: Action output:
+Found dynamictrees:leaves0 at (-65, 72, -72). Navigating...
+Path not found, but attempting to navigate anyway using destructive movements.
+Unable to reach -65, 72, -72, you are 7 blocks away.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: greg: Collect 10 wood
+Awaiting openrouter api response...
+executing code...
+
+Mode item_collecting finished executing, code_return: Action output:
+Found non-destructive path.
+Picked up 1 items.
+
+Received.
+Generated response: Wait - I already have 6 sticks and 8 rocks in my inventory! I have everything I need for the crude axe. Let me just craft it. !craftRecipe("pyrotech:crude_axe", 1)
+<bot> full response to system: ""Wait - I already have 6 sticks and 8 rocks in my inventory! I have everything I need for the crude axe. Let me just craft it. !craftRecipe("pyrotech:crude_axe", 1)""
+parsed command: { commandName: '!craftRecipe', args: [ 'pyrotech:crude_axe', 1 ] }
+executing code...
+
+crafting...
+Agent executed: !craftRecipe and got: Action output:
+Successfully crafted pyrotech:crude_axe, you now have 1 pyrotech:crude_axe.
+
+Storing memories...
+Saved memory to: ./bots/<bot>/memory.json
+Awaiting openrouter api response...
+selected examples:
+Example: work together with the other bot to build a house
+Example: greg: Collect 10 wood
+Awaiting openrouter api response...
+Received.
+Memory updated to:  <bot> bot. RotN agenda(11steps). Step1 DONE:7 pyrotech:rock(need6). Step2:collect 4 sticks. Digging keeps aborting. Nearby: dynamictrees(trunkshell,spruce/oakbranch,leaves0). Leaves too high at(-65,72,-72), 8blk away. Trying climb trunkshell to reach leaves for sticks. Spawn area(-64,-70).
+Received.
+Generated response: Got the axe! Now for step 5 - I need to place a log, debark it with the axe, then use the axe again for a plank. Let me place a log first. !placeHere("log")
+<bot> full response to system: ""Got the axe! Now for step 5 - I need to place a log, debark it with the axe, then use the axe again for a plank. Let me place a log first. !placeHere("log")""
+parsed command: { commandName: '!placeHere', args: [ 'log' ] }
+executing code...
+
+Agent executed: !placeHere and got: Action output:
+Placed log at (-66, 65, -71).
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: greg: Collect 10 wood
+Awaiting openrouter api response...
+Received.
+Generated response: Log placed. Now let me debark it with the crude axe. !useOn("pyrotech:crude_axe", "log")
+<bot> full response to system: ""Log placed. Now let me debark it with the crude axe. !useOn("pyrotech:crude_axe", "log")""
+parsed command: { commandName: '!useOn', args: [ 'pyrotech:crude_axe', 'log' ] }
+executing code...
+
+Agent executed: !useOn and got: Action output:
+Found non-destructive path.
+You have reached at -66, 65, -71.
+Equipped pyrotech:crude_axe.
+Used pyrotech:crude_axe on log.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: Code output: Placed oak_planks at (-154, 96, -228).
+Awaiting openrouter api response...
+Received.
+Generated response: Debarked the log. Now I need to use the axe on the debarked log to get a plank. !useOn("pyrotech:crude_axe", "hitwithaxe:debarked_spruce")
+<bot> full response to system: ""Debarked the log. Now I need to use the axe on the debarked log to get a plank. !useOn("pyrotech:crude_axe", "hitwithaxe:debarked_spruce")""
+parsed command: {
+  commandName: '!useOn',
+  args: [ 'pyrotech:crude_axe', 'hitwithaxe:debarked_spruce' ]
+}
+executing code...
+
+Agent executed: !useOn and got: Action output:
+Found non-destructive path.
+You have reached at -66, 65, -71.
+Equipped pyrotech:crude_axe.
+Used pyrotech:crude_axe on hitwithaxe:debarked_spruce.
+
+Storing memories...
+Saved memory to: ./bots/<bot>/memory.json
+Awaiting openrouter api response...
+selected examples:
+Example: Code output: Placed oak_planks at (-154, 96, -228).
+Example: trixy88: craft some sticks
+Awaiting openrouter api response...
+Received.
+Generated response: Let me check if I got a plank. !inventory
+<bot> full response to system: ""Let me check if I got a plank. !inventory""
+parsed command: { commandName: '!inventory', args: [] }
+Agent executed: !inventory and got: 
+INVENTORY
+- stick: 6
+- hitwithaxe:bark:20: 1
+- lifescroll:spawnscroll: 1
+- bread: 1
+- bundles:bundle: 1
+- pyrotech:crude_axe: 1
+- pyrotech_compat:rock_metamorphic:6: 2
+- pyrotech_compat:rock_igneous:7: 1
+- pyrotech_compat:rock_metamorphic:0: 1
+- pyrotech_compat:rock_igneous:0: 3
+- log:1: 20
+WEARING: Nothing
+
+Saved memory to: ./bots/<bot>/memory.json
+executing code...
+
+Mode item_collecting finished executing, code_return: Action output:
+Found non-destructive path.
+Picked up 1 items.
+
+selected examples:
+Example: Code output: Placed oak_planks at (-154, 96, -228).
+Example: trixy88: craft some sticks
+Awaiting openrouter api response...
+Received.
+Memory updated to:  <bot> bot. RotN agenda(11steps). Step1 DONE:7 pyrotech:rock(need6). Step2:collect 4 sticks. Digging keeps aborting. Trunkshell at(-65,64,-71) reached but can't collect sticks-leaves too high(y72). newAction/code writing DISABLED. Searching for dynamictrees:leaves0 closer to ground within 64blk. Spawn(-64,-70).
+Received.
+Generated response: Hmm, I don't see a plank in my inventory. The debarked log might still be there - let me check what's nearby. !nearbyBlocks
+<bot> full response to system: ""Hmm, I don't see a plank in my inventory. The debarked log might still be there - let me check what's nearby. !nearbyBlocks""
+parsed command: { commandName: '!nearbyBlocks', args: [] }
+Agent executed: !nearbyBlocks and got: 
+NEARBY_BLOCKS
+- dirt
+- dynamictrees:trunkshell
+- biomesoplenty:plant_0
+- grass
+- tallgrass
+- dynamictrees:sprucebranch
+- dynamictrees:rootydirt
+- water (source)
+- rustic:cohosh
+- mossy_cobblestone
+- undergroundbiomes:metamorphic_stone
+- dynamictrees:rootydirtspecies
+- undergroundbiomes:sedimentary_stone
+- pyrotech_compat:rock_igneous
+- osv:simpleores_tin_ore_undergroundbiomes_metamorphic_stone_6
+- Block Below: dirt
+- Block at Legs: air
+- Block at Head: air
+- First Solid Block Above Head: dynamictrees:sprucebranch (6 blocks up)
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: Code output: Placed oak_planks at (-154, 96, -228).
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Received.
+Generated response: The log block disappeared - maybe it broke. But wait, my actual goal is to craft `contenttweaker:crafting_tools` which needs the crude axe, 1 rock, and 1 stick. I have all of those! Let me craft it now. !craftRecipe("contenttweaker:crafting_tools", 1)
+<bot> full response to system: ""The log block disappeared - maybe it broke. But wait, my actual goal is to craft `contenttweaker:crafting_tools` which needs the crude axe, 1 rock, and 1 stick. I have all of those! Let me craft it now. !craftRecipe("contenttweaker:crafting_tools", 1)""
+parsed command: {
+  commandName: '!craftRecipe',
+  args: [ 'contenttweaker:crafting_tools', 1 ]
+}
+executing code...
+
+crafting...
+Agent executed: !craftRecipe and got: Action output:
+Successfully crafted contenttweaker:crafting_tools, you now have 1 contenttweaker:crafting_tools.
+
+Storing memories...
+Saved memory to: ./bots/<bot>/memory.json
+Awaiting openrouter api response...
+selected examples:
+Example: Code output: Placed oak_planks at (-154, 96, -228).
+Example: trixy88: craft some sticks
+Awaiting openrouter api response...
+Received.
+Memory updated to:  <bot> bot. RotN agenda(11steps). Steps1-4 DONE(rocks+sticks gathered,crude_axe crafted). Step5:debark log-placed log at(-66,65,-71),using crude_axe on it. Next:use axe again for plank. newAction/code writing DISABLED. Spawn(-64,-70). Leaves y72 unreachable.
+Received.
+Generated response: Got the crafting tools! Now I need 1 plank to craft the crafting table. Let me use the axe on a log to get a plank. !useOn("pyrotech:crude_axe", "log")
+<bot> full response to system: ""Got the crafting tools! Now I need 1 plank to craft the crafting table. Let me use the axe on a log to get a plank. !useOn("pyrotech:crude_axe", "log")""
+parsed command: { commandName: '!useOn', args: [ 'pyrotech:crude_axe', 'log' ] }
+executing code...
+
