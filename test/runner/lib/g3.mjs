@@ -55,17 +55,18 @@ export const G3_CONSOLE_ALLOW = [
     /^seed$/,
     // No tp of any form (lead, #201 review): even `tp <bot> ~ ~ ~` is a teleport in 1.12 (it dismounts, zeroes
     // motionY, sets onGround and forces a position packet). Life evidence comes from stat.deaths and the log.
+    // No time change of any form either (lead, #203 review): `time set day` is gone; only the query below.
     new RegExp(`^tell ${NAME} .+$`),                                       // the test-only task giver `Server`
-    new RegExp(`^testforblock ${N} ${N} ${N} \\S+ \\d+$`),
-    /^testfor @[aep]\[[^\]]*\]$/,
+    // Read-only checks approved for G3 (lead, #203 review): testforblock and testfor, and the gamerule query.
+    new RegExp(`^testforblock ${N} ${N} ${N} \\S+ \\d+$`),                 // read-only: does the block match
+    /^testfor @[aep]\[[^\]]*\]$/,                                          // read-only: does a selector match
     new RegExp(`^clear ${NAME} \\S+ ${N} 0$`),                             // count only: maxCount 0, never a real clear
     /^scoreboard objectives add [A-Za-z0-9_]{1,16} stat\.[A-Za-z0-9_.]+$/,
     /^scoreboard objectives add [A-Za-z0-9_]{1,16} food$/,                 // read-only food level, evidence only (lead, #203)
     /^scoreboard objectives remove [A-Za-z0-9_]{1,16}$/,
     new RegExp(`^scoreboard players list ${NAME}$`),
     /^time query daytime$/,
-    /^time set day$/,                                                      // G2's list; never in the first-night scenario
-    /^gamerule doDaylightCycle$/,                                          // the query form only, no value
+    /^gamerule [A-Za-z]+$/,                                                // read-only: the query form only, never a value
     new RegExp(`^setblock ${N} ${N} ${N} minecraft:gold_block$`),          // the task marker only
 ];
 
