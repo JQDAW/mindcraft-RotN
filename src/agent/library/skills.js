@@ -4,6 +4,7 @@ import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
+import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import pf from 'mineflayer-pathfinder';
@@ -54,6 +55,31 @@ function recipeIngredients(recipe) {
     return out;
 }
 
+/**
+ * !craftRecipe("cobblestone"): craft the cobblestone each held rock kind makes (rotn-data's 4-rocks
+ * recipes, cobble.js), from the kind with the most rocks, until `num` are made (G3 round 3 A).
+ */
+async function craftCobbleFromRocks(bot, num, ops) {
+    const choices = cobbleChoices(bot);
+    if (choices.length === 0) {
+        const held = cobbleRocksHeld(bot).map(c => `${c.have} ${c.rock}`);
+        log(bot, `Cobblestone takes ${ROCKS_PER_COBBLE} rocks of one kind, and each kind makes its own cobblestone; `
+            + `you have ${held.length ? held.join(', ') : 'no such rocks'}. Collect more with !collectBlocks("pyrotech:rock", 8).`);
+        return false;
+    }
+    let made = 0;
+    let any = false;
+    for (const c of choices) {
+        if (made >= num) break;
+        const n = Math.min(num - made, Math.floor(c.have / ROCKS_PER_COBBLE));
+        // plain rock makes vanilla cobblestone: name its variant, so this is not the general request again
+        const target = isGenericCobble(c.gives) ? `${c.gives.replace(/^minecraft:/, '')}:0` : c.gives;
+        log(bot, `Cobblestone from your rocks: ${n} ${c.gives} (${ROCKS_PER_COBBLE} ${c.rock} each).`);
+        if (await craftRecipe(bot, target, n, ops)) { any = true; made += n; }
+    }
+    return any;
+}
+
 export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
     /**
      * Attempt to craft the given item name from a recipe. May craft many items.
@@ -64,6 +90,8 @@ export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {
      * await skills.craftRecipe(bot, "stick");
      **/
     // ops: how a table is placed and picked up (tests pass their own; CRAFT_TABLE_OPS below).
+    // "cobblestone": the kind the bot's rocks make (G3 round 3 A: sedimentary rocks make chalk cobble).
+    if (isGenericCobble(itemName)) return await craftCobbleFromRocks(bot, num, ops);
     const run = currentRun(bot); // checked after each await (#225 review)
     let placedTable = false;
     // The variant to craft: "planks:1" asks for spruce planks; a bare "planks" any (B1b).

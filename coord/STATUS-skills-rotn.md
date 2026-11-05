@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T23:06Z (from `date -u`)
+Updated: 2026-11-05T23:36Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -384,7 +384,12 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
      Tests: `shelter` 18 (cursor and off hand moved back; the refusal lists every place), `night_routine` 19 (digOut from the off hand; it fails with "no pickaxe in hand" on the previous head). Related files pass; lint per file unchanged.
   5. **#229 review 2:** `stowCarried` deals with an open window (a chest or a table) first. It puts that window's cursor stack into one of its inventory slots, then closes the window; closing a 1.12 container drops a cursor stack on the ground. With no free slot it leaves the window open. Each click has `STOW_CLICK_MS` (3 s). The passive 600 ms resync wait was accepted by the lead. Tests: `shelter` 21/21 (an open chest with the pickaxe on its cursor; no free slot; a click never answered, which hangs on the previous head).
 - **G3 smoke round 3 running** (lead, received before 2026-11-05T23:06Z by `date -u`, about 2 hours): until the lead says it is over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only.
-- **Next:** idle until the round 3 findings. STATUS lives on `agent/skills-rotn/next` (from develop, no PR yet) until the next PR.
+- **Round 3 batch A finding, open PR** (branch `agent/skills-rotn/next`; STATUS lives here). `!craftRecipe("cobblestone")` with 8 sedimentary rocks asked for Twilight Forest's giant cobblestone.
+  - Now "cobblestone" means the cobblestone the held rocks make. The new `library/cobble.js` takes rotn-data's `rockRecipes()`, keeps the outputs in the `cobblestone` ore (26 of the 35; not the sandstones, holystone or defiled stone), and chooses the kinds the bot has 4 of, most first.
+  - `craftRecipe` crafts those outputs until the count is reached, with a clear line when no kind has 4.
+  - The cobblestone step's goal names that output (`goalNow(state)`; `agendaGoal` takes the state).
+  - Tests: `cobble` 5/5, with sedimentary, igneous, metamorphic and plain rocks, mixed kinds, and too few. On develop the craft tests fail with "1 twilightforest:giant_cobblestone", as in round 3. `agenda` 16/16 (the goal names the output). Related 8 files pass; lint per file unchanged.
+- **Next (lead):** review the round 3 A PR.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

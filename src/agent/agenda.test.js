@@ -11,7 +11,7 @@ import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
 import { Agenda, ROTN_EARLY_GAME, describeAgenda } from './agenda.js';
-import { agendaTick, agendaState, TICK_MS, BACKOFF_MS, STEP_LLM_MS } from './agenda_driver.js';
+import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS } from './agenda_driver.js';
 import { Agent } from './agent.js';
 import { parseCommandMessage } from './commands/index.js';
 import { TaskQueue } from './task_queue.js';
@@ -281,4 +281,17 @@ test('G3 round 2 B: the cobblestone step counts rotn-data\'s cobblestone ore (Un
         '10 metamorphic cobble (what the bot made in round 2) finish the step');
     assert.equal(stepOf([...tools, stack('undergroundbiomes:metamorphic_cobble', 0, 6), stack('cobblestone', 0, 4)], { tableNear: true }), null, 'mixed kinds add up');
     assert.doesNotMatch(ROTN_EARLY_GAME.find(s => s.id === 'cobblestone').goal, /!buildShelter/, 'the goal no longer invites a daytime shelter');
+});
+
+test('G3 round 3 A: the cobblestone step\'s goal names the cobblestone the held rocks make', () => {
+    const agenda = new Agenda('x', { dir: path.join(tmpdir(), `rotn-none-${Math.random()}`) });
+    const step = ROTN_EARLY_GAME.find(s => s.id === 'cobblestone');
+    const goal = (items) => agendaGoal(agenda, step, agendaState(fakeBot(items)));
+    assert.match(goal([stack('pyrotech_compat:rock_sedimentary', 0, 8)]),
+        /Your 8 pyrotech_compat:rock_sedimentary:0 make contenttweaker:chalk_cobble:0 \(4 rocks each\): craft it with !craftRecipe\("contenttweaker:chalk_cobble:0", 2\) or !craftRecipe\("cobblestone", 2\)\./);
+    assert.match(goal([stack('pyrotech_compat:rock_igneous', 3, 4)]), /make undergroundbiomes:igneous_cobble:3/);
+    assert.match(goal([stack('pyrotech_compat:rock_metamorphic', 0, 4)]), /make undergroundbiomes:metamorphic_cobble:0/);
+    assert.match(goal([stack('pyrotech:rock', 0, 4)]), /Your 4 pyrotech:rock:0 make cobblestone \(4 rocks each\)/);
+    // too few rocks of one kind: the general goal
+    assert.match(goal([stack('pyrotech:rock', 0, 3)]), /make cobblestone from 4 rocks of one kind with !craftRecipe\("cobblestone", 1\): each rock kind makes its own cobblestone/);
 });
