@@ -55,7 +55,12 @@ function sim(opt = {}) {
             else if (cmd === 'seed') add('Seed: 1880465901402976865');
             else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) minecraft:air 0$/.exec(cmd))) {
                 add(opt.blocked && Number(m[2]) === MARKER[1] + 2 ? `The block at ${m[1]}, ${m[2]}, ${m[3]} is Water (expected: Air).` : `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}`);
-            } else if (/^setblock -?\d+ -?\d+ -?\d+ minecraft:gold_block$/.test(cmd)) add('Block placed');
+            } else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) minecraft:gold_block 0$/.exec(cmd))) {
+                add(opt.noGold ? `The block at ${m[1]}, ${m[2]}, ${m[3]} is Air (expected: Gold Block).` : `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}`);
+            } else if (/^setblock -?\d+ -?\d+ -?\d+ minecraft:gold_block$/.test(cmd)) {
+                add('Block placed');
+                if (opt.chatAfterSetblock) say('No logs in 32 blocks, let me search wider.');
+            }
             else if (cmd.startsWith('testfor ')) {
                 testforN++;
                 if (opt.testforSilentFrom !== undefined && testforN > opt.testforSilentFrom) { t += waitS * 1000; return []; }   // no answer at all
@@ -176,5 +181,21 @@ describe('g3-untrusted-refused on a simulated server', () => {
         const blocked = byName(await run(sb));
         assert.match(blocked.not_on_marker.detail, /^not reached: site not clear: -20 72 -56/);
         assert.ok(!sb.sent.some((x) => x.startsWith('setblock ') || x.startsWith('tell ')));
+    });
+
+    test('#207 review nit: the gold block is confirmed after the setblock; the note keeps the setblock answer, and no proof means no whisper', async () => {
+        const s = sim();
+        const r = await run(s);
+        const gold = s.sent.indexOf('testforblock -20 70 -56 minecraft:gold_block 0');
+        assert.ok(gold > s.sent.indexOf('setblock -20 70 -56 minecraft:gold_block') && gold < s.sent.findIndex((x) => x.startsWith('tell ')));
+        assert.deepEqual({ ...r.notes.marker, reply: undefined }, { at: [-20, 70, -56], reply: undefined, goldBlock: true, detail: 'found' });
+        assert.match(r.notes.marker.reply, /: Block placed$/);
+        // Smoke batch C+D: a chat line right after the answer was recorded as the reply. The answer itself is kept.
+        const chat = await run(sim({ chatAfterSetblock: true }));
+        assert.match(chat.notes.marker.reply, /: Block placed$/);
+        const sn = sim({ noGold: true });
+        const none = await run(sn);
+        assert.match(byName(none).not_on_marker.detail, /^not reached: the gold block is not at the marker: The block at -20, 70, -56 is Air/);
+        assert.ok(!sn.sent.some((x) => x.startsWith('tell ')));
     });
 });

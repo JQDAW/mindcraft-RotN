@@ -147,17 +147,23 @@ export function mindcraftEnv(env, { profile, mindserverPort }) {
     return out;
 }
 
-/** The bot state files that must not carry over between G3 runs (#207 review): an open task or agenda progress. */
+/** The bot state files that must not carry over between runs (#207 review): an open task or agenda progress. */
 export const BOT_STATE_FILES = ['tasks.json', 'agenda.json'];
+/** How many of the driver's own backups (<file>.g3-<stamp>.bak) to keep per state file (#207 review nit). */
+export const KEEP_BACKUPS = 5;
 
 /**
- * Before main.js starts, move the bot's tasks.json and agenda.json aside (renamed to <file>.g3-<stamp>.bak,
- * never deleted), so a run never inherits an open task from an earlier one (a (c) task must not run in (d)
- * under the production giver list) and the agenda autostarts as on a fresh bot. dir is ./bots/<name>
- * relative to the cwd main.js and its agent run in (they inherit the driver's). Returns {dir, movedAside}.
+ * On EVERY start of this driver, before main.js starts: move the bot's tasks.json and agenda.json aside
+ * (renamed to <file>.g3-<stamp>.bak), so a run never inherits an open task from an earlier one (a (c) task
+ * must not run in (d) under the production giver list) and the agenda autostarts as on a fresh bot. There is
+ * no G3 gate inside: this driver is the G3 driver, and only the G3 scenarios start it (DRIVER.md, "G3").
+ * Then keep only the newest `keep` of the driver's own backups per state file and delete the older ones
+ * (the stamps sort by time); nothing else in the folder is touched. dir is ./bots/<name> relative to the
+ * cwd main.js and its agent run in (they inherit the driver's). Returns {dir, movedAside, pruned, fresh}.
  */
-export function clearBotState(dir, { stamp = new Date().toISOString().replace(/[:.]/g, '-') } = {}) {
+export function clearBotState(dir, { stamp = new Date().toISOString().replace(/[:.]/g, '-'), keep = KEEP_BACKUPS } = {}) {
     const movedAside = [];
+    const pruned = [];
     for (const f of BOT_STATE_FILES) {
         const p = path.join(dir, f);
         if (!fs.existsSync(p)) continue;
@@ -165,8 +171,19 @@ export function clearBotState(dir, { stamp = new Date().toISOString().replace(/[
         fs.renameSync(p, to);
         movedAside.push(path.basename(to));
     }
+    if (fs.existsSync(dir)) {
+        const names = fs.readdirSync(dir);
+        for (const f of BOT_STATE_FILES) {
+            const prefix = `${f}.g3-`;
+            const baks = names.filter((n) => n.startsWith(prefix) && n.endsWith('.bak')).sort();
+            for (const n of baks.slice(0, Math.max(0, baks.length - keep))) {
+                fs.rmSync(path.join(dir, n));
+                pruned.push(n);
+            }
+        }
+    }
     const left = BOT_STATE_FILES.filter((f) => fs.existsSync(path.join(dir, f)));
-    return { dir, movedAside, fresh: left.length === 0 };
+    return { dir, movedAside, pruned, fresh: left.length === 0 };
 }
 
 /** A free local TCP port for the MindServer (bound to localhost by Mindcraft). */
