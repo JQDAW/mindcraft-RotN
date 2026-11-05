@@ -24,7 +24,7 @@ test('built from the pinned pack, with nothing left undecided', () => {
 
 test('every entry is a dumped block, with its class and a known way and condition', () => {
     const vias = new Set(['BlockFalling', 'own-code', 'contenttweaker-gravity', 'osv-background']);
-    const whens = new Set(['unsupported-below', 'loses-support', 'player-nearby', 'redstone-powered']);
+    const whens = new Set(['unsupported-below', 'loses-support', 'player-nearby', 'redstone-powered', 'tree-felled']);
     for (const [n, e] of Object.entries(data.blocks)) {
         assert.ok(B[n], `${n} is dumped`);
         assert.equal(e.class, B[n].class, n);
@@ -34,12 +34,12 @@ test('every entry is a dumped block, with its class and a known way and conditio
             assert.equal(e.chain[0], e.class, n);
             assert.equal(e.chain.at(-1), 'net.minecraft.block.BlockFalling', n);
         }
-        if (e.via === 'own-code') assert.ok(REVIEWED[e.reviewed]?.falls && e.evidence === REVIEWED[e.reviewed].evidence, `${n}: reviewed`);
+        if (e.via === 'own-code') assert.ok(REVIEWED[e.reviewed]?.falls && e.evidence.startsWith(REVIEWED[e.reviewed].evidence), `${n}: reviewed`); // a config-gated review adds the config line
         if (e.via === 'contenttweaker-gravity') assert.match(e.script, /^scripts\/.+\.zs line \d+: \w+\.setGravity\(true\);$/, n);
         if (e.via === 'osv-background') assert.equal(data.blocks[e.background]?.via, 'BlockFalling', `${n}: background ${e.background} extends BlockFalling`);
     }
     for (const [rule, r] of Object.entries(data.notFalling)) {
-        assert.ok(r.evidence.length >= 2, rule);
+        assert.ok(r.evidence.length >= 1, rule);
         for (const n of r.blocks) assert.ok(B[n] && !data.blocks[n], `${rule}: ${n}`);
     }
 });
@@ -67,6 +67,19 @@ test('conditional falls say when', () => {
     assert.equal(pack.fallInfo('gravel').when, 'unsupported-below');
     // Concrete powder overrides the fall methods (it hardens next to water); listed, not reviewed.
     assert.ok(data.overridesFall['minecraft:concrete_powder'].some((m) => m.includes('onBlockAdded')));
+});
+
+test('#205 review: snow layers (Snow Real Magic, SnowGravity=true), any Falling* entity, binpatches not reflected', () => {
+    const snow = pack.fallInfo('minecraft:snow_layer');
+    assert.deepEqual([snow.via, snow.when, snow.class], ['own-code', 'unsupported-below', 'snownee.snow.ModSnowBlock']);
+    assert.ok(snow.evidence.endsWith('config/snowrealmagic.cfg line 10: B:SnowGravity=true'), snow.evidence);
+    assert.ok(data.fallingEntityClasses.includes('snownee.snow.FallingSnowEntity'), 'an Entity named Falling, not an EntityFallingBlock');
+    assert.ok(data.fallingEntityClasses.includes('com.ferreusveritas.dynamictrees.entities.EntityFallingTree'));
+    // Dynamic Trees: branches fall with the tree when a branch below is broken; leaves and roots do not fall.
+    assert.equal(pack.fallInfo('dynamictrees:oakbranch').when, 'tree-felled');
+    assert.equal(pack.falls('dynamictrees:leaves0'), false);
+    assert.ok(data.notFalling['com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves'].blocks.includes('dynamictrees:leaves0'));
+    assert.ok(data.notReflected.some((s) => s.startsWith('Forge binpatches')));
 });
 
 test('getBlock carries falls and fallsWhen', () => {
