@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T20:12Z (from `date -u`)
+Updated: 2026-11-05T20:13Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -365,6 +365,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Tests: `action_limits` 5/5 (the late-window test deposits on develop), `use_on` 11/11 (the collect test goes on before the break ends on develop). Related: 10 files pass. Lint 254.
 - **Next (lead):** review the follow-up PR; G3 smoke round 2.
+- **G3 smoke round 2 running (lead, received before 2026-11-05T20:13Z by `date -u`, about 2 hours):** until the lead says it is over: no `npm ci`, no full `npm test`, no long node scripts; targeted test files only, one at a time.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
