@@ -13,6 +13,7 @@
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { isSturdy, shelterShell, dumpState } from './night.js';
+import { loadRotnData, PACK_VERSION, registryName } from '../../../packages/rotn-data/index.js';
 import { toolLevels } from './rotn_sources.js';
 import { log, breakBlockAt, goToGoal } from './skills.js';
 
@@ -22,13 +23,19 @@ const HAZARD = /lava|fire/;
 /** How long a placement's block update may come late (P1 measured up to 1158 ms) before a retry. */
 export const LATE_UPDATE_MS = 1200;
 
-const isLiquid = (b) => !!b && (/water|lava/.test(b.name ?? '') || dumpState(b)?.liquid === true);
-const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) && !/fire/.test(b.name ?? '');
+export const isLiquid = (b) => !!b && (/water|lava/.test(b.name ?? '') || dumpState(b)?.liquid === true);
+export const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) && !/fire/.test(b.name ?? '');
 const isSolid = (b) => !!b && b.boundingBox === 'block';
-/** Gravel, sand, concrete powder (material sand), anvils and the dragon egg fall when undermined. */
-const isFalling = (b) => {
+/** A block that falls when undermined: rotn-data's falls() (#205), else gravel, sand, concrete powder, anvils, the dragon egg. */
+export const isFalling = (b) => {
+    if (typeof b?.name !== 'string' || !b.name) return false;
+    // rotn-data's per-block gravity (#205: BlockFalling and the pack's modded falling blocks).
+    let falls = null;
+    try { falls = loadRotnData(PACK_VERSION).falls(registryName(b.name)); } catch { falls = null; }
+    if (typeof falls === 'boolean') return falls;
+    // A block rotn-data does not know: judged by name and material, as before.
     const st = dumpState(b);
-    return /sand|gravel|anvil|dragon_egg|concrete_powder/.test(b?.name ?? '') || ['sand', 'anvil', 'dragon_egg'].includes(st?.material);
+    return /sand|gravel|anvil|dragon_egg|concrete_powder/.test(b.name) || ['sand', 'anvil', 'dragon_egg'].includes(st?.material);
 };
 const key = (p) => `${p.x},${p.y},${p.z}`;
 const at = (p) => `${p.x}, ${p.y}, ${p.z}`;
@@ -154,10 +161,29 @@ async function centerIn(bot, p, { timeoutMs = 2000 } = {}) {
     return off() <= 0.15;
 }
 
+/** Entity types that block a placement: mobs and players (mineflayer's 1.12 'mob', and the newer names). */
+const BODY_TYPES = ['player', 'mob', 'hostile', 'animal', 'passive', 'ambient', 'water_creature'];
+
+/**
+ * A mob or player (not the bot) standing in the cell, which a block cannot be placed into.
+ * Dropped items, XP orbs and arrows do not count (#204 re-review 2).
+ */
+export function mobIn(bot, cell) {
+    return Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position && BODY_TYPES.includes(e.type)
+        && Math.floor(e.position.x) === cell.x && Math.floor(e.position.z) === cell.z
+        && e.position.y > cell.y - (e.height ?? 1.8) && e.position.y < cell.y + 1) ?? null;
+}
+
 /** One placement of a sturdy block at target against a solid neighbour outside the 1x2 space. */
 async function placeOnce(bot, target, interior) {
     const item = shelterItems(bot)[0];
     if (!item) return false;
+    const mob = mobIn(bot, target);
+    if (mob) {
+        // #204 nit: say why the cell stays open, instead of a placement that fails without a word.
+        log(bot, `Cannot close ${at(target)}: ${mob.name ?? mob.displayName ?? 'a mob'} stands in it.`);
+        return false;
+    }
     const refPos = supportFor(target, interior, (q) => isSolid(bot.blockAt(q)));
     if (!refPos) return false;
     const ref = bot.blockAt(refPos);
@@ -193,16 +219,19 @@ async function fillCell(bot, target, interior) {
  * It needs a pickaxe that can dig the walls, so the bot can always get out again (#195 review 2).
  * Each line it logs comes from the bot's own view of the world, never from a command's chat reply.
  * @param {{site?: Vec3, radius?: number}} [opts] site: repair the shelter at this feet position.
- * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[]}>}
+ * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], line: string}>} line: what it logged.
  */
 export async function buildShelter(bot, { site = null, radius = 4 } = {}) {
     const plan = site ? siteNeeds(bot, site) : chooseSite(bot, radius);
-    const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing }; };
+    const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, line }; };
     if (!plan)
         return refuse(null, [], site ? `Cannot repair the shelter at ${at(site.floored())}: the space or its floor is not usable.`
             : `Found no place for a shelter within ${radius} blocks (needs a solid floor, a free 1x2 space, safe digging and a face for every block).`);
     const { feet } = plan;
     if (plan.unsafe) return refuse(feet, plan.todo, `Cannot build the shelter at ${at(feet)}: ${plan.unsafe}.`);
+    // chooseSite never returns such a site; a site the caller names is checked too (#195 nit).
+    if (plan.unsupported.length > 0)
+        return refuse(feet, plan.todo, `Cannot build the shelter at ${at(feet)}: nothing to place a block against at ${plan.unsupported.map(at).join('; ')}.`);
     const level = exitLevel(bot, feet);
     if (!toolLevels(bot, 'pickaxe').some(l => l >= level))
         return refuse(feet, plan.todo, `Not building a shelter at ${at(feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`);
@@ -244,9 +273,9 @@ export async function buildShelter(bot, { site = null, radius = 4 } = {}) {
     const missing = wallsAndRoof(feet).filter(q => !isSturdy(bot.blockAt(q)));
     const floor = bot.blockAt(feet.offset(0, -1, 0));
     const floorNote = isSturdy(floor) ? '' : ` The floor is ${floor?.name ?? 'unknown'}, not rock.`;
-    if (missing.length === 0)
-        log(bot, `Shelter closed at ${at(feet)}: placed ${placed} blocks.${floorNote}`);
-    else
-        log(bot, `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(at).join('; ')}); placed ${placed}.`);
-    return { closed: missing.length === 0, feet, placed, missing };
+    const line = missing.length === 0
+        ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${floorNote}`
+        : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(at).join('; ')}); placed ${placed}.`;
+    log(bot, line);
+    return { closed: missing.length === 0, feet, placed, missing, line };
 }

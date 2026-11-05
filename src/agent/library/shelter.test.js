@@ -228,3 +228,46 @@ test('D2b: !buildShelter runs as an action; unstuck leaves the bot alone only wh
     await mode.update(a);
     assert.ok(mode.stuck_time > 1, 'standing still is counted as stuck again');
 });
+
+test('#195 nit: a site the caller names is refused, not half-built, when a cell has nothing to be placed against', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const set = {};
+    for (let x = -5; x <= -1; x++) for (let z = -5; z <= 5; z++) for (let y = 60; y < 64; y++) set[`${x},${y},${z}`] = 'air';
+    const { bot, placed } = fakeBot({ set });
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0) });
+    assert.equal(r.closed, false);
+    assert.deepEqual(placed, []);
+    assert.match(r.line, /Cannot build the shelter at 0, 64, 0: nothing to place a block against at -1, 64, 0; -1, 65, 0\./);
+});
+
+test('#204 nit 7: a mob standing in a wall cell is named, and that cell stays open', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, placed } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+    bot.entities = { 1: bot.entity, 7: { name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95 } };
+    const r = await buildShelter(bot);
+    assert.equal(r.closed, false);
+    assert.deepEqual(placed, []);
+    assert.match(bot.output, /Cannot close 1, 64, 0: zombie stands in it\./);
+});
+
+test('isFalling uses rotn-data falls() (#205): soul sand (material sand) does not fall, gravel and anvils do', async () => {
+    const { isFalling } = await import('./shelter.js');
+    const b = (name) => ({ name, metadata: 0 });
+    assert.equal(isFalling(b('gravel')), true);
+    assert.equal(isFalling(b('anvil')), true);
+    assert.equal(isFalling(b('soul_sand')), false, 'the material rule alone said it falls');
+    assert.equal(isFalling(b('cobblestone')), false);
+});
+
+test('#204 re-review 2: only mobs and players block a cell, not dropped items, XP orbs or arrows', async () => {
+    const { mobIn } = await import('./shelter.js');
+    const cell = new Vec3(1, 64, 0);
+    const at = new Vec3(1.5, 64, 0.5);
+    const self = { type: 'player', position: new Vec3(0.5, 64, 0.5) };
+    const bot = (e) => ({ entity: self, entities: { 0: self, 1: e } });
+    for (const type of ['object', 'orb', 'global', 'other'])
+        assert.equal(mobIn(bot({ type, name: type === 'object' ? 'item' : 'xp_orb', position: at }), cell), null, type);
+    assert.equal(mobIn(bot({ type: 'mob', name: 'zombie', position: at }), cell)?.name, 'zombie');
+    assert.equal(mobIn(bot({ type: 'player', username: 'JQDAW', position: at }), cell)?.username, 'JQDAW');
+    assert.equal(mobIn(bot({ type: 'hostile', name: 'skeleton', position: at }), cell)?.name, 'skeleton');
+});
