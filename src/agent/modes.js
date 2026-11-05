@@ -24,6 +24,21 @@ async function say(agent, message) {
 // update: the function that is called every tick (if on is true)
 // when a mode is active, it will trigger an action to be performed but won't wait for it to return output
 
+/**
+ * Modes that would walk, dig or light the bot out of its night shelter (D2b-2). They are quiet while
+ * the night routine has it sheltered (bot.rotnSheltered true). When a wall is open
+ * (bot.rotnSheltered 'open') self_defense acts again, so the bot fights at the opening.
+ * self_preservation (fire, lava, a falling block on its head) always acts.
+ */
+export const SHELTER_QUIET_MODES = ['cowardice', 'self_defense', 'hunting', 'item_collecting', 'torch_placing', 'elbow_room', 'unstuck'];
+export function shelterQuiet(name, bot) {
+    let sheltered = false;
+    try { sheltered = bot?.rotnSheltered ?? false; } catch { return false; } // the loop must survive any bot (A3)
+    if (sheltered === true) return SHELTER_QUIET_MODES.includes(name);
+    if (sheltered === 'open') return name !== 'self_defense' && SHELTER_QUIET_MODES.includes(name);
+    return false;
+}
+
 // the order of this list matters! first modes will be prioritized
 // while update functions are async, they should *not* be awaited longer than ~100ms as it will block the update loop
 // to perform longer actions, use the execute function which won't block the update loop
@@ -553,6 +568,7 @@ class ModeController {
             this.unPauseAll();
         }
         for (let mode of modes_list) {
+            if (shelterQuiet(mode.name, _agent.bot)) continue; // D2b-2: inside a closed night shelter
             let interruptible = mode.interrupts.some(i => i === 'all') || mode.interrupts.some(i => i === _agent.actions.currentActionLabel);
             if (mode.on && !mode.paused && !mode.active && (_agent.isIdle() || interruptible)) {
                 // One throwing mode must not stop the others or the update loop (skills-rotn A3).

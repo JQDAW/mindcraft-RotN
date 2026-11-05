@@ -18,8 +18,7 @@
 // `overridesFall` lists falling blocks whose own class overrides one of the three methods that
 // start a fall, so the fall may be conditional (e.g. concrete powder hardens next to water);
 // those overrides are listed, not reviewed.
-// Not reflected: coremod or mixin changes to gravity, and blocks that fall through a helper
-// class (the reference must be in the block's own class chain).
+// Not reflected (also in the output's notReflected): see NOT_REFLECTED below.
 //
 // Usage: node packages/rotn-data/tools/build-falling-blocks.mjs --pack <server-pack.zip> [--check]
 //   needs `xz` on PATH (for the Forge jar's LZMA table); --check compares with the committed file.
@@ -41,10 +40,16 @@ const SRG_ENTRY = 'deobfuscation_data-1.12.2.lzma';
 const FALLING = 'net/minecraft/block/BlockFalling';
 const FALLING_ENTITY = 'net/minecraft/entity/item/EntityFallingBlock';
 const BLOCK = 'net/minecraft/block/Block';
+const ENTITY = 'net/minecraft/entity/Entity';
 // BlockFalling's methods that start a fall (SRG names, from the same table:
 // onBlockAdded, neighborChanged, updateTick). checkFallable (func_176503_e) is private.
 const FALL_METHODS = { func_176213_c: 'onBlockAdded', func_189540_a: 'neighborChanged', func_180650_b: 'updateTick' };
 
+const NOT_REFLECTED = [
+    'Forge binpatches: minecraft_server.1.12.2.jar is read as shipped; binpatches.pack.lzma in the Forge jar (pack200 inside LZMA) patches vanilla classes at load time and is not applied here, so a Forge change to a vanilla block class (its superclass or the methods that start a fall) is not seen',
+    'coremod and mixin changes to gravity (the class files are read as shipped, before any transformer)',
+    'blocks that fall through a helper class outside their own class chain (the falling-entity reference must be in the block class or a superclass below net.minecraft.block.Block)',
+];
 const OSV_CFG = 'config/osv.cfg';
 const OSV_VARIANT = 'com/personthecat/orestonevariants/blocks/BaseOreVariant';
 const COT_BLOCK = 'com/teamacronymcoders/contenttweaker/modules/vanilla/blocks/BlockContent';
@@ -54,6 +59,7 @@ const COT_BLOCK = 'com/teamacronymcoders/contenttweaker/modules/vanilla/blocks/B
 // `when`: 'unsupported-below' = falls like sand when the block under it can be fallen through,
 // 'loses-support' = falls only when it loses what holds it (hanging or standing),
 // 'player-nearby' = falls when a player comes close, 'redstone-powered' = falls when powered.
+// 'tree-felled' = falls with its tree when a branch below it is broken (Dynamic Trees).
 // Every BlockFalling subclass counts as 'unsupported-below' (its overrides are in overridesFall).
 const UB_SAND = (c) => ({
     falls: true, when: 'unsupported-below',
@@ -97,6 +103,30 @@ export const REVIEWED = {
     'vazkii.quark.automation.block.BlockGravisand': {
         falls: true, when: 'redstone-powered',
         evidence: 'QuarkRotN-r1.6-190.jar: BlockGravisand.checkRedstone calls World.isBlockPowered (func_175640_z, bytecode 2) before tryFall, which spawns an EntityGravisand (an EntityFallingBlock subclass, 35-73); scripts/jei_descriptions.zs line 417: it "will only fall when activated with redstone" and floats up when it is already on the ground',
+    },
+    'com.ferreusveritas.dynamictrees.blocks.BlockBranch': {
+        falls: true, when: 'tree-felled',
+        evidence: 'DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockBranch.dominoBreak calls EntityFallingTree.dropTree with DestroyType.HARVEST (bytecode 68-71): when a branch is broken, the part of the tree it held falls as one EntityFallingTree (an entity named Falling, #205 review); breakBlock (func_180663_b) uses sloppyBreak and VOID otherwise',
+    },
+    'com.ferreusveritas.dynamictrees.blocks.BlockRooty': {
+        falls: false,
+        evidence: 'DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockRooty.destroyTree drops the tree with DestroyType.BLAST (bytecode 72-75); the rooty block itself does not fall',
+    },
+    'com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves': {
+        falls: false,
+        evidence: 'DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockDynamicLeaves names EntityFallingTree only in addCollisionBoxToList (func_185477_a, bytecode 53), a collision check; the leaves do not fall by themselves (whether a felled tree entity carries them was not traced)',
+    },
+    'com.ferreusveritas.dynamictrees.blocks.BlockSurfaceRoot': {
+        falls: false,
+        evidence: 'DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockSurfaceRoot names EntityFallingTree only in addCollisionBoxToList (func_185477_a, bytecode 2), a collision check',
+    },
+    'com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell': {
+        falls: false,
+        evidence: 'DramaticTrees-1.12.2-0.13.4.jar (its com.ferreusveritas.dynamictrees classes are the ones the dumped blocks use): BlockTrunkShell names EntityFallingTree only in addCollisionBoxToList (func_185477_a, bytecode 2), a collision check',
+    },
+    'snownee.snow.ModSnowBlock': {
+        falls: true, when: 'unsupported-below', config: { file: 'config/snowrealmagic.cfg', key: 'SnowGravity' },
+        evidence: 'SnowRealMagic-1.12.2-0.7.4.jar: ModSnowBlock replaces minecraft:snow_layer (it is the dumped class); onBlockAdded (func_176213_c) and neighborChanged (func_189540_a) read ModConfig.snowGravity first (bytecode 0), updateTick (func_180650_b, 12) calls checkFallable, which spawns a snownee.snow.FallingSnowEntity (an Entity, not an EntityFallingBlock; 83-126)',
     },
     'thedarkcolour.futuremc.block.villagepillage.ScaffoldingBlock': {
         falls: true, when: 'loses-support',
@@ -255,7 +285,12 @@ export function buildFallingBlocks(packPath) {
     const dot = (c) => c.replace(/\//g, '.');
 
     // Falling-entity classes: EntityFallingBlock and every class on the pack that extends it.
-    const fallingEntities = new Set([...classes.keys()].filter((c) => chainOf(c).chain.includes(FALLING_ENTITY)));
+    // Falling-entity classes: EntityFallingBlock and its subclasses, and any other entity class whose
+    // simple name says Falling (Snow Real Magic's FallingSnowEntity extends Entity directly; #205 review).
+    const fallingEntities = new Set([...classes.keys()].filter((c) => {
+        const ch = chainOf(c).chain;
+        return ch.includes(FALLING_ENTITY) || (ch.includes(ENTITY) && /Falling/.test(c.slice(c.lastIndexOf('/') + 1)));
+    }));
     // Pack settings the rules read (cited by line).
     const osvCfg = zipRead(zipBuf, top.get(OSV_CFG)).toString('utf8').split(/\r?\n/);
     const osvLine = osvCfg.findIndex((l) => /^\s*B:bgImitation=/.test(l));
@@ -328,8 +363,19 @@ export function buildFallingBlocks(packPath) {
             else noFall('contenttweaker', name);
         } else if (reviewed) {
             const r = REVIEWED[reviewed];
+            if (r.config) {
+                // A config-gated fall: the pack's setting decides, cited by line.
+                const lines = zipRead(zipBuf, top.get(r.config.file)).toString('utf8').split(/\r?\n/);
+                const i = lines.findIndex((l) => l.trim() === `B:${r.config.key}=true` || l.trim() === `B:${r.config.key}=false`);
+                if (i < 0) throw new Error(`${r.config.file}: no B:${r.config.key}`);
+                const on = lines[i].trim().endsWith('=true');
+                const ev = `${r.evidence}. The pack: ${r.config.file} line ${i + 1}: ${lines[i].trim()}`;
+                if (on) blocks[name] = { via: 'own-code', class: b.class, reviewed, when: r.when, evidence: ev, jar: classes.get(reviewed.replace(/\./g, '/')).jar };
+                else (notFalling[reviewed] ??= { falls: false, evidence: [ev], blocks: [] }).blocks.push(name);
+                continue;
+            }
             if (r.falls) blocks[name] = { via: 'own-code', class: b.class, reviewed, when: r.when, evidence: r.evidence, jar: classes.get(reviewed.replace(/\./g, '/')).jar };
-            else noFall(reviewed, name);
+            else (notFalling[reviewed] ??= { falls: false, evidence: [r.evidence], blocks: [] }).blocks.push(name);
         } else {
             unreviewed[name] = { class: b.class, refsIn: refBy.map(dot), jar: classes.get(refBy[0]).jar };
         }
@@ -355,6 +401,7 @@ export function buildFallingBlocks(packPath) {
         notFalling,
         unreviewed,
         unresolved,
+        notReflected: NOT_REFLECTED,
     };
 }
 

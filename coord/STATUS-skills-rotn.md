@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-04T23:30Z (from `date -u`)
+Updated: 2026-11-05T01:25Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -202,6 +202,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 12. ~~rotn-data (from D2c, #186): a structured do-not-look field~~: **done in rotn-data #187** (`lookAt`). #190 switches `threats.js` to `lookAt === false`, which now also covers the ender creeper and the cockatrice. The data notes (the gorgon, ender dragon, wither, ghast, blaze, zombie horse) are **done in rotn-data #188**: the gorgon is now `avoid` with `lookAt: false`, rechecked on develop and asserted in #190's test.
 13. ~~Lead: `prismarine-recipe` as a direct dependency~~: the lead is adding 1.5.0 in a lead PR (2026-11-04).
 14. **net-forge (FYI, via the lead):** C1 follows your Request 2 rules: `bot.craft(recipe, 1, table)` with a prismarine-recipe `Recipe` built from bot.registry ids and canFill's real stack metas (never 32767), the result with rotn-data's exact count and meta, NBT results and `remaining` refused, and auto-eat paused around the craft.
+14. ~~rotn-data (via the lead, #206 review 1)~~ (answered by rotn-data #209: `foodValues`, `avoidFood`, `installFoods`): export `foodOf(name, meta)`, returning `{ hunger, saturation }` with the pack's `scripts/food.zs` values on top of the dump (bread 3, not 5), or `null` for a non-food. `food.js` uses it as soon as it exists, and a skipped test then checks bread 3. Also wanted: a structured "harmful food" field with sources, so `AVOID_FOODS` can leave the code.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
 
 ## Open PRs
@@ -221,7 +222,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   4. nit 4: no free space for a table logs that, instead of a TypeError.
 
   Item 5: tests for the 2x2-grid canFill crafts (the crude axe twice; Crafting Tools from a damaged crude axe, never the wildcard meta), the stop on no gain, and the table picked up once after a throw and after a craft. Tests: `craft_needs.test.js` 26/26 (the 5 new ones fail on the old `skills.js`); `src/agent/**` 209/209; lint 254.
-- **D2b-1, `!buildShelter`: #195 open** (branch `agent/skills-rotn/shelter-build`, base develop). `library/shelter.js` builds a closed 1x2 space with sturdy walls and roof from inside:
+- **D2b-1, `!buildShelter`: #195 merged** (branch `agent/skills-rotn/shelter-build`, base develop). `library/shelter.js` builds a closed 1x2 space with sturdy walls and roof from inside:
   - it picks the site within 4 blocks that needs the fewest blocks;
   - it counts first: 10 blocks on open ground, including a roof prop;
   - it digs and replaces dirt or wood in the walls;
@@ -239,11 +240,63 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     7. the fake world models the hitbox, reach, falling blocks, liquids, a ledge and late updates.
 
     Reply posted. Tests: `shelter.test.js` 10/10; `src/agent/**` 210/210; lint 254.
-- **Next:**
-  1. the #195 review, and the #198 follow-up **#202** (branch `agent/skills-rotn/craft-table-finally`, lead request on #198):
-     - `craftRecipe`'s own path places its table through `CRAFT_TABLE_OPS.place`, which guards a missing free space;
-     - a table it placed is picked up in a `finally`, also when `bot.craft` throws, and only once when `craftByFill` takes over;
-     - tests: placed and picked up after a craft and after a throw; a found table stays; placed and then the canFill craft (one pick-up); no free space; a 4-stick result on a held stack, counted by the gain.
+- **#202** (the #198 follow-up: `craftRecipe` picks up a table it placed in a `finally`, and guards a missing free space): approved by the lead, merge pending.
+- **D2b-2, the night routine: #204 open** (branch `agent/skills-rotn/night-routine`). `src/agent/night_routine.js`, `nightTick`, sits in the priority stack after control holds and before tasks. No LLM calls.
+  - **Dusk:** at `SHELTER_LEAD_MIN` before sunset (by `NightClock`), it stops the self-prompter at the checkpoint and builds a shelter. A task or the agenda that was running resumes later with no new run.
+  - **Inside:** every 10 s it repairs a breach at the same site. If the bot was pushed, teleported or walked out, it builds a new shelter where the bot is.
+  - **Full daylight:** after the sunrise, it digs out one side with no liquid outside and hands back to tasks and the agenda.
+  - **No shelter:** after 3 tries (30 s apart) the bot stays put until morning ("exposed").
+  - **Modes:** while sheltered, the modes that would walk, dig or light the bot out are quiet (`SHELTER_QUIET_MODES`). `self_defense` comes back while a wall is open; `self_preservation` always acts.
+  - **Agenda:** the cobblestone step aims for 10, the open-ground shelter.
+  - `settings.night_shelter: false` turns the routine off (lead-owned settings; default on).
+  - **Review nits folded in:** a crafting table whose block update comes late is found on a second look; tests for placed=true into `craftByFill` with no recipe id and with a 2x2 recipe; a site the caller names is refused when a cell has no support.
+  - Tests: `night_routine.test.js` 9/9; `shelter.test.js` 11/11; `craft_needs.test.js` 33/33; `src/agent/**` 236/236; lint 254.
+  - **#204 review (REQUEST CHANGES), fixed in `a36c3cd1`, reply posted:**
+    1. while a reflex acts nothing starts, and an interrupted build is not a try;
+    2. an unusable shelter (fire, lava, a block inside) is left for a new one;
+    3. at dusk a running action gets 60 s, then it is stopped; at night at once;
+    4. a giver's typed `!goal` runs first, and the giver is told once;
+    5. `digOut` uses the build's safety checks and verifies the exit;
+    6. reset on death and spawn (`Agent.bindNightReset`) and when the routine is off;
+    7. nit: a mob in a wall cell is named.
 
-     `craft_needs.test.js` 31/31 (the 3 placed-table tests fail on the old `skills.js`); `src/agent/**` 214/214; lint 254;
-  2. D2b-2, the night routine: a shelter step at dusk (`NightClock`, `SHELTER_LEAD_MIN`); stay in at night; repair with `buildShelter({ site })`; fight only at the opening (`nightThreatNote`); leave at daylight; `torch_placing` kept off in the shelter (it is on by default); the shortfall over the cobblestone step's 8 gathered.
+    Tests: `night_routine.test.js` 16/16; `shelter.test.js` 12/12; `src/agent/**` 244/244; lint 254.
+  - **Develop merged in** (`28c2bbfc`, after #202's squash merge; I kept this branch's side, which only adds to the #202 tip); GitHub reports the PR as mergeable. `isFalling` now uses rotn-data's `falls()` from #205 (`2d653a4d`). `src/agent/**` 245/245; lint 254.
+  - **#204 re-review (lead: two fixes, then merge), fixed in `66640bbc`, reply posted:**
+    1. a giver's `!goal` or typed command from inside the shelter clears `rotnSheltered` and sets the state to building, so the bot shelters again after it; `!stop` and `!pause` keep it sheltered;
+    2. `mobIn` counts only mobs and players.
+
+    Develop (#211) was merged in first. Tests: `night_routine.test.js` 17/17; `shelter.test.js` 14/14; `src/agent/**` 250/250; lint 254; mergeable.
+  - **Lead decisions on #204 (2026-11-04), recorded in the PR:**
+    1. no shelter possible: idle until morning with reflexes is accepted for now; the G3 (b) smoke run shows whether a dig-into-a-hillside fallback is needed;
+    2. night above tasks is accepted; typed commands, `!stop` and `!pause` still act at once.
+- **Security fix (lead, required before D1b): #211 merged** (branch `agent/skills-rotn/task-giver-recheck`).
+  - A stored task's giver is checked again with the current settings when the task starts and when a task stored as active is taken over (after a restart).
+  - A giver who is no longer listed gets the task cancelled: `task <id> dropped: its giver <giver> is no longer a task giver`, with no task text, and its restored goal is stopped.
+  - A takeover now says `task <id> started: …`.
+  - Tests: `priority.test.js` 28/28 (the 3 new ones fail on the old code); `src/agent/**` 227/227; lint 254.
+- **Next (lead order):**
+  1. #204's merge and #206's re-review;
+  2. D1: eating, and re-planning after teleports (AggroTP) or invasions:
+     - **D1a, eating: #206 open** (branch `agent/skills-rotn/eating`). An `eating` mode eats by rotn-data's food values (auto-eat sees only vanilla foods and ate the bread first; it is off now):
+       - at food 12 or lower when idle, and at 6 or lower during an action;
+       - never hawthorn berries, cloudsbluff or the vanilla bad foods;
+       - bread only when nothing else is left.
+
+       Tests: `food.test.js` 5/5; `src/agent/**` 224/224; lint 254. Request to rotn-data (via the lead) in the PR: a structured "harmful food" field.
+       - **#206 review (REQUEST CHANGES), fixed in `cd765ae6`, reply posted:**
+         1. pack food values through rotn-data's `foodOf` when it exists; until then the dump's vanilla values, said once; no test pins vanilla values; the pack check (bread 3) is skipped until `foodOf` exists (Request 14);
+         2. a consume that times out is judged by the food level and the item count after 1 s; the mode backs off 10 s, then 20 s, and gives up a food after 3 failures;
+         3. `eating` now comes before `cowardice` and `self_defense`, so the bot eats at food 6 or lower in a fight; at 12 or lower only when idle with no threat near.
+
+         Tests: `food.test.js` 8/8 plus 1 skipped; `src/agent/**` 227/227 plus 1 skipped; lint 254.
+       - **On rotn-data #209 (merged), in `bb57f4e4`:**
+         - develop merged in (not rebased: no force-push);
+         - pack food values from `foodValues` (bread 3, beef 2, berries 1; an estimate for not-computed foods);
+         - foods to avoid from `avoidFood` by meta, plus a short cited local list (hawthorn, chorus fruit, golden apples);
+         - auto-eat's `bannedFood` from the same list, by name (all of `fish`, as auto-eat cannot see `fish:3`); auto-eat stays off.
+
+         Tests: `food.test.js` 10/10; `src/agent/**` 237/237; lint 254; mergeable. Request 14 is answered by #209.
+       - **Lead (2026-11-05):** #206 waits for rotn-data's pack food values PR. When that merges, I bring #206 up to date by **merging** develop in, not rebasing: rebasing a pushed branch needs a force-push, which the rules forbid. Then I drop the `foodOf` fallback check if the API differs, and the skipped bread-3 test runs.
+     - **D1b next:** re-plan after a position jump of 5 or more blocks (AggroTP), and after the **hordes title text** (lead: match that text, not any title);
+  3. D3: the death report.
