@@ -2,7 +2,7 @@
 
 **Result in one line:** the real agent (FRCFLD, `openrouter/@preset/glm-5-1-mindcraft`) crafted the crude axe and Crafting Tools. It then got stuck at the agenda's `crafting_table` step: `!useOn("pyrotech:crude_axe", "log")` never returned, and after 5 min of self-prompting the agenda paused itself. No table, no stone tools and no cobblestone. `no_cheat` also failed, on a false positive: the pack repeated its own two `gamerule` lines (see below).
 
-This is a smoke batch, not the gate.
+This is a smoke batch, not the gate. `batch.json` says `"smoke": true` (the lead, #218 review), so `g3-batch-check.mjs <batch.json> <result.json>...` (the gate claim check) refuses it, whatever a `result.json` here says about `gateValid` or `pass`. That field was added by hand after the run, the only hand edit here, because these batches ran before the field existed. Smoke is now the default, and only `batch.mjs --gate` writes `gate: true` (the lead, #220 decision).
 
 ## Run conditions
 

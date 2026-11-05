@@ -19,7 +19,7 @@ import { setImmediate } from 'node:timers';
 import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
 import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
-import { checkFiles, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds } from '../tools/g3-batch-check.mjs';
+import { checkFiles, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds, smokeBatchesUnder, batchKind } from '../tools/g3-batch-check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BATCH = path.join(HERE, '..', 'runner', 'batch.mjs');
@@ -184,13 +184,14 @@ describe('maxBatchUsd: USD 2, an equal gate parameter of every G3 scenario', () 
 
 /** batch.mjs with the fake runner, a fake key-usage file and a fake TEST_SERVER_CTL that records the fetch. */
 function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b', 'c'], key = KEY, usageFile = true, runExit = '0', fakeCloud = '1', breakUsage = '', hang = '', timeoutMin = null,
-    driver = ['node', 'driver.mjs'], preflight = false, mark = 'passed' } = {}) {
+    driver = ['node', 'driver.mjs'], preflight = false, mark = 'passed', mode = null } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-batch-'));
     const file = path.join(dir, 'usage.json');
     if (usageFile) fs.writeFileSync(file, JSON.stringify({ data: { usage, limit: 5, limit_remaining: 5 - usage } }));
     const ctl = path.join(dir, 'ctl.sh');
     fs.writeFileSync(ctl, `#!/usr/bin/env bash\necho "$*" >> "${fwd(path.join(dir, 'ctl.txt'))}"\n`);
     const args = [BATCH, ...(preflight ? [preflight === true ? '--preflight' : preflight] : []), '--max-batch-usd', maxUsd, '--logs-out', fwd(path.join(dir, 'logs')), '--summary', path.join(dir, 'batch.json')];
+    if (mode) args.push(mode);
     if (timeoutMin) args.push('--timeout-min', timeoutMin);
     for (const s of scenarios) args.push('--scenario', s, '--out', path.join(dir, `out-${s}`));
     args.push('--', ...driver);
@@ -460,7 +461,7 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
         assert.match(all(), /g3[\\/]foo[\\/]result\.json: a G3 result that no batch\.json covers/);
         fs.rmSync(path.join(root, 'g3', 'foo'), { recursive: true });
         // A real batch: batch.json at the batch folder, results nested below it.
-        put('g3/b1/batch.json', summary);
+        put('g3/b1/batch.json', { ...summary, gate: true, smoke: false });   // a gate batch (#220 decision: only --gate writes gate: true)
         put('g3/b1/a/result.json', res('g3-a', { pass: true }).result);
         put('g3/b1/b/result.json', res('g3-b').result);
         assert.deepEqual(checkEvidenceTree(root), []);
@@ -563,5 +564,68 @@ describe('`Server` is a test-only task giver: never in the production settings',
     test('the repo\'s settings.js has no Server giver', async () => {
         const s = (await import(new URL('../../settings.js', import.meta.url).href)).default;
         assert.deepEqual(giverProblems(s), []);
+    });
+});
+
+describe('smoke is the default; only --gate makes gate evidence (lead, #218 review and #220 decision)', () => {
+    const summary = { batchId: '20261105T1724-1', testMode: false, maxBatchUsd: 2, scenarios: [{ id: 'g3-a', runId: 'run-a', exit: 0 }], exit: 0 };
+    const res = { file: 'a/result.json', result: { gate: 'G3', scenario: 'g3-a', batch: '20261105T1724-1:2', runId: 'run-a', pass: true, gateValid: true } };
+    const A = ['--max-batch-usd', '2', '--logs-out', 'l', '--scenario', 'a', '--out', 'o', '--', 'node', 'd.mjs'];
+
+    test('the defaults: no flag is a smoke batch, --gate a gate batch; --smoke is not an argument', () => {
+        assert.deepEqual([parseBatchArgs(A).options.gate, parseBatchArgs(A).problems], [false, []]);
+        assert.deepEqual([parseBatchArgs(['--gate', ...A]).options.gate, parseBatchArgs(['--gate', ...A]).problems], [true, []]);
+        assert.match(parseBatchArgs(['--smoke', ...A]).problems.join('; '), /unknown argument '--smoke'/);
+    });
+
+    test('the summary: by default gate: false and smoke: true; only --gate writes gate: true', { timeout: 60000 }, async () => {
+        const smoke = await runBatch({ scenarios: ['a'] });
+        assert.deepEqual([smoke.summary.gate, smoke.summary.smoke], [false, true], smoke.out);
+        assert.match(smoke.out, /batch \S+: a SMOKE batch \(the default: gate: false, smoke: true, never gate evidence\)/);
+        const gate = await runBatch({ scenarios: ['a'], mode: '--gate' });
+        assert.deepEqual([gate.summary.gate, gate.summary.smoke], [true, false], gate.out);
+        assert.match(gate.out, /batch \S+: a GATE batch \(gate: true\)/);
+    });
+
+    test('the gate claim check accepts only gate: true (and not smoke: true)', () => {
+        assert.deepEqual(crossCheckBatch({ ...summary, gate: true, smoke: false }, [res], { gate: true }), []);
+        assert.deepEqual(crossCheckBatch({ ...summary, gate: true }, [res], { gate: true }), []);
+        assert.match(crossCheckBatch({ ...summary, smoke: true }, [res], { gate: true }).join('; '), /is a smoke batch \(smoke: true\): never gate evidence/);
+        assert.match(crossCheckBatch({ ...summary, gate: true, smoke: true }, [res], { gate: true }).join('; '), /smoke batch/);
+        assert.match(crossCheckBatch(summary, [res], { gate: true }).join('; '), /does not say gate: true \(only batch\.mjs --gate writes it\): not gate evidence/);
+        for (const v of ['true', 1, false, null]) assert.equal(crossCheckBatch({ ...summary, gate: v }, [res], { gate: true }).length, 1, `gate: ${JSON.stringify(v)}`);
+        assert.deepEqual(crossCheckBatch({ ...summary, smoke: true }, [res]), [], 'consistency alone does not look at the mode');
+        assert.deepEqual([batchKind({ gate: true }), batchKind({ smoke: true }), batchKind({ gate: true, smoke: true }), batchKind({}), batchKind({ gate: 'true' })],
+            ['gate', 'smoke', 'both', 'neither', 'neither']);
+    });
+
+    test('the evidence check rejects G3 results under a batch.json without gate: true, unless it is a smoke record', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-smoke-'));
+        const b = path.join(dir, 's1', 'batch.json');
+        fs.mkdirSync(path.join(dir, 's1', 'a'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 's1', 'a', 'result.json'), JSON.stringify(res.result));
+        const files = resultFilesUnder(path.join(dir, 's1'));
+        const write = (extra) => fs.writeFileSync(b, JSON.stringify({ ...summary, ...extra }));
+        write({});
+        assert.match(checkEvidenceTree(dir).join('; '), /says neither gate: true nor smoke: true, so its 1 G3 result\(s\) are rejected/);
+        write({ gate: true, smoke: true });
+        assert.match(checkEvidenceTree(dir).join('; '), /says both gate: true and smoke: true/);
+        write({ smoke: true });
+        assert.deepEqual(checkEvidenceTree(dir), [], 'a smoke record stays');
+        assert.deepEqual(smokeBatchesUnder(dir), ['s1/batch.json']);
+        assert.match(checkFiles(b, files, { gate: true }).join('; '), /smoke batch/, 'but never as gate evidence');
+        write({ gate: true, smoke: false });
+        assert.deepEqual(checkEvidenceTree(dir), []);
+        assert.deepEqual(checkFiles(b, files, { gate: true }), []);
+        assert.deepEqual(smokeBatchesUnder(dir), []);
+    });
+
+    test('the committed 2026-11-05 G3 smoke batches are marked smoke: true and never pass the gate claim check', () => {
+        const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'evidence', 'g3');
+        for (const name of ['g3a-20261105', 'g3b-20261105', 'g3cd-20261105']) {
+            const b = path.join(root, name, 'batch.json');
+            assert.equal(batchKind(JSON.parse(fs.readFileSync(b, 'utf8'))), 'smoke', name);
+            assert.match(checkFiles(b, resultFilesUnder(path.join(root, name)), { gate: true }).join('; '), /smoke batch/, name);
+        }
     });
 });

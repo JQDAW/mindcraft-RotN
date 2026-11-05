@@ -1,6 +1,7 @@
 {
   "batchId": "20261105T184615-20716",
   "testMode": false,
+  "smoke": true,
   "maxBatchUsd": 2,
   "scenarios": [
     {

@@ -3,7 +3,7 @@
 // batch wrapper, which deletes the server when it exits, whatever its exit code:
 //
 //   deploy/test-server.sh run --yes --ttl-hours 4 --seed 1880465901402976865 -- \
-//     node test/runner/batch.mjs --max-batch-usd 2 --logs-out captures/raw/g3/server --summary captures/raw/g3/batch.json \
+//     node test/runner/batch.mjs --gate --max-batch-usd 2 --logs-out captures/raw/g3/server --summary captures/raw/g3/batch.json \
 //       --timeout-min 15 --scenario g3-rocks-to-stone-tools --out captures/raw/g3-rocks \
 //       --timeout-min 55 --scenario g3-first-night --out captures/raw/g3-night \
 //       -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/<g3 test profile>.json
@@ -15,6 +15,9 @@
 //      creates the server: that runs these checks plus one usage reading, and exits 0 or 2 without running
 //      anything. Only after it passed does test-server.sh set ROTN_BATCH_PREFLIGHT=passed (never inherited),
 //      and inside a test-server run the batch refuses without it. The batch repeats the checks itself.
+//      Smoke is the default (lead, #220 decision): without --gate the summary says gate: false, smoke: true,
+//      and the batch is never gate evidence. Only --gate writes gate: true (smoke: false); g3-batch-check.mjs
+//      and the evidence check accept a G3 result as gate evidence only under a batch.json with gate: true.
 //   1. Reads the OpenRouter key's usage (numbers only; lib/llm-spend.mjs). If it cannot, it refuses to
 //      start (exit 2): a batch whose spend cannot be watched does not run.
 //   2. Before each scenario, reads the usage again. If the batch has spent MORE than --max-batch-usd since
@@ -100,11 +103,12 @@ export function endVerdict(base, end, maxBatchUsd, exit) {
     if (s > maxBatchUsd) return { exit: EXIT_SPEND_STOP, reason: `spent USD ${s} by the end of the batch, more than maxBatchUsd ${maxBatchUsd}` };
     return { exit, reason: null };
 }
+const modeText = (o) => (o.gate ? 'a GATE batch (gate: true)' : 'a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)');
 const log = (m) => console.error(`[batch ${new Date().toISOString().slice(11, 19)}] ${m}`);
 
-/** Arguments: [--preflight | --preflight-files] --max-batch-usd N --logs-out DIR [--summary FILE] ([--timeout-min M] --scenario ID --out DIR)+ -- DRIVER... */
+/** Arguments: [--preflight | --preflight-files] [--gate] --max-batch-usd N --logs-out DIR [--summary FILE] ([--timeout-min M] --scenario ID --out DIR)+ -- DRIVER... */
 export function parseBatchArgs(argv) {
-    const o = { preflight: false, readUsage: true, maxBatchUsd: null, logsOut: null, summary: null, scenarios: [], driver: [] };
+    const o = { preflight: false, readUsage: true, gate: false, maxBatchUsd: null, logsOut: null, summary: null, scenarios: [], driver: [] };
     const problems = [];
     let timeoutMin = 15;
     for (let i = 0; i < argv.length; i++) {
@@ -112,6 +116,8 @@ export function parseBatchArgs(argv) {
         if (a === '--') { o.driver = argv.slice(i + 1); break; }
         if (a === '--preflight') o.preflight = true;
         else if (a === '--preflight-files') { o.preflight = true; o.readUsage = false; }
+        // Smoke is the default; only --gate makes a gate batch (lead, #220 decision).
+        else if (a === '--gate') o.gate = true;
         else if (a === '--max-batch-usd') o.maxBatchUsd = Number(argv[++i]);
         else if (a === '--logs-out') o.logsOut = argv[++i];
         else if (a === '--summary') o.summary = argv[++i];
@@ -197,7 +203,7 @@ async function main(argv) {
         return 2;
     }
     if (o.preflight && !o.readUsage) {
-        log(`preflight passed (files only, a dry run): driver, profile, model and settings checked; the key's usage was not read; ${o.scenarios.length} scenario(s)`);
+        log(`preflight passed (files only, a dry run): driver, profile, model and settings checked; the key's usage was not read; ${o.scenarios.length} scenario(s); ${modeText(o)}`);
         return 0;
     }
     if (o.preflight) {
@@ -206,7 +212,7 @@ async function main(argv) {
             log(`preflight refused: the key's usage cannot be read (${u.error}); a batch whose spend cannot be watched does not run`);
             return 2;
         }
-        log(`preflight passed: driver, profile, model and settings checked; the key's usage can be read; ${o.scenarios.length} scenario(s)`);
+        log(`preflight passed: driver, profile, model and settings checked; the key's usage can be read; ${o.scenarios.length} scenario(s); ${modeText(o)}`);
         return 0;
     }
     // Inside a test-server run, the server exists already: the same checks must have passed before it was
@@ -220,7 +226,8 @@ async function main(argv) {
     // The marker run.mjs requires for a gate-valid G3 run: this batch's id and its spend limit.
     const env = { ...process.env, ROTN_G3_BATCH: `${batchId}:${o.maxBatchUsd}` };
     const read = () => readKeyUsage({ key: env.OPENROUTER_API_KEY, fetchImpl: keyFetch(env) });
-    const summary = { batchId, testMode, maxBatchUsd: o.maxBatchUsd, scenarios: [], stopped: null };
+    const summary = { batchId, testMode, gate: o.gate, smoke: !o.gate, maxBatchUsd: o.maxBatchUsd, scenarios: [], stopped: null };
+    log(`batch ${batchId}: ${modeText(o)}`);
     const base = await read();
     summary.usageAtStart = base.ok ? base.usage : null;
     if (!base.ok) {

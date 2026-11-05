@@ -1,4 +1,5 @@
 import { testforblockVerdict } from './g2.mjs';
+import { parseLine } from './server-log.mjs';
 
 // G3 rules the runner enforces for every G3 scenario (coord/STATUS-harness-ops.md, "G3 batches";
 // lead, #101 and #116 review):
@@ -109,12 +110,19 @@ export function g3Policy(scenario, env, maxBatchUsd) {
  * test/tools/g3-batch-check.mjs checkEvidenceTree makes it compulsory: every G3 result under test/evidence/
  * must sit under a folder with a batch.json that vouches for it.
  * results: [{file, result}] with each result.json's contents; g3Scenarios: the ids loadScenarios marks
- * gate G3 (isG3Result). Returns the problems (empty = consistent).
+ * gate G3 (isG3Result). gate: true for a gate claim (lead, #218 review and #220 decision): the summary must
+ * also say gate: true (only batch.mjs --gate writes it; smoke is the default) and not smoke: true, so a
+ * smoke batch, or a summary that does not say gate: true, is never gate evidence. Returns the problems
+ * (empty = consistent).
  */
-export function crossCheckBatch(summary, results, { g3Scenarios = [] } = {}) {
+export function crossCheckBatch(summary, results, { g3Scenarios = [], gate = false } = {}) {
     if (!summary || typeof summary.batchId !== 'string' || !summary.batchId) return ['no batch summary with a batchId (batch.json from batch.mjs)'];
     const p = [];
     if (summary.testMode !== false) p.push(`batch ${summary.batchId} ran in test mode (or does not say): not gate evidence`);
+    if (gate && (summary.gate !== true || summary.smoke === true)) {
+        p.push(summary.smoke === true ? `batch ${summary.batchId} is a smoke batch (smoke: true): never gate evidence`
+            : `batch ${summary.batchId} does not say gate: true (only batch.mjs --gate writes it): not gate evidence`);
+    }
     const marker = `${summary.batchId}:${summary.maxBatchUsd}`;
     const ran = (summary.scenarios ?? []).reduce((m, s) => m.set(s.id, [...(m.get(s.id) ?? []), s]), new Map());
     const g3 = results.filter(({ result }) => isG3Result(result, g3Scenarios));
@@ -292,7 +300,13 @@ export function startEvent(output) {
     return null;
 }
 
-const SETBLOCK_REPLY = /Block placed|could not be placed|couldn't be placed/i;
+/**
+ * 1.12's own setblock answers (commands.setblock.success / noChange / outOfWorld), matched against the
+ * WHOLE server message after "]: " (#220 review nit: anchored), so a chat line such as "<bot> Block placed"
+ * or one that merely contains the words never counts.
+ */
+const SETBLOCK_ANSWERS = /^(?:Block placed|The block couldn't be placed|Cannot place block outside of the world)$/;
+export const isSetblockReply = (line) => SETBLOCK_ANSWERS.test(parseLine(String(line))?.msg ?? String(line).replace(/\r$/, ''));
 
 /**
  * Place a task marker (gold block) with the allowlisted `setblock` and confirm it read-only with
@@ -302,8 +316,8 @@ const SETBLOCK_REPLY = /Block placed|could not be placed|couldn't be placed/i;
  * not proven, and the scenario must not count on it.
  */
 export async function placeGoldMarker(confirm, marker) {
-    const placed = await confirm(`setblock ${marker.join(' ')} minecraft:gold_block`, (l) => l.some((x) => SETBLOCK_REPLY.test(x)));
-    const reply = placed.find((x) => SETBLOCK_REPLY.test(x)) ?? null;
+    const placed = await confirm(`setblock ${marker.join(' ')} minecraft:gold_block`, (l) => l.some(isSetblockReply));
+    const reply = placed.find(isSetblockReply) ?? null;
     const v = testforblockVerdict(await confirm(`testforblock ${marker.join(' ')} minecraft:gold_block 0`,
         (l) => { const x = testforblockVerdict(l, marker); return x.ok || /^The block at /.test(x.detail ?? ''); }), marker);
     return { at: marker, reply, goldBlock: v.ok, detail: v.ok ? 'found' : v.detail };

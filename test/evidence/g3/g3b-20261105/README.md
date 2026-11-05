@@ -2,7 +2,7 @@
 
 **Result in one line:** the real agent survived its first RotN night: dusk, night and dawn were seen, `stat.deaths` stayed 0, there were no death lines, and it was online for all 40.1 min. The only failing check is `no_cheat`, on the same false positive as batch A: the pack's own two `gamerule` lines, repeated.
 
-This is a smoke batch, not the gate.
+This is a smoke batch, not the gate. `batch.json` says `"smoke": true` (the lead, #218 review), so `g3-batch-check.mjs <batch.json> <result.json>...` (the gate claim check) refuses it, whatever a `result.json` here says about `gateValid` or `pass`. That field was added by hand after the run, the only hand edit here, because these batches ran before the field existed. Smoke is now the default, and only `batch.mjs --gate` writes `gate: true` (the lead, #220 decision).
 
 ## Run conditions
 
@@ -30,7 +30,7 @@ This is a smoke batch, not the gate.
 | Batch start | 17:52:43 |
 | Server created | 17:52:53 |
 | Ready | 17:56:12 |
-| FRCFLD joined | 17:56:22 |
+| FRCFLD joined | 17:56:21 (server.log) |
 | Dusk / night / dawn | 19.4 / 20.5 / 39.9 min after the join (daytime 12376 / 13743 / 989) |
 | Scenario end (dawn) | 40.1 min after the join; batch command exit 18:37:40 |
 | Teardown, "verified gone" | 18:37:53 |
