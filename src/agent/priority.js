@@ -93,8 +93,9 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
     // 2. Control: checked on every update, not throttled, so a typed command wins at once.
     const hold = agent.control?.blocking();
     if (hold) {
-        // A giver's typed command may walk the bot out of its night shelter (#204 re-review 1).
-        if (hold === 'command') leaveShelterFor(agent, "a task giver's command");
+        // A giver's typed command may walk the bot out of its night shelter (#204 re-review 1),
+        // also under a stored stop, pause or quiet hold, which blocking() reports first (#204 nit).
+        if (agent.control?.typed > 0) leaveShelterFor(agent, "a task giver's command");
         if (sp.isActive()) sp.stop(false);
         // Whatever ran keeps its place and resumes after !resume without using a run of its budget.
         agent._agenda_paused = true;
