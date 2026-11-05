@@ -1,6 +1,12 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (01:49 UTC, from `date -u`)
+Updated: 2026-11-05 (16:55 UTC, from `date -u`)
+
+## Resumed after the Orca restart (2026-11-05 16:55 UTC)
+
+- **#208 (d) is ready for the lead's merge.** Both re-review fixes were already in f097de1e. I merged develop in (#206, #210) as 3d1de0be and pushed it, no force-push.
+- **Retested after the merge:** g3-untrusted 6/6, g3-task 9/9, g3-spend 45/45, mindcraft-driver 14/14.
+- **Next:** the #207 nits PR, branched from develop once #208 merges (see step 2 below). Still open for the lead: #208 nit (2), the refusal deadline.
 
 ## PAUSED for the Orca restart (2026-11-05 01:49 UTC, the lead's request)
 
