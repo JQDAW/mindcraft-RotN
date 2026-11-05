@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T01:02Z (from `date -u`)
+Updated: 2026-11-05T01:17Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -262,16 +262,21 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
     Tests: `night_routine.test.js` 16/16; `shelter.test.js` 12/12; `src/agent/**` 244/244; lint 254.
   - **Develop merged in** (`28c2bbfc`, after #202's squash merge; I kept this branch's side, which only adds to the #202 tip); GitHub reports the PR as mergeable. `isFalling` now uses rotn-data's `falls()` from #205 (`2d653a4d`). `src/agent/**` 245/245; lint 254.
+  - **#204 re-review (lead: two fixes, then merge), fixed in `66640bbc`, reply posted:**
+    1. a giver's `!goal` or typed command from inside the shelter clears `rotnSheltered` and sets the state to building, so the bot shelters again after it; `!stop` and `!pause` keep it sheltered;
+    2. `mobIn` counts only mobs and players.
+
+    Develop (#211) was merged in first. Tests: `night_routine.test.js` 17/17; `shelter.test.js` 14/14; `src/agent/**` 250/250; lint 254; mergeable.
   - **Lead decisions on #204 (2026-11-04), recorded in the PR:**
     1. no shelter possible: idle until morning with reflexes is accepted for now; the G3 (b) smoke run shows whether a dig-into-a-hillside fallback is needed;
     2. night above tasks is accepted; typed commands, `!stop` and `!pause` still act at once.
-- **Security fix (lead, required before D1b): #211 open** (branch `agent/skills-rotn/task-giver-recheck`).
+- **Security fix (lead, required before D1b): #211 merged** (branch `agent/skills-rotn/task-giver-recheck`).
   - A stored task's giver is checked again with the current settings when the task starts and when a task stored as active is taken over (after a restart).
   - A giver who is no longer listed gets the task cancelled: `task <id> dropped: its giver <giver> is no longer a task giver`, with no task text, and its restored goal is stopped.
   - A takeover now says `task <id> started: …`.
   - Tests: `priority.test.js` 28/28 (the 3 new ones fail on the old code); `src/agent/**` 227/227; lint 254.
 - **Next (lead order):**
-  1. the #204 review (#202 is merged), #206 (waits for rotn-data's food values) and #211;
+  1. #204's merge, and #206 (waits for rotn-data's food values);
   2. D1: eating, and re-planning after teleports (AggroTP) or invasions:
      - **D1a, eating: #206 open** (branch `agent/skills-rotn/eating`). An `eating` mode eats by rotn-data's food values (auto-eat sees only vanilla foods and ate the bread first; it is off now):
        - at food 12 or lower when idle, and at 6 or lower during an action;
