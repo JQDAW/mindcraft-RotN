@@ -19,6 +19,7 @@ import { TaskQueue, isTaskGiver, markUntrusted } from './task_queue.js';
 import { Agenda } from './agenda.js';
 import { Control } from './control.js';
 import { autonomyTick } from './priority.js';
+import { autoEatBannedFood } from './library/food.js';
 import { resetNight } from './night_routine.js';
 import { hordeWarning, JumpWatch } from './library/hazard_watch.js';
 import { requestReplan } from './replan.js';
@@ -198,12 +199,15 @@ export class Agent {
             respondFunc(username, message);
         });
 
-        // Set up auto-eat
+        // Set up auto-eat. It stays off: the 'eating' mode eats by rotn-data's pack food values and
+        // by meta (skills-rotn D1). Should anything turn it on, its bans come from rotn-data's
+        // avoidFood, by name, as it cannot see a meta (all of `fish`, for the pufferfish fish:3).
         this.bot.autoEat.options = {
             priority: 'foodPoints',
-            startAt: 14,
-            bannedFood: ["rotten_flesh", "spider_eye", "poisonous_potato", "pufferfish", "chicken"]
+            startAt: 12,
+            bannedFood: autoEatBannedFood(),
         };
+        this.bot.autoEat.disable?.();
 
         if (save_data?.self_prompt) {
             if (init_message) {
