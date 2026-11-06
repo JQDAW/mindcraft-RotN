@@ -4,7 +4,7 @@ Updated: 2026-11-06T18:49Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #281 review nits; PR open, 2026-11-06T18:49Z
+## #281 review nits; PR #285 open, 2026-11-06T18:49Z
 
 - **Branch:** `agent/net-forge/allowlist-nits`, from develop `f7fbe4f` (#281 merged as `a8d98f5`).
 - **Nit 1, helper overrides refused automatically:** a mod class that overrides a helper the reviewed vanilla contact methods call (`checkPressed` `func_185616_e`, `updatePoweredState` `func_176570_e`, `findMinecarts` `func_176571_a`) now excludes its block like its own contact method would.
