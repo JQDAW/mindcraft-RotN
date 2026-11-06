@@ -138,11 +138,13 @@ function fast(t) {
     t.after(() => { Object.assign(skills.FELL_LIMITS, saved[0]); Object.assign(skills.TREE_FALL, saved[1]); });
 }
 
-test('rotn-data: a log comes from felling a tree (a Dynamic Trees branch), with an axe', () => {
+test('rotn-data: a log comes from felling a tree (a Dynamic Trees branch)', () => {
     const fell = worldSources('log').find(s => s.id === 'fell-tree');
     assert.ok(fell, 'the fell-tree rule is a log source');
     assert.ok(fell.blocks.includes('dynamictrees:sprucebranch'));
-    assert.equal(fell.tool?.type, 'axe');
+    // An axe, or by hand: rotn-data #252 (Request 13) found that a branch broken by hand fells the
+    // tree and drops its logs and sticks too (tool null). Either way, no other tool type.
+    assert.ok(fell.tool === null || fell.tool?.type === 'axe', JSON.stringify(fell.tool));
 });
 
 test('round 3 B: the plan: the lowest trunk block, from a high limb too; a place on the side away from the canopy', () => {

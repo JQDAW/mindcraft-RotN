@@ -6,6 +6,7 @@ import convoManager from './conversation.js';
 import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
+import { standsOnTree } from './library/fall_safety.js';
 import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
@@ -444,10 +445,16 @@ const modes_list = [
 
 // { outcome: 'freed' } if skills.moveAway finished within timeoutMs, { outcome: 'timeout' }
 // if it did not, { outcome: 'failed', error } if it gave up first (no path, or anything else).
-async function moveAwayWithin(bot, distance, timeoutMs) {
+export async function moveAwayWithin(bot, distance, timeoutMs) {
     let timer;
     const timedOut = new Promise((resolve) => { timer = setTimeout(() => resolve({ outcome: 'timeout' }), timeoutMs); });
-    const moved = skills.moveAway(bot, distance).then(() => ({ outcome: 'freed' }), (error) => ({ outcome: 'failed', error }));
+    // Stuck up on a tree (G3 round 4 B: the bot fell to its death 3 s after this reflex took over
+    // in a tree): climb down to firm ground, no drop over 3 blocks, instead of a walk in any direction.
+    // Every walk away is fall-safe too (skills.goToGoal).
+    const free = standsOnTree(bot)
+        ? skills.descendFromTree(bot).then((down) => { if (!down) throw new Error('no safe way down from the tree'); })
+        : skills.moveAway(bot, distance);
+    const moved = free.then(() => ({ outcome: 'freed' }), (error) => ({ outcome: 'failed', error }));
     try {
         return await Promise.race([moved, timedOut]);
     } finally {

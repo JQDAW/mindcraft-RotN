@@ -35,7 +35,10 @@ export const ROTN_EARLY_GAME = [
     },
     {
         id: 'sticks', short: 'collect 4 sticks',
-        goal: 'Get at least 4 sticks with !collectBlocks("stick", 4). Sticks drop from leaves; punching trees does not work in RotN.',
+        // G3 round 4 B and rotn-data Request 13: leaves never drop sticks on this pack; a felled
+        // tree does (0-7 with its logs), and a trunk broken by hand fells it too. collectBlock fells
+        // it safely (fellTree) and picks the sticks up with the logs.
+        goal: 'Get at least 4 sticks with !collectBlocks("stick", 4). In RotN sticks come from felling a tree: breaking its trunk, even by hand, fells it and drops logs and sticks. Leaves drop no sticks.',
         done: (s) => s.count('stick') >= 4 || s.count('stone_pickaxe') > 0,
     },
     {

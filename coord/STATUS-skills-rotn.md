@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T04:12Z (from `date -u`)
+Updated: 2026-11-06T07:16Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -459,8 +459,25 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
      - `placeFurnaceNear` requires air at the place before placing.
 
      Tests: `death_report` 14, `furnace` 7; the 4 new ones fail on the previous head; lint 254.
-- **#247 nit, ready for the next PR** (branch `agent/skills-rotn/next3`, from develop, pushed without a PR, "no rush"; STATUS lives here): from 10 to 20 min the night text says the items are already lost (before 10 min: "will be lost"). Test in `death_report` (14/14; the new assertion fails on develop). The other nit (rounding down shows "gone now" with 30 s left) was accepted as is by the lead.
-- **Next:** idle until the lead assigns work.
+- **#247 nit**: folded into the fall-safety PR (commit cherry-picked from `next3`). From 10 to 20 min the night text says the items are already lost. The rounding nit was accepted as is.
+- **G3 round 4 batch B, the fall** (branch `agent/skills-rotn/fall-safety`, PR open; STATUS lives here). "FRCFLD fell from a high place" during `!collectBlocks("stick", 4)` on leaves, 3 s after unstuck took over.
+  - **Findings:**
+    - Leaves went through `bot.collectBlock.collect`, whose pathfinder may dig, tower and step onto leaves.
+    - Every walk could dig a Dynamic Trees branch, which fells the whole tree.
+    - Pickups lost their no-dig movements inside `goToGoal`.
+    - Every modded block is a full cube in the bot's registry, so branches look like footing.
+    - Rotn-data (Request 13, #252): leaves never drop sticks; a felled tree does, by hand too. So the sticks the bot gained came from branches its pathfinder dug.
+  - **Fixed (`fall_safety.js`):**
+    - every walk drops at most 3 blocks and never breaks a branch;
+    - leaves only from the ground (no dig, tower, parkour or step onto tree blocks);
+    - a bot on a tree climbs down first (collect and unstuck);
+    - drops lying on leaves are left;
+    - a branch is always cut by `fellTree`;
+    - the agenda's stick step says felling;
+    - `moveAway` logs a copied start position.
+  - **Tests:** `fall_safety` 9 (7 fail on develop; 2 cover the new module). The related files pass one at a time. Lint 254.
+  - **Depends on:** rotn-data #252 for sticks to come from felling. My tests pass with and without it.
+- **G3 round 4 C+D, the chat burst**: next, in a separate PR.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
