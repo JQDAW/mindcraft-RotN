@@ -4,7 +4,7 @@ Updated: 2026-11-06T16:56Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Walk-through allowlist and #279 nits; PR open, 2026-11-06T16:56Z
+## Walk-through allowlist and #279 nits; PR #281 open, 2026-11-06T16:56Z
 
 - **Branch:** `agent/net-forge/walk-allowlist`, from develop `cbeb845` (#279 merged).
 - **Allowlist (lead decision after #279):** vanilla `BlockRailBase`, `BlockSign`, `BlockTorch`, `BlockButton` and `BlockLever` subclasses become walk-through when every state has no player box and nothing in the class chain declares a contact or collision-box method.
