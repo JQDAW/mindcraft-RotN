@@ -10,7 +10,8 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN } from './agenda.js';
+import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
 import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS } from './agenda_driver.js';
 import { Agent } from './agent.js';
 import { parseCommandMessage } from './commands/index.js';
@@ -335,4 +336,70 @@ test('round 5 A rerun: the sticks step needs 3 stickWood, and River Cane or bamb
 test('round 5 A rerun (lead: Hit With Axe): the Crafting Tools step names the axe path for a missing stick', () => {
     const tools = ROTN_EARLY_GAME.find(s => s.id === 'crafting_tools');
     assert.match(tools.goal, /With no stick left, !collectBlocks\("stick", 1\) chops a placed log and plank with the crude axe for 2 sticks/);
+});
+
+// G3 round 6 B (the lead): before dusk the agenda keeps at least 9 sturdy blocks for the shelter.
+// Any cobblestone or stone counts (night.js isSturdy): soapstone cobble too.
+const SOAPSTONE = 'undergroundbiomes:metamorphic_cobble';
+const dayAt = (min) => NIGHT_START - min * TICKS_PER_MIN; // min minutes before sunset (after the morning freeze: at most 7.9)
+
+test('G3 round 6 B: near dusk the shelter reserve comes before the current step; with the blocks held the step resumes', (t) => {
+    const items = [stack('pyrotech:rock', 0, 6)];
+    const agent = fakeAgent(t, items);
+    agent.bot.time = { timeOfDay: 1000 };
+    assert.equal(agendaTick(agent, { now: 0 }), 'sticks', 'by day: the current step');
+    assert.ok(RESERVE_LEAD_MIN > 6 && SHELTER_RESERVE >= 9);
+
+    agent.bot.time.timeOfDay = dayAt(7);
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'shelter_blocks');
+    assert.equal(agent.said.at(-1), `agenda step shelter_blocks started: keep ${SHELTER_RESERVE} sturdy blocks for the night's shelter`);
+    assert.match(agent.self_prompter.prompt, /^RotN agenda, step shelter_blocks \(before night\): Night is near: in about \d+ min the night routine builds a shelter from sturdy blocks \(any cobblestone or stone\)\. It needs 10 on open ground, and you have 0\./);
+
+    items.push(stack(SOAPSTONE, 6, 4), stack('cobblestone', 0, 6)); // 10 sturdy, soapstone included
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'sticks');
+    assert.equal(agent.said.at(-1), 'agenda resumed: sticks');
+    assert.equal(agent.agenda.active, true);
+});
+
+test('G3 round 6 B: after "agenda done" the reserve still runs before dusk, and then leaves the self-prompter alone', (t) => {
+    const items = [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('cobblestone', 0, 10)];
+    const agent = fakeAgent(t, items, { tableNear: true });
+    agent.bot.time = { timeOfDay: 1000 };
+    assert.equal(agendaTick(agent, { now: 0 }), 'done');
+    assert.equal(agent.agenda.active, false);
+    assert.equal(agent.agenda.finished, true);
+    assert.equal(agendaTick(agent, { now: TICK_MS }), null, 'by day nothing runs');
+
+    items[2].count = 3; // the cobblestone was used by day
+    agent.bot.time.timeOfDay = dayAt(7);
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'shelter_blocks');
+    assert.equal(agent.self_prompter.isActive(), true);
+    assert.match(agent.self_prompter.prompt, /you have 3\./);
+
+    items[2].count = 10;
+    assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), null);
+    assert.equal(agent.self_prompter.isActive(), false, 'its own run stopped');
+    assert.equal(agent.said.filter(l => l === 'agenda done').length, 1, '"agenda done" once');
+    assert.match(describeAgenda(agent.agenda, null), /agenda: done \(before night it still keeps the shelter blocks\)/);
+
+    // A giver's !agendaStop stops the reserve too.
+    agent.agenda.stop();
+    items[2].count = 0;
+    assert.equal(agendaTick(agent, { now: 4 * TICK_MS }), null);
+});
+
+test('G3 round 6 B: a reserve that used its budget does not pause the agenda; it is fresh again the next day', (t) => {
+    const agent = fakeAgent(t, [stack('pyrotech:rock', 0, 6)]);
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    agent.agenda.spent.shelter_blocks = { attempts: 1, llm_ms: STEP_LLM_MS };
+    assert.equal(agendaTick(agent, { now: 0 }), 'stuck');
+    assert.equal(agent.said.at(-1), `agenda step shelter_blocks stuck: ${STEP_LLM_MS / 60_000} min of self-prompting; going on without it until the night`);
+    assert.equal(agent.agenda.active, true, 'not paused');
+    assert.equal(agent.agenda.stuck, null);
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks');
+
+    agent.bot.time.timeOfDay = 1000; // the next morning
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'sticks');
+    assert.equal(agent.agenda.reserveOff, false);
+    assert.equal(agent.agenda.spentOn('shelter_blocks').llm_ms, 0);
 });

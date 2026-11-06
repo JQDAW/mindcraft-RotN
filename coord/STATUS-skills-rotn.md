@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T17:22Z (from `date -u`)
+Updated: 2026-11-06T18:47Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -209,8 +209,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- None open. **#274** (round 5 fixes) is merged (seen 2026-11-06T17:22Z by `date -u`).
-- **G3 smoke round 6 is running** (from 2026-11-06T17:22Z by `date -u`; four batches, about 2 hours): targeted tests only, no npm ci, no full npm test, no long node scripts. I am waiting for the lead's findings.
+- **Round 6 B shelter PR** (branch `agent/skills-rotn/r6`, opened 2026-11-06T18:47Z by `date -u`): see "Round 6 B fixes" below. **#274** (round 5 fixes) is merged.
+- G3 smoke round 6 is over (lead): A 7/7, B 4/5, C 7/7, D 7/7. The memory rule is lifted.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
@@ -704,6 +704,21 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
   - The block name comes from the last 1 to 4 words before "at" (`nameIn`), so "go to gold block at X Y Z and stand on it" names gold_block.
   - **Test:** `stand_on` 10 (+1), which uses the scenario's own `taskText` (`test/scenarios/g3/g3-task-preempts-agenda.mjs`), where the coordinates come before "stand on it". It resolves to that gold block for three markers.
   - The new test fails on the old `stand_on.js` (at the missing-article case; the exact scenario text already resolved before). `src` and `packages` tests 904/904. Lint 253.
+
+## Round 6 B fixes (branch `agent/skills-rotn/r6`, 2026-11-06T18:47Z by `date -u`)
+
+- **Finding (the lead; raw `captures/raw/r6-g3b/night/`):** at dusk the shelter was refused three times ("needs 9 sturdy blocks (cobblestone or stone); you have 0"). The bot held 11 `undergroundbiomes:metamorphic_cobble:6`, 44 rocks and 32 dirt piles. A zombie killed it at 18:16:30, and after the respawn the shelter was refused "without a pickaxe".
+- **Cause:** `isSturdy` needed hardness 1.5 or more. Meta 6 is soapstone cobble, whose hardness is 1.2 in the dump, so all 11 failed. The agenda's cobblestone step (ore count) had counted them.
+- **(1) Sturdy blocks from the data:** `night.js isSturdy` also accepts every member of the rotn-data ore dictionaries `cobblestone` and `stone` (Underground Biomes cobble and stone, `contenttweaker:chalk_cobble`, vanilla, ...), when it is a whole block. A test checks every member of both ores against the real dump. The rotn-data lists are enough, so no request was needed.
+- **Dirt fallback (`shelter.js`):**
+  - With too few sturdy blocks, the shelter first makes cobblestone from the rocks held.
+  - If it is still short, dirt (`dirt` ore, dug by hand) fills the rest, made from dirt piles (`pileDirt`, 4 each) when needed. Sturdy blocks are placed first.
+  - The log says how many walls are dirt. The night routine's breach check and repairs keep dirt walls, and `digOut` opens a dirt side first.
+- **(2) Reserve:** `SHELTER_RESERVE_STEP` (`agenda.js`). When sunset is within `RESERVE_LEAD_MIN` (10 min of running time) and the bot holds fewer than 10 sturdy blocks, this step comes before the current one. It also runs after "agenda done". A spent budget skips it until the next day instead of pausing the agenda.
+  - With the measured cycle this means "from the morning freeze on", because only about 8 min run between time 3001 and sunset.
+- **(3) No pickaxe (after a death):** the shelter is built from dirt only, at a site with a side that can be dug out by hand. With nothing held, the refusal names both the pickaxe and the missing dirt.
+- **Tests:** 11 new (shelter 6, night_routine 2, agenda 3). All fail on the old source. `src` and `packages` tests 919/919; lint 253.
+- **Not tried on a server.** Crafting dirt from piles uses `craftRecipe("dirt")` through rotn-data's 2x2 recipe, which is untested offline beyond a fake.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
