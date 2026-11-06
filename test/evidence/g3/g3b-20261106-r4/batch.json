@@ -1,0 +1,23 @@
+{
+  "batchId": "20261106T065151-12372",
+  "testMode": false,
+  "gate": false,
+  "smoke": true,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g3-first-night",
+      "out": "<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r4-g3b\\night",
+      "runId": "20261106t065152-e7d933",
+      "exit": 1,
+      "spentBefore": 0,
+      "timeoutMin": 67
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.763886889,
+  "usageAtEnd": 0.764898425,
+  "spentUsd": 0.001012,
+  "exit": 1,
+  "logsFetched": true
+}
