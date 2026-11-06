@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
-import { importDump, canonicalize, checkStateMetaRemap } from '../tools/import-dump.mjs';
+import { importDump, canonicalize, checkStateMetaRemap, checkEntityCollision, DT_LEAVES_PLAYER_BOX } from '../tools/import-dump.mjs';
 import { RotnData, DUMP_FILES } from '../src/catalog.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -195,7 +195,7 @@ test('state-meta-remap: imported sorted by networkId, with no notes when the ids
     try {
         const res = importDump({ src, jarSha256: JAR, outDir: pack });
         assert.deepEqual(res.problems, []);
-        assert.deepEqual(res.notes, []);
+        assert.deepEqual(res.notes.filter((n) => n.startsWith('state-meta-remap')), []); // the mini dump predates entityCollision (a note)
         const back = JSON.parse(fs.readFileSync(path.join(pack, 'state-meta-remap.json'), 'utf8'));
         assert.deepEqual(back.remap.map(x => x.networkId), [2808, 2809, 2811]);
         assert.equal(new RotnData(pack, { version: '3.3.4' }).clientMeta('minecraft:double_plant', 11), 10);
@@ -307,4 +307,114 @@ test('state-meta-remap: block ids that differ from the capture are a note, not a
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
+});
+
+// Request 14 (net-forge #259 via the lead): the player collision boxes of dumper 0.3.0.
+const FULL = [[0, 0, 0, 1, 1, 1]];
+const PROBE = { entity: 'FakePlayer standing on the block (x + 0.5, y + 1, z + 0.5)', entityBoxGrow: 1, air: [0, 250, 0], solid: [0, 5, 0] };
+const st = (meta, collision, entityCollision, entityCollisionVaries = false) => ({ meta, collision, entityCollision, entityCollisionVaries });
+function blocks03({ leaves = DT_LEAVES_PLAYER_BOX, leavesVaries = false } = {}) {
+    return {
+        format: 'rotn-dump/1',
+        entityCollisionProbe: PROBE,
+        blocks: {
+            'minecraft:stone': { defaultMeta: 0, states: [st(0, FULL, FULL)] },
+            'minecraft:fence': { defaultMeta: 0, states: [st(0, [[0.375, 0, 0.375, 0.625, 1.5, 0.625]], [[0.375, 0, 0.375, 0.625, 1.5, 0.625]], true)] },
+            'dynamictrees:leaves0': { defaultMeta: 0, states: [st(0, FULL, leaves, leavesVaries), st(1, FULL, DT_LEAVES_PLAYER_BOX)] },
+            'dynamictrees:leaves1': { defaultMeta: 0, states: [st(0, FULL, DT_LEAVES_PLAYER_BOX)] },
+            'mod:thrower': { defaultMeta: 0, states: [st(0, FULL, null, null)] },
+        },
+    };
+}
+
+test('entityCollision: a well-formed 0.3.0 blocks file whose leaves give the half-height box passes, with counts', () => {
+    const problems = [];
+    const notes = checkEntityCollision(blocks03(), { problems, dumperVersion: '0.3.0', requireLeaves: true });
+    assert.deepEqual(problems, []);
+    assert.deepEqual(DT_LEAVES_PLAYER_BOX, [[0.125, 0, 0.125, 0.875, 0.5, 0.875]]);
+    // 6 states: the 3 leaves states differ from collision (a full cube); the fence varies; the thrower threw.
+    assert.deepEqual(notes, ['entityCollision: 6 states; 3 differ from collision, 1 vary between the probes (world-dependent), 1 threw; self-check 3 dynamictrees:leaves* states ok']);
+});
+
+test('entityCollision self-check: a leaves state that is a full cube, or varies, blocks the import (even with allowErrors)', () => {
+    for (const bad of [{ leaves: FULL }, { leaves: [] }, { leavesVaries: true }, { leaves: null }]) {
+        const problems = [];
+        checkEntityCollision(blocks03(bad), { problems, dumperVersion: '0.3.0', requireLeaves: true, allowErrors: true });
+        assert.equal(problems.length, 1, JSON.stringify(bad));
+        assert.match(problems[0], /self-check: 1 of 3 dynamictrees:leaves\* states do not give a player the half-height box/);
+    }
+    // requireLeaves: a dump without any Dynamic Trees leaves cannot pass the self-check.
+    const f = blocks03();
+    delete f.blocks['dynamictrees:leaves0'];
+    delete f.blocks['dynamictrees:leaves1'];
+    const problems = [];
+    checkEntityCollision(f, { problems, dumperVersion: '0.3.0', requireLeaves: true });
+    assert.deepEqual(problems, ['entityCollision: self-check: no dynamictrees:leaves* block in the dump']);
+    const others = [];
+    checkEntityCollision(f, { problems: others, dumperVersion: '0.3.0' });
+    assert.deepEqual(others, []); // without requireLeaves (another pack): no problem
+});
+
+test('entityCollision: missing or malformed fields, and a 0.3.0 dump without the probe, are refused; older dumps get a note', () => {
+    const f = blocks03();
+    delete f.blocks['minecraft:stone'].states[0].entityCollisionVaries;
+    f.blocks['minecraft:fence'].states[0].entityCollision = [[0, 0, 1]];
+    let problems = [];
+    checkEntityCollision(f, { problems, dumperVersion: '0.3.0' });
+    assert.deepEqual(problems, ['entityCollision: 2 malformed states, e.g. minecraft:stone:0 lacks the fields; minecraft:fence:0 has bad boxes']);
+    const noProbe = blocks03();
+    delete noProbe.entityCollisionProbe;
+    problems = [];
+    checkEntityCollision(noProbe, { problems, dumperVersion: '0.3.0' });
+    assert.deepEqual(problems, ['entityCollision: dumper 0.3.0 wrote no entityCollisionProbe']);
+    problems = [];
+    assert.deepEqual(checkEntityCollision(noProbe, { problems, dumperVersion: '0.2.1', requireLeaves: true }), ['entityCollision: dumper 0.2.1 predates it (getCollisionBoundingBox only)']);
+    assert.deepEqual(problems, []);
+    // No air probe cell: no player boxes at all.
+    const noAir = blocks03();
+    noAir.entityCollisionProbe = { ...PROBE, air: null, solid: null };
+    problems = [];
+    const notes = checkEntityCollision(noAir, { problems, dumperVersion: '0.3.0' });
+    assert.deepEqual(problems, ['entityCollision: no air probe cell, so no player boxes were read']);
+    assert.ok(notes.includes('entityCollision: no solid probe cell, so entityCollisionVaries is null everywhere'));
+});
+
+test('entityCollision end to end: a 0.3.0 dump on the pinned pack must contain Dynamic Trees leaves; playerCollision reads the boxes', () => {
+    const add = (f) => {
+        f.manifest.dumper = '0.3.0';
+        f.blocks.entityCollisionProbe = PROBE;
+        for (const [name, b] of Object.entries(f.blocks.blocks)) {
+            for (const s of b.states) Object.assign(s, { collision: FULL, entityCollision: name === 'pyrotech:rock' ? [[0, 0, 0, 1, 0.125, 1]] : FULL, entityCollisionVaries: false });
+        }
+    };
+    // The mini dump has no Dynamic Trees blocks: on 3.3.4 the self-check refuses it and nothing is written.
+    let { root, src, pack } = fakeFetch({ mutate: add });
+    try {
+        const res = importDump({ src, jarSha256: JAR, outDir: pack, version: '3.3.4' });
+        assert.deepEqual(res.problems, ['entityCollision: self-check: no dynamictrees:leaves* block in the dump']);
+        assert.deepEqual(res.written, []);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+    // Another pack version (no Dynamic Trees requirement): imported, and the catalog reads the boxes.
+    ({ root, src, pack } = fakeFetch({ mutate: add }));
+    try {
+        const res = importDump({ src, jarSha256: JAR, outDir: pack, version: '9.9.9', expectedRecipes: [] });
+        assert.deepEqual(res.problems, []);
+        const cat = new RotnData(pack, { version: '9.9.9' });
+        assert.deepEqual(cat.dump.blocks.entityCollisionProbe, PROBE);
+        assert.deepEqual(cat.playerCollision('pyrotech:rock'), { boxes: [[0, 0, 0, 1, 0.125, 1]], varies: false, source: 'entityCollision' });
+        assert.equal(cat.playerCollision('minecraft:stone').source, 'entityCollision');
+        assert.equal(cat.playerCollision('nomod:nothing'), null);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('playerCollision falls back to getCollisionBoundingBox before dumper 0.3.0 (the current 3.3.4 data)', () => {
+    const cat = new RotnData(path.join(HERE, '../3.3.4'), { version: '3.3.4' });
+    const leaves = cat.playerCollision('dynamictrees:leaves0');
+    assert.equal(leaves.source, 'collision');
+    assert.equal(leaves.varies, null);
+    assert.deepEqual(leaves.boxes, FULL); // the full cube #259 is about
 });
