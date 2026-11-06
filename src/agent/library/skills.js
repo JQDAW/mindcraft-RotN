@@ -5,7 +5,7 @@ import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, 
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stowCarried } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
-import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTreeLeaves, FALLING_TREE, FELL_PLAN } from "./felling.js";
+import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
 import { oreMemberNames } from "../agenda_driver.js";
 import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBlock, leafFromGround, itemOnGround } from "./fall_safety.js";
 import prismarineRecipe from "prismarine-recipe";
@@ -739,6 +739,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Any Dynamic Trees branch fells its tree, whichever rule names it (rotn-data #13: a branch
     // broken by hand drops the tree's logs and sticks): always the safe cut, never collect().
     const fellsTree = (block) => isBranch(block) || fellMatchers.some(matches => matches(block));
+    const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     // Count what the bot really gains, not a rule's yield (#141 review): the targets in the
     // inventory before and after each break. A block with no item (water) counts 1 per success.
@@ -755,6 +756,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         return byKey;
     };
     const gainedByKey = {};
+    const allHeld = () => {
+        const byKey = {};
+        for (const item of bot.inventory.items()) {
+            const key = inventoryKey(item) ?? item.name;
+            byKey[key] = (byKey[key] ?? 0) + item.count;
+        }
+        return byKey;
+    };
     const isLiquid = baseType === 'lava' || baseType === 'water';
     let isWanted = blockMatcher(blocktypes); // the shared resolver: names and variants (#131 review)
     // A rule's tool can break during the run: stop searching that rule's blocks (B2b).
@@ -805,6 +814,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (block.position && givenUp.some(p => p.equals(block.position))) return false;
             // Leaves only where the bot can reach them standing on the ground: never climb for them.
             if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
+            // Wood only on the surface: never a log underground (G3 round 5 A rerun).
+            if (block.position && woodTarget && world.isUnderground(bot, block.position)) return false;
             if (exclude) {
                 for (let position of exclude) {
                     if (block.position.x === position.x && block.position.y === position.y && block.position.z === position.z) {
@@ -868,6 +879,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         try {
             let success = false;
             const before = heldByKey();
+            const allBefore = allHeld();
             const breakIt = async () => {
                 if (isLiquid) return await useToolOnBlock(bot, 'bucket', block);
                 // By hand when the block has no collision box (a rock pile), or when a rule's tool must
@@ -924,8 +936,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                     }
                 }
                 collected += gained;
-                if (gained === 0)
-                    log(bot, `Broke ${block.name} but got no ${blockType}.`);
+                if (gained === 0) {
+                    // Say what it did give (round 5 A rerun: a felled spruce gave logs, the stick
+                    // line said only "got no stick"), and that sticks are rare from felling.
+                    const other = Object.entries(allHeld()).map(([key, n]) => [key, n - (allBefore[key] ?? 0)]).filter(([, d]) => d > 0);
+                    const gave = other.length ? ` (it gave ${other.map(([key, d]) => `${d} ${key}`).join(', ')})` : '';
+                    const rare = baseType === 'stick' && fellsTree(block) ? ' A felled tree drops few sticks, often none.' : '';
+                    log(bot, `Broke ${block.name} but got no ${blockType}${gave}.${rare}`);
+                }
             }
             if (run.aborted) break;
             await autoLight(bot);
@@ -979,9 +997,10 @@ export const stickCraftsHeld = (bot) => Object.values(planksByKind(bot)).reduce(
 /**
  * Sticks short (G3 round 5 A: no tree could be felled safely): make `need` sticks from held planks,
  * 2 planks of one kind giving 4 (RotN keeps it, in the inventory grid). Without a pair of one kind,
- * held logs (ore:logWood) are made into planks first (#268 follow-up 2; craftRecipe finds or
- * places a table if the pack wants one). Bounded rounds, each must make progress. Returns the
- * sticks made.
+ * held logs (ore:logWood) are made into planks first (#268 follow-up 2), but only with a crafting
+ * table near or held: every RotN log -> planks recipe is a 3-high column (rotn-data; round 5 A
+ * rerun: "Crafting planks requires a crafting table"). Bounded rounds, each must make progress.
+ * Returns the sticks made.
  */
 export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds = 4) {
     const logNames = oreMemberNames('logWood');
@@ -993,6 +1012,10 @@ export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds 
         const pairs = stickCraftsHeld(bot);
         if (pairs === 0) {
             if (logsHeld() === 0) break;
+            if (countItem(bot, 'crafting_table') === 0 && !world.getNearestBlock(bot, 'crafting_table', 16)) {
+                log(bot, 'Logs make planks only at a crafting table in RotN, and you have none near. Before the table, River Cane or bamboo (picked by hand) work as sticks for the crude axe and the Crafting Tools.');
+                break;
+            }
             const before = planksHeld();
             log(bot, `Making planks from logs for sticks.`);
             await craftRecipe(bot, 'planks', Math.ceil(crafts / 2)); // 1 log: 4 planks in vanilla; another round if fewer
@@ -1098,8 +1121,12 @@ export async function breakLeafFromGround(bot, block, run = currentRun(bot)) {
  * Bounds for picking up a felled tree's drops (G3 smoke C+D). On this pack a branch break fells
  * the whole tree, which falls in the chop direction and drops its logs where it lands, a few
  * seconds later. The search is around the broken branch, not the bot.
+ * G3 round 5 A rerun: "no drops appeared within 6 s" three times, and later 25 logs lay around
+ * (picked up by item_collecting): a tall spruce lands up to its height away, and late. So the
+ * radius is a tall tree's height, the wait for drops 15 s, and the whole pickup at most 60 s;
+ * pickupMs lets the last pickup reach the inventory before the gain is counted.
  */
-export const FELL_LIMITS = { radius: 12, settleMs: 6000, quietMs: 1000, walkMs: 8000, totalMs: 30_000 };
+export const FELL_LIMITS = { radius: 20, settleMs: 15_000, quietMs: 2000, walkMs: 8000, totalMs: 60_000, pickupMs: 1000 };
 
 /**
  * After a branch break: wait (bounded) for the drops to appear and settle, then walk to each
@@ -1123,8 +1150,10 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
     // (G3 round 5 A: one tree refused 4 times in one collect, 6 in the run).
     const treeBlocks = (b) => [block.position, b, ...canopyOf(bot, b).cells.filter(p => isBranch(bot.blockAt(p)))];
     if (!base) {
+        // Every branch around it, not just this block (round 5 A rerun: a felled tree's trunk the
+        // bot still saw, 4 blocks, "its trunk is not in sight" 4 times in each of 2 collects).
         log(bot, `Not cutting the tree at ${at(block.position)}: its trunk is not in sight.`);
-        return { cut: false, skip: [block.position] };
+        return { cut: false, skip: [block.position, ...branchesNear(bot, block.position)] };
     }
     // A tree already refused in this collect: skipped without a word (refused: base keys).
     if (refused?.has(at(base))) return { cut: false, skip: treeBlocks(base) };
@@ -1166,6 +1195,9 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
     let underLeaves = false;
     for (let y = spot.y + 2; y <= base.y + FELL_PLAN.canopyHeight && !underLeaves; y++) underLeaves = isTreeLeaves(bot.blockAt(new Vec3(spot.x, y, spot.z)));
     await bot.lookAt(base.offset(0.5 + face.x * 0.5, 0.5, 0.5 + face.z * 0.5));
+    // Its blocks as the bot sees them now: after the fall they are skipped for this collect, so a
+    // trunk the bot still sees is never cut again (round 5 A rerun: one tree cut 4 times).
+    const standing = treeBlocks(base);
     await bot.dig(trunk, true, face);
     bot.rotnLastFell = { at: Date.now(), pos: base.clone ? base.clone() : base, underLeaves }; // the death report reads it
     log(bot, `Cut the tree at ${at(base)} from ${at(spot)}, away from its canopy${underLeaves ? ' (from under its leaves)' : ''}; stepping back.`);
@@ -1182,9 +1214,9 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
         else if (seen || Date.now() - start >= TREE_FALL.appearMs) break;
         await sleep(200);
     }
-    if (run.aborted) return { cut: true, skip: [] };
+    if (run.aborted) return { cut: true, skip: standing };
     await collectFelledDrops(bot, base, {}, itemsBefore);
-    return { cut: true, skip: [] };
+    return { cut: true, skip: standing };
 }
 
 async function collectFelledDrops(bot, center, limits = {}, baseline = null) {
@@ -1228,6 +1260,8 @@ async function collectFelledDrops(bot, center, limits = {}, baseline = null) {
         } catch { /* a walk that failed: try the next drop */ }
         await sleep(Math.min(250, left()));
     }
+    // The last pickup reaches the inventory a moment after the walk: count after it (round 5 A rerun).
+    if (walked > 0) await sleep(Math.min(L.pickupMs ?? 0, Math.max(0, left())));
     const leftBehind = dropsNear().length;
     log(bot, `Felled the tree at ${where}: ${seen} drops within ${L.radius} blocks (${Math.max(0, seen - before)} new), ${leftBehind} left behind`
         + `${leftBehind && left() <= 0 ? ` (the ${secsText(L.totalMs)} limit)` : ''}.`);
@@ -1938,6 +1972,13 @@ export async function goToPosition(bot, x, y, z, min_distance=2) {
     }
 }
 
+/** A search for wood: a log or a tree's branch (or what a felled tree gives, by rotn-data). */
+function isWoodSearch(blockType) {
+    const name = parseName(blockType)?.name ?? blockType;
+    return isBranch({ name }) || oreMemberNames('logWood').some(n => (parseName(n)?.name ?? n) === name)
+        || worldSources(blockType).some(s => s.id === 'fell-tree');
+}
+
 export async function goToNearestBlock(bot, blockType,  min_distance=2, range=64) {
     /**
      * Navigate to the nearest block of the given type.
@@ -1962,6 +2003,18 @@ export async function goToNearestBlock(bot, blockType,  min_distance=2, range=64
             blocks = world.getNearestBlocksWhere(bot, block => block.name === blockType, range, 1);
         }
         block = blocks[0];
+    }
+    else if (isWoodSearch(blockType)) {
+        // Wood: a tree on the surface, never a log underground (G3 round 5 A rerun: a log at
+        // y 45 under the surface, and the walk ran out its 180 s). On this pack trees are
+        // Dynamic Trees branches, so those are searched too (rotn-data fell-tree).
+        const names = [blockType, ...worldSources(blockType).filter(s => s.id === 'fell-tree').flatMap(s => s.blocks)];
+        block = world.getNearestBlocksWhere(bot, blockMatcher(names), range, 64)
+            .find(b => b && !world.isUnderground(bot, b.position)) ?? null;
+        if (!block) {
+            log(bot, `Could not find any ${blockType} on the surface in ${range} blocks (logs underground are left alone).`);
+            return false;
+        }
     }
     else {
         block = world.getNearestBlock(bot, blockType, range);

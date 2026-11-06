@@ -68,3 +68,13 @@ test('#268 follow-up 4: a memory.json from an earlier run holding a failure repl
         assert.equal((await loaded(''))[2], '', 'no memory: no warning');
     } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+// G3 round 5 A rerun: all 4 memory summaries came back empty (finish_reason stop). promptMemSaving
+// sends the prompt with the default stop sequence '*' (src/models/*.js sendRequest), so a summary
+// that opens with markdown ("**Memory:**", "* item") stops at its first character.
+test('round 5 A rerun: the memory prompt asks for plain text with no asterisks (the stop sequence is "*")', async () => {
+    const { readFileSync } = await import('node:fs');
+    const profile = JSON.parse(readFileSync(new URL('../../profiles/defaults/_default.json', import.meta.url), 'utf8'));
+    assert.match(profile.saving_memory, /Write plain text only: no markdown, no asterisks, no bullet points, no headings, and no thinking out loud; start with the memory itself\./);
+    assert.ok(!profile.saving_memory.includes('*'), 'the prompt itself shows no asterisk to copy');
+});

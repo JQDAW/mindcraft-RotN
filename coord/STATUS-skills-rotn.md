@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T12:48Z (from `date -u`)
+Updated: 2026-11-06T13:29Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -205,6 +205,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 14. ~~rotn-data (via the lead, #206 review 1)~~ (answered by rotn-data #209: `foodValues`, `avoidFood`, `installFoods`): export `foodOf(name, meta)`, returning `{ hunger, saturation }` with the pack's `scripts/food.zs` values on top of the dump (bread 3, not 5), or `null` for a non-food. `food.js` uses it as soon as it exists, and a skipped test then checks bread 3. Also wanted: a structured "harmful food" field with sources, so `AVOID_FOODS` can leave the code.
 15. **rotn-data (via the lead, D1b #212):** from the pack's `hordes-1.1.7` jar (`assets/hordes/lang/en_us.lang`) and any pack override, list the message keys and English texts sent at a wave or horde start, and whether each is a title, a subtitle or chat. The matcher then narrows from "names a horde" to exactly those.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
+16. **Lead (`src/models/prompter.js`, `src/models/*.js`), round 5 A rerun item 4:** `promptMemSaving` calls `sendRequest([], prompt)`, so the prompt is the only message (system) and the stop sequence is the default `'*'`. Please consider sending the summary prompt as a user turn, and passing no stop sequence (or `null`) for the memory call, so a markdown summary is not cut at its first `*`. My profile change (plain text, no asterisks) only lowers the chance.
 
 ## Open PRs
 
@@ -577,6 +578,41 @@ Round 5 resumed before 12:48Z, per the lead (A rerun, B, C, D): targeted tests o
   - `death_report` 15 (1 new).
   - All new or changed tests fail on develop's code (with a stub export for `stickCraftsHeld`).
   - Related files pass: `collect_rotn`, `agenda`, `fall_safety`.
+  - Lint 253.
+- **Opened as #270.**
+
+## Round 5 A rerun fixes (branch `agent/skills-rotn/r5-rerun`, on top of #270; 2026-11-06T13:29Z by `date -u`)
+
+Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-rerun/`). Pushed without a PR: the lead wants the PR after the round.
+
+1. **Felling drops late and far; sticks rare:**
+   - `FELL_LIMITS`: radius 12 → 20, settle 6 → 15 s, quiet 1 → 2 s, total 30 → 60 s (bounded). New `pickupMs` (1 s): the gain is counted after the last pickup.
+   - A cut tree's blocks, as the bot saw them before the cut, are skipped for the rest of the collect. In the log, one tree was cut 4 times because the bot still saw its trunk.
+   - "Trunk not in sight" now skips every branch around the block: once, not 4 times.
+   - A break with no target gain says what it gave ("it gave 3 log:1"). For sticks from felling it adds "A felled tree drops few sticks, often none."
+2. **No path from logs to sticks before the table:**
+   - rotn-data's answer (from the pack scripts and bytecode): every log → planks recipe is a 1x3 column, so a table is needed. Without a table, the only route is Hit With Axe: right-click a placed log twice with an axe (the crude axe qualifies) for 1 plank, and a placed plank once for 2 sticks.
+   - River Cane (`biomesoplenty:plant_1:5`) and BOP bamboo are `ore:stickWood`, picked by hand. They fill the crude axe's and the Crafting Tools' stick slots.
+   - **Agenda:** the sticks step now needs 3 `stickWood` (2 for the crude axe, 1 for the Crafting Tools; it was 4 sticks). Its goal names felling (rare), River Cane and bamboo, and says planks come after the table.
+   - The rest of the path is unchanged: crude axe → logs → `first_plank` (`!useOn` the crude axe on a placed log, 2 uses) → `crafting_tools` (uses up the axe) → `crafting_table` → planks and sticks at the table.
+   - The crude axe and Crafting Tools goals mention the stand-ins.
+   - **The stick fallback** now makes logs into planks only with a crafting table near or held; otherwise it says why and names the stand-ins.
+3. **Underground logs:**
+   - `world.isUnderground(bot, pos)`: solid non-tree ground within 48 blocks above.
+   - `!searchForBlock` for wood also searches Dynamic Trees branches (fell-tree) and never picks a block underground ("Could not find any log on the surface...").
+   - `collectBlocks` for wood skips underground blocks.
+4. **Empty memory summaries:**
+   - `promptMemSaving` sends the prompt as the only (system) message, with the default stop sequence `'*'`. A summary that opens with markdown (`**`, `* `) stops at its first character, which gives empty content with `finish_reason stop`, as logged.
+   - Profile side: `saving_memory` now asks for plain text with no asterisks, bullets, headings or thinking out loud.
+   - The rest is lead-owned code; see Requests 16. Not checked against the live model: a paid call needs a lead GO.
+- **Tests** (targeted):
+  - `fell_tree` 22 (5 new; 2 updated for radius 20; the logs-first test gets a table);
+  - `agenda` 18 (1 new; 3 updated for "collect 3 sticks");
+  - `history` 4 (1 new);
+  - `craft_needs` 34 (1 new guard: River Cane and bamboo fill both recipes);
+  - `fall_safety` 17 (the sticks-goal test updated).
+  - All new tests fail on #270's head (with a stub for `isUnderground`).
+  - Related files pass: `collect_rotn`, `priority`, `death_report`, `rotn_names`, `cobble`.
   - Lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)

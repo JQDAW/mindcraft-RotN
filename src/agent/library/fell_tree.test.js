@@ -14,6 +14,7 @@ import { __setRegistryForTest } from '../../utils/mcdata.js';
 import { worldSources } from './rotn_sources.js';
 import { treeBase, standSpots, FALLING_TREE } from './felling.js';
 import * as skills from './skills.js';
+import * as world from './world.js';
 
 const vanilla = minecraftData('1.12.2');
 const reg = { ...vanilla, blocks: { ...vanilla.blocks }, blocksByName: { ...vanilla.blocksByName } };
@@ -43,7 +44,7 @@ function tree(world, x, z = 0, { lean = 1 } = {}) {
  * The bot and its world. A cut trunk turns the whole tree into a falling tree entity for fallMs;
  * then its logs lie where it landed (log:1 each), east of the trunk (the canopy side).
  */
-function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false, approachMs = 0, axe = true, sticks = 0 } = {}) {
+function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false, approachMs = 0, axe = true, sticks = 0, ghost = false } = {}) {
     const world = new Map();
     for (const [x, z = 0] of trees) tree(world, x, z);
     build?.(world);
@@ -85,7 +86,9 @@ function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, un
             for (let y = where.y + 2; y < 75; y++) covered ||= /dynamictrees/.test(world.get(key(at(where.x, y, where.z))) ?? '');
             log.digs.push({ pos: key(b.position), from: key(where), covered, face: faceArg ? key(faceArg) : null, gotosBefore: log.moves.length, held: bot.heldItem?.name ?? null });
             // The whole tree falls: its blocks become one falling entity, and the logs land later.
-            for (const [k, name] of [...world]) if (name === BRANCH || name === LEAVES) world.delete(k);
+            // ghost: the client still sees the tree above the cut (round 5 A rerun); only the cut block goes.
+            if (ghost) world.delete(key(b.position));
+            else for (const [k, name] of [...world]) if (name === BRANCH || name === LEAVES) world.delete(k);
             const fall = { id: nextId++, name: FALLING_TREE, position: b.position.clone() };
             entities[fall.id] = fall;
             setTimeout(() => {
@@ -215,7 +218,7 @@ test('drops: none fell (the wait is bounded), and a drop that cannot be reached'
 
     const stuck = fakeBot({ unreachable: [at(7, 64, 1)] }); // the first log's place
     assert.equal(await skills.collectBlock(stuck, 'log', 1), true);
-    assert.match(stuck.output, /3 drops within 12 blocks \(3 new\), 1 left behind/);
+    assert.match(stuck.output, /3 drops within 20 blocks \(3 new\), 1 left behind/);
     assert.match(stuck.output, /Collected 2 log/);
 });
 
@@ -224,7 +227,7 @@ test('#222 review: drops already on the ground do not end the wait; it waits for
     // An old stick lies north of the trunk; the tree's logs land 1 s after the cut (longer than quietMs).
     const bot = fakeBot({ fallMs: 1000, onGround: [at(3, 64, 4)] });
     assert.equal(await skills.collectBlock(bot, 'log', 1), true, bot.output);
-    assert.match(bot.output, /Felled the tree at 3, 64, 0: 4 drops within 12 blocks \(3 new\), 0 left behind\./);
+    assert.match(bot.output, /Felled the tree at 3, 64, 0: 4 drops within 20 blocks \(3 new\), 0 left behind\./);
     assert.match(bot.output, /Collected 3 log/);
 });
 
@@ -427,7 +430,7 @@ test('#268 follow-up 3: planks are counted per kind: a mixed pair makes no stick
 
 test('#268 follow-up 2: no pair of planks but logs held: logs into planks first, then sticks', T, async (t) => {
     fast(t);
-    const bot = crafter([['log', 1, 2], ['planks', 0, 1]]);
+    const bot = crafter([['log', 1, 2], ['planks', 0, 1], ['crafting_table', 0, 1]]); // a table to place (round 5 A rerun)
     assert.equal(await skills.collectBlock(bot, 'stick', 4), true, bot.output);
     assert.deepEqual(bot.crafted, [['planks', 1], ['stick', 1]], 'one log into planks, then one stick craft');
     assert.equal(held(bot, 'stick'), 4);
@@ -439,4 +442,69 @@ test('#268 follow-up 2: no pair of planks but logs held: logs into planks first,
     const bare = crafter([]); // nothing to craft from
     assert.equal(await skills.collectBlock(bare, 'stick', 4), false);
     assert.deepEqual(bare.crafted, []);
+
+    // Round 5 A rerun: logs but no table near or held: no craft tried ("Crafting planks requires a
+    // crafting table" before), and the reason, with the sticks that need no table.
+    const noTable = crafter([['log', 1, 25]]);
+    assert.equal(await skills.collectBlock(noTable, 'stick', 4), false);
+    assert.deepEqual(noTable.crafted, []);
+    assert.match(noTable.output, /Logs make planks only at a crafting table in RotN, and you have none near\. Before the table, River Cane or bamboo \(picked by hand\) work as sticks/);
+});
+
+// ---- G3 round 5 A rerun: late, far drops; one tree cut 4 times; "its trunk is not in sight" ----
+
+test('round 5 A rerun: the drop wait is longer and bounded, and reaches as far as a tall tree falls', () => {
+    const L = skills.FELL_LIMITS;
+    assert.ok(L.radius >= 20, `radius ${L.radius}`);
+    assert.ok(L.settleMs >= 15_000, `settle ${L.settleMs}`);
+    assert.ok(L.totalMs <= 60_000 && L.totalMs > L.settleMs, `bounded: ${L.totalMs}`);
+    assert.ok(L.pickupMs > 0);
+});
+
+test('round 5 A rerun: drops that land 15 blocks out are picked up, and the gain is counted after the pickup', T, async (t) => {
+    fast(t);
+    const bot = fakeBot({ drops: [at(18, 64, 0), at(18, 64, 1)] }); // 15 out from the trunk at x 3
+    assert.equal(await skills.collectBlock(bot, 'log', 2), true, bot.output);
+    assert.match(bot.output, /Felled the tree at 3, 64, 0: 2 drops within 20 blocks \(2 new\), 0 left behind\./);
+    assert.match(bot.output, /Collected 2 log/);
+});
+
+test('round 5 A rerun: a felled tree the bot still sees is never cut again; its leftover blocks are one "not in sight"', T, async (t) => {
+    fast(t);
+    const bot = fakeBot({ ghost: true });
+    await skills.collectBlock(bot, 'log', 3);
+    assert.equal(bot.log.digs.length, 1, 'one cut, though the trunk above it is still seen');
+    assert.doesNotMatch(bot.output, /trunk is not in sight/, 'its blocks are skipped for this collect');
+    // The next collect: the leftover trunk (no ground under it) is one refusal, not one per block.
+    bot.output = '';
+    await skills.collectBlock(bot, 'log', 3);
+    assert.equal(bot.log.digs.length, 1);
+    assert.equal((bot.output.match(/its trunk is not in sight/g) ?? []).length, 1, bot.output);
+});
+
+test('round 5 A rerun: a felled tree that gave logs but no stick says what it gave, and that sticks are rare', T, async (t) => {
+    fast(t);
+    const bot = fakeBot({ sticks: 0 });
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), false);
+    assert.match(bot.output, /Broke dynamictrees:sprucebranch but got no stick \(it gave 3 log:1\)\. A felled tree drops few sticks, often none\./);
+});
+
+test('round 5 A rerun: wood is never targeted underground: collectBlocks and searchForBlock pick the surface tree', T, async (t) => {
+    fast(t);
+    const buried = (w) => { w.set(key(at(-2, 60, 0)), 'log'); w.set(key(at(-3, 60, 0)), 'log'); }; // 4 below the bot, in dirt
+    const bot = fakeBot({ build: buried });
+    assert.equal(world.isUnderground(bot, at(-2, 60, 0)), true);
+    assert.equal(world.isUnderground(bot, at(3, 64, 0)), false, 'a trunk under its own canopy is on the surface');
+    assert.equal(await skills.collectBlock(bot, 'log', 1), true, bot.output);
+    assert.equal(bot.log.digs.length, 1);
+    assert.equal(bot.log.digs[0].pos, '3,64,0', 'the surface tree, not the nearer buried log');
+
+    const search = fakeBot({ build: buried });
+    assert.equal(await skills.goToNearestBlock(search, 'log', 4, 64), true, search.output);
+    assert.match(search.output, /Found log at \(3, (6[4-9]|7\d), -?\d+\)/, 'a block of the surface tree');
+    assert.doesNotMatch(search.output, /, 60, /);
+
+    const none = fakeBot({ trees: [], build: buried });
+    assert.equal(await skills.goToNearestBlock(none, 'log', 4, 64), false);
+    assert.match(none.output, /Could not find any log on the surface in 64 blocks \(logs underground are left alone\)\./);
 });

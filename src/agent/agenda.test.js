@@ -113,9 +113,9 @@ test('the driver points the self-prompter at the current step and moves on when 
     assert.equal(agendaTick(agent, { now: 1_000 + TICK_MS - 1 }), null, 'throttled');
     items.push(stack('pyrotech_compat:rock_igneous', 0, 6));
     assert.equal(agendaTick(agent, { now: 1_000 + TICK_MS }), 'sticks');
-    assert.deepEqual(agent.said.slice(1), ['agenda step rocks done', 'agenda step sticks started: collect 4 sticks']);
+    assert.deepEqual(agent.said.slice(1), ['agenda step rocks done', 'agenda step sticks started: collect 3 sticks']);
     assert.equal(agent.self_prompter.starts.length, 1, 'already running: only the prompt changes');
-    assert.match(agent.self_prompter.prompt, /\(sticks\): Get at least 4 sticks with !collectBlocks\("stick", 4\)/);
+    assert.match(agent.self_prompter.prompt, /\(sticks\): Get at least 3 sticks: 2 for the crude axe and 1 for the Crafting Tools\. !collectBlocks\("stick", 3\)/);
 });
 
 test('a stopped self-prompter is restarted after a doubling back-off; after 3 runs the step is stuck and the agenda pauses', (t) => {
@@ -250,7 +250,7 @@ test('commands: !agenda describes it; !agendaStop/!agendaStart only when a giver
     // #164 review: the query records nothing, so the driver still posts "agenda step rocks done".
     agent.bot.inventory = fakeBot([stack('pyrotech:rock', 0, 6)]).inventory;
     await agent.handleMessage('JQDAW', '!agenda');
-    assert.ok(said.includes('JQDAW: agenda: active, step sticks (collect 4 sticks); done: rocks'));
+    assert.ok(said.includes('JQDAW: agenda: active, step sticks (collect 3 sticks); done: rocks'));
     assert.deepEqual(agent.agenda.done_at, {});
     await agent.handleMessage('Alex', '!agendaStop');
     assert.equal(agent.agenda.active, true, 'not a task giver');
@@ -271,7 +271,7 @@ test('a step once done stays done: crafting the crude axe uses up sticks, the ag
     // The bot crafts the crude axe: 1 rock and 2 sticks are used up.
     items[0].count = 5; items[1].count = 2; items.push(stack('pyrotech:crude_axe', 0, 1));
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'logs');
-    assert.ok(!agent.said.some(m => m === 'agenda step sticks started: collect 4 sticks'), 'never back to sticks');
+    assert.ok(!agent.said.some(m => m === 'agenda step sticks started: collect 3 sticks'), 'never back to sticks');
 });
 
 test('G3 round 3 A: the cobblestone step\'s goal names the cobblestone the held rocks make, with one command', () => {
@@ -321,4 +321,13 @@ test('round 4 C+D: steps done together get one summary line, not one line each',
     const one = fakeAgent(t, [stack('pyrotech:rock', 0, 6)]);
     agendaTick(one, { now: 1_000 });
     assert.equal(one.said[0], 'agenda step rocks done', 'one step keeps its own line');
+});
+
+test('round 5 A rerun: the sticks step needs 3 stickWood, and River Cane or bamboo count (rotn-data: ore:stickWood)', () => {
+    const rocks = [stack('pyrotech:rock', 0, 6)];
+    assert.equal(stepOf([...rocks, stack('stick', 0, 2)]), 'sticks', '2 sticks: one short of the axe and the Crafting Tools');
+    assert.equal(stepOf([...rocks, stack('stick', 0, 3)]), 'crude_axe', '3 sticks do (4 were needed before)');
+    assert.equal(stepOf([...rocks, stack('stick', 0, 1), stack('biomesoplenty:plant_1', 5, 2)]), 'crude_axe', '1 stick and 2 River Cane');
+    assert.equal(stepOf([...rocks, stack('biomesoplenty:bamboo', 0, 3)]), 'crude_axe', '3 bamboo');
+    assert.equal(stepOf([...rocks, stack('biomesoplenty:plant_1', 0, 3)]), 'sticks', 'another plant_1 kind is not River Cane');
 });
