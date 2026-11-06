@@ -14,8 +14,9 @@
 // 2 and 3 logged the same pattern (NaN y NaN) in the rocks, night and untrusted runs.
 //
 // This copies the vec3 into the old names before mineflayer's handlers run, for every entity.
+// spawn_entity is left out: mineflayer 4.33.0's spawn_entity handler does not read a velocity.
 
-export const VELOCITY_PACKETS = ['entity_velocity', 'spawn_entity', 'spawn_entity_living'];
+export const VELOCITY_PACKETS = ['entity_velocity', 'spawn_entity_living'];
 
 /** Copies packet.velocity {x, y, z} into velocityX/Y/Z in place. Returns true if it did. */
 export function normalizeVelocityFields(packet) {

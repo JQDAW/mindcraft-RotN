@@ -13,15 +13,21 @@ import { Buffer } from 'node:buffer';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
-import { buildCustomPackets, createTypeReader, slotType } from '../src/reid.js';
-import { readStackUpCount, writeStackUpCount, sizeOfStackUpCount, STACKUP_COUNT_TYPE } from '../src/stackup.js';
+import { buildCustomPackets, createTypeReader, slotType, assertPristineProtocol } from '../src/reid.js';
+import { readStackUpCount, writeStackUpCount, sizeOfStackUpCount, STACKUP_COUNT_TYPE, STACKUP_MARKER, STACKUP_BYTE_MAX, STACKUP_VERSION } from '../src/stackup.js';
 import { attachForgeBridge } from '../src/bridge.js';
 import { pinnedModList } from './helpers.js';
 
 const require = createRequire(import.meta.url);
 const { createSerializer, createDeserializer } = require('minecraft-protocol/src/transforms/serializer');
 const { PartialReadError } = require('protodef').utils;
+
+// minecraft-data's 1.12.2 protocol as it is before any test here compiles one (nmp's merge
+// changes it in place). reid.js is imported above, so its own load-time check already passed.
+const PRISTINE = JSON.parse(JSON.stringify(require('minecraft-data')('1.12.2').protocol));
+const JAVAP = fs.readFileSync(new URL('./fixtures/stackup-0.2.5/PacketBufferWriterSplice.javap.txt', import.meta.url), 'utf8');
 
 const hex = (s) => Buffer.from(s.replace(/\s+|\/\/[^\n]*/g, ''), 'hex');
 
@@ -198,4 +204,50 @@ test('a validating ProtoDef over the merged types (as nmp\'s pluginChannels buil
     const undeclared = { ...merged };
     delete undeclared[STACKUP_COUNT_TYPE];
     assert.throws(() => validating(undeclared), /validation error/, 'the failure this declaration prevents');
+});
+
+test('the constants match StackUp 0.2.5\'s bytecode (fixture: javap of PacketBufferWriterSplice)', () => {
+    const method = (sig) => {
+        const start = JAVAP.indexOf(sig);
+        assert.ok(start >= 0, `method ${sig} in the fixture`);
+        const end = JAVAP.indexOf('LineNumberTable', start);
+        return JAVAP.slice(start, end).split('\n').map((l) => l.replace(/\s*\/\/.*$/, '').trim()).filter((l) => /^\d+:/.test(l)).map((l) => l.replace(/^\d+:\s+/, '').replace(/\s+/g, ' '));
+    };
+    // readItemStack: readByte, compare with -42, then readInt.
+    const read = method('func_150791_c()');
+    const r = read.indexOf(`bipush ${STACKUP_MARKER}`);
+    assert.ok(r > 0 && read[r - 3].startsWith('invokevirtual #31') && read[r + 1].startsWith('if_icmpne') && read[r + 3].startsWith('invokevirtual #35'), read.join(' | '));
+    assert.match(JAVAP, /#31 +\/\/ Method readByte:\(\)B/);
+    assert.match(JAVAP, /#35 +\/\/ Method readInt:\(\)I/);
+    // writeItemStack: count < 0 or count > 64 -> writeByte(-42), writeInt(count); else writeByte(count).
+    const write = method('func_150788_a(');
+    assert.ok(write.includes(`bipush ${STACKUP_BYTE_MAX}`) && write.includes('if_icmpgt 56') && write.includes('iflt 56'), write.join(' | '));
+    const w = write.indexOf(`bipush ${STACKUP_MARKER}`);
+    assert.ok(w > 0 && write[w + 1].startsWith('invokevirtual #81') && write.slice(w + 2, w + 7).some((l) => l.startsWith('invokevirtual #84')), write.join(' | '));
+    assert.match(JAVAP, /#81 +\/\/ Method writeByte:\(I\)Lio\/netty\/buffer\/ByteBuf;/);
+    assert.match(JAVAP, /#84 +\/\/ Method writeInt:\(I\)Lio\/netty\/buffer\/ByteBuf;/);
+    assert.ok(JAVAP.includes(`mods/StackUp-${STACKUP_VERSION}.jar`), 'the fixture is from the version stackup.js follows');
+});
+
+test('the bridge warns when the server runs another StackUp version', () => {
+    const attach = (version) => {
+        const client = new EventEmitter();
+        client.write = () => true;
+        client.setSerializer = function () { this.deserializer = { parsePacketBuffer: () => ({ data: {}, metadata: { size: 0 } }) }; };
+        const logs = [];
+        const modList = pinnedModList().map((m) => (m.modid === 'stackup' ? { ...m, version } : m));
+        attachForgeBridge(client, { modList, log: (m) => logs.push(m) });
+        return logs.filter((l) => /StackUp/.test(l) && /warning/.test(l));
+    };
+    assert.deepEqual(attach(STACKUP_VERSION), []);
+    const w = attach('0.3.0');
+    assert.equal(w.length, 1);
+    assert.match(w[0], /warning: StackUp 0\.3\.0 on the server; the item-count layout was read from 0\.2\.5/);
+});
+
+test('reid.js refuses a minecraft-data protocol that nmp already merged overrides into', () => {
+    assert.doesNotThrow(() => assertPristineProtocol(PRISTINE));
+    const merge = require('lodash.merge');
+    const merged = merge(JSON.parse(JSON.stringify(PRISTINE)), buildCustomPackets({ reid: true, stackup: true })['1.12']);
+    assert.throws(() => assertPristineProtocol(merged), /already has forge-bridge overrides \(slot\.blockId "varint", slot\.itemCount "stackUpCount", packet_entity_effect\.reidEffectId\)/);
 });

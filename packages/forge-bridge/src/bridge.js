@@ -13,7 +13,7 @@ import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, rotnMetadat
 import { classifyKick, classifySocketError } from './kicks.js';
 import { modGuiWindow } from './mod-guis.js';
 import { HORDES_CHANNEL, decodeHordes } from './hordes.js';
-import { STACKUP_MODID } from './stackup.js';
+import { STACKUP_MODID, STACKUP_VERSION } from './stackup.js';
 
 const require = createRequire(import.meta.url);
 
@@ -62,6 +62,9 @@ export function attachForgeBridge(client, opts) {
     bridge.triumph = findMod(modList, 'triumph') ?? null;
     // StackUp writes item counts outside 0..64 as the byte -42 and an int (stackup.js).
     bridge.stackup = findMod(modList, STACKUP_MODID) ?? null;
+    if (bridge.stackup && bridge.stackup.version !== STACKUP_VERSION) {
+        log(`warning: StackUp ${bridge.stackup.version} on the server; the item-count layout was read from ${STACKUP_VERSION} (stackup.js). Check PacketBufferWriterSplice in the new jar`);
+    }
     bridge.metadataSerializers = { ...rotnMetadataSerializers(modList), ...extraSerializers };
     bridge.modList = modList;
     bridge.serverChannels = [];

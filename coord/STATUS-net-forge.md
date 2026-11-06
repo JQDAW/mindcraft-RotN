@@ -1,10 +1,20 @@
 # Status: net-forge
 
-Updated: 2026-11-06T04:29Z
+Updated: 2026-11-06T04:42Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## G3 round 3 batch C+D disconnect and the NaN x/z: **PR #249** (2026-11-06T03:27Z, lead's request; PR opened 2026-11-06T04:29Z)
+## #249 review follow-ups: PR open (2026-11-06T04:42Z, lead's list)
+
+- **Branch:** `agent/net-forge/stackup-followups`, from develop `aeda51d` (#249 merged). The PR is waiting for the lead's review.
+- **(1) javap fixture:** the StackUp 0.2.5 javap excerpt is committed as `packages/forge-bridge/test/fixtures/stackup-0.2.5/PacketBufferWriterSplice.javap.txt` (readItemStack and writeItemStack, with the jar's SHA-256). A test checks `STACKUP_MARKER` and `STACKUP_BYTE_MAX` against its instructions.
+- **(2) version warning:** the bridge logs a warning when the server's StackUp is not 0.2.5. Tested.
+- **(3) load order:** `reid.js` now checks minecraft-data's protocol when it takes its copy, and throws if nmp has already merged overrides into it. Tested; every forge-bridge test file that loads it passes.
+- **(4) process-wide note:** `stackup.js` says that the global nmp tables and nmp's protocol cache fix the slot layout for the whole process.
+- **(5) spawn_entity:** dropped from the velocity compat list. mineflayer 4.33.0's `spawn_entity` handler reads no velocity.
+- **Blocked / requests:** none.
+
+## G3 round 3 batch C+D disconnect and the NaN x/z: merged as #249 (`aeda51d`)
 
 - **Branch:** `agent/net-forge/stackup-count`, from develop `aec33fe`; PR #249 is waiting for the lead's review.
 - **Local full suite:** `npm test` hung on Windows. Run file by file: 100 of 103 pass. The 3 others are harness-ops files that fail the same way on develop `d89fc30`: `deploy-eol` (CR in the autocrlf checkout), and `cx23` and `test-server` (both time out).
