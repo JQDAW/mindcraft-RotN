@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-06T03:18Z (from `date -u`)
+Updated: 2026-11-06T08:48Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -204,7 +204,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - **#213 merged** (`1dfef62d`), the #209 review nits: (1) `installFoods` bans nothing and is meta 0 only (a pufferfish shares the cod's entry): documented in `src/foods.js`, `index.js` and the README; the eating code must check `avoidFood(name, meta)` and set auto-eat's `bannedFood` from it (see Request 11). (2) `scriptWon` names the winning line per field for the 9 foods `food.zs` sets more than once (baked beets: lines 466, 468). (3) The build stops on a `HungerEvents.onGetFoodValues` / `onGetPlayerFoodValues` handler (comments ignored). Tests: food-values 7/7, ESLint clean, `--check` reproduces.
 - **#226 merged** (`eb9b5657`), **G3 smoke round 2 batch A deaths (lead request, 2026-11-05):** "Zombie FRCFLD" is Zombie Players by Corosus (`mods/zombie_players-1.12.1-1.2.7.jar`), its own entity `zombie_players:zombie_player` (named "Zombie <player>" by its getDisplayName), not a renamed vanilla zombie, so no name rule. It spawns at any player death spot (unless within 32 blocks of the player's bed), never despawns, is a plain zombie with empty hands (20 health, 2 armor, attack 3, follow range 16) and cannot pick up items. Corpse Complex keeps armor, main hand and off hand; the rest drops and despawns after 600 s. The grove sprite (Primitive Mobs) only retaliates on a server: its player-targeting task is added under world.isRemote (client only), so the PR #62 'conditional' override was wrong and made threatOf say 'fight'. Moved to reviewedNotMarked; both get cited threat-reactions entries (grove sprite ignore-unless-provoked, zombie player fight). Tests: threats 15/15, entity-threats 6/6, threats-bosses 4/4, threats-parasite-weta 3/3, ESLint clean (targeted, smoke round 2 running).
 - **#226 review nits, branch `agent/rotn-data/death-zombie-nits`:** (1) ~~burns in daylight~~ corrected after the #243 review (REQUEST CHANGES): EntityZombiePlayer overrides setFire (`func_70015_d`) with a bare return, so it **never catches fire** (not by day, lava, fire or Fire Aspect; I had missed that override in the method list). Summary says so and keeps "do not wait for day"; the test is inverted. The Hordes' zombie-player options configure its own `hordes:zombie_player`, and The Hordes jar has no reference to Zombie Players; (2) the bot cannot read the 'Zombie <player>' name (FML spawn data), so the summary says to match on the entity type. threats 15/15, ESLint clean.
-- **Exact next step on resume:** #243 (the #226 nits, fix pushed) is with the lead; fix review findings on its branch (never force-push). Otherwise idle; on a new lead request, branch from develop. The #210 falls follow-ups stay low priority. Open offer to the lead: read Hunger Overhaul's HarvestCraft / Biomes O' Plenty tables so the 753 `not-computed` foods get values (only if the lead wants it for D1a). Request 11 is closed (covered by #206, lead confirmed). No background jobs, no subagents, nothing uncommitted.
+- **Exact next step on resume:** #261 is merged (`cc99d9e9`). The #261 review nits are in #262 (`agent/rotn-data/entity-collision-docs`); fix review findings there (never force-push). Then the Request 14 dump run waits for the human's GO via the lead (plan under Request 14). After it, a data PR with the new `blocks.json.br` and a diff report; then net-forge switches to `playerCollision`. The #210 falls follow-ups stay low priority. No background jobs, no subagents, nothing uncommitted.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
 - **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
@@ -346,7 +346,88 @@ Findings for skills-rotn (via the lead): see Request 8.
 9. **Lead: a prismarine-recipe patch?** (from PR #112). `node_modules/prismarine-recipe/lib/recipe.js` `computeDelta` > `applyShape` reads `recipe.inShape[y]` where it should read `shape[y]`, so any `outShape` adds back every input. A one-line patch would let rotn-data emit `outShape` from the dump's `remaining` (1,116 recipes: buckets, knives), which mineflayer's `craft.js` `updateOutShape` then handles correctly. Not needed for G3 (no G3 recipe has remaining items). `patches/` for prismarine-recipe is not on net-forge's list, so it's your call: patch it (who?), or leave `outShape` out.
 11. **CLOSED (lead confirmed 2026-11-05: covered by #206; skills-rotn's `src/agent/library/food.js` calls `foodValues`/`avoidFood` directly, auto-eat off).** **Lead or net-forge: a call site for `installFoods(bot.registry)`** (food-values PR). mineflayer-auto-eat reads `bot.registry.foodsByName`, which has minecraft-data's vanilla 1.12.2 values (bread 5) until this runs. It must run once per login after forge-bridge's `extendRegistry`, next to `installRotnRecipesOnce` in `initBot` (net-forge's part of `src/utils/mcdata.js`). One line, like Request 7's. The same place (or skills-rotn's eating) must set auto-eat's `bannedFood` from `avoidFood` and check `avoidFood(name, meta)` on the stack before eating: `installFoods` bans nothing, and a pufferfish (`fish` meta 3) shares the cod's entry (#209 review).
 12. **skills-rotn (FYI, no change required by me): the player zombie never burns or despawns** (#243). No `src/agent/` code assumes it burns by day (checked on develop: `library/threats.js` 143-148, `library/death_report.js` 33-43 and 170-187). But `death_report.js`'s rule "no walking within DEATH_SPOT_RADIUS while a player zombie is loaded there" then never ends by itself: the zombie stays until something kills it, and Corpse Complex's drops despawn after 600 s (`config/corpsecomplex.cfg` line 195). If you want the bot to get its items back, the way is to kill it (your `canFightHard` path) within those 10 minutes, not to wait for day; otherwise the drops are lost and the spot stays blocked while the zombie is loaded.
+13. **skills-rotn (answer to the lead's round 4 batch B question, 2026-11-06): where sticks come from.** Sources: the pinned pack zip (SHA-256 `90642fd5...f5205`). Bytecode was read with javap (no mod code run) from `mods/DramaticTrees-1.12.2-0.13.4.jar` (SHA-256 `b86dae76...7ffe`, which holds the `com.ferreusveritas.dynamictrees` classes; there is no separate Dynamic Trees jar). Recipes come from our `recipes.json.br` dump.
+   - **Dynamic Trees leaves never drop sticks.**
+     - `BlockDynamicLeaves.getDrops` (bytecode 0-32) only calls `Species.getLeavesDrops`. That method (bytecode 26-60) asks two sources of drop rules for leaf drops: a global store and the species' own.
+     - Nothing registers into the global store: no class in DramaticTrees or in the 6 DT addon jars calls `TreeRegistry.registerDropCreator`.
+     - A species' own rules are the seed rule and the apple rule. Neither drops sticks.
+     - The seed rule (`DropCreatorSeed.getLeavesDrop`, bytecode 0-105) drops 1 seed with a 1-in-20 chance per leaf block, about 5%. Each Fortune level makes the chance higher, at most 1 in 10. `config/dynamictrees.cfg` line 24 (`enableSeasonalSeedDropFactor=false`) keeps seasons from changing that chance.
+     - Vanilla 1.12 `minecraft:leaves`/`leaves2` don't drop sticks either (saplings and apples only; this is vanilla behaviour, not re-read here). DT's `DropEventHandler.onHarvestDropsEvent` only touches their apples.
+     - **No pack rule adds sticks to leaves:**
+       - The `scripts/dropt*.zs` leaves rules only match `biomesoplenty:leaves_6:8/9` (giant flower petals), at `dropt_loose_materials.zs` lines 701 and 711.
+       - Every Pyrotech Dropt rule is off (`config/pyrotech/plugin.Dropt.cfg` lines 13-39), and Pyrotech Compat has no leaves rule.
+       - Better With Mods' `AxeLeaves` (`betterwithmods.cfg` line 1622) only makes axes break leaves faster.
+     - **So our `world-sources.json` entry `sticks-from-leaves` is wrong.** It was "documented" from the wiki's "Get sticks: break leaves". `!collectBlocks stick` on leaves gets nothing.
+   - **Felling a tree drops sticks as the log remainder.** This is the reliable source before you have a crafting table.
+     - When a branch breaks, `BlockBranch.destroyBranchFromNode` measures the wood volume of the part that falls (`NodeNetVolume.run`: radius² × 64 voxels per branch block; `getVolume` divides by 4096, so V = Σ radius²/64 logs).
+     - `getLogDrops` multiplies V by `harvestMultiplier`, which is **1.5** in `config/dynamictrees.cfg` line 108 (default 1.0).
+     - `Species.getLogsAndSticks` (bytecode 0-23) turns that into logs = floor(V) and sticks = floor((V - logs) × 8).
+     - `Species$LogsAndSticks` only keeps the sticks if `dropSticks` is on, and `dropSticks=true` in line 96.
+     - `DropCreatorLogs.getLogsDrop` (bytecode 55-83) adds `TreeFamily.getStick(n)`, which is `minecraft:stick` (`TreeFamily` init bytecode 85-96, `Items.field_151055_y`).
+     - **So each felled tree gives 0-7 sticks (about 3.5 on average) next to its logs.** They land where the falling tree's logs land. Several trees give enough sticks.
+   - **Stick recipes in the pack** (every recipe whose result is `minecraft:stick`):
+     - `crafttweaker:stick`: 2 `ore:plankWood` → 4 sticks. Shaped 1×2, so the 2×2 inventory grid works, with no table. There is no vanilla stick recipe.
+     - `crafttweaker:bamboo_to_stick`: 2 `futuremc:bamboo` → 1.
+     - `crafttweaker:crassula_stem_to_stick`: 1 `contenttweaker:greasy_stem` → 2.
+     - `crafttweaker:broken_stick_to_stick`: 2 `contenttweaker:broken_stick` + 1 slimeball or glue → 1. Broken sticks themselves only come from crafting a stick.
+     - `crafttweaker:stick_block_to_sticks`: 1 `ancientbeasts:stick_wall` → 9.
+     - Better With Mods' `FastStick` (1 plank → 2 sticks) is off (`betterwithmods.cfg` line 1665).
+     - Pyrotech adds no stick recipe. Its chopping-block and other scripts only use sticks as an input.
+   - **Planks need a table.** Every `crafttweaker:*_planks` recipe for vanilla logs is 3 wide (`[null, log, null]` → 3 planks), so it needs a crafting table. So does the debarked-log version (`crafttweaker:minecraft_planks_*_debarked*`).
+     - The only planks recipes that fit 2×2 take Pam's `harvestcraft:pammaple`, `pamcinnamon` or `pampaperbark` logs (→ 4) or the Twilight Forest giant log.
+     - **Before the first table, sticks come from felling only** (or bamboo, greasy stems or a Rustic berry bush).
+     - Correction: planks without a table do exist. Once you have the crude axe, `world-sources.json` `debark-log` and `plank-from-debarked-log` (wiki-documented) give planks: place a log, then use the crude axe on it twice. After that, 2 planks → 4 sticks in the 2×2 grid. Only the recipes need a table.
+   - **Felling works by hand (skills-rotn's follow-up question):**
+     - `BlockBranch.removedByPlayer` → `removedByEntity` → `FutureBreak` → `futureBreak` (bytecode 0-262) has no tool check. The held item only adds Fortune (× (1 + 0.25 per level)) and takes `damageAxe`.
+     - The branches are `toolRequired:false` (dump).
+     - Branch hardness = log hardness × radius²/8, capped at 200 (`dynamictrees.cfg` line 114; `BlockBranchBasic.func_176195_g`). By hand that is about 1.5 s per hardness point, so a radius-8 oak trunk takes about 24 s.
+     - The pack doesn't block it: `betterwithmods.cfg` line 474 `HCLumber=false`, `primallib.cfg` line 37 No Tree Punching integration false, and no Dropt rule matches a branch.
+     - The round 4 B `driver.log` (lines 162-164, 197-199, 214) shows leaf breaks giving no stick while the bot, with no axe, gained sticks. It shows no logs, so logs from a hand-felled tree remain untested.
+   - **Path to the first table** (`scripts/crafting_tables.zs` and `scripts/pyrotech/pyrotech_recipes_craftingtable.zs`; all are 2×2, no table needed):
+     1. Craft the crude axe from a rock or flint + 2 `ore:stickWood` (`pyro_crude_axe`, craftingtable.zs lines 238-240).
+     2. Craft `contenttweaker:crafting_tools` from a crude axe or stone axe + a rock or flint + 1 `ore:stickWood` (crafting_tables.zs line 9). This consumes the axe, because the recipe has no reuse.
+     3. Craft `randomthings:customworkbench` from 1 `minecraft:log:0` (oak) + `crafting_tools` (line 16). It is a crafting table and needs no planks.
+        - The vanilla `minecraft:crafting_table` needs `ore:stickMat` (planks) + `crafting_tools` (line 15), so it comes after planks.
+     - So the first table costs 3 sticks, 2 rocks or flint, and 1 oak log. Then at the table, 1 log → 3 planks, and 2 planks → 4 sticks.
+     - `ore:stickWood` also accepts `betterwithmods:shaft`, `biomesoplenty:bamboo`, `biomesoplenty:plant_1:5`, `mod_lavacow:mossy_stick` and `primallib:wooden_shaft` (`oredict.json`).
+   - **Rustic wild berry bush:** `scripts/dropt.zs` lines 354-373 replace its drops when broken without silk touch, with one weighted pick:
+     - 30/56: 1 stick;
+     - 15/56: 2 sticks;
+     - 10/56: wild berries;
+     - 1/56: a worm.
+     - Not read: where these bushes generate, and whether the meta-1 rule (lines 375-399) is ever reached after the meta-0 rule matches.
+   - **rotn-data follow-up: merged via #256** (skills-rotn's round 4 PR, built on `agent/rotn-data/sticks-from-felling`; #252 closed as superseded).
+     - It removes `sticks-from-leaves` and gives `fell-tree` 6 branch → stick pairs and `tool: null`, all cited.
+     - Lead decision (#252 review): skills-rotn's round 4 PR merges this branch into theirs and supersedes #252 (like #241 for #239). Review fixes are pushed as `40b48682`: `tool: null` + `preferredTool: {type: axe, minLevel: 0}` (form agreed with skills-rotn), and the round 4 B line is marked as only supporting the bytecode.
+     - The first-table path as a `howToGet` source is not in it. It is a recipe chain, which `howToGet` already lists per item.
+14. **Lead (routed from net-forge #259): can the dumper record the boxes `addCollisionBoxToList` gives a player? Feasibility and cost, 2026-11-06.**
+   - **#261 merged** (`cc99d9e9`): dumper 0.3.0 `entityCollision` / `entityCollisionVaries` / `entityCollisionProbe`, the import's `checkEntityCollision` with the Dynamic Trees leaves self-check (always blocking), `catalog.playerCollision`. CI: `dumper-build` built `rotndump-0.3.0.jar` (JDK 8, BUILD SUCCESSFUL; PR run 42188964149, artifact `rotndump-jar` 63,121 bytes), `ci` and `ci-ubuntu-2604` passed.
+   - **#261 review nits (docs PR):** (1) `entityCollisionVaries` catches neighbour or own-cell dependence only, never tile-entity dependence (the state is never placed), so `false` is not proof; reworded in the `BlockDumper` Javadoc and comment, `catalog.playerCollision`, and both READMEs. (2) `tools/dumper/README.md` says 0.3.0, not 0.2.1. (3) The run procedure records the CI-printed jar SHA-256 in this STATUS when the jar is downloaded. (4) The solid probe is seed-dependent real terrain, read only and recorded in `entityCollisionProbe`: accepted by the lead, no change.
+   - **Dump-run plan (waits for the human's GO via the lead; nothing started):**
+     1. Take the `rotndump-jar` artifact of the `dumper-build` push run on develop for `cc99d9e9` or later (a PR artifact is not used). Record here, before the run: the run id, the file name and bytes, and the SHA-256 `build.sh` printed in that run's log, checked against the downloaded file with `sha256sum`.
+     2. Run the command in `tools/dumper/README.md` ("Run it on the test server") as in the three earlier batches: CPX42, nbg1, `--ttl-hours 2`, a 45-minute `timeout`, `deploy/test-server.sh` unchanged, the sweeper preflight on its own. About 4-5 min, 1 billed hour, about EUR 0.14 (+ IPv4). Verify the server, Primary IPv4 and SSH key are gone afterwards.
+     3. `import-dump.mjs --jar-sha256 <recorded hash>`: the leaves self-check must pass. Then a data PR with the new `blocks.json.br`, a batch record here and a diff report (states whose player boxes differ from `collision`, `entityCollisionVaries` states, the self-check).
+   - **Today:** `tools/dumper` `BlockDumper.writeState` records one box per state, from `getCollisionBoundingBox(world, (0,0,0))`.
+     - The dump has 4,896 blocks and 23,499 states (4,642 modded blocks, 21,832 modded states). `blocks.json.br` is 230 KB, and no state has `collision: null`.
+     - net-forge's #259 found 1,157 modded classes that override `addCollisionBoxToList` (`func_185477_a`). Its `collision-overrides-3.3.4.json` hand-builds 38 blocks: the Dynamic Trees leaves box, and a guessed full cube for override blocks whose dump box is empty. The other ~1,100 still use the single dumped box, which misses multi-box shapes.
+   - **Feasible, and cheap.** For each state, the dumper would call `state.addCollisionBoxToList(world, pos, entityBox, list, player, false)` and record the boxes relative to `pos` as a new field, `entityCollision` (`[]` = none, `null` = the call threw). The existing `collision` field stays as it is.
+     - `player` is `FakePlayerFactory.getMinecraft((WorldServer) world)`: a server-side `EntityPlayerMP` that is never spawned, standing on top of the block (`posY = pos.y + 1`). The recorded box is what a player walking over the block collides with.
+     - `entityBox` is the block cell grown by 1 on every side, so boxes taller than a block (fences, 1.5) are included.
+     - `isActualState = false`, so the block computes its own actual state.
+     - Dynamic Trees leaves show why the entity matters. `BlockDynamicLeaves.func_185477_a` (DramaticTrees jar, bytecode 2-131) gives an `EntityItem` vanilla's full cube (nothing if it is a seed), an `EntityFallingTree` nothing, and anyone else, a player included, `(0.125, 0, 0.125, 0.875, 0.5, 0.875)`.
+     - That makes a built-in check: every `dynamictrees:leaves*` state must come out as net-forge's `DYNAMIC_LEAVES_BOX`.
+   - **Limit: the state is not really in the world.** The dumper reads but never places blocks (ADR 0004). So a class that reads `world.getBlockState(pos)`, a tile entity or its neighbours sees the real world at `pos`, not the queried state.
+     - Mitigation, still read-only: query at two positions, one surrounded by air (high in a loaded chunk) and one surrounded by solid blocks (low). Add `entityCollisionVaries: true` where they differ.
+     - net-forge would then keep hand-built exceptions only for those flagged states. Fences and walls are the expected kind: their boxes depend on connections, which no per-state table can give.
+     - Placing each state in a scratch cell would be more exact, but it would write to the world. It runs `onBlockAdded`, creates tile entities, and can start falling blocks or flowing fluids. It would change the dumper's read-only contract, so I don't recommend it without an ADR.
+   - **Cost:**
+     - Dumper: about 80-120 lines of Java plus README, and version 0.2.1 → 0.3.0. Built with `tools/dumper/build.sh` (JDK 8, Gradle 4.10.3), as before.
+     - Runtime: two extra calls per state, about 47,000 calls in total. That should add well under a second over the 500-entry / 40 ms tick batching. `blocks.json.br` grows by roughly 20-60 KB (estimate).
+     - One test-server dump run, the same procedure as the three 2026-11-01/02 batches: CPX42 in nbg1, about 4-5 min, 1 billed hour, **about EUR 0.14** (+ IPv4). **Needs your GO.**
+     - rotn-data: `import-dump` carries the new field into `blocks.json.br`, `catalog.getBlock` exposes it, plus tests. One PR, together with the dumper change.
+     - net-forge (their files): `src/registry-extension.js` / `src/collision.js` read `entityCollision`. The override file shrinks to the flagged states and the shapes the Dynamic Trees check confirms.
+   - **Plan if you say go:** (1) a PR with the dumper change and the rotn-data import, tested offline (the Java build plus a fixture import), and no server run; (2) after your GO, one dump run; (3) a data PR with the new `blocks.json.br` and a diff report (states whose player boxes differ from `collision`, flagged states, the Dynamic Trees leaves check); (4) net-forge switches over.
 
 ## Open PRs
 
-- #243 `agent/rotn-data/death-zombie-nits`: the #226 review nits (REQUEST CHANGES fixed: it never catches fire).
+- #262 `agent/rotn-data/entity-collision-docs`: the #261 review nits (docs only: `entityCollisionVaries` does not catch tile-entity dependence; README 0.3.0; record the CI-printed jar SHA-256 at download).

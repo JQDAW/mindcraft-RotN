@@ -10,7 +10,8 @@
 //   2. every block, item and entity name in the dump is in the server's RegistryData
 //      capture (registry-names.json) and the other way round; every state-meta-remap record is
 //      consistent (networkId = blockId << 4 | idMeta, a synced block) and its anomaly counts are 0
-//      (checkStateMetaRemap);
+//      (checkStateMetaRemap); from dumper 0.3.0, blocks.json's player collision boxes are well formed
+//      and every dynamictrees:leaves* state gives a player the half-height box (checkEntityCollision);
 //   3. every early-game recipe in test/fixtures/scripts-<version>-early-recipes.json is
 //      found in the dump (the CraftTweaker scripts cross-check).
 // It then adds the pack pin (version, zip SHA-256) and the SHA-256 of every raw fetched file
@@ -136,6 +137,10 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     // 2b. the network block-state remap (state-meta-remap.json, dumper 0.2.0)
     notes.push(...checkStateMetaRemap(files['state-meta-remap'], names['minecraft:blocks']?.ids ?? {}, { allowErrors, problems, dumperVersion: m.dumper }));
 
+    // 2c. the player collision boxes (blocks.json entityCollision, dumper 0.3.0) and their
+    // Dynamic Trees leaves self-check (on the pinned 3.3.4 pack, whose config the box assumes)
+    notes.push(...checkEntityCollision(files.blocks, { problems, dumperVersion: m.dumper, requireLeaves: version === '3.3.4' }));
+
     // 3. scripts cross-check, on a catalog over the fetched files
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-import-'));
     let crosscheck = [];
@@ -227,6 +232,84 @@ export function checkStateMetaRemap(r, syncedIds, { allowErrors = false, problem
         else if (syncedIds[x.block] !== x.blockId) idDiffs.push(`${x.block} ${x.blockId} vs ${syncedIds[x.block]}`);
     }
     if (idDiffs.length) notes.push(`state-meta-remap: ${idDiffs.length} block ids differ from the registry capture (used by name only), e.g. ${[...new Set(idDiffs)].slice(0, 5).join(', ')}`);
+    return notes;
+}
+
+/**
+ * The box Dynamic Trees' leaves give a player on the pinned pack: mods/DramaticTrees-1.12.2-0.13.4.jar
+ * (SHA-256 b86dae76...7ffe) BlockDynamicLeaves.addCollisionBoxToList (func_185477_a) bytecode 96-128,
+ * AxisAlignedBB(0.125, 0, 0.125, 0.875, 0.5, 0.875), taken because config/dynamictrees.cfg has
+ * isLeavesPassable=false (line 60) and vanillaLeavesCollision=false (line 66) and Passable Leaves is
+ * not in the pack. An item gets vanilla's full cube there and a falling tree nothing, so a dump that
+ * used the wrong entity, or none, fails this check. net-forge's #259 derives the same box
+ * (forge-bridge src/collision.js DYNAMIC_LEAVES_BOX).
+ */
+export const DT_LEAVES_PLAYER_BOX = [[0.125, 0, 0.125, 0.875, 0.5, 0.875]];
+const DT_LEAVES = /^dynamictrees:leaves\d*$/;
+
+/** True if dumper version `v` ("0.3.0", "0.2.1", "0.0.0-test") is at least `min` (numbers only). */
+function versionAtLeast(v, min) {
+    const n = (s) => String(s ?? '').split(/[.-]/).slice(0, 3).map((x) => Number.parseInt(x, 10) || 0);
+    const a = n(v);
+    const b = n(min);
+    for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+    return true;
+}
+
+const isBox = (b) => Array.isArray(b) && b.length === 6 && b.every(Number.isFinite);
+const isBoxes = (x) => Array.isArray(x) && x.every(isBox);
+const sameBoxes = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Checks blocks.json's player collision fields (dumper 0.3.0, net-forge #259 via the lead):
+ * - from 0.3.0 the top-level entityCollisionProbe must exist with an air probe cell, and every
+ *   state must carry entityCollision (boxes, or null when the call threw) and
+ *   entityCollisionVaries (boolean, or null); an older dump without them is only a note;
+ * - the self-check: every dynamictrees:leaves* state gives a player DT_LEAVES_PLAYER_BOX and does
+ *   not vary between the probes (requireLeaves: at least one such block must be dumped);
+ * - notes: how many states throw, vary, or differ from getCollisionBoundingBox's `collision`.
+ * Self-check failures and malformed fields are problems, always blocking: --allow-errors is for
+ * the dumper's own entry errors, not for a measurement that is wrong.
+ */
+export function checkEntityCollision(blocksFile, { problems = [], dumperVersion, requireLeaves = false } = {}) {
+    const notes = [];
+    const bad = (msg) => problems.push(`entityCollision: ${msg}`);
+    const probe = blocksFile?.entityCollisionProbe;
+    if (!probe) {
+        if (versionAtLeast(dumperVersion, '0.3.0')) bad(`dumper ${dumperVersion} wrote no entityCollisionProbe`);
+        else notes.push(`entityCollision: dumper ${dumperVersion} predates it (getCollisionBoundingBox only)`);
+        return notes;
+    }
+    const cell = (p) => Array.isArray(p) && p.length === 3 && p.every(Number.isInteger);
+    if (!cell(probe.air)) bad('no air probe cell, so no player boxes were read');
+    if (!cell(probe.solid)) notes.push('entityCollision: no solid probe cell, so entityCollisionVaries is null everywhere');
+    let states = 0;
+    let threw = 0;
+    let varies = 0;
+    let differs = 0;
+    const malformed = [];
+    const leafStates = [];
+    for (const [name, b] of Object.entries(blocksFile.blocks ?? {})) {
+        for (const s of b.states ?? []) {
+            states++;
+            const label = `${name}:${s.meta}`;
+            if (!('entityCollision' in s) || !('entityCollisionVaries' in s)) { malformed.push(`${label} lacks the fields`); continue; }
+            const e = s.entityCollision;
+            if (e === null) threw++;
+            else if (!isBoxes(e)) { malformed.push(`${label} has bad boxes`); continue; }
+            else if (!sameBoxes(e, s.collision)) differs++;
+            if (s.entityCollisionVaries === true) varies++;
+            else if (s.entityCollisionVaries !== false && s.entityCollisionVaries !== null) malformed.push(`${label} entityCollisionVaries ${s.entityCollisionVaries}`);
+            if (DT_LEAVES.test(name)) leafStates.push({ label, s });
+        }
+    }
+    if (malformed.length) bad(`${malformed.length} malformed states, e.g. ${malformed.slice(0, 5).join('; ')}`);
+    if (requireLeaves && !leafStates.length) bad('self-check: no dynamictrees:leaves* block in the dump');
+    const wrong = leafStates.filter(({ s }) => !sameBoxes(s.entityCollision, DT_LEAVES_PLAYER_BOX) || s.entityCollisionVaries !== false);
+    if (wrong.length) {
+        bad(`self-check: ${wrong.length} of ${leafStates.length} dynamictrees:leaves* states do not give a player the half-height box ${JSON.stringify(DT_LEAVES_PLAYER_BOX[0])} at both probes, e.g. ${wrong.slice(0, 3).map(({ label, s }) => `${label} ${JSON.stringify(s.entityCollision)} varies ${s.entityCollisionVaries}`).join('; ')}`);
+    }
+    notes.push(`entityCollision: ${states} states; ${differs} differ from collision, ${varies} vary between the probes (world-dependent), ${threw} threw; self-check ${leafStates.length} dynamictrees:leaves* states ${wrong.length ? 'FAILED' : 'ok'}`);
     return notes;
 }
 

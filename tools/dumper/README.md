@@ -15,7 +15,7 @@ Every key is a registry name plus metadata, never a numeric id (numeric ids diff
 | File | Content |
 | --- | --- |
 | `manifest.json` | dumper version, `dumperJar` (file name, bytes and **SHA-256 of the jar that ran**, because the ForgeGradle 3 build is not byte-reproducible), `batch`, per-part `timing` (ms, ticks), Minecraft and Forge versions, dump time (UTC), active mods with versions and the SHA-256 of their sorted `id@version` list, per-file counts, errors |
-| `blocks.json` | per block: `defaultMeta`, `class`, and one entry per metadata value `m` (0-15) where `getMetaFromState(getStateFromMeta(m)) == m`: state `props`, `displayName`, `hardness`, `explosionResistance`, `material`, `harvestTool`, `harvestLevel`, `toolRequired`, `solid`, `liquid`, `replaceable`, `light`, `opacity`, `fullCube`, `opaque`, `collision` boxes (`[]` none, `null` unknown), the block's `item` `{name, meta}` and nominal `drops` |
+| `blocks.json` | per block: `defaultMeta`, `class`, and one entry per metadata value `m` (0-15) where `getMetaFromState(getStateFromMeta(m)) == m`: state `props`, `displayName`, `hardness`, `explosionResistance`, `material`, `harvestTool`, `harvestLevel`, `toolRequired`, `solid`, `liquid`, `replaceable`, `light`, `opacity`, `fullCube`, `opaque`, `collision` boxes from `getCollisionBoundingBox` (`[]` none, `null` unknown; one box at most), `entityCollision` (0.3.0, net-forge #259): the boxes `addCollisionBoxToList` gives a player standing on the block (a server-side `FakePlayer` at x + 0.5, y + 1, z + 0.5; entity box = the cell grown by 1), relative to the cell and rounded to 1e-6, read at the `air` probe cell (`[]` none, `null` no probe or the call threw), and `entityCollisionVaries`: whether the `solid` probe cell gives different boxes, i.e. the shape depends on the neighbouring blocks or on the block really at that position (`null` when a probe is missing or threw); only neighbour or own-cell dependence is caught, never tile-entity dependence (the state is never placed, so no tile entity exists at either probe cell): false is not proof that the shape is fixed. The probes are in the top-level `entityCollisionProbe` `{entity, entityBoxGrow, air: [x, y, z], solid: [x, y, z]}`: the first cell at x = z = 0 whose 27-cell neighbourhood is all air (y 250 down to 128) or all normal cubes (y 2 up to 60). Read only: the queried state is never placed. The block's `item` `{name, meta}` and nominal `drops` |
 | `items.json` | per item: `stackSize`, `maxDamage`, `hasSubtypes`, `block`, `toolClasses {class: level}`, `speed` on stone/log/dirt, `variants [{meta, displayName, translationKey, burnTime, food}]` |
 | `recipes.json` | every crafting-grid `IRecipe` after CraftTweaker: `id`, `class`, `type` (`shaped`/`shapeless`), `width`, `height`, `requiresTable` (`!canFit(2, 2)`), `result {name, meta, count}`, `slots` (shaped, row-major, `null` = empty) or `ingredients` (shapeless), each `{stacks: [{name, meta}], ore?, ores?}`. `ore` is set when the ingredient is exactly one ore key (read from Forge's `OreIngredient`, or matched with wildcards expanded), and its `stacks` are then the ore's own list, so they keep wildcard metas (`32767`) instead of listing each variant. `ores` lists every ore key inside, including CraftTweaker `<ore:a>|<b>` unions; `matchesSample`, `mirroredTested`, `remaining` (what `getRemainingItems` leaves, e.g. a reused tool; the sample grid uses each ingredient's first stack in sorted order, so it is the same on every server start) |
 | `smelting.json` | vanilla furnace recipes (`FurnaceRecipes`, after CraftTweaker's `furnace.*`): `input`, `output`, `xp` |
@@ -37,7 +37,7 @@ What is **not** in the dump, on purpose:
 - **Event-handler drops** (Pyrotech's stone-to-rocks, Dropt rules). `drops` is only `getItemDropped` / `quantityDropped` with a fixed seed. Gameplay drops are checked in G3 harness scenarios (ADR 0004).
 - **Mod station recipes** (Pyrotech kilns, anvils, drying racks). A later increment; ready-to-try needs only the crafting table and the 2x2 grid.
 - **Spawn rules applied at spawn time** (game stages, light, invasions).
-- Values that a mod computes from a real world position. Hardness and collision are read at (0, 0, 0) in the overworld; a value that throws is written as `null`.
+- Values that a mod computes from a real world position. Hardness and `collision` are read at (0, 0, 0) in the overworld, `entityCollision` at the two probe cells, never with the queried state placed there (so `entityCollisionVaries` flags a shape that depends on the neighbours or on the block really in the cell, but not one that depends on a tile entity); a value that throws is written as `null`.
 
 ## Build
 
@@ -61,14 +61,16 @@ The jar is **never committed**. Pinned toolchain:
 
 ```sh
 JAVA_HOME=/path/to/jdk8 tools/dumper/build.sh
-# -> tools/dumper/build/libs/rotndump-<version>.jar (0.2.1 now) and its SHA-256
+# -> tools/dumper/build/libs/rotndump-<version>.jar (0.3.0 now) and its SHA-256
 ```
 
 This PC has only JDK 21, so the jar is built in CI by harness-ops' `dumper-build` workflow (`.github/workflows/`; it runs `build.sh` unchanged and keeps the jar as the 7-day artifact `rotndump-jar`). The original proposal is kept in `ci/dumper-build.yml.proposed`.
 
 ## Run it on the test server
 
-Paid runs need a plan in `coord/STATUS-rotn-data.md` and the lead's written GO first. `deploy/test-server.sh` stays unchanged. Then:
+Paid runs need a plan in `coord/STATUS-rotn-data.md` and the lead's written GO first. `deploy/test-server.sh` stays unchanged.
+
+When downloading the jar (the `rotndump-jar` artifact of a `dumper-build` run on develop), record in `coord/STATUS-rotn-data.md`, before the run: the run id, the jar's file name and bytes, and the SHA-256 that `build.sh` printed in that run's CI log, checked against the downloaded file (`sha256sum`). That recorded value is `$JAR_SHA256` below: the ForgeGradle 3 build is not byte-reproducible, so only the CI-printed hash ties the dump to a build, and `import-dump.mjs` refuses a manifest whose `dumperJar.sha256` differs. Then:
 
 ```sh
 timeout 3600 deploy/test-server.sh run --ttl-hours 2 --yes \

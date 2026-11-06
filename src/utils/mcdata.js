@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat, applyCollisionShapes } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -199,6 +199,13 @@ export function initBot(username, { onMsaCode } = {}) {
                 bridge.on('registries', (snap) => {
                     forge.registryReport = extendRegistry(bot.registry, snap, { log: (m) => console.log(`[forge-bridge] ${m}`) });
                     forge.stateIdRemap = attachStateIdRemap(bot.registry, stateIdTable, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                    // #256 review: modded blocks get rotn-data's dumped collision (rock piles and plants are walk-through,
+                    // Dynamic Trees leaves a half-height box), not the full cube extendRegistry defaults to.
+                    try {
+                        forge.collision = applyCollisionShapes(bot.registry, loadRotnData(PACK_VERSION).dump?.blocks?.blocks, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                    } catch (e) {
+                        console.warn(`[forge-bridge] collision shapes not applied, modded blocks stay full cubes: ${e.message}`);
+                    }
                     mcdata = bot.registry; // the helpers see the extended maps (same object, refreshed for clarity)
                     // Lead exception (Request 7, this one line in net-forge's initBot; rotn-data): RotN crafting recipes.
                     forge.rotnRecipes = installRotnRecipesOnce(bot.registry, { log: (m) => console.log(`[forge-bridge] ${m}`) });
