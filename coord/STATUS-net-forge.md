@@ -1,12 +1,13 @@
 # Status: net-forge
 
-Updated: 2026-11-06T03:27Z
+Updated: 2026-11-06T04:29Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## G3 round 3 batch C+D disconnect and the NaN x/z: fix in progress (2026-11-06T03:27Z, lead's request)
+## G3 round 3 batch C+D disconnect and the NaN x/z: **PR #249** (2026-11-06T03:27Z, lead's request; PR opened 2026-11-06T04:29Z)
 
-- **Branch:** `agent/net-forge/stackup-count`, from develop `aec33fe`. The PR follows once the full `npm test` passes.
+- **Branch:** `agent/net-forge/stackup-count`, from develop `aec33fe`; PR #249 is waiting for the lead's review.
+- **Local full suite:** `npm test` hung on Windows. Run file by file: 100 of 103 pass. The 3 others are harness-ops files that fail the same way on develop `d89fc30`: `deploy-eol` (CR in the autocrlf checkout), and `cx23` and `test-server` (both time out).
 - **Disconnect, root cause: StackUp 0.2.5.**
   - StackUp's `PacketBuffer.readItemStack` reads count byte -42 (0xD6) as "an int count follows". Its writer sends counts outside 0..64 that way (`PacketBufferWriterSplice`, line 45 is the `readInt` in the server's stack trace).
   - RotN stacks rocks to 256 and blocks to 128 (`config/stackup`).
