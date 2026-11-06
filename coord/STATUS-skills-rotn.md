@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T15:50Z (from `date -u`)
+Updated: 2026-11-06T16:02Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -209,7 +209,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#195** (D2b-1, `!buildShelter`), waiting for the lead's review; **#198**, the #194 follow-up (branch `agent/skills-rotn/craft-fill-followup`). Merged: #194 (C1, `06ad75f`), #190 (do-not-look from `lookAt`), and #189 (P1 passed: 4/4 RotN crafts, including the stone pickaxe at a FastWorkbench table; modded item ids accepted in clicks; 5/5 placements in 589-1158 ms).
+- **#274** (round 5 fixes, branch `agent/skills-rotn/r5-rerun`, opened 2026-11-06T16:02Z by `date -u`): Hit With Axe sticks, standing on a block with a check (C), the #270 follow-ups, felling drops arriving late and stuck against trunks (A rerun), the plain-text memory prompt. All `src` tests: 443/443. Lint 253. Waiting for the lead's review.
+- Earlier PRs (#195, #198 and the ones before) are merged.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
