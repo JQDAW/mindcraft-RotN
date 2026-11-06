@@ -1,10 +1,65 @@
 # Status: net-forge
 
-Updated: 2026-11-06T04:42Z
+Updated: 2026-11-06T08:05Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #249 review follow-ups: PR open (2026-11-06T04:42Z, lead's list)
+## #256 question: Dynamic Trees leaves collision (2026-11-06T07:56Z answer; 08:05Z PR open)
+
+- **PR:** branch `agent/net-forge/collision-shapes`, from develop `4fd8106`. Waiting for the lead's review.
+- **Real dump result:** 4,595 modded blocks take the dump's shapes. 707 of them vary by state and 742 are walk-through. Overrides: 26 DT leaves and 12 full cubes. 9 blocks have no dump data and stay full cubes.
+- **Tests:**
+  - `test/collision.test.js` (7) passes, including prismarine-physics: the bot lands on leaves at +0.5 and falls through a rock pile.
+  - 17 other test files that use `initBot` or the extension pass. `e2e-initbot` now expects a rock pile to be `'empty'`.
+  - Lint: the new files are clean, and `mcdata.js` is unchanged at 11 errors.
+  - The tool's `--check` reports the data up to date.
+
+**Answer: players collide with Dynamic Trees leaves; they do not fall through.** Each leaves block is a half-height box inset by 1/8: `[0.125, 0, 0.125, 0.875, 0.5, 0.875]`. So they are ground, but the surface is 0.5 above the block, not 1.0. A player walks up onto them like a slab.
+
+Evidence (javap on `DramaticTrees-1.12.2-0.13.4.jar`, modid `dynamictrees`, from the pinned zip `90642fd5...f5205`; nothing run):
+
+- **`BlockDynamicLeaves.addCollisionBoxToList` (`func_185477_a`):**
+  - Item entities carrying a DT seed get no box.
+  - A falling tree entity (or no entity) gets no box.
+  - If `passableLeavesModLoaded` or `vanillaLeavesCollision` is true, the leaves use vanilla's full cube (`BlockLeaves`).
+  - Otherwise, if `isLeavesPassable` is false, the box above (bytecode 96-128).
+- **The pack's settings:**
+  - `config/dynamictrees.cfg` has `isLeavesPassable=false` (line 60) and `vanillaLeavesCollision=false` (line 66).
+  - `passableLeavesModLoaded` is `Loader.isModLoaded("passableleaves")` (`ModBlocks.preInit`). That mod is not on the server: the mod list in `test/fixtures/rotn-3.3.4/ping.json` has no `passableleaves`.
+- **`isPassable` (`func_176205_b`):** returns `isLeavesPassable` (false). `getCollisionBoundingBox` is not overridden. `getBoundingBox` (the selection box) is a full cube.
+- **Addon leaves:** all 26 leaves blocks on the pack inherit this. That covers the DT addons (BOP, PHC, Quark, Aether, TF, Defiled Lands) and `rustic:leaves0`. None of the 7 addon leaves classes overrides a collision method.
+- **Two more behaviours, for fall safety (#256):**
+  - **Landing on DT leaves deals no fall damage.** `onFallenUpon` (`func_180658_a`) never calls `entity.fall`.
+  - **`canopyCrash=true` (cfg line 36):** a landing with fallDistance > 3 (after -1) destroys the leaves under the entity's footprint. It works down layer by layer, multiplying fallDistance by 0.66 for each leaves layer, and stops once fallDistance is 3 or less or it reaches a block that is neither air nor leaves. The entity then falls on from there.
+  - **Inside leaves (`onEntityCollidedWithBlock`):** a real client is slowed (x/z motion x0.25, sinking halved, no sprint). mineflayer does not model this. The server does not enforce it either, so no kick is expected.
+
+**Why the bot sees a full cube.** forge-bridge's `extendRegistry` gives every modded block a full cube: `initBot` passes no properties, so the safe default is used. That covers all 4,642 modded blocks, not only the leaves.
+
+rotn-data's dump has a per-state `collision`, but it is never applied to `bot.registry`. The dump also has a blind spot: it reads `getCollisionBoundingBox`. A scan of every dumped class chain in the pack's jars found 1,157 modded blocks that override `addCollisionBoxToList`. For those, the dump may be wrong, as it is for the DT leaves (it records them as a full cube).
+
+**What the dump says for modded blocks (default state):**
+
+| Default-state collision | Blocks | Examples |
+| --- | --- | --- |
+| Full cube | 2,521 | |
+| No box | 757 | `pyrotech:rock` rock piles, plants, flowers, saplings |
+| Partial box | 1,355 | slabs, doors, fences, DT branches |
+| Box changes by state | 708 | |
+
+**Proposed minimal fix (net-forge, PR to follow):** a new `applyCollisionShapes(bot.registry, dumpBlocks)` in forge-bridge, called in `initBot` after `extendRegistry`.
+
+- **Source of shapes:** each modded block gets the dump's per-state boxes.
+  - `stateShapes` are indexed by metadata; prismarine-block reads them on 1.12 as well.
+  - `boundingBox` is `'empty'` only when no state has a box. The skills code checks `boundingBox === 'empty'` in felling, night, shelter and the pathfinder.
+- **Exceptions, from the bytecode scan:**
+  - The 26 DT leaves get the box above.
+  - 12 blocks have an `addCollisionBoxToList` override and no box in the dump. They keep the full cube rather than becoming walk-through. Examples: lily pads (they hold a player up), barbed wire fence, grape vines, hops, the TF portal.
+  - 9 blocks with no states in the dump also keep the full cube.
+- **Vanilla blocks** are untouched; minecraft-data has their shapes.
+
+**Requests:** rotn-data's dumper could record what `addCollisionBoxToList` adds for a player-sized entity, rather than `getCollisionBoundingBox`. The exception lists could then go.
+
+## (Merged as #250) #249 review follow-ups (2026-11-06T04:42Z, lead's list)
 
 - **Branch:** `agent/net-forge/stackup-followups`, from develop `aeda51d` (#249 merged). The PR is waiting for the lead's review.
 - **(1) javap fixture:** the StackUp 0.2.5 javap excerpt is committed as `packages/forge-bridge/test/fixtures/stackup-0.2.5/PacketBufferWriterSplice.javap.txt` (readItemStack and writeItemStack, with the jar's SHA-256). A test checks `STACKUP_MARKER` and `STACKUP_BYTE_MAX` against its instructions.

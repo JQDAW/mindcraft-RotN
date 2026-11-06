@@ -21,6 +21,7 @@ export { instrumentProfileFetch, describeProfileFetchError, formatProfileFetchFa
 export { assertOutsideGitWorkTrees, prepareSecretFolder, findGitWorkTree, realLocation } from './src/secret-folder.js';
 export { decideAgentExit, readExitReason, writeExitReason, recordAgentExit, createRequestedRestartGuard, REQUESTED_RESTART } from './src/exit-contract.js';
 export { extendRegistry, applyProperties } from './src/registry-extension.js';
+export { applyCollisionShapes, shapesFromDump, loadCollisionOverrides, DYNAMIC_LEAVES_BOX } from './src/collision.js';
 export { HORDES_CHANNEL, HORDES_DISC, HORDE_START_KEY, HORDE_END_KEY, decodeHordes, hordeEvent, attachHordeEvents } from './src/hordes.js';
 export { spawnFmlEntity, attachFmlEntities, fmlEntityName, fmlEntityTable } from './src/fml-entities.js';
 export { METADATA_SERIALIZER_TYPES, METADATA_SERIALIZER_CLASSES, rotnMetadataSerializers, metadataSerializersFromDump } from './src/reid.js';

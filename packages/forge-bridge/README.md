@@ -120,6 +120,11 @@ After the last RegistryData, `initBot` calls `extendRegistry(bot.registry, snaps
 - **Isolation.** Dummied entries are skipped. Only `bot.registry`'s own maps and its `blockCollisionShapes` are replaced; prismarine-registry copies minecraft-data only shallowly, so the maps are copied first. The process-wide `minecraft-data` object stays vanilla.
 - **Shapes.** Each modded block is registered in the copied collision-shape table, so a Block class made later keeps its shapes (prismarine-block resets shapes by name).
 - **Not covered:** FML EntitySpawn uses the mod-local entity table (`modId` + `modEntityTypeId`), not `minecraft:entities`; that is brief item 6.
+- **Collision shapes** (#256 review). After the extension, `initBot` calls `applyCollisionShapes(bot.registry, loadRotnData(PACK_VERSION).dump.blocks.blocks)` (`src/collision.js`) and sets `bot.forge.collision` (its report).
+  - Each modded block takes rotn-data's dumped `collision` per metadata (`stateShapes`, which prismarine-block reads on 1.12 too).
+  - `boundingBox` is `'empty'` only when no state has a box, so rock piles and plants are walk-through and a fence gate is never treated as walk-through.
+  - The dump reads `getCollisionBoundingBox`, but entities collide with what `addCollisionBoxToList` adds. `data/collision-overrides-3.3.4.json` (built from the pinned pack by `tools/build-collision-overrides.mjs`; `--check` compares) lists the exceptions. The 26 Dynamic Trees leaves get the half-height box `[0.125, 0, 0.125, 0.875, 0.5, 0.875]` that the pack's config selects (bytecode in `test/fixtures/dynamictrees-0.13.4/`). 12 blocks whose class adds a box the dump did not record (lily pads, barbed wire, ...) keep the full cube.
+  - Vanilla blocks and blocks without dump data keep their shapes. If anything fails, modded blocks stay full cubes and a warning is logged.
 
 ## Forge's two-pass block-state ids (G2 batch 4)
 
@@ -475,7 +480,7 @@ What different setups do:
 - **nmp protocol cache and shared protocol object.** One bot per process, which is how Mindcraft runs, is fine. Two effects follow from nmp 1.x internals:
   - nmp caches compiled protocols by state, direction and version only, not by `customPackets`. The first play-state client for 1.12.2 in a process fixes the overrides for that process.
   - nmp's `createProtocol` calls lodash `merge(mcData.protocol, customPackets['1.12'])`. That **mutates the shared `minecraft-data` 1.12.2 protocol object in place**, and every `require('minecraft-data')('1.12.2')` in the process returns that same object. After the first Forge connection, `bot.registry.protocol` and any later vanilla or non-REID 1.12.2 client in the same process see the Forge and REID types. A process that needs both must run them in separate processes.
-- **Registry properties.** Modded blocks, items, entities and biomes have names but default properties (below) until rotn-data's dump supplies them through `extendRegistry(..., { properties })`. Until then, for example, a modded plant is solid to the bot, and a modded block's hardness and drops are unknown.
+- **Registry properties.** Modded blocks, items, entities and biomes have names but default properties (below) until rotn-data's dump supplies them through `extendRegistry(..., { properties })`. Until then a modded block's hardness and drops are unknown. Collision shapes come from the dump already (above).
 - **FML EntitySpawn names.** Mod mobs spawned with FML EntitySpawn go into `bot.entities` (below), named from rotn-data's mod-local entity table. Their size is still 0 × 0 until rotn-data's properties supply it.
 - **Chunk bit widths.** Handled by `patches/prismarine-chunk+1.41.0.patch`:
   - Reads: a global-palette section is read at the width the packet states.

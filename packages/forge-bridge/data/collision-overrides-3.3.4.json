@@ -1,0 +1,231 @@
+{
+  "description": "Modded blocks whose collision the rotn-data dump (getCollisionBoundingBox) does not record correctly, and what forge-bridge src/collision.js uses instead. Every other modded block takes the dump's per-state collision. Built by packages/forge-bridge/tools/build-collision-overrides.mjs from the pinned server pack zip; no mod code run.",
+  "pack": {
+    "version": "3.3.4",
+    "sha256": "90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205"
+  },
+  "scanned": {
+    "moddedBlocks": 4642,
+    "addCollisionBoxToListOverride": 1157
+  },
+  "shapes": {
+    "dynamicLeaves": {
+      "shapes": [
+        [
+          0.125,
+          0,
+          0.125,
+          0.875,
+          0.5,
+          0.875
+        ]
+      ],
+      "evidence": "mods/DramaticTrees-1.12.2-0.13.4.jar (SHA-256 b86dae768ccc1182c52e5b9a8756a5906da53dc125d48bfe1c8dc69204a77ffe): BlockDynamicLeaves.addCollisionBoxToList (func_185477_a) gives a player vanilla's full cube if Passable Leaves is loaded or vanillaLeavesCollision is true, nothing if isLeavesPassable is true, else AxisAlignedBB(0.125, 0, 0.125, 0.875, 0.5, 0.875) (bytecode 96-128). On the pack: config/dynamictrees.cfg isLeavesPassable=false (line 60), vanillaLeavesCollision=false (line 66), mod passableleaves not in the pack"
+    },
+    "fullCube": {
+      "shapes": [
+        [
+          0,
+          0,
+          0,
+          1,
+          1,
+          1
+        ]
+      ],
+      "evidence": "The class chain overrides addCollisionBoxToList (func_185477_a, the class named per block) and the dump's default state has no box, so the dump missed a box the class adds (BlockLilyPad adds one for every entity but boats). Kept a solid full cube, forge-bridge's default, rather than made walk-through; not reviewed per class."
+    }
+  },
+  "blocks": {
+    "biomesoplenty:waterlily": {
+      "use": "fullCube",
+      "class": "biomesoplenty.common.block.BlockBOPLilypad",
+      "addCollisionBoxToList": "net.minecraft.block.BlockLilyPad"
+    },
+    "dungeontactics:bush_cherrybomb": {
+      "use": "fullCube",
+      "class": "pegbeard.dungeontactics.blocks.DTBushCherryBomb",
+      "addCollisionBoxToList": "pegbeard.dungeontactics.blocks.DTBushGeneric"
+    },
+    "dungeontactics:bush_glowcurrent": {
+      "use": "fullCube",
+      "class": "pegbeard.dungeontactics.blocks.DTBushGlowcurrent",
+      "addCollisionBoxToList": "pegbeard.dungeontactics.blocks.DTBushGeneric"
+    },
+    "dungeontactics:bush_incindiberry": {
+      "use": "fullCube",
+      "class": "pegbeard.dungeontactics.blocks.DTBushIncindiberry",
+      "addCollisionBoxToList": "pegbeard.dungeontactics.blocks.DTBushGeneric"
+    },
+    "dynamictrees:leaves0": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictrees:leaves1": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves_flowering": {
+      "use": "dynamicLeaves",
+      "class": "dynamictreesbop.blocks.BlockDynamicLeavesFlowering",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves_flowering_peach": {
+      "use": "dynamicLeaves",
+      "class": "dynamictreesbop.blocks.BlockDynamicLeavesFlowering",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves_palm": {
+      "use": "dynamicLeaves",
+      "class": "dynamictreesbop.blocks.BlockDynamicLeavesPalm",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves0": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves1": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves2": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves3": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves4": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves5": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves6": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesbop:leaves7": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesdefiledlands:leaves0": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesphc:leaves_dragonfruit": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesphc:leaves_palm": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesphc:leaves0": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesquark:leaves0": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreestheaether:leaves_crystal": {
+      "use": "dynamicLeaves",
+      "class": "maxhyper.dynamictreestheaether.blocks.BlockDynamicLeavesCrystal",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreestheaether:leaves0": {
+      "use": "dynamicLeaves",
+      "class": "maxhyper.dynamictreestheaether.blocks.BlockDynamicLeavesAether",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesttf:leaves_darkwood": {
+      "use": "dynamicLeaves",
+      "class": "maxhyper.dynamictreesttf.trees.TreeDarkwood$1",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesttf:leaves_of_transformation": {
+      "use": "dynamicLeaves",
+      "class": "maxhyper.dynamictreesttf.trees.TreeMagicTransformation$1",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesttf:leaves0": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesttf:leaves1": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "dynamictreesttf:leaves2": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "growthcraft_grapes:native_grape_vine_leaves": {
+      "use": "fullCube",
+      "class": "growthcraft.grapes.common.blocks.BlockGrapeLeaves",
+      "addCollisionBoxToList": "growthcraft.grapes.common.blocks.BlockGrapeLeaves"
+    },
+    "growthcraft_grapes:native_grape_vine0": {
+      "use": "fullCube",
+      "class": "growthcraft.grapes.common.blocks.BlockGrapeVine0",
+      "addCollisionBoxToList": "growthcraft.grapes.common.blocks.BlockGrapeVine0"
+    },
+    "growthcraft_grapes:native_grape_vine1": {
+      "use": "fullCube",
+      "class": "growthcraft.grapes.common.blocks.BlockGrapeVine1",
+      "addCollisionBoxToList": "growthcraft.grapes.common.blocks.BlockGrapeVine1"
+    },
+    "growthcraft_hops:hops": {
+      "use": "fullCube",
+      "class": "growthcraft.hops.common.block.BlockHops",
+      "addCollisionBoxToList": "growthcraft.hops.common.block.BlockHops"
+    },
+    "minetraps:barbed_wire_fence": {
+      "use": "fullCube",
+      "class": "xxrexraptorxx.minetraps.blocks.BlockBarbedWireFence",
+      "addCollisionBoxToList": "xxrexraptorxx.minetraps.blocks.BlockBarbedWireFence"
+    },
+    "rustic:leaves0": {
+      "use": "dynamicLeaves",
+      "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+      "addCollisionBoxToList": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves"
+    },
+    "twilightforest:huge_lilypad": {
+      "use": "fullCube",
+      "class": "twilightforest.block.BlockTFHugeLilyPad",
+      "addCollisionBoxToList": "twilightforest.block.BlockTFHugeLilyPad"
+    },
+    "twilightforest:huge_waterlily": {
+      "use": "fullCube",
+      "class": "twilightforest.block.BlockTFHugeWaterLily",
+      "addCollisionBoxToList": "net.minecraft.block.BlockLilyPad"
+    },
+    "twilightforest:twilight_portal": {
+      "use": "fullCube",
+      "class": "twilightforest.block.BlockTFPortal",
+      "addCollisionBoxToList": "twilightforest.block.BlockTFPortal"
+    }
+  }
+}

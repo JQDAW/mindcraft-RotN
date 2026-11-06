@@ -73,7 +73,7 @@ function rebind(kind, base, id) {
 // registry.blockCollisionShapes by name, so a Block class made after this
 // extension would drop the shapes of names it does not know. Register each
 // modded (or reshaped) block in a copy of that table under its own shape key.
-function registerShapes(registry, blocks) {
+export function registerShapes(registry, blocks) {
     const table = registry.blockCollisionShapes;
     if (!table || blocks.length === 0) return;
     const copy = { shapes: { ...table.shapes }, blocks: { ...table.blocks } };
