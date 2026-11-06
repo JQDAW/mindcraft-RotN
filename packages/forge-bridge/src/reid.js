@@ -37,10 +37,32 @@ function mcData(version = MC_VERSION) {
 // that object, a second set of overrides in the same process would start from the first
 // (REID's entity_effect tail pushed twice, an old StackUp count left in a slot without it).
 // So the overrides start from a copy taken when this module loads, before any client compiles.
+// This module must therefore load before nmp first compiles a play-state protocol in the
+// process; ES module imports guarantee it for initBot (mcdata.js imports forge-bridge at the
+// top). assertPristineProtocol checks it when the copy is taken: an override already in
+// minecraft-data's object means nmp merged before this module loaded.
 const pristineProtocols = new Map();
 function protocolOf(version = MC_VERSION) {
-    if (!pristineProtocols.has(version)) pristineProtocols.set(version, clone(mcData(version).protocol));
+    if (!pristineProtocols.has(version)) {
+        const p = clone(mcData(version).protocol);
+        assertPristineProtocol(p);
+        pristineProtocols.set(version, p);
+    }
     return pristineProtocols.get(version);
+}
+
+/** Throws if a 1.12.2 protocol object already carries this module's overrides. */
+export function assertPristineProtocol(protocol) {
+    const found = [];
+    const slot = protocol?.types?.slot;
+    if (slot && fieldOf(slot, 'blockId').type !== 'i16') found.push(`slot.blockId ${JSON.stringify(fieldOf(slot, 'blockId').type)}`);
+    const item = slot?.[1]?.find(f => f.anon)?.type?.[1]?.default;
+    if (item && fieldOf(item, 'itemCount').type !== 'i8') found.push(`slot.itemCount ${JSON.stringify(fieldOf(item, 'itemCount').type)}`);
+    const effect = protocol?.play?.toClient?.types?.packet_entity_effect;
+    if (effect?.[1]?.some(f => f.name === 'reidEffectId')) found.push('packet_entity_effect.reidEffectId');
+    if (found.length) {
+        throw new Error(`forge-bridge reid.js: minecraft-data's protocol already has forge-bridge overrides (${found.join(', ')}); node-minecraft-protocol compiled a play-state protocol before reid.js loaded. Import forge-bridge before creating any client.`);
+    }
 }
 protocolOf(MC_VERSION);
 

@@ -31,6 +31,8 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 
 export const STACKUP_MODID = 'stackup';
+/** The version whose bytecode this file follows (test/fixtures/stackup-0.2.5). */
+export const STACKUP_VERSION = '0.2.5';
 export const STACKUP_MARKER = -42;
 export const STACKUP_COUNT_TYPE = 'stackUpCount';
 /** Largest count StackUp still writes as a single byte (writeItemStack 32-41). */
@@ -76,6 +78,12 @@ export function sizeOfStackUpCount(value) {
 }
 
 /**
+ * Process-wide: nmp's type tables are module globals, nmp caches each compiled protocol by
+ * state, direction and version only, and its merge writes the overrides into minecraft-data's
+ * shared protocol object. So the first play-state client fixes the slot layout (StackUp count
+ * or plain byte) for every later client in the same Node process. One bot process talks to one
+ * server, so this holds; a process that must talk to servers with and without StackUp cannot.
+ *
  * Registers the native type on node-minecraft-protocol's type tables: the compiled protocol
  * (src/datatypes/compiler-minecraft.js, added by transforms/serializer.js createProtocol) and
  * the interpreter (src/datatypes/minecraft.js). Idempotent. Must run before the first
