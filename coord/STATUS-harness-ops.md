@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (05:18 UTC, from `date -u`)
+Updated: 2026-11-06 (07:13 UTC, from `date -u`)
 
 ## Now: G3 smoke round 3 is over (the lead, 2026-11-06). No batch until a new GO.
 
@@ -21,7 +21,10 @@ The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, 
   - `deploy-eol`'s on-disk check skips on Windows (not CI) for a stale CRLF working copy, naming the files and the verified fix (`git checkout -- deploy/cx23`).
   - Full `npm test` on Windows: 80 s, 1214 pass, 0 fail.
   - Plus the two #248 doc nits.
-- **Waiting:** the lead is asking the human for the next smoke round GO. Nothing starts before a written GO.
+- **Done: G3 smoke round 4** (GO 06:30Z; develop 09197157; smoke, no `--gate`). Raw logs in `captures/raw/r4-*`; the evidence PR comes next.
+  - A (rocks): PASS 7/7. B (first night): FAIL survived_night, the bot fell from a high place while collecting sticks from leaves, right after the unstuck reflex interrupted it. C: PASS 7/7. D: FAIL 3 of 7, a spam kick 8 s after the join from the agenda catch-up burst (12 chat lines at once, the same as round 3 D).
+  - LLM: 0 failed replies in all four scenarios. Spend USD 0.0114 in all; the key reads USD 0.7707 of 4.50. Hetzner: 3 servers, 12 + 7 + 13 min, each deleted with its Primary IP and SSH key (verified); the project is empty.
+  - No StackUp-count or NaN guard lines from forge-bridge in any scenario.
 - **For other agents (the lead routes):**
   - skills-rotn: felling stance (B); the death cause for "crushed by a falling tree" (B); the agenda catch-up chat burst that drew the spam kick (D).
   - net-forge: the NaN position and malformed packets (D; the lead has sent it).
