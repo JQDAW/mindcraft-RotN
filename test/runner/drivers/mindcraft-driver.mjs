@@ -83,7 +83,7 @@ export function envProblems(env, { debugEnables = () => false } = {}) {
 
 /**
  * Problems with the profile file: missing, not JSON, a task in it, a task-giver key, a different bot name,
- * or a model other than LLM_MODEL (the human's decision for every LLM run, 2026-11-03).
+ * or a model other than LLM_MODEL (the human's decision for every LLM run, 2026-11-06).
  */
 export const profileProblems = (file, bot) => checkProfile(file, bot).problems;
 

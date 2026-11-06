@@ -65,7 +65,7 @@ describe('mindcraft-driver: checks before anything starts', () => {
         assert.match(profileProblems(f('task.json', JSON.stringify({ ...JSON.parse(GOOD_PROFILE), task: { goal: 'x' } })), 'FRCFLD')[0], /has 'task'/);
         assert.match(profileProblems(f('other.json', '{"name":"Andy"}'), 'FRCFLD')[0], /name 'Andy' is not the runner's bot 'FRCFLD'/);
         assert.deepEqual(profileProblems(f('ok.json', GOOD_PROFILE), 'FRCFLD'), []);
-        // The model of every LLM run (the human's decision, 2026-11-03): the OpenRouter preset, in any profile form.
+        // The model of every LLM run (the human's decision, 2026-11-06): the OpenRouter preset, in any profile form.
         assert.deepEqual(profileProblems(f('obj.json', JSON.stringify({ name: 'FRCFLD', model: { api: 'openrouter', model: '@preset/glm-5-3-flash-cheap-reliable' } })), 'FRCFLD'), []);
         for (const [body, re] of [
             ['{"name":"FRCFLD"}', /model is 'not set', not openrouter\/@preset\/glm-5-3-flash-cheap-reliable/],

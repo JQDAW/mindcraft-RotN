@@ -5,6 +5,7 @@ import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, 
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stowCarried } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
+import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, FALLING_TREE } from "./felling.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import pf from 'mineflayer-pathfinder';
@@ -28,19 +29,32 @@ async function autoLight(bot) {
     return false;
 }
 
+/**
+ * A weapon's rank by its material, a sword above an axe of the same material. A heuristic:
+ * neither mineflayer's items nor rotn-data carry attack damage (upstream sorted by an
+ * item.attackDamage that does not exist), and RotN's durabilities do not follow damage.
+ */
+export function weaponRank(item) {
+    const name = String(item?.name ?? '');
+    const tier = /diamond/.test(name) ? 4 : /iron/.test(name) ? 3 : /stone|flint|bone|obsidian/.test(name) ? 2 : 1;
+    return tier * 2 + (/sword/.test(name) ? 1 : 0);
+}
+
 async function equipHighestAttack(bot) {
-    const isWeapon = (item) => item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe'));
-    // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory first,
-    // so it can be equipped in the main hand (#238 review 1).
-    if (!bot.inventory.items().some(isWeapon) && isWeapon({ name: bot.inventory.slots?.[45]?.name ?? '' }))
-        await stowCarried(bot, isWeapon, { resyncMs: 0 });
-    let weapons = bot.inventory.items().filter(isWeapon);
-    if (weapons.length === 0)
-        weapons = bot.inventory.items().filter(item => item.name.includes('pickaxe') || item.name.includes('shovel'));
-    if (weapons.length === 0)
-        return;
-    weapons.sort((a, b) => b.attackDamage - a.attackDamage);
-    let weapon = weapons[0];
+    const isWeapon = (item) => !!item && (item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
+    const best = (items) => items.filter(isWeapon).sort((a, b) => weaponRank(b) - weaponRank(a))[0] ?? null;
+    // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory when
+    // it is better than any there, so it can be held in the main hand (#238 review 1 and nit 3).
+    const off = bot.inventory.slots?.[45];
+    const inInventory = best(bot.inventory.items());
+    if (isWeapon(off) && (!inInventory || weaponRank(off) > weaponRank(inInventory))) {
+        const full = (bot.inventory.firstEmptyInventorySlot?.() ?? null) === null;
+        const moved = await stowCarried(bot, isWeapon, { resyncMs: 0 });
+        if (!moved.length) log(bot, `Could not take the ${off.name} from the off hand${full ? ': the inventory is full' : ''}.`); // #238 nit 2
+    }
+    let weapon = best(bot.inventory.items());
+    if (!weapon)
+        weapon = bot.inventory.items().find(item => item.name.includes('pickaxe') || item.name.includes('shovel')) ?? null;
     if (weapon)
         await bot.equip(weapon, 'hand');
 }
@@ -496,7 +510,12 @@ export async function smeltItem(bot, itemName, num=1, ops=FURNACE_OPS) {
 export async function placeFurnaceNear(bot, range, { place = placeBlock, freeSpace = world.getNearestFreeSpace } = {}) {
     const pos = freeSpace(bot, 1, range);
     if (!pos) return null;
-    if (!await place(bot, 'furnace', pos.x, pos.y, pos.z)) return null;
+    // The place must be air before placing (#247 review 3), so a furnace there afterwards is ours.
+    if (bot.blockAt(pos)?.name !== 'air') return null;
+    // placeBlock can report a failure (or throw) although the server placed it (#238 nit 1): what
+    // stands at pos decides. pos was air, so a furnace there is this one, never someone else's.
+    try { await place(bot, 'furnace', pos.x, pos.y, pos.z); }
+    catch (err) { log(bot, `Placing the furnace failed (${safeError(err)}).`); }
     const b = bot.blockAt(pos);
     return b && names112.isFurnace(b.name) ? b : null;
 }
@@ -830,15 +849,20 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 if (isLiquid) return await useToolOnBlock(bot, 'bucket', block);
                 // By hand when the block has no collision box (a rock pile), or when a rule's tool must
                 // stay equipped: bot.collectBlock.collect would re-equip the fastest tool (B2).
+                // A Dynamic Trees branch fells the whole tree, which falls as one entity and can
+                // crush the bot (G3 round 3 B): cut it safely (fellTree), and collect its logs after
+                // the fall, around the tree (G3 smoke C+D).
+                if (fellsTree(block)) {
+                    const r = await fellTree(bot, block, run);
+                    for (const p of r.skip) givenUp.push(p);
+                    return r.cut;
+                }
                 if (ruleTool || mc.mustCollectManually(block.name)) {
                     await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                     if (run.aborted) return false;
                     await bot.dig(block);
                     if (run.aborted) return true; // broken; the gain is still counted below
-                    // A Dynamic Trees branch fells the tree: its logs drop around it after the fall,
-                    // not at the bot (G3 smoke C+D: "Broke dynamictrees:sprucebranch but got no log").
-                    if (fellsTree(block)) await collectFelledDrops(bot, block.position);
-                    else await pickupNearbyItems(bot);
+                    await pickupNearbyItems(bot);
                     return true;
                 }
                 await bot.collectBlock.collect(block);
@@ -942,7 +966,77 @@ export const FELL_LIMITS = { radius: 12, settleMs: 6000, quietMs: 1000, walkMs: 
  * item within `radius` of the branch, nearest first, each walk and the whole run bounded.
  * The caller counts the real gain from the inventory. Returns the number of walks that arrived.
  */
-async function collectFelledDrops(bot, center, limits = {}) {
+/** How long the falling tree may take to appear after the cut, and to be gone. */
+export const TREE_FALL = { appearMs: 3000, maxMs: 15_000, stepAwayMs: 4000 };
+
+/**
+ * Fell a Dynamic Trees tree safely (G3 round 3 B: the bot was crushed by a falling tree it cut):
+ * find its lowest trunk block, stand beside it on the side away from the canopy, never under it
+ * or between trunks (felling.js), cut that block, step back at once, wait until the falling tree
+ * entity is gone, then collect the logs around the tree. No safe place: the tree is not cut and
+ * its blocks are skipped. Returns {cut, skip}: skip, the positions collectBlock must not try again.
+ */
+export async function fellTree(bot, block, run = currentRun(bot)) {
+    const base = treeBase(bot, block.position);
+    const at = (p) => `${p.x}, ${p.y}, ${p.z}`;
+    const treeBlocks = (b) => [b, ...canopyOf(bot, b).cells.filter(p => isBranch(bot.blockAt(p)))];
+    if (!base) {
+        log(bot, `Not cutting the tree at ${at(block.position)}: its trunk is not in sight.`);
+        return { cut: false, skip: [block.position] };
+    }
+    const spots = standSpots(bot, base);
+    if (spots.length === 0) {
+        log(bot, `Not cutting the tree at ${at(base)}: no place beside it that is out from under its canopy and not between trunks. A falling tree can crush you.`);
+        return { cut: false, skip: treeBlocks(base) };
+    }
+    // Walks near the tree never dig (#242 review 2): a broken branch would fell it onto the bot.
+    const walk = async (goal, ms) => {
+        const moves = new pf.Movements(bot);
+        moves.canDig = false;
+        bot.pathfinder.setMovements(moves);
+        try { await within(bot.pathfinder.goto(goal), ms, () => stopWalking(bot)); } catch { /* checked by the caller */ }
+    };
+    let spot = null;
+    for (const [i, s] of spots.slice(0, 3).entries()) { // the best few; the walk may not get there
+        // The first approach may come from far off or round obstacles: the normal walk limit. Once
+        // the bot is at the tree, another place nearby gets a step's time (#242 follow-up).
+        await walk(new pf.goals.GoalBlock(s.x, s.y, s.z), i === 0 ? GO_TO_LIMITS.totalMs : GO_TO_LIMITS.stepMs);
+        if (run.aborted) return { cut: false, skip: [] };
+        if (bot.entity.position.floored().equals(s)) { spot = s; break; }
+    }
+    if (!spot) {
+        log(bot, `Not cutting the tree at ${at(base)}: could not reach a safe place beside it.`);
+        return { cut: false, skip: treeBlocks(base) };
+    }
+    const trunk = bot.blockAt(base);
+    if (!isBranch(trunk)) return { cut: false, skip: [base] };
+    // The items already near the tree, so its own logs count as new when they land with the fall.
+    const itemsBefore = Object.values(bot.entities ?? {}).filter(e => e?.name === 'item' && e.position && e.position.distanceTo(base) <= FELL_LIMITS.radius).length;
+    // Hit the side face towards the bot (#242 review 5): the tree falls away from it.
+    const face = sideFace(base, spot);
+    await bot.lookAt(base.offset(0.5 + face.x * 0.5, 0.5, 0.5 + face.z * 0.5));
+    await bot.dig(trunk, true, face);
+    bot.rotnLastFell = { at: Date.now(), pos: base.clone ? base.clone() : base }; // the death report reads it
+    log(bot, `Cut the tree at ${at(base)} from ${at(spot)}, away from its canopy; stepping back.`);
+    // Step back at once: the tree falls a moment after the cut.
+    const away = retreatFrom(base, spot);
+    await walk(new pf.goals.GoalNear(away.x, away.y, away.z, 1), TREE_FALL.stepAwayMs); // a failed step back: still wait
+    // Collect only after the falling tree is gone (or never showed up in time).
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+    const falling = () => Object.values(bot.entities ?? {}).some(e => e?.name === FALLING_TREE && e.position && e.position.distanceTo(base) <= 32);
+    const start = Date.now();
+    let seen = false;
+    while (Date.now() - start < TREE_FALL.maxMs && !bot.interrupt_code && !run.aborted) {
+        if (falling()) seen = true;
+        else if (seen || Date.now() - start >= TREE_FALL.appearMs) break;
+        await sleep(200);
+    }
+    if (run.aborted) return { cut: true, skip: [] };
+    await collectFelledDrops(bot, base, {}, itemsBefore);
+    return { cut: true, skip: [] };
+}
+
+async function collectFelledDrops(bot, center, limits = {}, baseline = null) {
     const L = { ...FELL_LIMITS, ...limits };
     const start = Date.now();
     const left = () => L.totalMs - (Date.now() - start);
@@ -951,7 +1045,8 @@ async function collectFelledDrops(bot, center, limits = {}) {
         .filter(e => e && e.name === 'item' && e.position && e.position.distanceTo(center) <= L.radius);
     // Wait for the fall: until new drops have appeared (more than were already on the ground,
     // #222 review) and stayed the same for quietMs, at most settleMs.
-    const before = dropsNear().length;
+    // baseline: the drops near the tree before the cut (fellTree), as the logs land when the fall ends.
+    const before = baseline ?? dropsNear().length;
     let seen = before;
     let changedAt = Date.now();
     while (Date.now() - start < L.settleMs && !bot.interrupt_code) {

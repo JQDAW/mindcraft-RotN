@@ -310,3 +310,41 @@ test('defendSelf with the only sword in the off hand fights with it in the main 
     assert.equal(heldWhenHitting, 'stone_sword');
     assert.equal(slots[45], null, 'the sword left the off hand');
 });
+
+// #238 nits 2 and 3: a full inventory is logged; a better off-hand weapon beats a worse one in the
+// inventory, a worse one stays where it is.
+function weaponBot({ inventory = [], offHand = null, full = false }) {
+    const bot = fakeBot();
+    const slots = bot.inventory.slots;
+    slots.fill(null);
+    inventory.forEach((it, i) => { slots[36 + i] = { count: 1, metadata: 0, ...it }; });
+    if (full) for (let k = 9; k < 45; k++) slots[k] ??= { name: 'dirt', count: 64, metadata: 0 };
+    slots[45] = offHand && { count: 1, metadata: 0, ...offHand };
+    bot.inventory.items = () => slots.slice(9, 45).filter(Boolean);
+    bot.inventory.firstEmptyInventorySlot = () => { const i = slots.findIndex((x, k) => k >= 9 && k < 45 && !x); return i < 0 ? null : i; };
+    bot.moveSlotItem = (from, to) => { slots[to] = slots[from]; slots[from] = null; return Promise.resolve(); };
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: at(2), height: 1.8, isValid: true };
+    bot.entities[7] = zombie;
+    bot.nearestEntity = (pred) => Object.values(bot.entities).find(pred) ?? null;
+    bot.hitWith = null;
+    bot.pvp = { attack: () => { bot.hitWith = bot.heldItem?.name ?? null; delete bot.entities[7]; }, stop() {} };
+    return { bot, slots };
+}
+
+test('#238 nits: the better weapon is held, from the off hand or not; a full inventory is logged', T, async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const better = weaponBot({ inventory: [{ name: 'stone_axe' }], offHand: { name: 'iron_sword' } });
+    await skills.defendSelf(better.bot, 9, () => true);
+    assert.equal(better.bot.hitWith, 'iron_sword', 'the better off-hand sword');
+
+    const worse = weaponBot({ inventory: [{ name: 'stone_sword' }], offHand: { name: 'wooden_sword' } });
+    await skills.defendSelf(worse.bot, 9, () => true);
+    assert.equal(worse.bot.hitWith, 'stone_sword');
+    assert.equal(worse.slots[45]?.name, 'wooden_sword', 'a worse one stays in the off hand');
+
+    const full = weaponBot({ inventory: [{ name: 'stone_pickaxe' }], offHand: { name: 'stone_sword' }, full: true });
+    await skills.defendSelf(full.bot, 9, () => true);
+    assert.match(full.bot.output, /Could not take the stone_sword from the off hand: the inventory is full\./);
+    assert.equal(full.bot.hitWith, 'stone_pickaxe', 'it fights with what it can hold');
+});

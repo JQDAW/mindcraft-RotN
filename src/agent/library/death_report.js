@@ -13,7 +13,7 @@
 import { requestReplan } from '../replan.js';
 import { safeError } from '../safe_error.js';
 import { nightPhase } from './night.js';
-import { isPlayerZombie } from './threats.js';
+import { isPlayerZombie, canFightHard } from './threats.js';
 
 /** Samples kept while alive (one a second). */
 export const SAMPLES_KEPT = 3;
@@ -151,11 +151,34 @@ export class DeathReporter {
             if (now - this.lastChatAt >= CHAT_GAP_MS) chat = `I ${line}.`;
         }
         if (chat) this.lastChatAt = now;
-        return { line, chat, lost, pos: p.pos, cause: p.cause, dimension: p.dimension, label: p.label || '', streak: streak >= STREAK_DEATHS };
+        return { line, chat, lost, pos: p.pos, cause: p.cause, at: p.at, dimension: p.dimension, label: p.label || '', streak: streak >= STREAK_DEATHS };
     }
 }
 
 const where = (p) => (p ? `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}` : 'unknown');
+
+/** How long Corpse Complex keeps the dropped items at the death spot (config: Drop Despawn Timer 600). */
+export const DROPS_LAST_MIN = 10;
+
+/**
+ * What the model is told about the items it dropped (lead decision on rotn-data Request 12), with
+ * the minutes left counted from the death (#247 review 1), so a note read later is not stale.
+ */
+export function lostItemsNote(minutesLeft) {
+    if (minutesLeft <= 0) {
+        return `They lay at the death spot for ${DROPS_LAST_MIN} minutes after your death and are gone now; `
+            + 'move on and do not plan around them.';
+    }
+    return `They lie at the death spot for about ${minutesLeft} more minutes (${DROPS_LAST_MIN} minutes from your death), `
+        + 'and a zombie rises there (Zombie Players: it never burns in daylight and never leaves). They are lost unless '
+        + 'that zombie is killed before then; waiting for day does not help. Go back for them only with a weapon and more '
+        + 'than half your health; otherwise move on and do not plan around the lost items.';
+}
+
+/** The re-plan note for a death by a falling tree: what happened and how not to repeat the cut. */
+const treeNote = (lastFell) => `A falling tree crushed you${lastFell?.pos ? ` (the one you cut at ${where(lastFell.pos)})` : ''}: `
+    + 'in RotN a cut tree falls as one piece. Get logs only with !collectBlocks("log", n), which cuts the lowest trunk block '
+    + 'from the side away from the canopy and steps back; never cut a tree by hand or from under its leaves. ';
 
 /**
  * Why the bot must not walk to `pos` now because it is near its last death spot, or null.
@@ -177,12 +200,21 @@ export function deathSpotBlocked(agent, pos, { now = Date.now() } = {}) {
     }
     const zombie = Object.values(bot?.entities ?? {}).find(e => e !== bot.entity && e?.position
         && isPlayerZombie(e) && dist(e.position, last.pos) <= DEATH_SPOT_RADIUS);
-    if (zombie) return 'a player zombie (it rises where a player died) is there';
+    // The zombie never burns and never leaves (rotn-data #243), so this rule ends only when it dies.
+    // With a weapon and more than half its health the bot may go and fight it (the fight policy;
+    // lead decision on rotn-data Request 12); otherwise it stays away.
+    if (zombie && !canFightHard(bot)) return 'a player zombie (it rises where a player died) is there, and you lack a weapon or more than half your health to fight it';
+    // After DROPS_LAST_MIN the items are gone (#247 review 1): no fight for them past the zombie, and
+    // no walk to the spot itself. The area around it stays open (the zombie may be anywhere near).
+    if (ago >= DROPS_LAST_MIN * 60_000 && (zombie || dist(pos, last.pos) <= HOME_RADIUS)) {
+        return `your items there are already lost (they last ${DROPS_LAST_MIN} minutes after the death)${zombie ? ', and its zombie stays' : ''}`;
+    }
     if (ago < DEATH_SPOT_NIGHT_MS) {
         let phase = null;
         try { phase = agent._night?.clock?.phase?.(now) ?? null; } catch { phase = null; }
         if (!phase && typeof bot?.time?.timeOfDay === 'number') phase = nightPhase(bot.time.timeOfDay);
-        if (phase === 'night' || phase === 'dusk') return `it is ${phase}; go back to where you died only by day`;
+        // Not "only by day" (#247 review 2): the items are gone by then, and waiting does not help.
+        if (phase === 'night' || phase === 'dusk') return `it is ${phase}: do not go back to where you died now; the items left there will be lost`;
     }
     return null;
 }
@@ -255,24 +287,63 @@ export function bindDeathReport(agent, { setTimer = setTimeout, clearTimer = cle
 }
 
 /** The report for the pending death: one log line, the chat line if allowed, a re-plan note. */
+/**
+ * The death message's text for the report, or null when it is not the bot's death. A modded death
+ * message (Dynamic Trees' falling tree) reaches mineflayer untranslated, as its key: it does not
+ * start with the bot's name, which is then one of its arguments (G3 round 3 B: the report had no
+ * cause). Then: "<name> died (<key>)".
+ */
+export function deathCauseText(name, message, jsonMsg) {
+    const key = jsonMsg?.translate;
+    if (typeof key !== 'string' || !key.startsWith('death')) return null;
+    // The one who died is argument 1 (%1$s); argument 2 is the killer (#242 review 3: in
+    // death.attack.player the bot can be argument 2, and that death is not the bot's).
+    const first = jsonMsg.with?.[0];
+    // A string, a component with .text, or mineflayer's ChatMessage, whose toString() is its plain
+    // text. Any other object's toString() gives "[object Object]", which is never a bot's name, so
+    // such a message is not taken as the bot's (#242 nit).
+    const who = typeof first === 'string' ? first : (first?.text ?? (typeof first?.toString === 'function' ? first.toString() : null));
+    if (who != null) return who === name ? (String(message ?? '').startsWith(name) ? String(message) : `${name} died (${key})`) : null;
+    const text = String(message ?? '');
+    return text.startsWith(name) ? text : null;
+}
+
+/** How soon after its own cut a death counts as the falling tree's when the server gave no cause. */
+export const TREE_DEATH_MS = 15_000;
+
+/**
+ * Whether the bot was crushed by a falling tree (Dynamic Trees; G3 round 3 B): the cause says so
+ * (the text or the untranslated key), or there is no cause and the bot died within TREE_DEATH_MS
+ * of cutting a tree (bot.rotnLastFell, set by skills.fellTree).
+ */
+export function treeDeath(r, lastFell) {
+    // The pack's key and text (DramaticTrees-1.12.2-0.13.4.jar, assets/dynamictrees/lang/en_us.lang):
+    // death.attack.fallingtree=%1$s was crushed by a falling tree. Also falling_tree (#242 review 4).
+    if (r?.cause) return /falling[ _]?tree/i.test(r.cause);
+    return !!lastFell && Number.isFinite(r?.at) && r.at >= lastFell.at && r.at - lastFell.at <= TREE_DEATH_MS;
+}
+
 export function reportDeath(agent, { now = Date.now() } = {}) {
     const r = agent._death?.report(agent.bot, { now });
     if (!r) return null;
-    console.log(`[death] ${r.line}`);
+    const lastFell = agent.bot?.rotnLastFell;
+    const byTree = treeDeath(r, lastFell);
+    console.log(`[death] ${r.line}${byTree && !r.cause ? ' (likely the tree it had just cut)' : ''}`);
     if (r.chat && !agent.shut_up) {
         Promise.resolve().then(() => agent.openChat(r.chat)).catch(err => console.warn(`[death] chat: ${safeError(err)}`));
     }
     // The LLM gets the bot's own state only, never the server's death text (it can carry a mob's
-    // or player's custom name). Where the items went is hedged until G3 (b) shows how Corpse
-    // Complex behaves (#215 review 2).
+    // or player's custom name). Where the items went, plainly (rotn-data #226/#243: Corpse Complex
+    // drops them at the death spot for 600 s; Zombie Players raises a zombie there that never burns
+    // and never despawns; lead decision on rotn-data Request 12).
     const items = r.lost.length
-        ? `You no longer have ${formatLoss(r.lost)}; they may lie at the death spot (unconfirmed).`
+        ? `You no longer have ${formatLoss(r.lost)}. ${lostItemsNote(Math.floor(DROPS_LAST_MIN - (now - (r.at ?? now)) / 60_000))}`
         : 'Your inventory looks unchanged.';
     // A death is due for a prompt even when nothing was running (#215 review 1), except in a
     // death streak: then the note waits for the next prompt, so deaths cannot drive LLM calls.
     requestReplan(agent, 'death', r.label, {
         now, due: !r.streak,
-        note: `You died at ${where(r.pos)} and respawned. ${items} The spot is saved as 'last_death_position'. `
+        note: `You died at ${where(r.pos)} and respawned. ${byTree ? treeNote(lastFell) : ''}${items} The spot is saved as 'last_death_position'. `
             + `Do not go back there for ${DEATH_SPOT_WAIT_MS / 60_000} min, nor at dusk or night: what killed you may still be there, `
             + 'and a zombie rises where a player dies.',
     });

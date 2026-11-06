@@ -27,7 +27,7 @@ import { speak } from './speak.js';
 import { log, validateNameFormat, handleDisconnection } from './connection_handler.js';
 import { safeError, safeStack } from './safe_error.js';
 import { runUpdateLoop, createErrorReporter } from './update_loop.js';
-import { bindDeathReport } from './library/death_report.js';
+import { bindDeathReport, deathCauseText } from './library/death_report.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -525,9 +525,10 @@ export class Agent {
         this.bot.on('messagestr', async (message, _, jsonMsg) => {
             // D3: the server's death message only names the cause in the death report. The upstream
             // LLM prompt per death is gone (a chat-spam loop risk); bindDeathReport reports once.
-            if (jsonMsg.translate && jsonMsg.translate.startsWith('death') && message.startsWith(this.name)) {
-                this._death?.cause(message);
-            }
+            // A modded death message arrives untranslated, as its key (G3 round 3 B: "crushed by a
+            // falling tree" never reached the report): deathCauseText checks the arguments too.
+            const cause = deathCauseText(this.name, message, jsonMsg);
+            if (cause) this._death?.cause(cause);
         });
         this.bot.on('idle', () => {
             this.bot.clearControlStates();

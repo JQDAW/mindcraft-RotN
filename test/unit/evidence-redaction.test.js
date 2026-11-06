@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { redact, findLeaks, evidenceFiles } from '../tools/redact-evidence.mjs';
+import { redact, findLeaks, evidenceFiles, HCLOUD_SERVER_ID } from '../tools/redact-evidence.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const kinds = (t) => findLeaks(t).map((l) => l.kind);
@@ -171,13 +171,16 @@ describe('one rule for the tool and the check (lead, after G2 batch 6: a bare ad
         const files = evidenceFiles(path.join(ROOT, 'test', 'evidence'));
         const inGate = (f, g) => f.split(/[\\/]/).includes(g);
         assert.ok(files.some((f) => inGate(f, 'g0')) && files.some((f) => inGate(f, 'g1')) && files.some((f) => inGate(f, 'g2')));
+        // Evidence committed before the server-id rule (#237 review nit) keeps hcloud's server ids, by decision
+        // (masked from now on, existing evidence unchanged): compare with that one rule applied to both sides.
+        const ids = (s) => s.replace(HCLOUD_SERVER_ID, '$1<server-id>');   // the tool's own rule, not a copy (#244 nit)
         for (const f of files) {
             const t = fs.readFileSync(f, 'utf8');
             // Addresses, UUIDs and local paths everywhere. G2's logs and result.json also went through --bot;
             // a README is prose that may name the bot account, and G0/G1 kept the name.
-            assert.equal(redact(t), t, `${path.relative(ROOT, f)}: the tool would still change it`);
+            assert.equal(redact(t), ids(t), `${path.relative(ROOT, f)}: the tool would still change it`);
             if (inGate(f, 'g2') && path.basename(f) !== 'README.md') {
-                assert.equal(redact(t, { bot: 'FRCFLD' }), t, `${path.relative(ROOT, f)}: the bot name is left`);
+                assert.equal(redact(t, { bot: 'FRCFLD' }), ids(t), `${path.relative(ROOT, f)}: the bot name is left`);
             }
         }
     });
@@ -259,5 +262,23 @@ describe('loopback and the wildcard name no host: kept by the tool and the check
         }
         // Glued to more digits or dots, it is no quad at all (unchanged rule), so no partial leftover either.
         assert.equal(redact('127.0.0.1.5'), '127.0.0.1.5');
+    });
+});
+
+describe('Hetzner numeric server ids in hcloud output are masked (#237 review nit)', () => {
+    test('the three hcloud forms become <server-id>; nothing else changes', () => {
+        assert.equal(redact('Waiting for create_server (server: 174725082, image: 161547269) ...'), 'Waiting for create_server (server: <server-id>, image: 161547269) ...');
+        assert.equal(redact('Waiting for start_server (server: 174725082) ... done'), 'Waiting for start_server (server: <server-id>) ... done');
+        assert.equal(redact('Waiting for delete_server (server: 174697758) ...'), 'Waiting for delete_server (server: <server-id>) ...');
+        assert.equal(redact('Server 174725082 created'), 'Server <server-id> created');
+        assert.equal(redact('Server 174725082\nnext'), 'Server <server-id>\nnext', 'at the end of a line');
+        // Not server ids: a GitHub run id, the image id (public), short numbers, a glued word, the log's thread name.
+        for (const keep of ['sweeper OK: scheduled run 42145957893 succeeded', 'Server 12 created', 'the Server 174725082x', '[Server thread/INFO]', 'image: 161547269)']) {
+            assert.equal(redact(keep), keep, keep);
+        }
+    });
+
+    test('masking is not a leak-check rule: earlier evidence that keeps the ids still passes the check', () => {
+        assert.deepEqual(kinds('Waiting for delete_server (server: 174697758) ...'), []);
     });
 });
