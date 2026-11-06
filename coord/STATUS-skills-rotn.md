@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T20:11Z (from `date -u`)
+Updated: 2026-11-06T20:19Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -209,8 +209,11 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#291: dirt piles follow-up** (branch `agent/skills-rotn/dirt-piles`, opened 2026-11-06T19:57Z by `date -u`): rotn-data #288. Required before the G3 gate (lead). See "Dirt piles" below.
-- **#284** (round 6 B shelter) and rotn-data **#288** are merged.
+- None open. **#291** (dirt piles) is merged as develop `42a8e94`, after #284 and rotn-data #288.
+- **G3 smoke round 7 (pre-gate) is running on develop `42a8e94`** (from 2026-11-06T20:19Z by `date -u`).
+  - **Code freeze:** no PRs or pushes that change bot or harness code until the G3 gate is done; docs and STATUS only.
+  - **Memory rule:** targeted tests only.
+  - I am waiting for the lead's findings.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
