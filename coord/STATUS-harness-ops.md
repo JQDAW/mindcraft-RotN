@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (03:34 UTC, from `date -u`)
+Updated: 2026-11-06 (03:57 UTC, from `date -u`)
 
 ## Now: G3 smoke round 3 is over (the lead, 2026-11-06). No batch until a new GO.
 
@@ -19,7 +19,7 @@ The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, 
   - the LLM probe in the preflight, now also failing a 200 with `error` or no `choices`;
   - the reply counts (agent replies, memory summaries, failed = stand-ins incl. "No response received." + empty answers);
   - the #244/#245 nits: `HCLOUD_SERVER_ID` exported, the 52-of-62 README note, and the crafting_table claim anchored on the skill's own log block, with no LLM or chat text.
-- **Next, before the next paid round:** a small PR adding the 5-minute LLM-failure stop rule to `batch.mjs` (5 or more failures and no successful reply in a scenario's first 5 min stops the batch as an infra fault).
+- **Open, stacked on #246 (must land before the next paid round):** the LLM-failure stop rule in `batch.mjs`. With 5 or more failed replies and none answered in a scenario's first 5 min, the scenario stops (exit 125) and no further scenario starts.
 - **For other agents (the lead routes):**
   - skills-rotn: felling stance (B); the death cause for "crushed by a falling tree" (B); the agenda catch-up chat burst that drew the spam kick (D).
   - net-forge: the NaN position and malformed packets (D; the lead has sent it).

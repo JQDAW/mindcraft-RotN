@@ -55,7 +55,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { keyFetch, probeFetch, probeModel, readKeyUsage, spent, testOverridesAllowed, TEST_OVERRIDES } from './lib/llm-spend.mjs';
+import { countLlmReplies, keyFetch, probeFetch, probeModel, readKeyUsage, spent, testOverridesAllowed, TEST_OVERRIDES } from './lib/llm-spend.mjs';
 import { findBash } from './lib/adapters.mjs';
 import { LLM_MODEL } from './lib/g3.mjs';
 import { checkProfile, parseDriverArgs, settingsProblems } from './drivers/mindcraft-driver.mjs';
@@ -249,14 +249,52 @@ export function runIdOf(outDir) {
 }
 
 /** Run one scenario (the runner is run.mjs; tests may swap it in test mode). Resolves the exit code. */
-export function runOne(s, o, env, { spawnImpl = spawn } = {}) {
+/** The exit recorded for a scenario stopped by the LLM-failure rule (an infra fault, not a bot result). */
+export const EXIT_LLM_STOP = 125;
+
+/**
+ * The LLM-failure stop rule (lead, round 3 continuation): a scenario whose first windowMs (5 min, from its start)
+ * shows minFailed (5) or more failed LLM replies and no successful reply or memory summary is an infra fault (the
+ * model does not answer), not a bot result: it is stopped, and the batch starts no further scenario.
+ * The offline tests may shorten pollMs and windowMs (ROTN_LLM_STOP_POLL_MS, ROTN_LLM_STOP_WINDOW_MS; test mode only).
+ */
+export function llmStopSettings(env = {}) {
+    const t = testOverridesAllowed(env);
+    const n = (v, d) => (t && /^\d+$/.test(v ?? '') ? Number(v) : d);
+    return { windowMs: n(env.ROTN_LLM_STOP_WINDOW_MS, 5 * 60000), pollMs: n(env.ROTN_LLM_STOP_POLL_MS, 15000), minFailed: 5 };
+}
+
+/** Whether the rule fires on these driver.log lines: {stop, ok, memory, failed, httpErrors}. */
+export function llmStopVerdict(lines, { minFailed = 5 } = {}) {
+    const r = countLlmReplies(lines);
+    return { stop: r.failed >= minFailed && r.ok === 0 && r.memory === 0, ok: r.ok, memory: r.memory, failed: r.failed, httpErrors: r.httpErrors };
+}
+
+export function runOne(s, o, env, { spawnImpl = spawn, llmStop = llmStopSettings(env) } = {}) {
     const runner = testOverridesAllowed(env) && env.ROTN_BATCH_RUNNER ? env.ROTN_BATCH_RUNNER : path.join(HERE, 'run.mjs');
     const args = [runner, '--scenario', s.id, '--out', s.out, '--param', `maxBatchUsd=${o.maxBatchUsd}`, '--pass-env', 'OPENROUTER_API_KEY', '--', ...o.driver];
     return new Promise((resolve) => {
         let timedOut = false;
+        let llmStopped = false;
         let done = false;
-        const settle = (code) => { if (!done) { done = true; clearTimeout(timer); resolve(code); } };
+        const started = Date.now();
+        const settle = (code) => { if (!done) { done = true; clearTimeout(timer); clearInterval(watch); resolve(code); } };
         const child = spawnImpl(process.execPath, args, { stdio: 'inherit', env });
+        // The LLM-failure stop rule: read the scenario's driver.log during its first windowMs.
+        const watch = setInterval(() => {
+            if (Date.now() - started > llmStop.windowMs) { clearInterval(watch); return; }
+            let lines;
+            try { lines = fs.readFileSync(path.join(s.out, 'driver.log'), 'utf8').split('\n'); } catch { return; }
+            const v = llmStopVerdict(lines, llmStop);
+            if (!v.stop || llmStopped) return;
+            llmStopped = true;
+            clearInterval(watch);
+            const http = Object.entries(v.httpErrors).map(([st, k]) => `${k} x HTTP ${st}`).join(', ');
+            s.llmStop = { failed: v.failed, ok: v.ok, memory: v.memory, httpErrors: v.httpErrors, afterS: Math.round((Date.now() - started) / 1000) };
+            log(`${s.id}: LLM-failure stop: ${v.failed} failed LLM replies and none answered in its first ${Math.round(llmStop.windowMs / 60000 * 10) / 10} min${http ? ` (${http})` : ''}; an infra fault, stopping it and the batch`);
+            child.kill('SIGTERM');
+            setTimeout(() => child.kill('SIGKILL'), 20000).unref();
+        }, llmStop.pollMs);
         const timer = setTimeout(() => {
             timedOut = true;
             log(`${s.id}: timeout after ${s.timeoutMin} min, stopping it`);
@@ -264,7 +302,7 @@ export function runOne(s, o, env, { spawnImpl = spawn } = {}) {
             setTimeout(() => child.kill('SIGKILL'), 20000).unref();
         }, s.timeoutMin * 60000);
         // A timeout is 124 whatever the runner's own exit was (run.mjs exits 143 on SIGTERM; #122 nit 3).
-        child.on('exit', (code, signal) => settle(timedOut ? 124 : signal || code === null ? 124 : code));
+        child.on('exit', (code, signal) => settle(llmStopped ? EXIT_LLM_STOP : timedOut ? 124 : signal || code === null ? 124 : code));
         // The runner could not start (#122 nit 4): logged and recorded as 127, and the batch goes on to its
         // end-of-batch spend check, the log fetch and the summary.
         child.on('error', (e) => {
@@ -383,8 +421,13 @@ async function main(argv) {
         const code = await runOne(s, o, env);
         // The output folder and the run's own runId tie this batch to the result.json it wrote
         // (crossCheckBatch; #122 nit 1, #129 review).
-        summary.scenarios.push({ id: s.id, out: path.resolve(s.out), runId: runIdOf(s.out), exit: code, spentBefore: gate.spent, timeoutMin: s.timeoutMin });
+        summary.scenarios.push({ id: s.id, out: path.resolve(s.out), runId: runIdOf(s.out), exit: code, spentBefore: gate.spent, timeoutMin: s.timeoutMin, ...(s.llmStop ? { llmStop: s.llmStop } : {}) });
         if (code !== 0 && exit === 0) exit = 1;
+        // The LLM-failure stop rule: the model does not answer, so no further scenario starts (an infra fault).
+        if (code === EXIT_LLM_STOP) {
+            summary.stopped = `LLM-failure stop in ${s.id}: ${s.llmStop?.failed ?? '?'} failed LLM replies and none answered in its first minutes (an infra fault, not a bot result)`;
+            break;
+        }
     }
     const end = await read();
     summary.usageAtEnd = end.ok ? end.usage : null;

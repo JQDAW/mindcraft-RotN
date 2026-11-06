@@ -231,6 +231,13 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
     - A scenario without `runMinutes`, or an unknown id, is refused, except in the offline test mode (fake ids: `--timeout-min` or 15).
     - The preflight log lists the timeouts, the start line of each scenario shows its own, and the summary records `timeoutMin` for each scenario.
   - A scenario that hits its runner timeout is recorded with exit **124**, whatever run.mjs exits after the SIGTERM. A runner that cannot be started is recorded with exit **127**. The summary records each scenario's `out` folder and its `exit`, and the batch's own `exit`.
+- **The LLM-failure stop rule** (lead, round 3 continuation; `llmStopVerdict`, `runOne` in `batch.mjs`):
+  - During each scenario's first 5 minutes, counted from its start, `batch.mjs` reads the scenario's `driver.log` every 15 s with `countLlmReplies`.
+  - **5 or more failed replies and none answered** (no agent reply and no memory summary) is an infra fault (the model does not answer), not a bot result.
+  - The scenario is stopped and recorded with exit **125** (`EXIT_LLM_STOP`), with `llmStop: {failed, ok, memory, httpErrors, afterS}` in the summary. The batch starts no further scenario (`stopped: "LLM-failure stop in <id>: ..."`), and the logs are still fetched.
+  - Failures count as in `result.llm.replies`: the stand-ins "My brain disconnected, try again." and "No response received.", a memory summary that stored one, and empty answers. One reply or one summary in the window means the model answers, and the rule does not fire. Failures after the window are left to the scenario's own checks.
+  - Round 3 B's log (11 requests, all 429) has 11 failures and no answer, so the rule would fire on it once 5 failures fall inside the window. A model that answers slowly but fails rarely is never stopped by it.
+  - The offline tests shorten the window and the poll (`ROTN_LLM_STOP_WINDOW_MS`, `ROTN_LLM_STOP_POLL_MS`). Both are in `TEST_OVERRIDES`, so a real batch refuses them.
 - **Limits:**
   - The spend is checked **between** scenarios, not during one, so a single scenario can run past the limit.
   - OpenRouter's usage figure can lag a little behind the newest requests.
