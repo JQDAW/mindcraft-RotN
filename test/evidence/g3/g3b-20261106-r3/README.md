@@ -4,6 +4,11 @@
 - At 00:00 UTC the server rolled `logs/latest.log` over into `logs/2026-11-05-1.log.gz`.
 - The scenario's next poll (00:00:56) no longer found its begin marker and stopped: "scenario marker not in the last 20000 log lines; raise logTail".
 - That was a harness failure, not a verdict on the bot. Until then (28.5 min after the join) it was online with `stat.deaths` 0.
+- **Correction (round 3 continuation, 2026-11-06):** not one LLM call of this run succeeded.
+  - `driver.log` has 20 "My brain disconnected, try again" replies and 11 `Error [429] ... Provider returned error`, and no other reply.
+  - The old preset's upstream provider was rate-limited: Baidu, `tpm_rate_limit_exceeded`, confirmed by two probes at 01:32Z and 01:42Z.
+  - So the bot's 28.5 min came from its reflexes and the night routine alone. This run says nothing about the LLM-driven agent.
+  - Since then, every LLM run uses `@preset/glm-5-3-flash-cheap-reliable` (#241).
 - The run stopped per the GO (unexpected, after the join, so no retry). C+D did not start.
 
 **A smoke batch, never gate evidence:** `batch.json` says `"gate": false, "smoke": true` (written by `batch.mjs`, no hand edit).
@@ -60,7 +65,7 @@ The last samples (`notes.samples`): minute 28.5, daytime 16001 (Time Shall Not P
 
 ## Cost
 
-- **LLM:** 11 calls. The batch's own readings show USD 0 (0.7449 before and after) because OpenRouter's usage lags; the calls show up in the next reading.
+- **LLM:** 11 failed calls (429) and no successful one, which is why the batch's readings show USD 0 (0.7449 before and after). This line first said "11 calls" and blamed the usage lag; that was wrong.
 - **Hetzner:** about 33 min, 1 billed hour, about EUR 0.14 (excl. IPv4), plus 1 Primary IPv4-hour.
 - **Cumulative LLM** by the key's last reading: USD 0.7449 of the 4.50 stop.
 
