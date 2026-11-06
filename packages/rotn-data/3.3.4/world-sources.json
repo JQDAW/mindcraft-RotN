@@ -100,7 +100,7 @@
     {
       "id": "debark-log",
       "action": "use-tool-on-block",
-      "summary": "Place a log, then right-click it with the crude axe: it becomes a debarked log and drops bark.",
+      "summary": "Place a log (any axis), then right-click it with an axe (any axe, level 0 or better: the crude axe is the first): it becomes a debarked log and drops 1 bark one block toward you. 1 axe use.",
       "pairs": [
         { "block": { "name": "minecraft:log", "meta": 0 }, "item": { "name": "hitwithaxe:debarked_oak", "meta": 0 }, "documented": true },
         { "block": { "name": "minecraft:log", "meta": 1 }, "item": { "name": "hitwithaxe:debarked_spruce", "meta": 0 } },
@@ -110,16 +110,16 @@
         { "block": { "name": "minecraft:log2", "meta": 1 }, "item": { "name": "hitwithaxe:debarked_dark_oak", "meta": 0 } }
       ],
       "count": 1,
-      "tool": { "item": "pyrotech:crude_axe" },
+      "tool": { "type": "axe", "minLevel": 0 },
       "confidence": "documented",
-      "evidence": ["docs/research/rotn-progression.md section 1 step 5: [W-Getting_Started] 'Right-click a placed log with the crude axe to strip it for bark', [R:scripts/wood_stripping_boards.zs]"],
+      "evidence": ["docs/research/rotn-progression.md section 1 step 5: [W-Getting_Started] 'Right-click a placed log with the crude axe to strip it for bark', [R:scripts/wood_stripping_boards.zs]", "scripts/wood_stripping_boards.zs lines 26-28 (oak: minecraft:log metas 0, 4, 8, one per axis -> hitwithaxe:debarked_oak, drops hitwithaxe:bark:15) and lines 90-92 (spruce: metas 1, 5, 9 -> hitwithaxe:debarked_spruce, hitwithaxe:bark:20); the other woods alike", "mods/Hit With Axe-1.12.2-1.5.1.jar (SHA-256 89bd4a453ab425bcdff0e2854936a6960827cb7faa1bd2049a2a25e7f4938f41): HitWithAxe.onItemUse (PlayerInteractEvent.RightClickBlock, bytecode 31-156) runs a recipe when the held item's getToolClasses contains \"axe\" and its axe harvest level is at least the recipe's; every recipe here has level 0 (the crafttweaker Chopping.addRecipe overloads pass iconst_0), and pyrotech:crude_axe is {\"axe\": 0} in the dump. No bare hand. DefaultTransformCall.call (bytecode 28-78): the block becomes the recipe's output state, the stack drops one block toward the player (pos.offset(player facing, -1)), the axe takes 1 damage (the crude axe has maxDamage 8). config/hitwithaxe.cfg: Food Cost 0, Swing Cooldown 2 (ticks)"],
       "inferred": "The pairs for woods other than oak (by wood name).",
-      "unverified": ["whether a stone axe also debarks", "the bark item and meta per wood (oak is hitwithaxe:bark:15)"]
+      "unverified": ["no harness run has debarked a log yet"]
     },
     {
       "id": "plank-from-debarked-log",
       "action": "use-tool-on-block",
-      "summary": "Right-click the placed debarked log with the axe again: it gives a plank. This is how the first plank (for the crafting table) is made.",
+      "summary": "Right-click the placed debarked log with the axe again: the block disappears and 1 plank drops one block toward you (1 axe use). This is how the first plank (for the crafting table) is made without a table: 1 log gives 1 plank for 2 axe uses, while a crafting table gives 3 planks per log.",
       "pairs": [
         { "block": { "name": "hitwithaxe:debarked_oak" }, "item": { "name": "minecraft:planks", "meta": 0 }, "documented": true },
         { "block": { "name": "hitwithaxe:debarked_spruce" }, "item": { "name": "minecraft:planks", "meta": 1 } },
@@ -128,12 +128,29 @@
         { "block": { "name": "hitwithaxe:debarked_acacia" }, "item": { "name": "minecraft:planks", "meta": 4 } },
         { "block": { "name": "hitwithaxe:debarked_dark_oak" }, "item": { "name": "minecraft:planks", "meta": 5 } }
       ],
-      "count": null,
-      "tool": { "item": "pyrotech:crude_axe" },
+      "count": 1,
+      "tool": { "type": "axe", "minLevel": 0 },
       "confidence": "documented",
-      "evidence": ["docs/research/rotn-progression.md section 1 step 6: [W-Getting_Started], [HB newbeginning/wood] (the script maps debarked logs to planks)"],
+      "evidence": ["docs/research/rotn-progression.md section 1 step 6: [W-Getting_Started], [HB newbeginning/wood] (the script maps debarked logs to planks)", "scripts/wood_stripping_boards.zs line 29 (Chopping.addRecipe(\"hitwithaxe:debarked_oak\", 32767, <minecraft:planks>): any meta, 1 plank, the block becomes air) and line 93 (debarked_spruce -> <minecraft:planks:1>); the other woods alike", "the dump: every log-to-planks crafting recipe is a 1x3 column (scripts/wood_stripping_boards.zs lines 11-25), requiresTable true, 3 planks: there is no 2x2 one", "mods/Hit With Axe-1.12.2-1.5.1.jar (SHA-256 89bd4a453ab425bcdff0e2854936a6960827cb7faa1bd2049a2a25e7f4938f41): HitWithAxe.onItemUse (PlayerInteractEvent.RightClickBlock, bytecode 31-156) runs a recipe when the held item's getToolClasses contains \"axe\" and its axe harvest level is at least the recipe's; every recipe here has level 0 (the crafttweaker Chopping.addRecipe overloads pass iconst_0), and pyrotech:crude_axe is {\"axe\": 0} in the dump. No bare hand. DefaultTransformCall.call (bytecode 28-78): the block becomes the recipe's output state, the stack drops one block toward the player (pos.offset(player facing, -1)), the axe takes 1 damage (the crude axe has maxDamage 8). config/hitwithaxe.cfg: Food Cost 0, Swing Cooldown 2 (ticks)"],
       "inferred": "The pairs for woods other than oak (by wood name).",
-      "unverified": ["planks per click (the wiki says 'a wooden plank')"]
+      "unverified": ["no harness run has made a plank this way yet"]
+    },
+    {
+      "id": "sticks-from-planks",
+      "action": "use-tool-on-block",
+      "summary": "Place a planks block, then right-click it with an axe (any axe, level 0 or better: the crude axe is the first): the block disappears and 2 sticks drop one block toward you (1 axe use). That is the same 2 sticks per plank as crafting (2 planks give 4 sticks in the 2x2 grid), but it costs an axe use, so craft when you have 2 planks and chop when you have only 1. A debarked dead log (Biomes O' Plenty) gives 2 sticks the same way.",
+      "pairs": [
+        { "block": { "name": "minecraft:planks" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true },
+        { "block": { "name": "biomesoplenty:planks_0" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true },
+        { "block": { "name": "rustic:planks" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true },
+        { "block": { "name": "randomthings:spectreplank" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true },
+        { "block": { "name": "hitwithaxe:debarked_dead" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true }
+      ],
+      "count": 2,
+      "tool": { "type": "axe", "minLevel": 0 },
+      "confidence": "documented",
+      "evidence": ["scripts/wood_stripping_boards.zs line 779 (Chopping.addRecipe(\"minecraft:planks\", 32767, <minecraft:stick> * 2): any plank meta), lines 789, 791 and 793 (randomthings:spectreplank, rustic:planks, biomesoplenty:planks_0) and line 777 (hitwithaxe:debarked_dead); lines 780-792 name other mods' planks that are not in this pack", "mods/Hit With Axe-1.12.2-1.5.1.jar (SHA-256 89bd4a453ab425bcdff0e2854936a6960827cb7faa1bd2049a2a25e7f4938f41): HitWithAxe.onItemUse (PlayerInteractEvent.RightClickBlock, bytecode 31-156) runs a recipe when the held item's getToolClasses contains \"axe\" and its axe harvest level is at least the recipe's; every recipe here has level 0 (the crafttweaker Chopping.addRecipe overloads pass iconst_0), and pyrotech:crude_axe is {\"axe\": 0} in the dump. No bare hand. DefaultTransformCall.call (bytecode 28-78): the block becomes the recipe's output state, the stack drops one block toward the player (pos.offset(player facing, -1)), the axe takes 1 damage (the crude axe has maxDamage 8). config/hitwithaxe.cfg: Food Cost 0, Swing Cooldown 2 (ticks)"],
+      "unverified": ["no harness run has chopped a plank yet"]
     },
     {
       "id": "raw-iron",

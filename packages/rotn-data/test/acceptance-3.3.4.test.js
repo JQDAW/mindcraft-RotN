@@ -128,8 +128,10 @@ test('common-mobs.json is up to date, names real entities, and has modded mobs (
 const remapSkip = pack.stateMetaRemap() ? false : 'the 3.3.4 dump has no state-meta-remap.json yet (dumper 0.2.0 batch)';
 test('stateMetaRemap(): the double plant upper half reports meta 10, and the scan is complete', { skip: remapSkip }, () => {
     const r = pack.stateMetaRemap();
-    assert.deepEqual(r.anomalies, { encodingMismatches: 0, foreignStates: 0, first: null });
+    // unscannedIds and mapIds since dumper 0.2.1 (this data: the 0.3.0 run): every id in the network-id map was scanned.
+    assert.deepEqual(r.anomalies, { encodingMismatches: 0, foreignStates: 0, unscannedIds: 0, first: null });
     assert.equal(r.scanned.blocks, pack.names.blocks.size);
+    assert.equal(r.scanned.mapIds, r.scanned.networkIds);
     // Forge's second pass: getStateFromMeta(8..11) is one state, sent as 175 << 4 | 11.
     assert.deepEqual(r.byBlock['minecraft:double_plant'], { 8: 10, 9: 10, 11: 10 });
     const sent = r.records.find(x => x.networkId === (175 << 4 | 11));
