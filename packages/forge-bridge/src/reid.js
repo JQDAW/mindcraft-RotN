@@ -18,6 +18,7 @@
 // client for a version in a process fixes the protocol for that process.
 
 import { createRequire } from 'node:module';
+import { installStackUpType, STACKUP_COUNT_TYPE } from './stackup.js';
 
 const require = createRequire(import.meta.url);
 
@@ -30,6 +31,18 @@ function mcData(version = MC_VERSION) {
     if (!md) throw new Error(`no minecraft-data for ${version}`);
     return md;
 }
+
+// node-minecraft-protocol's createProtocol merges customPackets into minecraft-data's own
+// protocol object in place (transforms/serializer.js: merge(mcData.protocol, ...)). Built from
+// that object, a second set of overrides in the same process would start from the first
+// (REID's entity_effect tail pushed twice, an old StackUp count left in a slot without it).
+// So the overrides start from a copy taken when this module loads, before any client compiles.
+const pristineProtocols = new Map();
+function protocolOf(version = MC_VERSION) {
+    if (!pristineProtocols.has(version)) pristineProtocols.set(version, clone(mcData(version).protocol));
+    return pristineProtocols.get(version);
+}
+protocolOf(MC_VERSION);
 
 function fieldOf(container, name) {
     const f = container[1].find(x => x.name === name);
@@ -126,7 +139,7 @@ export function rotnMetadataSerializers(modList = []) {
  * @param {Record<number, string>} [metadataSerializers] extra entity-metadata serializer ids: { id: name in METADATA_SERIALIZER_TYPES }
  */
 export function forgeTypes(version = MC_VERSION, metadataSerializers = {}) {
-    const p = mcData(version).protocol;
+    const p = protocolOf(version);
     // Entity metadata type id is a VarInt in 1.12 (minecraft-data says i8).
     // Forge mod DataSerializers start at 256 and need two VarInt bytes.
     const meta = clone(p.types.entityMetadata);
@@ -148,9 +161,24 @@ export function forgeTypes(version = MC_VERSION, metadataSerializers = {}) {
     return out;
 }
 
+/**
+ * The slot type for this server: REID makes the item id a VarInt; StackUp (stackup.js) makes the
+ * count a byte, or the byte -42 and an int for counts outside 0..64.
+ */
+export function slotType(version = MC_VERSION, { reid = false, stackup = false } = {}) {
+    const slot = clone(protocolOf(version).types.slot);
+    if (reid) fieldOf(slot, 'blockId').type = 'varint';
+    if (stackup) {
+        const item = slot[1].find(f => f.anon)?.type?.[1]?.default;
+        if (!item) throw new Error('slot item container not found');
+        fieldOf(item, 'itemCount').type = STACKUP_COUNT_TYPE;
+    }
+    return slot;
+}
+
 /** REID-only overrides. */
 export function reidTypes(version = MC_VERSION) {
-    const p = mcData(version).protocol;
+    const p = protocolOf(version);
     const slot = clone(p.types.slot);
     fieldOf(slot, 'blockId').type = 'varint';
 
@@ -181,7 +209,7 @@ export function reidTypes(version = MC_VERSION) {
  * decoder checked against the real packets, for analysis and later use.
  */
 export function triumphTypes(version = MC_VERSION) {
-    const adv = clone(mcData(version).protocol.play.toClient.types.packet_advancements);
+    const adv = clone(protocolOf(version).play.toClient.types.packet_advancements);
     const mapping = fieldOf(adv, 'advancementMapping');
     const value = fieldOf(mapping.type[1].type, 'value');
     const display = fieldOf(value.type, 'displayData').type[1]; // ['container', [...]] inside the option
@@ -227,9 +255,9 @@ export const OPAQUE_PACKET_TYPE = 'forge_bridge_opaque_packet';
 
 /**
  * customPackets object for nmp's createClient / client.customPackets.
- * @param {{reid?: boolean, triumph?: boolean, version?: string, metadataSerializers?: Record<number, string>}} opts
+ * @param {{reid?: boolean, triumph?: boolean, stackup?: boolean, version?: string, metadataSerializers?: Record<number, string>}} opts
  */
-export function buildCustomPackets({ reid = false, triumph = false, version = MC_VERSION, metadataSerializers = {} } = {}) {
+export function buildCustomPackets({ reid = false, triumph = false, stackup = false, version = MC_VERSION, metadataSerializers = {} } = {}) {
     const major = mcData(version).version.majorVersion;
     const out = { types: { ...forgeTypes(version, metadataSerializers) } };
     const toClient = {};
@@ -237,6 +265,10 @@ export function buildCustomPackets({ reid = false, triumph = false, version = MC
         const r = reidTypes(version);
         Object.assign(out.types, r.types);
         Object.assign(toClient, r.toClient);
+    }
+    if (stackup) {
+        installStackUpType();
+        out.types.slot = slotType(version, { reid, stackup });
     }
     if (triumph) {
         out.types[OPAQUE_PACKET_TYPE] = ['container', [{ name: 'data', type: 'restBuffer' }]];
@@ -262,14 +294,14 @@ export function reidEffectIdFromTail(tail) {
  * An interpreted ProtoDef that can read single types (entityMetadata, slot)
  * with the same overrides as the play protocol. Used for FML EntitySpawn.
  */
-export function createTypeReader({ reid = false, version = MC_VERSION, metadataSerializers = {} } = {}) {
+export function createTypeReader({ reid = false, stackup = false, version = MC_VERSION, metadataSerializers = {} } = {}) {
     const { ProtoDef } = require('protodef');
     const minecraft = require('minecraft-protocol/src/datatypes/minecraft');
     const nbt = require('prismarine-nbt');
     const merge = require('lodash.merge');
     const md = mcData(version);
-    const custom = buildCustomPackets({ reid, version, metadataSerializers })[md.version.majorVersion];
-    const types = merge(clone(md.protocol.types), custom.types);
+    const custom = buildCustomPackets({ reid, stackup, version, metadataSerializers })[md.version.majorVersion];
+    const types = merge(clone(protocolOf(version).types), custom.types);
     const proto = new ProtoDef(false);
     nbt.addTypesToInterpreter('big', proto);
     proto.addTypes(minecraft); // first: JSON types capture their base types when added

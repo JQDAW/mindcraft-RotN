@@ -1,10 +1,28 @@
 # Status: net-forge
 
-Updated: 2026-11-06T00:17Z
+Updated: 2026-11-06T03:27Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #214 comment nit: PR open (2026-11-06T00:17Z, lead's request; G3 smoke round 3 running, targeted tests only)
+## G3 round 3 batch C+D disconnect and the NaN x/z: fix in progress (2026-11-06T03:27Z, lead's request)
+
+- **Branch:** `agent/net-forge/stackup-count`, from develop `aec33fe`. The PR follows once the full `npm test` passes.
+- **Disconnect, root cause: StackUp 0.2.5.**
+  - StackUp's `PacketBuffer.readItemStack` reads count byte -42 (0xD6) as "an int count follows". Its writer sends counts outside 0..64 that way (`PacketBufferWriterSplice`, line 45 is the `readInt` in the server's stack trace).
+  - RotN stacks rocks to 256 and blocks to 128 (`config/stackup`).
+  - Our slot type read the -42 as the count, and the bot sent that stack back in a window click without the int. That is the 14-byte click: "readerIndex(11) + length(4) exceeds writerIndex(14)".
+  - Its 3 unread bytes (`00 00 00`) were decoded again on channel close: id 0 (`CPacketConfirmTeleport`), teleport id 0, "1 bytes extra". So there is no separate teleport bug and no packet-id mapping error.
+  - Fix: a native `stackUpCount` slot-count type, used when `stackup` is in the server's ModList (`src/stackup.js`).
+- **NaN x/z, root cause: field names.**
+  - minecraft-data 3.119 parses 1.12.2's `entity_velocity` (and the spawn packets) as `velocity {x, y, z}`. mineflayer 4.33.0 reads `velocityX/Y/Z`, so every knockback of the bot was a NaN velocity.
+  - prismarine-physics' step-up branch then keeps y and makes x/z NaN. S1a's `movement_trace` shows it: `entity_velocity`, then "NaN 63.99999999999999 NaN".
+  - The guard kept it off the wire; the server logged no NaN.
+  - Fix: `src/velocity-compat.js` (in `initBot`). The guard also sanitizes the bot's own `entity_velocity`, and logs its trace when there is no capture.
+- **Also fixed:** nmp merges customPackets into minecraft-data's protocol object in place, so `reid.js` now builds from a copy taken at load.
+- **Earlier:** #235 (the `hordes.js` comment nit) merged. `agent/net-forge/hordes-nits` is left for the human's branch cleanup.
+- **Blocked / requests:** none.
+
+## (Merged as #235) #214 comment nit (2026-11-06T00:17Z)
 
 - **Branch:** `agent/net-forge/hordes-comment`, from develop `9072315`. The PR is waiting for the lead's review.
 - **Change:** a comment only, in `decodeHordes`, `packages/forge-bridge/src/hordes.js`.

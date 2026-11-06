@@ -13,6 +13,7 @@ import { buildCustomPackets, createTypeReader, reidEffectIdFromTail, rotnMetadat
 import { classifyKick, classifySocketError } from './kicks.js';
 import { modGuiWindow } from './mod-guis.js';
 import { HORDES_CHANNEL, decodeHordes } from './hordes.js';
+import { STACKUP_MODID } from './stackup.js';
 
 const require = createRequire(import.meta.url);
 
@@ -59,6 +60,8 @@ export function attachForgeBridge(client, opts) {
     bridge.reid = reid ? findMod(modList, REID_MODID) : null;
     // Triumph's ExtendedDisplayInfo changes play.advancements (reid.js triumphTypes).
     bridge.triumph = findMod(modList, 'triumph') ?? null;
+    // StackUp writes item counts outside 0..64 as the byte -42 and an int (stackup.js).
+    bridge.stackup = findMod(modList, STACKUP_MODID) ?? null;
     bridge.metadataSerializers = { ...rotnMetadataSerializers(modList), ...extraSerializers };
     bridge.modList = modList;
     bridge.serverChannels = [];
@@ -77,10 +80,10 @@ export function attachForgeBridge(client, opts) {
 
     // 1. Handshake marker and protocol overrides (must precede Login Success).
     client.tagHost = FML_TAG;
-    client.customPackets = mergeCustom(client.customPackets, buildCustomPackets({ reid, triumph: !!bridge.triumph, version, metadataSerializers: bridge.metadataSerializers }));
-    const typeReader = createTypeReader({ reid, version, metadataSerializers: bridge.metadataSerializers });
-    log(`attached; ${modList.length} mods; REID ${reid ? bridge.reid.version : 'absent'}; Triumph ${bridge.triumph ? bridge.triumph.version : 'absent'}`);
-    capture?.event('bridge_attached', { mods: modList.length, reid: bridge.reid, triumph: bridge.triumph, version });
+    client.customPackets = mergeCustom(client.customPackets, buildCustomPackets({ reid, triumph: !!bridge.triumph, stackup: !!bridge.stackup, version, metadataSerializers: bridge.metadataSerializers }));
+    const typeReader = createTypeReader({ reid, stackup: !!bridge.stackup, version, metadataSerializers: bridge.metadataSerializers });
+    log(`attached; ${modList.length} mods; REID ${reid ? bridge.reid.version : 'absent'}; Triumph ${bridge.triumph ? bridge.triumph.version : 'absent'}; StackUp ${bridge.stackup ? bridge.stackup.version : 'absent'}`);
+    capture?.event('bridge_attached', { mods: modList.length, reid: bridge.reid, triumph: bridge.triumph, stackup: bridge.stackup, version });
 
     if (capture) {
         Object.assign(capture.packetLimits, capturedPackets);
