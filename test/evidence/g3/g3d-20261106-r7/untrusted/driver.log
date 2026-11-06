@@ -1,0 +1,194 @@
+DRIVER {"t":"2026-11-06T21:28:51.059Z","type":"mindcraft_start","pid":33336,"main":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\main.js","settings":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\settings.js","profile":"profiles/rotn-bot.json","mindserverPort":52185,"models":{"model":"openrouter/@preset/glm-5-3-flash-cheap-reliable","code_model":null,"vision_model":null},"serverTaskGiver":false,"botState":{"dir":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\bots\\<bot>","movedAside":["tasks.json.g3-2026-11-06T21-28-51-044Z.bak","agenda.json.g3-2026-11-06T21-28-51-044Z.bak","memory.json.g3-2026-11-06T21-28-51-044Z.bak"],"pruned":["tasks.json.g3-2026-11-05T21-30-02-198Z.bak","agenda.json.g3-2026-11-06T18-24-00-070Z.bak","memory.json.g3-2026-11-06T18-24-00-070Z.bak"],"fresh":true}}
+MindServer running on port 52185 on host localhost
+MC server found. (Host: <ip>, Port: 25565, Version: 1.12.2)
+keys.json not found. Defaulting to environment variables.
+Connecting to MindServer
+Client connected
+<bot> connected to MindServer
+Starting agent
+Initializing agent <bot>...
+Examples initialized.
+No task.
+<bot> logging into minecraft...
+[chat] no bot._client.chat yet (it comes with the login): the outgoing chat limit wraps it on login
+<bot> updating available agents
+[forge-bridge] attached; 346 mods; REID 2.2.2; Triumph 3.19.2; StackUp 0.2.5
+Error with embedding model, using word-overlap instead.
+Error with embedding model, using word-overlap instead.
+Error with embedding model, using word-overlap instead.
+[chat] the outgoing chat limit is on (wrapped on playerJoin)
+[forge-bridge] registries: aetherapi:accessories=31 aetherapi:enchantment_fuels=3 aetherapi:enchantments=879 aetherapi:freezable_fuels=1 aetherapi:freezables=11 aetherapi:moa_types=4 arcaneworld:rituals=10 artisanworktables:recipe_registry=15 artisanworktables:requirement_builder_supplier=1 artisanworktables:requirement_context_supplier=1 charset:wire=34 doggytalents:talents=17 dynamictrees:species=136 livingenchantment:personalityregistry=14 livingenchantment:talentregistry=0 mcmultipart:micro_material=0 mcmultipart:micro_type=0 mcmultipart:slots=27 minecraft:biomes=175 minecraft:blocks=4896 minecraft:dataserializers=2 minecraft:enchantments=178 minecraft:entities=971 minecraft:items=9710 minecraft:potions=263 minecraft:potiontypes=298 minecraft:recipes=10687 minecraft:soundevents=1867 minecraft:villagerprofessions=19 netherex:pigtificate_professions=5 pyrotech:bloomery_recipe=12 pyrotech:campfire_recipe=21 pyrotech:chopping_block_recipe=0 pyrotech:compacting_bin_recipe=25 pyrotech:compost_bin_recipe=1437 pyrotech:crucible_brick_recipe=11 pyrotech:crucible_stone_recipe=7 pyrotech:crude_drying_rack_recipe=7 pyrotech:drying_rack_recipe=9 pyrotech:granite_anvil_recipe=206 pyrotech:kiln_brick_recipe=122 pyrotech:kiln_pit_recipe=24 pyrotech:kiln_stone_recipe=121 pyrotech:mechanical_compacting_bin_recipe=25 pyrotech:mill_brick_recipe=324 pyrotech:mill_stone_recipe=0 pyrotech:oven_brick_recipe=10 pyrotech:oven_stone_recipe=10 pyrotech:pit_recipe=41 pyrotech:soaking_pot_recipe=55 pyrotech:wither_forge_recipe=13 pyrotech:worktable_recipe=0
+[forge-bridge] collision shapes: 4633 modded blocks from the dump (states: 20904 player boxes, 928 neighbour-dependent, 0 collision box), 396 walk-through (+3 in some states), 162 liquid, hazards: 14 fire, 150 trap, 42 portal, 27 lava, 1 web; 9 without dump data keep their shape
+[forge-bridge] RotN recipes installed: 6089 recipes for 3666 items
+[forge-bridge] handshake complete (overrideDimension 0)
+[forge-bridge] state-id remap active: applied 506 state ids in 132 of the table's 132 blocks; conflicts 0 skipped
+<bot> logged in!
+<bot> updating available agents
+Initializing vision intepreter...
+<bot> spawned.
+received message from system : Respond with hello world and your name
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: You are self-prompting with the goal: 'Build a house'. Respond:
+Example: trade something with zorro_34
+Awaiting openrouter api response...
+Self-prompting started.
+starting self-prompt loop
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[openrouter] provider Wafer, finish_reason stop, content 26 chars
+Received.
+Generated response: Hello world, I'm <bot> 👋
+<bot> full response to system: """"
+<bot> received new message while generating, discarding old response.
+no response
+[openrouter] provider Wafer, finish_reason stop, content 83 chars
+Received.
+Generated response: Hello world, I'm <bot>! Let's grab those rocks. !collectBlocks("pyrotech:rock", 6)
+<bot> full response to system: ""Hello world, I'm <bot>! Let's grab those rocks. !collectBlocks("pyrotech:rock", 6)""
+parsed command: { commandName: '!collectBlocks', args: [ 'pyrotech:rock', 6 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output is very long (717 chars) and has been shortened.
+
+          First outputs:
+Found non-destructive path.
+You have reached at -46, 65, -62.
+Picked up 0 items.
+Broke pyrotech_compat:rock_sedimentary but got no pyrotech:rock.
+Found non-destructive path.
+You have reached at -41, 66, -63.
+Picked up 0 items.
+Found non-destructive p
+...skipping many lines.
+Final outputs:
+ s.
+Found non-destructive path.
+You have reached at -44, 66, -54.
+Found non-destructive path.
+Picked up 1 items.
+Collected 6 pyrotech:rock (2 pyrotech_compat:rock_sedimentary:0, 1 pyrotech_compat:rock_igneous:7, 3 pyrotech_compat:rock_metamorphic:6).
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[openrouter] provider Wafer, finish_reason stop, content 40 chars
+Received.
+Generated response: Got all 6 rocks! Rock step done.	!agenda
+<bot> full response to system: ""Got all 6 rocks! Rock step done.	!agenda""
+parsed command: { commandName: '!agenda', args: [] }
+Agent executed: !agenda and got: agenda: active, step sticks (collect 3 sticks); done: rocks
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[openrouter] provider Near AI, finish_reason stop, content 83 chars
+Received.
+Generated response: On to sticks! Trying river cane first. !collectBlocks("biomesoplenty:plant_1:5", 3)
+<bot> full response to system: ""On to sticks! Trying river cane first. !collectBlocks("biomesoplenty:plant_1:5", 3)""
+parsed command: {
+  commandName: '!collectBlocks',
+  args: [ 'biomesoplenty:plant_1:5', 3 ]
+}
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+No biomesoplenty:plant_1:5 nearby to collect.
+Collected 0 biomesoplenty:plant_1:5.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[openrouter] provider Near AI, finish_reason stop, content 72 chars
+Received.
+Generated response: No cane around. Trying bamboo. !collectBlocks("biomesoplenty:bamboo", 3)
+<bot> full response to system: ""No cane around. Trying bamboo. !collectBlocks("biomesoplenty:bamboo", 3)""
+parsed command: { commandName: '!collectBlocks', args: [ 'biomesoplenty:bamboo', 3 ] }
+executing code...
+
+Agent executed: !collectBlocks and got: Action output:
+No biomesoplenty:bamboo nearby to collect.
+Collected 0 biomesoplenty:bamboo.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[openrouter] provider Near AI, finish_reason stop, content 94 chars
+Received.
+Generated response: No cane or bamboo nearby. Falling back to felling trees for sticks. !collectBlocks("stick", 3)
+<bot> full response to system: ""No cane or bamboo nearby. Falling back to felling trees for sticks. !collectBlocks("stick", 3)""
+parsed command: { commandName: '!collectBlocks', args: [ 'stick', 3 ] }
+executing code...
+
+<bot> received message from Server : !taskAdd("stand on the gold block at -20 70 -56", "normal")
+Agent executed: !collectBlocks and got: Action output is very long (960 chars) and has been shortened.
+
+          First outputs:
+Cut the tree at -34, 68, -59 from -36, 67, -63, away from its canopy; stepping back.
+Broke the tree at -34, 68, -59: no drops appeared within 15 s.
+Broke dynamictrees:sprucebranch but got no stick. A felled tree drops few sticks, often none.
+Cut the 
+...skipping many lines.
+Final outputs:
+ 60, 63, -68, away from its canopy (from under its leaves); stepping back.
+Broke the tree at -56, 63, -70: no drops appeared within 15 s.
+Broke dynamictrees:sprucebranch but got no stick. A felled tree drops few sticks, often none.
+Collected 0 stick.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[openrouter] provider Near AI, finish_reason stop, content 103 chars
+Received.
+Generated response: Trees gave nothing. Let me search farther out for cane. !searchForBlock("biomesoplenty:plant_1:5", 256)
+<bot> full response to system: ""Trees gave nothing. Let me search farther out for cane. !searchForBlock("biomesoplenty:plant_1:5", 256)""
+parsed command: {
+  commandName: '!searchForBlock',
+  args: [ 'biomesoplenty:plant_1:5', 256 ]
+}
+executing code...
+
+Agent executed: !searchForBlock and got: Action output:
+Could not find any biomesoplenty:plant_1:5 in 256 blocks.
+
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+[openrouter] provider Near AI, finish_reason stop, content 71 chars
+Received.
+Generated response: Trying bamboo farther out. !searchForBlock("biomesoplenty:bamboo", 256)
+<bot> full response to system: ""Trying bamboo farther out. !searchForBlock("biomesoplenty:bamboo", 256)""
+Storing memories...
+parsed command: {
+  commandName: '!searchForBlock',
+  args: [ 'biomesoplenty:bamboo', 256 ]
+}
+executing code...
+
+Agent executed: !searchForBlock and got: Action output:
+Could not find any biomesoplenty:bamboo in 256 blocks.
+
+Saved memory to: ./bots/<bot>/memory.json
+Awaiting openrouter api response...
+selected examples:
+Example: Code output: Could not find any oak_log in 20 blocks.
+Example: work together with the other bot to build a house
+Awaiting openrouter api response...
+[openrouter] provider Wafer, finish_reason stop, content 281 chars
+Received.
+Memory updated to:  <bot> bot. RotN agenda: step 1 of 11 (collect 6 pyrotech:rock) completed. Rock piles near spawn break by hand; types include pyrotech_compat rock_sedimentary, rock_igneous, rock_metamorphic but all count as pyrotech:rock. Called !agenda to advance to step 2. Old memory was empty.

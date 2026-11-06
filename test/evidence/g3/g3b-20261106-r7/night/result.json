@@ -1,0 +1,357 @@
+{
+  "scenario": "g3-first-night",
+  "gate": "G3",
+  "title": "From a fresh spawn the agent lives through its first full night (the time untouched; the server is the arbiter)",
+  "runId": "20261106t204310-4707f5",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "FAIL",
+  "passed": 4,
+  "failed": 1,
+  "durationS": 1439,
+  "params": {
+    "bot": "<bot>",
+    "worldSeed": "1880465901402976865",
+    "maxMinutes": 55,
+    "nightFrom": 13000,
+    "dawnBelow": 12000,
+    "maxBatchUsd": 2,
+    "loginTimeoutMs": 240000,
+    "pollMs": 60000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "lateReplyMs": 5000,
+    "latePollMs": 1000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the bot makes it log in with its own account (online mode)"
+    },
+    {
+      "check": "fresh_start",
+      "pass": true,
+      "detail": "none of 24 target items held; the pack's first-join Bread and Bundle seen",
+      "readyToTry": "It starts as a fresh spawn: none of the early-game items held, and the pack's first-join gives seen"
+    },
+    {
+      "check": "survived_night",
+      "pass": false,
+      "detail": "no dawn (the bot died: <bot> was slain by Zombie); stat.deaths 1; death lines 1: <bot> was slain by Zombie",
+      "readyToTry": "It reaches the first dawn after a full night with no death (stat.deaths 0, no death line)"
+    },
+    {
+      "check": "stayed_online",
+      "pass": true,
+      "detail": "online from the join to the end (22.8 min)",
+      "readyToTry": "It stays online from the join to dawn (no leave, lost connection or kick)"
+    },
+    {
+      "check": "no_cheat",
+      "pass": true,
+      "detail": "nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)",
+      "readyToTry": "No give, game mode change, op or command by the bot during the run (the pack's first-join commands aside)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "objectives": [
+      {
+        "obj": "g3b_deaths",
+        "criteria": "stat.deaths",
+        "result": "added"
+      },
+      {
+        "obj": "g3b_played",
+        "criteria": "stat.playOneMinute",
+        "result": "added"
+      },
+      {
+        "obj": "g3b_food",
+        "criteria": "food",
+        "result": "added"
+      }
+    ],
+    "startCounts": {
+      "minecraft:stone_pickaxe": 0,
+      "minecraft:stone_axe": 0,
+      "minecraft:crafting_table": 0,
+      "pyrotech:crude_axe": 0,
+      "contenttweaker:crafting_tools": 0,
+      "undergroundbiomes:igneous_cobble": 0,
+      "contenttweaker:lignite_cobble": 0,
+      "undergroundbiomes:metamorphic_cobble": 0,
+      "undergroundbiomes:metamorphic_sandstone": 0,
+      "contenttweaker:chalk_cobble": 0,
+      "contenttweaker:shale_cobble": 0,
+      "contenttweaker:siltstone_cobble": 0,
+      "contenttweaker:dolomite_cobble": 0,
+      "contenttweaker:greywacke_cobble": 0,
+      "contenttweaker:chert_cobble": 0,
+      "undergroundbiomes:sedimentary_sandstone": 0,
+      "defiledlands:sandstone_defiled": 0,
+      "contenttweaker:serpentinite_cobblestone": 0,
+      "defiledlands:stone_defiled": 0,
+      "aether_legacy:holystone": 0,
+      "minecraft:cobblestone": 0,
+      "minecraft:sandstone": 0,
+      "contenttweaker:limestone_cobble": 0,
+      "minecraft:red_sandstone": 0
+    },
+    "samples": [
+      {
+        "min": 1.1,
+        "daytime": 2423,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 2.2,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 3.3,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 19
+      },
+      {
+        "min": 4.5,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 19
+      },
+      {
+        "min": 5.6,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 18
+      },
+      {
+        "min": 6.7,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 18
+      },
+      {
+        "min": 7.9,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 18
+      },
+      {
+        "min": 9,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 18
+      },
+      {
+        "min": 10.1,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 17
+      },
+      {
+        "min": 11.3,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 17
+      },
+      {
+        "min": 12.4,
+        "daytime": 4025,
+        "deaths": 0,
+        "food": 16
+      },
+      {
+        "min": 13.5,
+        "daytime": 5388,
+        "deaths": 0,
+        "food": 16
+      },
+      {
+        "min": 14.7,
+        "daytime": 6743,
+        "deaths": 0,
+        "food": 16
+      },
+      {
+        "min": 15.8,
+        "daytime": 8106,
+        "deaths": 0,
+        "food": 16
+      },
+      {
+        "min": 16.9,
+        "daytime": 9468,
+        "deaths": 0,
+        "food": 15
+      },
+      {
+        "min": 18.1,
+        "daytime": 10825,
+        "deaths": 0,
+        "food": 15
+      },
+      {
+        "min": 19.2,
+        "daytime": 12185,
+        "deaths": 0,
+        "food": 15
+      },
+      {
+        "min": 20.3,
+        "daytime": 13541,
+        "deaths": 0,
+        "food": 14
+      },
+      {
+        "min": 21.5,
+        "daytime": 14905,
+        "deaths": 0,
+        "food": 14
+      },
+      {
+        "min": 22.6,
+        "daytime": 16001,
+        "deaths": 1,
+        "food": 12
+      }
+    ],
+    "end": {
+      "reason": "the bot died: <bot> was slain by Zombie",
+      "minutes": 22.7
+    },
+    "night": {
+      "dusk": {
+        "min": 19.2,
+        "daytime": 12185,
+        "deaths": 0,
+        "food": 15
+      },
+      "night": {
+        "min": 20.3,
+        "daytime": 13541,
+        "deaths": 0,
+        "food": 14
+      },
+      "dawn": null
+    },
+    "foodAtEnd": {
+      "food": 12,
+      "objective": "added",
+      "gating": false,
+      "why": "the last food score before the end"
+    },
+    "deathLines": [
+      {
+        "time": "21:06:38",
+        "msg": "<bot> was slain by Zombie"
+      }
+    ],
+    "agendaChat": [
+      "agenda step rocks started: collect 6 rocks",
+      "agenda step rocks done",
+      "agenda step sticks started: collect 3 sticks",
+      "agenda step shelter_blocks started: keep 10 blocks for the night's shelter",
+      "agenda steps done: sticks, logs",
+      "agenda step crude_axe started: craft a crude axe",
+      "agenda step crude_axe done",
+      "agenda step first_plank started: make the first plank",
+      "agenda step first_plank done",
+      "agenda step crafting_tools started: craft Crafting Tools",
+      "agenda step crafting_tools done",
+      "agenda step crafting_table started: craft a crafting table",
+      "agenda step crafting_table done",
+      "agenda step planks_sticks started: make planks and sticks at the table",
+      "agenda step planks_sticks done",
+      "agenda step stone_pickaxe started: craft a stone pickaxe",
+      "agenda step stone_pickaxe done",
+      "agenda step shelter_blocks started: keep 10 blocks for the night's shelter",
+      "agenda step shelter_blocks stuck: 3 self-prompter runs; going on without it until the night",
+      "agenda step stone_axe started: craft a stone axe",
+      "agenda step stone_axe done",
+      "agenda step cobblestone started: make cobblestone from rocks",
+      "agenda step cobblestone done",
+      "agenda done"
+    ],
+    "shelterAtMidnight": {
+      "taken": false,
+      "why": "no tp in G3 (lead, #201 review), so no position to test around; survival is the gate"
+    },
+    "packFirstJoin": [
+      "gamerule_commandBlockOutput",
+      "gamerule_sendCommandFeedback",
+      "give_bread",
+      "give_bundle"
+    ],
+    "packRepeats": [
+      "gamerule_commandBlockOutput at 20:46:45",
+      "gamerule_sendCommandFeedback at 20:46:45"
+    ]
+  },
+  "botExitCode": 128,
+  "botExitSignal": "SIGTERM",
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "42a8e9423fe834b9efc2feb710f528d1971dc69f",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261106-204002",
+  "driver": "node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json",
+  "llm": {
+    "models": {
+      "model": "openrouter/@preset/glm-5-3-flash-cheap-reliable",
+      "code_model": null,
+      "vision_model": null
+    },
+    "calls": 54,
+    "replies": {
+      "ok": 39,
+      "memory": 14,
+      "failed": 1,
+      "disconnected": 0,
+      "empty": 1,
+      "memoryEmpty": 1
+    },
+    "httpErrors": {},
+    "providers": {
+      "Wafer": {
+        "requests": 53,
+        "empty": 0,
+        "summaries": {
+          "ok": 10,
+          "empty": 0,
+          "failed": 0
+        }
+      }
+    },
+    "summariesUnattributed": {
+      "ok": 4,
+      "empty": 1,
+      "failed": 0
+    },
+    "usageBefore": 0.82548733,
+    "usageAfter": 0.835392874,
+    "usd": 0.009906,
+    "error": null
+  },
+  "batch": "20261106T204309-1056:2"
+}
