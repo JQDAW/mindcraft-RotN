@@ -126,10 +126,12 @@ export const RESERVE_LEAD_MIN = SHELTER_LEAD_MIN + 4;
  * driver; a state without them never makes it due.
  */
 // #284 review 2 (lead decision): with no pickaxe held, a shelter must be one the bot can dig out of
-// by hand, so dirt (held, or what its dirt piles make) counts, and the reserve never sends the bot
-// on a rock run before the pickaxe step. With a pickaxe, it asks for sturdy blocks.
+// by hand, and the reserve never sends the bot on a rock run before the pickaxe step. With a
+// pickaxe, it asks for sturdy blocks. #284 review 3: with no pickaxe the shelter places only dirt
+// (shelter.js), so only placeable dirt counts then (held, or what its dirt piles make): 10
+// cobblestone and no dirt is not a reserve.
 const noPickaxe = (s) => s.hasPickaxe?.() === false;
-const reserveHave = (s) => (s.shelterBlocks?.() ?? 0) + (noPickaxe(s) ? (s.dirtBlocks?.() ?? 0) : 0);
+const reserveHave = (s) => (noPickaxe(s) ? (s.dirtBlocks?.() ?? 0) : (s.shelterBlocks?.() ?? 0));
 
 export const SHELTER_RESERVE_STEP = {
     id: 'shelter_blocks', short: `keep ${SHELTER_RESERVE} blocks for the night's shelter`,
@@ -138,13 +140,14 @@ export const SHELTER_RESERVE_STEP = {
     // shelters then, and nothing may send the bot out for blocks in the dark.
     due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; },
     done: (s) => reserveHave(s) >= SHELTER_RESERVE,
-    goal: `Night is near. At dusk the night routine builds a shelter from sturdy blocks (any cobblestone or stone): ${SHELTER_RESERVE} on open ground. Collect rocks with !collectBlocks("pyrotech:rock", 8) (rock piles break by hand; stone mined with a stone pickaxe gives rocks), then make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1). Keep these blocks for the night: do not place them.`,
+    // Only when goalNow fails: both cases, as goalNow tells them apart.
+    goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1), and mine stone with the pickaxe for more rocks. If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt with !collectBlocks("dirt", ${SHELTER_RESERVE}) (dirt piles count too, 4 piles make one dirt). Keep these blocks for the night: do not place them.`,
     goalNow: (s) => {
         const have = reserveHave(s);
         const mins = Math.max(1, Math.round((s.minutesToSunset?.() ?? 0) - SHELTER_LEAD_MIN));
         if (noPickaxe(s)) {
             return `Night is near: in about ${mins} min the night routine builds a shelter. You have no pickaxe yet, so it is built of dirt, which you can dig out of by hand in the morning. `
-                + `It needs ${SHELTER_RESERVE} blocks on open ground, and you have ${have} (dirt, dirt from your dirt piles, cobblestone). `
+                + `It needs ${SHELTER_RESERVE} blocks on open ground, and you have ${have} (dirt, and dirt from your dirt piles). `
                 + `Dig dirt by hand with !collectBlocks("dirt", ${SHELTER_RESERVE - have}): dirt dug without a shovel may drop dirt piles instead, and 4 piles make one dirt, so they count too. `
                 + 'Keep these blocks for the night: do not place them.';
         }

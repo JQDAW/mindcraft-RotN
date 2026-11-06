@@ -10,7 +10,7 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP } from './agenda.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
 import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS } from './agenda_driver.js';
 import { Agent } from './agent.js';
@@ -355,8 +355,13 @@ test('G3 round 6 B: near dusk the shelter reserve comes before the current step;
     assert.equal(agent.said.at(-1), `agenda step shelter_blocks started: keep ${SHELTER_RESERVE} blocks for the night's shelter`);
     assert.match(agent.self_prompter.prompt, /^RotN agenda, step shelter_blocks \(before night\): Night is near: in about \d+ min the night routine builds a shelter\. You have no pickaxe yet, so it is built of dirt/);
 
-    items.push(stack(SOAPSTONE, 6, 4), stack('cobblestone', 0, 6)); // 10 sturdy, soapstone included
-    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'sticks');
+    // #284 review 3: with no pickaxe the shelter places only dirt, so 10 sturdy blocks are no reserve.
+    items.push(stack(SOAPSTONE, 6, 4), stack('cobblestone', 0, 6));
+    assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'shelter_blocks', '10 cobblestone and no dirt: still due');
+    assert.match(agent.self_prompter.prompt, /you have 0 \(dirt, and dirt from your dirt piles\)\./);
+    assert.doesNotMatch(agent.self_prompter.prompt, /cobblestone/);
+    items.push(stack('dirt', 0, 10));
+    assert.equal(agendaTick(agent, { now: 3 * TICK_MS }), 'sticks');
     assert.equal(agent.said.at(-1), 'agenda resumed: sticks');
     assert.equal(agent.agenda.active, true);
 });
@@ -420,8 +425,10 @@ test('#284 review 2: with no pickaxe the reserve counts dirt and dirt piles and 
     agent.bot.time = { timeOfDay: dayAt(7) };
     assert.equal(agendaTick(agent, { now: 0 }), 'shelter_blocks');
     const prompt = agent.self_prompter.prompt;
-    assert.match(prompt, /you have 4 \(dirt, dirt from your dirt piles, cobblestone\)\. Dig dirt by hand with !collectBlocks\("dirt", 6\)/);
+    assert.match(prompt, /you have 4 \(dirt, and dirt from your dirt piles\)\. Dig dirt by hand with !collectBlocks\("dirt", 6\)/);
     assert.doesNotMatch(prompt, /rock/i, 'no rock run before the pickaxe step');
+    // The static goal (used only when goalNow fails) tells the two cases apart the same way.
+    assert.match(SHELTER_RESERVE_STEP.goal, /If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt with !collectBlocks\("dirt", 10\)/);
 
     items[1].count = 32; // 8 dirt from piles + 2 dirt = 10
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks', 'enough dirt: the tool steps go on');

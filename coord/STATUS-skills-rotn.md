@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T19:09Z (from `date -u`)
+Updated: 2026-11-06T19:23Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -729,6 +729,14 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
     - The data shows that all five `pileDirt` piles make a dirt-ore block, but only BWM's makes `minecraft:dirt`. The loamy, sandy and silty piles make `biomesoplenty:dirt` variants, and the aether pile makes `aether_dirt`.
     - So `dirtPileRecipes` reads each pile's own no-table recipe from rotn-data, and each pile is crafted into its own dirt.
   - **Tests:** 4 new (agenda 2, shelter 2) and 2 updated. All 6 fail on #284's previous head. `src` and `packages` tests 923/923; lint 253.
+- **2026-11-06T19:23Z: #284 re-review fix** (the lead):
+  - With no pickaxe, the reserve counts only placeable dirt (held, or made from the piles held), because the shelter then places only dirt. Before, 10 cobblestone and no dirt marked the reserve done, and the shelter was refused at dusk.
+  - Cobblestone is dropped from the no-pickaxe prompt.
+  - The static fallback goal now tells the two cases apart: with a pickaxe, sturdy blocks; without one, dirt only.
+  - **Tests:**
+    - `agenda.test.js` round 6 B: 10 sturdy blocks and no pickaxe are still due, and 10 dirt ends the reserve;
+    - #284 review 2: the prompt wording and the static goal are asserted.
+  - Both tests fail on the previous head. `src` and `packages` tests 924/924; lint 253. SHELTER_RESERVE stays 10 (lead).
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
