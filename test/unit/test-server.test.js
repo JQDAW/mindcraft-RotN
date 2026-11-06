@@ -10,6 +10,8 @@ import process from 'node:process';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { writeAtomic, readJsonRetry } from './fixtures/atomic-write.mjs';
+import zlib from 'node:zlib';
+import { parseRotatedLog } from '../runner/lib/adapters.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
@@ -1251,5 +1253,92 @@ describe('build.sh helpers (sourced)', () => {
         const r = bashFn('HEAP_MIN=4G HEAP_MAX=8G JVM_EXTRA=-Dfml.debugNetworkHandshake=true render_start_script forge-1.12.2-14.23.5.2860.jar');
         assert.equal(r.status, 0, r.stderr);
         assert.match(r.stdout, /^exec java -Xms4G -Xmx8G -Dfml\.debugNetworkHandshake=true -jar forge-1\.12\.2-14\.23\.5\.2860\.jar nogui$/m);
+    });
+});
+
+describe('the server log rolls over at 00:00 UTC (round 3 batch B): rotn-test log N rotated', () => {
+    const bash = findBash();
+    const helper = fwd(path.join(repo, 'deploy', 'test-server', 'rotn-test.sh'));
+    const serverDir = () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-logs-'));
+        fs.mkdirSync(path.join(dir, 'logs'));
+        return dir;
+    };
+    const helperRun = (dir, args) => spawnSync(bash, [helper, ...args], { encoding: 'utf8', env: { ...process.env, ROTN_TEST_SERVER_DIR: fwd(dir) } });
+
+    test('it reads the newest rolled-over file, then latest.log, and names them on its first line', () => {
+        const dir = serverDir();
+        const older = path.join(dir, 'logs', '2026-11-04-1.log.gz');
+        const newer = path.join(dir, 'logs', '2026-11-05-1.log.gz');
+        fs.writeFileSync(older, zlib.gzipSync('very old\n'));
+        fs.writeFileSync(newer, zlib.gzipSync('a\nscenario-r1-begin\nb\n'));
+        fs.utimesSync(older, new Date(Date.now() - 86400000), new Date(Date.now() - 86400000));
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'c\nd\n');
+        const r = helperRun(dir, ['log', '4', 'rotated']);
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(r.stdout.split('\n').filter(Boolean), ['##rotn-test files: 2026-11-05-1.log.gz,latest.log', 'scenario-r1-begin', 'b', 'c', 'd']);
+        assert.deepEqual(parseRotatedLog(r.stdout.split('\n').filter(Boolean)), { files: ['2026-11-05-1.log.gz', 'latest.log'], lines: ['scenario-r1-begin', 'b', 'c', 'd'] });
+        // Plain `log N` is unchanged: latest.log only.
+        assert.deepEqual(helperRun(dir, ['log', '4']).stdout.split('\n').filter(Boolean), ['c', 'd']);
+    });
+
+    test('#236 review 1: only the daily YYYY-MM-DD-N.log.gz counts; a newer debug-N.log.gz (or other .gz) is never picked', () => {
+        const dir = serverDir();
+        const daily = path.join(dir, 'logs', '2026-11-05-1.log.gz');
+        fs.writeFileSync(daily, zlib.gzipSync('scenario-r1-begin\nday\n'));
+        fs.utimesSync(daily, new Date(Date.now() - 3600000), new Date(Date.now() - 3600000));
+        fs.writeFileSync(path.join(dir, 'logs', 'debug-1.log.gz'), zlib.gzipSync('debug noise\n'));       // newer, by mtime
+        fs.writeFileSync(path.join(dir, 'logs', 'crash-2026-11-05.log.gz'), zlib.gzipSync('other\n'));   // newer, wrong shape
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'new\n');
+        const r = helperRun(dir, ['log', '10', 'rotated']);
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(r.stdout.split('\n').filter(Boolean), ['##rotn-test files: 2026-11-05-1.log.gz,latest.log', 'scenario-r1-begin', 'day', 'new']);
+        // Only a debug .gz: none of the daily kind, so latest.log alone.
+        fs.rmSync(daily);
+        assert.deepEqual(helperRun(dir, ['log', '10', 'rotated']).stdout.split('\n').filter(Boolean), ['##rotn-test files: latest.log', 'new']);
+    });
+
+    test('#236 review 3: a half-written .gz is retried once after a pause; still unreadable, it fails loudly', async () => {
+        const dir = serverDir();
+        const gz = path.join(dir, 'logs', '2026-11-05-1.log.gz');
+        const full = zlib.gzipSync('scenario-r1-begin\nold\n');
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'new\n');
+        // log4j still writing: a truncated file now, the complete one before the retry.
+        fs.writeFileSync(gz, full.subarray(0, 12));
+        const child = spawn(bash, [helper, 'log', '10', 'rotated'], { env: { ...process.env, ROTN_TEST_SERVER_DIR: fwd(dir), ROTN_TEST_GZ_RETRY_S: '2' } });
+        let out = '';
+        child.stdout.on('data', (d) => { out += d; });
+        setTimeout(() => fs.writeFileSync(gz, full), 500);
+        const code = await new Promise((resolve) => child.on('close', resolve));
+        assert.equal(code, 0);
+        assert.deepEqual(out.split('\n').filter(Boolean), ['##rotn-test files: 2026-11-05-1.log.gz,latest.log', 'scenario-r1-begin', 'old', 'new']);
+        // Truncated for good: one retry, then exit 3 with a message, and no header (no half answer).
+        fs.writeFileSync(gz, full.subarray(0, 12));
+        const bad = spawnSync(bash, [helper, 'log', '10', 'rotated'], { encoding: 'utf8', env: { ...process.env, ROTN_TEST_SERVER_DIR: fwd(dir), ROTN_TEST_GZ_RETRY_S: '0' } });
+        assert.equal(bad.status, 3);
+        assert.match(bad.stderr, /rotn-test: cannot read 2026-11-05-1\.log\.gz \(gzip failed twice\)/);
+        assert.equal(bad.stdout, '');
+    });
+
+    test('no rolled-over file yet: latest.log alone, still with the header', () => {
+        const dir = serverDir();
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'x\ny\n');
+        const r = helperRun(dir, ['log', '10', 'rotated']);
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(r.stdout.split('\n').filter(Boolean), ['##rotn-test files: latest.log', 'x', 'y']);
+    });
+
+    test('bad arguments are refused, on the server and in test-server.sh before any SSH', () => {
+        const dir = serverDir();
+        assert.equal(helperRun(dir, ['log', 'x']).status, 2);
+        for (const args of [['log', 'abc'], ['log', '10', 'all'], ['log', '10', 'rotated;id']]) {
+            const r = spawnSync(bash, [fwd(script), ...args], { encoding: 'utf8', env: { ...process.env, TEST_SERVER_NAME: 'mcr-test-none' } });
+            assert.notEqual(r.status, 0, args.join(' '));
+            assert.match(r.stderr, /usage: log \[N\] \[rotated\]/, args.join(' '));
+        }
+    });
+
+    test('parseRotatedLog without a header keeps every line', () => {
+        assert.deepEqual(parseRotatedLog(['a', 'b']), { files: [], lines: ['a', 'b'] });
     });
 });

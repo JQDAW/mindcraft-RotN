@@ -45,6 +45,19 @@ export function writeAtomic(file, text) {
 const SCENARIO_DIR = path.join(here, '..', 'scenarios');
 
 /** Scenario modules: test/scenarios/<group>/<id>.mjs, keyed by their exported id. */
+/**
+ * The run's evidence server log: the lines after the begin marker. If the marker is no longer in latest.log
+ * (the server rolled it over at 00:00 UTC), the same fallback as the session: the newest rolled-over file plus
+ * latest.log (server.logRotated, lead #236 review). Returns {lines, files}; lines is null when the marker is
+ * in neither, files is null when latest.log alone was enough.
+ */
+export function evidenceLog(server, logTail, marker) {
+    const lines = linesAfter(server.log(logTail), marker);
+    if (lines !== null || typeof server.logRotated !== 'function') return { lines, files: null };
+    const r = server.logRotated(logTail);
+    return { lines: linesAfter(r.lines, marker), files: r.files };
+}
+
 export async function loadScenarios(dir = SCENARIO_DIR) {
     const out = {};
     for (const group of fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory())) {
@@ -196,8 +209,12 @@ async function main(argv) {
     }
     if (policy.notGate) addNotGate(result, policy.notGate);
     try {
-        const since = linesAfter(server.log(result.params.logTail), `scenario-${runId}-begin`);
-        fs.writeFileSync(path.join(outDir, 'server.log'), since === null ? '(scenario marker not in the fetched log tail)\n' : since.join('\n') + '\n');
+        const ev = evidenceLog(server, result.params.logTail, `scenario-${runId}-begin`);
+        if (ev.files) {
+            result.notes = { ...(result.notes ?? {}), evidenceLogFiles: ev.files };
+            log(`server.log: the marker was rolled over; saved from ${ev.files.join(', ')}`);
+        }
+        fs.writeFileSync(path.join(outDir, 'server.log'), ev.lines === null ? '(scenario marker not in the fetched log tail)\n' : ev.lines.join('\n') + '\n');
     } catch (e) {
         log(`could not save the server log: ${e.message}`);
     }
