@@ -1102,7 +1102,7 @@ main() {
       echo "$out" ;;
     verify) load_meta; rssh 'rotn-test verify' | tr -d '\r' ;;
     log)
-      # log [N] [rotated]: rotated also reads the newest rolled-over logs/*.log.gz (00:00 UTC; rotn-test.sh).
+      # log [N] [rotated]: rotated also reads the newest daily rolled-over logs/YYYY-MM-DD-N.log.gz (00:00 UTC; rotn-test.sh).
       [[ ${ARGS[0]:-100} =~ ^[0-9]+$ && ( -z ${ARGS[1]:-} || ${ARGS[1]:-} == rotated ) ]] || die "usage: log [N] [rotated]"
       load_meta; rssh "rotn-test log ${ARGS[0]:-100} ${ARGS[1]:-}" | tr -d '\r' ;;
     build-log) load_meta; rssh "rotn-test build-log ${ARGS[0]:-100}" | tr -d '\r' ;;

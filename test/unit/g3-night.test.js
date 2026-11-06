@@ -8,6 +8,7 @@ import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { G3_CONSOLE_ALLOW, deathLines } from '../runner/lib/g3.mjs';
 import g3b, { dawnOf } from '../scenarios/g3/g3-first-night.mjs';
+import { evidenceLog } from '../runner/run.mjs';
 
 const NAME = 'FRCFLD';
 const MIN = 60000;
@@ -38,7 +39,8 @@ function daytimeAt(ms, start = 0) {
  * opt.frozen: the time never moves (a freeze that never ends); opt.offsetS: where in the cycle the server is at
  * t=0 (1300 s is daytime 14000, mid-night); opt.start: inventory at the join ({item: n}); opt.noPack: no
  * first-join kit lines; opt.rotateAt: the minute after the join when log4j rolls latest.log over (log() then
- * shows only the new file; logRotated() the newest rolled-over file plus latest.log, unless opt.noRotatedReader).
+ * shows only the new file; logRotated() the newest rolled-over file plus latest.log, unless opt.noRotatedReader);
+ * opt.cheatAt: the minute the bot runs a forbidden command (logged as "[<bot>: Set own game mode to Creative Mode]").
  */
 function sim(opt = {}) {
     const log = [];
@@ -52,7 +54,7 @@ function sim(opt = {}) {
     const objectives = new Map();
     const sent = [];
     const add = (msg) => log.push(line(t, msg));
-    const pending = new Set(['die', 'kick', 'rotate']);
+    const pending = new Set(['die', 'kick', 'rotate', 'cheat']);
     let rotIdx = 0;   // where latest.log starts in `log`
     const advance = () => {
         if (joinT === null) return;
@@ -61,6 +63,7 @@ function sim(opt = {}) {
             if (!opt.statOnly) add(`${NAME} was slain by Zombie`);
             if (!opt.lineOnly) deaths++;
         }
+        if (opt.cheatAt !== undefined && m >= opt.cheatAt && pending.delete('cheat')) add(`[${NAME}: Set own game mode to Creative Mode]`);
         if (opt.rotateAt !== undefined && m >= opt.rotateAt && pending.delete('rotate')) rotIdx = log.length;
         if (opt.kickAt !== undefined && m >= opt.kickAt && pending.delete('kick')) {
             online = false;
@@ -268,5 +271,36 @@ describe('the server log rolls over at 00:00 UTC mid-run (round 3 batch B)', () 
     test('no rotation: the rotated reader is never used', async () => {
         const r = await run(sim());
         assert.equal(r.notes.logWindow, undefined);
+    });
+});
+
+describe('#236 review: what was logged before the roll-over still counts after it', () => {
+    test('review 4: a forbidden command before the rotation still fails no_cheat at the end', async () => {
+        const r = await run(sim({ rotateAt: 30, cheatAt: 10 }));
+        const c = byName(r);
+        assert.equal(r.error ?? null, null);
+        assert.equal(c.no_cheat.pass, false);
+        assert.match(c.no_cheat.detail, /the bot ran a command: \[FRCFLD: Set own game mode to Creative Mode\]/);
+        assert.equal(r.notes.logWindow[0].files, '2026-11-05-1.log.gz,latest.log', 'it was read through the rotated window');
+        // The same command without a rotation, for comparison: caught the same way.
+        assert.equal(byName(await run(sim({ cheatAt: 10 }))).no_cheat.pass, false);
+    });
+
+    test('review 2: the evidence server.log (run.mjs evidenceLog) uses the same rotated fallback', async () => {
+        const s = sim({ rotateAt: 30 });
+        await run(s);
+        const marker = 'scenario-r1-begin';
+        assert.equal(s.server.log(20000).some((l) => l.includes(marker)), false, 'latest.log alone lost the marker');
+        const ev = evidenceLog(s.server, 20000, marker);
+        assert.deepEqual(ev.files, ['2026-11-05-1.log.gz', 'latest.log']);
+        assert.ok(ev.lines.some((l) => l.includes('joined the game')), 'the join before the rotation is in the evidence');
+        // No rotation: latest.log alone, no files recorded.
+        const plain = sim();
+        await run(plain);
+        assert.equal(evidenceLog(plain.server, 20000, marker).files, null);
+        // No rotated reader at all (an old server object): the old result, null lines.
+        const old = sim({ rotateAt: 30, noRotatedReader: true });
+        await run(old);
+        assert.deepEqual(evidenceLog(old.server, 20000, marker), { lines: null, files: null });
     });
 });

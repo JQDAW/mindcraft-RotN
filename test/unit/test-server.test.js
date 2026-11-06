@@ -1282,6 +1282,44 @@ describe('the server log rolls over at 00:00 UTC (round 3 batch B): rotn-test lo
         assert.deepEqual(helperRun(dir, ['log', '4']).stdout.split('\n').filter(Boolean), ['c', 'd']);
     });
 
+    test('#236 review 1: only the daily YYYY-MM-DD-N.log.gz counts; a newer debug-N.log.gz (or other .gz) is never picked', () => {
+        const dir = serverDir();
+        const daily = path.join(dir, 'logs', '2026-11-05-1.log.gz');
+        fs.writeFileSync(daily, zlib.gzipSync('scenario-r1-begin\nday\n'));
+        fs.utimesSync(daily, new Date(Date.now() - 3600000), new Date(Date.now() - 3600000));
+        fs.writeFileSync(path.join(dir, 'logs', 'debug-1.log.gz'), zlib.gzipSync('debug noise\n'));       // newer, by mtime
+        fs.writeFileSync(path.join(dir, 'logs', 'crash-2026-11-05.log.gz'), zlib.gzipSync('other\n'));   // newer, wrong shape
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'new\n');
+        const r = helperRun(dir, ['log', '10', 'rotated']);
+        assert.equal(r.status, 0, r.stderr);
+        assert.deepEqual(r.stdout.split('\n').filter(Boolean), ['##rotn-test files: 2026-11-05-1.log.gz,latest.log', 'scenario-r1-begin', 'day', 'new']);
+        // Only a debug .gz: none of the daily kind, so latest.log alone.
+        fs.rmSync(daily);
+        assert.deepEqual(helperRun(dir, ['log', '10', 'rotated']).stdout.split('\n').filter(Boolean), ['##rotn-test files: latest.log', 'new']);
+    });
+
+    test('#236 review 3: a half-written .gz is retried once after a pause; still unreadable, it fails loudly', async () => {
+        const dir = serverDir();
+        const gz = path.join(dir, 'logs', '2026-11-05-1.log.gz');
+        const full = zlib.gzipSync('scenario-r1-begin\nold\n');
+        fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'new\n');
+        // log4j still writing: a truncated file now, the complete one before the retry.
+        fs.writeFileSync(gz, full.subarray(0, 12));
+        const child = spawn(bash, [helper, 'log', '10', 'rotated'], { env: { ...process.env, ROTN_TEST_SERVER_DIR: fwd(dir), ROTN_TEST_GZ_RETRY_S: '2' } });
+        let out = '';
+        child.stdout.on('data', (d) => { out += d; });
+        setTimeout(() => fs.writeFileSync(gz, full), 500);
+        const code = await new Promise((resolve) => child.on('close', resolve));
+        assert.equal(code, 0);
+        assert.deepEqual(out.split('\n').filter(Boolean), ['##rotn-test files: 2026-11-05-1.log.gz,latest.log', 'scenario-r1-begin', 'old', 'new']);
+        // Truncated for good: one retry, then exit 3 with a message, and no header (no half answer).
+        fs.writeFileSync(gz, full.subarray(0, 12));
+        const bad = spawnSync(bash, [helper, 'log', '10', 'rotated'], { encoding: 'utf8', env: { ...process.env, ROTN_TEST_SERVER_DIR: fwd(dir), ROTN_TEST_GZ_RETRY_S: '0' } });
+        assert.equal(bad.status, 3);
+        assert.match(bad.stderr, /rotn-test: cannot read 2026-11-05-1\.log\.gz \(gzip failed twice\)/);
+        assert.equal(bad.stdout, '');
+    });
+
     test('no rolled-over file yet: latest.log alone, still with the header', () => {
         const dir = serverDir();
         fs.writeFileSync(path.join(dir, 'logs', 'latest.log'), 'x\ny\n');

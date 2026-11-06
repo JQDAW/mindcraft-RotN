@@ -158,15 +158,6 @@ export function scenarioTimeouts(scenarios, registry, { maxBatchUsd, testMode = 
 }
 
 /**
- * Whether the server lives long enough for this batch (lead, after #231). The scenarios run one after another,
- * so the batch needs the sum of their runner timeouts plus END_ALLOWANCE_MIN.
- * - ttlMinutes (the preflight, before the create: test-server.sh passes ROTN_BATCH_TTL_MINUTES): the TTL must
- *   also cover BUILD_ALLOWANCE_MIN for the build.
- * - remainingMinutes (the batch start, inside the run: minutes left before the server's delete-after): the time
- *   left must cover it, whatever the build really took.
- * Returns {needMin, problems}; a null input is not checked.
- */
-/**
  * A warning, never a refusal (lead, after round 3 batch B): whether this batch could still be running at 00:00 UTC,
  * when log4j rolls the server's logs/latest.log over. The session then reads the rolled-over file too
  * (lib/session.mjs, notes.logWindow), so a run survives it; the warning says to expect that. From nowMs: buildMin
@@ -180,6 +171,15 @@ export function midnightWarning(timeouts, nowMs, { buildMin = 0 } = {}) {
     return `this batch may run past 00:00 UTC (up to ${end.toISOString().slice(11, 16)} UTC on ${end.toISOString().slice(0, 10)}), when the server log rolls over; the session then also reads the rolled-over log (notes.logWindow)`;
 }
 
+/**
+ * Whether the server lives long enough for this batch (lead, after #231). The scenarios run one after another,
+ * so the batch needs the sum of their runner timeouts plus END_ALLOWANCE_MIN.
+ * - ttlMinutes (the preflight, before the create: test-server.sh passes ROTN_BATCH_TTL_MINUTES): the TTL must
+ *   also cover BUILD_ALLOWANCE_MIN for the build.
+ * - remainingMinutes (the batch start, inside the run: minutes left before the server's delete-after): the time
+ *   left must cover it, whatever the build really took.
+ * Returns {needMin, problems}; a null input is not checked.
+ */
 export function ttlProblems(timeouts, { ttlMinutes = null, remainingMinutes = null } = {}) {
     const sum = timeouts.reduce((n, t) => n + t.timeoutMin, 0);
     const needMin = sum + END_ALLOWANCE_MIN;
