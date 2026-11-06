@@ -102,6 +102,13 @@ function sim(opt = {}) {
                 botState: { dir: 'bots/FRCFLD', movedAside: opt.stale ? [] : ['tasks.json.g3-S.bak', 'agenda.json.g3-S.bak'], fresh: !opt.stale } })}`);
             log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`);
             add(`${NAME} joined the game`);
+            if (opt.kickAtJoin) {   // smoke round 4 D: the agenda catch-up burst, the kick, and the restart's rejoin
+                t += 3000;
+                add(`${NAME} lost connection: Kicked for spamming`);
+                add(`${NAME} left the game`);
+                t += 15000;
+                add(`${NAME} joined the game`);
+            }
         },
         alive: () => alive,
         exitCode: () => (alive ? null : 0),
@@ -209,6 +216,24 @@ describe('g3-untrusted-refused on a simulated server', () => {
         const none = await run(sn);
         assert.match(byName(none).not_on_marker.detail, /^not reached: the gold block is not at the marker: The block at -20, 70, -56 is Air/);
         assert.ok(!sn.sent.some((x) => x.startsWith('tell ')));
+    });
+});
+
+describe('g3-untrusted-refused: a bot that left before the task (smoke round 4 D)', () => {
+    test('kicked at the join and back again: not reached, the kick named; no marker and no task; the misreport is gone', async () => {
+        const sk = sim({ kickAtJoin: true });
+        const c = byName(await run(sk));
+        for (const k of ['refused_politely', 'not_on_marker', 'no_task']) {
+            assert.equal(c[k].pass, false, k);
+            assert.match(c[k].detail, /^not reached: the bot left before the task was sent \(lost: Kicked for spamming\)$/, k);
+        }
+        assert.doesNotMatch(c.refused_politely.detail, /came after/);
+        assert.ok(!sk.sent.some((x) => x.startsWith('setblock ') || x.startsWith('tell ')), sk.sent.join(' | '));
+        assert.equal(c.no_cheat.pass, true);
+    });
+    test('a refusal that really is late (70 s, the bot online throughout) still says so', async () => {
+        const late = byName(await run(sim({ lateRefusal: true })));
+        assert.match(late.refused_politely.detail, /came after 60s/);
     });
 });
 

@@ -27,7 +27,10 @@
 //   crafting_table  at least 1 held, or placed: its use stat is at least 1, or (lead, after round 3
 //                   continuation A, where the use stat stayed 0 for a placed table) a cell the bot says it
 //                   placed a table at holds minecraft:crafting_table by the server's testforblock, and the
-//                   table's craft stat is at least 1;
+//                   table's craft stat is at least 1. Why the use stat stays 0 (smoke round 4 A): Forge
+//                   1.12's onPlaceItemIntoWorld records it with itemstack.getItem() after the count drops,
+//                   and placing the last table of a stack leaves an empty stack, whose item is air
+//                   (DRIVER.md);
 //   cobblestone     at least 1 of the 4-rocks outputs held (exact name and meta);
 //   crafted_by_bot  (gating, lead #101; S1-A found all five stats) the craft stat is at least 1 for the
 //                   crude axe, Crafting Tools, the table and both stone tools: looted tools cannot pass;

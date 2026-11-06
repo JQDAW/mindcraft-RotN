@@ -259,8 +259,12 @@ export const EXIT_LLM_STOP = INFRA_FAULT_EXIT;
  * counted from the bot's spawn (the driver log's "<bot> spawned." line, so the driver start, the Forge join and
  * the agent start do not eat into it), minFailed (5) or more failed LLM replies and no successful reply or memory
  * summary is an infra fault (the model does not answer), not a bot result: the scenario is stopped, and the batch
- * starts no further one. Without a spawn line the window ends capMs (10 min) after the scenario's start, and it
- * never runs past that cap either.
+ * starts no further one.
+ * - Without a spawn line the window never opens, so the rule never fires; watching stops capMs (10 min) after
+ *   the scenario's start (#248 review nit, as in DRIVER.md).
+ * - A late spawn gets a shorter window: it still ends at that cap, so a spawn at minute 7 leaves 3 minutes.
+ * - The driver log is read every pollMs (15 s), so a stop comes up to one poll after the 5th failure, and the
+ *   window's edges are only as sharp as one poll.
  * The offline tests may shorten pollMs, windowMs and capMs (ROTN_LLM_STOP_*; test mode only).
  */
 export function llmStopSettings(env = {}) {
@@ -316,6 +320,7 @@ export function runOne(s, o, env, { spawnImpl = spawn, llmStop = llmStopSettings
             let lines = null;
             try { lines = fs.readFileSync(path.join(s.out, 'driver.log'), 'utf8').split('\n').map((l) => l.replace(/\r$/, '')); } catch { /* not yet */ }
             if (spawnedAt === null && lines?.some((l) => SPAWNED_LINE.test(l))) spawnedAt = now;
+            // The window: windowMs from the spawn, cut short by the cap for a late spawn; checked once per poll (up to 15 s late).
             const end = Math.min(spawnedAt === null ? Infinity : spawnedAt + llmStop.windowMs, started + llmStop.capMs);
             if (now > end) { clearInterval(watch); return; }
             if (!lines || spawnedAt === null) return;   // the window opens at the spawn
