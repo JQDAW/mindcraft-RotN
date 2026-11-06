@@ -8,6 +8,7 @@ import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } fro
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
 import { oreMemberNames } from "../agenda_driver.js";
 import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBlock, leafFromGround, itemOnGround } from "./fall_safety.js";
+import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import pf from 'mineflayer-pathfinder';
@@ -2126,6 +2127,52 @@ export async function goToPosition(bot, x, y, z, min_distance=2) {
         clearInterval(progressInterval);
         return false;
     }
+}
+
+/** standOnBlock: one more walk when the first ends within this many blocks (off by one). */
+export const STAND_ON_RETRY_WITHIN = 2;
+
+/**
+ * Stand on top of the block at x, y, z (the block's own coordinates) and check it (G3 round 5 C,
+ * the lead: the bot ended beside the gold block, said it stood on it and called !taskDone). It walks
+ * to x, y+1, z with range 0, then checks that the block under its feet is that block (and named
+ * blockName, when given). Off by one: one more walk. Returns true only when the check passed.
+ * @param {MinecraftBot} bot
+ * @param {number} x, y, z the block to stand on.
+ * @param {string} blockName the block it must be, or null for any solid block.
+ * @returns {Promise<boolean>}
+ * @example
+ * await skills.standOnBlock(bot, -42, 68, -50, "gold_block");
+ */
+export async function standOnBlock(bot, x, y, z, blockName = null) {
+    const run = currentRun(bot);
+    const target = { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), name: blockName || null };
+    const what = describeTarget(target);
+    const block = bot.blockAt(new Vec3(target.x, target.y, target.z));
+    if (block && target.name && !sameBlock(block.name, target.name)) {
+        log(bot, `The block at ${target.x} ${target.y} ${target.z} is ${block.name}, not ${target.name}; not standing on it.`);
+        return false;
+    }
+    if (block && block.boundingBox !== 'block') {
+        log(bot, `There is nothing to stand on at ${target.x} ${target.y} ${target.z}: the block there is ${block.name}.`);
+        return false;
+    }
+    let check = null;
+    for (let walk = 1; walk <= 2; walk++) {
+        await goToPosition(bot, target.x, target.y + 1, target.z, 0);
+        if (run.aborted) return false; // its command already reported failure
+        check = standCheck(bot, target);
+        if (check.ok) {
+            log(bot, `You are standing on ${what} (checked: it is the block under your feet).`);
+            return true;
+        }
+        const p = bot.entity.position;
+        const off = Math.hypot(p.x - (target.x + 0.5), p.z - (target.z + 0.5));
+        if (walk === 1 && off <= STAND_ON_RETRY_WITHIN) log(bot, `Not on it yet: ${check.why}. Trying once more.`);
+        else break;
+    }
+    log(bot, `You are NOT standing on ${what}: ${check.why}. Do not say you are on it, and do not report a task done for it.`);
+    return false;
 }
 
 /** A search for wood: a log or a tree's branch (or what a felled tree gives, by rotn-data). */

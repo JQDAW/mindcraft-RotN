@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T14:21Z (from `date -u`)
+Updated: 2026-11-06T15:50Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -646,6 +646,25 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
     - `agenda` 19 (1 new);
     - `fell_tree` 25 (2 messages updated).
     - All new tests fail on the previous head. They pass after the #272 merge, as do `collect_rotn` and `craft_needs`. Lint 253.
+
+- **2026-11-06T15:50Z: round 5 C, stand on the block** (lead; raw `captures/raw/r5-g3c/task/`):
+  - **What happened:** for the task "go to the gold block at -42 68 -50 and stand on it", the model ran `!goToCoordinates(-42, 68, -50, 1)`. That is the block's own position with range 1, so the bot ended beside the block. It then said "Standing on the gold block" and called `!taskDone`, and the server's on-marker check never found it.
+  - **`library/stand_on.js` (new):**
+    - `parseStandOn(text)` finds a stand-on text's block coordinates and block name (`gold block` and `block of gold` both give `gold_block`; an unknown name gives null, and only the position is checked);
+    - `standCheck(bot, target)` passes only when the block under the feet is the target block and the bot is on the ground; otherwise it says what is under the feet.
+  - **`skills.standOnBlock(bot, x, y, z, name)`:**
+    - walks to x, y+1, z with range 0, then checks the block under the feet;
+    - when it ends within 2 blocks (off by one), it walks once more; otherwise it does not retry;
+    - on failure it says "You are NOT standing on ...: <why>. Do not say you are on it, and do not report a task done for it.";
+    - when the block at x, y, z is the wrong block or not solid, it fails without walking.
+  - **`!standOnBlock(type, x, y, z)`** is a new command with a 5 min limit.
+  - **`!goToCoordinates`:** when the active task (or else the self-prompt goal) says to stand on a block, and the target is that block or the spot above it, it runs `standOnBlock` instead.
+  - **`!taskDone`:** for a stand-on task, it is refused until the check passes ("Not done: ... Use !standOnBlock(...) first, then !taskDone; or !taskFailed"). The task stays active, and its attempts and LLM-time budget still end it.
+  - **Prompt:** the task's self-prompt goal names `!standOnBlock(...)` and says to claim it only after that command confirms.
+  - **Tests:**
+    - `stand_on.test.js` (new, 7): parsing, the check, the range-0 walk, off by one twice, far away, the wrong block, the round 5 C replay through `!goToCoordinates`, and the command.
+    - `priority.test.js`: the gold-block task test now shows `!taskDone` refused from beside the block and accepted on top of it.
+  - On the old source, `stand_on.test.js` fails to load (no `standOnTarget` export) and the priority test fails. `action_limits`, `no_cheat`, `smelt_and_login`, `threat_arbitration`, `axe_chop` and `task_queue` pass (55). Lint error counts in the changed files are unchanged.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
