@@ -1,0 +1,4 @@
+logs/ as fetched at the end of round 3 batch B (name, bytes, lines):
+2026-11-05-1.log.gz 185891 26322
+latest.log 1481 12
+night/server-across-rollover.log = 2026-11-05-1.log.gz from its line 25784 (the begin marker) to its end, then all of latest.log
