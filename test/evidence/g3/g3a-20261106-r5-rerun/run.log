@@ -1,0 +1,42 @@
+[test-server 12:47:43] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --max-batch-usd 2 --logs-out captures/raw/r5-g3a-rerun/server --summary captures/raw/r5-g3a-rerun/batch.json --scenario g3-rocks-to-stone-tools --out captures/raw/r5-g3a-rerun/rocks -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 12:47:44] preflight passed: driver, profile, model and settings checked; the key's usage can be read; the LLM probe answered (HTTP 200, provider OpenInference, z-ai/glm-5.3-flash); 1 scenario(s) (timeouts: g3-rocks-to-stone-tools 37 min); a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[test-server 12:47:52] sweeper OK (via cadence): cadence of 4 dispatch runs on develop in the last 50 min, gaps 14.5, 15.3, 14.6 min, newest 42220103258 2.3 min ago
+[test-server 12:47:52] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 12:47:53] creating mcr-test-20261106-124745: delete-after 2026-11-06T14:47:52Z (TTL 2h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 12:48:09] server mcr-test-20261106-124745 is at <ip>
+[test-server 12:48:09] waiting for SSH and the build (up to 120 min)
+[test-server 12:48:20] phase: unreachable
+[test-server 12:48:37] phase: booting:running
+[test-server 12:49:27] phase: unpack
+[test-server 12:49:43] phase: starting
+[test-server 12:53:13] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 12:53:16] READY: mcr-test-20261106-124745 at <ip>:25565 (delete-after 2026-11-06T14:47:52Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261106-124745
+[test-server 12:53:16] running: node test/runner/batch.mjs --max-batch-usd 2 --logs-out captures/raw/r5-g3a-rerun/server --summary captures/raw/r5-g3a-rerun/batch.json --scenario g3-rocks-to-stone-tools --out captures/raw/r5-g3a-rerun/rocks -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 12:53:16] batch 20261106T125316-30896: a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[batch 12:53:16] g3-rocks-to-stone-tools: start (spent so far USD 0 of 2; runner timeout 37 min, derived 37)
+[scenario 12:53:17] g3-rocks-to-stone-tools (G3) run 20261106t125317-3c6129; git 1a7d990f6187274e5b7ab54a8e80cafd668bd847; driver: node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json; out: captures/raw/r5-g3a-rerun/rocks
+[scenario 12:53:33] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 12:54:56] PASS fresh_start: none of 24 target items held; the pack's first-join Bread and Bundle seen
+[scenario 13:01:04] FAIL stone_tools: minecraft:stone_pickaxe 0, minecraft:stone_axe 0; the agenda is stuck at step sticks: 5 min of self-prompting; agenda paused
+[scenario 13:01:04] FAIL crafting_table: held 0, placed (use stat) 0; the bot reported no placement
+[scenario 13:01:04] FAIL cobblestone: none of the 35 4-rocks outputs held
+[scenario 13:01:04] FAIL crafted_by_bot: pyrotech:crude_axe 0, contenttweaker:crafting_tools 0, minecraft:crafting_table 0, minecraft:stone_pickaxe 0, minecraft:stone_axe 0
+[scenario 13:01:06] PASS no_cheat: nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)
+[scenario 13:01:06] g3-rocks-to-stone-tools: 20 LLM requests (16 replies, 0 memory summaries, 3 failed), USD 0.002068
+[scenario 13:01:06] g3-rocks-to-stone-tools: model openrouter/@preset/glm-5-3-flash-cheap-reliable
+[scenario 13:01:09] g3-rocks-to-stone-tools: FAIL; 3 passed, 4 failed (captures/raw/r5-g3a-rerun/rocks/result.json)
+captures/raw/r5-g3a-rerun/server
+BATCH {"batchId":"20261106T125316-30896","testMode":false,"gate":false,"smoke":true,"maxBatchUsd":2,"scenarios":[{"id":"g3-rocks-to-stone-tools","out":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r5-g3a-rerun\\rocks","runId":"20261106t125317-3c6129","exit":1,"spentBefore":0,"timeoutMin":37}],"stopped":null,"usageAtStart":0.772298487,"usageAtEnd":0.774385237,"spentUsd":0.002087,"exit":1,"logsFetched":true}
+[test-server 13:01:19] command exited with 1
+[test-server 13:01:19] EXIT trap: tearing down mcr-test-20261106-124745
+[test-server 13:01:19] deleting batch mcr-test-20261106-124745 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261106-124745)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 13:01:39] batch mcr-test-20261106-124745: ran 13 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 13:01:39] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261106-124745

@@ -1,0 +1,234 @@
+{
+  "scenario": "g3-first-night",
+  "gate": "G3",
+  "title": "From a fresh spawn the agent lives through its first full night (the time untouched; the server is the arbiter)",
+  "runId": "20261106t130807-fb9c7d",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "FAIL",
+  "passed": 2,
+  "failed": 3,
+  "durationS": 1094,
+  "params": {
+    "bot": "<bot>",
+    "worldSeed": "1880465901402976865",
+    "maxMinutes": 55,
+    "nightFrom": 13000,
+    "dawnBelow": 12000,
+    "maxBatchUsd": 2,
+    "loginTimeoutMs": 240000,
+    "pollMs": 60000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "lateReplyMs": 5000,
+    "latePollMs": 1000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the bot makes it log in with its own account (online mode)"
+    },
+    {
+      "check": "fresh_start",
+      "pass": true,
+      "detail": "none of 24 target items held; the pack's first-join Bread and Bundle seen",
+      "readyToTry": "It starts as a fresh spawn: none of the early-game items held, and the pack's first-join gives seen"
+    },
+    {
+      "check": "survived_night",
+      "pass": false,
+      "detail": "not reached (scenario error)",
+      "readyToTry": "It reaches the first dawn after a full night with no death (stat.deaths 0, no death line)"
+    },
+    {
+      "check": "stayed_online",
+      "pass": false,
+      "detail": "not reached (scenario error)",
+      "readyToTry": "It stays online from the join to dawn (no leave, lost connection or kick)"
+    },
+    {
+      "check": "no_cheat",
+      "pass": false,
+      "detail": "not reached (scenario error)",
+      "readyToTry": "No give, game mode change, op or command by the bot during the run (the pack's first-join commands aside)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "objectives": [
+      {
+        "obj": "g3b_deaths",
+        "criteria": "stat.deaths",
+        "result": "added"
+      },
+      {
+        "obj": "g3b_played",
+        "criteria": "stat.playOneMinute",
+        "result": "added"
+      },
+      {
+        "obj": "g3b_food",
+        "criteria": "food",
+        "result": "added"
+      }
+    ],
+    "startCounts": {
+      "minecraft:stone_pickaxe": 0,
+      "minecraft:stone_axe": 0,
+      "minecraft:crafting_table": 0,
+      "pyrotech:crude_axe": 0,
+      "contenttweaker:crafting_tools": 0,
+      "undergroundbiomes:igneous_cobble": 0,
+      "contenttweaker:lignite_cobble": 0,
+      "undergroundbiomes:metamorphic_cobble": 0,
+      "undergroundbiomes:metamorphic_sandstone": 0,
+      "contenttweaker:chalk_cobble": 0,
+      "contenttweaker:shale_cobble": 0,
+      "contenttweaker:siltstone_cobble": 0,
+      "contenttweaker:dolomite_cobble": 0,
+      "contenttweaker:greywacke_cobble": 0,
+      "contenttweaker:chert_cobble": 0,
+      "undergroundbiomes:sedimentary_sandstone": 0,
+      "defiledlands:sandstone_defiled": 0,
+      "contenttweaker:serpentinite_cobblestone": 0,
+      "defiledlands:stone_defiled": 0,
+      "aether_legacy:holystone": 0,
+      "minecraft:cobblestone": 0,
+      "minecraft:sandstone": 0,
+      "contenttweaker:limestone_cobble": 0,
+      "minecraft:red_sandstone": 0
+    },
+    "samples": [
+      {
+        "min": 1.1,
+        "daytime": 2484,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 2.3,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 3.4,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 19
+      },
+      {
+        "min": 4.5,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 19
+      },
+      {
+        "min": 5.7,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 19
+      },
+      {
+        "min": 6.8,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 18
+      },
+      {
+        "min": 8,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 18
+      },
+      {
+        "min": 9.1,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 17
+      },
+      {
+        "min": 10.2,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 17
+      },
+      {
+        "min": 11.4,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": 17
+      },
+      {
+        "min": 12.5,
+        "daytime": 4139,
+        "deaths": 0,
+        "food": 16
+      },
+      {
+        "min": 13.6,
+        "daytime": 5504,
+        "deaths": 0,
+        "food": 16
+      },
+      {
+        "min": 14.8,
+        "daytime": 6867,
+        "deaths": 0,
+        "food": 16
+      },
+      {
+        "min": 15.9,
+        "daytime": 8231,
+        "deaths": 0,
+        "food": 15
+      }
+    ]
+  },
+  "botExitCode": 128,
+  "botExitSignal": "SIGTERM",
+  "botStoppedByRunner": true,
+  "error": "Error: console failed (3221225794):  (after 3 attempts)\n    at call (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/adapters.mjs:34:15)\n    at Object.console (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/adapters.mjs:37:38)\n    at Object.console (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/g3.mjs:191:27)\n    at Object.console (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/g3.mjs:191:27)\n    at send (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/late-console.mjs:34:30)\n    at Object.confirm (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/late-console.mjs:40:23)\n    at confirm (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/scenarios/g3/g3-first-night.mjs:112:36)\n    at Object.run (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/scenarios/g3/g3-first-night.mjs:144:45)\n    at async runScenario (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/runner.mjs:121:9)\n    at async main (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/run.mjs:196:26)",
+  "git": {
+    "sha": "1a7d990f6187274e5b7ab54a8e80cafd668bd847",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261106-130455",
+  "driver": "node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json",
+  "llm": {
+    "models": {
+      "model": "openrouter/@preset/glm-5-3-flash-cheap-reliable",
+      "code_model": null,
+      "vision_model": null
+    },
+    "calls": 48,
+    "replies": {
+      "ok": 37,
+      "memory": 0,
+      "failed": 10,
+      "disconnected": 0,
+      "empty": 10,
+      "memoryEmpty": 10
+    },
+    "httpErrors": {},
+    "usageBefore": 0.774393397,
+    "usageAfter": 0.779532343,
+    "usd": 0.005139,
+    "error": null
+  },
+  "batch": "20261106T130806-15256:2"
+}
