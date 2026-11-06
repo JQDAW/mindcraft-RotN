@@ -257,7 +257,10 @@ The real agent plays its early-game agenda from a fresh spawn, and the runner wh
   - `maxMinutes` (25, compared 'equal').
 - **Checks** (the final counts and scores):
   - `stone_tools`: at least 1 stone pickaxe and 1 stone axe held;
-  - `crafting_table`: at least 1 held, or placed (its use stat is at least 1);
+  - `crafting_table`: at least 1 held, or placed. "Placed" means one of:
+    - its use stat is at least 1;
+    - **the placed block itself** (lead, after round 3 continuation A: the bot placed its table at -42 67 -54, but `stat.useItem.minecraft.crafting_table` stayed 0). The cells the bot says it placed a table at ("Placed crafting_table at (x, y, z)" in its own output; the newest 5, `tablePlacements`) are checked at the end with the read-only `testforblock x y z minecraft:crafting_table 0`. A table the server finds counts only if the table's craft stat is at least 1, so a table that stood there before cannot pass alone. The claim is only a pointer; the server decides.
+    - `notes.craftingTablePath` records `path` (`placed`, `placed-block`, `held` or `none`) and every claim with the server's answer.
   - `cobblestone`: at least 1 of the 4-rocks outputs held, by exact name and meta;
   - `crafted_by_bot` (gating, lead #101): the craft stat is at least 1 for all five items;
   - `no_cheat`.
