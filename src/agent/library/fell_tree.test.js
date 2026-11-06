@@ -43,7 +43,7 @@ function tree(world, x, z = 0, { lean = 1 } = {}) {
  * The bot and its world. A cut trunk turns the whole tree into a falling tree entity for fallMs;
  * then its logs lie where it landed (log:1 each), east of the trunk (the canopy side).
  */
-function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false } = {}) {
+function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false, approachMs = 0 } = {}) {
     const world = new Map();
     for (const [x, z = 0] of trees) tree(world, x, z);
     build?.(world);
@@ -105,6 +105,12 @@ function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, un
                 log.moves.push(bot._moves?.canDig);
                 const target = at(Math.floor(goal.x), Math.floor(goal.y), Math.floor(goal.z));
                 if (stuck && goal.constructor?.name === 'GoalBlock') return Promise.resolve(); // it never gets there
+                if (approachMs && goal.constructor?.name === 'GoalBlock') { // a long walk to the place
+                    return new Promise(resolve => setTimeout(() => {
+                        bot.entity.position = at(Math.floor(goal.x), Math.floor(goal.y), Math.floor(goal.z)).offset(0.5, 0, 0.5);
+                        resolve();
+                    }, approachMs));
+                }
                 if (unreachable.some(p => p.equals(target))) return new Promise((_, reject) => { bot._pending = reject; });
                 bot.entity.position = target.offset(0.5, 0, 0.5);
                 log.positions.push({ to: key(target), at: Date.now(), falling: Object.values(entities).some(e => e.name === FALLING_TREE) });
@@ -262,4 +268,16 @@ test('#242 nit: on a slope it does not stand on the higher side above the cut; i
     const [fx, fy] = cut.from.split(',').map(Number);
     assert.ok(fy <= 64 && fx >= 2, `not from the hill: ${cut.from}`);
     assert.equal(cut.covered, false);
+});
+
+test('#242 follow-up: the first approach to a tree has the normal walk limit, not a step\'s, and still does not dig', T, async (t) => {
+    fast(t);
+    const saved = { ...skills.GO_TO_LIMITS };
+    t.after(() => Object.assign(skills.GO_TO_LIMITS, saved));
+    Object.assign(skills.GO_TO_LIMITS, { stepMs: 150, totalMs: 3000 }); // a step: 0.15 s; a walk: 3 s
+    const bot = fakeBot({ start: at(-20), approachMs: 500 }); // the tree is 0.5 s away
+    assert.equal(await skills.collectBlock(bot, 'log', 1), true, bot.output);
+    assert.equal(bot.log.digs.length, 1);
+    assert.doesNotMatch(bot.output, /could not reach a safe place/);
+    assert.equal(bot.log.moves[0], false, 'the approach cannot dig');
 });

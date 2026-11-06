@@ -6,7 +6,7 @@ import { setImmediate } from 'node:timers';
 import {
     inventoryCounts, lossDiff, formatLoss, DeathReporter, bindDeathReport,
     SETTLE_MS, RESPAWN_RETRY_MS, RESPAWN_RETRY_EVERY_MS, CHAT_GAP_MS, STREAK_MS,
-    deathCauseText, treeDeath, TREE_DEATH_MS,
+    deathCauseText, treeDeath, TREE_DEATH_MS, deathSpotBlocked, DEATH_SPOT_WAIT_MS, DROPS_LAST_MIN, lostItemsNote,
 } from './death_report.js';
 import { takeReplanNote, replanPromptDue, clearReplan, QUIET_MS } from '../replan.js';
 
@@ -135,8 +135,8 @@ test('D3: the agent samples while alive, retries a refused respawn, reports once
     const quiet = { now: timers.now() + QUIET_MS, idle: true, reflexActive: false, selfPrompting: false, lastPromptAt: -Infinity };
     assert.equal(replanPromptDue(agent, quiet), true);
     const note = takeReplanNote(agent);
-    assert.match(note, /^Reflexes \(death\) interrupted 'action:collectBlocks'\. You died at 100, 70, 200 and respawned\. You no longer have 12 cobblestone, 5 bread, 3 log:1, 2 log; they may lie at the death spot \(unconfirmed\)\. The spot is saved as 'last_death_position'\. Do not go back there for 5 min, nor at dusk or night: what killed you may still be there, and a zombie rises where a player dies. Check your state/);
-    assert.ok(!/do not despawn/.test(note), 'no unconfirmed Corpse Complex claim');
+    assert.match(note, /^Reflexes \(death\) interrupted 'action:collectBlocks'\. You died at 100, 70, 200 and respawned\. You no longer have 12 cobblestone, 5 bread, 3 log:1, 2 log\. They lie at the death spot for about 9 more minutes \(10 minutes from your death\), and a zombie rises there \(Zombie Players: it never burns in daylight and never leaves\)\. They are lost unless that zombie is killed before then; waiting for day does not help\. Go back for them only with a weapon and more than half your health; otherwise move on and do not plan around the lost items\. The spot is saved as 'last_death_position'\. Do not go back there for 5 min, nor at dusk or night: what killed you may still be there, and a zombie rises where a player dies. Check your state/);
+    assert.ok(!/do not despawn|unconfirmed/.test(note), 'only what rotn-data confirmed (600 s, the zombie)');
     assert.ok(!note.includes('Creeper'), 'the server text never reaches the LLM');
 
     // A later spawn with no death (e.g. a dimension change): no report.
@@ -246,4 +246,74 @@ test('#242 review 3 and 4: the bot is argument 1 only, never the killer; the pac
         assert.equal(treeDeath({ cause, at: 1 }), true, cause);
     }
     assert.equal(treeDeath({ cause: 'FRCFLD died (death.attack.falling_tree)', at: 1 }), true, 'falling_tree too');
+});
+
+// rotn-data Request 12 (lead decision): the player zombie never burns and never leaves, so the
+// avoid rule ends only when it dies. A recovery is allowed only within the fight policy.
+test('Request 12: back to the death spot past the player zombie only with a weapon and more than half the health', () => {
+    const dead = (health, items) => {
+        const d = new DeathReporter();
+        d.died({ pos: { x: 100, y: 70, z: 200 }, dimension: 'overworld', now: 1_000_000 });
+        const self = { id: 0, position: { x: 0, y: 64, z: 0 } };
+        const zombie = { id: 5, name: 'zombie_players:zombie_player', type: 'mob',
+            position: { x: 101, y: 70, z: 201, distanceTo() { return 1; } } };
+        return { _death: d, memory_bank: { memory: {} },
+            bot: { health, entity: self, entities: { 0: self, 5: zombie }, time: { timeOfDay: 1000 },
+                game: { dimension: 'overworld' }, inventory: { items: () => items, slots: [] } } };
+    };
+    const spot = { x: 101, y: 70, z: 200 };
+    const later = 1_000_000 + DEATH_SPOT_WAIT_MS; // by day, after the 5 min wait
+    assert.match(deathSpotBlocked(dead(20, []), spot, { now: later }), /player zombie .* you lack a weapon or more than half your health/);
+    assert.match(deathSpotBlocked(dead(10, [item('stone_sword', 1)]), spot, { now: later }) ?? '', /player zombie/, 'half the health is not enough');
+    assert.equal(deathSpotBlocked(dead(18, [item('stone_sword', 1)]), spot, { now: later }), null, 'a weapon and 18 health: it may go and fight');
+    assert.match(deathSpotBlocked(dead(18, [item('stone_sword', 1)]), spot, { now: 1_000_000 + 60_000 }), /wait 4 more min/, 'the 5 min wait still holds');
+});
+
+// #247 review 1 and 2.
+test('#247 review 1: after 10 minutes the items are lost: no fight past the zombie, no walk to the spot itself; the area stays open', () => {
+    const dead = (health, items, { zombie = true } = {}) => {
+        const d = new DeathReporter();
+        d.died({ pos: { x: 100, y: 70, z: 200 }, dimension: 'overworld', now: 1_000_000 });
+        const self = { id: 0, position: { x: 0, y: 64, z: 0 } };
+        const z = { id: 5, name: 'zombie_players:zombie_player', type: 'mob', position: { x: 101, y: 70, z: 201 } };
+        return { _death: d, memory_bank: { memory: {} },
+            bot: { health, entity: self, entities: zombie ? { 0: self, 5: z } : { 0: self }, time: { timeOfDay: 1000 },
+                game: { dimension: 'overworld' }, inventory: { items: () => items, slots: [] } } };
+    };
+    const fighter = () => dead(18, [item('stone_sword', 1)]);
+    const spot = { x: 101, y: 70, z: 200 };
+    const at = (min) => 1_000_000 + min * 60_000;
+    assert.equal(deathSpotBlocked(fighter(), spot, { now: at(9) }), null, 'within 10 min a fighter may go');
+    assert.match(deathSpotBlocked(fighter(), spot, { now: at(DROPS_LAST_MIN) }), /your items there are already lost \(they last 10 minutes after the death\), and its zombie stays/);
+    assert.match(deathSpotBlocked(dead(18, [], { zombie: false }), { x: 100, y: 70, z: 201 }, { now: at(11) }), /already lost/, 'the spot itself, zombie out of sight');
+    assert.equal(deathSpotBlocked(dead(18, [], { zombie: false }), { x: 115, y: 70, z: 200 }, { now: at(11) }), null, 'the area near it stays open');
+});
+
+test('#247 review 1: the note gives the minutes left from the death, and says when they are gone', (t) => {
+    assert.match(lostItemsNote(6), /^They lie at the death spot for about 6 more minutes \(10 minutes from your death\)/);
+    assert.match(lostItemsNote(0), /^They lay at the death spot for 10 minutes after your death and are gone now; move on/);
+    // through the report: the respawn comes 4 min after the death, so 5 minutes are left
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const timers = fakeTimers();
+    const { agent, bot } = fakeAgent();
+    bindDeathReport(agent, timers);
+    bot.inventory.slots[9] = item('cobblestone', 12);
+    bot.emit('physicsTick');
+    bot.inventory.slots[9] = null;
+    bot.health = 0; bot.isAlive = false; bot.emit('death');
+    timers.advance(4 * 60_000);
+    bot.health = 20; bot.isAlive = true; bot.emit('spawn');
+    timers.advance(SETTLE_MS + 1000);
+    assert.match(takeReplanNote(agent), /You no longer have 12 cobblestone\. They lie at the death spot for about 5 more minutes/);
+});
+
+test('#247 review 2: the night rule no longer says "only by day"', () => {
+    const d = new DeathReporter();
+    d.died({ pos: { x: 100, y: 70, z: 200 }, now: 1_000_000 });
+    const self = { id: 0, position: { x: 0, y: 64, z: 0 } };
+    const agent = { _death: d, memory_bank: { memory: {} }, bot: { entity: self, entities: { 0: self }, time: { timeOfDay: 18000 }, game: {} } };
+    const why = deathSpotBlocked(agent, { x: 101, y: 70, z: 200 }, { now: 1_000_000 + 6 * 60_000 });
+    assert.match(why, /^it is night: do not go back to where you died now; the items left there will be lost$/);
+    assert.doesNotMatch(why, /by day/);
 });

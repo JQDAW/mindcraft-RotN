@@ -126,3 +126,27 @@ test('#238 review 2: smeltItem with a failed placement says so and picks nothing
     assert.deepEqual(calls.pickUps, []);
     assert.equal(calls.opened, 0);
 });
+
+test('#238 nit 1: a placement reported as failed (or thrown) that did place the furnace still returns it, to be picked up', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const MINE = new Vec3(3, 64, 0);
+    const placesItThen = [
+        (world) => (_b, _n, x, y, z) => { world.set(String(new Vec3(x, y, z)), 'furnace'); return Promise.resolve(false); },
+        (world) => (_b, _n, x, y, z) => { world.set(String(new Vec3(x, y, z)), 'furnace'); return Promise.reject(new Error('Event blockUpdate did not fire')); },
+    ];
+    for (const makePlace of placesItThen) {
+        const world = new Map();
+        const bot = { output: '', blockAt: (p) => ({ name: world.get(String(p)) ?? 'air', position: p }) };
+        const b = await skills.placeFurnaceNear(bot, 16, { freeSpace: () => MINE, place: makePlace(world) });
+        assert.equal(String(b?.position), String(MINE));
+    }
+});
+
+test('#247 review 3: a place that already holds a furnace is not used: null, nothing placed', async () => {
+    const MINE = new Vec3(3, 64, 0);
+    let placed = 0;
+    const bot = { blockAt: (p) => ({ name: p.equals(MINE) ? 'furnace' : 'air', position: p }) };
+    const b = await skills.placeFurnaceNear(bot, 16, { freeSpace: () => MINE, place: () => { placed++; return Promise.resolve(true); } });
+    assert.equal(b, null, 'not someone else\'s furnace');
+    assert.equal(placed, 0);
+});
