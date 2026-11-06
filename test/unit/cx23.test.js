@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { windowsShellSkip } from './fixtures/windows-skip.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
@@ -371,7 +372,7 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
 });
 
 // ---------------------------------------------------------------- bootstrap.sh
-describe('bootstrap.sh', () => {
+describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, () => {
     const ubuntu = (version = '26.04', sshdConfig = 'Include /etc/ssh/sshd_config.d/*.conf\n\nKbdInteractiveAuthentication no\nUsePAM yes\n') => {
         fs.mkdirSync(rootFile('etc/ssh'), { recursive: true });
         fs.writeFileSync(rootFile('etc/os-release'), `NAME="Ubuntu"\nID=ubuntu\nVERSION_ID="${version}"\n`);
@@ -865,7 +866,7 @@ describe('bootstrap.sh', () => {
 });
 
 // ---------------------------------------------------------------- deploy.sh
-describe('deploy.sh (real git and tar on a local repo)', () => {
+describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSkip('deploy.sh (real git and tar on a local repo)', '20 s') }, () => {
     const git = (cwd, ...args) => {
         const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'tag.gpgsign=false', ...args],
             { cwd, encoding: 'utf8' });
