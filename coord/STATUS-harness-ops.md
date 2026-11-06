@@ -1,18 +1,23 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (12:20 UTC, from `date -u`)
+Updated: 2026-11-06 (13:49 UTC, from `date -u`)
 
-## Now: G3 smoke round 5 is on HOLD after batch A (the lead). Do not start B; no servers until the lead says (rotn-data's dump run has the project).
+## Now: G3 smoke round 5 is stopped after B (scenario error). The B rerun, C and D wait for this PR and the lead's word.
 
-- **A: FAIL 3/7** (GO 11:55Z, develop c32521e5, smoke). login_online, fresh_start and no_cheat pass; stone_tools, crafting_table, cobblestone and crafted_by_bot fail because the bot was gone.
-  - **Cause: the agent crashed five times on an empty memory summary.** The summary request got null content, `history.js:44` read `.length` on it, and the agent process exited. Each restart reloaded the 14 turns in `memory.json`, summarized at once and crashed again (restarts at 10, 20, 40, 80 and 160 s). The bot was off the server from 12:08:37 to the end.
-  - **The outgoing chat limit was off all run** ("no bot._client.chat to wrap"). The lead confirmed the cause: minecraft-protocol assigns `client.chat` only once play starts.
-  - Before the crash, the falling-tree guard refused the tree at -62 64 -50 six times ("no place beside it that is out from under its canopy"); 0 sticks. No falls, deaths, spam kicks, or StackUp/NaN lines.
-  - LLM 19 requests: 11 replies, 5 empty summaries (not counted by the runner then), 3 discarded for a newer message. USD 0.001557; the key reads 0.772293 of 4.50. Hetzner 12 min; server, Primary IP and SSH key verified gone at 12:11:08.
-- **Fixes elsewhere (the lead):** null content in `src/models/openrouter.js` (the lead); `history.js` and the chat limiter (skills-rotn).
-- **Open: my fix PR (the lead's order).** The driver also moves `bots/<bot>/memory.json` aside at every start (approved for all G3 batches: a fresh start means fresh memory), and the LLM counts include empty memory summaries (`replies.memoryEmpty`, part of `empty` and `failed`). DRIVER.md records both.
-- **Next:** batches B, C and D of round 5 under the same GO, once the lead says the fixes are merged. Raw logs `captures/raw/r5-g3b|g3c|g3d`.
+| Batch | Result |
+| --- | --- |
+| A (12:03Z, develop c32521e5) | FAIL 3/7: the agent crashed five times on a null memory summary, and the chat limit was off. Fixed elsewhere (#266, skills-rotn) and in #267 (fresh `memory.json`). |
+| A rerun (12:53Z, develop 1a7d990f) | FAIL 3/7, a result: the agenda paused as stuck at `sticks`. Felling gave 25 logs and 1 stick; `!craftRecipe("planks")` said it needs a crafting table; `!searchForBlock("log")` led to an underground log and 180 s of pathfinding. No crash, no deaths, the chat limit on, memory reset. |
+| B (13:08Z, develop 1a7d990f) | Scenario error at 13:26:21 after login_online and fresh_start passed: "console failed (3221225794)". The bot had reached step 8 (table, planks, 5 sticks). No server log (its fetch failed the same way). |
 
+- **B's cause:** this Windows machine was short of memory. 3221225794 is 0xC0000142: `bash.exe` failed to start, so nothing reached the server. Claude Code had reaped the batch's wrapper shell for low memory a minute before. No harness process was left behind. (The `npm test` tree from 03:17Z is not mine; the lead says leave it.)
+- **All round 5 memory summaries came back empty** (0 of 20 stored; the probe named OpenInference each time). The human has excluded OpenInference from the preset.
+- **LLM and Hetzner:** A USD 0.001557 (12 min), A rerun 0.002087 (13 min), B 0.005139 (21 min). The key reads USD 0.779532 of 4.50. Every server, Primary IP and SSH key verified gone; the project is empty.
+- **Open: my PR (the lead's order, after B):**
+  - the console and the final log fetch retry a bash that never started for up to 135 s (5, 10, 20, 40, 60 s), and the error names the free memory;
+  - per-provider counts from `openrouter.js`'s provider line (#271): requests, empty answers, and summaries ok/empty, attributed only when unambiguous;
+  - #267 nits: history.js's "[memory] summary returned" lines count (B: 11 empty, not 10), an exit counts only when non-zero, plain wording at DRIVER.md:372.
+- **Merged: #267** (fresh `memory.json` at every G3 start; empty summaries counted). **#258** (round 4 cleanup).
 ## Earlier: G3 smoke round 4 is over (GO 06:30Z, develop 09197157, smoke).
 
 | Batch | Result |

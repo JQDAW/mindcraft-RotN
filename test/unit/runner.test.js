@@ -15,7 +15,7 @@ import { G2_WORLD_SEED } from '../runner/lib/g2.mjs';
 import g2Blocks from '../scenarios/g2/g2-blocks-named.mjs';
 import * as L from '../runner/lib/server-log.mjs';
 import { parseArgs, loadScenarios, gitInfo, writeAtomic } from '../runner/run.mjs';
-import { driverEnv, ctlServer, driverProcess } from '../runner/lib/adapters.mjs';
+import { driverEnv, ctlServer, driverProcess, notStarted, retryNotStarted, NOT_STARTED_BACKOFF_MS } from '../runner/lib/adapters.mjs';
 import { attachScenario } from '../runner/drivers/scenario-protocol.mjs';
 import g1 from '../scenarios/g1/g1-login-chat-walk.mjs';
 
@@ -555,7 +555,53 @@ describe('adapters', () => {
         assert.deepEqual(pauses, [2000, 4000]);
         calls = 0;
         const bad = ctlServer('/ctl', { spawn: flaky(3), pause: () => {} });
-        assert.throws(() => bad.console('list'), /console failed \(255\): ssh: connection reset \(after 3 attempts\)/);
+        assert.throws(() => bad.console('list'), /console failed \(255\): ssh: connection reset \(after 3 attempts: \d\d:\d\d:\d\dZ 255 \(free \d+ MB\), /);
+    });
+
+    test('ctlServer: a bash that never started is retried longer, and only that (round 5 B: 0xC0000142 three times in 6 s)', () => {
+        const DLL_INIT = 3221225794;
+        const seq = (results) => { let i = 0; return () => results[Math.min(i++, results.length - 1)]; };
+        const fixed = { now: () => new Date('2026-11-06T13:26:15Z'), freemem: () => 512 * 2 ** 20 };
+        // Round 5 B's failure, now ridden out: three never-started calls, then the console answers.
+        let pauses = [];
+        const ok = ctlServer('/ctl', { ...fixed, spawn: seq([{ status: DLL_INIT, stderr: '' }, { status: DLL_INIT, stderr: '' }, { status: DLL_INIT, stderr: '' }, { status: 0, stdout: 'x\n' }]), pause: (ms) => pauses.push(ms) });
+        assert.deepEqual(ok.console('time query daytime'), ['x']);
+        assert.deepEqual(pauses, [5000, 10000, 20000], 'the long backoff, not 2 s and 4 s');
+        // Never started for the whole long backoff: 6 attempts over 135 s, then the error names each one.
+        pauses = [];
+        const never = ctlServer('/ctl', { ...fixed, spawn: seq([{ status: DLL_INIT, stderr: '' }]), pause: (ms) => pauses.push(ms) });
+        assert.throws(() => never.console('list'), (e) => {
+            assert.match(e.message, /^console failed \(3221225794 STATUS_DLL_INIT_FAILED\) \(after 6 attempts: 13:26:15Z STATUS_DLL_INIT_FAILED \(free 512 MB\), /);
+            return true;
+        });
+        assert.deepEqual(pauses, NOT_STARTED_BACKOFF_MS);
+        assert.equal(pauses.reduce((a, b) => a + b, 0), 135000);
+        // spawnSync's own errors: ENOMEM is a never-started process; a timeout is not (the command may have run).
+        assert.equal(notStarted({ status: null, error: Object.assign(new Error('x'), { code: 'ENOMEM' }) }), 'ENOMEM');
+        assert.equal(notStarted({ status: null, error: Object.assign(new Error('x'), { code: 'ETIMEDOUT' }) }), null);
+        assert.equal(notStarted({ status: 255 }), null, 'an ssh failure inside bash comes back as 8 bits');
+        assert.equal(notStarted({ status: 3221225495 }), 'STATUS_NO_MEMORY');
+        // Mixed: never-started retries do not use up the two ordinary ones, and an ordinary failure keeps 2 s and 4 s.
+        pauses = [];
+        const mixed = ctlServer('/ctl', { ...fixed, spawn: seq([{ status: DLL_INIT }, { status: 255, stderr: 'reset' }, { status: DLL_INIT }, { status: 255, stderr: 'reset' }, { status: 255, stderr: 'reset' }]), pause: (ms) => pauses.push(ms) });
+        assert.throws(() => mixed.log(5), /log failed \(255\): reset \(after 5 attempts: /);
+        assert.deepEqual(pauses, [5000, 2000, 10000, 4000]);
+    });
+
+    test('retryNotStarted (the batch\'s final log fetch, round 5 B): retries only a never-started process, with the long backoff', () => {
+        const DLL_INIT = 3221225794;
+        const run = (results) => { let i = 0; const f = () => results[Math.min(i++, results.length - 1)]; f.calls = () => i; return f; };
+        const told = [];
+        const pauses = [];
+        const a = run([{ status: DLL_INIT }, { status: DLL_INIT }, { status: 0 }]);
+        assert.equal(retryNotStarted(a, { pause: (ms) => pauses.push(ms), onRetry: (why, ms) => told.push(`${why} ${ms}`) }).status, 0);
+        assert.deepEqual([a.calls(), pauses, told], [3, [5000, 10000], ['STATUS_DLL_INIT_FAILED 5000', 'STATUS_DLL_INIT_FAILED 10000']]);
+        const b = run([{ status: 1 }]);
+        assert.equal(retryNotStarted(b, { pause: () => assert.fail('no wait for a fetch that ran and failed') }).status, 1);
+        assert.equal(b.calls(), 1);
+        const c = run([{ status: DLL_INIT }]);
+        assert.equal(retryNotStarted(c, { pause: () => {} }).status, DLL_INIT, 'gives up after the long backoff');
+        assert.equal(c.calls(), NOT_STARTED_BACKOFF_MS.length + 1);
     });
 });
 

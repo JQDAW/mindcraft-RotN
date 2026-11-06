@@ -32,7 +32,7 @@ import { runScenario, addNotGate } from './lib/runner.mjs';
 import { ctlServer, driverProcess, wallClock } from './lib/adapters.mjs';
 import { linesAfter } from './lib/server-log.mjs';
 import { guardConsole, g3Policy, LLM_MODEL } from './lib/g3.mjs';
-import { keyFetch, llmRecord, readKeyUsage } from './lib/llm-spend.mjs';
+import { keyFetch, llmRecord, providerSummary, readKeyUsage } from './lib/llm-spend.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -201,7 +201,9 @@ async function main(argv) {
         // Requests sent, then what came back (lead, after round 3: failed calls are never counted as calls).
         const http = Object.entries(result.llm.httpErrors ?? {}).map(([st, n]) => `${n} x HTTP ${st}`).join(', ');
         const rp = result.llm.replies ?? {};
-        log(`${scenario.id}: ${result.llm.calls} LLM requests (${rp.ok ?? '?'} replies, ${rp.memory ?? '?'} memory summaries, ${rp.failed ?? '?'} failed${http ? `; ${http}` : ''}), USD ${result.llm.usd ?? 'unknown'}`);
+        log(`${scenario.id}: ${result.llm.calls} LLM requests (${rp.ok ?? '?'} replies, ${rp.memory ?? '?'} memory summaries, ${rp.failed ?? '?'} failed${rp.memoryEmpty ? `, ${rp.memoryEmpty} of them empty summaries` : ''}${http ? `; ${http}` : ''}), USD ${result.llm.usd ?? 'unknown'}`);
+        // Which providers served the run, and their empty answers and summaries (lead, after round 5 B; openrouter.js #271).
+        log(`${scenario.id}: LLM providers: ${providerSummary(result.llm.providers, result.llm.summariesUnattributed)}`);
         if (result.llm.usd === null) addNotGate(result, `the LLM cost is unknown (${result.llm.error}): a G3 run must record its spend`);
         // Every LLM run uses the preset model (the human's decision, 2026-11-06). The Mindcraft driver refuses
         // any other; a G3 run whose recorded model is not it (or is unknown) is never a gate run.
