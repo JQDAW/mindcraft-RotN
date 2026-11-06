@@ -128,7 +128,10 @@ test('initBot logs in through forge-bridge to a fake Forge server and plays', { 
     // Brief item 4: bot.registry carries the synced modded names.
     const moddedBlock = bot.blockAt(bot.entity.position.floored().offset(-8, -1, -8));
     assert.equal(moddedBlock.name, 'pyrotech:rock');
-    assert.equal(moddedBlock.boundingBox, 'block');
+    // #256 review: the dump's collision (a rock pile has no box), not extendRegistry's full-cube default.
+    assert.equal(moddedBlock.boundingBox, 'empty');
+    assert.deepEqual(moddedBlock.shapes, []);
+    assert.equal(bot.forge.collision.fromDump, 2);
     assert.deepEqual(bot.forge.registryReport.added, { blocks: 2, items: 2, entities: 1, biomes: 1 });
     // rotn-data request 4: Mindcraft's name helpers read bot.registry, so they know modded names.
     assert.equal(getBlockId('pyrotech:rock'), 4001);

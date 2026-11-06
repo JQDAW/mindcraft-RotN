@@ -1,0 +1,5125 @@
+{
+ "description": "What forge-bridge src/collision.js adds to rotn-data's dumped per-state collision for modded blocks: walk-through is opt-in (only the states listed in walkThrough; any other state without a box is a solid full cube), liquid marks modded fluids, hazard/hazardByMeta mark trap, fire, portal, web and lava blocks, shapes names a reviewed box the dump does not record. Built by packages/forge-bridge/tools/build-collision-overrides.mjs from the pinned server pack zip (rules in its header); no mod code run.",
+ "pack": {
+  "version": "3.3.4",
+  "sha256": "90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205"
+ },
+ "counts": {
+  "moddedBlocks": 4642,
+  "withDumpStates": 4633,
+  "statesWithoutBox": 5986,
+  "walkThroughStates": 1422,
+  "solidStatesWithoutBox": 4564,
+  "blocks": {
+   "walkThrough": 326,
+   "liquid": 162,
+   "hazard": 233,
+   "dynamicLeaves": 26
+  }
+ },
+ "shapes": {
+  "dynamicLeaves": {
+   "shapes": [
+    [
+     0.125,
+     0,
+     0.125,
+     0.875,
+     0.5,
+     0.875
+    ]
+   ],
+   "evidence": "mods/DramaticTrees-1.12.2-0.13.4.jar (SHA-256 b86dae768ccc1182c52e5b9a8756a5906da53dc125d48bfe1c8dc69204a77ffe): BlockDynamicLeaves.addCollisionBoxToList (func_185477_a) gives a player vanilla's full cube if Passable Leaves is loaded or vanillaLeavesCollision is true, nothing if isLeavesPassable is true, else AxisAlignedBB(0.125, 0, 0.125, 0.875, 0.5, 0.875) (bytecode 96-128). On the pack: config/dynamictrees.cfg isLeavesPassable=false (line 60), vanillaLeavesCollision=false (line 66), mod passableleaves not in the pack"
+  }
+ },
+ "reviewed": {
+  "biomesoplenty.common.block.BlockBOPPlant": "BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar: BlockBOPPlant.onEntityCollidedWithBlock (func_180634_a) switches on the variant (BlockBOPPlant$2): POISONIVY adds poison (MobEffects.field_76436_u, bytecode 116-124), THORN and TINYCACTUS deal cactus damage (DamageSource.field_76367_g, 183-187); every other variant does nothing",
+  "biomesoplenty.common.block.BlockBOPFlower": "BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar: BlockBOPFlower.onEntityCollidedWithBlock (func_180634_a) switches on the variant (BlockBOPFlower$1): DEATHBLOOM adds wither (MobEffects.field_82731_v, bytecode 65-74), BURNING_BLOSSOM sets the entity on fire (func_70015_d, 91); every other variant does nothing",
+  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRock": "rock pile: Pyrotech rock piles (pyrotech:rock, the first G3 resource); no box in the dump, no contact or collision-box override",
+  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockGrass": "rock pile: Pyrotech grass-covered rock piles; no box in the dump, no contact or collision-box override",
+  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockNetherrack": "rock pile: Pyrotech netherrack rock piles; no box in the dump, no contact or collision-box override",
+  "trinsdar.pyrotech_compat.block.rocks.BlockRockBase": "rock pile: Pyrotech Compat rock piles (igneous, metamorphic, sedimentary, their sands, netherrack); no box in the dump, no contact or collision-box override"
+ },
+ "blocks": {
+  "adpother:polluted_water": {
+   "class": "com.endertech.minecraft.mods.adpother.blocks.PollutedWater",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "aether_legacy:aether_portal": {
+   "class": "com.gildedgames.the_aether.blocks.portal.BlockAetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "aether_legacy:berry_bush_stem": {
+   "class": "com.gildedgames.the_aether.blocks.natural.BlockBerryBushStem",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "aether_legacy:golden_oak_sapling": {
+   "class": "com.gildedgames.the_aether.blocks.BlockAetherSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "aether_legacy:purple_flower": {
+   "class": "com.gildedgames.the_aether.blocks.natural.BlockAetherFlower",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "aether_legacy:skyroot_sapling": {
+   "class": "com.gildedgames.the_aether.blocks.BlockAetherSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "aether_legacy:white_flower": {
+   "class": "com.gildedgames.the_aether.blocks.natural.BlockAetherFlower",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "ancientbeasts:spiky": {
+   "class": "com.unoriginal.ancientbeasts.blocks.BlockSpike",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.unoriginal.ancientbeasts.blocks.BlockSpike (attackEntityFrom)"
+   ]
+  },
+  "animania:honey": {
+   "class": "com.animania.common.blocks.fluids.BlockFluidHoney",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "animania:milk_friesian": {
+   "class": "com.animania.common.blocks.fluids.BlockFluidMilk",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "animania:milk_goat": {
+   "class": "com.animania.common.blocks.fluids.BlockFluidMilk",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "animania:milk_holstein": {
+   "class": "com.animania.common.blocks.fluids.BlockFluidMilk",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "animania:milk_jersey": {
+   "class": "com.animania.common.blocks.fluids.BlockFluidMilk",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "animania:milk_sheep": {
+   "class": "com.animania.common.blocks.fluids.BlockFluidMilk",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "animania:slop": {
+   "class": "com.animania.common.blocks.fluids.BlockFluidSlop",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "arcanearchives:brazier_of_hoarding_fire": {
+   "class": "com.aranaira.arcanearchives.blocks.BrazierFire",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "arcaneworld:return_portal": {
+   "class": "party.lemons.arcaneworld.block.BlockReturnPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "bblsom:arzabals_veil": {
+   "class": "bblsom.blocks.CustomBlockMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:paper": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:paper_w": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:red_crown": {
+   "class": "bblsom.blocks.CustomBlockMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_atashum": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_haelat": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_hailakand": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_mortarid": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_north_kraired": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_prektane": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_rising_isles": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_rymoe": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_wanlonggu": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "bblsom:wildflowers_west_kraired": {
+   "class": "bblsom.blocks.CustomBlockLitter",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betteranimalsplus:trillium": {
+   "class": "its_meow.betteranimalsplus.common.block.BlockTrillium",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:agave": {
+   "class": "paulevs.betternether.blocks.BlockAgave",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact paulevs.betternether.blocks.BlockAgave (attackEntityFrom)"
+   ]
+  },
+  "betternether:barrel_cactus": {
+   "class": "paulevs.betternether.blocks.BlockBarrelCactus",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact paulevs.betternether.blocks.BlockBarrelCactus (attackEntityFrom)"
+   ]
+  },
+  "betternether:black_apple": {
+   "class": "paulevs.betternether.blocks.BlockBlackApple",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:black_apple_seed": {
+   "class": "paulevs.betternether.blocks.BlockBlackAppleSeed",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:black_bush": {
+   "class": "paulevs.betternether.blocks.BlockBlackBush",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:bone_mushroom": {
+   "class": "paulevs.betternether.blocks.BlockBoneMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:egg_plant": {
+   "class": "paulevs.betternether.blocks.BlockEggPlant",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact paulevs.betternether.blocks.BlockEggPlant (addPotionEffect)"
+   ]
+  },
+  "betternether:eye_seed": {
+   "class": "paulevs.betternether.blocks.BlockEyeSeed",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:eye_vine": {
+   "class": "paulevs.betternether.blocks.BlockEyeVine",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:gray_mold": {
+   "class": "paulevs.betternether.blocks.BlockGrayMold",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:ink_bush": {
+   "class": "paulevs.betternether.blocks.BlockInkBush",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:ink_bush_seed": {
+   "class": "paulevs.betternether.blocks.BlockInkBushSeed",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:lucis_spore": {
+   "class": "paulevs.betternether.blocks.BlockLucisSpore",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:nether_cactus": {
+   "class": "paulevs.betternether.blocks.BlockNetherCactus",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact paulevs.betternether.blocks.BlockNetherCactus (attackEntityFrom)"
+   ]
+  },
+  "betternether:nether_grass": {
+   "class": "paulevs.betternether.blocks.BlockNetherGrass",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:nether_reed": {
+   "class": "paulevs.betternether.blocks.BlockNetherReed",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:potted_plant_1": {
+   "class": "paulevs.betternether.blocks.BlockPottedPlant",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:red_mold": {
+   "class": "paulevs.betternether.blocks.BlockRedMold",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:stalagnate_seed": {
+   "class": "paulevs.betternether.blocks.BlockStalagnateSeed",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betternether:stalagnate_seed_bottom": {
+   "class": "paulevs.betternether.blocks.BlockStalagnateSeedBottom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithaddons:aqueduct_water": {
+   "class": "betterwithaddons.block.BlockAqueductWater",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "betterwithaddons:bamboo": {
+   "class": "betterwithaddons.block.EriottoMod.BlockBamboo",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithaddons:crop_rice": {
+   "class": "betterwithaddons.block.EriottoMod.BlockCropRice",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithaddons:crop_rush": {
+   "class": "betterwithaddons.block.EriottoMod.BlockCropRush",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithaddons:crop_tea": {
+   "class": "betterwithaddons.block.EriottoMod.BlockCropTea",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithaddons:elytra_magma": {
+   "class": "betterwithaddons.block.BlockElytraMagma",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact betterwithaddons.block.BlockElytraMagma (attackEntityFrom)"
+   ]
+  },
+  "betterwithaddons:leafpile_sakura": {
+   "class": "betterwithaddons.block.EriottoMod.BlockCherryLeafPile",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithaddons:sapling_luretree": {
+   "class": "betterwithaddons.block.BlockLureTreeSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithaddons:sapling_mulberry": {
+   "class": "betterwithaddons.block.BlockModSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithaddons:sapling_sakura": {
+   "class": "betterwithaddons.block.BlockModSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithaddons:thorn_rose": {
+   "class": "betterwithaddons.block.BlockThornRose",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact betterwithaddons.block.BlockThornRose (attackEntityFrom)"
+   ]
+  },
+  "betterwithaddons:thorns": {
+   "class": "betterwithaddons.block.BlockThorns",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact betterwithaddons.block.BlockThorns (attackEntityFrom)"
+   ]
+  },
+  "betterwithmods:blood_sapling": {
+   "class": "betterwithmods.common.blocks.BlockBloodSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithmods:hemp": {
+   "class": "betterwithmods.common.blocks.BlockHemp",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithmods:invisible_light": {
+   "class": "betterwithmods.common.blocks.BlockInvisibleLight",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact betterwithmods.common.blocks.BlockInvisibleLight (setFire)"
+   ]
+  },
+  "betterwithmods:nether_growth": {
+   "class": "betterwithmods.common.blocks.BlockNetherGrowth",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact betterwithmods.common.blocks.BlockNetherGrowth (attackEntityFrom)"
+   ]
+  },
+  "betterwithmods:sapling_crop_acacia": {
+   "class": "betterwithmods.module.hardcore.world.saplings.BlockSaplingCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithmods:sapling_crop_birch": {
+   "class": "betterwithmods.module.hardcore.world.saplings.BlockSaplingCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithmods:sapling_crop_dark_oak": {
+   "class": "betterwithmods.module.hardcore.world.saplings.BlockSaplingCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithmods:sapling_crop_jungle": {
+   "class": "betterwithmods.module.hardcore.world.saplings.BlockSaplingCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithmods:sapling_crop_oak": {
+   "class": "betterwithmods.module.hardcore.world.saplings.BlockSaplingCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithmods:sapling_crop_spruce": {
+   "class": "betterwithmods.module.hardcore.world.saplings.BlockSaplingCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "betterwithmods:saw": {
+   "class": "betterwithmods.common.blocks.mechanical.BlockSaw",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact betterwithmods.common.blocks.mechanical.BlockSaw (attackEntityFrom)"
+   ]
+  },
+  "betterwithmods:stoked_flame": {
+   "class": "betterwithmods.common.blocks.BlockFireStoked",
+   "hazard": "fire",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockFire"
+   ]
+  },
+  "betterwithmods:temporary_water": {
+   "class": "betterwithmods.common.blocks.BlockTemporaryWater",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "biomesoplenty:blood": {
+   "class": "biomesoplenty.common.fluids.blocks.BlockBloodFluid",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "biomesoplenty:blue_fire": {
+   "class": "biomesoplenty.common.block.BlockBOPBlueFire",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "biomesoplenty:bramble_plant": {
+   "class": "biomesoplenty.common.block.BlockBOPBramblePlant",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact biomesoplenty.common.block.BlockBOPBramblePlant (attackEntityFrom)"
+   ]
+  },
+  "biomesoplenty:double_plant": {
+   "class": "biomesoplenty.common.block.BlockBOPDoublePlant",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "biomesoplenty:flower_0": {
+   "class": "biomesoplenty.common.block.BlockBOPFlower",
+   "hazardByMeta": {
+    "2": "trap",
+    "15": "fire"
+   },
+   "walkThrough": [
+    0,
+    1,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14
+   ],
+   "rules": [
+    "reviewed biomesoplenty.common.block.BlockBOPFlower",
+    "plant"
+   ]
+  },
+  "biomesoplenty:flower_1": {
+   "class": "biomesoplenty.common.block.BlockBOPFlower",
+   "walkThrough": "all",
+   "rules": [
+    "reviewed biomesoplenty.common.block.BlockBOPFlower",
+    "plant"
+   ]
+  },
+  "biomesoplenty:honey": {
+   "class": "biomesoplenty.common.fluids.blocks.BlockHoneyFluid",
+   "liquid": true,
+   "hazard": "trap",
+   "rules": [
+    "fluid-class",
+    "hazard-contact biomesoplenty.common.fluids.blocks.BlockHoneyFluid (addPotionEffect)"
+   ]
+  },
+  "biomesoplenty:hot_spring_water": {
+   "class": "biomesoplenty.common.fluids.blocks.BlockHotSpringWaterFluid",
+   "liquid": true,
+   "hazard": "trap",
+   "rules": [
+    "fluid-class",
+    "hazard-contact biomesoplenty.common.fluids.blocks.BlockHotSpringWaterFluid (addPotionEffect)"
+   ]
+  },
+  "biomesoplenty:ivy": {
+   "class": "biomesoplenty.common.block.BlockBOPVine",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "biomesoplenty:mushroom": {
+   "class": "biomesoplenty.common.block.BlockBOPMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "biomesoplenty:plant_0": {
+   "class": "biomesoplenty.common.block.BlockBOPPlant",
+   "hazardByMeta": {
+    "4": "trap"
+   },
+   "walkThrough": [
+    0,
+    1,
+    2,
+    3,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "rules": [
+    "reviewed biomesoplenty.common.block.BlockBOPPlant",
+    "plant"
+   ]
+  },
+  "biomesoplenty:plant_1": {
+   "class": "biomesoplenty.common.block.BlockBOPPlant",
+   "hazardByMeta": {
+    "2": "trap",
+    "6": "trap"
+   },
+   "walkThrough": [
+    0,
+    1,
+    3,
+    4,
+    5,
+    7,
+    8,
+    9,
+    10,
+    11
+   ],
+   "rules": [
+    "reviewed biomesoplenty.common.block.BlockBOPPlant",
+    "plant"
+   ]
+  },
+  "biomesoplenty:poison": {
+   "class": "biomesoplenty.common.fluids.blocks.BlockPoisonFluid",
+   "liquid": true,
+   "hazard": "trap",
+   "rules": [
+    "fluid-class",
+    "hazard-contact biomesoplenty.common.fluids.blocks.BlockPoisonFluid (addPotionEffect)"
+   ]
+  },
+  "biomesoplenty:sand": {
+   "class": "biomesoplenty.common.fluids.blocks.BlockQuicksandFluid",
+   "liquid": true,
+   "hazard": "trap",
+   "rules": [
+    "fluid-class",
+    "hazard-contact biomesoplenty.common.fluids.blocks.BlockQuicksandFluid (setInWeb)"
+   ]
+  },
+  "biomesoplenty:sapling_0": {
+   "class": "biomesoplenty.common.block.BlockBOPSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "biomesoplenty:sapling_1": {
+   "class": "biomesoplenty.common.block.BlockBOPSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "biomesoplenty:sapling_2": {
+   "class": "biomesoplenty.common.block.BlockBOPSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "biomesoplenty:willow_vine": {
+   "class": "biomesoplenty.common.block.BlockBOPVine",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "charm:rune_portal": {
+   "class": "svenhjol.charm.world.block.BlockRunePortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockEndPortal"
+   ]
+  },
+  "contenttweaker:ambrosium_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:ardicite": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.blocks.BlockContent",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "contenttweaker:bonfire": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.blocks.BlockContent",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "contenttweaker:brass_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:bronze_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:coade_stone_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:coba_star": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.blocks.BlockContent",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "contenttweaker:concentrated_bioflow": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.fluids.BlockFluidContent",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "contenttweaker:copper_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:dimensional_vortex": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.blocks.BlockContent",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "contenttweaker:dread_cold": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.fluids.BlockFluidContent",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "contenttweaker:electrum_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:ender_slag": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.fluids.BlockFluidContent",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "contenttweaker:fiery_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:fire_block": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.blocks.BlockContent",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "contenttweaker:gravitite_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:ironwood_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:knightmetal_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:lifeblood": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.fluids.BlockFluidContent",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "contenttweaker:methanol": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.fluids.BlockFluidContent",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "contenttweaker:mythril_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:onyx_alloy_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:residual_mythril": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.fluids.BlockFluidContent",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "contenttweaker:soul_bonfire": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.blocks.BlockContent",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "contenttweaker:soulforged_steel_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:steeleaf_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:tannin": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.fluids.BlockFluidContent",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "contenttweaker:tin_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:unstable_spiritfire": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.fluids.BlockFluidContent",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "contenttweaker:viridium_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "contenttweaker:void_block": {
+   "class": "com.teamacronymcoders.contenttweaker.modules.vanilla.blocks.BlockContent",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "contenttweaker:zinc_molten": {
+   "class": "com.teamacronymcoders.base.materialsystem.blocks.BlockMaterialFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "cyclicmagic:biomass": {
+   "class": "com.lothrazar.cyclicmagic.liquid.biomass.BlockFluidBiomass",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "defiledlands:blastem": {
+   "class": "lykrast.defiledlands.common.block.BlockBlastem",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact lykrast.defiledlands.common.block.BlockBlastem (createExplosion)"
+   ]
+  },
+  "defiledlands:healing_pad": {
+   "class": "lykrast.defiledlands.common.block.BlockHealingPad",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact lykrast.defiledlands.common.block.BlockHealingPad (addPotionEffect)"
+   ]
+  },
+  "defiledlands:hephaestite_block": {
+   "class": "lykrast.defiledlands.common.block.BlockHephaestite",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact lykrast.defiledlands.common.block.BlockHephaestite (attackEntityFrom, setFire)"
+   ]
+  },
+  "defiledlands:hephaestite_ore": {
+   "class": "lykrast.defiledlands.common.block.BlockHephaestiteOre",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact lykrast.defiledlands.common.block.BlockHephaestiteOre (attackEntityFrom, setFire)"
+   ]
+  },
+  "defiledlands:scuronotte": {
+   "class": "lykrast.defiledlands.common.block.BlockScuronotte",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "defiledlands:tenebra_sapling": {
+   "class": "lykrast.defiledlands.common.block.BlockSaplingTenebra",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "defiledlands:vilespine": {
+   "class": "lykrast.defiledlands.common.block.BlockVilespine",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact lykrast.defiledlands.common.block.BlockVilespine (attackEntityFrom)"
+   ]
+  },
+  "dimstack:dim_pipe": {
+   "class": "cd4017be.lib.block.AdvancedBlock",
+   "hazard": "portal",
+   "rules": [
+    "hazard-material portal"
+   ]
+  },
+  "dimstack:portal": {
+   "class": "cd4017be.dimstack.block.Portal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-material portal"
+   ]
+  },
+  "dungeontactics:alchemical_cauldron": {
+   "class": "pegbeard.dungeontactics.blocks.DTCauldron",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTCauldron (setFire)"
+   ]
+  },
+  "dungeontactics:caltrops": {
+   "class": "pegbeard.dungeontactics.blocks.DTCaltrops",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTCaltrops (addPotionEffect, attackEntityFrom)"
+   ]
+  },
+  "dungeontactics:caltrops_poison": {
+   "class": "pegbeard.dungeontactics.blocks.DTCaltrops",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTCaltrops (addPotionEffect, attackEntityFrom)"
+   ]
+  },
+  "dungeontactics:flower_ailment": {
+   "class": "pegbeard.dungeontactics.blocks.DTFlower",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFlower (addPotionEffect, attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:flower_bark": {
+   "class": "pegbeard.dungeontactics.blocks.DTFlower",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFlower (addPotionEffect, attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:flower_bramble": {
+   "class": "pegbeard.dungeontactics.blocks.DTFlower",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFlower (addPotionEffect, attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:flower_cinder": {
+   "class": "pegbeard.dungeontactics.blocks.DTFlower",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFlower (addPotionEffect, attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:flower_fade": {
+   "class": "pegbeard.dungeontactics.blocks.DTFlower",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFlower (addPotionEffect, attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:flower_feather": {
+   "class": "pegbeard.dungeontactics.blocks.DTFlower",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFlower (addPotionEffect, attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:flower_sanguine": {
+   "class": "pegbeard.dungeontactics.blocks.DTFlower",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFlower (addPotionEffect, attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:flower_tangle": {
+   "class": "pegbeard.dungeontactics.blocks.DTFlower",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFlower (addPotionEffect, attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:flower_xp": {
+   "class": "pegbeard.dungeontactics.blocks.DTFlower",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFlower (addPotionEffect, attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:mushroom_blast": {
+   "class": "pegbeard.dungeontactics.blocks.DTMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dungeontactics:mushroom_coal": {
+   "class": "pegbeard.dungeontactics.blocks.DTMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dungeontactics:mushroom_gold": {
+   "class": "pegbeard.dungeontactics.blocks.DTMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dungeontactics:mushroom_iron": {
+   "class": "pegbeard.dungeontactics.blocks.DTMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dungeontactics:mushroom_mithril": {
+   "class": "pegbeard.dungeontactics.blocks.DTMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dungeontactics:mushroom_silver": {
+   "class": "pegbeard.dungeontactics.blocks.DTMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dungeontactics:mushroom_steel": {
+   "class": "pegbeard.dungeontactics.blocks.DTMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dungeontactics:powered_bars": {
+   "class": "pegbeard.dungeontactics.blocks.DTFence",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTFence (attackEntityFrom, setFire)"
+   ]
+  },
+  "dungeontactics:trap_ailment": {
+   "class": "pegbeard.dungeontactics.blocks.DTTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTTrap (addPotionEffect, attackEntityFrom, newExplosion, setFire)"
+   ]
+  },
+  "dungeontactics:trap_ambush": {
+   "class": "pegbeard.dungeontactics.blocks.DTTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTTrap (addPotionEffect, attackEntityFrom, newExplosion, setFire)"
+   ]
+  },
+  "dungeontactics:trap_boom": {
+   "class": "pegbeard.dungeontactics.blocks.DTTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTTrap (addPotionEffect, attackEntityFrom, newExplosion, setFire)"
+   ]
+  },
+  "dungeontactics:trap_clamp": {
+   "class": "pegbeard.dungeontactics.blocks.DTTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTTrap (addPotionEffect, attackEntityFrom, newExplosion, setFire)"
+   ]
+  },
+  "dungeontactics:trap_fire": {
+   "class": "pegbeard.dungeontactics.blocks.DTTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTTrap (addPotionEffect, attackEntityFrom, newExplosion, setFire)"
+   ]
+  },
+  "dungeontactics:trap_foul": {
+   "class": "pegbeard.dungeontactics.blocks.DTTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTTrap (addPotionEffect, attackEntityFrom, newExplosion, setFire)"
+   ]
+  },
+  "dungeontactics:trap_piston": {
+   "class": "pegbeard.dungeontactics.blocks.DTTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTTrap (addPotionEffect, attackEntityFrom, newExplosion, setFire)"
+   ]
+  },
+  "dungeontactics:trap_port": {
+   "class": "pegbeard.dungeontactics.blocks.DTTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTTrap (addPotionEffect, attackEntityFrom, newExplosion, setFire)"
+   ]
+  },
+  "dungeontactics:trap_spectral": {
+   "class": "pegbeard.dungeontactics.blocks.DTTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact pegbeard.dungeontactics.blocks.DTTrap (addPotionEffect, attackEntityFrom, newExplosion, setFire)"
+   ]
+  },
+  "dungeontactics:wither_web": {
+   "class": "pegbeard.dungeontactics.blocks.DTWeb",
+   "hazard": "web",
+   "rules": [
+    "hazard-material web"
+   ]
+  },
+  "dynamictrees:cactusbranch": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockBranchCactus",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictrees.blocks.BlockBranchCactus (attackEntityFrom)"
+   ]
+  },
+  "dynamictrees:leaves0": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictrees:leaves1": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves_flowering": {
+   "class": "dynamictreesbop.blocks.BlockDynamicLeavesFlowering",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves_flowering_peach": {
+   "class": "dynamictreesbop.blocks.BlockDynamicLeavesFlowering",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves_palm": {
+   "class": "dynamictreesbop.blocks.BlockDynamicLeavesPalm",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves0": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves1": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves2": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves3": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves4": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves5": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves6": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesbop:leaves7": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesdefiledlands:leaves0": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesphc:fruitalmond": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitapricot": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitavocado": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitbanana": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitbreadfruit": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitcashew": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitcherry": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitchestnut": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitcoconut": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruitPalm",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitdate": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruitPalm",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitdragonfruit": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitdurian": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitfig": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitgooseberry": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitgrapefruit": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitguava": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruithazelnut": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitjackfruit": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitlemon": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitlime": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitlychee": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitmango": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitnutmeg": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitolive": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitorange": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitpapaya": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruitPalm",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitpawpaw": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitpeach": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitpear": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitpecan": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitpeppercorn": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitpersimmon": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitpistachio": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitplum": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitpomegranate": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitrambutan": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitsoursop": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitspiderweb": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitstarfruit": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruittamarind": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitvanillabean": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:fruitwalnut": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit (setInWeb)"
+   ]
+  },
+  "dynamictreesphc:leaves_dragonfruit": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm",
+   "shapes": "dynamicLeaves",
+   "hazard": "trap",
+   "rules": [
+    "dynamic-leaves",
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm (attackEntityFrom)"
+   ]
+  },
+  "dynamictreesphc:leaves_palm": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm",
+   "shapes": "dynamicLeaves",
+   "hazard": "trap",
+   "rules": [
+    "dynamic-leaves",
+    "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm (attackEntityFrom)"
+   ]
+  },
+  "dynamictreesphc:leaves0": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesphc:passionfruit_vine": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockVinePassionfruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dynamictreesphc:passionfruit_vine_age0": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockVinePassionfruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dynamictreesphc:passionfruit_vine_age1": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockVinePassionfruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dynamictreesphc:passionfruit_vine_age2": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockVinePassionfruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dynamictreesphc:passionfruit_vine_age3": {
+   "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockVinePassionfruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "dynamictreesquark:leaves0": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreestheaether:leaves_crystal": {
+   "class": "maxhyper.dynamictreestheaether.blocks.BlockDynamicLeavesCrystal",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreestheaether:leaves0": {
+   "class": "maxhyper.dynamictreestheaether.blocks.BlockDynamicLeavesAether",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesttf:leaves_darkwood": {
+   "class": "maxhyper.dynamictreesttf.trees.TreeDarkwood$1",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesttf:leaves_of_transformation": {
+   "class": "maxhyper.dynamictreesttf.trees.TreeMagicTransformation$1",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesttf:leaves0": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesttf:leaves1": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "dynamictreesttf:leaves2": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "endreborn:block_end_forge": {
+   "class": "endreborn.mod.blocks.BlockEndForge",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact endreborn.mod.blocks.BlockEndForge (attackEntityFrom)"
+   ]
+  },
+  "endreborn:block_end_magma": {
+   "class": "endreborn.mod.blocks.BlockEndMagma",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact endreborn.mod.blocks.BlockEndMagma (attackEntityFrom)"
+   ]
+  },
+  "endreborn:broken_ender_flower": {
+   "class": "endreborn.mod.blocks.CutoutBlock",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "endreborn:crop_dragonite": {
+   "class": "endreborn.mod.blocks.DragonBush",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "endreborn:crop_ender_flower": {
+   "class": "endreborn.mod.blocks.EnderCropBase",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "endreborn:end_fire": {
+   "class": "endreborn.mod.blocks.BlockColdFire",
+   "hazard": "fire",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockFire"
+   ]
+  },
+  "extraalchemy:encasing_ice": {
+   "class": "zabi.minecraft.extraalchemy.blocks.BlockEncasingIce",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact zabi.minecraft.extraalchemy.blocks.BlockEncasingIce (setInWeb)"
+   ]
+  },
+  "foundry:bronze": {
+   "class": "exter.foundry.block.BlockLiquidMetal",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "foundry:copper": {
+   "class": "exter.foundry.block.BlockLiquidMetal",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "foundry:gold": {
+   "class": "exter.foundry.block.BlockLiquidMetal",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "foundry:iron": {
+   "class": "exter.foundry.block.BlockLiquidMetal",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "foundry:silver": {
+   "class": "exter.foundry.block.BlockLiquidMetal",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "foundry:steel": {
+   "class": "exter.foundry.block.BlockLiquidMetal",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "foundry:tin": {
+   "class": "exter.foundry.block.BlockLiquidMetal",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "futuremc:campfire": {
+   "class": "thedarkcolour.futuremc.block.villagepillage.CampfireBlock",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact thedarkcolour.futuremc.block.villagepillage.CampfireBlock (attackEntityFrom)"
+   ]
+  },
+  "futuremc:cornflower": {
+   "class": "thedarkcolour.futuremc.block.villagepillage.CornflowerBlock",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "futuremc:lily_of_the_valley": {
+   "class": "thedarkcolour.futuremc.block.villagepillage.LilyOfTheValleyBlock",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "futuremc:wither_rose": {
+   "class": "thedarkcolour.futuremc.block.villagepillage.WitherRoseBlock",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact thedarkcolour.futuremc.block.villagepillage.WitherRoseBlock (addPotionEffect)"
+   ]
+  },
+  "growthcraft_apples:apple_crop": {
+   "class": "growthcraft.apples.common.block.BlockApple",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "growthcraft_apples:apple_sapling": {
+   "class": "growthcraft.apples.common.block.BlockAppleSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "growthcraft_apples:fluid_applecider_apple_cider_ethereal": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_apples:fluid_applecider_apple_cider_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_apples:fluid_applecider_apple_cider_fermented": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_apples:fluid_applecider_apple_cider_intoxicated": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_apples:fluid_applecider_apple_cider_poisoned": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_apples:fluid_applecider_apple_cider_potent": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_apples:fluid_applecider_apple_cider_potentextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_apples:fluid_applecider_apple_juice": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bamboo:bamboo_shoot": {
+   "class": "growthcraft.bamboo.common.block.BlockBambooShoot",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "growthcraft_bees:fluid_honey": {
+   "class": "growthcraft.core.shared.block.GrowthcraftBlockFluid",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bees:fluid_mead_mead_ethereal": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bees:fluid_mead_mead_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bees:fluid_mead_mead_fermented": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bees:fluid_mead_mead_hyperextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bees:fluid_mead_mead_intoxicated": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bees:fluid_mead_mead_poisoned": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bees:fluid_mead_mead_potent": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bees:fluid_mead_mead_potentextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_bees:fluid_mead_mead_young": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_cellar:brew_kettle": {
+   "class": "growthcraft.cellar.common.block.BlockBrewKettle",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact growthcraft.cellar.common.block.BlockBrewKettle (setFire)"
+   ]
+  },
+  "growthcraft_cellar:cork_sapling": {
+   "class": "growthcraft.cellar.common.block.BlockCorkSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_green_ambrosia": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_green_juice": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_green_portwine": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_green_wine": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_green_wine_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_green_wine_intoxicated": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_green_wine_poisoned": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_green_wine_potent": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_purple_ambrosia": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_purple_juice": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_purple_portwine": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_purple_wine": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_purple_wine_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_purple_wine_intoxicated": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_purple_wine_poisoned": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_purple_wine_potent": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_red_ambrosia": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_red_juice": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_red_portwine": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_red_wine": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_red_wine_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_red_wine_intoxicated": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_red_wine_poisoned": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_grapes:fluid_grapebooze_red_wine_potent": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_hopalebooze_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_hopalebooze_hyperextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_hopalebooze_intoxicated": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_hopalebooze_lager": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_hopalebooze_normal": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_hopalebooze_poisoned": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_hopalebooze_potent": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_hopalebooze_unhopped": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_hopalebooze_young": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_lagerbooze_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_lagerbooze_hyperextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_lagerbooze_intoxicated": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_lagerbooze_magical": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_lagerbooze_normal": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_lagerbooze_poisoned": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_lagerbooze_potent": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_lagerbooze_potentextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_hops:fluid_lagerbooze_young": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_butter_milk": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidButterMilk",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_appenzeller": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_asiago": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_casu_marzu": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_cheddar": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_emmentaler": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_gorgonzola": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_gouda": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_monterey": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_parmesan": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_provolone": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cheese_ricotta": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCheese",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_condensed_milk": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCondensedMilk",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_cream": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidCream",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_kumisbooze_kumis_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_kumisbooze_kumis_fermented": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_kumisbooze_kumis_hyperextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_kumisbooze_kumis_poisoned": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_kumisbooze_kumis_potent": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_kumisbooze_kumis_potent_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_kumisbooze_kumis_potent_hyperextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_milk": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidMilk",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_milk_curds": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidMilkCurds",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_rennet": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidRennet",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_skim_milk": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidSkimMilk",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:fluid_whey": {
+   "class": "growthcraft.milk.common.block.fluids.BlockFluidWhey",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_milk:thistle": {
+   "class": "growthcraft.milk.common.block.BlockThistle",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_fermented": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_hyperextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_magical": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_mash": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_poisoned": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_potent": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_potent_extended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_potent_hyperextended": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:fluid_sakebooze_sake_water": {
+   "class": "growthcraft.cellar.shared.block.BlockFluidBooze",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "growthcraft_rice:ricecrop": {
+   "class": "growthcraft.rice.common.block.BlockRiceCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:almond_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:apple_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:apricot_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:aridgarden": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockBaseGarden",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:avocado_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:banana_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:breadfruit_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:cashew_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:cherry_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:chestnut_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:cinnamon_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:coconut_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:date_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:dragonfruit_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:durian_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:fig_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:frostgarden": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockBaseGarden",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:gooseberry_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:grapefruit_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:guava_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:hazelnut_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:jackfruit_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:lemon_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:lime_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:lychee_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:mango_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:maple_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:nutmeg_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:olive_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:orange_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamagavecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamalmond": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamamaranthcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamapple": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamapricot": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamarrowrootcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamartichokecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamasparaguscrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamavocado": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pambambooshootcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pambanana": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pambarleycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pambeancrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pambeetcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pambellpeppercrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamblackberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamblueberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pambreadfruit": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pambroccolicrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pambrusselsproutcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcabbagecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcactusfruitcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcandleberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcantaloupecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcashew": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcassavacrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcauliflowercrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcelerycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcherry": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamchestnut": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamchickpeacrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamchilipeppercrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcoconut": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcoffeebeancrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcorncrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcottoncrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcranberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcucumbercrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamcurryleafcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamdate": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamdragonfruit": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamdurian": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pameggplantcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamelderberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamfig": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamflaxcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamgarliccrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamgigapicklecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamgingercrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamgooseberry": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamgrapecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamgrapefruit": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamgreengrapecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamguava": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamhazelnut": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamhuckleberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamjackfruit": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamjicamacrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamjuniperberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamjutecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamkalecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamkenafcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamkiwicrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamkohlrabicrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamleekcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamlemon": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamlentilcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamlettucecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamlime": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamlychee": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pammango": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pammilletcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pammulberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pammustardseedscrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamnutmeg": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamoatscrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamokracrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamolive": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamonioncrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamorange": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampapaya": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamparsnipcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampassionfruit": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampawpaw": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampeach": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampeanutcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampear": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampeascrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampecan": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampeppercorn": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampersimmon": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampineapplecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampistachio": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamplum": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pampomegranate": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamquinoacrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamradishcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamrambutan": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamraspberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamrhubarbcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamricecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamrutabagacrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamryecrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamscallioncrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamseaweedcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamsesameseedscrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamsisalcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamsoursop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamsoybeancrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamspiceleafcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamspiderweb": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamspinachcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamstarfruit": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamstrawberrycrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamsweetpotatocrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamtamarind": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamtarocrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamtealeafcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamtomatillocrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamtomatocrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamturnipcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamvanillabean": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamwalnut": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamFruit",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamwaterchestnutcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamwhitemushroomcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamwintersquashcrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pamzucchinicrop": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamCrop",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:papaya_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:paperbark_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:passionfruit_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pawpaw_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:peach_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pear_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pecan_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:peppercorn_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:persimmon_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pistachio_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:plum_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:pomegranate_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:rambutan_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:shadedgarden": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockBaseGarden",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:soggygarden": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockBaseGarden",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:soursop_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:spiderweb_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:starfruit_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:tamarind_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:tropicalgarden": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockBaseGarden",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:vanillabean_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:walnut_sapling": {
+   "class": "com.pam.harvestcraft.blocks.growables.BlockPamSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "harvestcraft:windygarden": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockBaseGarden",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "iceandfire:dragon_ice_spikes": {
+   "class": "com.github.alexthe666.iceandfire.block.BlockIceSpikes",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.github.alexthe666.iceandfire.block.BlockIceSpikes (attackEntityFrom)"
+   ]
+  },
+  "iceandfire:dread_portal": {
+   "class": "com.github.alexthe666.iceandfire.block.BlockDreadPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-material portal"
+   ]
+  },
+  "iceandfire:fire_lily": {
+   "class": "com.github.alexthe666.iceandfire.block.BlockElementalFlower",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "iceandfire:frost_lily": {
+   "class": "com.github.alexthe666.iceandfire.block.BlockElementalFlower",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "iceandfire:myrmex_desert_biolight": {
+   "class": "com.github.alexthe666.iceandfire.block.BlockMyrmexBiolight",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "iceandfire:myrmex_jungle_biolight": {
+   "class": "com.github.alexthe666.iceandfire.block.BlockMyrmexBiolight",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "minetraps:barbed_wire": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockBarbedWire",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockBarbedWire (attackEntityFrom, setInWeb)"
+   ]
+  },
+  "minetraps:barbed_wire_fence": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockBarbedWireFence",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockBarbedWireFence (attackEntityFrom, setInWeb)"
+   ]
+  },
+  "minetraps:bear_trap": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockBearTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockBearTrap (addPotionEffect, attackEntityFrom)"
+   ]
+  },
+  "minetraps:explosive_mine": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockExplosiveMine",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockExplosiveMine (attackEntityFrom, createExplosion)"
+   ]
+  },
+  "minetraps:nail_trap": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockNailTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockNailTrap (attackEntityFrom)"
+   ]
+  },
+  "minetraps:quicksand": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockQuicksand",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockQuicksand (setInWeb)"
+   ]
+  },
+  "minetraps:razor_wire": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockRazorWire",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockRazorWire (attackEntityFrom, setInWeb)"
+   ]
+  },
+  "minetraps:spikes": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockSpikes",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockSpikes (attackEntityFrom)"
+   ]
+  },
+  "minetraps:spikes_on": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockSpikes",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockSpikes (attackEntityFrom)"
+   ]
+  },
+  "minetraps:spikes_toxic": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockSpikesToxic",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockSpikesToxic (addPotionEffect, attackEntityFrom)"
+   ]
+  },
+  "minetraps:spikes_toxic_on": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockSpikesToxic",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockSpikesToxic (addPotionEffect, attackEntityFrom)"
+   ]
+  },
+  "minetraps:toxic_mine": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockToxicMine",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockToxicMine (attackEntityFrom, createExplosion)"
+   ]
+  },
+  "minetraps:toxic_nail_trap": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockToxicNailTrap",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockToxicNailTrap (addPotionEffect, attackEntityFrom)"
+   ]
+  },
+  "minetraps:toxin": {
+   "class": "xxrexraptorxx.minetraps.fluids.BlockToxin",
+   "liquid": true,
+   "hazard": "trap",
+   "rules": [
+    "fluid-class",
+    "hazard-contact xxrexraptorxx.minetraps.fluids.BlockToxin (addPotionEffect)"
+   ]
+  },
+  "minetraps:wall_spikes": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockWallSpikes",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockWallSpikes (attackEntityFrom)"
+   ]
+  },
+  "minetraps:wall_spikes_on": {
+   "class": "xxrexraptorxx.minetraps.blocks.BlockWallSpikes",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact xxrexraptorxx.minetraps.blocks.BlockWallSpikes (attackEntityFrom)"
+   ]
+  },
+  "mod_lavacow:bloodtooth_shroom": {
+   "class": "com.Fishmod.mod_LavaCow.blocks.BlockGlowShroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "mod_lavacow:cordy_shroom": {
+   "class": "com.Fishmod.mod_LavaCow.blocks.BlockGlowShroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "mod_lavacow:glowshroom": {
+   "class": "com.Fishmod.mod_LavaCow.blocks.BlockGlowShroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "mod_lavacow:veil_shroom": {
+   "class": "com.Fishmod.mod_LavaCow.blocks.BlockGlowShroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "mowziesmobs:campfire": {
+   "class": "com.bobmowzie.mowziesmobs.server.block.BlockCampfire",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.bobmowzie.mowziesmobs.server.block.BlockCampfire (attackEntityFrom)"
+   ]
+  },
+  "netherex:blue_fire": {
+   "class": "logictechcorp.netherex.block.BlockBlueFire",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "netherex:brown_elder_mushroom": {
+   "class": "logictechcorp.netherex.block.BlockElderMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "netherex:ichor": {
+   "class": "logictechcorp.libraryex.block.BlockModInfiniteFluid",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "netherex:nether_portal": {
+   "class": "logictechcorp.netherex.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-material portal"
+   ]
+  },
+  "netherex:red_elder_mushroom": {
+   "class": "logictechcorp.netherex.block.BlockElderMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "netherex:soul_glass": {
+   "class": "logictechcorp.netherex.block.BlockSoulGlass",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact logictechcorp.netherex.block.BlockSoulGlass (addPotionEffect)"
+   ]
+  },
+  "netherex:thornstalk": {
+   "class": "logictechcorp.netherex.block.BlockThornstalk",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact logictechcorp.netherex.block.BlockThornstalk (attackEntityFrom)"
+   ]
+  },
+  "nyx:gleaning_meteor_rock": {
+   "class": "de.ellpeck.nyx.blocks.MeteorRock",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact de.ellpeck.nyx.blocks.MeteorRock (attackEntityFrom)"
+   ]
+  },
+  "nyx:lunar_water": {
+   "class": "de.ellpeck.nyx.blocks.LunarWater",
+   "liquid": true,
+   "hazard": "trap",
+   "rules": [
+    "fluid-class",
+    "hazard-contact de.ellpeck.nyx.blocks.LunarWater (addPotionEffect)"
+   ]
+  },
+  "nyx:lunar_water_cauldron": {
+   "class": "de.ellpeck.nyx.blocks.LunarWaterCauldron",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact de.ellpeck.nyx.blocks.LunarWaterCauldron (addPotionEffect)"
+   ]
+  },
+  "nyx:meteor_rock": {
+   "class": "de.ellpeck.nyx.blocks.MeteorRock",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact de.ellpeck.nyx.blocks.MeteorRock (attackEntityFrom)"
+   ]
+  },
+  "pyrotech_compat:anvil_andesite": {
+   "class": "trinsdar.pyrotech_compat.block.BlockAnvilStones",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.basic.block.spi.BlockAnvilBase (attackEntityFrom)"
+   ]
+  },
+  "pyrotech_compat:anvil_diorite": {
+   "class": "trinsdar.pyrotech_compat.block.BlockAnvilStones",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.basic.block.spi.BlockAnvilBase (attackEntityFrom)"
+   ]
+  },
+  "pyrotech_compat:rock_igneous": {
+   "class": "trinsdar.pyrotech_compat.block.rocks.BlockRockIgneous",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile trinsdar.pyrotech_compat.block.rocks.BlockRockBase"
+   ]
+  },
+  "pyrotech_compat:rock_igneous_sand": {
+   "class": "trinsdar.pyrotech_compat.block.rocks.BlockRockIgneousSand",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile trinsdar.pyrotech_compat.block.rocks.BlockRockBase"
+   ]
+  },
+  "pyrotech_compat:rock_metamorphic": {
+   "class": "trinsdar.pyrotech_compat.block.rocks.BlockRockMetamorphic",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile trinsdar.pyrotech_compat.block.rocks.BlockRockBase"
+   ]
+  },
+  "pyrotech_compat:rock_metamorphic_sand": {
+   "class": "trinsdar.pyrotech_compat.block.rocks.BlockRockMetamorphicSand",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile trinsdar.pyrotech_compat.block.rocks.BlockRockBase"
+   ]
+  },
+  "pyrotech_compat:rock_netherrack": {
+   "class": "trinsdar.pyrotech_compat.block.rocks.BlockRockBase",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile trinsdar.pyrotech_compat.block.rocks.BlockRockBase"
+   ]
+  },
+  "pyrotech_compat:rock_sedimentary": {
+   "class": "trinsdar.pyrotech_compat.block.rocks.BlockRockSedimentary",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile trinsdar.pyrotech_compat.block.rocks.BlockRockBase"
+   ]
+  },
+  "pyrotech_compat:rock_sedimentary_sand": {
+   "class": "trinsdar.pyrotech_compat.block.rocks.BlockRockSedimentarySand",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile trinsdar.pyrotech_compat.block.rocks.BlockRockBase"
+   ]
+  },
+  "pyrotech:anvil_granite": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.basic.block.BlockAnvilGranite",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.basic.block.spi.BlockAnvilBase (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:anvil_iron_plated": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.basic.block.BlockAnvilIronPlated",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.basic.block.spi.BlockAnvilBase (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:bloom": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockBloom",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockBloom (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:bloomery": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockBloomery",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockBloomery (attackEntityFrom, setFire)"
+   ]
+  },
+  "pyrotech:brick_sawmill": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.machine.block.BlockBrickSawmill",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.machine.block.spi.BlockSawmillBase (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:campfire": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.basic.block.BlockCampfire",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.basic.block.BlockCampfire (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:fluid.coal_tar": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.refractory.block.fluid.BlockFluidCoalTar",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "pyrotech:fluid.liquid_clay": {
+   "class": "com.codetaylor.mc.pyrotech.modules.core.block.fluid.BlockFluidClay",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "pyrotech:fluid.wood_tar": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.refractory.block.fluid.BlockFluidWoodTar",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "pyrotech:generated_pile_slag_copper": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:generated_pile_slag_gold": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:generated_pile_slag_iron": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:generated_pile_slag_mithril": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:generated_pile_slag_silver": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:generated_pile_slag_tin": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:pile_slag": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockPileSlag (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:rock": {
+   "class": "com.codetaylor.mc.pyrotech.modules.core.block.BlockRock",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile com.codetaylor.mc.pyrotech.modules.core.block.BlockRock"
+   ]
+  },
+  "pyrotech:rock_grass": {
+   "class": "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockGrass",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile com.codetaylor.mc.pyrotech.modules.core.block.BlockRockGrass"
+   ]
+  },
+  "pyrotech:rock_netherrack": {
+   "class": "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockNetherrack",
+   "walkThrough": "all",
+   "rules": [
+    "rock-pile com.codetaylor.mc.pyrotech.modules.core.block.BlockRockNetherrack"
+   ]
+  },
+  "pyrotech:stone_sawmill": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.machine.block.BlockStoneSawmill",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.machine.block.spi.BlockSawmillBase (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:torch_fiber": {
+   "class": "com.codetaylor.mc.pyrotech.modules.ignition.block.BlockTorchFiber",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.ignition.block.spi.BlockTorchBase (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:torch_stone": {
+   "class": "com.codetaylor.mc.pyrotech.modules.ignition.block.BlockTorchStone",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.ignition.block.spi.BlockTorchBase (attackEntityFrom)"
+   ]
+  },
+  "pyrotech:wither_forge": {
+   "class": "com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockWitherForge",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockBloomery (attackEntityFrom, setFire)"
+   ]
+  },
+  "quark:glowshroom": {
+   "class": "vazkii.quark.world.block.BlockGlowshroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "quark:roots": {
+   "class": "vazkii.quark.world.block.BlockRoots",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "quark:roots_black_flower": {
+   "class": "vazkii.quark.world.block.BlockRootsFlower",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "quark:roots_blue_flower": {
+   "class": "vazkii.quark.world.block.BlockRootsFlower",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "quark:roots_white_flower": {
+   "class": "vazkii.quark.world.block.BlockRootsFlower",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "quark:variant_sapling": {
+   "class": "vazkii.quark.world.block.BlockVariantSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "randomportals:black_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:black_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:blue_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:blue_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:brown_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:brown_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:cyan_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:cyan_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:gray_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:gray_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:green_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:green_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:light_blue_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:light_blue_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:lime_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:lime_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:magenta_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:magenta_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:orange_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:orange_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:pink_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:pink_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:purple_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:red_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:red_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:silver_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:silver_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:upside_down_end_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockUpsideDownEndPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockEndPortal"
+   ]
+  },
+  "randomportals:vertical_end_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockVerticalEndPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockEndPortal"
+   ]
+  },
+  "randomportals:white_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:white_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:yellow_lateral_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockLateralNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomportals:yellow_vertical_nether_portal": {
+   "class": "com.therandomlabs.randomportals.block.BlockNetherPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "randomthings:beansprout": {
+   "class": "lumien.randomthings.block.BlockBeanSprout",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "randomthings:blazingfire": {
+   "class": "lumien.randomthings.block.BlockBlazingFire",
+   "hazard": "fire",
+   "rules": [
+    "hazard-material fire"
+   ]
+  },
+  "randomthings:glowingmushroom": {
+   "class": "lumien.randomthings.block.BlockGlowingMushroom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "randomthings:lotus": {
+   "class": "lumien.randomthings.block.BlockLotus",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "randomthings:pitcherplant": {
+   "class": "lumien.randomthings.block.BlockPitcherPlant",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "randomthings:sakanade": {
+   "class": "lumien.randomthings.block.BlockSakanade",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "randomthings:spectresapling": {
+   "class": "lumien.randomthings.block.spectretree.BlockSpectreSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rats:ratglove_flower": {
+   "class": "com.github.alexthe666.rats.server.blocks.BlockRatgloveFlower",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rats:ratlantis_portal": {
+   "class": "com.github.alexthe666.rats.server.blocks.BlockRatlantisPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-material portal"
+   ]
+  },
+  "rotn_blocks:mushroom_lamp_0": {
+   "class": "net.mcreator.rotnblocks.block.BlockMushroomLamp0$BlockCustom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rotn_blocks:mushroom_lamp_1": {
+   "class": "net.mcreator.rotnblocks.block.BlockMushroomLamp1$BlockCustom",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:ale_wort": {
+   "class": "rustic.common.blocks.fluids.BlockFluidRustic",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "rustic:aloe_vera": {
+   "class": "rustic.common.blocks.crops.Herbs$1",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:apple_juice": {
+   "class": "rustic.common.blocks.fluids.BlockFluidRustic",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "rustic:blood_orchid": {
+   "class": "rustic.common.blocks.crops.Herbs$2",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:chamomile": {
+   "class": "rustic.common.blocks.crops.Herbs$3",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:cloudsbluff": {
+   "class": "rustic.common.blocks.crops.Herbs$4",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:cohosh": {
+   "class": "rustic.common.blocks.crops.Herbs$5",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:core_root": {
+   "class": "rustic.common.blocks.crops.Herbs$6",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:deathstalk_mushroom": {
+   "class": "rustic.common.blocks.crops.Herbs$7",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:ginseng": {
+   "class": "rustic.common.blocks.crops.Herbs$8",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:grape_juice": {
+   "class": "rustic.common.blocks.fluids.BlockFluidRustic",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "rustic:honey": {
+   "class": "rustic.common.blocks.fluids.ModFluids$14",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "rustic:horsetail": {
+   "class": "rustic.common.blocks.crops.Herbs$9",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:ironberry_juice": {
+   "class": "rustic.common.blocks.fluids.BlockFluidRustic",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "rustic:leaves0": {
+   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
+   "shapes": "dynamicLeaves",
+   "rules": [
+    "dynamic-leaves"
+   ]
+  },
+  "rustic:marsh_mallow": {
+   "class": "rustic.common.blocks.crops.Herbs$10",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:mooncap_mushroom": {
+   "class": "rustic.common.blocks.crops.Herbs$11",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:olive_oil": {
+   "class": "rustic.common.blocks.fluids.BlockFluidRustic",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "rustic:sapling": {
+   "class": "rustic.common.blocks.BlockSaplingRustic",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:sapling_apple": {
+   "class": "rustic.common.blocks.crops.BlockSaplingApple",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "rustic:wildberry_juice": {
+   "class": "rustic.common.blocks.fluids.BlockFluidRustic",
+   "liquid": true,
+   "rules": [
+    "fluid-class"
+   ]
+  },
+  "rustic:wind_thistle": {
+   "class": "rustic.common.blocks.crops.Herbs$12",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "simplyhotsprings:hot_spring_water": {
+   "class": "connor135246.simplyhotsprings.common.blocks.BlockHotSpringWater",
+   "liquid": true,
+   "hazard": "trap",
+   "rules": [
+    "fluid-class",
+    "hazard-contact connor135246.simplyhotsprings.common.blocks.BlockHotSpringWater (addPotionEffect)"
+   ]
+  },
+  "stygian:endacid": {
+   "class": "fluke.stygian.block.fluid.ModBlockFluidClassic",
+   "liquid": true,
+   "hazard": "trap",
+   "rules": [
+    "fluid-class",
+    "hazard-contact fluke.stygian.block.fluid.ModBlockFluidClassic (attackEntityFrom)"
+   ]
+  },
+  "stygian:endcactus": {
+   "class": "fluke.stygian.block.BlockEndCactus",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact fluke.stygian.block.BlockEndCactus (attackEntityFrom)"
+   ]
+  },
+  "stygian:endcanopysapling": {
+   "class": "fluke.stygian.block.BlockEndCanopySapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "stygian:endglow": {
+   "class": "fluke.stygian.block.BlockEndGlowPlant",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "stygian:endmagma": {
+   "class": "fluke.stygian.block.BlockEndMagma",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact fluke.stygian.block.BlockEndMagma (attackEntityFrom)"
+   ]
+  },
+  "stygian:endtallgrass": {
+   "class": "fluke.stygian.block.BlockEndTallGrass",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "stygian:endvine": {
+   "class": "fluke.stygian.block.BlockEndVine",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "twilightforest:block_storage": {
+   "class": "twilightforest.block.BlockTFCompressed",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact twilightforest.block.BlockTFCompressed (attackEntityFrom)"
+   ]
+  },
+  "twilightforest:burnt_thorns": {
+   "class": "twilightforest.block.BlockTFBurntThorns",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact twilightforest.block.BlockTFBurntThorns (attackEntityFrom)"
+   ]
+  },
+  "twilightforest:fiery_essence": {
+   "class": "twilightforest.block.BlockTFFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "twilightforest:hedge": {
+   "class": "twilightforest.block.BlockTFHedge",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact twilightforest.block.BlockTFHedge (attackEntityFrom)"
+   ]
+  },
+  "twilightforest:knightmetal_block": {
+   "class": "twilightforest.block.BlockTFKnightmetalBlock",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact twilightforest.block.BlockTFKnightmetalBlock (attackEntityFrom)"
+   ]
+  },
+  "twilightforest:molten_fierymetal": {
+   "class": "twilightforest.block.BlockTFFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "twilightforest:molten_knightmetal": {
+   "class": "twilightforest.block.BlockTFFluid",
+   "liquid": true,
+   "hazard": "lava",
+   "rules": [
+    "fluid-class",
+    "hazard-material lava"
+   ]
+  },
+  "twilightforest:slider": {
+   "class": "twilightforest.block.BlockTFSlider",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact twilightforest.block.BlockTFSlider (attackEntityFrom)"
+   ]
+  },
+  "twilightforest:thorn_rose": {
+   "class": "twilightforest.block.BlockTFThornRose",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "twilightforest:thorns": {
+   "class": "twilightforest.block.BlockTFThorns",
+   "hazard": "trap",
+   "rules": [
+    "hazard-contact twilightforest.block.BlockTFThorns (attackEntityFrom)"
+   ]
+  },
+  "twilightforest:trollber": {
+   "class": "twilightforest.block.BlockTFRipeTorchCluster",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "twilightforest:trollvidr": {
+   "class": "twilightforest.block.BlockTFTrollRoot",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "twilightforest:twilight_portal": {
+   "class": "twilightforest.block.BlockTFPortal",
+   "hazard": "portal",
+   "rules": [
+    "hazard-material portal"
+   ]
+  },
+  "twilightforest:twilight_sapling": {
+   "class": "twilightforest.block.BlockTFSapling",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  },
+  "twilightforest:unripe_trollber": {
+   "class": "twilightforest.block.BlockTFUnripeTorchCluster",
+   "walkThrough": "all",
+   "rules": [
+    "plant"
+   ]
+  }
+ }
+}

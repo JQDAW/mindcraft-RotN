@@ -73,16 +73,21 @@ function rebind(kind, base, id) {
 // registry.blockCollisionShapes by name, so a Block class made after this
 // extension would drop the shapes of names it does not know. Register each
 // modded (or reshaped) block in a copy of that table under its own shape key.
-function registerShapes(registry, blocks) {
-    const table = registry.blockCollisionShapes;
-    if (!table || blocks.length === 0) return;
+export function registerShapes(registry, blocks) {
+    registry.blockCollisionShapes = shapeTableWith(registry.blockCollisionShapes, blocks);
+}
+
+// The copy of a collision-shape table with `blocks` ({ name, shapes }) registered; the table itself
+// when there is nothing to add. Pure, so a caller can build it before changing anything.
+export function shapeTableWith(table, blocks) {
+    if (!table || blocks.length === 0) return table;
     const copy = { shapes: { ...table.shapes }, blocks: { ...table.blocks } };
     for (const b of blocks) {
         const key = `forge:${b.name}`;
         copy.shapes[key] = b.shapes ?? FULL_CUBE;
         copy.blocks[b.name] = key;
     }
-    registry.blockCollisionShapes = copy;
+    return copy;
 }
 
 /**

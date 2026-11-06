@@ -1,0 +1,121 @@
+# javap -c -p -l com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves (isPassable func_176205_b, addCollisionBoxToList func_185477_a)
+# and the first instructions of com.ferreusveritas.dynamictrees.ModBlocks.preInit (it sets passableLeavesModLoaded)
+# from mods/DramaticTrees-1.12.2-0.13.4.jar (modid dynamictrees) in the pinned RotN 3.3.4 server pack, jar SHA-256 b86dae768ccc1182c52e5b9a8756a5906da53dc125d48bfe1c8dc69204a77ffe
+# extracted to a scratch folder outside the repo; nothing was run. Read by test/collision.test.js.
+
+  public boolean func_176205_b(net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos);
+    Code:
+       0: getstatic     #352                // Field passableLeavesModLoaded:Z
+       3: ifeq          15
+       6: aload_0
+       7: aload_1
+       8: aload_2
+       9: invokespecial #354                // Method net/minecraft/block/BlockLeaves.func_176205_b:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/util/math/BlockPos;)Z
+      12: goto          18
+      15: getstatic     #357                // Field com/ferreusveritas/dynamictrees/ModConfigs.isLeavesPassable:Z
+      18: ireturn
+    LineNumberTable:
+      line 228: 0
+    LocalVariableTable:
+      Start  Length  Slot  Name   Signature
+          0      19     0  this   Lcom/ferreusveritas/dynamictrees/blocks/BlockDynamicLeaves;
+          0      19     1 access   Lnet/minecraft/world/IBlockAccess;
+          0      19     2   pos   Lnet/minecraft/util/math/BlockPos;
+
+  public void func_185477_a(net.minecraft.block.state.IBlockState, net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.util.math.AxisAlignedBB, java.util.List<net.minecraft.util.math.AxisAlignedBB>, net.minecraft.entity.Entity, boolean);
+    Code:
+       0: aload         6
+       2: instanceof    #398                // class net/minecraft/entity/item/EntityItem
+       5: ifeq          46
+       8: aload         6
+      10: checkcast     #398                // class net/minecraft/entity/item/EntityItem
+      13: astore        8
+      15: aload         8
+      17: invokevirtual #401                // Method net/minecraft/entity/item/EntityItem.func_92059_d:()Lnet/minecraft/item/ItemStack;
+      20: invokevirtual #407                // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+      23: instanceof    #409                // class com/ferreusveritas/dynamictrees/items/Seed
+      26: ifeq          30
+      29: return
+      30: aload_0
+      31: aload_1
+      32: aload_2
+      33: aload_3
+      34: aload         4
+      36: aload         5
+      38: aload         6
+      40: iload         7
+      42: invokespecial #411                // Method net/minecraft/block/BlockLeaves.func_185477_a:(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/util/math/AxisAlignedBB;Ljava/util/List;Lnet/minecraft/entity/Entity;Z)V
+      45: return
+      46: aload         6
+      48: ifnull        59
+      51: aload         6
+      53: instanceof    #413                // class com/ferreusveritas/dynamictrees/entities/EntityFallingTree
+      56: ifeq          60
+      59: return
+      60: getstatic     #352                // Field passableLeavesModLoaded:Z
+      63: ifne          72
+      66: getstatic     #416                // Field com/ferreusveritas/dynamictrees/ModConfigs.vanillaLeavesCollision:Z
+      69: ifeq          90
+      72: aload_0
+      73: aload_1
+      74: aload_2
+      75: aload_3
+      76: aload         4
+      78: aload         5
+      80: aload         6
+      82: iload         7
+      84: invokespecial #411                // Method net/minecraft/block/BlockLeaves.func_185477_a:(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/util/math/AxisAlignedBB;Ljava/util/List;Lnet/minecraft/entity/Entity;Z)V
+      87: goto          131
+      90: getstatic     #357                // Field com/ferreusveritas/dynamictrees/ModConfigs.isLeavesPassable:Z
+      93: ifne          131
+      96: new           #418                // class net/minecraft/util/math/AxisAlignedBB
+      99: dup
+     100: ldc2_w        #419                // double 0.125d
+     103: dconst_0
+     104: ldc2_w        #419                // double 0.125d
+     107: ldc2_w        #421                // double 0.875d
+     110: ldc2_w        #423                // double 0.5d
+     113: ldc2_w        #421                // double 0.875d
+     116: invokespecial #427                // Method net/minecraft/util/math/AxisAlignedBB."<init>":(DDDDDD)V
+     119: astore        8
+     121: aload_3
+     122: aload         4
+     124: aload         5
+     126: aload         8
+     128: invokestatic  #431                // Method func_185492_a:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/util/math/AxisAlignedBB;Ljava/util/List;Lnet/minecraft/util/math/AxisAlignedBB;)V
+     131: return
+    LineNumberTable:
+      line 257: 0
+      line 258: 8
+      line 259: 15
+      line 260: 29
+      line 262: 30
+      line 263: 45
+      line 266: 46
+      line 267: 59
+      line 269: 60
+      line 270: 72
+      line 271: 90
+      line 272: 96
+      line 273: 121
+      line 275: 131
+    LocalVariableTable:
+      Start  Length  Slot  Name   Signature
+         15      31     8  item   Lnet/minecraft/entity/item/EntityItem;
+        121      10     8  aabb   Lnet/minecraft/util/math/AxisAlignedBB;
+          0     132     0  this   Lcom/ferreusveritas/dynamictrees/blocks/BlockDynamicLeaves;
+          0     132     1 state   Lnet/minecraft/block/state/IBlockState;
+          0     132     2 worldIn   Lnet/minecraft/world/World;
+          0     132     3   pos   Lnet/minecraft/util/math/BlockPos;
+          0     132     4 entityBox   Lnet/minecraft/util/math/AxisAlignedBB;
+          0     132     5 collidingBoxes   Ljava/util/List;
+          0     132     6 entityIn   Lnet/minecraft/entity/Entity;
+          0     132     7 unknown   Z
+
+
+    public static void preInit();
+      Code:
+         0: ldc           #59                 // String passableleaves
+         2: invokestatic  #65                 // Method net/minecraftforge/fml/common/Loader.isModLoaded:(Ljava/lang/String;)Z
+         5: putstatic     #71                 // Field com/ferreusveritas/dynamictrees/blocks/BlockDynamicLeaves.passableLeavesModLoaded:Z
+         8: new           #73                 // class com/ferreusveritas/dynamictrees/blocks/BlockRootyDirt
