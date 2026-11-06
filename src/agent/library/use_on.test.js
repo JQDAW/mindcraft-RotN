@@ -226,8 +226,9 @@ test('collectBlock: a collect that never returns gives the block up at COLLECT_L
     const saved = { ...skills.COLLECT_LIMITS };
     t.after(() => Object.assign(skills.COLLECT_LIMITS, saved));
     Object.assign(skills.COLLECT_LIMITS, { blockMs: 300, totalMs: 1000 });
-    const dirt = { ...block('dirt', at(3)), canHarvest: () => true };
-    const bot = fakeBot({ blocks: [dirt] });
+    // Sand, not dirt: dirt by hand now takes rotn-data #288's pile route; these tests are about the time limits.
+    const sand = { ...block('sand', at(3)), canHarvest: () => true };
+    const bot = fakeBot({ blocks: [sand] });
     // Like mineflayer-collectblock: the collect never ends by itself; cancelTask ends it (a moment later).
     let cancelled = 0;
     let settled = false;
@@ -239,11 +240,11 @@ test('collectBlock: a collect that never returns gives the block up at COLLECT_L
     bot.tool = { equipForBlock: () => Promise.resolve() };
     bot.stopDigging = () => {};
     const t0 = Date.now();
-    assert.equal(await skills.collectBlock(bot, 'dirt', 2), false);
+    assert.equal(await skills.collectBlock(bot, 'sand', 2), false);
     assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
     assert.ok(cancelled >= 1, 'the collect was cancelled');
-    assert.match(bot.output, /Gave up on dirt at 3, 64, 0: time limit of 0\.3 s reached\./);
-    assert.match(bot.output, /No more dirt nearby to collect\.|No dirt nearby to collect\./, 'the given-up block is not tried again');
+    assert.match(bot.output, /Gave up on sand at 3, 64, 0: time limit of 0\.3 s reached\./);
+    assert.match(bot.output, /No more sand nearby to collect\.|No sand nearby to collect\./, 'the given-up block is not tried again');
     assert.equal(settled, true, 'the cancelled collect ended before collectBlock went on (#224 review 2)');
 });
 
@@ -254,12 +255,12 @@ test('collectBlock: a given-up block with a section scan (blocks without a posit
     const saved = { ...skills.COLLECT_LIMITS };
     t.after(() => Object.assign(skills.COLLECT_LIMITS, saved));
     Object.assign(skills.COLLECT_LIMITS, { blockMs: 200, totalMs: 1000 });
-    const dirt = { ...block('dirt', at(3)), canHarvest: () => true };
-    const bot = fakeBot({ blocks: [dirt] });
+    const sand = { ...block('sand', at(3)), canHarvest: () => true };
+    const bot = fakeBot({ blocks: [sand] });
     const find = bot.findBlocks;
     bot.findBlocks = (opts) => {
         const m = opts.matching;
-        if (typeof m === 'function') m({ ...dirt, position: null }); // the section scan
+        if (typeof m === 'function') m({ ...sand, position: null }); // the section scan
         return find(opts);
     };
     let end = null;
@@ -269,8 +270,8 @@ test('collectBlock: a given-up block with a section scan (blocks without a posit
     };
     bot.tool = { equipForBlock: () => Promise.resolve() };
     bot.stopDigging = () => {};
-    assert.equal(await skills.collectBlock(bot, 'dirt', 2), false);
-    assert.match(bot.output, /Gave up on dirt at 3, 64, 0/);
+    assert.equal(await skills.collectBlock(bot, 'sand', 2), false);
+    assert.match(bot.output, /Gave up on sand at 3, 64, 0/);
 });
 
 // G3 round 2: the flee (moveAway) threw "PathStopped" when something stopped the pathfinder,

@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T19:28Z (from `date -u`)
+Updated: 2026-11-06T20:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -209,8 +209,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#284: round 6 B shelter** (branch `agent/skills-rotn/r6`, opened 2026-11-06T18:47Z by `date -u`): see "Round 6 B fixes" below. **#274** (round 5 fixes) is merged.
-- G3 smoke round 6 is over (lead): A 7/7, B 4/5, C 7/7, D 7/7. The memory rule is lifted.
+- **#291: dirt piles follow-up** (branch `agent/skills-rotn/dirt-piles`, opened 2026-11-06T19:57Z by `date -u`): rotn-data #288. Required before the G3 gate (lead). See "Dirt piles" below.
+- **#284** (round 6 B shelter) and rotn-data **#288** are merged.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
@@ -744,6 +744,37 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
     1. `worldSources` passes `unlessTool` through;
     2. collecting `dirt_pile` never equips, or keeps holding, a level-1+ shovel;
     3. the no-pickaxe reserve goal asks for `!collectBlocks("betterwithmods:dirt_pile", 4n)` instead of `"dirt"` (`collectBlocks("dirt")` gets piles and counts 0).
+
+## Dirt piles (branch `agent/skills-rotn/dirt-piles`, 2026-11-06T19:57Z by `date -u`)
+
+- **Data (rotn-data #288, confirmed by the human's play):** dirt and grass dug by hand, or with any tool except a shovel of level 1+, drop 4 `betterwithmods:dirt_pile`. 4 piles make 1 dirt in the grid. A level-1+ shovel gets the dirt block.
+- **`rotn_sources.js`:**
+  - `worldSources` passes `unlessTool` through;
+  - new `isToolFor(item, tool)`;
+  - new `handRoute(bot, name)`: a no-table craft from one input the bot can collect now (dirt from 4 piles).
+- **`collectBlock`:**
+  - For a rule with `unlessTool`, a matching tool is never equipped (a held one is put away, again right before the dig). The dig is done by hand, not by `collectBlock.collect`, which equips the fastest tool.
+  - The shovel route (`howToGet(dirt).ways[0]` is now dirt-with-shovel): when the item's own blocks need a tool the bot lacks and a hand route exists, it collects `per` inputs for each item still wanted (inputs held count) and crafts them (`COLLECT_ROUTE_OPS.craft`).
+  - With a level-1 shovel, dirt is dug with the shovel as before.
+- **Reserve:** the no-pickaxe goal asks for `!collectBlocks("betterwithmods:dirt_pile", 4n)`. The pile and per-dirt count come from rotn-data's recipe. It also says not to use a level-1 shovel for it. The static goal matches.
+- **Tests:**
+  - `dirt_piles.test.js`, 3 new: `unlessTool` and the shovel route in the data; no level-1 shovel held at any dig, a held one put away, no collectBlock.collect; dirt by route with 2 piles held (3 digs, crafted `dirt:0` x3), and with an iron shovel the plain route;
+  - the `agenda.test.js` #284 review 2 test, updated.
+  - All 4 fail on develop's code.
+  - `use_on` (2) and `names_e2e` (1) used dirt as a neutral block, so they now use sand.
+  - `src` and `packages` tests 928/928; lint 253.
+- Not tried on a server.
+- **2026-11-06T20:11Z: #291 review fix** (the lead):
+  - mineflayer's `unequip('hand')` tosses the held stack when no slot is free. So `stopHolding(bot, tool)` now:
+    1. switches to an empty hotbar slot, or to one holding something that is not a level-1+ shovel;
+    2. otherwise calls `unequip` only while an inventory slot is free;
+    3. otherwise skips the dig with the reason.
+  - **Nit:** `dirtPile()` keeps the recipe's meta.
+  - **Tests:**
+    - the `dirt_piles` fake now models mineflayer's slots and `unequip`, including the toss;
+    - 1 new full-inventory test: the shovel is never tossed; another hotbar item is held, or the dig is skipped with the reason; with a free slot, `unequip` moves it;
+    - 1 new agenda test for the nit.
+  - Both new tests fail on the previous head. `src` and `packages` tests 930/930; lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

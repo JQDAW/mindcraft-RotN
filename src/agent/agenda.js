@@ -21,7 +21,7 @@
 // (E3 adds "agenda paused for task <id>" and "agenda resumed: <id>".)
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { SHELTER_LEAD_MIN } from './library/night.js';
+import { SHELTER_LEAD_MIN, dirtPileRecipes } from './library/night.js';
 
 /**
  * RotN's first day, docs/research/rotn-progression.md section 3, steps 1-9. A rock is any
@@ -131,6 +131,23 @@ export const RESERVE_LEAD_MIN = SHELTER_LEAD_MIN + 4;
 // (shelter.js), so only placeable dirt counts then (held, or what its dirt piles make): 10
 // cobblestone and no dirt is not a reserve.
 const noPickaxe = (s) => s.hasPickaxe?.() === false;
+/**
+ * The pile that dirt dug by hand drops, and how many make one dirt (rotn-data #288 and its recipe:
+ * betterwithmods:dirt_pile, 4). Dug by hand, or with a shovel below level 1, dirt drops 4 piles.
+ */
+export function dirtPile(recipes = dirtPileRecipes) {
+    let r = null;
+    try { r = recipes().find(x => x.gives?.name === 'minecraft:dirt') ?? null; } catch { r = null; }
+    if (!r) return { name: 'betterwithmods:dirt_pile', per: 4 };
+    // The recipe's own variant (#291 nit): a pile with a meta other than 0 is asked for by it.
+    const name = r.name.replace(/^minecraft:/, '');
+    return { name: r.meta ? `${name}:${r.meta}` : name, per: r.per };
+}
+/** The no-pickaxe ask: piles for `blocks` dirt blocks (each dirt block dug by hand gives `per` piles). */
+const pileAsk = (blocks) => {
+    const p = dirtPile();
+    return `Dig dirt or grass by hand with !collectBlocks("${p.name}", ${p.per * blocks}): dug by hand (or with a shovel below level 1) it drops ${p.per} piles of dirt, not a dirt block, and ${p.per} piles make one dirt, which the shelter crafts itself. Do not use a flint, bone or iron shovel for it: those get the dirt block instead.`;
+};
 const reserveHave = (s) => (noPickaxe(s) ? (s.dirtBlocks?.() ?? 0) : (s.shelterBlocks?.() ?? 0));
 
 export const SHELTER_RESERVE_STEP = {
@@ -141,14 +158,14 @@ export const SHELTER_RESERVE_STEP = {
     due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; },
     done: (s) => reserveHave(s) >= SHELTER_RESERVE,
     // Only when goalNow fails: both cases, as goalNow tells them apart.
-    goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1), and mine stone with the pickaxe for more rocks. If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt with !collectBlocks("dirt", ${SHELTER_RESERVE}) (dirt piles count too, 4 piles make one dirt). Keep these blocks for the night: do not place them.`,
+    goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1), and mine stone with the pickaxe for more rocks. If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks("betterwithmods:dirt_pile", ${4 * SHELTER_RESERVE}) (4 piles make one dirt, which the shelter crafts itself). Keep these blocks for the night: do not place them.`,
     goalNow: (s) => {
         const have = reserveHave(s);
         const mins = Math.max(1, Math.round((s.minutesToSunset?.() ?? 0) - SHELTER_LEAD_MIN));
         if (noPickaxe(s)) {
             return `Night is near: in about ${mins} min the night routine builds a shelter. You have no pickaxe yet, so it is built of dirt, which you can dig out of by hand in the morning. `
                 + `It needs ${SHELTER_RESERVE} blocks on open ground, and you have ${have} (dirt, and dirt from your dirt piles). `
-                + `Dig dirt by hand with !collectBlocks("dirt", ${SHELTER_RESERVE - have}): dirt dug without a shovel may drop dirt piles instead, and 4 piles make one dirt, so they count too. `
+                + `${pileAsk(SHELTER_RESERVE - have)} `
                 + 'Keep these blocks for the night: do not place them.';
         }
         const head = `Night is near: in about ${mins} min the night routine builds a shelter from sturdy blocks (any cobblestone or stone). It needs ${SHELTER_RESERVE} on open ground, and you have ${have}. `;

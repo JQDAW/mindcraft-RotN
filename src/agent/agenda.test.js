@@ -10,7 +10,7 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile } from './agenda.js';
 import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
 import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS } from './agenda_driver.js';
 import { Agent } from './agent.js';
@@ -425,10 +425,13 @@ test('#284 review 2: with no pickaxe the reserve counts dirt and dirt piles and 
     agent.bot.time = { timeOfDay: dayAt(7) };
     assert.equal(agendaTick(agent, { now: 0 }), 'shelter_blocks');
     const prompt = agent.self_prompter.prompt;
-    assert.match(prompt, /you have 4 \(dirt, and dirt from your dirt piles\)\. Dig dirt by hand with !collectBlocks\("dirt", 6\)/);
+    // rotn-data #288: dirt dug by hand drops 4 betterwithmods:dirt_pile, so the ask is piles, 4 per
+    // dirt block still missing; !collectBlocks("dirt") would count 0.
+    assert.match(prompt, /you have 4 \(dirt, and dirt from your dirt piles\)\. Dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 24\): dug by hand \(or with a shovel below level 1\) it drops 4 piles of dirt, not a dirt block/);
+    assert.doesNotMatch(prompt, /collectBlocks\("dirt"/);
     assert.doesNotMatch(prompt, /rock/i, 'no rock run before the pickaxe step');
     // The static goal (used only when goalNow fails) tells the two cases apart the same way.
-    assert.match(SHELTER_RESERVE_STEP.goal, /If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt with !collectBlocks\("dirt", 10\)/);
+    assert.match(SHELTER_RESERVE_STEP.goal, /If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 40\)/);
 
     items[1].count = 32; // 8 dirt from piles + 2 dirt = 10
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks', 'enough dirt: the tool steps go on');
@@ -440,4 +443,11 @@ test('#284 review 2: with no pickaxe the reserve counts dirt and dirt piles and 
     b.agenda.done_at.cobblestone = 1; // the cobblestone step was done once; the cobblestone was used since
     assert.equal(agendaTick(b, { now: 0 }), 'shelter_blocks');
     assert.match(b.self_prompter.prompt, /builds a shelter from sturdy blocks \(any cobblestone or stone\)\. It needs 10 on open ground, and you have 3\./);
+});
+
+test('#291 nit: the pile the reserve asks for keeps its recipe variant (meta); on 3.3.4 it is betterwithmods:dirt_pile, 4 per dirt', () => {
+    assert.deepEqual(dirtPile(), { name: 'betterwithmods:dirt_pile', per: 4 }, 'the real rotn-data recipe');
+    const recipe = (meta) => () => [{ name: 'somemod:dirt_bits', meta, per: 8, gives: { name: 'minecraft:dirt', meta: 0 } }];
+    assert.deepEqual(dirtPile(recipe(3)), { name: 'somemod:dirt_bits:3', per: 8 });
+    assert.deepEqual(dirtPile(recipe(0)), { name: 'somemod:dirt_bits', per: 8 });
 });

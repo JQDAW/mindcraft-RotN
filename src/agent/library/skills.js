@@ -2,7 +2,7 @@ import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
-import { worldSources, itemVariants, toolAllows, allowedTool, allowedTools, toolUsesLeft, describeTool, stowCarried } from "./rotn_sources.js";
+import { worldSources, itemVariants, toolAllows, allowedTool, allowedTools, toolUsesLeft, describeTool, stowCarried, isToolFor, handRoute } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
@@ -726,7 +726,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const preferredTools = []; // [matcher, tool] for rules where a tool helps but is not needed (#252)
     const needsTool = [];
     const fellMatchers = []; // rotn-data "fell-tree": breaking a branch fells the whole tree
-    for (const source of worldSources(blockType)) {
+    const avoidTools = []; // [matcher, tool]: rules whose drop a tool changes (rotn-data #288 unlessTool)
+    const sources = worldSources(blockType);
+    for (const source of sources) {
         if (!toolAllows(bot, source.tool)) {
             needsTool.push(source);
             continue;
@@ -735,13 +737,29 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (!blocktypes.includes(name)) blocktypes.push(name);
         if (source.tool) ruleTools.push([blockMatcher(source.blocks), source.tool, source.blocks]);
         else if (source.preferredTool) preferredTools.push([blockMatcher(source.blocks), source.preferredTool]);
+        if (source.unlessTool) avoidTools.push([blockMatcher(source.blocks), source.unlessTool]);
         if (source.id === 'fell-tree') fellMatchers.push(blockMatcher(source.blocks));
+    }
+    // The item's own blocks give it only with a tool the bot lacks (rotn-data #288: dirt drops
+    // itself only to a shovel of level 1+; by hand it drops 4 dirt piles, and "Broke dirt but got no
+    // dirt" was all the bot learned). Then collect what those blocks do give by hand and craft it
+    // (4 dirt piles -> 1 dirt in the inventory grid), when rotn-data has such a way.
+    const ownBlocks = (s) => s.blocks.some(b => (parseName(b)?.name ?? b) === baseType);
+    if (!collectRouting && needsTool.some(ownBlocks) && !sources.some(s => ownBlocks(s) && toolAllows(bot, s.tool))) {
+        const route = handRoute(bot, blockType);
+        if (route) return await collectByRoute(bot, blockType, num, route, needsTool.find(ownBlocks));
     }
     // Any Dynamic Trees branch fells its tree, whichever rule names it (rotn-data #13: a branch
     // broken by hand drops the tree's logs and sticks): always the safe cut, never collect().
     const fellsTree = (block) => isBranch(block) || fellMatchers.some(matches => matches(block));
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
+    const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
+    // Never hold a tool that changes the rule's drop (a shovel of level 1+ for dirt piles); false
+    // when it cannot be let go without throwing it away (#291 review: a full inventory).
+    const handOff = async (avoid) => !avoid || await stopHolding(bot, avoid);
+    const cannotLetGo = (block) => `Not digging ${block.name}: you hold ${bot.heldItem?.name}, which would make it drop dirt instead of ${blockType}, `
+        + 'and with a full inventory and no other item in the hotbar it could only be let go by throwing it away. Free a slot first.';
     // Count what the bot really gains, not a rule's yield (#141 review): the targets in the
     // inventory before and after each break. A block with no item (water) counts 1 per success.
     const countsItems = mc.getItemId(baseType) != null;
@@ -856,6 +874,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             }
             await bot.equip(ruleItem, 'hand');
         }
+        else if (avoidToolFor(block)) {
+            // rotn-data #288: by hand (or a lesser tool), never the tool that changes the drop;
+            // mineflayer-tool would pick the fastest, which is that shovel.
+            if (!await handOff(avoidToolFor(block))) {
+                log(bot, cannotLetGo(block));
+                break;
+            }
+        }
         else {
             // A preferred tool (an axe to fell a tree, rotn-data #252) when the bot holds one; else the hand.
             const preferred = preferredTools.find(([matches]) => matches(block))?.[1];
@@ -899,9 +925,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                     if (!r) givenUp.push(block.position.clone ? block.position.clone() : block.position);
                     return r;
                 }
-                if (ruleTool || mc.mustCollectManually(block.name)) {
+                // A rule whose drop a tool changes is dug here too: bot.collectBlock.collect would
+                // equip the fastest tool (rotn-data #288).
+                const avoid = avoidToolFor(block);
+                if (ruleTool || avoid || mc.mustCollectManually(block.name)) {
                     await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                     if (run.aborted) return false;
+                    if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
                     await bot.dig(block);
                     if (run.aborted) return true; // broken; the gain is still counted below
                     await pickupNearbyItems(bot);
@@ -978,6 +1008,59 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}.`);
     return collected > 0;
+}
+
+let collectRouting = false; // collectByRoute's own collect does not take another route
+
+/** mineflayer's player window: the hotbar is slots 36-44. */
+const HOTBAR_START = 36;
+
+/**
+ * Stop holding a tool the spec matches (rotn-data #288: a shovel of level 1+ turns dirt piles back
+ * into dirt), never by throwing it away. #291 review: mineflayer's unequip('hand') tosses the held
+ * stack when no hotbar or inventory slot is free. So, in order: switch to an empty hotbar slot, or
+ * to one holding something else; else unequip only while an inventory slot is free. Returns
+ * whether the bot no longer holds such a tool.
+ */
+export async function stopHolding(bot, tool) {
+    if (!isToolFor(bot.heldItem, tool)) return true;
+    const slots = bot.inventory?.slots ?? [];
+    const hotbar = Array.from({ length: 9 }, (_, i) => slots[HOTBAR_START + i] ?? null);
+    let i = hotbar.findIndex(it => !it);
+    if (i < 0) i = hotbar.findIndex(it => !isToolFor(it, tool));
+    if (i >= 0 && typeof bot.setQuickBarSlot === 'function') {
+        bot.setQuickBarSlot(i);
+        return !isToolFor(bot.heldItem, tool);
+    }
+    if (bot.inventory?.firstEmptyInventorySlot?.() != null) {
+        await bot.unequip('hand'); // a free slot: it moves the stack there, nothing is tossed
+        return !isToolFor(bot.heldItem, tool);
+    }
+    return false;
+}
+
+/** How collectByRoute crafts (tests pass their own). */
+export const COLLECT_ROUTE_OPS = { craft: (...args) => craftRecipe(...args) };
+
+/**
+ * Collect an item by its hand route (rotn_sources.handRoute): collect route.per of the input for
+ * each item still wanted (the inputs held count), then craft them in the inventory grid. rotn-data
+ * #288: !collectBlocks("dirt") without a level-1 shovel collects dirt piles, 4 per dirt.
+ */
+async function collectByRoute(bot, blockType, num, route, shovelRule) {
+    const before = countItem(bot, blockType);
+    log(bot, `${blockType} drops itself only with ${describeTool(shovelRule.tool)}. By hand: ${route.text} `
+        + `Collecting ${route.input} (${route.per} per ${blockType}) and crafting.`);
+    const needInputs = Math.max(0, route.per * num - countItem(bot, route.input));
+    if (needInputs > 0) {
+        collectRouting = true;
+        try { await collectBlock(bot, route.input, needInputs); } finally { collectRouting = false; }
+    }
+    const n = Math.min(num, Math.floor(countItem(bot, route.input) / route.per));
+    if (n > 0 && !currentRun(bot).aborted) await COLLECT_ROUTE_OPS.craft(bot, route.gives, n);
+    const gained = Math.max(0, countItem(bot, blockType) - before);
+    log(bot, `Collected ${gained} ${blockType}${gained ? ` (crafted from ${route.input})` : ''}.`);
+    return gained > 0;
 }
 
 /** Held planks (ore:stickMat) by kind: { "planks:1": 3, ... }. A stick takes 2 of one kind. */

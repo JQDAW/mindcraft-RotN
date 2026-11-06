@@ -66,6 +66,9 @@ export function worldSources(name) {
             tool: w.tool ?? null,
             // A tool that helps but is not needed (rotn-data #252: an axe fells a tree faster; by hand works).
             preferredTool: w.preferredTool ?? null,
+            // A tool that changes the drop (rotn-data #288: a shovel of level 1+ makes dirt drop dirt,
+            // not 4 dirt piles): the rule holds only while the bot does NOT use such a tool.
+            unlessTool: w.unlessTool ?? null,
             id: w.id ?? null, // the rule ("fell-tree": a Dynamic Trees branch fells the tree)
             count: typeof w.count === 'number' && w.count > 0 ? w.count : 1,
             text: w.summary ?? w.action ?? '',
@@ -192,6 +195,38 @@ export function allowedTool(bot, tool) {
         }
     }
     return best;
+}
+
+/** Whether an item is a tool the rule's tool spec accepts ({type, minLevel?, maxLevel?}). */
+export function isToolFor(item, tool) {
+    if (!item || !tool) return false;
+    const level = getItem(registryName(item.name ?? ''))?.toolClasses?.[tool.type];
+    return typeof level === 'number' && level >= 0 && levelOk(tool, level);
+}
+
+/**
+ * Another way to get an item when its own blocks give it only with a tool the bot lacks (rotn-data
+ * #288: dirt drops itself only to a shovel of level 1+; by hand it drops 4 dirt piles): a craft
+ * with no table from one input that the bot can collect now. {input, per, gives, text} in bot
+ * names ("betterwithmods:dirt_pile", 4, "dirt:0"), or null.
+ */
+export function handRoute(bot, name) {
+    const p = parseName(name);
+    const result = lookup(name);
+    if (!p || !result) return null;
+    const want = registryName(p.name);
+    for (const w of result.ways ?? []) {
+        if (w.kind !== 'craft' || w.requiresTable || w.inputs?.length !== 1 || w.gives?.name !== want) continue;
+        if (p.meta != null && (w.gives.meta ?? 0) !== p.meta) continue;
+        const input = w.inputs[0];
+        for (const c of input.choices ?? []) {
+            const inputName = c.meta ? formatName(botName(c.name), c.meta) : botName(c.name);
+            const usable = worldSources(inputName).find(s => toolAllows(bot, s.tool));
+            if (!usable) continue;
+            return { input: inputName, per: input.count, gives: formatName(botName(w.gives.name), w.gives.meta ?? 0), text: usable.text };
+        }
+    }
+    return null;
 }
 
 /** Every held item that is the rule's tool (allowedTool gives only the best one). */

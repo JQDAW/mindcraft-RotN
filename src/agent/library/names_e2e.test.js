@@ -3,7 +3,7 @@
 // skill, with a fake bot on the 1.12.2 registry. One test per review scenario:
 //   1. !collectBlocks("oak_log") collects oak, even when spruce is nearer and the
 //      oak log lies on its side;
-//   2. the names !inventory and !nearbyBlocks show ("planks:0", "dirt:0") work
+//   2. the names !inventory and !nearbyBlocks show ("planks:0", "sand:0") work
 //      in !discard, !equip, !putInChest, !consume and !collectBlocks;
 //   3. !craftRecipe("stick", 4) with 2 planks crafts once (the limit applies).
 import { test } from 'node:test';
@@ -95,14 +95,15 @@ test('scenario 1: !collectBlocks("oak_log", 1) collects the oak log, not "No log
 test('scenario 2: names from !inventory and !nearbyBlocks work in the commands that take names', async (t) => {
     t.mock.method(console, 'log', () => {});
     const items = [stack('planks', 0, 3, 36), stack('planks', 1, 5, 37), stack('apple', 0, 2, 38)];
-    const dirt = placed('dirt', 0, at(2, 63));
-    const bot = fakeBot({ items, blocks: [dirt, placed('chest', 2, at(1))] });
+    // Sand, not dirt: dirt by hand takes rotn-data #288's pile route (dirt_piles.test.js); this is about names.
+    const sand = placed('sand', 0, at(2, 63));
+    const bot = fakeBot({ items, blocks: [sand, placed('chest', 2, at(1))] });
     const agent = fakeAgent(bot);
 
     // What the LLM sees.
     const shown = Object.keys(world.getInventoryCounts(bot));
     assert.ok(shown.includes('planks:0') && shown.includes('planks:1'));
-    assert.ok(world.getNearbyBlockTypes(bot, 16).includes('dirt:0'));
+    assert.ok(world.getNearbyBlockTypes(bot, 16).includes('sand:0'));
 
     await run(agent, '!equip("planks:0")');
     assert.deepEqual(bot.calls.equip[0], { name: 'planks', metadata: 0, dest: 'hand' });
@@ -116,9 +117,9 @@ test('scenario 2: names from !inventory and !nearbyBlocks work in the commands t
     await run(agent, '!consume("apple")');
     assert.equal(bot.calls.consume, 1);
 
-    await run(agent, '!collectBlocks("dirt:0", 1)');
-    assert.deepEqual(bot.calls.collect.map(b => b.name), ['dirt']);
-    assert.doesNotMatch(bot.output, /do not have any|No dirt:0 nearby/);
+    await run(agent, '!collectBlocks("sand:0", 1)');
+    assert.deepEqual(bot.calls.collect.map(b => b.name), ['sand']);
+    assert.doesNotMatch(bot.output, /do not have any|No sand:0 nearby/);
 });
 
 test('scenario 3: !craftRecipe("stick", 4) with 2 planks crafts once, and says why', async (t) => {
