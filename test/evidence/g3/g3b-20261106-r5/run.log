@@ -1,0 +1,48 @@
+[test-server 13:04:53] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --max-batch-usd 2 --logs-out captures/raw/r5-g3b/server --summary captures/raw/r5-g3b/batch.json --scenario g3-first-night --out captures/raw/r5-g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 13:04:54] preflight passed: driver, profile, model and settings checked; the key's usage can be read; the LLM probe answered (HTTP 200, provider OpenInference, z-ai/glm-5.3-flash); 1 scenario(s) (timeouts: g3-first-night 67 min); a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[test-server 13:05:03] sweeper OK (via cadence): cadence of 4 dispatch runs on develop in the last 50 min, gaps 15.3, 14.6, 15.5 min, newest 42222075642 4 min ago
+[test-server 13:05:03] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 3h, sweeper deletes it) ~4 billed hours, EUR 0.55 plus Primary IPv4
+[test-server 13:05:03] creating mcr-test-20261106-130455: delete-after 2026-11-06T16:05:03Z (TTL 3h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 13:05:13] server mcr-test-20261106-130455 is at <ip>
+[test-server 13:05:13] waiting for SSH and the build (up to 120 min)
+[test-server 13:05:23] phase: unreachable
+[test-server 13:05:40] phase: booting:running
+[test-server 13:06:12] phase: starting
+[test-server 13:08:04] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 13:08:06] READY: mcr-test-20261106-130455 at <ip>:25565 (delete-after 2026-11-06T16:05:03Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261106-130455
+[test-server 13:08:06] running: node test/runner/batch.mjs --max-batch-usd 2 --logs-out captures/raw/r5-g3b/server --summary captures/raw/r5-g3b/batch.json --scenario g3-first-night --out captures/raw/r5-g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 13:08:06] batch 20261106T130806-15256: a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[batch 13:08:07] g3-first-night: start (spent so far USD 0 of 2; runner timeout 67 min, derived 67)
+[scenario 13:08:07] g3-first-night (G3) run 20261106t130807-fb9c7d; git 1a7d990f6187274e5b7ab54a8e80cafd668bd847; driver: node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json; out: captures/raw/r5-g3b/night
+[scenario 13:09:19] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 13:10:19] PASS fresh_start: none of 24 target items held; the pack's first-join Bread and Bundle seen
+[scenario 13:26:21] scenario error: Error: console failed (3221225794):  (after 3 attempts)
+    at call (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/adapters.mjs:34:15)
+    at Object.console (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/adapters.mjs:37:38)
+    at Object.console (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/g3.mjs:191:27)
+    at Object.console (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/g3.mjs:191:27)
+    at send (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/late-console.mjs:34:30)
+    at Object.confirm (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/late-console.mjs:40:23)
+    at confirm (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/scenarios/g3/g3-first-night.mjs:112:36)
+    at Object.run (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/scenarios/g3/g3-first-night.mjs:144:45)
+    at async runScenario (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/runner.mjs:121:9)
+    at async main (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/run.mjs:196:26)
+[scenario 13:26:21] g3-first-night: 48 LLM requests (37 replies, 0 memory summaries, 10 failed), USD 0.005139
+[scenario 13:26:21] g3-first-night: model openrouter/@preset/glm-5-3-flash-cheap-reliable
+[scenario 13:26:27] could not save the server log: log failed (3221225794):  (after 3 attempts)
+[scenario 13:26:27] g3-first-night: FAIL; 2 passed, 3 failed (captures/raw/r5-g3b/night/result.json)
+[batch 13:26:27] log fetch failed (3221225794)
+BATCH {"batchId":"20261106T130806-15256","testMode":false,"gate":false,"smoke":true,"maxBatchUsd":2,"scenarios":[{"id":"g3-first-night","out":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r5-g3b\\night","runId":"20261106t130807-fb9c7d","exit":1,"spentBefore":0,"timeoutMin":67}],"stopped":null,"usageAtStart":0.774393397,"usageAtEnd":0.779532343,"spentUsd":0.005139,"exit":1,"logsFetched":false}
+[test-server 13:26:27] command exited with 1
+[test-server 13:26:27] EXIT trap: tearing down mcr-test-20261106-130455
+[test-server 13:26:28] deleting batch mcr-test-20261106-130455 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261106-130455)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 13:26:41] batch mcr-test-20261106-130455: ran 21 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 13:26:41] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261106-130455

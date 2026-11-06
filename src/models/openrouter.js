@@ -30,8 +30,9 @@ export class OpenRouter {
         const pack = {
             model: this.model_name,
             messages,
-            stop: stop_seq
         };
+        // A null or empty stop_seq sends no stop sequence at all (memory summaries).
+        if (stop_seq) pack.stop = stop_seq;
 
         let res = null;
         try {
