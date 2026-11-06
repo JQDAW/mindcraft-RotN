@@ -24,7 +24,10 @@
 //   5. The final counts (count-only clear) and the final scores, then the objectives are removed.
 // Checks:
 //   stone_tools     at least 1 stone pickaxe and 1 stone axe held;
-//   crafting_table  at least 1 held, or placed (its use stat is at least 1);
+//   crafting_table  at least 1 held, or placed: its use stat is at least 1, or (lead, after round 3
+//                   continuation A, where the use stat stayed 0 for a placed table) a cell the bot says it
+//                   placed a table at holds minecraft:crafting_table by the server's testforblock, and the
+//                   table's craft stat is at least 1;
 //   cobblestone     at least 1 of the 4-rocks outputs held (exact name and meta);
 //   crafted_by_bot  (gating, lead #101; S1-A found all five stats) the craft stat is at least 1 for the
 //                   crude axe, Crafting Tools, the table and both stone tools: looted tools cannot pass;
@@ -32,7 +35,7 @@
 //                   the pack's own first-join ones, no give, no game mode change, no op.
 // Not claimed: logs and planks (the table and tools prove them; the debarked plank has no stat).
 import { startSession } from '../../runner/lib/session.mjs';
-import { G2_WORLD_SEED } from '../../runner/lib/g2.mjs';
+import { G2_WORLD_SEED, testforblockVerdict } from '../../runner/lib/g2.mjs';
 import { G3_DEFAULTS, G3_GATE_PARAMS, cheatProblems, guardConsole, statCriterion } from '../../runner/lib/g3.mjs';
 import { clearTestCommand, clearTestCount, playerScores, scoreboardAddResult } from '../../runner/lib/s1.mjs';
 import { chatLines } from '../../runner/lib/server-log.mjs';
@@ -66,6 +69,26 @@ const TOOLS = ['minecraft:stone_pickaxe', 'minecraft:stone_axe'];
 export const FIRST_JOIN_KIT = ['give_bread', 'give_bundle'];
 /** The target items a fresh spawn holds none of (also g3-first-night's fresh_start). */
 export const START_EMPTY = [...TOOLS, 'minecraft:crafting_table', 'pyrotech:crude_axe', 'contenttweaker:crafting_tools'];
+
+/** The most placement claims the end checks with testforblock (each is one console command). */
+export const MAX_TABLE_CLAIMS = 5;
+/**
+ * The cells the bot says it placed a crafting table at, from its own output (Mindcraft's placeBlock prints
+ * "Placed crafting_table at (x, y, z)."; a "minecraft:" prefix is accepted): distinct cells, the newest
+ * MAX_TABLE_CLAIMS. A claim is only a pointer: the server's testforblock decides.
+ */
+export function tablePlacements(lines) {
+    const cells = [];
+    for (const l of lines) {
+        for (const m of String(l).matchAll(/\bPlaced (?:minecraft:)?crafting_table at \((-?\d+), (-?\d+), (-?\d+)\)/g)) {
+            const at = [Number(m[1]), Number(m[2]), Number(m[3])];
+            const i = cells.findIndex((c) => c.join() === at.join());
+            if (i >= 0) cells.splice(i, 1);
+            cells.push(at);
+        }
+    }
+    return cells.slice(-MAX_TABLE_CLAIMS);
+}
 const ENDS = (t) => /^agenda (step cobblestone done|done)$/.test(t);
 const STUCK = /^agenda step (\S+) stuck: (.*)$/;
 
@@ -191,15 +214,32 @@ export default {
 
         ctx.check('stone_tools', TOOLS.every((t) => fin[t] >= 1), TOOLS.map((t) => `${t} ${fin[t] ?? 'no reply'}`).join(', ') + `; ${end}`);
         const placed = score(sc, 'g3a_u_table');
-        // Which path decided it (lead, #201): the use stat ("placed", approved for G3 (a)) or the count ("held");
-        // useStat: the objective's add result, so a rejected criterion shows as the "held" fallback.
+        // The placed block itself (lead, after round 3 continuation A, where the bot placed its table at -42 67 -54
+        // but the use stat stayed 0): every cell the bot says it placed a table at ("Placed crafting_table at (x, y,
+        // z)" in its own output) is checked read-only with testforblock. A confirmed cell counts only if the table's
+        // craft stat is at least 1, so a table that stood there before cannot pass alone.
+        const claims = tablePlacements(typeof bot.output === 'function' ? bot.output() : []);
+        const onServer = [];
+        for (const at of claims) {
+            const v = testforblockVerdict(await confirm(`testforblock ${at.join(' ')} minecraft:crafting_table 0`,
+                (l) => { const x = testforblockVerdict(l, at); return x.ok || /^The block at /.test(x.detail ?? ''); }), at);
+            onServer.push({ at, table: v.ok, detail: v.ok ? 'found' : v.detail });
+        }
+        const craftedTable = score(sc, 'g3a_c_table') >= 1;
+        const placedBlock = craftedTable && onServer.some((x) => x.table);
+        // Which path decided it (lead, #201): the use stat ("placed", approved for G3 (a)), the placed block, or the
+        // count ("held"); useStat: the objective's add result, so a rejected criterion shows as the fallback.
         const heldN = fin['minecraft:crafting_table'];
         ctx.note('craftingTablePath', {
-            path: placed >= 1 ? 'placed' : heldN >= 1 ? 'held' : 'none',
+            path: placed >= 1 ? 'placed' : placedBlock ? 'placed-block' : heldN >= 1 ? 'held' : 'none',
             useStat: added.g3a_u_table ?? null, fallback: added.g3a_u_table !== 'added', held: heldN, placed,
+            claims: onServer,
         });
-        ctx.check('crafting_table', fin['minecraft:crafting_table'] >= 1 || placed >= 1,
-            `held ${fin['minecraft:crafting_table'] ?? 'no reply'}, placed (use stat) ${placed ?? 'no scores'}${added.g3a_u_table === 'added' ? '' : ` (the use stat objective: ${added.g3a_u_table ?? 'no reply'})`}`);
+        const blockText = claims.length
+            ? `; the bot's placements: ${onServer.map((x) => `${x.at.join(' ')} ${x.table ? 'a table (server)' : x.detail}`).join(', ')}${onServer.some((x) => x.table) && !craftedTable ? ' (not counted: no table craft stat)' : ''}`
+            : '; the bot reported no placement';
+        ctx.check('crafting_table', heldN >= 1 || placed >= 1 || placedBlock,
+            `held ${heldN ?? 'no reply'}, placed (use stat) ${placed ?? 'no scores'}${added.g3a_u_table === 'added' ? '' : ` (the use stat objective: ${added.g3a_u_table ?? 'no reply'})`}${blockText}`);
         const cobbleN = cobble.reduce((n, c) => n + (c.count ?? 0), 0);
         ctx.check('cobblestone', cobble.some((c) => c.count >= 1),
             cobble.length ? cobble.map((c) => `${c.name}:${c.meta} ${c.count ?? 'no reply'}`).join(', ') + ` (${cobbleN} in all)` : `none of the ${outputs.length} 4-rocks outputs held`);
