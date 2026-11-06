@@ -127,6 +127,29 @@ test('the G3 chain: crude axe, Crafting Tools, crafting table, stone tools, firs
     assert.match(stick.ways[0].evidence.find((e) => /round 4 batch B/.test(e)), /^Supporting only \(the bytecode above is the evidence\)/);
 });
 
+test('round 5 A: with an axe, a placed plank gives 2 sticks, and any axe (level 0) debarks and splits logs', () => {
+    // Hit With Axe 1.5.1: a right-click with any item whose tool classes contain "axe", level 0 here.
+    const AXE = { type: 'axe', minLevel: 0 };
+    assert.deepEqual(way(pack.howToGet('hitwithaxe:debarked_oak'), 'debark-log').tool, AXE);
+    const plank = way(pack.howToGet('oak_planks'), 'plank-from-debarked-log');
+    assert.deepEqual(plank.tool, AXE);
+    assert.equal(plank.count, 1);
+    assert.deepEqual(pack.getItem('pyrotech:crude_axe').toolClasses, { axe: 0 }, 'the crude axe qualifies');
+    // wood_stripping_boards.zs line 779: minecraft:planks (any meta) -> 2 sticks; after felling, before crafting.
+    const stick = pack.howToGet('stick');
+    assert.deepEqual(stick.ways.slice(0, 2).map((w) => w.id), ['fell-tree', 'sticks-from-planks']);
+    const chop = way(stick, 'sticks-from-planks');
+    assert.equal(chop.action, 'use-tool-on-block');
+    assert.deepEqual(chop.tool, AXE);
+    assert.equal(chop.count, 2);
+    assert.equal(chop.confidence, 'documented');
+    assert.deepEqual(chop.blocks.map((b) => b.name), ['minecraft:planks', 'biomesoplenty:planks_0', 'rustic:planks', 'randomthings:spectreplank', 'hitwithaxe:debarked_dead']);
+    for (const b of chop.blocks) assert.ok(pack.names.blocks.has(b.name), b.name);
+    assert.match(formatHowToGet(pack.howToGet('stick')), /Place a planks block, then right-click it with an axe .* With an axe\./);
+    // No 2x2 recipe turns logs into planks: every one needs the table.
+    for (const w of pack.howToGet('spruce_planks').ways.filter((x) => x.kind === 'craft' && x.inputs.some((i) => i.choices.some((c) => c.name === 'minecraft:log')))) assert.equal(w.requiresTable, true);
+});
+
 test('#107 review: confidence is never stronger than the source', () => {
     // Per pair: the research names the oak debarked log and the oak plank only.
     assert.equal(pack.howToGet('oak_planks').ways[0].confidence, 'documented');
