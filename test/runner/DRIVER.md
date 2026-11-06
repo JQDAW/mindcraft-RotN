@@ -195,6 +195,8 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
   - Every other failure keeps the 2 quick retries (2 s, then 4 s): a console command that did reach the server must not be re-sent many times.
   - The final error lists each attempt's time, its result and the machine's free memory then.
   - The batch's final `fetch logs` gets the same long retry (`retryNotStarted`), so a short squeeze no longer loses the server log.
+- **The worst case for one console call is about 8.4 min** (#273 review 1): 3 ordinary attempts that each run into the 120 s timeout (360 s), their 2 s and 4 s waits, and the 135 s of never-started waits. The waits use `sleepSync`, so the scenario's clock stands still meanwhile: a scenario can overrun its own windows by that much, and the runner's timeout (derived + margin) still bounds the whole run.
+- **The residual risk** (#273 review 4): 0xC0000017 and 0xC000012D could in theory end a bash that had already started and sent its command, which the long retry would then send again. Most console calls are reads; a repeated `setblock`, `clear` or whisper would show in the server log (`adapters.mjs`, at `NOT_STARTED_STATUS`).
 - **What it cannot fix:** memory that stays short for longer than about 2 minutes. Free memory on the runner's machine before a batch (close large applications).
 
 **Smoke is the default; only `--gate` makes a gate batch (lead, #218 review and #220 decision).**
