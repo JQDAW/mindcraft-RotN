@@ -7,6 +7,14 @@ Agents add items here when they need something only the human can do. The human 
 - [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key, which is under Done): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
 - [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
 - [ ] **Whitelist the bot** on the live server when the lead asks (after G3).
+- [ ] **Move the lead and the four dev agents to the CPX32 dev server** (the human's plan, 2026-11-06, after G3 smoke round 7; it ends the RAM pressure on the Windows PC). Every step marked *you* involves a secret or an account, so no agent does it.
+  1. **Before** (the lead confirms): every agent has pushed its branches and STATUS handoff; no Hetzner test server exists; no batch is running.
+  2. **Base system** (you): Node.js 22 LTS (same major as here, ADR 0002), git, build tools for native modules (`build-essential`, `python3`), `gh`, `hcloud`, `jq`, `bash`, `ssh`. Java is not needed (the dumper builds in CI).
+  3. **Accounts and secrets** (you, as environment variables or tool logins on the dev server, never in a file in the repo): `OPENROUTER_API_KEY` (the test key), `HCLOUD_TOKEN` (the test project), `gh auth login` (as JQDAW), and your SSH key for reaching the dev server.
+  4. **Bot account** (you): run `msa-login FRCFLD` once on the dev server (device code); harness-ops tells you the exact command and the profiles folder.
+  5. **Repo and worktrees** (agents, after 2-4): clone `JQDAW/mindcraft-RotN`, `npm ci` in each worktree (patch-package must apply), one worktree per agent on its branch, as on this PC.
+  6. **Agent sessions** (you): start the lead and the four agents there the way you prefer (Orca or another terminal manager), never with `--dangerously-skip-permissions`. The lead rebuilds its own memory notes from STATUS and PLAN.
+  7. **Validation** (the lead gives a GO): one G3 smoke batch from the dev server, all checks as usual, before any gate-relevant run. The test-server sweeper and watchdog are unchanged.
 
 ## Done
 
