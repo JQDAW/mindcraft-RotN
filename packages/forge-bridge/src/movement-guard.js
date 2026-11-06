@@ -10,18 +10,24 @@
 // packet, or anything that sets bot.entity.position, velocity, yaw or pitch) poisons every
 // later packet. This module:
 //   1. sanitizes the server inputs that mineflayer feeds into the bot's own motion (position,
-//      the bot's own entity_teleport, explosion knockback) before mineflayer's handlers see them;
+//      the bot's own entity_teleport and entity_velocity, explosion knockback) before
+//      mineflayer's handlers see them;
 //   2. checks the bot's state every physics tick (and every 250 ms) and repairs a non-finite or out-of-range
 //      position, velocity or rotation from the last good state (or, before there is one, the
 //      server's last absolute position);
 //   3. guards the wire: a movement packet that the server would kick for is never sent
 //      (dropped; the state is repaired, so the next tick sends a good one);
 //   4. keeps a short trace of movement inputs and outputs, and writes it to the capture (and
-//      one log line) the first time anything above fires, and on a movement kick.
+//      one log line) the first time anything above fires, and on a movement kick. Without a
+//      capture, the last TRACE_LOG_ENTRIES entries go to the log instead.
 // Each kind of event is logged once; all are counted in bot.forge.movementGuard.
+
+import { normalizeVelocityFields } from './velocity-compat.js';
 
 export const MAX_COORD = 3.0e7;
 const TRACE_SIZE = 80;
+const TRACE_LOG_ENTRIES = 12;
+const TRACE_LOG_CHARS = 3000;
 
 const POSITION_FIELDS = ['x', 'y', 'z'];
 const LOOK_FIELDS = ['yaw', 'pitch'];
@@ -85,13 +91,15 @@ export function attachMovementGuard(bot, { log = () => {}, capture = () => null,
     const writeTrace = (why) => {
         if (traceWritten) return;
         traceWritten = true;
-        capture()?.event('movement_trace', { why, stats: { ...stats }, state: state(), trace: [...trace] });
+        const cap = capture();
+        if (cap) cap.event('movement_trace', { why, stats: { ...stats }, state: state(), trace: [...trace] });
+        else log(`movement guard: no capture; state ${JSON.stringify(state())}; last ${TRACE_LOG_ENTRIES} trace entries: ${JSON.stringify(trace.slice(-TRACE_LOG_ENTRIES)).slice(0, TRACE_LOG_CHARS)}`);
     };
     const once = (kind, message) => {
         if (!stats.first) stats.first = { kind, message, t: now() - t0 };
         if (logged.has(kind)) return;
         logged.add(kind);
-        log(`movement guard: ${message} (logged once; trace in the capture as movement_trace)`);
+        log(`movement guard: ${message} (logged once; trace ${capture() ? 'in the capture as movement_trace' : 'in the next log line'})`);
         writeTrace(`${kind}: ${message}`);
     };
 
@@ -137,9 +145,27 @@ export function attachMovementGuard(bot, { log = () => {}, capture = () => null,
         record({ dir: 'S2C', name: 'entity_teleport', ...pick(p, ['x', 'y', 'z', 'yaw', 'pitch']), ...(bad.length ? { sanitized: bad } : {}) });
         if (bad.length) { stats.sanitizedInputs++; once('input:entity_teleport', `server entity_teleport for the bot had ${bad.join(', ')}; kept the current value`); }
     });
-    // Traced only, for self: their fields are integers or bytes on the wire (velocity i16,
-    // relative moves i16, angles i8), so they cannot carry a non-finite value.
-    on('entity_velocity', (p) => { if (isSelf(p.entityId)) record({ dir: 'S2C', name: 'entity_velocity', ...pick(p, ['velocity', 'velocityX', 'velocityY', 'velocityZ']) }); });
+    // The bot's own entity_velocity (knockback). The wire has three i16, but mineflayer reads
+    // velocityX/Y/Z and minecraft-data 3.119 names them velocity {x, y, z}; a missing name was a
+    // NaN velocity (velocity-compat.js). A component that is not a finite number becomes 0, in
+    // both shapes, so mineflayer's handler cannot make the bot's velocity non-finite.
+    on('entity_velocity', (p) => {
+        if (!isSelf(p.entityId)) return;
+        normalizeVelocityFields(p); // whichever listener runs first, mineflayer finds velocityX/Y/Z
+        const v = p.velocity && typeof p.velocity === 'object' ? p.velocity : null;
+        const bad = [];
+        for (const k of ['x', 'y', 'z']) {
+            const legacy = `velocity${k.toUpperCase()}`;
+            if (typeof p[legacy] === 'number' && Number.isFinite(p[legacy])) continue;
+            bad.push(`${k} ${p[legacy]}`);
+            p[legacy] = 0;
+            if (v) v[k] = 0;
+        }
+        record({ dir: 'S2C', name: 'entity_velocity', ...pick(p, ['velocity', 'velocityX', 'velocityY', 'velocityZ']), ...(bad.length ? { sanitized: bad } : {}) });
+        if (bad.length) { stats.sanitizedInputs++; once('input:entity_velocity', `server entity_velocity for the bot had ${bad.join(', ')}; used 0`); }
+    });
+    // Traced only, for self: integers or bytes on the wire (relative moves i16, angles i8),
+    // which mineflayer reads under the names minecraft-data gives them.
     for (const name of ['rel_entity_move', 'entity_move_look', 'entity_look']) {
         on(name, (p) => { if (isSelf(p.entityId)) record({ dir: 'S2C', name, ...pick(p, ['x', 'y', 'z', 'dX', 'dY', 'dZ', 'yaw', 'pitch']) }); });
     }

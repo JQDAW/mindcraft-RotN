@@ -16,6 +16,7 @@ import { EventEmitter } from 'node:events';
 import { createRequire } from 'node:module';
 import { attachMovementGuard, movementProblem, MAX_COORD } from '../src/movement-guard.js';
 import { throttleMovement } from '../src/movement-throttle.js';
+import { attachVelocityCompat, normalizeVelocityFields } from '../src/velocity-compat.js';
 
 const require = createRequire(import.meta.url);
 const mineflayer = require('mineflayer');
@@ -190,7 +191,8 @@ test('the wire guard: a bad packet is dropped (never written), the state is repa
     assert.deepEqual(written.map(([n]) => n), ['position', 'chat']);
     assert.equal(bot.entity.position.y, 65);
     assert.equal(g.stats.droppedPackets, 2);
-    assert.equal(logs.length, 1);
+    assert.equal(logs.length, 2, 'the event, then its trace (no capture)');
+    assert.match(logs[1], /^movement guard: no capture; state /);
     assert.match(logs[0], /dropped position y NaN: the server kicks for it/);
 });
 
@@ -217,7 +219,7 @@ test("before any good state: the repair uses the server's last absolute position
     assert.deepEqual([bot.entity.position.x, bot.entity.position.y, bot.entity.position.z], [8.5, 65, -3.5]);
     assert.equal(write('position', { x: 8.5, y: 65, z: -3.5, onGround: false }), true);
     assert.equal(written.length, 1);
-    assert.equal(logs.length, 1);
+    assert.equal(logs.length, 2, 'the event, then its trace (no capture)');
     assert.match(logs[0], /bot state became invalid \(position NaN 65 -3\.5\) at forcedMove/);
 });
 
@@ -264,4 +266,73 @@ test('a movement kick writes the trace to the capture (once), even when nothing 
     assert.deepEqual(events[0].trace.map((e) => e.name), ['entity_velocity', 'entity_metadata', 'kick_disconnect'], 'the trace as it was at the first kick');
     assert.equal(events[0].trace[1].flags, 1);
     assert.equal(g.stats.movementKicks, 2);
+});
+
+// ---- G3 round 3: the bot's own knockback (entity_velocity) made x and z NaN ----
+// minecraft-data 3.119 parses 1.12.2's entity_velocity as velocity {x, y, z}; mineflayer 4.33.0
+// reads velocityX/Y/Z. S1a's movement_trace (harness-ops captures/raw/s1a-20261102):
+// entity_velocity {x: 2261, y: 1600, z: -2324} for the bot, then "position NaN 63.99999999999999
+// NaN" one physics tick later, with velocity 0 / -0.0784 / 0.
+const KNOCKBACK = { x: 2261, y: 1600, z: -2324 };
+
+test('reproduces the knockback NaN: stock mineflayer + minecraft-data 3.119 turn x and z NaN, y stays finite', async () => {
+    const s = await standingBot({ guard: false });
+    try {
+        s.client.emit('entity_velocity', { entityId: 42, velocity: { ...KNOCKBACK } });
+        await sleep(150);
+        const p = s.bot.entity.position;
+        assert.ok(Number.isNaN(p.x) && Number.isNaN(p.z), `x and z NaN: ${p}`);
+        assert.ok(Number.isFinite(p.y), `y finite: ${p.y}`);
+        assert.ok(Number.isFinite(s.bot.entity.velocity.x), 'velocity reset to 0 by moveEntity');
+    } finally { s.end(); }
+});
+
+test('velocity compat: the knockback is applied as the server meant it, for the bot and for mobs', async () => {
+    const s = await standingBot({ guard: false });
+    try {
+        const compat = attachVelocityCompat(s.client);
+        const from = s.bot.entity.position.clone();
+        s.client.emit('entity_velocity', { entityId: 42, velocity: { ...KNOCKBACK } });
+        await sleep(150);
+        const p = s.bot.entity.position;
+        assert.ok(Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z), `finite: ${p}`);
+        assert.ok(p.x > from.x && p.z < from.z, `pushed +x and -z: ${from} -> ${p}`);
+        assert.deepEqual(s.bad(), []);
+        s.client.emit('spawn_entity_living', { entityId: 77, entityUUID: '00000000-0000-4000-8000-000000000077', type: 54, x: 1, y: 65, z: 1, yaw: 0, pitch: 0, headPitch: 0, velocity: { x: 800, y: 0, z: -800 }, metadata: [] });
+        const v = s.bot.entities[77].velocity;
+        assert.deepEqual([v.x, v.y, v.z], [0.1, 0, -0.1]);
+        assert.equal(compat.normalized, 2);
+        // The old field names still work and are left alone.
+        assert.equal(normalizeVelocityFields({ velocityX: 1, velocityY: 2, velocityZ: 3 }), false);
+    } finally { s.end(); }
+});
+
+test('with the guard and no compat: the bot\'s own knockback is still read (either shape), and a non-finite component is used as 0', async () => {
+    const s = await standingBot();
+    try {
+        s.client.emit('entity_velocity', { entityId: 42, velocity: { ...KNOCKBACK } });
+        await sleep(150);
+        assert.ok(Number.isFinite(s.bot.entity.position.x) && Number.isFinite(s.bot.entity.position.z), `finite: ${s.bot.entity.position}`);
+        assert.equal(s.guard.stats.repairedStates, 0, 'nothing to repair');
+        assert.deepEqual(s.logs, []);
+
+        s.client.emit('entity_velocity', { entityId: 42, velocityX: NaN, velocityY: 0 });
+        await sleep(150);
+        assert.deepEqual(s.bad(), []);
+        assert.equal(s.guard.stats.sanitizedInputs, 1);
+        assert.match(s.logs[0], /server entity_velocity for the bot had x NaN, z undefined; used 0/);
+        await assertResumes(s);
+    } finally { s.end(); }
+});
+
+test('without a capture, the first event logs the trace instead of pointing at a capture', async () => {
+    const s = await standingBot({ guard: false });
+    try {
+        const logs = [];
+        attachMovementGuard(s.bot, { log: (m) => logs.push(m), capture: () => null });
+        s.client.emit('explosion', { x: 8, y: 65, z: 8, radius: 1, affectedBlockOffsets: [], playerMotionX: NaN, playerMotionY: 0, playerMotionZ: 0 });
+        assert.equal(logs.length, 2);
+        assert.match(logs[0], /trace in the next log line\)$/);
+        assert.match(logs[1], /^movement guard: no capture; state \{.*\}; last 12 trace entries: \[.*"name":"explosion"/);
+    } finally { s.end(); }
 });

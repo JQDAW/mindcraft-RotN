@@ -7,7 +7,7 @@ import { plugin as pvp } from 'mineflayer-pvp';
 import { plugin as collectblock } from 'mineflayer-collectblock';
 import { plugin as autoEat } from 'mineflayer-auto-eat';
 import plugin from 'mineflayer-armor-manager';
-import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard } from '../../packages/forge-bridge/index.js';
+import { createForgeConnect, CaptureWriter, throttleMovement, forgeOptionsFromEnv, placeBlockTimeout, assertMicrosoftAuthSafe, quietMsaCodeHandler, recordAgentExit, extendRegistry, attachFmlEntities, attachHordeEvents, fmlEntityTable, metadataSerializersFromDump, instrumentProfileFetch, attachBotErrorLogger, attachStateIdRemap, stateIdRemapStatus, attachMovementGuard, attachVelocityCompat } from '../../packages/forge-bridge/index.js';
 import { modEntityTable as rdModEntityTable, entityByModId as rdEntityByModId, loadRotnData, PACK_VERSION } from '../../packages/rotn-data/index.js';
 import { toNew as rdToNew, toOld as rdToOld, blockToOld, parseOld, botName, installRecipes as rdInstallRecipes, getBlock as rdGetBlock, getItem as rdGetItem, snapshotRecipeTable, restoreRecipeTable } from '../../packages/rotn-data/index.js';
 const armorManager = plugin;
@@ -245,6 +245,8 @@ export function initBot(username, { onMsaCode } = {}) {
     // Under the throttle, the movement guard (G2 batch 7's invalid_player_movement kick): a
     // packet with a non-finite or out-of-range position or rotation is never sent, the bot's
     // state is repaired, and the first such event is logged once with a trace in the capture.
+    // minecraft-data 3.119 names entity velocities velocity {x, y, z}; mineflayer 4.33 reads velocityX/Y/Z (velocity-compat.js).
+    forge.velocityCompat = attachVelocityCompat(bot._client);
     const movementGuard = attachMovementGuard(bot, { log: (m) => console.warn(`[forge-bridge] ${m}`), capture: () => forge.capture });
     forge.movementGuard = movementGuard.stats;
     bot._client.write = throttleMovement(movementGuard.guardWrite(bot._client.write.bind(bot._client)), { intervalMs: 50 });
