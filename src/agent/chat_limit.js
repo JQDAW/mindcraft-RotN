@@ -19,8 +19,11 @@
 // A line may carry a key (a refusal: "refusal:<sender>", #256 review 1). At most one line per key
 // waits: a repeat replaces the waiting one. And a keyed line is not sent until keyGapMs after the
 // last one with that key, so a player who keeps typing commands gets at most one refusal per 10 s
-// and cannot starve the agenda lines the harness reads. The queue holds at most queueMax lines
-// (high lines aside).
+// and cannot starve the agenda lines the harness reads. A line in its gap holds up nothing: lines
+// that may go now still go when the budget allows (#256 follow-up). The queue holds at most
+// queueMax lines (high lines aside). Waiting high lines are bounded too: replies to task givers,
+// and at most one refusal per player who is not one, so their number is at most the number of
+// players (plus the givers' replies).
 
 export const CHAT_LIMIT = { perPacket: 20, budget: 100, refillPerSec: 10, lowQueueMax: 3, lowMaxWaitMs: 15_000, queueMax: 20, keyGapMs: 10_000 };
 const RANK = { high: 0, normal: 1, low: 2 };
@@ -88,6 +91,7 @@ export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, set
     const oldest = (priority) => queue.reduce((best, q, i) => (q.priority === priority && (best < 0 || q.seq < queue[best].seq) ? i : best), -1);
     const drain = () => {
         timer = null;
+        timerAt = Infinity;
         refill();
         for (let i = queue.length - 1; i >= 0; i--) {
             if (queue[i].priority === 'low' && now() - queue[i].since > limits.lowMaxWaitMs) drop(queue.splice(i, 1)[0], 'it waited too long');
@@ -99,11 +103,17 @@ export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, set
         }
         schedule();
     };
+    let timerAt = Infinity;
+    // The drain timer: when the budget allows a packet and some line may go. A new line that may go
+    // sooner than the timer set for a keyed line in its gap moves the timer earlier (#256 follow-up).
     const schedule = () => {
-        if (timer || !queue.length) return;
+        if (!queue.length) return;
         const budgetWait = ((level + limits.perPacket - limits.budget) / limits.refillPerSec) * 1000;
         const soonest = Math.min(...queue.map(eligibleAt)) - now();
         const wait = Math.max(50, budgetWait, soonest);
+        if (timer && now() + wait >= timerAt) return;
+        if (timer) clearTimer(timer);
+        timerAt = now() + wait;
         timer = setTimer(drain, wait);
         timer?.unref?.();
     };
@@ -114,14 +124,18 @@ export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, set
         const priority = bot.rotnChatPriority ?? 'normal';
         const line = { text, priority, key, since: now(), seq: seq++ };
         // A high-priority line (a reply to a giver, a refusal) goes at once when the budget allows,
-        // ahead of lines that wait; a keyed one only after its gap (#256 review 1).
-        if (fits() && (!queue.length || priority === 'high') && eligibleAt(line) <= now()) return send(line);
+        // ahead of lines that wait; a keyed one only after its gap (#256 review 1). Any other line
+        // goes at once when nothing that may go now waits before it: a refusal in its gap does not
+        // hold up a normal line (#256 follow-up).
+        const readyWaiting = queue.some(q => eligibleAt(q) <= now());
+        if (fits() && (!readyWaiting || priority === 'high') && eligibleAt(line) <= now()) return send(line);
         // At most one waiting line per key: the newest text replaces the waiting one.
         const same = key ? queue.find(q => q.key === key) : null;
         if (same) {
             same.text = text;
             if (RANK[priority] < RANK[same.priority]) same.priority = priority;
             state.collapsed++;
+            log(`[chat] collapsed a repeat into the waiting line (${key}): ${short(text)}`);
             return;
         }
         if (priority === 'low' && queue.filter(q => q.priority === 'low').length >= limits.lowQueueMax) {
