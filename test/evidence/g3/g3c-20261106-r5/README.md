@@ -6,7 +6,7 @@
 
 ## Run conditions
 
-- **GO:** the round 5 GO. Claude Code's auto mode first blocked the run command (15:06); the human approved it at the lead's request, and the preflight was re-run because the first one was older than 15 min.
+- **GO:** the round 5 GO. Claude Code's auto mode first blocked the run command (15:06); a one-off: the same command went through auto mode when retried at the lead's request (corrected after round 7: no human approved it; run commands go through auto mode), and the preflight was re-run because the first one was older than 15 min.
 - **Code:** a clean detached checkout of `origin/develop` at `a6825e81`, after `npm ci`.
 - **Free memory at 15:20:38 UTC:** 4,717 MB physical, 11,670 MB virtual.
 - **Checks right before the create (15:20:38-15:20:51 UTC), all passed:** `msa-login`; an empty project; the batch preflight with the LLM probe (HTTP 200, provider Wafer), "timeouts: g3-task-preempts-agenda 34 min" for a 120 min TTL, no midnight warning; the dry run (sweeper OK).

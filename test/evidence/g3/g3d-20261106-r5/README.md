@@ -6,7 +6,7 @@
 
 ## Run conditions
 
-- **GO:** the round 5 GO; the human approved the run command.
+- **GO:** the round 5 GO; the run command went through Claude Code's auto mode (corrected after round 7: run commands go through Claude Code's auto mode, not a human approval).
 - **Code:** a clean detached checkout of `origin/develop` at `a6825e81`, after `npm ci`.
 - **The sweeper check:** at 15:38 the dry run warned "sweeper check would refuse" (the scheduled sweeper run 426 min old, the helper 42 min of 40, a 4.6 min dispatch gap). It was re-checked every 2 min without any skip flag and was OK at 15:47:40 (by the dispatch cadence).
 - **Free memory at 15:47:53 UTC:** 6,328 MB physical, 13,662 MB virtual.
