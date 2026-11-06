@@ -8,7 +8,7 @@ import { installChatLimit, withChatPriority, CHAT_LIMIT } from './chat_limit.js'
 import { Agent } from './agent.js';
 
 /** A bot whose client counts like a vanilla 1.12 server at `tps` ticks per second. */
-function fakeBot({ tps = 20 } = {}) {
+function fakeBot({ tps = 20, logs = [] } = {}) {
     const clock = { t: 0, timers: [] };
     const sent = [];
     let counter = 0, at = 0, peak = 0;
@@ -26,7 +26,7 @@ function fakeBot({ tps = 20 } = {}) {
         now: () => clock.t,
         setTimer: (fn, ms) => { const h = { at: clock.t + ms, fn }; clock.timers.push(h); return h; },
         clearTimer: (h) => { clock.timers = clock.timers.filter(x => x !== h); },
-        log: () => {},
+        log: (m) => logs.push(m),
     });
     const advance = (ms) => {
         const end = clock.t + ms;
@@ -166,4 +166,44 @@ test('#256 review 2: no client chat to wrap: a warning that the limit is off', (
     const warned = [];
     assert.equal(installChatLimit({}, { warn: (m) => warned.push(m) }), null);
     assert.match(warned[0], /chat limit is OFF/);
+});
+
+// #256 follow-up: a refusal waiting in its 10 s gap held up a normal line that the budget allowed.
+const refuseTo = (f, who) => withChatPriority(f.bot, 'high', () => f.bot.chat(`Sorry ${who}, I only run commands from task givers.`), `refusal:${who}`);
+
+test('#256 follow-up: a refusal in its gap does not hold up a normal line the budget allows: it goes at once', () => {
+    const f = fakeBot();
+    refuseTo(f, 'Mallory');               // t 0: sent
+    f.advance(500);
+    refuseTo(f, 'Mallory');               // in its gap: waits until t 10 s
+    f.advance(500);
+    f.bot.chat('agenda step rocks done'); // t 1 s: the budget allows it
+    const line = f.sent.find(x => x.text === 'agenda step rocks done');
+    assert.ok(line, 'sent');
+    assert.equal(line.t, 1_000, 'at once, not after the refusal\'s gap');
+    f.advance(20_000);
+    const refusals = f.sent.filter(x => /^Sorry Mallory/.test(x.text));
+    assert.deepEqual(refusals.map(x => x.t), [0, 10_000], 'the waiting refusal still goes when its gap ends');
+});
+
+test('#256 follow-up: a line over the budget waits for the budget (about 2 s), not for a refusal\'s gap timer (10 s)', () => {
+    const f = fakeBot();
+    refuseTo(f, 'Mallory');                       // t 0: sent (20)
+    refuseTo(f, 'Mallory');                       // waits for its gap: the timer is set for t 10 s
+    for (let i = 0; i < 4; i++) f.bot.chat(`n${i}`); // t 0: sent (100: the budget is used up)
+    f.bot.chat('late');                           // over the budget: waits
+    f.advance(30_000);
+    const late = f.sent.find(x => x.text === 'late');
+    assert.ok(late.t <= 2_100, `sent when the budget allowed: ${late.t} ms`);
+    assert.ok(f.sent.every(x => !x.kicked));
+});
+
+test('#256 follow-up: a collapsed repeat is logged', () => {
+    const logs = [];
+    const f = fakeBot({ logs });
+    refuseTo(f, 'Mallory');
+    refuseTo(f, 'Mallory'); // waits
+    refuseTo(f, 'Mallory'); // collapses into it
+    assert.equal(f.limiter.collapsed, 1);
+    assert.ok(logs.some(m => /^\[chat\] collapsed a repeat into the waiting line \(refusal:Mallory\): Sorry Mallory/.test(m)), JSON.stringify(logs));
 });

@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T07:53Z (from `date -u`)
+Updated: 2026-11-06T08:18Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -460,7 +460,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Tests: `death_report` 14, `furnace` 7; the 4 new ones fail on the previous head; lint 254.
 - **#247 nit**: folded into the fall-safety PR (commit cherry-picked from `next3`). From 10 to 20 min the night text says the items are already lost. The rounding nit was accepted as is.
-- **The round 4 PR, #256** (lead: one PR, built on rotn-data's `agent/rotn-data/sticks-from-felling`, superseding #252 and my #253). Branch `agent/skills-rotn/round4`: rotn-data's branch with `fall-safety` merged in (no rebase); STATUS lives here.
+- **#256 merged** (#252 closed as superseded). The round 4 PR, #256 (lead: one PR, built on rotn-data's `agent/rotn-data/sticks-from-felling`, superseding #252 and my #253). Branch `agent/skills-rotn/round4`: rotn-data's branch with `fall-safety` merged in (no rebase); STATUS lives here.
 - **G3 round 4 batch B, the fall** (first opened as #253, now in the round 4 PR). "FRCFLD fell from a high place" during `!collectBlocks("stick", 4)` on leaves, 3 s after unstuck took over.
   - **Findings:**
     - Leaves went through `bot.collectBlock.collect`, whose pathfinder may dig, tower and step onto leaves.
@@ -496,6 +496,18 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     - low (reflex narration) is dropped when busy or after 15 s.
   - **The "late refusal"** was the harness's reading (lead: harness #255). The server log has it 1 s after the whisper.
   - **Tests:** `chat_limit` 5 and `agenda` #17; the agent wiring and agenda tests fail on develop. Full `npm test` after `npm ci`: 1331 pass. The 1 failure is `deploy-eol`, which checks `deploy/cx23/` on disk for CR; this Windows checkout converts to CRLF, and I didn't touch `deploy/`. Lint 254.
+- **#256 follow-up, PR #260** (branch `agent/skills-rotn/chat-gap`, from develop; opened at the lead's request, waiting for review; STATUS lives here):
+  - A refusal waiting in its 10 s gap no longer holds up lines that may go now: they go at once when the budget allows.
+  - A new line that may go sooner moves the drain timer earlier.
+  - Collapsed repeats are logged.
+  - The comment notes that waiting high lines are bounded by the number of players (plus the givers' replies).
+  - Tests: `chat_limit` 11; the 3 new ones (two timing tests and the collapse log) fail on develop. Lint 254.
+- **Waiting for net-forge #259 to merge** (lead, from the #259 review; not started). Once #259 marks modded fluids as liquid in the registry and adds `forge.hazard` on traps, fires and portals:
+  - (a) `fall_safety.js` `isEmpty`/`firstBelow` use the liquid flag, not only the names water/lava (molten metals, poison, acid, tar);
+  - (b) every walk's Movements avoids `forge.hazard` blocks.
+  - With tests, in #260 or the next PR.
+  - On 2026-11-06 #259's head (`agent/net-forge/collision-shapes`) had neither field yet.
+- **Next:** #260 review fixes if any; then the #259 item once it merges.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
