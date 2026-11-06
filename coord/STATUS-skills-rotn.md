@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T16:56Z (from `date -u`)
+Updated: 2026-11-06T17:22Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -209,8 +209,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#274** (round 5 fixes, branch `agent/skills-rotn/r5-rerun`, opened 2026-11-06T16:02Z by `date -u`): Hit With Axe sticks, standing on a block with a check (C), the #270 follow-ups, felling drops arriving late and stuck against trunks (A rerun), the plain-text memory prompt. Review fixes pushed 2026-11-06T16:49Z; `src` and `packages` tests 903/903, lint 253. Waiting for the lead's re-review.
-- Earlier PRs (#195, #198 and the ones before) are merged.
+- None open. **#274** (round 5 fixes) is merged (seen 2026-11-06T17:22Z by `date -u`).
+- **G3 smoke round 6 is running** (from 2026-11-06T17:22Z by `date -u`; four batches, about 2 hours): targeted tests only, no npm ci, no full npm test, no long node scripts. I am waiting for the lead's findings.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
