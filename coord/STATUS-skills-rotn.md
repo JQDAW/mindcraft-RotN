@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T01:46Z (from `date -u`)
+Updated: 2026-11-06T01:55Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -419,7 +419,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   3. A better off-hand weapon beats a worse one in the inventory, by `weaponRank`: material, then sword over axe. It is a heuristic: neither mineflayer nor rotn-data has attack damage, upstream's `attackDamage` sort was a no-op, and RotN's durabilities do not follow damage.
 
   Tests: `furnace` 6, `use_on` 15; the new ones fail on develop. Related 4 files pass; lint per file unchanged.
-- **#239 open** (branch `agent/skills-rotn/model-preset`): the bot's model is now `openrouter/@preset/glm-5-3-flash-cheap-reliable` (human decision, 2026-11-06), and `rotn_profile.test.js` asserts it (2/2). Only those two files changed. It merges first; harness-ops then switches the driver check.
+- **#239 open** (branch `agent/skills-rotn/model-preset`): the bot's model is now `openrouter/@preset/glm-5-3-flash-cheap-reliable` (human decision, 2026-11-06), and `rotn_profile.test.js` asserts it (2/2). Only those two files changed. It cannot pass CI alone (the harness tests check the real profile against `LLM_MODEL`), so harness-ops opens one combined PR on top of my branch, keeping my commit. I do not push to `agent/skills-rotn/model-preset` any more; #239 closes as superseded when the combined PR merges.
 - **Next:** idle until the lead assigns work or the round 3 findings come. Round 3 still running: targeted tests only.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
