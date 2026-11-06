@@ -785,6 +785,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         log(bot, `Not collecting ${blockType}: you are up on a tree and found no safe way down; try !moveAway or wait.`);
         return false;
     }
+    // Intended to last (#256 nit): mineflayer-collectblock keeps one Movements for every collect, so
+    // this makes all its walks fall-safe from the first collect on (fallSafe marks it, so only once).
     if (bot.collectBlock?.movements) fallSafe(bot.collectBlock.movements);
     for (let i=0; i<num && collected<num; i++) { // collected counts the items really gained (a stone can give 4 rocks)
         if (run.aborted) break;

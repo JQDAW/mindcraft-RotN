@@ -19,6 +19,12 @@ import { isBranch } from './felling.js';
 
 /** The highest drop a walk may take: a fall of 3 blocks does no damage (fall damage is height - 3). */
 export const MAX_SAFE_DROP = 3;
+/**
+ * mineflayer-pathfinder 2.4.5's maxDropDown for that (#256 review 3): getLandingBlock looks for the
+ * landing block from the feet down and accepts it while node.y - landing.y <= maxDropDown; the bot
+ * then stands on top of it, so the fall is (node.y - landing.y) - 1. maxDropDown 4 = falls of 3.
+ */
+export const PATHFINDER_MAX_DROP_DOWN = MAX_SAFE_DROP + 1;
 /** Leaves are broken only from the ground: at most this many blocks between the ground and the leaf. */
 export const LEAF_ABOVE_GROUND = 3;
 // An exclusion cost the pathfinder treats as "never" (it drops moves costing over 100).
@@ -31,7 +37,9 @@ export const isTreePart = (b) => isBranch(b) || isLeafBlock(b);
 
 const offset = (pos, dy) => (pos?.offset ? pos.offset(0, dy, 0) : new Vec3(pos.x, pos.y + dy, pos.z));
 const blockAt = (bot, pos) => { try { return bot.blockAt(pos) ?? null; } catch { return null; } };
-const isEmpty = (b) => !b || b.boundingBox === 'empty' || b.name === 'air';
+// Water and lava are not empty here (#256 nit): a leaf over water is not reachable from the ground,
+// and an item on water is not on the ground. isGround rejects them.
+const isEmpty = (b) => !b || b.name === 'air' || (b.boundingBox === 'empty' && !/water|lava/.test(b.name ?? ''));
 
 /** Firm ground to stand on: a solid block that is not part of a tree and not a liquid. */
 export function isGround(b) {
@@ -88,7 +96,7 @@ export function itemOnGround(bot, entity) {
  */
 export function fallSafe(movements) {
     if (!movements || movements.rotnFallSafe) return movements;
-    movements.maxDropDown = MAX_SAFE_DROP;
+    movements.maxDropDown = PATHFINDER_MAX_DROP_DOWN;
     movements.exclusionAreasBreak.push((b) => (isBranch(b) ? NEVER : 0));
     movements.rotnFallSafe = true;
     return movements;

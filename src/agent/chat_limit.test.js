@@ -93,24 +93,77 @@ test('withChatPriority sets the priority only for the call, and installing twice
     withChatPriority(f.bot, 'high', () => assert.equal(f.bot.rotnChatPriority, 'high'));
     assert.equal(f.bot.rotnChatPriority, undefined);
     assert.equal(installChatLimit(f.bot), f.limiter);
-    assert.equal(installChatLimit({}), null, 'no client: nothing to wrap');
+    assert.equal(installChatLimit({}, { warn: () => {} }), null, 'no client: nothing to wrap');
 });
 
-test('the agent: a reply to a player is high priority, a self-prompted one normal; openChat applies it to its packets', async (t) => {
+test('the agent: a refusal is high with a per-sender key; a reply to a giver high; to others and self-prompted normal', async (t) => {
     const before = { ...settings };
-    Object.assign(settings, { language: 'en', only_chat_with: ['JQDAW'] });
+    Object.assign(settings, { language: 'en', only_chat_with: ['JQDAW'], task_givers: ['JQDAW'] });
     t.after(() => { for (const k of Object.keys(settings)) delete settings[k]; Object.assign(settings, before); });
+    t.mock.method(console, 'log', () => {});
     const seen = [];
     const agent = Object.create(Agent.prototype);
     Object.assign(agent, { name: 'FRCFLD', shut_up: false, last_sender: null,
-        bot: { whisper(to, m) { seen.push([m, this.rotnChatPriority]); } } });
-    await agent.routeResponse('Server', 'Sorry Server, I only run commands from task givers.');
+        checkTaskDone: () => Promise.resolve(),
+        bot: { players: { FRCFLD: {}, JQDAW: {}, Mallory: {} },
+            whisper(to, m) { seen.push([m.trim(), this.rotnChatPriority, this.rotnChatKey ?? null]); } } });
+    await agent.handleMessage('Mallory', '!taskAdd("dig here", "normal")'); // the real refusal path
+    await agent.routeResponse('JQDAW', 'on it');
+    await agent.routeResponse('Mallory', 'hello');
     await agent.routeResponse('system', 'thinking aloud');
     await agent.openChat('I\'m stuck!', { priority: 'low' });
     assert.deepEqual(seen, [
-        ['Sorry Server, I only run commands from task givers. ', 'high'],
-        ['thinking aloud ', 'normal'],
-        ['I\'m stuck! ', 'low'],
+        ['Sorry Mallory, I only run commands from task givers.', 'high', 'refusal:Mallory'],
+        ['on it', 'high', null],
+        ['hello', 'normal', null],
+        ['thinking aloud', 'normal', null],
+        ['I\'m stuck!', 'low', null],
     ]);
     assert.equal(agent.bot.rotnChatPriority, undefined, 'reset after each send');
+});
+
+test('#256 review 1: a player who keeps typing commands: one waiting refusal, a bounded queue, and the agenda lines still go out', () => {
+    const f = fakeBot();
+    const refuse = () => withChatPriority(f.bot, 'high', () => f.bot.chat('Sorry Mallory, I only run commands from task givers.'), 'refusal:Mallory');
+    for (let i = 0; i < 5; i++) f.bot.chat(`agenda ${i}`); // the budget is used up
+    let maxQueue = 0, maxRefusalsWaiting = 0;
+    for (let s = 0; s < 120; s++) { // 2 minutes: a command every second, an agenda line every 4 s
+        refuse();
+        if (s % 4 === 0) f.bot.chat(`agenda line ${s}`);
+        const p = f.limiter.pending();
+        maxQueue = Math.max(maxQueue, p.length);
+        maxRefusalsWaiting = Math.max(maxRefusalsWaiting, p.filter(x => x.key === 'refusal:Mallory').length);
+        f.advance(1_000);
+    }
+    f.advance(120_000);
+    assert.equal(maxRefusalsWaiting, 1, 'repeats collapse into the one waiting refusal');
+    assert.ok(maxQueue <= CHAT_LIMIT.queueMax, `bounded: ${maxQueue}`);
+    const texts = f.sent.map(x => x.text);
+    for (let s = 0; s < 120; s += 4) assert.ok(texts.includes(`agenda line ${s}`), `agenda line ${s} was sent`);
+    const refusals = f.sent.filter(x => /^Sorry Mallory/.test(x.text));
+    assert.ok(refusals[0].t <= 2_000, `the first refusal is prompt: ${refusals[0].t} ms`);
+    assert.ok(refusals.every((x, i) => i === 0 || x.t - refusals[i - 1].t >= CHAT_LIMIT.keyGapMs), 'then at most one per 10 s');
+    assert.ok(refusals.length >= 1 && refusals.length <= 120 / (CHAT_LIMIT.keyGapMs / 1000) + 2, `at most one per ${CHAT_LIMIT.keyGapMs / 1000} s ahead of the rest: ${refusals.length}`);
+    assert.ok(f.sent.every(x => !x.kicked));
+});
+
+test('#256 review 1: the queue holds at most queueMax lines: low lines go first, then the oldest normal; high lines are kept', () => {
+    const f = fakeBot();
+    for (let i = 0; i < 5; i++) f.bot.chat(`burst ${i}`);
+    withChatPriority(f.bot, 'low', () => f.bot.chat('narration'));
+    for (let i = 0; i < CHAT_LIMIT.queueMax + 5; i++) f.bot.chat(`n${i}`);
+    for (let i = 0; i < 3; i++) withChatPriority(f.bot, 'high', () => f.bot.chat(`giver reply ${i}`));
+    const p = f.limiter.pending();
+    assert.equal(p.filter(x => x.priority === 'normal').length, CHAT_LIMIT.queueMax - 3, 'room for the high lines');
+    assert.equal(p.filter(x => x.priority === 'high').length, 3);
+    assert.ok(!p.some(x => x.text === 'narration'), 'the low line went first');
+    assert.ok(!p.some(x => x.text === 'n0'), 'then the oldest normal');
+    f.advance(120_000);
+    for (let i = 0; i < 3; i++) assert.ok(f.sent.some(x => x.text === `giver reply ${i}`));
+});
+
+test('#256 review 2: no client chat to wrap: a warning that the limit is off', () => {
+    const warned = [];
+    assert.equal(installChatLimit({}, { warn: (m) => warned.push(m) }), null);
+    assert.match(warned[0], /chat limit is OFF/);
 });

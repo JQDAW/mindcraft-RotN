@@ -10,7 +10,7 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
 import {
-    MAX_SAFE_DROP, fallSafe, treeSafe, standsOnTree, leafFromGround, itemOnGround, isTreePart,
+    MAX_SAFE_DROP, PATHFINDER_MAX_DROP_DOWN, fallSafe, treeSafe, standsOnTree, leafFromGround, itemOnGround, isTreePart,
 } from './fall_safety.js';
 import { ROTN_EARLY_GAME } from '../agenda.js';
 import { moveAwayWithin } from '../modes.js';
@@ -111,16 +111,35 @@ test('the predicates: leaves within reach from the ground, the bot on a tree, an
 test('fallSafe: no drop over 3 blocks and never a broken branch; treeSafe also no dig, tower, parkour or step above a tree', () => {
     const bot = fakeBot({ blocks: { '2,64,0': LEAVES } });
     const m = fallSafe(new pf.Movements(bot));
-    assert.equal(m.maxDropDown, MAX_SAFE_DROP);
-    assert.equal(MAX_SAFE_DROP, 3);
+    assert.equal(m.maxDropDown, PATHFINDER_MAX_DROP_DOWN);
+    assert.deepEqual([MAX_SAFE_DROP, PATHFINDER_MAX_DROP_DOWN], [3, 4]);
     assert.equal(m.safeToBreak(bot.blockAt(at(1, 64)).name === 'air' ? { ...bot.blockAt(at(1, 64)), name: BRANCH, type: MODDED[BRANCH] } : null), false, 'a branch is never broken');
     assert.equal(m.safeToBreak(bot.blockAt(at(2, 64))), true, 'leaves may be');
     fallSafe(m);
     assert.equal(m.exclusionAreasBreak.length, 1, 'once');
     const t = treeSafe(bot, new pf.Movements(bot));
-    assert.deepEqual([t.maxDropDown, t.canDig, t.allow1by1towers, t.allowParkour, t.scafoldingBlocks.length], [3, false, false, false, 0]);
+    assert.deepEqual([t.maxDropDown, t.canDig, t.allow1by1towers, t.allowParkour, t.scafoldingBlocks.length], [4, false, false, false, 0]);
     assert.ok(t.exclusionStep(bot.blockAt(at(2, 65))) >= 100, 'a step onto leaves');
     assert.equal(t.exclusionStep(bot.blockAt(at(1, 64))), 0, 'a step on dirt');
+});
+
+test('#256 review 3: in pathfinder 2.4.5 a fall-safe walk may fall 3 blocks (no damage), not 4', () => {
+    // The bot stands at y 67 on a ledge (dirt at y 66); east of it the ground is lower.
+    const at3 = fakeBot({ blocks: { '0,66,0': 'dirt', '0,65,0': 'dirt', '0,64,0': 'dirt' } });
+    const node = { x: 0, y: 67, z: 0, remainingBlocks: 0 };
+    const east = { x: 1, z: 0 };
+    // East: air down to y 64, dirt at y 63 (the world's ground): landing at feet y 64, a fall of 3.
+    const m = fallSafe(new pf.Movements(at3));
+    const land = m.getLandingBlock(node, east);
+    assert.ok(land, 'a fall of 3 is allowed');
+    assert.equal(land.position.y, 64, 'it stands at y 64: 67 - 64 = 3 blocks');
+    // The same with the ground one lower (air at y 63): a fall of 4 is refused.
+    const at4 = fakeBot({ blocks: { '0,66,0': 'dirt', '0,65,0': 'dirt', '0,64,0': 'dirt', '1,63,0': 'air' } });
+    assert.equal(fallSafe(new pf.Movements(at4)).getLandingBlock(node, east), null, 'a fall of 4 is not');
+    // The old setting (maxDropDown 3) refused the harmless fall of 3.
+    const old = new pf.Movements(at3);
+    old.maxDropDown = 3;
+    assert.equal(old.getLandingBlock(node, east), null);
 });
 
 test('every goToGoal walk is fall-safe; canDig false never digs (pickups used to get digging movements)', async (t) => {
@@ -129,7 +148,7 @@ test('every goToGoal walk is fall-safe; canDig false never digs (pickups used to
     await skills.goToGoal(bot, new pf.goals.GoalNear(5, 64, 0, 1));
     assert.ok(bot.calls.paths.length > 0);
     for (const m of [...bot.calls.paths, ...bot.calls.moves]) {
-        assert.equal(m.maxDropDown, 3);
+        assert.equal(m.maxDropDown, 4);
         assert.ok(m.exclusionBreak({ name: BRANCH, type: MODDED[BRANCH] }) >= 100, 'no branch broken');
     }
     const quiet = fakeBot();
@@ -150,7 +169,7 @@ test('unstuck: on a tree it climbs down (no drop over 3); on the ground its walk
     const r = await moveAwayWithin(treeBot, 5, 2000);
     assert.equal(r.outcome, 'freed');
     const m = treeBot.calls.gotos[0].moves;
-    assert.deepEqual([m.maxDropDown, m.allow1by1towers, m.allowParkour], [3, false, false]);
+    assert.deepEqual([m.maxDropDown, m.allow1by1towers, m.allowParkour], [4, false, false]);
     assert.ok(m.exclusionBreak({ name: BRANCH, type: MODDED[BRANCH] }) >= 100);
     assert.match(treeBot.output, /climbing down to the ground/);
 
@@ -160,7 +179,7 @@ test('unstuck: on a tree it climbs down (no drop over 3); on the ground its walk
 
     const ground = fakeBot({ arrive: () => at(6, 64) });
     assert.equal((await moveAwayWithin(ground, 5, 2000)).outcome, 'freed');
-    assert.ok(ground.calls.moves.length > 0 && ground.calls.moves.every(mv => mv.maxDropDown === 3), 'the walk away drops at most 3');
+    assert.ok(ground.calls.moves.length > 0 && ground.calls.moves.every(mv => mv.maxDropDown === 4), 'the walk away falls at most 3');
 });
 
 test('leaves only from the ground: the canopy is skipped; a low leaf is broken from a ground walk that never digs or towers', async (t) => {
@@ -177,7 +196,7 @@ test('leaves only from the ground: the canopy is skipped; a low leaf is broken f
     assert.deepEqual(bot.calls.digs, ['6,65,0']);
     assert.deepEqual(bot.calls.collected, [], 'not mineflayer-collectblock (it digs, towers and climbs)');
     const m = bot.calls.gotos[0].moves;
-    assert.deepEqual([m.canDig, m.allow1by1towers, m.allowParkour, m.maxDropDown], [false, false, false, 3]);
+    assert.deepEqual([m.canDig, m.allow1by1towers, m.allowParkour, m.maxDropDown], [false, false, false, 4]);
 
     // The walk did not get within reach: skipped, not broken from afar.
     const far = fakeBot({ blocks: { '9,64,0': LEAVES } });
@@ -191,7 +210,7 @@ test('a collect that starts on a tree climbs down first, or does nothing when th
     const blocks = { '0,64,0': LEAVES, '0,65,0': LEAVES, '0,66,0': LEAVES, '4,64,0': LEAVES };
     const bot = fakeBot({ blocks, start: at(0, 67), arrive: (goal) => (goal.isEnd?.(at(3, 64)) ? at(3, 64) : null) });
     assert.equal(await skills.collectBlock(bot, LEAVES, 1), true);
-    assert.equal(bot.calls.gotos[0].moves.maxDropDown, 3, 'down first');
+    assert.equal(bot.calls.gotos[0].moves.maxDropDown, 4, 'down first');
     assert.deepEqual(bot.calls.digs, ['4,64,0']);
 
     const stuck = fakeBot({ blocks, start: at(0, 67) });

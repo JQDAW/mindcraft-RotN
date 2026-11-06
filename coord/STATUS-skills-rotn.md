@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T07:39Z (from `date -u`)
+Updated: 2026-11-06T07:53Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -478,6 +478,15 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     - `moveAway` logs a copied start position.
   - **Tests:** `fall_safety` 9 (7 fail on develop; 2 cover the new module). The related files pass one at a time. Lint 254.
   - **Sticks with rotn-data #252** (agreed with rotn-data): `fell-tree` gives sticks with `tool: null` and `preferredTool` axe. `collectBlock` equips a held axe for it, otherwise cuts by hand, never "needs an axe". The stick step also mentions planks -> sticks. Test: `fell_tree` #13, which fails without the `preferredTool` code.
+- **#256 review (REQUEST CHANGES, small), fixed on the same branch:**
+  1. **The chat queue is capped** at 20; when full, a low line goes first, then the oldest normal one; high lines are kept.
+     - A refusal carries a per-sender key: at most one waits (repeats collapse into it), and the next one goes out at least 10 s after the last.
+     - Replies to task givers are high; replies to other players are normal.
+     - Test: a non-giver typing a command every second for 2 min while agenda lines come. The result: one waiting refusal, the queue bounded, every agenda line sent, the first refusal within 2 s and then at most one per 10 s.
+  2. **A warning when `bot._client.chat` is missing** (the limit is off).
+  3. **Fall limit corrected.** Pathfinder 2.4.5 `getLandingBlock` accepts `node.y - landing.y <= maxDropDown` and the bot then stands on top of the landing block, so the fall is that minus 1. Now `maxDropDown` is 4: falls of 3, which do no damage. The test uses the real `Movements`: a fall of 3 is allowed, 4 is refused, and the old setting refused 3.
+  - **Nits:** the shared mineflayer-collectblock movements change is commented as intended; water and lava no longer count as empty in `fall_safety.js`.
+  - **Tests:** `chat_limit` 8 (4 new; they fail on the previous head), `fall_safety` 10 (the landing test fails with the old setting). Related files pass one at a time. Lint 254.
 - **G3 round 4 C+D, the spam kick** (in the round 4 PR):
   - **Agenda:** two or more steps done in one tick send one line, `agenda steps done: a, b, ...`. One step keeps `agenda step <id> done`; `agenda done` and `started` are unchanged, so the harness parsers still match.
   - **Outgoing chat limit** (`chat_limit.js`, at `bot._client.chat`, so every packet counts):

@@ -11,40 +11,56 @@
 // The limit sits at the one place every packet passes: mineflayer's bot._client.chat (bot.chat,
 // bot.whisper and each piece of a long line). A packet over the budget waits in a queue.
 // Priorities, set by the caller around its bot.chat/whisper call (withChatPriority):
-// - 'high': a reply to a player, a refusal included: it goes before anything waiting; never dropped.
-// - 'normal' (the default): agenda lines, self-prompted replies: waits its turn; never dropped.
-// - 'low': reflex narration ("I'm stuck!"): dropped when LOW_QUEUE_MAX low lines already wait,
-//   or when it has waited longer than lowMaxWaitMs.
+// - 'high': a reply to a task giver, or a refusal: it goes before anything waiting; never dropped.
+// - 'normal' (the default): agenda lines, self-prompted replies, replies to other players: waits its
+//   turn; dropped only when the queue is full (the oldest normal line, after any low one).
+// - 'low': reflex narration ("I'm stuck!"): dropped when lowQueueMax low lines already wait, or
+//   when it has waited longer than lowMaxWaitMs.
+// A line may carry a key (a refusal: "refusal:<sender>", #256 review 1). At most one line per key
+// waits: a repeat replaces the waiting one. And a keyed line is not sent until keyGapMs after the
+// last one with that key, so a player who keeps typing commands gets at most one refusal per 10 s
+// and cannot starve the agenda lines the harness reads. The queue holds at most queueMax lines
+// (high lines aside).
 
-export const CHAT_LIMIT = { perPacket: 20, budget: 100, refillPerSec: 10, lowQueueMax: 3, lowMaxWaitMs: 15_000 };
+export const CHAT_LIMIT = { perPacket: 20, budget: 100, refillPerSec: 10, lowQueueMax: 3, lowMaxWaitMs: 15_000, queueMax: 20, keyGapMs: 10_000 };
 const RANK = { high: 0, normal: 1, low: 2 };
 
 /**
- * Run fn (a synchronous bot.chat or bot.whisper call) with this priority for the packets it sends.
- * mineflayer sends them synchronously, so the priority applies to exactly those packets.
+ * Run fn (a synchronous bot.chat or bot.whisper call) with this priority (and collapse key) for the
+ * packets it sends. mineflayer sends them synchronously, so they apply to exactly those packets.
  */
-export function withChatPriority(bot, priority, fn) {
-    const before = bot?.rotnChatPriority;
-    if (bot) bot.rotnChatPriority = RANK[priority] === undefined ? 'normal' : priority;
+export function withChatPriority(bot, priority, fn, key = null) {
+    const before = [bot?.rotnChatPriority, bot?.rotnChatKey];
+    if (bot) {
+        bot.rotnChatPriority = RANK[priority] === undefined ? 'normal' : priority;
+        bot.rotnChatKey = key ?? undefined;
+    }
     try { return fn(); }
-    finally { if (bot) bot.rotnChatPriority = before; }
+    finally { if (bot) [bot.rotnChatPriority, bot.rotnChatKey] = before; }
 }
 
 /**
- * Wrap bot._client.chat with the limit. Returns the limiter ({ pending(), dropped }); idempotent.
- * now/setTimer/clearTimer/log are for tests.
+ * Wrap bot._client.chat with the limit. Returns the limiter ({ pending(), dropped, collapsed }), or
+ * null (with a warning: the limit is off) when the bot has no client chat to wrap; idempotent.
+ * now/setTimer/clearTimer/log/warn are for tests.
  */
-export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout, log = (m) => console.log(m) } = {}) {
+export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout,
+    log = (m) => console.log(m), warn = (m) => console.warn(m) } = {}) {
     const client = bot?._client;
-    if (!client || typeof client.chat !== 'function') return null;
+    if (!client || typeof client.chat !== 'function') {
+        // #256 review 2: never silently off; a kick for spam would follow.
+        warn('[chat] no bot._client.chat to wrap: the outgoing chat limit is OFF for this bot.');
+        return null;
+    }
     if (client.rotnChatLimit) return client.rotnChatLimit;
     const raw = client.chat.bind(client);
     let level = 0;          // the counter as the server sees it, by our estimate
     let at = now();
     let seq = 0;
-    const queue = [];       // { text, priority, since, seq }
+    const queue = [];       // { text, priority, key, since, seq }
+    const keySentAt = new Map();
     let timer = null;
-    const state = { dropped: 0, sent: 0, pending: () => queue.map(q => ({ text: q.text, priority: q.priority })) };
+    const state = { dropped: 0, collapsed: 0, sent: 0, pending: () => queue.map(q => ({ text: q.text, priority: q.priority, key: q.key })) };
 
     const refill = () => {
         const t = now();
@@ -52,46 +68,75 @@ export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, set
         at = t;
     };
     const fits = () => level + limits.perPacket <= limits.budget;
-    const send = (text) => {
+    const send = (q) => {
         level += limits.perPacket;
         state.sent++;
-        raw(text);
+        if (q.key) keySentAt.set(q.key, now());
+        raw(q.text);
     };
     const short = (text) => (text.length > 60 ? `${text.slice(0, 57)}...` : text);
     const drop = (q, why) => {
         state.dropped++;
-        log(`[chat] dropped a low-priority line (${why}): ${short(q.text)}`);
+        log(`[chat] dropped a ${q.priority} line (${why}): ${short(q.text)}`);
     };
-    // The next one to go: the highest priority, then the oldest.
-    const next = () => queue.reduce((best, q, i) => (best < 0 || RANK[q.priority] < RANK[queue[best].priority]
+    // When a line may go: a keyed one keyGapMs after the last line sent with its key.
+    const eligibleAt = (q) => (q.key ? (keySentAt.get(q.key) ?? -Infinity) + limits.keyGapMs : -Infinity);
+    // The next one to go: of the lines that may go, the highest priority, then the oldest; or -1.
+    const next = () => queue.reduce((best, q, i) => (eligibleAt(q) > now() ? best
+        : best < 0 || RANK[q.priority] < RANK[queue[best].priority]
         || (RANK[q.priority] === RANK[queue[best].priority] && q.seq < queue[best].seq) ? i : best), -1);
+    const oldest = (priority) => queue.reduce((best, q, i) => (q.priority === priority && (best < 0 || q.seq < queue[best].seq) ? i : best), -1);
     const drain = () => {
         timer = null;
         refill();
         for (let i = queue.length - 1; i >= 0; i--) {
             if (queue[i].priority === 'low' && now() - queue[i].since > limits.lowMaxWaitMs) drop(queue.splice(i, 1)[0], 'it waited too long');
         }
-        while (queue.length && fits()) send(queue.splice(next(), 1)[0].text);
+        while (queue.length && fits()) {
+            const i = next();
+            if (i < 0) break; // only keyed lines in their gap wait
+            send(queue.splice(i, 1)[0]);
+        }
         schedule();
     };
     const schedule = () => {
         if (timer || !queue.length) return;
-        const wait = Math.max(50, ((level + limits.perPacket - limits.budget) / limits.refillPerSec) * 1000);
+        const budgetWait = ((level + limits.perPacket - limits.budget) / limits.refillPerSec) * 1000;
+        const soonest = Math.min(...queue.map(eligibleAt)) - now();
+        const wait = Math.max(50, budgetWait, soonest);
         timer = setTimer(drain, wait);
         timer?.unref?.();
     };
 
     client.chat = (text) => {
         refill();
+        const key = bot.rotnChatKey ?? null;
         const priority = bot.rotnChatPriority ?? 'normal';
-        // A high-priority line (a reply to a player, a refusal) goes at once when the budget allows,
-        // ahead of lines that wait.
-        if (fits() && (!queue.length || priority === 'high')) return send(text);
-        if (priority === 'low' && queue.filter(q => q.priority === 'low').length >= limits.lowQueueMax) {
-            drop({ text }, 'chat is busy');
+        const line = { text, priority, key, since: now(), seq: seq++ };
+        // A high-priority line (a reply to a giver, a refusal) goes at once when the budget allows,
+        // ahead of lines that wait; a keyed one only after its gap (#256 review 1).
+        if (fits() && (!queue.length || priority === 'high') && eligibleAt(line) <= now()) return send(line);
+        // At most one waiting line per key: the newest text replaces the waiting one.
+        const same = key ? queue.find(q => q.key === key) : null;
+        if (same) {
+            same.text = text;
+            if (RANK[priority] < RANK[same.priority]) same.priority = priority;
+            state.collapsed++;
             return;
         }
-        queue.push({ text, priority, since: now(), seq: seq++ });
+        if (priority === 'low' && queue.filter(q => q.priority === 'low').length >= limits.lowQueueMax) {
+            drop(line, 'chat is busy');
+            return;
+        }
+        if (queue.length >= limits.queueMax) {
+            // Make room: a low line, else the oldest normal one. High lines are never dropped (their
+            // number is bounded: replies to givers, one refusal per sender).
+            if (priority === 'low') { drop(line, 'the chat queue is full'); return; }
+            const victim = oldest('low') >= 0 ? oldest('low') : oldest('normal');
+            if (victim >= 0) drop(queue.splice(victim, 1)[0], 'the chat queue is full');
+            else if (priority !== 'high') { drop(line, 'the chat queue is full'); return; }
+        }
+        queue.push(line);
         schedule();
     };
     // A disconnect ends the queue: lines for the old connection must not go to the next one.
