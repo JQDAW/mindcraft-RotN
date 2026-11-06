@@ -1,36 +1,31 @@
 # Status: net-forge
 
-Updated: 2026-11-06T13:45Z
+Updated: 2026-11-06T16:24Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Next: switch collision to rotn-data `playerCollision` (#269); proposal, 2026-11-06T13:45Z
+## Collision from rotn-data `playerCollision` (#269); PR open, 2026-11-06T16:24Z
 
-rotn-data's #269 (`b49cf6e`) adds `RotnData.playerCollision()`. Its boxes come from `addCollisionBoxToList` for a player, which is what entities really collide with. Today `applyCollisionShapes` reads the dump's `collision` field (`getCollisionBoundingBox`), so it misses those boxes.
+- **Branch:** `agent/net-forge/player-collision`, from develop `b49cf6e`. The lead approved the switch. The walk-through allowlist goes in a separate later PR (decision below).
+- **Shapes:** each modded state gets what a player collides with, from rotn-data's `RotnData.playerCollision`, passed in by `initBot`.
+  - Stairs and cauldrons get several boxes. Lily pads get their thin box: 0.09375 high, which the pathfinder treats as a carpet, so the bot walks onto it.
+  - **Neighbour-dependent states** (`varies`: fences, walls, panes, Dynamic Trees branches) get one full-width box from the floor to their tallest box, at least 1 high. A fence or wall is `[0,0,0,1,1.5,1]`; a branch is a full cube.
+    - My proposal had said "keep today's `collision` box". That box is not conservative: for a BOP fence it is a 1-high cube, and the player really collides with a 1.5-high post.
+  - A missing or malformed result keeps the dumped `collision`. Without `playerCollision`, behaviour is as before.
+- **Policy is unchanged:**
+  - Walk-through stays opt-in: a state with no player box that is not reviewed stays a full cube, for example `contenttweaker:cave_grass`.
+  - Liquids and hazards are unchanged.
+  - The generator still requires no `addCollisionBoxToList` override for walk-through classes, because the dumper cannot see tile-entity dependence.
+- **Overrides data:**
+  - Only the 24 leaves-only entries and the `dynamicLeaves` shape table went.
+  - The tool now checks all 26 Dynamic Trees leaves blocks against the box the jar and config select, in every state. The result is under `checks.dynamicLeaves`.
+  - Everything else is identical: 326 walk-through, 162 liquid, 233 hazard. `--check` reports it up to date.
+- **Tests:**
+  - `collision.test.js` 13/13: 2 new #269 tests (fence landing at 65.5, lily pad at 64.09375), plus real-dump checks for stairs, fence, wall, branch and lily pad.
+  - `e2e-initbot` and `fall_safety` 18/18.
+  - Lint at baseline (253).
 
-**Survey** (4,642 modded blocks; overrides compared with the #269 dump):
-
-- **The 326 walk-through blocks all agree:** none of their walk-through states has a player box. Dynamic Trees leaves also agree with `DYNAMIC_LEAVES_BOX`.
-- **47 states have a player box but no `collision` box.** Today they become a full cube; the new data gives the real box. Examples: BOP and Twilight Forest lily pads, the Dungeon Tactics bushes, grape vines, hops, `minetraps:barbed_wire_fence`.
-- **3,256 states have several boxes** (stairs, cauldrons, hoppers). Today each is one box.
-- **480 states have a solid `collision` box but no player box.** Examples: `contenttweaker:cave_grass`, `bonfire`, `void_block`, `charset:wire`, the horsepower fillers, `arcanearchives:fake_air`.
-- **224 blocks have no player box in any state** and are not reviewed. Examples: buttons, pressure plates, rails, signs, torches, the adpother gases. Under the opt-in rule they stay full cubes.
-- **354 states have `varies` true** (fences, walls, panes, snow layers): the shape depends on the neighbours.
-- **Some boxes reach outside their cell** (piston heads, `dimstack:portal`, mcwbridges bridges). Per-cell physics only sees them from their own cell.
-
-**Plan:** one small PR in `packages/forge-bridge/`.
-
-1. **Per-state shapes** come from `playerCollision`, including multi-box states, the Dynamic Trees branch guard and the lily-pad boxes.
-2. **Policy stays as it is:**
-   - Walk-through stays opt-in: a state without a box that is not reviewed stays a full cube.
-   - Liquid and hazard flags are unchanged.
-3. **`varies` states** keep today's `collision` box, which is the conservative choice. Mineflayer cannot compute modded fence connections.
-4. **Overrides file:**
-   - The `dynamicLeaves` shape table entry goes, because the data now has those boxes. The tool and test check that the data still matches.
-   - The generator checks walk-through classes against the player boxes instead of looking for `addCollisionBoxToList` overrides.
-   - The reviewed allowlist, liquids and hazards stay.
-
-**Question for the lead:** should I widen the walk-through allowlist to reviewed harmless classes among the 224 (buttons, pressure plates, rails, signs, torches, levers), each with no box and no contact harm? Or keep it for a later PR?
+**Lead decision (2026-11-06), for a later PR:** widen the walk-through allowlist to rails, signs, torches, buttons and levers, if they have no collision box and no contact harm. Pressure plates and tripwire stay excluded, because they trigger mechanisms and traps.
 
 ## (Merged as #263) #259 follow-up: whole-block vs partial hazards
 

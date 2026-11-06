@@ -1,5 +1,5 @@
 // Builds packages/forge-bridge/data/collision-overrides-3.3.4.json: what src/collision.js needs
-// beyond rotn-data's dumped per-state `collision` to give modded blocks safe shapes (#256, #259 review).
+// beyond rotn-data's per-state playerCollision (#269) to give modded blocks safe shapes (#256, #259 review).
 //
 // The lead's rule (#259): walk-through is opt-in. A state the dump gives no box becomes walk-through
 // only if its block is in a reviewed harmless class (plants, flowers, grass, saplings, crops, rock
@@ -10,11 +10,13 @@
 // - every class in the vanilla server jar (mapped with Forge's notch-to-SRG table), the Forge jar
 //   and every mod jar: superclass, interfaces, declared methods and the member names it references;
 // - config/dynamictrees.cfg, for the Dynamic Trees leaves box;
-// - rotn-data's 3.3.4 dump (blocks.json): class, and per state the material and the collision.
+// - rotn-data's 3.3.4 dump (blocks.json): class, and per state the material and playerCollision
+//   (the boxes addCollisionBoxToList adds for a player, and whether they depend on the neighbours).
 // Rules, per dumped modded block (class chain = the block's class up to net.minecraft.block.Block):
-// - shapes 'dynamicLeaves': the chain contains BlockDynamicLeaves. The dump reads
-//   getCollisionBoundingBox (a full cube); entities collide with what addCollisionBoxToList adds,
-//   a half-height box with the pack's config (bytecode in test/fixtures/dynamictrees-0.13.4/).
+// - check, Dynamic Trees leaves: every state of a block whose chain contains BlockDynamicLeaves
+//   must give a player the box the jar and the pack's config select (bytecode in
+//   test/fixtures/dynamictrees-0.13.4/); the tool fails otherwise. Since #269 the data has that box,
+//   so no shape override is written for them.
 // - liquid: the chain contains BlockFluidBase or BlockLiquid, or implements IFluidBlock.
 // - hazard (every state, or per meta):
 //   'portal' (BlockPortal, BlockEndPortal, BlockEndGateway, or material portal),
@@ -23,11 +25,12 @@
 //   chain declares onEntityCollidedWithBlock (func_180634_a) or onEntityWalk (func_176199_a) and
 //   references attackEntityFrom, addPotionEffect, setFire, setInWeb or an explosion), or a reviewed
 //   per-variant entry (REVIEWED).
-// - walkThrough: every state (or the reviewed metas) has no box in the dump, the block is no
-//   liquid and no hazard, and either the chain contains a vanilla plant class (PLANT_BASES) or every
-//   state's material is plants or vine, or the class is a reviewed rock pile (ROCK_PILES); and no
-//   class in the chain declares onEntityCollidedWithBlock, onEntityWalk or addCollisionBoxToList
-//   (func_185477_a: it may add a box the dump did not see, like a lily pad's), unless REVIEWED.
+// - walkThrough: every state (or the reviewed metas) gives a player no box and does not depend on
+//   its neighbours (playerCollision), the block is no liquid and no hazard, and either the chain
+//   contains a vanilla plant class (PLANT_BASES) or every state's material is plants or vine, or the
+//   class is a reviewed rock pile (ROCK_PILES); and no class in the chain declares
+//   onEntityCollidedWithBlock, onEntityWalk or addCollisionBoxToList (func_185477_a: the dumper calls
+//   it at an empty cell, and a tile entity could change what it adds), unless REVIEWED.
 //
 // Usage: node packages/forge-bridge/tools/build-collision-overrides.mjs --pack <server pack zip> [--check]
 // --check compares with the committed file and exits 1 if they differ.
@@ -266,7 +269,7 @@ export function buildCollisionOverrides(packPath) {
     const pack = loadRotnData('3.3.4');
     if (!pack.hasDump) throw new Error('no 3.3.4 dump imported');
     const blocks = {};
-    const counts = { moddedBlocks: 0, withDumpStates: 0, statesWithoutBox: 0, walkThroughStates: 0, solidStatesWithoutBox: 0 };
+    const counts = { moddedBlocks: 0, withDumpStates: 0, statesWithoutBox: 0, walkThroughStates: 0, solidStatesWithoutBox: 0, dynamicLeavesChecked: 0 };
     const dot = (c) => c.replace(/\//g, '.');
     for (const [regName, b] of Object.entries(pack.dump.blocks.blocks).sort(([a], [z]) => a.localeCompare(z))) {
         if (regName.startsWith('minecraft:')) continue;
@@ -280,7 +283,17 @@ export function buildCollisionOverrides(packPath) {
         const out = { class: b.class };
         const rules = [];
 
-        if (chain.includes(DT_LEAVES)) { out.shapes = 'dynamicLeaves'; rules.push('dynamic-leaves'); }
+        const player = (s) => pack.playerCollision({ name: regName, metadata: s.meta });
+        const dtLeaves = chain.includes(DT_LEAVES);
+        if (dtLeaves) {
+            counts.dynamicLeavesChecked++;
+            for (const s of states) {
+                const pc = player(s);
+                if (JSON.stringify(pc?.boxes) !== JSON.stringify(leavesShapes) || pc.varies === true) {
+                    throw new Error(`${regName}:${s.meta}: a player gets ${JSON.stringify(pc)}, the jar and ${DT_CFG} give ${JSON.stringify(leavesShapes)}`);
+                }
+            }
+        }
 
         const liquid = FLUID_BASES.some((f) => chain.includes(f)) || interfacesOf(chain).has(IFLUID);
         if (liquid) { out.liquid = true; rules.push(chain.find((c) => FLUID_BASES.includes(c)) ? 'fluid-class' : 'IFluidBlock'); }
@@ -310,12 +323,12 @@ export function buildCollisionOverrides(packPath) {
 
         // Walk-through: opt-in, per state.
         if (states.length) counts.withDumpStates++;
-        const noBox = states.filter((s) => Array.isArray(s.collision) && s.collision.length === 0);
+        const noBox = states.filter((s) => { const pc = player(s); return Array.isArray(pc?.boxes) && pc.boxes.length === 0 && pc.varies !== true; });
         counts.statesWithoutBox += noBox.length;
         const plantLike = PLANT_BASES.some((p) => chain.includes(p)) || (states.length > 0 && states.every((s) => PLANT_MATERIALS.has(s.material)));
         const pile = below.find((c) => ROCK_PILES[c]);
         const overrides = declares(M.addCollisionBoxToList) || (!reviewed && contact);
-        if (noBox.length && !liquid && !hazard && !out.shapes && (plantLike || pile) && !overrides) {
+        if (noBox.length && !liquid && !hazard && !dtLeaves && (plantLike || pile) && !overrides) {
             const metas = noBox.map((s) => s.meta).filter((m) => !(m in hazardByMeta));
             if (metas.length) {
                 out.walkThrough = metas.length === states.length ? 'all' : metas.sort((a, z) => a - z);
@@ -324,7 +337,7 @@ export function buildCollisionOverrides(packPath) {
             }
         }
         counts.solidStatesWithoutBox = counts.statesWithoutBox - counts.walkThroughStates;
-        if (out.shapes || out.liquid || out.hazard || out.hazardByMeta || out.walkThrough) {
+        if (out.liquid || out.hazard || out.hazardByMeta || out.walkThrough) {
             out.rules = rules;
             blocks[regName] = out;
         }
@@ -334,13 +347,13 @@ export function buildCollisionOverrides(packPath) {
     }
     const tally = (f) => Object.values(blocks).filter(f).length;
     return {
-        description: 'What forge-bridge src/collision.js adds to rotn-data\'s dumped per-state collision for modded blocks: walk-through is opt-in (only the states listed in walkThrough; any other state without a box is a solid full cube), liquid marks modded fluids, hazard/hazardByMeta mark trap, fire, portal, web and lava blocks, shapes names a reviewed box the dump does not record. Built by packages/forge-bridge/tools/build-collision-overrides.mjs from the pinned server pack zip (rules in its header); no mod code run.',
+        description: 'What forge-bridge src/collision.js adds to rotn-data\'s per-state playerCollision for modded blocks: walk-through is opt-in (only the states listed in walkThrough; any other state a player has no box in is a solid full cube), liquid marks modded fluids, hazard/hazardByMeta mark trap, fire, portal, web and lava blocks; checks records what the tool verified in the data. Built by packages/forge-bridge/tools/build-collision-overrides.mjs from the pinned server pack zip (rules in its header); no mod code run.',
         pack: { version: '3.3.4', sha256: PACK_SHA256 },
         counts: {
             ...counts,
-            blocks: { walkThrough: tally((o) => o.walkThrough), liquid: tally((o) => o.liquid), hazard: tally((o) => o.hazard || o.hazardByMeta), dynamicLeaves: tally((o) => o.shapes === 'dynamicLeaves') },
+            blocks: { walkThrough: tally((o) => o.walkThrough), liquid: tally((o) => o.liquid), hazard: tally((o) => o.hazard || o.hazardByMeta) },
         },
-        shapes: {
+        checks: {
             dynamicLeaves: {
                 shapes: leavesShapes,
                 evidence: `${DT_JAR} (SHA-256 ${dtJarSha}): BlockDynamicLeaves.addCollisionBoxToList (func_185477_a) gives a player `
@@ -352,7 +365,7 @@ export function buildCollisionOverrides(packPath) {
         },
         reviewed: Object.fromEntries([
             ...Object.entries(REVIEWED).map(([c, r]) => [dot(c), r.evidence]),
-            ...Object.entries(ROCK_PILES).map(([c, e]) => [dot(c), `rock pile: ${e}; no box in the dump, no contact or collision-box override`]),
+            ...Object.entries(ROCK_PILES).map(([c, e]) => [dot(c), `rock pile: ${e}; no player box in the dump, no contact or collision-box override`]),
         ]),
         blocks,
     };
