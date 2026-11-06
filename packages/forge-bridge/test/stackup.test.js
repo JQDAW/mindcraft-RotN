@@ -182,3 +182,20 @@ test('the bridge turns StackUp on from the server mod list only', () => {
     assert.equal(without.bridge.stackup, null);
     assert.equal(itemCountType(without.client.customPackets['1.12'].types.slot), 'i8'); // REID's slot only
 });
+
+test('a validating ProtoDef over the merged types (as nmp\'s pluginChannels builds one) knows stackUpCount', () => {
+    // nmp merges customPackets into minecraft-data's protocol in place, and pluginChannels then
+    // validates those types before it adds nmp's native ones. Without the 'native' declaration
+    // the e2e login failed with "validation error".
+    const { ProtoDef } = require('protodef');
+    const merge = require('lodash.merge');
+    const nbt = require('prismarine-nbt');
+    const custom = buildCustomPackets({ reid: true, stackup: true })['1.12'];
+    assert.equal(custom.types[STACKUP_COUNT_TYPE], 'native');
+    const validating = (types) => { const proto = new ProtoDef(true); nbt.addTypesToInterpreter('big', proto); proto.addTypes(types); };
+    const merged = merge(JSON.parse(JSON.stringify(require('minecraft-data')('1.12.2').protocol.types)), custom.types);
+    assert.doesNotThrow(() => validating(merged));
+    const undeclared = { ...merged };
+    delete undeclared[STACKUP_COUNT_TYPE];
+    assert.throws(() => validating(undeclared), /validation error/, 'the failure this declaration prevents');
+});

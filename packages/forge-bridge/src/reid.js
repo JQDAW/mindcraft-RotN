@@ -268,6 +268,10 @@ export function buildCustomPackets({ reid = false, triumph = false, stackup = fa
     }
     if (stackup) {
         installStackUpType();
+        // Declared 'native', as minecraft-data declares its own native types: a validating
+        // ProtoDef that sees these types (nmp's pluginChannels builds one from minecraft-data's
+        // protocol, which nmp's merge has already changed) must know the name.
+        out.types[STACKUP_COUNT_TYPE] = 'native';
         out.types.slot = slotType(version, { reid, stackup });
     }
     if (triumph) {
