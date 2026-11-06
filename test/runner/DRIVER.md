@@ -187,6 +187,16 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`.
 
 Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
 
+**The runner's machine short of memory** (round 5 B, 13:26Z: "console failed (3221225794) (after 3 attempts)", a scenario error that stopped the round).
+- **What happened:** every console and log call starts Git Bash, which runs `test-server.sh`, which runs ssh. 3221225794 is 0xC0000142, STATUS_DLL_INIT_FAILED: `bash.exe` itself failed to start, so nothing reached the server. Node gets the full 32-bit code only from a process it starts itself; an ssh failure inside bash comes back as 8 bits.
+- **Why:** the Windows machine running the batch was short of memory. About a minute earlier, Claude Code had reaped the batch's wrapper shell for low memory. The 2 s and 4 s retries were over in 6 s. No process from the harness was left behind.
+- **Now** (`ctlServer`, `lib/adapters.mjs`):
+  - A call whose bash never started (0xC0000142, 0xC0000017 STATUS_NO_MEMORY, 0xC000012D STATUS_COMMITMENT_LIMIT, or a spawn error ENOMEM, EAGAIN, EMFILE or ENFILE) is retried after 5, 10, 20, 40 and 60 s, 135 s in all. That is safe because nothing ran. These retries do not use up the 2 ordinary ones.
+  - Every other failure keeps the 2 quick retries (2 s, then 4 s): a console command that did reach the server must not be re-sent many times.
+  - The final error lists each attempt's time, its result and the machine's free memory then.
+  - The batch's final `fetch logs` gets the same long retry (`retryNotStarted`), so a short squeeze no longer loses the server log.
+- **What it cannot fix:** memory that stays short for longer than about 2 minutes. Free memory on the runner's machine before a batch (close large applications).
+
 **Smoke is the default; only `--gate` makes a gate batch (lead, #218 review and #220 decision).**
 - Without `--gate`, `batch.mjs` runs a smoke batch, and `batch.json` says `gate: false, smoke: true`. Only `batch.mjs --gate` writes `gate: true` (with `smoke: false`). There is no `--smoke` argument, so it is refused as unknown.
 - The batch logs its mode at its preflight and at its start: `a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)` or `a GATE batch (gate: true)`.
@@ -292,12 +302,21 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
     - `memory`: memory summaries ("Memory updated to:"), requests of their own;
     - `failed = disconnected + empty`: Mindcraft's stand-in replies, "My brain disconnected, try again." (also when a memory summary stores it) and "No response received." (a completion with no choices), and an answer with no text ("Error: Generated response is not a string"; round 3 continuation A had 3).
     - **`memoryEmpty` (part of `empty`): memory summaries that got no text back** (lead, round 5 A). There, every summary's request got null content, `history.js` threw, and the agent exited; it crashed five times and none of it was counted (19 requests: 11 replies, 0 summaries, 0 failed).
-      - A summary is open from "Storing memories..." until "Memory updated to:". It counts as empty when the next summary starts or the agent process exits ("Agent process exited with code") while it is open, or when it stores nothing (or "null").
-      - A summary still open when the log ends (the bot was stopped while its request waited) is not counted, like any request still waiting.
-      - Round 5 A now reads 11 replies, 5 failed (5 empty summaries); the round 3 and round 4 logs count as before.
+      - A summary is open from "Storing memories..." until its outcome line.
+      - **Stored:** "Memory updated to: <text>".
+      - **Empty:** "Memory updated to:" with nothing (or "null") after it; `history.js`'s "[memory] summary returned ..." for an empty or null reply or "No response received." (what `openrouter.js` returns for empty content since #266); or the next summary starting, or the agent process exiting with a non-zero code, while it is open.
+      - **Disconnected (failed, not empty):** the "My brain disconnected" stand-in, and "[memory] summary failed (...)" (the request threw). In logs from before #266, "Memory updated to: No response received." is disconnected too.
+      - **Not counted:** a summary still open when the log ends, or when the agent exits with code 0 or on a signal (#267 review). The bot was stopped while the request waited, like any request still waiting.
+      - Round 5 A reads 11 replies and 5 failed (5 empty summaries); the A rerun 16 and 4 (4); B 37 and 11 (11). The round 3 and round 4 logs count as before.
     - **`ok + memory + failed` can be less than `calls`** (#246 review): requests that never print "Generated response:" or "Memory updated to:" (a coding request, a goal request, a request still waiting when the bot left) are in `calls` only. In the round 3 logs the sum matched `calls`, except D's request in flight at its disconnect.
   - `httpErrors: {status: n}` counts the "Error [429]"-style lines; a retried request can add more than one.
-  - The run log says it the same way: "N LLM requests (ok replies, m memory summaries, f failed; n x HTTP 429), USD ...".
+  - The run log says it the same way: "N LLM requests (ok replies, m memory summaries, f failed, e of them empty summaries; n x HTTP 429), USD ...".
+  - **Providers** (lead, after round 5 B, when the human excluded OpenInference from the preset and asked which provider fails summaries):
+    - `openrouter.js` logs one line per completion (#271): "[openrouter] provider <name>, finish_reason <reason>, content <n|null> chars". Both fields are sanitised to `[\w .-]` (others become `?`), 40 characters at most. A failed request has no completion, so it has no such line.
+    - `providers: {name: {requests, empty, summaries: {ok, empty, failed}}}` counts those lines; content null or 0 is an empty answer.
+    - **A summary is attributed to a provider only when exactly one completion came back while it was open, and no request failed in that time.** Then that completion was the summary's own. Every other summary goes to `summariesUnattributed: {ok, empty, failed}`; none is guessed. Logs from before #271 have no provider lines, so all their summaries are unattributed.
+    - The run log adds a line per scenario: "LLM providers: OpenInference: 12 requests (3 empty), summaries 0 ok, 3 empty; Wafer: ...; summaries not attributed: 1 ok, 0 empty".
+    - **The batch report and every evidence README give the probe's provider (from the preflight line in `run.log`) and this line.** The probe's provider alone says only who answered one request before the batch.
   - Evidence counts `replies.ok` as calls, never `calls` alone. `llm.models` is what the driver started the agent with (its `mindcraft_start` event), and a G3 run whose recorded model is not the preset is not gate-valid. Progress and killed records carry the calls so far.
 - **Test mode is for the offline tests only.** `ROTN_TEST_MODE`, `ROTN_OPENROUTER_USAGE_FILE` and `ROTN_BATCH_RUNNER` make `batch.mjs` refuse to start inside a real test-server run, and the usage read ignores the fake file there. `deploy/test-server.sh run` sets `TEST_SERVER_FAKE_CLOUD=1` only against the offline fakes. `BATCH` records `testMode`.
 
@@ -369,7 +388,10 @@ A task from the test-only giver `Server` interrupts the real agent's agenda. The
   - **Every counter criterion must be added,** or the run is not gate-valid.
 - **The preflight, read-only:** `testforblock X Y+1 Z minecraft:air 0` and the same for Y+2, before the `setblock`. If either cell is not air (water included), the task steps fail with "site not clear", and nothing is placed or whispered.
 - **No state carries over** (#207 review):
-  - The driver moves `bots/<bot>/tasks.json`, `agenda.json` and `memory.json` aside before `main.js` starts, renaming them to `.g3-<stamp>.bak`. It does this on every start: there is no G3 gate inside, because only the G3 scenarios use this driver, so (a) and (b) get the fresh-bot agenda autostart too. It then keeps the newest 5 of its own backups per file (`KEEP_BACKUPS`) and deletes older ones; nothing else in the folder is touched (#207 review nit). Its start event's `botState` reports `movedAside` and `pruned`, and `fresh_bot_state` checks it.
+  - **What the driver does before `main.js` starts:** it renames `bots/<bot>/tasks.json`, `agenda.json` and `memory.json` to `<file>.g3-<stamp>.bak`.
+  - **When:** on every start. Only the G3 scenarios use this driver, so it needs no G3 check of its own, and (a) and (b) also start as a fresh bot, with the agenda starting by itself.
+  - **Old backups:** it keeps its newest 5 backups per file (`KEEP_BACKUPS`) and deletes older ones. Nothing else in the folder is touched (#207 review nit).
+  - **The record:** its start event's `botState` lists `movedAside` and `pruned`, and the `fresh_bot_state` check reads it.
   - **`memory.json` too, from round 5 B** (lead, after round 5 A; approved for all G3 batches): a fresh start means fresh memory. `memory.json` holds the bot's memory summary and its recent turns, which `history.js` reloads at every start. In round 5 A it held 14 turns, so each restart reached the summary limit at once and crashed again on the same empty reply. The old file stays as its `.bak` for the record; `histories/` and the rest are not touched.
   - (c) ends with no open task: a task still open at the end is cancelled with the giver's `!taskCancel("<id>")` (`notes.openTaskAtEnd`).
 - **The steps and checks** (`warmMinutes` 5, `activeWaitMinutes` 5, `acceptS` 60, `taskMinutes` 5 and `resumeMinutes` 5 are compared 'equal'):

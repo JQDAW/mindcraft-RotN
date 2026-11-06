@@ -1,6 +1,7 @@
 // Real adapters for the scenario engine: the test server (through deploy/test-server.sh, i.e.
 // $TEST_SERVER_CTL), the bot driver process and the wall clock.
 import fs from 'node:fs';
+import os from 'node:os';
 import process from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -18,20 +19,69 @@ export function findBash() {
 }
 
 /**
- * Console and log of the test server, via `deploy/test-server.sh console|log` (SSH to the box).
- * A failed call is retried twice, after 2 s and 4 s (an SSH hiccup must not fail a 12-minute run).
+ * Windows NTSTATUS exit codes of a process that never got going (it failed while loading, before main):
+ * 0xC0000142 STATUS_DLL_INIT_FAILED (round 5 B: Git Bash could not start while the machine was short of
+ * memory), 0xC0000017 STATUS_NO_MEMORY, 0xC000012D STATUS_COMMITMENT_LIMIT. Node gets the full 32-bit code
+ * only from the process it started itself (bash); a failure of ssh inside bash would come back as 8 bits.
  */
-export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries = 2, backoffMs = 2000, spawn: run = spawnSync, pause = sleepSync } = {}) {
+export const NOT_STARTED_STATUS = { 3221225794: 'STATUS_DLL_INIT_FAILED', 3221225495: 'STATUS_NO_MEMORY', 3221225773: 'STATUS_COMMITMENT_LIMIT' };
+/** spawnSync errors that mean the process was not started (a timeout, ETIMEDOUT, is not one of them). */
+export const NOT_STARTED_ERRORS = ['ENOMEM', 'EAGAIN', 'EMFILE', 'ENFILE'];
+/** Waits before each retry of a call whose process never started (5+10+20+40+60 = 135 s in all). */
+export const NOT_STARTED_BACKOFF_MS = [5000, 10000, 20000, 40000, 60000];
+
+/** Why a spawnSync result is a process that never started, or null if it started (or timed out). */
+export function notStarted(r) {
+    if (r?.error && NOT_STARTED_ERRORS.includes(r.error.code)) return r.error.code;
+    return NOT_STARTED_STATUS[r?.status] ?? null;
+}
+
+/**
+ * Run start() (a spawnSync call) again while its process never started, waiting waits[i] before retry i;
+ * onRetry(why, ms) is told each time. Returns the last result. For calls that are safe to repeat when
+ * nothing ran (the batch's final `fetch logs`, round 5 B).
+ */
+export function retryNotStarted(start, { waits = NOT_STARTED_BACKOFF_MS, pause = sleepSync, onRetry = () => {} } = {}) {
+    let r = start();
+    for (const ms of waits) {
+        const why = notStarted(r);
+        if (!why) break;
+        onRetry(why, ms);
+        pause(ms);
+        r = start();
+    }
+    return r;
+}
+
+/**
+ * Console and log of the test server, via `deploy/test-server.sh console|log` (SSH to the box).
+ * - A failed call is retried twice, after 2 s and 4 s (an SSH hiccup must not fail a 12-minute run).
+ * - A call whose bash never started (notStarted: low memory on the runner's machine, round 5 B) is retried
+ *   after NOT_STARTED_BACKOFF_MS instead, up to 5 more times. Nothing reached the server, so a console
+ *   command cannot run twice. Those retries do not use up the 2 ordinary ones.
+ * - The final error names each attempt's time, its result and the free memory then (`os.freemem()`).
+ */
+export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries = 2, backoffMs = 2000, notStartedBackoffMs = NOT_STARTED_BACKOFF_MS,
+    spawn: run = spawnSync, pause = sleepSync, now = () => new Date(), freemem = os.freemem } = {}) {
     if (!ctl) throw new Error('TEST_SERVER_CTL is not set: run this through `deploy/test-server.sh run -- ...`');
     const call = (args) => {
         let last;
-        for (let attempt = 0; attempt <= retries; attempt++) {
-            if (attempt) pause(backoffMs * 2 ** (attempt - 1));
+        let failed = 0;      // ordinary failures retried so far
+        let unstarted = 0;   // never-started processes retried so far
+        const attempts = [];
+        for (;;) {
             const r = run(bash, [ctl, ...args], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
             if (r.status === 0) return r.stdout.split('\n').map((l) => l.replace(/\r$/, '')).filter(Boolean);
-            last = `${args[0]} failed (${r.status}): ${(r.stderr ?? '').trim().slice(-500)}`;
+            const why = notStarted(r);
+            const code = r.status ?? r.error?.code ?? 'no status';
+            attempts.push(`${now().toISOString().slice(11, 19)}Z ${why ?? code} (free ${Math.round(freemem() / 2 ** 20)} MB)`);
+            const err = (r.stderr ?? '').trim().slice(-500);
+            last = `${args[0]} failed (${code}${why && why !== code ? ` ${why}` : ''})${err ? `: ${err}` : ''}`;
+            if (why && unstarted < notStartedBackoffMs.length) pause(notStartedBackoffMs[unstarted++]);
+            else if (!why && failed < retries) pause(backoffMs * 2 ** failed++);
+            else break;
         }
-        throw new Error(`${last} (after ${retries + 1} attempts)`);
+        throw new Error(`${last} (after ${attempts.length} attempts: ${attempts.join(', ')})`);
     };
     return {
         console: (cmd, waitS = 3) => call(['console', '--wait', String(waitS), '--', cmd]),
