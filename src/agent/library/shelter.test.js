@@ -583,7 +583,12 @@ test('G3 round 7 B: siteProblem names what is where; in the shelter the bot is i
     assert.equal(problem({ '0,64,0': 'carpet' }, true), null);
     assert.equal(problem({ '0,65,0': 'snow_layer' }, true), null);
     assert.equal(problem({ '0,65,0': 'torch' }, true), null);
-    assert.equal(problem({ '0,64,0': 'water' }, true), null);
+    assert.equal(problem({ '0,64,0': 'water' }, true), null, 'water at its feet');
+    // #296 review 1: a liquid at head height drowns the bot; lava counts anywhere.
+    assert.equal(problem({ '0,65,0': 'water' }, true), 'water at 0, 65, 0 (a liquid at head height: the bot would drown)');
+    assert.equal(problem({ '0,65,0': 'flowing_water' }, true), 'flowing_water at 0, 65, 0 (a liquid at head height: the bot would drown)');
+    assert.equal(problem({ '0,64,0': 'lava' }, true), 'lava at 0, 64, 0 (lava in the 1x2 space)');
+    assert.equal(problem({ '0,65,0': 'flowing_lava' }, true), 'flowing_lava at 0, 65, 0 (lava in the 1x2 space)');
     assert.equal(problem({ '0,63,0': 'air' }, true), null, 'the floor: when it goes, the bot falls out of the shelter');
     assert.equal(problem({ '0,63,0': 'air' }, false), 'air at 0, 63, 0 (the floor is not solid)');
     // What does count, by name and place.

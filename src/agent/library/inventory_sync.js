@@ -98,7 +98,9 @@ export async function clearCursor(bot, click = (...a) => bot.clickWindow(...a)) 
         return `put the ${held.name} on the cursor into slot ${slot}`;
     }
     await click(-999, 0, 0); // a click outside the window drops the cursor stack
-    return `dropped the ${held.name} on the cursor: no free slot`;
+    const line = `Dropped the ${held.name} on the cursor: no free slot for it.`;
+    if (typeof bot.output === 'string') bot.output += line + '\n'; // the bot's own log (#296 nit), as skills.log
+    return line;
 }
 
 /**

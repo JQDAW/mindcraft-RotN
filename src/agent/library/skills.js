@@ -46,7 +46,9 @@ export function weaponRank(item) {
 /**
  * Hold the best weapon (else a pickaxe or shovel). Never throws (G3 round 7 B: a rejected click
  * here ended self_defense, and the bot died without hitting back): when the equip fails, the fight
- * goes on with what is in hand. Whether the weapon is held; `fight.told` keeps one line per fight.
+ * goes on with what is in hand. Whether the weapon is held. `fight.equipFailed`: after the first
+ * failed equip of a fight, no more are tried in it (#296 review 2: each try can wait about 11 s for
+ * an unanswered click and its retry, while the bot does not attack).
  */
 async function equipHighestAttack(bot, fight = {}) {
     const isWeapon = (item) => !!item && (item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
@@ -64,13 +66,14 @@ async function equipHighestAttack(bot, fight = {}) {
     if (!weapon)
         weapon = bot.inventory.items().find(item => item.name.includes('pickaxe') || item.name.includes('shovel')) ?? null;
     if (!weapon) return false;
+    if (fight.equipFailed) return false; // fighting with what is in hand (#296 review 2)
     if (bot.heldItem === weapon || (weapon.slot != null && bot.heldItem?.slot === weapon.slot)) return true;
     try {
         await bot.equip(weapon, 'hand');
         return true;
     } catch (err) {
-        if (!fight.told) log(bot, `Could not take the ${weapon.name} in hand (${safeError(err)}); fighting with ${bot.heldItem?.name ?? 'bare hands'}.`);
-        fight.told = true;
+        fight.equipFailed = true;
+        log(bot, `Could not take the ${weapon.name} in hand (${safeError(err)}); fighting with ${bot.heldItem?.name ?? 'bare hands'} for the rest of this fight.`);
         return false;
     }
 }

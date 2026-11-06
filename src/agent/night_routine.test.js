@@ -549,4 +549,16 @@ test('G3 round 7 B: inside, a dropped item, a carpet or snow in the space, or a 
     lava.o.siteNeeds = siteNeeds;
     assert.equal(nightTick(lava.agent, { now: CHECK_MS + 2, ops: lava.o }), 'night:building');
     assert.match(lava.agent.chat.at(-1), /no longer usable: lava at 0, 64, -1 \(lava in the walls or roof\); building a new one$/);
+
+    // #296 review 1: water at the bot's feet keeps the shelter; water at head height drowns it.
+    world.clear(); walls();
+    const wet = shelter();
+    nightTick(wet.agent, { now: 0, ops: wet.o });
+    await settle(wet.agent);
+    nightTick(wet.agent, { now: 1, ops: wet.o });
+    world.set('0,64,0', 'water');
+    assert.equal(nightTick(wet.agent, { now: CHECK_MS + 2, ops: wet.o }), 'night:inside');
+    world.set('0,65,0', 'water');
+    assert.equal(nightTick(wet.agent, { now: 2 * CHECK_MS + 3, ops: wet.o }), 'night:building');
+    assert.match(wet.agent.chat.at(-1), /no longer usable: water at 0, 65, 0 \(a liquid at head height: the bot would drown\); building a new one$/);
 });

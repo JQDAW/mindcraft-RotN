@@ -103,9 +103,10 @@ function propFor(roof, solidAt, emptyAt) {
 /**
  * Why a site cannot be used at all, or null: `{pos, block, why, text}`, text naming the block and
  * where it is. A new site needs a solid floor, a free 1x2 space and no fire or lava in its walls
- * and roof. `occupied` (the shelter the bot is in, G3 round 7 B): only real fire or lava there, or
- * a solid block in the bot's two cells, counts; a torch, a carpet, a snow layer, grass or water in
- * the space does not, nor the floor (when it goes, the bot falls and is no longer in the shelter).
+ * and roof. `occupied` (the shelter the bot is in, G3 round 7 B): only real fire or lava there, a
+ * solid block in the bot's two cells, or a liquid at head height (drowning, #296 review 1) counts;
+ * a torch, a carpet, a snow layer, grass or water at its feet does not, nor the floor (when it goes,
+ * the bot falls and is no longer in the shelter).
  * Dropped items are entities, never blocks, so they never count.
  */
 export function siteProblem(bot, feet, { occupied = false } = {}) {
@@ -118,6 +119,8 @@ export function siteProblem(bot, feet, { occupied = false } = {}) {
         if (!b) return found(q, b, 'not loaded');
         const hazard = hazardOf(b);
         if (hazard) return found(q, b, `${hazard} in the 1x2 space`);
+        // #296 review 1: any liquid at head height drowns the bot (water at its feet does not).
+        if (occupied && q.y > p.y && isLiquid(b)) return found(q, b, 'a liquid at head height: the bot would drown');
         if (occupied ? isBodyBlock(b) : !isEmpty(b)) return found(q, b, occupied ? 'a solid block in the 1x2 space' : 'the 1x2 space is not free');
     }
     for (const q of wallsAndRoof(p)) {

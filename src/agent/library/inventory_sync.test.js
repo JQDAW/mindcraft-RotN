@@ -67,12 +67,14 @@ test('G3 round 7 B: before an equip the cursor stack goes into a free slot, or i
     assert.deepEqual(bot.clicks, [9]);
 
     const full = invBot({ cursor: item('stick', 3), full: true });
+    full.output = '';
     guardInventory(full);
     full.equip = (it) => { full.heldItem = it; return Promise.resolve(); };
     guardInventory(full); // equip came later (mineflayer's plugins): wrapped now
     await full.equip(full.inventory.slots[16], 'hand');
     assert.deepEqual(full.clicks, [-999]);
     assert.deepEqual(full.dropped, ['stick']);
+    assert.equal(full.output, 'Dropped the stick on the cursor: no free slot for it.\n', "in the bot's own log (#296 nit)");
     assert.equal(full.heldItem.name, 'stone_sword');
 });
 

@@ -224,7 +224,7 @@ test('#186 review 3: no random looks either while a do-not-look mob is loaded ne
 
 // G3 round 7 B: self_defense's equip was rejected by the server, the error ended the fight, and a
 // zombie killed the bot without it hitting back.
-test('G3 round 7 B: an equip the server rejects does not end self-defense: the bot fights with what is in hand, and says so once', async (t) => {
+test('G3 round 7 B and #296 review 2: an equip the server rejects does not end self-defense: the bot fights with what is in hand for the rest of the fight, with no more equip tries, and says so once', async (t) => {
     t.mock.method(console, 'log', () => {});
     const { defendSelf } = await import('./skills.js');
     const zombie = mob('zombie', 3);
@@ -239,8 +239,17 @@ test('G3 round 7 B: an equip the server rejects does not end self-defense: the b
     bot.pvp.attack = (e) => { attack(e); if (++rounds === 2) delete bot.entities[zombie.id]; }; // dies in round 2
     assert.equal(await defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
     assert.deepEqual(bot.pvp.attacks, ['zombie', 'zombie'], 'it fought on');
-    assert.equal(equips, 2, 'each round tries the weapon again');
+    assert.equal(equips, 1, 'no second try in this fight: each can wait about 11 s without attacking');
     assert.equal(bot.output.match(/Could not take/g)?.length, 1, bot.output);
-    assert.match(bot.output, /Could not take the stone_sword in hand \(Error: Server rejected transaction for clicking on slot 16, on window with id 0\.\); fighting with wheat_seeds\./);
+    assert.match(bot.output, /Could not take the stone_sword in hand \(Error: Server rejected transaction for clicking on slot 16, on window with id 0\.\); fighting with wheat_seeds for the rest of this fight\./);
+
+    // The next fight tries the weapon again.
+    const next = fightBot([mob('zombie', 3)]);
+    next.inventory = bot.inventory;
+    let held = null;
+    next.equip = (it) => { held = it; return Promise.resolve(); };
+    next.pvp.attack = (e) => { delete next.entities[e.id]; };
+    assert.equal(await defendSelf(next, 8, (e) => e.name === 'zombie'), true);
+    assert.equal(held, sword);
     assert.match(bot.output, /Successfully defended self\./);
 });
