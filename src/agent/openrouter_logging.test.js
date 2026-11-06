@@ -135,6 +135,36 @@ test('each completion logs one provider line: name, finish reason and length onl
     assert.equal(logs.find(l => l.startsWith('[openrouter]')), '[openrouter] provider unknown, finish_reason none, content null chars');
 });
 
+test('a null stop_seq sends no stop field; the default still sends "*"', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'error', () => {});
+    const packs = [];
+    const create = (pack) => { packs.push(pack); return Promise.resolve({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] }); };
+    await modelWith(create).sendRequest([], 'system', null);
+    await modelWith(create).sendRequest([], 'system');
+    assert.ok(!('stop' in packs[0]));
+    assert.equal(packs[1].stop, '*');
+});
+
+test('promptMemSaving asks with a user turn and no stop sequence (skills-rotn Request 16)', async () => {
+    const { Prompter } = await import('../models/prompter.js');
+    const calls = [];
+    const fake = {
+        profile: { saving_memory: 'Summarize: $TO_SUMMARIZE' },
+        checkCooldown: async () => {},
+        replaceStrings: async (p) => p,
+        _saveLog: async () => {},
+        chat_model: { sendRequest: async (...args) => { calls.push(args); return '**Memory** kept'; } },
+    };
+    const resp = await Prompter.prototype.promptMemSaving.call(fake, []);
+    assert.equal(resp, '**Memory** kept');
+    const [turns, system, stop] = calls[0];
+    assert.equal(stop, null);
+    assert.equal(system, 'Summarize: $TO_SUMMARIZE');
+    assert.equal(turns.length, 1);
+    assert.equal(turns[0].role, 'user');
+});
+
 test('a normal response is unchanged', async (t) => {
     const lines = captureErrors(t);
     const res = await modelWith(() => Promise.resolve({ choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }] })).sendRequest([], 'system');
