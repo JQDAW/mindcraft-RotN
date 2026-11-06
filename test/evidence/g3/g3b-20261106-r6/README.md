@@ -6,7 +6,7 @@
 
 ## Run conditions
 
-- **GO:** the round 6 GO; the human approved the run command.
+- **GO:** the round 6 GO; the run command went through Claude Code's auto mode (corrected after round 7: run commands go through Claude Code's auto mode, not a human approval).
 - **Code:** a clean detached checkout of `origin/develop` at `f7fbe4fe`, after `npm ci`.
 - **Free memory at 17:39:04 UTC:** 6,065 MB physical, 13,526 MB virtual.
 - **Checks right before the create (17:39:04-17:39:13 UTC), all passed:** `msa-login`; an empty project; the batch preflight with the LLM probe (HTTP 200, provider Wafer), "timeouts: g3-first-night 67 min" for a 180 min TTL, no midnight warning; the dry run (sweeper OK by its scheduled run).

@@ -1,8 +1,30 @@
 # Status: rotn-data
 
-Updated: 2026-11-06T19:27Z (from `date -u`)
+Updated: 2026-11-06T21:46Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+
+## Handoff (before the move to the dev server, 2026-11-06)
+
+- **Open PRs:** none of mine. My last five are merged: #269, #272, #278, #280 and #288 (`6f1847f2`, the dirt drop rule). This handoff is STATUS only, on `agent/rotn-data/handoff`.
+- **Branches:** every `agent/rotn-data/*` branch is pushed and merged. One exception: the local `agent/rotn-data/cite-paths-readme` has one commit the remote lacks (`b4eaf1da`, the sludge lord line citation, lines 180-198). That line is already on develop, so nothing is lost. The local commit is not pushed, because pushing it would need a force-push.
+- **Running:** nothing. No background jobs, no subagents, no Hetzner servers.
+- **Next task:** none assigned. When asked, the cobblestone and stone variant list goes to skills-rotn. Only if it asks (the lead's rule); it has not asked. The list:
+  - ore:cobblestone: 32 entries (vanilla, 16 Underground Biomes cobbles, 4 Pyrotech, 9 ContentTweaker, 2 Better With Mods);
+  - ore:stone: 28 entries;
+  - cobble blocks in the registry only: mossy cobblestone, Quark brimstone and permafrost, Ice and Fire charred and frozen cobblestone, the Twilight Forest giant cobblestone;
+  - hazards: serpentinite cobble needs a level 2 pickaxe; the giant cobblestone has hardness 128.
+
+  The list is in this session's scratchpad and goes away with this machine. Rebuild it from `packages/rotn-data/3.3.4/`: `oredict.json` (ore:cobblestone, ore:stone) and `blocks.json.br` names matching `cobble`.
+- **Low-priority follow-ups:**
+  - the #210 `falls` follow-ups;
+  - marking the non-oak debark and plank pairs `documented`;
+  - the dumper items under "Follow-ups" below.
+- **Open requests** (below):
+  - 2: the `bot.registry` properties for net-forge, on its request;
+  - 9: the prismarine-recipe `outShape` patch, the lead's call.
+- **Scratch to carry over:** none needed. The pinned pack zip is the source of every jar and config cited; verify its SHA-256 `90642fd5...f5205` on the new server. The citations' test fixtures are in the repo, under `packages/rotn-data/test/fixtures/`.
+- **On the new server:** `npm ci`, then the targeted tests: `node --test "packages/rotn-data/test/**/*.test.js"`.
 
 ## Done
 
@@ -237,7 +259,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - **#213 merged** (`1dfef62d`), the #209 review nits: (1) `installFoods` bans nothing and is meta 0 only (a pufferfish shares the cod's entry): documented in `src/foods.js`, `index.js` and the README; the eating code must check `avoidFood(name, meta)` and set auto-eat's `bannedFood` from it (see Request 11). (2) `scriptWon` names the winning line per field for the 9 foods `food.zs` sets more than once (baked beets: lines 466, 468). (3) The build stops on a `HungerEvents.onGetFoodValues` / `onGetPlayerFoodValues` handler (comments ignored). Tests: food-values 7/7, ESLint clean, `--check` reproduces.
 - **#226 merged** (`eb9b5657`), **G3 smoke round 2 batch A deaths (lead request, 2026-11-05):** "Zombie FRCFLD" is Zombie Players by Corosus (`mods/zombie_players-1.12.1-1.2.7.jar`), its own entity `zombie_players:zombie_player` (named "Zombie <player>" by its getDisplayName), not a renamed vanilla zombie, so no name rule. It spawns at any player death spot (unless within 32 blocks of the player's bed), never despawns, is a plain zombie with empty hands (20 health, 2 armor, attack 3, follow range 16) and cannot pick up items. Corpse Complex keeps armor, main hand and off hand; the rest drops and despawns after 600 s. The grove sprite (Primitive Mobs) only retaliates on a server: its player-targeting task is added under world.isRemote (client only), so the PR #62 'conditional' override was wrong and made threatOf say 'fight'. Moved to reviewedNotMarked; both get cited threat-reactions entries (grove sprite ignore-unless-provoked, zombie player fight). Tests: threats 15/15, entity-threats 6/6, threats-bosses 4/4, threats-parasite-weta 3/3, ESLint clean (targeted, smoke round 2 running).
 - **#226 review nits, branch `agent/rotn-data/death-zombie-nits`:** (1) ~~burns in daylight~~ corrected after the #243 review (REQUEST CHANGES): EntityZombiePlayer overrides setFire (`func_70015_d`) with a bare return, so it **never catches fire** (not by day, lava, fire or Fire Aspect; I had missed that override in the method list). Summary says so and keeps "do not wait for day"; the test is inverted. The Hordes' zombie-player options configure its own `hordes:zombie_player`, and The Hordes jar has no reference to Zombie Players; (2) the bot cannot read the 'Zombie <player>' name (FML spawn data), so the summary says to match on the entity type. threats 15/15, ESLint clean.
-- **Exact next step on resume:** #269 (`b49cf6e`), #272 (`a6825e8`), #278 (`2c2758e`) and #280 are merged. Request 16 (#284, the dirt drop rule) is in #288 (`agent/rotn-data/dirt-piles`); skills-rotn has the answer. Fix review findings there (never force-push). The cobblestone and stone variant list for skills-rotn is ready if it asks (the lead: only if it asks). The #210 falls follow-ups stay low priority. No background jobs, no subagents.
+- **Exact next step on resume:** see "Handoff" at the top.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); targeted tests while a G3 smoke round runs (no full suite, no `npm ci`, no long node scripts) when the lead says the memory rule applies; it is lifted now (round 5 is over); no paid batch without a written GO.
 - **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
@@ -486,4 +508,4 @@ Findings for skills-rotn (via the lead): see Request 8.
    - **Data:** `world-sources.json` gets `dirt-piles` (tool null, a new optional `unlessTool: {type: shovel, minLevel: 1}`, which howto passes through) and `dirt-with-shovel` (shovel level 1, the dump's plain drops). The other soils (Biomes O' Plenty, Defiled Lands, Aether), sand, red sand and gravel follow the same pattern in the script and are named in the rule's note, not encoded.
 ## Open PRs
 
-- #288 `agent/rotn-data/dirt-piles`: Request 16 (#284): the dirt and grass drop rule (`dirt-piles`, `dirt-with-shovel`), `unlessTool` in howto, and the Dropt script, configs and bytecode as test fixtures.
+- None. #288 is merged (`6f1847f2`).

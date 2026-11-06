@@ -1,7 +1,24 @@
 # Status: rotn-lead
 
-Updated: 2026-11-06 01:47 UTC (from `date -u`)
+Updated: 2026-11-06 22:04 UTC (from `date -u`)
 
+
+## Handoff snapshot (2026-11-06 22:04 UTC): before the move to the CPX32 dev server
+
+- **G3:** smoke rounds 1-7 are done. Round 7 on `42a8e94` scored A 7/7, B 4/5, C 7/7 and D 7/7 (evidence: test/evidence/g3/*-r7, #292). B died to a zombie after leaving a working shelter: the shelter check misjudged it, and the equip click was rejected (cursor desync). skills-rotn's fix is **#296**, in review.
+- **Gate rule** (docs/PLAN.md, the human's decision 2026-11-06): a clean 4/4 smoke round A-D on the final commit, each batch on its own fresh server; then one `batch.mjs --gate` batch per scenario on that commit, each on a fresh server. On a failure the rest still run, and only the failed scenario is rerun, with the human's approval. A batch run only to validate the dev server never counts.
+- **Next, in order:**
+  1. Merge #296.
+  2. The move (coord/NEEDS-HUMAN.md checklist, #293).
+  3. One validation smoke batch from the dev server (lead GO).
+  4. A 4/4 smoke round on the final commit (human GO).
+  5. The gate batches (human GO).
+- **Spend:** the OpenRouter test key read USD 0.846 of the 4.50 stop after round 7. Model: the preset `@preset/glm-5-3-flash-cheap-reliable`. Providers seen are Wafer and Near AI, both fine; OpenInference was excluded by the human after empty summaries.
+- **Lead tools:** `coord/tools/lead-merge-one.sh <pr> <reviewedSHA>` is the CI-gated squash merge. It refuses non-merge commits added after the reviewed head.
+- **Rules learned:**
+  - Run commands go through auto mode; the human does not approve them. A block means stop and ask.
+  - Reviewers run at medium effort and never link another worktree's node_modules (the main repo has its own now).
+  - harness-ops' post-gate todo: the overlapping memory-summary counter fix.
 
 ## Current snapshot (2026-11-03 03:11 UTC): before the human's Orca restart
 

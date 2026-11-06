@@ -1,10 +1,23 @@
 # Status: net-forge
 
-Updated: 2026-11-06T18:49Z
+Updated: 2026-11-06T21:45Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #281 review nits; PR #285 open, 2026-11-06T18:49Z
+## Handoff for the move to the new dev server, 2026-11-06T21:45Z
+
+- **Open PRs:** none. The last ones, #279, #281 and #285, are merged. This STATUS update is the only open change.
+- **Branches:** every `agent/net-forge/*` branch is pushed, and none is ahead of origin. The worktree was clean on `agent/net-forge/allowlist-nits` (merged as #285). Nothing is unpushed or stashed.
+- **Next task:** none is assigned. I am idle and wait for the lead.
+- **Candidate follow-ups, not started; the lead decides:**
+  - **Collision overhangs into a plain air cell are not seen** (a bridge deck reaching into the next cell). The pathfinder calls that cell safe, and physics lets a bot wholly in it fall past the deck. This is pinned by the #281 test in `packages/forge-bridge/test/collision.test.js`. A fix would mean a patch to mineflayer-pathfinder or prismarine-physics to look at the neighbouring cells' boxes.
+  - **Tile-entity-dependent shapes** (Malisis doors, wells, chutes) get the box they have with no tile entity, which the `collision.js` header documents. A fix needs rotn-data's dumper.
+- **Open requests:** none. The old request below, that the dumper record what `addCollisionBoxToList` adds for a player, was done by rotn-data #269 and used in #279.
+- **Environment notes for the new server:**
+  - The collision generator needs the pinned server pack zip (it was at `C:/Users/admin/source/RotN 3.3.4 Server Pack.zip`) and `xz` on PATH. Run it as `node packages/forge-bridge/tools/build-collision-overrides.mjs --pack <zip> --check`.
+  - `javap` (any JDK) was used for the bytecode reviews.
+
+## (Merged as #285) #281 review nits
 
 - **Branch:** `agent/net-forge/allowlist-nits`, from develop `f7fbe4f` (#281 merged as `a8d98f5`).
 - **Nit 1, helper overrides refused automatically:** a mod class that overrides a helper the reviewed vanilla contact methods call (`checkPressed` `func_185616_e`, `updatePoweredState` `func_176570_e`, `findMinecarts` `func_176571_a`) now excludes its block like its own contact method would.
@@ -140,7 +153,7 @@ rotn-data's dump has a per-state `collision`, but it is never applied to `bot.re
   - 9 blocks with no states in the dump also keep the full cube.
 - **Vanilla blocks** are untouched; minecraft-data has their shapes.
 
-**Requests:** rotn-data's dumper could record what `addCollisionBoxToList` adds for a player-sized entity, rather than `getCollisionBoundingBox`. The exception lists could then go.
+**Requests (done by rotn-data #269, used in #279):** rotn-data's dumper could record what `addCollisionBoxToList` adds for a player-sized entity, rather than `getCollisionBoundingBox`. The exception lists could then go.
 
 ## (Merged as #250) #249 review follow-ups (2026-11-06T04:42Z, lead's list)
 
