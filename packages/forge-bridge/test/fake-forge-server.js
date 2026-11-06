@@ -10,6 +10,8 @@ import { once } from 'node:events';
 import * as hs from '../src/fml-hs.js';
 import { encodeRegister } from '../src/channels.js';
 import { buildCustomPackets } from '../src/reid.js';
+import { findMod } from '../src/modlist.js';
+import { STACKUP_MODID } from '../src/stackup.js';
 
 const require = createRequire(import.meta.url);
 const mc = require('minecraft-protocol');
@@ -22,7 +24,7 @@ export async function startFakeForgeServer({ modList, registries, reid = true, o
         version: '1.12.2',
         // Same overrides as the bot: nmp caches compiled protocols per state, direction and
         // version only, so in one process the server and the bot share them.
-        customPackets: buildCustomPackets({ reid, triumph: true }),
+        customPackets: buildCustomPackets({ reid, triumph: true, stackup: !!findMod(modList, STACKUP_MODID) }),
         keepAlive: false,
         hideErrors: true,
         motd: 'fake forge',
