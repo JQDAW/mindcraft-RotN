@@ -64,37 +64,37 @@
       "unverified": ["the Underground Biomes stones' cobblestone with a Sturdy pickaxe"]
     },
     {
-      "id": "sticks-from-leaves",
-      "action": "break",
-      "summary": "Break leaves by hand; they can drop sticks.",
-      "blocks": [{ "name": "minecraft:leaves" }, { "name": "minecraft:leaves2" }, { "name": "dynamictrees:leaves0" }, { "name": "dynamictrees:leaves1" }],
-      "gives": { "name": "minecraft:stick", "meta": 0, "count": 1 },
-      "tool": null,
-      "confidence": "documented",
-      "evidence": ["docs/research/rotn-progression.md section 1 step 2: [W-Getting_Started] 'Get sticks: break leaves'"],
-      "unverified": ["the drop chance and count", "which leaves blocks the Dynamic Trees fork places (the dump has dynamictrees:leaves0 and leaves1)"]
-    },
-    {
       "id": "fell-tree",
       "action": "break",
-      "summary": "Chop a tree with an axe (a crude axe works); the tree falls in the chop direction and drops logs. Stand to the side.",
+      "summary": "Break a Dynamic Trees branch, by hand or with an axe (an axe is much faster on a thick trunk): the part of the tree above it falls in the break direction and drops its logs plus 0-7 sticks (the part of a log left over). This is the first source of sticks: leaves never drop them. Break the thinnest trunk you can reach (by hand about 1.5 s per hardness point: radius 4 about 6 s, radius 8 about 24 s) and stand to the side.",
       "pairs": [
         { "block": { "name": "dynamictrees:oakbranch" }, "item": { "name": "minecraft:log", "meta": 0 } },
         { "block": { "name": "dynamictrees:sprucebranch" }, "item": { "name": "minecraft:log", "meta": 1 } },
         { "block": { "name": "dynamictrees:birchbranch" }, "item": { "name": "minecraft:log", "meta": 2 } },
         { "block": { "name": "dynamictrees:junglebranch" }, "item": { "name": "minecraft:log", "meta": 3 } },
         { "block": { "name": "dynamictrees:acaciabranch" }, "item": { "name": "minecraft:log2", "meta": 0 } },
-        { "block": { "name": "dynamictrees:darkoakbranch" }, "item": { "name": "minecraft:log2", "meta": 1 } }
+        { "block": { "name": "dynamictrees:darkoakbranch" }, "item": { "name": "minecraft:log2", "meta": 1 } },
+        { "block": { "name": "dynamictrees:oakbranch" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true },
+        { "block": { "name": "dynamictrees:sprucebranch" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true },
+        { "block": { "name": "dynamictrees:birchbranch" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true },
+        { "block": { "name": "dynamictrees:junglebranch" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true },
+        { "block": { "name": "dynamictrees:acaciabranch" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true },
+        { "block": { "name": "dynamictrees:darkoakbranch" }, "item": { "name": "minecraft:stick", "meta": 0 }, "documented": true }
       ],
       "count": null,
-      "tool": { "type": "axe", "minLevel": 0 },
+      "tool": null,
       "confidence": "documented",
       "evidence": [
         "docs/research/rotn-progression.md section 1 step 4: [W-Getting_Started], [W-Tips] (trees fall in the chop direction; Dynamic Trees fork)",
-        "the dump: Dynamic Trees branch blocks dynamictrees:<wood>branch"
+        "the dump: Dynamic Trees branch blocks dynamictrees:<wood>branch, material wood, toolRequired false (harvestTool axe, level 0); hardness = the log's hardness x radius^2 / 8 (oakbranch radius 1: 0.25, radius 2: 1), capped by config/dynamictrees.cfg line 114 maxTreeHardness=200 (BlockBranchBasic.func_176195_g)",
+        "mods/DramaticTrees-1.12.2-0.13.4.jar (SHA-256 b86dae768ccc1182c52e5b9a8756a5906da53dc125d48bfe1c8dc69204a77ffe; it holds the com.ferreusveritas.dynamictrees classes the dumped branches use): no tool check. BlockBranch.removedByPlayer -> removedByEntity -> FutureBreak -> futureBreak (bytecode 0-262): destroyBranchFromNode, getLogDrops(wood volume x (1 + 0.25 x Fortune level)), ForgeEventFactory.fireBlockHarvesting, EntityFallingTree.dropTree(HARVEST); the held item only adds Fortune and takes damageAxe",
+        "Logs and sticks: NodeNetVolume.run adds radius^2 x 64 voxels per branch block and getVolume divides by 4096; getLogDrops multiplies by config/dynamictrees.cfg line 108 harvestMultiplier=1.5; Species.getLogsAndSticks (bytecode 0-23): logs = floor(V), sticks = floor((V - logs) x 8), kept because line 96 dropSticks=true (Species$LogsAndSticks); DropCreatorLogs.getLogsDrop (bytecode 55-83) adds TreeFamily.getStick(n) = minecraft:stick (TreeFamily init bytecode 85-96, Items.field_151055_y)",
+        "No pack rule removes them: config/betterwithmods.cfg line 474 HCLumber=false, config/primallib.cfg line 37 No Tree Punching integration false, no scripts/dropt*.zs rule matches a branch",
+        "Leaves give no sticks (why this rule replaces 'sticks-from-leaves'): BlockDynamicLeaves.getDrops (bytecode 0-32) only calls Species.getLeavesDrops, whose drop creators are the seed (DropCreatorSeed.getLeavesDrop: 1 in 20, Fortune down to 1 in 10) and, on apple oaks, the apple; nothing calls TreeRegistry.registerDropCreator in DramaticTrees or the 6 Dynamic Trees addon jars; no scripts/dropt*.zs rule gives leaves a stick (only biomesoplenty:leaves_6:8/9, dropt_loose_materials.zs lines 701, 711)",
+        "G3 smoke round 4 batch B (harness-ops captures/raw/r4-g3b/night/driver.log lines 162-164, 197-199, 214): every logged dynamictrees:leaves0 break gave no stick, yet the bot, with no axe, gained sticks"
       ],
       "inferred": "Every branch-to-log pair (by wood name): the research says the exact log item a tree drops is UNVERIFIED.",
-      "unverified": ["which log item each tree drops, and how many", "that punching a tree drops nothing (the wiki says so since 3.0; the handbook disagrees)"]
+      "unverified": ["which log item each tree drops, and how many", "logs from a tree felled by hand: the bytecode drops them as for an axe, but no harness run has shown it (round 4 B shows sticks only)", "branches of other mods' trees (Biomes O' Plenty, Pam's, Quark, Twilight Forest): the same code, not listed here"]
     },
     {
       "id": "debark-log",
