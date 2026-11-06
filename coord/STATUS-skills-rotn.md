@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T19:23Z (from `date -u`)
+Updated: 2026-11-06T19:28Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -737,6 +737,13 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
     - `agenda.test.js` round 6 B: 10 sturdy blocks and no pickaxe are still due, and 10 dirt ends the reserve;
     - #284 review 2: the prompt wording and the static goal are asserted.
   - Both tests fail on the previous head. `src` and `packages` tests 924/924; lint 253. SHELTER_RESERVE stays 10 (lead).
+- **2026-11-06T19:28Z: next, after rotn-data #288 merges** (rotn-data's dirt drop rule, confirmed by the human's play):
+  - Dirt dug by hand, or with any shovel below level 1, drops 4 `betterwithmods:dirt_pile`. A level-1+ shovel gives plain dirt.
+  - #284 already counts the piles and crafts them into dirt.
+  - The follow-up PR, in my own files:
+    1. `worldSources` passes `unlessTool` through;
+    2. collecting `dirt_pile` never equips, or keeps holding, a level-1+ shovel;
+    3. the no-pickaxe reserve goal asks for `!collectBlocks("betterwithmods:dirt_pile", 4n)` instead of `"dirt"` (`collectBlocks("dirt")` gets piles and counts 0).
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
