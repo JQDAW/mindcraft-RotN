@@ -6,7 +6,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
 ## #259 follow-up: whole-block vs partial hazards (2026-11-06T09:14Z, PR open)
 
-- **Branch:** `agent/net-forge/hazard-split`, from develop `5c6aab2`. The PR is waiting for the lead's review.
+- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. It is waiting for the lead's review.
 - **`hazardBlockIds(registry, { wholeBlockOnly: true })`** leaves out partial hazards. That is the set for `Movements.blocksToAvoid`.
 - **`partialHazardBlockIds(registry)`** lists the blocks to check per state with `stateHazard`. On 3.3.4 those are BOP `plant_0`, `plant_1` and `flower_0`.
 - **Rule:** a present `forge.hazardByMeta` means partial. The README documents it, and validation refuses data with both `hazard` and `hazardByMeta`.
