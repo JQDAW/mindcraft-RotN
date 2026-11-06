@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T09:38Z (from `date -u`)
+Updated: 2026-11-06T12:27Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -532,6 +532,32 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - **Tests:** `fall_safety` 17, `threat_arbitration` 11. The 4 new ones fail on the previous head (`f5fd928`). Full `npm test`: 1265 pass, 0 fail.
   - **Lint 253:** my `isClearPath` edit added a missing semicolon to an upstream line, so per CLAUDE.md this PR commits the lowered baseline (`test/lint-baseline.json`, via `--update`).
 - **Next:** the #264 re-review.
+- **2026-11-06T11:55Z:** G3 smoke round 5 has started (lead). Until it ends: no npm ci, no full npm test, no long node scripts; targeted test files only. No #264 change while the re-review runs.
+- **#264 merged** (`c32521e`).
+
+## Round 5 batch A fixes (branch `agent/skills-rotn/r5-batch-a`, 2026-11-06T12:27Z by `date -u`)
+
+Source: the lead's batch A findings (raw log: harness-ops `captures/raw/r5-g3a/`).
+
+1. **Memory crash loop** (`history.js:44`, null from `promptMemSaving`, 5 restarts):
+   - `summarizeMemories` keeps the previous memory, with a `[memory]` warning, for: a null, empty or non-text reply; a model failure reply ("No response received.", "My brain disconnected, try again.", and the other canned replies in `src/models/`); a throw.
+   - A real summary is trimmed and kept as before.
+2. **Chat limiter off all run:**
+   - minecraft-protocol assigns `client.chat` only in `onReady` (after login).
+   - `installChatLimit` now waits rather than giving up: it wraps on the client's `playerJoin`, the bot's `login` and every `spawn`. These also re-wrap a replaced `client.chat` or a reconnect's new client.
+   - A spawn that still has nothing to wrap warns that the limit is OFF.
+3. **Tree guard too strict, 0 sticks:**
+   - The stand ring of 2 to 3.5 blocks lay under any grown canopy. It now reaches 4.5 out, and the cut reach is 5 from the eyes (the server allows 6).
+   - A place under leaves is allowed if no branch is above it and it is not on the side the canopy leans to. Places under no canopy still come first.
+   - A refused tree is said once per collect; it was said again for each of its blocks.
+   - **Fallback:** when sticks are still short, `collectBlocks("stick")` crafts the rest from held planks (`ore:stickMat`, 2 planks give 4).
+- **Tests** (targeted, round 5 rules):
+  - `history.test.js` (new, 2);
+  - `chat_limit` 14 (1 new);
+  - `fell_tree` 15 (2 new; the plan and grove tests updated to the new rule; the grove test also checks one refusal per tree).
+  - All new tests fail on develop's code.
+  - Related files pass: `collect_rotn`, `fall_safety`, `agenda`, `priority`, `rotn_names`, `cobble`, `threat_arbitration`.
+  - Lint 253 (baseline).
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

@@ -16,8 +16,13 @@ export const isRooty = (b) => !!b && DT.test(b.name) && /rooty/.test(b.name);
 const empty = (b) => !b || b.boundingBox === 'empty';
 const solid = (b) => !!b && b.boundingBox === 'block';
 
-/** How far the plan looks: the canopy's reach around the trunk, its height, and where the bot stands. */
-export const FELL_PLAN = { canopyRadius: 5, canopyHeight: 20, standMin: 2, standMax: 3.5, reach: 4.4, retreat: 4 };
+/**
+ * How far the plan looks: the canopy's reach around the trunk, its height, and where the bot stands.
+ * G3 round 5 A: a stand ring of 2 to 3.5 lay under almost any grown canopy (Dynamic Trees leaves
+ * reach 3 to 4 blocks past the branch ends), so normal trees were refused. The ring now reaches 4.5
+ * out; the cut reach is 5 from the eyes (the 1.12 server allows a dig within 6).
+ */
+export const FELL_PLAN = { canopyRadius: 5, canopyHeight: 20, standMin: 2, standMax: 4.5, reach: 5, retreat: 4 };
 
 /**
  * The tree's lowest trunk block for a branch block the bot found (which may be a limb high in the
@@ -59,9 +64,11 @@ export function canopyOf(bot, base, plan = FELL_PLAN) {
 
 /**
  * Where to stand to cut the trunk at `base`: on the ground beside it, standMin to standMax blocks
- * out, the head within reach of the trunk block, no leaves or branches anywhere above (not under the
- * canopy), and no other trunk next to it (not inside a ring of trunks). Best first: the side away
- * from the canopy's lean, with the least canopy near.
+ * out, the head within reach of the trunk block, no branch anywhere above, and no other trunk next
+ * to it (not inside a ring of trunks). Leaves above are allowed (G3 round 5 A: they covered every
+ * place beside a normal tree) but only off the side the canopy leans to: the tree falls away from
+ * the face the bot hits, so the leaves above the bot swing up and away. Best first: a place under
+ * no canopy at all, then the side away from the canopy's lean, with the least canopy near.
  */
 export function standSpots(bot, base, plan = FELL_PLAN) {
     const { cells, lean } = canopyOf(bot, base, plan);
@@ -78,21 +85,26 @@ export function standSpots(bot, base, plan = FELL_PLAN) {
             const p = new Vec3(base.x + dx, base.y + dy, base.z + dz);
             if (!solid(bot.blockAt(p.offset(0, -1, 0))) || !empty(bot.blockAt(p)) || !empty(bot.blockAt(p.offset(0, 1, 0)))) continue;
             if (p.offset(0.5, 1.62, 0.5).distanceTo(target) > plan.reach) continue;
-            let covered = false;
-            for (let y = p.y + 2; y <= base.y + plan.canopyHeight && !covered; y++) covered = isCanopy(bot.blockAt(new Vec3(p.x, y, p.z)));
-            if (covered) continue;
+            let branchAbove = false, leavesAbove = false;
+            for (let y = p.y + 2; y <= base.y + plan.canopyHeight && !branchAbove; y++) {
+                const b = bot.blockAt(new Vec3(p.x, y, p.z));
+                branchAbove = isBranch(b);
+                leavesAbove ||= isTreeLeaves(b);
+            }
+            if (branchAbove) continue;
+            const away = leanLen > 0.25 ? -(dx * lean.x + dz * lean.z) / (d * leanLen) : 0; // 1: opposite the lean
+            if (leavesAbove && away < 0) continue; // under leaves on the side it leans to
             let ringed = false;
             for (const [ox, oz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
                 for (const oy of [0, 1]) ringed ||= isBranch(bot.blockAt(p.offset(ox, oy, oz)));
             }
             if (ringed) continue;
-            const away = leanLen > 0.25 ? -(dx * lean.x + dz * lean.z) / (d * leanLen) : 0; // 1: opposite the lean
             const near = cells.filter(c => Math.hypot(c.x - p.x, c.z - p.z) <= 2).length;
-            spots.push({ pos: p, score: away * 10 - near - d * 0.1 });
+            spots.push({ pos: p, covered: leavesAbove, score: away * 10 - near - d * 0.1 });
             break;
         }
     }
-    return spots.sort((a, b) => b.score - a.score).map(s => s.pos);
+    return spots.sort((a, b) => (a.covered - b.covered) || (b.score - a.score)).map(s => s.pos);
 }
 
 /** The trunk's side face towards the spot, the one to hit (a horizontal unit vector). */
