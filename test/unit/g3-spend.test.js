@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, agentModels, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL, countLlmReplies, providerSummary, probeModel, probeFetch, TEST_OVERRIDES } from '../runner/lib/llm-spend.mjs';
+import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, agentModels, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL, countLlmReplies, providerSummary, EMPTY_PROVIDER, probeModel, probeFetch, TEST_OVERRIDES } from '../runner/lib/llm-spend.mjs';
 import { LLM_MODEL, modelId, modelProblems, profileModels } from '../runner/lib/g3.mjs';
 import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProblems, g3Policy } from '../runner/lib/g3.mjs';
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
@@ -903,6 +903,27 @@ describe('LLM replies are counted as successful or failed, and the preflight pro
         // result.llm carries them next to the replies.
         const rec = llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1 }, lines);
         assert.deepEqual([rec.providers, rec.summariesUnattributed], [r.providers, r.summariesUnattributed]);
+    });
+
+    test('#273 review nits: an empty provider name counts; a failed summary is never charged to another request\'s provider', () => {
+        const pl = (name, chars) => `[openrouter] provider ${name}, finish_reason stop, content ${chars} chars`;
+        // 3: an empty name (a completion without a provider) is a request of its own, never dropped.
+        const e = countLlmReplies([LLM_CALL_LINE, pl('', 'null'), LLM_CALL_LINE, pl('Wafer', 5)]);
+        assert.deepEqual(e.providers, {
+            [EMPTY_PROVIDER]: { requests: 1, empty: 1, summaries: { ok: 0, empty: 0, failed: 0 } },
+            Wafer: { requests: 1, empty: 0, summaries: { ok: 0, empty: 0, failed: 0 } },
+        });
+        // 2: the summary's request threw (no completion); the one completion while it was open was an agent reply's.
+        for (const end of ['[memory] summary failed (Error: socket hang up); keeping the previous memory',
+            '[memory] summary returned failure reply "My brain disconnected, try again."; keeping the previous memory']) {
+            const f = countLlmReplies(['Storing memories...', LLM_CALL_LINE, LLM_CALL_LINE, pl('Wafer', 30), 'Generated response: ok', end]);
+            assert.deepEqual(f.providers.Wafer.summaries, { ok: 0, empty: 0, failed: 0 }, end);
+            assert.deepEqual(f.summariesUnattributed, { ok: 0, empty: 0, failed: 1 }, end);
+        }
+        // An empty summary with exactly one completion while open is still that completion's (it came back empty).
+        const ok = countLlmReplies(['Storing memories...', LLM_CALL_LINE, pl('OpenInference', 'null'),
+            '[memory] summary returned failure reply "No response received."; keeping the previous memory']);
+        assert.deepEqual(ok.providers.OpenInference.summaries, { ok: 0, empty: 1, failed: 0 });
     });
 
     test('probeModel: 200 names the provider; 429 gives the provider\'s error code; no key, network and timeout are reasons; the key never comes back', async () => {
