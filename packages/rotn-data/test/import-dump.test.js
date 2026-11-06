@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
-import { importDump, canonicalize, checkStateMetaRemap, checkEntityCollision, DT_LEAVES_PLAYER_BOX } from '../tools/import-dump.mjs';
+import { importDump, canonicalize, checkStateMetaRemap, checkEntityCollision, keepWorldDependentCollision, DT_LEAVES_PLAYER_BOX } from '../tools/import-dump.mjs';
 import { RotnData, DUMP_FILES, isDtBranchNoConnectionBox } from '../src/catalog.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -431,24 +431,56 @@ test('playerCollision: a Dynamic Trees branch dumped with the no-connection cube
     // Radius > 8 (thick trunks) never takes that path: the dumped box is used.
     assert.deepEqual(cat.playerCollision({ name: 'dynamictrees:oakbranch', meta: 15 }), { boxes: [[-0.5, 0, -0.5, 1.5, 1, 1.5]], varies: false, source: 'entityCollision' });
     assert.equal(cat.playerCollision({ name: 'dynamictreesbop:cherrybranch', meta: 3 }).source, 'collision');
+    // Rustic registers Dynamic Trees branches in its own namespace (#269 review).
+    assert.deepEqual(cat.playerCollision({ name: 'rustic:olivebranch', meta: 0 }), { boxes: [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], varies: true, source: 'collision' });
 });
 
-test('isDtBranchNoConnectionBox: only a dynamictrees* block with one cell-centred cube of whole-block half-size', () => {
-    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), true);
-    assert.equal(isDtBranchNoConnectionBox('dynamictreesttf:canopybranch', [[-7.5, -7.5, -7.5, 8.5, 8.5, 8.5]]), true);
-    assert.equal(isDtBranchNoConnectionBox('mcwbridges:most1', [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), false);
-    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', [[-0.5, 0, -0.5, 1.5, 1, 1.5]]), false);
-    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', [[-0.25, -0.25, -0.25, 1.25, 1.25, 1.25]]), false);
-    assert.equal(isDtBranchNoConnectionBox('dynamictrees:leaves0', DT_LEAVES_PLAYER_BOX), false);
-    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', [FULL[0], FULL[0]]), false);
-    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', null), false);
+test('isDtBranchNoConnectionBox: only a block of a Dynamic Trees class with one cell-centred cube of whole-block half-size', () => {
+    const basic = { class: 'com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic' };
+    assert.equal(isDtBranchNoConnectionBox(basic, [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), true);
+    assert.equal(isDtBranchNoConnectionBox({ class: 'maxhyper.dynamictreesttf.blocks.BlockBranchTwilight' }, [[-7.5, -7.5, -7.5, 8.5, 8.5, 8.5]]), true);
+    assert.equal(isDtBranchNoConnectionBox({ class: 'com.mcwbridges.kikoz.objects.blocks.BridgeBlock' }, [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), false);
+    assert.equal(isDtBranchNoConnectionBox({}, [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), false);
+    assert.equal(isDtBranchNoConnectionBox(basic, [[-0.5, 0, -0.5, 1.5, 1, 1.5]]), false);
+    assert.equal(isDtBranchNoConnectionBox(basic, [[-0.25, -0.25, -0.25, 1.25, 1.25, 1.25]]), false);
+    assert.equal(isDtBranchNoConnectionBox({ class: 'com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves' }, DT_LEAVES_PLAYER_BOX), false);
+    assert.equal(isDtBranchNoConnectionBox(basic, [FULL[0], FULL[0]]), false);
+    assert.equal(isDtBranchNoConnectionBox(basic, null), false);
 });
 
 test('entityCollision: Dynamic Trees branch states with the no-connection cube are counted in a note', () => {
     const f = blocks03();
-    f.blocks['dynamictrees:oakbranch'] = { defaultMeta: 0, states: [st(0, [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), st(15, [[-0.5, 0, -0.5, 1.5, 1, 1.5]], [[-0.5, 0, -0.5, 1.5, 1, 1.5]])] };
+    f.blocks['dynamictrees:oakbranch'] = { defaultMeta: 0, class: 'com.ferreusveritas.dynamictrees.blocks.BlockBranchThick', states: [st(0, [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), st(15, [[-0.5, 0, -0.5, 1.5, 1, 1.5]], [[-0.5, 0, -0.5, 1.5, 1, 1.5]])] };
     const problems = [];
     const notes = checkEntityCollision(f, { problems, dumperVersion: '0.3.0', requireLeaves: true });
     assert.deepEqual(problems, []);
     assert.ok(notes.includes('entityCollision: 1 states of 1 Dynamic Trees branch blocks have the no-connection cube (playerCollision uses their collision, varies true)'), notes.join('\n'));
+});
+
+// #269 review: collision of neighbour-dependent states stays as it was (forge-bridge reads it).
+test('keepWorldDependentCollision keeps the previous collision only for states flagged entityCollisionVaries', () => {
+    const POST = [[0.25, 0, 0.25, 0.75, 1.5, 0.75]];
+    const HALF = [[0, 0, 0, 0.75, 1.5, 0.75]];
+    const blocks = { blocks: {
+        'mod:wall': { states: [st(0, HALF, POST, true)] },
+        'mod:odd': { states: [st(0, HALF, HALF, false)] },
+        'mod:new': { states: [st(0, FULL, FULL)] },
+    } };
+    const previous = { blocks: { 'mod:wall': { states: [{ meta: 0, collision: POST }] }, 'mod:odd': { states: [{ meta: 0, collision: POST }] } } };
+    assert.deepEqual(keepWorldDependentCollision(blocks, previous), { kept: ['mod:wall:0'], changed: ['mod:odd:0'] });
+    assert.deepEqual(blocks.blocks['mod:wall'].states[0].collision, POST);
+    assert.deepEqual(blocks.blocks['mod:odd'].states[0].collision, HALF, 'a state not flagged keeps its new value');
+    assert.deepEqual(keepWorldDependentCollision(blocks, null), { kept: [], changed: [] });
+});
+
+test('the 3.3.4 data keeps the 2026-11-02 collision of the 103 neighbour-dependent states (manifest.import.collisionKept)', () => {
+    const cat = new RotnData(path.join(HERE, '../3.3.4'), { version: '3.3.4' });
+    const kept = cat.dump.manifest.import.collisionKept;
+    assert.equal(kept.length, 103);
+    assert.ok(kept.includes('aether_legacy:aerogel_wall:0'));
+    assert.deepEqual(cat.getBlock({ name: 'aether_legacy:aerogel_wall', meta: 0 }).state.collision, [[0.25, 0, 0.25, 0.75, 1.5, 0.75]]);
+    for (const k of kept) {
+        const i = k.lastIndexOf(':');
+        assert.equal(cat.getBlock({ name: k.slice(0, i), meta: Number(k.slice(i + 1)) }).state.entityCollisionVaries, true, k);
+    }
 });

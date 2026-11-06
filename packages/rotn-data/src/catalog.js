@@ -48,10 +48,12 @@ const sameMeta = (want, have) => want == null || have === WILDCARD_META || want 
  * parts around them, so every branch state of radius <= 8 was dumped with this box (2 to 16 blocks
  * wide, entityCollisionVaries false). In a tree every branch connects, and its shape is the core box
  * plus arms toward its tree-part neighbours, so the dumped box says nothing about it (Request 14 run).
- * Only for dynamictrees* blocks.
+ * Only for a block whose class is in a Dynamic Trees package: Dynamic Trees, its addons, and the
+ * Dynamic Trees branches Rustic registers as rustic:olivebranch and rustic:ironwoodbranch (#269 review).
+ * @param {{ class?: string }} block the blocks.json entry
  */
-export function isDtBranchNoConnectionBox(name, boxes) {
-    if (!/^dynamictrees[a-z]*:/.test(String(name)) || !Array.isArray(boxes) || boxes.length !== 1) return false;
+export function isDtBranchNoConnectionBox(block, boxes) {
+    if (!/dynamictrees/.test(String(block?.class ?? '')) || !Array.isArray(boxes) || boxes.length !== 1) return false;
     const [x0, y0, z0, x1, y1, z1] = boxes[0];
     const h = x1 - 0.5;
     return Number.isInteger(h) && h >= 1 && [x0, y0, z0].every((v) => v === 0.5 - h) && [y1, z1].every((v) => v === 0.5 + h);
@@ -160,7 +162,7 @@ export class RotnData {
         const b = this.getBlock(input);
         if (!b?.propertiesKnown || !b.state) return null;
         const s = b.state;
-        if (isDtBranchNoConnectionBox(b.name, s.entityCollision)) return { boxes: s.collision ?? null, varies: true, source: 'collision' };
+        if (isDtBranchNoConnectionBox(b, s.entityCollision)) return { boxes: s.collision ?? null, varies: true, source: 'collision' };
         if (Array.isArray(s.entityCollision)) return { boxes: s.entityCollision, varies: s.entityCollisionVaries ?? null, source: 'entityCollision' };
         return { boxes: s.collision ?? null, varies: null, source: 'collision' };
     }

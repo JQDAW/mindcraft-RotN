@@ -14,9 +14,10 @@
 //      and every dynamictrees:leaves* state gives a player the half-height box (checkEntityCollision);
 //   3. every early-game recipe in test/fixtures/scripts-<version>-early-recipes.json is
 //      found in the dump (the CraftTweaker scripts cross-check).
-// It then adds the pack pin (version, zip SHA-256) and the SHA-256 of every raw fetched file
-// (manifest.import.rawSha256) to the manifest and writes each file as sorted JSON (.json, or
-// .json.br when larger than 1 MiB).
+// It then keeps the previous `collision` of every state whose shape depends on its neighbours
+// (keepWorldDependentCollision, #269 review), adds the pack pin (version, zip SHA-256) and the
+// SHA-256 of every raw fetched file (manifest.import.rawSha256) to the manifest and writes each
+// file as sorted JSON (.json, or .json.br when larger than 1 MiB).
 //
 // Usage: node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir> --jar-sha256 <hex>
 //        [--version 3.3.4] [--allow-errors] [--dry-run]
@@ -28,8 +29,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { isDtBranchNoConnectionBox } from '../src/catalog.js';
-import { RotnData, DUMP_FORMAT, DUMP_FILES } from '../src/catalog.js';
+import { RotnData, DUMP_FORMAT, DUMP_FILES, isDtBranchNoConnectionBox } from '../src/catalog.js';
 import { recipeMatches } from '../src/crosscheck.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -95,13 +95,50 @@ export function rawHashes(src) {
     return out;
 }
 
+/** blocks.json(.br) already in `dir` (the data this import replaces), or null. */
+function readPreviousBlocks(dir) {
+    for (const ext of ['.json', '.json.br']) {
+        const p = path.join(dir ?? '', `blocks${ext}`);
+        if (!dir || !fs.existsSync(p)) continue;
+        const buf = fs.readFileSync(p);
+        return JSON.parse((ext === '.json.br' ? zlib.brotliDecompressSync(buf) : buf).toString('utf8'));
+    }
+    return null;
+}
+
+/**
+ * `collision` (getCollisionBoundingBox) is read at (0,0,0) of a fresh world, so for a shape that
+ * depends on its neighbours (a wall, a fence) it records whatever that world has there, and a new
+ * dump would change it for no reason in the pack. forge-bridge reads `collision`, so such a change
+ * would change the bot (#269 review). For every state flagged entityCollisionVaries (dumper 0.3.0)
+ * whose `collision` differs from the previous data's, the previous value is kept. Mutates `blocks`;
+ * returns the kept states as "name:meta" plus the changes left alone (states not flagged).
+ */
+export function keepWorldDependentCollision(blocks, previous) {
+    const kept = [];
+    const changed = [];
+    for (const [name, b] of Object.entries(blocks?.blocks ?? {})) {
+        const old = previous?.blocks?.[name];
+        if (!old) continue;
+        for (const s of b.states ?? []) {
+            const o = old.states?.find((x) => x.meta === s.meta);
+            if (!o || !('collision' in o) || JSON.stringify(o.collision) === JSON.stringify(s.collision)) continue;
+            if (s.entityCollisionVaries === true) { s.collision = o.collision; kept.push(`${name}:${s.meta}`); } else changed.push(`${name}:${s.meta}`);
+        }
+    }
+    return { kept, changed };
+}
+
 /**
  * @param {{ src: string, jarSha256: string, outDir?: string, version?: string, allowErrors?: boolean,
- *           dryRun?: boolean, registryDir?: string, expectedRecipes?: object[] }} opts
+ *           dryRun?: boolean, registryDir?: string, expectedRecipes?: object[], keepCollisionFrom?: string|null }} opts
+ *   keepCollisionFrom: the folder whose blocks.json(.br) gives the previous `collision` values
+ *   (default outDir; null keeps none)
  * @returns {{ written: string[], problems: string[], crosscheck: Array<{key: string, ok: boolean}> }}
  */
-export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErrors = false, dryRun = false, registryDir, expectedRecipes } = {}) {
+export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErrors = false, dryRun = false, registryDir, expectedRecipes, keepCollisionFrom } = {}) {
     outDir ??= path.join(ROOT, version);
+    if (keepCollisionFrom === undefined) keepCollisionFrom = outDir;
     registryDir ??= outDir;
     const pin = PACK_PINS[version];
     const problems = [];
@@ -157,12 +194,18 @@ export function importDump({ src, jarSha256, version = '3.3.4', outDir, allowErr
     }
     if (problems.length) return { written: [], problems, notes, crosscheck };
 
+    // the previous collision of neighbour-dependent states (#269 review)
+    const previous = keepCollisionFrom ? readPreviousBlocks(keepCollisionFrom) : null;
+    const { kept, changed } = keepWorldDependentCollision(files.blocks, previous);
+    if (kept.length) notes.push(`collision: kept the previous value of ${kept.length} states flagged entityCollisionVaries whose collision changed with the world, e.g. ${kept.slice(0, 5).join(', ')}`);
+    if (changed.length) notes.push(`collision: ${changed.length} states not flagged entityCollisionVaries changed their collision, e.g. ${changed.slice(0, 5).join(', ')}`);
+
     // write
     files.manifest = {
         ...m,
         pack: { version, zipSha256: pin?.zipSha256 ?? null },
         importedFrom: 'tools/dumper via deploy/test-server.sh --fetch rotn-dump',
-        import: { expectedJarSha256: jarSha256, rawSha256: rawHashes(src) },
+        import: { expectedJarSha256: jarSha256, rawSha256: rawHashes(src), ...(kept.length ? { collisionKept: kept.sort() } : {}) },
     };
     files.blocks.blocks = sortKeys(files.blocks.blocks);
     files.items.items = sortKeys(files.items.items);
@@ -306,7 +349,7 @@ export function checkEntityCollision(blocksFile, { problems = [], dumperVersion,
             if (s.entityCollisionVaries === true) varies++;
             else if (s.entityCollisionVaries !== false && s.entityCollisionVaries !== null) malformed.push(`${label} entityCollisionVaries ${s.entityCollisionVaries}`);
             if (DT_LEAVES.test(name)) leafStates.push({ label, s });
-            if (isDtBranchNoConnectionBox(name, e)) { branchStates++; branchBlocks.add(name); }
+            if (isDtBranchNoConnectionBox(b, e)) { branchStates++; branchBlocks.add(name); }
         }
     }
     if (malformed.length) bad(`${malformed.length} malformed states, e.g. ${malformed.slice(0, 5).join('; ')}`);
