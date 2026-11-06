@@ -12,6 +12,7 @@ import { RegistrySnapshot } from '../src/registries.js';
 import { extendRegistry } from '../src/registry-extension.js';
 import { applyCollisionShapes, dumpShapesByMeta, validateCollisionOverrides, loadCollisionOverrides, hazardBlockIds, partialHazardBlockIds, liquidBlockIds, stateHazard, DYNAMIC_LEAVES_BOX } from '../src/collision.js';
 import { loadRotnData } from '../../rotn-data/index.js';
+import { utilityWalkRule } from '../tools/build-collision-overrides.mjs';
 
 const require = createRequire(import.meta.url);
 const { Vec3 } = require('vec3');
@@ -237,6 +238,34 @@ test('walk-through is opt-in: reviewed rock piles and plant states only; an unre
     assert.equal(registry.blocksByName.stone.forge, undefined, 'vanilla entries are not touched');
 });
 
+test('#281 review: the utility walk-through rule goes by the class chain, not by names', () => {
+    const MC = 'net/minecraft/block/';
+    const OBJ = ['net/minecraft/block/Block', 'net/minecraftforge/registries/IForgeRegistryEntry$Impl'];
+    const methods = { 'mod/Plate': [], 'mod/Button': [], 'mod/Lamp': [], 'mod/ArrowButton': ['func_185616_e'], 'mod/PlayerRail': ['func_176570_e'],
+        'mod/Contact': ['func_180634_a'], [`${MC}BlockButton`]: ['func_180634_a', 'func_185616_e'], [`${MC}BlockRailDetector`]: ['func_180634_a', 'func_176570_e', 'func_176571_a'],
+        'betterwithmods/common/blocks/BlockRailDetectorBase': ['func_176571_a'] };
+    const rule = (...chain) => utilityWalkRule([...chain, ...OBJ], (c) => methods[c] ?? []);
+    // A pressure plate under any name is never walk-through.
+    assert.equal(rule('mod/Lamp', `${MC}BlockBasePressurePlate`).never, `${MC}BlockBasePressurePlate`);
+    assert.equal(rule('mod/Plate', `${MC}BlockTripWire`).never, `${MC}BlockTripWire`);
+    assert.equal(rule('mod/Plate', `${MC}BlockTripWireHook`).never, `${MC}BlockTripWireHook`);
+    assert.equal(rule('mod/Plate', `${MC}BlockPressurePlate`, `${MC}BlockBasePressurePlate`).never, `${MC}BlockBasePressurePlate`);
+    // A button: utility, and vanilla's contact method is reviewed harmless.
+    assert.deepEqual(rule('mod/Button', `${MC}BlockButtonWood`, `${MC}BlockButton`, `${MC}BlockDirectional`),
+        { utility: `${MC}BlockButton`, never: null, ownContact: null });
+    // A mod class overriding the helper vanilla's contact method calls is excluded (it could look for players).
+    assert.equal(rule('mod/ArrowButton', `${MC}BlockButton`).ownContact, 'mod/ArrowButton');
+    assert.equal(rule('mod/PlayerRail', `${MC}BlockRailDetector`, `${MC}BlockRailBase`).ownContact, 'mod/PlayerRail');
+    // Unless that override is reviewed: Better With Mods' detector rails still find only minecarts.
+    assert.deepEqual(rule('betterwithmods/common/blocks/BlockRailDetectorBase', `${MC}BlockRailDetector`, `${MC}BlockRailBase`),
+        { utility: `${MC}BlockRailBase`, never: null, ownContact: null });
+    // A mod's own contact method, anywhere below Block, excludes.
+    assert.equal(rule('mod/Lamp', 'mod/Contact', `${MC}BlockTorch`).ownContact, 'mod/Contact');
+    // A helper name means nothing without the vanilla class that calls it.
+    assert.equal(rule('mod/ArrowButton', `${MC}BlockTorch`).ownContact, null);
+    assert.equal(rule('mod/Plate', `${MC}BlockContainer`).utility, null);
+});
+
 test('#259: a molten metal, a spike trap and a modded portal stay non-walkable, with liquid and hazard flags', () => {
     const { registry, Block } = fixedMini();
     const molten = registry.blocksByName['somemod:molten_bronze'];
@@ -434,7 +463,13 @@ test('the real 3.3.4 dump and data: molten metal, spikes and a modded portal non
     assert.deepEqual(byName('rats:rat_tube_red').shapes, FULL, 'a tube: solid, its box comes from its tile entity');
     assert.deepEqual(data.counts.utilityWalkThrough, { lever: 1, torch: 25, button: 41, sign: 2, rail: 4 });
     assert.deepEqual(data.counts.neverWalkThrough, { 'net.minecraft.block.BlockBasePressurePlate': 24 });
-    for (const [n, o] of Object.entries(data.blocks)) {
-        if (o.walkThrough) assert.ok(!/PressurePlate|TripWire/.test(o.rules.join(' ') + o.class), `${n}: never a pressure plate or tripwire`);
+    // The blocks the class-chain rule kept solid (NEVER_WALK_BASES), whatever their names.
+    const never = Object.entries(data.checks.neverWalkThrough);
+    assert.equal(never.length, 24);
+    for (const [n, base] of never) {
+        assert.ok(!data.blocks[n]?.walkThrough, `${n} (${base}): not walk-through`);
+        assert.deepEqual(byName(n).shapes, FULL, `${n}: a solid full cube`);
     }
+    assert.ok(never.some(([n]) => n === 'betternether:bone_plate'), 'a pressure plate not named one');
+    assert.ok(data.blocks['betterwithmods:detector_rail_stone'].walkThrough, 'a reviewed helper override: walk-through');
 });
