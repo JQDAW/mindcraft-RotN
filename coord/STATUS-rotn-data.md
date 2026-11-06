@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-06T07:05Z (from `date -u`)
+Updated: 2026-11-06T07:13Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -204,7 +204,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - **#213 merged** (`1dfef62d`), the #209 review nits: (1) `installFoods` bans nothing and is meta 0 only (a pufferfish shares the cod's entry): documented in `src/foods.js`, `index.js` and the README; the eating code must check `avoidFood(name, meta)` and set auto-eat's `bannedFood` from it (see Request 11). (2) `scriptWon` names the winning line per field for the 9 foods `food.zs` sets more than once (baked beets: lines 466, 468). (3) The build stops on a `HungerEvents.onGetFoodValues` / `onGetPlayerFoodValues` handler (comments ignored). Tests: food-values 7/7, ESLint clean, `--check` reproduces.
 - **#226 merged** (`eb9b5657`), **G3 smoke round 2 batch A deaths (lead request, 2026-11-05):** "Zombie FRCFLD" is Zombie Players by Corosus (`mods/zombie_players-1.12.1-1.2.7.jar`), its own entity `zombie_players:zombie_player` (named "Zombie <player>" by its getDisplayName), not a renamed vanilla zombie, so no name rule. It spawns at any player death spot (unless within 32 blocks of the player's bed), never despawns, is a plain zombie with empty hands (20 health, 2 armor, attack 3, follow range 16) and cannot pick up items. Corpse Complex keeps armor, main hand and off hand; the rest drops and despawns after 600 s. The grove sprite (Primitive Mobs) only retaliates on a server: its player-targeting task is added under world.isRemote (client only), so the PR #62 'conditional' override was wrong and made threatOf say 'fight'. Moved to reviewedNotMarked; both get cited threat-reactions entries (grove sprite ignore-unless-provoked, zombie player fight). Tests: threats 15/15, entity-threats 6/6, threats-bosses 4/4, threats-parasite-weta 3/3, ESLint clean (targeted, smoke round 2 running).
 - **#226 review nits, branch `agent/rotn-data/death-zombie-nits`:** (1) ~~burns in daylight~~ corrected after the #243 review (REQUEST CHANGES): EntityZombiePlayer overrides setFire (`func_70015_d`) with a bare return, so it **never catches fire** (not by day, lava, fire or Fire Aspect; I had missed that override in the method list). Summary says so and keeps "do not wait for day"; the test is inverted. The Hordes' zombie-player options configure its own `hordes:zombie_player`, and The Hordes jar has no reference to Zombie Players; (2) the bot cannot read the 'Zombie <player>' name (FML spawn data), so the summary says to match on the entity type. threats 15/15, ESLint clean.
-- **Exact next step on resume:** Request 13 (the sticks answer for skills-rotn) is written; the `sticks-from-leaves` fix in `world-sources.json` waits for a lead GO. #243 (the #226 nits, fix pushed) is with the lead; fix review findings on its branch (never force-push). Otherwise idle; on a new lead request, branch from develop. The #210 falls follow-ups stay low priority. Open offer to the lead: read Hunger Overhaul's HarvestCraft / Biomes O' Plenty tables so the 753 `not-computed` foods get values (only if the lead wants it for D1a). Request 11 is closed (covered by #206, lead confirmed). No background jobs, no subagents, nothing uncommitted.
+- **Exact next step on resume:** Request 13 (the sticks answer for skills-rotn) is written; its data fix is draft #252, to merge together with skills-rotn's sticks PR (two of their tests read the data). #243 (the #226 nits, fix pushed) is with the lead; fix review findings on its branch (never force-push). Otherwise idle; on a new lead request, branch from develop. The #210 falls follow-ups stay low priority. Open offer to the lead: read Hunger Overhaul's HarvestCraft / Biomes O' Plenty tables so the 753 `not-computed` foods get values (only if the lead wants it for D1a). Request 11 is closed (covered by #206, lead confirmed). No background jobs, no subagents, nothing uncommitted.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
 - **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
@@ -376,6 +376,13 @@ Findings for skills-rotn (via the lead): see Request 8.
    - **Planks need a table.** Every `crafttweaker:*_planks` recipe for vanilla logs is 3 wide (`[null, log, null]` → 3 planks), so it needs a crafting table. So does the debarked-log version (`crafttweaker:minecraft_planks_*_debarked*`).
      - The only planks recipes that fit 2×2 take Pam's `harvestcraft:pammaple`, `pamcinnamon` or `pampaperbark` logs (→ 4) or the Twilight Forest giant log.
      - **Before the first table, sticks come from felling only** (or bamboo, greasy stems or a Rustic berry bush).
+     - Correction: planks without a table do exist. Once you have the crude axe, `world-sources.json` `debark-log` and `plank-from-debarked-log` (wiki-documented) give planks: place a log, then use the crude axe on it twice. After that, 2 planks → 4 sticks in the 2×2 grid. Only the recipes need a table.
+   - **Felling works by hand (skills-rotn's follow-up question):**
+     - `BlockBranch.removedByPlayer` → `removedByEntity` → `FutureBreak` → `futureBreak` (bytecode 0-262) has no tool check. The held item only adds Fortune (× (1 + 0.25 per level)) and takes `damageAxe`.
+     - The branches are `toolRequired:false` (dump).
+     - Branch hardness = log hardness × radius²/8, capped at 200 (`dynamictrees.cfg` line 114; `BlockBranchBasic.func_176195_g`). By hand that is about 1.5 s per hardness point, so a radius-8 oak trunk takes about 24 s.
+     - The pack doesn't block it: `betterwithmods.cfg` line 474 `HCLumber=false`, `primallib.cfg` line 37 No Tree Punching integration false, and no Dropt rule matches a branch.
+     - The round 4 B `driver.log` (lines 162-164, 197-199, 214) shows leaf breaks giving no stick while the bot, with no axe, gained sticks. It shows no logs, so logs from a hand-felled tree remain untested.
    - **Path to the first table** (`scripts/crafting_tables.zs` and `scripts/pyrotech/pyrotech_recipes_craftingtable.zs`; all are 2×2, no table needed):
      1. Craft the crude axe from a rock or flint + 2 `ore:stickWood` (`pyro_crude_axe`, craftingtable.zs lines 238-240).
      2. Craft `contenttweaker:crafting_tools` from a crude axe or stone axe + a rock or flint + 1 `ore:stickWood` (crafting_tables.zs line 9). This consumes the axe, because the recipe has no reuse.
@@ -389,12 +396,13 @@ Findings for skills-rotn (via the lead): see Request 8.
      - 10/56: wild berries;
      - 1/56: a worm.
      - Not read: where these bushes generate, and whether the meta-1 rule (lines 375-399) is ever reached after the meta-0 rule matches.
-   - **rotn-data follow-up (on the lead's GO):**
-     - Remove or correct `sticks-from-leaves` in `world-sources.json`.
-     - Add a cited `fell-tree` stick remainder.
-     - Add the first-table path as a `howToGet` source.
-     - skills-rotn's `collect_rotn` tests mock leaves that drop sticks, so this needs to be coordinated with them.
+   - **rotn-data follow-up: draft PR #252** (`agent/rotn-data/sticks-from-felling`).
+     - It removes `sticks-from-leaves` and gives `fell-tree` 6 branch → stick pairs and `tool: null`, all cited.
+     - It must merge together with skills-rotn's sticks PR: two of their tests read this data and fail until they update them (`fell_tree.test.js:141-146` expects an axe; `collect_rotn.test.js:143` expects a leaves stick rule).
+     - The first-table path as a `howToGet` source is not in it. It is a recipe chain, which `howToGet` already lists per item.
 
 ## Open PRs
+
+- #252 (draft) `agent/rotn-data/sticks-from-felling`: sticks come from felling, by hand too; merge together with skills-rotn's sticks PR.
 
 - #243 `agent/rotn-data/death-zombie-nits`: the #226 review nits (REQUEST CHANGES fixed: it never catches fire).
