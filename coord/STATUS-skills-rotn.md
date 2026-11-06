@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T12:27Z (from `date -u`)
+Updated: 2026-11-06T12:48Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -558,6 +558,26 @@ Source: the lead's batch A findings (raw log: harness-ops `captures/raw/r5-g3a/`
   - All new tests fail on develop's code.
   - Related files pass: `collect_rotn`, `fall_safety`, `agenda`, `priority`, `rotn_names`, `cobble`, `threat_arbitration`.
   - Lint 253 (baseline).
+- **Merged as #268** (`1a7d990`). Review: APPROVE WITH NITS. Round 5 must show no falling-tree death with the relaxed guard.
+
+## #268 follow-ups (branch `agent/skills-rotn/r5-followups`, 2026-11-06T12:48Z by `date -u`)
+
+Round 5 resumed before 12:48Z, per the lead (A rerun, B, C, D): targeted tests only.
+
+- **2. Logs to planks first:** `sticksFromPlanks` makes held logs (`ore:logWood`) into planks when there is no pair of one kind, then makes sticks. It runs in bounded rounds, and each round must make progress.
+- **3. Planks per kind:** `stickCraftsHeld` counts pairs of one kind only, so a mixed pair makes no stick.
+- **4. Load:** a failure string, or a memory that is not text, in an old `memory.json` is dropped on load with a `[memory]` warning; the turns are kept.
+- **1 (evidence for round 5):**
+  - the cut log line says "(from under its leaves)" when that was the stand;
+  - `rotnLastFell.underLeaves` is set;
+  - a falling-tree `[death]` line says "[its last cut was from under the tree's leaves]" or "[... under no canopy]".
+- **Tests:**
+  - `history` 3 (1 new);
+  - `fell_tree` 17: 2 new; the planks test now uses a crafting model per kind; the oak test also checks the under-leaves log;
+  - `death_report` 15 (1 new).
+  - All new or changed tests fail on develop's code (with a stub export for `stickCraftsHeld`).
+  - Related files pass: `collect_rotn`, `agenda`, `fall_safety`.
+  - Lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
