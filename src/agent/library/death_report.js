@@ -13,7 +13,7 @@
 import { requestReplan } from '../replan.js';
 import { safeError } from '../safe_error.js';
 import { nightPhase } from './night.js';
-import { isPlayerZombie } from './threats.js';
+import { isPlayerZombie, canFightHard } from './threats.js';
 
 /** Samples kept while alive (one a second). */
 export const SAMPLES_KEPT = 3;
@@ -157,6 +157,15 @@ export class DeathReporter {
 
 const where = (p) => (p ? `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}` : 'unknown');
 
+/** How long Corpse Complex keeps the dropped items at the death spot (config: Drop Despawn Timer 600). */
+export const DROPS_LAST_MIN = 10;
+
+/** What the model is told about the items it dropped (lead decision on rotn-data Request 12). */
+export const LOST_ITEMS_NOTE = `They lie at the death spot for ${DROPS_LAST_MIN} minutes, and a zombie rises there `
+    + '(Zombie Players: it never burns in daylight and never leaves). They are lost unless that zombie is killed '
+    + `within ${DROPS_LAST_MIN} minutes of your death; waiting for day does not help. Go back for them only with a weapon `
+    + 'and more than half your health; otherwise move on and do not plan around the lost items.';
+
 /** The re-plan note for a death by a falling tree: what happened and how not to repeat the cut. */
 const treeNote = (lastFell) => `A falling tree crushed you${lastFell?.pos ? ` (the one you cut at ${where(lastFell.pos)})` : ''}: `
     + 'in RotN a cut tree falls as one piece. Get logs only with !collectBlocks("log", n), which cuts the lowest trunk block '
@@ -182,7 +191,10 @@ export function deathSpotBlocked(agent, pos, { now = Date.now() } = {}) {
     }
     const zombie = Object.values(bot?.entities ?? {}).find(e => e !== bot.entity && e?.position
         && isPlayerZombie(e) && dist(e.position, last.pos) <= DEATH_SPOT_RADIUS);
-    if (zombie) return 'a player zombie (it rises where a player died) is there';
+    // The zombie never burns and never leaves (rotn-data #243), so this rule ends only when it dies.
+    // With a weapon and more than half its health the bot may go and fight it (the fight policy;
+    // lead decision on rotn-data Request 12); otherwise it stays away.
+    if (zombie && !canFightHard(bot)) return 'a player zombie (it rises where a player died) is there, and you lack a weapon or more than half your health to fight it';
     if (ago < DEATH_SPOT_NIGHT_MS) {
         let phase = null;
         try { phase = agent._night?.clock?.phase?.(now) ?? null; } catch { phase = null; }
@@ -306,10 +318,11 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
         Promise.resolve().then(() => agent.openChat(r.chat)).catch(err => console.warn(`[death] chat: ${safeError(err)}`));
     }
     // The LLM gets the bot's own state only, never the server's death text (it can carry a mob's
-    // or player's custom name). Where the items went is hedged until G3 (b) shows how Corpse
-    // Complex behaves (#215 review 2).
+    // or player's custom name). Where the items went, plainly (rotn-data #226/#243: Corpse Complex
+    // drops them at the death spot for 600 s; Zombie Players raises a zombie there that never burns
+    // and never despawns; lead decision on rotn-data Request 12).
     const items = r.lost.length
-        ? `You no longer have ${formatLoss(r.lost)}; they may lie at the death spot (unconfirmed).`
+        ? `You no longer have ${formatLoss(r.lost)}. ${LOST_ITEMS_NOTE}`
         : 'Your inventory looks unchanged.';
     // A death is due for a prompt even when nothing was running (#215 review 1), except in a
     // death streak: then the note waits for the next prompt, so deaths cannot drive LLM calls.

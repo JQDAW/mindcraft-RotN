@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T03:30Z (from `date -u`)
+Updated: 2026-11-06T03:32Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -447,7 +447,12 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   3. The #238 nits: `placeFurnaceNear` trusts `blockAt(pos)` after a failed or thrown placement; a weapon stuck in the off hand is logged; a better off-hand weapon beats a worse one (`weaponRank`).
 
   Tests: `fell_tree` 12, `furnace` 6, `use_on` 15, `death_report` 10; related 6 files pass; lint 254.
-- **Next (lead):** review this PR. `agent/skills-rotn/next2` is superseded by it.
+  4. rotn-data Request 12 (lead decision, routed from #243):
+     - the death note says plainly that the items lie at the death spot for 10 min, guarded by a zombie that never burns and never leaves. They are lost unless it is killed within 10 min; waiting for day does not help; go back only with a weapon and more than half the health, otherwise move on. The "(unconfirmed)" hedge is gone;
+     - `deathSpotBlocked` keeps the zombie avoid rule, except within the fight policy (`canFightHard`). The 5 min wait and the night rule stay.
+
+     Tests: `death_report` 11 (the note, and the rule with and without a weapon, at half and at 18 health); both fail on the previous head.
+- **Next (lead):** review #247. `agent/skills-rotn/next2` is superseded by it.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
