@@ -1,18 +1,36 @@
 # Status: net-forge
 
-Updated: 2026-11-06T08:05Z
+Updated: 2026-11-06T08:30Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #256 question: Dynamic Trees leaves collision (2026-11-06T07:56Z answer; 08:05Z PR open)
+## #256 question: Dynamic Trees leaves collision (2026-11-06T07:56Z answer; 08:30Z #259 review changes pushed)
 
-- **PR #259:** branch `agent/net-forge/collision-shapes`, from develop `4fd8106`. Waiting for the lead's review.
-- **Real dump result:** 4,595 modded blocks take the dump's shapes. 707 of them vary by state and 742 are walk-through. Overrides: 26 DT leaves and 12 full cubes. 9 blocks have no dump data and stay full cubes.
+- **PR #259:** branch `agent/net-forge/collision-shapes`. Changes from the lead's REQUEST CHANGES review are pushed and waiting for re-review.
+  - **Develop:** merged in (`b1f35ed`, with #256) instead of rebased. The branch was already pushed, and a rebase would need a force-push.
+- **Walk-through is now opt-in.** The tool reviews classes:
+  - **Allowed:** plant bases (BlockBush, BlockCrops, BlockSapling, ...) or blocks whose every state is plants or vine material, plus the reviewed Pyrotech and Pyrotech Compat rock piles. A class only qualifies if it has no box, no entity-contact override and no `addCollisionBoxToList` override.
+  - **Per variant** for BOP plants and flowers. Poison ivy, thorn, tiny cactus, deathbloom and burning blossom are solid and hazards (javap, switch maps resolved).
+  - **Everything else** without a box is a full cube. Every state is checked.
+  - **Result:** 326 blocks are walk-through in some or all states (1,422 states). 4,564 states without a box stay solid.
+- **Liquids:** 162 modded fluids get `liquid: true` (BlockFluidBase, BlockLiquid or IFluidBlock) and stay solid.
+- **`forge.hazard`:**
+
+  | Kind | Blocks | Based on |
+  | --- | --- | --- |
+  | `trap` | 150 | bytecode of the contact methods and the mod methods they call: damage, effect, fire, web or explosion |
+  | `portal` | 42 | base class or material |
+  | `lava` | 27 | fluids with lava material |
+  | `fire` | 14 | base class or material |
+  | `web` | 1 | base class or material |
+
+  Per-state entries in `blocksByStateId` carry a state's own `boundingBox` and `hazard`.
+- **Fail-safe:** the overrides are validated and every change is planned before the registry is touched. A test shows that a bad override leaves every block a full cube.
 - **Tests:**
-  - `test/collision.test.js` (7) passes, including prismarine-physics: the bot lands on leaves at +0.5 and falls through a rock pile.
-  - 17 other test files that use `initBot` or the extension pass. `e2e-initbot` now expects a rock pile to be `'empty'`.
-  - Lint: the new files are clean, and `mcdata.js` is unchanged at 11 errors.
-  - The tool's `--check` reports the data up to date.
+  - `test/collision.test.js` 9/9. It covers molten metal, spikes, a modded portal, fire, web, BOP poison and poison ivy as not walk-through, through mineflayer-pathfinder's own `Movements.getBlock().safe`. Rock piles and BOP grass are walk-through.
+  - After the merge: `fall_safety.test.js` 10/10, plus 21 other files that use `initBot` or the extension.
+  - Lint is clean. The tool's `--check` is up to date.
+- **Routed by the lead to skills-rotn:** `fall_safety.js` `isEmpty` should use `liquid` and `forge.hazard`.
 
 **Answer: players collide with Dynamic Trees leaves; they do not fall through.** Each leaves block is a half-height box inset by 1/8: `[0.125, 0, 0.125, 0.875, 0.5, 0.875]`. So they are ground, but the surface is 0.5 above the block, not 1.0. A player walks up onto them like a slab.
 
