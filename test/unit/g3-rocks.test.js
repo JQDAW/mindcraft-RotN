@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { G3_CONSOLE_ALLOW, PACK_FIRST_JOIN, cheatProblems, statCriterion } from '../runner/lib/g3.mjs';
-import g3a, { G3A_STATS, cobbleOutputs } from '../scenarios/g3/g3-rocks-to-stone-tools.mjs';
+import g3a, { G3A_STATS, MAX_TABLE_CLAIMS, cobbleOutputs, tablePlacements } from '../scenarios/g3/g3-rocks-to-stone-tools.mjs';
 
 const NAME = 'FRCFLD';
 const MIN = 60000;
@@ -36,6 +36,8 @@ const PLAY = [
  * opt.play: the script (default PLAY); opt.start: inventory at the join ({'name:meta': n});
  * opt.lines: [[minute, raw log message]] written at that minute; opt.noPack: no first-join pack lines;
  * opt.badCriterion: a criterion the server does not know; opt.kickAt: the minute the bot is kicked.
+ * A play event's place: [x, y, z] puts a crafting table there and the bot says "Placed crafting_table at (x, y, z)."
+ * in its output; claim: [x, y, z] is the output line alone (no block); opt.world: {"x y z": block} at the start.
  */
 function sim(opt = {}) {
     const log = [];
@@ -47,6 +49,8 @@ function sim(opt = {}) {
     const stats = new Map();
     const objectives = new Map();
     const sent = [];
+    const output = [];
+    const world = new Map(Object.entries(opt.world ?? {}));
     const add = (msg) => log.push(line(t, msg));
     const play = [...(opt.play ?? PLAY)];
     const extra = [...(opt.lines ?? [])];
@@ -61,6 +65,8 @@ function sim(opt = {}) {
             if (e.use) stat(statCriterion('useItem', e.use));
             for (const [k, n] of Object.entries(e.inv ?? {})) put(k, n);
             if (e.say) add(`<${NAME}> ${e.say}`);
+            for (const at of [e.place, e.claim].filter(Boolean)) output.push(`Placed crafting_table at (${at.join(', ')}).`);
+            if (e.place) world.set(e.place.join(' '), 'minecraft:crafting_table');
         }
         while (extra.length && extra[0][0] <= m) add(extra.shift()[1]);
         if (opt.kickAt !== undefined && m >= opt.kickAt) {
@@ -81,7 +87,10 @@ function sim(opt = {}) {
             let m;
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
             else if (cmd === 'seed') add('Seed: 1880465901402976865');
-            else if ((m = /^clear (\S+) (\S+) (-?\d+) 0$/.exec(cmd))) {
+            else if ((m = /^testforblock (-?\d+) (-?\d+) (-?\d+) (\S+) 0$/.exec(cmd))) {
+                const here = world.get(`${m[1]} ${m[2]} ${m[3]}`) ?? 'minecraft:air';
+                add(here === m[4] ? `Successfully found the block at ${m[1]}, ${m[2]}, ${m[3]}` : `The block at ${m[1]}, ${m[2]}, ${m[3]} is ${here === 'minecraft:air' ? 'Air' : here} (expected: Crafting Table).`);
+            } else if ((m = /^clear (\S+) (\S+) (-?\d+) 0$/.exec(cmd))) {
                 const n = online ? count(m[2], Number(m[3])) : null;
                 if (n === null) add(`That player cannot be found`);
                 else add(n ? `${m[1]} has ${n} items that match the criteria` : `Could not clear the inventory of ${m[1]}, no items to remove`);
@@ -121,7 +130,7 @@ function sim(opt = {}) {
         },
         alive: () => alive,
         exitCode: () => (alive ? null : 0),
-        output: () => [],
+        output: () => output,
         stop() { alive = false; online = false; return Promise.resolve(); },
     };
     const clock = { now: () => t, sleep: async (ms) => { t += ms; for (let i = 0; i < 3; i++) await tick(); } };
@@ -235,7 +244,7 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
         for (const cmd of s.sent) assert.ok(G3_CONSOLE_ALLOW.some((re) => re.test(cmd)), `not approved: ${cmd}`);
         assert.equal(s.objectives.size, 0, 'the objectives are removed at the end');
         assert.equal(r.gateValid, true, r.weakenedParams.join('; '));
-        assert.deepEqual(r.notes.craftingTablePath, { path: 'placed', useStat: 'added', fallback: false, held: 0, placed: 1 });
+        assert.deepEqual(r.notes.craftingTablePath, { path: 'placed', useStat: 'added', fallback: false, held: 0, placed: 1, claims: [] });
     });
 
     test('the server rejects the table\'s use stat: crafting_table falls back to "held", and the result says so (lead, #201)', async () => {
@@ -244,7 +253,7 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
         const c = byName(r);
         assert.equal(c.crafting_table.pass, true, c.crafting_table.detail);
         assert.match(c.crafting_table.detail, /\(the use stat objective: invalid\)/);
-        assert.deepEqual(r.notes.craftingTablePath, { path: 'held', useStat: 'invalid', fallback: true, held: 1, placed: 0 });
+        assert.deepEqual(r.notes.craftingTablePath, { path: 'held', useStat: 'invalid', fallback: true, held: 1, placed: 0, claims: [] });
         assert.equal(c.crafted_by_bot.pass, true, 'the use stat is not part of crafted_by_bot');
     });
 
@@ -283,8 +292,8 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
         const r = await run(sim({ badCriterion: statCriterion('useItem', 'minecraft:crafting_table') }));
         const c = byName(r);
         assert.equal(c.crafting_table.pass, false);
-        assert.equal(c.crafting_table.detail, 'held 0, placed (use stat) 0 (the use stat objective: invalid)');
-        assert.deepEqual(r.notes.craftingTablePath, { path: 'none', useStat: 'invalid', fallback: true, held: 0, placed: 0 });
+        assert.equal(c.crafting_table.detail, 'held 0, placed (use stat) 0 (the use stat objective: invalid); the bot reported no placement');
+        assert.deepEqual(r.notes.craftingTablePath, { path: 'none', useStat: 'invalid', fallback: true, held: 0, placed: 0, claims: [] });
         assert.equal(c.crafted_by_bot.pass, true, 'the table was still crafted');
     });
 
@@ -320,5 +329,55 @@ describe('g3-rocks-to-stone-tools on a simulated server', () => {
             assert.equal(r.gateValid, false, JSON.stringify(params));
             assert.equal(r.pass, false);
         }
+    });
+});
+
+describe('crafting_table: the placed block itself, when the use stat stays 0 (lead, after round 3 continuation A)', () => {
+    // Round 3 continuation A: crafted (craft stat 1), placed by the bot at -42 67 -54, the use stat 0, held 0 at the end.
+    const AT = [-42, 67, -54];
+    const playWith = (table) => PLAY.map(([m, e]) => (e.craft === 'minecraft:crafting_table' ? [m, table] : [m, e]));
+
+    test('tablePlacements: distinct cells from the bot\'s own "Placed crafting_table at" lines, the newest few', () => {
+        assert.deepEqual(tablePlacements(['Placed crafting_table at (-42, 67, -54).', 'Cannot place crafting_table at (-43, 67, -56): nothing to place on.',
+            'Placed oak_planks at (1, 2, 3).', 'Agent executed: !placeHere and got: Placed minecraft:crafting_table at (1, 2, 3)', 'Placed crafting_table at (-42, 67, -54).']),
+        [[1, 2, 3], [-42, 67, -54]], 'deduplicated (newest last); planks and failures ignored');
+        const many = Array.from({ length: 8 }, (_, i) => `Placed crafting_table at (${i}, 64, 0).`);
+        assert.equal(MAX_TABLE_CLAIMS, 5);
+        assert.deepEqual(tablePlacements(many).map((c) => c[0]), [3, 4, 5, 6, 7]);
+        assert.deepEqual(tablePlacements([]), []);
+    });
+
+    test('the round 3 case: no use stat, not held, but the server finds the table where the bot placed it: PASS', async () => {
+        const s = sim({ play: playWith({ craft: 'minecraft:crafting_table', place: AT }) });
+        const r = await run(s);
+        const c = byName(r);
+        assert.equal(c.crafting_table.pass, true, c.crafting_table.detail);
+        assert.match(c.crafting_table.detail, /^held 0, placed \(use stat\) 0; the bot's placements: -42 67 -54 a table \(server\)$/);
+        assert.equal(r.notes.craftingTablePath.path, 'placed-block');
+        assert.deepEqual(r.notes.craftingTablePath.claims, [{ at: AT, table: true, detail: 'found' }]);
+        assert.ok(s.sent.includes('testforblock -42 67 -54 minecraft:crafting_table 0'));
+        for (const cmd of s.sent) assert.ok(G3_CONSOLE_ALLOW.some((re) => re.test(cmd)), `not approved: ${cmd}`);
+        assert.equal(c.crafted_by_bot.pass, true);
+    });
+
+    test('a claim the server does not confirm (no table there) fails, with what the server found', async () => {
+        const c = byName(await run(sim({ play: playWith({ craft: 'minecraft:crafting_table', claim: AT }) })));
+        assert.equal(c.crafting_table.pass, false);
+        assert.match(c.crafting_table.detail, /the bot's placements: -42 67 -54 The block at -42, 67, -54 is Air/);
+    });
+
+    test('a table that stood there before, with no table craft stat, is not counted', async () => {
+        const c = byName(await run(sim({ play: playWith({ claim: AT }), world: { '-42 67 -54': 'minecraft:crafting_table' } })));
+        assert.equal(c.crafting_table.pass, false);
+        assert.match(c.crafting_table.detail, /a table \(server\) \(not counted: no table craft stat\)$/);
+        assert.equal(c.crafted_by_bot.pass, false, 'and the craft check fails anyway');
+    });
+
+    test('no placement reported: the old paths only, and no testforblock is sent', async () => {
+        const s = sim();
+        const c = byName(await run(s));
+        assert.equal(c.crafting_table.pass, true, 'the default play places it with the use stat');
+        assert.match(c.crafting_table.detail, /the bot reported no placement$/);
+        assert.ok(!s.sent.some((x) => x.startsWith('testforblock')));
     });
 });
