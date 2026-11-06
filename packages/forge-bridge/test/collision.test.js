@@ -91,8 +91,11 @@ test('the javap fixture: Dynamic Trees leaves give a player AxisAlignedBB(0.125,
     assert.match(JAVAP, /String passableleaves\n.*Loader\.isModLoaded[^\n]*\n.*putstatic.*BlockDynamicLeaves\.passableLeavesModLoaded/);
     assert.match(JAVAP.slice(JAVAP.indexOf('func_176205_b(')), /ModConfigs\.isLeavesPassable:Z\n\s+18: ireturn/, 'isPassable is the config flag');
     const data = loadCollisionOverrides();
-    assert.deepEqual(data.shapes.dynamicLeaves.shapes, [DYNAMIC_LEAVES_BOX], 'the pack config selects the box (isLeavesPassable=false, vanillaLeavesCollision=false)');
-    assert.match(data.shapes.dynamicLeaves.evidence, /isLeavesPassable=false \(line 60\), vanillaLeavesCollision=false \(line 66\), mod passableleaves not in the pack/);
+    // Since #269 the box comes from rotn-data's playerCollision; the overrides tool checks every leaves state against it.
+    assert.deepEqual(data.checks.dynamicLeaves.shapes, [DYNAMIC_LEAVES_BOX], 'the pack config selects the box (isLeavesPassable=false, vanillaLeavesCollision=false)');
+    assert.equal(data.counts.dynamicLeavesChecked, 26);
+    assert.equal(data.shapes, undefined, 'no shape override is needed any more');
+    assert.match(data.checks.dynamicLeaves.evidence, /isLeavesPassable=false \(line 60\), vanillaLeavesCollision=false \(line 66\), mod passableleaves not in the pack/);
 });
 
 test('dumpShapesByMeta: 16 shapes by metadata, or null for missing or malformed data', () => {
@@ -106,9 +109,60 @@ test('dumpShapesByMeta: 16 shapes by metadata, or null for missing or malformed 
     assert.equal(dumpShapesByMeta(undefined), null);
 });
 
+// rotn-data's playerCollision shape: (regName, meta) => { boxes, varies } (RotnData.playerCollision).
+const LILY = [[0.0625, 0, 0.0625, 0.9375, 0.09375, 0.9375]];
+const STAIRS = [[0, 0, 0, 1, 0.5, 1], [0.5, 0.5, 0, 1, 1, 1]];
+const PLAYER = {
+    'somemod:lily': { 0: { boxes: LILY, varies: false } },
+    'somemod:stairs': { 0: { boxes: STAIRS, varies: false } },
+    'somemod:fence': { 0: { boxes: [[0.375, 0, 0.375, 0.625, 1.5, 0.625]], varies: true } },
+    'somemod:branch': { 0: { boxes: [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], varies: true } },
+    'somemod:pane': { 0: { boxes: [], varies: true } },
+    'somemod:grass': { 0: { boxes: [], varies: false } },
+    'somemod:plantgrass': { 0: { boxes: [], varies: false } },
+    'somemod:odd': { 0: { boxes: [[0, 0, 0, 1, 'x', 1]], varies: false } },
+    'dynamictrees:leaves0': { 0: { boxes: [DYNAMIC_LEAVES_BOX], varies: false } },
+};
+const playerCollision = (name, meta) => PLAYER[name]?.[meta] ?? null;
+
+test('#269: dumpShapesByMeta takes what a player collides with; a neighbour-dependent state gets one full-width box', () => {
+    const shape = (name, collision) => dumpShapesByMeta({ defaultMeta: 0, states: [state(0, collision)] }, { name, playerCollision });
+    assert.deepEqual(shape('somemod:lily', []).shapes[0], LILY, 'a box the dumped collision did not have');
+    assert.deepEqual(shape('somemod:stairs', FULL).shapes[0], STAIRS, 'several boxes');
+    assert.deepEqual(shape('somemod:grass', [[0.25, 0, 0.25, 0.75, 0.625, 0.75]]).shapes[0], [], 'no player box');
+    assert.deepEqual(shape('somemod:fence', FULL).shapes[0], [[0, 0, 0, 1, 1.5, 1]], 'a fence: full width, as tall as its post');
+    assert.deepEqual(shape('somemod:branch', [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]]).shapes[0], FULL, 'a branch core: at least a full cube');
+    assert.deepEqual(shape('somemod:pane', []).shapes[0], FULL, 'no box seen, but neighbours matter: solid');
+    assert.deepEqual(shape('somemod:odd', BOTTOM).shapes[0], BOTTOM, 'malformed player data keeps the dumped collision');
+    assert.deepEqual(shape('somemod:unknown', TOP).shapes[0], TOP, 'no player data keeps the dumped collision');
+    assert.deepEqual(shape('somemod:fence', FULL).sources, { player: 0, varies: 1, collision: 0 });
+    assert.deepEqual(shape('somemod:stairs', FULL).sources, { player: 1, varies: 0, collision: 0 });
+});
+
+test('#269: applyCollisionShapes with playerCollision: lily pads and stairs as a player meets them, leaves from the data, opt-in walk-through kept', () => {
+    const names = ['somemod:lily', 'somemod:stairs', 'somemod:fence', 'somemod:grass', 'somemod:plantgrass', 'dynamictrees:leaves0'];
+    const registry = extended([['minecraft:air', 0], ['minecraft:stone', 1], ...names.map((n, i) => [n, 5001 + i])]);
+    const dump = Object.fromEntries(names.map((n) => [n, { defaultMeta: 0, states: [state(0, n === 'somemod:lily' ? [] : FULL)] }]));
+    const data = { blocks: { 'somemod:plantgrass': { walkThrough: 'all' } } };
+    const report = applyCollisionShapes(registry, dump, { overrides: data, playerCollision });
+    assert.deepEqual(report.states, { player: 5, varies: 1, collision: 0 });
+    const Block = require('prismarine-block')(registry);
+    const idOf = (n) => registry.blocksByName[n].id;
+    const at = (n) => Block.fromStateId(idOf(n) << 4, 1);
+    assert.deepEqual(at('somemod:lily').shapes, LILY, 'not a full cube any more');
+    assert.deepEqual(at('somemod:stairs').shapes, STAIRS);
+    assert.deepEqual(at('somemod:fence').shapes, [[0, 0, 0, 1, 1.5, 1]]);
+    assert.deepEqual(at('somemod:grass').shapes, FULL, 'no player box, not reviewed: stays a solid full cube');
+    assert.equal(at('somemod:plantgrass').boundingBox, 'empty', 'reviewed: walk-through');
+    assert.deepEqual(at('dynamictrees:leaves0').shapes, [DYNAMIC_LEAVES_BOX], 'from the data, no shape override');
+    assert.equal(landingY(registry, { 63: 1, 64: idOf('somemod:lily') }), 64.09375, 'the bot stands on the lily pad');
+    assert.equal(landingY(registry, { 63: 1, 64: idOf('somemod:fence') }), 65.5, 'and on top of a fence');
+    assert.equal(landingY(registry, { 63: 1, 64: idOf('somemod:plantgrass') }), 64, 'and falls through reviewed grass');
+});
+
 test('walk-through is opt-in: reviewed rock piles and plant states only; an unreviewed state without a box is a solid full cube', () => {
     const { registry, report, Block } = fixedMini();
-    assert.deepEqual(report, { fromDump: 8, noDumpData: 2, walkThroughBlocks: 1, walkThroughSomeStates: 1, perStateEntries: 15, liquid: 1, hazard: { lava: 1, trap: 2, portal: 1, fire: 1 }, shapes: { dynamicLeaves: 1 } });
+    assert.deepEqual(report, { fromDump: 8, noDumpData: 2, walkThroughBlocks: 1, walkThroughSomeStates: 1, perStateEntries: 15, liquid: 1, hazard: { lava: 1, trap: 2, portal: 1, fire: 1 }, shapes: { dynamicLeaves: 1 }, states: { player: 0, varies: 0, collision: 12 } }); // leaves0 takes its shape override, not the dump
     const rock = blockOf(Block, 'pyrotech:rock', 6);
     assert.equal(rock.boundingBox, 'empty');
     assert.deepEqual(rock.shapes, []);
@@ -277,8 +331,11 @@ test('the real 3.3.4 dump and data: molten metal, spikes and a modded portal non
     for (const name of Object.keys(data.blocks)) assert.ok(dumped[name], `${name} is in the dump`);
     const modded = Object.keys(dumped).filter((n) => !n.startsWith('minecraft:'));
     const registry = extended([['minecraft:air', 0], ...modded.map((n, i) => [n, 4000 + i])]);
-    const report = applyCollisionShapes(registry, dumped);
-    assert.equal(report.fromDump + report.shapes.dynamicLeaves + report.noDumpData, modded.length);
+    const report = applyCollisionShapes(registry, dumped, { playerCollision: (name, meta) => pack.playerCollision({ name, metadata: meta }) });
+    assert.equal(report.fromDump + report.noDumpData, modded.length);
+    assert.deepEqual(report.shapes, {}, 'no shape overrides: every box is from the data');
+    assert.equal(report.states.collision, 0, 'every dumped state has player data');
+    assert.ok(report.states.varies > 300, JSON.stringify(report.states));
     assert.equal(report.liquid, data.counts.blocks.liquid);
     assert.equal(report.walkThroughBlocks + report.walkThroughSomeStates, data.counts.blocks.walkThrough);
     const Block = require('prismarine-block')(registry);
@@ -290,7 +347,7 @@ test('the real 3.3.4 dump and data: molten metal, spikes and a modded portal non
         ['pyrotech:rock', 0, true, undefined], ['pyrotech_compat:rock_igneous', 3, true, undefined],
         ['biomesoplenty:plant_0', 0, true, undefined], ['biomesoplenty:plant_0', 4, false, 'trap'], // shortgrass, poison ivy
         ['biomesoplenty:flower_0', 2, false, 'trap'], ['biomesoplenty:flower_0', 15, false, 'fire'], ['biomesoplenty:flower_0', 0, true, undefined],
-        ['biomesoplenty:waterlily', 0, false, undefined], // its class adds a box the dump did not see
+        ['biomesoplenty:waterlily', 0, true, undefined], // #269: a box 0.09375 high, a carpet to the pathfinder (under 0.1)
     ];
     const movements = movementsOver(registry, Block, (p) => byName(cases[p.x][0], cases[p.x][1]));
     cases.forEach(([n, meta, walk, hazard], x) => {
@@ -313,4 +370,11 @@ test('the real 3.3.4 dump and data: molten metal, spikes and a modded portal non
     assert.equal(liquidBlockIds(registry).size, data.counts.blocks.liquid);
     assert.deepEqual(byName('dynamictrees:leaves0').shapes, [DYNAMIC_LEAVES_BOX]);
     assert.deepEqual(byName('dynamictreesbop:leaves_palm').shapes, [DYNAMIC_LEAVES_BOX]);
+    // #269: what a player collides with.
+    assert.deepEqual(byName('biomesoplenty:waterlily').shapes, [[0.0625, 0, 0.0625, 0.9375, 0.09375, 0.9375]]);
+    assert.deepEqual(byName('biomesoplenty:sacred_oak_stairs').shapes, [[0, 0, 0, 1, 0.5, 1], [0.5, 0.5, 0, 1, 1, 1]], 'stairs: two boxes, not a cube');
+    assert.deepEqual(byName('biomesoplenty:cherry_fence').shapes, [[0, 0, 0, 1, 1.5, 1]], 'a fence: neighbour-dependent, full width, 1.5 high');
+    assert.deepEqual(byName('quark:bark_acacia_wall').shapes, [[0, 0, 0, 1, 1.5, 1]]);
+    assert.deepEqual(byName('dynamictrees:oakbranch').shapes, FULL, 'a thin branch: its arms reach the neighbours, so a full cube');
+    assert.deepEqual(byName('contenttweaker:cave_grass').shapes, FULL, 'no player box but not reviewed: solid (the walk-through list is a later PR)');
 });

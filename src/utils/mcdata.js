@@ -199,10 +199,15 @@ export function initBot(username, { onMsaCode } = {}) {
                 bridge.on('registries', (snap) => {
                     forge.registryReport = extendRegistry(bot.registry, snap, { log: (m) => console.log(`[forge-bridge] ${m}`) });
                     forge.stateIdRemap = attachStateIdRemap(bot.registry, stateIdTable, { log: (m) => console.log(`[forge-bridge] ${m}`) });
-                    // #256 review: modded blocks get rotn-data's dumped collision (rock piles and plants are walk-through,
-                    // Dynamic Trees leaves a half-height box), not the full cube extendRegistry defaults to.
+                    // #256 review: modded blocks get what a player collides with (rotn-data's playerCollision, #269;
+                    // rock piles and plants walk-through, Dynamic Trees leaves a half-height box), not the full cube
+                    // extendRegistry defaults to.
                     try {
-                        forge.collision = applyCollisionShapes(bot.registry, loadRotnData(PACK_VERSION).dump?.blocks?.blocks, { log: (m) => console.log(`[forge-bridge] ${m}`) });
+                        const rd = loadRotnData(PACK_VERSION);
+                        forge.collision = applyCollisionShapes(bot.registry, rd.dump?.blocks?.blocks, {
+                            playerCollision: (name, meta) => rd.playerCollision({ name, metadata: meta }),
+                            log: (m) => console.log(`[forge-bridge] ${m}`),
+                        });
                     } catch (e) {
                         console.warn(`[forge-bridge] collision shapes not applied, modded blocks stay full cubes: ${e.message}`);
                     }
