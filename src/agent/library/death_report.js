@@ -160,11 +160,20 @@ const where = (p) => (p ? `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(
 /** How long Corpse Complex keeps the dropped items at the death spot (config: Drop Despawn Timer 600). */
 export const DROPS_LAST_MIN = 10;
 
-/** What the model is told about the items it dropped (lead decision on rotn-data Request 12). */
-export const LOST_ITEMS_NOTE = `They lie at the death spot for ${DROPS_LAST_MIN} minutes, and a zombie rises there `
-    + '(Zombie Players: it never burns in daylight and never leaves). They are lost unless that zombie is killed '
-    + `within ${DROPS_LAST_MIN} minutes of your death; waiting for day does not help. Go back for them only with a weapon `
-    + 'and more than half your health; otherwise move on and do not plan around the lost items.';
+/**
+ * What the model is told about the items it dropped (lead decision on rotn-data Request 12), with
+ * the minutes left counted from the death (#247 review 1), so a note read later is not stale.
+ */
+export function lostItemsNote(minutesLeft) {
+    if (minutesLeft <= 0) {
+        return `They lay at the death spot for ${DROPS_LAST_MIN} minutes after your death and are gone now; `
+            + 'move on and do not plan around them.';
+    }
+    return `They lie at the death spot for about ${minutesLeft} more minutes (${DROPS_LAST_MIN} minutes from your death), `
+        + 'and a zombie rises there (Zombie Players: it never burns in daylight and never leaves). They are lost unless '
+        + 'that zombie is killed before then; waiting for day does not help. Go back for them only with a weapon and more '
+        + 'than half your health; otherwise move on and do not plan around the lost items.';
+}
 
 /** The re-plan note for a death by a falling tree: what happened and how not to repeat the cut. */
 const treeNote = (lastFell) => `A falling tree crushed you${lastFell?.pos ? ` (the one you cut at ${where(lastFell.pos)})` : ''}: `
@@ -195,11 +204,17 @@ export function deathSpotBlocked(agent, pos, { now = Date.now() } = {}) {
     // With a weapon and more than half its health the bot may go and fight it (the fight policy;
     // lead decision on rotn-data Request 12); otherwise it stays away.
     if (zombie && !canFightHard(bot)) return 'a player zombie (it rises where a player died) is there, and you lack a weapon or more than half your health to fight it';
+    // After DROPS_LAST_MIN the items are gone (#247 review 1): no fight for them past the zombie, and
+    // no walk to the spot itself. The area around it stays open (the zombie may be anywhere near).
+    if (ago >= DROPS_LAST_MIN * 60_000 && (zombie || dist(pos, last.pos) <= HOME_RADIUS)) {
+        return `your items there are already lost (they last ${DROPS_LAST_MIN} minutes after the death)${zombie ? ', and its zombie stays' : ''}`;
+    }
     if (ago < DEATH_SPOT_NIGHT_MS) {
         let phase = null;
         try { phase = agent._night?.clock?.phase?.(now) ?? null; } catch { phase = null; }
         if (!phase && typeof bot?.time?.timeOfDay === 'number') phase = nightPhase(bot.time.timeOfDay);
-        if (phase === 'night' || phase === 'dusk') return `it is ${phase}; go back to where you died only by day`;
+        // Not "only by day" (#247 review 2): the items are gone by then, and waiting does not help.
+        if (phase === 'night' || phase === 'dusk') return `it is ${phase}: do not go back to where you died now; the items left there will be lost`;
     }
     return null;
 }
@@ -322,7 +337,7 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
     // drops them at the death spot for 600 s; Zombie Players raises a zombie there that never burns
     // and never despawns; lead decision on rotn-data Request 12).
     const items = r.lost.length
-        ? `You no longer have ${formatLoss(r.lost)}. ${LOST_ITEMS_NOTE}`
+        ? `You no longer have ${formatLoss(r.lost)}. ${lostItemsNote(Math.floor(DROPS_LAST_MIN - (now - (r.at ?? now)) / 60_000))}`
         : 'Your inventory looks unchanged.';
     // A death is due for a prompt even when nothing was running (#215 review 1), except in a
     // death streak: then the note waits for the next prompt, so deaths cannot drive LLM calls.

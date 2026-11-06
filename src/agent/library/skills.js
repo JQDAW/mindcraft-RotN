@@ -510,8 +510,10 @@ export async function smeltItem(bot, itemName, num=1, ops=FURNACE_OPS) {
 export async function placeFurnaceNear(bot, range, { place = placeBlock, freeSpace = world.getNearestFreeSpace } = {}) {
     const pos = freeSpace(bot, 1, range);
     if (!pos) return null;
+    // The place must be air before placing (#247 review 3), so a furnace there afterwards is ours.
+    if (bot.blockAt(pos)?.name !== 'air') return null;
     // placeBlock can report a failure (or throw) although the server placed it (#238 nit 1): what
-    // stands at pos decides. pos was free, so a furnace there is this one, never someone else's.
+    // stands at pos decides. pos was air, so a furnace there is this one, never someone else's.
     try { await place(bot, 'furnace', pos.x, pos.y, pos.z); }
     catch (err) { log(bot, `Placing the furnace failed (${safeError(err)}).`); }
     const b = bot.blockAt(pos);

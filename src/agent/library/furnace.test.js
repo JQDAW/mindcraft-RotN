@@ -141,3 +141,12 @@ test('#238 nit 1: a placement reported as failed (or thrown) that did place the 
         assert.equal(String(b?.position), String(MINE));
     }
 });
+
+test('#247 review 3: a place that already holds a furnace is not used: null, nothing placed', async () => {
+    const MINE = new Vec3(3, 64, 0);
+    let placed = 0;
+    const bot = { blockAt: (p) => ({ name: p.equals(MINE) ? 'furnace' : 'air', position: p }) };
+    const b = await skills.placeFurnaceNear(bot, 16, { freeSpace: () => MINE, place: () => { placed++; return Promise.resolve(true); } });
+    assert.equal(b, null, 'not someone else\'s furnace');
+    assert.equal(placed, 0);
+});
