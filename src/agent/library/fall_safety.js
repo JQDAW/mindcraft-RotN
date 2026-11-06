@@ -16,6 +16,7 @@
 // the ground are broken; a bot that is on a tree climbs down first (skills.descendFromTree).
 import { Vec3 } from 'vec3';
 import { isBranch } from './felling.js';
+import { stateHazard, hazardBlockIds } from '../../../packages/forge-bridge/src/collision.js';
 
 /** The highest drop a walk may take: a fall of 3 blocks does no damage (fall damage is height - 3). */
 export const MAX_SAFE_DROP = 3;
@@ -37,13 +38,56 @@ export const isTreePart = (b) => isBranch(b) || isLeafBlock(b);
 
 const offset = (pos, dy) => (pos?.offset ? pos.offset(0, dy, 0) : new Vec3(pos.x, pos.y + dy, pos.z));
 const blockAt = (bot, pos) => { try { return bot.blockAt(pos) ?? null; } catch { return null; } };
-// Water and lava are not empty here (#256 nit): a leaf over water is not reachable from the ground,
-// and an item on water is not on the ground. isGround rejects them.
-const isEmpty = (b) => !b || b.name === 'air' || (b.boundingBox === 'empty' && !/water|lava/.test(b.name ?? ''));
+// ---- Liquids and hazards (net-forge #259; lead, before G3 smoke round 5) ----
+// mineflayer's physics and the pathfinder know water and lava by name only. A modded fluid (molten
+// metal, poison, acid, tar, honey, milk: 162 on 3.3.4) is a solid full cube in bot.registry with
+// `liquid: true` (forge-bridge applyCollisionShapes), and traps, fires, portals and webs carry
+// `forge.hazard`, per state where a block mixes them (biomesoplenty:plant_0: poison ivy is a trap,
+// short grass is not). So the guard lives here.
+const VANILLA_LIQUID = /^(minecraft:)?(flowing_)?(water|lava)$/;
+const VANILLA_LAVA = /^(minecraft:)?(flowing_)?lava$/;
 
-/** Firm ground to stand on: a solid block that is not part of a tree and not a liquid. */
-export function isGround(b) {
-    return !!b && b.boundingBox === 'block' && !isTreePart(b) && !/water|lava/.test(b.name ?? '');
+/** Any liquid: vanilla water and lava by name, a modded fluid by the registry's liquid flag. */
+export function isLiquid(bot, b) {
+    if (!b) return false;
+    if (VANILLA_LIQUID.test(b.name ?? '')) return true;
+    return bot?.registry?.blocks?.[b.type]?.liquid === true;
+}
+
+/**
+ * The hazard of this block state ('trap', 'fire', 'portal', 'web', 'lava'), or null: vanilla lava
+ * and fire by name, a modded block per state (forge-bridge stateHazard; never by block id alone).
+ */
+export function hazardOf(bot, b) {
+    if (!b) return null;
+    if (VANILLA_LAVA.test(b.name ?? '')) return 'lava';
+    if (b.name === 'fire' || b.name === 'minecraft:fire') return 'fire';
+    try { return stateHazard(bot?.registry, b); } catch { return null; }
+}
+
+/** Deadly to stand in: lava, and the pack's molten metals (forge.hazard 'lava'). */
+export const isLethal = (bot, b) => hazardOf(bot, b) === 'lava';
+
+/** A liquid or a hazard: never ground, never empty (vanilla water included: not firm ground). */
+export const isUnsafeBlock = (bot, b) => isLiquid(bot, b) || hazardOf(bot, b) !== null;
+
+const VANILLA_WATER = /^(minecraft:)?(flowing_)?water$/;
+/** A modded fluid (the registry's liquid flag); vanilla water and lava are known by name. */
+const isModdedLiquid = (bot, b) => !!b && !VANILLA_LIQUID.test(b.name ?? '') && bot?.registry?.blocks?.[b.type]?.liquid === true;
+/**
+ * What a walk must keep out of: a liquid or a hazard, but not vanilla water, which the pathfinder
+ * handles itself (wading, swimming, landing in it; #264 review 1: refusing it left a bot in a lake
+ * with no way out).
+ */
+export const isWalkHazard = (bot, b) => !!b && !VANILLA_WATER.test(b.name ?? '') && isUnsafeBlock(bot, b);
+
+// A liquid or a hazard is not empty (#256 nit, #259): a leaf over water is not reachable from the
+// ground, an item on molten metal is not on the ground. isFirmGround rejects them.
+const isEmpty = (bot, b) => !b || b.name === 'air' || (b.boundingBox === 'empty' && !isUnsafeBlock(bot, b));
+
+/** Firm ground to stand on: a solid block, not part of a tree, not a liquid, not a hazard. */
+export function isFirmGround(bot, b) {
+    return !!b && b.boundingBox === 'block' && !isTreePart(b) && !isUnsafeBlock(bot, b);
 }
 
 /**
@@ -53,7 +97,7 @@ export function isGround(b) {
 export function firstBelow(bot, pos, maxDepth) {
     for (let d = 1; d <= maxDepth; d++) {
         const b = blockAt(bot, offset(pos, -d));
-        if (!isEmpty(b)) return { block: b, depth: d };
+        if (!isEmpty(bot, b)) return { block: b, depth: d };
     }
     return null;
 }
@@ -74,7 +118,7 @@ export function standsOnTree(bot) {
 export function leafFromGround(bot, block) {
     if (!block?.position) return true; // findBlocks' section scan: decided again with the position
     const below = firstBelow(bot, block.position, LEAF_ABOVE_GROUND + 1);
-    return !!below && isGround(below.block);
+    return !!below && isFirmGround(bot, below.block);
 }
 
 /**
@@ -87,7 +131,7 @@ export function itemOnGround(bot, entity) {
     // An item rests on the block top, a little above it: the block below its floored position.
     const cell = new Vec3(Math.floor(p.x), Math.floor(p.y + 0.01), Math.floor(p.z));
     const below = firstBelow(bot, cell, MAX_SAFE_DROP);
-    return !!below && isGround(below.block);
+    return !!below && isFirmGround(bot, below.block);
 }
 
 /**
@@ -98,8 +142,71 @@ export function fallSafe(movements) {
     if (!movements || movements.rotnFallSafe) return movements;
     movements.maxDropDown = PATHFINDER_MAX_DROP_DOWN;
     movements.exclusionAreasBreak.push((b) => (isBranch(b) ? NEVER : 0));
+    liquidAndHazardSafe(movements);
     movements.rotnFallSafe = true;
     return movements;
+}
+
+/**
+ * Every walk keeps out of liquids and hazards (#259; lead, before smoke round 5). Changes the
+ * movements in place:
+ * - blocksToAvoid gets the blocks that are a hazard in every state; a block with hazardByMeta
+ *   (BOP plant_0: poison ivy, short grass) is not added, or the bot would avoid all short grass;
+ * - an exclusion check per state (stateHazard): never step into a hazard state, nor onto a cell
+ *   above a liquid or a hazard; never dig either;
+ * - the pathfinder's view of a modded liquid or a hazard state is made unsafe and not solid, as it
+ *   treats vanilla lava: it never stands, lands or drops onto one (getLandingBlock and the forward
+ *   move check no exclusion for the floor or the landing cell, so this is what stops them).
+ * Vanilla water stays as the pathfinder treats it (it may swim and land in it); vanilla lava and
+ * fire are in its own blocksToAvoid already.
+ */
+function liquidAndHazardSafe(movements) {
+    const bot = movements.bot;
+    if (!bot) return;
+    const registry = bot.registry;
+    for (const id of hazardBlockIds(registry)) {
+        if (!registry?.blocks?.[id]?.forge?.hazardByMeta) movements.blocksToAvoid.add(id);
+    }
+    const near = (b, dx, dy, dz) => (b?.position ? blockAt(bot, b.position.offset(dx, dy, dz)) : null);
+    // Not into a hazard state, nor onto a cell above a liquid or a hazard. The check runs on head
+    // cells too (below them: the feet cell), so vanilla water is left out (#264 review 1).
+    // Note (#264 review nit): a non-empty exclusionAreasStep turns off the pathfinder's path
+    // shortcuts (mineflayer-pathfinder index.js), for every walk; accepted.
+    movements.exclusionAreasStep.push((b) => (hazardOf(bot, b) || isWalkHazard(bot, near(b, 0, -1, 0)) ? NEVER : 0));
+    // Never dig a liquid or a hazard, nor a block next to a modded fluid (#264 review 2): it would
+    // flow out. safeToBreak's own check (dontCreateFlow) reads .liquid, and mineflayer-collectblock
+    // turns dontCreateFlow off, so the neighbours are checked here whatever that setting is.
+    movements.exclusionAreasBreak.push((b) => (isWalkHazard(bot, b)
+        || [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => isModdedLiquid(bot, near(b, dx, dy, dz))) ? NEVER : 0));
+    const getBlock = movements.getBlock.bind(movements);
+    movements.getBlock = (pos, dx, dy, dz) => {
+        const b = getBlock(pos, dx, dy, dz);
+        // Everything a walk keeps out of is lava to the pathfinder: unsafe, not solid; a modded
+        // fluid is also a liquid, so dontCreateFlow sees it (#264 review 2). Vanilla water keeps
+        // the pathfinder's own handling.
+        if (b && b.type !== undefined && isWalkHazard(bot, b)) {
+            b.safe = false;
+            b.physical = false;
+            b.replaceable = false;
+            if (isModdedLiquid(bot, b)) b.liquid = true;
+        }
+        return b;
+    };
+}
+
+/**
+ * Make every walk the bot takes fall-safe and liquid- and hazard-safe: whoever sets the
+ * pathfinder's movements (our skills, mineflayer-collectblock, mineflayer-pvp, upstream code) gets
+ * them through fallSafe. Call once the pathfinder plugin is loaded (after spawn); idempotent.
+ */
+export function installWalkSafety(bot) {
+    const pf = bot?.pathfinder;
+    if (!pf || typeof pf.setMovements !== 'function' || pf.rotnWalkSafety) return false;
+    const set = pf.setMovements.bind(pf);
+    pf.setMovements = (movements) => set(fallSafe(movements));
+    if (pf.movements) fallSafe(pf.movements);
+    pf.rotnWalkSafety = true;
+    return true;
 }
 
 /**
