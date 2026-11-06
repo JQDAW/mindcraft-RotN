@@ -1,12 +1,24 @@
 # Status: net-forge
 
-Updated: 2026-11-06T08:51Z
+Updated: 2026-11-06T09:18Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #256 question: Dynamic Trees leaves collision (2026-11-06T07:56Z answer; 08:30Z #259 review changes pushed)
+## #259 follow-up: whole-block vs partial hazards (#263; 2026-11-06T09:18Z review fixes pushed)
 
-- **PR #259:** branch `agent/net-forge/collision-shapes`. Changes from the lead's REQUEST CHANGES review are pushed and waiting for re-review.
+- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. The lead's 3 fixes are pushed and waiting for re-review.
+- **Final API** (forge-bridge `index.js`), all after `applyCollisionShapes`:
+  - `hazardBlockIds(registry, { kinds, includePartial = false })` returns a `Set` of the whole-block hazard ids: the set for `Movements.blocksToAvoid`. Partial hazards are added only with `includePartial: true`.
+  - `partialHazardBlockIds(registry, { kinds })` returns the blocks to check per state with `stateHazard`. On 3.3.4 those are BOP `plant_0`, `plant_1` and `flower_0`.
+  - `stateHazard(registry, block | {type, metadata} | stateId)` gives one state's kind or `null`.
+  - `liquidBlockIds(registry)` returns the modded fluids.
+  - On the block entry: `forge.hazard` (first kind), `forge.hazardKinds` (every kind), and `forge.hazardByMeta` (present = partial).
+- **A `hazardByMeta` covering every state** the dump lists, or a block without dump states, is a whole-block hazard (tested).
+- **Tests:** `collision.test.js` 11/11, lint clean.
+
+## (Merged as #259) #256 question: Dynamic Trees leaves collision (2026-11-06T07:56Z answer)
+
+- **PR #259:** branch `agent/net-forge/collision-shapes`, merged.
   - **Develop:** merged in (`b1f35ed`, with #256) instead of rebased. The branch was already pushed, and a rebase would need a force-push.
 - **Walk-through is now opt-in.** The tool reviews classes:
   - **Allowed:** plant bases (BlockBush, BlockCrops, BlockSapling, ...) or blocks whose every state is plants or vine material, plus the reviewed Pyrotech and Pyrotech Compat rock piles. A class only qualifies if it has no box, no entity-contact override and no `addCollisionBoxToList` override.
