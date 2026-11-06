@@ -38,8 +38,10 @@ import net.minecraftforge.fml.common.registry.ForgeRegistries;
  * half-height box while getCollisionBoundingBox says a full cube). It is read at the "air" probe
  * cell (every one of the 27 cells around it is air) and again at the "solid" probe cell (every one
  * is a normal cube); "entityCollisionVaries" is true when the two differ, i.e. the shape depends on
- * the world at that position (neighbours, the block really there, a tile entity). Both are read
- * only: the queried state is never placed. Boxes are relative to the cell, rounded to 1e-6.
+ * the neighbouring blocks or on the block really in the queried cell (air at one probe, a normal cube
+ * at the other). It catches only that: the queried state is never placed, so there is no tile entity
+ * at either cell and a shape that depends on one is not flagged; false is not proof that the shape is
+ * fixed (#261 review). Both are read only. Boxes are relative to the cell, rounded to 1e-6.
  * Every value is computed first and written as null if the game call throws (J).
  * Harvest tool and level come from Forge's Block#getHarvestTool/getHarvestLevel, so Tool
  * Progression's overrides are included. Hardness is read at (0,0,0) in the overworld, so
@@ -264,7 +266,8 @@ final class BlockDumper extends Part<Block> {
             return new double[][] {{bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ}};
         });
         // What a player collides with (null: no air probe, or the call threw); varies: null when
-        // either probe is missing or threw.
+        // either probe is missing or threw. varies catches neighbour or own-cell dependence only, not a
+        // tile entity (none exists at either probe cell: the state is never placed).
         double[][] entityAir = probeAir == null ? null : J.get(() -> entityBoxes(s, probeAir));
         double[][] entitySolid = probeSolid == null ? null : J.get(() -> entityBoxes(s, probeSolid));
         Boolean entityVaries = entityAir == null || entitySolid == null ? null : !Arrays.deepEquals(entityAir, entitySolid);
