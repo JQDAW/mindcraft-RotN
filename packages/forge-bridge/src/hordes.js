@@ -34,6 +34,11 @@ export function decodeHordes(buf) {
     const r = new Reader(buf);
     const disc = r.u8();
     if (disc === HORDES_DISC.SOUND) {
+        // HordeSoundMessage.toBytes (4-30) omits x/z when direction is null, but fromBytes
+        // always reads them, so such a message would misparse in Forge too. The server never
+        // sends one: spawnWave (43/91) always sets a direction. Without x/z the sound string
+        // is read as doubles; for "hordes:horde_spawn" the rest then reads short (WireError),
+        // so the bridge logs it and emits nothing.
         const x = r.f64(), z = r.f64();
         return { type: 'Sound', disc, direction: { x, z }, sound: r.string() };
     }

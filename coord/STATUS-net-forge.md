@@ -1,12 +1,23 @@
 # Status: net-forge
 
-Updated: 2026-11-05T16:59Z
+Updated: 2026-11-06T00:17Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Hordes horde event: PR open (2026-11-05T16:59Z), serves skills-rotn D1b
+## #214 comment nit: PR open (2026-11-06T00:17Z, lead's request; G3 smoke round 3 running, targeted tests only)
 
-- **Branch:** `agent/net-forge/hordes-event`, **PR #214** (waiting for the lead's review). It decodes the Hordes 1.1.7 `hordes_hordeevent` channel and emits `bot.emit('rotn:horde', ev)`. No batch was run.
+- **Branch:** `agent/net-forge/hordes-comment`, from develop `9072315`. The PR is waiting for the lead's review.
+- **Change:** a comment only, in `decodeHordes`, `packages/forge-bridge/src/hordes.js`.
+  - `HordeSoundMessage.toBytes` (4-30) omits x/z when `direction` is null, while `fromBytes` always reads them.
+  - The server always sets a direction (`spawnWave` 43/91).
+  - Checked: such a payload with `hordes:horde_spawn` throws `WireError` (read past end), so the bridge logs it and emits nothing.
+- **Tests:** `hordes.test.js` 7/7, the only targeted file.
+- **Why a new branch:** the lead asked for a rebase on develop. `agent/net-forge/hordes-nits` was already pushed, and the rules forbid force-pushing. So its two STATUS commits were cherry-picked onto this fresh branch from develop. `hordes-nits` is superseded and can be deleted.
+- **Blocked / requests:** none.
+
+## Hordes horde event: merged as #214 (`d5ae8e7`), serves skills-rotn D1b
+
+- **Branch:** `agent/net-forge/hordes-event`, **PR #214**, merged as `d5ae8e7`. It decodes the Hordes 1.1.7 `hordes_hordeevent` channel and emits `bot.emit('rotn:horde', ev)`. No batch was run.
 - **Events for skills-rotn** (in `packages/forge-bridge/src/hordes.js`, wired in `initBot`):
   - `{ kind: 'start', key: 'message.hordes.EventStart' }`: the horde starts.
   - `{ kind: 'end', key: 'message.hordes.EventEnd' }`: the horde stopped.
