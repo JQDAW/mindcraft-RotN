@@ -152,9 +152,9 @@ test('promptMemSaving asks with a user turn and no stop sequence (skills-rotn Re
     const fake = {
         profile: { saving_memory: 'Summarize: $TO_SUMMARIZE' },
         checkCooldown: async () => {},
-        replaceStrings: async (p) => p,
+        replaceStrings: (p) => Promise.resolve(p),
         _saveLog: async () => {},
-        chat_model: { sendRequest: async (...args) => { calls.push(args); return '**Memory** kept'; } },
+        chat_model: { sendRequest: (...args) => { calls.push(args); return Promise.resolve('**Memory** kept'); } },
     };
     const resp = await Prompter.prototype.promptMemSaving.call(fake, []);
     assert.equal(resp, '**Memory** kept');
