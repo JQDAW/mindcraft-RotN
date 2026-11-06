@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rotn-lead's CI-gated merge. Usage: lead-merge-one.sh <pr>. Do not delete (lead tool).
+# rotn-lead's CI-gated merge. Usage: lead-merge-one.sh <pr> <reviewedSHA>. Do not delete (lead tool).
 # Update the branch from develop, wait for CI on the new head, check the new head is a
 # merge of the old head and develop, then squash-merge at that exact SHA.
 set -u
@@ -21,12 +21,14 @@ for i in $(seq 1 20); do
   [ "$new" != "$old" ] && break
   [ "$(gh pr view "$p" --json mergeStateStatus --jq .mergeStateStatus)" = CLEAN ] && \
     git fetch -q origin "pull/$p/head" develop && git merge-base --is-ancestor origin/develop "$old" && break
+  sleep 3
 done
 echo "#$p old=${old:0:7} new=${new:0:7}"
 if [ "$new" != "$old" ]; then
   for i in $(seq 1 10); do
     git fetch -q origin "pull/$p/head" develop
     git cat-file -e "$new^{commit}" 2>/dev/null && break
+    sleep 2
   done
   parents=$(git rev-list --parents -n1 "$new" | cut -d' ' -f2-)
   case " $parents " in *" $old "*) ;; *) echo "#$p STOP: new head is not a merge on top of the old head"; exit 3;; esac
@@ -36,12 +38,15 @@ fi
 for i in $(seq 1 40); do
   n=$(gh api "repos/JQDAW/mindcraft-RotN/commits/$new/check-runs" --jq '.total_count' 2>/dev/null || echo 0)
   [ "${n:-0}" -gt 0 ] && break
-  gh run list --limit 1 >/dev/null 2>&1
+  sleep 5
 done
 gh pr checks "$p" --watch --interval 15 >/dev/null 2>&1
-res=$(gh api "repos/JQDAW/mindcraft-RotN/commits/$new/check-runs" --jq '[.check_runs[] | .conclusion] | join(",")')
+res=$(gh api "repos/JQDAW/mindcraft-RotN/commits/$new/check-runs" --jq '[.check_runs[] | (.conclusion // "pending")] | join(",")')
 echo "#$p checks on ${new:0:7}: $res"
-case "$res" in *failure*|*cancelled*|*timed_out*|"") echo "#$p STOP: CI not green"; exit 4;; esac
+# Allowlist: every check run must have concluded success, skipped or neutral (a pending run has conclusion null).
+bad=$(echo "$res" | tr "," "
+" | grep -vxE "success|skipped|neutral" | head -1)
+{ [ -n "$res" ] && [ -z "$bad" ]; } || { echo "#$p STOP: CI not green ($res)"; exit 4; }
 cur=$(gh pr view "$p" --json headRefOid --jq .headRefOid)
 [ "$cur" = "$new" ] || { echo "#$p STOP: head moved again to ${cur:0:7}"; exit 5; }
 gh pr merge "$p" --squash --match-head-commit "$new" 2>&1 | tail -1
