@@ -1,18 +1,18 @@
 {
  "format": "rotn-dump/1",
- "dumper": "0.2.0",
+ "dumper": "0.3.0",
  "dumperJar": {
-  "file": "rotndump-0.2.0.jar",
-  "bytes": 62963,
-  "sha256": "3d25f2d74a783495e86f62820c872a63c4095e158377ea089bef1e95a41031a7"
+  "file": "rotndump-0.3.0.jar",
+  "bytes": 65499,
+  "sha256": "7c82061aaf633851c46b33a94183f371cc40c36c5808ddfd9f17d71752609c8c"
  },
  "minecraft": "1.12.2",
  "forge": "14.23.5.2860",
- "dumpedAt": "2026-11-02T02:37:07Z",
+ "dumpedAt": "2026-11-06T12:22:37Z",
  "batch": 500,
  "tickBudgetMs": 40,
  "modCount": 347,
- "modListSha256": "70d98c0da18fd233851102f18ad52347ab28b73f4597f3b7da3078b3aa569e9f",
+ "modListSha256": "e4ba691be0cfbd50e1a70aa44b8b25d14a82f128f37579045bfddab7a6d2fa3d",
  "mods": [
   {
    "id": "FML",
@@ -1116,7 +1116,7 @@
   },
   {
    "id": "rotndump",
-   "version": "0.2.0"
+   "version": "0.3.0"
   },
   {
    "id": "rotntweaker",
@@ -1416,49 +1416,49 @@
  },
  "timing": {
   "oredict": {
-   "ms": 28,
+   "ms": 56,
    "ticks": 5,
-   "maxTickMs": 15
+   "maxTickMs": 27
   },
   "blocks": {
-   "ms": 533,
-   "ticks": 14,
-   "maxTickMs": 42
+   "ms": 1348,
+   "ticks": 27,
+   "maxTickMs": 140
   },
   "items": {
-   "ms": 754,
-   "ticks": 26,
-   "maxTickMs": 69
+   "ms": 1213,
+   "ticks": 32,
+   "maxTickMs": 102
   },
   "recipes": {
-   "ms": 544,
-   "ticks": 24,
-   "maxTickMs": 72
+   "ms": 905,
+   "ticks": 29,
+   "maxTickMs": 100
   },
   "smelting": {
-   "ms": 23,
+   "ms": 50,
    "ticks": 4,
-   "maxTickMs": 12
+   "maxTickMs": 25
   },
   "entities": {
-   "ms": 43,
+   "ms": 49,
    "ticks": 2,
-   "maxTickMs": 28
+   "maxTickMs": 31
   },
   "spawns": {
-   "ms": 42,
-   "ticks": 1,
-   "maxTickMs": 33
+   "ms": 57,
+   "ticks": 2,
+   "maxTickMs": 40
   },
   "serializers": {
-   "ms": 1179,
-   "ticks": 27,
-   "maxTickMs": 86
+   "ms": 1813,
+   "ticks": 39,
+   "maxTickMs": 103
   },
   "state-meta-remap": {
-   "ms": 42,
+   "ms": 66,
    "ticks": 157,
-   "maxTickMs": 12
+   "maxTickMs": 17
   }
  },
  "entryErrors": {},
@@ -1469,19 +1469,124 @@
  },
  "importedFrom": "tools/dumper via deploy/test-server.sh --fetch rotn-dump",
  "import": {
-  "expectedJarSha256": "3d25f2d74a783495e86f62820c872a63c4095e158377ea089bef1e95a41031a7",
+  "expectedJarSha256": "7c82061aaf633851c46b33a94183f371cc40c36c5808ddfd9f17d71752609c8c",
   "rawSha256": {
-   "DONE": "04153b253d95468e64fcee68025e2a2959e7704afeb71757475581b0ae4d6ae5",
-   "blocks.json": "63143646b69bff04f7e94203985f3fb33daa58a3bdf9b4791e11f4dc99e0745c",
+   "DONE": "7d5ae4185ecca6c352f1a83ef1f3d300c44e0620cd2efbea2e11e10dd9ffe4d4",
+   "blocks.json": "9bf7b7486154bbd42917c0565ff310767d1aa18ee6187d33fbb36b918e820d72",
    "entities.json": "0fc31780218c3d6d0f8fb799cc99f981575ecb54a6ac98dd6c2745a07599b5e1",
-   "items.json": "66c4f5c64b366d11399c6f3b7568d70a9690e23c48ad1f2c52b4a511434ee960",
-   "manifest.json": "08fc826a3bde9077baf69abfcd8661807f2908abdfcb46ed68b367e8c09c4c61",
-   "oredict.json": "278e0dee4aa1ca8179338270a0d533b5fde83dcce9b73cc0da63c0461ce47d17",
-   "recipes.json": "c59c6760da67ce3f6d6d2da176e81be7a3ee140d93dcaa07f72a4a1b7408c77c",
+   "items.json": "e6137d77602face563fb5cae6894fbdb0a1012ed77801a53e0b8341ba7fca823",
+   "manifest.json": "5ed57fe6471e3fdd03f5da0189c575cef92a9085b1a86fdeb62f8acfdfdbb8bf",
+   "oredict.json": "54d90e31a38e32c6e389a873f3eb74474cdc77242a37de9856d8df9e63309b4d",
+   "recipes.json": "6d6fc7383ce9411bc215c41a4fb7a9b04c29eb4c48c96206d65d8d72865e73ad",
    "serializers.json": "df31e18914b16f4f0af8679120dfd044dd578d68d0c039236baba3b917b55319",
-   "smelting.json": "f0f9b516902ecb697c588df3cf6c671863be5797145a0efa92e7ec04959c966f",
-   "spawns.json": "fd1bf1fdd3e3f3775852c856022d8d6784fb570c7e6aeff35fc2fc5276eb26dd",
-   "state-meta-remap.json": "29bee0d3ac3eff83a8d9ae4f63a0859568ecae8a186e347bc1e79e0498242fd8"
-  }
+   "smelting.json": "02e9c1d1be3d7b0b759a7534016da6a5d3a25416351ff3e250cc717aa07fcf46",
+   "spawns.json": "d482b7228d58e0f2b7b0b70290bf3d73030401e795f61201b5dc0fc3a53aa175",
+   "state-meta-remap.json": "3f5caee6f66bfb2d429a2b6ef5c179eabd4d3a7c7d3842b6304c990f547100dc"
+  },
+  "collisionKept": [
+   "aether_legacy:aerogel_wall:0",
+   "aether_legacy:angelic_wall:0",
+   "aether_legacy:carved_wall:0",
+   "aether_legacy:hellfire_wall:0",
+   "aether_legacy:holystone_brick_wall:0",
+   "aether_legacy:holystone_wall:0",
+   "aether_legacy:mossy_holystone_wall:0",
+   "quark:bark_acacia_wall:0",
+   "quark:bark_birch_wall:0",
+   "quark:bark_dark_oak_wall:0",
+   "quark:bark_jungle_wall:0",
+   "quark:bark_oak_wall:0",
+   "quark:bark_spruce_wall:0",
+   "quark:biotite_wall:0",
+   "quark:brick_wall:0",
+   "quark:cobbed_stone_wall:0",
+   "quark:dark_prismarine_wall:0",
+   "quark:duskbound_block_wall:0",
+   "quark:elder_prismarine_bricks_wall:0",
+   "quark:elder_prismarine_dark_wall:0",
+   "quark:elder_prismarine_wall:0",
+   "quark:end_bricks_wall:0",
+   "quark:fire_stone_brick_wall:0",
+   "quark:fire_stone_wall:0",
+   "quark:icy_stone_brick_wall:0",
+   "quark:icy_stone_wall:0",
+   "quark:midori_block_wall:0",
+   "quark:polished_netherrack_bricks_wall:0",
+   "quark:prismarine_bricks_wall:0",
+   "quark:prismarine_rough_wall:0",
+   "quark:purpur_block_wall:0",
+   "quark:quartz_wall:0",
+   "quark:red_sandstone_wall:0",
+   "quark:reed_block_wall:0",
+   "quark:sandstone_wall:0",
+   "quark:sandy_bricks_wall:0",
+   "quark:snow_bricks_wall:0",
+   "quark:soul_sandstone_wall:0",
+   "quark:stone_andesite_bricks_wall:0",
+   "quark:stone_andesite_wall:0",
+   "quark:stone_diorite_bricks_wall:0",
+   "quark:stone_diorite_wall:0",
+   "quark:stone_granite_bricks_wall:0",
+   "quark:stone_granite_wall:0",
+   "quark:stone_wall:0",
+   "quark:stonebrick_mossy_wall:0",
+   "quark:stonebrick_wall:0",
+   "undergroundbiomes:igneous_brick_wall:0",
+   "undergroundbiomes:igneous_brick_wall:1",
+   "undergroundbiomes:igneous_brick_wall:2",
+   "undergroundbiomes:igneous_brick_wall:3",
+   "undergroundbiomes:igneous_brick_wall:4",
+   "undergroundbiomes:igneous_brick_wall:5",
+   "undergroundbiomes:igneous_brick_wall:6",
+   "undergroundbiomes:igneous_brick_wall:7",
+   "undergroundbiomes:igneous_cobble_wall:0",
+   "undergroundbiomes:igneous_cobble_wall:1",
+   "undergroundbiomes:igneous_cobble_wall:2",
+   "undergroundbiomes:igneous_cobble_wall:3",
+   "undergroundbiomes:igneous_cobble_wall:4",
+   "undergroundbiomes:igneous_cobble_wall:5",
+   "undergroundbiomes:igneous_cobble_wall:6",
+   "undergroundbiomes:igneous_cobble_wall:7",
+   "undergroundbiomes:igneous_stone_wall:0",
+   "undergroundbiomes:igneous_stone_wall:1",
+   "undergroundbiomes:igneous_stone_wall:2",
+   "undergroundbiomes:igneous_stone_wall:3",
+   "undergroundbiomes:igneous_stone_wall:4",
+   "undergroundbiomes:igneous_stone_wall:5",
+   "undergroundbiomes:igneous_stone_wall:6",
+   "undergroundbiomes:igneous_stone_wall:7",
+   "undergroundbiomes:metamorphic_brick_wall:0",
+   "undergroundbiomes:metamorphic_brick_wall:1",
+   "undergroundbiomes:metamorphic_brick_wall:2",
+   "undergroundbiomes:metamorphic_brick_wall:3",
+   "undergroundbiomes:metamorphic_brick_wall:4",
+   "undergroundbiomes:metamorphic_brick_wall:5",
+   "undergroundbiomes:metamorphic_brick_wall:6",
+   "undergroundbiomes:metamorphic_brick_wall:7",
+   "undergroundbiomes:metamorphic_cobble_wall:0",
+   "undergroundbiomes:metamorphic_cobble_wall:1",
+   "undergroundbiomes:metamorphic_cobble_wall:2",
+   "undergroundbiomes:metamorphic_cobble_wall:3",
+   "undergroundbiomes:metamorphic_cobble_wall:4",
+   "undergroundbiomes:metamorphic_cobble_wall:5",
+   "undergroundbiomes:metamorphic_cobble_wall:6",
+   "undergroundbiomes:metamorphic_cobble_wall:7",
+   "undergroundbiomes:metamorphic_stone_wall:0",
+   "undergroundbiomes:metamorphic_stone_wall:1",
+   "undergroundbiomes:metamorphic_stone_wall:2",
+   "undergroundbiomes:metamorphic_stone_wall:3",
+   "undergroundbiomes:metamorphic_stone_wall:4",
+   "undergroundbiomes:metamorphic_stone_wall:5",
+   "undergroundbiomes:metamorphic_stone_wall:6",
+   "undergroundbiomes:metamorphic_stone_wall:7",
+   "undergroundbiomes:sedimentary_stone_wall:0",
+   "undergroundbiomes:sedimentary_stone_wall:1",
+   "undergroundbiomes:sedimentary_stone_wall:2",
+   "undergroundbiomes:sedimentary_stone_wall:3",
+   "undergroundbiomes:sedimentary_stone_wall:4",
+   "undergroundbiomes:sedimentary_stone_wall:5",
+   "undergroundbiomes:sedimentary_stone_wall:6",
+   "undergroundbiomes:sedimentary_stone_wall:7"
+  ]
  }
 }

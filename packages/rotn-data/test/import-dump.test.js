@@ -6,8 +6,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
-import { importDump, canonicalize, checkStateMetaRemap, checkEntityCollision, DT_LEAVES_PLAYER_BOX } from '../tools/import-dump.mjs';
-import { RotnData, DUMP_FILES } from '../src/catalog.js';
+import { importDump, canonicalize, checkStateMetaRemap, checkEntityCollision, keepWorldDependentCollision, DT_LEAVES_PLAYER_BOX } from '../tools/import-dump.mjs';
+import { RotnData, DUMP_FILES, isDtBranchNoConnectionBox } from '../src/catalog.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const JAR = 'ab'.repeat(32); // the expected dumper jar SHA-256 in these tests
@@ -411,10 +411,76 @@ test('entityCollision end to end: a 0.3.0 dump on the pinned pack must contain D
     }
 });
 
-test('playerCollision falls back to getCollisionBoundingBox before dumper 0.3.0 (the current 3.3.4 data)', () => {
+test('playerCollision on the 3.3.4 data (dumper 0.3.0 run): half-height leaves, multi-box stairs, a varying wall, a thrown state', () => {
     const cat = new RotnData(path.join(HERE, '../3.3.4'), { version: '3.3.4' });
-    const leaves = cat.playerCollision('dynamictrees:leaves0');
-    assert.equal(leaves.source, 'collision');
-    assert.equal(leaves.varies, null);
-    assert.deepEqual(leaves.boxes, FULL); // the full cube #259 is about
+    assert.equal(cat.dump.manifest.dumper, '0.3.0');
+    // The full cube #259 is about is gone: a player gets the half-height box.
+    assert.deepEqual(cat.playerCollision('dynamictrees:leaves0'), { boxes: DT_LEAVES_PLAYER_BOX, varies: false, source: 'entityCollision' });
+    assert.equal(cat.playerCollision('minecraft:oak_stairs').boxes.length, 2);
+    assert.equal(cat.playerCollision('minecraft:cobblestone_wall').varies, true);
+    // end_portal_frame's call threw (null): getCollisionBoundingBox stands in.
+    assert.deepEqual(cat.playerCollision('minecraft:end_portal_frame'), { boxes: [[0, 0, 0, 1, 0.8125, 1]], varies: null, source: 'collision' });
+});
+
+test('playerCollision: a Dynamic Trees branch dumped with the no-connection cube gets its core box, varies true', () => {
+    const cat = new RotnData(path.join(HERE, '../3.3.4'), { version: '3.3.4' });
+    // Radius 1 (meta 0): dumped as a 2-block cube around the cell; the core is 2/16 wide.
+    assert.deepEqual(cat.getBlock({ name: 'dynamictrees:oakbranch', meta: 0 }).state.entityCollision, [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]);
+    assert.deepEqual(cat.playerCollision({ name: 'dynamictrees:oakbranch', meta: 0 }), { boxes: [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], varies: true, source: 'collision' });
+    assert.deepEqual(cat.playerCollision({ name: 'dynamictrees:oakbranch', meta: 7 }), { boxes: FULL, varies: true, source: 'collision' });
+    // Radius > 8 (thick trunks) never takes that path: the dumped box is used.
+    assert.deepEqual(cat.playerCollision({ name: 'dynamictrees:oakbranch', meta: 15 }), { boxes: [[-0.5, 0, -0.5, 1.5, 1, 1.5]], varies: false, source: 'entityCollision' });
+    assert.equal(cat.playerCollision({ name: 'dynamictreesbop:cherrybranch', meta: 3 }).source, 'collision');
+    // Rustic registers Dynamic Trees branches in its own namespace (#269 review).
+    assert.deepEqual(cat.playerCollision({ name: 'rustic:olivebranch', meta: 0 }), { boxes: [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], varies: true, source: 'collision' });
+});
+
+test('isDtBranchNoConnectionBox: only a block of a Dynamic Trees class with one cell-centred cube of whole-block half-size', () => {
+    const basic = { class: 'com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic' };
+    assert.equal(isDtBranchNoConnectionBox(basic, [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), true);
+    assert.equal(isDtBranchNoConnectionBox({ class: 'maxhyper.dynamictreesttf.blocks.BlockBranchTwilight' }, [[-7.5, -7.5, -7.5, 8.5, 8.5, 8.5]]), true);
+    assert.equal(isDtBranchNoConnectionBox({ class: 'com.mcwbridges.kikoz.objects.blocks.BridgeBlock' }, [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), false);
+    assert.equal(isDtBranchNoConnectionBox({}, [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), false);
+    assert.equal(isDtBranchNoConnectionBox(basic, [[-0.5, 0, -0.5, 1.5, 1, 1.5]]), false);
+    assert.equal(isDtBranchNoConnectionBox(basic, [[-0.25, -0.25, -0.25, 1.25, 1.25, 1.25]]), false);
+    assert.equal(isDtBranchNoConnectionBox({ class: 'com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves' }, DT_LEAVES_PLAYER_BOX), false);
+    assert.equal(isDtBranchNoConnectionBox(basic, [FULL[0], FULL[0]]), false);
+    assert.equal(isDtBranchNoConnectionBox(basic, null), false);
+});
+
+test('entityCollision: Dynamic Trees branch states with the no-connection cube are counted in a note', () => {
+    const f = blocks03();
+    f.blocks['dynamictrees:oakbranch'] = { defaultMeta: 0, class: 'com.ferreusveritas.dynamictrees.blocks.BlockBranchThick', states: [st(0, [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), st(15, [[-0.5, 0, -0.5, 1.5, 1, 1.5]], [[-0.5, 0, -0.5, 1.5, 1, 1.5]])] };
+    const problems = [];
+    const notes = checkEntityCollision(f, { problems, dumperVersion: '0.3.0', requireLeaves: true });
+    assert.deepEqual(problems, []);
+    assert.ok(notes.includes('entityCollision: 1 states of 1 Dynamic Trees branch blocks have the no-connection cube (playerCollision uses their collision, varies true)'), notes.join('\n'));
+});
+
+// #269 review: collision of neighbour-dependent states stays as it was (forge-bridge reads it).
+test('keepWorldDependentCollision keeps the previous collision only for states flagged entityCollisionVaries', () => {
+    const POST = [[0.25, 0, 0.25, 0.75, 1.5, 0.75]];
+    const HALF = [[0, 0, 0, 0.75, 1.5, 0.75]];
+    const blocks = { blocks: {
+        'mod:wall': { states: [st(0, HALF, POST, true)] },
+        'mod:odd': { states: [st(0, HALF, HALF, false)] },
+        'mod:new': { states: [st(0, FULL, FULL)] },
+    } };
+    const previous = { blocks: { 'mod:wall': { states: [{ meta: 0, collision: POST }] }, 'mod:odd': { states: [{ meta: 0, collision: POST }] } } };
+    assert.deepEqual(keepWorldDependentCollision(blocks, previous), { kept: ['mod:wall:0'], changed: ['mod:odd:0'] });
+    assert.deepEqual(blocks.blocks['mod:wall'].states[0].collision, POST);
+    assert.deepEqual(blocks.blocks['mod:odd'].states[0].collision, HALF, 'a state not flagged keeps its new value');
+    assert.deepEqual(keepWorldDependentCollision(blocks, null), { kept: [], changed: [] });
+});
+
+test('the 3.3.4 data keeps the 2026-11-02 collision of the 103 neighbour-dependent states (manifest.import.collisionKept)', () => {
+    const cat = new RotnData(path.join(HERE, '../3.3.4'), { version: '3.3.4' });
+    const kept = cat.dump.manifest.import.collisionKept;
+    assert.equal(kept.length, 103);
+    assert.ok(kept.includes('aether_legacy:aerogel_wall:0'));
+    assert.deepEqual(cat.getBlock({ name: 'aether_legacy:aerogel_wall', meta: 0 }).state.collision, [[0.25, 0, 0.25, 0.75, 1.5, 0.75]]);
+    for (const k of kept) {
+        const i = k.lastIndexOf(':');
+        assert.equal(cat.getBlock({ name: k.slice(0, i), meta: Number(k.slice(i + 1)) }).state.entityCollisionVaries, true, k);
+    }
 });
