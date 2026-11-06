@@ -44,7 +44,7 @@ export const ROTN_EARLY_GAME = [
         // (every log -> planks recipe is a 1x3 column; rotn-data). Before the table the bot needs
         // 3 ore:stickWood (2 for the crude axe, 1 for Crafting Tools), and River Cane
         // (biomesoplenty:plant_1:5) and BOP bamboo are stickWood too, picked by hand (rotn-data).
-        goal: 'Get at least 3 sticks: 2 for the crude axe and 1 for the Crafting Tools. !collectBlocks("stick", 3) fells a tree (breaking its trunk, even by hand), but a felled tree drops few sticks, often none. River Cane (tall cane by rivers) and bamboo work as sticks in both recipes and break by hand: !collectBlocks("biomesoplenty:plant_1:5", 3) or !collectBlocks("biomesoplenty:bamboo", 3). Planks need a crafting table here, so they come later. Leaves drop no sticks.',
+        goal: 'Get at least 3 sticks: 2 for the crude axe and 1 for the Crafting Tools. !collectBlocks("stick", 3) fells a tree (breaking its trunk, even by hand), but a felled tree drops few sticks, often none. River Cane (tall cane by rivers) and bamboo work as sticks in both recipes and break by hand: !collectBlocks("biomesoplenty:plant_1:5", 3) or !collectBlocks("biomesoplenty:bamboo", 3). Planks from ordinary logs need a crafting table here, so they come later. Leaves drop no sticks.',
         done: (s) => s.countOre('stickWood') >= 3 || s.count('stone_pickaxe') > 0,
     },
     {

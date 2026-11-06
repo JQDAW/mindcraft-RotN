@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T16:02Z (from `date -u`)
+Updated: 2026-11-06T16:29Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -209,7 +209,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#274** (round 5 fixes, branch `agent/skills-rotn/r5-rerun`, opened 2026-11-06T16:02Z by `date -u`): Hit With Axe sticks, standing on a block with a check (C), the #270 follow-ups, felling drops arriving late and stuck against trunks (A rerun), the plain-text memory prompt. All `src` tests: 443/443. Lint 253. Waiting for the lead's review.
+- **#274** (round 5 fixes, branch `agent/skills-rotn/r5-rerun`, opened 2026-11-06T16:02Z by `date -u`): Hit With Axe sticks, standing on a block with a check (C), the #270 follow-ups, felling drops arriving late and stuck against trunks (A rerun), the plain-text memory prompt. All `src` tests: 445/445 (with the rotn-data #278 grid-planks fix). Lint 253. Waiting for the lead's review.
 - Earlier PRs (#195, #198 and the ones before) are merged.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
@@ -666,6 +666,16 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
     - `stand_on.test.js` (new, 7): parsing, the check, the range-0 walk, off by one twice, far away, the wrong block, the round 5 C replay through `!goToCoordinates`, and the command.
     - `priority.test.js`: the gold-block task test now shows `!taskDone` refused from beside the block and accepted on top of it.
   - On the old source, `stand_on.test.js` fails to load (no `standOnTarget` export) and the priority test fails. `action_limits`, `no_cheat`, `smelt_and_login`, `threat_arbitration`, `axe_chop` and `task_queue` pass (55). Lint error counts in the changed files are unchanged.
+
+- **2026-11-06T16:29Z: grid planks from modded logs** (rotn-data #278 correction; pushed to #274):
+  - **The correction:** only vanilla logs need a table for planks. Seven modded logs make planks in the 2x2 grid: mangrove, Pam's maple, cinnamon and paperbark, twilight oak, tower wood and the End log. My sticks fallback had assumed a table for all logs.
+  - **`skills.gridPlanksReady(bot)`** (new, exported) returns a `stickMat` plank that a held log makes now with no table, by rotn-data's recipes. Only recipes whose inputs are all logs count, so planks are never turned into other planks.
+  - **`sticksFromPlanks`:** with no table, it crafts those planks first and then sticks. A failed grid craft is said once and not tried again, and then the axe path or the reason follows as before.
+  - **Wording:** the reason now says "most logs (all vanilla ones)", and the agenda sticks goal says "Planks from ordinary logs need a crafting table here".
+  - **Tests (`fell_tree` 27, +2):**
+    - a held Pam maple log, with no table and no axe, gives planks in the grid, then 4 sticks, with planks left for the table;
+    - by the real recipes: a mangrove log gives `biomesoplenty:planks_0:6`, a maple log gives `planks` and an End log gives `stygian:endplanks`; a vanilla log or planks alone give nothing.
+  - The first test fails on the old `skills.js`. All `src` tests: 445/445. Lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

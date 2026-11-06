@@ -363,7 +363,7 @@ test('round 5 A: a grown oak (leaves over every place in reach) is cut: from und
  * inventory grid: 2 planks of one kind give 4 sticks; 1 log gives 4 planks of its kind (log:m ->
  * planks:m). bot.crafted lists [item, count] per craft.
  */
-function crafter(held, { planksNeedTable = false, build = null } = {}) {
+function crafter(held, { planksNeedTable = false, build = null, gridLogs = {} } = {}) {
     const bot = fakeBot({ trees: [], axe: false, build });
     for (const [name, metadata, count] of held) bot.inventory.add({ name, metadata, count, type: reg.itemsByName[name].id });
     const stack = (name, meta) => bot.inventory.items().find(i => i.name === name && i.metadata === meta);
@@ -372,7 +372,13 @@ function crafter(held, { planksNeedTable = false, build = null } = {}) {
     bot.recipesFor = (want, meta, n, table) => {
         // planksNeedTable: as on RotN, logs -> planks only at a table (#270 review 2).
         if (table && !(planksNeedTable && want === id('planks'))) return [];
-        if (!table && planksNeedTable && want === id('planks')) return [];
+        if (!table && planksNeedTable && want === id('planks')) {
+            // gridLogs: a modded log whose planks recipe is 2x2, no table (rotn-data #278).
+            const g = bot.inventory.items().find(i => gridLogs[i.name] && i.count >= 1);
+            if (!g) return [];
+            const [n, m, c] = gridLogs[g.name];
+            return [{ result: { id: id(n), count: c }, out: [n, m, c], use: [[g.name, g.metadata, 1]], inShape: [[{ id: g.type, metadata: g.metadata, count: 1 }]] }];
+        }
         const items = bot.inventory.items();
         if (want === id('stick')) {
             const p = items.find(i => i.name === 'planks' && i.count >= 2);
@@ -450,7 +456,32 @@ test('#268 follow-up 2: no pair of planks but logs held: logs into planks first,
     const noTable = crafter([['log', 1, 25]]);
     assert.equal(await skills.collectBlock(noTable, 'stick', 4), false);
     assert.deepEqual(noTable.crafted, []);
-    assert.match(noTable.output, /Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them.* River Cane or bamboo \(picked by hand\) work as sticks/);
+    assert.match(noTable.output, /Not making planks: in RotN most logs \(all vanilla ones\) become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them.* River Cane or bamboo \(picked by hand\) work as sticks/);
+});
+
+test('rotn-data #278: a log whose planks need no table (a Pam maple log) makes planks in the 2x2 grid, then sticks; no table, no axe', T, async (t) => {
+    fast(t);
+    const MAPLE = 'harvestcraft:pammaple';
+    const saved = [reg.items, reg.itemsByName];
+    t.after(() => { [reg.items, reg.itemsByName] = saved; });
+    reg.items = { ...saved[0], 9001: { id: 9001, name: MAPLE, displayName: 'Maple Log', stackSize: 64 } };
+    reg.itemsByName = { ...saved[1], [MAPLE]: reg.items[9001] };
+    const bot = crafter([[MAPLE, 0, 1]], { planksNeedTable: true, gridLogs: { [MAPLE]: ['planks', 1, 4] } });
+    assert.equal(await skills.collectBlock(bot, 'stick', 4), true, bot.output);
+    assert.deepEqual(bot.crafted, [['planks', 1], ['stick', 1]]);
+    assert.match(bot.output, /Making planks from your logs in the 2x2 grid \(these logs need no crafting table\)\./);
+    assert.doesNotMatch(bot.output, /Not making planks/);
+    assert.equal(held(bot, 'stick'), 4);
+    assert.equal(held(bot, 'planks', 1), 2, 'planks left, one of them for the table');
+});
+
+test('rotn-data #278: by its recipes, a held mangrove, maple or End log has grid planks; a vanilla log or planks alone do not', () => {
+    const inv = (name, metadata) => ({ inventory: { items: () => [{ name, metadata, count: 4 }] } });
+    assert.equal(skills.gridPlanksReady(inv('biomesoplenty:log_1', 6)), 'biomesoplenty:planks_0:6');
+    assert.equal(skills.gridPlanksReady(inv('harvestcraft:pammaple', 0)), 'planks');
+    assert.equal(skills.gridPlanksReady(inv('stygian:endlog', 0)), 'stygian:endplanks');
+    assert.equal(skills.gridPlanksReady(inv('log', 1)), null, 'vanilla logs need a table');
+    assert.equal(skills.gridPlanksReady(inv('planks', 0)), null, 'planks are never made into other planks');
 });
 
 // ---- G3 round 5 A rerun: late, far drops; one tree cut 4 times; "its trunk is not in sight" ----
@@ -516,7 +547,7 @@ test('#270 review 2: planks need a table (as on RotN) and none is near or held: 
     const bot = crafter([['log', 1, 25]], { planksNeedTable: true });
     assert.equal(await skills.collectBlock(bot, 'stick', 4), false);
     assert.deepEqual(bot.crafted, []);
-    assert.equal((bot.output.match(/Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them \(place a log or plank and use the axe on it\)\. Get a crude axe or a table first/g) ?? []).length, 1, bot.output);
+    assert.equal((bot.output.match(/Not making planks: in RotN most logs \(all vanilla ones\) become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them \(place a log or plank and use the axe on it\)\. Get a crude axe or a table first/g) ?? []).length, 1, bot.output);
     assert.doesNotMatch(bot.output, /Making planks from logs|requires a crafting table/);
     assert.match(bot.output, /Collected 0 stick\./);
     assert.equal(held(bot, 'log', 1), 25);

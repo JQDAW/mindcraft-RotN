@@ -992,6 +992,21 @@ function planksByKind(bot) {
     return byKind;
 }
 
+/**
+ * A plank (a stickMat member) that a held log makes in the 2x2 grid now, or null (rotn-data #278:
+ * vanilla logs need a table, but mangrove, Pam's maple, cinnamon and paperbark, twilight oak, tower
+ * wood and End logs do not). Only recipes made of logs, so planks are never turned into other planks.
+ */
+export function gridPlanksReady(bot, logNames = oreMemberNames('logWood')) {
+    const isLog = (name) => { const p = parseName(name); return !!p && logNames.some(n => itemMatches({ name: p.name, metadata: p.meta ?? 0 }, n)); };
+    for (const name of oreMemberNames('stickMat')) {
+        const way = craftNeeds(bot, name);
+        if (way?.ready && !way.requiresTable && way.inputs.length > 0
+            && way.inputs.every(i => i.kinds.length > 0 && i.kinds.every(k => isLog(k.name)))) return name;
+    }
+    return null;
+}
+
 /** A crafting table placed within 16 blocks, or one held. */
 const tableAtHand = (bot) => countItem(bot, 'crafting_table') > 0 || !!world.getNearestBlock(bot, 'crafting_table', 16);
 
@@ -1023,10 +1038,21 @@ export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds 
     const logsHeld = () => logNames.reduce((n, name) => n + countItem(bot, name), 0);
     const planksHeld = () => Object.values(planksByKind(bot)).reduce((n, c) => n + c, 0);
     let made = 0;
+    let gridFailed = false;
     for (let r = 0; r < rounds && made < need && !run.aborted && !bot.interrupt_code; r++) {
         const crafts = Math.ceil((need - made) / 4);
         const pairs = stickCraftsHeld(bot);
         if (pairs === 0) {
+            // No table: a log whose planks recipe is 2x2 is crafted first (rotn-data #278).
+            const grid = !gridFailed && !tableAtHand(bot) ? gridPlanksReady(bot, logNames) : null;
+            if (grid) {
+                const before = planksHeld();
+                log(bot, `Making ${grid} from your logs in the 2x2 grid (these logs need no crafting table).`);
+                await craftRecipe(bot, grid, 1);
+                if (planksHeld() > before) continue;
+                log(bot, `Could not make ${grid} from your logs (the reason is above).`);
+                gridFailed = true;
+            }
             // No table near or held: Hit With Axe with any axe of level 0 or more (the lead's
             // decision, rotn-data #272): a placed log gives 1 plank (2 uses), a placed plank 2 sticks.
             if (!tableAtHand(bot)) {
@@ -1034,7 +1060,7 @@ export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds 
                 if (logsHeld() === 0 && planksHeld() === 0) break;
                 // Said once, with what to do instead, so the model does not retry the same command
                 // (#270 review 1; round 5 A rerun: "Crafting planks requires a crafting table").
-                log(bot, 'Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them (place a log or plank and use the axe on it). Get a crude axe or a table first. Until then, River Cane or bamboo (picked by hand) work as sticks for the crude axe and the Crafting Tools.');
+                log(bot, 'Not making planks: in RotN most logs (all vanilla ones) become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them (place a log or plank and use the axe on it). Get a crude axe or a table first. Until then, River Cane or bamboo (picked by hand) work as sticks for the crude axe and the Crafting Tools.');
                 break;
             }
             if (logsHeld() === 0) break;

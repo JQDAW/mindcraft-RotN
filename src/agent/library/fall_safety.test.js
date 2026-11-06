@@ -273,7 +273,7 @@ test('the sticks step: felling, not leaves (rotn-data Request 13: leaves never d
     assert.match(sticks.goal, /!collectBlocks\("stick", 3\) fells a tree/);
     assert.match(sticks.goal, /Leaves drop no sticks/);
     // Round 5 A rerun: planks need a table (rotn-data), so before it River Cane or bamboo stand in.
-    assert.match(sticks.goal, /Planks need a crafting table here, so they come later/);
+    assert.match(sticks.goal, /Planks from ordinary logs need a crafting table here, so they come later/);
     assert.match(sticks.goal, /!collectBlocks\("biomesoplenty:plant_1:5", 3\)/);
     assert.doesNotMatch(sticks.goal, /drop from leaves|punching trees does not work/);
 });
