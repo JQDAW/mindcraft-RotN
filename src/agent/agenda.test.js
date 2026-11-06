@@ -425,10 +425,13 @@ test('#284 review 2: with no pickaxe the reserve counts dirt and dirt piles and 
     agent.bot.time = { timeOfDay: dayAt(7) };
     assert.equal(agendaTick(agent, { now: 0 }), 'shelter_blocks');
     const prompt = agent.self_prompter.prompt;
-    assert.match(prompt, /you have 4 \(dirt, and dirt from your dirt piles\)\. Dig dirt by hand with !collectBlocks\("dirt", 6\)/);
+    // rotn-data #288: dirt dug by hand drops 4 betterwithmods:dirt_pile, so the ask is piles, 4 per
+    // dirt block still missing; !collectBlocks("dirt") would count 0.
+    assert.match(prompt, /you have 4 \(dirt, and dirt from your dirt piles\)\. Dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 24\): dug by hand \(or with a shovel below level 1\) it drops 4 piles of dirt, not a dirt block/);
+    assert.doesNotMatch(prompt, /collectBlocks\("dirt"/);
     assert.doesNotMatch(prompt, /rock/i, 'no rock run before the pickaxe step');
     // The static goal (used only when goalNow fails) tells the two cases apart the same way.
-    assert.match(SHELTER_RESERVE_STEP.goal, /If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt with !collectBlocks\("dirt", 10\)/);
+    assert.match(SHELTER_RESERVE_STEP.goal, /If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 40\)/);
 
     items[1].count = 32; // 8 dirt from piles + 2 dirt = 10
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks', 'enough dirt: the tool steps go on');
