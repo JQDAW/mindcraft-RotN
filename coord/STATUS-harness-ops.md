@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (00:17 UTC, from `date -u`)
+Updated: 2026-11-06 (00:49 UTC, from `date -u`)
 
 ## Now: G3 smoke round 3 paused after batch B (the lead's GO, 2026-11-06)
 
@@ -12,9 +12,10 @@ Updated: 2026-11-06 (00:17 UTC, from `date -u`)
   - The server log rolled over at 00:00 UTC, the begin marker was gone, and the run stopped at 00:00:56. Until then: no deaths, and online.
   - Stopped per the GO. C+D did not start.
 - **Cumulative LLM** by the key: USD 0.7449 of the 4.50 stop. Both servers were verified deleted, and the project was checked empty.
-- **Open:**
-  - the log roll-over fix PR: the session reads the rolled-over `.gz` plus `latest.log` once the marker is gone, records `notes.logWindow`, `rotn-test console` survives it, and `batch.mjs` warns about runs past 00:00 UTC;
-  - a separate PR with A's and B's smoke evidence.
+- **Merged:** #237, A's and B's smoke evidence.
+- **Open:** #236, the log roll-over fix. The session reads the rolled-over `.gz` plus `latest.log` once the marker is gone and records `notes.logWindow`; `rotn-test console` survives it; `batch.mjs` warns about runs past 00:00 UTC.
+  - The lead's review fixes are pushed (70818871): a daily-only `.gz` glob, the rotated fallback for the evidence `server.log` too, one retry on a half-written `.gz`, a `no_cheat` test across the rotation, and a doc block moved.
+- **Queued for the next evidence or redactor PR** (#237 nits): the "16 vs 17 min" wording, and masking Hetzner's numeric server IDs in the redactor.
 - **Next:** no batch until the lead brings a new human GO (C+D plus a B rerun). Targeted tests only until the lead declares round 3 over.
 
 ## Done: G3 smoke round 2 (the lead's written GO, 2026-11-05)
