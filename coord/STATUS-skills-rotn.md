@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T03:54Z (from `date -u`)
+Updated: 2026-11-06T07:53Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -441,7 +441,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Nit tests: no place reached, a 2x2 trunk, a slope. Tests: `fell_tree` 11/11, `death_report` 10/10; the review-item tests fail on the previous head. Related 6 files pass; lint 254.
 - **Round 3 over** (lead): full tests allowed again.
-- **Open PR: the #242 follow-up and the #238 nits** (branch `agent/skills-rotn/approach-and-nits`, a fresh branch off develop, with the #238 nits commit cherry-picked from `next2` (the same result as a rebase, no force-push); STATUS lives here):
+- **#247 merged** (the #242 follow-up and the #238 nits; branch `agent/skills-rotn/approach-and-nits`, a fresh branch off develop, with the #238 nits commit cherry-picked from `next2` (the same result as a rebase, no force-push); STATUS lives here):
   1. The first approach to a tree has the normal walk limit (`GO_TO_LIMITS.totalMs`), still without digging. The other places, once the bot is at the tree, keep a step's time. Test: a 0.5 s approach with a 0.15 s step and a 3 s walk; with the old step limit, "could not reach a safe place".
   2. The `[object Object]` fallback in `deathCauseText` is commented.
   3. The #238 nits: `placeFurnaceNear` trusts `blockAt(pos)` after a failed or thrown placement; a weapon stuck in the off hand is logged; a better off-hand weapon beats a worse one (`weaponRank`).
@@ -459,7 +459,43 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
      - `placeFurnaceNear` requires air at the place before placing.
 
      Tests: `death_report` 14, `furnace` 7; the 4 new ones fail on the previous head; lint 254.
-- **Next (lead):** re-review #247. `agent/skills-rotn/next2` is superseded by it.
+- **#247 nit**: folded into the fall-safety PR (commit cherry-picked from `next3`). From 10 to 20 min the night text says the items are already lost. The rounding nit was accepted as is.
+- **The round 4 PR, #256** (lead: one PR, built on rotn-data's `agent/rotn-data/sticks-from-felling`, superseding #252 and my #253). Branch `agent/skills-rotn/round4`: rotn-data's branch with `fall-safety` merged in (no rebase); STATUS lives here.
+- **G3 round 4 batch B, the fall** (first opened as #253, now in the round 4 PR). "FRCFLD fell from a high place" during `!collectBlocks("stick", 4)` on leaves, 3 s after unstuck took over.
+  - **Findings:**
+    - Leaves went through `bot.collectBlock.collect`, whose pathfinder may dig, tower and step onto leaves.
+    - Every walk could dig a Dynamic Trees branch, which fells the whole tree.
+    - Pickups lost their no-dig movements inside `goToGoal`.
+    - Every modded block is a full cube in the bot's registry, so branches look like footing.
+    - Rotn-data (Request 13, #252): leaves never drop sticks; a felled tree does, by hand too. So the sticks the bot gained came from branches its pathfinder dug.
+  - **Fixed (`fall_safety.js`):**
+    - every walk drops at most 3 blocks and never breaks a branch;
+    - leaves only from the ground (no dig, tower, parkour or step onto tree blocks);
+    - a bot on a tree climbs down first (collect and unstuck);
+    - drops lying on leaves are left;
+    - a branch is always cut by `fellTree`;
+    - the agenda's stick step says felling;
+    - `moveAway` logs a copied start position.
+  - **Tests:** `fall_safety` 9 (7 fail on develop; 2 cover the new module). The related files pass one at a time. Lint 254.
+  - **Sticks with rotn-data #252** (agreed with rotn-data): `fell-tree` gives sticks with `tool: null` and `preferredTool` axe. `collectBlock` equips a held axe for it, otherwise cuts by hand, never "needs an axe". The stick step also mentions planks -> sticks. Test: `fell_tree` #13, which fails without the `preferredTool` code.
+- **#256 review (REQUEST CHANGES, small), fixed on the same branch:**
+  1. **The chat queue is capped** at 20; when full, a low line goes first, then the oldest normal one; high lines are kept.
+     - A refusal carries a per-sender key: at most one waits (repeats collapse into it), and the next one goes out at least 10 s after the last.
+     - Replies to task givers are high; replies to other players are normal.
+     - Test: a non-giver typing a command every second for 2 min while agenda lines come. The result: one waiting refusal, the queue bounded, every agenda line sent, the first refusal within 2 s and then at most one per 10 s.
+  2. **A warning when `bot._client.chat` is missing** (the limit is off).
+  3. **Fall limit corrected.** Pathfinder 2.4.5 `getLandingBlock` accepts `node.y - landing.y <= maxDropDown` and the bot then stands on top of the landing block, so the fall is that minus 1. Now `maxDropDown` is 4: falls of 3, which do no damage. The test uses the real `Movements`: a fall of 3 is allowed, 4 is refused, and the old setting refused 3.
+  - **Nits:** the shared mineflayer-collectblock movements change is commented as intended; water and lava no longer count as empty in `fall_safety.js`.
+  - **Tests:** `chat_limit` 8 (4 new; they fail on the previous head), `fall_safety` 10 (the landing test fails with the old setting). Related files pass one at a time. Lint 254.
+- **G3 round 4 C+D, the spam kick** (in the round 4 PR):
+  - **Agenda:** two or more steps done in one tick send one line, `agenda steps done: a, b, ...`. One step keeps `agenda step <id> done`; `agenda done` and `started` are unchanged, so the harness parsers still match.
+  - **Outgoing chat limit** (`chat_limit.js`, at `bot._client.chat`, so every packet counts):
+    - a budget of 100 that refills at 10 per second (vanilla 1.12 kicks above 200, with 20 per packet and 1 removed per tick; no pack config changes it, checked in the pinned zip);
+    - high priority (replies to players, refusals) goes first and is never dropped;
+    - normal (agenda lines, self-prompted replies) is queued, never dropped;
+    - low (reflex narration) is dropped when busy or after 15 s.
+  - **The "late refusal"** was the harness's reading (lead: harness #255). The server log has it 1 s after the whisper.
+  - **Tests:** `chat_limit` 5 and `agenda` #17; the agent wiring and agenda tests fail on develop. Full `npm test` after `npm ci`: 1331 pass. The 1 failure is `deploy-eol`, which checks `deploy/cx23/` on disk for CR; this Windows checkout converts to CRLF, and I didn't touch `deploy/`. Lint 254.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

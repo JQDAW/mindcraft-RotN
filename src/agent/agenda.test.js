@@ -304,3 +304,21 @@ test('#233 review 2: the rock-specific goal reaches the prompt once the bot has 
     assert.match(sp.prompt, /make contenttweaker:chalk_cobble:0/);
     assert.equal(agent.agenda.spentOn('cobblestone').attempts, runs, 'the same run');
 });
+
+// G3 round 4 C+D: an inventory left over from an earlier run completed every step at once; the 12
+// lines in one second got the bot kicked for spamming. Now one line names the steps done together.
+test('round 4 C+D: steps done together get one summary line, not one line each', (t) => {
+    const all = fakeAgent(t, [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('crafting_table', 0, 1), stack('cobblestone', 0, 10)]);
+    assert.equal(agendaTick(all, { now: 1_000 }), 'done');
+    assert.equal(all.said.length, 2, JSON.stringify(all.said));
+    assert.equal(all.said[0], `agenda steps done: ${ROTN_EARLY_GAME.map(s => s.id).join(', ')}`);
+    assert.equal(all.said[1], 'agenda done', 'the line the harness ends on');
+
+    const two = fakeAgent(t, [stack('pyrotech:rock', 0, 6), stack('stick', 0, 4)]);
+    assert.equal(agendaTick(two, { now: 1_000 }), 'crude_axe');
+    assert.deepEqual(two.said, ['agenda steps done: rocks, sticks', 'agenda step crude_axe started: craft a crude axe']);
+
+    const one = fakeAgent(t, [stack('pyrotech:rock', 0, 6)]);
+    agendaTick(one, { now: 1_000 });
+    assert.equal(one.said[0], 'agenda step rocks done', 'one step keeps its own line');
+});
