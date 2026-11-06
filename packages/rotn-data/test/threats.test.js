@@ -347,5 +347,8 @@ test('grove sprite only retaliates; the zombie player is a plain zombie at the d
     assert.match(zombie.evidence.join(' '), /zombie_players-1\.12\.1-1\.2\.7\.jar.*onLivingDeath/);
     assert.match(zombie.evidence.join(' '), /'Zombie ' \+ the GameProfile name/);
     assert.match(zombie.summary, /never despawns/);
+    // #226 review: it burns in daylight, and the bot sees only its type (the name is in undecoded FML spawn data).
+    assert.match(zombie.summary, /burns in daylight/);
+    assert.match(zombie.summary, /recognise it by its entity type, zombie_players:zombie_player/);
     assert.match(zombie.evidence.join(' '), /corpsecomplex\.cfg.*'Drop Despawn Timer'=600/);
 });
