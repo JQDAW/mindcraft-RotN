@@ -6,6 +6,7 @@ import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stow
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, FALLING_TREE } from "./felling.js";
+import { fallSafe, treeSafe, standsOnTree, isGround, isLeafBlock, leafFromGround, itemOnGround } from "./fall_safety.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import pf from 'mineflayer-pathfinder';
@@ -732,7 +733,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         if (source.tool) ruleTools.push([blockMatcher(source.blocks), source.tool, source.blocks]);
         if (source.id === 'fell-tree') fellMatchers.push(blockMatcher(source.blocks));
     }
-    const fellsTree = (block) => fellMatchers.some(matches => matches(block));
+    // Any Dynamic Trees branch fells its tree, whichever rule names it (rotn-data #13: a branch
+    // broken by hand drops the tree's logs and sticks): always the safe cut, never collect().
+    const fellsTree = (block) => isBranch(block) || fellMatchers.some(matches => matches(block));
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     // Count what the bot really gains, not a rule's yield (#141 review): the targets in the
     // inventory before and after each break. A block with no item (water) counts 1 per success.
@@ -774,6 +777,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const run = currentRun(bot);
     const runStart = Date.now();
     const givenUp = [];
+    // Fall safety (G3 round 4 B, fall_safety.js): off a tree first; mineflayer-collectblock's own
+    // walks never drop over 3 blocks nor break a branch; leaves only from the ground.
+    if (standsOnTree(bot) && !(await descendFromTree(bot, run))) {
+        log(bot, `Not collecting ${blockType}: you are up on a tree and found no safe way down; try !moveAway or wait.`);
+        return false;
+    }
+    if (bot.collectBlock?.movements) fallSafe(bot.collectBlock.movements);
     for (let i=0; i<num && collected<num; i++) { // collected counts the items really gained (a stone can give 4 rocks)
         if (run.aborted) break;
         if (Date.now() - runStart >= CL.totalMs) {
@@ -787,6 +797,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             // findBlocks' section scan passes blocks without a position (G3 round 2 B: "Cannot read
             // properties of null (reading 'x')" after the first give-up).
             if (block.position && givenUp.some(p => p.equals(block.position))) return false;
+            // Leaves only where the bot can reach them standing on the ground: never climb for them.
+            if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
             if (exclude) {
                 for (let position of exclude) {
                     if (block.position.x === position.x && block.position.y === position.y && block.position.z === position.z) {
@@ -857,6 +869,12 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                     for (const p of r.skip) givenUp.push(p);
                     return r.cut;
                 }
+                // Leaves from the ground (G3 round 4 B), not with collectBlock's walk into the tree.
+                if (isLeafBlock(block)) {
+                    const r = await breakLeafFromGround(bot, block, run);
+                    if (!r) givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                    return r;
+                }
                 if (ruleTool || mc.mustCollectManually(block.name)) {
                     await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                     if (run.aborted) return false;
@@ -917,6 +935,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     }
     // Name what was really gained when it is not just the asked-for name (a rock can be an
     // Underground Biomes rock): "Collected 3 pyrotech:rock (2 pyrotech_compat:rock_metamorphic:0, ...)".
+    // A run that ended up on a tree anyway (a pile, a pickup) climbs down before it returns.
+    if (!run.aborted && standsOnTree(bot)) await descendFromTree(bot, run);
     const gainedNames = Object.entries(gainedByKey);
     const details = gainedNames.length && !(gainedNames.length === 1 && gainedNames[0][0] === blockType)
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
@@ -933,14 +953,14 @@ export async function pickupNearbyItems(bot) {
      * await skills.pickupNearbyItems(bot);
      **/
     const distance = 8;
-    const getNearestItem = bot => bot.nearestEntity(entity => entity.name === 'item' && bot.entity.position.distanceTo(entity.position) < distance);
+    // Only items on firm ground: one lying on leaves or a branch would lead the bot up into the
+    // tree (G3 round 4 B). Never dig on the way (the no-dig movements were lost in goToGoal).
+    const getNearestItem = bot => bot.nearestEntity(entity => entity.name === 'item' && bot.entity.position.distanceTo(entity.position) < distance
+        && itemOnGround(bot, entity));
     let nearestItem = getNearestItem(bot);
     let pickedUp = 0;
     while (nearestItem) {
-        let movements = new pf.Movements(bot);
-        movements.canDig = false;
-        bot.pathfinder.setMovements(movements);
-        await goToGoal(bot, new pf.goals.GoalFollow(nearestItem, 1));
+        await goToGoal(bot, new pf.goals.GoalFollow(nearestItem, 1), { canDig: false });
         await new Promise(resolve => setTimeout(resolve, 200));
         let prev = nearestItem;
         nearestItem = getNearestItem(bot);
@@ -953,6 +973,58 @@ export async function pickupNearbyItems(bot) {
     return true;
 }
 
+
+/** Bounds for climbing down from a tree and for breaking leaves from the ground (G3 round 4 B). */
+export const TREE_SAFETY = { descendMs: 20_000, leafWalkMs: 20_000, leafReach: 4 };
+
+/**
+ * Off a tree, safely (G3 round 4 B): walk to the nearest place on firm ground (not leaves, not a
+ * branch) with fall-safe movements: no drop over 3 blocks, no broken branch, no tower, no parkour.
+ * Leaves may be dug on the way down. Bounded by TREE_SAFETY.descendMs. Returns true when the bot
+ * is no longer on a tree; false leaves it where it is, which is safer than a jump.
+ */
+export async function descendFromTree(bot, run = currentRun(bot)) {
+    if (!standsOnTree(bot)) return true;
+    const moves = fallSafe(new pf.Movements(bot));
+    moves.allow1by1towers = false;
+    moves.allowParkour = false;
+    moves.scafoldingBlocks = [];
+    const ground = new pf.goals.Goal();
+    ground.isEnd = (node) => isGround(bot.blockAt(new Vec3(node.x, node.y - 1, node.z)));
+    log(bot, 'You are up on a tree; climbing down to the ground (at most 3 blocks per drop).');
+    bot.pathfinder.setMovements(moves);
+    try { await within(bot.pathfinder.goto(ground), TREE_SAFETY.descendMs, () => stopWalking(bot)); }
+    catch { /* no path: checked below */ }
+    if (run.aborted) return !standsOnTree(bot);
+    const down = !standsOnTree(bot);
+    if (!down) log(bot, 'Found no safe way down from the tree (no drop over 3 blocks); staying put.');
+    return down;
+}
+
+/**
+ * Break one leaves block from the ground (G3 round 4 B): collectBlock's walk dug, towered and
+ * stepped onto leaves to reach the nearest ones, often in the canopy. Here the walk stays on the
+ * ground (treeSafe), the block must be within reach from there, and nothing is dug but the leaves.
+ * Returns true when it was broken.
+ */
+export async function breakLeafFromGround(bot, block, run = currentRun(bot)) {
+    const p = block.position;
+    bot.pathfinder.setMovements(treeSafe(bot, new pf.Movements(bot)));
+    try {
+        await within(bot.pathfinder.goto(new pf.goals.GoalNear(p.x, p.y, p.z, TREE_SAFETY.leafReach)),
+            TREE_SAFETY.leafWalkMs, () => stopWalking(bot));
+    } catch { /* no path: checked below */ }
+    if (run.aborted) return false;
+    const eye = bot.entity.position.offset(0, bot.entity.eyeHeight ?? 1.62, 0);
+    if (standsOnTree(bot) || eye.distanceTo(p.offset(0.5, 0.5, 0.5)) > TREE_SAFETY.leafReach + 0.5) {
+        log(bot, `Could not reach ${block.name} at ${p.x}, ${p.y}, ${p.z} from the ground; skipping it.`);
+        return false;
+    }
+    await bot.dig(block, true);
+    if (run.aborted) return true;
+    await pickupNearbyItems(bot);
+    return true;
+}
 
 /**
  * Bounds for picking up a felled tree's drops (G3 smoke C+D). On this pack a branch break fells
@@ -990,8 +1062,9 @@ export async function fellTree(bot, block, run = currentRun(bot)) {
         return { cut: false, skip: treeBlocks(base) };
     }
     // Walks near the tree never dig (#242 review 2): a broken branch would fell it onto the bot.
+    // And never drop over 3 blocks (G3 round 4 B).
     const walk = async (goal, ms) => {
-        const moves = new pf.Movements(bot);
+        const moves = fallSafe(new pf.Movements(bot));
         moves.canDig = false;
         bot.pathfinder.setMovements(moves);
         try { await within(bot.pathfinder.goto(goal), ms, () => stopWalking(bot)); } catch { /* checked by the caller */ }
@@ -1064,7 +1137,8 @@ async function collectFelledDrops(bot, center, limits = {}, baseline = null) {
     let walked = 0;
     while (!bot.interrupt_code && left() > 0) {
         const here = bot.entity.position;
-        const item = dropsNear().filter(e => !tried.has(e.id ?? e))
+        // Only drops on firm ground: one caught in another tree's leaves would lead the bot up (G3 round 4 B).
+        const item = dropsNear().filter(e => !tried.has(e.id ?? e) && itemOnGround(bot, e))
             .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))[0];
         if (!item) break;
         tried.add(item.id ?? item);
@@ -1599,22 +1673,28 @@ export async function giveToPlayer(bot, itemType, username, num=1) {
     return false;
 }
 
-export async function goToGoal(bot, goal) {
+export async function goToGoal(bot, goal, { canDig = true } = {}) {
     /**
      * Navigate to the given goal. Use doors and attempt minimally destructive movements.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {pf.goals.Goal} goal, the goal to navigate to.
+     * @param {{canDig?: boolean}} options, canDig false: never dig (no destructive fallback).
      **/
 
-    const nonDestructiveMovements = new pf.Movements(bot);
+    // Every walk is fall-safe (G3 round 4 B, fall_safety.js): no drop over 3 blocks, and never a
+    // broken Dynamic Trees branch, which fells the tree (also the stuck reflex's walk away).
+    const nonDestructiveMovements = fallSafe(new pf.Movements(bot));
     const dontBreakBlocks = ['glass', 'glass_pane'];
     for (let block of dontBreakBlocks) {
         nonDestructiveMovements.blocksCantBreak.add(mc.getBlockId(block));
     }
     nonDestructiveMovements.placeCost = 2;
     nonDestructiveMovements.digCost = 10;
+    // A caller that set no-dig movements (pickupNearbyItems) used to get these replaced by digging
+    // ones here; a drop resting on leaves then led the bot up into the tree (G3 round 4 B).
+    if (!canDig) nonDestructiveMovements.canDig = false;
 
-    const destructiveMovements = new pf.Movements(bot);
+    const destructiveMovements = canDig ? fallSafe(new pf.Movements(bot)) : nonDestructiveMovements;
 
     let final_movements = destructiveMovements;
 
@@ -1947,10 +2027,12 @@ export async function moveAway(bot, distance) {
      * @example
      * await skills.moveAway(bot, 8);
      **/
-    const pos = bot.entity.position;
+    // A copy: a server position packet (a respawn) changes bot.entity.position in place, and the
+    // log line then named the wrong start (G3 round 4 B: "Moved away from" the respawn point).
+    const pos = bot.entity.position.clone();
     let goal = new pf.goals.GoalNear(pos.x, pos.y, pos.z, distance);
     let inverted_goal = new pf.goals.GoalInvert(goal);
-    bot.pathfinder.setMovements(new pf.Movements(bot));
+    bot.pathfinder.setMovements(fallSafe(new pf.Movements(bot))); // goToGoal's are fall-safe too (G3 round 4 B)
 
     if (bot.modes.isOn('cheat')) {
         const move = new pf.Movements(bot);

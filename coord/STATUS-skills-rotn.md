@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T03:54Z (from `date -u`)
+Updated: 2026-11-06T07:16Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -441,7 +441,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Nit tests: no place reached, a 2x2 trunk, a slope. Tests: `fell_tree` 11/11, `death_report` 10/10; the review-item tests fail on the previous head. Related 6 files pass; lint 254.
 - **Round 3 over** (lead): full tests allowed again.
-- **Open PR: the #242 follow-up and the #238 nits** (branch `agent/skills-rotn/approach-and-nits`, a fresh branch off develop, with the #238 nits commit cherry-picked from `next2` (the same result as a rebase, no force-push); STATUS lives here):
+- **#247 merged** (the #242 follow-up and the #238 nits; branch `agent/skills-rotn/approach-and-nits`, a fresh branch off develop, with the #238 nits commit cherry-picked from `next2` (the same result as a rebase, no force-push); STATUS lives here):
   1. The first approach to a tree has the normal walk limit (`GO_TO_LIMITS.totalMs`), still without digging. The other places, once the bot is at the tree, keep a step's time. Test: a 0.5 s approach with a 0.15 s step and a 3 s walk; with the old step limit, "could not reach a safe place".
   2. The `[object Object]` fallback in `deathCauseText` is commented.
   3. The #238 nits: `placeFurnaceNear` trusts `blockAt(pos)` after a failed or thrown placement; a weapon stuck in the off hand is logged; a better off-hand weapon beats a worse one (`weaponRank`).
@@ -459,7 +459,25 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
      - `placeFurnaceNear` requires air at the place before placing.
 
      Tests: `death_report` 14, `furnace` 7; the 4 new ones fail on the previous head; lint 254.
-- **Next (lead):** re-review #247. `agent/skills-rotn/next2` is superseded by it.
+- **#247 nit**: folded into the fall-safety PR (commit cherry-picked from `next3`). From 10 to 20 min the night text says the items are already lost. The rounding nit was accepted as is.
+- **G3 round 4 batch B, the fall** (branch `agent/skills-rotn/fall-safety`, PR open; STATUS lives here). "FRCFLD fell from a high place" during `!collectBlocks("stick", 4)` on leaves, 3 s after unstuck took over.
+  - **Findings:**
+    - Leaves went through `bot.collectBlock.collect`, whose pathfinder may dig, tower and step onto leaves.
+    - Every walk could dig a Dynamic Trees branch, which fells the whole tree.
+    - Pickups lost their no-dig movements inside `goToGoal`.
+    - Every modded block is a full cube in the bot's registry, so branches look like footing.
+    - Rotn-data (Request 13, #252): leaves never drop sticks; a felled tree does, by hand too. So the sticks the bot gained came from branches its pathfinder dug.
+  - **Fixed (`fall_safety.js`):**
+    - every walk drops at most 3 blocks and never breaks a branch;
+    - leaves only from the ground (no dig, tower, parkour or step onto tree blocks);
+    - a bot on a tree climbs down first (collect and unstuck);
+    - drops lying on leaves are left;
+    - a branch is always cut by `fellTree`;
+    - the agenda's stick step says felling;
+    - `moveAway` logs a copied start position.
+  - **Tests:** `fall_safety` 9 (7 fail on develop; 2 cover the new module). The related files pass one at a time. Lint 254.
+  - **Depends on:** rotn-data #252 for sticks to come from felling. My tests pass with and without it.
+- **G3 round 4 C+D, the chat burst**: next, in a separate PR.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
