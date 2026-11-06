@@ -287,10 +287,14 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
   - The key's own credit limit (USD 5 for the test key) is the hard backstop.
 - **Records.** `result.json`'s `llm` (the models, the calls, the replies, the usage before and after, the cost) is in every record.
   - `calls` is the requests sent, successful or not.
-  - `replies: {ok, memory, failed, disconnected, empty}` says what came back (lead, after round 3, where all "11 calls" of a run had failed):
+  - `replies: {ok, memory, failed, disconnected, empty, memoryEmpty}` says what came back (lead, after round 3, where all "11 calls" of a run had failed):
     - `ok`: the agent's replies;
     - `memory`: memory summaries ("Memory updated to:"), requests of their own;
     - `failed = disconnected + empty`: Mindcraft's stand-in replies, "My brain disconnected, try again." (also when a memory summary stores it) and "No response received." (a completion with no choices), and an answer with no text ("Error: Generated response is not a string"; round 3 continuation A had 3).
+    - **`memoryEmpty` (part of `empty`): memory summaries that got no text back** (lead, round 5 A). There, every summary's request got null content, `history.js` threw, and the agent exited; it crashed five times and none of it was counted (19 requests: 11 replies, 0 summaries, 0 failed).
+      - A summary is open from "Storing memories..." until "Memory updated to:". It counts as empty when the next summary starts or the agent process exits ("Agent process exited with code") while it is open, or when it stores nothing (or "null").
+      - A summary still open when the log ends (the bot was stopped while its request waited) is not counted, like any request still waiting.
+      - Round 5 A now reads 11 replies, 5 failed (5 empty summaries); the round 3 and round 4 logs count as before.
     - **`ok + memory + failed` can be less than `calls`** (#246 review): requests that never print "Generated response:" or "Memory updated to:" (a coding request, a goal request, a request still waiting when the bot left) are in `calls` only. In the round 3 logs the sum matched `calls`, except D's request in flight at its disconnect.
   - `httpErrors: {status: n}` counts the "Error [429]"-style lines; a retried request can add more than one.
   - The run log says it the same way: "N LLM requests (ok replies, m memory summaries, f failed; n x HTTP 429), USD ...".
@@ -365,7 +369,8 @@ A task from the test-only giver `Server` interrupts the real agent's agenda. The
   - **Every counter criterion must be added,** or the run is not gate-valid.
 - **The preflight, read-only:** `testforblock X Y+1 Z minecraft:air 0` and the same for Y+2, before the `setblock`. If either cell is not air (water included), the task steps fail with "site not clear", and nothing is placed or whispered.
 - **No state carries over** (#207 review):
-  - The driver moves `bots/<bot>/tasks.json` and `agenda.json` aside before `main.js` starts, renaming them to `.g3-<stamp>.bak`. It does this on every start: there is no G3 gate inside, because only the G3 scenarios use this driver, so (a) and (b) get the fresh-bot agenda autostart too. It then keeps the newest 5 of its own backups per file (`KEEP_BACKUPS`) and deletes older ones; nothing else in the folder is touched (#207 review nit). Its start event's `botState` reports `movedAside` and `pruned`, and `fresh_bot_state` checks it.
+  - The driver moves `bots/<bot>/tasks.json`, `agenda.json` and `memory.json` aside before `main.js` starts, renaming them to `.g3-<stamp>.bak`. It does this on every start: there is no G3 gate inside, because only the G3 scenarios use this driver, so (a) and (b) get the fresh-bot agenda autostart too. It then keeps the newest 5 of its own backups per file (`KEEP_BACKUPS`) and deletes older ones; nothing else in the folder is touched (#207 review nit). Its start event's `botState` reports `movedAside` and `pruned`, and `fresh_bot_state` checks it.
+  - **`memory.json` too, from round 5 B** (lead, after round 5 A; approved for all G3 batches): a fresh start means fresh memory. `memory.json` holds the bot's memory summary and its recent turns, which `history.js` reloads at every start. In round 5 A it held 14 turns, so each restart reached the summary limit at once and crashed again on the same empty reply. The old file stays as its `.bak` for the record; `histories/` and the rest are not touched.
   - (c) ends with no open task: a task still open at the end is cancelled with the giver's `!taskCancel("<id>")` (`notes.openTaskAtEnd`).
 - **The steps and checks** (`warmMinutes` 5, `activeWaitMinutes` 5, `acceptS` 60, `taskMinutes` 5 and `resumeMinutes` 5 are compared 'equal'):
   - `agenda_active`: the counter rises over the warm-up.
@@ -393,7 +398,7 @@ A short session of the real agent with the **production** task-giver list. `Serv
   - The human decided this is enough for G3. A real untrusted player (a second Microsoft account) is revisited at G4 if the human wants it.
 - **The switch:** the scenario starts the driver with `ROTN_G3_PRODUCTION_GIVERS=1`, which turns `allow_server_task_giver` off. It can only turn the test giver off, never on, and it is not passed on to `main.js`.
   - The driver's `mindcraft_start` event reports `serverTaskGiver` (`production_givers` requires false) and `botState` (`fresh_bot_state`).
-  - `tasks.json` and `agenda.json` are moved aside before the start, so no task from an earlier run can run here. From round 5, (d) runs in its own batch on a fresh server (the batch layout above).
+  - `tasks.json`, `agenda.json` and `memory.json` are moved aside before the start, so no task or memory from an earlier run carries over here. From round 5, (d) runs in its own batch on a fresh server (the batch layout above).
 - **The marker: pinned candidates, the first clear one wins** (lead, after smoke round 2, where `-20,70,-56` had Leaves in both cells above it).
   - `G3_MARKERS.untrusted` in `lib/g3.mjs` lists (d)'s candidates in order, all S1-A's server-confirmed surface rock piles (`test/evidence/s1/s1a-20261102/survey/result.json`, `notes.confirmed`): `-20,70,-56`, `-25,71,-28`, `-57,70,-32`, `-5,74,-68`. None is (c)'s `-42,68,-50`.
   - The scenario's `markers` parameter is that list, `;`-separated and compared 'equal'.
