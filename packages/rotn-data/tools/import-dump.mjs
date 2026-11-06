@@ -21,6 +21,11 @@
 //
 // Usage: node packages/rotn-data/tools/import-dump.mjs <fetched rotn-dump dir> --jar-sha256 <hex>
 //        [--version 3.3.4] [--allow-errors] [--dry-run]
+//
+// The previous `collision` values come from the blocks.json(.br) already in the output folder
+// (packages/rotn-data/<version>/): importDump's keepCollisionFrom defaults to outDir. The command line
+// always uses that default; to keep none, call importDump with keepCollisionFrom: null. Import over
+// the committed data, so a re-import keeps the values forge-bridge has been reading.
 import { Buffer } from 'node:buffer';
 import fs from 'node:fs';
 import process from 'node:process';
