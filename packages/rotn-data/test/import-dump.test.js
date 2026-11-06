@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import { importDump, canonicalize, checkStateMetaRemap, checkEntityCollision, keepWorldDependentCollision, DT_LEAVES_PLAYER_BOX } from '../tools/import-dump.mjs';
-import { RotnData, DUMP_FILES, isDtBranchNoConnectionBox } from '../src/catalog.js';
+import { RotnData, DUMP_FILES, isDtBranchNoConnectionBox, isDtCactusBranch } from '../src/catalog.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const JAR = 'ab'.repeat(32); // the expected dumper jar SHA-256 in these tests
@@ -433,6 +433,23 @@ test('playerCollision: a Dynamic Trees branch dumped with the no-connection cube
     assert.equal(cat.playerCollision({ name: 'dynamictreesbop:cherrybranch', meta: 3 }).source, 'collision');
     // Rustic registers Dynamic Trees branches in its own namespace (#269 review).
     assert.deepEqual(cat.playerCollision({ name: 'rustic:olivebranch', meta: 0 }), { boxes: [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], varies: true, source: 'collision' });
+});
+
+test('playerCollision: a Dynamic Trees cactus branch keeps its core box but varies (its arms are not dumped; #279 review)', () => {
+    const cat = new RotnData(path.join(HERE, '../3.3.4'), { version: '3.3.4' });
+    const metas = cat.dump.blocks.blocks['dynamictrees:cactusbranch'].states.map((s) => s.meta);
+    assert.equal(metas.length, 6);
+    for (const meta of metas) {
+        const s = cat.getBlock({ name: 'dynamictrees:cactusbranch', meta }).state;
+        assert.equal(s.entityCollisionVaries, false, 'the dump does not flag it');
+        assert.deepEqual(cat.playerCollision({ name: 'dynamictrees:cactusbranch', meta }), { boxes: s.entityCollision, varies: true, source: 'entityCollision' });
+    }
+    // The trunk core is 10/16 wide, a branch core 8/16.
+    assert.deepEqual(cat.playerCollision({ name: 'dynamictrees:cactusbranch', meta: 0 }).boxes, [[0.25, 0.25, 0.25, 0.75, 0.75, 0.75]]);
+    assert.equal(isDtCactusBranch({ class: 'com.ferreusveritas.dynamictrees.blocks.BlockBranchCactus' }), true);
+    assert.equal(isDtCactusBranch({ class: 'net.minecraft.block.BlockCactus' }), false);
+    assert.equal(isDtCactusBranch({ class: 'com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic' }), false);
+    assert.equal(cat.playerCollision('minecraft:cactus').varies, false, 'the vanilla cactus is unaffected');
 });
 
 test('isDtBranchNoConnectionBox: only a block of a Dynamic Trees class with one cell-centred cube of whole-block half-size', () => {

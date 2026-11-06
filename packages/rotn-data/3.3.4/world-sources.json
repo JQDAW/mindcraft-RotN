@@ -119,7 +119,7 @@
     {
       "id": "plank-from-debarked-log",
       "action": "use-tool-on-block",
-      "summary": "Right-click the placed debarked log with the axe again: the block disappears and 1 plank drops one block toward you (1 axe use). This is how the first plank (for the crafting table) is made without a table: 1 log gives 1 plank for 2 axe uses, while a crafting table gives 3 planks per log. A few modded logs are the exception and craft into 4 planks in the 2x2 grid: the Biomes O' Plenty mangrove log, Pam's maple, cinnamon and paperbark logs, the Twilight Forest twilight oak log and the Stygian end log.",
+      "summary": "Right-click the placed debarked log with the axe again: the block disappears and 1 plank drops one block toward you (1 axe use). This is how the first plank (for the crafting table) is made without a table: 1 log gives 1 plank for 2 axe uses, while a crafting table gives 3 planks per log. A few modded logs are the exception and craft into 4 planks in the 2x2 grid: the Biomes O' Plenty mangrove log, Pam's maple, cinnamon and paperbark logs, the Twilight Forest twilight oak log and the Stygian end log. Two Twilight Forest crafts also need no table: 4 dark twilight logs (2x2) give 4 tower wood, and a giant log gives 64 oak planks.",
       "pairs": [
         { "block": { "name": "hitwithaxe:debarked_oak" }, "item": { "name": "minecraft:planks", "meta": 0 }, "documented": true },
         { "block": { "name": "hitwithaxe:debarked_spruce" }, "item": { "name": "minecraft:planks", "meta": 1 } },

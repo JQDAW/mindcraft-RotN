@@ -59,6 +59,19 @@ export function isDtBranchNoConnectionBox(block, boxes) {
     return Number.isInteger(h) && h >= 1 && [x0, y0, z0].every((v) => v === 0.5 - h) && [y1, z1].every((v) => v === 0.5 + h);
 }
 
+/**
+ * True for a Dynamic Trees cactus branch (dynamictrees:cactusbranch, #279 review). Its dumped box is
+ * only the core: DramaticTrees-1.12.2-0.13.4.jar BlockBranchCactus.addCollisionBoxToList
+ * (func_185477_a) adds an arm toward each side whose getSideConnectionRadius is above 0 (bytecode
+ * 7-159) and, for a non-trunk branch growing out sideways, a stub upward (163-305), then the core box
+ * (308-358). The dumper's all-air probe has no cactus parts around it, so the arms never appear, and
+ * entityCollisionVaries is false.
+ * @param {{ class?: string }} block the blocks.json entry
+ */
+export function isDtCactusBranch(block) {
+    return /dynamictrees.*\.BlockBranchCactus$/.test(String(block?.class ?? ''));
+}
+
 export class RotnData {
     /**
      * @param {string} dir  folder with registry-names.json and (optionally) the dump files
@@ -156,6 +169,8 @@ export class RotnData {
      * `varies: null` and `source: 'collision'`. A Dynamic Trees branch whose dumped box is the
      * no-connection cube (isDtBranchNoConnectionBox) also gets `collision` (its core box), with
      * `varies: true` and `source: 'collision'`: in a tree its arms depend on the neighbouring tree parts.
+     * A Dynamic Trees cactus branch (isDtCactusBranch) keeps its dumped core box with `varies: true`:
+     * its arms toward the neighbouring cactus parts are not in the dump.
      * `null` for an unknown block or a block without a dump.
      */
     playerCollision(input) {
@@ -163,6 +178,7 @@ export class RotnData {
         if (!b?.propertiesKnown || !b.state) return null;
         const s = b.state;
         if (isDtBranchNoConnectionBox(b, s.entityCollision)) return { boxes: s.collision ?? null, varies: true, source: 'collision' };
+        if (isDtCactusBranch(b) && Array.isArray(s.entityCollision)) return { boxes: s.entityCollision, varies: true, source: 'entityCollision' };
         if (Array.isArray(s.entityCollision)) return { boxes: s.entityCollision, varies: s.entityCollisionVaries ?? null, source: 'entityCollision' };
         return { boxes: s.collision ?? null, varies: null, source: 'collision' };
     }
