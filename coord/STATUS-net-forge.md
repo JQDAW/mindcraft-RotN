@@ -1,12 +1,19 @@
 # Status: net-forge
 
-Updated: 2026-11-05T19:17Z
+Updated: 2026-11-06T00:17Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Idle (since 2026-11-05T17:17Z, lead: usage; the G3 smoke batches ended at 2026-11-05T19:17Z, test limits lifted)
+## #214 comment nit: PR open (2026-11-06T00:17Z, lead's request; G3 smoke round 3 running, targeted tests only)
 
-- **Open nit (lead, #214 review, for later):** add a comment at `hordes.js:37` that `HordeSoundMessage.toBytes` omits x/z when `direction` is null, while `fromBytes` always reads them. The server always sets a direction (`spawnWave` 43/91), so this is a comment only. Branch `agent/net-forge/hordes-nits` holds this STATUS entry; the comment goes in with my next forge-bridge PR.
+- **Branch:** `agent/net-forge/hordes-comment`, from develop `9072315`. The PR is waiting for the lead's review.
+- **Change:** a comment only, in `decodeHordes`, `packages/forge-bridge/src/hordes.js`.
+  - `HordeSoundMessage.toBytes` (4-30) omits x/z when `direction` is null, while `fromBytes` always reads them.
+  - The server always sets a direction (`spawnWave` 43/91).
+  - Checked: such a payload with `hordes:horde_spawn` throws `WireError` (read past end), so the bridge logs it and emits nothing.
+- **Tests:** `hordes.test.js` 7/7, the only targeted file.
+- **Why a new branch:** the lead asked for a rebase on develop. `agent/net-forge/hordes-nits` was already pushed, and the rules forbid force-pushing. So its two STATUS commits were cherry-picked onto this fresh branch from develop. `hordes-nits` is superseded and can be deleted.
+- **Blocked / requests:** none.
 
 ## Hordes horde event: merged as #214 (`d5ae8e7`), serves skills-rotn D1b
 
