@@ -1,0 +1,310 @@
+{
+  "scenario": "g3-rocks-to-stone-tools",
+  "gate": "G3",
+  "title": "From a fresh spawn the agent makes cobblestone, a crafting table and stone tools with RotN recipes (the server counts)",
+  "runId": "20261106t172828-24c1e0",
+  "pass": true,
+  "checksPassed": true,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "PASS",
+  "passed": 7,
+  "failed": 0,
+  "durationS": 467,
+  "params": {
+    "bot": "<bot>",
+    "worldSeed": "1880465901402976865",
+    "maxMinutes": 25,
+    "maxBatchUsd": 2,
+    "loginTimeoutMs": 240000,
+    "milestonePollMs": 60000,
+    "pollMs": 1000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "lateReplyMs": 5000,
+    "latePollMs": 1000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the bot makes it log in with its own account (online mode)"
+    },
+    {
+      "check": "fresh_start",
+      "pass": true,
+      "detail": "none of 24 target items held; the pack's first-join Bread and Bundle seen",
+      "readyToTry": "At the start the bot holds none of the target items (a fresh spawn)"
+    },
+    {
+      "check": "stone_tools",
+      "pass": true,
+      "detail": "minecraft:stone_pickaxe 1, minecraft:stone_axe 1; done: both stone tools crafted and the agent reports its cobblestone step done",
+      "readyToTry": "It ends with a stone pickaxe and a stone axe (the server's count)"
+    },
+    {
+      "check": "crafting_table",
+      "pass": true,
+      "detail": "held 0, placed (use stat) 0; the bot's placements: -19 72 -76 a table (server)",
+      "readyToTry": "It has a crafting table, held or placed (count, or the table's use stat)"
+    },
+    {
+      "check": "cobblestone",
+      "pass": true,
+      "detail": "contenttweaker:chalk_cobble:0 10 (10 in all)",
+      "readyToTry": "It holds cobblestone made from rocks (any 4-rocks output, rotn-data)"
+    },
+    {
+      "check": "crafted_by_bot",
+      "pass": true,
+      "detail": "pyrotech:crude_axe 1, contenttweaker:crafting_tools 1, minecraft:crafting_table 1, minecraft:stone_pickaxe 1, minecraft:stone_axe 1",
+      "readyToTry": "The server's craft stats show the bot crafted the crude axe, Crafting Tools, the table and both stone tools"
+    },
+    {
+      "check": "no_cheat",
+      "pass": true,
+      "detail": "nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)",
+      "readyToTry": "No give, game mode change, op or command by the bot during the run (the pack's first-join commands aside)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "objectives": [
+      {
+        "obj": "g3a_c_crude",
+        "criteria": "stat.craftItem.pyrotech.crude_axe",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_ctools",
+        "criteria": "stat.craftItem.contenttweaker.crafting_tools",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_table",
+        "criteria": "stat.craftItem.minecraft.crafting_table",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_spick",
+        "criteria": "stat.craftItem.minecraft.stone_pickaxe",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_saxe",
+        "criteria": "stat.craftItem.minecraft.stone_axe",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_cobble",
+        "criteria": "stat.craftItem.minecraft.cobblestone",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_u_table",
+        "criteria": "stat.useItem.minecraft.crafting_table",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_deaths",
+        "criteria": "stat.deaths",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_played",
+        "criteria": "stat.playOneMinute",
+        "result": "added"
+      }
+    ],
+    "startCounts": {
+      "minecraft:stone_pickaxe": 0,
+      "minecraft:stone_axe": 0,
+      "minecraft:crafting_table": 0,
+      "pyrotech:crude_axe": 0,
+      "contenttweaker:crafting_tools": 0,
+      "undergroundbiomes:igneous_cobble": 0,
+      "contenttweaker:lignite_cobble": 0,
+      "undergroundbiomes:metamorphic_cobble": 0,
+      "undergroundbiomes:metamorphic_sandstone": 0,
+      "contenttweaker:chalk_cobble": 0,
+      "contenttweaker:shale_cobble": 0,
+      "contenttweaker:siltstone_cobble": 0,
+      "contenttweaker:dolomite_cobble": 0,
+      "contenttweaker:greywacke_cobble": 0,
+      "contenttweaker:chert_cobble": 0,
+      "undergroundbiomes:sedimentary_sandstone": 0,
+      "defiledlands:sandstone_defiled": 0,
+      "contenttweaker:serpentinite_cobblestone": 0,
+      "defiledlands:stone_defiled": 0,
+      "aether_legacy:holystone": 0,
+      "minecraft:cobblestone": 0,
+      "minecraft:sandstone": 0,
+      "contenttweaker:limestone_cobble": 0,
+      "minecraft:red_sandstone": 0
+    },
+    "milestonesMin": {
+      "g3a_c_crude": 3.7,
+      "g3a_c_ctools": 3.7,
+      "g3a_c_table": 3.7,
+      "g3a_c_spick": 4.8,
+      "g3a_c_saxe": 4.8
+    },
+    "track": [
+      {
+        "min": 1.4,
+        "deaths": 0
+      },
+      {
+        "min": 2.5,
+        "deaths": 0
+      },
+      {
+        "min": 3.7,
+        "deaths": 0
+      },
+      {
+        "min": 4.8,
+        "deaths": 0
+      },
+      {
+        "min": 5.9,
+        "deaths": 0
+      }
+    ],
+    "end": {
+      "reason": "done: both stone tools crafted and the agent reports its cobblestone step done",
+      "minutes": 5.9
+    },
+    "agendaChat": [
+      "agenda step rocks started: collect 6 rocks",
+      "agenda step rocks done",
+      "agenda step sticks started: collect 3 sticks",
+      "agenda step logs done",
+      "agenda step sticks done",
+      "agenda step crude_axe started: craft a crude axe",
+      "agenda step crude_axe done",
+      "agenda step first_plank started: make the first plank",
+      "agenda step first_plank done",
+      "agenda step crafting_tools started: craft Crafting Tools",
+      "agenda step crafting_tools done",
+      "agenda step crafting_table started: craft a crafting table",
+      "agenda step crafting_table done",
+      "agenda step planks_sticks started: make planks and sticks at the table",
+      "agenda step planks_sticks done",
+      "agenda step stone_pickaxe started: craft a stone pickaxe",
+      "agenda step stone_pickaxe done",
+      "agenda step stone_axe started: craft a stone axe",
+      "agenda step stone_axe done",
+      "agenda step cobblestone started: make cobblestone from rocks",
+      "agenda step cobblestone done",
+      "agenda done"
+    ],
+    "finalCounts": {
+      "minecraft:stone_pickaxe": 1,
+      "minecraft:stone_axe": 1,
+      "minecraft:crafting_table": 0
+    },
+    "cobbleHeld": [
+      {
+        "name": "contenttweaker:chalk_cobble",
+        "meta": 0,
+        "count": 10
+      }
+    ],
+    "finalScores": {
+      "g3a_c_crude": 1,
+      "g3a_c_table": 1,
+      "g3a_c_spick": 1,
+      "g3a_c_saxe": 1,
+      "g3a_played": 7864,
+      "g3a_c_ctools": 1
+    },
+    "craftingTablePath": {
+      "path": "placed-block",
+      "useStat": "added",
+      "fallback": false,
+      "held": 0,
+      "placed": 0,
+      "claims": [
+        {
+          "at": [
+            -19,
+            72,
+            -76
+          ],
+          "table": true,
+          "detail": "found"
+        }
+      ]
+    },
+    "packFirstJoin": [
+      "gamerule_commandBlockOutput",
+      "gamerule_sendCommandFeedback",
+      "give_bread",
+      "give_bundle"
+    ],
+    "packRepeats": [
+      "gamerule_commandBlockOutput at 17:30:57",
+      "gamerule_sendCommandFeedback at 17:30:57"
+    ]
+  },
+  "botExitCode": 128,
+  "botExitSignal": "SIGTERM",
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "f7fbe4fe8c8d673a0c597bd49bbe8b321c8bbea0",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261106-172516",
+  "driver": "node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json",
+  "llm": {
+    "models": {
+      "model": "openrouter/@preset/glm-5-3-flash-cheap-reliable",
+      "code_model": null,
+      "vision_model": null
+    },
+    "calls": 42,
+    "replies": {
+      "ok": 33,
+      "memory": 9,
+      "failed": 0,
+      "disconnected": 0,
+      "empty": 0,
+      "memoryEmpty": 0
+    },
+    "httpErrors": {},
+    "providers": {
+      "Wafer": {
+        "requests": 42,
+        "empty": 0,
+        "summaries": {
+          "ok": 6,
+          "empty": 0,
+          "failed": 0
+        }
+      }
+    },
+    "summariesUnattributed": {
+      "ok": 3,
+      "empty": 0,
+      "failed": 0
+    },
+    "usageBefore": 0.792588585,
+    "usageAfter": 0.797966891,
+    "usd": 0.005378,
+    "error": null
+  },
+  "batch": "20261106T172828-12232:2"
+}
