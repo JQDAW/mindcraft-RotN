@@ -6,7 +6,7 @@
 
 ## Run conditions
 
-- **GO:** the lead's written GO for G3 smoke round 6 (approved by the human); the human approved the run command.
+- **GO:** the lead's written GO for G3 smoke round 6 (approved by the human); the run command went through Claude Code's auto mode (corrected after round 7: run commands go through Claude Code's auto mode, not a human approval).
 - **Code:** a clean detached checkout of `origin/develop` at `f7fbe4fe`, after `npm ci`.
 - **Free memory at 17:24:54 UTC:** 5,901 MB physical, 13,390 MB virtual.
 - **Checks right before the create (17:24:54-17:25:04 UTC), all passed:** `msa-login FRCFLD --check`; an empty project (only the human's own unlabelled SSH key); the batch preflight with the LLM probe (HTTP 200, provider Wafer), "timeouts: g3-rocks-to-stone-tools 37 min" for a 120 min TTL, no midnight warning; the dry run (sweeper OK by its scheduled run, 72 min old).
