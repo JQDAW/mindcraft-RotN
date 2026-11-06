@@ -1,16 +1,20 @@
 # Status: net-forge
 
-Updated: 2026-11-06T09:14Z
+Updated: 2026-11-06T09:18Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #259 follow-up: whole-block vs partial hazards (2026-11-06T09:14Z, PR open)
+## #259 follow-up: whole-block vs partial hazards (#263; 2026-11-06T09:18Z review fixes pushed)
 
-- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. It is waiting for the lead's review.
-- **`hazardBlockIds(registry, { wholeBlockOnly: true })`** leaves out partial hazards. That is the set for `Movements.blocksToAvoid`.
-- **`partialHazardBlockIds(registry)`** lists the blocks to check per state with `stateHazard`. On 3.3.4 those are BOP `plant_0`, `plant_1` and `flower_0`.
-- **Rule:** a present `forge.hazardByMeta` means partial. The README documents it, and validation refuses data with both `hazard` and `hazardByMeta`.
-- **Tests:** `collision.test.js` 10/10, lint clean.
+- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. The lead's 3 fixes are pushed and waiting for re-review.
+- **Final API** (forge-bridge `index.js`), all after `applyCollisionShapes`:
+  - `hazardBlockIds(registry, { kinds, includePartial = false })` returns a `Set` of the whole-block hazard ids: the set for `Movements.blocksToAvoid`. Partial hazards are added only with `includePartial: true`.
+  - `partialHazardBlockIds(registry, { kinds })` returns the blocks to check per state with `stateHazard`. On 3.3.4 those are BOP `plant_0`, `plant_1` and `flower_0`.
+  - `stateHazard(registry, block | {type, metadata} | stateId)` gives one state's kind or `null`.
+  - `liquidBlockIds(registry)` returns the modded fluids.
+  - On the block entry: `forge.hazard` (first kind), `forge.hazardKinds` (every kind), and `forge.hazardByMeta` (present = partial).
+- **A `hazardByMeta` covering every state** the dump lists, or a block without dump states, is a whole-block hazard (tested).
+- **Tests:** `collision.test.js` 11/11, lint clean.
 
 ## (Merged as #259) #256 question: Dynamic Trees leaves collision (2026-11-06T07:56Z answer)
 

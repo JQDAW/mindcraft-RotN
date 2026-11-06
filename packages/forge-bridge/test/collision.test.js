@@ -156,14 +156,14 @@ test('#259: a molten metal, a spike trap and a modded portal stay non-walkable, 
     assert.deepEqual(walkable, [false, false, false, true], 'the pathfinder walks through the rock pile only');
 });
 
-test('hazardBlockIds, liquidBlockIds and stateHazard: by block id for avoid lists, per state for one block', () => {
+test('hazardBlockIds (whole-block by default), partialHazardBlockIds, liquidBlockIds and stateHazard', () => {
     const { registry, Block } = fixedMini();
     const id = (n) => ID[n];
-    assert.deepEqual([...hazardBlockIds(registry)].sort(), ['somemod:molten_bronze', 'somemod:spikes', 'somemod:portal', 'somemod:plant', 'somemod:nodata'].map(id).sort());
+    // The default is the set for Movements.blocksToAvoid: whole-block hazards only; the partial plant goes through stateHazard.
+    assert.deepEqual([...hazardBlockIds(registry)].sort(), ['somemod:molten_bronze', 'somemod:spikes', 'somemod:portal', 'somemod:nodata'].map(id).sort());
     assert.deepEqual([...hazardBlockIds(registry, { kinds: ['portal', 'fire'] })].sort(), [id('somemod:portal'), id('somemod:nodata')].sort());
-    assert.ok(hazardBlockIds(registry, { kinds: ['trap'] }).has(id('somemod:plant')), 'a per-variant hazard counts');
-    // For Movements.blocksToAvoid: whole-block hazards only; the partial one goes through stateHazard.
-    assert.deepEqual([...hazardBlockIds(registry, { wholeBlockOnly: true })].sort(), ['somemod:molten_bronze', 'somemod:spikes', 'somemod:portal', 'somemod:nodata'].map(id).sort());
+    assert.ok(!hazardBlockIds(registry, { kinds: ['trap'] }).has(id('somemod:plant')), 'a partial hazard is not in the default set');
+    assert.deepEqual([...hazardBlockIds(registry, { includePartial: true })].sort(), ['somemod:molten_bronze', 'somemod:spikes', 'somemod:portal', 'somemod:plant', 'somemod:nodata'].map(id).sort(), 'only on explicit request');
     assert.deepEqual([...partialHazardBlockIds(registry)], [id('somemod:plant')]);
     assert.deepEqual([...partialHazardBlockIds(registry, { kinds: ['fire'] })], []);
     assert.deepEqual([...liquidBlockIds(registry)], [id('somemod:molten_bronze')]);
@@ -173,6 +173,33 @@ test('hazardBlockIds, liquidBlockIds and stateHazard: by block id for avoid list
     assert.equal(stateHazard(registry, { type: id('somemod:spikes'), metadata: 0 }), 'trap');
     assert.equal(stateHazard(registry, blockOf(Block, 'minecraft:stone')), null);
     assert.equal(stateHazard(registry, undefined), null);
+});
+
+test('#263: a hazardByMeta that covers every state (or a block without dump states) is a whole-block hazard', () => {
+    const ids = [['minecraft:air', 0], ['somemod:allbad', 4001], ['somemod:nostates', 4002], ['somemod:somebad', 4003]];
+    const registry = extended(ids);
+    const dump = {
+        'somemod:allbad': { defaultMeta: 0, states: [state(0, FULL), state(1, FULL)] },
+        'somemod:somebad': { defaultMeta: 0, states: [state(0, FULL), state(1, FULL)] },
+    };
+    const data = { shapes: {}, blocks: {
+        'somemod:allbad': { hazardByMeta: { 0: 'trap', 1: 'fire' } },
+        'somemod:nostates': { hazardByMeta: { 3: 'trap' } },
+        'somemod:somebad': { hazardByMeta: { 1: 'fire' } },
+    } };
+    applyCollisionShapes(registry, dump, { overrides: data });
+    const all = registry.blocksByName['somemod:allbad'].forge;
+    assert.equal(all.hazardByMeta, undefined, 'every state harms: not partial');
+    assert.equal(all.hazard, 'trap');
+    assert.deepEqual(all.hazardKinds, ['trap', 'fire']);
+    assert.equal(registry.blocksByName['somemod:nostates'].forge.hazardByMeta, undefined, 'states unknown: the safe side');
+    assert.deepEqual(registry.blocksByName['somemod:somebad'].forge.hazardByMeta, { 1: 'fire' });
+    assert.deepEqual([...hazardBlockIds(registry)].sort(), [4001, 4002], 'both whole-block hazards are in the blocksToAvoid set');
+    assert.deepEqual([...hazardBlockIds(registry, { kinds: ['fire'] })], [4001], 'a whole-block hazard is found by any of its states\' kinds');
+    assert.deepEqual([...partialHazardBlockIds(registry)], [4003]);
+    assert.equal(stateHazard(registry, (4001 << 4) | 1), 'fire', 'per state, each state\'s own kind');
+    assert.equal(stateHazard(registry, (4002 << 4) | 7), 'trap');
+    assert.equal(stateHazard(registry, (4003 << 4) | 0), null);
 });
 
 test('a bad override fails before anything changes: every modded block stays a full cube', () => {
@@ -271,10 +298,10 @@ test('the real 3.3.4 dump and data: molten metal, spikes and a modded portal non
         assert.equal(registry.blocksByStateId[(registry.blocksByName[n].id << 4) | meta].forge.hazard, hazard, `${n}:${meta} hazard`);
     });
     assert.equal(registry.blocksByName['contenttweaker:bronze_molten'].liquid, true);
-    const trapIds = hazardBlockIds(registry, { kinds: ['trap'] });
-    assert.ok(trapIds.has(registry.blocksByName['biomesoplenty:plant_0'].id), 'poison ivy makes plant_0 an avoid-list block by id');
-    assert.ok(hazardBlockIds(registry, { kinds: ['fire'] }).has(registry.blocksByName['biomesoplenty:flower_0'].id), 'burning blossom');
-    const whole = hazardBlockIds(registry, { wholeBlockOnly: true });
+    const partialTraps = hazardBlockIds(registry, { kinds: ['trap'], includePartial: true });
+    assert.ok(partialTraps.has(registry.blocksByName['biomesoplenty:plant_0'].id), 'with includePartial, poison ivy makes plant_0 a trap block (a partial one)');
+    assert.ok(hazardBlockIds(registry, { kinds: ['fire'], includePartial: true }).has(registry.blocksByName['biomesoplenty:flower_0'].id), 'burning blossom, partial');
+    const whole = hazardBlockIds(registry);
     const idOf = (n) => registry.blocksByName[n].id;
     for (const n of ['biomesoplenty:plant_0', 'biomesoplenty:plant_1', 'biomesoplenty:flower_0']) {
         assert.ok(!whole.has(idOf(n)), `${n}: partial, not for blocksToAvoid (it would avoid the harmless grass)`);

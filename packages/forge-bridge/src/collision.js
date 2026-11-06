@@ -58,7 +58,7 @@ export function validateCollisionOverrides(data) {
             if (!isMeta(Number(m)) || !HAZARD_KINDS.includes(k)) bad(`${name}: hazardByMeta ${m}: ${k}`);
         }
         if (o.walkThrough && (o.liquid || o.hazard)) bad(`${name}: a liquid or hazard cannot be walk-through`);
-        // hazardByMeta means a partial hazard (hazardBlockIds' wholeBlockOnly relies on it).
+        // hazardByMeta means a partial hazard (hazardBlockIds leaves partial hazards out by default).
         if (o.hazard && o.hazardByMeta) bad(`${name}: hazard (every state) and hazardByMeta (some states) together`);
     }
     return data;
@@ -98,7 +98,17 @@ function planBlock(entry, dumped, o, data) {
     }
     const def = byMeta?.defaultMeta ?? 0;
     const boxes = shapes.map((s) => (s.length ? 'block' : 'empty'));
-    const hazards = shapes.map((_, m) => hazardOf(m));
+    let hazards = shapes.map((_, m) => hazardOf(m));
+    // A partial hazard (hazardByMeta) only when some real state is harmless. If it covers every state
+    // the dump lists, or the dump lists none (unknown: the safe side), it is a whole-block hazard, so
+    // hazardBlockIds keeps it for blocksToAvoid (#263 review).
+    let hazardByMeta = o?.hazardByMeta ? { ...o.hazardByMeta } : null;
+    const metas = Array.isArray(dumped?.states) ? dumped.states.map((s) => s.meta).filter(isMeta) : [];
+    if (hazardByMeta && (metas.length === 0 || metas.every((m) => hazardByMeta[m]))) {
+        const first = hazards.find(Boolean);
+        hazards = hazards.map((h) => h ?? first);
+        hazardByMeta = null;
+    }
     return {
         source,
         shapes: shapes[def],
@@ -108,7 +118,7 @@ function planBlock(entry, dumped, o, data) {
         // The block-level kind: every state's, or the first harmful state's (an avoid list by block id
         // must not miss poison ivy); each state's own kind stays on its blocksByStateId entry.
         hazard: o?.hazard ?? hazards.find(Boolean) ?? null,
-        hazardByMeta: o?.hazardByMeta ? { ...o.hazardByMeta } : null,
+        hazardByMeta,
         hazards,
         liquid: !!o?.liquid,
     };
@@ -153,6 +163,8 @@ export function applyCollisionShapes(registry, dumpBlocks, { overrides = loadCol
         const forge = { ...entry.forge, collision: plan.source };
         if (plan.hazard) forge.hazard = plan.hazard;
         if (plan.hazardByMeta) forge.hazardByMeta = plan.hazardByMeta;
+        const kinds = [...new Set(plan.hazards.filter(Boolean))];
+        if (kinds.length) forge.hazardKinds = kinds;
         entry.forge = forge;
         if (plan.boundingBox === 'empty') report.walkThroughBlocks++;
         else if (plan.boxes.includes('empty')) report.walkThroughSomeStates++;
@@ -178,31 +190,31 @@ export function applyCollisionShapes(registry, dumpBlocks, { overrides = loadCol
 // ---- lookups for skills-rotn (#259 re-review): avoid lists and floor checks by block id ----
 
 /**
- * Ids of the blocks with a hazard. A block whose entry has `forge.hazardByMeta` is a *partial*
- * hazard: only those states harm (BOP `plant_0`: poison ivy is meta 4, the short grass beside it is
- * harmless). By default every hazard block is returned, partial ones included.
- * For mineflayer-pathfinder's `Movements.blocksToAvoid` (by block id) use `{ wholeBlockOnly: true }`:
- * every state of those blocks harms. Handle partial hazards per state with `stateHazard` (and
- * `partialHazardBlockIds` to know which blocks need it); putting them in blocksToAvoid would avoid
- * all BOP short grass.
+ * Ids of the **whole-block** hazards: every state of the block harms. This is the set for
+ * mineflayer-pathfinder's `Movements.blocksToAvoid` (by block id), and the default.
+ * A block whose entry has `forge.hazardByMeta` is a *partial* hazard: only those states harm (BOP
+ * `plant_0`: poison ivy is meta 4, the short grass beside it is harmless). Partial hazards are left
+ * out unless `includePartial: true`; check their states with `stateHazard` (`partialHazardBlockIds`
+ * lists them). Putting them in blocksToAvoid would avoid all BOP short grass.
  * @param {object} registry  bot.registry after applyCollisionShapes
- * @param {{ kinds?: string[], wholeBlockOnly?: boolean }} [opts]  kinds: only these (default every
- *        kind in HAZARD_KINDS); wholeBlockOnly: leave out partial hazards
+ * @param {{ kinds?: string[], includePartial?: boolean }} [opts]  kinds: only blocks with one of
+ *        these kinds (default every kind in HAZARD_KINDS); includePartial: add the partial hazards
  * @returns {Set<number>}
  */
-export function hazardBlockIds(registry, { kinds = HAZARD_KINDS, wholeBlockOnly = false } = {}) {
+export function hazardBlockIds(registry, { kinds = HAZARD_KINDS, includePartial = false } = {}) {
     const want = new Set(kinds);
     const ids = new Set();
     for (const b of registry?.blocksArray ?? []) {
         const f = b?.forge;
         if (!f?.hazard) continue;
-        const partial = isPartial(f);
-        if (partial && wholeBlockOnly) continue;
-        const k = partial ? Object.values(f.hazardByMeta) : [f.hazard];
-        if (k.some((x) => want.has(x))) ids.add(b.id);
+        if (isPartial(f) && !includePartial) continue;
+        if (kindsOf(f).some((x) => want.has(x))) ids.add(b.id);
     }
     return ids;
 }
+
+// Every kind of a hazard block: its states' kinds (forge.hazardKinds), else the block-level kind.
+const kindsOf = (f) => (Array.isArray(f.hazardKinds) && f.hazardKinds.length ? f.hazardKinds : [f.hazard]);
 
 /**
  * Ids of the partial-hazard blocks (`forge.hazardByMeta` present: some states harm, others not).
@@ -213,7 +225,7 @@ export function partialHazardBlockIds(registry, { kinds = HAZARD_KINDS } = {}) {
     const want = new Set(kinds);
     const ids = new Set();
     for (const b of registry?.blocksArray ?? []) {
-        if (isPartial(b?.forge) && Object.values(b.forge.hazardByMeta).some((k) => want.has(k))) ids.add(b.id);
+        if (isPartial(b?.forge) && kindsOf(b.forge).some((k) => want.has(k))) ids.add(b.id);
     }
     return ids;
 }
