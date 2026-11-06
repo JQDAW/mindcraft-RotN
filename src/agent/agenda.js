@@ -85,8 +85,9 @@ export const ROTN_EARLY_GAME = [
         goalNow: (s) => {
             const c = s.cobble?.()[0];
             if (!c) return null;
-            // The same text while the kind is the same (no new prompt for every rock); one command.
-            return `Your ${c.rock} rocks make ${c.gives}, 4 rocks each: craft it with !craftRecipe("cobblestone", n), n up to your rocks / 4. `
+            // The real number (#234 nit): what the rocks make, at most what the step still needs.
+            const n = Math.min(Math.floor(c.have / 4), Math.max(1, 10 - s.countOre('cobblestone')));
+            return `Your ${c.rock} rocks make ${c.gives}, 4 rocks each: craft it with !craftRecipe("cobblestone", ${n}). `
                 + 'Mine more rocks with !collectBlocks("pyrotech:rock", 8) when you run short. Aim for 10 cobblestone: at dusk the night routine builds the shelter from them (10 on open ground), so do not use them by day.';
         },
         // D2b-2: the open-ground shelter's 10 blocks. Any cobblestone of the ore counts (G3 round 2 B:

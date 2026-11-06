@@ -117,6 +117,8 @@ export function craftNeeds(bot, name) {
  * 4 stick (enough)."
  */
 export function describeNeeds(name, needs) {
+    // No inputs to describe (a recipe given by id, the rock recipes): no "To craft X: ." (#234 nit).
+    if (!needs?.inputs?.length) return '';
     const parts = needs.inputs.map(i => {
         const held = i.kinds.length ? `you have ${i.kinds.map(k => `${k.have} ${k.name}`).join(', ')}` : 'you have none';
         const verdict = i.short > 0 ? `, so get ${i.short}${i.kinds.length ? ' more' : ''} ${i.more}` : ' (enough)';
