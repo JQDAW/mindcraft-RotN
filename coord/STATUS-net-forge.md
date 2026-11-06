@@ -1,12 +1,40 @@
 # Status: net-forge
 
-Updated: 2026-11-06T09:18Z
+Updated: 2026-11-06T13:45Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #259 follow-up: whole-block vs partial hazards (#263; 2026-11-06T09:18Z review fixes pushed)
+## Next: switch collision to rotn-data `playerCollision` (#269); proposal, 2026-11-06T13:45Z
 
-- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. The lead's 3 fixes are pushed and waiting for re-review.
+rotn-data's #269 (`b49cf6e`) adds `RotnData.playerCollision()`. Its boxes come from `addCollisionBoxToList` for a player, which is what entities really collide with. Today `applyCollisionShapes` reads the dump's `collision` field (`getCollisionBoundingBox`), so it misses those boxes.
+
+**Survey** (4,642 modded blocks; overrides compared with the #269 dump):
+
+- **The 326 walk-through blocks all agree:** none of their walk-through states has a player box. Dynamic Trees leaves also agree with `DYNAMIC_LEAVES_BOX`.
+- **47 states have a player box but no `collision` box.** Today they become a full cube; the new data gives the real box. Examples: BOP and Twilight Forest lily pads, the Dungeon Tactics bushes, grape vines, hops, `minetraps:barbed_wire_fence`.
+- **3,256 states have several boxes** (stairs, cauldrons, hoppers). Today each is one box.
+- **480 states have a solid `collision` box but no player box.** Examples: `contenttweaker:cave_grass`, `bonfire`, `void_block`, `charset:wire`, the horsepower fillers, `arcanearchives:fake_air`.
+- **224 blocks have no player box in any state** and are not reviewed. Examples: buttons, pressure plates, rails, signs, torches, the adpother gases. Under the opt-in rule they stay full cubes.
+- **354 states have `varies` true** (fences, walls, panes, snow layers): the shape depends on the neighbours.
+- **Some boxes reach outside their cell** (piston heads, `dimstack:portal`, mcwbridges bridges). Per-cell physics only sees them from their own cell.
+
+**Plan:** one small PR in `packages/forge-bridge/`.
+
+1. **Per-state shapes** come from `playerCollision`, including multi-box states, the Dynamic Trees branch guard and the lily-pad boxes.
+2. **Policy stays as it is:**
+   - Walk-through stays opt-in: a state without a box that is not reviewed stays a full cube.
+   - Liquid and hazard flags are unchanged.
+3. **`varies` states** keep today's `collision` box, which is the conservative choice. Mineflayer cannot compute modded fence connections.
+4. **Overrides file:**
+   - The `dynamicLeaves` shape table entry goes, because the data now has those boxes. The tool and test check that the data still matches.
+   - The generator checks walk-through classes against the player boxes instead of looking for `addCollisionBoxToList` overrides.
+   - The reviewed allowlist, liquids and hazards stay.
+
+**Question for the lead:** should I widen the walk-through allowlist to reviewed harmless classes among the 224 (buttons, pressure plates, rails, signs, torches, levers), each with no box and no contact harm? Or keep it for a later PR?
+
+## (Merged as #263) #259 follow-up: whole-block vs partial hazards
+
+- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. Merged.
 - **Final API** (forge-bridge `index.js`), all after `applyCollisionShapes`:
   - `hazardBlockIds(registry, { kinds, includePartial = false })` returns a `Set` of the whole-block hazard ids: the set for `Movements.blocksToAvoid`. Partial hazards are added only with `includePartial: true`.
   - `partialHazardBlockIds(registry, { kinds })` returns the blocks to check per state with `stateHazard`. On 3.3.4 those are BOP `plant_0`, `plant_1` and `flower_0`.
