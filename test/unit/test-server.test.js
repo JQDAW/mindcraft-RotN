@@ -294,6 +294,27 @@ describe('up / run / down', () => {
         assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0);
     });
 
+    test('run + the G3 batch LLM-failure stop (#248 nit): the batch stops as an infra fault (125), and the server is still deleted', () => {
+        const usage = path.join(tmp, 'usage.json');
+        fs.writeFileSync(usage, JSON.stringify({ data: { usage: 0.25, limit: 5, limit_remaining: 4.75 } }));
+        const out = (s) => fwd(path.join(tmp, `out-${s}`));
+        const r = run(['run', '--yes', '--name', 'mcr-test-llmstop', '--', fwd(process.execPath), fwd(path.join(repo, 'test', 'runner', 'batch.mjs')),
+            '--max-batch-usd', '2', '--logs-out', fwd(path.join(tmp, 'g3-logs')), '--timeout-min', '1',
+            '--scenario', 'a', '--out', out('a'), '--scenario', 'b', '--out', out('b'),
+            '--', 'node', 'driver.mjs'], {
+            ROTN_TEST_MODE: '1', ROTN_OPENROUTER_USAGE_FILE: fwd(usage), ROTN_BATCH_RUNNER: fwd(path.join(fixtures, 'fake-batch-runner.mjs')),
+            FAKE_DIR: fwd(tmp), OPENROUTER_API_KEY: 'not-a-real-key', FAKE_LLM: 'a:6:0', ROTN_LLM_STOP_WINDOW_MS: '20000', ROTN_LLM_STOP_POLL_MS: '100',
+        });
+        assert.equal(r.code, 125, r.all);
+        assert.deepEqual(fs.readFileSync(path.join(tmp, 'ran.txt'), 'utf8').trim().split('\n').map((l) => l.split(' ')[0]), ['a'], 'b never started');
+        assert.match(r.stderr, /a: LLM-failure stop: 6 failed LLM replies and none answered within \d+ s of the bot's spawn \(6 x HTTP 429\)/);
+        assert.match(r.stderr, /EXIT trap: tearing down mcr-test-llmstop/);
+        assert.match(r.stderr, /verified gone: server, Primary IPv4 and SSH key of mcr-test-llmstop/);
+        const st = state();
+        assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0, 'the server is deleted');
+        assert.ok(!r.all.includes('not-a-real-key'), 'the key is never printed');
+    });
+
     test('run + the G3 batch spend stop: the batch stops, fetches the logs, and the server is deleted (#116 review)', () => {
         // batch.mjs with a fake runner that "spends" USD 1.5 per scenario against a limit of 2: a and b
         // run, c would start at USD 3 spent, so the batch stops, fetches the logs and exits 5.

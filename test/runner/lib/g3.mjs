@@ -109,6 +109,9 @@ export function g3Policy(scenario, env, maxBatchUsd) {
     return { guard, notGate, batch: marker };
 }
 
+/** The exit batch.mjs records for a scenario its LLM-failure rule stopped: an infra fault (EXIT_LLM_STOP there). */
+export const INFRA_FAULT_EXIT = 125;
+
 /**
  * The gate evidence cross-check (#122 nit 1). The ROTN_G3_BATCH marker alone can be forged (export it and
  * run run.mjs directly), so a G3 result counts only if the batch summary that batch.mjs wrote (BATCH,
@@ -123,8 +126,9 @@ export function g3Policy(scenario, env, maxBatchUsd) {
  * results: [{file, result}] with each result.json's contents; g3Scenarios: the ids loadScenarios marks
  * gate G3 (isG3Result). gate: true for a gate claim (lead, #218 review and #220 decision): the summary must
  * also say gate: true (only batch.mjs --gate writes it; smoke is the default) and not smoke: true, so a
- * smoke batch, or a summary that does not say gate: true, is never gate evidence. Returns the problems
- * (empty = consistent).
+ * smoke batch, or a summary that does not say gate: true, is never gate evidence. An infra fault (#248 review:
+ * the batch's exit 125 for a scenario and its result's infraFault, which must agree) is never gate evidence
+ * either. Returns the problems (empty = consistent).
  */
 export function crossCheckBatch(summary, results, { g3Scenarios = [], gate = false } = {}) {
     if (!summary || typeof summary.batchId !== 'string' || !summary.batchId) return ['no batch summary with a batchId (batch.json from batch.mjs)'];
@@ -150,6 +154,11 @@ export function crossCheckBatch(summary, results, { g3Scenarios = [], gate = fal
             p.push(`${file}: its runId '${result.runId ?? 'none'}' is not the run batch ${summary.batchId} recorded for ${result.scenario} ('${runs[0].runId ?? 'none'}')`);
         }
         if (result.pass === true && runs[0].exit !== 0) p.push(`${file}: a passing result, but the batch recorded exit ${runs[0].exit} for ${result.scenario}`);
+        // An infra fault (the LLM-failure stop, exit 125; #248 review) is recorded on both sides, or neither.
+        const stopped = runs[0].exit === INFRA_FAULT_EXIT;
+        if (stopped && !result.infraFault) p.push(`${file}: the batch stopped ${result.scenario} as an infra fault (exit ${INFRA_FAULT_EXIT}), but its result does not say infraFault`);
+        if (!stopped && result.infraFault) p.push(`${file}: its result says infraFault, but the batch recorded exit ${runs[0].exit} for ${result.scenario}, not ${INFRA_FAULT_EXIT}`);
+        if (gate && result.infraFault) p.push(`${file}: an infra fault (${result.infraFault.kind ?? 'unknown'}), not a bot result: never gate evidence`);
     }
     return p;
 }

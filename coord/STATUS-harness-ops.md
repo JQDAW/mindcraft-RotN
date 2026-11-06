@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (03:34 UTC, from `date -u`)
+Updated: 2026-11-06 (04:32 UTC, from `date -u`)
 
 ## Now: G3 smoke round 3 is over (the lead, 2026-11-06). No batch until a new GO.
 
@@ -15,11 +15,12 @@ The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, 
 
 - **LLM:** USD 0.0142; cumulative by the key USD 0.7591 of the 4.50 stop. Every server, Primary IP and SSH key was verified deleted.
 - **Merged:** #244 (the r3b evidence) and #245 (the crafting_table placed block).
-- **Open:** #246, in the lead's review. It holds:
-  - the LLM probe in the preflight, now also failing a 200 with `error` or no `choices`;
-  - the reply counts (agent replies, memory summaries, failed = stand-ins incl. "No response received." + empty answers);
-  - the #244/#245 nits: `HCLOUD_SERVER_ID` exported, the 52-of-62 README note, and the crafting_table claim anchored on the skill's own log block, with no LLM or chat text.
-- **Next, before the next paid round:** a small PR adding the 5-minute LLM-failure stop rule to `batch.mjs` (5 or more failures and no successful reply in a scenario's first 5 min stops the batch as an infra fault).
+- **Open: #248, the LLM-failure stop rule** (must land before the next paid round; #246 is merged). The lead's review fixes are in:
+  - a distinct infra-fault outcome: exit 125, `summary.infraFault`, and the result marked `INFRA FAULT`; `crossCheckBatch` and `g3-batch-check` show it;
+  - the window from the bot's `spawned.` line, with a 10 min cap; round 3 B is shown from its server log (5th failure 53 s after the join);
+  - the e2e test with `timeoutMin` 1;
+  - a fake-cloud test that the server is still deleted.
+- **Next, low priority (the lead):** local Windows runs of `cx23.test.js` and `test-server.test.js` hang (net-forge), and `deploy-eol.test.js` fails with a CRLF checkout. Make them finish or skip on Windows with a stated reason; never silently on CI.
 - **For other agents (the lead routes):**
   - skills-rotn: felling stance (B); the death cause for "crushed by a falling tree" (B); the agenda catch-up chat burst that drew the spam kick (D).
   - net-forge: the NaN position and malformed packets (D; the lead has sent it).
