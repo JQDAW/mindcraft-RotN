@@ -11,6 +11,8 @@ const DT = /^dynamictrees[a-z]*:/;
 export const isBranch = (b) => !!b && DT.test(b.name) && /branch/.test(b.name);
 export const isTreeLeaves = (b) => !!b && DT.test(b.name) && /leaves/.test(b.name);
 const isCanopy = (b) => isBranch(b) || isTreeLeaves(b);
+/** Dynamic Trees' rooty soil under a trunk (rootydirt, rootysand, ...). */
+export const isRooty = (b) => !!b && DT.test(b.name) && /rooty/.test(b.name);
 const empty = (b) => !b || b.boundingBox === 'empty';
 const solid = (b) => !!b && b.boundingBox === 'block';
 
@@ -19,8 +21,9 @@ export const FELL_PLAN = { canopyRadius: 5, canopyHeight: 20, standMin: 2, stand
 
 /**
  * The tree's lowest trunk block for a branch block the bot found (which may be a limb high in the
- * canopy): a branch block within the canopy radius, at or below it, with no branch below it and
- * something solid (rooty soil) under it. The one nearest the found block's column, or null.
+ * canopy): a branch block within the canopy radius, at or below it, standing on rooty soil or on
+ * ground, never on another tree block (#242 review 1: leaves under a limb looked solid, as
+ * forge-bridge gives modded blocks a full box). The one nearest the found block's column, or null.
  */
 export function treeBase(bot, pos, plan = FELL_PLAN) {
     let best = null;
@@ -30,7 +33,7 @@ export function treeBase(bot, pos, plan = FELL_PLAN) {
             const p = new Vec3(pos.x + dx, y, pos.z + dz);
             if (!isBranch(bot.blockAt(p))) continue;
             const below = bot.blockAt(p.offset(0, -1, 0));
-            if (isBranch(below) || empty(below)) continue;
+            if (!isRooty(below) && !(solid(below) && !DT.test(below.name))) continue;
             const d = Math.hypot(dx, dz);
             if (!best || d < best.d || (d === best.d && y < best.p.y)) best = { p, d };
         }
@@ -69,7 +72,9 @@ export function standSpots(bot, base, plan = FELL_PLAN) {
     for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
         const d = Math.hypot(dx, dz);
         if (d < plan.standMin || d > plan.standMax) continue;
-        for (const dy of [0, -1, 1]) {
+        // At the cut height or one below, never above: the fall follows the side face the bot
+        // hits, and from above it could hit the top face (#242 review 5).
+        for (const dy of [0, -1]) {
             const p = new Vec3(base.x + dx, base.y + dy, base.z + dz);
             if (!solid(bot.blockAt(p.offset(0, -1, 0))) || !empty(bot.blockAt(p)) || !empty(bot.blockAt(p.offset(0, 1, 0)))) continue;
             if (p.offset(0.5, 1.62, 0.5).distanceTo(target) > plan.reach) continue;
@@ -88,6 +93,12 @@ export function standSpots(bot, base, plan = FELL_PLAN) {
         }
     }
     return spots.sort((a, b) => b.score - a.score).map(s => s.pos);
+}
+
+/** The trunk's side face towards the spot, the one to hit (a horizontal unit vector). */
+export function sideFace(base, spot) {
+    const dx = spot.x - base.x, dz = spot.z - base.z;
+    return Math.abs(dx) >= Math.abs(dz) ? new Vec3(Math.sign(dx) || 1, 0, 0) : new Vec3(0, 0, Math.sign(dz) || 1);
 }
 
 /** Where to step back to right after the cut: further out from the trunk along base -> spot. */

@@ -269,10 +269,13 @@ export function bindDeathReport(agent, { setTimer = setTimeout, clearTimer = cle
 export function deathCauseText(name, message, jsonMsg) {
     const key = jsonMsg?.translate;
     if (typeof key !== 'string' || !key.startsWith('death')) return null;
+    // The one who died is argument 1 (%1$s); argument 2 is the killer (#242 review 3: in
+    // death.attack.player the bot can be argument 2, and that death is not the bot's).
+    const first = jsonMsg.with?.[0];
+    const who = typeof first === 'string' ? first : (first?.text ?? (typeof first?.toString === 'function' ? first.toString() : null));
+    if (who != null) return who === name ? (String(message ?? '').startsWith(name) ? String(message) : `${name} died (${key})`) : null;
     const text = String(message ?? '');
-    if (text.startsWith(name)) return text;
-    const args = (jsonMsg.with ?? []).map(w => (typeof w === 'string' ? w : (w?.text ?? (typeof w?.toString === 'function' ? w.toString() : ''))));
-    return args.includes(name) ? `${name} died (${key})` : null;
+    return text.startsWith(name) ? text : null;
 }
 
 /** How soon after its own cut a death counts as the falling tree's when the server gave no cause. */
@@ -284,7 +287,9 @@ export const TREE_DEATH_MS = 15_000;
  * of cutting a tree (bot.rotnLastFell, set by skills.fellTree).
  */
 export function treeDeath(r, lastFell) {
-    if (r?.cause) return /falling ?tree/i.test(r.cause);
+    // The pack's key and text (DramaticTrees-1.12.2-0.13.4.jar, assets/dynamictrees/lang/en_us.lang):
+    // death.attack.fallingtree=%1$s was crushed by a falling tree. Also falling_tree (#242 review 4).
+    if (r?.cause) return /falling[ _]?tree/i.test(r.cause);
     return !!lastFell && Number.isFinite(r?.at) && r.at >= lastFell.at && r.at - lastFell.at <= TREE_DEATH_MS;
 }
 

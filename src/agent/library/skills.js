@@ -5,7 +5,7 @@ import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, 
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stowCarried } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
-import { treeBase, canopyOf, standSpots, retreatFrom, isBranch, FALLING_TREE } from "./felling.js";
+import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, FALLING_TREE } from "./felling.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import pf from 'mineflayer-pathfinder';
@@ -971,9 +971,16 @@ export async function fellTree(bot, block, run = currentRun(bot)) {
         log(bot, `Not cutting the tree at ${at(base)}: no place beside it that is out from under its canopy and not between trunks. A falling tree can crush you.`);
         return { cut: false, skip: treeBlocks(base) };
     }
+    // Walks near the tree never dig (#242 review 2): a broken branch would fell it onto the bot.
+    const walk = async (goal, ms) => {
+        const moves = new pf.Movements(bot);
+        moves.canDig = false;
+        bot.pathfinder.setMovements(moves);
+        try { await within(bot.pathfinder.goto(goal), ms, () => stopWalking(bot)); } catch { /* checked by the caller */ }
+    };
     let spot = null;
     for (const s of spots.slice(0, 3)) { // the best few; the walk may not get there
-        try { await goToGoal(bot, new pf.goals.GoalBlock(s.x, s.y, s.z)); } catch { /* checked below */ }
+        await walk(new pf.goals.GoalBlock(s.x, s.y, s.z), GO_TO_LIMITS.stepMs);
         if (run.aborted) return { cut: false, skip: [] };
         if (bot.entity.position.floored().equals(s)) { spot = s; break; }
     }
@@ -985,15 +992,15 @@ export async function fellTree(bot, block, run = currentRun(bot)) {
     if (!isBranch(trunk)) return { cut: false, skip: [base] };
     // The items already near the tree, so its own logs count as new when they land with the fall.
     const itemsBefore = Object.values(bot.entities ?? {}).filter(e => e?.name === 'item' && e.position && e.position.distanceTo(base) <= FELL_LIMITS.radius).length;
-    await bot.lookAt(base.offset(0.5, 0.5, 0.5));
-    await bot.dig(trunk);
+    // Hit the side face towards the bot (#242 review 5): the tree falls away from it.
+    const face = sideFace(base, spot);
+    await bot.lookAt(base.offset(0.5 + face.x * 0.5, 0.5, 0.5 + face.z * 0.5));
+    await bot.dig(trunk, true, face);
     bot.rotnLastFell = { at: Date.now(), pos: base.clone ? base.clone() : base }; // the death report reads it
     log(bot, `Cut the tree at ${at(base)} from ${at(spot)}, away from its canopy; stepping back.`);
     // Step back at once: the tree falls a moment after the cut.
     const away = retreatFrom(base, spot);
-    try {
-        await within(goToGoal(bot, new pf.goals.GoalNear(away.x, away.y, away.z, 1)), TREE_FALL.stepAwayMs, () => stopWalking(bot));
-    } catch { /* a step back that failed: still wait for the fall */ }
+    await walk(new pf.goals.GoalNear(away.x, away.y, away.z, 1), TREE_FALL.stepAwayMs); // a failed step back: still wait
     // Collect only after the falling tree is gone (or never showed up in time).
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
     const falling = () => Object.values(bot.entities ?? {}).some(e => e?.name === FALLING_TREE && e.position && e.position.distanceTo(base) <= 32);

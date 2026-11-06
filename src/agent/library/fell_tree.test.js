@@ -43,9 +43,10 @@ function tree(world, x, z = 0, { lean = 1 } = {}) {
  * The bot and its world. A cut trunk turns the whole tree into a falling tree entity for fallMs;
  * then its logs lie where it landed (log:1 each), east of the trunk (the canopy side).
  */
-function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [] } = {}) {
+function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false } = {}) {
     const world = new Map();
     for (const [x, z = 0] of trees) tree(world, x, z);
+    build?.(world);
     const blockAt = (p) => {
         const q = p.floored ? p.floored() : p;
         const name = world.get(key(q)) ?? (q.y < 64 ? 'dirt' : 'air');
@@ -57,7 +58,7 @@ function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, un
     let nextId = 1;
     const entities = {};
     for (const pos of onGround) { const id = nextId++; entities[id] = { id, name: 'item', position: pos, drop: 'stick' }; }
-    const log = { digs: [], pickups: [], positions: [] };
+    const log = { digs: [], pickups: [], positions: [], moves: [] };
     const bot = {
         log, world, registry: reg, version: '1.12.2', output: '', interrupt_code: false,
         game: { gameMode: 'survival' },
@@ -78,11 +79,11 @@ function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, un
         tool: { equipForBlock: () => Promise.resolve() },
         lookAt: () => Promise.resolve(),
         nearestEntity: () => null,
-        dig: (b) => {
+        dig: (b, _forceLook, faceArg) => {
             const where = bot.entity.position.floored();
             let covered = false;
             for (let y = where.y + 2; y < 75; y++) covered ||= /dynamictrees/.test(world.get(key(at(where.x, y, where.z))) ?? '');
-            log.digs.push({ pos: key(b.position), from: key(where), covered });
+            log.digs.push({ pos: key(b.position), from: key(where), covered, face: faceArg ? key(faceArg) : null, gotosBefore: log.moves.length });
             // The whole tree falls: its blocks become one falling entity, and the logs land later.
             for (const [k, name] of [...world]) if (name === BRANCH || name === LEAVES) world.delete(k);
             const fall = { id: nextId++, name: FALLING_TREE, position: b.position.clone() };
@@ -97,11 +98,13 @@ function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, un
             return Promise.resolve();
         },
         pathfinder: {
-            setMovements() {}, setGoal() {}, isMoving: () => false,
+            setMovements(m) { bot._moves = m; }, setGoal() {}, isMoving: () => false,
             stop() { const r = bot._pending; bot._pending = null; r?.(new Error('Path was stopped before it could be completed!')); },
             getPathTo: () => ({ status: 'success', path: [] }),
             goto(goal) {
+                log.moves.push(bot._moves?.canDig);
                 const target = at(Math.floor(goal.x), Math.floor(goal.y), Math.floor(goal.z));
+                if (stuck && goal.constructor?.name === 'GoalBlock') return Promise.resolve(); // it never gets there
                 if (unreachable.some(p => p.equals(target))) return new Promise((_, reject) => { bot._pending = reject; });
                 bot.entity.position = target.offset(0.5, 0, 0.5);
                 log.positions.push({ to: key(target), at: Date.now(), falling: Object.values(entities).some(e => e.name === FALLING_TREE) });
@@ -198,4 +201,65 @@ test('#222 review: drops already on the ground do not end the wait; it waits for
     assert.equal(await skills.collectBlock(bot, 'log', 1), true, bot.output);
     assert.match(bot.output, /Felled the tree at 3, 64, 0: 4 drops within 12 blocks \(3 new\), 0 left behind\./);
     assert.match(bot.output, /Collected 3 log/);
+});
+
+// #242 review.
+test('#242 review 1: a limb with leaves under it is not the trunk; the trunk stands on rooty soil or ground', () => {
+    const bot = fakeBot({ build: (w) => { w.set(key(at(4, 66, 0)), LEAVES); } }); // leaves right under the limb at 4, 67, 0
+    assert.equal(key(treeBase(bot, at(4, 67, 0))), '3,64,0');
+    // a trunk on plain ground (no rooty soil) counts too
+    const ground = fakeBot({ build: (w) => { w.delete(key(at(3, 63, 0))); } });
+    assert.equal(key(treeBase(ground, at(3, 66, 0))), '3,64,0');
+});
+
+test('#242 review 2 and 5: no walk near the tree may dig; the cut is at the cut height or below, on the side face towards the bot', T, async (t) => {
+    fast(t);
+    const bot = fakeBot();
+    assert.equal(await skills.collectBlock(bot, 'log', 1), true, bot.output);
+    const cut = bot.log.digs[0];
+    // every walk of the felling (to the place, and the step back right after the cut) cannot dig
+    const fellingWalks = bot.log.moves.slice(0, cut.gotosBefore + 1);
+    assert.ok(fellingWalks.length >= 2 && fellingWalks.every(canDig => canDig === false), `canDig per walk: ${fellingWalks}`);
+    const from = cut.from.split(',').map(Number), face = cut.face.split(',').map(Number);
+    assert.ok(from[1] <= 64, `not above the cut block: ${cut.from}`);
+    assert.equal(face[1], 0, 'a side face, not the top');
+    assert.ok((from[0] - 3) * face[0] + (from[2] - 0) * face[2] > 0, `the face towards the bot: ${cut.face} from ${cut.from}`);
+});
+
+test('#242 nit: no safe place reached: no cut, and a reason', T, async (t) => {
+    fast(t);
+    const bot = fakeBot({ stuck: true });
+    assert.equal(await skills.collectBlock(bot, 'log', 1), false);
+    assert.equal(bot.log.digs.length, 0);
+    assert.match(bot.output, /Not cutting the tree at 3, 64, 0: could not reach a safe place beside it\./);
+});
+
+test('#242 nit: a thick (2x2) trunk: one cut at a trunk base, from a place next to no trunk and under no canopy', T, async (t) => {
+    fast(t);
+    const thick = (w) => {
+        for (const [x, z] of [[4, 0], [3, 1], [4, 1]]) {
+            w.set(key(at(x, 63, z)), ROOTY);
+            for (let y = 64; y <= 68; y++) w.set(key(at(x, y, z)), BRANCH);
+        }
+    };
+    const bot = fakeBot({ build: thick });
+    assert.equal(await skills.collectBlock(bot, 'log', 1), true, bot.output);
+    assert.equal(bot.log.digs.length, 1);
+    const cut = bot.log.digs[0];
+    assert.match(cut.pos, /^[34],64,[01]$/, `a trunk base: ${cut.pos}`);
+    assert.equal(cut.covered, false);
+    const [fx, , fz] = cut.from.split(',').map(Number);
+    for (const [x, z] of [[3, 0], [4, 0], [3, 1], [4, 1]]) assert.ok(Math.max(Math.abs(fx - x), Math.abs(fz - z)) > 1, `next to the trunk at ${x}, ${z}: ${cut.from}`);
+});
+
+test('#242 nit: on a slope it does not stand on the higher side above the cut; it cuts from the level side', T, async (t) => {
+    fast(t);
+    // The ground west of x 2 is one block higher (stand at y 65 there): above the cut height.
+    const hill = (w) => { for (let x = -6; x <= 1; x++) for (let z = -6; z <= 6; z++) w.set(key(at(x, 64, z)), 'dirt'); };
+    const bot = fakeBot({ start: at(0, 65, 0), build: hill });
+    assert.equal(await skills.collectBlock(bot, 'log', 1), true, bot.output);
+    const cut = bot.log.digs[0];
+    const [fx, fy] = cut.from.split(',').map(Number);
+    assert.ok(fy <= 64 && fx >= 2, `not from the hill: ${cut.from}`);
+    assert.equal(cut.covered, false);
 });

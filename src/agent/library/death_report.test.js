@@ -230,3 +230,20 @@ test('round 3 B: the re-plan note says a falling tree crushed the bot and how to
     assert.match(note, /A falling tree crushed you \(the one you cut at -70, 64, -83\): in RotN a cut tree falls as one piece\./);
     assert.match(note, /Get logs only with !collectBlocks\("log", n\), which cuts the lowest trunk block from the side away from the canopy and steps back/);
 });
+
+test('#242 review 3 and 4: the bot is argument 1 only, never the killer; the pack\'s real key and text', () => {
+    // Another player's death that names the bot as the killer (argument 2) is not the bot's.
+    assert.equal(deathCauseText('FRCFLD', 'JQDAW was slain by FRCFLD',
+        { translate: 'death.attack.player', with: [{ text: 'JQDAW' }, { text: 'FRCFLD' }] }), null);
+    assert.equal(deathCauseText('FRCFLD', 'death.fell.assist', { translate: 'death.fell.assist', with: [{ text: 'JQDAW' }, { text: 'FRCFLD' }] }), null);
+    // DramaticTrees-1.12.2-0.13.4.jar, assets/dynamictrees/lang/en_us.lang:
+    //   death.attack.fallingtree=%1$s was crushed by a falling tree  (TreeDamageSource "fallingtree")
+    // and the r3b-g3b server log: "FRCFLD was crushed by a falling tree".
+    const real = { translate: 'death.attack.fallingtree', with: [{ text: 'FRCFLD' }] };
+    for (const message of ['FRCFLD was crushed by a falling tree', 'death.attack.fallingtree']) {
+        const cause = deathCauseText('FRCFLD', message, real);
+        assert.ok(cause);
+        assert.equal(treeDeath({ cause, at: 1 }), true, cause);
+    }
+    assert.equal(treeDeath({ cause: 'FRCFLD died (death.attack.falling_tree)', at: 1 }), true, 'falling_tree too');
+});

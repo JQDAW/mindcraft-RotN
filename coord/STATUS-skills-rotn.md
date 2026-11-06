@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T02:53Z (from `date -u`)
+Updated: 2026-11-06T03:07Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -420,7 +420,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
   Tests: `furnace` 6, `use_on` 15; the new ones fail on develop. Related 4 files pass; lint per file unchanged.
 - **Model preset merged in #241** (my profile commit plus harness-ops' `LLM_MODEL`; #239 closed as superseded): `openrouter/@preset/glm-5-3-flash-cheap-reliable`.
-- **Round 3 batch B finding, open PR** (branch `agent/skills-rotn/safe-felling`; STATUS lives here, taken over from `next2`). "FRCFLD was crushed by a falling tree", 3 s after its cut, with 12 items lost. The pack has Dramatic Trees with RLMixins' "Falling Overhaul": a cut tree falls as one `dynamictrees:falling_tree` entity.
+- **#242 open, REQUEST CHANGES addressed** (branch `agent/skills-rotn/safe-felling`; STATUS lives here, taken over from `next2`). "FRCFLD was crushed by a falling tree", 3 s after its cut, with 12 items lost. The pack has Dramatic Trees with RLMixins' "Falling Overhaul": a cut tree falls as one `dynamictrees:falling_tree` entity.
   1. **Safe felling** (`library/felling.js` plans, `skills.fellTree` acts):
      - it finds the lowest trunk block (also from a limb in the canopy);
      - it stands 2-3.5 blocks out on the side away from the canopy's lean, with no leaves or branches overhead and no trunk next to it, within reach;
@@ -433,7 +433,16 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
   Tests: `fell_tree` 6/6 (rewritten on a fake tree world; on develop the bot cut from inside the canopy), `death_report` 9/9 (the 3 new ones fail on develop). Related 7 files pass; lint per file unchanged.
 - **Still waiting for the next PR:** the three #238 nits on `agent/skills-rotn/next2`.
-- **Next (lead):** review the safe-felling PR. Round 3 C+D running: targeted tests only.
+  3. **#242 review:**
+     - the trunk must stand on rooty soil or ground, never on a tree block (a limb on leaves is not the trunk);
+     - the walks during felling use `canDig = false`;
+     - the death message is the bot's only when the bot is argument 1;
+     - the death key is verified in the pack (DramaticTrees-1.12.2-0.13.4.jar, `assets/dynamictrees/lang/en_us.lang`: `death.attack.fallingtree=%1$s was crushed by a falling tree`, damage source `fallingtree`), and the regex also covers `falling_tree`;
+     - places are never above the cut height, and the cut hits the side face towards the bot.
+
+     Nit tests: no place reached, a 2x2 trunk, a slope. Tests: `fell_tree` 11/11, `death_report` 10/10; the review-item tests fail on the previous head. Related 6 files pass; lint 254.
+- **Round 3 over** (lead): full tests allowed again.
+- **Next (lead):** re-review #242.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
