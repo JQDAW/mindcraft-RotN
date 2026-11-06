@@ -1,10 +1,28 @@
 # Status: net-forge
 
-Updated: 2026-11-06T16:56Z
+Updated: 2026-11-06T18:49Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Walk-through allowlist and #279 nits; PR #281 open, 2026-11-06T16:56Z
+## #281 review nits; PR open, 2026-11-06T18:49Z
+
+- **Branch:** `agent/net-forge/allowlist-nits`, from develop `f7fbe4f` (#281 merged as `a8d98f5`).
+- **Nit 1, helper overrides refused automatically:** a mod class that overrides a helper the reviewed vanilla contact methods call (`checkPressed` `func_185616_e`, `updatePoweredState` `func_176570_e`, `findMinecarts` `func_176571_a`) now excludes its block like its own contact method would.
+  - **Found:** one class does. Better With Mods' `BlockRailDetectorBase` (the steel and stone detector rails) overrides `findMinecarts`.
+  - **Reviewed:** javap on BetterWithMods-1.12-2.3.24.jar. The override adds its rider filter, then returns `World.getEntitiesWithinAABB` for the caller's minecart class (bytecode 26-37), so it finds only minecarts.
+  - The class is listed in `REVIEWED_HELPER_OVERRIDES` with that evidence, and both rails stay walk-through. Any other override is refused unless reviewed.
+- **Nit 2, the class-chain rule:** the rule is now an exported pure function, `utilityWalkRule(chain, methodsOf)`.
+  - It has a unit test with synthetic chains: a pressure plate, tripwire or hook under any name; helper overrides, reviewed and not; a mod's own contact method.
+  - The data records every excluded block in `checks.neverWalkThrough` (24 pressure plates). The real-dump test checks that each of them is a solid full cube, instead of matching names.
+- **Nit 3:** `collision.js` notes that a state whose every box is flat becomes a full cube. That is safe, but a floor-level layer would become a step; on 3.3.4 such states are only trunk shells and Rats tubes.
+- **Data:** the walk-through, liquid and hazard entries are unchanged (399, 162, 233). The data adds `checks.neverWalkThrough` and the review notes.
+- **Tests:**
+  - `collision.test.js` 15/15.
+  - `e2e-initbot` and `fall_safety` 18/18.
+  - Lint is clean on the touched files.
+  - The generator's `--check` reports the data up to date.
+
+## (Merged as #281, `a8d98f5`) Walk-through allowlist and #279 nits
 
 - **Branch:** `agent/net-forge/walk-allowlist`, from develop `cbeb845` (#279 merged).
 - **Allowlist (lead decision after #279):** vanilla `BlockRailBase`, `BlockSign`, `BlockTorch`, `BlockButton` and `BlockLever` subclasses become walk-through when every state has no player box and nothing in the class chain declares a contact or collision-box method.

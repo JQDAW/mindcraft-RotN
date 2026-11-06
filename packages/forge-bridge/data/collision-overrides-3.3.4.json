@@ -40,6 +40,32 @@
     ]
    ],
    "evidence": "mods/DramaticTrees-1.12.2-0.13.4.jar (SHA-256 b86dae768ccc1182c52e5b9a8756a5906da53dc125d48bfe1c8dc69204a77ffe): BlockDynamicLeaves.addCollisionBoxToList (func_185477_a) gives a player vanilla's full cube if Passable Leaves is loaded or vanillaLeavesCollision is true, nothing if isLeavesPassable is true, else AxisAlignedBB(0.125, 0, 0.125, 0.875, 0.5, 0.875) (bytecode 96-128). On the pack: config/dynamictrees.cfg isLeavesPassable=false (line 60), vanillaLeavesCollision=false (line 66), mod passableleaves not in the pack"
+  },
+  "neverWalkThrough": {
+   "aether_legacy:holystone_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "aether_legacy:skyroot_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "aether_legacy:zanite_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "betternether:bone_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "betternether:cincinnasite_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "betternether:reeds_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "betternether:stalagnate_planks_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "betterwithmods:steel_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "inspirations:carpeted_pressure_plate_1": "net.minecraft.block.BlockBasePressurePlate",
+   "inspirations:carpeted_pressure_plate_2": "net.minecraft.block.BlockBasePressurePlate",
+   "quark:acacia_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "quark:birch_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "quark:dark_oak_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "quark:jungle_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "quark:obsidian_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "quark:spruce_pressure_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "twilightforest:canopy_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "twilightforest:dark_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "twilightforest:mangrove_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "twilightforest:mine_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "twilightforest:sort_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "twilightforest:time_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "twilightforest:trans_plate": "net.minecraft.block.BlockBasePressurePlate",
+   "twilightforest:twilight_oak_plate": "net.minecraft.block.BlockBasePressurePlate"
   }
  },
  "reviewed": {
@@ -52,12 +78,13 @@
   "net.minecraft.block.BlockRailBase": "rail (lead decision after #279): walk-through where no state has a player box and no class in the chain declares a contact or collision-box method",
   "net.minecraft.block.BlockSign": "sign (lead decision after #279): walk-through where no state has a player box and no class in the chain declares a contact or collision-box method",
   "net.minecraft.block.BlockTorch": "torch (lead decision after #279): walk-through where no state has a player box and no class in the chain declares a contact or collision-box method",
-  "net.minecraft.block.BlockButton": "harmless vanilla contact method: BlockButton (apd).onEntityCollidedWithBlock (func_180634_a): returns unless the button is wooden (field_150047_a) and unpowered, then checkPressed (func_185616_e) looks only for EntityArrow (aeh, bytecode 1-15): an arrow presses a wooden button, a player does not",
+  "net.minecraft.block.BlockButton": "harmless vanilla contact method: BlockButton (apd).onEntityCollidedWithBlock (func_180634_a): returns unless the button is wooden (field_150047_a) and unpowered, then checkPressed (func_185616_e) looks only for EntityArrow (aeh, bytecode 1-15): an arrow presses a wooden button, a player does not; a mod class that overrides checkPressed (func_185616_e) is excluded unless reviewed",
   "net.minecraft.block.BlockLever": "lever (lead decision after #279): walk-through where no state has a player box and no class in the chain declares a contact or collision-box method",
   "net.minecraft.block.BlockBasePressurePlate": "never walk-through (lead decision after #279): triggers mechanisms and traps",
   "net.minecraft.block.BlockTripWire": "never walk-through (lead decision after #279): triggers mechanisms and traps",
   "net.minecraft.block.BlockTripWireHook": "never walk-through (lead decision after #279): triggers mechanisms and traps",
-  "net.minecraft.block.BlockRailDetector": "harmless vanilla contact method: BlockRailDetector (apv).onEntityCollidedWithBlock (func_180634_a): returns if powered, else updatePoweredState (func_176570_e) looks only for EntityMinecart (afe, bytecode 23-36): a minecart powers it, a player does not"
+  "net.minecraft.block.BlockRailDetector": "harmless vanilla contact method: BlockRailDetector (apv).onEntityCollidedWithBlock (func_180634_a): returns if powered, else updatePoweredState (func_176570_e) looks only for EntityMinecart (afe, bytecode 23-36): a minecart powers it, a player does not; a mod class that overrides updatePoweredState (func_176570_e) or findMinecarts (func_176571_a) is excluded unless reviewed",
+  "betterwithmods.common.blocks.BlockRailDetectorBase": "reviewed helper override: BetterWithMods-1.12-2.3.24.jar: BlockRailDetectorBase overrides findMinecarts (func_176571_a) only; it adds its rider filter to the caller's predicates and returns World.getEntitiesWithinAABB (func_175647_a, bytecode 26-37) for the caller's Class<T extends EntityMinecart> (aload_3): it finds only minecarts, so a player still does not power it"
  },
  "blocks": {
   "adpother:polluted_water": {
