@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T13:36Z (from `date -u`)
+Updated: 2026-11-06T14:21Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -625,6 +625,27 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
   3. **`underLeaves`** also counts vanilla leaves (`isLeafBlock`); new test.
   - `fell_tree` 25. The two new non-guard tests fail on develop's `skills.js`. Lint 253.
   - **Path choice:** rotn-data had already answered (Hit With Axe; River Cane and bamboo are `stickWood`). The path above follows it. The lead asked me to wait for that answer, so it is open to the lead's call.
+- **2026-11-06T14:21Z: Hit With Axe sticks** (lead decision; rotn-data #272 merged, `a6825e8`, and merged into this branch):
+  - **`skills.sticksByAxe(bot, need)`:** with any axe of level 0 or more (crude, flint, stone), it places a held log near the bot and uses the axe on it twice (debark, then 1 plank). It places a plank and uses the axe once for 2 sticks, and picks up the drops around the block.
+    - A pair of spare planks is crafted into 4 sticks in the grid, which costs no axe use.
+    - Before the bot has a table (none near or held), 1 plank is kept for it.
+    - **Bounded:** at most 8 axe uses (the crude axe's life) and 90 s per call.
+    - **Stops with a reason when:** there is no axe at the start ("you hold no axe"), the axe breaks, a use changes nothing, or there are no logs or spare planks.
+    - Places and pickups go through `AXE_CHOP_OPS` (tests replace them).
+  - **`collectBlocks("stick")`:** when sticks are short and no table is near or held, the fallback uses `sticksByAxe` if the bot holds an axe. Otherwise it says why ("...you hold no axe to chop them...").
+  - **Agenda:** the `crafting_tools` goal names `!collectBlocks("stick", 1)` for a missing stick (about 5 crude-axe uses, a plank kept).
+    - The sticks step stays at 3 `stickWood`: the logs step's cut (1), the first plank (2) and the axe-route stick (5) would use all 8 of the crude axe's uses, so the third stick should still come from the sticks step.
+  - **Tests:**
+    - `axe_chop.test.js` (new, 6), with a fake world where a log is debarked then gives a plank, a plank gives 2 sticks, and the axe breaks after N uses:
+      - no axe;
+      - 2 logs give 2 sticks in 5 uses, with a plank kept;
+      - 3 logs give 4 sticks by crafting;
+      - a use that changes nothing, a broken axe, and the use cap;
+      - only the kept plank;
+      - via `collectBlocks`;
+    - `agenda` 19 (1 new);
+    - `fell_tree` 25 (2 messages updated).
+    - All new tests fail on the previous head. They pass after the #272 merge, as do `collect_rotn` and `craft_needs`. Lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
