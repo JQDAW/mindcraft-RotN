@@ -363,14 +363,15 @@ The real agent plays its early-game agenda from a fresh spawn, and the runner wh
 
 The real agent lives through its first full night from a fresh spawn. The runner whispers nothing and never touches the time: no `time set` (not on `G3_CONSOLE_ALLOW` at all since the #203 review) and no `gamerule` (a unit test checks both), and no `tp`.
 - **`fresh_start`, as in (a):** none of (a)'s target items held (count-only `clear`), and the pack's first-join Bread and Bundle in this run's log.
-- **The dawn rule (provisional, lead after S1-A):** `time query daytime` every minute.
+- **The dawn rule (pinned by the lead after G3 smoke round 6; set after S1-A):** `time query daytime` every minute.
   - **Dusk first** (#203 review): a night counts only after a sample below `nightFrom` (13000). The night is then the first sample at or above it, and dawn is the first sample below `dawnBelow` (12000) after that, so the time has wrapped past 24000.
   - A run that joins mid-night waits for the next full night, which a fresh server's 55 min limit does not reach, so it fails. A unit test starts mid-night.
   - S1-A measured a cycle of about 40 min with Extended Days, so dawn is expected about 40 min after the join.
   - **The daytime holds are Extended Days** (lead, after round 6; checked against the pack). RotN 3.3.4 ships `ExtendedDays-1.12.2-0.2.9-28.jar`, and its `config/extendeddays.cfg` sets `"Extended Periods" < 3000 10  16000 10 >`: 10 real minutes are added at daytime 3000 and again at 16000.
     - So `time query daytime` reads **3001 for about 10 min** in the morning and **16001 for about 10 min** in the night. Round 5's B rerun and round 6 B show both (minutes 2.3-11.5 and 22.9-31).
     - A vanilla cycle of 20 min plus the two holds gives S1-A's 40 min. A run that samples a hold sees no change for ~10 min: that is not a stuck server or a frozen clock.
-  - `maxMinutes` (55), `nightFrom` and `dawnBelow` are compared 'equal'. The first G3 smoke batch confirms the rule before it is pinned.
+  - `maxMinutes` (55), `nightFrom` (13000) and `dawnBelow` (12000) are compared 'equal'.
+  - **Pinned** (lead, after round 6): the night is a sample at or above 13000 after dusk, dawn the next sample below 12000, `maxMinutes` 55. Round 5's B rerun confirmed it with both Extended Days holds: dusk at minute 19.5 (12504), the night at 20.6 (13878), dawn at 40.1 (1246); `test/evidence/g3/g3b-20261106-r5-rerun/`.
 - **Every minute:** `scoreboard players list <bot>` for `stat.deaths` (objective `g3b_deaths`, plus `g3b_played`), and the log's death lines (`deathLines` in `lib/g3.mjs`: the 1.12 death messages, and a raw `death.attack.*` key from a mod).
 - **The end** comes at the first of: dawn, a death (stat or line), the bot leaving, its driver exiting, or `maxMinutes`.
 - **Checks:**
