@@ -6,7 +6,7 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
 ## #256 question: Dynamic Trees leaves collision (2026-11-06T07:56Z answer; 08:05Z PR open)
 
-- **PR:** branch `agent/net-forge/collision-shapes`, from develop `4fd8106`. Waiting for the lead's review.
+- **PR #259:** branch `agent/net-forge/collision-shapes`, from develop `4fd8106`. Waiting for the lead's review.
 - **Real dump result:** 4,595 modded blocks take the dump's shapes. 707 of them vary by state and 742 are walk-through. Overrides: 26 DT leaves and 12 full cubes. 9 blocks have no dump data and stay full cubes.
 - **Tests:**
   - `test/collision.test.js` (7) passes, including prismarine-physics: the bot lands on leaves at +0.5 and falls through a rock pile.
