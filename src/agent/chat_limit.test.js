@@ -253,3 +253,50 @@ test('#260 nit 2: a disconnect clears the timer and its time, so the next line i
     assert.equal(clock.timers.length, 1, 'a fresh timer, not skipped as later than the old one');
     assert.ok(clock.timers[0].at <= 2_100, `for the budget: ${clock.timers[0].at} ms`);
 });
+
+// G3 round 5 batch A: the limit was OFF all run ("no bot._client.chat to wrap"). minecraft-protocol
+// assigns client.chat only in onReady (client/play.js), after the login; initBot returns before that.
+test('round 5 A: no client.chat yet at install: it wraps on playerJoin, login or spawn (and a reconnect\'s client), and the limit then holds', async () => {
+    const { EventEmitter } = await import('node:events');
+    const clock = { t: 0, timers: [] };
+    const sent = [], logs = [], warned = [];
+    const newClient = () => Object.assign(new EventEmitter(), { chat: undefined });
+    const onReady = (client) => { client.chat = (text) => sent.push(text); client.emit('playerJoin'); };
+    const bot = Object.assign(new EventEmitter(), { _client: newClient() });
+    bot.chat = (m) => bot._client.chat(m);
+    const opts = { now: () => clock.t, log: (m) => logs.push(m), warn: (m) => warned.push(m),
+        setTimer: (fn, ms) => { const h = { at: clock.t + ms, fn }; clock.timers.push(h); return h; },
+        clearTimer: (h) => { clock.timers = clock.timers.filter(x => x !== h); } };
+
+    const limiter = installChatLimit(bot, opts);
+    assert.ok(limiter, 'not given up');
+    assert.equal(limiter.active, false);
+    assert.equal(warned.length, 0, 'no OFF warning before the login');
+    assert.ok(logs.some(m => /wraps it on login/.test(m)), JSON.stringify(logs));
+
+    onReady(bot._client);    // minecraft-protocol: client.chat, then 'playerJoin'
+    assert.equal(limiter.active, true);
+    for (let i = 0; i < 12; i++) bot.chat(`agenda ${i}`);
+    assert.equal(sent.length, 5, 'a burst is limited: 5 at once, the rest wait');
+    assert.equal(installChatLimit(bot, opts), limiter, 'idempotent');
+
+    // A client whose chat came without a playerJoin: the bot's 'login' wraps it.
+    const c2 = newClient();
+    bot._client = c2;
+    c2.chat = (text) => sent.push(`c2 ${text}`);
+    bot.emit('login');
+    assert.equal(c2.rotnChatLimit?.active, true, 'a reconnect\'s client is wrapped on login');
+    for (let i = 0; i < 7; i++) bot.chat(`x${i}`);
+    assert.equal(sent.filter(s => s.startsWith('c2')).length, 5);
+
+    // client.chat replaced after the wrap: the next spawn wraps the new one.
+    c2.chat = (text) => sent.push(`c2b ${text}`);
+    bot.emit('spawn');
+    for (let i = 0; i < 7; i++) bot.chat(`y${i}`);
+    assert.ok(sent.filter(s => s.startsWith('c2b')).length < 7, 'the replaced chat is limited too');
+
+    // A spawn with still no client.chat: the warning that the limit is off (never silently off).
+    bot._client = newClient();
+    bot.emit('spawn');
+    assert.match(warned.at(-1) ?? '', /chat limit is OFF/);
+});
