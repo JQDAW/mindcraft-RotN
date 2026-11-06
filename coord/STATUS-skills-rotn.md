@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T08:16Z (from `date -u`)
+Updated: 2026-11-06T08:18Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -502,7 +502,12 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - Collapsed repeats are logged.
   - The comment notes that waiting high lines are bounded by the number of players (plus the givers' replies).
   - Tests: `chat_limit` 11; the 3 new ones (two timing tests and the collapse log) fail on develop. Lint 254.
-- **Next:** #260 review fixes if any; otherwise idle until the lead assigns work.
+- **Waiting for net-forge #259 to merge** (lead, from the #259 review; not started). Once #259 marks modded fluids as liquid in the registry and adds `forge.hazard` on traps, fires and portals:
+  - (a) `fall_safety.js` `isEmpty`/`firstBelow` use the liquid flag, not only the names water/lava (molten metals, poison, acid, tar);
+  - (b) every walk's Movements avoids `forge.hazard` blocks.
+  - With tests, in #260 or the next PR.
+  - On 2026-11-06 #259's head (`agent/net-forge/collision-shapes`) had neither field yet.
+- **Next:** #260 review fixes if any; then the #259 item once it merges.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
