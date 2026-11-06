@@ -229,5 +229,6 @@ test('the sticks step: felling, not leaves (rotn-data Request 13: leaves never d
     assert.match(sticks.goal, /!collectBlocks\("stick", 4\)/);
     assert.match(sticks.goal, /felling a tree/);
     assert.match(sticks.goal, /Leaves drop no sticks/);
+    assert.match(sticks.goal, /!craftRecipe\("stick", 1\) makes 4 sticks from 2 planks/, 'or from planks (rotn-data #252: the planks recipe is kept)');
     assert.doesNotMatch(sticks.goal, /drop from leaves|punching trees does not work/);
 });

@@ -14,6 +14,8 @@
 // Chat lines for harness-ops (the runner parses them from the server log):
 //   agenda step <id> started: <short>
 //   agenda step <id> done
+//   agenda steps done: <id>, <id>, ...   (two or more done in the same tick, one line: G3 round 4
+//                                        C+D, 12 lines in one second got the bot kicked for spam)
 //   agenda step <id> stuck: <why>   (its LLM budget is spent; the agenda pauses)
 //   agenda done
 // (E3 adds "agenda paused for task <id>" and "agenda resumed: <id>".)
@@ -38,7 +40,7 @@ export const ROTN_EARLY_GAME = [
         // G3 round 4 B and rotn-data Request 13: leaves never drop sticks on this pack; a felled
         // tree does (0-7 with its logs), and a trunk broken by hand fells it too. collectBlock fells
         // it safely (fellTree) and picks the sticks up with the logs.
-        goal: 'Get at least 4 sticks with !collectBlocks("stick", 4). In RotN sticks come from felling a tree: breaking its trunk, even by hand, fells it and drops logs and sticks. Leaves drop no sticks.',
+        goal: 'Get at least 4 sticks with !collectBlocks("stick", 4). In RotN sticks come from felling a tree: breaking its trunk, even by hand, fells it and drops logs and sticks. If you have planks, !craftRecipe("stick", 1) makes 4 sticks from 2 planks. Leaves drop no sticks.',
         done: (s) => s.count('stick') >= 4 || s.count('stone_pickaxe') > 0,
     },
     {

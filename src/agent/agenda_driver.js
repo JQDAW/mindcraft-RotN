@@ -101,6 +101,8 @@ const othersOnline = (agent) => Object.keys(agent.bot?.players ?? {}).some(n => 
 // A chat line; a failed send is logged, never an unhandled rejection (#164 review nit).
 export function say(agent, line) {
     try {
+        // Normal priority for the chat limit (chat_limit.js): queued when chat is busy, never dropped
+        // (harness-ops reads these lines).
         Promise.resolve(agent.openChat(line)).catch(err => console.warn(`[agenda] chat failed: ${safeError(err)}`));
     } catch (err) {
         console.warn(`[agenda] chat failed: ${safeError(err)}`);
@@ -149,7 +151,11 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
 
     const state = agendaState(agent.bot);
     const { step, newlyDone } = agenda.evaluate(state);
-    for (const s of newlyDone) say(agent, `agenda step ${s.id} done`);
+    // One line for the steps done in this tick (G3 round 4 C+D: an inventory left over from an
+    // earlier run completed all 11 steps at once, and 12 lines in one second got the bot kicked
+    // for spam). One step keeps the "agenda step <id> done" line the harness reads.
+    if (newlyDone.length === 1) say(agent, `agenda step ${newlyDone[0].id} done`);
+    else if (newlyDone.length > 1) say(agent, `agenda steps done: ${newlyDone.map(s => s.id).join(', ')}`);
     if (!step) {
         say(agent, 'agenda done');
         agenda.stop();

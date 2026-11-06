@@ -43,7 +43,7 @@ function tree(world, x, z = 0, { lean = 1 } = {}) {
  * The bot and its world. A cut trunk turns the whole tree into a falling tree entity for fallMs;
  * then its logs lie where it landed (log:1 each), east of the trunk (the canopy side).
  */
-function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false, approachMs = 0 } = {}) {
+function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false, approachMs = 0, axe = true, sticks = 0 } = {}) {
     const world = new Map();
     for (const [x, z = 0] of trees) tree(world, x, z);
     build?.(world);
@@ -54,7 +54,7 @@ function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, un
         return { name, metadata: 0, type: id, position: q, boundingBox: name === 'air' ? 'empty' : 'block',
             canHarvest: () => true, transparent: name === 'air', shapes: name === 'air' ? [] : [[0, 0, 0, 1, 1, 1]] };
     };
-    const items = [{ name: 'stone_axe', metadata: 0, count: 1, type: reg.itemsByName.stone_axe.id }];
+    const items = axe ? [{ name: 'stone_axe', metadata: 0, count: 1, type: reg.itemsByName.stone_axe.id }] : [];
     let nextId = 1;
     const entities = {};
     for (const pos of onGround) { const id = nextId++; entities[id] = { id, name: 'item', position: pos, drop: 'stick' }; }
@@ -83,7 +83,7 @@ function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, un
             const where = bot.entity.position.floored();
             let covered = false;
             for (let y = where.y + 2; y < 75; y++) covered ||= /dynamictrees/.test(world.get(key(at(where.x, y, where.z))) ?? '');
-            log.digs.push({ pos: key(b.position), from: key(where), covered, face: faceArg ? key(faceArg) : null, gotosBefore: log.moves.length });
+            log.digs.push({ pos: key(b.position), from: key(where), covered, face: faceArg ? key(faceArg) : null, gotosBefore: log.moves.length, held: bot.heldItem?.name ?? null });
             // The whole tree falls: its blocks become one falling entity, and the logs land later.
             for (const [k, name] of [...world]) if (name === BRANCH || name === LEAVES) world.delete(k);
             const fall = { id: nextId++, name: FALLING_TREE, position: b.position.clone() };
@@ -93,6 +93,9 @@ function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, un
                 log.fellAt = Date.now();
                 for (const pos of drops ?? [at(b.position.x + 4, 64, 1), at(b.position.x + 5, 64, 0), at(b.position.x + 6, 64, -1)]) {
                     const id = nextId++; entities[id] = { id, name: 'item', position: pos, drop: 'log' };
+                }
+                for (let i = 0; i < sticks; i++) { // a felled tree also drops sticks with its logs (rotn-data #252)
+                    const id = nextId++; entities[id] = { id, name: 'item', position: at(b.position.x + 4 + i, 64, 2), drop: 'stick' };
                 }
             }, fallMs);
             return Promise.resolve();
@@ -282,4 +285,24 @@ test('#242 follow-up: the first approach to a tree has the normal walk limit, no
     assert.equal(bot.log.digs.length, 1);
     assert.doesNotMatch(bot.output, /could not reach a safe place/);
     assert.equal(bot.log.moves[0], false, 'the approach cannot dig');
+});
+
+test('#252: sticks come from felling, by hand when there is no axe, with an axe when there is one', T, async (t) => {
+    fast(t);
+    const way = worldSources('stick').find(s => s.id === 'fell-tree');
+    assert.ok(way, 'fell-tree gives sticks');
+    assert.equal(way.tool, null, 'no tool is required');
+    assert.deepEqual(way.preferredTool, { type: 'axe', minLevel: 0 });
+    assert.ok(!worldSources('stick').some(s => s.blocks.some(b => /leaves/.test(b))), 'leaves are no stick source');
+
+    const handOnly = fakeBot({ axe: false, sticks: 3 });
+    assert.equal(await skills.collectBlock(handOnly, 'stick', 2), true, handOnly.output);
+    assert.equal(handOnly.log.digs.length, 1);
+    assert.equal(handOnly.log.digs[0].held, null, 'by hand');
+    assert.doesNotMatch(handOnly.output, /needs an axe/);
+    assert.match(handOnly.output, /Collected 3 stick/);
+
+    const withAxe = fakeBot({ sticks: 2 });
+    assert.equal(await skills.collectBlock(withAxe, 'stick', 2), true, withAxe.output);
+    assert.equal(withAxe.log.digs[0].held, 'stone_axe', 'the preferred axe');
 });

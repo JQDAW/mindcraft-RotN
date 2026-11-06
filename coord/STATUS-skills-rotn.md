@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T07:16Z (from `date -u`)
+Updated: 2026-11-06T07:39Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -460,7 +460,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Tests: `death_report` 14, `furnace` 7; the 4 new ones fail on the previous head; lint 254.
 - **#247 nit**: folded into the fall-safety PR (commit cherry-picked from `next3`). From 10 to 20 min the night text says the items are already lost. The rounding nit was accepted as is.
-- **G3 round 4 batch B, the fall** (branch `agent/skills-rotn/fall-safety`, PR open; STATUS lives here). "FRCFLD fell from a high place" during `!collectBlocks("stick", 4)` on leaves, 3 s after unstuck took over.
+- **The round 4 PR** (lead: one PR, built on rotn-data's `agent/rotn-data/sticks-from-felling`, superseding #252 and my #253). Branch `agent/skills-rotn/round4`: rotn-data's branch with `fall-safety` merged in (no rebase); STATUS lives here.
+- **G3 round 4 batch B, the fall** (first opened as #253, now in the round 4 PR). "FRCFLD fell from a high place" during `!collectBlocks("stick", 4)` on leaves, 3 s after unstuck took over.
   - **Findings:**
     - Leaves went through `bot.collectBlock.collect`, whose pathfinder may dig, tower and step onto leaves.
     - Every walk could dig a Dynamic Trees branch, which fells the whole tree.
@@ -476,8 +477,16 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     - the agenda's stick step says felling;
     - `moveAway` logs a copied start position.
   - **Tests:** `fall_safety` 9 (7 fail on develop; 2 cover the new module). The related files pass one at a time. Lint 254.
-  - **Depends on:** rotn-data #252 for sticks to come from felling. My tests pass with and without it.
-- **G3 round 4 C+D, the chat burst**: next, in a separate PR.
+  - **Sticks with rotn-data #252** (agreed with rotn-data): `fell-tree` gives sticks with `tool: null` and `preferredTool` axe. `collectBlock` equips a held axe for it, otherwise cuts by hand, never "needs an axe". The stick step also mentions planks -> sticks. Test: `fell_tree` #13, which fails without the `preferredTool` code.
+- **G3 round 4 C+D, the spam kick** (in the round 4 PR):
+  - **Agenda:** two or more steps done in one tick send one line, `agenda steps done: a, b, ...`. One step keeps `agenda step <id> done`; `agenda done` and `started` are unchanged, so the harness parsers still match.
+  - **Outgoing chat limit** (`chat_limit.js`, at `bot._client.chat`, so every packet counts):
+    - a budget of 100 that refills at 10 per second (vanilla 1.12 kicks above 200, with 20 per packet and 1 removed per tick; no pack config changes it, checked in the pinned zip);
+    - high priority (replies to players, refusals) goes first and is never dropped;
+    - normal (agenda lines, self-prompted replies) is queued, never dropped;
+    - low (reflex narration) is dropped when busy or after 15 s.
+  - **The "late refusal"** was the harness's reading (lead: harness #255). The server log has it 1 s after the whisper.
+  - **Tests:** `chat_limit` 5 and `agenda` #17; the agent wiring and agenda tests fail on develop. Full `npm test` after `npm ci`: 1331 pass. The 1 failure is `deploy-eol`, which checks `deploy/cx23/` on disk for CR; this Windows checkout converts to CRLF, and I didn't touch `deploy/`. Lint 254.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

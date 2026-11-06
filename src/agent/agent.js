@@ -28,6 +28,7 @@ import { log, validateNameFormat, handleDisconnection } from './connection_handl
 import { safeError, safeStack } from './safe_error.js';
 import { runUpdateLoop, createErrorReporter } from './update_loop.js';
 import { bindDeathReport, deathCauseText } from './library/death_report.js';
+import { installChatLimit, withChatPriority } from './chat_limit.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -79,6 +80,8 @@ export class Agent {
 
         console.log(this.name, 'logging into minecraft...');
         this.bot = initBot(this.name);
+        // The outgoing chat limit (G3 round 4 C+D: kicked for spam): every packet goes through it.
+        installChatLimit(this.bot);
         
         // Connection Handler
         const onDisconnect = (event, reason) => {
@@ -440,13 +443,14 @@ export class Agent {
             convoManager.sendToBot(to_player, message);
         }
         else {
-            // otherwise, use open chat
-            this.openChat(message);
+            // otherwise, use open chat; a reply to a player (a refusal included) goes first
+            // through the chat limit and is never dropped (G3 round 4 C+D)
+            this.openChat(message, { priority: self_prompt ? 'normal' : 'high' });
             // note that to_player could be another bot, but if we get here the conversation has ended
         }
     }
 
-    async openChat(message) {
+    async openChat(message, { priority = 'normal' } = {}) {
         let to_translate = message;
         let remaining = '';
         let command_name = containsCommand(message);
@@ -461,14 +465,14 @@ export class Agent {
 
         if (settings.only_chat_with.length > 0) {
             for (let username of settings.only_chat_with) {
-                this.bot.whisper(username, message);
+                withChatPriority(this.bot, priority, () => this.bot.whisper(username, message));
             }
         }
         else {
             if (settings.speak) {
                 speak(to_translate, this.prompter.profile.speak_model);
             }
-            if (settings.chat_ingame) {this.bot.chat(message);}
+            if (settings.chat_ingame) withChatPriority(this.bot, priority, () => this.bot.chat(message));
             sendOutputToServer(this.name, message);
         }
     }

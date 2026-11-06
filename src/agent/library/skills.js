@@ -721,6 +721,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // below Sturdy. That is also why the old cobblestone -> stone alias is gone: such stone
     // drops rocks, not cobblestone.
     const ruleTools = []; // [matcher, tool] for rules that need a tool
+    const preferredTools = []; // [matcher, tool] for rules where a tool helps but is not needed (#252)
     const needsTool = [];
     const fellMatchers = []; // rotn-data "fell-tree": breaking a branch fells the whole tree
     for (const source of worldSources(blockType)) {
@@ -731,6 +732,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         for (const name of source.blocks)
             if (!blocktypes.includes(name)) blocktypes.push(name);
         if (source.tool) ruleTools.push([blockMatcher(source.blocks), source.tool, source.blocks]);
+        else if (source.preferredTool) preferredTools.push([blockMatcher(source.blocks), source.preferredTool]);
         if (source.id === 'fell-tree') fellMatchers.push(blockMatcher(source.blocks));
     }
     // Any Dynamic Trees branch fells its tree, whichever rule names it (rotn-data #13: a branch
@@ -838,8 +840,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             }
             await bot.equip(ruleItem, 'hand');
         }
-        else
-            await bot.tool.equipForBlock(block);
+        else {
+            // A preferred tool (an axe to fell a tree, rotn-data #252) when the bot holds one; else the hand.
+            const preferred = preferredTools.find(([matches]) => matches(block))?.[1];
+            const prefItem = preferred ? allowedTool(bot, preferred) : null;
+            if (prefItem) await bot.equip(prefItem, 'hand');
+            else await bot.tool.equipForBlock(block);
+        }
         if (run.aborted) break;
         if (isLiquid) {
             const bucket = bot.inventory.findInventoryItem('bucket');

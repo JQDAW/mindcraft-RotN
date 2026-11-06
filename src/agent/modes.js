@@ -14,7 +14,8 @@ import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
 async function say(agent, message) {
     agent.bot.modes.behavior_log += message + '\n';
     if (agent.shut_up || !settings.narrate_behavior) return;
-    agent.openChat(message);
+    // Reflex narration is low priority for the chat limit: dropped when chat is busy (G3 round 4 C+D).
+    agent.openChat(message, { priority: 'low' });
 }
 
 // a mode is a function that is called every tick to respond immediately to the world
