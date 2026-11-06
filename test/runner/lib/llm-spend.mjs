@@ -175,8 +175,10 @@ export function countLlmReplies(lines) {
         if (l.startsWith(MEMORY_RETURNED_LINE) || l.startsWith(MEMORY_THROW_LINE)) {
             summary ??= { providers: [], requestError: true };
             const failed = l.startsWith(MEMORY_THROW_LINE) || l.includes(LLM_FAILED_REPLY);
-            // A failed summary request completed nothing, so a completion seen while it was open belongs to
-            // another request: never charge that provider with the failure (#273 review 2).
+            // A failed summary: its request either completed nothing (a network or HTTP error, no provider line)
+            // or completed with finish_reason "length", which logs its provider line and then throws. So a
+            // completion seen while it was open may be another request's or the summary's own; which one is not
+            // known, and the failure is never charged to a provider (#273 review 2, #276 review).
             if (failed) summary.requestError = true;
             closeSummary(failed ? 'failed' : 'empty');
         }

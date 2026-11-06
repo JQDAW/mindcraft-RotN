@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (16:04 UTC, from `date -u`)
+Updated: 2026-11-06 (16:58 UTC, from `date -u`)
 
 ## Now: G3 smoke round 5 is over (smoke). No batch until a new GO.
 
@@ -16,9 +16,10 @@ Updated: 2026-11-06 (16:04 UTC, from `date -u`)
 - **Memory summaries by provider:** with Wafer (B rerun, C, D), 17 stored and 1 empty of 18 attributed, plus 6 stored unattributed. Before OpenInference was excluded (A, A rerun, B; no provider lines then): 0 stored of 20.
 - **Spend:** USD 0.021827 by the batch figures, 0.021851 by the key (0.770735 to 0.792586 of the 4.50 stop). Hetzner: 12 + 13 + 21 + 47 + 14 + 8 min, every server, Primary IP and SSH key verified gone.
 - **For skills-rotn (the lead routes):** C's "task done" without standing on the marker (range 1; check the block under the feet); stuck against trunks at `sticks` (A rerun, D); felling with no drops within 6 s; `!searchForBlock("log")` choosing an underground log.
-- **Open: the evidence PR** (all six folders, smoke, provider tables and memory figures in the READMEs). **Next: the #273 nits PR** (separate, small).
+- **Merged: #275** (the round 5 evidence) and **#276** (the #273 nits).
+- **Open: the sweeper PR** (the lead approved the proposal below in principle, #275 review): at most one dispatch run within 180 s after each scheduled helper run is left out, every choice tried, so a real cron run in that window still passes. Plus the #275 and #276 review nits (the B README verdict line; the llm-spend comment on `finish_reason length`).
 
-### Proposal: the sweeper check without the throttled cron (the lead, after round 5; nothing changed without approval)
+### The sweeper check without the throttled cron (approved in principle in the #275 review; now in the sweeper PR)
 
 **What happened at 15:38Z (D waited 9 min):**
 - (a), the sweeper's own `schedule` run, was 426 min old (limit 120). GitHub throttles cron; on 2026-11-06 the scheduled runs came hours apart.

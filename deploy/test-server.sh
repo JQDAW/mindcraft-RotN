@@ -64,7 +64,8 @@
 #       successful test-server-sweeper.yml run (any event) on develop created after it, or
 #   (c) a cadence: at least 3 successful workflow_dispatch runs of test-server-sweeper.yml on develop
 #       in the last 50 minutes, every gap between consecutive ones 10..20 minutes, the newest under
-#       20 minutes old (the external cron service dispatches every 15 min).
+#       20 minutes old (the external cron service dispatches every 15 min). At most one run within
+#       180 s after each scheduled helper run may be left out: the helper's own dispatch (deploy/README.md).
 #   Read-only `gh run list --repo ...` calls only. A one-off manual dispatch never counts. Agents must
 #   never dispatch the sweeper to fake a cadence (deploy/README.md).
 #   hcloud always runs with --context mindcraft-rotn-test (the test project); any other
@@ -111,6 +112,8 @@ readonly SWEEPER_HELPER_MAX_AGE_MIN=40
 readonly SWEEPER_HELPER_IDLE_WARN_DAYS=45
 # (c): an external cron service (cron-job.org, set up by the human) dispatches the sweeper every 15 min.
 readonly CADENCE_WINDOW_MIN=50 CADENCE_MIN_RUNS=3 CADENCE_GAP_MIN=10 CADENCE_GAP_MAX=20 CADENCE_NEWEST_MAX=20
+# (c): at most one dispatch run within this many seconds after each scheduled helper run may be left out (sweeper_cadence_ok).
+readonly CADENCE_HELPER_EXCUSE_S=180
 STATUS_PING_CMD=${STATUS_PING_CMD:-node $REPO_ROOT/test/tools/status-ping.mjs}
 POLL_SECONDS=${ROTN_TEST_POLL_SECONDS:-15}
 MOJANG_PROFILE_URL=${MOJANG_PROFILE_URL:-https://api.mojang.com/users/profiles/minecraft}
@@ -526,29 +529,60 @@ sweeper_newest_ok() {
 # sweeper_cadence_ok: (c). Prints "OK <message>" or "NO <reason>". Every successful workflow_dispatch
 # sweeper run on develop in the window counts, so an extra manual run between two cron runs makes a
 # short gap and fails the check: it never helps.
+#
+# The helper's own dispatch (lead, after G3 smoke round 5): the helper repo's scheduled workflow
+# dispatches the sweeper too, and its run lands between two cron runs (2026-11-06: helper 14:56:12,
+# sweeper 14:56:18, between 14:45 and 15:00), which broke (c) for 50 min. So:
+# - For each successful event=schedule run of the helper's workflow (read from the helper repo; an
+#   agent cannot make one, a manual helper run is workflow_dispatch there), AT MOST ONE dispatch run
+#   created within CADENCE_HELPER_EXCUSE_S after it may be left out.
+# - Which one is not known (the helper's and the cron's runs look the same), and a real cron run can land
+#   inside that window too. So every choice is tried, leaving out none or one per helper run, and (c)
+#   passes if the remaining runs pass the unchanged rules. Leaving runs out only removes evidence, so it
+#   can never make a cadence that the remaining runs do not show; a manual dispatch with no helper run
+#   before it still breaks (c).
+# - If the helper repo cannot be read, nothing is excused (the check is exactly as before).
 sweeper_cadence_ok() {
-  local runs
+  local runs helpers
   runs=$(gh_ run list --workflow "$SWEEPER_WORKFLOW" --branch develop --event workflow_dispatch \
            --limit 30 --json databaseId,status,conclusion,createdAt 2>/dev/null) \
     || { echo "NO 'gh run list' failed (not logged in?)"; return; }
+  helpers=$(gh_at "$SWEEPER_HELPER_REPO" run list --workflow "$SWEEPER_HELPER_WORKFLOW" --event schedule \
+              --limit 20 --json databaseId,status,conclusion,createdAt 2>/dev/null) || helpers='[]'
   jqr -r --argjson now "$SWEEPER_NOW" --argjson win "$(( CADENCE_WINDOW_MIN * 60 ))" --argjson n "$CADENCE_MIN_RUNS" \
          --argjson gmin "$(( CADENCE_GAP_MIN * 60 ))" --argjson gmax "$(( CADENCE_GAP_MAX * 60 ))" \
-         --argjson newest "$(( CADENCE_NEWEST_MAX * 60 ))" '
+         --argjson newest "$(( CADENCE_NEWEST_MAX * 60 ))" --argjson excuse "$CADENCE_HELPER_EXCUSE_S" \
+         --argjson helpers "$( [[ $helpers == \[* ]] && printf '%s' "$helpers" || echo '[]')" '
     def m: (. / 60 * 10 | floor) / 10;
+    # The unchanged rules on a list of runs sorted by time: "OK ..." or "NO ...".
+    def verdict:
+      . as $r | ($r | length) as $len
+      | if $len < $n then "NO only \($len) successful dispatch runs on develop in the last \($win / 60) min (need \($n))"
+        else
+          ([range(1; $len) as $i | $r[$i].t - $r[$i - 1].t]) as $gaps
+          | ($now - $r[-1].t) as $age
+          | ($gaps | map(m | tostring) | join(", ")) as $g
+          | if any($gaps[]; . < $gmin or . > $gmax) then
+              "NO dispatch-run gaps \($g) min are not all \($gmin / 60)..\($gmax / 60) min (one-off or missed dispatches)"
+            elif $age >= $newest then "NO the newest dispatch run (\($r[-1].id)) is \($age | m) min old (limit \($newest / 60))"
+            else "OK cadence of \($len) dispatch runs on develop in the last \($win / 60) min, gaps \($g) min, newest \($r[-1].id) \($age | m) min ago"
+            end
+        end;
     [.[] | select(.status == "completed" and .conclusion == "success")
          | {id: .databaseId, t: (.createdAt | fromdateiso8601)} | select($now - .t <= $win and .t <= $now)]
     | sort_by(.t) as $r
-    | ($r | length) as $len
-    | if $len < $n then "NO only \($len) successful dispatch runs on develop in the last \($win / 60) min (need \($n))"
-      else
-        ([range(1; $len) as $i | $r[$i].t - $r[$i - 1].t]) as $gaps
-        | ($now - $r[-1].t) as $age
-        | ($gaps | map(m | tostring) | join(", ")) as $g
-        | if any($gaps[]; . < $gmin or . > $gmax) then
-            "NO dispatch-run gaps \($g) min are not all \($gmin / 60)..\($gmax / 60) min (one-off or missed dispatches)"
-          elif $age >= $newest then "NO the newest dispatch run (\($r[-1].id)) is \($age | m) min old (limit \($newest / 60))"
-          else "OK cadence of \($len) dispatch runs on develop in the last \($win / 60) min, gaps \($g) min, newest \($r[-1].id) \($age | m) min ago"
-          end
+    | [$helpers[] | select(.status == "completed" and .conclusion == "success")
+         | {id: .databaseId, t: (.createdAt | fromdateiso8601)} | select(.t <= $now and $now - .t <= $win + $excuse)] as $hs
+    # Every choice: for each helper run, leave out nothing or one dispatch run created within $excuse after it.
+    | (reduce $hs[] as $h ([{out: [], why: []}];
+         [.[] as $c | $c,
+           ($r[] | select(.t >= $h.t and .t - $h.t <= $excuse) | select(.id as $i | $c.out | index([$i]) | not)
+            | {out: ($c.out + [.id]), why: ($c.why + ["\(.id) (\($h.t | todate), helper run \($h.id))"])})])) as $choices
+    | [$choices[] | . as $c | {c: $c, v: ([$r[] | select(.id as $i | $c.out | index([$i]) | not)] | verdict)}] as $tried
+    | ([$tried[] | select(.v | startswith("OK"))] | sort_by(.c.out | length) | first) as $pass
+    | if $pass == null then $tried[0].v
+      elif ($pass.c.out | length) == 0 then $pass.v
+      else "\($pass.v); left out the helper'"'"'s own dispatch: \($pass.c.why | join(", "))"
       end' <<< "$runs" || echo "NO unreadable sweeper run list"
 }
 
