@@ -10,7 +10,10 @@ import { getBlockId } from '../../utils/mcdata.js';
 const STAND_ON = /\bstand(?:s|ing)?\s+(?:on\s+top\s+of|on|upon)\b/i;
 const NUM = String.raw`(-?\d+)(?:\.\d+)?`;
 const TRIPLE = String.raw`\(?\s*${NUM}\s*[,\s]\s*${NUM}\s*[,\s]\s*${NUM}`;
-const NAME = String.raw`(?:the|a|an)\s+([a-z][a-z0-9_: ]*?)\s+(?:at|@)\s*`;
+// "the gold block at", "gold block at", "the gold block, at" (#274 re-review: the article and the
+// comma are optional). The phrase may hold more words ("go to the gold block"); nameIn takes the
+// block name from its last words.
+const NAME = String.raw`(?:(?:the|a|an)\s+)?([a-z][a-z0-9_: ]*?)(?:\s*,\s*|\s+)(?:at\b|@)\s*`;
 // Right after "stand on": "the gold block at X Y Z", or just "X Y Z".
 const AFTER = new RegExp(String.raw`^\s*(?:${NAME})?${TRIPLE}`, 'i');
 // "stand on it" (or there, that): the block named before it, with its coordinates.
@@ -27,6 +30,16 @@ export function blockNamesFor(phrase) {
     const base = (of ? `${of[1]} block` : p).replace(/ /g, '_');
     const cands = [base, base.endsWith('_block') ? null : `${base}_block`].filter(Boolean);
     return cands.filter(n => getBlockId(n) != null);
+}
+
+/** The block a phrase ends with ("go to the gold block" -> gold_block), from its last 1-4 words; or null. */
+function nameIn(phrase) {
+    const words = bare(phrase).trim().split(/\s+/).filter(w => w && !/^(?:the|a|an)$/.test(w));
+    for (let k = Math.min(4, words.length); k >= 1; k--) {
+        const hit = blockNamesFor(words.slice(-k).join(' '))[0];
+        if (hit) return hit;
+    }
+    return null;
 }
 
 /**
@@ -47,7 +60,7 @@ export function parseStandOn(text) {
         if (before) m = before.slice(1, 5);
     }
     if (!m) return null;
-    const name = m[0] ? (blockNamesFor(m[0])[0] ?? null) : null;
+    const name = m[0] ? nameIn(m[0]) : null;
     return { x: Number(m[1]), y: Number(m[2]), z: Number(m[3]), name };
 }
 

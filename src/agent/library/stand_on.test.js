@@ -13,6 +13,7 @@ import { ActionManager } from '../action_manager.js';
 import { actionsList, ACTION_LIMITS_MIN, standOnTarget } from '../commands/actions.js';
 import { parseStandOn, standCheck, blockNamesFor } from './stand_on.js';
 import * as skills from './skills.js';
+import * as scenarioC from '../../../test/scenarios/g3/g3-task-preempts-agenda.mjs'; // taskText only; no side effects
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -83,6 +84,19 @@ test('#274 review 2: the coordinates are the ones that go with "stand on", not t
         'stand on it: the block named last before it');
     assert.deepEqual(parseStandOn('stand on it, then go to the gold block at -42 68 -50'), null, 'nothing named before "it"');
     assert.equal(parseStandOn('go to 100 70 100 and stand on it'), null, 'a bare position is not a block to stand on');
+});
+
+test('#274 re-review: no article or a comma before "at" still names the block; the exact scenario C text resolves to its gold block', () => {
+    assert.deepEqual(parseStandOn('stand on gold block at -42 68 -50'), { x: -42, y: 68, z: -50, name: 'gold_block' });
+    assert.deepEqual(parseStandOn('stand on the gold block, at -42 68 -50'), { x: -42, y: 68, z: -50, name: 'gold_block' });
+    assert.deepEqual(parseStandOn('go to gold block at -42 68 -50 and stand on it'), { x: -42, y: 68, z: -50, name: 'gold_block' });
+    // The scenario's own task text (test/scenarios/g3/g3-task-preempts-agenda.mjs taskText): the
+    // coordinates come before "stand on it".
+    for (const marker of [[-42, 68, -50], [10, 64, -3], [0, 70, 0]]) {
+        const [x, y, z] = marker;
+        assert.deepEqual(parseStandOn(scenarioC.taskText(marker)), { x, y, z, name: 'gold_block' }, scenarioC.taskText(marker));
+    }
+    assert.equal(parseStandOn('stand on the cat 1 2 3'), null, '"at" only as a word, not the end of "cat"');
 });
 
 test('#274 nit: on a slab (or farmland) the feet are inside the block\'s cell: still on it', () => {

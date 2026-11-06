@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T16:49Z (from `date -u`)
+Updated: 2026-11-06T16:56Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -697,6 +697,13 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
     - `stand_on` 9 (+2): the coordinates and the slab;
     - `fell_tree`: a wooden roof is not tree cover.
   - All 7 new or changed tests fail on the old source. `src` and `packages` tests: 903/903 after the develop merge. Lint 253.
+
+- **2026-11-06T16:56Z: #274 re-review fix** (the lead's re-review: all four items fixed; one small fix):
+  - **`stand_on.js` `AFTER`:** the article and a comma before "at" are now optional ("stand on gold block at X Y Z", "stand on the gold block, at X Y Z").
+  - "at" must be a whole word after a space or comma (not the end of "cat").
+  - The block name comes from the last 1 to 4 words before "at" (`nameIn`), so "go to gold block at X Y Z and stand on it" names gold_block.
+  - **Test:** `stand_on` 10 (+1), which uses the scenario's own `taskText` (`test/scenarios/g3/g3-task-preempts-agenda.mjs`), where the coordinates come before "stand on it". It resolves to that gold block for three markers.
+  - The new test fails on the old `stand_on.js` (at the missing-article case; the exact scenario text already resolved before). `src` and `packages` tests 904/904. Lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
