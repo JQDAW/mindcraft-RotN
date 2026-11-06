@@ -286,3 +286,27 @@ test('moveAway: a stopped walk (PathStopped) returns false with a plain line, no
     assert.match(bot.output, /Walk stopped \(interrupted\)\./);
     assert.doesNotMatch(bot.output, /Moved away/);
 });
+
+// #238 review 1: threats.hasWeapon counts a sword in the off hand, so the bot fights a player
+// zombie; equipHighestAttack must then hold that sword in the main hand, not a pickaxe.
+test('defendSelf with the only sword in the off hand fights with it in the main hand', T, async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const bot = fakeBot();
+    const slots = bot.inventory.slots;
+    slots[36] = { name: 'stone_pickaxe', count: 1, metadata: 0, attackDamage: 3 };
+    slots[45] = { name: 'stone_sword', count: 1, metadata: 0, attackDamage: 5 };
+    bot.inventory.items = () => slots.slice(9, 45).filter(Boolean); // as mineflayer: no off hand
+    bot.inventory.firstEmptyInventorySlot = () => { const i = slots.findIndex((x, k) => k >= 9 && k < 45 && !x); return i < 0 ? null : i; };
+    bot.moveSlotItem = (from, to) => { slots[to] = slots[from]; slots[from] = null; return Promise.resolve(); };
+    const held = [];
+    bot.equip = (item, where) => { held.push(`${item.name}@${where}`); bot.heldItem = item; return Promise.resolve(); };
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: at(2), height: 1.8, isValid: true };
+    bot.entities[7] = zombie;
+    bot.nearestEntity = (pred) => Object.values(bot.entities).find(pred) ?? null;
+    let heldWhenHitting = null;
+    bot.pvp = { attack: () => { heldWhenHitting = bot.heldItem?.name; delete bot.entities[7]; }, stop() {} };
+    assert.equal(await skills.defendSelf(bot, 9, () => true), true);
+    assert.deepEqual(held, ['stone_sword@hand']);
+    assert.equal(heldWhenHitting, 'stone_sword');
+    assert.equal(slots[45], null, 'the sword left the off hand');
+});

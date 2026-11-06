@@ -87,3 +87,42 @@ test('pickUpFurnaceAt breaks a lit furnace at its position with the right tool a
     assert.deepEqual(dug, [String(FURNACE_AT)]);
     assert.equal(await skills.pickUpFurnaceAt(bot, FURNACE_AT), false, 'nothing left to pick up');
 });
+
+// #238 review 2: placeFurnaceNear identified "its" furnace as the nearest one after placing, so a
+// failed placement next to someone else's furnace made smeltItem use and later pick up that one.
+test('#238 review 2: placeFurnaceNear returns the furnace at its own position, never the nearest one', async () => {
+    const OTHER = new Vec3(0, 64, 1); // someone's furnace, nearer than the free space
+    const MINE = new Vec3(3, 64, 0);
+    const make = () => {
+        const world = new Map([[String(OTHER), 'furnace']]);
+        const bot = {
+            entity: { position: new Vec3(0, 64, 0) },
+            blockAt: (p) => ({ name: world.get(String(p)) ?? 'air', position: p }),
+            findBlocks: () => [OTHER],
+        };
+        return { bot, world };
+    };
+    const freeSpace = () => MINE;
+
+    const a = make();
+    const placed = await skills.placeFurnaceNear(a.bot, 16, {
+        freeSpace, place: (_b, _n, x, y, z) => { a.world.set(String(new Vec3(x, y, z)), 'furnace'); return Promise.resolve(true); },
+    });
+    assert.equal(String(placed?.position), String(MINE), 'its own furnace');
+
+    const b = make();
+    assert.equal(await skills.placeFurnaceNear(b.bot, 16, { freeSpace, place: () => Promise.resolve(false) }), null, 'a failed placement: null, not the other furnace');
+
+    const c = make();
+    assert.equal(await skills.placeFurnaceNear(c.bot, 16, { freeSpace, place: () => Promise.resolve(true) }), null, 'reported placed, but no furnace there: null');
+});
+
+test('#238 review 2: smeltItem with a failed placement says so and picks nothing up', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, ops, calls } = smeltBot();
+    ops.place = () => Promise.resolve(null);
+    assert.equal(await skills.smeltItem(bot, 'log', 1, ops), false);
+    assert.match(bot.output, /Could not place your furnace\./);
+    assert.deepEqual(calls.pickUps, []);
+    assert.equal(calls.opened, 0);
+});

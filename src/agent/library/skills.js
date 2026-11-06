@@ -2,7 +2,7 @@ import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
-import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from "./rotn_sources.js";
+import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stowCarried } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
 import prismarineRecipe from "prismarine-recipe";
@@ -29,7 +29,12 @@ async function autoLight(bot) {
 }
 
 async function equipHighestAttack(bot) {
-    let weapons = bot.inventory.items().filter(item => item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
+    const isWeapon = (item) => item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe'));
+    // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory first,
+    // so it can be equipped in the main hand (#238 review 1).
+    if (!bot.inventory.items().some(isWeapon) && isWeapon({ name: bot.inventory.slots?.[45]?.name ?? '' }))
+        await stowCarried(bot, isWeapon, { resyncMs: 0 });
+    let weapons = bot.inventory.items().filter(isWeapon);
     if (weapons.length === 0)
         weapons = bot.inventory.items().filter(item => item.name.includes('pickaxe') || item.name.includes('shovel'));
     if (weapons.length === 0)
@@ -381,6 +386,7 @@ export async function smeltItem(bot, itemName, num=1, ops=FURNACE_OPS) {
         if (hasFurnace) {
             furnaceBlock = await ops.place(bot, furnaceRange);
             if (furnaceBlock) { placedFurnace = true; placedAt = furnaceBlock.position.clone ? furnaceBlock.position.clone() : furnaceBlock.position; }
+            else log(bot, 'Could not place your furnace.');
             if (run.aborted) { await putAway(); return false; }
         }
     }
@@ -482,12 +488,17 @@ export async function smeltItem(bot, itemName, num=1, ops=FURNACE_OPS) {
     return true;
 }
 
-/** Place the furnace from the inventory on the nearest free space; the furnace block, or null. */
-async function placeFurnaceNear(bot, range) {
-    const pos = world.getNearestFreeSpace(bot, 1, range);
+/**
+ * Place the furnace from the inventory on the nearest free space. Its own furnace, or null: the
+ * placement must succeed and a furnace must stand at that position. Never the nearest furnace,
+ * which could be someone else's that smeltItem would then pick up (#238 review 2).
+ */
+export async function placeFurnaceNear(bot, range, { place = placeBlock, freeSpace = world.getNearestFreeSpace } = {}) {
+    const pos = freeSpace(bot, 1, range);
     if (!pos) return null;
-    await placeBlock(bot, 'furnace', pos.x, pos.y, pos.z);
-    return world.getNearestBlock(bot, names112.FURNACE_BLOCKS, range);
+    if (!await place(bot, 'furnace', pos.x, pos.y, pos.z)) return null;
+    const b = bot.blockAt(pos);
+    return b && names112.isFurnace(b.name) ? b : null;
 }
 
 /** Pick up a furnace at pos (lit or not): break it with the right tool, then take the drop. */
