@@ -61,7 +61,7 @@ LLM: 52 calls: 40 agent replies and 12 memory summaries OK; 0 failed. USD 0.0050
 
 - **The spam kick:**
   - The driver moved `agenda.json` aside, so the agenda started fresh. But it marks steps done from the inventory, and (c) had left everything: stone tools, cobble, the table.
-  - So right after the spawn it sent 12 chat lines in one second, and the server kicked it ("disconnect.spam"). The agent process restarted 10 s later and rejoined.
+  - So right after the spawn it sent 12 chat lines in one second, and the server kicked it ("disconnect.spam"). The agent process restarted (it waits 10 s), and the bot rejoined 15 s after the kick (07:10:18 to 07:10:33).
   - The lead has sent this to skills-rotn.
 - **The harness misreport (mine):**
   - The scenario's `gone()` stays true after the kick, although the bot was back online before the task was sent. So the observe loop never ran: there were no testfor polls and no refusal check within the 60 s window.
@@ -73,7 +73,8 @@ LLM: 52 calls: 40 agent replies and 12 memory summaries OK; 0 failed. USD 0.0050
 
 ## Cost
 
-- **Spend:** USD 0.005625 in all (key usage 0.764898 to 0.770727). For the round: USD 0.011406; the key reads USD 0.7707 of the 4.50 stop.
+- **Spend:** USD 0.005625 in all (key usage 0.765102 to 0.770727, from `batch.json`). For the round: USD 0.011406 in the three batches; the key reads USD 0.7707 of the 4.50 stop.
+  - Between batch B's end (0.764898) and this batch's start (0.765102), the key moved by USD 0.000204 outside any batch. Most likely that is the two preflight LLM probes before this batch, which no batch counts.
 - **Hetzner:** ran 13 min, billed ~1 h, est. EUR 0.1381 excl. IPv4. Server, Primary IP and SSH key verified gone; the project is empty.
 
 ## Files

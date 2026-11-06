@@ -181,7 +181,7 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`.
 - **Stops:**
   - a scenario error, an infra fault (exit 125) or a harness fault stops the round before the next batch;
   - a plain check FAIL is a result, not a stop;
-  - only an infrastructure failure before the bot joins may be retried once.
+  - an infrastructure failure before the bot joins may be retried once, but only if the GO allows it or the lead approves it at the time: a retry is a paid run.
 - **The report after each batch:** pass/fail per check, bot findings, LLM ok/failed counts, spend, Hetzner minutes, and the server, Primary IP and SSH key verified deleted.
 
 Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
