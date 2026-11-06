@@ -39,6 +39,24 @@ function readJson(dir, base) {
 
 const sameMeta = (want, have) => want == null || have === WILDCARD_META || want === WILDCARD_META || want === have;
 
+/**
+ * True for the box a Dynamic Trees branch gives when no neighbour is a tree part: one cube centred
+ * on the cell whose half-size is a whole number of blocks (the branch radius, not radius / 16).
+ * DramaticTrees-1.12.2-0.13.4.jar (SHA-256 b86dae76...7ffe) BlockBranchBasic.addCollisionBoxToList
+ * (func_185477_a) bytecode 171-216: with no connection it adds AxisAlignedBB(0.5, 0.5, 0.5, 0.5, 0.5,
+ * 0.5).grow(radius); BlockBranchThick hands radius <= 8 to it. The dumper's probe cells have no tree
+ * parts around them, so every branch state of radius <= 8 was dumped with this box (2 to 16 blocks
+ * wide, entityCollisionVaries false). In a tree every branch connects, and its shape is the core box
+ * plus arms toward its tree-part neighbours, so the dumped box says nothing about it (Request 14 run).
+ * Only for dynamictrees* blocks.
+ */
+export function isDtBranchNoConnectionBox(name, boxes) {
+    if (!/^dynamictrees[a-z]*:/.test(String(name)) || !Array.isArray(boxes) || boxes.length !== 1) return false;
+    const [x0, y0, z0, x1, y1, z1] = boxes[0];
+    const h = x1 - 0.5;
+    return Number.isInteger(h) && h >= 1 && [x0, y0, z0].every((v) => v === 0.5 - h) && [y1, z1].every((v) => v === 0.5 + h);
+}
+
 export class RotnData {
     /**
      * @param {string} dir  folder with registry-names.json and (optionally) the dump files
@@ -133,12 +151,16 @@ export class RotnData {
      * per-state table cannot give it). It does not catch tile-entity dependence (the dumper never
      * places the state), so `false` is not proof that the shape is fixed. Before 0.3.0, or
      * when the call threw, it falls back to `collision` (getCollisionBoundingBox) with
-     * `varies: null` and `source: 'collision'`. `null` for an unknown block or a block without a dump.
+     * `varies: null` and `source: 'collision'`. A Dynamic Trees branch whose dumped box is the
+     * no-connection cube (isDtBranchNoConnectionBox) also gets `collision` (its core box), with
+     * `varies: true` and `source: 'collision'`: in a tree its arms depend on the neighbouring tree parts.
+     * `null` for an unknown block or a block without a dump.
      */
     playerCollision(input) {
         const b = this.getBlock(input);
         if (!b?.propertiesKnown || !b.state) return null;
         const s = b.state;
+        if (isDtBranchNoConnectionBox(b.name, s.entityCollision)) return { boxes: s.collision ?? null, varies: true, source: 'collision' };
         if (Array.isArray(s.entityCollision)) return { boxes: s.entityCollision, varies: s.entityCollisionVaries ?? null, source: 'entityCollision' };
         return { boxes: s.collision ?? null, varies: null, source: 'collision' };
     }

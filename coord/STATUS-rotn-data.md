@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-06T11:57Z (from `date -u`)
+Updated: 2026-11-06T12:34Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -193,6 +193,38 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - blocks/items: `betterwithaddons:world_scale_ore` hardness 15 -> 225 and `randomthings:spectrecoil_number` names (world or random values, known).
 - entities, spawns and serializers: unchanged. `common-mobs.json`: only its dump stamp changed.
 
+## Fourth dump batch record (player collision dump, dumper 0.3.0, 2026-11-06)
+
+| Item | Value |
+| --- | --- |
+| GO | lead's written GO (the human approved at 11:55Z); start given by the lead after 12:11Z (round 5 on hold after batch A, Hetzner project empty, verified 12:11Z) |
+| Checkout | this worktree, branch `agent/rotn-data/dump-run-0.3.0` from origin/develop `c32521e5`; `deploy/test-server.sh` and `tools/dumper/run-dump.sh` identical to develop |
+| Jar | dumper-build push run **42193215026** (develop `5c6aab2e`, success); `rotndump-0.3.0.jar`, 65,499 bytes, SHA-256 `7c82061aaf633851c46b33a94183f371cc40c36c5808ddfd9f17d71752609c8c` (printed by `build.sh` in the run's log, equal to `sha256sum` of the download; recorded here before the run) |
+| Command | `timeout 2700 deploy/test-server.sh run --ttl-hours 2 --yes --extra-mod <jar> -- tools/dumper/run-dump.sh <scratch out>` (defaults CPX42, nbg1) |
+| Preflight | passed on its own: "sweeper OK (via cadence): cadence of 4 dispatch runs on develop in the last 50 min ... newest 42216276607 1.9 min ago". No `--skip-sweeper-check`. Dry run at 11:56Z: exit 0, nothing created |
+| Times (UTC) | command start 12:17:19; server `mcr-test-20261106-121721` (id 174802984, CPX42, nbg1, delete-after 14:17:29) created 12:17:29-12:17:43; jar uploaded 12:19:17; ready 12:22:33; `rotndump` scheduled 12:22:37; `DONE` after 12 s; teardown 12:23:19-12:23:34 |
+| Duration and cost | ran 6 min; 1 billed hour, about **EUR 0.14** (EUR 0.1381 excl. Primary IPv4) |
+| After | EXIT trap: "verified gone: server, Primary IPv4 and SSH key". My own check at 12:23:42Z: `hcloud server list` and `primary-ip list` empty, nothing labelled `purpose=mindcraft-rotn-test`; the only SSH key is the pre-existing unlabelled one (created 2026-10-31) |
+| Live server | not touched. No world writes (the dumper only reads), no LLM |
+| Manifest | dumper 0.3.0; `dumperJar.sha256` matches (`--jar-sha256` accepted it); Forge 14.23.5.2860; 347 mods; **0 errors, 0 entryErrors** |
+| Import | `import-dump.mjs --jar-sha256 7c82061a...609c8c`: no problems; every scripts cross-check ok; **leaves self-check ok (32 `dynamictrees:leaves*` states give the half-height box at both probes)** |
+| Raw output | `rotn-dump/` (35 MB) and `latest.log` stay in my scratchpad, out of git |
+
+`manifest.timing` (batch 500, 40 ms budget): blocks 1,348 ms over 27 ticks (longest 140 ms, was 42 ms: the two addCollisionBoxToList calls per state); serializers 1,813 ms / 39 ticks; every other part under 1.3 s. The longest tick (140 ms) is on a server with no players.
+
+**Player collision (`entityCollision`), 23,499 states:**
+- 5,392 states (865 blocks) give a player something other than `collision`: 3,408 multi-box (stairs, cauldron, hopper, ...); 456 a lower single box (the Dynamic Trees leaves, lanterns, brambles); 481 nothing where `collision` is solid (61 blocks, e.g. ContentTweaker cave plants, `charm:rune_portal`); 36 a box where `collision` is empty (lily pads, grape vines, `minetraps:barbed_wire_fence`); the rest another single box (bars, walls, panes).
+- 383 states vary between the air and solid probes (`entityCollisionVaries`): fences, walls, panes, bars, `minecraft:snow_layer` and the like (earthworks 84, undergroundbiomes 56, quark 53, netherex 33, minecraft 29, ...).
+- 12 threw (`entityCollision: null`): `minecraft:end_portal_frame` (8) and the four `cyclicmagic` pipes. `playerCollision` falls back to `collision` for them.
+- **Finding: the Dynamic Trees branch no-connection cube.** 432 states of 54 `dynamictrees*` branch blocks (radius 1-8) were dumped with one cube centred on the cell, 2 to 16 blocks wide (e.g. `dynamictrees:oakbranch` meta 0 `[-0.5,-0.5,-0.5,1.5,1.5,1.5]`, meta 7 `[-7.5,...,8.5]`), `entityCollisionVaries` false. DramaticTrees `BlockBranchBasic.func_185477_a` bytecode 171-216: with no tree-part neighbour it adds `AxisAlignedBB(0.5,...).grow(radius)` with the integer radius, not radius/16; `BlockBranchThick` hands radius <= 8 to it. Neither probe cell has tree parts around it, so the dumper recorded that path faithfully, and `varies` cannot see it (air and stone both give no connections). In a tree every branch connects. `catalog.playerCollision` therefore returns the branch's `collision` (its core box) with `varies: true` for these states (`isDtBranchNoConnectionBox`); radius > 8 (thick trunks) keeps the dumped box. The import notes the count.
+
+**Other changes against the 2026-11-02 data, all per-run, none from the dumper change:**
+- `blocks`: 103 `collision` values in 55 blocks (walls, quark bark walls, ...) differ: `getCollisionBoundingBox` is read at (0,0,0) as before, the new world has other neighbours there, and all 103 states are flagged `entityCollisionVaries`. 6 `displayName`s of `randomthings:spectrecoil_number` (a random number per run).
+- `items`: the same Spectre Coil name. `oredict` (`ratPoop`), `smelting` (13) and 1 recipe: the NBT of `rats:rat_nugget_ore` (Rats picks its ores at random per run).
+- `recipes`: 104 `crafttweaker:rustic_chair_N` ids map to other chair colours (the same recipes and the same id set; only which id gets which colour); `wards:enchanted_paper` lists its 380 books in another order (the same set).
+- `state-meta-remap`: identical except the numeric block ids (modded ids are allocated per world; used by name only), and it now carries 0.2.1's `unscannedIds` 0 and `mapIds` = `networkIds` 24,011, so the scan is complete.
+- `entities`, `spawns`, `serializers`: byte-identical. `common-mobs.json` regenerated: only its `dumpedAt` and `dumperJarSha256` change.
+
 ## Restart point (resumed 2026-11-05 after the Orca restart)
 
 - **Worktree:** branch `agent/rotn-data/status-idle`, from develop after #213 (`1dfef62d`); STATUS only, no PR (rides with the next one). No background jobs, no subagents (the lead reviews).
@@ -204,7 +236,7 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 - **#213 merged** (`1dfef62d`), the #209 review nits: (1) `installFoods` bans nothing and is meta 0 only (a pufferfish shares the cod's entry): documented in `src/foods.js`, `index.js` and the README; the eating code must check `avoidFood(name, meta)` and set auto-eat's `bannedFood` from it (see Request 11). (2) `scriptWon` names the winning line per field for the 9 foods `food.zs` sets more than once (baked beets: lines 466, 468). (3) The build stops on a `HungerEvents.onGetFoodValues` / `onGetPlayerFoodValues` handler (comments ignored). Tests: food-values 7/7, ESLint clean, `--check` reproduces.
 - **#226 merged** (`eb9b5657`), **G3 smoke round 2 batch A deaths (lead request, 2026-11-05):** "Zombie FRCFLD" is Zombie Players by Corosus (`mods/zombie_players-1.12.1-1.2.7.jar`), its own entity `zombie_players:zombie_player` (named "Zombie <player>" by its getDisplayName), not a renamed vanilla zombie, so no name rule. It spawns at any player death spot (unless within 32 blocks of the player's bed), never despawns, is a plain zombie with empty hands (20 health, 2 armor, attack 3, follow range 16) and cannot pick up items. Corpse Complex keeps armor, main hand and off hand; the rest drops and despawns after 600 s. The grove sprite (Primitive Mobs) only retaliates on a server: its player-targeting task is added under world.isRemote (client only), so the PR #62 'conditional' override was wrong and made threatOf say 'fight'. Moved to reviewedNotMarked; both get cited threat-reactions entries (grove sprite ignore-unless-provoked, zombie player fight). Tests: threats 15/15, entity-threats 6/6, threats-bosses 4/4, threats-parasite-weta 3/3, ESLint clean (targeted, smoke round 2 running).
 - **#226 review nits, branch `agent/rotn-data/death-zombie-nits`:** (1) ~~burns in daylight~~ corrected after the #243 review (REQUEST CHANGES): EntityZombiePlayer overrides setFire (`func_70015_d`) with a bare return, so it **never catches fire** (not by day, lava, fire or Fire Aspect; I had missed that override in the method list). Summary says so and keeps "do not wait for day"; the test is inverted. The Hordes' zombie-player options configure its own `hordes:zombie_player`, and The Hordes jar has no reference to Zombie Players; (2) the bot cannot read the 'Zombie <player>' name (FML spawn data), so the summary says to match on the entity type. threats 15/15, ESLint clean.
-- **Exact next step on resume:** #262 is merged (`5c6aab2e`). The lead gave the written GO for the Request 14 dump run (the human approved it at 11:55Z, 2026-11-06), but it **starts only when the lead says harness-ops has finished G3 smoke round 5** (the shared Hetzner project must be empty for their batches). Prepared: the jar is downloaded and its hash recorded, and the dry run passed (see Request 14). Then run, verify deletion, import with `--jar-sha256`, data PR. The memory rule applies: targeted tests only. The #210 falls follow-ups stay low priority. No background jobs, no subagents, nothing uncommitted.
+- **Exact next step on resume:** the Request 14 dump run is done (fourth batch record above; deletion verified, reported to the lead). The import PR (`agent/rotn-data/dump-run-0.3.0`, see Open PRs) carries the data, the Dynamic Trees branch guard in `playerCollision` and the batch record; fix review findings there (never force-push). Then net-forge can switch to `playerCollision`. The memory rule applies: targeted tests only. The #210 falls follow-ups stay low priority. No background jobs, no subagents.
 - **Scratch for these PRs (this session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/593cb80f0a2fa303/58e02aa2-eb4f-4b10-a106-0e44e7aa3c41/scratchpad/`):** `jars/` (four mod jars from the pinned zip, SHA-256s in #178), `packfiles/` (pack configs and scripts), `mcp/` (MCP stable-39 CSVs), `meth.sh` and `summ.sh` (javap helpers), `out/*.json` (the cited entries as merged).
 - **Rules in force:** never force-push (the lead's rule; denied once here); memory is tight, so targeted test files one at a time, no full suite or `npm ci` unless the lead says; no paid batch without a written GO.
 - **Reusable scratch, outside the repo (my previous session's scratchpad, `C:/Users/admin/AppData/Local/Temp/claude/C--Users-admin-orca-workspaces-mindcraft-RotN-rotn-data-g2/385eb418-186a-499d-8a48-1cfbf1bc037d/scratchpad/`):**
@@ -411,6 +443,7 @@ Findings for skills-rotn (via the lead): see Request 8.
      - SHA-256 printed by `build.sh` in that run's log (09:12:27Z): `7c82061aaf633851c46b33a94183f371cc40c36c5808ddfd9f17d71752609c8c`. `sha256sum` of the downloaded file: the same. This is `$JAR_SHA256`.
      - Contents: `mcmod.info` version 0.3.0; `BlockDumper.class` has `entityCollision`, `entityCollisionVaries`, `entityCollisionProbe` and the reobfuscated `func_185908_a` (`addCollisionBoxToList`).
    - **Dry run, 2026-11-06T11:57Z:** `deploy/test-server.sh run --ttl-hours 2 --yes --dry-run --extra-mod <jar> -- tools/dumper/run-dump.sh <out>`: exit 0. Sweeper OK (cadence, 3 dispatch runs in 50 min, newest 42212593876). Plan cpx42 nbg1 at EUR 0.1381/h gross, worst case about EUR 0.41 + IPv4. It printed the ssh-key, primary-ip and server create commands (labels `purpose`, `delete-after`, `batch`) and created nothing. `node --test packages/rotn-data/test/import-dump.test.js`: 23/23.
+   - **Run done** (2026-11-06T12:34Z): see the fourth dump batch record. Server, Primary IP and SSH key deletion verified at 12:23:42Z; the import passed with the leaves self-check; one finding (the Dynamic Trees branch no-connection cube) handled in `playerCollision`. Import PR open (Open PRs).
    - **Dump-run plan:**
      1. Take the `rotndump-jar` artifact of the `dumper-build` push run on develop for `cc99d9e9` or later (a PR artifact is not used). Record here, before the run: the run id, the file name and bytes, and the SHA-256 `build.sh` printed in that run's log, checked against the downloaded file with `sha256sum`.
      2. Run the command in `tools/dumper/README.md` ("Run it on the test server") as in the three earlier batches: CPX42, nbg1, `--ttl-hours 2`, a 45-minute `timeout`, `deploy/test-server.sh` unchanged, the sweeper preflight on its own. About 4-5 min, 1 billed hour, about EUR 0.14 (+ IPv4). Verify the server, Primary IPv4 and SSH key are gone afterwards.
@@ -438,4 +471,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- None. The STATUS update for the dump-run preparation is on `agent/rotn-data/dump-run-0.3.0` (no PR yet; the data PR after the run carries it).
+- (new) `agent/rotn-data/dump-run-0.3.0`: Request 14 import (dumper 0.3.0 data, the Dynamic Trees branch guard in `playerCollision`, the fourth batch record).

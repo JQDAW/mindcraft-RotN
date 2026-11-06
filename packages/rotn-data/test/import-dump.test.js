@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import zlib from 'node:zlib';
 import { importDump, canonicalize, checkStateMetaRemap, checkEntityCollision, DT_LEAVES_PLAYER_BOX } from '../tools/import-dump.mjs';
-import { RotnData, DUMP_FILES } from '../src/catalog.js';
+import { RotnData, DUMP_FILES, isDtBranchNoConnectionBox } from '../src/catalog.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const JAR = 'ab'.repeat(32); // the expected dumper jar SHA-256 in these tests
@@ -411,10 +411,44 @@ test('entityCollision end to end: a 0.3.0 dump on the pinned pack must contain D
     }
 });
 
-test('playerCollision falls back to getCollisionBoundingBox before dumper 0.3.0 (the current 3.3.4 data)', () => {
+test('playerCollision on the 3.3.4 data (dumper 0.3.0 run): half-height leaves, multi-box stairs, a varying wall, a thrown state', () => {
     const cat = new RotnData(path.join(HERE, '../3.3.4'), { version: '3.3.4' });
-    const leaves = cat.playerCollision('dynamictrees:leaves0');
-    assert.equal(leaves.source, 'collision');
-    assert.equal(leaves.varies, null);
-    assert.deepEqual(leaves.boxes, FULL); // the full cube #259 is about
+    assert.equal(cat.dump.manifest.dumper, '0.3.0');
+    // The full cube #259 is about is gone: a player gets the half-height box.
+    assert.deepEqual(cat.playerCollision('dynamictrees:leaves0'), { boxes: DT_LEAVES_PLAYER_BOX, varies: false, source: 'entityCollision' });
+    assert.equal(cat.playerCollision('minecraft:oak_stairs').boxes.length, 2);
+    assert.equal(cat.playerCollision('minecraft:cobblestone_wall').varies, true);
+    // end_portal_frame's call threw (null): getCollisionBoundingBox stands in.
+    assert.deepEqual(cat.playerCollision('minecraft:end_portal_frame'), { boxes: [[0, 0, 0, 1, 0.8125, 1]], varies: null, source: 'collision' });
+});
+
+test('playerCollision: a Dynamic Trees branch dumped with the no-connection cube gets its core box, varies true', () => {
+    const cat = new RotnData(path.join(HERE, '../3.3.4'), { version: '3.3.4' });
+    // Radius 1 (meta 0): dumped as a 2-block cube around the cell; the core is 2/16 wide.
+    assert.deepEqual(cat.getBlock({ name: 'dynamictrees:oakbranch', meta: 0 }).state.entityCollision, [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]);
+    assert.deepEqual(cat.playerCollision({ name: 'dynamictrees:oakbranch', meta: 0 }), { boxes: [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], varies: true, source: 'collision' });
+    assert.deepEqual(cat.playerCollision({ name: 'dynamictrees:oakbranch', meta: 7 }), { boxes: FULL, varies: true, source: 'collision' });
+    // Radius > 8 (thick trunks) never takes that path: the dumped box is used.
+    assert.deepEqual(cat.playerCollision({ name: 'dynamictrees:oakbranch', meta: 15 }), { boxes: [[-0.5, 0, -0.5, 1.5, 1, 1.5]], varies: false, source: 'entityCollision' });
+    assert.equal(cat.playerCollision({ name: 'dynamictreesbop:cherrybranch', meta: 3 }).source, 'collision');
+});
+
+test('isDtBranchNoConnectionBox: only a dynamictrees* block with one cell-centred cube of whole-block half-size', () => {
+    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), true);
+    assert.equal(isDtBranchNoConnectionBox('dynamictreesttf:canopybranch', [[-7.5, -7.5, -7.5, 8.5, 8.5, 8.5]]), true);
+    assert.equal(isDtBranchNoConnectionBox('mcwbridges:most1', [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), false);
+    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', [[-0.5, 0, -0.5, 1.5, 1, 1.5]]), false);
+    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', [[-0.25, -0.25, -0.25, 1.25, 1.25, 1.25]]), false);
+    assert.equal(isDtBranchNoConnectionBox('dynamictrees:leaves0', DT_LEAVES_PLAYER_BOX), false);
+    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', [FULL[0], FULL[0]]), false);
+    assert.equal(isDtBranchNoConnectionBox('dynamictrees:oakbranch', null), false);
+});
+
+test('entityCollision: Dynamic Trees branch states with the no-connection cube are counted in a note', () => {
+    const f = blocks03();
+    f.blocks['dynamictrees:oakbranch'] = { defaultMeta: 0, states: [st(0, [[0.4375, 0.4375, 0.4375, 0.5625, 0.5625, 0.5625]], [[-0.5, -0.5, -0.5, 1.5, 1.5, 1.5]]), st(15, [[-0.5, 0, -0.5, 1.5, 1, 1.5]], [[-0.5, 0, -0.5, 1.5, 1, 1.5]])] };
+    const problems = [];
+    const notes = checkEntityCollision(f, { problems, dumperVersion: '0.3.0', requireLeaves: true });
+    assert.deepEqual(problems, []);
+    assert.ok(notes.includes('entityCollision: 1 states of 1 Dynamic Trees branch blocks have the no-connection cube (playerCollision uses their collision, varies true)'), notes.join('\n'));
 });

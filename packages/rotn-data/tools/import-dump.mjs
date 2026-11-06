@@ -28,6 +28,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { isDtBranchNoConnectionBox } from '../src/catalog.js';
 import { RotnData, DUMP_FORMAT, DUMP_FILES } from '../src/catalog.js';
 import { recipeMatches } from '../src/crosscheck.js';
 
@@ -267,7 +268,9 @@ const sameBoxes = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  *   entityCollisionVaries (boolean, or null); an older dump without them is only a note;
  * - the self-check: every dynamictrees:leaves* state gives a player DT_LEAVES_PLAYER_BOX and does
  *   not vary between the probes (requireLeaves: at least one such block must be dumped);
- * - notes: how many states throw, vary, or differ from getCollisionBoundingBox's `collision`.
+ * - notes: how many states throw, vary, or differ from getCollisionBoundingBox's `collision`, and
+ *   how many Dynamic Trees branch states carry the no-connection cube (catalog.playerCollision
+ *   ignores it; see isDtBranchNoConnectionBox).
  * Self-check failures and malformed fields are problems, always blocking: --allow-errors is for
  * the dumper's own entry errors, not for a measurement that is wrong.
  */
@@ -289,6 +292,8 @@ export function checkEntityCollision(blocksFile, { problems = [], dumperVersion,
     let differs = 0;
     const malformed = [];
     const leafStates = [];
+    const branchBlocks = new Set();
+    let branchStates = 0;
     for (const [name, b] of Object.entries(blocksFile.blocks ?? {})) {
         for (const s of b.states ?? []) {
             states++;
@@ -301,6 +306,7 @@ export function checkEntityCollision(blocksFile, { problems = [], dumperVersion,
             if (s.entityCollisionVaries === true) varies++;
             else if (s.entityCollisionVaries !== false && s.entityCollisionVaries !== null) malformed.push(`${label} entityCollisionVaries ${s.entityCollisionVaries}`);
             if (DT_LEAVES.test(name)) leafStates.push({ label, s });
+            if (isDtBranchNoConnectionBox(name, e)) { branchStates++; branchBlocks.add(name); }
         }
     }
     if (malformed.length) bad(`${malformed.length} malformed states, e.g. ${malformed.slice(0, 5).join('; ')}`);
@@ -310,6 +316,7 @@ export function checkEntityCollision(blocksFile, { problems = [], dumperVersion,
         bad(`self-check: ${wrong.length} of ${leafStates.length} dynamictrees:leaves* states do not give a player the half-height box ${JSON.stringify(DT_LEAVES_PLAYER_BOX[0])} at both probes, e.g. ${wrong.slice(0, 3).map(({ label, s }) => `${label} ${JSON.stringify(s.entityCollision)} varies ${s.entityCollisionVaries}`).join('; ')}`);
     }
     notes.push(`entityCollision: ${states} states; ${differs} differ from collision, ${varies} vary between the probes (world-dependent), ${threw} threw; self-check ${leafStates.length} dynamictrees:leaves* states ${wrong.length ? 'FAILED' : 'ok'}`);
+    if (branchStates) notes.push(`entityCollision: ${branchStates} states of ${branchBlocks.size} Dynamic Trees branch blocks have the no-connection cube (playerCollision uses their collision, varies true)`);
     return notes;
 }
 
