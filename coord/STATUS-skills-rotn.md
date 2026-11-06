@@ -209,7 +209,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **Dirt piles follow-up** (branch `agent/skills-rotn/dirt-piles`, opened 2026-11-06T19:57Z by `date -u`): rotn-data #288. Required before the G3 gate (lead). See "Dirt piles" below.
+- **#291: dirt piles follow-up** (branch `agent/skills-rotn/dirt-piles`, opened 2026-11-06T19:57Z by `date -u`): rotn-data #288. Required before the G3 gate (lead). See "Dirt piles" below.
 - **#284** (round 6 B shelter) and rotn-data **#288** are merged.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
