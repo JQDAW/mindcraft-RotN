@@ -295,3 +295,29 @@ test('#259: molten metal at the feet makes self_preservation act, like lava; mil
     await flush();
     assert.deepEqual(milk.log.ran, [], 'milk is a liquid, not lethal');
 });
+
+// #264 review 3: a modded fire block (forge.hazard 'fire': 14 on 3.3.4) burns like vanilla fire, at
+// the feet or at the head.
+test('#264 review 3: a modded fire block at the feet or the head makes self_preservation act; a modded trap does not', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const withBlock = (name, hazard, y) => {
+        const agent = arena();
+        for (const k of Object.keys(agent.bot.entities)) if (k !== '0') delete agent.bot.entities[k];
+        const id = 4420;
+        const entry = { id, name, boundingBox: 'empty', forge: { modded: true, hazard } };
+        agent.bot.registry = { ...reg, blocks: { ...reg.blocks, [id]: entry }, blocksByStateId: { ...reg.blocksByStateId, [id << 4]: entry } };
+        agent.bot.inventory = { items: () => [], findInventoryItem: () => null };
+        agent.bot.blockAt = (p) => (Math.floor(p.y) === y ? { name, type: id, metadata: 0, position: p } : { name: 'air', type: 0, metadata: 0, position: p });
+        return agent;
+    };
+    for (const y of [64, 65]) { // the feet cell, the head cell
+        const agent = withBlock('netherex:blue_fire', 'fire', y);
+        await __modeForTest('self_preservation').update(agent);
+        await flush();
+        assert.deepEqual(agent.log.ran.map(r => r.label), ['mode:self_preservation'], `fire at y ${y}`);
+    }
+    const trap = withBlock('minetraps:spikes', 'trap', 64);
+    await __modeForTest('self_preservation').update(trap);
+    await flush();
+    assert.deepEqual(trap.log.ran, [], 'a trap is avoided by the walks, not a burn');
+});

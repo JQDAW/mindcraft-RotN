@@ -16,6 +16,7 @@ import {
 import { ROTN_EARLY_GAME } from '../agenda.js';
 import { moveAwayWithin } from '../modes.js';
 import * as skills from './skills.js';
+import * as world from './world.js';
 
 const vanilla = minecraftData('1.12.2');
 const reg = { ...vanilla, blocks: { ...vanilla.blocks }, blocksByName: { ...vanilla.blocksByName }, blocksByStateId: { ...vanilla.blocksByStateId } };
@@ -350,4 +351,50 @@ test('#259: installWalkSafety makes every movements anyone sets fall-, liquid- a
     assert.equal(set[0].maxDropDown, PATHFINDER_MAX_DROP_DOWN);
     assert.ok(set[0].blocksToAvoid.has(FLUIDS[SPIKES].id));
     assert.equal(installWalkSafety(bot), false, 'once');
+});
+
+// ---- #264 review ----
+
+test('#264 review 1: vanilla water is left to the pathfinder: wading and swimming still give moves', () => {
+    const node = { x: 0, y: 64, z: 0, remainingBlocks: 0 };
+    const east = { x: 1, z: 0 };
+    const moves = (blocks) => {
+        const bot = fakeBot({ blocks });
+        const safe = [], raw = [];
+        fallSafe(new pf.Movements(bot)).getMoveForward(node, east, safe);
+        new pf.Movements(bot).getMoveForward(node, east, raw);
+        return [safe.length, raw.length];
+    };
+    assert.deepEqual(moves({ '1,64,0': 'water' }), [1, 1], 'wading: 1-deep water on dirt');
+    assert.deepEqual(moves({ '1,64,0': 'water', '1,63,0': 'water', '1,62,0': 'water' }), [1, 1], 'swimming on the surface');
+    assert.deepEqual(moves({ '1,65,0': 'water', '1,64,0': 'water', '1,63,0': 'water' }), [1, 1], 'under water');
+    // ...while a modded fluid is still refused
+    assert.deepEqual(moves({ '1,63,0': MILK }), [0, 1], 'never onto a floor of milk');
+});
+
+test('#264 review 2: never dig next to a modded fluid, whatever dontCreateFlow says (mineflayer-collectblock turns it off)', () => {
+    const bot = fakeBot({ blocks: { '1,64,0': 'stone', '2,64,0': MOLTEN, '5,64,0': 'stone', '6,64,0': 'water', '9,64,0': 'stone' } });
+    const stone = (x) => bot.blockAt(at(x, 64));
+    for (const dontCreateFlow of [true, false]) {
+        const m = fallSafe(new pf.Movements(bot));
+        m.dontCreateFlow = dontCreateFlow;
+        assert.equal(m.safeToBreak(stone(1)), false, `next to molten tin (dontCreateFlow ${dontCreateFlow})`);
+        assert.equal(m.safeToBreak(stone(9)), true, `nothing near (dontCreateFlow ${dontCreateFlow})`);
+    }
+    const raw = new pf.Movements(bot);
+    assert.equal(raw.safeToBreak(stone(1)), true, 'the raw pathfinder would dig it');
+    const m = fallSafe(new pf.Movements(bot));
+    assert.equal(m.getBlock(at(2, 64), 0, 0, 0).liquid, true, 'a modded fluid is a liquid to the pathfinder');
+    assert.equal(m.safeToBreak(stone(5)), false, 'next to water: the pathfinder\'s own dontCreateFlow, as before');
+});
+
+test('#264 nit: isClearPath uses the safe movements', async () => {
+    const bot = fakeBot();
+    let used = null;
+    bot.pathfinder = { getPathFromTo: function* (m) { used = m; yield { result: { status: 'success', path: [] } }; } };
+    await world.isClearPath(bot, { position: at(3, 64) });
+    assert.ok(used, 'searched');
+    assert.equal(used.rotnFallSafe, true);
+    assert.ok(used.blocksToAvoid.has(FLUIDS[SPIKES].id));
+    assert.equal(used.canDig, false);
 });

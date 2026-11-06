@@ -1,5 +1,5 @@
 {
-  "total": 254,
+  "total": 253,
   "files": {
     "bots/execTemplate.js": 3,
     "bots/lintTemplate.js": 1,
@@ -16,7 +16,7 @@
     "src/agent/library/lockdown.js": 2,
     "src/agent/library/skill_library.js": 2,
     "src/agent/library/skills.js": 20,
-    "src/agent/library/world.js": 2,
+    "src/agent/library/world.js": 1,
     "src/agent/memory_bank.js": 2,
     "src/agent/modes.js": 28,
     "src/agent/npc/controller.js": 3,

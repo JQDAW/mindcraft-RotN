@@ -2,6 +2,7 @@ import pf from 'mineflayer-pathfinder';
 import * as mc from '../../utils/mcdata.js';
 import { VILLAGER_PROFESSIONS_112 } from './names112.js';
 import { inventoryKey, blockMetasFor, blockMatcher, blockDisplayName } from './rotn_names.js';
+import { fallSafe } from './fall_safety.js';
 
 
 export function getNearestFreeSpace(bot, size=1, distance=8) {
@@ -435,7 +436,8 @@ export async function isClearPath(bot, target, limits = CLEAR_PATH_LIMITS) {
     const { maxDistance, searchRadius, timeoutMs } = { ...CLEAR_PATH_LIMITS, ...limits };
     if (!target?.position || !bot.entity?.position) return false;
     if (bot.entity.position.distanceTo(target.position) > maxDistance) return false;
-    let movements = new pf.Movements(bot)
+    // The safe movements (#264 nit): a path over molten metal, a trap or a drop over 3 is not clear.
+    let movements = fallSafe(new pf.Movements(bot));
     movements.canDig = false;
     movements.canPlaceOn = false;
     movements.canOpenDoors = false;

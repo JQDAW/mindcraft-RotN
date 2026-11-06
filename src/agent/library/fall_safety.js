@@ -68,8 +68,18 @@ export function hazardOf(bot, b) {
 /** Deadly to stand in: lava, and the pack's molten metals (forge.hazard 'lava'). */
 export const isLethal = (bot, b) => hazardOf(bot, b) === 'lava';
 
-/** A liquid or a hazard: never stood on, landed on, walked into or dug. */
+/** A liquid or a hazard: never ground, never empty (vanilla water included: not firm ground). */
 export const isUnsafeBlock = (bot, b) => isLiquid(bot, b) || hazardOf(bot, b) !== null;
+
+const VANILLA_WATER = /^(minecraft:)?(flowing_)?water$/;
+/** A modded fluid (the registry's liquid flag); vanilla water and lava are known by name. */
+const isModdedLiquid = (bot, b) => !!b && !VANILLA_LIQUID.test(b.name ?? '') && bot?.registry?.blocks?.[b.type]?.liquid === true;
+/**
+ * What a walk must keep out of: a liquid or a hazard, but not vanilla water, which the pathfinder
+ * handles itself (wading, swimming, landing in it; #264 review 1: refusing it left a bot in a lake
+ * with no way out).
+ */
+export const isWalkHazard = (bot, b) => !!b && !VANILLA_WATER.test(b.name ?? '') && isUnsafeBlock(bot, b);
 
 // A liquid or a hazard is not empty (#256 nit, #259): a leaf over water is not reachable from the
 // ground, an item on molten metal is not on the ground. isFirmGround rejects them.
@@ -157,17 +167,28 @@ function liquidAndHazardSafe(movements) {
     for (const id of hazardBlockIds(registry)) {
         if (!registry?.blocks?.[id]?.forge?.hazardByMeta) movements.blocksToAvoid.add(id);
     }
-    const below = (b) => (b?.position ? blockAt(bot, offset(b.position, -1)) : null);
-    movements.exclusionAreasStep.push((b) => (hazardOf(bot, b) || isUnsafeBlock(bot, below(b)) ? NEVER : 0));
-    movements.exclusionAreasBreak.push((b) => (isUnsafeBlock(bot, b) ? NEVER : 0));
+    const near = (b, dx, dy, dz) => (b?.position ? blockAt(bot, b.position.offset(dx, dy, dz)) : null);
+    // Not into a hazard state, nor onto a cell above a liquid or a hazard. The check runs on head
+    // cells too (below them: the feet cell), so vanilla water is left out (#264 review 1).
+    // Note (#264 review nit): a non-empty exclusionAreasStep turns off the pathfinder's path
+    // shortcuts (mineflayer-pathfinder index.js), for every walk; accepted.
+    movements.exclusionAreasStep.push((b) => (hazardOf(bot, b) || isWalkHazard(bot, near(b, 0, -1, 0)) ? NEVER : 0));
+    // Never dig a liquid or a hazard, nor a block next to a modded fluid (#264 review 2): it would
+    // flow out. safeToBreak's own check (dontCreateFlow) reads .liquid, and mineflayer-collectblock
+    // turns dontCreateFlow off, so the neighbours are checked here whatever that setting is.
+    movements.exclusionAreasBreak.push((b) => (isWalkHazard(bot, b)
+        || [[0, 1, 0], [1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]].some(([dx, dy, dz]) => isModdedLiquid(bot, near(b, dx, dy, dz))) ? NEVER : 0));
     const getBlock = movements.getBlock.bind(movements);
     movements.getBlock = (pos, dx, dy, dz) => {
         const b = getBlock(pos, dx, dy, dz);
-        // Vanilla water keeps the pathfinder's own handling; everything else unsafe is lava to it.
-        if (b && b.type !== undefined && isUnsafeBlock(bot, b) && !/^(minecraft:)?(flowing_)?water$/.test(b.name ?? '')) {
+        // Everything a walk keeps out of is lava to the pathfinder: unsafe, not solid; a modded
+        // fluid is also a liquid, so dontCreateFlow sees it (#264 review 2). Vanilla water keeps
+        // the pathfinder's own handling.
+        if (b && b.type !== undefined && isWalkHazard(bot, b)) {
             b.safe = false;
             b.physical = false;
             b.replaceable = false;
+            if (isModdedLiquid(bot, b)) b.liquid = true;
         }
         return b;
     };

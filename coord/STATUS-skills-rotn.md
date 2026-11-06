@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T09:19Z (from `date -u`)
+Updated: 2026-11-06T09:38Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -522,7 +522,16 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - **The #260 nits** are included.
   - **Tests:** `fall_safety` 14 (4 new), `threat_arbitration` 10 (1 new). All 5 new tests fail on develop's code; `fall_safety` was checked with develop's file plus stub exports. Full `npm test`: 1261 pass, 0 fail. Lint 254.
   - **net-forge #263** (not merged) makes `hazardBlockIds` whole-block by default. My filter on `hazardByMeta` is right with and without it.
-- **Next:** the fluids and hazards PR review.
+- **#264 review (REQUEST CHANGES), fixed on the same branch:**
+  1. **Vanilla water is left to the pathfinder.** The step and break checks use `isWalkHazard` (a liquid or a hazard, but not vanilla water); before, the head-cell check refused water. Tests: wading, swimming on the surface and under water give the same moves as the raw pathfinder; a floor of milk is still refused.
+  2. **Never dig next to a modded fluid.** `getBlock` marks modded fluids `.liquid`, and the break exclusion checks the 5 neighbours itself, because collectblock turns `dontCreateFlow` off. Test: stone next to molten tin is not breakable with `dontCreateFlow` on or off; the raw pathfinder would dig it.
+  3. **Modded fire reflex.** A `forge.hazard` `'fire'` at the feet or head makes `self_preservation` act; a trap does not.
+  - **Nits:**
+    - `isClearPath` uses `fallSafe` movements (test).
+    - The step exclusion turning off the pathfinder's path shortcuts is noted in the code.
+  - **Tests:** `fall_safety` 17, `threat_arbitration` 11. The 4 new ones fail on the previous head (`f5fd928`). Full `npm test`: 1265 pass, 0 fail.
+  - **Lint 253:** my `isClearPath` edit added a missing semicolon to an upstream line, so per CLAUDE.md this PR commits the lowered baseline (`test/lint-baseline.json`, via `--update`).
+- **Next:** the #264 re-review.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
