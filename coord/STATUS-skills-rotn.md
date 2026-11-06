@@ -694,7 +694,7 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
     - `TREE_COVER` matches wood only as a whole name part (`log`, `log2`, `log_0`, `twilight_log`, `petrified_wood`), not `wooden_slab` and the like.
   - **Tests:**
     - `axe_chop` 10 (+4): a worn axe (damage 3, 2 and 7), the stone axe chosen over the crude axe, three early exits (a use that changes nothing, the use cap, an abort), and the placement spot;
-    - `stand_on` 11 (+2): the coordinates and the slab;
+    - `stand_on` 9 (+2): the coordinates and the slab;
     - `fell_tree`: a wooden roof is not tree cover.
   - All 7 new or changed tests fail on the old source. `src` and `packages` tests: 903/903 after the develop merge. Lint 253.
 
