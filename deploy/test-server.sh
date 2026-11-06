@@ -471,9 +471,9 @@ sweeper_clock() {
 sweeper_scheduled_ok() {
   local runs latest age t
   runs=$(gh_ run list --workflow "$SWEEPER_WORKFLOW" --branch develop --event schedule \
-           --limit 20 --json databaseId,status,conclusion,createdAt 2>/dev/null) \
+           --limit 20 --json databaseId,event,status,conclusion,createdAt 2>/dev/null) \
     || { echo "NO 'gh run list' failed (not logged in?)"; return; }
-  latest=$(jqr -r '[.[] | select(.status == "completed" and .conclusion == "success")]
+  latest=$(jqr -r '[.[] | select(.event == "schedule" and .status == "completed" and .conclusion == "success")]
                    | sort_by(.createdAt) | last // empty | "\(.databaseId) \(.createdAt)"' <<< "$runs")
   [[ -n $latest ]] || { echo "NO no successful scheduled run of $SWEEPER_WORKFLOW on develop yet"; return; }
   t=$(iso_epoch "${latest#* }") || { echo "NO unreadable run time '${latest#* }'"; return; }
@@ -487,9 +487,9 @@ sweeper_scheduled_ok() {
 sweeper_helper_ok() {
   local runs helper th age sweeps sweep
   runs=$(gh_at "$SWEEPER_HELPER_REPO" run list --workflow "$SWEEPER_HELPER_WORKFLOW" --event schedule \
-           --limit 20 --json databaseId,status,conclusion,createdAt 2>/dev/null) \
+           --limit 20 --json databaseId,event,status,conclusion,createdAt 2>/dev/null) \
     || { echo "NO 'gh run list' on $SWEEPER_HELPER_REPO failed"; return; }
-  helper=$(jqr -r '[.[] | select(.status == "completed" and .conclusion == "success")]
+  helper=$(jqr -r '[.[] | select(.event == "schedule" and .status == "completed" and .conclusion == "success")]
                    | sort_by(.createdAt) | last // empty | "\(.databaseId) \(.createdAt)"' <<< "$runs")
   [[ -n $helper ]] || { echo "NO no successful scheduled run of $SWEEPER_HELPER_WORKFLOW in $SWEEPER_HELPER_REPO"; return; }
   th=$(iso_epoch "${helper#* }") || { echo "NO unreadable helper run time '${helper#* }'"; return; }
@@ -545,10 +545,10 @@ sweeper_newest_ok() {
 sweeper_cadence_ok() {
   local runs helpers
   runs=$(gh_ run list --workflow "$SWEEPER_WORKFLOW" --branch develop --event workflow_dispatch \
-           --limit 30 --json databaseId,status,conclusion,createdAt 2>/dev/null) \
+           --limit 30 --json databaseId,event,status,conclusion,createdAt 2>/dev/null) \
     || { echo "NO 'gh run list' failed (not logged in?)"; return; }
   helpers=$(gh_at "$SWEEPER_HELPER_REPO" run list --workflow "$SWEEPER_HELPER_WORKFLOW" --event schedule \
-              --limit 20 --json databaseId,status,conclusion,createdAt 2>/dev/null) || helpers='[]'
+              --limit 20 --json databaseId,event,status,conclusion,createdAt 2>/dev/null) || helpers='[]'
   jqr -r --argjson now "$SWEEPER_NOW" --argjson win "$(( CADENCE_WINDOW_MIN * 60 ))" --argjson n "$CADENCE_MIN_RUNS" \
          --argjson gmin "$(( CADENCE_GAP_MIN * 60 ))" --argjson gmax "$(( CADENCE_GAP_MAX * 60 ))" \
          --argjson newest "$(( CADENCE_NEWEST_MAX * 60 ))" --argjson excuse "$CADENCE_HELPER_EXCUSE_S" \
@@ -568,10 +568,10 @@ sweeper_cadence_ok() {
             else "OK cadence of \($len) dispatch runs on develop in the last \($win / 60) min, gaps \($g) min, newest \($r[-1].id) \($age | m) min ago"
             end
         end;
-    [.[] | select(.status == "completed" and .conclusion == "success")
+    [.[] | select(.event == "workflow_dispatch" and .status == "completed" and .conclusion == "success")
          | {id: .databaseId, t: (.createdAt | fromdateiso8601)} | select($now - .t <= $win and .t <= $now)]
     | sort_by(.t) as $r
-    | [$helpers[] | select(.status == "completed" and .conclusion == "success")
+    | [$helpers[] | select(.event == "schedule" and .status == "completed" and .conclusion == "success")
          | {id: .databaseId, t: (.createdAt | fromdateiso8601)} | select(.t <= $now and $now - .t <= $win + $excuse)] as $hs
     # Every choice: for each helper run, leave out nothing or one dispatch run created within $excuse after it.
     | (reduce $hs[] as $h ([{out: [], why: []}];
