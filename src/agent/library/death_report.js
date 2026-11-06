@@ -272,6 +272,9 @@ export function deathCauseText(name, message, jsonMsg) {
     // The one who died is argument 1 (%1$s); argument 2 is the killer (#242 review 3: in
     // death.attack.player the bot can be argument 2, and that death is not the bot's).
     const first = jsonMsg.with?.[0];
+    // A string, a component with .text, or mineflayer's ChatMessage, whose toString() is its plain
+    // text. Any other object's toString() gives "[object Object]", which is never a bot's name, so
+    // such a message is not taken as the bot's (#242 nit).
     const who = typeof first === 'string' ? first : (first?.text ?? (typeof first?.toString === 'function' ? first.toString() : null));
     if (who != null) return who === name ? (String(message ?? '').startsWith(name) ? String(message) : `${name} died (${key})`) : null;
     const text = String(message ?? '');

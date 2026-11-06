@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T03:07Z (from `date -u`)
+Updated: 2026-11-06T03:30Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -420,7 +420,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
   Tests: `furnace` 6, `use_on` 15; the new ones fail on develop. Related 4 files pass; lint per file unchanged.
 - **Model preset merged in #241** (my profile commit plus harness-ops' `LLM_MODEL`; #239 closed as superseded): `openrouter/@preset/glm-5-3-flash-cheap-reliable`.
-- **#242 open, REQUEST CHANGES addressed** (branch `agent/skills-rotn/safe-felling`; STATUS lives here, taken over from `next2`). "FRCFLD was crushed by a falling tree", 3 s after its cut, with 12 items lost. The pack has Dramatic Trees with RLMixins' "Falling Overhaul": a cut tree falls as one `dynamictrees:falling_tree` entity.
+- **#242 merged** (lead). "FRCFLD was crushed by a falling tree", 3 s after its cut, with 12 items lost. The pack has Dramatic Trees with RLMixins' "Falling Overhaul": a cut tree falls as one `dynamictrees:falling_tree` entity.
   1. **Safe felling** (`library/felling.js` plans, `skills.fellTree` acts):
      - it finds the lowest trunk block (also from a limb in the canopy);
      - it stands 2-3.5 blocks out on the side away from the canopy's lean, with no leaves or branches overhead and no trunk next to it, within reach;
@@ -432,7 +432,6 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
      - the re-plan note says a falling tree crushed it and to get logs only through `!collectBlocks("log", n)`.
 
   Tests: `fell_tree` 6/6 (rewritten on a fake tree world; on develop the bot cut from inside the canopy), `death_report` 9/9 (the 3 new ones fail on develop). Related 7 files pass; lint per file unchanged.
-- **Still waiting for the next PR:** the three #238 nits on `agent/skills-rotn/next2`.
   3. **#242 review:**
      - the trunk must stand on rooty soil or ground, never on a tree block (a limb on leaves is not the trunk);
      - the walks during felling use `canDig = false`;
@@ -442,7 +441,13 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Nit tests: no place reached, a 2x2 trunk, a slope. Tests: `fell_tree` 11/11, `death_report` 10/10; the review-item tests fail on the previous head. Related 6 files pass; lint 254.
 - **Round 3 over** (lead): full tests allowed again.
-- **Next (lead):** re-review #242.
+- **Open PR: the #242 follow-up and the #238 nits** (branch `agent/skills-rotn/approach-and-nits`, a fresh branch off develop, with the #238 nits commit cherry-picked from `next2` (the same result as a rebase, no force-push); STATUS lives here):
+  1. The first approach to a tree has the normal walk limit (`GO_TO_LIMITS.totalMs`), still without digging. The other places, once the bot is at the tree, keep a step's time. Test: a 0.5 s approach with a 0.15 s step and a 3 s walk; with the old step limit, "could not reach a safe place".
+  2. The `[object Object]` fallback in `deathCauseText` is commented.
+  3. The #238 nits: `placeFurnaceNear` trusts `blockAt(pos)` after a failed or thrown placement; a weapon stuck in the off hand is logged; a better off-hand weapon beats a worse one (`weaponRank`).
+
+  Tests: `fell_tree` 12, `furnace` 6, `use_on` 15, `death_report` 10; related 6 files pass; lint 254.
+- **Next (lead):** review this PR. `agent/skills-rotn/next2` is superseded by it.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

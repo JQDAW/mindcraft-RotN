@@ -995,8 +995,10 @@ export async function fellTree(bot, block, run = currentRun(bot)) {
         try { await within(bot.pathfinder.goto(goal), ms, () => stopWalking(bot)); } catch { /* checked by the caller */ }
     };
     let spot = null;
-    for (const s of spots.slice(0, 3)) { // the best few; the walk may not get there
-        await walk(new pf.goals.GoalBlock(s.x, s.y, s.z), GO_TO_LIMITS.stepMs);
+    for (const [i, s] of spots.slice(0, 3).entries()) { // the best few; the walk may not get there
+        // The first approach may come from far off or round obstacles: the normal walk limit. Once
+        // the bot is at the tree, another place nearby gets a step's time (#242 follow-up).
+        await walk(new pf.goals.GoalBlock(s.x, s.y, s.z), i === 0 ? GO_TO_LIMITS.totalMs : GO_TO_LIMITS.stepMs);
         if (run.aborted) return { cut: false, skip: [] };
         if (bot.entity.position.floored().equals(s)) { spot = s; break; }
     }
