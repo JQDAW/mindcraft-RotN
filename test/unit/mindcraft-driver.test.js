@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parseDriverArgs, envProblems, profileProblems, settingsProblems, settingsFileOf, mindcraftEnv, freePort, clearBotState, EXIT_FATAL } from '../runner/drivers/mindcraft-driver.mjs';
 
 // A profile as skills-rotn's RotN profile sets it: the bot's name and the preset model (lib/g3.mjs LLM_MODEL).
-const GOOD_PROFILE = JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-1-mindcraft' });
+const GOOD_PROFILE = JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable' });
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DRIVER = path.join(HERE, '..', 'runner', 'drivers', 'mindcraft-driver.mjs');
@@ -66,14 +66,14 @@ describe('mindcraft-driver: checks before anything starts', () => {
         assert.match(profileProblems(f('other.json', '{"name":"Andy"}'), 'FRCFLD')[0], /name 'Andy' is not the runner's bot 'FRCFLD'/);
         assert.deepEqual(profileProblems(f('ok.json', GOOD_PROFILE), 'FRCFLD'), []);
         // The model of every LLM run (the human's decision, 2026-11-03): the OpenRouter preset, in any profile form.
-        assert.deepEqual(profileProblems(f('obj.json', JSON.stringify({ name: 'FRCFLD', model: { api: 'openrouter', model: '@preset/glm-5-1-mindcraft' } })), 'FRCFLD'), []);
+        assert.deepEqual(profileProblems(f('obj.json', JSON.stringify({ name: 'FRCFLD', model: { api: 'openrouter', model: '@preset/glm-5-3-flash-cheap-reliable' } })), 'FRCFLD'), []);
         for (const [body, re] of [
-            ['{"name":"FRCFLD"}', /model is 'not set', not openrouter\/@preset\/glm-5-1-mindcraft/],
+            ['{"name":"FRCFLD"}', /model is 'not set', not openrouter\/@preset\/glm-5-3-flash-cheap-reliable/],
             ['{"name":"FRCFLD","model":"openrouter/anthropic/claude-sonnet-4-6"}', /model is 'openrouter\/anthropic\/claude-sonnet-4-6', not openrouter\/@preset/],
-            ['{"name":"FRCFLD","model":"@preset/glm-5-1-mindcraft"}', /model is '@preset\/glm-5-1-mindcraft', not openrouter\/@preset/],
-            ['{"name":"FRCFLD","model":{"api":"openai","model":"@preset/glm-5-1-mindcraft"}}', /model is 'openai\/@preset\/glm-5-1-mindcraft'/],
-            [JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-1-mindcraft', code_model: 'gpt-4o' }), /code_model is 'gpt-4o', not openrouter\/@preset/],
-            [JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-1-mindcraft', vision_model: {} }), /vision_model is 'not understood'/],
+            ['{"name":"FRCFLD","model":"@preset/glm-5-3-flash-cheap-reliable"}', /model is '@preset\/glm-5-3-flash-cheap-reliable', not openrouter\/@preset/],
+            ['{"name":"FRCFLD","model":{"api":"openai","model":"@preset/glm-5-3-flash-cheap-reliable"}}', /model is 'openai\/@preset\/glm-5-3-flash-cheap-reliable'/],
+            [JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable', code_model: 'gpt-4o' }), /code_model is 'gpt-4o', not openrouter\/@preset/],
+            [JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable', vision_model: {} }), /vision_model is 'not understood'/],
         ]) assert.match(profileProblems(f('model.json', body), 'FRCFLD').join('; '), re, body);
         // Givers are settings; the test-only Server giver is the driver's alone (#146).
         for (const k of ['allow_server_task_giver', 'task_givers', 'TaskGivers']) {
@@ -239,7 +239,7 @@ describe('mindcraft-driver end to end with a fake main.js', () => {
         const start = JSON.parse(/DRIVER (\{.*"type":"mindcraft_start".*\})/.exec(await waitFor(() => (/mindcraft_start/.test(out()) ? out() : null)))[1]);
         assert.equal(start.main, path.join(app, 'main.js'));
         assert.equal(start.settings, path.join(app, 'settings.js'), 'the settings file main.js imports was the one checked');
-        assert.deepEqual(start.models, { model: 'openrouter/@preset/glm-5-1-mindcraft', code_model: null, vision_model: null },
+        assert.deepEqual(start.models, { model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable', code_model: null, vision_model: null },
             'the model goes into the run record (run.mjs result.llm.models)');
         assert.equal(start.serverTaskGiver, true, 'the start event says whether the test-only Server giver is on');
         assert.equal(start.botState.fresh, true, 'no tasks.json or agenda.json from an earlier run (#207 review)');

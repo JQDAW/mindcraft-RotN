@@ -10,10 +10,12 @@ import { parseLine } from './server-log.mjs';
 export const G3_DEFAULTS = Object.freeze({ maxBatchUsd: 2 });
 
 /**
- * The model of every LLM run (the human's decision, 2026-11-03): the OpenRouter preset
- * @preset/glm-5-1-mindcraft, written in a Mindcraft profile as "openrouter/@preset/glm-5-1-mindcraft".
+ * The model of every LLM run (the human's decision): the OpenRouter preset @preset/glm-5-3-flash-cheap-reliable,
+ * written in a Mindcraft profile as "openrouter/@preset/glm-5-3-flash-cheap-reliable". It replaced
+ * @preset/glm-5-1-mindcraft (2026-11-03) on 2026-11-06, after that preset's upstream provider rate-limited G3
+ * smoke round 3 (HTTP 429, tpm_rate_limit_exceeded); the human set the new one up for reliable providers.
  */
-export const LLM_MODEL = 'openrouter/@preset/glm-5-1-mindcraft';
+export const LLM_MODEL = 'openrouter/@preset/glm-5-3-flash-cheap-reliable';
 
 /**
  * A profile's model setting as one "api/model" id, the way Mindcraft's selectAPI reads it: a string

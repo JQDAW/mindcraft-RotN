@@ -16,7 +16,7 @@
 //       * the settings.js next to main.js (the file main.js really imports; there is no option to check
 //         another one) must evaluate to allow_insecure_coding === false, as deploy.sh checks;
 //       * the profile must exist, parse, carry no task, and be named as the runner's bot;
-//       * the profile's model must be openrouter/@preset/glm-5-1-mindcraft (LLM_MODEL in lib/g3.mjs; the
+//       * the profile's model must be openrouter/@preset/glm-5-3-flash-cheap-reliable (LLM_MODEL in lib/g3.mjs; the
 //         human's decision for every LLM run), and so must code_model and vision_model when set.
 //   - Starts `node main.js` with MINDCRAFT_SINGLE_BOT_SERVICE=1, PROFILES=[profile], a free local
 //     MINDSERVER_PORT, and SETTINGS_JSON={"host","port","auth":"microsoft","auto_open_ui":false,
