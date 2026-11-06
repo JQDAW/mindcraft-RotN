@@ -1,0 +1,31 @@
+{
+  "batchId": "20261106T070211-27476",
+  "testMode": false,
+  "gate": false,
+  "smoke": true,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g3-task-preempts-agenda",
+      "out": "<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r4-g3cd\\task",
+      "runId": "20261106t070211-f36ae0",
+      "exit": 0,
+      "spentBefore": 0,
+      "timeoutMin": 34
+    },
+    {
+      "id": "g3-untrusted-refused",
+      "out": "<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r4-g3cd\\untrusted",
+      "runId": "20261106t071006-96140a",
+      "exit": 1,
+      "spentBefore": 0.005535,
+      "timeoutMin": 16
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.765102059,
+  "usageAtEnd": 0.770726667,
+  "spentUsd": 0.005625,
+  "exit": 1,
+  "logsFetched": true
+}

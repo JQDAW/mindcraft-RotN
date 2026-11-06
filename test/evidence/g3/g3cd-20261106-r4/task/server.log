@@ -1,0 +1,491 @@
+[07:02:14] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Seed: 1880465901402976865
+[07:02:20] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player <bot> is <uuid-v4>
+[07:02:20] [Netty Epoll Server IO #5/INFO] [FML]: Client protocol version 2
+[07:02:20] [Netty Epoll Server IO #5/INFO] [FML]: Client attempting to join with 346 mods : artisanintegrations@1.12.2-1.3.0,msunspirit@1.0.0,musictriggers@7.0.4,bnbgamingcore@0.12.0,sandro@1.3d,vanillaanvilrepair@1.1,theimpossiblelibrary@0.4.5,salt_lamps@1.12.2-1.1.0,nyx@1.6.1,rusticbopwoods@1.0,universaltweaks@1.9.0,chunkgenlimit@1.1,noarcher@1.0.0,betternether@0.1.9.4,contenttweaker@1.12.2-4.10.0,from_the_depths@1.3.0.1,craftstudioapi@1.0.0,bettercaves@1.12.2,forgeendertech@1.12.2-4.5.6.1,minerva@1.0.13,artisanworktables@1.12.2-1.24.2,exsartagine@${version},estop@1.12.1,hungertweaker@1.3.0,forgelin@1.8.4,randompatches@1.12.2-1.22.1.10,llibrary@1.7.20,scavenge@1.8,morpheus@1.12.2-3.5.106,hordes@1.1.7,normalasm@5.28,waila@1.8.26,minetraps@1.0.4,snowrealmagic@0.7.4,dynview@1.3,betterthanmending@1.1.2,mcmultipart@2.5.3,shetiphiancore@3.5.9,bundles@1.2.3,mysticallib@1.12.2-1.13.0,glaretorch@8.10,malisisdoors@1.12.2-7.3.0,enhanced_snowman@1.0,simpleores@1.11.2.2,ancientbeasts@1.9.99999,growthcraft_hops@4.2.2,betterwithlib@${version},totemexpansion@1.2.2,malisiscore@1.12.2-6.5.1-SNAPSHOT,rusticcompat@1.0,biomesoplenty@7.0.1.2445,controlledburn@1.12.2.024,redstoneflux@2.1.1,ironfurnaces@1.3.5,defiledlands@1.4.3,reccomplex@1.4.8.6,modtweaker@4.0.19,fairylights@2.1.10,corpsecomplex@1.0.12.0,potioncore@1.9_for_1.12.2,gamestages@2.0.123,aquaacrobatics@1.15.4,extendeddays@0.2.9,shadowmc@3.8.0,specialai@1.1.0_for_mc1.12.2,ceramics@1.12-1.3.7b,futurefireproof@1.2.2,triumph@3.19.2,nolavabuild@1.12.2-1.0.0,FML@8.0.99.99,obfuscate@0.4.2,atlaslib@1.1.6,multiblockmobs@1.6,zombie_players@1.12.1-1.2.7,globalxp@v1.4.10,hardcoredarkness@2.0,charm@1.4,dropt-bed@1.12.2-1.0.1,scalinghealth@1.3.37,bettermineshafts@1.12.2-2.2.1,dynamictrees@1.12.2-0.13.4,geckolib3@3.0.30,netherex@2.2.5,setbonus@1.12.2.040,dungpipe@1.0,advancedliftingmethods@1.0.0,justenoughdimensions@1.6.0-dev.20200416.184714,rockytweaks@@VERSION@,foundry@1.7.18,simplyhotsprings@${version},configanytime@3.0,quarkoddities@1,serenetweaks@0.0.1,cd4017be_lib@6.5.1,mowziesmobs@1.5.8,dynamictreesbop@1.12.2-9999.9999.9999z,jsonpaintings@1.4.0,rltweaker@0.7.4,timeshallnotpass@1.12.2-1.2.1,betterhorses@1.0,trumpetskeleton@1.12-1.0.2.1,bountifulbaubles@0.0.1,configmod@v1.0,hungeroverhaul@1.12.2-1.3.3.jenkins148,jei@4.27.3,bnbgaminglib@2.17.6,maleksinfinitygauntlet@1.0,lemonlib@1.3.0,copypaste@1.1,simplewoodenpipes@1.8,naturescompass@1.8.5,sereneseasons@1.2.18,basketcase@2.1.109,horsepower@2.6.4,noisethreader@1.1.0,vials@1.2.1.5,iceologer@1.5.3,inventorytweaks@1.63+release.109.220f184,redstoneplusplus@1.3e,athenaeum@1.12.2-1.19.6,betterhurttimer@1.12.2-1.5.0.3,iceandfire@1.9.1-1.2.1,bounceable@1.0.1,simple_paraglider@1.1.0,crafttweaker@4.1.20,rebind@2.7.5,forge@14.23.5.2860,paths@1.7.0,growthcraft_fishtrap@4.2.2,dynamictreesttf@1.12.2-1.2.3,dmgcontrol@1.3.17,eplus@5.1.0,antiqueatlas@4.6.3,cyclicmagic@1.20.12,enchcontrol@1.1.5,thiccentities@GRADLE:VERSION,minecraft@1.12.2,worldprimer@0.6.0-dev.20200122.211517,earthworks@1.3.4.3,fireresistancetiers@1.0,bettercombat@1.5.6,undergroundbiomes@1.3.14,behgameon@1.1.0,requious@1.0,demonic_scythe@1.4,growthcraft_milk@4.2.2,applecore@3.4.0,contentcreator@1.3.6-5,rustic@1.1.7,outfox@0.1.5,rotntweaker@0.1.0,fermiumbooter@1.4.1,astikorcarts@1.12.2-0.1.2.8,dropt@1.12.2-1.19.4,deadmanssatchel@1.12.2-1.0.0.20190226202924,ctintegration@1.8.0,spectral_edge@1.0,mantle@1.12-1.3.3.55,loottweaker@0.3.1,tnt_utilities@1.2.3,ftbbackups@1.1.0.1,rats@3.2.21,autoreglib@1.3-32,growthcraft_bees@4.2.2,libraryex@1.2.2,simplecore@1.7.3.4,trident@1.0.5,anvilpatch@1.1.1,biometweakercore@1.0.39,witherconfig@1.2.1,extrasounds@1.12.2-1.4.1,pyrotech_compat@@VERSION@,discordrpc@1.3.3,inworldcrafting@1.12.2-1.2.0,betterinvisibility@1.0.5,combatrefined@1.4.1,cosmeticarmorreworked@1.12.2-v5a,respawntimer@$version,well@1.0.1,arrowharvest@1.12.2-1.0.3,base@3.14.0,stygian@1.0.4,orestages@2.0.37,butterflies@1.12.2-1.0.3,roughmobsrevamped@2.3.23,chargethrower@1.0.1,rotn_blocks@1.0.0,animania@1.7.3,clipboard@@VERSION@,fantasticlib@1.12.2.068,dynamictreesquark@1.12.2-1.0.6,guilib@$version,villagenames@4.4.13,futuremc@0.2.6,doggytalents@1.15.1.6,incontrol@3.9.18,powerdrop@1.0,osv@5.14,growthcraft_bamboo@4.2.2,advancedmortars@1.12.2-1.7.1,netherchest@1.1.1,teamsmod@1.12.2-Rfinal,lttweaker@1.1.14,aggrotp@0.4.1,placebo@1.6.0,ometweaks@1.1.0,hitwithaxe@1.5.1,zombieawareness@1.12.1-1.11.16,arcaneworld@0.0.11,bookshelf@2.3.590,cofhworld@1.4.0,elegant_networking@3.16,xporbclump@2.3.6,letmesleep@1.2.2,adpother@1.12.2-1.2.25.0,aeble@1.4.2,carryon@1.12.3,eguilib@0.1.2,bblsom@1.1.2,biometweaker@3.2.369,twilightforest@3.14,growthcraft@4.2.2,redcore@0.6,dynamictreesphc@2.0.6,mcwbridges@1.0.6,charset@0.5.6.6,growthcraft_cellar@4.2.2,betterwithmods@1.12-2.3.24,rotm@1.1.4,crafttweakerjei@2.0.3,logimmune@0.1,aireducer@0.3.0,betterwithaddons@0.51,customdisc@1.3,mtlib@3.0.7,lifescroll@1.0,artisanworkstumps@1.12.2-1.1.4,msmlegacy@@VERSION@,livingenchantment@3.2.3,geographicraft@0.8.7,elenaidodge2@1.1.0,sasit@1.1.30,bountiful@2.2.3,dimstages@2.0.23,roguelike@1.8.0,patchouli@1.0-28,brigo@1.1.1,collective@3.0,mapgadgets@@VERSION@,betterbiomeblend@1.2.0,randomthings@4.2.7.4,qualitytools@1.0.7_for_1.12.2,endreborn@0.3.8,materialchanger@1.0,spartanfire@0.08,redstoneminusredstone@@VERSION@,dynamictreesdefiledlands@1.12.2-1.0.0,editableedibles@1.3.2,asmc@1.0.2,dpt@1.1.1,spartanweaponry@1.4.1,aesthetics@1.6.0.23,zenutils@1.26.14,growthcraft_grapes@4.2.2,tpp@1.0.1.1,vtt@0.6.4,atop@1.6,extraalchemy@0.5.4,epicsiegemod@13.169,aether_legacy_addon@1.12.2-v1.3.0,dynamictreestheaether@1.0.14,forgelin_continuous@2.1.20.0,extendedrenderer@v1.0,crafttweakerutils@0.7,dungeontactics@DT-0.16.9,zenrecipereloading@1.4.4,mixinbooter@10.7,trashslot@8.4.10,thirstybottles@2.0.1,chutes@1.0.0,ivtoolkit@1.3.3-1.12,gamblingstyle@1.1.3,esmtweaks@0.4.5,mcp@9.42,artifacts@1.12.2-1.2.4,cavegenerator@1.1,beneath@1.7.1,spartancompat@@VERSION@,betteranimalsplus@9.0.1,harvestcraft@1.12.2zb,harvestersnight@1.1.0,jeid@2.2.2,specialmobs@1.0.4_for_mc1.12.2,alfheim@1.5,rlmixins@1.3.18,pyrotech@1.12.2-1.5.25,soundphysics@1.1.13,randomportals@1.12.2-1.8.2.4,superflatcaves@1.3.1,growthcraft_rice@4.2.2,aarcaddon@1.0.1,recipestages@1.1.3,spartantwilight@1.2.0,mod_lavacow@1.3.2,primallib@{@version},orelib@3.6.0.1,bonemealtweaker@1.1.1,hooklib@3.16,inspirations@1.12.2-0.2.9,itlt@1.0.4,fxcontrol@0.1.14,weakerspiderwebs@2.0,randomenchantments@@VERSION@,toolbelt@1.9.14,stackup@0.2.5,silentlib@3.0.13,baubles@1.5.2,arcanearchives@0.2.0.25-mixins8,sbetterwatersplash@1.0,wards@1.3.1,vintagefix@0.6.2,growthcraft_apples@4.2.2,golems@7.1.9,betterslimes@1.3.4,quark@r1.6-190,pollutantpump@1.3.0,spartanshields@1.5.5,fastbench@1.7.4,harvestcrafttweaker@@VERSION@,multimob@1.0.5,mclogs@1.0.6,coroutil@1.12.1-1.2.37,toolprogression@1.12.2-1.6.12,hunterillager@1.2,magma_monsters@0.3.0,toroquest@1.12.2-5.3,dimstack@0.1.9,solcarrot@1.8.4,paintingselgui@$version,aether_legacy@1.5.3.2,advancedmotd@1.1.0,tnt_utilities_core@1.2.3,gbook_snapshot@2.9.1.s5,craftingcraft@6.1.3,aactadapter@1.12.2-0.1.0,primitivemobs@1.2.3a
+[07:02:20] [Netty Epoll Server IO #5/INFO] [dimstack]: Sending dimension stack configuration packet to <bot>
+[07:02:20] [Server thread/INFO] [FML]: [Server thread] Server side modded connection established
+[07:02:20] [Server thread/INFO] [gamestages]: Could not find legacy data for <uuid-v4>.
+[07:02:20] [Server thread/ERROR] [cyclicmagic]: Data not found for <bot>
+[07:02:20] [Server thread/INFO] [net.minecraft.server.management.PlayerList]: <bot>[/<ip>:63990] logged in with entity id 774 at (-43.5, 66.0, -61.5)
+[07:02:20] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <bot> joined the game
+[07:02:20] [Server thread/INFO] [gamestages]: Syncing 0 stages for <bot>.
+[07:02:20] [Server thread/INFO] [Waila]: Player EntityPlayerMP['<bot>'/774, l='world', x=-43.50, y=66.00, z=-61.50] connected. Sending ping
+[07:02:20] [Server thread/INFO] [Music Triggers]: Found joining player with UUID <uuid-v4>
+[07:02:21] [Server thread/INFO] [bountifulbaubles]: Attempting to sync config to player <bot>
+[07:02:21] [Server thread/INFO] [extraalchemy]: Asking client for config status
+[07:02:21] [Server thread/INFO] [antiqueatlas]: Sent custom biome data to player <bot>
+[07:02:21] [Server thread/INFO] [antiqueatlas]: Sent markers data #-1 to player <bot>
+[07:02:21] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: A non-excluded player has connected. The following modules have been toggled off: Daylight Cycle Module
+[07:02:21] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: Daylight Cycle Module: The daylight cycle has been enabled.
+[07:02:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule commandBlockOutput has been updated to false]
+[07:02:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule sendCommandFeedback has been updated to false]
+[07:02:21] [Server thread/INFO] [gamestages]: Syncing 1 stages for <bot>.
+[07:02:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Given    [Bread] * 1 to <bot>]
+[07:02:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Given    [Bundle] * 1 to <bot>]
+[07:02:21] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[07:02:21] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[07:02:22] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step rocks started: collect 6 rocks
+[07:02:23] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class net.daveyx0.multimob.entity.EntityMMBird from class net.daveyx0.multimob.entity.EntityMMFlyingMob
+[07:02:24] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class magma_monsters.entities.EntityMagmaMonster from class magma_monsters.entities.EntityMagmaMonsterGrunt
+[07:02:24] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class magma_monsters.entities.EntityMagmaMonster from class magma_monsters.entities.EntityMagmaMonsterGrunt
+[07:02:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Hello world, I'm <bot>! On it — collecting rocks now. !collectBlocks("pyrotech:rock", 6)
+[07:02:26] [Server thread/INFO] [toolprogression]: Game stages and/or Ore Stages isn't loaded.
+[07:02:28] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a0'
+[07:02:28] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class com.github.alexthe666.iceandfire.entity.EntityDreadThrall from class com.github.alexthe666.iceandfire.entity.EntityDreadKnight
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: java.lang.Exception
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at com.ferreusveritas.dynamictrees.util.Deprecatron.Complain(Deprecatron.java:13)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at com.ferreusveritas.dynamictrees.util.Deprecatron.Complain(Deprecatron.java:22)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at com.ferreusveritas.dynamictrees.api.TreeHelper.getExactSpecies(TreeHelper.java:200)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.daveyx0.primitivemobs.modint.PrimitiveMobsDTIntegration.searchDynamicTree(PrimitiveMobsDTIntegration.java:66)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.daveyx0.primitivemobs.entity.passive.EntityGroveSprite.determineLogAndLeaves(EntityGroveSprite.java:146)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.daveyx0.primitivemobs.entity.passive.EntityGroveSprite.func_180482_a(EntityGroveSprite.java:123)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.world.WorldEntitySpawner.func_77192_a(WorldEntitySpawner.java:155)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.world.WorldServer.func_72835_b(WorldServer.java:203)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.MinecraftServer.func_71190_q(MinecraftServer.java:756)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.dedicated.DedicatedServer.func_71190_q(DedicatedServer.java:397)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.MinecraftServer.func_71217_p(MinecraftServer.java:668)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.MinecraftServer.run(MinecraftServer.java:526)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at java.lang.Thread.run(Thread.java:750)
+[07:02:28] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:02:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a1'
+[07:02:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a2'
+[07:02:33] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 13ms increasing chunk view distance to: 5
+[07:02:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a3'
+[07:02:35] [Server thread/INFO] [ASMUtil]: Transforming class funwayguy/epicsiegemod/ai/hooks/ChunkCacheFixed
+[07:02:35] [Server thread/INFO] [ASMUtil]: Transforming class funwayguy/epicsiegemod/ai/hooks/ChunkCacheFixed
+[07:02:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a4'
+[07:02:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a5'
+[07:02:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a6'
+[07:02:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a7'
+[07:02:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a8'
+[07:02:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a9'
+[07:02:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3c_a10'
+[07:02:48] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:02:48] [Server thread/INFO] [antiqueatlas]: Saving local markers data to NBT
+[07:02:49] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 18ms increasing chunk view distance to: 6
+[07:02:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a0' successfully
+[07:02:51] [Server thread/WARN] [betterwithmods]: [EXPLOSION] -  position: (-120.0, 7.0, 6.0), cause: No Placer
+[07:02:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a1' successfully
+[07:02:51] [Server thread/WARN] [betterwithmods]: [EXPLOSION] -  position: (-122.0, 8.0, 2.0), cause: No Placer
+[07:02:51] [Server thread/WARN] [betterwithmods]: [EXPLOSION] -  position: (-121.0, 6.0, 4.0), cause: No Placer
+[07:02:52] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step rocks done
+[07:02:52] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step sticks started: collect 4 sticks
+[07:02:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got 5 rocks so far — one short of 6. Grabbing one more! !collectBlocks("pyrotech:rock", 1)
+[07:02:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a2' successfully
+[07:02:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a3' successfully
+[07:02:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a4' successfully
+[07:02:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a5' successfully
+[07:03:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a6' successfully
+[07:03:02] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a7' successfully
+[07:03:03] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 10ms increasing chunk view distance to: 7
+[07:03:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a8' successfully
+[07:03:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a9' successfully
+[07:03:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Hmm, that one broke without a drop. Trying again for the last rock. !collectBlocks("pyrotech:rock", 1)
+[07:03:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3c_a10' successfully
+[07:03:08] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:03:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Picking up item!
+[07:03:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 1 tracked objective(s) for <bot>:
+[07:03:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a2: 2 (g3c_a2)
+[07:03:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> That's 6 rocks — step 1 done! Moving on to sticks now. Leaves drop sticks in RotN, so I'll break some leaves. !collectBlocks("stick", 4)
+[07:03:18] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 12ms increasing chunk view distance to: 8
+[07:03:33] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:03:33] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 14ms increasing chunk view distance to: 9
+[07:03:33] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:03:33] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:03:33] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:03:34] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:03:34] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:03:44] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:03:44] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:03:48] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 13ms increasing chunk view distance to: 10
+[07:03:58] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:04:03] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 14ms increasing chunk view distance to: 11
+[07:04:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 1 stick down, need more. Continuing! !collectBlocks("stick", 3)
+[07:04:13] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:04:13] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[07:04:18] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:04:18] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 17ms increasing chunk view distance to: 12
+[07:04:23] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:04:24] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !inventory
+[07:04:27] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 3 sticks total, one more to go. !collectBlocks("stick", 1)
+[07:04:33] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 16ms increasing chunk view distance to: 13
+[07:04:34] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:04:34] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:04:34] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-1, 10] in dimension 0 (overworld) while populating chunk [-1, 9], causing cascading worldgen lag.
+[07:04:34] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:34] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [0, 9] in dimension 0 (overworld) while populating chunk [-1, 9], causing cascading worldgen lag.
+[07:04:34] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:34] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [0, 10] in dimension 0 (overworld) while populating chunk [-1, 9], causing cascading worldgen lag.
+[07:04:34] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:35] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [9, -10] in dimension 0 (overworld) while populating chunk [9, -9], causing cascading worldgen lag.
+[07:04:35] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:35] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [10, -9] in dimension 0 (overworld) while populating chunk [9, -9], causing cascading worldgen lag.
+[07:04:35] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:36] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [9, -14] in dimension 0 (overworld) while populating chunk [9, -13], causing cascading worldgen lag.
+[07:04:36] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:36] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [10, -13] in dimension 0 (overworld) while populating chunk [9, -13], causing cascading worldgen lag.
+[07:04:36] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Not yet, still need one more. !collectBlocks("stick", 1)
+[07:04:43] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:04:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step sticks done
+[07:04:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crude_axe started: craft a crude axe
+[07:04:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got 4 sticks — step 2 done! Agenda should advance on its own. 🌟
+[07:04:48] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 18ms increasing chunk view distance to: 14
+[07:04:50] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, 2] in dimension 0 (overworld) while populating chunk [-18, 1], causing cascading worldgen lag.
+[07:04:50] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !craftRecipe("pyrotech:crude_axe", 1)
+[07:04:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, 6] in dimension 0 (overworld) while populating chunk [-17, 6], causing cascading worldgen lag.
+[07:04:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, 5] in dimension 0 (overworld) while populating chunk [-17, 6], causing cascading worldgen lag.
+[07:04:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-17, 7] in dimension 0 (overworld) while populating chunk [-17, 6], causing cascading worldgen lag.
+[07:04:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:52] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-17, -16] in dimension 0 (overworld) while populating chunk [-17, -15], causing cascading worldgen lag.
+[07:04:52] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:52] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, -16] in dimension 0 (overworld) while populating chunk [-17, -15], causing cascading worldgen lag.
+[07:04:52] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:52] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-16, 10] in dimension 0 (overworld) while populating chunk [-15, 10], causing cascading worldgen lag.
+[07:04:52] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:04:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crude_axe done
+[07:04:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step logs started: collect 3 logs
+[07:04:53] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:04:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Axe crafted! Step 3 done. Now for step 4 — chopping logs. !collectBlocks("log", 3)
+[07:05:03] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:05:03] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 23ms increasing chunk view distance to: 15
+[07:05:04] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-6, 11] in dimension 0 (overworld) while populating chunk [-5, 11], causing cascading worldgen lag.
+[07:05:04] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:04] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-5, 12] in dimension 0 (overworld) while populating chunk [-5, 11], causing cascading worldgen lag.
+[07:05:04] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:04] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:05:05] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-10, 11] in dimension 0 (overworld) while populating chunk [-9, 11], causing cascading worldgen lag.
+[07:05:05] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:06] [Server thread/WARN] [FML]: MalisisCore loaded a new chunk [0, -19] in dimension 0 (overworld) while populating chunk [2, -18], causing cascading worldgen lag.
+[07:05:06] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:07] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-20, 5] in dimension 0 (overworld) while populating chunk [-19, 5], causing cascading worldgen lag.
+[07:05:07] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:08] [Server thread/WARN] [FML]: Quark: RotN Edition loaded a new chunk [-20, -16] in dimension 0 (overworld) while populating chunk [-19, -16], causing cascading worldgen lag.
+[07:05:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [10, 11] in dimension 0 (overworld) while populating chunk [10, 10], causing cascading worldgen lag.
+[07:05:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:11] [Server thread/INFO] [com.personthecat.cavegenerator.world.feature.StructureGenerator]: Spawning ironwoodsapling at BlockPos{x=-228, y=71, z=213}
+[07:05:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule commandBlockOutput has been updated to false]
+[07:05:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule sendCommandFeedback has been updated to false]
+[07:05:18] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 19ms increasing chunk view distance to: 16
+[07:05:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step logs done
+[07:05:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step first_plank started: make the first plank
+[07:05:19] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, -5] in dimension 0 (overworld) while populating chunk [12, -4], causing cascading worldgen lag.
+[07:05:19] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:19] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [13, -4] in dimension 0 (overworld) while populating chunk [12, -4], causing cascading worldgen lag.
+[07:05:19] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:20] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, -9] in dimension 0 (overworld) while populating chunk [12, -8], causing cascading worldgen lag.
+[07:05:20] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:21] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [11, 7] in dimension 0 (overworld) while populating chunk [11, 6], causing cascading worldgen lag.
+[07:05:21] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:21] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, 5] in dimension 0 (overworld) while populating chunk [11, 6], causing cascading worldgen lag.
+[07:05:21] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:21] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, 6] in dimension 0 (overworld) while populating chunk [11, 6], causing cascading worldgen lag.
+[07:05:21] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:21] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, 7] in dimension 0 (overworld) while populating chunk [11, 6], causing cascading worldgen lag.
+[07:05:21] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, -16] in dimension 0 (overworld) while populating chunk [12, -15], causing cascading worldgen lag.
+[07:05:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, -17] in dimension 0 (overworld) while populating chunk [11, -18], causing cascading worldgen lag.
+[07:05:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, -18] in dimension 0 (overworld) while populating chunk [11, -18], causing cascading worldgen lag.
+[07:05:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 12 logs collected! Now step 5 — first plank time. !placeHere("log:0")
+[07:05:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Log placed! Now debarking: !useOn("pyrotech:crude_axe", "log")
+[07:05:33] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [1, 14] in dimension 0 (overworld) while populating chunk [2, 13], causing cascading worldgen lag.
+[07:05:33] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:33] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [2, 14] in dimension 0 (overworld) while populating chunk [2, 13], causing cascading worldgen lag.
+[07:05:33] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:33] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 22ms increasing chunk view distance to: 17
+[07:05:34] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-20, -8] in dimension 0 (overworld) while populating chunk [-20, -7], causing cascading worldgen lag.
+[07:05:34] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:34] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-21, 0] in dimension 0 (overworld) while populating chunk [-21, -1], causing cascading worldgen lag.
+[07:05:34] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:34] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-7, 15] in dimension 0 (overworld) while populating chunk [-7, 14], causing cascading worldgen lag.
+[07:05:34] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:35] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-3, 16] in dimension 0 (overworld) while populating chunk [-3, 15], causing cascading worldgen lag.
+[07:05:35] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:35] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-2, 15] in dimension 0 (overworld) while populating chunk [-3, 15], causing cascading worldgen lag.
+[07:05:35] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:35] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-21, 5] in dimension 0 (overworld) while populating chunk [-21, 4], causing cascading worldgen lag.
+[07:05:35] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:36] [Server thread/INFO] [com.personthecat.cavegenerator.world.feature.StructureGenerator]: Spawning ironwoodsapling at BlockPos{x=44, y=63, z=251}
+[07:05:38] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [7, 15] in dimension 0 (overworld) while populating chunk [6, 15], causing cascading worldgen lag.
+[07:05:38] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Leaves are blocking the placed log. Let me clear the way: !newAction("Go to the placed log at -63, 69, -33, break any leaves blocking access to it, then use the pyrotech:crude_axe on the log to debark it.")
+[07:05:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> newAction is disabled. Enable with allow_insecure_coding=true in settings.js
+[07:05:43] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:05:43] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:05:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !goToCoordinates(-62, 69, -33, 1)
+[07:05:48] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:05:48] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 25ms increasing chunk view distance to: 18
+[07:05:49] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:05:50] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-10, -20] in dimension 0 (overworld) while populating chunk [-9, -20], causing cascading worldgen lag.
+[07:05:50] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:50] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-10, -21] in dimension 0 (overworld) while populating chunk [-9, -20], causing cascading worldgen lag.
+[07:05:50] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:50] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-11, -20] in dimension 0 (overworld) while populating chunk [-10, -21], causing cascading worldgen lag.
+[07:05:50] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:50] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-11, -21] in dimension 0 (overworld) while populating chunk [-10, -21], causing cascading worldgen lag.
+[07:05:50] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:50] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-9, -21] in dimension 0 (overworld) while populating chunk [-9, -20], causing cascading worldgen lag.
+[07:05:50] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:50] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, 6] in dimension 0 (overworld) while populating chunk [-22, 6], causing cascading worldgen lag.
+[07:05:50] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:50] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-22, 7] in dimension 0 (overworld) while populating chunk [-22, 6], causing cascading worldgen lag.
+[07:05:50] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:50] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, 7] in dimension 0 (overworld) while populating chunk [-22, 6], causing cascading worldgen lag.
+[07:05:50] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, 11] in dimension 0 (overworld) while populating chunk [-22, 11], causing cascading worldgen lag.
+[07:05:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-22, 12] in dimension 0 (overworld) while populating chunk [-22, 11], causing cascading worldgen lag.
+[07:05:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [10, -21] in dimension 0 (overworld) while populating chunk [10, -20], causing cascading worldgen lag.
+[07:05:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [11, -20] in dimension 0 (overworld) while populating chunk [10, -20], causing cascading worldgen lag.
+[07:05:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-21, -21] in dimension 0 (overworld) while populating chunk [-21, -20], causing cascading worldgen lag.
+[07:05:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-20, -21] in dimension 0 (overworld) while populating chunk [-21, -20], causing cascading worldgen lag.
+[07:05:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, -20] in dimension 0 (overworld) while populating chunk [-22, -20], causing cascading worldgen lag.
+[07:05:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-22, -21] in dimension 0 (overworld) while populating chunk [-22, -20], causing cascading worldgen lag.
+[07:05:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:51] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, -21] in dimension 0 (overworld) while populating chunk [-22, -20], causing cascading worldgen lag.
+[07:05:51] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:05:52] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Right next to it now. !useOn("pyrotech:crude_axe", "log")
+[07:05:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Debarked! Now for the plank: !useOn("pyrotech:crude_axe", "hitwithaxe:debarked_oak")
+[07:05:58] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:05:58] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:05:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step first_plank done
+[07:05:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_tools started: craft Crafting Tools
+[07:06:03] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 22ms increasing chunk view distance to: 19
+[07:06:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got the plank. Now to craft the crafting tools: !craftRecipe("contenttweaker:crafting_tools", 1)
+[07:06:05] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [0, -22] in dimension 0 (overworld) while populating chunk [1, -21], causing cascading worldgen lag.
+[07:06:05] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:05] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [1, -22] in dimension 0 (overworld) while populating chunk [1, -21], causing cascading worldgen lag.
+[07:06:05] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Crafting tools done! RotN agenda step 6 complete — the agenda will move to step 7 on its own. 🛠️
+[07:06:05] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [2, -22] in dimension 0 (overworld) while populating chunk [2, -21], causing cascading worldgen lag.
+[07:06:05] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:05] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [3, -21] in dimension 0 (overworld) while populating chunk [2, -21], causing cascading worldgen lag.
+[07:06:05] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_tools done
+[07:06:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_table started: craft a crafting table
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, -2] in dimension 0 (overworld) while populating chunk [16, -1], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, -1] in dimension 0 (overworld) while populating chunk [16, -1], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [15, 3] in dimension 0 (overworld) while populating chunk [16, 2], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, 3] in dimension 0 (overworld) while populating chunk [16, 2], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [15, 4] in dimension 0 (overworld) while populating chunk [16, 3], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, 4] in dimension 0 (overworld) while populating chunk [16, 3], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [15, 5] in dimension 0 (overworld) while populating chunk [16, 4], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, 5] in dimension 0 (overworld) while populating chunk [16, 4], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, 4] in dimension 0 (overworld) while populating chunk [16, 4], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, 3] in dimension 0 (overworld) while populating chunk [16, 3], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, 2] in dimension 0 (overworld) while populating chunk [16, 2], causing cascading worldgen lag.
+[07:06:08] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !craftRecipe("crafting_table", 1)
+[07:06:09] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-20, 17] in dimension 0 (overworld) while populating chunk [-20, 16], causing cascading worldgen lag.
+[07:06:09] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:09] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-19, 17] in dimension 0 (overworld) while populating chunk [-20, 16], causing cascading worldgen lag.
+[07:06:09] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:09] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [15, -20] in dimension 0 (overworld) while populating chunk [14, -20], causing cascading worldgen lag.
+[07:06:09] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:09] [Server thread/WARN] [net.minecraft.entity.SharedMonsterAttributes]: Ignoring unknown attribute 'generic.scales'
+[07:06:09] [Server thread/WARN] [net.minecraft.entity.SharedMonsterAttributes]: Ignoring unknown attribute 'generic.scales'
+[07:06:09] [Server thread/WARN] [net.minecraft.entity.SharedMonsterAttributes]: Ignoring unknown attribute 'generic.scales'
+[07:06:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-21, 17] in dimension 0 (overworld) while populating chunk [-22, 16], causing cascading worldgen lag.
+[07:06:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-22, 17] in dimension 0 (overworld) while populating chunk [-22, 16], causing cascading worldgen lag.
+[07:06:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_table done
+[07:06:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step planks_sticks started: make planks and sticks at the table
+[07:06:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Step 7 done! Now for step 8 — placing the crafting table first: !placeHere("crafting_table")
+[07:06:15] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !craftRecipe("planks", 2)
+[07:06:15] [Server thread/INFO] [Quark ASM]: Transforming net.minecraft.inventory.ContainerWorkbench
+[07:06:15] [Server thread/INFO] [Quark ASM]: Applying Transformation to method (Names [transferStackInSlot, func_82846_b] Descriptor (Lnet/minecraft/entity/player/EntityPlayer;I)Lnet/minecraft/item/ItemStack;)
+[07:06:15] [Server thread/INFO] [Quark ASM]: Located Method, patching...
+[07:06:15] [Server thread/INFO] [Quark ASM]: Located patch target node INVOKEVIRTUAL net/minecraft/inventory/ContainerWorkbench.func_75135_a (Lnet/minecraft/item/ItemStack;IIZ)Z
+[07:06:15] [Server thread/INFO] [Quark ASM]: Located patch target node INVOKEVIRTUAL net/minecraft/inventory/ContainerWorkbench.func_75135_a (Lnet/minecraft/item/ItemStack;IIZ)Z
+[07:06:15] [Server thread/INFO] [Quark ASM]: Located patch target node INVOKEVIRTUAL net/minecraft/inventory/ContainerWorkbench.func_75135_a (Lnet/minecraft/item/ItemStack;IIZ)Z
+[07:06:15] [Server thread/INFO] [Quark ASM]: Located patch target node INVOKEVIRTUAL net/minecraft/inventory/ContainerWorkbench.func_75135_a (Lnet/minecraft/item/ItemStack;IIZ)Z
+[07:06:15] [Server thread/INFO] [Quark ASM]: Patch result: true
+[07:06:15] [Server thread/INFO] [ASMUtil]: Transforming class net/minecraft/inventory/ContainerWorkbench
+[07:06:15] [Server thread/INFO] [ASMUtil]: Transforming class net/minecraft/inventory/ContainerWorkbench
+[07:06:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step planks_sticks done
+[07:06:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_pickaxe started: craft a stone pickaxe
+[07:06:18] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 24ms increasing chunk view distance to: 20
+[07:06:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !craftRecipe("stone_pickaxe", 1)
+[07:06:19] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-7, -22] in dimension 0 (overworld) while populating chunk [-6, -22], causing cascading worldgen lag.
+[07:06:19] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:19] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-7, -23] in dimension 0 (overworld) while populating chunk [-6, -22], causing cascading worldgen lag.
+[07:06:19] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:19] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-6, -23] in dimension 0 (overworld) while populating chunk [-6, -22], causing cascading worldgen lag.
+[07:06:19] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:20] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-9, 17] in dimension 0 (overworld) while populating chunk [-8, 17], causing cascading worldgen lag.
+[07:06:20] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:20] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-8, 18] in dimension 0 (overworld) while populating chunk [-8, 17], causing cascading worldgen lag.
+[07:06:20] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:20] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-14, -22] in dimension 0 (overworld) while populating chunk [-13, -22], causing cascading worldgen lag.
+[07:06:20] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:20] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-14, -23] in dimension 0 (overworld) while populating chunk [-13, -22], causing cascading worldgen lag.
+[07:06:20] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:21] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-13, -23] in dimension 0 (overworld) while populating chunk [-13, -22], causing cascading worldgen lag.
+[07:06:21] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_pickaxe done
+[07:06:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_axe started: craft a stone axe
+[07:06:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Stone pickaxe crafted! Step 9 done — the agenda should move to step 10 on its own.
+[07:06:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, -22] in dimension 0 (overworld) while populating chunk [-17, -22], causing cascading worldgen lag.
+[07:06:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-19, -22] in dimension 0 (overworld) while populating chunk [-18, -22], causing cascading worldgen lag.
+[07:06:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, -23] in dimension 0 (overworld) while populating chunk [-18, -22], causing cascading worldgen lag.
+[07:06:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-17, -23] in dimension 0 (overworld) while populating chunk [-17, -22], causing cascading worldgen lag.
+[07:06:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-24, 11] in dimension 0 (overworld) while populating chunk [-24, 10], causing cascading worldgen lag.
+[07:06:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:22] [Server thread/WARN] [FML]: Quark: RotN Edition loaded a new chunk [-24, 12] in dimension 0 (overworld) while populating chunk [-24, 10], causing cascading worldgen lag.
+[07:06:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [7, 18] in dimension 0 (overworld) while populating chunk [8, 17], causing cascading worldgen lag.
+[07:06:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [8, 18] in dimension 0 (overworld) while populating chunk [8, 17], causing cascading worldgen lag.
+[07:06:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, -20] in dimension 0 (overworld) while populating chunk [15, -19], causing cascading worldgen lag.
+[07:06:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, -19] in dimension 0 (overworld) while populating chunk [15, -19], causing cascading worldgen lag.
+[07:06:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:24] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !craftRecipe("stone_axe", 1)
+[07:06:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-24, 18] in dimension 0 (overworld) while populating chunk [-24, 17], causing cascading worldgen lag.
+[07:06:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, 18] in dimension 0 (overworld) while populating chunk [-24, 18], causing cascading worldgen lag.
+[07:06:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, 18] in dimension 0 (overworld) while populating chunk [-24, 18], causing cascading worldgen lag.
+[07:06:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, 17] in dimension 0 (overworld) while populating chunk [-24, 18], causing cascading worldgen lag.
+[07:06:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-25, 16] in dimension 0 (overworld) while populating chunk [-24, 18], causing cascading worldgen lag.
+[07:06:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:06:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_axe done
+[07:06:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step cobblestone started: make cobblestone from rocks
+[07:06:28] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Step 10 done! Now step 11 — collecting rocks: !collectBlocks("pyrotech:rock", 8)
+[07:06:33] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:06:38] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:06:43] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:06:53] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:07:03] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:07:07] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got 8 more rocks (20 total now). Crafting cobblestone: !craftRecipe("cobblestone", 3)
+[07:07:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 6 cobblestone so far — need 4 more. Gathering more rocks: !collectBlocks("pyrotech:rock", 16)
+[07:07:18] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:07:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 6 tracked objective(s) for <bot>:
+[07:07:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a9: 1 (g3c_a9)
+[07:07:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a10: 1 (g3c_a10)
+[07:07:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a7: 1 (g3c_a7)
+[07:07:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a2: 2 (g3c_a2)
+[07:07:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a8: 1 (g3c_a8)
+[07:07:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a6: 1 (g3c_a6)
+[07:07:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -42, 69, -50
+[07:07:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 20 more rocks! Crafting the last batch: !craftRecipe("cobblestone", 4)
+[07:07:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -42, 70, -50
+[07:07:33] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Block placed
+[07:07:33] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:07:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Successfully found the block at -42, 68, -50
+[07:07:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 7 total — need 3 more. One more rock run: !collectBlocks("pyrotech:rock", 12)
+[07:07:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: You whisper to <bot>: !taskAdd("go to the gold block at -42 68 -50 and stand on it", "normal")
+[07:07:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> *Server used taskAdd*
+[07:07:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> task t1 accepted: go to the gold block at -42 68 -50 and stand on it
+[07:07:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda paused for task t1
+[07:07:44] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:07:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Selector '@a[name=<bot>,x=-42,y=69,z=-50,dx=0,dy=1,dz=0]' found nothing
+[07:07:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> task t1: stopping collectBlocks to start it
+[07:07:54] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> task t1 started: go to the gold block at -42 68 -50 and stand on it
+[07:07:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> On it — heading to the gold block: !goToCoordinates(-42, 68, -50, 0)
+[07:08:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Selector '@a[name=<bot>,x=-42,y=69,z=-50,dx=0,dy=1,dz=0]' found nothing
+[07:08:03] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:08:04] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:08:06] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-16, -24] in dimension 0 (overworld) while populating chunk [-16, -23], causing cascading worldgen lag.
+[07:08:06] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:08:08] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[07:08:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Selector '@a[name=<bot>,x=-42,y=69,z=-50,dx=0,dy=1,dz=0]' found nothing
+[07:08:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, 13] in dimension 0 (overworld) while populating chunk [16, 12], causing cascading worldgen lag.
+[07:08:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:08:13] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:08:16] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [10, -25] in dimension 0 (overworld) while populating chunk [10, -24], causing cascading worldgen lag.
+[07:08:16] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:08:16] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, -24] in dimension 0 (overworld) while populating chunk [10, -24], causing cascading worldgen lag.
+[07:08:16] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:08:16] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [11, -24] in dimension 0 (overworld) while populating chunk [10, -24], causing cascading worldgen lag.
+[07:08:16] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:08:16] [Server thread/WARN] [FML]: Quark: RotN Edition loaded a new chunk [-20, -24] in dimension 0 (overworld) while populating chunk [-19, -24], causing cascading worldgen lag.
+[07:08:16] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:08:16] [Server thread/WARN] [FML]: Quark: RotN Edition loaded a new chunk [-21, -24] in dimension 0 (overworld) while populating chunk [-19, -24], causing cascading worldgen lag.
+[07:08:16] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[07:08:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Checking position — I might already be on it: !stats
+[07:08:19] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[07:08:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Block below me is the gold block — I'm standing on it. Task done! !taskDone("Went to the gold block at -42 68 -50 and stood on it")
+[07:08:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> task t1 done
+[07:08:20] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda resumed: cobblestone
+[07:08:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Back to rock collecting — need 12 more for 3 cobble: !collectBlocks("pyrotech:rock", 12)
+[07:08:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Found <bot>
+[07:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 7 tracked objective(s) for <bot>:
+[07:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a9: 1 (g3c_a9)
+[07:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a10: 1 (g3c_a10)
+[07:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a7: 1 (g3c_a7)
+[07:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a2: 2 (g3c_a2)
+[07:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a1: 1 (g3c_a1)
+[07:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a8: 1 (g3c_a8)
+[07:08:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a6: 1 (g3c_a6)
+[07:08:38] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:08:38] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:08:48] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:09:13] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:09:23] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:09:23] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:09:28] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 16 sedimentary rocks — those might make a different cobble. Let me test the recipe: !craftRecipe("cobblestone", 1)
+[07:09:33] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:09:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 7 tracked objective(s) for <bot>:
+[07:09:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a9: 1 (g3c_a9)
+[07:09:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a10: 1 (g3c_a10)
+[07:09:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a7: 1 (g3c_a7)
+[07:09:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a2: 4 (g3c_a2)
+[07:09:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a1: 1 (g3c_a1)
+[07:09:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a8: 1 (g3c_a8)
+[07:09:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3c_a6: 1 (g3c_a6)
+[07:09:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Now 8 cobble. Crafting another batch: !craftRecipe("cobblestone", 1)
+[07:09:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a0' successfully
+[07:09:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a1' successfully
+[07:09:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> The chalk cobble counts as cobble for shelter presumably. Checking what's left: !inventory
+[07:09:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a2' successfully
+[07:09:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 12 metamorphic rocks left = 3 more cobble. That'll put me at 11 + 1 chalk = 12: !craftRecipe("cobblestone", 3)
+[07:09:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a3' successfully
+[07:09:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step cobblestone done
+[07:09:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda done
+[07:09:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a4' successfully
+[07:09:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a5' successfully
+[07:09:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a6' successfully
+[07:09:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a7' successfully
+[07:09:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a8' successfully
+[07:09:56] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a9' successfully
+[07:09:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3c_a10' successfully
+[07:09:59] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[07:10:04] [Server thread/INFO] [net.minecraft.network.NetHandlerPlayServer]: <bot> lost connection: Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer
+[07:10:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <bot> left the game
+[07:10:04] [Server thread/INFO] [Music Triggers]: Found leaving player with UUID <uuid-v4>
+[07:10:04] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: All non-excluded players have disconnected. The following modules have been toggled on: Daylight Cycle Module
+[07:10:04] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: Daylight Cycle Module: The daylight cycle has been disabled.
+[07:10:04] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[07:10:04] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
