@@ -284,7 +284,7 @@ Total LLM USD 0.1805, and 3 billed server hours (about EUR 0.41 plus 3 Primary I
 3. Open question for the lead: #208 nit (2), measuring the refusal deadline from the chat line's timestamp instead of the 5 s poll.
 4. The G3 batches (A alone, B alone, C+D together) each need a written GO. Not started.
 
-## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
+## Earlier: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
 The lead's order: one scenario per small PR, (a) first, then (b) first night, (c) a task preempts the agenda and it resumes, (d) untrusted players refused. Each gets server-side pass checks, maxBatchUsd 2 and an offline test against fakes. **No batch:** nothing is running, no paid work is pending, and nothing touches the CX23.
 
