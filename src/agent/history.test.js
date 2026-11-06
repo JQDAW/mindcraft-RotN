@@ -44,3 +44,27 @@ test('round 5 A: a real summary still replaces the memory (trimmed, truncated at
     assert.equal(isMemoryReply('No response received.'), false);
     assert.equal(isMemoryReply('ok'), true);
 });
+
+test('#268 follow-up 4: a memory.json from an earlier run holding a failure reply is dropped on load', async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const { tmpdir } = await import('node:os');
+    const dir = mkdtempSync(join(tmpdir(), 'rotn-mem-'));
+    try {
+        const loaded = async (memory) => {
+            const h = Object.create(History.prototype);
+            h.memory_fp = join(dir, 'memory.json');
+            writeFileSync(h.memory_fp, JSON.stringify({ memory, turns: [{ role: 'user', content: 'hi' }] }));
+            const warned = await quietly(() => { h.load(); });
+            return [h.memory, h.turns.length, warned.join('\n')];
+        };
+        for (const bad of ['My brain disconnected, try again.', 'No response received.', 42]) {
+            const [memory, turns, warned] = await loaded(bad);
+            assert.equal(memory, '', `dropped: ${bad}`);
+            assert.equal(turns, 1, 'the turns are kept');
+            assert.match(warned, /\[memory\] the saved memory was not a summary/);
+        }
+        assert.deepEqual((await loaded('Logs at 10 64 -3.')).slice(0, 2), ['Logs at 10 64 -3.', 1], 'a real summary is kept');
+        assert.equal((await loaded(''))[2], '', 'no memory: no warning');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+});

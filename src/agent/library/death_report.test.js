@@ -320,3 +320,20 @@ test('#247 review 2: the night rule no longer says "only by day"', () => {
     const late = deathSpotBlocked(agent, { x: 115, y: 70, z: 200 }, { now: 1_000_000 + 12 * 60_000 });
     assert.match(late, /^it is night: do not go back to where you died now; the items you left there are already lost$/);
 });
+
+test('#268 review 1: a falling-tree death says whether the last cut was from under the tree\'s leaves', (t) => {
+    const lines = [];
+    t.mock.method(console, 'log', (...a) => lines.push(a.join(' ')));
+    for (const underLeaves of [true, false]) {
+        const timers = fakeTimers();
+        const { agent, bot } = fakeAgent();
+        bindDeathReport(agent, timers);
+        bot.rotnLastFell = { at: timers.now(), pos: { x: -62, y: 64, z: -50 }, underLeaves };
+        bot.emit('physicsTick');
+        bot.health = 0; bot.isAlive = false; bot.emit('death');
+        bot.health = 20; bot.isAlive = true; bot.emit('spawn');
+        timers.advance(SETTLE_MS + 1000);
+        const line = lines.filter(l => l.startsWith('[death]')).at(-1) ?? '';
+        assert.match(line, underLeaves ? /\[its last cut was from under the tree's leaves\]/ : /\[its last cut was from under no canopy\]/, line);
+    }
+});

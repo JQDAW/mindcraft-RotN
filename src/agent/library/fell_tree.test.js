@@ -43,7 +43,7 @@ function tree(world, x, z = 0, { lean = 1 } = {}) {
  * The bot and its world. A cut trunk turns the whole tree into a falling tree entity for fallMs;
  * then its logs lie where it landed (log:1 each), east of the trunk (the canopy side).
  */
-function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false, approachMs = 0, axe = true, sticks = 0, planks = 0 } = {}) {
+function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false, approachMs = 0, axe = true, sticks = 0 } = {}) {
     const world = new Map();
     for (const [x, z = 0] of trees) tree(world, x, z);
     build?.(world);
@@ -55,7 +55,6 @@ function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, un
             canHarvest: () => true, transparent: name === 'air', shapes: name === 'air' ? [] : [[0, 0, 0, 1, 1, 1]] };
     };
     const items = axe ? [{ name: 'stone_axe', metadata: 0, count: 1, type: reg.itemsByName.stone_axe.id }] : [];
-    if (planks) items.push({ name: 'planks', metadata: 0, count: planks, type: reg.itemsByName.planks.id });
     let nextId = 1;
     const entities = {};
     for (const pos of onGround) { const id = nextId++; entities[id] = { id, name: 'item', position: pos, drop: 'stick' }; }
@@ -324,19 +323,19 @@ test('#252: sticks come from felling, by hand when there is no axe, with an axe 
 
 // ---- G3 round 5 batch A: the tree at -62 64 -50 refused six times, 0 sticks ----
 
-/** A grown oak as Dynamic Trees makes it: a 6-block trunk, 4 limbs of 2 at y 68, leaves 4 out all round. */
+/** A grown oak as Dynamic Trees makes it: a 6-block trunk, 4 limbs of 2 at y 68, leaves 4 to 4.5 out all round (over every place in the stand ring). */
 function oak(world, x, z = 0) {
     world.set(key(at(x, 63, z)), ROOTY);
     for (let y = 64; y <= 69; y++) world.set(key(at(x, y, z)), BRANCH);
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (let i = 1; i <= 2; i++) world.set(key(at(x + dx * i, 68, z + dz * i)), BRANCH);
     for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) for (let y = 67; y <= 71; y++) {
-        if (Math.hypot(dx, dz) > 4.3) continue;
+        if (Math.hypot(dx, dz) > 4.6) continue;
         const p = at(x + dx, y, z + dz);
         if (!world.has(key(p))) world.set(key(p), LEAVES);
     }
 }
 
-test('round 5 A: a grown oak (leaves 4 out all round) is cut: from under its leaves, never under a limb', T, async (t) => {
+test('round 5 A: a grown oak (leaves over every place in reach) is cut: from under its leaves, never under a limb', T, async (t) => {
     fast(t);
     const bot = fakeBot({ trees: [], build: (w) => oak(w, 3), start: at(-4) });
     const spots = standSpots(bot, at(3));
@@ -350,37 +349,94 @@ test('round 5 A: a grown oak (leaves 4 out all round) is cut: from under its lea
     const [fx, , fz] = bot.log.digs[0].from.split(',').map(Number);
     const d = Math.hypot(fx - 3, fz);
     assert.ok(d >= 2 && d <= 4.5, `from 2 to 4.5 out: ${bot.log.digs[0].from}`);
+    // #268 review 1: the relaxed case is visible in the log and to the death report.
+    assert.equal(bot.log.digs[0].covered, true, 'every place is under its leaves');
+    assert.match(bot.output, /Cut the tree at 3, 64, 0 from -?\d+, 64, -?\d+, away from its canopy \(from under its leaves\); stepping back\./);
+    assert.equal(bot.rotnLastFell.underLeaves, true);
 });
+
+/**
+ * A bot with no tree in reach holding `held` ([name, meta, count]) and a crafting model of the
+ * inventory grid: 2 planks of one kind give 4 sticks; 1 log gives 4 planks of its kind (log:m ->
+ * planks:m). bot.crafted lists [item, count] per craft.
+ */
+function crafter(held) {
+    const bot = fakeBot({ trees: [], axe: false });
+    for (const [name, metadata, count] of held) bot.inventory.add({ name, metadata, count, type: reg.itemsByName[name].id });
+    const stack = (name, meta) => bot.inventory.items().find(i => i.name === name && i.metadata === meta);
+    const id = (name) => reg.itemsByName[name].id;
+    bot.crafted = [];
+    bot.recipesFor = (want, meta, n, table) => {
+        if (table) return [];
+        const items = bot.inventory.items();
+        if (want === id('stick')) {
+            const p = items.find(i => i.name === 'planks' && i.count >= 2);
+            return p ? [{ result: { id: id('stick'), count: 4 }, out: ['stick', 0, 4], use: [['planks', p.metadata, 2]],
+                inShape: [[{ id: id('planks'), metadata: p.metadata, count: 1 }], [{ id: id('planks'), metadata: p.metadata, count: 1 }]] }] : [];
+        }
+        if (want === id('planks')) {
+            const l = items.find(i => i.name === 'log' && i.count >= 1 && (meta == null || i.metadata === meta));
+            return l ? [{ result: { id: id('planks'), count: 4 }, out: ['planks', l.metadata, 4], use: [['log', l.metadata, 1]],
+                inShape: [[{ id: id('log'), metadata: l.metadata, count: 1 }]] }] : [];
+        }
+        return [];
+    };
+    bot.craft = (r, count) => {
+        bot.crafted.push([r.out[0], count]);
+        for (const [name, meta, n] of r.use) stack(name, meta).count -= n * count;
+        const [name, meta, n] = r.out;
+        const got = stack(name, meta);
+        if (got) got.count += n * count;
+        else bot.inventory.add({ name, metadata: meta, count: n * count, type: id(name) });
+    };
+    bot.armorManager = { equipAll() {} };
+    return bot;
+}
+const held = (bot, name, meta) => bot.inventory.items().filter(i => i.name === name && (meta == null || i.metadata === meta)).reduce((n, i) => n + i.count, 0);
 
 test('round 5 A: sticks short and no tree to fell: the rest are made from held planks (2 planks give 4 sticks)', T, async (t) => {
     fast(t);
-    const make = (planks) => {
-        const bot = fakeBot({ trees: [], axe: false, planks });
-        const plank = () => bot.inventory.items().find(i => i.name === 'planks');
-        const recipe = { result: { id: reg.itemsByName.stick.id, count: 4 },
-            inShape: [[{ id: reg.itemsByName.planks.id, metadata: 0, count: 1 }], [{ id: reg.itemsByName.planks.id, metadata: 0, count: 1 }]] };
-        bot.crafted = [];
-        bot.recipesFor = (id, meta, n, table) => (id === reg.itemsByName.stick.id && !table && (plank()?.count ?? 0) >= 2 ? [recipe] : []);
-        bot.craft = (r, count) => {
-            bot.crafted.push(count);
-            plank().count -= 2 * count;
-            const items = bot.inventory.items();
-            const stick = items.find(i => i.name === 'stick');
-            if (stick) stick.count += 4 * count;
-            else bot.inventory.add({ name: 'stick', metadata: 0, count: 4 * count, type: reg.itemsByName.stick.id });
-        };
-        bot.armorManager = { equipAll() {} };
-        return bot;
-    };
-    const bot = make(5);
+    const bot = crafter([['planks', 0, 5]]);
     assert.equal(await skills.collectBlock(bot, 'stick', 6), true, bot.output);
-    assert.deepEqual(bot.crafted, [2], 'two crafts for 6 sticks');
-    assert.equal(bot.inventory.items().find(i => i.name === 'stick')?.count, 8);
+    assert.deepEqual(bot.crafted, [['stick', 2]], 'two crafts for 6 sticks');
+    assert.equal(held(bot, 'stick'), 8);
     assert.match(bot.output, /Making the other 6 sticks from planks/);
     assert.match(bot.output, /Collected 8 stick, 8 of them made from planks\./);
 
-    const none = make(1); // one plank: not enough for a craft, so no craft is tried
+    const none = crafter([['planks', 0, 1]]); // one plank: not enough for a craft, so no craft is tried
     assert.equal(await skills.collectBlock(none, 'stick', 4), false);
     assert.deepEqual(none.crafted, []);
     assert.match(none.output, /Collected 0 stick\./);
+});
+
+test('#268 follow-up 3: planks are counted per kind: a mixed pair makes no stick, a pair of one kind does', T, async (t) => {
+    fast(t);
+    const mixed = crafter([['planks', 0, 1], ['planks', 1, 1]]); // oak + spruce: 2 planks, no pair
+    assert.equal(skills.stickCraftsHeld(mixed), 0);
+    assert.equal(await skills.collectBlock(mixed, 'stick', 4), false);
+    assert.deepEqual(mixed.crafted, [], 'no craft tried for a mixed pair');
+    assert.doesNotMatch(mixed.output, /Making the other/);
+
+    const some = crafter([['planks', 0, 1], ['planks', 1, 3]]); // a spruce pair
+    assert.equal(skills.stickCraftsHeld(some), 1);
+    assert.equal(await skills.collectBlock(some, 'stick', 8), true, some.output);
+    assert.deepEqual(some.crafted, [['stick', 1]], 'one craft: the only pair, not the 2 the count asks for');
+    assert.equal(held(some, 'planks', 1), 1);
+    assert.equal(held(some, 'planks', 0), 1);
+});
+
+test('#268 follow-up 2: no pair of planks but logs held: logs into planks first, then sticks', T, async (t) => {
+    fast(t);
+    const bot = crafter([['log', 1, 2], ['planks', 0, 1]]);
+    assert.equal(await skills.collectBlock(bot, 'stick', 4), true, bot.output);
+    assert.deepEqual(bot.crafted, [['planks', 1], ['stick', 1]], 'one log into planks, then one stick craft');
+    assert.equal(held(bot, 'stick'), 4);
+    assert.equal(held(bot, 'log', 1), 1, 'only the logs needed');
+    assert.equal(held(bot, 'planks', 1), 2);
+    assert.match(bot.output, /Making planks from logs for sticks\./);
+    assert.match(bot.output, /Collected 4 stick, 4 of them made from planks\./);
+
+    const bare = crafter([]); // nothing to craft from
+    assert.equal(await skills.collectBlock(bare, 'stick', 4), false);
+    assert.deepEqual(bare.crafted, []);
 });
