@@ -178,6 +178,7 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`.
   - an empty project (no server, Primary IP or labelled SSH key);
   - the batch preflight on its own, with the TTL above (it includes the LLM probe and the midnight warning; do not start a batch that would cross 00:00 UTC);
   - `test-server.sh up --dry-run` with the same TTL.
+    - If it warns "sweeper check would refuse", wait and re-check (every 2 min, round 5 D): never a skip flag. The cadence path leaves out the helper's own dispatch (#282). A helper run whose job GitHub started late can still make it refuse for up to 50 min: that fails safe (`deploy/README.md`, the sweeper check).
 - **The run:** `deploy/test-server.sh run --yes --ttl-hours <h> --seed 1880465901402976865 -- node test/runner/batch.mjs --max-batch-usd 2 --logs-out <raw>/server --summary <raw>/batch.json --scenario <id> --out <raw>/<dir> -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json`. No skip flags, no `--timeout-min` unless the GO names one.
 - **Stops:**
   - a scenario error, an infra fault (exit 125) or a harness fault stops the round before the next batch;
@@ -366,6 +367,9 @@ The real agent lives through its first full night from a fresh spawn. The runner
   - **Dusk first** (#203 review): a night counts only after a sample below `nightFrom` (13000). The night is then the first sample at or above it, and dawn is the first sample below `dawnBelow` (12000) after that, so the time has wrapped past 24000.
   - A run that joins mid-night waits for the next full night, which a fresh server's 55 min limit does not reach, so it fails. A unit test starts mid-night.
   - S1-A measured a cycle of about 40 min with Extended Days, so dawn is expected about 40 min after the join.
+  - **The daytime holds are Extended Days** (lead, after round 6; checked against the pack). RotN 3.3.4 ships `ExtendedDays-1.12.2-0.2.9-28.jar`, and its `config/extendeddays.cfg` sets `"Extended Periods" < 3000 10  16000 10 >`: 10 real minutes are added at daytime 3000 and again at 16000.
+    - So `time query daytime` reads **3001 for about 10 min** in the morning and **16001 for about 10 min** in the night. Round 5's B rerun and round 6 B show both (minutes 2.3-11.5 and 22.9-31).
+    - A vanilla cycle of 20 min plus the two holds gives S1-A's 40 min. A run that samples a hold sees no change for ~10 min: that is not a stuck server or a frozen clock.
   - `maxMinutes` (55), `nightFrom` and `dawnBelow` are compared 'equal'. The first G3 smoke batch confirms the rule before it is pinned.
 - **Every minute:** `scoreboard players list <bot>` for `stat.deaths` (objective `g3b_deaths`, plus `g3b_played`), and the log's death lines (`deathLines` in `lib/g3.mjs`: the 1.12 death messages, and a raw `death.attack.*` key from a mod).
 - **The end** comes at the first of: dawn, a death (stat or line), the bot leaving, its driver exiting, or `maxMinutes`.

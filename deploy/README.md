@@ -98,6 +98,8 @@ Before any create, `up` and `run` (which calls `up`) require **one** of these:
   - The OK line names what was left out: `...; left out the helper's own dispatch: <run id> (<time>, helper run <id>)`.
   - **Why this cannot fake a cadence:** leaving runs out only removes evidence. An agent cannot make a helper `schedule` run (a manual helper run is `workflow_dispatch` there and does not count). A manual sweeper dispatch with no helper run in the 180 s before it still breaks (c), and one helper run never excuses two extra runs.
   - If the helper repo cannot be read, nothing is left out.
+  - **A late helper run fails safe** (#282 review nit 2). The 180 s count from the helper run's `createdAt`. If GitHub starts its job late, so that its dispatch lands more than 180 s after that, the extra run is not left out and (c) refuses for up to 50 min, as before this rule. Never the other way round: a late start cannot excuse a run.
+  - Every path checks each run's `event` in jq itself (`schedule` for (a), (b) and the helper runs; `workflow_dispatch` for the cadence), not only through `gh`'s `--event` filter (#282 review nit 1).
 - Every `gh` call names its repo with `--repo`, and `GH_REPO` and `GH_HOST` are stripped. The preflight never handles a token: `gh` uses the local login.
 - The OK line says which path passed, e.g. `sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15, 15 min, newest ... 1 min ago`. A refusal gives the reason for every path.
 
