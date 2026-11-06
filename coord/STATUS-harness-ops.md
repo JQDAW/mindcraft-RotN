@@ -1,8 +1,22 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (16:58 UTC, from `date -u`)
+Updated: 2026-11-06 (18:48 UTC, from `date -u`)
 
-## Now: G3 smoke round 5 is over (smoke). No batch until a new GO.
+## Now: G3 smoke round 6 is over (smoke, develop f7fbe4fe). No batch until a new GO.
+
+| Batch (evidence folder) | Result |
+| --- | --- |
+| A (`g3a-20261106-r6`) | **PASS 7/7:** sticks by felling, the first plank by Hit With Axe with the crude axe kept, both stone tools by minute 4.8, "agenda done". |
+| B (`g3b-20261106-r6`) | 4/5: the whole agenda, then the shelter counted "0 sturdy blocks" (it misses Underground Biomes cobble; the bot had 11) and a zombie killed the bot in the open. |
+| C (`g3c-20261106-r6`) | **PASS 7/7:** the bot stood on the gold block and checked the block under its feet before `!taskDone`; the server confirmed it. |
+| D (`g3d-20261106-r6`) | **PASS 7/7:** the refusal in the same second as the whisper. |
+
+- **Memory summaries:** 42 stored, 0 empty; every provider line names Wafer. **Spend:** USD 0.022473 by the batch figures, 0.022631 by the key (to 0.815220 of 4.50). Hetzner 11 + 38 + 12 + 8 min, all verified gone. Free memory 5.9-6.1 GB at each start.
+- **The daytime holds at 3001 and 16001 are Extended Days** (lead; checked against the pack's `config/extendeddays.cfg`: 3000 and 16000, 10 real minutes each). In DRIVER.md and the round 5 B rerun README.
+- **For skills-rotn (the lead routes):** the shelter's sturdy blocks should include RotN's cobble variants; `!taskDone` used for an agenda step (harmless).
+- **Open: the round 6 evidence PR. Next: the #282 nits PR** (the helper run's `event` checked in jq; a late-started helper run fails safe, documented).
+
+## Earlier: G3 smoke round 5 is over (smoke).
 
 | Batch (evidence folder) | Result |
 | --- | --- |

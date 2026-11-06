@@ -45,7 +45,7 @@ At 14:45 the lead saw `night/result.json` say "FAIL (killed)": that is the progr
 - **Sticks by felling:** the first tree gave "Broke the tree at -27, 79, -91: no drops appeared within 6 s"; then "Felled the tree at -29, 77, -90: 5 drops within 12 blocks (5 new), 0 left behind" and "Collected 4 stick." (a dark oak).
 - **The agenda:** rocks, sticks, crude axe, logs, first plank, crafting tools, crafting table, planks and sticks, stone pickaxe, stone axe, cobblestone, then "agenda done".
 - **The night:** "[night] sunset is near: building a shelter", then "[night] in the shelter at -34, 66, -90 until morning". No falls, no deaths near leaves or liquids.
-- **Daytime stood at 3001 from minute 2.3 to 11.5,** then advanced normally (about 1,375 per sample). The server logged "Can't keep up! ... Running 2684ms behind" and "Time is 3001" at 14:24:44 (3 such lines in all). The log does not show why daytime stayed; the night came later than usual but the result is unaffected.
+- **Daytime stood at 3001 from minute 2.3 to 11.5,** then advanced normally (about 1,375 per sample). The server logged "Can't keep up! ... Running 2684ms behind" and "Time is 3001" at 14:24:44 (3 such lines in all). **That is the pack's Extended Days mod** (lead, after round 6; corrected from "the log does not show why"): `extendeddays@0.2.9` is in the FML mod list, and the RotN 3.3.4 server pack's `config/extendeddays.cfg` sets `"Extended Periods" < 3000 10  16000 10 >`, which adds 10 real minutes at daytime 3000 and again at 16000. The "Can't keep up!" lines are unrelated. The hold at 16000 is why the night ran from minute 20.6 to dawn at 40.1; the result is unaffected (DRIVER.md, the dawn rule).
 
 ## LLM, providers and memory summaries
 

@@ -1,0 +1,23 @@
+{
+  "batchId": "20261106T184044-8576",
+  "testMode": false,
+  "gate": false,
+  "smoke": true,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g3-untrusted-refused",
+      "out": "<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r6-g3d\\untrusted",
+      "runId": "20261106t184044-2f7813",
+      "exit": 0,
+      "spentBefore": 0,
+      "timeoutMin": 16
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.812683508,
+  "usageAtEnd": 0.815219868,
+  "spentUsd": 0.002536,
+  "exit": 0,
+  "logsFetched": true
+}
