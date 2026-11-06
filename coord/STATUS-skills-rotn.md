@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T16:29Z (from `date -u`)
+Updated: 2026-11-06T16:49Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -205,11 +205,11 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 14. ~~rotn-data (via the lead, #206 review 1)~~ (answered by rotn-data #209: `foodValues`, `avoidFood`, `installFoods`): export `foodOf(name, meta)`, returning `{ hunger, saturation }` with the pack's `scripts/food.zs` values on top of the dump (bread 3, not 5), or `null` for a non-food. `food.js` uses it as soon as it exists, and a skipped test then checks bread 3. Also wanted: a structured "harmful food" field with sources, so `AVOID_FOODS` can leave the code.
 15. **rotn-data (via the lead, D1b #212):** from the pack's `hordes-1.1.7` jar (`assets/hordes/lang/en_us.lang`) and any pack override, list the message keys and English texts sent at a wave or horde start, and whether each is a title, a subtitle or chat. The matcher then narrows from "names a horde" to exactly those.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
-16. **Lead (`src/models/prompter.js`, `src/models/*.js`), round 5 A rerun item 4:** `promptMemSaving` calls `sendRequest([], prompt)`, so the prompt is the only message (system) and the stop sequence is the default `'*'`. Please consider sending the summary prompt as a user turn, and passing no stop sequence (or `null`) for the memory call, so a markdown summary is not cut at its first `*`. My profile change (plain text, no asterisks) only lowers the chance.
+16. **DONE in #277 (merged; lead): no stop sequence for memory summaries, and a user turn.** Was: **Lead (`src/models/prompter.js`, `src/models/*.js`), round 5 A rerun item 4:** `promptMemSaving` calls `sendRequest([], prompt)`, so the prompt is the only message (system) and the stop sequence is the default `'*'`. Please consider sending the summary prompt as a user turn, and passing no stop sequence (or `null`) for the memory call, so a markdown summary is not cut at its first `*`. My profile change (plain text, no asterisks) only lowers the chance.
 
 ## Open PRs
 
-- **#274** (round 5 fixes, branch `agent/skills-rotn/r5-rerun`, opened 2026-11-06T16:02Z by `date -u`): Hit With Axe sticks, standing on a block with a check (C), the #270 follow-ups, felling drops arriving late and stuck against trunks (A rerun), the plain-text memory prompt. All `src` tests: 445/445 (with the rotn-data #278 grid-planks fix). Lint 253. Waiting for the lead's review.
+- **#274** (round 5 fixes, branch `agent/skills-rotn/r5-rerun`, opened 2026-11-06T16:02Z by `date -u`): Hit With Axe sticks, standing on a block with a check (C), the #270 follow-ups, felling drops arriving late and stuck against trunks (A rerun), the plain-text memory prompt. Review fixes pushed 2026-11-06T16:49Z; `src` and `packages` tests 903/903, lint 253. Waiting for the lead's re-review.
 - Earlier PRs (#195, #198 and the ones before) are merged.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
@@ -676,6 +676,27 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
     - a held Pam maple log, with no table and no axe, gives planks in the grid, then 4 sticks, with planks left for the table;
     - by the real recipes: a mangrove log gives `biomesoplenty:planks_0:6`, a maple log gives `planks` and an End log gives `stygian:endplanks`; a vanilla log or planks alone give nothing.
   - The first test fails on the old `skills.js`. All `src` tests: 445/445. Lint 253.
+
+- **2026-11-06T16:49Z: #274 review fixes** (the lead's 4 required items and 2 nits; develop with #275-#278 merged in):
+  1. **The axe keeps a use** (`skills.js`, `rotn_sources.js`):
+     - `toolUsesLeft(item)` is rotn-data's `maxDamage` minus the damage (1.12 metadata), so the crude axe has 8.
+     - A log is chopped only when an axe keeps 1 use after its 2 clicks, and a plank only when one keeps 1 after its 1 click. Otherwise: "Keeping the axe for the Crafting Tools: it has N uses left, and chopping a log takes 2; stopping."
+     - With several axes held, the one with the most uses left chops, so a stone axe does it and the crude axe is untouched.
+  2. **Stand-on coordinates** (`stand_on.js`): only the triple right after "stand on", or for "stand on it/there/that" the last named block before it ("the gold block at X Y Z"). Never the first triple in the text; a bare position with "stand on it" gives null.
+  3. **Every early exit cleans up:** a `finally` after each placement breaks what is left (log, debarked log or plank) back by hand, not with the axe, bounded at 5 s, then picks up the drops. When the run was stopped or aborted, the block is still broken back, but the bot does not walk after the drops ("Stopped; the drops are left near ...").
+  4. **Placement** (`chopSpot` and `chopSpotOk`):
+     - an empty cell 1.5 to 3 blocks away, on firm ground (`isFirmGround`: not leaves, a branch, a liquid or a hazard);
+     - no liquid or hazard in the 3x3x3 around it;
+     - no ledge: each side is solid or has firm ground under it;
+     - `placeNear` uses it and says why when there is none, and `pickUpNear` only walks to drops lying on the ground (`itemOnGround`).
+  - **Nits:**
+    - `standCheck` uses the cell of feet y - 0.01, so a slab or farmland underfoot counts;
+    - `TREE_COVER` matches wood only as a whole name part (`log`, `log2`, `log_0`, `twilight_log`, `petrified_wood`), not `wooden_slab` and the like.
+  - **Tests:**
+    - `axe_chop` 10 (+4): a worn axe (damage 3, 2 and 7), the stone axe chosen over the crude axe, three early exits (a use that changes nothing, the use cap, an abort), and the placement spot;
+    - `stand_on` 11 (+2): the coordinates and the slab;
+    - `fell_tree`: a wooden roof is not tree cover.
+  - All 7 new or changed tests fail on the old source. `src` and `packages` tests: 903/903 after the develop merge. Lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
