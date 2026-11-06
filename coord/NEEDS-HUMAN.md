@@ -7,6 +7,19 @@ Agents add items here when they need something only the human can do. The human 
 - [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key, which is under Done): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
 - [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
 - [ ] **Whitelist the bot** on the live server when the lead asks (after G3).
+- [ ] **Move the lead and the four dev agents to the CPX32 dev server** (the human's plan, 2026-11-06, after G3 smoke round 7; it ends the RAM pressure on the Windows PC). Every step marked *you* involves a secret or an account, so no agent does it.
+  1. **Before** (the lead confirms): every agent has pushed its branches and STATUS handoff; no Hetzner test server exists; no batch is running.
+  2. **Base system** (you): Node.js 22 LTS (same major as here, ADR 0002), git, build tools for native modules (`build-essential`, `python3`), `gh`, `hcloud`, `jq`, `bash`, `curl`, `unzip`, `openssh-client` (`ssh`, `ssh-keygen`, `scp`), and a JDK 8 (rotn-data uses `javap` to cite pack bytecode; `tools/dumper/build.sh` needs JDK 8).
+  3. **The pack zip** (you): copy the pinned RotN 3.3.4 server pack zip (SHA-256 `90642fd5...f5205`) to the dev server; harness-ops sets `ROTN_PACK_ZIP` to its path (`PACK_ZIP` defaults to a Windows path in deploy/test-server.sh).
+  4. **Accounts and secrets** (you, never in a file in the repo):
+     - Hetzner: an hcloud context for the **test** project (`hcloud context create mindcraft-rotn-test`, token typed by you), not an exported `HCLOUD_TOKEN`. Keep the dev server itself in a different Hetzner project from the test servers, so the sweeper can never touch it.
+     - GitHub: `gh auth login` as JQDAW (the keyring, not an exported token).
+     - OpenRouter: `OPENROUTER_API_KEY` (the test key) only in the session that runs batches (harness-ops), not in every agent's shell.
+     - Your SSH key for reaching the dev server.
+  5. **Repo and worktrees** (agents, after 2-4): clone `JQDAW/mindcraft-RotN`, `npm ci` in each worktree (patch-package must apply), one worktree per agent on its branch, as on this PC.
+  6. **Bot account** (you, after 5): run the device-code login for FRCFLD once, `node packages/forge-bridge/tools/msa-login.mjs` with `MINDCRAFT_PROFILES_FOLDER` set (deploy/cx23/README.md); harness-ops gives you the exact command and folder, then checks it with `--check`.
+  7. **Agent sessions** (you): start the lead and the four agents the way you prefer (Orca or another terminal manager), never in bypass-permissions mode. Orca's agent launch can add the bypass flag: decline that prompt and start plain `claude` instead. The lead rebuilds its own memory notes from STATUS and PLAN.
+  8. **Validation** (the lead gives a GO): one G3 smoke batch from the dev server, all checks as usual. It only checks the environment and never counts toward the gate: under docs/PLAN.md the full 4/4 A-D smoke round on the final commit still runs before any gate batch. The test-server sweeper and watchdog are unchanged.
 
 ## Done
 
