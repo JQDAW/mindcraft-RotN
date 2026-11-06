@@ -214,6 +214,12 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
       - In the preflight, `test-server.sh` passes the TTL (`ROTN_BATCH_TTL_MINUTES`), and the TTL must also cover 20 min of build (`BUILD_ALLOWANCE_MIN`; observed 3-5 min). Otherwise the batch is refused before the create.
       - At the batch start, `test-server.sh` passes the seconds left before the server's delete-after, by its own clock (`TEST_SERVER_SECONDS_LEFT`), and that time must cover the batch, whatever the build really took. Otherwise it is refused before any scenario or LLM call. A real test-server run without that value is refused too.
       - Round 2's batches need: A 37+25 = 62 of 120 min, B 67+25 = 92 of 180, C+D 34+16+25 = 75 of 120.
+    - **The server log rolls over at 00:00 UTC** (log4j: `logs/latest.log` becomes `logs/<date>-N.log.gz`). Round 3 batch B lost its begin marker that way: "scenario marker not in the last 20000 log lines" at 00:00:56, after 29 min of a good night.
+      - Once the marker is no longer in `latest.log`, the session (`sinceMarker` in `lib/session.mjs`) reads `test-server.sh log N rotated`: the tail of the newest rolled-over `logs/*.log.gz` (by modification time) plus `latest.log`. `rotn-test`'s first line names the files (`##rotn-test files: 2026-11-05-1.log.gz,latest.log`).
+      - Each distinct set of files a window read is recorded in `notes.logWindow` (`files`, `markerFound`, `sessionMin`).
+      - `rotn-test console` also survives the roll-over: when `latest.log` got shorter while it waited, it prints the whole new file as the reply.
+      - A second roll-over within one run (only a server restart could cause one) is not covered. G3 never restarts the server.
+      - `batch.mjs` **warns** (never refuses) when a batch may run past 00:00 UTC: at the preflight (build allowance included) and at the batch start.
     - A scenario without `runMinutes`, or an unknown id, is refused, except in the offline test mode (fake ids: `--timeout-min` or 15).
     - The preflight log lists the timeouts, the start line of each scenario shows its own, and the summary records `timeoutMin` for each scenario.
   - A scenario that hits its runner timeout is recorded with exit **124**, whatever run.mjs exits after the SIGTERM. A runner that cannot be started is recorded with exit **127**. The summary records each scenario's `out` folder and its `exit`, and the batch's own `exit`.

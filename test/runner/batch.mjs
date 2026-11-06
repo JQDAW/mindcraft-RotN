@@ -166,6 +166,20 @@ export function scenarioTimeouts(scenarios, registry, { maxBatchUsd, testMode = 
  *   left must cover it, whatever the build really took.
  * Returns {needMin, problems}; a null input is not checked.
  */
+/**
+ * A warning, never a refusal (lead, after round 3 batch B): whether this batch could still be running at 00:00 UTC,
+ * when log4j rolls the server's logs/latest.log over. The session then reads the rolled-over file too
+ * (lib/session.mjs, notes.logWindow), so a run survives it; the warning says to expect that. From nowMs: buildMin
+ * (the preflight: BUILD_ALLOWANCE_MIN; the batch start: 0), the runner timeouts and END_ALLOWANCE_MIN.
+ * Returns the warning text, or null.
+ */
+export function midnightWarning(timeouts, nowMs, { buildMin = 0 } = {}) {
+    const mins = buildMin + timeouts.reduce((n, t) => n + t.timeoutMin, 0) + END_ALLOWANCE_MIN;
+    const end = new Date(nowMs + mins * 60000);
+    if (end.toISOString().slice(0, 10) === new Date(nowMs).toISOString().slice(0, 10)) return null;
+    return `this batch may run past 00:00 UTC (up to ${end.toISOString().slice(11, 16)} UTC on ${end.toISOString().slice(0, 10)}), when the server log rolls over; the session then also reads the rolled-over log (notes.logWindow)`;
+}
+
 export function ttlProblems(timeouts, { ttlMinutes = null, remainingMinutes = null } = {}) {
     const sum = timeouts.reduce((n, t) => n + t.timeoutMin, 0);
     const needMin = sum + END_ALLOWANCE_MIN;
@@ -305,6 +319,9 @@ async function main(argv) {
         for (const p of ttl.problems) log(`refused: ${p}`);
         return 2;
     }
+    // A warning only (lead, after round 3 batch B): the server rolls its log over at 00:00 UTC.
+    const midnight = midnightWarning(tos.timeouts, Date.now(), { buildMin: o.preflight ? BUILD_ALLOWANCE_MIN : 0 });
+    if (midnight) log(`warning: ${midnight}`);
     if (o.preflight && !o.readUsage) {
         log(`preflight passed (files only, a dry run): driver, profile, model and settings checked; the key's usage was not read; ${o.scenarios.length} scenario(s) (timeouts: ${timeoutText}); ${modeText(o)}`);
         return 0;

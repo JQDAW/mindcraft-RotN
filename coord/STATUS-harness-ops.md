@@ -1,6 +1,21 @@
 # Status: harness-ops
 
-Updated: 2026-11-05 (22:59 UTC, from `date -u`)
+Updated: 2026-11-06 (00:17 UTC, from `date -u`)
+
+## Now: G3 smoke round 3 paused after batch B (the lead's GO, 2026-11-06)
+
+- **A** (`g3-rocks-to-stone-tools`, develop 609490f6): FAIL 6 of 7.
+  - Both stone tools, the table and all five crafts were done; 10 of 11 agenda steps in about 7 min, with no deaths.
+  - `cobblestone` failed: `!craftRecipe("cobblestone")` asks for Twilight Forest's giant cobblestone; the rock's own `chalk_cobble` was never tried. That is fixed by skills-rotn's #234.
+  - LLM USD 0.1715.
+- **B** (`g3-first-night`): a scenario error, not a verdict on the bot.
+  - The server log rolled over at 00:00 UTC, the begin marker was gone, and the run stopped at 00:00:56. Until then: no deaths, and online.
+  - Stopped per the GO. C+D did not start.
+- **Cumulative LLM** by the key: USD 0.7449 of the 4.50 stop. Both servers were verified deleted, and the project was checked empty.
+- **Open:**
+  - the log roll-over fix PR: the session reads the rolled-over `.gz` plus `latest.log` once the marker is gone, records `notes.logWindow`, `rotn-test console` survives it, and `batch.mjs` warns about runs past 00:00 UTC;
+  - a separate PR with A's and B's smoke evidence.
+- **Next:** no batch until the lead brings a new human GO (C+D plus a B rerun). Targeted tests only until the lead declares round 3 over.
 
 ## Done: G3 smoke round 2 (the lead's written GO, 2026-11-05)
 
@@ -32,14 +47,7 @@ Round 2 LLM total: USD 0.3699. Cumulative with round 1: USD 0.5505 of the 4.50 s
 - `--timeout-min` may only raise it; a lower value is refused in the preflight.
 - No `--timeout-min` is needed in the next GO's commands.
 
-**Open (the lead's follow-up to #231):** the TTL and timeout-cap PR.
-- A batch is refused when its TTL cannot cover the sum of its derived timeouts plus 20 min of build and 5 min of logs and teardown. This is checked in the preflight, before the create.
-- At the batch start, it is refused when the seconds left before delete-after cannot cover the same sum plus 5 min.
-- An explicit `--timeout-min` is capped at 3x the derived value.
-- DRIVER.md now says that `--timeout-min` carries over to later scenarios.
-- Round 2's layout fits: A 62 of 120 min, B 92 of 180, C+D 75 of 120.
-
-**Next:** the lead's review, then the GO for G3 smoke round 3.
+**Merged:** #232 (the TTL check and the `--timeout-min` cap).
 
 ## Done: the first G3 smoke batches (the lead's written GO, 2026-11-05)
 

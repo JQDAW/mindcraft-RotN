@@ -6,12 +6,15 @@
 #   rotn-test start                      release a build held for extra mods (--extra-mod)
 #   rotn-test console [--wait S] CMD...  type CMD into the Forge console, print new log lines
 #   rotn-test log [N]                    tail logs/latest.log
+#   rotn-test log N rotated              the same over the newest rotated logs/*.log.gz plus latest.log (log4j
+#                                        rolls latest.log daily at 00:00 UTC); the first line names the files:
+#                                        "##rotn-test files: <a.log.gz>,latest.log"
 #   rotn-test build-log [N]              tail the first-boot build log
 #   rotn-test verify                     key=value facts for the G0 checks
 set -euo pipefail
 
 STATE=/var/lib/rotn-test
-SERVER=/opt/rotn/server
+SERVER=${ROTN_TEST_SERVER_DIR:-/opt/rotn/server}   # the override is for the offline tests only
 SOCK=/opt/rotn/console.sock
 LOG=$SERVER/logs/latest.log
 
@@ -41,10 +44,23 @@ case $cmd in
     runuser -u minecraft -- tmux -S "$SOCK" send-keys -t rotn -l -- "$line"
     runuser -u minecraft -- tmux -S "$SOCK" send-keys -t rotn Enter
     sleep "$wait"
-    [[ -f $LOG ]] && tail -n "+$(( before + 1 ))" "$LOG"
+    if [[ -f $LOG ]]; then
+      now=$(wc -l < "$LOG")
+      # latest.log was rolled over while we waited (it is shorter now): all of the new file is new.
+      if (( now < before )); then cat "$LOG"; else tail -n "+$(( before + 1 ))" "$LOG"; fi
+    fi
     ;;
   log)
-    tail -n "${1:-100}" "$LOG"
+    n=${1:-100}
+    [[ $n =~ ^[0-9]+$ ]] || { echo "usage: rotn-test log [N] [rotated]" >&2; exit 2; }
+    if [[ ${2:-} == rotated ]]; then
+      # The newest rotated file, by modification time, then latest.log; one file name per entry.
+      rot=$(ls -t "$SERVER"/logs/*.log.gz 2>/dev/null | head -n 1 || true)
+      echo "##rotn-test files: ${rot:+$(basename "$rot"),}latest.log"
+      { [[ -n $rot ]] && gzip -dc "$rot"; [[ -f $LOG ]] && cat "$LOG"; } | tail -n "$n"
+    else
+      tail -n "$n" "$LOG"
+    fi
     ;;
   build-log)
     tail -n "${1:-100}" /var/log/rotn-test-build.log

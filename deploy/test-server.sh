@@ -27,7 +27,9 @@
 #   console CMD   Type CMD into the server console and print the new log lines (--wait S).
 #   fetch PATH    Copy PATH (relative to the server dir, e.g. logs) into --out DIR.
 #   verify        Print the on-server G0 facts (key=value).
-#   log [N]       Tail the server log.  build-log [N]  Tail the cloud-init build log.
+#   log [N] [rotated]  Tail the server log; with rotated, over the newest rolled-over log too (log4j rolls
+#                 latest.log at 00:00 UTC; the first line names the files).
+#   build-log [N]  Tail the cloud-init build log.
 #   ssh [CMD]     Open an SSH session (or run CMD) on the server.
 #   env           Print TEST_SERVER_* exports for the server.
 #   render-user-data [up options]   Print the cloud-init user-data and exit (no API calls).
@@ -1099,7 +1101,10 @@ main() {
       done
       echo "$out" ;;
     verify) load_meta; rssh 'rotn-test verify' | tr -d '\r' ;;
-    log) load_meta; rssh "rotn-test log ${ARGS[0]:-100}" | tr -d '\r' ;;
+    log)
+      # log [N] [rotated]: rotated also reads the newest rolled-over logs/*.log.gz (00:00 UTC; rotn-test.sh).
+      [[ ${ARGS[0]:-100} =~ ^[0-9]+$ && ( -z ${ARGS[1]:-} || ${ARGS[1]:-} == rotated ) ]] || die "usage: log [N] [rotated]"
+      load_meta; rssh "rotn-test log ${ARGS[0]:-100} ${ARGS[1]:-}" | tr -d '\r' ;;
     build-log) load_meta; rssh "rotn-test build-log ${ARGS[0]:-100}" | tr -d '\r' ;;
     ssh) load_meta; rssh "${ARGS[@]}" ;;
     env)

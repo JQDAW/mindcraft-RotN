@@ -16,7 +16,7 @@ import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProble
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
-import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN, scenarioTimeouts, TIMEOUT_MARGIN_MIN, TEST_DEFAULT_TIMEOUT_MIN, TIMEOUT_CAP_FACTOR, ttlProblems, BUILD_ALLOWANCE_MIN, END_ALLOWANCE_MIN } from '../runner/batch.mjs';
+import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN, scenarioTimeouts, TIMEOUT_MARGIN_MIN, TEST_DEFAULT_TIMEOUT_MIN, TIMEOUT_CAP_FACTOR, ttlProblems, BUILD_ALLOWANCE_MIN, END_ALLOWANCE_MIN, midnightWarning } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
 import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
 import { checkFiles, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds, smokeBatchesUnder, batchKind } from '../tools/g3-batch-check.mjs';
@@ -761,5 +761,31 @@ describe('batch.mjs: the --timeout-min cap, its carry-over, and the TTL check (l
             '--', 'node', DRIVER, '--profile', 'profiles/rotn-bot.json'], { encoding: 'utf8', env: { ...realEnv(), TEST_SERVER_CTL: 'ctl.sh' } });
         assert.equal(r.status, 2, r.stderr);
         assert.match(r.stderr, /refused: inside a test-server run without the time left before the server's delete-after \(TEST_SERVER_SECONDS_LEFT\)/);
+    });
+});
+
+describe('batch.mjs warns (never refuses) when a batch may run past 00:00 UTC (lead, after round 3 batch B)', () => {
+    const t = (...m) => m.map((timeoutMin) => ({ timeoutMin }));
+    const at = (iso) => Date.parse(iso);
+
+    test('the window: build (preflight only) + the runner timeouts + the end allowance', () => {
+        // Round 3 batch B: started 23:28, 67-min timeout. Preflight: 20 + 67 + 5 = 92 min -> 01:00 the next day.
+        assert.equal(midnightWarning(t(67), at('2026-11-05T23:28:00Z'), { buildMin: 20 }),
+            'this batch may run past 00:00 UTC (up to 01:00 UTC on 2026-11-06), when the server log rolls over; the session then also reads the rolled-over log (notes.logWindow)');
+        assert.equal(midnightWarning(t(37), at('2026-11-05T20:15:00Z'), { buildMin: 20 }), null, 'round 2 batch A: ends 21:17');
+        // At the batch start the build is over: 34 + 16 + 5 = 55 min from 23:04 ends 23:59, the same day.
+        assert.equal(midnightWarning(t(34, 16), at('2026-11-05T23:04:00Z')), null);
+        assert.match(midnightWarning(t(34, 16), at('2026-11-05T23:06:00Z')), /up to 00:01 UTC on 2026-11-06/);
+    });
+
+    test('the preflight prints it as a warning and still passes', { timeout: 60000 }, () => {
+        // The real clock decides: the warning appears exactly when (b)'s window (20 + 67 + 5 min) crosses the next 00:00 UTC.
+        const DRIVER = path.join(HERE, '..', 'runner', 'drivers', 'mindcraft-driver.mjs');
+        const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ROTN_TEST_MODE|ROTN_OPENROUTER_USAGE_FILE|ROTN_BATCH_RUNNER|TEST_SERVER_.*|ROTN_BATCH_PREFLIGHT|ROTN_BATCH_TTL_MINUTES)$/.test(k)));
+        const r = spawnSync(process.execPath, [BATCH, '--preflight-files', '--max-batch-usd', '2', '--logs-out', 'l', '--scenario', 'g3-first-night', '--out', 'o',
+            '--', 'node', DRIVER, '--profile', 'profiles/rotn-bot.json'], { encoding: 'utf8', env });
+        assert.equal(r.status, 0, r.stderr);
+        const crosses = midnightWarning(t(67), Date.now(), { buildMin: 20 }) !== null;
+        assert.equal(/warning: this batch may run past 00:00 UTC/.test(r.stderr), crosses, r.stderr);
     });
 });

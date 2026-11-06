@@ -49,8 +49,23 @@ export async function startSession(ctx, { name, env = {}, naming = null, checkNa
         markerOk = markerSeen(server.console(`say ${marker}`, 1)) || markerSeen(server.log(p.logTail));
     }
     if (!markerOk) throw new Error(`the scenario marker never appeared in the server log after ${MARKER_TRIES} 'say' attempts`);
+    // The server rolls logs/latest.log over at 00:00 UTC (log4j; round 3 batch B lost its marker that way). Once
+    // the marker is no longer in latest.log, read the newest rolled-over file plus latest.log (server.logRotated),
+    // and record which files each such window read (notes.logWindow: one entry per distinct set of files).
+    const windows = [];
+    const t0 = clock.now();
     const sinceMarker = () => {
-        const lines = linesAfter(server.log(p.logTail), marker);
+        let lines = linesAfter(server.log(p.logTail), marker);
+        if (lines === null && typeof server.logRotated === 'function') {
+            const r = server.logRotated(p.logTail);
+            lines = linesAfter(r.lines, marker);
+            const files = r.files.join(',');
+            if (!windows.some((w) => w.files === files)) {
+                windows.push({ files, markerFound: lines !== null, sessionMin: Math.round(((clock.now() - t0) / 60000) * 10) / 10 });
+                ctx.note('logWindow', windows);
+            }
+            if (lines === null) throw new Error(`scenario marker not in the last ${p.logTail} log lines of ${files || 'the server logs'} (latest.log was rolled over); raise logTail`);
+        }
         if (lines === null) throw new Error(`scenario marker not in the last ${p.logTail} log lines; raise logTail`);
         return lines;
     };

@@ -36,7 +36,16 @@ export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries 
     return {
         console: (cmd, waitS = 3) => call(['console', '--wait', String(waitS), '--', cmd]),
         log: (n = 20000) => call(['log', String(n)]),
+        // The tail over the newest rolled-over logs/*.log.gz plus latest.log (log4j rolls latest.log at 00:00 UTC):
+        // {files, lines}. rotn-test's first line names the files ("##rotn-test files: a.log.gz,latest.log").
+        logRotated: (n = 20000) => parseRotatedLog(call(['log', String(n), 'rotated'])),
     };
+}
+
+/** `rotn-test log N rotated` output -> {files, lines}; files is [] when the header line is missing. */
+export function parseRotatedLog(out) {
+    const m = /^##rotn-test files: (.*)$/.exec(out[0] ?? '');
+    return m ? { files: m[1].split(',').filter(Boolean), lines: out.slice(1) } : { files: [], lines: out };
 }
 
 function sleepSync(ms) {

@@ -37,7 +37,8 @@ function daytimeAt(ms, start = 0) {
  * (otherwise it stays 20, so 1.12 never writes a food score);
  * opt.frozen: the time never moves (a freeze that never ends); opt.offsetS: where in the cycle the server is at
  * t=0 (1300 s is daytime 14000, mid-night); opt.start: inventory at the join ({item: n}); opt.noPack: no
- * first-join kit lines.
+ * first-join kit lines; opt.rotateAt: the minute after the join when log4j rolls latest.log over (log() then
+ * shows only the new file; logRotated() the newest rolled-over file plus latest.log, unless opt.noRotatedReader).
  */
 function sim(opt = {}) {
     const log = [];
@@ -51,7 +52,8 @@ function sim(opt = {}) {
     const objectives = new Map();
     const sent = [];
     const add = (msg) => log.push(line(t, msg));
-    const pending = new Set(['die', 'kick']);
+    const pending = new Set(['die', 'kick', 'rotate']);
+    let rotIdx = 0;   // where latest.log starts in `log`
     const advance = () => {
         if (joinT === null) return;
         const m = (t - joinT) / MIN;
@@ -59,6 +61,7 @@ function sim(opt = {}) {
             if (!opt.statOnly) add(`${NAME} was slain by Zombie`);
             if (!opt.lineOnly) deaths++;
         }
+        if (opt.rotateAt !== undefined && m >= opt.rotateAt && pending.delete('rotate')) rotIdx = log.length;
         if (opt.kickAt !== undefined && m >= opt.kickAt && pending.delete('kick')) {
             online = false;
             add(`${NAME} lost connection: Kicked by an operator`);
@@ -99,8 +102,11 @@ function sim(opt = {}) {
             t += waitS * 1000;
             return log.slice(before);
         },
-        log: (n) => { advance(); return log.slice(-n); },
+        log: (n) => { advance(); return log.slice(Math.max(rotIdx, log.length - n)); },
     };
+    if (!opt.noRotatedReader) {
+        server.logRotated = (n) => { advance(); return { files: rotIdx ? ['2026-11-05-1.log.gz', 'latest.log'] : ['latest.log'], lines: log.slice(-n) }; };
+    }
     const bot = {
         start() {
             alive = true;
@@ -232,5 +238,35 @@ describe('g3-first-night on a simulated server', () => {
             const r = await run(sim(), params);
             assert.equal(r.gateValid, false, JSON.stringify(params));
         }
+    });
+});
+
+describe('the server log rolls over at 00:00 UTC mid-run (round 3 batch B)', () => {
+    test('the marker rotated out: the session reads the rolled-over file plus latest.log, records the files, and every check passes', async () => {
+        const r = await run(sim({ rotateAt: 30 }));
+        const c = byName(r);
+        assert.equal(r.error ?? null, null);
+        for (const k of Object.keys(g3b.checks)) assert.equal(c[k].pass, true, `${k}: ${c[k].detail}`);
+        assert.equal(r.notes.logWindow.length, 1);
+        assert.equal(r.notes.logWindow[0].files, '2026-11-05-1.log.gz,latest.log');
+        assert.equal(r.notes.logWindow[0].markerFound, true);
+        assert.ok(r.notes.logWindow[0].sessionMin >= 30, `found after the rotation: ${r.notes.logWindow[0].sessionMin}`);
+    });
+
+    test('a death before the rotation still counts afterwards (the window spans both files)', async () => {
+        const c = byName(await run(sim({ rotateAt: 30, dieAt: 10 })));
+        assert.equal(c.survived_night.pass, false);
+        assert.match(c.survived_night.detail, /death lines 1/);
+    });
+
+    test('without the rotated reader, round 3 batch B\'s failure: a scenario error, and no window is recorded', async () => {
+        const r = await run(sim({ rotateAt: 30, noRotatedReader: true }));
+        assert.match(String(r.error), /scenario marker not in the last \d+ log lines; raise logTail/);
+        assert.equal(r.notes.logWindow, undefined);
+    });
+
+    test('no rotation: the rotated reader is never used', async () => {
+        const r = await run(sim());
+        assert.equal(r.notes.logWindow, undefined);
     });
 });
