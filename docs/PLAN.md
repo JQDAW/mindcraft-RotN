@@ -66,6 +66,8 @@ Per bot: profile JSON (name equals the account's Minecraft name), Microsoft acco
 | 3 Act in RotN | Skills and modes for RotN, task queue, agenda | skills-rotn, rotn-data, harness-ops | G3: rocks to stone tools on a fresh spawn; survives the first night; a task preempts the agenda, which then resumes |
 | 4 Deploy + harden | CX23 service, reconnects, 2-hour soak, TRY_IT.md | harness-ops, independent-reviewer, lead | G4: the full ready-to-try list is green on the CX23 |
 
+**G3 gate rule (the human's decision, 2026-11-06).** Before the gate, one full smoke round of A, B, C and D (C and D each on its own fresh server) on the final develop commit must pass 4/4. Then one `batch.mjs --gate` batch per scenario on that same commit; each must pass. If a gate batch fails, the remaining gate batches still run, and the failure stays in the evidence. The bug is then fixed, and only the failed scenario is rerun as a new gate batch, with the human's approval. Passes on a test server count for G3 only; ready-to-try is proven on the CX23 (G4).
+
 At most three dev agents run at once. Phase 1 starts net-forge; rotn-data starts once a capture of the registry exists; skills-rotn starts at G2 (it may start early on commands that need no modded facts).
 
 ## Definition of ready-to-try
