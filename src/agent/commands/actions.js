@@ -386,8 +386,8 @@ export const actionsList = [
         name: '!collectBlocks',
         description: 'Collect the nearest blocks of a given type.',
         params: {
-            // BlockOrItemName (E2): an item with a world rule works too, e.g. "stick" (from leaves).
-            'type': { type: 'BlockOrItemName', description: 'The block or item to collect: a block (e.g. "log") or an item that comes from breaking blocks (e.g. "stick" from leaves, "pyrotech:rock" from rock piles and stone).' },
+            // BlockOrItemName (E2): an item with a world rule works too, e.g. "stick" (from a felled tree).
+            'type': { type: 'BlockOrItemName', description: 'The block or item to collect: a block (e.g. "log") or an item that comes from breaking blocks (e.g. "stick" from a felled tree, "pyrotech:rock" from rock piles and stone).' },
             'num': { type: 'int', description: 'The number of blocks to collect.', domain: [1, Number.MAX_SAFE_INTEGER] }
         },
         perform: runAsAction(async (agent, type, num) => {

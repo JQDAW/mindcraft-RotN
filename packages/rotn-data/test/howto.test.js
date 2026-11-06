@@ -111,7 +111,20 @@ test('the G3 chain: crude axe, Crafting Tools, crafting table, stone tools, firs
     assert.deepEqual(pack.howToGet('spruce_planks').ways[0].blocks, [{ name: 'hitwithaxe:debarked_spruce' }]);
     assert.deepEqual(way(pack.howToGet('hitwithaxe:debarked_oak'), 'debark-log').blocks, [{ name: 'minecraft:log', meta: 0 }]);
     assert.deepEqual(way(pack.howToGet('spruce_log'), 'fell-tree').blocks, [{ name: 'dynamictrees:sprucebranch' }]);
-    assert.deepEqual(pack.howToGet('stick').ways[0].id, 'sticks-from-leaves');
+    // Round 4 B: Dynamic Trees leaves never drop sticks; a felled tree drops them, by hand too (bytecode).
+    const stick = pack.howToGet('stick');
+    assert.deepEqual(stick.ways[0].id, 'fell-tree');
+    assert.equal(stick.ways[0].tool, null);
+    assert.equal(stick.ways[0].confidence, 'documented');
+    assert.ok(stick.ways[0].blocks.some((b) => b.name === 'dynamictrees:oakbranch'));
+    assert.ok(!stick.ways.some((w) => w.kind === 'world' && w.blocks.some((b) => /leaves/.test(b.name))), 'no world rule gives sticks from leaves');
+    assert.equal(way(pack.howToGet('oak_log'), 'fell-tree').tool, null);
+    // #252 review: the axe stays preferred (equip it when the bot has one), not required.
+    assert.deepEqual(stick.ways[0].preferredTool, { type: 'axe', minLevel: 0 });
+    assert.deepEqual(way(pack.howToGet('oak_log'), 'fell-tree').preferredTool, { type: 'axe', minLevel: 0 });
+    assert.equal('preferredTool' in way(pack.howToGet('pyrotech:rock', { meta: 0 }), 'rock-pile'), false);
+    // #252 review: the bytecode is the evidence; the round 4 B log only supports it.
+    assert.match(stick.ways[0].evidence.find((e) => /round 4 batch B/.test(e)), /^Supporting only \(the bytecode above is the evidence\)/);
 });
 
 test('#107 review: confidence is never stronger than the source', () => {
@@ -215,7 +228,7 @@ test('rock piles and stone: the ways say which block metas give a rock in the ro
     assert.deepEqual(mine.ore.blocks.find((b) => b.name === 'minecraft:stone').metas, [0]);
     assert.deepEqual(mine.ore.blocks.find((b) => b.name === 'undergroundbiomes:igneous_stone').metas, [0, 1, 2, 3, 4, 5, 6, 7]);
     // A way from a rule without 'ore' has no ore field.
-    assert.equal(way(pack.howToGet('stick'), 'sticks-from-leaves').ore, undefined);
+    assert.equal(way(pack.howToGet('stick'), 'fell-tree').ore, undefined);
 });
 
 test('recipes that differ only in their id are listed once', () => {
@@ -232,7 +245,7 @@ test('smelting and plain drops; plain drops skip blocks a world rule covers', ()
     assert.equal(flint.confidence, 'dump-sample');
     assert.equal(flint.blocks[0].name, 'minecraft:gravel');
     const stick = pack.howToGet('stick');
-    const covered = new Set(way(stick, 'sticks-from-leaves').blocks.map((b) => b.name));
+    const covered = new Set(way(stick, 'fell-tree').blocks.map((b) => b.name));
     for (const w of stick.ways.filter((x) => x.kind === 'block-drop')) for (const b of w.blocks) assert.ok(!covered.has(b.name));
     assert.equal(pack.howToGet('bread').ways[0].id, 'start-kit');
 });

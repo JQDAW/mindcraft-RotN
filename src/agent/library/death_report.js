@@ -214,7 +214,11 @@ export function deathSpotBlocked(agent, pos, { now = Date.now() } = {}) {
         try { phase = agent._night?.clock?.phase?.(now) ?? null; } catch { phase = null; }
         if (!phase && typeof bot?.time?.timeOfDay === 'number') phase = nightPhase(bot.time.timeOfDay);
         // Not "only by day" (#247 review 2): the items are gone by then, and waiting does not help.
-        if (phase === 'night' || phase === 'dusk') return `it is ${phase}: do not go back to where you died now; the items left there will be lost`;
+        if (phase === 'night' || phase === 'dusk') {
+            // From DROPS_LAST_MIN on the items are gone already (#247 nit), before that they will be.
+            const items = ago >= DROPS_LAST_MIN * 60_000 ? 'the items you left there are already lost' : 'the items left there will be lost';
+            return `it is ${phase}: do not go back to where you died now; ${items}`;
+        }
     }
     return null;
 }
