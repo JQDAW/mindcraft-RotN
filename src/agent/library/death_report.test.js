@@ -316,4 +316,7 @@ test('#247 review 2: the night rule no longer says "only by day"', () => {
     const why = deathSpotBlocked(agent, { x: 101, y: 70, z: 200 }, { now: 1_000_000 + 6 * 60_000 });
     assert.match(why, /^it is night: do not go back to where you died now; the items left there will be lost$/);
     assert.doesNotMatch(why, /by day/);
+    // #247 nit: from 10 min on (the night rule lasts to 20 min) the items are already lost
+    const late = deathSpotBlocked(agent, { x: 115, y: 70, z: 200 }, { now: 1_000_000 + 12 * 60_000 });
+    assert.match(late, /^it is night: do not go back to where you died now; the items you left there are already lost$/);
 });

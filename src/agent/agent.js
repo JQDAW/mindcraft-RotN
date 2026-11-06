@@ -28,6 +28,7 @@ import { log, validateNameFormat, handleDisconnection } from './connection_handl
 import { safeError, safeStack } from './safe_error.js';
 import { runUpdateLoop, createErrorReporter } from './update_loop.js';
 import { bindDeathReport, deathCauseText } from './library/death_report.js';
+import { installChatLimit, withChatPriority } from './chat_limit.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -79,6 +80,8 @@ export class Agent {
 
         console.log(this.name, 'logging into minecraft...');
         this.bot = initBot(this.name);
+        // The outgoing chat limit (G3 round 4 C+D: kicked for spam): every packet goes through it.
+        installChatLimit(this.bot);
         
         // Connection Handler
         const onDisconnect = (event, reason) => {
@@ -293,7 +296,8 @@ export class Agent {
                 // Lead decision (Request 11): only task givers may make the bot run a command by
                 // typing it. Others may still chat, but nothing they type runs.
                 if (!this.isTaskGiver(source)) {
-                    this.routeResponse(source, `Sorry ${source}, I only run commands from task givers.`);
+                    // High priority, at most one waiting per sender (chat_limit.js, #256 review 1).
+                    this.routeResponse(source, `Sorry ${source}, I only run commands from task givers.`, { priority: 'high', key: `refusal:${source}` });
                     return false;
                 }
                 if (!commandExists(user_command_name)) {
@@ -381,7 +385,7 @@ export class Agent {
                 if (refused) {
                     // Questions (queries) are answered; actions are not run for a non-giver.
                     this.history.add('system', `${command_name} was not run: ${source} is not a task giver, so only questions are answered for them.`, untrusted);
-                    this.routeResponse(source, `Sorry ${source}, I only do things for task givers.`);
+                    this.routeResponse(source, `Sorry ${source}, I only do things for task givers.`, { priority: 'high', key: `refusal:${source}` });
                     break;
                 }
                 this.self_prompter.handleUserPromptedCmd(self_prompt, isAction(command_name));
@@ -426,9 +430,12 @@ export class Agent {
         return used_command;
     }
 
-    async routeResponse(to_player, message) {
+    async routeResponse(to_player, message, { priority = null, key = null } = {}) {
         if (this.shut_up) return;
         let self_prompt = to_player === 'system' || to_player === this.name;
+        // The chat limit's priority (chat_limit.js, G3 round 4 C+D): a reply to a task giver goes
+        // first and is never dropped; other replies wait their turn. Refusals pass 'high' and a key.
+        priority ??= self_prompt ? 'normal' : (this.isTaskGiver?.(to_player) ? 'high' : 'normal');
         if (self_prompt && this.last_sender) {
             // this is for when the agent is prompted by system while still in conversation
             // so it can respond to events like death but be routed back to the last sender
@@ -440,13 +447,13 @@ export class Agent {
             convoManager.sendToBot(to_player, message);
         }
         else {
-            // otherwise, use open chat
-            this.openChat(message);
+            // otherwise, use open chat, with the chat limit's priority
+            this.openChat(message, { priority, key });
             // note that to_player could be another bot, but if we get here the conversation has ended
         }
     }
 
-    async openChat(message) {
+    async openChat(message, { priority = 'normal', key = null } = {}) {
         let to_translate = message;
         let remaining = '';
         let command_name = containsCommand(message);
@@ -461,14 +468,14 @@ export class Agent {
 
         if (settings.only_chat_with.length > 0) {
             for (let username of settings.only_chat_with) {
-                this.bot.whisper(username, message);
+                withChatPriority(this.bot, priority, () => this.bot.whisper(username, message), key);
             }
         }
         else {
             if (settings.speak) {
                 speak(to_translate, this.prompter.profile.speak_model);
             }
-            if (settings.chat_ingame) {this.bot.chat(message);}
+            if (settings.chat_ingame) withChatPriority(this.bot, priority, () => this.bot.chat(message), key);
             sendOutputToServer(this.name, message);
         }
     }

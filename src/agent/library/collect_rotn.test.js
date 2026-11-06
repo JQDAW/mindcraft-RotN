@@ -45,7 +45,7 @@ function drops(b, held) {
     return []; // leaves: an unlucky roll, no stick
 }
 
-function fakeBot({ blocks = [], items = [] } = {}) {
+function fakeBot({ blocks = [], items = [], dropsOf = drops } = {}) {
     const calls = { equip: [], collected: [], dug: [] };
     const remaining = [...blocks];
     const bot = {
@@ -84,7 +84,7 @@ function fakeBot({ blocks = [], items = [] } = {}) {
     };
     function breakBlock(b) {
         remaining.splice(remaining.indexOf(b), 1);
-        for (const [name, metadata, count] of drops(b, bot.heldItem)) {
+        for (const [name, metadata, count] of dropsOf(b, bot.heldItem)) {
             const stack = items.find(i => i.name === name && i.metadata === metadata);
             if (stack) stack.count += count;
             else items.push({ name, metadata, count, type: reg.itemsByName[name].id });
@@ -140,12 +140,14 @@ test('review 2: with a stone and an iron pickaxe, the stone one is used (iron wo
     assert.match(bot.output, /Collected 8 pyrotech:rock \(8 pyrotech:rock:0\)\./);
 });
 
-test('review 1: the count is the real gain: leaves that drop no stick give "Collected 0 stick"', async (t) => {
+// Was leaves for sticks; leaves never drop sticks on this pack (rotn-data Request 13), so the
+// rule goes. The same check with piles that drop nothing (round 4 B: leaves are fall_safety.test.js).
+test('review 1: the count is the real gain: piles that drop nothing give "Collected 0 pyrotech:rock"', async (t) => {
     t.mock.method(console, 'log', () => {});
-    const bot = fakeBot({ blocks: [block('leaves', 0, at(1, 66)), block('leaves', 0, at(2, 66))] });
-    assert.equal(await skills.collectBlock(bot, 'stick', 2), false);
-    assert.match(bot.output, /Broke leaves but got no stick\./);
-    assert.match(bot.output, /Collected 0 stick\./);
+    const bot = fakeBot({ blocks: [block('pyrotech:rock', 0, at(1)), block('pyrotech:rock', 0, at(2))], dropsOf: () => [] });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 2), false);
+    assert.match(bot.output, /Broke pyrotech:rock but got no pyrotech:rock\./);
+    assert.match(bot.output, /Collected 0 pyrotech:rock\./);
 });
 
 test('review 3: a bare "pyrotech:rock" skips a nearer dirt clump (meta 4) and takes a rock pile', async (t) => {

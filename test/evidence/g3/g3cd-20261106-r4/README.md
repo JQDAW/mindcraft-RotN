@@ -14,9 +14,9 @@
 - **Checks right before the create (06:58:27-06:58:41 UTC), all passed:**
   - `msa-login FRCFLD --check`;
   - an empty project;
-  - the batch preflight on its own, with the LLM probe (HTTP 200, provider Wafer), "timeouts: g3-task-preempts-agenda 34 min, g3-untrusted-refused 16 min" for a 120 min TTL, and no midnight warning;
+  - the batch preflight on its own, with the LLM probe (06:58:29, HTTP 200, provider Wafer), "timeouts: g3-task-preempts-agenda 34 min, g3-untrusted-refused 16 min" for a 120 min TTL, and no midnight warning;
   - `test-server.sh up --dry-run`: sweeper OK.
-- **Command:** as in batch A, with both scenarios in this order (no skip flags, no `--gate`, no `--timeout-min`). The LLM-failure stop rule was active and did not fire.
+- **Command:** as in batch A, with both scenarios in this order (no skip flags, no `--gate`, no `--timeout-min`). `test-server.sh run` runs the batch preflight once more before the create, with a second LLM probe (06:58:54 in `run.log`). The LLM-failure stop rule was active and did not fire.
 
 ## Times (UTC)
 
@@ -74,7 +74,9 @@ LLM: 52 calls: 40 agent replies and 12 memory summaries OK; 0 failed. USD 0.0050
 ## Cost
 
 - **Spend:** USD 0.005625 in all (key usage 0.765102 to 0.770727, from `batch.json`). For the round: USD 0.011406 in the three batches; the key reads USD 0.7707 of the 4.50 stop.
-  - Between batch B's end (0.764898) and this batch's start (0.765102), the key moved by USD 0.000204 outside any batch. Most likely that is the two preflight LLM probes before this batch, which no batch counts.
+  - **The per-scenario figures do not add up to the batch's (0.005027 + 0.000089 = 0.005116, not 0.005625).** The 0.000509 gap lies between (c)'s end reading (0.770129, at 07:10:04) and (d)'s start reading (0.770638). The batch's own reading at 07:10:06 already had it ("spent so far USD 0.005535", which is 0.770637 - 0.765102). (c)'s bot was already stopped (`runScenario` stops it before `run.mjs` reads the usage), and (d)'s driver had not started. So no call was made in that window: OpenRouter recorded some of (c)'s calls after (c)'s end reading. (c)'s own figure undercounts by up to that much. The batch figure includes it, because the batch reads the usage again at its end.
+  - **Between batches, B's end (0.764898, 06:55:32) and this batch's start (0.765102, 07:02:11), the key moved by USD 0.000204.** The two LLM probes in that window (06:58:29 and 06:58:54; 16 tokens each) explain almost none of it: the same two probes between batches A and B moved the key by USD 0.000002. So this is most likely B's calls recorded late, after B's end reading, and B's batch figure (0.001012) undercounts by up to that much.
+  - **By the key, the round cost USD 0.011611:** from A's start (0.759115) to 0.770727, which the key still read at 07:49 UTC with no run in between. The three batch figures give USD 0.011406; the difference, 0.000205, is the late-recorded usage and the probes between batches.
 - **Hetzner:** ran 13 min, billed ~1 h, est. EUR 0.1381 excl. IPv4. Server, Primary IP and SSH key verified gone; the project is empty.
 
 ## Files
