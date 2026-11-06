@@ -332,7 +332,9 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
     if (!r) return null;
     const lastFell = agent.bot?.rotnLastFell;
     const byTree = treeDeath(r, lastFell);
-    console.log(`[death] ${r.line}${byTree && !r.cause ? ' (likely the tree it had just cut)' : ''}`);
+    // Which stand the cut was from (#268 review 1: round 5 must show cuts from under leaves are safe).
+    const stand = byTree && lastFell ? ` [its last cut was from ${lastFell.underLeaves ? "under the tree's leaves" : 'under no canopy'}]` : '';
+    console.log(`[death] ${r.line}${byTree && !r.cause ? ' (likely the tree it had just cut)' : ''}${stand}`);
     if (r.chat && !agent.shut_up) {
         Promise.resolve().then(() => agent.openChat(r.chat)).catch(err => console.warn(`[death] chat: ${safeError(err)}`));
     }

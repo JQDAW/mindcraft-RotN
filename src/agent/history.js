@@ -149,7 +149,11 @@ export class History {
                 return null;
             }
             const data = JSON.parse(readFileSync(this.memory_fp, 'utf8'));
-            this.memory = data.memory || '';
+            // A memory.json from before round 5 A may hold a failure reply as the memory ("My brain
+            // disconnected, try again."): dropped, so it never reaches $MEMORY (#268 follow-up 4).
+            this.memory = isMemoryReply(data.memory) ? data.memory : '';
+            if (data.memory && !this.memory)
+                console.warn(`[memory] the saved memory was not a summary (${typeof data.memory === 'string' ? `"${data.memory.trim().slice(0, 60)}"` : typeof data.memory}); starting with none`);
             this.turns = data.turns || [];
             console.log('Loaded memory:', this.memory);
             return data;
