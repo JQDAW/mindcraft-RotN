@@ -1,17 +1,17 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T21:49Z (from `date -u`)
+Updated: 2026-11-06T22:16Z (from `date -u`)
 
 ## Handoff (before the move to the dev server, 2026-11-06T21:49Z by `date -u`)
 
-- **Open PRs:** **#296** (`agent/skills-rotn/r7-shelter-cursor`): the round 7 B fixes (the shelter check, cursor sync, rejected-click recovery, self-defense fights on). Full `npm test` 1360 pass, 0 fail, 3 skipped; lint 253. It waits for review.
+- **Open PRs:** **#296** (`agent/skills-rotn/r7-shelter-cursor`): the round 7 B fixes (the shelter check, cursor sync, rejected-click recovery, self-defense fights on). Full `npm test` 1360 pass, 0 fail, 3 skipped; lint 253. The lead's review (2 safety fixes and a nit) is answered in `3db993d0` (2026-11-06T22:16Z by `date -u`): water at head height in the bot's own shelter counts as unusable (drowning), and lava anywhere; after the first failed equip of a fight no more are tried; a cursor-stack drop goes to the bot's own log. develop (#297) is merged in. It waits for the re-review.
 - **Branches:** everything is committed and pushed. Nothing is local only.
   - `agent/skills-rotn/r7-shelter-cursor`: #296.
   - `agent/skills-rotn/r7`: STATUS-only commits, already merged into #296's branch; no PR of its own.
   - `agent/skills-rotn/night-threats`: 2 old commits now pushed; their change (do-not-look from rotn-data's `lookAt`) is already in develop by another commit, so the branch is stale.
   - Every other `agent/skills-rotn/*` branch is merged.
 - **Next task:**
-  1. #296's review fixes.
+  1. #296's re-review, if anything is left.
   2. Then the next smoke or gate findings for G3 (b), starting with what the new "no longer usable: <block> at <pos> (<why>)" line names in the next B run. Round 7 did not name the cause.
   3. Watch for `[inventory]` lines (cursor put down, resync) to confirm the cursor fix live.
 - **Open requests:**
