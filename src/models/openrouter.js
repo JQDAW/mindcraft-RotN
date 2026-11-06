@@ -45,8 +45,14 @@ export class OpenRouter {
             if (completion.choices[0].finish_reason === 'length') {
                 throw new Error('Context length exceeded');
             }
+            res = completion.choices[0].message?.content;
+            if (typeof res !== 'string' || res.trim() === '') {
+                // A reasoning model can answer with reasoning only and null content
+                // (G3 smoke round 5 A: history.js crashed on null). Treat it as no reply.
+                console.error(`Empty content returned (model ${this.model_name}, finish_reason ${completion.choices[0].finish_reason ?? 'none'})`);
+                return 'No response received.';
+            }
             console.log('Received.');
-            res = completion.choices[0].message.content;
         } catch (err) {
             // A safe summary; the SDK error object carries request headers and the response body.
             console.error('Error while awaiting response:', safeError(err));

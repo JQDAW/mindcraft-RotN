@@ -147,15 +147,20 @@ export function mindcraftEnv(env, { profile, mindserverPort }) {
     return out;
 }
 
-/** The bot state files that must not carry over between runs (#207 review): an open task or agenda progress. */
-export const BOT_STATE_FILES = ['tasks.json', 'agenda.json'];
+/**
+ * The bot state files that must not carry over between runs: an open task or agenda progress (#207 review), and
+ * the bot's memory and recent turns (memory.json; lead, round 5 A: a fresh start means fresh memory). In round 5 A
+ * the 14 turns in memory.json made every restart summarize at once and crash again on the same empty reply.
+ */
+export const BOT_STATE_FILES = ['tasks.json', 'agenda.json', 'memory.json'];
 /** How many of the driver's own backups (<file>.g3-<stamp>.bak) to keep per state file (#207 review nit). */
 export const KEEP_BACKUPS = 5;
 
 /**
- * On EVERY start of this driver, before main.js starts: move the bot's tasks.json and agenda.json aside
+ * On EVERY start of this driver, before main.js starts: move the bot's tasks.json, agenda.json and memory.json aside
  * (renamed to <file>.g3-<stamp>.bak), so a run never inherits an open task from an earlier one (a (c) task
- * must not run in (d) under the production giver list) and the agenda autostarts as on a fresh bot. There is
+ * must not run in (d) under the production giver list), the agenda autostarts and the bot starts with no memory or
+ * earlier turns, as a fresh bot. There is
  * no G3 gate inside: this driver is the G3 driver, and only the G3 scenarios start it (DRIVER.md, "G3").
  * Then keep only the newest `keep` of the driver's own backups per state file and delete the older ones
  * (the stamps sort by time); nothing else in the folder is touched. dir is ./bots/<name> relative to the
@@ -231,7 +236,7 @@ async function main(argv) {
     // The models the agent will use (checked above to be LLM_MODEL), for the run record (run.mjs, result.llm.models).
     const models = profileModels(checked.profile);
     // serverTaskGiver: whether the test-only console giver `Server` is on (g3-untrusted-refused needs it off);
-    // botState: the tasks.json and agenda.json moved aside before the start (#207 review).
+    // botState: the tasks.json, agenda.json and memory.json moved aside before the start (#207 review; memory.json: round 5 A).
     event('mindcraft_start', { pid: child.pid, main: path.resolve(o.main), settings: o.settings, profile: o.profile, mindserverPort, models, serverTaskGiver: serverGiverOn(process.env), botState });
 
     let stopping = false;

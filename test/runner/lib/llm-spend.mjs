@@ -17,6 +17,10 @@ export const LLM_NO_RESPONSE = 'No response received.';
 export const LLM_EMPTY_REPLY = 'Error: Generated response is not a string';
 /** Mindcraft's line after a memory summary, which is an LLM request of its own (src/agent/history.js). */
 export const LLM_MEMORY_LINE = 'Memory updated to:';
+/** Mindcraft's line before a memory summary's request (src/agent/history.js, summarizeMemories). */
+export const LLM_MEMORY_START = 'Storing memories...';
+/** The agent process's line when it ends (src/process/agent_process.js); a summary still open then never answered. */
+export const AGENT_EXIT_LINE = 'Agent process exited with code';
 export const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /** The test-mode overrides of the spend machinery; never honoured in a real batch (#122 review). */
@@ -84,15 +88,24 @@ export const countLlmCalls = (lines) => lines.filter((l) => l.includes(LLM_CALL_
  * - memory: memory summaries ("Memory updated to:"), LLM requests of their own;
  * - failed = disconnected (Mindcraft's stand-in replies "My brain disconnected, try again." and "No response
  *   received.") + empty (the model answered no text:
- *   "Error: Generated response is not a string"; round 3 continuation A had 3);
+ *   "Error: Generated response is not a string"; round 3 continuation A had 3) + memoryEmpty;
+ * - memoryEmpty (part of empty): memory summaries that got no text back (lead, round 5 A, where a null
+ *   summary reply crashed the agent five times and none of it was counted):
+ *   - a "Memory updated to:" with nothing (or "null") after it;
+ *   - a summary that started ("Storing memories...") and never stored a memory before the next summary
+ *     started or the agent process exited. A summary still open when the log ends (the bot was stopped while
+ *     its request waited) is not counted, like any request still waiting.
  * - httpErrors: {status: n} from "Error [429] (status 429)" lines (one per failed attempt).
- * In the round 3 logs, requests = ok + memory + empty (+ a request still waiting when the bot left).
+ * In the round 3 logs, requests = ok + memory + empty (+ a request still waiting when the bot left);
+ * a reply Mindcraft discards for a newer message ("discarding old response") is a request with no reply line.
  */
 export function countLlmReplies(lines) {
     let ok = 0;
     let memory = 0;
     let disconnected = 0;
     let empty = 0;
+    let memoryEmpty = 0;
+    let summaryOpen = false;
     const httpErrors = {};
     for (const l of lines ?? []) {
         if (l.includes(LLM_REPLY_LINE)) {
@@ -100,15 +113,23 @@ export function countLlmReplies(lines) {
             else ok++;
         }
         if (l.startsWith(LLM_EMPTY_REPLY)) empty++;
+        if (l.startsWith(LLM_MEMORY_START) || l.startsWith(AGENT_EXIT_LINE)) {
+            if (summaryOpen) memoryEmpty++;
+            summaryOpen = l.startsWith(LLM_MEMORY_START);
+        }
         // A memory summary whose request failed stores the stand-in itself ("Memory updated to:  My brain disconnected").
         if (l.startsWith(LLM_MEMORY_LINE)) {
-            if (l.includes(LLM_FAILED_REPLY)) disconnected++;
+            summaryOpen = false;
+            const stored = l.slice(LLM_MEMORY_LINE.length).trim();
+            if (l.includes(LLM_FAILED_REPLY) || l.includes(LLM_NO_RESPONSE)) disconnected++;
+            else if (stored === '' || stored === 'null' || stored === 'undefined') memoryEmpty++;
             else memory++;
         }
         const m = /\bError \[(\d{3})\]/.exec(l);
         if (m) httpErrors[m[1]] = (httpErrors[m[1]] ?? 0) + 1;
     }
-    return { ok, memory, failed: disconnected + empty, disconnected, empty, httpErrors };
+    empty += memoryEmpty;
+    return { ok, memory, failed: disconnected + empty, disconnected, empty, memoryEmpty, httpErrors };
 }
 
 /** USD spent between two readings, to a millionth of a dollar; null if either is missing. */
