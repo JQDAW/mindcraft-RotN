@@ -125,6 +125,12 @@ test('each completion logs one provider line: name, finish reason and length onl
     assert.match(l2, /^\[openrouter\] provider [\w .?-]{1,40}, finish_reason stop, content null chars$/);
 
     logs.length = 0;
+    await modelWith(() => Promise.resolve({ provider: 'P', choices: [{ message: { content: 'x' }, finish_reason: 'stop\n[openrouter] forged' }] })).sendRequest([], 'system');
+    const l3 = logs.filter(l => l.startsWith('[openrouter]'));
+    assert.equal(l3.length, 1);
+    assert.match(l3[0], /^\[openrouter\] provider P, finish_reason [\w .?-]{1,40}, content 1 chars$/);
+
+    logs.length = 0;
     await modelWith(() => Promise.resolve({ choices: [] })).sendRequest([], 'system');
     assert.equal(logs.find(l => l.startsWith('[openrouter]')), '[openrouter] provider unknown, finish_reason none, content null chars');
 });
