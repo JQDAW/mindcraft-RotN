@@ -119,6 +119,12 @@ test('the G3 chain: crude axe, Crafting Tools, crafting table, stone tools, firs
     assert.ok(stick.ways[0].blocks.some((b) => b.name === 'dynamictrees:oakbranch'));
     assert.ok(!stick.ways.some((w) => w.kind === 'world' && w.blocks.some((b) => /leaves/.test(b.name))), 'no world rule gives sticks from leaves');
     assert.equal(way(pack.howToGet('oak_log'), 'fell-tree').tool, null);
+    // #252 review: the axe stays preferred (equip it when the bot has one), not required.
+    assert.deepEqual(stick.ways[0].preferredTool, { type: 'axe', minLevel: 0 });
+    assert.deepEqual(way(pack.howToGet('oak_log'), 'fell-tree').preferredTool, { type: 'axe', minLevel: 0 });
+    assert.equal('preferredTool' in way(pack.howToGet('pyrotech:rock', { meta: 0 }), 'rock-pile'), false);
+    // #252 review: the bytecode is the evidence; the round 4 B log only supports it.
+    assert.match(stick.ways[0].evidence.find((e) => /round 4 batch B/.test(e)), /^Supporting only \(the bytecode above is the evidence\)/);
 });
 
 test('#107 review: confidence is never stronger than the source', () => {

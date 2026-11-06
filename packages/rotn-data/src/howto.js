@@ -120,6 +120,8 @@ function worldWays(catalog, want) {
             blocks,
             count: rule.count ?? rule.gives?.count ?? null,
             tool: rule.tool ?? null,
+            // A tool that helps but is not required (fell-tree: an axe); only on rules that name one.
+            ...(rule.preferredTool ? { preferredTool: rule.preferredTool } : {}),
             confidence,
             evidence: rule.evidence ?? [],
             unverified: rule.unverified ?? [],
