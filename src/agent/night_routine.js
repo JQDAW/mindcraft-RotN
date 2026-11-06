@@ -14,7 +14,7 @@
 
 import { Vec3 } from 'vec3';
 import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable } from './library/night.js';
-import { buildShelter, siteNeeds, isLiquid, isFalling, isEmpty } from './library/shelter.js';
+import { buildShelter, siteNeeds, siteProblem, isLiquid, isFalling, isEmpty } from './library/shelter.js';
 import { breakBlockAt } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
 import { say, isGiverGoal } from './agenda_driver.js';
@@ -134,7 +134,7 @@ export async function digOut(bot, feet) {
 }
 
 /** What the routine does in the world (tests pass their own). */
-export const NIGHT_OPS = { buildShelter, digOut, siteNeeds };
+export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem };
 
 function line(agent, text) {
     console.log(text);
@@ -264,12 +264,15 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             startBuilding(n, now);
             return 'night:building';
         }
-        // Dirt walls (the fallback) are walls too: only an opening is a breach (G3 round 6 B).
-        const need = ops.siteNeeds(bot, n.site, { accept: isWall });
+        // Dirt walls (the fallback) are walls too: only an opening is a breach (G3 round 6 B). Only
+        // real fire or lava, or a solid block in the bot's two cells, makes the shelter unusable: a
+        // dropped item or a harmless block (a torch, a carpet, snow) never does (G3 round 7 B).
+        const need = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true });
         if (!need) {
-            // Fire, lava or a block in the 1x2 space: it cannot be repaired there (#204 review 2).
+            // It cannot be repaired there (#204 review 2); say exactly what is where (G3 round 7 B).
+            const found = ops.siteProblem?.(bot, n.site, { occupied: true });
             bot.rotnSheltered = false;
-            line(agent, `[night] the shelter at ${at(n.site)} is no longer usable (fire, lava or a block inside): building a new one`);
+            line(agent, `[night] the shelter at ${at(n.site)} is no longer usable: ${found?.text ?? 'the check found it unusable but named nothing'}; building a new one`);
             startBuilding(n, now);
             return 'night:building';
         }

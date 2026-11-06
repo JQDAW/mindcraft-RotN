@@ -23,13 +23,32 @@ import { log, breakBlockAt, goToGoal, craftRecipe } from './skills.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const SIX = [new Vec3(0, -1, 0), ...HORIZONTAL, new Vec3(0, 1, 0)];
-const HAZARD = /lava|fire/;
 /** How long a placement's block update may come late (P1 measured up to 1158 ms) before a retry. */
 export const LATE_UPDATE_MS = 1200;
 
+/**
+ * Real fire or lava: rotn-data's material (G3 round 7 B), so a block whose name only holds "fire"
+ * (every iceandfire: block, unfired pottery, a firefly) is no hazard. By name for a block rotn-data
+ * does not know.
+ */
+export const hazardOf = (b) => {
+    if (typeof b?.name !== 'string' || !b.name) return null;
+    const material = dumpState(b)?.material;
+    if (material) return ['fire', 'lava'].includes(material) ? material : null;
+    return /(^|[:_])(fire|lava)$/.exec(b.name)?.[2] ?? null;
+};
 export const isLiquid = (b) => !!b && (/water|lava/.test(b.name ?? '') || dumpState(b)?.liquid === true);
-export const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) && !/fire/.test(b.name ?? '');
+export const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) && !hazardOf(b);
 const isSolid = (b) => !!b && b.boundingBox === 'block';
+/**
+ * A block the bot's body cannot share a cell with: rotn-data's solid material with a collision box
+ * (a carpet, a snow layer, a torch or grass are not); mineflayer's bounding box for an unknown block.
+ */
+const isBodyBlock = (b) => {
+    const st = dumpState(b);
+    if (st && typeof st.solid === 'boolean') return st.solid && (st.collision?.length ?? 0) > 0;
+    return isSolid(b);
+};
 /** A block that falls when undermined: rotn-data's falls() (#205), else gravel, sand, concrete powder, anvils, the dragon egg. */
 export const isFalling = (b) => {
     if (typeof b?.name !== 'string' || !b.name) return false;
@@ -82,18 +101,46 @@ function propFor(roof, solidAt, emptyAt) {
 }
 
 /**
+ * Why a site cannot be used at all, or null: `{pos, block, why, text}`, text naming the block and
+ * where it is. A new site needs a solid floor, a free 1x2 space and no fire or lava in its walls
+ * and roof. `occupied` (the shelter the bot is in, G3 round 7 B): only real fire or lava there, or
+ * a solid block in the bot's two cells, counts; a torch, a carpet, a snow layer, grass or water in
+ * the space does not, nor the floor (when it goes, the bot falls and is no longer in the shelter).
+ * Dropped items are entities, never blocks, so they never count.
+ */
+export function siteProblem(bot, feet, { occupied = false } = {}) {
+    const p = new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
+    const found = (pos, b, why) => ({ pos, block: b?.name ?? 'unloaded', why, text: `${b?.name ?? 'an unloaded block'} at ${at(pos)} (${why})` });
+    const floor = p.offset(0, -1, 0);
+    if (!occupied && !isSolid(bot.blockAt(floor))) return found(floor, bot.blockAt(floor), 'the floor is not solid');
+    for (const q of [p, p.offset(0, 1, 0)]) {
+        const b = bot.blockAt(q);
+        if (!b) return found(q, b, 'not loaded');
+        const hazard = hazardOf(b);
+        if (hazard) return found(q, b, `${hazard} in the 1x2 space`);
+        if (occupied ? isBodyBlock(b) : !isEmpty(b)) return found(q, b, occupied ? 'a solid block in the 1x2 space' : 'the 1x2 space is not free');
+    }
+    for (const q of wallsAndRoof(p)) {
+        const b = bot.blockAt(q);
+        if (!b) return found(q, b, 'not loaded');
+        const hazard = hazardOf(b);
+        if (hazard) return found(q, b, `${hazard} in the walls or roof`);
+    }
+    return null;
+}
+
+/**
  * Dry run of a shelter at feet, in the build order: the cells to fill, the blocks that takes (a
  * roof prop included), the cells that would have no face to be placed against (`unsupported`), and
  * why digging would be unsafe (`unsafe`: a falling block above or a liquid next to a cell to dig).
- * null when the site cannot be used at all: the floor is not solid, the 1x2 space is not free, a
- * shell cell is lava or fire, or a block is not loaded.
+ * null when the site cannot be used at all (siteProblem says why): the floor is not solid, the 1x2
+ * space is not free, a shell cell is lava or fire, or a block is not loaded. `occupied`: the
+ * shelter the bot is in (siteProblem).
  */
-export function siteNeeds(bot, feet, { accept = isSturdy } = {}) {
+export function siteNeeds(bot, feet, { accept = isSturdy, occupied = false } = {}) {
     const p = new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
-    if (!isSolid(bot.blockAt(p.offset(0, -1, 0)))) return null;
-    if (!isEmpty(bot.blockAt(p)) || !isEmpty(bot.blockAt(p.offset(0, 1, 0)))) return null;
+    if (siteProblem(bot, p, { occupied })) return null;
     const order = wallsAndRoof(p);
-    if (order.some(q => { const b = bot.blockAt(q); return !b || HAZARD.test(b.name ?? ''); })) return null;
 
     const interior = new Set([key(p), key(p.offset(0, 1, 0))]);
     const shell = new Set(order.map(key));
@@ -233,9 +280,9 @@ async function fillCell(bot, target, interior, mode) {
 }
 
 /** The refusal for a plan that cannot be built, or null. */
-function planProblem(plan, site, radius, handExit) {
+function planProblem(plan, site, radius, handExit, bot = null) {
     if (!plan)
-        return site ? `Cannot repair the shelter at ${at(site.floored())}: the space or its floor is not usable.`
+        return site ? `Cannot repair the shelter at ${at(site.floored())}: ${siteProblem(bot, site, { occupied: true })?.text ?? 'the space is not usable'}.`
             : `Found no place for a shelter within ${radius} blocks (needs a solid floor, a free 1x2 space, safe digging and a face for every block${handExit ? ', and a side you can dig out by hand' : ''}).`;
     if (plan.unsafe) return `Cannot build the shelter at ${at(plan.feet)}: ${plan.unsafe}.`;
     // chooseSite never returns such a site; a site the caller names is checked too (#195 nit).
@@ -308,8 +355,9 @@ async function pickaxeFor(bot, level) {
 export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, craft = craftRecipe } = {}) {
     const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, soft: 0, line }; };
     // 1. A sturdy shelter (rock walls); a repair keeps the dirt walls it has.
-    let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy }) : chooseSite(bot, radius);
-    const problem = planProblem(plan, site, radius, false);
+    // A repair is of the shelter the bot is in: only fire, lava or a solid block there stops it (G3 round 7 B).
+    let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy, occupied: true }) : chooseSite(bot, radius);
+    const problem = planProblem(plan, site, radius, false, bot);
     const level = problem ? 0 : exitLevel(bot, plan.feet);
     const pick = await pickaxeFor(bot, level);
     // Without a pickaxe the dirt-wall search is tried before any refusal (#284 review 3): dirt walls
@@ -322,9 +370,9 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     // 2. The dirt fallback: too few sturdy blocks, or no pickaxe to dig out of rock.
     if (!pick.ok || sturdy() < plan.blocks) {
         const handExit = !pick.ok;
-        const soft = site ? siteNeeds(bot, site, { accept: isWall }) : chooseSite(bot, radius, { accept: isWall, handExit });
+        const soft = site ? siteNeeds(bot, site, { accept: isWall, occupied: true }) : chooseSite(bot, radius, { accept: isWall, handExit });
         // With a pickaxe, the fallback site (it may be another one) must still be one to get out of.
-        const softProblem = planProblem(soft, site, radius, handExit)
+        const softProblem = planProblem(soft, site, radius, handExit, bot)
             ?? (pick.ok && !soft.handExit && !toolLevels(bot, 'pickaxe').some(l => l >= exitLevel(bot, soft.feet))
                 ? `Cannot build the shelter at ${at(soft.feet)}: your pickaxe could not dig out of its walls.` : null);
         // Without a pickaxe only dirt goes in: the bot must be able to dig itself out by hand.

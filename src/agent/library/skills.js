@@ -43,7 +43,12 @@ export function weaponRank(item) {
     return tier * 2 + (/sword/.test(name) ? 1 : 0);
 }
 
-async function equipHighestAttack(bot) {
+/**
+ * Hold the best weapon (else a pickaxe or shovel). Never throws (G3 round 7 B: a rejected click
+ * here ended self_defense, and the bot died without hitting back): when the equip fails, the fight
+ * goes on with what is in hand. Whether the weapon is held; `fight.told` keeps one line per fight.
+ */
+async function equipHighestAttack(bot, fight = {}) {
     const isWeapon = (item) => !!item && (item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
     const best = (items) => items.filter(isWeapon).sort((a, b) => weaponRank(b) - weaponRank(a))[0] ?? null;
     // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory when
@@ -58,8 +63,16 @@ async function equipHighestAttack(bot) {
     let weapon = best(bot.inventory.items());
     if (!weapon)
         weapon = bot.inventory.items().find(item => item.name.includes('pickaxe') || item.name.includes('shovel')) ?? null;
-    if (weapon)
+    if (!weapon) return false;
+    if (bot.heldItem === weapon || (weapon.slot != null && bot.heldItem?.slot === weapon.slot)) return true;
+    try {
         await bot.equip(weapon, 'hand');
+        return true;
+    } catch (err) {
+        if (!fight.told) log(bot, `Could not take the ${weapon.name} in hand (${safeError(err)}); fighting with ${bot.heldItem?.name ?? 'bare hands'}.`);
+        fight.told = true;
+        return false;
+    }
 }
 
 // The ingredients of one craft, keyed by canonical name: "planks:0" when the recipe pins
@@ -654,9 +667,10 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
     bot.modes.pause('self_defense');
     bot.modes.pause('cowardice');
     let attacked = false;
+    const fight = {}; // one line when the weapon cannot be taken in hand (G3 round 7 B)
     let enemy = world.getNearestEntityWhere(bot, isEnemy, range);
     while (enemy) {
-        await equipHighestAttack(bot);
+        await equipHighestAttack(bot, fight);
         if (bot.entity.position.distanceTo(enemy.position) >= 4 && enemy.name !== 'creeper' && enemy.name !== 'phantom') {
             try {
                 bot.pathfinder.setMovements(new pf.Movements(bot));

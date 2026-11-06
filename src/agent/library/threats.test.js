@@ -221,3 +221,26 @@ test('#186 review 3: no random looks either while a do-not-look mob is loaded ne
         Math.random = random;
     }
 });
+
+// G3 round 7 B: self_defense's equip was rejected by the server, the error ended the fight, and a
+// zombie killed the bot without it hitting back.
+test('G3 round 7 B: an equip the server rejects does not end self-defense: the bot fights with what is in hand, and says so once', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { defendSelf } = await import('./skills.js');
+    const zombie = mob('zombie', 3);
+    const bot = fightBot([zombie]);
+    const sword = { name: 'stone_sword', count: 1, slot: 16 };
+    bot.inventory = { items: () => [sword], slots: [] };
+    bot.heldItem = { name: 'wheat_seeds', count: 1, slot: 36 };
+    let equips = 0;
+    bot.equip = () => { equips++; return Promise.reject(new Error('Server rejected transaction for clicking on slot 16, on window with id 0.')); };
+    let rounds = 0;
+    const attack = bot.pvp.attack.bind(bot.pvp);
+    bot.pvp.attack = (e) => { attack(e); if (++rounds === 2) delete bot.entities[zombie.id]; }; // dies in round 2
+    assert.equal(await defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
+    assert.deepEqual(bot.pvp.attacks, ['zombie', 'zombie'], 'it fought on');
+    assert.equal(equips, 2, 'each round tries the weapon again');
+    assert.equal(bot.output.match(/Could not take/g)?.length, 1, bot.output);
+    assert.match(bot.output, /Could not take the stone_sword in hand \(Error: Server rejected transaction for clicking on slot 16, on window with id 0\.\); fighting with wheat_seeds\./);
+    assert.match(bot.output, /Successfully defended self\./);
+});
