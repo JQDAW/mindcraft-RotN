@@ -127,10 +127,12 @@ export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, set
         // ahead of lines that wait; a keyed one only after its gap (#256 review 1). Any other line
         // goes at once when nothing that may go now waits before it: a refusal in its gap does not
         // hold up a normal line (#256 follow-up).
-        const readyWaiting = queue.some(q => eligibleAt(q) <= now());
-        if (fits() && (!readyWaiting || priority === 'high') && eligibleAt(line) <= now()) return send(line);
-        // At most one waiting line per key: the newest text replaces the waiting one.
+        // At most one waiting line per key: the newest text replaces the waiting one. Checked first
+        // (#260 nit 1): a new keyed line never goes ahead of an older one with its key that waits,
+        // so per-key order holds (a late drain timer left a moment where the budget fit).
         const same = key ? queue.find(q => q.key === key) : null;
+        const readyWaiting = queue.some(q => eligibleAt(q) <= now());
+        if (!same && fits() && (!readyWaiting || priority === 'high') && eligibleAt(line) <= now()) return send(line);
         if (same) {
             same.text = text;
             if (RANK[priority] < RANK[same.priority]) same.priority = priority;
@@ -154,7 +156,7 @@ export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, set
         schedule();
     };
     // A disconnect ends the queue: lines for the old connection must not go to the next one.
-    client.once?.('end', () => { if (timer) clearTimer(timer); timer = null; queue.length = 0; });
+    client.once?.('end', () => { if (timer) clearTimer(timer); timer = null; timerAt = Infinity; queue.length = 0; }); // #260 nit 2: timerAt too
     client.rotnChatLimit = state;
     return state;
 }

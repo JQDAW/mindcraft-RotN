@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T08:18Z (from `date -u`)
+Updated: 2026-11-06T08:25Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -496,7 +496,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     - low (reflex narration) is dropped when busy or after 15 s.
   - **The "late refusal"** was the harness's reading (lead: harness #255). The server log has it 1 s after the whisper.
   - **Tests:** `chat_limit` 5 and `agenda` #17; the agent wiring and agenda tests fail on develop. Full `npm test` after `npm ci`: 1331 pass. The 1 failure is `deploy-eol`, which checks `deploy/cx23/` on disk for CR; this Windows checkout converts to CRLF, and I didn't touch `deploy/`. Lint 254.
-- **#256 follow-up, PR #260** (branch `agent/skills-rotn/chat-gap`, from develop; opened at the lead's request, waiting for review; STATUS lives here):
+- **#260 merged** (the #256 follow-up):
   - A refusal waiting in its 10 s gap no longer holds up lines that may go now: they go at once when the budget allows.
   - A new line that may go sooner moves the drain timer earlier.
   - Collapsed repeats are logged.
@@ -507,7 +507,11 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - (b) every walk's Movements avoids `forge.hazard` blocks.
   - With tests, in #260 or the next PR.
   - On 2026-11-06 #259's head (`agent/net-forge/collision-shapes`) had neither field yet.
-- **Next:** #260 review fixes if any; then the #259 item once it merges.
+- **#260 nits, ready for the fluids and hazards PR** (branch `agent/skills-rotn/fluids-hazards`, from develop, pushed without a PR; STATUS lives here):
+  1. **Per-key order.** A new keyed line (a refusal) never goes ahead of an older waiting line with its key: it replaces it. Test: a drain timer firing 500 ms late, the budget fitting before it fires, two refusals to one player. Result: one refusal, the newest text. Fails on develop.
+  2. **The end handler also resets `timerAt`.** The guard test passes on develop too, because `schedule()` reads `timerAt` only while a timer is set: consistency, no live bug.
+  - Tests: `chat_limit` 13. Lint 254.
+- **Next:** the #259 item (above) once #259 merges, on this branch, then one PR.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

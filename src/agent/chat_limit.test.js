@@ -207,3 +207,49 @@ test('#256 follow-up: a collapsed repeat is logged', () => {
     assert.equal(f.limiter.collapsed, 1);
     assert.ok(logs.some(m => /^\[chat\] collapsed a repeat into the waiting line \(refusal:Mallory\): Sorry Mallory/.test(m)), JSON.stringify(logs));
 });
+
+// #260 nit 1: a drain timer can fire late (a busy event loop). In that moment the budget fits, and a
+// new refusal to the same player must not go ahead of the older one that waits: it replaces it.
+test('#260 nit 1: a new keyed line never overtakes an older waiting one with its key (a late drain timer)', () => {
+    const clock = { t: 0, timers: [] };
+    const sent = [];
+    const bot = { _client: { chat: (text) => sent.push({ text, t: clock.t }), once() {} } };
+    bot.chat = (m) => bot._client.chat(m);
+    installChatLimit(bot, { now: () => clock.t, log: () => {},
+        setTimer: (fn, ms) => { const h = { at: clock.t + ms + 500, fn }; clock.timers.push(h); return h; }, // 500 ms late
+        clearTimer: (h) => { clock.timers = clock.timers.filter(x => x !== h); } });
+    const refuse = (n) => withChatPriority(bot, 'high', () => bot.chat(`Sorry Mallory (${n})`), 'refusal:Mallory');
+    for (let i = 0; i < 5; i++) bot.chat(`n${i}`); // the budget is used up
+    refuse(1);              // waits for the budget (the timer: 2 s asked, 2.5 s really)
+    clock.t = 2_200;        // the budget fits now, but the timer has not fired yet
+    refuse(2);
+    for (let t = 0; t < 40; t++) { // run the timers for 20 s
+        clock.timers.sort((a, b) => a.at - b.at);
+        const h = clock.timers[0];
+        if (!h || h.at > 22_200) break;
+        clock.timers.shift(); clock.t = h.at; h.fn();
+    }
+    const refusals = sent.filter(x => /^Sorry Mallory/.test(x.text));
+    assert.deepEqual(refusals.map(x => x.text), ['Sorry Mallory (2)'], 'one refusal, the newest text, not (2) then the older (1)');
+});
+
+// A guard, not a fix of a live bug: schedule() reads timerAt only while a timer is set, and the end
+// handler already cleared the timer, so a stale timerAt changed nothing; it is reset for consistency.
+test('#260 nit 2: a disconnect clears the timer and its time, so the next line is scheduled afresh (guard)', () => {
+    const clock = { t: 0, timers: [] };
+    const sent = [];
+    let onEnd = null;
+    const bot = { _client: { chat: (text) => sent.push({ text, t: clock.t }), once: (ev, fn) => { if (ev === 'end') onEnd = fn; } } };
+    bot.chat = (m) => bot._client.chat(m);
+    installChatLimit(bot, { now: () => clock.t, log: () => {},
+        setTimer: (fn, ms) => { const h = { at: clock.t + ms, fn }; clock.timers.push(h); return h; },
+        clearTimer: (h) => { clock.timers = clock.timers.filter(x => x !== h); } });
+    const refuse = () => withChatPriority(bot, 'high', () => bot.chat('Sorry Mallory'), 'refusal:Mallory');
+    refuse();                // t 0: sent
+    refuse();                // waits for its gap: a timer for t 10 s
+    onEnd();                 // the connection ends: queue and timer cleared
+    assert.equal(clock.timers.length, 0);
+    for (let i = 0; i < 5; i++) bot.chat(`n${i}`); // t 0: 4 fit (one refusal used 20), n4 waits
+    assert.equal(clock.timers.length, 1, 'a fresh timer, not skipped as later than the old one');
+    assert.ok(clock.timers[0].at <= 2_100, `for the budget: ${clock.timers[0].at} ms`);
+});
