@@ -6,7 +6,7 @@ import convoManager from './conversation.js';
 import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
-import { standsOnTree } from './library/fall_safety.js';
+import { standsOnTree, isLethal } from './library/fall_safety.js';
 import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
@@ -108,8 +108,10 @@ const modes_list = [
                     await skills.moveAway(bot, 2);
                 });
             }
+            // Molten metal (a modded fluid with forge.hazard 'lava', #259) is lethal like lava.
             else if (names112.isLava(block.name) || block.name === 'fire' ||
-                names112.isLava(blockAbove.name) || blockAbove.name === 'fire') {
+                names112.isLava(blockAbove.name) || blockAbove.name === 'fire' ||
+                isLethal(bot, block) || isLethal(bot, blockAbove)) {
                 say(agent, 'I\'m on fire!');
                 // if you have a water bucket, use it
                 let waterBucket = bot.inventory.findInventoryItem('water_bucket');

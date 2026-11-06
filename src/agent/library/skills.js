@@ -6,7 +6,7 @@ import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stow
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, FALLING_TREE } from "./felling.js";
-import { fallSafe, treeSafe, standsOnTree, isGround, isLeafBlock, leafFromGround, itemOnGround } from "./fall_safety.js";
+import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBlock, leafFromGround, itemOnGround } from "./fall_safety.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import pf from 'mineflayer-pathfinder';
@@ -999,7 +999,9 @@ export async function descendFromTree(bot, run = currentRun(bot)) {
     moves.allowParkour = false;
     moves.scafoldingBlocks = [];
     const ground = new pf.goals.Goal();
-    ground.isEnd = (node) => isGround(bot.blockAt(new Vec3(node.x, node.y - 1, node.z)));
+    // Firm ground below, and not standing in a liquid or a hazard (#259).
+    ground.isEnd = (node) => isFirmGround(bot, bot.blockAt(new Vec3(node.x, node.y - 1, node.z)))
+        && !isUnsafeBlock(bot, bot.blockAt(new Vec3(node.x, node.y, node.z)));
     log(bot, 'You are up on a tree; climbing down to the ground (at most 3 blocks per drop).');
     bot.pathfinder.setMovements(moves);
     try { await within(bot.pathfinder.goto(ground), TREE_SAFETY.descendMs, () => stopWalking(bot)); }

@@ -10,6 +10,7 @@ import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
 import {
+    isLiquid, hazardOf, isLethal, isFirmGround, installWalkSafety,
     MAX_SAFE_DROP, PATHFINDER_MAX_DROP_DOWN, fallSafe, treeSafe, standsOnTree, leafFromGround, itemOnGround, isTreePart,
 } from './fall_safety.js';
 import { ROTN_EARLY_GAME } from '../agenda.js';
@@ -17,9 +18,29 @@ import { moveAwayWithin } from '../modes.js';
 import * as skills from './skills.js';
 
 const vanilla = minecraftData('1.12.2');
-const reg = { ...vanilla, blocks: { ...vanilla.blocks }, blocksByName: { ...vanilla.blocksByName } };
+const reg = { ...vanilla, blocks: { ...vanilla.blocks }, blocksByName: { ...vanilla.blocksByName }, blocksByStateId: { ...vanilla.blocksByStateId } };
 const MODDED = { 'dynamictrees:oakbranch': 4400, 'dynamictrees:leaves0': 4401, 'dynamictrees:rootydirt': 4402 };
-for (const [name, id] of Object.entries(MODDED)) { reg.blocks[id] = { id, name }; reg.blocksByName[name] = reg.blocks[id]; }
+// diggable, as forge-bridge's extendRegistry makes modded blocks (else the pathfinder never digs them).
+for (const [name, id] of Object.entries(MODDED)) { reg.blocks[id] = { id, name, diggable: true }; reg.blocksByName[name] = reg.blocks[id]; }
+// #259: what forge-bridge's applyCollisionShapes puts on modded entries. Molten tin: a liquid that
+// is lethal (hazard 'lava'); milk: a liquid, no hazard; spikes: a trap in every state; BOP plant_0:
+// poison ivy (meta 4) is a trap, short grass (meta 0) is not (hazardByMeta, per-state entries).
+const MOLTEN = 'contenttweaker:tin_molten', MILK = 'animania:milk_holstein', SPIKES = 'minetraps:spikes', PLANT = 'biomesoplenty:plant_0';
+const FLUIDS = {
+    [MOLTEN]: { id: 4410, liquid: true, boundingBox: 'block', forge: { modded: true, hazard: 'lava' } },
+    [MILK]: { id: 4411, liquid: true, boundingBox: 'block', forge: { modded: true } },
+    [SPIKES]: { id: 4412, boundingBox: 'block', forge: { modded: true, hazard: 'trap' } },
+    [PLANT]: { id: 4413, boundingBox: 'empty', forge: { modded: true, hazard: 'trap', hazardByMeta: { 4: 'trap' } } },
+};
+for (const [name, e] of Object.entries(FLUIDS)) {
+    reg.blocks[e.id] = { name, diggable: true, ...e }; reg.blocksByName[name] = reg.blocks[e.id]; MODDED[name] = e.id;
+    for (let m = 0; m < 16; m++) {
+        const hazard = e.forge.hazardByMeta ? e.forge.hazardByMeta[m] : e.forge.hazard;
+        const forge = { ...e.forge }; if (hazard) forge.hazard = hazard; else delete forge.hazard;
+        reg.blocksByStateId[(e.id << 4) | m] = { ...reg.blocks[e.id], forge };
+    }
+}
+reg.blocksArray = Object.values(reg.blocks);
 __setRegistryForTest(reg);
 
 const BRANCH = 'dynamictrees:oakbranch', LEAVES = 'dynamictrees:leaves0';
@@ -35,9 +56,11 @@ function fakeBot({ blocks = {}, start = at(0), arrive = null, items = [], entiti
     const world = new Map(Object.entries(blocks));
     const blockAt = (p) => {
         const q = p.floored ? p.floored() : new Vec3(Math.floor(p.x), Math.floor(p.y), Math.floor(p.z));
-        const name = world.get(key(q)) ?? (q.y < 64 ? 'dirt' : 'air');
+        const cell = world.get(key(q)) ?? (q.y < 64 ? 'dirt' : 'air');
+        const [name, meta] = cell.split('@'); // "biomesoplenty:plant_0@4": a state
         const id = reg.blocksByName[name]?.id ?? MODDED[name];
-        return { name, metadata: 0, type: id, position: q, boundingBox: name === 'air' ? 'empty' : 'block',
+        const empty = name === 'air' || reg.blocks[id]?.boundingBox === 'empty';
+        return { name, metadata: Number(meta ?? 0), type: id, position: q, boundingBox: empty ? 'empty' : 'block',
             canHarvest: () => true, transparent: name === 'air', shapes: name === 'air' ? [] : [[0, 0, 0, 1, 1, 1]] };
     };
     const calls = { moves: [], paths: [], gotos: [], digs: [], collected: [] };
@@ -115,8 +138,9 @@ test('fallSafe: no drop over 3 blocks and never a broken branch; treeSafe also n
     assert.deepEqual([MAX_SAFE_DROP, PATHFINDER_MAX_DROP_DOWN], [3, 4]);
     assert.equal(m.safeToBreak(bot.blockAt(at(1, 64)).name === 'air' ? { ...bot.blockAt(at(1, 64)), name: BRANCH, type: MODDED[BRANCH] } : null), false, 'a branch is never broken');
     assert.equal(m.safeToBreak(bot.blockAt(at(2, 64))), true, 'leaves may be');
+    const counts = [m.exclusionAreasBreak.length, m.exclusionAreasStep.length];
     fallSafe(m);
-    assert.equal(m.exclusionAreasBreak.length, 1, 'once');
+    assert.deepEqual([m.exclusionAreasBreak.length, m.exclusionAreasStep.length], counts, 'once');
     const t = treeSafe(bot, new pf.Movements(bot));
     assert.deepEqual([t.maxDropDown, t.canDig, t.allow1by1towers, t.allowParkour, t.scafoldingBlocks.length], [4, false, false, false, 0]);
     assert.ok(t.exclusionStep(bot.blockAt(at(2, 65))) >= 100, 'a step onto leaves');
@@ -250,4 +274,80 @@ test('the sticks step: felling, not leaves (rotn-data Request 13: leaves never d
     assert.match(sticks.goal, /Leaves drop no sticks/);
     assert.match(sticks.goal, /!craftRecipe\("stick", 1\) makes 4 sticks from 2 planks/, 'or from planks (rotn-data #252: the planks recipe is kept)');
     assert.doesNotMatch(sticks.goal, /drop from leaves|punching trees does not work/);
+});
+
+// ---- #259: liquids and hazards (lead, before G3 smoke round 5) ----
+
+test('#259: any liquid (vanilla by name, modded by the liquid flag) and any hazard (per state) is not ground and not empty', () => {
+    const bot = fakeBot({ blocks: {
+        '1,63,0': MOLTEN, '1,64,0': LEAVES,              // a leaf over molten tin
+        '2,63,0': MILK, '2,64,0': LEAVES,                // over milk
+        '3,64,0': `${PLANT}@4`, '3,65,0': LEAVES,        // over poison ivy
+        '4,64,0': `${PLANT}@0`, '4,65,0': LEAVES,        // over short grass: the dirt below counts
+        '5,63,0': SPIKES,
+        '6,63,0': 'water',
+    } });
+    const b = (x, y) => bot.blockAt(at(x, y));
+    assert.equal(isLiquid(bot, b(6, 63)), true, 'vanilla water by name');
+    assert.equal(isLiquid(bot, b(1, 63)), true, 'molten tin by the flag');
+    assert.equal(isLiquid(bot, b(2, 63)), true, 'milk by the flag');
+    assert.equal(isLiquid(bot, b(5, 63)), false);
+    assert.equal(isLethal(bot, b(1, 63)), true, 'molten metal is lethal like lava');
+    assert.equal(isLethal(bot, b(2, 63)), false, 'milk is not');
+    assert.equal(hazardOf(bot, b(3, 64)), 'trap', 'poison ivy');
+    assert.equal(hazardOf(bot, b(4, 64)), null, 'short grass, the same block id');
+    for (const [x, y] of [[1, 63], [2, 63], [5, 63], [6, 63]]) assert.equal(isFirmGround(bot, b(x, y)), false, `${b(x, y).name} is not ground`);
+    assert.equal(isFirmGround(bot, b(0, 63)), true, 'dirt is');
+    assert.equal(leafFromGround(bot, b(1, 64)), false, 'not over molten tin');
+    assert.equal(leafFromGround(bot, b(2, 64)), false, 'not over milk');
+    assert.equal(leafFromGround(bot, b(3, 65)), false, 'not over poison ivy (a hazard is not empty)');
+    assert.equal(leafFromGround(bot, b(4, 65)), true, 'over short grass the dirt counts');
+    assert.equal(itemOnGround(bot, { position: new Vec3(1.5, 64.0, 0.5) }), false, 'an item on molten tin');
+    assert.equal(itemOnGround(bot, { position: new Vec3(5.5, 64.0, 0.5) }), false, 'on spikes');
+});
+
+test('#259: every walk avoids whole-block hazards by id, poison ivy per state (never all of plant_0), and never digs either', () => {
+    const bot = fakeBot({ blocks: { '1,64,0': `${PLANT}@4`, '2,64,0': `${PLANT}@0` } });
+    const m = fallSafe(new pf.Movements(bot));
+    assert.ok(m.blocksToAvoid.has(FLUIDS[SPIKES].id), 'spikes: a hazard in every state');
+    assert.ok(m.blocksToAvoid.has(FLUIDS[MOLTEN].id), 'molten tin');
+    assert.ok(!m.blocksToAvoid.has(FLUIDS[PLANT].id), 'not plant_0 by id: the bot would avoid all short grass');
+    assert.ok(m.exclusionStep(bot.blockAt(at(1, 64))) >= 100, 'into poison ivy: never');
+    assert.equal(m.exclusionStep(bot.blockAt(at(2, 64))), 0, 'into short grass: fine');
+    assert.ok(m.exclusionBreak({ name: MOLTEN, type: FLUIDS[MOLTEN].id, metadata: 0 }) >= 100, 'never dig a fluid');
+    assert.ok(m.exclusionBreak({ name: SPIKES, type: FLUIDS[SPIKES].id, metadata: 0 }) >= 100, 'nor a trap');
+    assert.equal(m.exclusionBreak({ name: 'dirt', type: reg.blocksByName.dirt.id, metadata: 0 }), 0);
+});
+
+test('#259: the pathfinder never lands, drops or steps onto a modded liquid or a hazard (they are solid cubes in the registry)', () => {
+    const node = { x: 0, y: 64, z: 0, remainingBlocks: 0 };
+    const east = { x: 1, z: 0 };
+    // A step east onto a floor at y 63 of: dirt, molten tin, milk, spikes.
+    const forward = (floor) => {
+        const bot = fakeBot({ blocks: floor ? { '1,63,0': floor } : {} });
+        const out = [];
+        fallSafe(new pf.Movements(bot)).getMoveForward(node, east, out);
+        const raw = [];
+        new pf.Movements(bot).getMoveForward(node, east, raw);
+        return [out.length, raw.length];
+    };
+    assert.deepEqual(forward(null), [1, 1], 'dirt: a step');
+    for (const floor of [MOLTEN, MILK, SPIKES]) assert.deepEqual(forward(floor), [0, 1], `${floor}: no step (the raw pathfinder would)`);
+    // A drop east from a ledge onto a pool of molten tin 2 below.
+    const pool = fakeBot({ blocks: { '1,63,0': 'air', '1,62,0': MOLTEN } });
+    assert.equal(fallSafe(new pf.Movements(pool)).getLandingBlock(node, east), null, 'never lands on molten tin');
+    assert.ok(new pf.Movements(pool).getLandingBlock(node, east), 'the raw pathfinder would');
+});
+
+test('#259: installWalkSafety makes every movements anyone sets fall-, liquid- and hazard-safe, once', () => {
+    const bot = fakeBot();
+    const set = [];
+    bot.pathfinder = { setMovements: (m) => set.push(m), movements: new pf.Movements(bot) };
+    assert.equal(installWalkSafety(bot), true);
+    assert.equal(bot.pathfinder.movements.rotnFallSafe, true, 'the current movements too');
+    bot.pathfinder.setMovements(new pf.Movements(bot)); // e.g. mineflayer-collectblock or -pvp
+    assert.equal(set[0].rotnFallSafe, true);
+    assert.equal(set[0].maxDropDown, PATHFINDER_MAX_DROP_DOWN);
+    assert.ok(set[0].blocksToAvoid.has(FLUIDS[SPIKES].id));
+    assert.equal(installWalkSafety(bot), false, 'once');
 });

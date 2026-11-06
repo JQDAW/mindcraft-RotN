@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T08:25Z (from `date -u`)
+Updated: 2026-11-06T09:19Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -511,7 +511,18 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   1. **Per-key order.** A new keyed line (a refusal) never goes ahead of an older waiting line with its key: it replaces it. Test: a drain timer firing 500 ms late, the budget fitting before it fires, two refusals to one player. Result: one refusal, the newest text. Fails on develop.
   2. **The end handler also resets `timerAt`.** The guard test passes on develop too, because `schedule()` reads `timerAt` only while a timer is set: consistency, no live bug.
   - Tests: `chat_limit` 13. Lint 254.
-- **Next:** the #259 item (above) once #259 merges, on this branch, then one PR.
+- **Fluids and hazards** (#259 merged; lead: required before smoke round 5). Same branch, `agent/skills-rotn/fluids-hazards`, with develop merged in. PR open; STATUS lives here.
+  - **`fall_safety.js`:** `isLiquid` (vanilla by name, modded by the registry's `liquid` flag) and `hazardOf` (per state, forge-bridge `stateHazard`). `isLethal`: molten metal counts as lava. `isEmpty`, `firstBelow` and `isFirmGround` treat any liquid or hazard as not ground and not empty.
+  - **Every walk:** `installWalkSafety` wraps `bot.pathfinder.setMovements` after spawn, so all walks (ours, mineflayer-collectblock, pvp, upstream) go through `fallSafe`. That gives:
+    - whole-block hazard ids in `blocksToAvoid`, never a block with `hazardByMeta`;
+    - a per-state exclusion: never step into a hazard state, nor onto a cell above a liquid or a hazard; never dig either;
+    - modded liquids and hazard states made unsafe and not solid in the pathfinder's view, as it treats lava, so it never stands, lands or drops onto them;
+    - vanilla water left as the pathfinder treats it.
+  - **The reflex:** `self_preservation` treats molten metal at the feet or head like lava.
+  - **The #260 nits** are included.
+  - **Tests:** `fall_safety` 14 (4 new), `threat_arbitration` 10 (1 new). All 5 new tests fail on develop's code; `fall_safety` was checked with develop's file plus stub exports. Full `npm test`: 1261 pass, 0 fail. Lint 254.
+  - **net-forge #263** (not merged) makes `hazardBlockIds` whole-block by default. My filter on `hazardByMeta` is right with and without it.
+- **Next:** the fluids and hazards PR review.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

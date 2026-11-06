@@ -270,3 +270,28 @@ test('#227 nit: a weapon in the off hand counts for the player zombie policy', (
     slots[45] = null;
     assert.equal(threatPlan(bot)?.action, 'flee');
 });
+
+// #259 (lead, before smoke round 5): molten metal is lethal like lava. A modded fluid with
+// forge.hazard 'lava' at the bot's feet makes self_preservation act, as vanilla lava does.
+test('#259: molten metal at the feet makes self_preservation act, like lava; milk does not', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const withFluid = (name, hazard) => {
+        const agent = arena();
+        for (const k of Object.keys(agent.bot.entities)) if (k !== '0') delete agent.bot.entities[k];
+        const id = 4410;
+        const forge = { modded: true, ...(hazard ? { hazard } : {}) };
+        const entry = { id, name, liquid: true, boundingBox: 'block', forge };
+        agent.bot.registry = { ...reg, blocks: { ...reg.blocks, [id]: entry }, blocksByStateId: { ...reg.blocksByStateId, [id << 4]: entry } };
+        agent.bot.inventory = { items: () => [], findInventoryItem: () => null }; // no water bucket
+        agent.bot.blockAt = (p) => (Math.floor(p.y) === 64 ? { name, type: id, metadata: 0, position: p } : { name: 'air', type: 0, metadata: 0, position: p });
+        return agent;
+    };
+    const molten = withFluid('contenttweaker:tin_molten', 'lava');
+    await __modeForTest('self_preservation').update(molten);
+    await flush();
+    assert.deepEqual(molten.log.ran.map(r => r.label), ['mode:self_preservation'], 'it gets out');
+    const milk = withFluid('animania:milk_holstein', null);
+    await __modeForTest('self_preservation').update(milk);
+    await flush();
+    assert.deepEqual(milk.log.ran, [], 'milk is a liquid, not lethal');
+});
