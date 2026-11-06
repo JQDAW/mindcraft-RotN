@@ -4,8 +4,12 @@ import { VILLAGER_PROFESSIONS_112 } from './names112.js';
 import { inventoryKey, blockMetasFor, blockMatcher, blockDisplayName } from './rotn_names.js';
 import { fallSafe, isTreePart } from './fall_safety.js';
 
-/** Blocks a tree on the surface can have above its wood: its own wood and leaves, snow, vines. */
-const TREE_COVER = /log|wood|branch|leaves|snow|vine/;
+/**
+ * Blocks a tree on the surface can have above its wood: its own wood and leaves, snow, vines.
+ * Wood only as a whole name part ("log", "log2", "biomesoplenty:log_0", "twilight_log",
+ * "petrified_wood"), never "wood" or "log" inside a word ("wooden_slab" is a roof: #274 nit).
+ */
+export const TREE_COVER = /branch|leaves|snow|vine|(?:^|[:_])(?:log\d?|log_\d+|wood)$/;
 
 /**
  * True when solid ground lies above pos within `up` blocks (stone, dirt: not the tree's own wood

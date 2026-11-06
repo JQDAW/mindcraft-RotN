@@ -528,6 +528,11 @@ test('round 5 A rerun: wood is never targeted underground: collectBlocks and sea
     const bot = fakeBot({ build: buried });
     assert.equal(world.isUnderground(bot, at(-2, 60, 0)), true);
     assert.equal(world.isUnderground(bot, at(3, 64, 0)), false, 'a trunk under its own canopy is on the surface');
+    // #274 nit: "wood" only as a whole name part: a wooden slab roof is not tree cover.
+    const roofed = fakeBot({ trees: [], build: (w) => { w.set(key(at(-6, 64, 0)), 'log'); w.set(key(at(-6, 67, 0)), 'wooden_slab'); } });
+    assert.equal(world.isUnderground(roofed, at(-6, 64, 0)), true, 'a log under a wooden slab roof');
+    for (const name of ['log2', 'biomesoplenty:log_0', 'twilightforest:twilight_log', 'dynamictrees:oakbranch', 'leaves']) assert.ok(world.TREE_COVER.test(name), name);
+    for (const name of ['wooden_slab', 'planks', 'driftwood', 'betterwithmods:wood_siding']) assert.ok(!world.TREE_COVER.test(name), name);
     assert.equal(await skills.collectBlock(bot, 'log', 1), true, bot.output);
     assert.equal(bot.log.digs.length, 1);
     assert.equal(bot.log.digs[0].pos, '3,64,0', 'the surface tree, not the nearer buried log');

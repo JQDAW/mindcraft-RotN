@@ -76,6 +76,29 @@ test('a task text that says to stand on a block: its coordinates and block; othe
     assert.deepEqual(blockNamesFor('gold block'), ['gold_block']);
 });
 
+test('#274 review 2: the coordinates are the ones that go with "stand on", not the first triple in the text', () => {
+    assert.deepEqual(parseStandOn('go to 100 70 100, then stand on the gold block at -42 68 -50'), { x: -42, y: 68, z: -50, name: 'gold_block' });
+    assert.deepEqual(parseStandOn('walk to 5 64 5 and stand on 7, 65, -8'), { x: 7, y: 65, z: -8, name: null });
+    assert.deepEqual(parseStandOn('pass the stone at 1 2 3, go to the gold block at -42 68 -50 and stand on it'), { x: -42, y: 68, z: -50, name: 'gold_block' },
+        'stand on it: the block named last before it');
+    assert.deepEqual(parseStandOn('stand on it, then go to the gold block at -42 68 -50'), null, 'nothing named before "it"');
+    assert.equal(parseStandOn('go to 100 70 100 and stand on it'), null, 'a bare position is not a block to stand on');
+});
+
+test('#274 nit: on a slab (or farmland) the feet are inside the block\'s cell: still on it', () => {
+    const slabAt = new Vec3(3, 64, 3);
+    const bot = {
+        entity: { position: new Vec3(3.5, 64.5, 3.5), onGround: true },
+        blockAt: (p) => ({ name: p.equals(slabAt) ? 'stone_slab' : p.y < 64 ? 'dirt' : 'air', position: p, boundingBox: p.equals(slabAt) || p.y < 64 ? 'block' : 'empty' }),
+    };
+    assert.equal(standCheck(bot, { x: 3, y: 64, z: 3, name: 'stone_slab' }).ok, true);
+    bot.entity.position = new Vec3(3.5, 64.9375, 3.5); // farmland height
+    assert.equal(standCheck(bot, { x: 3, y: 64, z: 3, name: null }).ok, true);
+    bot.entity.position = new Vec3(3.5, 65, 3.5); // a full block: the cell below the feet
+    assert.equal(standCheck(bot, { x: 3, y: 64, z: 3, name: 'stone_slab' }).ok, true);
+    assert.equal(standCheck(bot, { x: 3, y: 63, z: 3, name: null }).ok, false);
+});
+
 test('the check: beside the block is not on it; on top of the gold block is', () => {
     const { bot } = fakeAgent();
     const target = parseStandOn(TASK);

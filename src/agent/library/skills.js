@@ -2,7 +2,7 @@ import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
-import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stowCarried } from "./rotn_sources.js";
+import { worldSources, itemVariants, toolAllows, allowedTool, allowedTools, toolUsesLeft, describeTool, stowCarried } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
 import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
@@ -1090,21 +1090,28 @@ export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds 
 /** Any axe of level 0 or more: the crude, flint or stone axe (rotn-data #272: Hit With Axe). */
 export const AXE_ANY = { type: 'axe', minLevel: 0 };
 
-/** Bounds for Hit With Axe: axe clicks in all (the crude axe has 8 uses), time, the wait per click and for drops. */
-export const AXE_CHOP_LIMITS = { clicks: 8, totalMs: 90_000, settleMs: 1500, pickupMs: 5000, dropRadius: 3 };
+/**
+ * Bounds for Hit With Axe: axe clicks in all, time, the wait per click and for drops. reserve: the
+ * uses each axe keeps (#274 review 1: the Crafting Tools need the same crude axe, often worn from
+ * felling). cleanupMs: breaking a placed block back on an early exit.
+ */
+export const AXE_CHOP_LIMITS = { clicks: 8, totalMs: 90_000, settleMs: 1500, pickupMs: 5000, dropRadius: 3, reserve: 1, cleanupMs: 5000 };
 
 /**
  * Hit With Axe (rotn-data #272; the lead's decision for round 5 A rerun: the path to sticks before
  * a table exists). Place a block and use (right-click) any axe of level 0 or more on it: a log is
  * debarked on the first click (+1 bark) and gives 1 plank on the second; a plank gives 2 sticks.
  * Each click costs 1 axe use, and the drop lands one block toward the bot. Planks are made from
- * held logs; before the bot has a table, one plank is kept for it. Bounded by AXE_CHOP_LIMITS; gives
- * up with a reason when there is no axe, nothing to chop, or a click changes nothing.
+ * held logs; before the bot has a table, one plank is kept for it. Bounded by AXE_CHOP_LIMITS:
+ * a log or plank is chopped only when an axe has its uses and still keeps `reserve` (#274 review 1).
+ * Gives up with a reason when there is no axe, nothing to chop, or a click changes nothing. Every
+ * exit after a placement breaks the block back by hand and picks up the drops (#274 review 3).
  * ops.place(bot, name) places the item near the bot and returns the block (or null); ops.pickup
- * picks up the drops around a position. Returns the sticks gained.
+ * picks up the drops around a position; ops.takeBack breaks a placed block. Returns the sticks gained.
  */
 export async function sticksByAxe(bot, need, run = currentRun(bot), ops = AXE_CHOP_OPS, limits = {}) {
     const L = { ...AXE_CHOP_LIMITS, ...limits };
+    const O = { ...AXE_CHOP_OPS, ...ops };
     const start = Date.now();
     const left = () => L.totalMs - (Date.now() - start);
     const sticks = () => countItem(bot, 'stick');
@@ -1113,6 +1120,14 @@ export async function sticksByAxe(bot, need, run = currentRun(bot), ops = AXE_CH
         log(bot, 'Not making sticks with an axe: you hold no axe (a crude, flint or stone axe works).');
         return 0;
     }
+    // The axe for `uses` more clicks that still keeps L.reserve: the one with the most uses left.
+    const usesLeft = (a) => toolUsesLeft(a) ?? Infinity; // unknown: only the click cap bounds it
+    const axeFor = (uses) => allowedTools(bot, AXE_ANY).filter(a => usesLeft(a) - uses >= L.reserve)
+        .sort((a, b) => usesLeft(b) - usesLeft(a))[0] ?? null;
+    const keepAxe = (what, uses) => {
+        const most = Math.max(...allowedTools(bot, AXE_ANY).map(usesLeft));
+        log(bot, `Keeping the axe for the Crafting Tools: it has ${most} use${most === 1 ? '' : 's'} left, and chopping a ${what} takes ${uses}; stopping.`);
+    };
     const logNames = oreMemberNames('logWood');
     const heldLog = () => bot.inventory.items().find(i => logNames.some(n => itemMatches(i, n))) ?? null;
     const plankNames = oreMemberNames('stickMat');
@@ -1121,41 +1136,63 @@ export async function sticksByAxe(bot, need, run = currentRun(bot), ops = AXE_CH
         const kind = Object.entries(sparePlanksByKind(bot)).find(([, n]) => n > 0)?.[0];
         return kind ? bot.inventory.items().find(i => (inventoryKey(i) ?? i.name) === kind) ?? null : null;
     };
+    const stopped = () => run.aborted || !!bot.interrupt_code;
+    // Every exit after a placement (#274 review 3): break what is left of the block back by hand
+    // (not with the axe: its uses are kept), then pick the drops up. Bounded; when the command was
+    // stopped or timed out, the block is still broken back, but there is no walk after the drops.
+    const cleanUp = async (pos) => {
+        const rest = bot.blockAt(pos);
+        if (rest && rest.name !== 'air' && rest.boundingBox !== 'empty') {
+            try {
+                const res = await within(O.takeBack(bot, rest), L.cleanupMs, () => { try { bot.stopDigging?.(); } catch { /* best effort */ } });
+                if (res === TIMED_OUT) log(bot, `Could not break the placed ${rest.name} back within ${secsText(L.cleanupMs)}.`);
+            } catch (err) {
+                log(bot, `Could not break the placed ${rest.name} back (${safeError(err)}).`);
+            }
+        }
+        if (stopped()) { log(bot, `Stopped; the drops are left near ${pos}.`); return; }
+        await O.pickup(bot, pos, L);
+    };
     let clicks = 0;
-    // Place `item`, click it with the axe up to maxClicks times while it changes, then pick up the
-    // drops; true when `gained()` rose.
+    // Place `item`, click it with the axe up to maxClicks times while it changes, then clean up;
+    // true when `gained()` rose.
     const chop = async (item, gained, maxClicks) => {
         const name = inventoryKey(item) ?? item.name;
-        const block = await ops.place(bot, name);
+        const block = await O.place(bot, name);
         if (!block) { log(bot, `Could not place ${name} to chop it with the axe.`); return false; }
         const pos = block.position;
         const before = gained();
-        for (let i = 0; i < maxClicks && clicks < L.clicks && left() > 0 && !run.aborted && !bot.interrupt_code; i++) {
-            const axe = allowedTool(bot, AXE_ANY);
-            if (!axe) { log(bot, 'Your axe broke; stopping.'); break; }
-            const now = bot.blockAt(pos);
-            if (!now || now.name === 'air') break;
-            await bot.equip(axe, 'hand');
-            await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
-            const was = `${now.name}:${now.metadata}`;
-            await bot.activateBlock(now);
-            clicks++;
-            let after = null;
-            for (const until = Date.now() + Math.min(L.settleMs, Math.max(0, left())); ;) {
-                after = bot.blockAt(pos);
-                if (!after || `${after.name}:${after.metadata}` !== was || Date.now() >= until) break;
-                await new Promise(r => setTimeout(r, 100));
+        let ok = true;
+        try {
+            for (let i = 0; i < maxClicks && clicks < L.clicks && left() > 0 && !stopped(); i++) {
+                const now = bot.blockAt(pos);
+                if (!now || now.name === 'air') break;
+                if (!allowedTool(bot, AXE_ANY)) { log(bot, 'Your axe broke; stopping.'); ok = false; break; }
+                const axe = axeFor(1);
+                if (!axe) { keepAxe(now.name, 1); ok = false; break; }
+                await bot.equip(axe, 'hand');
+                await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+                const was = `${now.name}:${now.metadata}`;
+                await bot.activateBlock(now);
+                clicks++;
+                let after = null;
+                for (const until = Date.now() + Math.min(L.settleMs, Math.max(0, left())); ;) {
+                    after = bot.blockAt(pos);
+                    if (!after || `${after.name}:${after.metadata}` !== was || Date.now() >= until) break;
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                if (after && `${after.name}:${after.metadata}` === was) {
+                    log(bot, `Using the axe on the placed ${now.name} changed nothing; stopping.`);
+                    ok = false;
+                    break;
+                }
             }
-            if (after && `${after.name}:${after.metadata}` === was) {
-                log(bot, `Using the axe on the placed ${now.name} changed nothing; stopping.`);
-                return false;
-            }
+        } finally {
+            await cleanUp(pos);
         }
-        if (run.aborted) return false;
-        await ops.pickup(bot, pos, L);
-        return gained() > before;
+        return ok && !stopped() && gained() > before;
     };
-    while (sticks() - first < need && clicks < L.clicks && left() > 0 && !run.aborted && !bot.interrupt_code) {
+    while (sticks() - first < need && clicks < L.clicks && left() > 0 && !stopped()) {
         if (!allowedTool(bot, AXE_ANY)) { log(bot, 'Your axe broke; stopping.'); break; }
         const short = need - (sticks() - first);
         // 2 planks of one kind make 4 sticks with no axe use: craft them in the inventory grid.
@@ -1168,6 +1205,7 @@ export async function sticksByAxe(bot, need, run = currentRun(bot), ops = AXE_CH
         const plank = sparePlank();
         // A spare plank: chop it when 2 sticks will do, or when there is no log to pair it with.
         if (plank && (short <= 2 || !heldLog())) {
+            if (!axeFor(1)) { keepAxe('plank', 1); break; }
             log(bot, `Chopping a placed ${inventoryKey(plank) ?? plank.name} with the axe for 2 sticks.`);
             if (!(await chop(plank, sticks, 1))) break;
             continue;
@@ -1177,30 +1215,85 @@ export async function sticksByAxe(bot, need, run = currentRun(bot), ops = AXE_CH
             log(bot, `No logs${plankCount() ? ' or spare planks (one is kept for the crafting table)' : ' or planks'} to chop with the axe.`);
             break;
         }
+        if (!axeFor(2)) { keepAxe('log', 2); break; }
         log(bot, `Chopping a placed ${inventoryKey(wood) ?? wood.name} with the axe for a plank (2 uses).`);
-        if (!(await chop(wood, plankCount, 3))) break;
+        if (!(await chop(wood, plankCount, 2))) break;
     }
     if (clicks >= L.clicks && sticks() - first < need) log(bot, `Stopped chopping: ${L.clicks} axe uses in this collect.`);
     else if (left() <= 0) log(bot, `Stopped chopping: time limit of ${secsText(L.totalMs)} reached.`);
     return Math.max(0, sticks() - first);
 }
 
-/** Place an item on free ground near the bot; the block, or null. */
+/**
+ * Where to place a block to chop it (#274 review 4): an empty cell 1.5 to 3 blocks from the bot
+ * (in reach, never its own cell), on firm ground (not leaves, a branch, a liquid or a hazard),
+ * with no liquid or hazard within 1 block, and no ledge beside it: each side is solid or has firm
+ * ground under it, so the drop (it lands one block toward the bot) stays up here. Nearest first;
+ * the bot's own level before one up or down. Null when there is none.
+ */
+export function chopSpot(bot, maxDist = 3) {
+    const me = bot.entity.position;
+    const feet = new Vec3(Math.floor(me.x), Math.floor(me.y), Math.floor(me.z));
+    const spots = [];
+    for (let dx = -maxDist; dx <= maxDist; dx++) {
+        for (let dz = -maxDist; dz <= maxDist; dz++) {
+            const h = Math.hypot(dx, dz);
+            if (h < 1.5 || h > maxDist) continue;
+            for (const dy of [0, -1, 1]) {
+                const p = feet.offset(dx, dy, dz);
+                if (chopSpotOk(bot, p)) spots.push({ p, d: h + Math.abs(dy) });
+            }
+        }
+    }
+    spots.sort((a, b) => a.d - b.d);
+    return spots[0]?.p ?? null;
+}
+
+/** chopSpot's test for one cell. */
+export function chopSpotOk(bot, p) {
+    const cell = bot.blockAt(p);
+    if (!cell || cell.boundingBox !== 'empty' || isUnsafeBlock(bot, cell)) return false;
+    if (!isFirmGround(bot, bot.blockAt(p.offset(0, -1, 0)))) return false;
+    for (let x = -1; x <= 1; x++) {
+        for (let y = -1; y <= 1; y++) {
+            for (let z = -1; z <= 1; z++) {
+                const b = bot.blockAt(p.offset(x, y, z));
+                if (!b || isUnsafeBlock(bot, b)) return false;
+            }
+        }
+    }
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const side = bot.blockAt(p.offset(x, 0, z));
+        if (side.boundingBox === 'empty' && !isFirmGround(bot, bot.blockAt(p.offset(x, -1, z)))) return false;
+    }
+    return true;
+}
+
+/** Place an item at a chopSpot; the block, or null. */
 async function placeNear(bot, name) {
-    const pos = world.getNearestFreeSpace(bot, 1, 6);
-    if (!pos) return null;
+    const pos = chopSpot(bot);
+    if (!pos) {
+        log(bot, 'No safe spot near you to place it on: it needs firm ground 2-3 blocks away (not leaves), no liquid or hazard beside it, and no ledge.');
+        return null;
+    }
     await placeBlock(bot, name, pos.x, pos.y, pos.z);
     const b = bot.blockAt(pos);
     return b && b.name !== 'air' ? b : null;
 }
 
-/** Walk to the items near pos (the drops of an axe click), bounded. */
+/** Break a placed block back by hand (#274 review 3): the axe's uses are kept for the Crafting Tools. */
+async function takeBackByHand(bot, block) {
+    if (bot.heldItem && typeof bot.unequip === 'function') await bot.unequip('hand');
+    await bot.dig(block, true);
+}
+
+/** Walk to the items near pos (the drops of an axe click) that lie on firm ground, bounded. */
 async function pickUpNear(bot, pos, L = AXE_CHOP_LIMITS) {
     const start = Date.now();
     const tried = new Set();
     while (Date.now() - start < L.pickupMs && !bot.interrupt_code) {
         const item = Object.values(bot.entities ?? {}).find(e => e?.name === 'item' && e.position && !tried.has(e.id ?? e)
-            && e.position.distanceTo(pos) <= L.dropRadius);
+            && e.position.distanceTo(pos) <= L.dropRadius && itemOnGround(bot, e));
         if (!item) break;
         tried.add(item.id ?? item);
         const p = item.position;
@@ -1210,7 +1303,7 @@ async function pickUpNear(bot, pos, L = AXE_CHOP_LIMITS) {
     }
 }
 
-export const AXE_CHOP_OPS = { place: placeNear, pickup: pickUpNear };
+export const AXE_CHOP_OPS = { place: placeNear, pickup: pickUpNear, takeBack: takeBackByHand };
 
 export async function pickupNearbyItems(bot) {
     /**
