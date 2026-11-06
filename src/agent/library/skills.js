@@ -2,12 +2,13 @@ import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
-import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stowCarried } from "./rotn_sources.js";
+import { worldSources, itemVariants, toolAllows, allowedTool, allowedTools, toolUsesLeft, describeTool, stowCarried } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
-import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTreeLeaves, FALLING_TREE, FELL_PLAN } from "./felling.js";
+import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
 import { oreMemberNames } from "../agenda_driver.js";
 import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBlock, leafFromGround, itemOnGround } from "./fall_safety.js";
+import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
 import pf from 'mineflayer-pathfinder';
@@ -739,6 +740,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Any Dynamic Trees branch fells its tree, whichever rule names it (rotn-data #13: a branch
     // broken by hand drops the tree's logs and sticks): always the safe cut, never collect().
     const fellsTree = (block) => isBranch(block) || fellMatchers.some(matches => matches(block));
+    const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     // Count what the bot really gains, not a rule's yield (#141 review): the targets in the
     // inventory before and after each break. A block with no item (water) counts 1 per success.
@@ -755,6 +757,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         return byKey;
     };
     const gainedByKey = {};
+    const allHeld = () => {
+        const byKey = {};
+        for (const item of bot.inventory.items()) {
+            const key = inventoryKey(item) ?? item.name;
+            byKey[key] = (byKey[key] ?? 0) + item.count;
+        }
+        return byKey;
+    };
     const isLiquid = baseType === 'lava' || baseType === 'water';
     let isWanted = blockMatcher(blocktypes); // the shared resolver: names and variants (#131 review)
     // A rule's tool can break during the run: stop searching that rule's blocks (B2b).
@@ -805,6 +815,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (block.position && givenUp.some(p => p.equals(block.position))) return false;
             // Leaves only where the bot can reach them standing on the ground: never climb for them.
             if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
+            // Wood only on the surface: never a log underground (G3 round 5 A rerun).
+            if (block.position && woodTarget && world.isUnderground(bot, block.position)) return false;
             if (exclude) {
                 for (let position of exclude) {
                     if (block.position.x === position.x && block.position.y === position.y && block.position.z === position.z) {
@@ -868,6 +880,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         try {
             let success = false;
             const before = heldByKey();
+            const allBefore = allHeld();
             const breakIt = async () => {
                 if (isLiquid) return await useToolOnBlock(bot, 'bucket', block);
                 // By hand when the block has no collision box (a rock pile), or when a rule's tool must
@@ -924,8 +937,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                     }
                 }
                 collected += gained;
-                if (gained === 0)
-                    log(bot, `Broke ${block.name} but got no ${blockType}.`);
+                if (gained === 0) {
+                    // Say what it did give (round 5 A rerun: a felled spruce gave logs, the stick
+                    // line said only "got no stick"), and that sticks are rare from felling.
+                    const other = Object.entries(allHeld()).map(([key, n]) => [key, n - (allBefore[key] ?? 0)]).filter(([, d]) => d > 0);
+                    const gave = other.length ? ` (it gave ${other.map(([key, d]) => `${d} ${key}`).join(', ')})` : '';
+                    const rare = baseType === 'stick' && fellsTree(block) ? ' A felled tree drops few sticks, often none.' : '';
+                    log(bot, `Broke ${block.name} but got no ${blockType}${gave}.${rare}`);
+                }
             }
             if (run.aborted) break;
             await autoLight(bot);
@@ -973,30 +992,85 @@ function planksByKind(bot) {
     return byKind;
 }
 
+/**
+ * A plank (a stickMat member) that a held log makes in the 2x2 grid now, or null (rotn-data #278:
+ * vanilla logs need a table, but mangrove, Pam's maple, cinnamon and paperbark, twilight oak, tower
+ * wood and End logs do not). Only recipes made of logs, so planks are never turned into other planks.
+ */
+export function gridPlanksReady(bot, logNames = oreMemberNames('logWood')) {
+    const isLog = (name) => { const p = parseName(name); return !!p && logNames.some(n => itemMatches({ name: p.name, metadata: p.meta ?? 0 }, n)); };
+    for (const name of oreMemberNames('stickMat')) {
+        const way = craftNeeds(bot, name);
+        if (way?.ready && !way.requiresTable && way.inputs.length > 0
+            && way.inputs.every(i => i.kinds.length > 0 && i.kinds.every(k => isLog(k.name)))) return name;
+    }
+    return null;
+}
+
+/** A crafting table placed within 16 blocks, or one held. */
+const tableAtHand = (bot) => countItem(bot, 'crafting_table') > 0 || !!world.getNearestBlock(bot, 'crafting_table', 16);
+
+/**
+ * Held planks by kind that sticks may use: before the bot has a table (none near or held), one plank
+ * of the most-held kind is kept for it (round 5 A rerun; the lead's Hit With Axe path).
+ */
+function sparePlanksByKind(bot) {
+    const byKind = planksByKind(bot);
+    if (tableAtHand(bot)) return byKind;
+    const most = Object.entries(byKind).sort((a, b) => b[1] - a[1])[0];
+    if (most) byKind[most[0]] -= 1;
+    return byKind;
+}
+
 /** The sticks crafts the held planks allow: 2 of one kind each, never a mixed pair (#268 follow-up 3). */
-export const stickCraftsHeld = (bot) => Object.values(planksByKind(bot)).reduce((n, c) => n + Math.floor(c / 2), 0);
+export const stickCraftsHeld = (bot) => Object.values(sparePlanksByKind(bot)).reduce((n, c) => n + Math.floor(Math.max(0, c) / 2), 0);
 
 /**
  * Sticks short (G3 round 5 A: no tree could be felled safely): make `need` sticks from held planks,
  * 2 planks of one kind giving 4 (RotN keeps it, in the inventory grid). Without a pair of one kind,
- * held logs (ore:logWood) are made into planks first (#268 follow-up 2; craftRecipe finds or
- * places a table if the pack wants one). Bounded rounds, each must make progress. Returns the
- * sticks made.
+ * held logs (ore:logWood) are made into planks first (#268 follow-up 2), but only with a crafting
+ * table near or held: every RotN log -> planks recipe is a 3-high column (rotn-data; round 5 A
+ * rerun: "Crafting planks requires a crafting table"). Bounded rounds, each must make progress.
+ * Returns the sticks made.
  */
-export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds = 4) {
+export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds = 4, axeOps = AXE_CHOP_OPS) {
     const logNames = oreMemberNames('logWood');
     const logsHeld = () => logNames.reduce((n, name) => n + countItem(bot, name), 0);
     const planksHeld = () => Object.values(planksByKind(bot)).reduce((n, c) => n + c, 0);
     let made = 0;
+    let gridFailed = false;
     for (let r = 0; r < rounds && made < need && !run.aborted && !bot.interrupt_code; r++) {
         const crafts = Math.ceil((need - made) / 4);
         const pairs = stickCraftsHeld(bot);
         if (pairs === 0) {
+            // No table: a log whose planks recipe is 2x2 is crafted first (rotn-data #278).
+            const grid = !gridFailed && !tableAtHand(bot) ? gridPlanksReady(bot, logNames) : null;
+            if (grid) {
+                const before = planksHeld();
+                log(bot, `Making ${grid} from your logs in the 2x2 grid (these logs need no crafting table).`);
+                await craftRecipe(bot, grid, 1);
+                if (planksHeld() > before) continue;
+                log(bot, `Could not make ${grid} from your logs (the reason is above).`);
+                gridFailed = true;
+            }
+            // No table near or held: Hit With Axe with any axe of level 0 or more (the lead's
+            // decision, rotn-data #272): a placed log gives 1 plank (2 uses), a placed plank 2 sticks.
+            if (!tableAtHand(bot)) {
+                if (allowedTool(bot, AXE_ANY)) { made += await sticksByAxe(bot, need - made, run, axeOps); break; }
+                if (logsHeld() === 0 && planksHeld() === 0) break;
+                // Said once, with what to do instead, so the model does not retry the same command
+                // (#270 review 1; round 5 A rerun: "Crafting planks requires a crafting table").
+                log(bot, 'Not making planks: in RotN most logs (all vanilla ones) become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them (place a log or plank and use the axe on it). Get a crude axe or a table first. Until then, River Cane or bamboo (picked by hand) work as sticks for the crude axe and the Crafting Tools.');
+                break;
+            }
             if (logsHeld() === 0) break;
             const before = planksHeld();
             log(bot, `Making planks from logs for sticks.`);
             await craftRecipe(bot, 'planks', Math.ceil(crafts / 2)); // 1 log: 4 planks in vanilla; another round if fewer
-            if (planksHeld() <= before) break;
+            if (planksHeld() <= before) {
+                log(bot, 'Could not make planks from your logs (the reason is above); not trying again in this collect.');
+                break;
+            }
             continue;
         }
         const before = countItem(bot, 'stick');
@@ -1004,11 +1078,232 @@ export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds 
         log(bot, `Making the other ${left} stick${left === 1 ? '' : 's'} from planks (2 planks of one kind give 4).`);
         await craftRecipe(bot, 'stick', Math.min(crafts, pairs));
         const got = Math.max(0, countItem(bot, 'stick') - before);
-        if (got === 0) break;
+        if (got === 0) {
+            log(bot, 'Could not make sticks from your planks (the reason is above); not trying again in this collect.');
+            break;
+        }
         made += got;
     }
     return made;
 }
+
+/** Any axe of level 0 or more: the crude, flint or stone axe (rotn-data #272: Hit With Axe). */
+export const AXE_ANY = { type: 'axe', minLevel: 0 };
+
+/**
+ * Bounds for Hit With Axe: axe clicks in all, time, the wait per click and for drops. reserve: the
+ * uses each axe keeps (#274 review 1: the Crafting Tools need the same crude axe, often worn from
+ * felling). cleanupMs: breaking a placed block back on an early exit.
+ */
+export const AXE_CHOP_LIMITS = { clicks: 8, totalMs: 90_000, settleMs: 1500, pickupMs: 5000, dropRadius: 3, reserve: 1, cleanupMs: 5000 };
+
+/**
+ * Hit With Axe (rotn-data #272; the lead's decision for round 5 A rerun: the path to sticks before
+ * a table exists). Place a block and use (right-click) any axe of level 0 or more on it: a log is
+ * debarked on the first click (+1 bark) and gives 1 plank on the second; a plank gives 2 sticks.
+ * Each click costs 1 axe use, and the drop lands one block toward the bot. Planks are made from
+ * held logs; before the bot has a table, one plank is kept for it. Bounded by AXE_CHOP_LIMITS:
+ * a log or plank is chopped only when an axe has its uses and still keeps `reserve` (#274 review 1).
+ * Gives up with a reason when there is no axe, nothing to chop, or a click changes nothing. Every
+ * exit after a placement breaks the block back by hand and picks up the drops (#274 review 3).
+ * ops.place(bot, name) places the item near the bot and returns the block (or null); ops.pickup
+ * picks up the drops around a position; ops.takeBack breaks a placed block. Returns the sticks gained.
+ */
+export async function sticksByAxe(bot, need, run = currentRun(bot), ops = AXE_CHOP_OPS, limits = {}) {
+    const L = { ...AXE_CHOP_LIMITS, ...limits };
+    const O = { ...AXE_CHOP_OPS, ...ops };
+    const start = Date.now();
+    const left = () => L.totalMs - (Date.now() - start);
+    const sticks = () => countItem(bot, 'stick');
+    const first = sticks();
+    if (!allowedTool(bot, AXE_ANY)) {
+        log(bot, 'Not making sticks with an axe: you hold no axe (a crude, flint or stone axe works).');
+        return 0;
+    }
+    // The axe for `uses` more clicks that still keeps L.reserve: the one with the most uses left.
+    const usesLeft = (a) => toolUsesLeft(a) ?? Infinity; // unknown: only the click cap bounds it
+    const axeFor = (uses) => allowedTools(bot, AXE_ANY).filter(a => usesLeft(a) - uses >= L.reserve)
+        .sort((a, b) => usesLeft(b) - usesLeft(a))[0] ?? null;
+    const keepAxe = (what, uses) => {
+        const most = Math.max(...allowedTools(bot, AXE_ANY).map(usesLeft));
+        log(bot, `Keeping the axe for the Crafting Tools: it has ${most} use${most === 1 ? '' : 's'} left, and chopping a ${what} takes ${uses}; stopping.`);
+    };
+    const logNames = oreMemberNames('logWood');
+    const heldLog = () => bot.inventory.items().find(i => logNames.some(n => itemMatches(i, n))) ?? null;
+    const plankNames = oreMemberNames('stickMat');
+    const plankCount = () => bot.inventory.items().filter(i => plankNames.some(n => itemMatches(i, n))).reduce((n, i) => n + i.count, 0);
+    const sparePlank = () => {
+        const kind = Object.entries(sparePlanksByKind(bot)).find(([, n]) => n > 0)?.[0];
+        return kind ? bot.inventory.items().find(i => (inventoryKey(i) ?? i.name) === kind) ?? null : null;
+    };
+    const stopped = () => run.aborted || !!bot.interrupt_code;
+    // Every exit after a placement (#274 review 3): break what is left of the block back by hand
+    // (not with the axe: its uses are kept), then pick the drops up. Bounded; when the command was
+    // stopped or timed out, the block is still broken back, but there is no walk after the drops.
+    const cleanUp = async (pos) => {
+        const rest = bot.blockAt(pos);
+        if (rest && rest.name !== 'air' && rest.boundingBox !== 'empty') {
+            try {
+                const res = await within(O.takeBack(bot, rest), L.cleanupMs, () => { try { bot.stopDigging?.(); } catch { /* best effort */ } });
+                if (res === TIMED_OUT) log(bot, `Could not break the placed ${rest.name} back within ${secsText(L.cleanupMs)}.`);
+            } catch (err) {
+                log(bot, `Could not break the placed ${rest.name} back (${safeError(err)}).`);
+            }
+        }
+        if (stopped()) { log(bot, `Stopped; the drops are left near ${pos}.`); return; }
+        await O.pickup(bot, pos, L);
+    };
+    let clicks = 0;
+    // Place `item`, click it with the axe up to maxClicks times while it changes, then clean up;
+    // true when `gained()` rose.
+    const chop = async (item, gained, maxClicks) => {
+        const name = inventoryKey(item) ?? item.name;
+        const block = await O.place(bot, name);
+        if (!block) { log(bot, `Could not place ${name} to chop it with the axe.`); return false; }
+        const pos = block.position;
+        const before = gained();
+        let ok = true;
+        try {
+            for (let i = 0; i < maxClicks && clicks < L.clicks && left() > 0 && !stopped(); i++) {
+                const now = bot.blockAt(pos);
+                if (!now || now.name === 'air') break;
+                if (!allowedTool(bot, AXE_ANY)) { log(bot, 'Your axe broke; stopping.'); ok = false; break; }
+                const axe = axeFor(1);
+                if (!axe) { keepAxe(now.name, 1); ok = false; break; }
+                await bot.equip(axe, 'hand');
+                await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+                const was = `${now.name}:${now.metadata}`;
+                await bot.activateBlock(now);
+                clicks++;
+                let after = null;
+                for (const until = Date.now() + Math.min(L.settleMs, Math.max(0, left())); ;) {
+                    after = bot.blockAt(pos);
+                    if (!after || `${after.name}:${after.metadata}` !== was || Date.now() >= until) break;
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                if (after && `${after.name}:${after.metadata}` === was) {
+                    log(bot, `Using the axe on the placed ${now.name} changed nothing; stopping.`);
+                    ok = false;
+                    break;
+                }
+            }
+        } finally {
+            await cleanUp(pos);
+        }
+        return ok && !stopped() && gained() > before;
+    };
+    while (sticks() - first < need && clicks < L.clicks && left() > 0 && !stopped()) {
+        if (!allowedTool(bot, AXE_ANY)) { log(bot, 'Your axe broke; stopping.'); break; }
+        const short = need - (sticks() - first);
+        // 2 planks of one kind make 4 sticks with no axe use: craft them in the inventory grid.
+        if (stickCraftsHeld(bot) > 0) {
+            const before = sticks();
+            await craftRecipe(bot, 'stick', Math.min(Math.ceil(short / 4), stickCraftsHeld(bot)));
+            if (sticks() <= before) break;
+            continue;
+        }
+        const plank = sparePlank();
+        // A spare plank: chop it when 2 sticks will do, or when there is no log to pair it with.
+        if (plank && (short <= 2 || !heldLog())) {
+            if (!axeFor(1)) { keepAxe('plank', 1); break; }
+            log(bot, `Chopping a placed ${inventoryKey(plank) ?? plank.name} with the axe for 2 sticks.`);
+            if (!(await chop(plank, sticks, 1))) break;
+            continue;
+        }
+        const wood = heldLog();
+        if (!wood) {
+            log(bot, `No logs${plankCount() ? ' or spare planks (one is kept for the crafting table)' : ' or planks'} to chop with the axe.`);
+            break;
+        }
+        if (!axeFor(2)) { keepAxe('log', 2); break; }
+        log(bot, `Chopping a placed ${inventoryKey(wood) ?? wood.name} with the axe for a plank (2 uses).`);
+        if (!(await chop(wood, plankCount, 2))) break;
+    }
+    if (clicks >= L.clicks && sticks() - first < need) log(bot, `Stopped chopping: ${L.clicks} axe uses in this collect.`);
+    else if (left() <= 0) log(bot, `Stopped chopping: time limit of ${secsText(L.totalMs)} reached.`);
+    return Math.max(0, sticks() - first);
+}
+
+/**
+ * Where to place a block to chop it (#274 review 4): an empty cell 1.5 to 3 blocks from the bot
+ * (in reach, never its own cell), on firm ground (not leaves, a branch, a liquid or a hazard),
+ * with no liquid or hazard within 1 block, and no ledge beside it: each side is solid or has firm
+ * ground under it, so the drop (it lands one block toward the bot) stays up here. Nearest first;
+ * the bot's own level before one up or down. Null when there is none.
+ */
+export function chopSpot(bot, maxDist = 3) {
+    const me = bot.entity.position;
+    const feet = new Vec3(Math.floor(me.x), Math.floor(me.y), Math.floor(me.z));
+    const spots = [];
+    for (let dx = -maxDist; dx <= maxDist; dx++) {
+        for (let dz = -maxDist; dz <= maxDist; dz++) {
+            const h = Math.hypot(dx, dz);
+            if (h < 1.5 || h > maxDist) continue;
+            for (const dy of [0, -1, 1]) {
+                const p = feet.offset(dx, dy, dz);
+                if (chopSpotOk(bot, p)) spots.push({ p, d: h + Math.abs(dy) });
+            }
+        }
+    }
+    spots.sort((a, b) => a.d - b.d);
+    return spots[0]?.p ?? null;
+}
+
+/** chopSpot's test for one cell. */
+export function chopSpotOk(bot, p) {
+    const cell = bot.blockAt(p);
+    if (!cell || cell.boundingBox !== 'empty' || isUnsafeBlock(bot, cell)) return false;
+    if (!isFirmGround(bot, bot.blockAt(p.offset(0, -1, 0)))) return false;
+    for (let x = -1; x <= 1; x++) {
+        for (let y = -1; y <= 1; y++) {
+            for (let z = -1; z <= 1; z++) {
+                const b = bot.blockAt(p.offset(x, y, z));
+                if (!b || isUnsafeBlock(bot, b)) return false;
+            }
+        }
+    }
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const side = bot.blockAt(p.offset(x, 0, z));
+        if (side.boundingBox === 'empty' && !isFirmGround(bot, bot.blockAt(p.offset(x, -1, z)))) return false;
+    }
+    return true;
+}
+
+/** Place an item at a chopSpot; the block, or null. */
+async function placeNear(bot, name) {
+    const pos = chopSpot(bot);
+    if (!pos) {
+        log(bot, 'No safe spot near you to place it on: it needs firm ground 2-3 blocks away (not leaves), no liquid or hazard beside it, and no ledge.');
+        return null;
+    }
+    await placeBlock(bot, name, pos.x, pos.y, pos.z);
+    const b = bot.blockAt(pos);
+    return b && b.name !== 'air' ? b : null;
+}
+
+/** Break a placed block back by hand (#274 review 3): the axe's uses are kept for the Crafting Tools. */
+async function takeBackByHand(bot, block) {
+    if (bot.heldItem && typeof bot.unequip === 'function') await bot.unequip('hand');
+    await bot.dig(block, true);
+}
+
+/** Walk to the items near pos (the drops of an axe click) that lie on firm ground, bounded. */
+async function pickUpNear(bot, pos, L = AXE_CHOP_LIMITS) {
+    const start = Date.now();
+    const tried = new Set();
+    while (Date.now() - start < L.pickupMs && !bot.interrupt_code) {
+        const item = Object.values(bot.entities ?? {}).find(e => e?.name === 'item' && e.position && !tried.has(e.id ?? e)
+            && e.position.distanceTo(pos) <= L.dropRadius && itemOnGround(bot, e));
+        if (!item) break;
+        tried.add(item.id ?? item);
+        const p = item.position;
+        await within(goToGoal(bot, new pf.goals.GoalNear(p.x, p.y, p.z, 1), { canDig: false }),
+            Math.max(0, L.pickupMs - (Date.now() - start)), () => stopWalking(bot));
+        await new Promise(r => setTimeout(r, 250));
+    }
+}
+
+export const AXE_CHOP_OPS = { place: placeNear, pickup: pickUpNear, takeBack: takeBackByHand };
 
 export async function pickupNearbyItems(bot) {
     /**
@@ -1098,8 +1393,12 @@ export async function breakLeafFromGround(bot, block, run = currentRun(bot)) {
  * Bounds for picking up a felled tree's drops (G3 smoke C+D). On this pack a branch break fells
  * the whole tree, which falls in the chop direction and drops its logs where it lands, a few
  * seconds later. The search is around the broken branch, not the bot.
+ * G3 round 5 A rerun: "no drops appeared within 6 s" three times, and later 25 logs lay around
+ * (picked up by item_collecting): a tall spruce lands up to its height away, and late. So the
+ * radius is a tall tree's height, the wait for drops 15 s, and the whole pickup at most 60 s;
+ * pickupMs lets the last pickup reach the inventory before the gain is counted.
  */
-export const FELL_LIMITS = { radius: 12, settleMs: 6000, quietMs: 1000, walkMs: 8000, totalMs: 30_000 };
+export const FELL_LIMITS = { radius: 20, settleMs: 15_000, quietMs: 2000, walkMs: 8000, totalMs: 60_000, pickupMs: 1000 };
 
 /**
  * After a branch break: wait (bounded) for the drops to appear and settle, then walk to each
@@ -1123,8 +1422,10 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
     // (G3 round 5 A: one tree refused 4 times in one collect, 6 in the run).
     const treeBlocks = (b) => [block.position, b, ...canopyOf(bot, b).cells.filter(p => isBranch(bot.blockAt(p)))];
     if (!base) {
+        // Every branch around it, not just this block (round 5 A rerun: a felled tree's trunk the
+        // bot still saw, 4 blocks, "its trunk is not in sight" 4 times in each of 2 collects).
         log(bot, `Not cutting the tree at ${at(block.position)}: its trunk is not in sight.`);
-        return { cut: false, skip: [block.position] };
+        return { cut: false, skip: [block.position, ...branchesNear(bot, block.position)] };
     }
     // A tree already refused in this collect: skipped without a word (refused: base keys).
     if (refused?.has(at(base))) return { cut: false, skip: treeBlocks(base) };
@@ -1163,9 +1464,16 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
     const face = sideFace(base, spot);
     // Round 5 must show the relaxed guard is safe (#268 review 1): say when the bot cut from under
     // the tree's leaves, in the log and in what the death report reads.
+    // Any leaves, vanilla too (#270 review 3: isTreeLeaves matches Dynamic Trees leaves only).
     let underLeaves = false;
-    for (let y = spot.y + 2; y <= base.y + FELL_PLAN.canopyHeight && !underLeaves; y++) underLeaves = isTreeLeaves(bot.blockAt(new Vec3(spot.x, y, spot.z)));
+    for (let y = spot.y + 2; y <= base.y + FELL_PLAN.canopyHeight && !underLeaves; y++) {
+        const b = bot.blockAt(new Vec3(spot.x, y, spot.z));
+        underLeaves = isTreeLeaves(b) || isLeafBlock(b);
+    }
     await bot.lookAt(base.offset(0.5 + face.x * 0.5, 0.5, 0.5 + face.z * 0.5));
+    // Its blocks as the bot sees them now: after the fall they are skipped for this collect, so a
+    // trunk the bot still sees is never cut again (round 5 A rerun: one tree cut 4 times).
+    const standing = treeBlocks(base);
     await bot.dig(trunk, true, face);
     bot.rotnLastFell = { at: Date.now(), pos: base.clone ? base.clone() : base, underLeaves }; // the death report reads it
     log(bot, `Cut the tree at ${at(base)} from ${at(spot)}, away from its canopy${underLeaves ? ' (from under its leaves)' : ''}; stepping back.`);
@@ -1182,9 +1490,9 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
         else if (seen || Date.now() - start >= TREE_FALL.appearMs) break;
         await sleep(200);
     }
-    if (run.aborted) return { cut: true, skip: [] };
+    if (run.aborted) return { cut: true, skip: standing };
     await collectFelledDrops(bot, base, {}, itemsBefore);
-    return { cut: true, skip: [] };
+    return { cut: true, skip: standing };
 }
 
 async function collectFelledDrops(bot, center, limits = {}, baseline = null) {
@@ -1228,6 +1536,8 @@ async function collectFelledDrops(bot, center, limits = {}, baseline = null) {
         } catch { /* a walk that failed: try the next drop */ }
         await sleep(Math.min(250, left()));
     }
+    // The last pickup reaches the inventory a moment after the walk: count after it (round 5 A rerun).
+    if (walked > 0) await sleep(Math.min(L.pickupMs ?? 0, Math.max(0, left())));
     const leftBehind = dropsNear().length;
     log(bot, `Felled the tree at ${where}: ${seen} drops within ${L.radius} blocks (${Math.max(0, seen - before)} new), ${leftBehind} left behind`
         + `${leftBehind && left() <= 0 ? ` (the ${secsText(L.totalMs)} limit)` : ''}.`);
@@ -1938,6 +2248,59 @@ export async function goToPosition(bot, x, y, z, min_distance=2) {
     }
 }
 
+/** standOnBlock: one more walk when the first ends within this many blocks (off by one). */
+export const STAND_ON_RETRY_WITHIN = 2;
+
+/**
+ * Stand on top of the block at x, y, z (the block's own coordinates) and check it (G3 round 5 C,
+ * the lead: the bot ended beside the gold block, said it stood on it and called !taskDone). It walks
+ * to x, y+1, z with range 0, then checks that the block under its feet is that block (and named
+ * blockName, when given). Off by one: one more walk. Returns true only when the check passed.
+ * @param {MinecraftBot} bot
+ * @param {number} x, y, z the block to stand on.
+ * @param {string} blockName the block it must be, or null for any solid block.
+ * @returns {Promise<boolean>}
+ * @example
+ * await skills.standOnBlock(bot, -42, 68, -50, "gold_block");
+ */
+export async function standOnBlock(bot, x, y, z, blockName = null) {
+    const run = currentRun(bot);
+    const target = { x: Math.floor(x), y: Math.floor(y), z: Math.floor(z), name: blockName || null };
+    const what = describeTarget(target);
+    const block = bot.blockAt(new Vec3(target.x, target.y, target.z));
+    if (block && target.name && !sameBlock(block.name, target.name)) {
+        log(bot, `The block at ${target.x} ${target.y} ${target.z} is ${block.name}, not ${target.name}; not standing on it.`);
+        return false;
+    }
+    if (block && block.boundingBox !== 'block') {
+        log(bot, `There is nothing to stand on at ${target.x} ${target.y} ${target.z}: the block there is ${block.name}.`);
+        return false;
+    }
+    let check = null;
+    for (let walk = 1; walk <= 2; walk++) {
+        await goToPosition(bot, target.x, target.y + 1, target.z, 0);
+        if (run.aborted) return false; // its command already reported failure
+        check = standCheck(bot, target);
+        if (check.ok) {
+            log(bot, `You are standing on ${what} (checked: it is the block under your feet).`);
+            return true;
+        }
+        const p = bot.entity.position;
+        const off = Math.hypot(p.x - (target.x + 0.5), p.z - (target.z + 0.5));
+        if (walk === 1 && off <= STAND_ON_RETRY_WITHIN) log(bot, `Not on it yet: ${check.why}. Trying once more.`);
+        else break;
+    }
+    log(bot, `You are NOT standing on ${what}: ${check.why}. Do not say you are on it, and do not report a task done for it.`);
+    return false;
+}
+
+/** A search for wood: a log or a tree's branch (or what a felled tree gives, by rotn-data). */
+function isWoodSearch(blockType) {
+    const name = parseName(blockType)?.name ?? blockType;
+    return isBranch({ name }) || oreMemberNames('logWood').some(n => (parseName(n)?.name ?? n) === name)
+        || worldSources(blockType).some(s => s.id === 'fell-tree');
+}
+
 export async function goToNearestBlock(bot, blockType,  min_distance=2, range=64) {
     /**
      * Navigate to the nearest block of the given type.
@@ -1962,6 +2325,18 @@ export async function goToNearestBlock(bot, blockType,  min_distance=2, range=64
             blocks = world.getNearestBlocksWhere(bot, block => block.name === blockType, range, 1);
         }
         block = blocks[0];
+    }
+    else if (isWoodSearch(blockType)) {
+        // Wood: a tree on the surface, never a log underground (G3 round 5 A rerun: a log at
+        // y 45 under the surface, and the walk ran out its 180 s). On this pack trees are
+        // Dynamic Trees branches, so those are searched too (rotn-data fell-tree).
+        const names = [blockType, ...worldSources(blockType).filter(s => s.id === 'fell-tree').flatMap(s => s.blocks)];
+        block = world.getNearestBlocksWhere(bot, blockMatcher(names), range, 64)
+            .find(b => b && !world.isUnderground(bot, b.position)) ?? null;
+        if (!block) {
+            log(bot, `Could not find any ${blockType} on the surface in ${range} blocks (logs underground are left alone).`);
+            return false;
+        }
     }
     else {
         block = world.getNearestBlock(bot, blockType, range);

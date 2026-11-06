@@ -194,6 +194,26 @@ export function allowedTool(bot, tool) {
     return best;
 }
 
+/** Every held item that is the rule's tool (allowedTool gives only the best one). */
+export function allowedTools(bot, tool) {
+    if (!tool) return [];
+    return bot.inventory.items().filter(item => {
+        const level = getItem(registryName(item.name))?.toolClasses?.[tool.type];
+        return typeof level === 'number' && level >= 0 && levelOk(tool, level);
+    });
+}
+
+/**
+ * Uses a tool has left by its damage (1.12: the item's metadata) and rotn-data's maxDamage (the
+ * crude axe has 8): maxDamage - damage, the uses after which it is still whole; null when unknown.
+ */
+export function toolUsesLeft(item) {
+    const max = getItem(registryName(item?.name ?? ''))?.maxDamage;
+    if (!(max > 0)) return null;
+    const used = item.durabilityUsed ?? item.metadata ?? 0;
+    return Math.max(0, max - used);
+}
+
 /** "a pickaxe below Sturdy (level 0)" style text for a rule's tool, for the bot's log. */
 export function describeTool(tool) {
     if (!tool) return 'nothing';

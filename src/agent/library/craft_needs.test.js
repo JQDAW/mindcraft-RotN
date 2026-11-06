@@ -487,3 +487,11 @@ test('#202 nit: a crafting table whose block update comes late is found on a sec
     assert.ok(table.position.equals(free));
     assert.doesNotMatch(bot.output, /Could not place a crafting table to craft/);
 });
+
+test('round 5 A rerun: River Cane and bamboo fill the stickWood slots of the crude axe and the Crafting Tools (rotn-data)', () => {
+    const cane = stack('biomesoplenty:plant_1', 5, 2);
+    const axe = craftNeeds(invBot([stack('pyrotech:rock', 0, 1), cane]), 'pyrotech:crude_axe');
+    assert.equal(axe?.ready, true, JSON.stringify(axe));
+    const tools = craftNeeds(invBot([stack('pyrotech:crude_axe', 0, 1), stack('pyrotech:rock', 0, 1), stack('biomesoplenty:bamboo', 0, 1)]), 'contenttweaker:crafting_tools');
+    assert.equal(tools?.ready, true, JSON.stringify(tools));
+});

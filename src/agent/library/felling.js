@@ -46,6 +46,20 @@ export function treeBase(bot, pos, plan = FELL_PLAN) {
     return best?.p ?? null;
 }
 
+/** The branch blocks within the canopy radius of pos and canopyHeight above or below it. */
+export function branchesNear(bot, pos, plan = FELL_PLAN) {
+    const out = [];
+    const r = Math.ceil(plan.canopyRadius);
+    for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
+        if (Math.hypot(dx, dz) > plan.canopyRadius) continue;
+        for (let dy = -plan.canopyHeight; dy <= plan.canopyHeight; dy++) {
+            const p = new Vec3(pos.x + dx, pos.y + dy, pos.z + dz);
+            if (isBranch(bot.blockAt(p))) out.push(p);
+        }
+    }
+    return out;
+}
+
 /** The canopy above the trunk: its cells, and its lean (the mean horizontal offset from the trunk). */
 export function canopyOf(bot, base, plan = FELL_PLAN) {
     const cells = [];

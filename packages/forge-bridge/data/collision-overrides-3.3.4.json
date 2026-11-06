@@ -1,5 +1,5 @@
 {
- "description": "What forge-bridge src/collision.js adds to rotn-data's dumped per-state collision for modded blocks: walk-through is opt-in (only the states listed in walkThrough; any other state without a box is a solid full cube), liquid marks modded fluids, hazard/hazardByMeta mark trap, fire, portal, web and lava blocks, shapes names a reviewed box the dump does not record. Built by packages/forge-bridge/tools/build-collision-overrides.mjs from the pinned server pack zip (rules in its header); no mod code run.",
+ "description": "What forge-bridge src/collision.js adds to rotn-data's per-state playerCollision for modded blocks: walk-through is opt-in (only the states listed in walkThrough; any other state a player has no box in is a solid full cube), liquid marks modded fluids, hazard/hazardByMeta mark trap, fire, portal, web and lava blocks; checks records what the tool verified in the data. Built by packages/forge-bridge/tools/build-collision-overrides.mjs from the pinned server pack zip (rules in its header); no mod code run.",
  "pack": {
   "version": "3.3.4",
   "sha256": "90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205"
@@ -7,17 +7,27 @@
  "counts": {
   "moddedBlocks": 4642,
   "withDumpStates": 4633,
-  "statesWithoutBox": 5986,
-  "walkThroughStates": 1422,
-  "solidStatesWithoutBox": 4564,
+  "statesWithoutBox": 6419,
+  "walkThroughStates": 2204,
+  "solidStatesWithoutBox": 4215,
+  "dynamicLeavesChecked": 26,
+  "utilityWalkThrough": {
+   "lever": 1,
+   "torch": 25,
+   "button": 41,
+   "sign": 2,
+   "rail": 4
+  },
+  "neverWalkThrough": {
+   "net.minecraft.block.BlockBasePressurePlate": 24
+  },
   "blocks": {
-   "walkThrough": 326,
+   "walkThrough": 399,
    "liquid": 162,
-   "hazard": 233,
-   "dynamicLeaves": 26
+   "hazard": 233
   }
  },
- "shapes": {
+ "checks": {
   "dynamicLeaves": {
    "shapes": [
     [
@@ -35,10 +45,19 @@
  "reviewed": {
   "biomesoplenty.common.block.BlockBOPPlant": "BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar: BlockBOPPlant.onEntityCollidedWithBlock (func_180634_a) switches on the variant (BlockBOPPlant$2): POISONIVY adds poison (MobEffects.field_76436_u, bytecode 116-124), THORN and TINYCACTUS deal cactus damage (DamageSource.field_76367_g, 183-187); every other variant does nothing",
   "biomesoplenty.common.block.BlockBOPFlower": "BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar: BlockBOPFlower.onEntityCollidedWithBlock (func_180634_a) switches on the variant (BlockBOPFlower$1): DEATHBLOOM adds wither (MobEffects.field_82731_v, bytecode 65-74), BURNING_BLOSSOM sets the entity on fire (func_70015_d, 91); every other variant does nothing",
-  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRock": "rock pile: Pyrotech rock piles (pyrotech:rock, the first G3 resource); no box in the dump, no contact or collision-box override",
-  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockGrass": "rock pile: Pyrotech grass-covered rock piles; no box in the dump, no contact or collision-box override",
-  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockNetherrack": "rock pile: Pyrotech netherrack rock piles; no box in the dump, no contact or collision-box override",
-  "trinsdar.pyrotech_compat.block.rocks.BlockRockBase": "rock pile: Pyrotech Compat rock piles (igneous, metamorphic, sedimentary, their sands, netherrack); no box in the dump, no contact or collision-box override"
+  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRock": "rock pile: Pyrotech rock piles (pyrotech:rock, the first G3 resource); no player box in the dump, no contact or collision-box override",
+  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockGrass": "rock pile: Pyrotech grass-covered rock piles; no player box in the dump, no contact or collision-box override",
+  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockNetherrack": "rock pile: Pyrotech netherrack rock piles; no player box in the dump, no contact or collision-box override",
+  "trinsdar.pyrotech_compat.block.rocks.BlockRockBase": "rock pile: Pyrotech Compat rock piles (igneous, metamorphic, sedimentary, their sands, netherrack); no player box in the dump, no contact or collision-box override",
+  "net.minecraft.block.BlockRailBase": "rail (lead decision after #279): walk-through where no state has a player box and no class in the chain declares a contact or collision-box method",
+  "net.minecraft.block.BlockSign": "sign (lead decision after #279): walk-through where no state has a player box and no class in the chain declares a contact or collision-box method",
+  "net.minecraft.block.BlockTorch": "torch (lead decision after #279): walk-through where no state has a player box and no class in the chain declares a contact or collision-box method",
+  "net.minecraft.block.BlockButton": "harmless vanilla contact method: BlockButton (apd).onEntityCollidedWithBlock (func_180634_a): returns unless the button is wooden (field_150047_a) and unpowered, then checkPressed (func_185616_e) looks only for EntityArrow (aeh, bytecode 1-15): an arrow presses a wooden button, a player does not",
+  "net.minecraft.block.BlockLever": "lever (lead decision after #279): walk-through where no state has a player box and no class in the chain declares a contact or collision-box method",
+  "net.minecraft.block.BlockBasePressurePlate": "never walk-through (lead decision after #279): triggers mechanisms and traps",
+  "net.minecraft.block.BlockTripWire": "never walk-through (lead decision after #279): triggers mechanisms and traps",
+  "net.minecraft.block.BlockTripWireHook": "never walk-through (lead decision after #279): triggers mechanisms and traps",
+  "net.minecraft.block.BlockRailDetector": "harmless vanilla contact method: BlockRailDetector (apv).onEntityCollidedWithBlock (func_180634_a): returns if powered, else updatePoweredState (func_176570_e) looks only for EntityMinecart (afe, bytecode 23-36): a minecart powers it, a player does not"
  },
  "blocks": {
   "adpother:polluted_water": {
@@ -48,11 +67,25 @@
     "fluid-class"
    ]
   },
+  "aether_legacy:aether_lever": {
+   "class": "com.gildedgames.the_aether.addon.blocks.BlockAetherLever",
+   "walkThrough": "all",
+   "rules": [
+    "lever net.minecraft.block.BlockLever"
+   ]
+  },
   "aether_legacy:aether_portal": {
    "class": "com.gildedgames.the_aether.blocks.portal.BlockAetherPortal",
    "hazard": "portal",
    "rules": [
     "hazard-base net.minecraft.block.BlockPortal"
+   ]
+  },
+  "aether_legacy:ambrosium_torch": {
+   "class": "com.gildedgames.the_aether.blocks.decorative.BlockAmbrosiumTorch",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
    ]
   },
   "aether_legacy:berry_bush_stem": {
@@ -69,6 +102,13 @@
     "plant"
    ]
   },
+  "aether_legacy:holystone_button": {
+   "class": "com.gildedgames.the_aether.addon.blocks.BlockButtonHolystone",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
   "aether_legacy:purple_flower": {
    "class": "com.gildedgames.the_aether.blocks.natural.BlockAetherFlower",
    "walkThrough": "all",
@@ -76,11 +116,32 @@
     "plant"
    ]
   },
+  "aether_legacy:skyroot_button": {
+   "class": "com.gildedgames.the_aether.addon.blocks.BlockButtonSkyroot",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
   "aether_legacy:skyroot_sapling": {
    "class": "com.gildedgames.the_aether.blocks.BlockAetherSapling",
    "walkThrough": "all",
    "rules": [
     "plant"
+   ]
+  },
+  "aether_legacy:skyroot_standing_sign": {
+   "class": "com.gildedgames.the_aether.addon.blocks.BlockSkyrootStandingSign",
+   "walkThrough": "all",
+   "rules": [
+    "sign net.minecraft.block.BlockSign"
+   ]
+  },
+  "aether_legacy:skyroot_wall_sign": {
+   "class": "com.gildedgames.the_aether.addon.blocks.BlockSkyrootWallSign",
+   "walkThrough": "all",
+   "rules": [
+    "sign net.minecraft.block.BlockSign"
    ]
   },
   "aether_legacy:white_flower": {
@@ -300,11 +361,25 @@
     "plant"
    ]
   },
+  "betternether:bone_button": {
+   "class": "paulevs.betternether.blocks.BlockWoodenButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
   "betternether:bone_mushroom": {
    "class": "paulevs.betternether.blocks.BlockBoneMushroom",
    "walkThrough": "all",
    "rules": [
     "plant"
+   ]
+  },
+  "betternether:cincinnasite_button": {
+   "class": "paulevs.betternether.blocks.BlockWoodenButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
    ]
   },
   "betternether:egg_plant": {
@@ -391,6 +466,20 @@
     "plant"
    ]
   },
+  "betternether:reeds_button": {
+   "class": "paulevs.betternether.blocks.BlockWoodenButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "betternether:stalagnate_planks_button": {
+   "class": "paulevs.betternether.blocks.BlockWoodenButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
   "betternether:stalagnate_seed": {
    "class": "paulevs.betternether.blocks.BlockStalagnateSeed",
    "walkThrough": "all",
@@ -454,6 +543,13 @@
     "plant"
    ]
   },
+  "betterwithaddons:rail_rusted": {
+   "class": "betterwithaddons.block.BlockRustyRail",
+   "walkThrough": "all",
+   "rules": [
+    "rail net.minecraft.block.BlockRailBase"
+   ]
+  },
   "betterwithaddons:sapling_luretree": {
    "class": "betterwithaddons.block.BlockLureTreeSapling",
    "walkThrough": "all",
@@ -494,6 +590,27 @@
    "walkThrough": "all",
    "rules": [
     "plant"
+   ]
+  },
+  "betterwithmods:booster": {
+   "class": "betterwithmods.common.blocks.mechanical.BlockGearBoostedRail",
+   "walkThrough": "all",
+   "rules": [
+    "rail net.minecraft.block.BlockRailBase"
+   ]
+  },
+  "betterwithmods:detector_rail_steel": {
+   "class": "betterwithmods.common.blocks.BlockRailDetectorBase",
+   "walkThrough": "all",
+   "rules": [
+    "rail net.minecraft.block.BlockRailBase"
+   ]
+  },
+  "betterwithmods:detector_rail_stone": {
+   "class": "betterwithmods.common.blocks.BlockRailDetectorBase",
+   "walkThrough": "all",
+   "rules": [
+    "rail net.minecraft.block.BlockRailBase"
    ]
   },
   "betterwithmods:hemp": {
@@ -1043,6 +1160,20 @@
     "fluid-class"
    ]
   },
+  "cyclicmagic:button_large": {
+   "class": "com.lothrazar.cyclicmagic.block.buttonflat.BlockButtonLarge",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "cyclicmagic:doorbell_simple": {
+   "class": "com.lothrazar.cyclicmagic.block.buttondoorbell.BlockDoorbell",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
   "defiledlands:blastem": {
    "class": "lykrast.defiledlands.common.block.BlockBlastem",
    "hazard": "trap",
@@ -1321,104 +1452,6 @@
    "hazard": "trap",
    "rules": [
     "hazard-contact com.ferreusveritas.dynamictrees.blocks.BlockBranchCactus (attackEntityFrom)"
-   ]
-  },
-  "dynamictrees:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictrees:leaves1": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves_flowering": {
-   "class": "dynamictreesbop.blocks.BlockDynamicLeavesFlowering",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves_flowering_peach": {
-   "class": "dynamictreesbop.blocks.BlockDynamicLeavesFlowering",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves_palm": {
-   "class": "dynamictreesbop.blocks.BlockDynamicLeavesPalm",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves1": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves2": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves3": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves4": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves5": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves6": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves7": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesdefiledlands:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
    ]
   },
   "dynamictreesphc:fruitalmond": {
@@ -1717,27 +1750,16 @@
   },
   "dynamictreesphc:leaves_dragonfruit": {
    "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm",
-   "shapes": "dynamicLeaves",
    "hazard": "trap",
    "rules": [
-    "dynamic-leaves",
     "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm (attackEntityFrom)"
    ]
   },
   "dynamictreesphc:leaves_palm": {
    "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm",
-   "shapes": "dynamicLeaves",
    "hazard": "trap",
    "rules": [
-    "dynamic-leaves",
     "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm (attackEntityFrom)"
-   ]
-  },
-  "dynamictreesphc:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
    ]
   },
   "dynamictreesphc:passionfruit_vine": {
@@ -1773,62 +1795,6 @@
    "walkThrough": "all",
    "rules": [
     "plant"
-   ]
-  },
-  "dynamictreesquark:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreestheaether:leaves_crystal": {
-   "class": "maxhyper.dynamictreestheaether.blocks.BlockDynamicLeavesCrystal",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreestheaether:leaves0": {
-   "class": "maxhyper.dynamictreestheaether.blocks.BlockDynamicLeavesAether",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves_darkwood": {
-   "class": "maxhyper.dynamictreesttf.trees.TreeDarkwood$1",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves_of_transformation": {
-   "class": "maxhyper.dynamictreesttf.trees.TreeMagicTransformation$1",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves1": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves2": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
    ]
   },
   "endreborn:block_end_forge": {
@@ -1964,11 +1930,46 @@
     "plant"
    ]
   },
+  "futuremc:soul_fire_torch": {
+   "class": "thedarkcolour.futuremc.block.BlockSoulFireTorch",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
   "futuremc:wither_rose": {
    "class": "thedarkcolour.futuremc.block.villagepillage.WitherRoseBlock",
    "hazard": "trap",
    "rules": [
     "hazard-contact thedarkcolour.futuremc.block.villagepillage.WitherRoseBlock (addPotionEffect)"
+   ]
+  },
+  "glaretorch:blockglaretorch": {
+   "class": "glaretorch.BlockGlareTorch",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "glaretorch:blockglaretorchlarge": {
+   "class": "glaretorch.BlockGlareTorch",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "glaretorch:blockglaretorchlarge2": {
+   "class": "glaretorch.BlockGlareTorch",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "glaretorch:blockglaretorchsmall": {
+   "class": "glaretorch.BlockGlareTorch",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
    ]
   },
   "growthcraft_apples:apple_crop": {
@@ -2739,6 +2740,118 @@
    "walkThrough": "all",
    "rules": [
     "plant"
+   ]
+  },
+  "harvestcraft:candledeco1": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco10": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco11": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco12": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco13": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco14": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco15": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco16": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco2": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco3": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco4": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco5": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco6": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco7": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco8": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
+  "harvestcraft:candledeco9": {
+   "class": "com.pam.harvestcraft.blocks.blocks.BlockPamCandle",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
    ]
   },
   "harvestcraft:cashew_sapling": {
@@ -3952,6 +4065,13 @@
     "plant"
    ]
   },
+  "iceandfire:burnt_torch": {
+   "class": "com.github.alexthe666.iceandfire.block.BlockBurntTorch",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
+   ]
+  },
   "iceandfire:dragon_ice_spikes": {
    "class": "com.github.alexthe666.iceandfire.block.BlockIceSpikes",
    "hazard": "trap",
@@ -3964,6 +4084,13 @@
    "hazard": "portal",
    "rules": [
     "hazard-material portal"
+   ]
+  },
+  "iceandfire:dread_torch": {
+   "class": "com.github.alexthe666.iceandfire.block.BlockDreadTorch",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
    ]
   },
   "iceandfire:fire_lily": {
@@ -3992,6 +4119,13 @@
    "walkThrough": "all",
    "rules": [
     "plant"
+   ]
+  },
+  "inspirations:torch_lever": {
+   "class": "knightminer.inspirations.utility.block.BlockTorchLever",
+   "walkThrough": "all",
+   "rules": [
+    "torch net.minecraft.block.BlockTorch"
    ]
   },
   "minetraps:barbed_wire": {
@@ -4446,11 +4580,53 @@
     "hazard-contact com.codetaylor.mc.pyrotech.modules.tech.bloomery.block.BlockBloomery (attackEntityFrom, setFire)"
    ]
   },
+  "quark:acacia_button": {
+   "class": "vazkii.quark.decoration.block.BlockCustomButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "quark:birch_button": {
+   "class": "vazkii.quark.decoration.block.BlockCustomButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "quark:dark_oak_button": {
+   "class": "vazkii.quark.decoration.block.BlockCustomButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
   "quark:glowshroom": {
    "class": "vazkii.quark.world.block.BlockGlowshroom",
    "walkThrough": "all",
    "rules": [
     "plant"
+   ]
+  },
+  "quark:gold_button": {
+   "class": "vazkii.quark.automation.block.BlockMetalButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "quark:iron_button": {
+   "class": "vazkii.quark.automation.block.BlockMetalButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "quark:jungle_button": {
+   "class": "vazkii.quark.decoration.block.BlockCustomButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
    ]
   },
   "quark:roots": {
@@ -4479,6 +4655,13 @@
    "walkThrough": "all",
    "rules": [
     "plant"
+   ]
+  },
+  "quark:spruce_button": {
+   "class": "vazkii.quark.decoration.block.BlockCustomButton",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
    ]
   },
   "quark:variant_sapling": {
@@ -4894,13 +5077,6 @@
     "fluid-class"
    ]
   },
-  "rustic:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
   "rustic:marsh_mallow": {
    "class": "rustic.common.blocks.crops.Herbs$10",
    "walkThrough": "all",
@@ -5024,6 +5200,20 @@
     "hazard-contact twilightforest.block.BlockTFBurntThorns (attackEntityFrom)"
    ]
   },
+  "twilightforest:canopy_button": {
+   "class": "twilightforest.block.RegisterBlockEvent$5",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "twilightforest:dark_button": {
+   "class": "twilightforest.block.RegisterBlockEvent$5",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
   "twilightforest:fiery_essence": {
    "class": "twilightforest.block.BlockTFFluid",
    "liquid": true,
@@ -5045,6 +5235,20 @@
    "hazard": "trap",
    "rules": [
     "hazard-contact twilightforest.block.BlockTFKnightmetalBlock (attackEntityFrom)"
+   ]
+  },
+  "twilightforest:mangrove_button": {
+   "class": "twilightforest.block.RegisterBlockEvent$5",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "twilightforest:mine_button": {
+   "class": "twilightforest.block.RegisterBlockEvent$5",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
    ]
   },
   "twilightforest:molten_fierymetal": {
@@ -5072,6 +5276,13 @@
     "hazard-contact twilightforest.block.BlockTFSlider (attackEntityFrom)"
    ]
   },
+  "twilightforest:sort_button": {
+   "class": "twilightforest.block.RegisterBlockEvent$5",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
   "twilightforest:thorn_rose": {
    "class": "twilightforest.block.BlockTFThornRose",
    "walkThrough": "all",
@@ -5086,6 +5297,20 @@
     "hazard-contact twilightforest.block.BlockTFThorns (attackEntityFrom)"
    ]
   },
+  "twilightforest:time_button": {
+   "class": "twilightforest.block.RegisterBlockEvent$5",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "twilightforest:trans_button": {
+   "class": "twilightforest.block.RegisterBlockEvent$5",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
   "twilightforest:trollber": {
    "class": "twilightforest.block.BlockTFRipeTorchCluster",
    "walkThrough": "all",
@@ -5098,6 +5323,13 @@
    "walkThrough": "all",
    "rules": [
     "plant"
+   ]
+  },
+  "twilightforest:twilight_oak_button": {
+   "class": "twilightforest.block.RegisterBlockEvent$5",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
    ]
   },
   "twilightforest:twilight_portal": {
@@ -5119,6 +5351,132 @@
    "walkThrough": "all",
    "rules": [
     "plant"
+   ]
+  },
+  "undergroundbiomes:igneous_stone_button_down": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonIgneous",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:igneous_stone_button_east": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonIgneous",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:igneous_stone_button_north": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonIgneous",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:igneous_stone_button_south": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonIgneous",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:igneous_stone_button_up": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonIgneous",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:igneous_stone_button_west": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonIgneous",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:metamorphic_stone_button_down": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonMetamorphic",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:metamorphic_stone_button_east": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonMetamorphic",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:metamorphic_stone_button_north": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonMetamorphic",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:metamorphic_stone_button_south": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonMetamorphic",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:metamorphic_stone_button_up": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonMetamorphic",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:metamorphic_stone_button_west": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonMetamorphic",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:sedimentary_stone_button_down": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonSedimentary",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:sedimentary_stone_button_east": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonSedimentary",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:sedimentary_stone_button_north": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonSedimentary",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:sedimentary_stone_button_south": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonSedimentary",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:sedimentary_stone_button_up": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonSedimentary",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
+   ]
+  },
+  "undergroundbiomes:sedimentary_stone_button_west": {
+   "class": "exterminatorjeff.undergroundbiomes.common.block.button.UBButtonSedimentary",
+   "walkThrough": "all",
+   "rules": [
+    "button net.minecraft.block.BlockButton"
    ]
   }
  }

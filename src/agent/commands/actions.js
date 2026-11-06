@@ -9,6 +9,20 @@ import { nightPhase } from '../library/night.js';
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
 import { threatFor, hurtBy } from '../library/threats.js';
+import { parseStandOn } from '../library/stand_on.js';
+
+/**
+ * The block the running task (or else the self-prompt goal) says to stand on, when a walk to
+ * x, y, z means that block: its own position or the one above it (G3 round 5 C: the model walked to
+ * the gold block's position with range 1 and ended beside it). Else null.
+ */
+export function standOnTarget(agent, x, y, z) {
+    const task = agent.tasks?.tasks?.find(t => t.status === 'active');
+    const t = parseStandOn(task?.text) ?? parseStandOn(agent.self_prompter?.prompt);
+    if (!t) return null;
+    const [fx, fy, fz] = [x, y, z].map(Math.floor);
+    return fx === t.x && fz === t.z && (fy === t.y || fy === t.y + 1) ? t : null;
+}
 
 /** 'day', 'dusk' or 'night' by the night routine's clock (else the server time), or null. */
 function phaseNow(agent, now = Date.now()) {
@@ -35,7 +49,7 @@ function deathSpotOk(agent, x, y, z) {
  * Commands not listed keep their own timeout; !followPlayer and !stay run until stopped.
  */
 export const ACTION_LIMITS_MIN = {
-    goToPlayer: 5, goToCoordinates: 5, searchForBlock: 5, searchForEntity: 5, moveAway: 5,
+    goToPlayer: 5, goToCoordinates: 5, standOnBlock: 5, searchForBlock: 5, searchForEntity: 5, moveAway: 5,
     goToRememberedPlace: 5, goToBed: 5, goToSurface: 5, useOn: 2,
     collectBlocks: 10, attack: 3, attackPlayer: 3, buildShelter: 5, digDown: 5,
     craftRecipe: 4, smeltItem: 12, clearFurnace: 2, putInChest: 2, takeFromChest: 2, viewChest: 1,
@@ -249,7 +263,27 @@ export const actionsList = [
         },
         perform: runAsAction(async (agent, x, y, z, closeness) => {
             if (!deathSpotOk(agent, x, y, z)) return;
+            const stand = standOnTarget(agent, x, y, z);
+            if (stand) {
+                skills.log(agent.bot, `The task says to stand on the ${stand.name ?? 'block'} at ${stand.x} ${stand.y} ${stand.z}, so standing on top of it and checking.`);
+                await skills.standOnBlock(agent.bot, stand.x, stand.y, stand.z, stand.name);
+                return;
+            }
             await skills.goToPosition(agent.bot, x, y, z, closeness);
+        })
+    },
+    {
+        name: '!standOnBlock',
+        description: 'Stand on top of the block at x, y, z (give the coordinates of the block itself) and check that it is the block under your feet. Use it whenever you must stand on a block; say you are on it only after it says so.',
+        params: {
+            'type': {type: 'BlockName', description: 'The block to stand on, e.g. gold_block.'},
+            'x': {type: 'float', description: 'The x coordinate of the block.', domain: [-Infinity, Infinity]},
+            'y': {type: 'float', description: 'The y coordinate of the block.', domain: [-64, 320]},
+            'z': {type: 'float', description: 'The z coordinate of the block.', domain: [-Infinity, Infinity]},
+        },
+        perform: runAsAction(async (agent, type, x, y, z) => {
+            if (!deathSpotOk(agent, x, y + 1, z)) return;
+            await skills.standOnBlock(agent.bot, x, y, z, type);
         })
     },
     {

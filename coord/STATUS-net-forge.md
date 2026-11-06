@@ -1,12 +1,42 @@
 # Status: net-forge
 
-Updated: 2026-11-06T09:18Z
+Updated: 2026-11-06T16:56Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #259 follow-up: whole-block vs partial hazards (#263; 2026-11-06T09:18Z review fixes pushed)
+## Walk-through allowlist and #279 nits; PR #281 open, 2026-11-06T16:56Z
 
-- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. The lead's 3 fixes are pushed and waiting for re-review.
+- **Branch:** `agent/net-forge/walk-allowlist`, from develop `cbeb845` (#279 merged).
+- **Allowlist (lead decision after #279):** vanilla `BlockRailBase`, `BlockSign`, `BlockTorch`, `BlockButton` and `BlockLever` subclasses become walk-through when every state has no player box and nothing in the class chain declares a contact or collision-box method.
+  - `BlockBasePressurePlate`, `BlockTripWire` and `BlockTripWireHook` are never walk-through. 24 modded pressure plates are recorded as excluded; the pack has no modded tripwire.
+  - **Reviewed vanilla contact methods** (javap on the pinned server jar, names through the SRG table):
+    - `BlockButton`'s contact method looks only for `EntityArrow`.
+    - `BlockRailDetector`'s looks only for `EntityMinecart`.
+    - Neither counts as contact, so the 41 buttons and the 2 detector rails qualify. A mod class's own contact method still excludes a block.
+  - **Result:** 73 more walk-through blocks: 41 buttons, 25 torches and candles, 4 rails, 2 signs and 1 lever (399 in all). No earlier entry changed.
+  - The Pyrotech torches stay solid: they are `'trap'` hazards because they set entities on fire.
+- **#279 nits:**
+  1. `collision.js` header: tile-entity-dependent shapes (Malisis doors, wells, chutes) are read at an empty cell, and `varies` false is not proof that a shape is fixed. It also describes boxes that reach into the next cell.
+  2. **Boxes reaching into the next cell:** a thick trunk `[-1,0,-1,2,1,2]` is surrounded by `dynamictrees:trunkshell` blocks. Their player box in the data was a point (`[0,0,0,0,0,0]`), so the pathfinder saw a floor at the bottom of the cell.
+     - New rule: a state whose every box has no volume is treated like a neighbour-dependent one (a full cube). That covers trunk shells and Rats tubes; a plane beside a real box is kept.
+     - Test: the pathfinder keeps out of the shells and stands on them at the trunk's top, and physics lands there too. It also pins the known limit: an overhang into a plain air cell (a bridge deck) is not seen.
+  3. The `fixedMini` comment now says it covers the no-playerCollision fallback and the generic `shapes` override, which the 3.3.4 path no longer uses.
+  4. The cactus branch arms went to rotn-data: #280 makes them `varies`, which this code already handles.
+- **Tests:**
+  - `collision.test.js` 14/14.
+  - `e2e-initbot` and `fall_safety` 18/18.
+  - Lint is clean on the touched files.
+  - The generator's `--check` reports the data up to date.
+
+## (Merged as #279) Collision from rotn-data `playerCollision` (#269)
+
+- **Shapes:** each modded state gets what a player collides with (`RotnData.playerCollision`, passed in by `initBot`). Stairs get several boxes; lily pads get their thin box, a carpet to the pathfinder.
+- **Neighbour-dependent states** get a full-width box at least 1 high: `[0,0,0,1,1.5,1]` for a fence or wall.
+- **Policy** (opt-in walk-through, liquids, hazards) was unchanged. The leaves shape override was replaced by a check.
+
+## (Merged as #263) #259 follow-up: whole-block vs partial hazards
+
+- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. Merged.
 - **Final API** (forge-bridge `index.js`), all after `applyCollisionShapes`:
   - `hazardBlockIds(registry, { kinds, includePartial = false })` returns a `Set` of the whole-block hazard ids: the set for `Movements.blocksToAvoid`. Partial hazards are added only with `includePartial: true`.
   - `partialHazardBlockIds(registry, { kinds })` returns the blocks to check per state with `stateHazard`. On 3.3.4 those are BOP `plant_0`, `plant_1` and `flower_0`.
