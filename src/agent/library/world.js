@@ -2,7 +2,28 @@ import pf from 'mineflayer-pathfinder';
 import * as mc from '../../utils/mcdata.js';
 import { VILLAGER_PROFESSIONS_112 } from './names112.js';
 import { inventoryKey, blockMetasFor, blockMatcher, blockDisplayName } from './rotn_names.js';
-import { fallSafe } from './fall_safety.js';
+import { fallSafe, isTreePart } from './fall_safety.js';
+
+/**
+ * Blocks a tree on the surface can have above its wood: its own wood and leaves, snow, vines.
+ * Wood only as a whole name part ("log", "log2", "biomesoplenty:log_0", "twilight_log",
+ * "petrified_wood"), never "wood" or "log" inside a word ("wooden_slab" is a roof: #274 nit).
+ */
+export const TREE_COVER = /branch|leaves|snow|vine|(?:^|[:_])(?:log\d?|log_\d+|wood)$/;
+
+/**
+ * True when solid ground lies above pos within `up` blocks (stone, dirt: not the tree's own wood
+ * or leaves): the block is underground. G3 round 5 A rerun: !searchForBlock("log") picked a log
+ * at y 45 under the surface and the walk ran out its 180 s. An unloaded block ends the scan.
+ */
+export function isUnderground(bot, pos, up = 48) {
+    for (let y = pos.y + 1; y <= Math.min(pos.y + up, 255); y++) {
+        const b = bot.blockAt(pos.offset ? pos.offset(0, y - pos.y, 0) : { x: pos.x, y, z: pos.z });
+        if (!b) return false;
+        if (b.boundingBox === 'block' && !isTreePart(b) && !TREE_COVER.test(b.name ?? '')) return true;
+    }
+    return false;
+}
 
 
 export function getNearestFreeSpace(bot, size=1, distance=8) {
