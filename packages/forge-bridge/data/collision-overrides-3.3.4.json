@@ -1,5 +1,5 @@
 {
- "description": "What forge-bridge src/collision.js adds to rotn-data's dumped per-state collision for modded blocks: walk-through is opt-in (only the states listed in walkThrough; any other state without a box is a solid full cube), liquid marks modded fluids, hazard/hazardByMeta mark trap, fire, portal, web and lava blocks, shapes names a reviewed box the dump does not record. Built by packages/forge-bridge/tools/build-collision-overrides.mjs from the pinned server pack zip (rules in its header); no mod code run.",
+ "description": "What forge-bridge src/collision.js adds to rotn-data's per-state playerCollision for modded blocks: walk-through is opt-in (only the states listed in walkThrough; any other state a player has no box in is a solid full cube), liquid marks modded fluids, hazard/hazardByMeta mark trap, fire, portal, web and lava blocks; checks records what the tool verified in the data. Built by packages/forge-bridge/tools/build-collision-overrides.mjs from the pinned server pack zip (rules in its header); no mod code run.",
  "pack": {
   "version": "3.3.4",
   "sha256": "90642fd5cd098e9140bc67d44d5e05ca492706b02aa202657b64013bee7f5205"
@@ -7,17 +7,17 @@
  "counts": {
   "moddedBlocks": 4642,
   "withDumpStates": 4633,
-  "statesWithoutBox": 5986,
+  "statesWithoutBox": 6419,
   "walkThroughStates": 1422,
-  "solidStatesWithoutBox": 4564,
+  "solidStatesWithoutBox": 4997,
+  "dynamicLeavesChecked": 26,
   "blocks": {
    "walkThrough": 326,
    "liquid": 162,
-   "hazard": 233,
-   "dynamicLeaves": 26
+   "hazard": 233
   }
  },
- "shapes": {
+ "checks": {
   "dynamicLeaves": {
    "shapes": [
     [
@@ -35,10 +35,10 @@
  "reviewed": {
   "biomesoplenty.common.block.BlockBOPPlant": "BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar: BlockBOPPlant.onEntityCollidedWithBlock (func_180634_a) switches on the variant (BlockBOPPlant$2): POISONIVY adds poison (MobEffects.field_76436_u, bytecode 116-124), THORN and TINYCACTUS deal cactus damage (DamageSource.field_76367_g, 183-187); every other variant does nothing",
   "biomesoplenty.common.block.BlockBOPFlower": "BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar: BlockBOPFlower.onEntityCollidedWithBlock (func_180634_a) switches on the variant (BlockBOPFlower$1): DEATHBLOOM adds wither (MobEffects.field_82731_v, bytecode 65-74), BURNING_BLOSSOM sets the entity on fire (func_70015_d, 91); every other variant does nothing",
-  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRock": "rock pile: Pyrotech rock piles (pyrotech:rock, the first G3 resource); no box in the dump, no contact or collision-box override",
-  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockGrass": "rock pile: Pyrotech grass-covered rock piles; no box in the dump, no contact or collision-box override",
-  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockNetherrack": "rock pile: Pyrotech netherrack rock piles; no box in the dump, no contact or collision-box override",
-  "trinsdar.pyrotech_compat.block.rocks.BlockRockBase": "rock pile: Pyrotech Compat rock piles (igneous, metamorphic, sedimentary, their sands, netherrack); no box in the dump, no contact or collision-box override"
+  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRock": "rock pile: Pyrotech rock piles (pyrotech:rock, the first G3 resource); no player box in the dump, no contact or collision-box override",
+  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockGrass": "rock pile: Pyrotech grass-covered rock piles; no player box in the dump, no contact or collision-box override",
+  "com.codetaylor.mc.pyrotech.modules.core.block.BlockRockNetherrack": "rock pile: Pyrotech netherrack rock piles; no player box in the dump, no contact or collision-box override",
+  "trinsdar.pyrotech_compat.block.rocks.BlockRockBase": "rock pile: Pyrotech Compat rock piles (igneous, metamorphic, sedimentary, their sands, netherrack); no player box in the dump, no contact or collision-box override"
  },
  "blocks": {
   "adpother:polluted_water": {
@@ -1323,104 +1323,6 @@
     "hazard-contact com.ferreusveritas.dynamictrees.blocks.BlockBranchCactus (attackEntityFrom)"
    ]
   },
-  "dynamictrees:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictrees:leaves1": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves_flowering": {
-   "class": "dynamictreesbop.blocks.BlockDynamicLeavesFlowering",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves_flowering_peach": {
-   "class": "dynamictreesbop.blocks.BlockDynamicLeavesFlowering",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves_palm": {
-   "class": "dynamictreesbop.blocks.BlockDynamicLeavesPalm",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves1": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves2": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves3": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves4": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves5": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves6": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesbop:leaves7": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesdefiledlands:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
   "dynamictreesphc:fruitalmond": {
    "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockPamFruit",
    "hazard": "trap",
@@ -1717,27 +1619,16 @@
   },
   "dynamictreesphc:leaves_dragonfruit": {
    "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm",
-   "shapes": "dynamicLeaves",
    "hazard": "trap",
    "rules": [
-    "dynamic-leaves",
     "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm (attackEntityFrom)"
    ]
   },
   "dynamictreesphc:leaves_palm": {
    "class": "com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm",
-   "shapes": "dynamicLeaves",
    "hazard": "trap",
    "rules": [
-    "dynamic-leaves",
     "hazard-contact com.ferreusveritas.dynamictreesphc.blocks.BlockDynamicLeavesPalm (attackEntityFrom)"
-   ]
-  },
-  "dynamictreesphc:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
    ]
   },
   "dynamictreesphc:passionfruit_vine": {
@@ -1773,62 +1664,6 @@
    "walkThrough": "all",
    "rules": [
     "plant"
-   ]
-  },
-  "dynamictreesquark:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreestheaether:leaves_crystal": {
-   "class": "maxhyper.dynamictreestheaether.blocks.BlockDynamicLeavesCrystal",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreestheaether:leaves0": {
-   "class": "maxhyper.dynamictreestheaether.blocks.BlockDynamicLeavesAether",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves_darkwood": {
-   "class": "maxhyper.dynamictreesttf.trees.TreeDarkwood$1",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves_of_transformation": {
-   "class": "maxhyper.dynamictreesttf.trees.TreeMagicTransformation$1",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves1": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
-   ]
-  },
-  "dynamictreesttf:leaves2": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
    ]
   },
   "endreborn:block_end_forge": {
@@ -4892,13 +4727,6 @@
    "liquid": true,
    "rules": [
     "fluid-class"
-   ]
-  },
-  "rustic:leaves0": {
-   "class": "com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves",
-   "shapes": "dynamicLeaves",
-   "rules": [
-    "dynamic-leaves"
    ]
   },
   "rustic:marsh_mallow": {

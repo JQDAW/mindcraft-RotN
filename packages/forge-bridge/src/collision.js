@@ -3,17 +3,23 @@
 // pathfinder and the skills' fall checks saw rock piles and plants as walls and floors, and Dynamic
 // Trees leaves 0.5 too high.
 //
-// applyCollisionShapes puts rotn-data's dumped per-state collision on bot.registry's modded block
-// entries, with data/collision-overrides-3.3.4.json (built from the pinned pack by
+// applyCollisionShapes puts what a player collides with in each state on bot.registry's modded block
+// entries: rotn-data's playerCollision (#269: the boxes addCollisionBoxToList adds for a player, the
+// call entities really collide through; several boxes for stairs or cauldrons), or the dumped
+// getCollisionBoundingBox (`collision`) when no playerCollision is given. A state whose shape depends
+// on its neighbours (`varies`: fences, walls, panes, Dynamic Trees branches) gets one full-width box
+// as tall as the tallest box seen for it (at least 1), because a per-state table cannot know the connections.
+// With data/collision-overrides-3.3.4.json (built from the pinned pack by
 // tools/build-collision-overrides.mjs; its rules are in that tool's header):
-// - walk-through is opt-in (lead decision, #259): a state the dump gives no box is walk-through
+// - walk-through is opt-in (lead decision, #259): a state a player has no box in is walk-through
 //   only if the data lists it (reviewed harmless classes: plants, flowers, grass, saplings, crops,
 //   rock piles). Every other state without a box is a solid full cube, so an unknown modded fluid,
 //   trap or portal is never air to the pathfinder;
 // - `liquid: true` on modded fluids (BlockFluidBase, BlockLiquid, IFluidBlock), which stay solid;
 // - `forge.hazard` ('trap', 'fire', 'portal', 'web', 'lava') for skills-rotn's avoid lists;
-// - Dynamic Trees leaves get the half-height box a player collides with (DYNAMIC_LEAVES_BOX); the
-//   dump reads getCollisionBoundingBox and records a full cube.
+// - `shapes` names a reviewed box for a block, over the dump (unused on 3.3.4 since #269: the
+//   Dynamic Trees leaves' half-height DYNAMIC_LEAVES_BOX now comes from playerCollision, and the
+//   overrides tool checks that it still does).
 // Shapes are per metadata (`stateShapes`, which prismarine-block reads on 1.12 too). prismarine-block
 // takes `boundingBox` from the entry blocksByStateId gives for the state, so a state whose
 // boundingBox or hazard differs from its block's gets its own copy of the entry there (same id,
@@ -64,23 +70,40 @@ export function validateCollisionOverrides(data) {
     return data;
 }
 
+// One full-width box from the cell's floor to the top of the tallest box, or a full cube when there
+// is no box: for a state whose shape depends on its neighbours (a fence is 1.5 high and, connected,
+// fills its row; a Dynamic Trees branch grows arms toward the next tree part).
+const neighbourSafeShape = (boxes) => (boxes.length ? [[0, 0, 0, 1, Math.max(1, ...boxes.map((b) => b[4])), 1]] : FULL_CUBE);
+
 /**
- * The dump's collision for each of the 16 metas (a meta with no state takes the default state's),
- * or null when the dump has no usable collision for the block (no states, or a state whose
- * collision is missing or malformed).
+ * The shape for each of the 16 metas (a meta with no state takes the default state's), or null when
+ * the dump has no usable data for the block (no states, or a state whose `collision` is missing or
+ * malformed). With `playerCollision` (rotn-data's, as `(regName, meta) => { boxes, varies } | null`)
+ * each state's shape is what a player collides with; a state whose result is missing or malformed
+ * keeps its `collision`, and a `varies` state gets neighbourSafeShape of both.
+ * `sources` counts the states by where their shape came from: player, varies, collision.
  */
-export function dumpShapesByMeta(dumped) {
+export function dumpShapesByMeta(dumped, { name, playerCollision } = {}) {
     const states = dumped?.states;
     if (!Array.isArray(states) || states.length === 0) return null;
     if (!states.every((s) => isMeta(s.meta) && isShape(s.collision))) return null;
+    const sources = { player: 0, varies: 0, collision: 0 };
+    const shapeOf = (s) => {
+        const pc = playerCollision?.(name, s.meta);
+        if (!pc || !isShape(pc.boxes)) { sources.collision++; return s.collision; }
+        if (pc.varies === true) { sources.varies++; return neighbourSafeShape([...pc.boxes, ...s.collision]); }
+        sources.player++;
+        return pc.boxes;
+    };
+    const byMeta = new Map(states.map((s) => [s.meta, shapeOf(s)]));
     const def = states.find((s) => s.meta === dumped.defaultMeta) ?? states[0];
-    const byMeta = new Map(states.map((s) => [s.meta, s.collision]));
-    return { defaultMeta: def.meta, shapes: Array.from({ length: 16 }, (_, m) => byMeta.get(m) ?? def.collision) };
+    const defShape = byMeta.get(def.meta);
+    return { defaultMeta: def.meta, shapes: Array.from({ length: 16 }, (_, m) => byMeta.get(m) ?? defShape), sources };
 }
 
 // What one modded block becomes, or null to leave it as it is. Pure: changes nothing.
-function planBlock(entry, dumped, o, data) {
-    const byMeta = dumpShapesByMeta(dumped);
+function planBlock(entry, dumped, o, data, playerCollision) {
+    const byMeta = dumpShapesByMeta(dumped, { name: entry.registryName ?? entry.name, playerCollision });
     const hazardOf = (m) => o?.hazardByMeta?.[m] ?? o?.hazard ?? null;
     if (!byMeta && !o?.liquid && !o?.hazard && !o?.hazardByMeta) return null;
     let shapes;
@@ -121,6 +144,7 @@ function planBlock(entry, dumped, o, data) {
         hazardByMeta,
         hazards,
         liquid: !!o?.liquid,
+        sources: source === 'dump' ? byMeta.sources : null,
     };
 }
 
@@ -131,9 +155,12 @@ function planBlock(entry, dumped, o, data) {
  * collision-shape table is replaced by a copy (registerShapes) for Block classes made later.
  * @param {object} registry  bot.registry after extendRegistry
  * @param {object|null|undefined} dumpBlocks  rotn-data's dump: `blocks.json`'s `blocks` (by registry name)
- * @param {{ overrides?: object, log?: (msg: string) => void }} [opts]
+ * @param {{ overrides?: object, log?: (msg: string) => void,
+ *   playerCollision?: (regName: string, meta: number) => ({ boxes: number[][], varies: boolean|null }|null) }} [opts]
+ *   playerCollision: rotn-data's (RotnData.playerCollision for that block and meta); without it the
+ *   dumped `collision` is used
  */
-export function applyCollisionShapes(registry, dumpBlocks, { overrides = loadCollisionOverrides(), log = () => {} } = {}) {
+export function applyCollisionShapes(registry, dumpBlocks, { overrides = loadCollisionOverrides(), log = () => {}, playerCollision } = {}) {
     if (!registry?.entitiesByForgeId) {
         throw new Error('applyCollisionShapes: this registry was not extended (call extendRegistry first)');
     }
@@ -143,18 +170,20 @@ export function applyCollisionShapes(registry, dumpBlocks, { overrides = loadCol
     for (const entry of registry.blocksArray ?? []) {
         if (!entry?.forge?.modded) continue;
         const regName = entry.registryName ?? entry.name;
-        const plan = planBlock(entry, dumpBlocks?.[regName], overrides.blocks[regName], overrides);
+        const plan = planBlock(entry, dumpBlocks?.[regName], overrides.blocks[regName], overrides, playerCollision);
         plans.push([entry, plan]);
     }
     // The new collision-shape table, built before anything changes.
     const table = shapeTableWith(registry.blockCollisionShapes, plans.filter(([, p]) => p).map(([e, p]) => ({ name: e.name, shapes: p.shapes })));
     // 2. Apply (nothing below can throw on a valid plan).
-    const report = { fromDump: 0, noDumpData: 0, walkThroughBlocks: 0, walkThroughSomeStates: 0, perStateEntries: 0, liquid: 0, hazard: {}, shapes: {} };
+    const report = { fromDump: 0, noDumpData: 0, walkThroughBlocks: 0, walkThroughSomeStates: 0, perStateEntries: 0, liquid: 0, hazard: {}, shapes: {}, states: { player: 0, varies: 0, collision: 0 } };
     for (const [entry, plan] of plans) {
         if (!plan || plan.source === 'default') report.noDumpData++;
         if (!plan) continue;
-        if (plan.source === 'dump') report.fromDump++;
-        else if (plan.source !== 'default') report.shapes[plan.source] = (report.shapes[plan.source] ?? 0) + 1;
+        if (plan.source === 'dump') {
+            report.fromDump++;
+            for (const k of Object.keys(report.states)) report.states[k] += plan.sources[k];
+        } else if (plan.source !== 'default') report.shapes[plan.source] = (report.shapes[plan.source] ?? 0) + 1;
         entry.shapes = plan.shapes;
         if (plan.stateShapes) entry.stateShapes = plan.stateShapes;
         else delete entry.stateShapes;
@@ -182,7 +211,8 @@ export function applyCollisionShapes(registry, dumpBlocks, { overrides = loadCol
     }
     registry.blockCollisionShapes = table;
     const h = Object.entries(report.hazard).map(([k, n]) => `${n} ${k}`).join(', ') || 'none';
-    log(`collision shapes: ${report.fromDump} modded blocks from the dump, ${report.walkThroughBlocks} walk-through `
+    const st = report.states;
+    log(`collision shapes: ${report.fromDump} modded blocks from the dump (states: ${st.player} player boxes, ${st.varies} neighbour-dependent, ${st.collision} collision box), ${report.walkThroughBlocks} walk-through `
         + `(+${report.walkThroughSomeStates} in some states), ${report.liquid} liquid, hazards: ${h}; ${report.noDumpData} without dump data keep their shape`);
     return report;
 }

@@ -1,12 +1,35 @@
 # Status: net-forge
 
-Updated: 2026-11-06T09:18Z
+Updated: 2026-11-06T16:24Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #259 follow-up: whole-block vs partial hazards (#263; 2026-11-06T09:18Z review fixes pushed)
+## Collision from rotn-data `playerCollision` (#269); PR #279 open, 2026-11-06T16:24Z
 
-- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. The lead's 3 fixes are pushed and waiting for re-review.
+- **Branch:** `agent/net-forge/player-collision`, from develop `b49cf6e`. The lead approved the switch. The walk-through allowlist goes in a separate later PR (decision below).
+- **Shapes:** each modded state gets what a player collides with, from rotn-data's `RotnData.playerCollision`, passed in by `initBot`.
+  - Stairs and cauldrons get several boxes. Lily pads get their thin box: 0.09375 high, which the pathfinder treats as a carpet, so the bot walks onto it.
+  - **Neighbour-dependent states** (`varies`: fences, walls, panes, Dynamic Trees branches) get one full-width box from the floor to their tallest box, at least 1 high. A fence or wall is `[0,0,0,1,1.5,1]`; a branch is a full cube.
+    - My proposal had said "keep today's `collision` box". That box is not conservative: for a BOP fence it is a 1-high cube, and the player really collides with a 1.5-high post.
+  - A missing or malformed result keeps the dumped `collision`. Without `playerCollision`, behaviour is as before.
+- **Policy is unchanged:**
+  - Walk-through stays opt-in: a state with no player box that is not reviewed stays a full cube, for example `contenttweaker:cave_grass`.
+  - Liquids and hazards are unchanged.
+  - The generator still requires no `addCollisionBoxToList` override for walk-through classes, because the dumper cannot see tile-entity dependence.
+- **Overrides data:**
+  - Only the 24 leaves-only entries and the `dynamicLeaves` shape table went.
+  - The tool now checks all 26 Dynamic Trees leaves blocks against the box the jar and config select, in every state. The result is under `checks.dynamicLeaves`.
+  - Everything else is identical: 326 walk-through, 162 liquid, 233 hazard. `--check` reports it up to date.
+- **Tests:**
+  - `collision.test.js` 13/13: 2 new #269 tests (fence landing at 65.5, lily pad at 64.09375), plus real-dump checks for stairs, fence, wall, branch and lily pad.
+  - `e2e-initbot` and `fall_safety` 18/18.
+  - Lint at baseline (253).
+
+**Lead decision (2026-11-06), for a later PR:** widen the walk-through allowlist to rails, signs, torches, buttons and levers, if they have no collision box and no contact harm. Pressure plates and tripwire stay excluded, because they trigger mechanisms and traps.
+
+## (Merged as #263) #259 follow-up: whole-block vs partial hazards
+
+- **PR #263:** branch `agent/net-forge/hazard-split`, from develop `5c6aab2`. Merged.
 - **Final API** (forge-bridge `index.js`), all after `applyCollisionShapes`:
   - `hazardBlockIds(registry, { kinds, includePartial = false })` returns a `Set` of the whole-block hazard ids: the set for `Movements.blocksToAvoid`. Partial hazards are added only with `includePartial: true`.
   - `partialHazardBlockIds(registry, { kinds })` returns the blocks to check per state with `stateHazard`. On 3.3.4 those are BOP `plant_0`, `plant_1` and `flower_0`.
