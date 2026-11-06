@@ -1,8 +1,28 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (02:00 UTC, from `date -u`)
+Updated: 2026-11-06 (03:04 UTC, from `date -u`)
 
-## Now: HOLDING, no batch until the lead says so (the round 3 continuation GO of 01:07Z)
+## Now: G3 smoke round 3 is over (the lead, 2026-11-06). No batch until a new GO.
+
+The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, from develop aec33fe7. A probe before each batch returned 200 (OpenInference), and there were 0 LLM failures in 109 replies.
+
+| Batch | Result |
+| --- | --- |
+| A rerun | 6/7. **All 11 agenda steps done** in 8.5 min, incl. 10 `chalk_cobble`. `crafting_table` is a false negative: the table was placed at -42 67 -54, but the use stat stayed 0. |
+| B | 4/5. Crushed by a falling Dynamic Trees tree at 3.7 min, at the `logs` step. |
+| C | **PASS 7/7.** Task preempted the active agenda, server-confirmed on the marker, agenda resumed. |
+| D | FAIL. Kicked for spamming (an agenda catch-up burst of 11 lines at the join), then two DecoderException disconnects (NaN position, malformed packets; net-forge). |
+
+- **LLM:** USD 0.0142; cumulative by the key USD 0.7591 of the 4.50 stop. Every server, Primary IP and SSH key was verified deleted.
+- **Open:** the r3b evidence PR. It also corrects round 3 B's README (all its calls failed), the 16 vs 17 min wording, and masks Hetzner server ids in the redactor.
+- **Next (the lead's order):**
+  - (2) the `crafting_table` placed false negative: check the placed block itself, with an offline test;
+  - (3) the LLM probe in the preflight, success/failure counts in the result, and the #241 date nit.
+- **For other agents (the lead routes):**
+  - skills-rotn: felling stance (B); the death cause for "crushed by a falling tree" (B); the agenda catch-up chat burst that drew the spam kick (D).
+  - net-forge: the NaN position and malformed packets (D; the lead has sent it).
+
+## Earlier: the hold before the new preset (round 3 continuation)
 
 - **Continuation batch A** (develop 73c25461, `captures/raw/r3b-g3a/`): FAIL, but it never tested the bot.
   - Every LLM call failed: 20 "My brain disconnected" replies, 11 of them `429 Provider returned error`. The agenda stuck at `rocks` after 3 self-prompter runs (2.6 min).
