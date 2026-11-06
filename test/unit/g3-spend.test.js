@@ -88,9 +88,9 @@ describe('the key usage read: numbers only, the key never leaves the header', ()
         assert.equal(spent({ ok: true, usage: 1 }, { ok: false, error: 'http 401' }), null);
         const start = `DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: LLM_MODEL, code_model: null, vision_model: null } })}`;
         assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1.25 }, [start, LLM_CALL_LINE, LLM_CALL_LINE]),
-            { models: { model: LLM_MODEL, code_model: null, vision_model: null }, calls: 2, replies: { ok: 0, memory: 0, failed: 0, disconnected: 0, empty: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
+            { models: { model: LLM_MODEL, code_model: null, vision_model: null }, calls: 2, replies: { ok: 0, memory: 0, failed: 0, disconnected: 0, empty: 0, memoryEmpty: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
         assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: false, error: 'timeout' }, []),
-            { models: null, calls: 0, replies: { ok: 0, memory: 0, failed: 0, disconnected: 0, empty: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
+            { models: null, calls: 0, replies: { ok: 0, memory: 0, failed: 0, disconnected: 0, empty: 0, memoryEmpty: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
     });
 
     test('the model of every LLM run: the OpenRouter preset (the human\'s decision, 2026-11-06), recorded from the driver', () => {
@@ -799,11 +799,11 @@ describe('LLM replies are counted as successful or failed, and the preflight pro
         const lines = [LLM_CALL_LINE, 'Error while awaiting response: Error [429] (status 429): 429 Provider returned error',
             'Generated response: My brain disconnected, try again.', LLM_CALL_LINE, 'Generated response: On it! !collectBlocks("pyrotech:rock", 6)',
             'Error while awaiting response: Error [429] (status 429): 429 Provider returned error', 'Error [500] (status 500): x', 'NoError [429]'];
-        assert.deepEqual(countLlmReplies(lines), { ok: 1, memory: 0, failed: 1, disconnected: 1, empty: 0, httpErrors: { 429: 2, 500: 1 } });
+        assert.deepEqual(countLlmReplies(lines), { ok: 1, memory: 0, failed: 1, disconnected: 1, empty: 0, memoryEmpty: 0, httpErrors: { 429: 2, 500: 1 } });
         assert.equal(countLlmCalls(lines), 2, 'calls stays the number of requests sent');
         const rec = llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1 }, lines);
-        assert.deepEqual([rec.calls, rec.replies, rec.httpErrors], [2, { ok: 1, memory: 0, failed: 1, disconnected: 1, empty: 0 }, { 429: 2, 500: 1 }]);
-        assert.deepEqual(countLlmReplies([]), { ok: 0, memory: 0, failed: 0, disconnected: 0, empty: 0, httpErrors: {} });
+        assert.deepEqual([rec.calls, rec.replies, rec.httpErrors], [2, { ok: 1, memory: 0, failed: 1, disconnected: 1, empty: 0, memoryEmpty: 0 }, { 429: 2, 500: 1 }]);
+        assert.deepEqual(countLlmReplies([]), { ok: 0, memory: 0, failed: 0, disconnected: 0, empty: 0, memoryEmpty: 0, httpErrors: {} });
     });
 
     test('countLlmReplies: memory summaries count apart; an empty answer and a failed summary are failures (round 3 continuation A and round 3 B)', () => {
@@ -813,14 +813,35 @@ describe('LLM replies are counted as successful or failed, and the preflight pro
             ...Array(13).fill('Memory updated to:  RotN agenda: done rocks, sticks.'),
             ...Array(3).fill(null).flatMap(() => ['Error: Generated response is not a string null', 'Error during message generation or file writing: Error: Generated response is not a string']),
         ];
-        assert.deepEqual(countLlmReplies(a), { ok: 46, memory: 13, failed: 3, disconnected: 0, empty: 3, httpErrors: {} });
+        assert.deepEqual(countLlmReplies(a), { ok: 46, memory: 13, failed: 3, disconnected: 0, empty: 3, memoryEmpty: 0, httpErrors: {} });
         // Round 3 B: 11 requests, all failed; one was a memory summary that stored the stand-in.
         const b = [...Array(10).fill('Generated response: My brain disconnected, try again.'), 'FRCFLD full response to system: ""My brain disconnected, try again.""',
             'Memory updated to:  My brain disconnected, try again.', ...Array(11).fill('Error while awaiting response: Error [429] (status 429): 429 Provider returned error')];
-        assert.deepEqual(countLlmReplies(b), { ok: 0, memory: 0, failed: 11, disconnected: 11, empty: 0, httpErrors: { 429: 11 } });
+        assert.deepEqual(countLlmReplies(b), { ok: 0, memory: 0, failed: 11, disconnected: 11, empty: 0, memoryEmpty: 0, httpErrors: { 429: 11 } });
         // #246 review 2: Mindcraft's other stand-in (a completion with no choices) is a failed reply, not an answer.
         assert.deepEqual(countLlmReplies(['Generated response: No response received.', 'Generated response: ok']),
-            { ok: 1, memory: 0, failed: 1, disconnected: 1, empty: 0, httpErrors: {} });
+            { ok: 1, memory: 0, failed: 1, disconnected: 1, empty: 0, memoryEmpty: 0, httpErrors: {} });
+    });
+
+    test('countLlmReplies: an empty memory summary is a failed reply (lead, round 5 A: five null summaries crashed the agent, none counted)', () => {
+        // Round 5 A's pattern: the summary starts, its request gets null content, history.js throws, the agent exits.
+        const crash = ['Storing memories...', 'parsed command: { commandName: \'!collectBlocks\', args: [ \'stick\', 4 ] }', LLM_CALL_LINE, 'Received.',
+            'Agent FRCFLD disconnected', 'Agent process exited with code 1 and signal null', '[agent_process] FRCFLD: transient; restarting in 10 s.',
+            'TypeError: Cannot read properties of null (reading \'length\')'];
+        const r5a = [...Array(11).fill('Generated response: !inventory'), ...Array(5).fill(crash).flat()];
+        assert.deepEqual(countLlmReplies(r5a), { ok: 11, memory: 0, failed: 5, disconnected: 0, empty: 5, memoryEmpty: 5, httpErrors: {} });
+        // A summary cut short by the next one, and an empty or "null" stored memory, are empty too.
+        assert.deepEqual(countLlmReplies(['Storing memories...', 'Storing memories...', 'Memory updated to:  ', 'Storing memories...', 'Memory updated to:  null']),
+            { ok: 0, memory: 0, failed: 3, disconnected: 0, empty: 3, memoryEmpty: 3, httpErrors: {} });
+        // Mindcraft's no-choices stand-in stored as the memory is a disconnected reply, not a memory.
+        assert.deepEqual(countLlmReplies(['Storing memories...', 'Memory updated to:  No response received.']),
+            { ok: 0, memory: 0, failed: 1, disconnected: 1, empty: 0, memoryEmpty: 0, httpErrors: {} });
+        // Not empty: a summary that stored a memory, a clean exit after it, and one still waiting when the log ends.
+        assert.deepEqual(countLlmReplies(['Storing memories...', 'Memory updated to:  RotN agenda: done rocks.', 'Agent process exited with code 0 and signal null', 'Storing memories...']),
+            { ok: 0, memory: 1, failed: 0, disconnected: 0, empty: 0, memoryEmpty: 0, httpErrors: {} });
+        // The early-stop rule still needs no answer at all: empty summaries next to agent replies do not fire it.
+        assert.equal(llmStopVerdict(r5a).stop, false);
+        assert.equal(llmStopVerdict(Array(5).fill(crash).flat()).stop, true, 'five empty summaries and nothing answered: the rule fires');
     });
 
     test('probeModel: 200 names the provider; 429 gives the provider\'s error code; no key, network and timeout are reasons; the key never comes back', async () => {

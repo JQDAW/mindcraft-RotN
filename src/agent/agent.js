@@ -82,6 +82,7 @@ export class Agent {
         console.log(this.name, 'logging into minecraft...');
         this.bot = initBot(this.name);
         // The outgoing chat limit (G3 round 4 C+D: kicked for spam): every packet goes through it.
+        // client.chat comes only with the login, so it wraps then (and on each spawn) (G3 round 5 A).
         installChatLimit(this.bot);
         
         // Connection Handler

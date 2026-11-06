@@ -9,6 +9,20 @@ export function isUntrustedTurn(turn) {
     return !!turn?.untrusted || (typeof turn?.content === 'string' && /^[^:\n]{1,40}: \[untrusted: /.test(turn.content));
 }
 
+// The canned replies src/models/*.js return instead of throwing when a request fails.
+const MODEL_FAILURE_REPLIES = new Set([
+    'No response received.',
+    'My brain disconnected, try again.',
+    'No response from Claude.',
+    'No response data.',
+    'An unexpected error occurred, please try again.',
+]);
+
+/** A memory summary worth keeping: non-empty text that is not a model failure reply. */
+export function isMemoryReply(reply) {
+    return typeof reply === 'string' && reply.trim() !== '' && !MODEL_FAILURE_REPLIES.has(reply.trim());
+}
+
 export class History {
     constructor(agent) {
         this.agent = agent;
@@ -39,7 +53,22 @@ export class History {
 
     async summarizeMemories(turns) {
         console.log("Storing memories...");
-        this.memory = await this.agent.prompter.promptMemSaving(turns);
+        // G3 round 5 batch A: a null reply (openrouter: null content) crashed here and the agent
+        // restarted 5 times. A null, empty, non-text or failure reply, or a throw, keeps the
+        // previous memory.
+        let reply;
+        try {
+            reply = await this.agent.prompter.promptMemSaving(turns);
+        } catch (err) {
+            console.warn(`[memory] summary failed (${err?.message ?? err}); keeping the previous memory`);
+            return;
+        }
+        if (!isMemoryReply(reply)) {
+            const what = typeof reply === 'string' ? (reply.trim() ? `failure reply "${reply.trim()}"` : 'an empty reply') : `a ${reply === null ? 'null' : typeof reply} reply`;
+            console.warn(`[memory] summary returned ${what}; keeping the previous memory`);
+            return;
+        }
+        this.memory = reply.trim();
 
         if (this.memory.length > 500) {
             this.memory = this.memory.slice(0, 500);
@@ -120,7 +149,11 @@ export class History {
                 return null;
             }
             const data = JSON.parse(readFileSync(this.memory_fp, 'utf8'));
-            this.memory = data.memory || '';
+            // A memory.json from before round 5 A may hold a failure reply as the memory ("My brain
+            // disconnected, try again."): dropped, so it never reaches $MEMORY (#268 follow-up 4).
+            this.memory = isMemoryReply(data.memory) ? data.memory : '';
+            if (data.memory && !this.memory)
+                console.warn(`[memory] the saved memory was not a summary (${typeof data.memory === 'string' ? `"${data.memory.trim().slice(0, 60)}"` : typeof data.memory}); starting with none`);
             this.turns = data.turns || [];
             console.log('Loaded memory:', this.memory);
             return data;

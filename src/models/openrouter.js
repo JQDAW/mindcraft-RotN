@@ -37,6 +37,12 @@ export class OpenRouter {
         try {
             console.log('Awaiting openrouter api response...');
             let completion = await this.openai.chat.completions.create(pack);
+            // One line per completion for the G3 harness's per-provider counts:
+            // provider name, finish reason and content length only, never the body.
+            const c0 = completion?.choices?.[0];
+            const clean = (v, d) => String(v ?? d).replace(/[^\w .-]/g, '?').slice(0, 40);
+            const provider = clean(completion?.provider, 'unknown');
+            console.log(`[openrouter] provider ${provider}, finish_reason ${clean(c0?.finish_reason, 'none')}, content ${typeof c0?.message?.content === 'string' ? c0.message.content.length : 'null'} chars`);
             if (!completion?.choices?.[0]) {
                 // Never the whole response body; only its error summary, if any.
                 console.error(`No completion or choices returned (model ${this.model_name}):`, completion?.error ? safeError(completion.error) : 'no choices in the response');
@@ -45,8 +51,14 @@ export class OpenRouter {
             if (completion.choices[0].finish_reason === 'length') {
                 throw new Error('Context length exceeded');
             }
+            res = completion.choices[0].message?.content;
+            if (typeof res !== 'string' || res.trim() === '') {
+                // A reasoning model can answer with reasoning only and null content
+                // (G3 smoke round 5 A: history.js crashed on null). Treat it as no reply.
+                console.error(`Empty content returned (model ${this.model_name}, finish_reason ${completion.choices[0].finish_reason ?? 'none'})`);
+                return 'No response received.';
+            }
             console.log('Received.');
-            res = completion.choices[0].message.content;
         } catch (err) {
             // A safe summary; the SDK error object carries request headers and the response body.
             console.error('Error while awaiting response:', safeError(err));

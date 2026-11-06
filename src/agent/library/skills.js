@@ -5,7 +5,8 @@ import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, 
 import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stowCarried } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
-import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, FALLING_TREE } from "./felling.js";
+import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTreeLeaves, FALLING_TREE, FELL_PLAN } from "./felling.js";
+import { oreMemberNames } from "../agenda_driver.js";
 import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBlock, leafFromGround, itemOnGround } from "./fall_safety.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
@@ -779,6 +780,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const run = currentRun(bot);
     const runStart = Date.now();
     const givenUp = [];
+    const refusedTrees = new Set(); // trees fellTree found no safe place for: said once (G3 round 5 A)
     // Fall safety (G3 round 4 B, fall_safety.js): off a tree first; mineflayer-collectblock's own
     // walks never drop over 3 blocks nor break a branch; leaves only from the ground.
     if (standsOnTree(bot) && !(await descendFromTree(bot, run))) {
@@ -874,7 +876,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 // crush the bot (G3 round 3 B): cut it safely (fellTree), and collect its logs after
                 // the fall, around the tree (G3 smoke C+D).
                 if (fellsTree(block)) {
-                    const r = await fellTree(bot, block, run);
+                    const r = await fellTree(bot, block, run, refusedTrees);
                     for (const p of r.skip) givenUp.push(p);
                     return r.cut;
                 }
@@ -946,11 +948,66 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Underground Biomes rock): "Collected 3 pyrotech:rock (2 pyrotech_compat:rock_metamorphic:0, ...)".
     // A run that ended up on a tree anyway (a pile, a pickup) climbs down before it returns.
     if (!run.aborted && standsOnTree(bot)) await descendFromTree(bot, run);
+    // Sticks short (G3 round 5 A: no tree could be felled safely, 0 sticks): RotN keeps 2 planks
+    // (ore:stickMat) -> 4 sticks in the inventory grid, so make the rest from held planks.
+    let fromPlanks = 0;
+    if (baseType === 'stick' && collected < num && !run.aborted && !bot.interrupt_code)
+        fromPlanks = await sticksFromPlanks(bot, num - collected, run);
+    collected += fromPlanks;
     const gainedNames = Object.entries(gainedByKey);
     const details = gainedNames.length && !(gainedNames.length === 1 && gainedNames[0][0] === blockType)
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
-    log(bot, `Collected ${collected} ${blockType}${details}.`);
+    log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}.`);
     return collected > 0;
+}
+
+/** Held planks (ore:stickMat) by kind: { "planks:1": 3, ... }. A stick takes 2 of one kind. */
+function planksByKind(bot) {
+    const names = oreMemberNames('stickMat');
+    const byKind = {};
+    for (const item of bot.inventory.items()) {
+        if (!names.some(name => itemMatches(item, name))) continue;
+        const key = inventoryKey(item) ?? item.name;
+        byKind[key] = (byKind[key] ?? 0) + item.count;
+    }
+    return byKind;
+}
+
+/** The sticks crafts the held planks allow: 2 of one kind each, never a mixed pair (#268 follow-up 3). */
+export const stickCraftsHeld = (bot) => Object.values(planksByKind(bot)).reduce((n, c) => n + Math.floor(c / 2), 0);
+
+/**
+ * Sticks short (G3 round 5 A: no tree could be felled safely): make `need` sticks from held planks,
+ * 2 planks of one kind giving 4 (RotN keeps it, in the inventory grid). Without a pair of one kind,
+ * held logs (ore:logWood) are made into planks first (#268 follow-up 2; craftRecipe finds or
+ * places a table if the pack wants one). Bounded rounds, each must make progress. Returns the
+ * sticks made.
+ */
+export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds = 4) {
+    const logNames = oreMemberNames('logWood');
+    const logsHeld = () => logNames.reduce((n, name) => n + countItem(bot, name), 0);
+    const planksHeld = () => Object.values(planksByKind(bot)).reduce((n, c) => n + c, 0);
+    let made = 0;
+    for (let r = 0; r < rounds && made < need && !run.aborted && !bot.interrupt_code; r++) {
+        const crafts = Math.ceil((need - made) / 4);
+        const pairs = stickCraftsHeld(bot);
+        if (pairs === 0) {
+            if (logsHeld() === 0) break;
+            const before = planksHeld();
+            log(bot, `Making planks from logs for sticks.`);
+            await craftRecipe(bot, 'planks', Math.ceil(crafts / 2)); // 1 log: 4 planks in vanilla; another round if fewer
+            if (planksHeld() <= before) break;
+            continue;
+        }
+        const before = countItem(bot, 'stick');
+        const left = need - made;
+        log(bot, `Making the other ${left} stick${left === 1 ? '' : 's'} from planks (2 planks of one kind give 4).`);
+        await craftRecipe(bot, 'stick', Math.min(crafts, pairs));
+        const got = Math.max(0, countItem(bot, 'stick') - before);
+        if (got === 0) break;
+        made += got;
+    }
+    return made;
 }
 
 export async function pickupNearbyItems(bot) {
@@ -1059,17 +1116,22 @@ export const TREE_FALL = { appearMs: 3000, maxMs: 15_000, stepAwayMs: 4000 };
  * entity is gone, then collect the logs around the tree. No safe place: the tree is not cut and
  * its blocks are skipped. Returns {cut, skip}: skip, the positions collectBlock must not try again.
  */
-export async function fellTree(bot, block, run = currentRun(bot)) {
+export async function fellTree(bot, block, run = currentRun(bot), refused = null) {
     const base = treeBase(bot, block.position);
     const at = (p) => `${p.x}, ${p.y}, ${p.z}`;
-    const treeBlocks = (b) => [b, ...canopyOf(bot, b).cells.filter(p => isBranch(bot.blockAt(p)))];
+    // The found block too: a branch beyond the canopy radius would bring the same tree back
+    // (G3 round 5 A: one tree refused 4 times in one collect, 6 in the run).
+    const treeBlocks = (b) => [block.position, b, ...canopyOf(bot, b).cells.filter(p => isBranch(bot.blockAt(p)))];
     if (!base) {
         log(bot, `Not cutting the tree at ${at(block.position)}: its trunk is not in sight.`);
         return { cut: false, skip: [block.position] };
     }
+    // A tree already refused in this collect: skipped without a word (refused: base keys).
+    if (refused?.has(at(base))) return { cut: false, skip: treeBlocks(base) };
     const spots = standSpots(bot, base);
     if (spots.length === 0) {
-        log(bot, `Not cutting the tree at ${at(base)}: no place beside it that is out from under its canopy and not between trunks. A falling tree can crush you.`);
+        refused?.add(at(base));
+        log(bot, `Not cutting the tree at ${at(base)}: no place beside it that is under no branch, off the side its canopy leans to and not between trunks. A falling tree can crush you.`);
         return { cut: false, skip: treeBlocks(base) };
     }
     // Walks near the tree never dig (#242 review 2): a broken branch would fell it onto the bot.
@@ -1089,6 +1151,7 @@ export async function fellTree(bot, block, run = currentRun(bot)) {
         if (bot.entity.position.floored().equals(s)) { spot = s; break; }
     }
     if (!spot) {
+        refused?.add(at(base));
         log(bot, `Not cutting the tree at ${at(base)}: could not reach a safe place beside it.`);
         return { cut: false, skip: treeBlocks(base) };
     }
@@ -1098,10 +1161,14 @@ export async function fellTree(bot, block, run = currentRun(bot)) {
     const itemsBefore = Object.values(bot.entities ?? {}).filter(e => e?.name === 'item' && e.position && e.position.distanceTo(base) <= FELL_LIMITS.radius).length;
     // Hit the side face towards the bot (#242 review 5): the tree falls away from it.
     const face = sideFace(base, spot);
+    // Round 5 must show the relaxed guard is safe (#268 review 1): say when the bot cut from under
+    // the tree's leaves, in the log and in what the death report reads.
+    let underLeaves = false;
+    for (let y = spot.y + 2; y <= base.y + FELL_PLAN.canopyHeight && !underLeaves; y++) underLeaves = isTreeLeaves(bot.blockAt(new Vec3(spot.x, y, spot.z)));
     await bot.lookAt(base.offset(0.5 + face.x * 0.5, 0.5, 0.5 + face.z * 0.5));
     await bot.dig(trunk, true, face);
-    bot.rotnLastFell = { at: Date.now(), pos: base.clone ? base.clone() : base }; // the death report reads it
-    log(bot, `Cut the tree at ${at(base)} from ${at(spot)}, away from its canopy; stepping back.`);
+    bot.rotnLastFell = { at: Date.now(), pos: base.clone ? base.clone() : base, underLeaves }; // the death report reads it
+    log(bot, `Cut the tree at ${at(base)} from ${at(spot)}, away from its canopy${underLeaves ? ' (from under its leaves)' : ''}; stepping back.`);
     // Step back at once: the tree falls a moment after the cut.
     const away = retreatFrom(base, spot);
     await walk(new pf.goals.GoalNear(away.x, away.y, away.z, 1), TREE_FALL.stepAwayMs); // a failed step back: still wait

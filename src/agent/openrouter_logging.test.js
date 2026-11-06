@@ -98,6 +98,43 @@ test('an error whose message embeds a JSON body is cut before the body', async (
     assert.equal(flat(lines), 'Error while awaiting response: Error (status 400): 400 {...}');
 });
 
+test('null, missing or blank content is no reply, never null (G3 round 5 A)', async (t) => {
+    // Mock once: re-mocking an already mocked console.error leaks past the test.
+    const lines = captureErrors(t);
+    for (const message of [{ content: null }, {}, { content: '   ' }, undefined]) {
+        lines.length = 0;
+        const res = await modelWith(() => Promise.resolve({ choices: [{ message, finish_reason: 'stop' }] })).sendRequest([], 'system');
+        assert.equal(res, 'No response received.');
+        assert.equal(flat(lines), 'Empty content returned (model vendor/some-model, finish_reason stop)');
+    }
+});
+
+test('each completion logs one provider line: name, finish reason and length only', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...args) => logs.push(args.join(' ')));
+    t.mock.method(console, 'error', () => {});
+    const m = modelWith(() => Promise.resolve({ provider: 'Wafer', choices: [{ message: { content: 'secret reply text' }, finish_reason: 'stop' }] }));
+    assert.equal(await m.sendRequest([], 'system'), 'secret reply text');
+    const line = logs.find(l => l.startsWith('[openrouter]'));
+    assert.equal(line, '[openrouter] provider Wafer, finish_reason stop, content 17 chars');
+    assert.ok(!logs.join('\n').includes('secret reply text'));
+
+    logs.length = 0;
+    await modelWith(() => Promise.resolve({ provider: 'Bad<script>\nname'.repeat(5), choices: [{ message: { content: null }, finish_reason: 'stop' }] })).sendRequest([], 'system');
+    const l2 = logs.find(l => l.startsWith('[openrouter]'));
+    assert.match(l2, /^\[openrouter\] provider [\w .?-]{1,40}, finish_reason stop, content null chars$/);
+
+    logs.length = 0;
+    await modelWith(() => Promise.resolve({ provider: 'P', choices: [{ message: { content: 'x' }, finish_reason: 'stop\n[openrouter] forged' }] })).sendRequest([], 'system');
+    const l3 = logs.filter(l => l.startsWith('[openrouter]'));
+    assert.equal(l3.length, 1);
+    assert.match(l3[0], /^\[openrouter\] provider P, finish_reason [\w .?-]{1,40}, content 1 chars$/);
+
+    logs.length = 0;
+    await modelWith(() => Promise.resolve({ choices: [] })).sendRequest([], 'system');
+    assert.equal(logs.find(l => l.startsWith('[openrouter]')), '[openrouter] provider unknown, finish_reason none, content null chars');
+});
+
 test('a normal response is unchanged', async (t) => {
     const lines = captureErrors(t);
     const res = await modelWith(() => Promise.resolve({ choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }] })).sendRequest([], 'system');

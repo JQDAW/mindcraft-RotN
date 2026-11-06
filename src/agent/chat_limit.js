@@ -42,28 +42,56 @@ export function withChatPriority(bot, priority, fn, key = null) {
     finally { if (bot) [bot.rotnChatPriority, bot.rotnChatKey] = before; }
 }
 
+const OFF = '[chat] no bot._client.chat to wrap: the outgoing chat limit is OFF for this bot.';
+
 /**
- * Wrap bot._client.chat with the limit. Returns the limiter ({ pending(), dropped, collapsed }), or
- * null (with a warning: the limit is off) when the bot has no client chat to wrap; idempotent.
+ * Wrap bot._client.chat with the limit. minecraft-protocol assigns client.chat only when the login
+ * completes (client/play.js onReady), after initBot returns: G3 round 5 batch A ran with the limit
+ * off ("no bot._client.chat to wrap"). So when it is not there yet this does not give up: it wraps
+ * on the client's 'playerJoin' (right after onReady), the bot's 'login' and every 'spawn'. Those
+ * also wrap again if client.chat was replaced, or the client of a reconnect. A spawn with still
+ * nothing to wrap warns that the limit is off (#256 review 2: never silently off).
+ * Returns the limiter ({ active, pending(), sent, dropped, collapsed }; active once wrapped), or
+ * null with the warning when the bot has no client and no events to wait on. Idempotent.
  * now/setTimer/clearTimer/log/warn are for tests.
  */
-export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout,
-    log = (m) => console.log(m), warn = (m) => console.warn(m) } = {}) {
-    const client = bot?._client;
-    if (!client || typeof client.chat !== 'function') {
-        // #256 review 2: never silently off; a kick for spam would follow.
-        warn('[chat] no bot._client.chat to wrap: the outgoing chat limit is OFF for this bot.');
-        return null;
+export function installChatLimit(bot, opts = {}) {
+    const { log = (m) => console.log(m), warn = (m) => console.warn(m) } = opts;
+    const attach = (when) => {
+        const client = bot?._client;
+        if (!client) return null;
+        if (!client.rotnChatLimit) {
+            const limiter = createLimiter(bot, client, opts);
+            client.rotnChatLimit = limiter.state;
+            client.rotnChatWrap = limiter.wrap;
+            client.on?.('playerJoin', () => limiter.wrap('playerJoin'));
+        }
+        client.rotnChatWrap(when);
+        return client.rotnChatLimit;
+    };
+    const state = attach('install');
+    const waits = typeof bot?.on === 'function';
+    if (waits && !bot.rotnChatLimitHooked) {
+        bot.rotnChatLimitHooked = true;
+        bot.on('login', () => attach('login'));
+        bot.on('spawn', () => { if (!attach('spawn')?.active) warn(OFF); });
     }
-    if (client.rotnChatLimit) return client.rotnChatLimit;
-    const raw = client.chat.bind(client);
+    if (state?.active) return state;
+    if (!waits) { warn(OFF); return null; }
+    log('[chat] no bot._client.chat yet (it comes with the login): the outgoing chat limit wraps it on login');
+    return state;
+}
+
+function createLimiter(bot, client, { limits = CHAT_LIMIT, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout,
+    log = (m) => console.log(m) } = {}) {
+    let raw = null;         // the client's own chat, once wrapped
     let level = 0;          // the counter as the server sees it, by our estimate
     let at = now();
     let seq = 0;
     const queue = [];       // { text, priority, key, since, seq }
     const keySentAt = new Map();
     let timer = null;
-    const state = { dropped: 0, collapsed: 0, sent: 0, pending: () => queue.map(q => ({ text: q.text, priority: q.priority, key: q.key })) };
+    const state = { active: false, dropped: 0, collapsed: 0, sent: 0, pending: () => queue.map(q => ({ text: q.text, priority: q.priority, key: q.key })) };
 
     const refill = () => {
         const t = now();
@@ -118,7 +146,7 @@ export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, set
         timer?.unref?.();
     };
 
-    client.chat = (text) => {
+    const limited = (text) => {
         refill();
         const key = bot.rotnChatKey ?? null;
         const priority = bot.rotnChatPriority ?? 'normal';
@@ -157,6 +185,15 @@ export function installChatLimit(bot, { limits = CHAT_LIMIT, now = Date.now, set
     };
     // A disconnect ends the queue: lines for the old connection must not go to the next one.
     client.once?.('end', () => { if (timer) clearTimer(timer); timer = null; timerAt = Infinity; queue.length = 0; }); // #260 nit 2: timerAt too
-    client.rotnChatLimit = state;
-    return state;
+    // Wrap the client's chat when it has one, and again if it was replaced. True when wrapped.
+    const wrap = (when) => {
+        if (client.chat === limited) return true;
+        if (typeof client.chat !== 'function') return false;
+        raw = client.chat.bind(client);
+        client.chat = limited;
+        state.active = true;
+        if (when !== 'install') log(`[chat] the outgoing chat limit is on (wrapped on ${when})`);
+        return true;
+    };
+    return { state, wrap };
 }
