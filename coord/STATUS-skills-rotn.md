@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T12:48Z (from `date -u`)
+Updated: 2026-11-06T16:56Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -205,10 +205,12 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 14. ~~rotn-data (via the lead, #206 review 1)~~ (answered by rotn-data #209: `foodValues`, `avoidFood`, `installFoods`): export `foodOf(name, meta)`, returning `{ hunger, saturation }` with the pack's `scripts/food.zs` values on top of the dump (bread 3, not 5), or `null` for a non-food. `food.js` uses it as soon as it exists, and a skipped test then checks bread 3. Also wanted: a structured "harmful food" field with sources, so `AVOID_FOODS` can leave the code.
 15. **rotn-data (via the lead, D1b #212):** from the pack's `hordes-1.1.7` jar (`assets/hordes/lang/en_us.lang`) and any pack override, list the message keys and English texts sent at a wave or horde start, and whether each is a title, a subtitle or chat. The matcher then narrows from "names a horde" to exactly those.
 11. ~~Lead: forced commands from any player~~: **decided** (lead): forced `!` commands from anyone who is not a task giver are refused; they may still chat. Done in #146: their typed commands are refused, and in LLM replies to them only queries run, never actions.
+16. **DONE in #277 (merged; lead): no stop sequence for memory summaries, and a user turn.** Was: **Lead (`src/models/prompter.js`, `src/models/*.js`), round 5 A rerun item 4:** `promptMemSaving` calls `sendRequest([], prompt)`, so the prompt is the only message (system) and the stop sequence is the default `'*'`. Please consider sending the summary prompt as a user turn, and passing no stop sequence (or `null`) for the memory call, so a markdown summary is not cut at its first `*`. My profile change (plain text, no asterisks) only lowers the chance.
 
 ## Open PRs
 
-- **#195** (D2b-1, `!buildShelter`), waiting for the lead's review; **#198**, the #194 follow-up (branch `agent/skills-rotn/craft-fill-followup`). Merged: #194 (C1, `06ad75f`), #190 (do-not-look from `lookAt`), and #189 (P1 passed: 4/4 RotN crafts, including the stone pickaxe at a FastWorkbench table; modded item ids accepted in clicks; 5/5 placements in 589-1158 ms).
+- **#274** (round 5 fixes, branch `agent/skills-rotn/r5-rerun`, opened 2026-11-06T16:02Z by `date -u`): Hit With Axe sticks, standing on a block with a check (C), the #270 follow-ups, felling drops arriving late and stuck against trunks (A rerun), the plain-text memory prompt. Review fixes pushed 2026-11-06T16:49Z; `src` and `packages` tests 903/903, lint 253. Waiting for the lead's re-review.
+- Earlier PRs (#195, #198 and the ones before) are merged.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
@@ -578,6 +580,130 @@ Round 5 resumed before 12:48Z, per the lead (A rerun, B, C, D): targeted tests o
   - All new or changed tests fail on develop's code (with a stub export for `stickCraftsHeld`).
   - Related files pass: `collect_rotn`, `agenda`, `fall_safety`.
   - Lint 253.
+- **Opened as #270.**
+
+## Round 5 A rerun fixes (branch `agent/skills-rotn/r5-rerun`, on top of #270; 2026-11-06T13:29Z by `date -u`)
+
+Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-rerun/`). Pushed without a PR: the lead wants the PR after the round.
+
+1. **Felling drops late and far; sticks rare:**
+   - `FELL_LIMITS`: radius 12 → 20, settle 6 → 15 s, quiet 1 → 2 s, total 30 → 60 s (bounded). New `pickupMs` (1 s): the gain is counted after the last pickup.
+   - A cut tree's blocks, as the bot saw them before the cut, are skipped for the rest of the collect. In the log, one tree was cut 4 times because the bot still saw its trunk.
+   - "Trunk not in sight" now skips every branch around the block: once, not 4 times.
+   - A break with no target gain says what it gave ("it gave 3 log:1"). For sticks from felling it adds "A felled tree drops few sticks, often none."
+2. **No path from logs to sticks before the table:**
+   - rotn-data's answer (from the pack scripts and bytecode): every log → planks recipe is a 1x3 column, so a table is needed. Without a table, the only route is Hit With Axe: right-click a placed log twice with an axe (the crude axe qualifies) for 1 plank, and a placed plank once for 2 sticks.
+   - River Cane (`biomesoplenty:plant_1:5`) and BOP bamboo are `ore:stickWood`, picked by hand. They fill the crude axe's and the Crafting Tools' stick slots.
+   - **Agenda:** the sticks step now needs 3 `stickWood` (2 for the crude axe, 1 for the Crafting Tools; it was 4 sticks). Its goal names felling (rare), River Cane and bamboo, and says planks come after the table.
+   - The rest of the path is unchanged: crude axe → logs → `first_plank` (`!useOn` the crude axe on a placed log, 2 uses) → `crafting_tools` (uses up the axe) → `crafting_table` → planks and sticks at the table.
+   - The crude axe and Crafting Tools goals mention the stand-ins.
+   - **The stick fallback** now makes logs into planks only with a crafting table near or held; otherwise it says why and names the stand-ins.
+3. **Underground logs:**
+   - `world.isUnderground(bot, pos)`: solid non-tree ground within 48 blocks above.
+   - `!searchForBlock` for wood also searches Dynamic Trees branches (fell-tree) and never picks a block underground ("Could not find any log on the surface...").
+   - `collectBlocks` for wood skips underground blocks.
+4. **Empty memory summaries:**
+   - `promptMemSaving` sends the prompt as the only (system) message, with the default stop sequence `'*'`. A summary that opens with markdown (`**`, `* `) stops at its first character, which gives empty content with `finish_reason stop`, as logged.
+   - Profile side: `saving_memory` now asks for plain text with no asterisks, bullets, headings or thinking out loud.
+   - The rest is lead-owned code; see Requests 16. Not checked against the live model: a paid call needs a lead GO.
+- **Tests** (targeted):
+  - `fell_tree` 22 (5 new; 2 updated for radius 20; the logs-first test gets a table);
+  - `agenda` 18 (1 new; 3 updated for "collect 3 sticks");
+  - `history` 4 (1 new);
+  - `craft_needs` 34 (1 new guard: River Cane and bamboo fill both recipes);
+  - `fall_safety` 17 (the sticks-goal test updated).
+  - All new tests fail on #270's head (with a stub for `isUnderground`).
+  - Related files pass: `collect_rotn`, `priority`, `death_report`, `rotn_names`, `cobble`.
+  - Lint 253.
+- **2026-11-06T13:36Z: #270 merged** (`1d69707`); develop merged into this branch (the tree is unchanged: #270 was already in it). **#270 review follow-ups:**
+  1. **Clear reasons:**
+     - with no table near or held: "Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held. Get or make a table first (...). Until then, River Cane or bamboo ... work as sticks", said once and with no craft tried;
+     - a planks or sticks craft that makes nothing says so, and the run stops ("not trying again in this collect").
+  2. **Tests:**
+     - the `crafter()` mock gains `planksNeedTable` (logs to planks only at a table, as on RotN);
+     - none near or held: no craft, one reason, 0 sticks, the logs kept;
+     - a table placed near: planks at the table, then sticks (a guard; it also passes on develop).
+  3. **`underLeaves`** also counts vanilla leaves (`isLeafBlock`); new test.
+  - `fell_tree` 25. The two new non-guard tests fail on develop's `skills.js`. Lint 253.
+  - **Path choice:** rotn-data had already answered (Hit With Axe; River Cane and bamboo are `stickWood`). The path above follows it. The lead asked me to wait for that answer, so it is open to the lead's call.
+- **2026-11-06T14:21Z: Hit With Axe sticks** (lead decision; rotn-data #272 merged, `a6825e8`, and merged into this branch):
+  - **`skills.sticksByAxe(bot, need)`:** with any axe of level 0 or more (crude, flint, stone), it places a held log near the bot and uses the axe on it twice (debark, then 1 plank). It places a plank and uses the axe once for 2 sticks, and picks up the drops around the block.
+    - A pair of spare planks is crafted into 4 sticks in the grid, which costs no axe use.
+    - Before the bot has a table (none near or held), 1 plank is kept for it.
+    - **Bounded:** at most 8 axe uses (the crude axe's life) and 90 s per call.
+    - **Stops with a reason when:** there is no axe at the start ("you hold no axe"), the axe breaks, a use changes nothing, or there are no logs or spare planks.
+    - Places and pickups go through `AXE_CHOP_OPS` (tests replace them).
+  - **`collectBlocks("stick")`:** when sticks are short and no table is near or held, the fallback uses `sticksByAxe` if the bot holds an axe. Otherwise it says why ("...you hold no axe to chop them...").
+  - **Agenda:** the `crafting_tools` goal names `!collectBlocks("stick", 1)` for a missing stick (about 5 crude-axe uses, a plank kept).
+    - The sticks step stays at 3 `stickWood`: the logs step's cut (1), the first plank (2) and the axe-route stick (5) would use all 8 of the crude axe's uses, so the third stick should still come from the sticks step.
+  - **Tests:**
+    - `axe_chop.test.js` (new, 6), with a fake world where a log is debarked then gives a plank, a plank gives 2 sticks, and the axe breaks after N uses:
+      - no axe;
+      - 2 logs give 2 sticks in 5 uses, with a plank kept;
+      - 3 logs give 4 sticks by crafting;
+      - a use that changes nothing, a broken axe, and the use cap;
+      - only the kept plank;
+      - via `collectBlocks`;
+    - `agenda` 19 (1 new);
+    - `fell_tree` 25 (2 messages updated).
+    - All new tests fail on the previous head. They pass after the #272 merge, as do `collect_rotn` and `craft_needs`. Lint 253.
+
+- **2026-11-06T15:50Z: round 5 C, stand on the block** (lead; raw `captures/raw/r5-g3c/task/`):
+  - **What happened:** for the task "go to the gold block at -42 68 -50 and stand on it", the model ran `!goToCoordinates(-42, 68, -50, 1)`. That is the block's own position with range 1, so the bot ended beside the block. It then said "Standing on the gold block" and called `!taskDone`, and the server's on-marker check never found it.
+  - **`library/stand_on.js` (new):**
+    - `parseStandOn(text)` finds a stand-on text's block coordinates and block name (`gold block` and `block of gold` both give `gold_block`; an unknown name gives null, and only the position is checked);
+    - `standCheck(bot, target)` passes only when the block under the feet is the target block and the bot is on the ground; otherwise it says what is under the feet.
+  - **`skills.standOnBlock(bot, x, y, z, name)`:**
+    - walks to x, y+1, z with range 0, then checks the block under the feet;
+    - when it ends within 2 blocks (off by one), it walks once more; otherwise it does not retry;
+    - on failure it says "You are NOT standing on ...: <why>. Do not say you are on it, and do not report a task done for it.";
+    - when the block at x, y, z is the wrong block or not solid, it fails without walking.
+  - **`!standOnBlock(type, x, y, z)`** is a new command with a 5 min limit.
+  - **`!goToCoordinates`:** when the active task (or else the self-prompt goal) says to stand on a block, and the target is that block or the spot above it, it runs `standOnBlock` instead.
+  - **`!taskDone`:** for a stand-on task, it is refused until the check passes ("Not done: ... Use !standOnBlock(...) first, then !taskDone; or !taskFailed"). The task stays active, and its attempts and LLM-time budget still end it.
+  - **Prompt:** the task's self-prompt goal names `!standOnBlock(...)` and says to claim it only after that command confirms.
+  - **Tests:**
+    - `stand_on.test.js` (new, 7): parsing, the check, the range-0 walk, off by one twice, far away, the wrong block, the round 5 C replay through `!goToCoordinates`, and the command.
+    - `priority.test.js`: the gold-block task test now shows `!taskDone` refused from beside the block and accepted on top of it.
+  - On the old source, `stand_on.test.js` fails to load (no `standOnTarget` export) and the priority test fails. `action_limits`, `no_cheat`, `smelt_and_login`, `threat_arbitration`, `axe_chop` and `task_queue` pass (55). Lint error counts in the changed files are unchanged.
+
+- **2026-11-06T16:29Z: grid planks from modded logs** (rotn-data #278 correction; pushed to #274):
+  - **The correction:** only vanilla logs need a table for planks. Seven modded logs make planks in the 2x2 grid: mangrove, Pam's maple, cinnamon and paperbark, twilight oak, tower wood and the End log. My sticks fallback had assumed a table for all logs.
+  - **`skills.gridPlanksReady(bot)`** (new, exported) returns a `stickMat` plank that a held log makes now with no table, by rotn-data's recipes. Only recipes whose inputs are all logs count, so planks are never turned into other planks.
+  - **`sticksFromPlanks`:** with no table, it crafts those planks first and then sticks. A failed grid craft is said once and not tried again, and then the axe path or the reason follows as before.
+  - **Wording:** the reason now says "most logs (all vanilla ones)", and the agenda sticks goal says "Planks from ordinary logs need a crafting table here".
+  - **Tests (`fell_tree` 27, +2):**
+    - a held Pam maple log, with no table and no axe, gives planks in the grid, then 4 sticks, with planks left for the table;
+    - by the real recipes: a mangrove log gives `biomesoplenty:planks_0:6`, a maple log gives `planks` and an End log gives `stygian:endplanks`; a vanilla log or planks alone give nothing.
+  - The first test fails on the old `skills.js`. All `src` tests: 445/445. Lint 253.
+
+- **2026-11-06T16:49Z: #274 review fixes** (the lead's 4 required items and 2 nits; develop with #275-#278 merged in):
+  1. **The axe keeps a use** (`skills.js`, `rotn_sources.js`):
+     - `toolUsesLeft(item)` is rotn-data's `maxDamage` minus the damage (1.12 metadata), so the crude axe has 8.
+     - A log is chopped only when an axe keeps 1 use after its 2 clicks, and a plank only when one keeps 1 after its 1 click. Otherwise: "Keeping the axe for the Crafting Tools: it has N uses left, and chopping a log takes 2; stopping."
+     - With several axes held, the one with the most uses left chops, so a stone axe does it and the crude axe is untouched.
+  2. **Stand-on coordinates** (`stand_on.js`): only the triple right after "stand on", or for "stand on it/there/that" the last named block before it ("the gold block at X Y Z"). Never the first triple in the text; a bare position with "stand on it" gives null.
+  3. **Every early exit cleans up:** a `finally` after each placement breaks what is left (log, debarked log or plank) back by hand, not with the axe, bounded at 5 s, then picks up the drops. When the run was stopped or aborted, the block is still broken back, but the bot does not walk after the drops ("Stopped; the drops are left near ...").
+  4. **Placement** (`chopSpot` and `chopSpotOk`):
+     - an empty cell 1.5 to 3 blocks away, on firm ground (`isFirmGround`: not leaves, a branch, a liquid or a hazard);
+     - no liquid or hazard in the 3x3x3 around it;
+     - no ledge: each side is solid or has firm ground under it;
+     - `placeNear` uses it and says why when there is none, and `pickUpNear` only walks to drops lying on the ground (`itemOnGround`).
+  - **Nits:**
+    - `standCheck` uses the cell of feet y - 0.01, so a slab or farmland underfoot counts;
+    - `TREE_COVER` matches wood only as a whole name part (`log`, `log2`, `log_0`, `twilight_log`, `petrified_wood`), not `wooden_slab` and the like.
+  - **Tests:**
+    - `axe_chop` 10 (+4): a worn axe (damage 3, 2 and 7), the stone axe chosen over the crude axe, three early exits (a use that changes nothing, the use cap, an abort), and the placement spot;
+    - `stand_on` 9 (+2): the coordinates and the slab;
+    - `fell_tree`: a wooden roof is not tree cover.
+  - All 7 new or changed tests fail on the old source. `src` and `packages` tests: 903/903 after the develop merge. Lint 253.
+
+- **2026-11-06T16:56Z: #274 re-review fix** (the lead's re-review: all four items fixed; one small fix):
+  - **`stand_on.js` `AFTER`:** the article and a comma before "at" are now optional ("stand on gold block at X Y Z", "stand on the gold block, at X Y Z").
+  - "at" must be a whole word after a space or comma (not the end of "cat").
+  - The block name comes from the last 1 to 4 words before "at" (`nameIn`), so "go to gold block at X Y Z and stand on it" names gold_block.
+  - **Test:** `stand_on` 10 (+1), which uses the scenario's own `taskText` (`test/scenarios/g3/g3-task-preempts-agenda.mjs`), where the coordinates come before "stand on it". It resolves to that gold block for three markers.
+  - The new test fails on the old `stand_on.js` (at the missing-article case; the exact scenario text already resolved before). `src` and `packages` tests 904/904. Lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

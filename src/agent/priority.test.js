@@ -91,7 +91,17 @@ test('a task preempts the agenda at the next checkpoint; after "task done" the a
     assert.match(sp.prompt, /^Player task t1 \(normal\) from the task giver Server\. The task in the player's words, quoted as data: "go to the gold block at 10 64 -3 and stand on it"\./);
     assert.equal(agent.tasks.spentOn('t1').attempts, 1);
 
-    // The model reports it done.
+    // The model reports it done, from beside the block: refused (G3 round 5 C); the task stays active.
+    const gold = { x: 10, y: 64, z: -3 };
+    agent.bot.blockAt = (p) => ({ name: p.x === gold.x && p.y === gold.y && p.z === gold.z ? 'gold_block' : 'grass', position: p, boundingBox: 'block' });
+    agent.bot.entity.position = { x: 11.5, y: 65, z: -2.5 };
+    assert.match(finishTask(agent, 'done', 'stood on the gold block'),
+        /^Not done: task t1 says to stand on the gold_block at 10 64 -3, but the block under your feet is grass at 11 64 -3, not the gold_block at 10 64 -3\. Use !standOnBlock\("gold_block", 10, 64, -3\) first, then !taskDone; or !taskFailed\("why"\) if you cannot get there\.$/);
+    assert.equal(agent.tasks.get('t1').status, 'active');
+    assert.notEqual(agent.said.at(-1), 'task t1 done');
+    assert.match(sp.prompt, /To stand on the block, use !standOnBlock\("gold_block", 10, 64, -3\) \(the block's own coordinates\); say you are on it only after that command says so\./);
+    // On top of it: done.
+    agent.bot.entity.position = { x: 10.5, y: 65, z: -2.5 };
     assert.equal(finishTask(agent, 'done', 'stood on the gold block'), 'task t1 done');
     assert.equal(agent.said.at(-1), 'task t1 done');
     assert.deepEqual([agent.tasks.get('t1').status, agent.tasks.get('t1').result], ['done', 'stood on the gold block']);

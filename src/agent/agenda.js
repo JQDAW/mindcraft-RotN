@@ -36,16 +36,20 @@ export const ROTN_EARLY_GAME = [
         done: (s) => s.count('pyrotech:rock') >= 6 || s.count('stone_pickaxe') > 0,
     },
     {
-        id: 'sticks', short: 'collect 4 sticks',
+        id: 'sticks', short: 'collect 3 sticks',
         // G3 round 4 B and rotn-data Request 13: leaves never drop sticks on this pack; a felled
         // tree does (0-7 with its logs), and a trunk broken by hand fells it too. collectBlock fells
         // it safely (fellTree) and picks the sticks up with the logs.
-        goal: 'Get at least 4 sticks with !collectBlocks("stick", 4). In RotN sticks come from felling a tree: breaking its trunk, even by hand, fells it and drops logs and sticks. If you have planks, !craftRecipe("stick", 1) makes 4 sticks from 2 planks. Leaves drop no sticks.',
-        done: (s) => s.count('stick') >= 4 || s.count('stone_pickaxe') > 0,
+        // G3 round 5 A rerun: 3 felled spruces gave 25 logs and 1 stick, and planks need a table
+        // (every log -> planks recipe is a 1x3 column; rotn-data). Before the table the bot needs
+        // 3 ore:stickWood (2 for the crude axe, 1 for Crafting Tools), and River Cane
+        // (biomesoplenty:plant_1:5) and BOP bamboo are stickWood too, picked by hand (rotn-data).
+        goal: 'Get at least 3 sticks: 2 for the crude axe and 1 for the Crafting Tools. !collectBlocks("stick", 3) fells a tree (breaking its trunk, even by hand), but a felled tree drops few sticks, often none. River Cane (tall cane by rivers) and bamboo work as sticks in both recipes and break by hand: !collectBlocks("biomesoplenty:plant_1:5", 3) or !collectBlocks("biomesoplenty:bamboo", 3). Planks from ordinary logs need a crafting table here, so they come later. Leaves drop no sticks.',
+        done: (s) => s.countOre('stickWood') >= 3 || s.count('stone_pickaxe') > 0,
     },
     {
         id: 'crude_axe', short: 'craft a crude axe',
-        goal: 'Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks, in your inventory grid. It breaks after about 8 uses, so keep a spare.',
+        goal: 'Craft a crude axe with !craftRecipe("pyrotech:crude_axe", 1): 1 rock and 2 sticks (River Cane or bamboo work too), in your inventory grid. It breaks after about 8 uses: keep 2 uses for your first plank.',
         done: (s) => s.count('pyrotech:crude_axe') > 0 || s.count('stone_axe') > 0 || s.count('stone_pickaxe') > 0,
     },
     {
@@ -60,7 +64,9 @@ export const ROTN_EARLY_GAME = [
     },
     {
         id: 'crafting_tools', short: 'craft Crafting Tools',
-        goal: 'Craft Crafting Tools with !craftRecipe("contenttweaker:crafting_tools", 1): the crude axe, 1 rock and 1 stick.',
+        // The lead's Hit With Axe decision (round 5 A rerun): with no stick left and no table yet,
+        // collectBlock makes sticks by using the crude axe on a placed log and plank (sticksByAxe).
+        goal: 'Craft Crafting Tools with !craftRecipe("contenttweaker:crafting_tools", 1): the crude axe (it is used up), 1 rock and 1 stick (or River Cane or bamboo). Make your first plank before this. With no stick left, !collectBlocks("stick", 1) chops a placed log and plank with the crude axe for 2 sticks (about 5 uses) and keeps a plank for the table.',
         done: (s) => s.count('contenttweaker:crafting_tools') > 0 || s.count('crafting_table') > 0 || s.near('crafting_table') || s.count('stone_pickaxe') > 0,
     },
     {
