@@ -460,7 +460,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Tests: `death_report` 14, `furnace` 7; the 4 new ones fail on the previous head; lint 254.
 - **#247 nit**: folded into the fall-safety PR (commit cherry-picked from `next3`). From 10 to 20 min the night text says the items are already lost. The rounding nit was accepted as is.
-- **The round 4 PR** (lead: one PR, built on rotn-data's `agent/rotn-data/sticks-from-felling`, superseding #252 and my #253). Branch `agent/skills-rotn/round4`: rotn-data's branch with `fall-safety` merged in (no rebase); STATUS lives here.
+- **The round 4 PR, #256** (lead: one PR, built on rotn-data's `agent/rotn-data/sticks-from-felling`, superseding #252 and my #253). Branch `agent/skills-rotn/round4`: rotn-data's branch with `fall-safety` merged in (no rebase); STATUS lives here.
 - **G3 round 4 batch B, the fall** (first opened as #253, now in the round 4 PR). "FRCFLD fell from a high place" during `!collectBlocks("stick", 4)` on leaves, 3 s after unstuck took over.
   - **Findings:**
     - Leaves went through `bot.collectBlock.collect`, whose pathfinder may dig, tower and step onto leaves.
