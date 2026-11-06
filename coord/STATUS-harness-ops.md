@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (04:32 UTC, from `date -u`)
+Updated: 2026-11-06 (05:18 UTC, from `date -u`)
 
 ## Now: G3 smoke round 3 is over (the lead, 2026-11-06). No batch until a new GO.
 
@@ -15,12 +15,13 @@ The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, 
 
 - **LLM:** USD 0.0142; cumulative by the key USD 0.7591 of the 4.50 stop. Every server, Primary IP and SSH key was verified deleted.
 - **Merged:** #244 (the r3b evidence) and #245 (the crafting_table placed block).
-- **Open: #248, the LLM-failure stop rule** (must land before the next paid round; #246 is merged). The lead's review fixes are in:
-  - a distinct infra-fault outcome: exit 125, `summary.infraFault`, and the result marked `INFRA FAULT`; `crossCheckBatch` and `g3-batch-check` show it;
-  - the window from the bot's `spawned.` line, with a 10 min cap; round 3 B is shown from its server log (5th failure 53 s after the join);
-  - the e2e test with `timeoutMin` 1;
-  - a fake-cloud test that the server is still deleted.
-- **Next, low priority (the lead):** local Windows runs of `cx23.test.js` and `test-server.test.js` hang (net-forge), and `deploy-eol.test.js` fails with a CRLF checkout. Make them finish or skip on Windows with a stated reason; never silently on CI.
+- **Merged:** #248 (the LLM-failure stop rule, with its infra-fault outcome). It had to be in place before the next paid round, and it is.
+- **Open: the Windows test PR** (the lead, low priority; net-forge's report). The tests did not hang: Git Bash process starts on Windows made `cx23.test.js` take 189 s and `test-server.test.js` 255 s alone, beyond tool time limits.
+  - The 8 shell-heavy blocks now skip on a local Windows run with a stated reason, unless `ROTN_RUN_SHELL_TESTS=1`. They never skip on CI (`CI=true`) or on Linux.
+  - `deploy-eol`'s on-disk check skips on Windows (not CI) for a stale CRLF working copy, naming the files and the verified fix (`git checkout -- deploy/cx23`).
+  - Full `npm test` on Windows: 80 s, 1214 pass, 0 fail.
+  - Plus the two #248 doc nits.
+- **Waiting:** the lead is asking the human for the next smoke round GO. Nothing starts before a written GO.
 - **For other agents (the lead routes):**
   - skills-rotn: felling stance (B); the death cause for "crushed by a falling tree" (B); the agenda catch-up chat burst that drew the spam kick (D).
   - net-forge: the NaN position and malformed packets (D; the lead has sent it).

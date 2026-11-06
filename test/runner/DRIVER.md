@@ -233,6 +233,8 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
   - A scenario that hits its runner timeout is recorded with exit **124**, whatever run.mjs exits after the SIGTERM. A runner that cannot be started is recorded with exit **127**. The summary records each scenario's `out` folder and its `exit`, and the batch's own `exit`.
 - **The LLM-failure stop rule** (lead, round 3 continuation; #248 review; `llmStopVerdict`, `runOne` in `batch.mjs`):
   - **The window:** 5 minutes counted from the bot's spawn: the driver log's `<bot> spawned.` line (`SPAWNED_LINE`), so the driver start, the Forge join and the agent start do not eat into it. Without a spawn line, the window never opens; it never runs past 10 minutes from the scenario's start either (`capMs`). `batch.mjs` reads the scenario's `driver.log` every 15 s.
+    - A late spawn gets a shorter window, since it still ends at the cap (a spawn at minute 7 leaves 3 minutes).
+    - Because of the 15 s poll, a stop comes up to one poll after the 5th failure, and the window's edges are only as sharp as one poll.
   - **The trigger:** 5 or more failed replies and none answered (no agent reply and no memory summary). That is an infra fault (the model does not answer), not a bot result. Failures count as in `result.llm.replies`: the stand-ins "My brain disconnected, try again." and "No response received.", a memory summary that stored one, and empty answers.
   - **The outcome, distinct from a check fail:**
     - The scenario is stopped and recorded with exit **125** (`EXIT_LLM_STOP` = `INFRA_FAULT_EXIT` in `lib/g3.mjs`), with `llmStop: {failed, ok, memory, httpErrors, afterSpawnS, afterStartS}`.
