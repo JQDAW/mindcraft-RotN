@@ -37,6 +37,11 @@ export class OpenRouter {
         try {
             console.log('Awaiting openrouter api response...');
             let completion = await this.openai.chat.completions.create(pack);
+            // One line per completion for the G3 harness's per-provider counts:
+            // provider name, finish reason and content length only, never the body.
+            const c0 = completion?.choices?.[0];
+            const provider = String(completion?.provider ?? 'unknown').replace(/[^\w .-]/g, '?').slice(0, 40);
+            console.log(`[openrouter] provider ${provider}, finish_reason ${c0?.finish_reason ?? 'none'}, content ${typeof c0?.message?.content === 'string' ? c0.message.content.length : 'null'} chars`);
             if (!completion?.choices?.[0]) {
                 // Never the whole response body; only its error summary, if any.
                 console.error(`No completion or choices returned (model ${this.model_name}):`, completion?.error ? safeError(completion.error) : 'no choices in the response');
