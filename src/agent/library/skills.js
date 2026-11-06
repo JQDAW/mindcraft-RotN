@@ -29,19 +29,32 @@ async function autoLight(bot) {
     return false;
 }
 
+/**
+ * A weapon's rank by its material, a sword above an axe of the same material. A heuristic:
+ * neither mineflayer's items nor rotn-data carry attack damage (upstream sorted by an
+ * item.attackDamage that does not exist), and RotN's durabilities do not follow damage.
+ */
+export function weaponRank(item) {
+    const name = String(item?.name ?? '');
+    const tier = /diamond/.test(name) ? 4 : /iron/.test(name) ? 3 : /stone|flint|bone|obsidian/.test(name) ? 2 : 1;
+    return tier * 2 + (/sword/.test(name) ? 1 : 0);
+}
+
 async function equipHighestAttack(bot) {
-    const isWeapon = (item) => item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe'));
-    // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory first,
-    // so it can be equipped in the main hand (#238 review 1).
-    if (!bot.inventory.items().some(isWeapon) && isWeapon({ name: bot.inventory.slots?.[45]?.name ?? '' }))
-        await stowCarried(bot, isWeapon, { resyncMs: 0 });
-    let weapons = bot.inventory.items().filter(isWeapon);
-    if (weapons.length === 0)
-        weapons = bot.inventory.items().filter(item => item.name.includes('pickaxe') || item.name.includes('shovel'));
-    if (weapons.length === 0)
-        return;
-    weapons.sort((a, b) => b.attackDamage - a.attackDamage);
-    let weapon = weapons[0];
+    const isWeapon = (item) => !!item && (item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
+    const best = (items) => items.filter(isWeapon).sort((a, b) => weaponRank(b) - weaponRank(a))[0] ?? null;
+    // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory when
+    // it is better than any there, so it can be held in the main hand (#238 review 1 and nit 3).
+    const off = bot.inventory.slots?.[45];
+    const inInventory = best(bot.inventory.items());
+    if (isWeapon(off) && (!inInventory || weaponRank(off) > weaponRank(inInventory))) {
+        const full = (bot.inventory.firstEmptyInventorySlot?.() ?? null) === null;
+        const moved = await stowCarried(bot, isWeapon, { resyncMs: 0 });
+        if (!moved.length) log(bot, `Could not take the ${off.name} from the off hand${full ? ': the inventory is full' : ''}.`); // #238 nit 2
+    }
+    let weapon = best(bot.inventory.items());
+    if (!weapon)
+        weapon = bot.inventory.items().find(item => item.name.includes('pickaxe') || item.name.includes('shovel')) ?? null;
     if (weapon)
         await bot.equip(weapon, 'hand');
 }
@@ -497,7 +510,10 @@ export async function smeltItem(bot, itemName, num=1, ops=FURNACE_OPS) {
 export async function placeFurnaceNear(bot, range, { place = placeBlock, freeSpace = world.getNearestFreeSpace } = {}) {
     const pos = freeSpace(bot, 1, range);
     if (!pos) return null;
-    if (!await place(bot, 'furnace', pos.x, pos.y, pos.z)) return null;
+    // placeBlock can report a failure (or throw) although the server placed it (#238 nit 1): what
+    // stands at pos decides. pos was free, so a furnace there is this one, never someone else's.
+    try { await place(bot, 'furnace', pos.x, pos.y, pos.z); }
+    catch (err) { log(bot, `Placing the furnace failed (${safeError(err)}).`); }
     const b = bot.blockAt(pos);
     return b && names112.isFurnace(b.name) ? b : null;
 }
