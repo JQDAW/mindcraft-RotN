@@ -41,14 +41,14 @@
 
 ## LLM, providers and memory summaries
 
-- **Requests:** 25: 19 agent replies, **5 memory summaries stored**, 0 failed, no HTTP errors.
+- **Requests:** 25: 19 agent replies, **5 memory summaries stored**, 0 failed, no HTTP errors, and **1 still in flight at the end** (19 + 5 = 24; #283 review nit).
 
 | Provider | Requests | Empty answers | Summaries stored | Summaries empty |
 | --- | --- | --- | --- | --- |
 | Wafer | 24 | 0 | 4 | 0 |
 | Not attributed (another request was in flight) | - | - | 1 | 0 |
 
-- 25 requests but 24 provider lines: one request had no completion yet when the runner stopped the bot.
+- **The 25th request:** the last line of `untrusted/driver.log` is "Awaiting openrouter api response..." with nothing after it. The runner stopped the bot while that request waited, so it has no reply, no summary line and no provider line. It is in `calls` only, as DRIVER.md ("Records") allows for a request still waiting when the bot left.
 
 ## Cost
 
