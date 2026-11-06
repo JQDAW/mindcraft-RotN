@@ -1,6 +1,34 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (18:48 UTC, from `date -u`)
+Updated: 2026-11-06 (19:20 UTC, from `date -u`)
+
+## Next: the G3 gate plan (the lead, after #283 and #286; nothing run)
+
+**What a G3 gate claim needs** (`batch.mjs --gate`, `lib/g3.mjs`, DRIVER.md "Smoke is the default" and "Where G3 evidence goes"):
+- **A gate batch:** `batch.mjs --gate` writes `"gate": true, "smoke": false` into `batch.json`; without `--gate` a batch is smoke and never gate evidence.
+- **Gate-valid runs:** every G3 run carries `ROTN_G3_BATCH=<batch id>:2`, the pinned model in `llm.models`, a recorded spend, the default parameters compared 'equal' (`maxBatchUsd` 2, (b)'s `maxMinutes` 55, `nightFrom`, `dawnBelow`; (c)'s pinned marker and counter), and no `notGate` reason. All four round 6 results already say `gateValid: true`, so the code needs no change.
+- **The gate claim check, per batch:** `node test/tools/g3-batch-check.mjs <batch.json> <result.json>...` exits 0 only if the batch says `gate: true` (not smoke), every result's marker is that batch, the batch ran each scenario exactly once, each `runId` is the one the batch read back, no passing result has a nonzero exit, and no result is an infra fault.
+- **Evidence layout:** `test/evidence/g3/<batch>/batch.json` with each scenario's `result.json`, `driver.log` and `server.log` in a folder below it, redacted with `redact-evidence.mjs --bot FRCFLD`, plus a README. `g3-batch-check --tree test/evidence` must stay consistent. Proposed names: `g3a-<date>-gate`, `g3b-<date>-gate`, `g3c-<date>-gate`, `g3d-<date>-gate`.
+- **How many runs:** PLAN.md (phase 3, "G3: rocks to stone tools on a fresh spawn; survives the first night; a task preempts the agenda, which then resumes", plus ready-to-try's "untrusted players' tasks are politely refused") sets no repeat count. G2's precedent: each scenario passed once as a gate run. **Proposal: one gate run per scenario (A, B, C, D), each in its own gate batch; the lead decides if more are wanted.**
+
+**Batches and order** (as in rounds 5 and 6; D needs its own fresh server, so four gate batches):
+
+| Batch | `--ttl-hours` | Server minutes (round 6) | LLM USD (round 6) |
+| --- | --- | --- | --- |
+| A `g3-rocks-to-stone-tools` | 2 | 11 | 0.005 |
+| B `g3-first-night` | 3 | 38-47 | 0.007 |
+| C `g3-task-preempts-agenda` | 2 | 12-14 | 0.008 |
+| D `g3-untrusted-refused` | 1 | 8 | 0.003 |
+
+- **Cost:** 4 servers, each billed about 1 h: EUR 0.55 plus Primary IPv4; LLM about USD 0.025 (the stops stay USD 2 per batch and USD 4.50 by the key, which reads 0.8152 now).
+- **Time:** about 1 h 45 min of wall clock, the checks before each batch (`npm ci` about 2 min) included; B alone is about 45 min (Extended Days' two 10 min holds).
+- **The run command:** as in the round GO template, with `--gate` added to `batch.mjs`: `bash deploy/test-server.sh run --yes --ttl-hours <h> --seed 1880465901402976865 -- node test/runner/batch.mjs --gate --max-batch-usd 2 --logs-out <raw>/server --summary <raw>/batch.json --scenario <id> --out <raw>/<dir> -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json`. The rest of the round rules unchanged (preflight on its own first, no skip flags, deletion verified, stops, the human approves each run command, free memory noted).
+
+**Before the gate (for the lead):**
+1. **B's shelter fix** (skills-rotn): round 6 B died because the shelter counts no RotN cobble. B should pass a smoke run on the gate's develop commit first.
+2. **Pin (b)'s dawn rule:** DRIVER.md still calls it provisional ("the first G3 smoke batch confirms it before it is pinned"). Round 5's B rerun confirmed it (dusk 19.5, night 20.6, dawn 40.1 of 55 min, with both Extended Days holds). I can drop "provisional" in a doc PR once the lead pins it.
+3. **One commit for all four gate batches,** with a smoke round on that commit just before (A, C and D passed on f7fbe4fe).
+4. **A failed gate run:** it stays in the evidence as it is. A rerun is a new gate batch, a paid retry the lead approves, and the README lists every gate attempt for that scenario, so no passing run is picked from several.
 
 ## Now: G3 smoke round 6 is over (smoke, develop f7fbe4fe). No batch until a new GO.
 
@@ -14,7 +42,7 @@ Updated: 2026-11-06 (18:48 UTC, from `date -u`)
 - **Memory summaries:** 42 stored, 0 empty; every provider line names Wafer. **Spend:** USD 0.022473 by the batch figures, 0.022631 by the key (to 0.815220 of 4.50). Hetzner 11 + 38 + 12 + 8 min, all verified gone. Free memory 5.9-6.1 GB at each start.
 - **The daytime holds at 3001 and 16001 are Extended Days** (lead; checked against the pack's `config/extendeddays.cfg`: 3000 and 16000, 10 real minutes each). In DRIVER.md and the round 5 B rerun README.
 - **For skills-rotn (the lead routes):** the shelter's sturdy blocks should include RotN's cobble variants; `!taskDone` used for an agenda step (harmless).
-- **Open: the round 6 evidence PR. Next: the #282 nits PR** (the helper run's `event` checked in jq; a late-started helper run fails safe, documented).
+- **Merged: #283** (round 6 evidence, Extended Days) and **#286** (#282 nits). **Open:** the #283 nit (C and D: the request still in flight at the end) and this gate plan, one PR.
 
 ## Earlier: G3 smoke round 5 is over (smoke).
 
