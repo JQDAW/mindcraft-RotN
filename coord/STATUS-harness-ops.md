@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (07:21 UTC, from `date -u`)
+Updated: 2026-11-06 (07:32 UTC, from `date -u`)
 
 ## Now: G3 smoke round 4 is over (GO 06:30Z, develop 09197157, smoke). No batch until a new GO.
 
@@ -17,18 +17,12 @@ Updated: 2026-11-06 (07:21 UTC, from `date -u`)
   - **Why the use stat stays 0:** Forge 1.12.x `ForgeHooks.onPlaceItemIntoWorld` sets the stack to its new count, then calls `addStat(StatList.getObjectUseStats(itemstack.getItem()))`.
   - Placing the last item of a stack leaves an empty stack, whose item is air, so the use is credited to air.
   - The bot only ever holds one table, so the stat can never count its placement. DRIVER.md and the scenario header now say so; the check is unchanged (the held count and the placed block carry it).
-- **Next PR (`test/` only): (d) after an early kick.** `gone()` stays true after the kick, even though the agent process rejoined before the task was sent. So the observe loop never ran, and the refusal was called late.
+- **Open: #255 (`test/` only), (d) after an early kick.** `gone()` stays true after the kick, even though the agent process rejoined before the task was sent. So the observe loop never ran, and the refusal was called late.
   - Fix: a bot that left before the task is sent makes (d) "not reached", with the kick named, and no task is sent.
   - Offline test included.
-- **Proposal (the lead's question): should (d) start from a fresh inventory?** Yes. Today the G3 allowlist allows only the count-only `clear <bot> <item> <N> 0` (`lib/g3.mjs:84`), so a real clear needs a new line. I have not added one. Options:
-  1. **Recommended, no allowlist change:** run (d) in its own batch on a fresh CPX42. A fresh world gives the first-join inventory, so the agenda starts at `rocks`.
-     - Cost: one more server (about EUR 0.14 and a 3 min build).
-     - It also keeps (c) and (d) independent.
-  2. **One server, one new allowlist line (needs the lead's OK):** as (c)'s very last step, after its checks are recorded, `clear <bot>` (no item, no count).
-     - The allowlist entry would be exactly `^clear <bot>$`, allowed only in (c)'s teardown, with an offline test.
-     - It must be at the end of (c), not the start of (d): `clear` needs the bot online, and the burst comes within 3 s of (d)'s spawn, before a console command can reliably land.
-  3. **Not recommended:** run (d) before (c). (d) runs up to 16 min while the agenda keeps going (A finished all 11 steps in 6.3 min), so (c) would inherit the same problem and could miss its active-agenda wait.
-  - Either way, the catch-up burst itself needs skills-rotn's fix: a fresh inventory only removes the trigger in (d).
+- **Decided (the lead, after round 4): (d) runs in its own batch on a fresh server** from round 5. There is no allowlist change. A fresh world gives the first-join inventory, so the agenda starts at `rocks`.
+  - The batch layout, the TTL figures (D: 16 + 25 = 41 of 60 min, `--ttl-hours 1`) and a round GO template are in DRIVER.md, in #255.
+  - The catch-up burst itself still needs skills-rotn's fix.
 - **Merged: #251, the Windows test PR** (the lead, low priority; net-forge's report). The tests did not hang: Git Bash process starts on Windows made `cx23.test.js` take 189 s and `test-server.test.js` 255 s alone, beyond tool time limits.
   - The 8 shell-heavy blocks now skip on a local Windows run with a stated reason, unless `ROTN_RUN_SHELL_TESTS=1`. They never skip on CI (`CI=true`) or on Linux.
   - `deploy-eol`'s on-disk check skips on Windows (not CI) for a stale CRLF working copy, naming the files and the verified fix (`git checkout -- deploy/cx23`).
