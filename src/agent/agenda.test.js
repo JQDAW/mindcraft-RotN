@@ -331,3 +331,8 @@ test('round 5 A rerun: the sticks step needs 3 stickWood, and River Cane or bamb
     assert.equal(stepOf([...rocks, stack('biomesoplenty:bamboo', 0, 3)]), 'crude_axe', '3 bamboo');
     assert.equal(stepOf([...rocks, stack('biomesoplenty:plant_1', 0, 3)]), 'sticks', 'another plant_1 kind is not River Cane');
 });
+
+test('round 5 A rerun (lead: Hit With Axe): the Crafting Tools step names the axe path for a missing stick', () => {
+    const tools = ROTN_EARLY_GAME.find(s => s.id === 'crafting_tools');
+    assert.match(tools.goal, /With no stick left, !collectBlocks\("stick", 1\) chops a placed log and plank with the crude axe for 2 sticks/);
+});

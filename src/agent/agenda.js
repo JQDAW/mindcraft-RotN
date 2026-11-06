@@ -64,7 +64,9 @@ export const ROTN_EARLY_GAME = [
     },
     {
         id: 'crafting_tools', short: 'craft Crafting Tools',
-        goal: 'Craft Crafting Tools with !craftRecipe("contenttweaker:crafting_tools", 1): the crude axe (it is used up), 1 rock and 1 stick (or River Cane or bamboo). Make your first plank before this.',
+        // The lead's Hit With Axe decision (round 5 A rerun): with no stick left and no table yet,
+        // collectBlock makes sticks by using the crude axe on a placed log and plank (sticksByAxe).
+        goal: 'Craft Crafting Tools with !craftRecipe("contenttweaker:crafting_tools", 1): the crude axe (it is used up), 1 rock and 1 stick (or River Cane or bamboo). Make your first plank before this. With no stick left, !collectBlocks("stick", 1) chops a placed log and plank with the crude axe for 2 sticks (about 5 uses) and keeps a plank for the table.',
         done: (s) => s.count('contenttweaker:crafting_tools') > 0 || s.count('crafting_table') > 0 || s.near('crafting_table') || s.count('stone_pickaxe') > 0,
     },
     {

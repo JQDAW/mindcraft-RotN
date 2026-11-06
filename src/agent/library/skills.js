@@ -991,8 +991,23 @@ function planksByKind(bot) {
     return byKind;
 }
 
+/** A crafting table placed within 16 blocks, or one held. */
+const tableAtHand = (bot) => countItem(bot, 'crafting_table') > 0 || !!world.getNearestBlock(bot, 'crafting_table', 16);
+
+/**
+ * Held planks by kind that sticks may use: before the bot has a table (none near or held), one plank
+ * of the most-held kind is kept for it (round 5 A rerun; the lead's Hit With Axe path).
+ */
+function sparePlanksByKind(bot) {
+    const byKind = planksByKind(bot);
+    if (tableAtHand(bot)) return byKind;
+    const most = Object.entries(byKind).sort((a, b) => b[1] - a[1])[0];
+    if (most) byKind[most[0]] -= 1;
+    return byKind;
+}
+
 /** The sticks crafts the held planks allow: 2 of one kind each, never a mixed pair (#268 follow-up 3). */
-export const stickCraftsHeld = (bot) => Object.values(planksByKind(bot)).reduce((n, c) => n + Math.floor(c / 2), 0);
+export const stickCraftsHeld = (bot) => Object.values(sparePlanksByKind(bot)).reduce((n, c) => n + Math.floor(Math.max(0, c) / 2), 0);
 
 /**
  * Sticks short (G3 round 5 A: no tree could be felled safely): make `need` sticks from held planks,
@@ -1002,7 +1017,7 @@ export const stickCraftsHeld = (bot) => Object.values(planksByKind(bot)).reduce(
  * rerun: "Crafting planks requires a crafting table"). Bounded rounds, each must make progress.
  * Returns the sticks made.
  */
-export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds = 4) {
+export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds = 4, axeOps = AXE_CHOP_OPS) {
     const logNames = oreMemberNames('logWood');
     const logsHeld = () => logNames.reduce((n, name) => n + countItem(bot, name), 0);
     const planksHeld = () => Object.values(planksByKind(bot)).reduce((n, c) => n + c, 0);
@@ -1011,13 +1026,17 @@ export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds 
         const crafts = Math.ceil((need - made) / 4);
         const pairs = stickCraftsHeld(bot);
         if (pairs === 0) {
-            if (logsHeld() === 0) break;
-            // Said once, with what to do instead, so the model does not retry the same command
-            // (#270 review 1; round 5 A rerun: "Crafting planks requires a crafting table").
-            if (countItem(bot, 'crafting_table') === 0 && !world.getNearestBlock(bot, 'crafting_table', 16)) {
-                log(bot, 'Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held. Get or make a table first (Crafting Tools and 1 plank; your first plank comes from using the crude axe on a placed log). Until then, River Cane or bamboo (picked by hand) work as sticks for the crude axe and the Crafting Tools.');
+            // No table near or held: Hit With Axe with any axe of level 0 or more (the lead's
+            // decision, rotn-data #272): a placed log gives 1 plank (2 uses), a placed plank 2 sticks.
+            if (!tableAtHand(bot)) {
+                if (allowedTool(bot, AXE_ANY)) { made += await sticksByAxe(bot, need - made, run, axeOps); break; }
+                if (logsHeld() === 0 && planksHeld() === 0) break;
+                // Said once, with what to do instead, so the model does not retry the same command
+                // (#270 review 1; round 5 A rerun: "Crafting planks requires a crafting table").
+                log(bot, 'Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them (place a log or plank and use the axe on it). Get a crude axe or a table first. Until then, River Cane or bamboo (picked by hand) work as sticks for the crude axe and the Crafting Tools.');
                 break;
             }
+            if (logsHeld() === 0) break;
             const before = planksHeld();
             log(bot, `Making planks from logs for sticks.`);
             await craftRecipe(bot, 'planks', Math.ceil(crafts / 2)); // 1 log: 4 planks in vanilla; another round if fewer
@@ -1040,6 +1059,131 @@ export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds 
     }
     return made;
 }
+
+/** Any axe of level 0 or more: the crude, flint or stone axe (rotn-data #272: Hit With Axe). */
+export const AXE_ANY = { type: 'axe', minLevel: 0 };
+
+/** Bounds for Hit With Axe: axe clicks in all (the crude axe has 8 uses), time, the wait per click and for drops. */
+export const AXE_CHOP_LIMITS = { clicks: 8, totalMs: 90_000, settleMs: 1500, pickupMs: 5000, dropRadius: 3 };
+
+/**
+ * Hit With Axe (rotn-data #272; the lead's decision for round 5 A rerun: the path to sticks before
+ * a table exists). Place a block and use (right-click) any axe of level 0 or more on it: a log is
+ * debarked on the first click (+1 bark) and gives 1 plank on the second; a plank gives 2 sticks.
+ * Each click costs 1 axe use, and the drop lands one block toward the bot. Planks are made from
+ * held logs; before the bot has a table, one plank is kept for it. Bounded by AXE_CHOP_LIMITS; gives
+ * up with a reason when there is no axe, nothing to chop, or a click changes nothing.
+ * ops.place(bot, name) places the item near the bot and returns the block (or null); ops.pickup
+ * picks up the drops around a position. Returns the sticks gained.
+ */
+export async function sticksByAxe(bot, need, run = currentRun(bot), ops = AXE_CHOP_OPS, limits = {}) {
+    const L = { ...AXE_CHOP_LIMITS, ...limits };
+    const start = Date.now();
+    const left = () => L.totalMs - (Date.now() - start);
+    const sticks = () => countItem(bot, 'stick');
+    const first = sticks();
+    if (!allowedTool(bot, AXE_ANY)) {
+        log(bot, 'Not making sticks with an axe: you hold no axe (a crude, flint or stone axe works).');
+        return 0;
+    }
+    const logNames = oreMemberNames('logWood');
+    const heldLog = () => bot.inventory.items().find(i => logNames.some(n => itemMatches(i, n))) ?? null;
+    const plankNames = oreMemberNames('stickMat');
+    const plankCount = () => bot.inventory.items().filter(i => plankNames.some(n => itemMatches(i, n))).reduce((n, i) => n + i.count, 0);
+    const sparePlank = () => {
+        const kind = Object.entries(sparePlanksByKind(bot)).find(([, n]) => n > 0)?.[0];
+        return kind ? bot.inventory.items().find(i => (inventoryKey(i) ?? i.name) === kind) ?? null : null;
+    };
+    let clicks = 0;
+    // Place `item`, click it with the axe up to maxClicks times while it changes, then pick up the
+    // drops; true when `gained()` rose.
+    const chop = async (item, gained, maxClicks) => {
+        const name = inventoryKey(item) ?? item.name;
+        const block = await ops.place(bot, name);
+        if (!block) { log(bot, `Could not place ${name} to chop it with the axe.`); return false; }
+        const pos = block.position;
+        const before = gained();
+        for (let i = 0; i < maxClicks && clicks < L.clicks && left() > 0 && !run.aborted && !bot.interrupt_code; i++) {
+            const axe = allowedTool(bot, AXE_ANY);
+            if (!axe) { log(bot, 'Your axe broke; stopping.'); break; }
+            const now = bot.blockAt(pos);
+            if (!now || now.name === 'air') break;
+            await bot.equip(axe, 'hand');
+            await bot.lookAt(pos.offset(0.5, 0.5, 0.5));
+            const was = `${now.name}:${now.metadata}`;
+            await bot.activateBlock(now);
+            clicks++;
+            let after = null;
+            for (const until = Date.now() + Math.min(L.settleMs, Math.max(0, left())); ;) {
+                after = bot.blockAt(pos);
+                if (!after || `${after.name}:${after.metadata}` !== was || Date.now() >= until) break;
+                await new Promise(r => setTimeout(r, 100));
+            }
+            if (after && `${after.name}:${after.metadata}` === was) {
+                log(bot, `Using the axe on the placed ${now.name} changed nothing; stopping.`);
+                return false;
+            }
+        }
+        if (run.aborted) return false;
+        await ops.pickup(bot, pos, L);
+        return gained() > before;
+    };
+    while (sticks() - first < need && clicks < L.clicks && left() > 0 && !run.aborted && !bot.interrupt_code) {
+        if (!allowedTool(bot, AXE_ANY)) { log(bot, 'Your axe broke; stopping.'); break; }
+        const short = need - (sticks() - first);
+        // 2 planks of one kind make 4 sticks with no axe use: craft them in the inventory grid.
+        if (stickCraftsHeld(bot) > 0) {
+            const before = sticks();
+            await craftRecipe(bot, 'stick', Math.min(Math.ceil(short / 4), stickCraftsHeld(bot)));
+            if (sticks() <= before) break;
+            continue;
+        }
+        const plank = sparePlank();
+        // A spare plank: chop it when 2 sticks will do, or when there is no log to pair it with.
+        if (plank && (short <= 2 || !heldLog())) {
+            log(bot, `Chopping a placed ${inventoryKey(plank) ?? plank.name} with the axe for 2 sticks.`);
+            if (!(await chop(plank, sticks, 1))) break;
+            continue;
+        }
+        const wood = heldLog();
+        if (!wood) {
+            log(bot, `No logs${plankCount() ? ' or spare planks (one is kept for the crafting table)' : ' or planks'} to chop with the axe.`);
+            break;
+        }
+        log(bot, `Chopping a placed ${inventoryKey(wood) ?? wood.name} with the axe for a plank (2 uses).`);
+        if (!(await chop(wood, plankCount, 3))) break;
+    }
+    if (clicks >= L.clicks && sticks() - first < need) log(bot, `Stopped chopping: ${L.clicks} axe uses in this collect.`);
+    else if (left() <= 0) log(bot, `Stopped chopping: time limit of ${secsText(L.totalMs)} reached.`);
+    return Math.max(0, sticks() - first);
+}
+
+/** Place an item on free ground near the bot; the block, or null. */
+async function placeNear(bot, name) {
+    const pos = world.getNearestFreeSpace(bot, 1, 6);
+    if (!pos) return null;
+    await placeBlock(bot, name, pos.x, pos.y, pos.z);
+    const b = bot.blockAt(pos);
+    return b && b.name !== 'air' ? b : null;
+}
+
+/** Walk to the items near pos (the drops of an axe click), bounded. */
+async function pickUpNear(bot, pos, L = AXE_CHOP_LIMITS) {
+    const start = Date.now();
+    const tried = new Set();
+    while (Date.now() - start < L.pickupMs && !bot.interrupt_code) {
+        const item = Object.values(bot.entities ?? {}).find(e => e?.name === 'item' && e.position && !tried.has(e.id ?? e)
+            && e.position.distanceTo(pos) <= L.dropRadius);
+        if (!item) break;
+        tried.add(item.id ?? item);
+        const p = item.position;
+        await within(goToGoal(bot, new pf.goals.GoalNear(p.x, p.y, p.z, 1), { canDig: false }),
+            Math.max(0, L.pickupMs - (Date.now() - start)), () => stopWalking(bot));
+        await new Promise(r => setTimeout(r, 250));
+    }
+}
+
+export const AXE_CHOP_OPS = { place: placeNear, pickup: pickUpNear };
 
 export async function pickupNearbyItems(bot) {
     /**

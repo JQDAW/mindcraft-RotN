@@ -450,7 +450,7 @@ test('#268 follow-up 2: no pair of planks but logs held: logs into planks first,
     const noTable = crafter([['log', 1, 25]]);
     assert.equal(await skills.collectBlock(noTable, 'stick', 4), false);
     assert.deepEqual(noTable.crafted, []);
-    assert.match(noTable.output, /Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held\..* River Cane or bamboo \(picked by hand\) work as sticks/);
+    assert.match(noTable.output, /Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them.* River Cane or bamboo \(picked by hand\) work as sticks/);
 });
 
 // ---- G3 round 5 A rerun: late, far drops; one tree cut 4 times; "its trunk is not in sight" ----
@@ -516,7 +516,7 @@ test('#270 review 2: planks need a table (as on RotN) and none is near or held: 
     const bot = crafter([['log', 1, 25]], { planksNeedTable: true });
     assert.equal(await skills.collectBlock(bot, 'stick', 4), false);
     assert.deepEqual(bot.crafted, []);
-    assert.equal((bot.output.match(/Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held\. Get or make a table first/g) ?? []).length, 1, bot.output);
+    assert.equal((bot.output.match(/Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held, and you hold no axe to chop them \(place a log or plank and use the axe on it\)\. Get a crude axe or a table first/g) ?? []).length, 1, bot.output);
     assert.doesNotMatch(bot.output, /Making planks from logs|requires a crafting table/);
     assert.match(bot.output, /Collected 0 stick\./);
     assert.equal(held(bot, 'log', 1), 25);
