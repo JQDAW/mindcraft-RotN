@@ -83,7 +83,10 @@ export function validateCollisionOverrides(data) {
 // One full-width box from the cell's floor to the top of the tallest box, or a full cube when there
 // is no box: for a state whose shape depends on its neighbours (a fence is 1.5 high and, connected,
 // fills its row; a Dynamic Trees branch grows arms toward the next tree part).
-// A box with no volume (zero extent on an axis): a point or a plane.
+// A box with no volume (zero extent on an axis): a point or a plane. A state whose every box is
+// flat becomes a full cube (dumpShapesByMeta). That is safe (never a hole), but costs paths: a flat
+// floor-level layer, if a mod had one, would become a 1-high step the bot climbs or walks around.
+// On 3.3.4 the all-flat states are the trunk shells and the Rats tubes, which are no floor layers.
 const isFlat = (b) => b[3] <= b[0] || b[4] <= b[1] || b[5] <= b[2];
 const neighbourSafeShape = (boxes) => (boxes.length ? [[0, 0, 0, 1, Math.max(1, ...boxes.map((b) => b[4])), 1]] : FULL_CUBE);
 

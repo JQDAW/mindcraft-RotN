@@ -37,7 +37,10 @@
 //   it at an empty cell, and a tile entity could change what it adds), unless REVIEWED. The vanilla
 //   contact methods in HARMLESS_VANILLA_CONTACT are reviewed (javap on the pinned server jar): a
 //   player walking in triggers neither, so only a mod class's own contact method excludes a button
-//   or a detector rail.
+//   or a detector rail, or a mod class that declares one of the vanilla helpers those methods call
+//   (HARMLESS_VANILLA_HELPERS): an override could look for players, unless the override is
+//   reviewed (REVIEWED_HELPER_OVERRIDES: Better With Mods' detector rails). The excluded
+//   pressure plates and tripwire are listed in checks.neverWalkThrough.
 //
 // Usage: node packages/forge-bridge/tools/build-collision-overrides.mjs --pack <server pack zip> [--check]
 // --check compares with the committed file and exits 1 if they differ.
@@ -104,6 +107,16 @@ const HARMLESS_VANILLA_CONTACT = {
     [`${MC}BlockButton`]: 'BlockButton (apd).onEntityCollidedWithBlock (func_180634_a): returns unless the button is wooden (field_150047_a) and unpowered, then checkPressed (func_185616_e) looks only for EntityArrow (aeh, bytecode 1-15): an arrow presses a wooden button, a player does not',
     [`${MC}BlockRailDetector`]: 'BlockRailDetector (apv).onEntityCollidedWithBlock (func_180634_a): returns if powered, else updatePoweredState (func_176570_e) looks only for EntityMinecart (afe, bytecode 23-36): a minecart powers it, a player does not',
 };
+// What those contact methods call (SRG names): a mod class that declares one overrides it, so its
+// block is excluded like one with its own contact method (#281 review).
+const HARMLESS_VANILLA_HELPERS = {
+    [`${MC}BlockButton`]: { func_185616_e: 'checkPressed' },
+    [`${MC}BlockRailDetector`]: { func_176570_e: 'updatePoweredState', func_176571_a: 'findMinecarts' },
+};
+// Mod overrides of those helpers, reviewed with javap -c on the pinned jar.
+const REVIEWED_HELPER_OVERRIDES = {
+    'betterwithmods/common/blocks/BlockRailDetectorBase': 'BetterWithMods-1.12-2.3.24.jar: BlockRailDetectorBase overrides findMinecarts (func_176571_a) only; it adds its rider filter to the caller\'s predicates and returns World.getEntitiesWithinAABB (func_175647_a, bytecode 26-37) for the caller\'s Class<T extends EntityMinecart> (aload_3): it finds only minecarts, so a player still does not power it',
+};
 // Never walk-through, whatever else the chain contains: they trigger mechanisms and traps.
 const NEVER_WALK_BASES = [`${MC}BlockBasePressurePlate`, `${MC}BlockTripWire`, `${MC}BlockTripWireHook`];
 // Classes whose contact method harms only some variants (javap -c on the pinned jar, the switch on
@@ -118,6 +131,28 @@ const REVIEWED = {
         evidence: 'BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar: BlockBOPFlower.onEntityCollidedWithBlock (func_180634_a) switches on the variant (BlockBOPFlower$1): DEATHBLOOM adds wither (MobEffects.field_82731_v, bytecode 65-74), BURNING_BLOSSOM sets the entity on fire (func_70015_d, 91); every other variant does nothing',
     },
 };
+
+/**
+ * The class-chain part of the utility walk-through rule (lead decision after #279).
+ * chain: the block's class and its superclasses (internal names, the class first);
+ * methodsOf(c): the SRG names of the methods class c declares.
+ * Returns { utility: the UTILITY_BASES class in the chain or null, never: the NEVER_WALK_BASES
+ * class in the chain or null, ownContact: the class below net.minecraft.block.Block that declares
+ * a contact method other than a reviewed harmless vanilla one, or overrides a helper one of those
+ * calls (unless REVIEWED_HELPER_OVERRIDES lists it), or null }.
+ */
+export function utilityWalkRule(chain, methodsOf) {
+    const below = chain.slice(0, Math.max(0, chain.indexOf(BLOCK)));
+    const helpers = chain.flatMap((c) => Object.keys(HARMLESS_VANILLA_HELPERS[c] ?? {}));
+    const declaresAny = (c, ms) => ms.some((m) => methodsOf(c).includes(m));
+    const ownContact = below.find((c) => !HARMLESS_VANILLA_CONTACT[c]
+        && (declaresAny(c, [M.onEntityCollidedWithBlock, M.onEntityWalk]) || (!REVIEWED_HELPER_OVERRIDES[c] && declaresAny(c, helpers))));
+    return {
+        utility: chain.find((c) => UTILITY_BASES[c]) ?? null,
+        never: chain.find((c) => NEVER_WALK_BASES.includes(c)) ?? null,
+        ownContact: ownContact ?? null,
+    };
+}
 
 const sha256 = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
@@ -242,7 +277,7 @@ export function buildCollisionOverrides(packPath) {
         }
     }
     if (!dtJarSha) throw new Error(`${DT_JAR} is not in the pack`);
-    for (const c of [DT_LEAVES, ...FLUID_BASES, ...Object.keys(HAZARD_BASES), ...PLANT_BASES, ...Object.keys(ROCK_PILES), ...Object.keys(REVIEWED), ...Object.keys(UTILITY_BASES), ...NEVER_WALK_BASES, ...Object.keys(HARMLESS_VANILLA_CONTACT)]) {
+    for (const c of [DT_LEAVES, ...FLUID_BASES, ...Object.keys(HAZARD_BASES), ...PLANT_BASES, ...Object.keys(ROCK_PILES), ...Object.keys(REVIEWED), ...Object.keys(UTILITY_BASES), ...NEVER_WALK_BASES, ...Object.keys(HARMLESS_VANILLA_CONTACT), ...Object.keys(REVIEWED_HELPER_OVERRIDES)]) {
         if (!classes.has(c)) throw new Error(`class ${c} not found in the pack`);
     }
 
@@ -291,6 +326,7 @@ export function buildCollisionOverrides(packPath) {
     const blocks = {};
     const counts = { moddedBlocks: 0, withDumpStates: 0, statesWithoutBox: 0, walkThroughStates: 0, solidStatesWithoutBox: 0, dynamicLeavesChecked: 0, utilityWalkThrough: {}, neverWalkThrough: {} };
     const dot = (c) => c.replace(/\//g, '.');
+    const neverWalkThrough = {};
     for (const [regName, b] of Object.entries(pack.dump.blocks.blocks).sort(([a], [z]) => a.localeCompare(z))) {
         if (regName.startsWith('minecraft:')) continue;
         counts.moddedBlocks++;
@@ -347,12 +383,12 @@ export function buildCollisionOverrides(packPath) {
         counts.statesWithoutBox += noBox.length;
         const plantLike = PLANT_BASES.some((p) => chain.includes(p)) || (states.length > 0 && states.every((s) => PLANT_MATERIALS.has(s.material)));
         const pile = below.find((c) => ROCK_PILES[c]);
-        const utility = chain.find((c) => UTILITY_BASES[c]);
-        const never = chain.find((c) => NEVER_WALK_BASES.includes(c));
-        // A contact method other than a reviewed harmless vanilla one.
-        const ownContact = below.find((c) => !HARMLESS_VANILLA_CONTACT[c] && [M.onEntityCollidedWithBlock, M.onEntityWalk].some((m) => classes.get(c).methods.includes(m)));
+        const { utility, never, ownContact } = utilityWalkRule(chain, (c) => classes.get(c).methods);
         const overrides = declares(M.addCollisionBoxToList) || (!reviewed && ownContact);
-        if (noBox.length && never) counts.neverWalkThrough[dot(never)] = (counts.neverWalkThrough[dot(never)] ?? 0) + 1;
+        if (noBox.length && never) {
+            counts.neverWalkThrough[dot(never)] = (counts.neverWalkThrough[dot(never)] ?? 0) + 1;
+            neverWalkThrough[regName] = dot(never);
+        }
         if (noBox.length && !liquid && !hazard && !dtLeaves && !never && (plantLike || pile || utility) && !overrides) {
             const metas = noBox.map((s) => s.meta).filter((m) => !(m in hazardByMeta));
             if (metas.length) {
@@ -388,13 +424,16 @@ export function buildCollisionOverrides(packPath) {
                     + `(line ${passable.line}), vanillaLeavesCollision=${vanilla.value} (line ${vanilla.line}), mod ${PASSABLE_LEAVES_MODID} `
                     + `${passableLeavesJar ? `loaded (${passableLeavesJar})` : 'not in the pack'}`,
             },
+            // Blocks with no player box that NEVER_WALK_BASES keeps solid: block -> the class in its chain.
+            neverWalkThrough,
         },
         reviewed: Object.fromEntries([
             ...Object.entries(REVIEWED).map(([c, r]) => [dot(c), r.evidence]),
             ...Object.entries(ROCK_PILES).map(([c, e]) => [dot(c), `rock pile: ${e}; no player box in the dump, no contact or collision-box override`]),
             ...Object.entries(UTILITY_BASES).map(([c, k]) => [dot(c), `${k} (lead decision after #279): walk-through where no state has a player box and no class in the chain declares a contact or collision-box method`]),
             ...NEVER_WALK_BASES.map((c) => [dot(c), 'never walk-through (lead decision after #279): triggers mechanisms and traps']),
-            ...Object.entries(HARMLESS_VANILLA_CONTACT).map(([c, e]) => [dot(c), `harmless vanilla contact method: ${e}`]),
+            ...Object.entries(HARMLESS_VANILLA_CONTACT).map(([c, e]) => [dot(c), `harmless vanilla contact method: ${e}; a mod class that overrides ${Object.entries(HARMLESS_VANILLA_HELPERS[c]).map(([s, n]) => `${n} (${s})`).join(' or ')} is excluded unless reviewed`]),
+            ...Object.entries(REVIEWED_HELPER_OVERRIDES).map(([c, e]) => [dot(c), `reviewed helper override: ${e}`]),
         ]),
         blocks,
     };
