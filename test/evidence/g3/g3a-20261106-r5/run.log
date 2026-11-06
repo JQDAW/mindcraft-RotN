@@ -1,0 +1,42 @@
+[test-server 11:58:13] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --max-batch-usd 2 --logs-out captures/raw/r5-g3a/server --summary captures/raw/r5-g3a/batch.json --scenario g3-rocks-to-stone-tools --out captures/raw/r5-g3a/rocks -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 11:58:14] preflight passed: driver, profile, model and settings checked; the key's usage can be read; the LLM probe answered (HTTP 200, provider OpenInference, z-ai/glm-5.3-flash); 1 scenario(s) (timeouts: g3-rocks-to-stone-tools 37 min); a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[test-server 11:58:27] sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15.2, 14.7 min, newest 42212593876 12.9 min ago
+[test-server 11:58:27] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 11:58:28] creating mcr-test-20261106-115820: delete-after 2026-11-06T13:58:27Z (TTL 2h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 11:58:42] server mcr-test-20261106-115820 is at <ip>
+[test-server 11:58:42] waiting for SSH and the build (up to 120 min)
+[test-server 11:58:52] phase: unreachable
+[test-server 11:59:10] phase: booting:running
+[test-server 11:59:59] phase: unpack
+[test-server 12:00:15] phase: starting
+[test-server 12:03:46] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 12:03:48] READY: mcr-test-20261106-115820 at <ip>:25565 (delete-after 2026-11-06T13:58:27Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261106-115820
+[test-server 12:03:48] running: node test/runner/batch.mjs --max-batch-usd 2 --logs-out captures/raw/r5-g3a/server --summary captures/raw/r5-g3a/batch.json --scenario g3-rocks-to-stone-tools --out captures/raw/r5-g3a/rocks -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 12:03:48] batch 20261106T120348-5060: a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[batch 12:03:49] g3-rocks-to-stone-tools: start (spent so far USD 0 of 2; runner timeout 37 min, derived 37)
+[scenario 12:03:49] g3-rocks-to-stone-tools (G3) run 20261106t120349-22c479; git c32521e5eb4dac79ae0b0480dcbce49d9243c93f; driver: node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json; out: captures/raw/r5-g3a/rocks
+[scenario 12:04:06] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 12:05:27] PASS fresh_start: none of 24 target items held; the pack's first-join Bread and Bundle seen
+[scenario 12:10:38] FAIL stone_tools: minecraft:stone_pickaxe no reply, minecraft:stone_axe 0; the bot is gone: lost (Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer)
+[scenario 12:10:38] FAIL crafting_table: held 0, placed (use stat) 0; the bot reported no placement
+[scenario 12:10:38] FAIL cobblestone: undergroundbiomes:igneous_cobble:0 no reply, undergroundbiomes:igneous_cobble:1 no reply, undergroundbiomes:igneous_cobble:2 no reply, undergroundbiomes:igneous_cobble:4 no reply, undergroundbiomes:igneous_cobble:5 no reply, undergroundbiomes:igneous_cobble:6 no reply, undergroundbiomes:igneous_cobble:7 no reply, contenttweaker:lignite_cobble:0 no reply, undergroundbiomes:metamorphic_cobble:0 no reply, undergroundbiomes:metamorphic_cobble:2 no reply, undergroundbiomes:metamorphic_cobble:3 no reply, undergroundbiomes:metamorphic_cobble:4 no reply, undergroundbiomes:metamorphic_cobble:5 no reply, undergroundbiomes:metamorphic_cobble:6 no reply, undergroundbiomes:metamorphic_cobble:7 no reply, undergroundbiomes:metamorphic_sandstone:0 no reply, contenttweaker:chalk_cobble:0 no reply, contenttweaker:shale_cobble:0 no reply, contenttweaker:siltstone_cobble:0 no reply, contenttweaker:chert_cobble:0 no reply, undergroundbiomes:sedimentary_sandstone:0 no reply, defiledlands:sandstone_defiled:0 no reply, undergroundbiomes:sedimentary_sandstone:2 no reply, contenttweaker:serpentinite_cobblestone:0 no reply, defiledlands:stone_defiled:0 no reply, undergroundbiomes:sedimentary_sandstone:6 no reply, aether_legacy:holystone:0 no reply, minecraft:cobblestone:0 no reply, minecraft:sandstone:0 no reply, contenttweaker:limestone_cobble:0 no reply, minecraft:red_sandstone:0 no reply (0 in all)
+[scenario 12:10:38] FAIL crafted_by_bot: pyrotech:crude_axe 0, contenttweaker:crafting_tools 0, minecraft:crafting_table 0, minecraft:stone_pickaxe 0, minecraft:stone_axe 0
+[scenario 12:10:40] PASS no_cheat: nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)
+[scenario 12:10:41] g3-rocks-to-stone-tools: 19 LLM requests (11 replies, 0 memory summaries, 0 failed), USD 0.001557
+[scenario 12:10:41] g3-rocks-to-stone-tools: model openrouter/@preset/glm-5-3-flash-cheap-reliable
+[scenario 12:10:43] g3-rocks-to-stone-tools: FAIL; 3 passed, 4 failed (captures/raw/r5-g3a/rocks/result.json)
+captures/raw/r5-g3a/server
+BATCH {"batchId":"20261106T120348-5060","testMode":false,"gate":false,"smoke":true,"maxBatchUsd":2,"scenarios":[{"id":"g3-rocks-to-stone-tools","out":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r5-g3a\\rocks","runId":"20261106t120349-22c479","exit":1,"spentBefore":0,"timeoutMin":37}],"stopped":null,"usageAtStart":0.770735047,"usageAtEnd":0.772292527,"spentUsd":0.001557,"exit":1,"logsFetched":true}
+[test-server 12:10:52] command exited with 1
+[test-server 12:10:52] EXIT trap: tearing down mcr-test-20261106-115820
+[test-server 12:10:53] deleting batch mcr-test-20261106-115820 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261106-115820)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 12:11:08] batch mcr-test-20261106-115820: ran 12 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 12:11:08] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261106-115820

@@ -1,0 +1,384 @@
+{
+  "scenario": "g3-rocks-to-stone-tools",
+  "gate": "G3",
+  "title": "From a fresh spawn the agent makes cobblestone, a crafting table and stone tools with RotN recipes (the server counts)",
+  "runId": "20261106t120349-22c479",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "FAIL",
+  "passed": 3,
+  "failed": 4,
+  "durationS": 412,
+  "params": {
+    "bot": "<bot>",
+    "worldSeed": "1880465901402976865",
+    "maxMinutes": 25,
+    "maxBatchUsd": 2,
+    "loginTimeoutMs": 240000,
+    "milestonePollMs": 60000,
+    "pollMs": 1000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "lateReplyMs": 5000,
+    "latePollMs": 1000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the bot makes it log in with its own account (online mode)"
+    },
+    {
+      "check": "fresh_start",
+      "pass": true,
+      "detail": "none of 24 target items held; the pack's first-join Bread and Bundle seen",
+      "readyToTry": "At the start the bot holds none of the target items (a fresh spawn)"
+    },
+    {
+      "check": "stone_tools",
+      "pass": false,
+      "detail": "minecraft:stone_pickaxe no reply, minecraft:stone_axe 0; the bot is gone: lost (Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer)",
+      "readyToTry": "It ends with a stone pickaxe and a stone axe (the server's count)"
+    },
+    {
+      "check": "crafting_table",
+      "pass": false,
+      "detail": "held 0, placed (use stat) 0; the bot reported no placement",
+      "readyToTry": "It has a crafting table, held or placed (count, or the table's use stat)"
+    },
+    {
+      "check": "cobblestone",
+      "pass": false,
+      "detail": "undergroundbiomes:igneous_cobble:0 no reply, undergroundbiomes:igneous_cobble:1 no reply, undergroundbiomes:igneous_cobble:2 no reply, undergroundbiomes:igneous_cobble:4 no reply, undergroundbiomes:igneous_cobble:5 no reply, undergroundbiomes:igneous_cobble:6 no reply, undergroundbiomes:igneous_cobble:7 no reply, contenttweaker:lignite_cobble:0 no reply, undergroundbiomes:metamorphic_cobble:0 no reply, undergroundbiomes:metamorphic_cobble:2 no reply, undergroundbiomes:metamorphic_cobble:3 no reply, undergroundbiomes:metamorphic_cobble:4 no reply, undergroundbiomes:metamorphic_cobble:5 no reply, undergroundbiomes:metamorphic_cobble:6 no reply, undergroundbiomes:metamorphic_cobble:7 no reply, undergroundbiomes:metamorphic_sandstone:0 no reply, contenttweaker:chalk_cobble:0 no reply, contenttweaker:shale_cobble:0 no reply, contenttweaker:siltstone_cobble:0 no reply, contenttweaker:chert_cobble:0 no reply, undergroundbiomes:sedimentary_sandstone:0 no reply, defiledlands:sandstone_defiled:0 no reply, undergroundbiomes:sedimentary_sandstone:2 no reply, contenttweaker:serpentinite_cobblestone:0 no reply, defiledlands:stone_defiled:0 no reply, undergroundbiomes:sedimentary_sandstone:6 no reply, aether_legacy:holystone:0 no reply, minecraft:cobblestone:0 no reply, minecraft:sandstone:0 no reply, contenttweaker:limestone_cobble:0 no reply, minecraft:red_sandstone:0 no reply (0 in all)",
+      "readyToTry": "It holds cobblestone made from rocks (any 4-rocks output, rotn-data)"
+    },
+    {
+      "check": "crafted_by_bot",
+      "pass": false,
+      "detail": "pyrotech:crude_axe 0, contenttweaker:crafting_tools 0, minecraft:crafting_table 0, minecraft:stone_pickaxe 0, minecraft:stone_axe 0",
+      "readyToTry": "The server's craft stats show the bot crafted the crude axe, Crafting Tools, the table and both stone tools"
+    },
+    {
+      "check": "no_cheat",
+      "pass": true,
+      "detail": "nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)",
+      "readyToTry": "No give, game mode change, op or command by the bot during the run (the pack's first-join commands aside)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "objectives": [
+      {
+        "obj": "g3a_c_crude",
+        "criteria": "stat.craftItem.pyrotech.crude_axe",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_ctools",
+        "criteria": "stat.craftItem.contenttweaker.crafting_tools",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_table",
+        "criteria": "stat.craftItem.minecraft.crafting_table",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_spick",
+        "criteria": "stat.craftItem.minecraft.stone_pickaxe",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_saxe",
+        "criteria": "stat.craftItem.minecraft.stone_axe",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_c_cobble",
+        "criteria": "stat.craftItem.minecraft.cobblestone",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_u_table",
+        "criteria": "stat.useItem.minecraft.crafting_table",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_deaths",
+        "criteria": "stat.deaths",
+        "result": "added"
+      },
+      {
+        "obj": "g3a_played",
+        "criteria": "stat.playOneMinute",
+        "result": "added"
+      }
+    ],
+    "startCounts": {
+      "minecraft:stone_pickaxe": 0,
+      "minecraft:stone_axe": 0,
+      "minecraft:crafting_table": 0,
+      "pyrotech:crude_axe": 0,
+      "contenttweaker:crafting_tools": 0,
+      "undergroundbiomes:igneous_cobble": 0,
+      "contenttweaker:lignite_cobble": 0,
+      "undergroundbiomes:metamorphic_cobble": 0,
+      "undergroundbiomes:metamorphic_sandstone": 0,
+      "contenttweaker:chalk_cobble": 0,
+      "contenttweaker:shale_cobble": 0,
+      "contenttweaker:siltstone_cobble": 0,
+      "contenttweaker:dolomite_cobble": 0,
+      "contenttweaker:greywacke_cobble": 0,
+      "contenttweaker:chert_cobble": 0,
+      "undergroundbiomes:sedimentary_sandstone": 0,
+      "defiledlands:sandstone_defiled": 0,
+      "contenttweaker:serpentinite_cobblestone": 0,
+      "defiledlands:stone_defiled": 0,
+      "aether_legacy:holystone": 0,
+      "minecraft:cobblestone": 0,
+      "minecraft:sandstone": 0,
+      "contenttweaker:limestone_cobble": 0,
+      "minecraft:red_sandstone": 0
+    },
+    "milestonesMin": {},
+    "track": [
+      {
+        "min": 1.5,
+        "deaths": 0
+      }
+    ],
+    "end": {
+      "reason": "the bot is gone: lost (Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer)",
+      "minutes": 1.5
+    },
+    "agendaChat": [
+      "agenda step rocks started: collect 6 rocks",
+      "agenda step rocks done",
+      "agenda step sticks started: collect 4 sticks"
+    ],
+    "finalCounts": {
+      "minecraft:stone_pickaxe": null,
+      "minecraft:stone_axe": 0,
+      "minecraft:crafting_table": 0
+    },
+    "cobbleHeld": [
+      {
+        "name": "undergroundbiomes:igneous_cobble",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:igneous_cobble",
+        "meta": 1,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:igneous_cobble",
+        "meta": 2,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:igneous_cobble",
+        "meta": 4,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:igneous_cobble",
+        "meta": 5,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:igneous_cobble",
+        "meta": 6,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:igneous_cobble",
+        "meta": 7,
+        "count": null
+      },
+      {
+        "name": "contenttweaker:lignite_cobble",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:metamorphic_cobble",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:metamorphic_cobble",
+        "meta": 2,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:metamorphic_cobble",
+        "meta": 3,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:metamorphic_cobble",
+        "meta": 4,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:metamorphic_cobble",
+        "meta": 5,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:metamorphic_cobble",
+        "meta": 6,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:metamorphic_cobble",
+        "meta": 7,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:metamorphic_sandstone",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "contenttweaker:chalk_cobble",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "contenttweaker:shale_cobble",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "contenttweaker:siltstone_cobble",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "contenttweaker:chert_cobble",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:sedimentary_sandstone",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "defiledlands:sandstone_defiled",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:sedimentary_sandstone",
+        "meta": 2,
+        "count": null
+      },
+      {
+        "name": "contenttweaker:serpentinite_cobblestone",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "defiledlands:stone_defiled",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "undergroundbiomes:sedimentary_sandstone",
+        "meta": 6,
+        "count": null
+      },
+      {
+        "name": "aether_legacy:holystone",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "minecraft:cobblestone",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "minecraft:sandstone",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "contenttweaker:limestone_cobble",
+        "meta": 0,
+        "count": null
+      },
+      {
+        "name": "minecraft:red_sandstone",
+        "meta": 0,
+        "count": null
+      }
+    ],
+    "finalScores": {
+      "g3a_played": 1433
+    },
+    "craftingTablePath": {
+      "path": "none",
+      "useStat": "added",
+      "fallback": false,
+      "held": 0,
+      "placed": 0,
+      "claims": []
+    },
+    "packFirstJoin": [
+      "gamerule_commandBlockOutput",
+      "gamerule_sendCommandFeedback",
+      "give_bread",
+      "give_bundle"
+    ],
+    "packRepeats": []
+  },
+  "botExitCode": 128,
+  "botExitSignal": "SIGTERM",
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "c32521e5eb4dac79ae0b0480dcbce49d9243c93f",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261106-115820",
+  "driver": "node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json",
+  "llm": {
+    "models": {
+      "model": "openrouter/@preset/glm-5-3-flash-cheap-reliable",
+      "code_model": null,
+      "vision_model": null
+    },
+    "calls": 19,
+    "replies": {
+      "ok": 11,
+      "memory": 0,
+      "failed": 0,
+      "disconnected": 0,
+      "empty": 0
+    },
+    "httpErrors": {},
+    "usageBefore": 0.770735047,
+    "usageAfter": 0.772292527,
+    "usd": 0.001557,
+    "error": null
+  },
+  "batch": "20261106T120348-5060:2"
+}
