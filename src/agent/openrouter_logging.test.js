@@ -98,6 +98,15 @@ test('an error whose message embeds a JSON body is cut before the body', async (
     assert.equal(flat(lines), 'Error while awaiting response: Error (status 400): 400 {...}');
 });
 
+test('null, missing or blank content is no reply, never null (G3 round 5 A)', async (t) => {
+    for (const message of [{ content: null }, {}, { content: '   ' }, undefined]) {
+        const lines = captureErrors(t);
+        const res = await modelWith(() => Promise.resolve({ choices: [{ message, finish_reason: 'stop' }] })).sendRequest([], 'system');
+        assert.equal(res, 'No response received.');
+        assert.equal(flat(lines), 'Empty content returned (model vendor/some-model, finish_reason stop)');
+    }
+});
+
 test('a normal response is unchanged', async (t) => {
     const lines = captureErrors(t);
     const res = await modelWith(() => Promise.resolve({ choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }] })).sendRequest([], 'system');
