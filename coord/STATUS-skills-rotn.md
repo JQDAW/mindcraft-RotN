@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T03:54Z (from `date -u`)
+Updated: 2026-11-06T04:12Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -441,7 +441,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
      Nit tests: no place reached, a 2x2 trunk, a slope. Tests: `fell_tree` 11/11, `death_report` 10/10; the review-item tests fail on the previous head. Related 6 files pass; lint 254.
 - **Round 3 over** (lead): full tests allowed again.
-- **Open PR: the #242 follow-up and the #238 nits** (branch `agent/skills-rotn/approach-and-nits`, a fresh branch off develop, with the #238 nits commit cherry-picked from `next2` (the same result as a rebase, no force-push); STATUS lives here):
+- **#247 merged** (the #242 follow-up and the #238 nits; branch `agent/skills-rotn/approach-and-nits`, a fresh branch off develop, with the #238 nits commit cherry-picked from `next2` (the same result as a rebase, no force-push); STATUS lives here):
   1. The first approach to a tree has the normal walk limit (`GO_TO_LIMITS.totalMs`), still without digging. The other places, once the bot is at the tree, keep a step's time. Test: a 0.5 s approach with a 0.15 s step and a 3 s walk; with the old step limit, "could not reach a safe place".
   2. The `[object Object]` fallback in `deathCauseText` is commented.
   3. The #238 nits: `placeFurnaceNear` trusts `blockAt(pos)` after a failed or thrown placement; a weapon stuck in the off hand is logged; a better off-hand weapon beats a worse one (`weaponRank`).
@@ -459,7 +459,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
      - `placeFurnaceNear` requires air at the place before placing.
 
      Tests: `death_report` 14, `furnace` 7; the 4 new ones fail on the previous head; lint 254.
-- **Next (lead):** re-review #247. `agent/skills-rotn/next2` is superseded by it.
+- **#247 nit, ready for the next PR** (branch `agent/skills-rotn/next3`, from develop, pushed without a PR, "no rush"; STATUS lives here): from 10 to 20 min the night text says the items are already lost (before 10 min: "will be lost"). Test in `death_report` (14/14; the new assertion fails on develop). The other nit (rounding down shows "gone now" with 30 s left) was accepted as is by the lead.
+- **Next:** idle until the lead assigns work.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
