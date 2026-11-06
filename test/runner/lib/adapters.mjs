@@ -24,6 +24,13 @@ export function findBash() {
  * memory), 0xC0000017 STATUS_NO_MEMORY, 0xC000012D STATUS_COMMITMENT_LIMIT. Node gets the full 32-bit code
  * only from the process it started itself (bash); a failure of ssh inside bash would come back as 8 bits.
  */
+// Residual risk (#273 review 4): these codes are taken to mean "bash never ran". STATUS_DLL_INIT_FAILED only
+// happens while a process loads, but STATUS_NO_MEMORY and STATUS_COMMITMENT_LIMIT could in theory end a bash
+// that had already started, after ssh had sent the console command; the long retry would then send that
+// command again (at most 5 more times). It would take bash itself, not its ssh child (whose code comes back
+// as 8 bits), running out of memory after the send. Most console calls are reads (testfor, time query,
+// scoreboard list), where a repeat is harmless; a repeated setblock, clear or whisper (a task sent twice) is
+// possible but would show in the server log, which the evidence keeps.
 export const NOT_STARTED_STATUS = { 3221225794: 'STATUS_DLL_INIT_FAILED', 3221225495: 'STATUS_NO_MEMORY', 3221225773: 'STATUS_COMMITMENT_LIMIT' };
 /** spawnSync errors that mean the process was not started (a timeout, ETIMEDOUT, is not one of them). */
 export const NOT_STARTED_ERRORS = ['ENOMEM', 'EAGAIN', 'EMFILE', 'ENFILE'];
