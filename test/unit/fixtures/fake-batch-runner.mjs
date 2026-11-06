@@ -20,9 +20,21 @@ const file = process.env.ROTN_OPENROUTER_USAGE_FILE;
 const body = JSON.parse(fs.readFileSync(file, 'utf8'));
 body.data.usage = Math.round((body.data.usage + Number(process.env.FAKE_SPEND || 0)) * 1e6) / 1e6;
 fs.writeFileSync(file, process.env.FAKE_BREAK_USAGE === id ? '{"data":' : JSON.stringify(body));
+// FAKE_LLM=<scenario id>:<failed>:<ok>: that scenario writes a driver.log in --out with <failed> stand-in
+// replies (with their 429 lines) and <ok> real replies, then hangs (for the LLM-failure stop rule).
+const [llmId, llmFailed, llmOk] = (process.env.FAKE_LLM ?? '').split(':');
+if (llmId === id) {
+    const lines = process.env.FAKE_LLM_NOSPAWN === '1' ? [] : ['FRCFLD logged in!', 'FRCFLD spawned.'];
+    for (let i = 0; i < Number(llmFailed); i++) {
+        lines.push('Awaiting openrouter api response...', 'Error while awaiting response: Error [429] (status 429): 429 Provider returned error',
+            'Generated response: My brain disconnected, try again.', 'FRCFLD full response to system: """"');
+    }
+    for (let i = 0; i < Number(llmOk); i++) lines.push('Awaiting openrouter api response...', 'Generated response: On it!', 'FRCFLD full response to system: ""On it!""');
+    fs.writeFileSync(path.join(out, 'driver.log'), lines.join('\n') + '\n');
+}
 // FAKE_HANG=<scenario id>: that scenario never ends on its own (for the batch's timeout); on SIGTERM it
 // exits 143 like run.mjs does.
-if (process.env.FAKE_HANG === id) {
+if (process.env.FAKE_HANG === id || llmId === id) {
     process.on('SIGTERM', () => process.exit(143));
     setInterval(() => {}, 1000);
 } else {
