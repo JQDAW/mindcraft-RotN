@@ -231,13 +231,20 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
     - A scenario without `runMinutes`, or an unknown id, is refused, except in the offline test mode (fake ids: `--timeout-min` or 15).
     - The preflight log lists the timeouts, the start line of each scenario shows its own, and the summary records `timeoutMin` for each scenario.
   - A scenario that hits its runner timeout is recorded with exit **124**, whatever run.mjs exits after the SIGTERM. A runner that cannot be started is recorded with exit **127**. The summary records each scenario's `out` folder and its `exit`, and the batch's own `exit`.
-- **The LLM-failure stop rule** (lead, round 3 continuation; `llmStopVerdict`, `runOne` in `batch.mjs`):
-  - During each scenario's first 5 minutes, counted from its start, `batch.mjs` reads the scenario's `driver.log` every 15 s with `countLlmReplies`.
-  - **5 or more failed replies and none answered** (no agent reply and no memory summary) is an infra fault (the model does not answer), not a bot result.
-  - The scenario is stopped and recorded with exit **125** (`EXIT_LLM_STOP`), with `llmStop: {failed, ok, memory, httpErrors, afterS}` in the summary. The batch starts no further scenario (`stopped: "LLM-failure stop in <id>: ..."`), and the logs are still fetched.
-  - Failures count as in `result.llm.replies`: the stand-ins "My brain disconnected, try again." and "No response received.", a memory summary that stored one, and empty answers. One reply or one summary in the window means the model answers, and the rule does not fire. Failures after the window are left to the scenario's own checks.
-  - Round 3 B's log (11 requests, all 429) has 11 failures and no answer, so the rule would fire on it once 5 failures fall inside the window. A model that answers slowly but fails rarely is never stopped by it.
-  - The offline tests shorten the window and the poll (`ROTN_LLM_STOP_WINDOW_MS`, `ROTN_LLM_STOP_POLL_MS`). Both are in `TEST_OVERRIDES`, so a real batch refuses them.
+- **The LLM-failure stop rule** (lead, round 3 continuation; #248 review; `llmStopVerdict`, `runOne` in `batch.mjs`):
+  - **The window:** 5 minutes counted from the bot's spawn: the driver log's `<bot> spawned.` line (`SPAWNED_LINE`), so the driver start, the Forge join and the agent start do not eat into it. Without a spawn line, the window never opens; it never runs past 10 minutes from the scenario's start either (`capMs`). `batch.mjs` reads the scenario's `driver.log` every 15 s.
+  - **The trigger:** 5 or more failed replies and none answered (no agent reply and no memory summary). That is an infra fault (the model does not answer), not a bot result. Failures count as in `result.llm.replies`: the stand-ins "My brain disconnected, try again." and "No response received.", a memory summary that stored one, and empty answers.
+  - **The outcome, distinct from a check fail:**
+    - The scenario is stopped and recorded with exit **125** (`EXIT_LLM_STOP` = `INFRA_FAULT_EXIT` in `lib/g3.mjs`), with `llmStop: {failed, ok, memory, httpErrors, afterSpawnS, afterStartS}`.
+    - The batch starts no further scenario and exits **125** (unless the spend check gives 5 or 6), with `summary.infraFault` and `stopped: "LLM-failure stop: ... (an infra fault, not a bot result)"`. The logs are still fetched, and `test-server.sh`'s EXIT trap still deletes the server (a fake-cloud test shows it).
+    - The scenario's own `result.json` (written by the runner as a killed run) is marked: verdict `INFRA FAULT`, `pass: false`, `infraFault: {kind: "llm-failure-stop", ..., reason}`. Its checks stay as written.
+    - **The evidence tooling:** `crossCheckBatch` requires the batch's exit 125 and the result's `infraFault` to agree (both or neither), and the gate claim check refuses an infra fault ("not a bot result: never gate evidence"). `g3-batch-check --tree` names infra-fault results apart from check fails ("N infra fault result(s), not check fails: ...").
+  - **Round 3 B, shown from its committed server log** (`test/evidence/g3/g3b-20261106-r3/night/server-across-rollover.log`; the bot said each stand-in in chat, so the server times them):
+    - it joined at 23:31:28, and the stand-ins came at 23:31:37, :40, :43, 23:32:18 and 23:32:21;
+    - the 5th was 53 s after the join, with no LLM answer before it (only the agenda's "step rocks started" and Mindcraft's "Agent did not use command" notice);
+    - so the rule would have fired at the first poll after 23:32:21. A unit test checks this from the committed log.
+  - **Not covered:** a model that answers once and then fails, and failures after the window. Those are left to the scenario's own checks.
+  - The offline tests shorten the window, the cap and the poll (`ROTN_LLM_STOP_WINDOW_MS`, `ROTN_LLM_STOP_CAP_MS`, `ROTN_LLM_STOP_POLL_MS`). All three are in `TEST_OVERRIDES`, so a real batch refuses them.
 - **Limits:**
   - The spend is checked **between** scenarios, not during one, so a single scenario can run past the limit.
   - OpenRouter's usage figure can lag a little behind the newest requests.

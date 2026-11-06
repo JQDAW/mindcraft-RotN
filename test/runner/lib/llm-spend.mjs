@@ -20,7 +20,7 @@ export const LLM_MEMORY_LINE = 'Memory updated to:';
 export const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /** The test-mode overrides of the spend machinery; never honoured in a real batch (#122 review). */
-export const TEST_OVERRIDES = ['ROTN_TEST_MODE', 'ROTN_OPENROUTER_USAGE_FILE', 'ROTN_OPENROUTER_PROBE_FILE', 'ROTN_BATCH_RUNNER', 'ROTN_LLM_STOP_POLL_MS', 'ROTN_LLM_STOP_WINDOW_MS'];
+export const TEST_OVERRIDES = ['ROTN_TEST_MODE', 'ROTN_OPENROUTER_USAGE_FILE', 'ROTN_OPENROUTER_PROBE_FILE', 'ROTN_BATCH_RUNNER', 'ROTN_LLM_STOP_POLL_MS', 'ROTN_LLM_STOP_WINDOW_MS', 'ROTN_LLM_STOP_CAP_MS'];
 
 /**
  * Are the test-mode overrides allowed? Only with ROTN_TEST_MODE=1, and only offline: either outside any

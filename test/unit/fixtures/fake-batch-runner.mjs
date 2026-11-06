@@ -24,7 +24,7 @@ fs.writeFileSync(file, process.env.FAKE_BREAK_USAGE === id ? '{"data":' : JSON.s
 // replies (with their 429 lines) and <ok> real replies, then hangs (for the LLM-failure stop rule).
 const [llmId, llmFailed, llmOk] = (process.env.FAKE_LLM ?? '').split(':');
 if (llmId === id) {
-    const lines = [];
+    const lines = process.env.FAKE_LLM_NOSPAWN === '1' ? [] : ['FRCFLD logged in!', 'FRCFLD spawned.'];
     for (let i = 0; i < Number(llmFailed); i++) {
         lines.push('Awaiting openrouter api response...', 'Error while awaiting response: Error [429] (status 429): 429 Provider returned error',
             'Generated response: My brain disconnected, try again.', 'FRCFLD full response to system: """"');

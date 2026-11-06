@@ -37,7 +37,10 @@
 //   6. Prints `BATCH {json}` (and writes it to --summary): per scenario its exit code and the spend before
 //      it; the totals; why it stopped; testMode. Never the key.
 //   Exit: 0 if every scenario exited 0 (gate pass), 5 if the spend went over the limit (stop or end), 6 if
-//   the spend could not be read at the end, 2 if it could not start, else 1. The wrapper deletes the server.
+//   the spend could not be read at the end, 2 if it could not start, 125 if the LLM-failure rule stopped a
+//   scenario (an infra fault: the model did not answer; summary.infraFault, and the scenario's result.json says
+//   "INFRA FAULT"), else 1 (a check failed). The wrapper deletes the server.
+//   Per scenario: 124 timeout, 125 LLM-failure stop, 127 the runner could not start, else the runner's own exit.
 //   With --preflight: 0 if every check passed, else 2. --preflight-files (test-server.sh's --dry-run) runs
 //   the same checks without the key's usage reading, so a dry run never contacts OpenRouter (#176 review nit).
 //
@@ -57,7 +60,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { countLlmReplies, keyFetch, probeFetch, probeModel, readKeyUsage, spent, testOverridesAllowed, TEST_OVERRIDES } from './lib/llm-spend.mjs';
 import { findBash } from './lib/adapters.mjs';
-import { LLM_MODEL } from './lib/g3.mjs';
+import { INFRA_FAULT_EXIT, LLM_MODEL } from './lib/g3.mjs';
 import { checkProfile, parseDriverArgs, settingsProblems } from './drivers/mindcraft-driver.mjs';
 import { loadScenarios } from './run.mjs';
 
@@ -248,21 +251,29 @@ export function runIdOf(outDir) {
     }
 }
 
-/** Run one scenario (the runner is run.mjs; tests may swap it in test mode). Resolves the exit code. */
-/** The exit recorded for a scenario stopped by the LLM-failure rule (an infra fault, not a bot result). */
-export const EXIT_LLM_STOP = 125;
+/** The exit recorded for a scenario, and the batch, stopped by the LLM-failure rule (an infra fault, not a bot result). */
+export const EXIT_LLM_STOP = INFRA_FAULT_EXIT;
 
 /**
- * The LLM-failure stop rule (lead, round 3 continuation): a scenario whose first windowMs (5 min, from its start)
- * shows minFailed (5) or more failed LLM replies and no successful reply or memory summary is an infra fault (the
- * model does not answer), not a bot result: it is stopped, and the batch starts no further scenario.
- * The offline tests may shorten pollMs and windowMs (ROTN_LLM_STOP_POLL_MS, ROTN_LLM_STOP_WINDOW_MS; test mode only).
+ * The LLM-failure stop rule (lead, round 3 continuation; #248 review): in a scenario's first windowMs (5 min)
+ * counted from the bot's spawn (the driver log's "<bot> spawned." line, so the driver start, the Forge join and
+ * the agent start do not eat into it), minFailed (5) or more failed LLM replies and no successful reply or memory
+ * summary is an infra fault (the model does not answer), not a bot result: the scenario is stopped, and the batch
+ * starts no further one. Without a spawn line the window ends capMs (10 min) after the scenario's start, and it
+ * never runs past that cap either.
+ * The offline tests may shorten pollMs, windowMs and capMs (ROTN_LLM_STOP_*; test mode only).
  */
 export function llmStopSettings(env = {}) {
     const t = testOverridesAllowed(env);
     const n = (v, d) => (t && /^\d+$/.test(v ?? '') ? Number(v) : d);
-    return { windowMs: n(env.ROTN_LLM_STOP_WINDOW_MS, 5 * 60000), pollMs: n(env.ROTN_LLM_STOP_POLL_MS, 15000), minFailed: 5 };
+    return {
+        windowMs: n(env.ROTN_LLM_STOP_WINDOW_MS, 5 * 60000), capMs: n(env.ROTN_LLM_STOP_CAP_MS, 10 * 60000),
+        pollMs: n(env.ROTN_LLM_STOP_POLL_MS, 15000), minFailed: 5,
+    };
 }
+
+/** The bot's spawn in the driver log: Mindcraft prints "<bot> spawned." once the bot is in the world. */
+export const SPAWNED_LINE = /^[A-Za-z0-9_]{3,16} spawned\.$/;
 
 /** Whether the rule fires on these driver.log lines: {stop, ok, memory, failed, httpErrors}. */
 export function llmStopVerdict(lines, { minFailed = 5 } = {}) {
@@ -270,6 +281,24 @@ export function llmStopVerdict(lines, { minFailed = 5 } = {}) {
     return { stop: r.failed >= minFailed && r.ok === 0 && r.memory === 0, ok: r.ok, memory: r.memory, failed: r.failed, httpErrors: r.httpErrors };
 }
 
+/**
+ * Mark a scenario's result.json as an infra fault (#248 review): the runner wrote it as a killed run ("FAIL"),
+ * which would read as a bot failure. The record keeps every check as written and gains infraFault and the verdict
+ * "INFRA FAULT"; pass stays false. A missing or unreadable result.json is left alone (the summary still says it).
+ */
+export function markInfraFault(out, infraFault, reason) {
+    const f = path.join(out, 'result.json');
+    try {
+        const r = JSON.parse(fs.readFileSync(f, 'utf8'));
+        if (!r || typeof r !== 'object' || Array.isArray(r)) return false;
+        fs.writeFileSync(f, JSON.stringify({ ...r, verdict: 'INFRA FAULT', pass: false, infraFault: { ...infraFault, reason } }, null, 2) + '\n');
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/** Run one scenario (the runner is run.mjs; tests may swap it in test mode). Resolves the exit code. */
 export function runOne(s, o, env, { spawnImpl = spawn, llmStop = llmStopSettings(env) } = {}) {
     const runner = testOverridesAllowed(env) && env.ROTN_BATCH_RUNNER ? env.ROTN_BATCH_RUNNER : path.join(HERE, 'run.mjs');
     const args = [runner, '--scenario', s.id, '--out', s.out, '--param', `maxBatchUsd=${o.maxBatchUsd}`, '--pass-env', 'OPENROUTER_API_KEY', '--', ...o.driver];
@@ -280,18 +309,23 @@ export function runOne(s, o, env, { spawnImpl = spawn, llmStop = llmStopSettings
         const started = Date.now();
         const settle = (code) => { if (!done) { done = true; clearTimeout(timer); clearInterval(watch); resolve(code); } };
         const child = spawnImpl(process.execPath, args, { stdio: 'inherit', env });
-        // The LLM-failure stop rule: read the scenario's driver.log during its first windowMs.
+        // The LLM-failure stop rule: read the scenario's driver.log from the bot's spawn for windowMs (capped).
+        let spawnedAt = null;
         const watch = setInterval(() => {
-            if (Date.now() - started > llmStop.windowMs) { clearInterval(watch); return; }
-            let lines;
-            try { lines = fs.readFileSync(path.join(s.out, 'driver.log'), 'utf8').split('\n'); } catch { return; }
+            const now = Date.now();
+            let lines = null;
+            try { lines = fs.readFileSync(path.join(s.out, 'driver.log'), 'utf8').split('\n').map((l) => l.replace(/\r$/, '')); } catch { /* not yet */ }
+            if (spawnedAt === null && lines?.some((l) => SPAWNED_LINE.test(l))) spawnedAt = now;
+            const end = Math.min(spawnedAt === null ? Infinity : spawnedAt + llmStop.windowMs, started + llmStop.capMs);
+            if (now > end) { clearInterval(watch); return; }
+            if (!lines || spawnedAt === null) return;   // the window opens at the spawn
             const v = llmStopVerdict(lines, llmStop);
             if (!v.stop || llmStopped) return;
             llmStopped = true;
             clearInterval(watch);
             const http = Object.entries(v.httpErrors).map(([st, k]) => `${k} x HTTP ${st}`).join(', ');
-            s.llmStop = { failed: v.failed, ok: v.ok, memory: v.memory, httpErrors: v.httpErrors, afterS: Math.round((Date.now() - started) / 1000) };
-            log(`${s.id}: LLM-failure stop: ${v.failed} failed LLM replies and none answered in its first ${Math.round(llmStop.windowMs / 60000 * 10) / 10} min${http ? ` (${http})` : ''}; an infra fault, stopping it and the batch`);
+            s.llmStop = { failed: v.failed, ok: v.ok, memory: v.memory, httpErrors: v.httpErrors, afterSpawnS: Math.round((now - spawnedAt) / 1000), afterStartS: Math.round((now - started) / 1000) };
+            log(`${s.id}: LLM-failure stop: ${v.failed} failed LLM replies and none answered within ${s.llmStop.afterSpawnS} s of the bot's spawn${http ? ` (${http})` : ''}; an infra fault, stopping it and the batch`);
             child.kill('SIGTERM');
             setTimeout(() => child.kill('SIGKILL'), 20000).unref();
         }, llmStop.pollMs);
@@ -423,9 +457,15 @@ async function main(argv) {
         // (crossCheckBatch; #122 nit 1, #129 review).
         summary.scenarios.push({ id: s.id, out: path.resolve(s.out), runId: runIdOf(s.out), exit: code, spentBefore: gate.spent, timeoutMin: s.timeoutMin, ...(s.llmStop ? { llmStop: s.llmStop } : {}) });
         if (code !== 0 && exit === 0) exit = 1;
-        // The LLM-failure stop rule: the model does not answer, so no further scenario starts (an infra fault).
+        // The LLM-failure stop rule: the model does not answer, so no further scenario starts. The outcome is an
+        // infra fault, distinct from a check fail (#248 review): the batch exits 125, the summary says
+        // infraFault, and the scenario's own result.json is marked (verdict "INFRA FAULT", infraFault).
         if (code === EXIT_LLM_STOP) {
-            summary.stopped = `LLM-failure stop in ${s.id}: ${s.llmStop?.failed ?? '?'} failed LLM replies and none answered in its first minutes (an infra fault, not a bot result)`;
+            const reason = `LLM-failure stop: ${s.llmStop?.failed ?? '?'} failed LLM replies and none answered within ${s.llmStop?.afterSpawnS ?? '?'} s of the bot's spawn`;
+            summary.stopped = `${reason} in ${s.id} (an infra fault, not a bot result)`;
+            summary.infraFault = { kind: 'llm-failure-stop', scenario: s.id, ...s.llmStop };
+            markInfraFault(s.out, summary.infraFault, reason);
+            exit = EXIT_LLM_STOP;
             break;
         }
     }

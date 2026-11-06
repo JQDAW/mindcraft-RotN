@@ -16,10 +16,10 @@ import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProble
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
-import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, llmStopVerdict, llmStopSettings, EXIT_LLM_STOP, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN, scenarioTimeouts, TIMEOUT_MARGIN_MIN, TEST_DEFAULT_TIMEOUT_MIN, TIMEOUT_CAP_FACTOR, ttlProblems, BUILD_ALLOWANCE_MIN, END_ALLOWANCE_MIN, midnightWarning } from '../runner/batch.mjs';
+import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, llmStopVerdict, llmStopSettings, EXIT_LLM_STOP, SPAWNED_LINE, markInfraFault, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN, scenarioTimeouts, TIMEOUT_MARGIN_MIN, TEST_DEFAULT_TIMEOUT_MIN, TIMEOUT_CAP_FACTOR, ttlProblems, BUILD_ALLOWANCE_MIN, END_ALLOWANCE_MIN, midnightWarning } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
-import { crossCheckBatch, isG3Result } from '../runner/lib/g3.mjs';
-import { checkFiles, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds, smokeBatchesUnder, batchKind } from '../tools/g3-batch-check.mjs';
+import { crossCheckBatch, isG3Result, INFRA_FAULT_EXIT } from '../runner/lib/g3.mjs';
+import { checkFiles, infraFaultsUnder, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds, smokeBatchesUnder, batchKind } from '../tools/g3-batch-check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BATCH = path.join(HERE, '..', 'runner', 'batch.mjs');
@@ -208,7 +208,7 @@ function runBatch({ spend = '1.5', usage = 0, maxUsd = '2', scenarios = ['a', 'b
         child.stderr.on('data', (b) => { out += b; });
         child.on('exit', (code) => {
             const read = (f) => (fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), 'utf8') : '');
-            resolve({ code, out, ran: read('ran.txt').trim().split('\n').filter(Boolean), ctl: read('ctl.txt'), summary: JSON.parse(read('batch.json') || 'null') });
+            resolve({ code, out, dir, ran: read('ran.txt').trim().split('\n').filter(Boolean), ctl: read('ctl.txt'), summary: JSON.parse(read('batch.json') || 'null') });
         });
     });
 }
@@ -879,44 +879,65 @@ describe('LLM replies are counted as successful or failed, and the preflight pro
     });
 });
 
-describe('the LLM-failure stop rule (lead, round 3 continuation): 5+ failed replies and none answered in a scenario\'s first 5 min', () => {
+describe('the LLM-failure stop rule (lead, round 3 continuation; #248 review): 5+ failed replies and none answered in the first 5 min after the bot spawned', () => {
     const fail = ['Error while awaiting response: Error [429] (status 429): 429 Provider returned error', 'Generated response: My brain disconnected, try again.'];
+    const stopEnv = (extra = {}) => ({ ROTN_LLM_STOP_WINDOW_MS: '20000', ROTN_LLM_STOP_POLL_MS: '100', ...extra });
 
     test('llmStopVerdict: 5 failures and nothing answered stops; one reply or one memory summary does not; 4 do not', () => {
         const n = (k) => Array.from({ length: k }, () => fail).flat();
-        assert.equal(llmStopVerdict(n(5)).stop, true);
         assert.deepEqual(llmStopVerdict(n(5)), { stop: true, ok: 0, memory: 0, failed: 5, httpErrors: { 429: 5 } });
         assert.equal(llmStopVerdict(n(4)).stop, false);
         assert.equal(llmStopVerdict([...n(6), 'Generated response: On it!']).stop, false, 'the model answered once');
         assert.equal(llmStopVerdict([...n(6), 'Memory updated to:  RotN agenda: step 1']).stop, false, 'a memory summary is an answer');
-        assert.equal(llmStopVerdict([...Array(5).fill('Generated response: No response received.')]).stop, true, 'the other stand-in counts');
-        assert.equal(llmStopVerdict([...Array(5).fill('Error: Generated response is not a string null')]).stop, true, 'empty answers count');
-        // Round 3 B's whole log pattern (11 requests, all 429): it would have stopped.
-        const b = [...Array(10).fill('Generated response: My brain disconnected, try again.'), 'Memory updated to:  My brain disconnected, try again.'];
-        assert.equal(llmStopVerdict(b).stop, true);
+        assert.equal(llmStopVerdict(Array(5).fill('Generated response: No response received.')).stop, true, 'the other stand-in counts');
+        assert.equal(llmStopVerdict(Array(5).fill('Error: Generated response is not a string null')).stop, true, 'empty answers count');
     });
 
-    test('llmStopSettings: 5 min, 15 s polls and 5 failures; shorter only in the offline test mode', () => {
-        assert.deepEqual(llmStopSettings({}), { windowMs: 300000, pollMs: 15000, minFailed: 5 });
-        assert.deepEqual(llmStopSettings({ ROTN_LLM_STOP_WINDOW_MS: '1', ROTN_LLM_STOP_POLL_MS: '1' }), { windowMs: 300000, pollMs: 15000, minFailed: 5 }, 'ignored outside test mode');
-        assert.deepEqual(llmStopSettings({ ROTN_TEST_MODE: '1', ROTN_LLM_STOP_WINDOW_MS: '800', ROTN_LLM_STOP_POLL_MS: '50' }), { windowMs: 800, pollMs: 50, minFailed: 5 });
-        for (const k of ['ROTN_LLM_STOP_WINDOW_MS', 'ROTN_LLM_STOP_POLL_MS']) assert.ok(TEST_OVERRIDES.includes(k), `${k} is refused in a real batch`);
+    test('round 3 B, from its committed server log: the 5th failure came 53 s after the join, with no answer before it', () => {
+        // The bot said each stand-in in chat, so the server log times them (driver.log has no per-line times).
+        const log = fs.readFileSync(path.join(HERE, '..', 'evidence', 'g3', 'g3b-20261106-r3', 'night', 'server-across-rollover.log'), 'utf8').split('\n');
+        const at = (l) => { const m = /^\[(\d\d):(\d\d):(\d\d)\]/.exec(l); return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null; };
+        const joined = at(log.find((l) => l.includes('joined the game')));
+        const chat = log.filter((l) => /<<bot>> /.test(l));
+        const failures = chat.filter((l) => l.includes('My brain disconnected, try again.')).map(at);
+        assert.ok(failures.length >= 5);
+        assert.equal(failures[4] - joined, 53, '23:31:28 -> 23:32:21');
+        // Before it, the bot's only other chat is not an LLM answer: the agenda's own line and Mindcraft's notice.
+        const other = chat.filter((l) => at(l) <= failures[4] && !l.includes('My brain disconnected'));
+        assert.ok(other.every((l) => /<<bot>> (agenda step \S+ started: |Agent did not use command in the last 3 auto-prompts)/.test(l)), JSON.stringify(other));
+        assert.ok(failures[4] - joined < 300, 'well inside 5 min of the spawn');
     });
 
-    test('a batch whose first scenario gets only failures: that scenario is stopped (125), the next never starts, the summary says why', { timeout: 60000 }, async () => {
-        const r = await runBatch({ scenarios: ['a', 'b'], extraEnv: { FAKE_LLM: 'a:6:0', ROTN_LLM_STOP_WINDOW_MS: '20000', ROTN_LLM_STOP_POLL_MS: '100' } });
-        assert.notEqual(r.code, 0, r.out);
-        assert.deepEqual(r.ran.map((l) => l.split(' ')[0]), ['a'], 'b never started');
-        assert.equal(r.summary.scenarios.length, 1);
-        assert.equal(r.summary.scenarios[0].exit, EXIT_LLM_STOP);
+    test('llmStopSettings: 5 min from the spawn, a 10 min cap from the start, 15 s polls, 5 failures; shorter only in test mode', () => {
+        assert.deepEqual(llmStopSettings({}), { windowMs: 300000, capMs: 600000, pollMs: 15000, minFailed: 5 });
+        assert.deepEqual(llmStopSettings({ ROTN_LLM_STOP_WINDOW_MS: '1', ROTN_LLM_STOP_CAP_MS: '1', ROTN_LLM_STOP_POLL_MS: '1' }), { windowMs: 300000, capMs: 600000, pollMs: 15000, minFailed: 5 }, 'ignored outside test mode');
+        assert.deepEqual(llmStopSettings({ ROTN_TEST_MODE: '1', ROTN_LLM_STOP_WINDOW_MS: '800', ROTN_LLM_STOP_CAP_MS: '900', ROTN_LLM_STOP_POLL_MS: '50' }), { windowMs: 800, capMs: 900, pollMs: 50, minFailed: 5 });
+        for (const k of ['ROTN_LLM_STOP_WINDOW_MS', 'ROTN_LLM_STOP_CAP_MS', 'ROTN_LLM_STOP_POLL_MS']) assert.ok(TEST_OVERRIDES.includes(k), `${k} is refused in a real batch`);
+        assert.ok(SPAWNED_LINE.test('FRCFLD spawned.') && !SPAWNED_LINE.test('Generated response: FRCFLD spawned.'));
+    });
+
+    test('a batch whose first scenario gets only failures: an infra fault (125), the next scenario never starts, the result says INFRA FAULT', { timeout: 150000 }, async () => {
+        // timeoutMin 1 (#248 review 3): if the rule ever failed to fire, the fake would be stopped after a minute, not 15.
+        const r = await runBatch({ scenarios: ['a', 'b'], timeoutMin: '1', extraEnv: stopEnv({ FAKE_LLM: 'a:6:0' }) });
+        assert.equal(r.code, EXIT_LLM_STOP, r.out);
         assert.equal(EXIT_LLM_STOP, 125);
-        assert.deepEqual([r.summary.scenarios[0].llmStop.failed, r.summary.scenarios[0].llmStop.ok, r.summary.scenarios[0].llmStop.httpErrors], [6, 0, { 429: 6 }]);
-        assert.match(r.summary.stopped, /^LLM-failure stop in a: 6 failed LLM replies and none answered/);
-        assert.match(r.out, /a: LLM-failure stop: 6 failed LLM replies and none answered in its first 0\.3 min \(6 x HTTP 429\); an infra fault, stopping it and the batch/);
+        assert.deepEqual(r.ran.map((l) => l.split(' ')[0]), ['a'], 'b never started');
+        assert.equal(r.summary.exit, 125);
+        assert.equal(r.summary.scenarios[0].exit, 125);
+        const stop = r.summary.scenarios[0].llmStop;
+        assert.deepEqual([stop.failed, stop.ok, stop.httpErrors], [6, 0, { 429: 6 }]);
+        assert.ok(stop.afterSpawnS <= stop.afterStartS);
+        assert.deepEqual([r.summary.infraFault.kind, r.summary.infraFault.scenario, r.summary.infraFault.failed], ['llm-failure-stop', 'a', 6]);
+        assert.match(r.summary.stopped, /^LLM-failure stop: 6 failed LLM replies and none answered within \d+ s of the bot's spawn in a \(an infra fault, not a bot result\)$/);
+        assert.match(r.out, /a: LLM-failure stop: 6 failed LLM replies and none answered within \d+ s of the bot's spawn \(6 x HTTP 429\); an infra fault, stopping it and the batch/);
         assert.match(r.ctl, /fetch logs/, 'the logs are still fetched');
+        // The scenario's own record says so (#248 review 1): not a check fail.
+        const res = JSON.parse(fs.readFileSync(path.join(r.dir, 'out-a', 'result.json'), 'utf8'));
+        assert.deepEqual([res.verdict, res.pass, res.infraFault.kind, res.infraFault.failed], ['INFRA FAULT', false, 'llm-failure-stop', 6]);
+        assert.match(res.infraFault.reason, /^LLM-failure stop: 6 failed LLM replies/);
     });
 
-    test('runOne: a model that answered once is never stopped; failures after the window are not counted', async () => {
+    test('runOne: no spawn line means no window (until the cap); a model that answered once is never stopped; failures after the window are not counted', async () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-llmstop-'));
         const child = () => {
             const c = new EventEmitter();
@@ -924,24 +945,48 @@ describe('the LLM-failure stop rule (lead, round 3 continuation): 5+ failed repl
             c.kill = (sig) => { c.killed.push(sig); if (sig === 'SIGTERM') setImmediate(() => c.emit('exit', 143, null)); };
             return c;
         };
-        const s = { id: 'x', out: dir, timeoutMin: 1 };
-        // Six failures and one answer: the rule does not fire; the run ends on its own with 0.
-        fs.writeFileSync(path.join(dir, 'driver.log'), [...Array(6).fill('Generated response: My brain disconnected, try again.'), 'Generated response: On it!'].join('\n'));
-        let c1;
-        const p1 = runOne(s, { maxBatchUsd: 2, driver: ['node', 'd.mjs'] }, {}, { spawnImpl: () => (c1 = child()), llmStop: { windowMs: 400, pollMs: 50, minFailed: 5 } });
-        await new Promise((res) => setTimeout(res, 600));
-        c1.emit('exit', 0, null);
-        assert.equal(await p1, 0);
-        assert.deepEqual(c1.killed, []);
-        // Failures that appear only after the window: not this rule's business.
-        fs.rmSync(path.join(dir, 'driver.log'));
-        let c2;
-        const p2 = runOne({ ...s }, { maxBatchUsd: 2, driver: ['node', 'd.mjs'] }, {}, { spawnImpl: () => (c2 = child()), llmStop: { windowMs: 200, pollMs: 50, minFailed: 5 } });
-        await new Promise((res) => setTimeout(res, 400));
-        fs.writeFileSync(path.join(dir, 'driver.log'), Array(9).fill('Generated response: My brain disconnected, try again.').join('\n'));
-        await new Promise((res) => setTimeout(res, 300));
-        c2.emit('exit', 1, null);
-        assert.equal(await p2, 1);
-        assert.deepEqual(c2.killed, []);
+        const run1 = async (lines, llmStop, { writeAfterMs = 0, waitMs = 600 } = {}) => {
+            fs.rmSync(path.join(dir, 'driver.log'), { force: true });
+            if (!writeAfterMs) fs.writeFileSync(path.join(dir, 'driver.log'), lines.join('\n'));
+            let c;
+            const p = runOne({ id: 'x', out: dir, timeoutMin: 1 }, { maxBatchUsd: 2, driver: ['node', 'd.mjs'] }, {}, { spawnImpl: () => (c = child()), llmStop });
+            if (writeAfterMs) { await new Promise((res) => setTimeout(res, writeAfterMs)); fs.writeFileSync(path.join(dir, 'driver.log'), lines.join('\n')); }
+            await new Promise((res) => setTimeout(res, waitMs));
+            if (!c.killed.length) c.emit('exit', 0, null);
+            return { code: await p, killed: c.killed };
+        };
+        const settings = { windowMs: 400, capMs: 5000, pollMs: 50, minFailed: 5 };
+        const fails = Array(9).fill('Generated response: My brain disconnected, try again.');
+        // With the spawn line: stopped (the control).
+        assert.deepEqual(await run1(['FRCFLD spawned.', ...fails], settings), { code: 125, killed: ['SIGTERM'] });
+        // No spawn line: the window never opens, and after the cap it never will.
+        assert.deepEqual(await run1(fails, { ...settings, capMs: 300 }), { code: 0, killed: [] });
+        // Six failures and one answer: not stopped.
+        assert.deepEqual(await run1(['FRCFLD spawned.', ...fails.slice(0, 6), 'Generated response: On it!'], settings), { code: 0, killed: [] });
+        // The spawn and the failures appear only after the cap: not counted.
+        assert.deepEqual(await run1(['FRCFLD spawned.', ...fails], { ...settings, capMs: 200 }, { writeAfterMs: 400, waitMs: 400 }), { code: 0, killed: [] });
+    });
+
+    test('the evidence tooling shows an infra fault as such (#248 review 1): the batch and the result must agree; never gate evidence', () => {
+        const summary = { batchId: 'b1', testMode: false, gate: true, maxBatchUsd: 2, scenarios: [{ id: 'g3-a', runId: 'run-a', exit: 125 }], exit: 125 };
+        const res = (extra = {}) => ({ file: 'a/result.json', result: { gate: 'G3', scenario: 'g3-a', batch: 'b1:2', runId: 'run-a', pass: false, verdict: 'INFRA FAULT', infraFault: { kind: 'llm-failure-stop', failed: 6 }, ...extra } });
+        assert.equal(INFRA_FAULT_EXIT, 125);
+        assert.deepEqual(crossCheckBatch(summary, [res()]), [], 'consistent: both sides say infra fault');
+        assert.match(crossCheckBatch(summary, [res({ infraFault: undefined, verdict: 'FAIL' })]).join('; '), /stopped g3-a as an infra fault \(exit 125\), but its result does not say infraFault/);
+        assert.match(crossCheckBatch({ ...summary, scenarios: [{ id: 'g3-a', runId: 'run-a', exit: 1 }] }, [res()]).join('; '), /its result says infraFault, but the batch recorded exit 1 for g3-a, not 125/);
+        assert.match(crossCheckBatch(summary, [res()], { gate: true }).join('; '), /an infra fault \(llm-failure-stop\), not a bot result: never gate evidence/);
+        // --tree names infra faults apart from check fails.
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-infra-'));
+        fs.mkdirSync(path.join(dir, 'b1', 'a'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'b1', 'batch.json'), JSON.stringify({ ...summary, gate: false, smoke: true }));
+        fs.writeFileSync(path.join(dir, 'b1', 'a', 'result.json'), JSON.stringify(res().result));
+        assert.deepEqual(checkEvidenceTree(dir), []);
+        assert.deepEqual(infraFaultsUnder(dir), ['b1/a/result.json (llm-failure-stop)']);
+        // markInfraFault: what batch.mjs does to the killed run's record.
+        fs.writeFileSync(path.join(dir, 'b1', 'a', 'result.json'), JSON.stringify({ scenario: 'g3-a', verdict: 'FAIL', pass: false, checks: [{ check: 'x', pass: false }] }));
+        assert.equal(markInfraFault(path.join(dir, 'b1', 'a'), { kind: 'llm-failure-stop', failed: 6 }, 'why'), true);
+        const marked = JSON.parse(fs.readFileSync(path.join(dir, 'b1', 'a', 'result.json'), 'utf8'));
+        assert.deepEqual([marked.verdict, marked.pass, marked.infraFault, marked.checks], ['INFRA FAULT', false, { kind: 'llm-failure-stop', failed: 6, reason: 'why' }, [{ check: 'x', pass: false }]]);
+        assert.equal(markInfraFault(path.join(dir, 'none'), {}, 'why'), false);
     });
 });

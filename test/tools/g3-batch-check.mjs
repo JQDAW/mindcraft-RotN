@@ -126,6 +126,20 @@ export function smokeBatchesUnder(dir) {
     }).map((f) => path.relative(dir, f).split(path.sep).join('/')).sort();
 }
 
+/**
+ * The results under dir marked as an infra fault (#248 review: the LLM-failure stop; result.infraFault and
+ * the verdict "INFRA FAULT"), so the evidence check names them apart from check fails: "<relative path>
+ * (<kind>)", sorted.
+ */
+export function infraFaultsUnder(dir) {
+    if (!fs.existsSync(dir)) return [];
+    return resultFilesUnder(dir).flatMap((f) => {
+        let r;
+        try { r = readJson(f); } catch { return []; }
+        return r && typeof r === 'object' && r.infraFault ? [`${path.relative(dir, f).split(path.sep).join('/')} (${r.infraFault.kind ?? 'infra fault'})`] : [];
+    }).sort();
+}
+
 /** The ids of the scenarios that loadScenarios marks gate G3. */
 export async function g3ScenarioIds() {
     const { loadScenarios } = await import('../runner/run.mjs');
@@ -135,8 +149,10 @@ export async function g3ScenarioIds() {
 async function main(args) {
     if (args[0] === '--tree' && args.length === 2) {
         const smoke = smokeBatchesUnder(args[1]);
+        const faults = infraFaultsUnder(args[1]);
         return [checkEvidenceTree(args[1], { g3Scenarios: await g3ScenarioIds() }),
-            `every G3 result under ${args[1]} is vouched for by a gate: true or smoke: true batch.json; ${smoke.length} smoke batch(es), never gate evidence${smoke.length ? `: ${smoke.join(', ')}` : ''}`];
+            `every G3 result under ${args[1]} is vouched for by a gate: true or smoke: true batch.json; ${smoke.length} smoke batch(es), never gate evidence${smoke.length ? `: ${smoke.join(', ')}` : ''}`
+            + `; ${faults.length} infra fault result(s), not check fails${faults.length ? `: ${faults.join(', ')}` : ''}`];
     }
     if (args.length >= 2 && !args[0].startsWith('--')) {
         const [summaryFile, ...resultFiles] = args;
