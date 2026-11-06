@@ -7,7 +7,8 @@
 // time: no `time set`, no gamerule (the guard would allow `time set day` from G2's list; this scenario
 // never sends it, and its unit test checks that).
 //
-// The dawn bound (provisional, lead after S1-A; the first G3 smoke batch confirms it before it is pinned):
+// The dawn bound (pinned by the lead after G3 smoke round 6; set after S1-A and confirmed by round 5's B rerun,
+// dusk at minute 19.5, the night at 20.6, dawn at 40.1, with both Extended Days holds):
 // `time query daytime` every pollMs. A night counts only if dusk was seen: a sample below nightFrom (13000),
 // then one at or above it (the night), then dawn, the first sample below dawnBelow (12000) after that, i.e.
 // the time has wrapped past 24000 (#203 review: a run that joins mid-night must wait for the next full night). S1-A measured

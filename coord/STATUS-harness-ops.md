@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (19:20 UTC, from `date -u`)
+Updated: 2026-11-06 (19:49 UTC, from `date -u`)
 
 ## Next: the G3 gate plan (the lead, after #283 and #286; nothing run)
 
@@ -26,7 +26,7 @@ Updated: 2026-11-06 (19:20 UTC, from `date -u`)
 
 **Before the gate (for the lead):**
 1. **B's shelter fix** (skills-rotn): round 6 B died because the shelter counts no RotN cobble. B should pass a smoke run on the gate's develop commit first.
-2. **Pin (b)'s dawn rule:** DRIVER.md still calls it provisional ("the first G3 smoke batch confirms it before it is pinned"). Round 5's B rerun confirmed it (dusk 19.5, night 20.6, dawn 40.1 of 55 min, with both Extended Days holds). I can drop "provisional" in a doc PR once the lead pins it.
+2. **(b)'s dawn rule is pinned** (lead, after #287): night at or above 13000 after dusk, dawn the next sample below 12000, `maxMinutes` 55. "Provisional" is dropped in DRIVER.md and the scenario header (the pin-dawn doc PR).
 3. **One commit for all four gate batches,** with a smoke round on that commit just before (A, C and D passed on f7fbe4fe).
 4. **A failed gate run:** it stays in the evidence as it is. A rerun is a new gate batch, a paid retry the lead approves, and the README lists every gate attempt for that scenario, so no passing run is picked from several.
 
@@ -42,7 +42,7 @@ Updated: 2026-11-06 (19:20 UTC, from `date -u`)
 - **Memory summaries:** 42 stored, 0 empty; every provider line names Wafer. **Spend:** USD 0.022473 by the batch figures, 0.022631 by the key (to 0.815220 of 4.50). Hetzner 11 + 38 + 12 + 8 min, all verified gone. Free memory 5.9-6.1 GB at each start.
 - **The daytime holds at 3001 and 16001 are Extended Days** (lead; checked against the pack's `config/extendeddays.cfg`: 3000 and 16000, 10 real minutes each). In DRIVER.md and the round 5 B rerun README.
 - **For skills-rotn (the lead routes):** the shelter's sturdy blocks should include RotN's cobble variants; `!taskDone` used for an agenda step (harmless).
-- **Merged: #283** (round 6 evidence, Extended Days) and **#286** (#282 nits). **Open:** the #283 nit (C and D: the request still in flight at the end) and this gate plan, one PR.
+- **Merged: #283** (round 6 evidence, Extended Days) and **#286** (#282 nits). **Merged: #287** (the #283 nit and the gate plan). **Open:** the pin-dawn doc PR. The lead takes the gate decisions (passes needed, failure handling) to the human and records them in PLAN.md.
 
 ## Earlier: G3 smoke round 5 is over (smoke).
 
