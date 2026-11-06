@@ -22,7 +22,7 @@ You build everything that proves the bot works and keeps it running: the disposa
 
 - Builds on Mindcraft's task format (`tasks/`, `--task_path`, `--task_id`) where it fits, with pass/fail checks read from the bot state and server logs.
 - One scenario per ready-to-try item (see `docs/PLAN.md`), grouped by gate.
-- (Optional, only if the human asks) a model benchmark mode: same scenarios across several OpenRouter models, recording success rate and cost per hour. The default model is the human's preset `@preset/glm-5-1-mindcraft` (PLAN, LLM row).
+- (Optional, only if the human asks) a model benchmark mode: same scenarios across several OpenRouter models, recording success rate and cost per hour. The default model is the human's preset `@preset/glm-5-3-flash-cheap-reliable` (PLAN, LLM row).
 
 ## CX23 (bot runtime)
 
