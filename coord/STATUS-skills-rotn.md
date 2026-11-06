@@ -209,7 +209,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **Round 6 B shelter PR** (branch `agent/skills-rotn/r6`, opened 2026-11-06T18:47Z by `date -u`): see "Round 6 B fixes" below. **#274** (round 5 fixes) is merged.
+- **#284: round 6 B shelter** (branch `agent/skills-rotn/r6`, opened 2026-11-06T18:47Z by `date -u`): see "Round 6 B fixes" below. **#274** (round 5 fixes) is merged.
 - G3 smoke round 6 is over (lead): A 7/7, B 4/5, C 7/7, D 7/7. The memory rule is lifted.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
