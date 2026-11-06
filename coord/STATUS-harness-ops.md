@@ -1,8 +1,35 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (07:13 UTC, from `date -u`)
+Updated: 2026-11-06 (07:32 UTC, from `date -u`)
 
-## Now: G3 smoke round 3 is over (the lead, 2026-11-06). No batch until a new GO.
+## Now: G3 smoke round 4 is over (GO 06:30Z, develop 09197157, smoke). No batch until a new GO.
+
+| Batch | Result |
+| --- | --- |
+| A | **PASS 7/7.** All 11 agenda steps in 6.3 min. `crafting_table` passes on "held" (the skill picks the table up after each craft). |
+| B | 4/5. "fell from a high place" 2.4 min in, at the `sticks` step, while the unstuck reflex had interrupted `!collectBlocks("stick", 4)`. Not the falling tree. |
+| C | **PASS 7/7.** The task preempted the active agenda, the server confirmed the bot on the marker, and the agenda resumed and finished. |
+| D | FAIL 3/7. Kicked for spamming 3 s after the join: the agenda catch-up burst (11 "done" lines and "agenda done") on (c)'s inventory. The "late refusal" is **my misreport**: the refusal came 1 s after the whisper (fix PR below). |
+
+- **LLM:** 0 failed replies in all four scenarios. USD 0.0114 for the round; the key reads USD 0.7707 of 4.50. Hetzner: 12 + 7 + 13 min; every server, Primary IP and SSH key verified gone. No StackUp-count or NaN guard lines from forge-bridge.
+- **For skills-rotn (the lead routes):** the spam kick (D, sent). The fall during unstuck at the sticks step and the low leaf drop rate (B). The "late refusal" was not the bot: please withdraw it.
+- **Open: the round 4 evidence PR** (`test/evidence/g3/*-20261106-r4`, SMOKE), with the crafting-table answer:
+  - **Why the use stat stays 0:** Forge 1.12.x `ForgeHooks.onPlaceItemIntoWorld` sets the stack to its new count, then calls `addStat(StatList.getObjectUseStats(itemstack.getItem()))`.
+  - Placing the last item of a stack leaves an empty stack, whose item is air, so the use is credited to air.
+  - The bot only ever holds one table, so the stat can never count its placement. DRIVER.md and the scenario header now say so; the check is unchanged (the held count and the placed block carry it).
+- **Open: #255 (`test/` only), (d) after an early kick.** `gone()` stays true after the kick, even though the agent process rejoined before the task was sent. So the observe loop never ran, and the refusal was called late.
+  - Fix: a bot that left before the task is sent makes (d) "not reached", with the kick named, and no task is sent.
+  - Offline test included.
+- **Decided (the lead, after round 4): (d) runs in its own batch on a fresh server** from round 5. There is no allowlist change. A fresh world gives the first-join inventory, so the agenda starts at `rocks`.
+  - The batch layout, the TTL figures (D: 16 + 25 = 41 of 60 min, `--ttl-hours 1`) and a round GO template are in DRIVER.md, in #255.
+  - The catch-up burst itself still needs skills-rotn's fix.
+- **Merged: #251, the Windows test PR** (the lead, low priority; net-forge's report). The tests did not hang: Git Bash process starts on Windows made `cx23.test.js` take 189 s and `test-server.test.js` 255 s alone, beyond tool time limits.
+  - The 8 shell-heavy blocks now skip on a local Windows run with a stated reason, unless `ROTN_RUN_SHELL_TESTS=1`. They never skip on CI (`CI=true`) or on Linux.
+  - `deploy-eol`'s on-disk check skips on Windows (not CI) for a stale CRLF working copy, naming the files and the verified fix (`git checkout -- deploy/cx23`).
+  - Full `npm test` on Windows: 80 s, 1214 pass, 0 fail.
+  - Plus the two #248 doc nits.
+
+## Earlier: G3 smoke round 3 is over (the lead, 2026-11-06)
 
 The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, from develop aec33fe7. A probe before each batch returned 200 (OpenInference). LLM, corrected (#246): 103 agent replies, 28 memory summaries and 3 failures (A's 3 empty answers); not "0 failures in 109 replies".
 
@@ -16,15 +43,6 @@ The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, 
 - **LLM:** USD 0.0142; cumulative by the key USD 0.7591 of the 4.50 stop. Every server, Primary IP and SSH key was verified deleted.
 - **Merged:** #244 (the r3b evidence) and #245 (the crafting_table placed block).
 - **Merged:** #248 (the LLM-failure stop rule, with its infra-fault outcome). It had to be in place before the next paid round, and it is.
-- **Open: the Windows test PR** (the lead, low priority; net-forge's report). The tests did not hang: Git Bash process starts on Windows made `cx23.test.js` take 189 s and `test-server.test.js` 255 s alone, beyond tool time limits.
-  - The 8 shell-heavy blocks now skip on a local Windows run with a stated reason, unless `ROTN_RUN_SHELL_TESTS=1`. They never skip on CI (`CI=true`) or on Linux.
-  - `deploy-eol`'s on-disk check skips on Windows (not CI) for a stale CRLF working copy, naming the files and the verified fix (`git checkout -- deploy/cx23`).
-  - Full `npm test` on Windows: 80 s, 1214 pass, 0 fail.
-  - Plus the two #248 doc nits.
-- **Done: G3 smoke round 4** (GO 06:30Z; develop 09197157; smoke, no `--gate`). Raw logs in `captures/raw/r4-*`; the evidence PR comes next.
-  - A (rocks): PASS 7/7. B (first night): FAIL survived_night, the bot fell from a high place while collecting sticks from leaves, right after the unstuck reflex interrupted it. C: PASS 7/7. D: FAIL 3 of 7, a spam kick 8 s after the join from the agenda catch-up burst (12 chat lines at once, the same as round 3 D).
-  - LLM: 0 failed replies in all four scenarios. Spend USD 0.0114 in all; the key reads USD 0.7707 of 4.50. Hetzner: 3 servers, 12 + 7 + 13 min, each deleted with its Primary IP and SSH key (verified); the project is empty.
-  - No StackUp-count or NaN guard lines from forge-bridge in any scenario.
 - **For other agents (the lead routes):**
   - skills-rotn: felling stance (B); the death cause for "crushed by a falling tree" (B); the agenda catch-up chat burst that drew the spam kick (D).
   - net-forge: the NaN position and malformed packets (D; the lead has sent it).
