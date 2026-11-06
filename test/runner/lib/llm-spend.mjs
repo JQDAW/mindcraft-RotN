@@ -21,6 +21,21 @@ export const LLM_MEMORY_LINE = 'Memory updated to:';
 export const LLM_MEMORY_START = 'Storing memories...';
 /** The agent process's line when it ends (src/process/agent_process.js); a summary still open then never answered. */
 export const AGENT_EXIT_LINE = 'Agent process exited with code';
+/** history.js (since round 5 A) when a summary's reply was not a memory: a failure stand-in, empty or null. */
+export const MEMORY_RETURNED_LINE = '[memory] summary returned ';
+/** history.js when the summary request threw. */
+export const MEMORY_THROW_LINE = '[memory] summary failed';
+/** openrouter.js when a request failed (no completion, so no provider line). */
+export const LLM_REQUEST_ERROR = 'Error while awaiting response';
+/**
+ * openrouter.js's line per completion (lead, #271): "[openrouter] provider <name>, finish_reason <reason>,
+ * content <n|null> chars". Both fields are sanitised to [\w .-] (others become ?), at most 40 characters.
+ * Content null or 0 is an empty answer. An empty provider name (a completion without one) is accepted and
+ * counted as EMPTY_PROVIDER (#273 review 3; openrouter.js is to log "unknown" for it as well).
+ */
+export const PROVIDER_LINE = /^\[openrouter\] provider ([\w .?-]{0,40}), finish_reason ([\w .?-]{0,40}), content (\d+|null) chars$/;
+/** The name an empty provider field is counted under. */
+export const EMPTY_PROVIDER = '(none)';
 export const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /** The test-mode overrides of the spend machinery; never honoured in a real batch (#122 review). */
@@ -90,12 +105,18 @@ export const countLlmCalls = (lines) => lines.filter((l) => l.includes(LLM_CALL_
  *   received.") + empty (the model answered no text:
  *   "Error: Generated response is not a string"; round 3 continuation A had 3) + memoryEmpty;
  * - memoryEmpty (part of empty): memory summaries that got no text back (lead, round 5 A, where a null
- *   summary reply crashed the agent five times and none of it was counted):
- *   - a "Memory updated to:" with nothing (or "null") after it;
- *   - a summary that started ("Storing memories...") and never stored a memory before the next summary
- *     started or the agent process exited. A summary still open when the log ends (the bot was stopped while
- *     its request waited) is not counted, like any request still waiting.
+ *   summary reply crashed the agent five times and none of it was counted). A summary is open from
+ *   "Storing memories..." until its outcome:
+ *   - "Memory updated to:" stores it (memory), or is empty when nothing (or "null") follows; the stand-ins
+ *     after it are disconnected (logs before #266);
+ *   - "[memory] summary returned ..." (history.js since round 5 A) is disconnected for "My brain disconnected",
+ *     else empty ("No response received.", which openrouter.js returns for empty content since #266, an empty
+ *     or a null reply); "[memory] summary failed (...)" (a throw) is disconnected;
+ *   - the next summary's start, or the agent process exiting with a non-zero code (#267 review), while it is
+ *     open makes it empty. A summary still open when the log ends, or at an exit with code 0 or a signal (the
+ *     bot was stopped while its request waited), is not counted, like any request still waiting.
  * - httpErrors: {status: n} from "Error [429] (status 429)" lines (one per failed attempt).
+ * - providers / summariesUnattributed: see the provider line below (lead, after round 5 B).
  * In the round 3 logs, requests = ok + memory + empty (+ a request still waiting when the bot left);
  * a reply Mindcraft discards for a newer message ("discarding old response") is a request with no reply line.
  */
@@ -105,31 +126,74 @@ export function countLlmReplies(lines) {
     let disconnected = 0;
     let empty = 0;
     let memoryEmpty = 0;
-    let summaryOpen = false;
     const httpErrors = {};
+    const providers = {};
+    const summariesUnattributed = { ok: 0, empty: 0, failed: 0 };
+    let summary = null;   // the open summary: {providers: [names seen since it started], requestError}
+    const prov = (name) => (providers[name] ??= { requests: 0, empty: 0, summaries: { ok: 0, empty: 0, failed: 0 } });
+    const closeSummary = (outcome) => {
+        if (!summary) return;
+        if (outcome === 'ok') memory++;
+        else if (outcome === 'empty') memoryEmpty++;
+        else disconnected++;
+        // Attributed only when exactly one completion came back while it was open and no request failed then:
+        // that completion was the summary's own. Anything else is never guessed.
+        const key = outcome === 'ok' ? 'ok' : outcome === 'empty' ? 'empty' : 'failed';
+        if (summary.providers.length === 1 && !summary.requestError) prov(summary.providers[0]).summaries[key]++;
+        else summariesUnattributed[key]++;
+        summary = null;
+    };
     for (const l of lines ?? []) {
         if (l.includes(LLM_REPLY_LINE)) {
             if (l.includes(LLM_FAILED_REPLY) || l.includes(LLM_NO_RESPONSE)) disconnected++;
             else ok++;
         }
         if (l.startsWith(LLM_EMPTY_REPLY)) empty++;
-        if (l.startsWith(LLM_MEMORY_START) || l.startsWith(AGENT_EXIT_LINE)) {
-            if (summaryOpen) memoryEmpty++;
-            summaryOpen = l.startsWith(LLM_MEMORY_START);
+        const p = PROVIDER_LINE.exec(l);
+        if (p) {
+            const name = p[1] || EMPTY_PROVIDER;
+            const s = prov(name);
+            s.requests++;
+            if (p[3] === 'null' || p[3] === '0') s.empty++;
+            summary?.providers.push(name);
         }
-        // A memory summary whose request failed stores the stand-in itself ("Memory updated to:  My brain disconnected").
+        if (l.startsWith(LLM_REQUEST_ERROR) && summary) summary.requestError = true;
+        if (l.startsWith(LLM_MEMORY_START)) {
+            closeSummary('empty');
+            summary = { providers: [], requestError: false };
+        }
+        const exit = /^Agent process exited with code (-?\d+)/.exec(l);
+        if (exit && exit[1] !== '0') closeSummary('empty');
+        else if (l.startsWith(AGENT_EXIT_LINE)) summary = null;   // code 0, or a signal: still waiting, not counted
         if (l.startsWith(LLM_MEMORY_LINE)) {
-            summaryOpen = false;
             const stored = l.slice(LLM_MEMORY_LINE.length).trim();
-            if (l.includes(LLM_FAILED_REPLY) || l.includes(LLM_NO_RESPONSE)) disconnected++;
-            else if (stored === '' || stored === 'null' || stored === 'undefined') memoryEmpty++;
-            else memory++;
+            summary ??= { providers: [], requestError: true };   // no start line seen: never attributed
+            if (l.includes(LLM_FAILED_REPLY) || l.includes(LLM_NO_RESPONSE)) closeSummary('failed');
+            else if (stored === '' || stored === 'null' || stored === 'undefined') closeSummary('empty');
+            else closeSummary('ok');
+        }
+        if (l.startsWith(MEMORY_RETURNED_LINE) || l.startsWith(MEMORY_THROW_LINE)) {
+            summary ??= { providers: [], requestError: true };
+            const failed = l.startsWith(MEMORY_THROW_LINE) || l.includes(LLM_FAILED_REPLY);
+            // A failed summary request completed nothing, so a completion seen while it was open belongs to
+            // another request: never charge that provider with the failure (#273 review 2).
+            if (failed) summary.requestError = true;
+            closeSummary(failed ? 'failed' : 'empty');
         }
         const m = /\bError \[(\d{3})\]/.exec(l);
         if (m) httpErrors[m[1]] = (httpErrors[m[1]] ?? 0) + 1;
     }
     empty += memoryEmpty;
-    return { ok, memory, failed: disconnected + empty, disconnected, empty, memoryEmpty, httpErrors };
+    return { ok, memory, failed: disconnected + empty, disconnected, empty, memoryEmpty, httpErrors, providers, summariesUnattributed };
+}
+
+/** "provider X: 12 requests (3 empty), summaries 2 ok, 1 empty" per provider, for the run log and the READMEs. */
+export function providerSummary(providers, unattributed) {
+    const parts = Object.entries(providers ?? {}).map(([name, s]) =>
+        `${name}: ${s.requests} requests (${s.empty} empty), summaries ${s.summaries.ok} ok, ${s.summaries.empty} empty${s.summaries.failed ? `, ${s.summaries.failed} failed` : ''}`);
+    const u = unattributed ?? {};
+    if ((u.ok ?? 0) + (u.empty ?? 0) + (u.failed ?? 0)) parts.push(`summaries not attributed: ${u.ok} ok, ${u.empty} empty${u.failed ? `, ${u.failed} failed` : ''}`);
+    return parts.length ? parts.join('; ') : 'no provider lines';
 }
 
 /** USD spent between two readings, to a millionth of a dollar; null if either is missing. */
@@ -162,7 +226,8 @@ export function llmRecord(before, after, outputLines) {
         // The model of the run (the human's decision: openrouter/@preset/glm-5-3-flash-cheap-reliable for every LLM run).
         models: agentModels(outputLines),
         calls: countLlmCalls(outputLines),
-        ...(({ httpErrors, ...replies }) => ({ replies, httpErrors }))(countLlmReplies(outputLines)),
+        // providers: {name: {requests, empty, summaries: {ok, empty, failed}}} from openrouter.js's provider line (#271).
+        ...(({ httpErrors, providers, summariesUnattributed, ...replies }) => ({ replies, httpErrors, providers, summariesUnattributed }))(countLlmReplies(outputLines)),
         usageBefore: before?.ok ? before.usage : null,
         usageAfter: after?.ok ? after.usage : null,
         usd: spent(before, after),

@@ -1,0 +1,23 @@
+{
+  "batchId": "20261106T152418-16276",
+  "testMode": false,
+  "gate": false,
+  "smoke": true,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g3-task-preempts-agenda",
+      "out": "<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r5-g3c\\task",
+      "runId": "20261106t152418-b87b2f",
+      "exit": 1,
+      "spentBefore": 0,
+      "timeoutMin": 34
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.784930521,
+  "usageAtEnd": 0.791479123,
+  "spentUsd": 0.006549,
+  "exit": 1,
+  "logsFetched": true
+}

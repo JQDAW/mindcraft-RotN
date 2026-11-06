@@ -1,18 +1,60 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (12:20 UTC, from `date -u`)
+Updated: 2026-11-06 (16:04 UTC, from `date -u`)
 
-## Now: G3 smoke round 5 is on HOLD after batch A (the lead). Do not start B; no servers until the lead says (rotn-data's dump run has the project).
+## Now: G3 smoke round 5 is over (smoke). No batch until a new GO.
 
-- **A: FAIL 3/7** (GO 11:55Z, develop c32521e5, smoke). login_online, fresh_start and no_cheat pass; stone_tools, crafting_table, cobblestone and crafted_by_bot fail because the bot was gone.
-  - **Cause: the agent crashed five times on an empty memory summary.** The summary request got null content, `history.js:44` read `.length` on it, and the agent process exited. Each restart reloaded the 14 turns in `memory.json`, summarized at once and crashed again (restarts at 10, 20, 40, 80 and 160 s). The bot was off the server from 12:08:37 to the end.
-  - **The outgoing chat limit was off all run** ("no bot._client.chat to wrap"). The lead confirmed the cause: minecraft-protocol assigns `client.chat` only once play starts.
-  - Before the crash, the falling-tree guard refused the tree at -62 64 -50 six times ("no place beside it that is out from under its canopy"); 0 sticks. No falls, deaths, spam kicks, or StackUp/NaN lines.
-  - LLM 19 requests: 11 replies, 5 empty summaries (not counted by the runner then), 3 discarded for a newer message. USD 0.001557; the key reads 0.772293 of 4.50. Hetzner 12 min; server, Primary IP and SSH key verified gone at 12:11:08.
-- **Fixes elsewhere (the lead):** null content in `src/models/openrouter.js` (the lead); `history.js` and the chat limiter (skills-rotn).
-- **Open: my fix PR (the lead's order).** The driver also moves `bots/<bot>/memory.json` aside at every start (approved for all G3 batches: a fresh start means fresh memory), and the LLM counts include empty memory summaries (`replies.memoryEmpty`, part of `empty` and `failed`). DRIVER.md records both.
-- **Next:** batches B, C and D of round 5 under the same GO, once the lead says the fixes are merged. Raw logs `captures/raw/r5-g3b|g3c|g3d`.
+| Batch (evidence folder) | Result |
+| --- | --- |
+| A (`g3a-20261106-r5`, c32521e5) | 3/7: five agent crashes on empty memory summaries; the chat limit off. Fixed (#266, skills-rotn, #267). |
+| A rerun (`g3a-20261106-r5-rerun`, 1a7d990f) | 3/7: the agenda paused at `sticks` (1 stick from felling, no planks without a table, 180 s towards an underground log). |
+| B (`g3b-20261106-r5`, 1a7d990f) | Scenario error: Git Bash could not start (0xC0000142) on the runner's machine, short of memory. Fixed in #273. |
+| B rerun (`g3b-20261106-r5-rerun`, a6825e81) | **PASS 5/5:** all 11 agenda steps, 4 sticks by felling, the night in a shelter, 0 deaths. |
+| C (`g3c-20261106-r5`, a6825e81) | 5/7: `!goToCoordinates(..., 1)` stopped beside the gold block; the bot said it stood on it and called `!taskDone`. |
+| D (`g3d-20261106-r5`, a6825e81) | **PASS 7/7:** its own fresh server, no catch-up burst, refusal 1 s after the whisper. |
 
+- **Memory summaries by provider:** with Wafer (B rerun, C, D), 17 stored and 1 empty of 18 attributed, plus 6 stored unattributed. Before OpenInference was excluded (A, A rerun, B; no provider lines then): 0 stored of 20.
+- **Spend:** USD 0.021827 by the batch figures, 0.021851 by the key (0.770735 to 0.792586 of the 4.50 stop). Hetzner: 12 + 13 + 21 + 47 + 14 + 8 min, every server, Primary IP and SSH key verified gone.
+- **For skills-rotn (the lead routes):** C's "task done" without standing on the marker (range 1; check the block under the feet); stuck against trunks at `sticks` (A rerun, D); felling with no drops within 6 s; `!searchForBlock("log")` choosing an underground log.
+- **Open: the evidence PR** (all six folders, smoke, provider tables and memory figures in the READMEs). **Next: the #273 nits PR** (separate, small).
+
+### Proposal: the sweeper check without the throttled cron (the lead, after round 5; nothing changed without approval)
+
+**What happened at 15:38Z (D waited 9 min):**
+- (a), the sweeper's own `schedule` run, was 426 min old (limit 120). GitHub throttles cron; on 2026-11-06 the scheduled runs came hours apart.
+- (b), the helper repo's `schedule` run (`JQDAW/rotn-sweeper-cron`), was 42 min old (limit 40). Its own cron is throttled the same way: on 2026-11-06 it ran at 00:04, 06:56 and 14:56, every 6-8 h.
+- (c), the dispatch cadence, refused because of a 4.6 min gap. The external cron dispatches the sweeper every 15 min, on time all day (10:15 to 16:00, 25 runs, all successful). The gap came from **the helper itself**: its 14:56:12 `schedule` run dispatched a sweeper run at 14:56:18, between the 14:45 and 15:00 cron runs. `workflow_dispatch` runs from both sources look the same to (c), so each helper run breaks (c) for up to 50 min.
+
+**What the check guarantees today:** before any create, proof that something off this PC, which an agent cannot fake, ran the sweeper recently and keeps doing so. The sweeper deletes every labelled server, Primary IP and SSH key whose `delete-after` (create + TTL) has passed, so a crashed batch bills at most TTL plus one sweep interval. There is no on-box watchdog: a server cannot delete itself without a Hetzner token on it, and a powered-off Hetzner server still bills.
+
+**Proposal: (c) forgives only the helper's own dispatch, proven from the helper repo.**
+1. When (c) counts the `workflow_dispatch` sweeper runs on develop in the last 50 min, leave out a run that was created within 3 min after a successful `event=schedule` run of `dispatch-sweeper.yml` in the helper repo.
+2. Everything else in (c) stays: at least 3 remaining runs, every gap 10-20 min, the newest under 20 min old. `sweeper_newest_ok` stays too (the newest completed sweeper run must not have failed).
+3. **Why this does not weaken the guarantee:**
+   - An agent cannot make a helper `schedule` run: a manual run of the helper is `workflow_dispatch` there and does not count. So only a real helper run can excuse an extra sweeper run, and only one, within 3 min after it.
+   - A manual sweeper dispatch by an agent still makes a short gap, and (c) still refuses for up to 50 min.
+   - The proof of the external cron is unchanged: 3 runs at 10-20 min gaps that no helper run explains.
+4. **Today's runs under the proposal:** at 15:38, 14:56:18 is excused (6 s after the helper's 14:56:12 run), leaving 14:45:28, 15:00:59, 15:15:28 and 15:30:45: gaps 15.5, 14.5 and 15.3 min, newest 7 min old. D would have started at once.
+5. **Not proposed:** dropping the 10 min minimum gap (it is what stops a faked cadence); relying on (a) or (b) (the throttled cron cannot keep within 120 or 40 min); a poweroff timer on the box (a stopped server still bills).
+6. **Alternative (needs the human's helper repo):** the helper passes an input such as `source=helper` to the dispatch, the sweeper workflow shows it in its `run-name`, and (c) leaves those runs out by name. Cleaner, but it changes the human's repo; the time-window rule above needs no change outside `deploy/`.
+7. **If approved:** one small `deploy/` PR: the rule in `sweeper_cadence_ok`, offline tests with today's run lists (the helper run excused; a manual dispatch still refused; a helper run more than 3 min before the extra run not excused), and `deploy/README.md`.
+
+## Earlier: round 5 stopped after B (13:49 UTC)
+
+| Batch | Result |
+| --- | --- |
+| A (12:03Z, develop c32521e5) | FAIL 3/7: the agent crashed five times on a null memory summary, and the chat limit was off. Fixed elsewhere (#266, skills-rotn) and in #267 (fresh `memory.json`). |
+| A rerun (12:53Z, develop 1a7d990f) | FAIL 3/7, a result: the agenda paused as stuck at `sticks`. Felling gave 25 logs and 1 stick; `!craftRecipe("planks")` said it needs a crafting table; `!searchForBlock("log")` led to an underground log and 180 s of pathfinding. No crash, no deaths, the chat limit on, memory reset. |
+| B (13:08Z, develop 1a7d990f) | Scenario error at 13:26:21 after login_online and fresh_start passed: "console failed (3221225794)". The bot had reached step 8 (table, planks, 5 sticks). No server log (its fetch failed the same way). |
+
+- **B's cause:** this Windows machine was short of memory. 3221225794 is 0xC0000142: `bash.exe` failed to start, so nothing reached the server. Claude Code had reaped the batch's wrapper shell for low memory a minute before. No harness process was left behind. (The `npm test` tree from 03:17Z is not mine; the lead says leave it.)
+- **All round 5 memory summaries came back empty** (0 of 20 stored; the probe named OpenInference each time). The human has excluded OpenInference from the preset.
+- **LLM and Hetzner:** A USD 0.001557 (12 min), A rerun 0.002087 (13 min), B 0.005139 (21 min). The key reads USD 0.779532 of 4.50. Every server, Primary IP and SSH key verified gone; the project is empty.
+- **Open: my PR (the lead's order, after B):**
+  - the console and the final log fetch retry a bash that never started for up to 135 s (5, 10, 20, 40, 60 s), and the error names the free memory;
+  - per-provider counts from `openrouter.js`'s provider line (#271): requests, empty answers, and summaries ok/empty, attributed only when unambiguous;
+  - #267 nits: history.js's "[memory] summary returned" lines count (B: 11 empty, not 10), an exit counts only when non-zero, plain wording at DRIVER.md:372.
+- **Merged: #267** (fresh `memory.json` at every G3 start; empty summaries counted). **#258** (round 4 cleanup).
 ## Earlier: G3 smoke round 4 is over (GO 06:30Z, develop 09197157, smoke).
 
 | Batch | Result |

@@ -1,0 +1,23 @@
+{
+  "batchId": "20261106T125316-30896",
+  "testMode": false,
+  "gate": false,
+  "smoke": true,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g3-rocks-to-stone-tools",
+      "out": "<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\captures\\raw\\r5-g3a-rerun\\rocks",
+      "runId": "20261106t125317-3c6129",
+      "exit": 1,
+      "spentBefore": 0,
+      "timeoutMin": 37
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.772298487,
+  "usageAtEnd": 0.774385237,
+  "spentUsd": 0.002087,
+  "exit": 1,
+  "logsFetched": true
+}

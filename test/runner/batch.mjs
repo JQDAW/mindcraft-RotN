@@ -59,7 +59,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { countLlmReplies, keyFetch, probeFetch, probeModel, readKeyUsage, spent, testOverridesAllowed, TEST_OVERRIDES } from './lib/llm-spend.mjs';
-import { findBash } from './lib/adapters.mjs';
+import { findBash, notStarted, retryNotStarted } from './lib/adapters.mjs';
 import { INFRA_FAULT_EXIT, LLM_MODEL } from './lib/g3.mjs';
 import { checkProfile, parseDriverArgs, settingsProblems } from './drivers/mindcraft-driver.mjs';
 import { loadScenarios } from './run.mjs';
@@ -490,9 +490,11 @@ async function main(argv) {
 /** Always: fetch the server logs, then print and write the summary. */
 function finish(o, summary) {
     if (process.env.TEST_SERVER_CTL) {
-        const r = spawnSync(findBash(), [process.env.TEST_SERVER_CTL, 'fetch', 'logs', '--out', o.logsOut], { stdio: 'inherit' });
+        // A bash that never started (low memory on this machine, round 5 B) is retried with the long backoff: fetching is safe to repeat.
+        const r = retryNotStarted(() => spawnSync(findBash(), [process.env.TEST_SERVER_CTL, 'fetch', 'logs', '--out', o.logsOut], { stdio: 'inherit' }),
+            { onRetry: (why, ms) => log(`log fetch: bash did not start (${why}); retrying in ${ms / 1000} s`) });
         summary.logsFetched = r.status === 0;
-        if (r.status !== 0) log(`log fetch failed (${r.status})`);
+        if (r.status !== 0) log(`log fetch failed (${r.status ?? r.error?.code}${notStarted(r) ? ` ${notStarted(r)}` : ''})`);
     } else {
         summary.logsFetched = false;
         log('TEST_SERVER_CTL is not set: no logs to fetch (not inside deploy/test-server.sh run)');

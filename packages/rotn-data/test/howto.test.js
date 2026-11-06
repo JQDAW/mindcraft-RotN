@@ -127,6 +127,101 @@ test('the G3 chain: crude axe, Crafting Tools, crafting table, stone tools, firs
     assert.match(stick.ways[0].evidence.find((e) => /round 4 batch B/.test(e)), /^Supporting only \(the bytecode above is the evidence\)/);
 });
 
+test('round 5 A: with an axe, a placed plank gives 2 sticks, and any axe (level 0) debarks and splits logs', () => {
+    // Hit With Axe 1.5.1: a right-click with any item whose tool classes contain "axe", level 0 here.
+    const AXE = { type: 'axe', minLevel: 0 };
+    assert.deepEqual(way(pack.howToGet('hitwithaxe:debarked_oak'), 'debark-log').tool, AXE);
+    const plank = way(pack.howToGet('oak_planks'), 'plank-from-debarked-log');
+    assert.deepEqual(plank.tool, AXE);
+    assert.equal(plank.count, 1);
+    assert.deepEqual(pack.getItem('pyrotech:crude_axe').toolClasses, { axe: 0 }, 'the crude axe qualifies');
+    // wood_stripping_boards.zs line 779: minecraft:planks (any meta) -> 2 sticks; after felling, before crafting.
+    const stick = pack.howToGet('stick');
+    assert.deepEqual(stick.ways.slice(0, 2).map((w) => w.id), ['fell-tree', 'sticks-from-planks']);
+    const chop = way(stick, 'sticks-from-planks');
+    assert.equal(chop.action, 'use-tool-on-block');
+    assert.deepEqual(chop.tool, AXE);
+    assert.equal(chop.count, 2);
+    assert.equal(chop.confidence, 'documented');
+    assert.deepEqual(chop.blocks.map((b) => b.name), ['minecraft:planks', 'biomesoplenty:planks_0', 'rustic:planks', 'randomthings:spectreplank', 'hitwithaxe:debarked_dead']);
+    for (const b of chop.blocks) assert.ok(pack.names.blocks.has(b.name), b.name);
+    assert.match(formatHowToGet(pack.howToGet('stick')), /Place a planks block, then right-click it with an axe .* With an axe\./);
+    // No vanilla log makes planks in the 2x2 grid: every wood's log -> planks recipe needs the table (#272 review: oak too).
+    for (const wood of ['oak', 'spruce', 'birch', 'jungle', 'acacia', 'dark_oak']) {
+        const fromLog = pack.howToGet(`${wood}_planks`).ways.filter((x) => x.kind === 'craft' && x.inputs.some((i) => i.choices.some((c) => /^minecraft:log2?$/.test(c.name))));
+        assert.ok(fromLog.length >= 1, wood);
+        for (const w of fromLog) assert.equal(w.requiresTable, true, wood);
+    }
+});
+
+test('#272 review: all 18 vanilla log -> planks recipes need the table; the table-free log recipes are modded', () => {
+    const ore = (n) => new Set(pack.dump.oredict.ores[n].map((s) => (s.meta === 32767 ? `${s.name}:*` : `${s.name}:${s.meta}`)));
+    const logs = ore('logWood');
+    const planks = ore('plankWood');
+    const has = (set, s) => set.has(`${s.name}:${s.meta}`) || set.has(`${s.name}:*`);
+    const fromLogs = pack.dump.recipes.recipes.filter((r) => r.result && has(planks, r.result) && (() => {
+        const ings = (r.ingredients ?? r.slots ?? []).filter(Boolean);
+        return ings.length > 0 && ings.every((i) => (i.stacks ?? []).some((s) => has(logs, s)));
+    })());
+    const vanilla = fromLogs.filter((r) => r.result.name === 'minecraft:planks' && (r.ingredients ?? r.slots).filter(Boolean).every((i) => i.stacks.some((s) => /^minecraft:log2?$/.test(s.name))));
+    assert.equal(vanilla.length, 18);
+    for (const r of vanilla) assert.deepEqual([r.requiresTable, r.width, r.height, r.result.count], [true, 1, 3, 3], r.id);
+    assert.deepEqual(fromLogs.filter((r) => !r.requiresTable).map((r) => r.id).sort(), [
+        'biomesoplenty:mangrove_planks',
+        'harvestcraft:minecraft_planks_meta_1_x4_pammaple',
+        'harvestcraft:minecraft_planks_meta_3_x4_pamcinnamon',
+        'harvestcraft:minecraft_planks_meta_3_x4_pampaperbark',
+        'stygian:end_planks',
+        'twilightforest:dark_tower/tower_wood',
+        'twilightforest:wood/twilight_oak_planks',
+    ]);
+    assert.match(way(pack.howToGet('oak_planks'), 'plank-from-debarked-log').summary, /mangrove log/);
+});
+
+test('#272 review: the cited script lines and Hit With Axe bytecode are fixtures, and the rules match them', () => {
+    // "<line>: <text>" lines from the pack's scripts/wood_stripping_boards.zs (header lines start with #).
+    const zs = new Map(fs.readFileSync(path.join(HERE, 'fixtures/rotn-3.3.4/wood_stripping_boards.excerpt.zs'), 'utf8')
+        .split(/\r?\n/).filter((l) => /^\d+: /.test(l)).map((l) => [Number(l.slice(0, l.indexOf(':'))), l.slice(l.indexOf(':') + 2)]));
+    const chop = (n) => zs.get(n).match(/^Chopping\.addRecipe\("([^"]+)", (\d+)(?:, "([^"]+)", (\d+))?, <([^>]+)>(?: \* (\d+))?\);/);
+    // Lines 11-25: the oak planks crafts are 1x3 columns of 3 planks.
+    for (const n of [11, 16, 21]) assert.match(zs.get(n), /^recipes\.add(Hidden)?Shaped\("oak_planks\d?", <minecraft:planks>\*3,\[$/);
+    // Lines 26-28: each axis of an oak log -> the debarked oak log and oak bark.
+    const debark = way(pack.howToGet('hitwithaxe:debarked_oak'), 'debark-log');
+    for (const n of [26, 27, 28]) {
+        const [, block, meta, out, , drop] = chop(n);
+        assert.deepEqual([block, out, drop], ['minecraft:log', 'hitwithaxe:debarked_oak', 'hitwithaxe:bark:15'], `line ${n}`);
+        // The pair names the wood (meta & 3); bits 4 and 8 are the placed log's axis ("any axis" in the summary).
+        assert.ok(debark.blocks.some((b) => b.name === block && b.meta === (Number(meta) & 3)), `line ${n}`);
+    }
+    // Line 29: the debarked oak log (any meta) -> one plank, the block becomes air.
+    assert.deepEqual(chop(29).slice(1, 7), ['hitwithaxe:debarked_oak', '32767', undefined, undefined, 'minecraft:planks', undefined]);
+    assert.equal(way(pack.howToGet('oak_planks'), 'plank-from-debarked-log').count, 1);
+    // Lines 777-793: every "<block>, any meta -> 2 sticks" whose block is in this pack is in the rule, and no other.
+    const stickLines = [...zs.keys()].filter((n) => n >= 777 && n <= 793 && zs.get(n).startsWith('Chopping'));
+    const stickBlocks = stickLines.map(chop).filter((m) => m[5] === 'minecraft:stick' && m[6] === '2' && m[2] === '32767').map((m) => m[1]);
+    assert.equal(stickBlocks.length, stickLines.length);
+    const rule = way(pack.howToGet('stick'), 'sticks-from-planks');
+    assert.deepEqual(rule.blocks.map((b) => b.name).sort(), stickBlocks.filter((b) => pack.names.blocks.has(b)).sort());
+    assert.equal(rule.count, 2);
+
+    const javap = fs.readFileSync(path.join(HERE, 'fixtures/hitwithaxe-1.5.1/HitWithAxe.javap.txt'), 'utf8').replace(/\r\n/g, '\n');
+    const section = (name) => javap.slice(javap.indexOf(`## ${name}`)).split(/\n## /)[0];
+    // onItemUse: the held item's tool classes must contain "axe", and its axe level must be >= the recipe's.
+    const use = section('shadows.hitwithaxe.HitWithAxe');
+    assert.match(use, /Item\.getToolClasses[^\n]*\n[^\n]*String axe\n[^\n]*Set\.contains/);
+    assert.match(use, /String axe\n(?:[^\n]*\n){2}[^\n]*Item\.getHarvestLevel[^\n]*\n[^\n]*\n[^\n]*TransformRecipe\.getHarvestLevel[^\n]*\n[^\n]*if_icmplt/);
+    // call: the stack drops one block toward the player (offset(facing, -1)); the held axe takes 1 damage.
+    const call = section('shadows.hitwithaxe.DefaultTransformCall');
+    assert.match(call, /EntityPlayer\.func_174811_aO[^\n]*\n[^\n]*iconst_m1\n[^\n]*BlockPos\.func_177967_a/);
+    assert.match(call, /iconst_1\n[^\n]*\n[^\n]*ItemStack\.func_77972_a/);
+    // The script's overloads (lines 26-28: 5 arguments; 29 and 779: 3 arguments) pass harvest level 0.
+    const crt = section('shadows.hitwithaxe.crt.Chopping');
+    assert.match(crt, /addRecipe\(java\.lang\.String, int, java\.lang\.String, int, crafttweaker\.api\.item\.IItemStack\);\n\s+Code:\n(?:[^\n]*\n){4}\s+4: iconst_0\n/);
+    assert.match(crt, /addRecipe\(java\.lang\.String, int, crafttweaker\.api\.item\.IItemStack\);\n\s+Code:\n(?:[^\n]*\n){3}\s+4: iconst_0\n\s+5: iconst_0\n/);
+    assert.deepEqual(rule.tool, { type: 'axe', minLevel: 0 });
+    assert.deepEqual(debark.tool, { type: 'axe', minLevel: 0 });
+});
+
 test('#107 review: confidence is never stronger than the source', () => {
     // Per pair: the research names the oak debarked log and the oak plank only.
     assert.equal(pack.howToGet('oak_planks').ways[0].confidence, 'documented');

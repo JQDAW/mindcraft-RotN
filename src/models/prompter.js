@@ -280,7 +280,11 @@ export class Prompter {
         await this.checkCooldown();
         let prompt = this.profile.saving_memory;
         prompt = await this.replaceStrings(prompt, null, null, to_summarize);
-        let resp = await this.chat_model.sendRequest([], prompt);
+        // A user turn (some providers return empty content for a system-only
+        // request) and no stop sequence: the default '*' cut a markdown summary
+        // at its first asterisk, often to nothing (G3 smoke round 5, skills-rotn
+        // Request 16).
+        let resp = await this.chat_model.sendRequest([{ role: 'user', content: 'Write the updated memory now, as plain text.' }], prompt, null);
         await this._saveLog(prompt, to_summarize, resp, 'memSaving');
         if (resp?.includes('</think>')) {
             const [_, afterThink] = resp.split('</think>')

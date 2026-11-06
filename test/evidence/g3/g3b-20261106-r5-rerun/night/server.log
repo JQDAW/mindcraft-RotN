@@ -1,0 +1,1389 @@
+[14:21:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Seed: 1880465901402976865
+[14:21:29] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player <bot> is <uuid-v4>
+[14:21:29] [Netty Epoll Server IO #4/INFO] [FML]: Client protocol version 2
+[14:21:29] [Netty Epoll Server IO #4/INFO] [FML]: Client attempting to join with 346 mods : artisanintegrations@1.12.2-1.3.0,msunspirit@1.0.0,musictriggers@7.0.4,bnbgamingcore@0.12.0,sandro@1.3d,vanillaanvilrepair@1.1,theimpossiblelibrary@0.4.5,salt_lamps@1.12.2-1.1.0,nyx@1.6.1,rusticbopwoods@1.0,universaltweaks@1.9.0,chunkgenlimit@1.1,noarcher@1.0.0,betternether@0.1.9.4,contenttweaker@1.12.2-4.10.0,from_the_depths@1.3.0.1,craftstudioapi@1.0.0,bettercaves@1.12.2,forgeendertech@1.12.2-4.5.6.1,minerva@1.0.13,artisanworktables@1.12.2-1.24.2,exsartagine@${version},estop@1.12.1,hungertweaker@1.3.0,forgelin@1.8.4,randompatches@1.12.2-1.22.1.10,llibrary@1.7.20,scavenge@1.8,morpheus@1.12.2-3.5.106,hordes@1.1.7,normalasm@5.28,waila@1.8.26,minetraps@1.0.4,snowrealmagic@0.7.4,dynview@1.3,betterthanmending@1.1.2,mcmultipart@2.5.3,shetiphiancore@3.5.9,bundles@1.2.3,mysticallib@1.12.2-1.13.0,glaretorch@8.10,malisisdoors@1.12.2-7.3.0,enhanced_snowman@1.0,simpleores@1.11.2.2,ancientbeasts@1.9.99999,growthcraft_hops@4.2.2,betterwithlib@${version},totemexpansion@1.2.2,malisiscore@1.12.2-6.5.1-SNAPSHOT,rusticcompat@1.0,biomesoplenty@7.0.1.2445,controlledburn@1.12.2.024,redstoneflux@2.1.1,ironfurnaces@1.3.5,defiledlands@1.4.3,reccomplex@1.4.8.6,modtweaker@4.0.19,fairylights@2.1.10,corpsecomplex@1.0.12.0,potioncore@1.9_for_1.12.2,gamestages@2.0.123,aquaacrobatics@1.15.4,extendeddays@0.2.9,shadowmc@3.8.0,specialai@1.1.0_for_mc1.12.2,ceramics@1.12-1.3.7b,futurefireproof@1.2.2,triumph@3.19.2,nolavabuild@1.12.2-1.0.0,FML@8.0.99.99,obfuscate@0.4.2,atlaslib@1.1.6,multiblockmobs@1.6,zombie_players@1.12.1-1.2.7,globalxp@v1.4.10,hardcoredarkness@2.0,charm@1.4,dropt-bed@1.12.2-1.0.1,scalinghealth@1.3.37,bettermineshafts@1.12.2-2.2.1,dynamictrees@1.12.2-0.13.4,geckolib3@3.0.30,netherex@2.2.5,setbonus@1.12.2.040,dungpipe@1.0,advancedliftingmethods@1.0.0,justenoughdimensions@1.6.0-dev.20200416.184714,rockytweaks@@VERSION@,foundry@1.7.18,simplyhotsprings@${version},configanytime@3.0,quarkoddities@1,serenetweaks@0.0.1,cd4017be_lib@6.5.1,mowziesmobs@1.5.8,dynamictreesbop@1.12.2-9999.9999.9999z,jsonpaintings@1.4.0,rltweaker@0.7.4,timeshallnotpass@1.12.2-1.2.1,betterhorses@1.0,trumpetskeleton@1.12-1.0.2.1,bountifulbaubles@0.0.1,configmod@v1.0,hungeroverhaul@1.12.2-1.3.3.jenkins148,jei@4.27.3,bnbgaminglib@2.17.6,maleksinfinitygauntlet@1.0,lemonlib@1.3.0,copypaste@1.1,simplewoodenpipes@1.8,naturescompass@1.8.5,sereneseasons@1.2.18,basketcase@2.1.109,horsepower@2.6.4,noisethreader@1.1.0,vials@1.2.1.5,iceologer@1.5.3,inventorytweaks@1.63+release.109.220f184,redstoneplusplus@1.3e,athenaeum@1.12.2-1.19.6,betterhurttimer@1.12.2-1.5.0.3,iceandfire@1.9.1-1.2.1,bounceable@1.0.1,simple_paraglider@1.1.0,crafttweaker@4.1.20,rebind@2.7.5,forge@14.23.5.2860,paths@1.7.0,growthcraft_fishtrap@4.2.2,dynamictreesttf@1.12.2-1.2.3,dmgcontrol@1.3.17,eplus@5.1.0,antiqueatlas@4.6.3,cyclicmagic@1.20.12,enchcontrol@1.1.5,thiccentities@GRADLE:VERSION,minecraft@1.12.2,worldprimer@0.6.0-dev.20200122.211517,earthworks@1.3.4.3,fireresistancetiers@1.0,bettercombat@1.5.6,undergroundbiomes@1.3.14,behgameon@1.1.0,requious@1.0,demonic_scythe@1.4,growthcraft_milk@4.2.2,applecore@3.4.0,contentcreator@1.3.6-5,rustic@1.1.7,outfox@0.1.5,rotntweaker@0.1.0,fermiumbooter@1.4.1,astikorcarts@1.12.2-0.1.2.8,dropt@1.12.2-1.19.4,deadmanssatchel@1.12.2-1.0.0.20190226202924,ctintegration@1.8.0,spectral_edge@1.0,mantle@1.12-1.3.3.55,loottweaker@0.3.1,tnt_utilities@1.2.3,ftbbackups@1.1.0.1,rats@3.2.21,autoreglib@1.3-32,growthcraft_bees@4.2.2,libraryex@1.2.2,simplecore@1.7.3.4,trident@1.0.5,anvilpatch@1.1.1,biometweakercore@1.0.39,witherconfig@1.2.1,extrasounds@1.12.2-1.4.1,pyrotech_compat@@VERSION@,discordrpc@1.3.3,inworldcrafting@1.12.2-1.2.0,betterinvisibility@1.0.5,combatrefined@1.4.1,cosmeticarmorreworked@1.12.2-v5a,respawntimer@$version,well@1.0.1,arrowharvest@1.12.2-1.0.3,base@3.14.0,stygian@1.0.4,orestages@2.0.37,butterflies@1.12.2-1.0.3,roughmobsrevamped@2.3.23,chargethrower@1.0.1,rotn_blocks@1.0.0,animania@1.7.3,clipboard@@VERSION@,fantasticlib@1.12.2.068,dynamictreesquark@1.12.2-1.0.6,guilib@$version,villagenames@4.4.13,futuremc@0.2.6,doggytalents@1.15.1.6,incontrol@3.9.18,powerdrop@1.0,osv@5.14,growthcraft_bamboo@4.2.2,advancedmortars@1.12.2-1.7.1,netherchest@1.1.1,teamsmod@1.12.2-Rfinal,lttweaker@1.1.14,aggrotp@0.4.1,placebo@1.6.0,ometweaks@1.1.0,hitwithaxe@1.5.1,zombieawareness@1.12.1-1.11.16,arcaneworld@0.0.11,bookshelf@2.3.590,cofhworld@1.4.0,elegant_networking@3.16,xporbclump@2.3.6,letmesleep@1.2.2,adpother@1.12.2-1.2.25.0,aeble@1.4.2,carryon@1.12.3,eguilib@0.1.2,bblsom@1.1.2,biometweaker@3.2.369,twilightforest@3.14,growthcraft@4.2.2,redcore@0.6,dynamictreesphc@2.0.6,mcwbridges@1.0.6,charset@0.5.6.6,growthcraft_cellar@4.2.2,betterwithmods@1.12-2.3.24,rotm@1.1.4,crafttweakerjei@2.0.3,logimmune@0.1,aireducer@0.3.0,betterwithaddons@0.51,customdisc@1.3,mtlib@3.0.7,lifescroll@1.0,artisanworkstumps@1.12.2-1.1.4,msmlegacy@@VERSION@,livingenchantment@3.2.3,geographicraft@0.8.7,elenaidodge2@1.1.0,sasit@1.1.30,bountiful@2.2.3,dimstages@2.0.23,roguelike@1.8.0,patchouli@1.0-28,brigo@1.1.1,collective@3.0,mapgadgets@@VERSION@,betterbiomeblend@1.2.0,randomthings@4.2.7.4,qualitytools@1.0.7_for_1.12.2,endreborn@0.3.8,materialchanger@1.0,spartanfire@0.08,redstoneminusredstone@@VERSION@,dynamictreesdefiledlands@1.12.2-1.0.0,editableedibles@1.3.2,asmc@1.0.2,dpt@1.1.1,spartanweaponry@1.4.1,aesthetics@1.6.0.23,zenutils@1.26.14,growthcraft_grapes@4.2.2,tpp@1.0.1.1,vtt@0.6.4,atop@1.6,extraalchemy@0.5.4,epicsiegemod@13.169,aether_legacy_addon@1.12.2-v1.3.0,dynamictreestheaether@1.0.14,forgelin_continuous@2.1.20.0,extendedrenderer@v1.0,crafttweakerutils@0.7,dungeontactics@DT-0.16.9,zenrecipereloading@1.4.4,mixinbooter@10.7,trashslot@8.4.10,thirstybottles@2.0.1,chutes@1.0.0,ivtoolkit@1.3.3-1.12,gamblingstyle@1.1.3,esmtweaks@0.4.5,mcp@9.42,artifacts@1.12.2-1.2.4,cavegenerator@1.1,beneath@1.7.1,spartancompat@@VERSION@,betteranimalsplus@9.0.1,harvestcraft@1.12.2zb,harvestersnight@1.1.0,jeid@2.2.2,specialmobs@1.0.4_for_mc1.12.2,alfheim@1.5,rlmixins@1.3.18,pyrotech@1.12.2-1.5.25,soundphysics@1.1.13,randomportals@1.12.2-1.8.2.4,superflatcaves@1.3.1,growthcraft_rice@4.2.2,aarcaddon@1.0.1,recipestages@1.1.3,spartantwilight@1.2.0,mod_lavacow@1.3.2,primallib@{@version},orelib@3.6.0.1,bonemealtweaker@1.1.1,hooklib@3.16,inspirations@1.12.2-0.2.9,itlt@1.0.4,fxcontrol@0.1.14,weakerspiderwebs@2.0,randomenchantments@@VERSION@,toolbelt@1.9.14,stackup@0.2.5,silentlib@3.0.13,baubles@1.5.2,arcanearchives@0.2.0.25-mixins8,sbetterwatersplash@1.0,wards@1.3.1,vintagefix@0.6.2,growthcraft_apples@4.2.2,golems@7.1.9,betterslimes@1.3.4,quark@r1.6-190,pollutantpump@1.3.0,spartanshields@1.5.5,fastbench@1.7.4,harvestcrafttweaker@@VERSION@,multimob@1.0.5,mclogs@1.0.6,coroutil@1.12.1-1.2.37,toolprogression@1.12.2-1.6.12,hunterillager@1.2,magma_monsters@0.3.0,toroquest@1.12.2-5.3,dimstack@0.1.9,solcarrot@1.8.4,paintingselgui@$version,aether_legacy@1.5.3.2,advancedmotd@1.1.0,tnt_utilities_core@1.2.3,gbook_snapshot@2.9.1.s5,craftingcraft@6.1.3,aactadapter@1.12.2-0.1.0,primitivemobs@1.2.3a
+[14:21:29] [Netty Epoll Server IO #4/INFO] [dimstack]: Sending dimension stack configuration packet to <bot>
+[14:21:30] [Server thread/INFO] [FML]: [Server thread] Server side modded connection established
+[14:21:30] [Server thread/INFO] [gamestages]: Could not find legacy data for <uuid-v4>.
+[14:21:30] [Server thread/ERROR] [cyclicmagic]: Data not found for <bot>
+[14:21:30] [Server thread/INFO] [net.minecraft.server.management.PlayerList]: <bot>[/<ip>:58263] logged in with entity id 773 at (-44.5, 66.0, -66.5)
+[14:21:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <bot> joined the game
+[14:21:30] [Server thread/INFO] [gamestages]: Syncing 0 stages for <bot>.
+[14:21:30] [Server thread/INFO] [Waila]: Player EntityPlayerMP['<bot>'/773, l='world', x=-44.50, y=66.00, z=-66.50] connected. Sending ping
+[14:21:30] [Server thread/INFO] [Music Triggers]: Found joining player with UUID <uuid-v4>
+[14:21:30] [Server thread/INFO] [bountifulbaubles]: Attempting to sync config to player <bot>
+[14:21:30] [Server thread/INFO] [extraalchemy]: Asking client for config status
+[14:21:30] [Server thread/INFO] [antiqueatlas]: Sent custom biome data to player <bot>
+[14:21:30] [Server thread/INFO] [antiqueatlas]: Sent markers data #-1 to player <bot>
+[14:21:30] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: A non-excluded player has connected. The following modules have been toggled off: Daylight Cycle Module
+[14:21:30] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: Daylight Cycle Module: The daylight cycle has been enabled.
+[14:21:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule commandBlockOutput has been updated to false]
+[14:21:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule sendCommandFeedback has been updated to false]
+[14:21:30] [Server thread/INFO] [gamestages]: Syncing 1 stages for <bot>.
+[14:21:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Given    [Bread] * 1 to <bot>]
+[14:21:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Given    [Bundle] * 1 to <bot>]
+[14:21:31] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[14:21:31] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[14:21:31] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class magma_monsters.entities.EntityMagmaMonster from class magma_monsters.entities.EntityMagmaMonsterGrunt
+[14:21:31] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class magma_monsters.entities.EntityMagmaMonster from class magma_monsters.entities.EntityMagmaMonsterGrunt
+[14:21:31] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class net.daveyx0.multimob.entity.EntityMMBird from class net.daveyx0.multimob.entity.EntityMMFlyingMob
+[14:21:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step rocks started: collect 6 rocks
+[14:21:35] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 19ms increasing chunk view distance to: 5
+[14:21:35] [Server thread/WARN] [net.minecraft.network.datasync.EntityDataManager]: defineId called for: class com.github.alexthe666.iceandfire.entity.EntityDreadThrall from class com.github.alexthe666.iceandfire.entity.EntityDreadKnight
+[14:21:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Hello world! I'm <bot>. Starting the RotN agenda — collecting rocks now. !collectBlocks("pyrotech:rock", 6)
+[14:21:38] [Server thread/INFO] [toolprogression]: Game stages and/or Ore Stages isn't loaded.
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: java.lang.Exception
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at com.ferreusveritas.dynamictrees.util.Deprecatron.Complain(Deprecatron.java:13)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at com.ferreusveritas.dynamictrees.util.Deprecatron.Complain(Deprecatron.java:22)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at com.ferreusveritas.dynamictrees.api.TreeHelper.getExactSpecies(TreeHelper.java:200)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.daveyx0.primitivemobs.modint.PrimitiveMobsDTIntegration.searchDynamicTree(PrimitiveMobsDTIntegration.java:66)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.daveyx0.primitivemobs.entity.passive.EntityGroveSprite.determineLogAndLeaves(EntityGroveSprite.java:146)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.daveyx0.primitivemobs.entity.passive.EntityGroveSprite.func_180482_a(EntityGroveSprite.java:123)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.world.WorldEntitySpawner.func_77192_a(WorldEntitySpawner.java:155)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.world.WorldServer.func_72835_b(WorldServer.java:203)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.MinecraftServer.func_71190_q(MinecraftServer.java:756)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.dedicated.DedicatedServer.func_71190_q(DedicatedServer.java:397)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.MinecraftServer.func_71217_p(MinecraftServer.java:668)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at net.minecraft.server.MinecraftServer.run(MinecraftServer.java:526)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:13]: 	at java.lang.Thread.run(Thread.java:750)
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:21:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:21:45] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[14:21:45] [Server thread/INFO] [ASMUtil]: Transforming class funwayguy/epicsiegemod/ai/hooks/ChunkCacheFixed
+[14:21:45] [Server thread/INFO] [ASMUtil]: Transforming class funwayguy/epicsiegemod/ai/hooks/ChunkCacheFixed
+[14:21:50] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:21:50] [Server thread/INFO] [antiqueatlas]: Saving local markers data to NBT
+[14:21:51] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 29ms increasing chunk view distance to: 6
+[14:21:56] [Server thread/WARN] [net.minecraft.network.NetHandlerPlayServer]: <bot> moved wrongly!
+[14:22:05] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 13ms increasing chunk view distance to: 7
+[14:22:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> I'm stuck!
+[14:22:20] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 14ms increasing chunk view distance to: 8
+[14:22:20] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> I'm free.
+[14:22:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got unstuck, resuming rock collection. !collectBlocks("pyrotech:rock", 6)
+[14:22:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3b_deaths'
+[14:22:35] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:22:35] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 18ms increasing chunk view distance to: 9
+[14:22:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3b_played'
+[14:22:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: No objective was found by the name 'g3b_food'
+[14:22:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3b_deaths' successfully
+[14:22:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3b_played' successfully
+[14:22:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Added new objective 'g3b_food' successfully
+[14:22:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:22:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:22:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:22:50] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 17ms increasing chunk view distance to: 10
+[14:22:51] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:22:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step rocks done
+[14:22:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step sticks started: collect 4 sticks
+[14:22:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:22:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:22:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:22:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:22:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:02] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got 5 more, but I need 6 total. Grabbing one more. !collectBlocks("pyrotech:rock", 1)
+[14:23:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:05] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 17ms increasing chunk view distance to: 11
+[14:23:06] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-3, -18] in dimension 0 (overworld) while populating chunk [-3, -17], causing cascading worldgen lag.
+[14:23:06] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:06] [Server thread/INFO] [com.personthecat.cavegenerator.world.feature.StructureGenerator]: Spawning ironwoodsapling at BlockPos{x=149, y=77, z=-261}
+[14:23:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:10] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:13] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> No luck there. Let me search a wider area. !collectBlocks("pyrotech:rock", 1)
+[14:23:14] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:15] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:15] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:20] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:23:20] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 23ms increasing chunk view distance to: 12
+[14:23:21] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:21] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Hold on — checking my inventory, I already have 9 rocks (7 metamorphic + 2 igneous). Let me check if the agenda updated. !agenda
+[14:23:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:21] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [9, -10] in dimension 0 (overworld) while populating chunk [9, -9], causing cascading worldgen lag.
+[14:23:21] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:21] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [10, -9] in dimension 0 (overworld) while populating chunk [9, -9], causing cascading worldgen lag.
+[14:23:21] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:22] [Server thread/WARN] [FML]: MalisisCore loaded a new chunk [0, -19] in dimension 0 (overworld) while populating chunk [2, -18], causing cascading worldgen lag.
+[14:23:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [9, -14] in dimension 0 (overworld) while populating chunk [9, -13], causing cascading worldgen lag.
+[14:23:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [10, -13] in dimension 0 (overworld) while populating chunk [9, -13], causing cascading worldgen lag.
+[14:23:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Rocks done! Now on step 2: sticks. Felling a tree should drop them. !collectBlocks("stick", 4)
+[14:23:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:25] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:27] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Could not clear the inventory of <bot>, no items to remove
+[14:23:35] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 20ms increasing chunk view distance to: 13
+[14:23:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 2510
+[14:23:36] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:37] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [10, -15] in dimension 0 (overworld) while populating chunk [10, -14], causing cascading worldgen lag.
+[14:23:37] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:37] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [11, -15] in dimension 0 (overworld) while populating chunk [10, -14], causing cascading worldgen lag.
+[14:23:37] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:37] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [11, -14] in dimension 0 (overworld) while populating chunk [10, -14], causing cascading worldgen lag.
+[14:23:37] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 1 tracked objective(s) for <bot>:
+[14:23:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 1108 (g3b_played)
+[14:23:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:40] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:41] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:41] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:45] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:45] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:45] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:23:50] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 21ms increasing chunk view distance to: 14
+[14:23:53] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-10, -20] in dimension 0 (overworld) while populating chunk [-9, -20], causing cascading worldgen lag.
+[14:23:53] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:53] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-10, -21] in dimension 0 (overworld) while populating chunk [-9, -20], causing cascading worldgen lag.
+[14:23:53] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:53] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-11, -20] in dimension 0 (overworld) while populating chunk [-10, -21], causing cascading worldgen lag.
+[14:23:53] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:53] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-11, -21] in dimension 0 (overworld) while populating chunk [-10, -21], causing cascading worldgen lag.
+[14:23:53] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:53] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-9, -21] in dimension 0 (overworld) while populating chunk [-9, -20], causing cascading worldgen lag.
+[14:23:53] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:54] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [11, 7] in dimension 0 (overworld) while populating chunk [11, 6], causing cascading worldgen lag.
+[14:23:54] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:54] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, 6] in dimension 0 (overworld) while populating chunk [11, 6], causing cascading worldgen lag.
+[14:23:54] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:23:54] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, 7] in dimension 0 (overworld) while populating chunk [11, 6], causing cascading worldgen lag.
+[14:23:54] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:00] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:24:00] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:24:05] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:24:05] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 30ms increasing chunk view distance to: 15
+[14:24:06] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, -9] in dimension 0 (overworld) while populating chunk [12, -8], causing cascading worldgen lag.
+[14:24:06] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:09] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [12, -16] in dimension 0 (overworld) while populating chunk [12, -15], causing cascading worldgen lag.
+[14:24:09] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-17, -16] in dimension 0 (overworld) while populating chunk [-17, -15], causing cascading worldgen lag.
+[14:24:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-17, -17] in dimension 0 (overworld) while populating chunk [-17, -15], causing cascading worldgen lag.
+[14:24:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, 6] in dimension 0 (overworld) while populating chunk [-17, 6], causing cascading worldgen lag.
+[14:24:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-17, 7] in dimension 0 (overworld) while populating chunk [-17, 6], causing cascading worldgen lag.
+[14:24:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, 8] in dimension 0 (overworld) while populating chunk [-17, 8], causing cascading worldgen lag.
+[14:24:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, 7] in dimension 0 (overworld) while populating chunk [-17, 8], causing cascading worldgen lag.
+[14:24:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, 9] in dimension 0 (overworld) while populating chunk [-17, 8], causing cascading worldgen lag.
+[14:24:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-17, 9] in dimension 0 (overworld) while populating chunk [-17, 8], causing cascading worldgen lag.
+[14:24:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule commandBlockOutput has been updated to false]
+[14:24:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule sendCommandFeedback has been updated to false]
+[14:24:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda steps done: sticks, logs
+[14:24:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crude_axe started: craft a crude axe
+[14:24:20] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 23ms increasing chunk view distance to: 16
+[14:24:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-1, 10] in dimension 0 (overworld) while populating chunk [-1, 9], causing cascading worldgen lag.
+[14:24:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [0, 9] in dimension 0 (overworld) while populating chunk [-1, 9], causing cascading worldgen lag.
+[14:24:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [0, 10] in dimension 0 (overworld) while populating chunk [-1, 9], causing cascading worldgen lag.
+[14:24:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-14, -22] in dimension 0 (overworld) while populating chunk [-13, -22], causing cascading worldgen lag.
+[14:24:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-14, -23] in dimension 0 (overworld) while populating chunk [-13, -22], causing cascading worldgen lag.
+[14:24:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:25] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-13, -23] in dimension 0 (overworld) while populating chunk [-13, -22], causing cascading worldgen lag.
+[14:24:25] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:26] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:24:27] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-17, -23] in dimension 0 (overworld) while populating chunk [-17, -22], causing cascading worldgen lag.
+[14:24:27] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:27] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-19, -22] in dimension 0 (overworld) while populating chunk [-18, -22], causing cascading worldgen lag.
+[14:24:27] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:27] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, -23] in dimension 0 (overworld) while populating chunk [-18, -22], causing cascading worldgen lag.
+[14:24:27] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:30] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:24:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Sticks acquired! Now step 3: crafting the crude axe. !craftRecipe("pyrotech:crude_axe", 1)
+[14:24:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crude_axe done
+[14:24:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step first_plank started: make the first plank
+[14:24:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Crude axe crafted — and with the one I already had, that's 2 total, so I've got my spare! Agenda can move on. !agenda
+[14:24:35] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 25ms increasing chunk view distance to: 17
+[14:24:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Logs are in already — now the first plank. Placing a log to work on. !placeHere("log2:1")
+[14:24:39] [Server thread/WARN] [FML]: Quark: RotN Edition loaded a new chunk [-20, -16] in dimension 0 (overworld) while populating chunk [-19, -16], causing cascading worldgen lag.
+[14:24:39] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:40] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-16, -24] in dimension 0 (overworld) while populating chunk [-16, -23], causing cascading worldgen lag.
+[14:24:40] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-16, 10] in dimension 0 (overworld) while populating chunk [-15, 10], causing cascading worldgen lag.
+[14:24:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [9, 11] in dimension 0 (overworld) while populating chunk [10, 10], causing cascading worldgen lag.
+[14:24:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:41] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [10, 11] in dimension 0 (overworld) while populating chunk [10, 10], causing cascading worldgen lag.
+[14:24:41] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, -2] in dimension 0 (overworld) while populating chunk [16, -1], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, -1] in dimension 0 (overworld) while populating chunk [16, -1], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, 2] in dimension 0 (overworld) while populating chunk [16, 1], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [15, 3] in dimension 0 (overworld) while populating chunk [16, 2], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, 3] in dimension 0 (overworld) while populating chunk [16, 2], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [15, 4] in dimension 0 (overworld) while populating chunk [16, 3], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, 4] in dimension 0 (overworld) while populating chunk [16, 3], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [15, 5] in dimension 0 (overworld) while populating chunk [16, 4], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, 5] in dimension 0 (overworld) while populating chunk [16, 4], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, 4] in dimension 0 (overworld) while populating chunk [16, 4], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, 3] in dimension 0 (overworld) while populating chunk [16, 3], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:43] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, 2] in dimension 0 (overworld) while populating chunk [16, 2], causing cascading worldgen lag.
+[14:24:43] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:44] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, 1] in dimension 0 (overworld) while populating chunk [16, 1], causing cascading worldgen lag.
+[14:24:44] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:44] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [18, 0] in dimension 0 (overworld) while populating chunk [17, 1], causing cascading worldgen lag.
+[14:24:44] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:44] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [18, 1] in dimension 0 (overworld) while populating chunk [17, 1], causing cascading worldgen lag.
+[14:24:44] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:44] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, 0] in dimension 0 (overworld) while populating chunk [16, 1], causing cascading worldgen lag.
+[14:24:44] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Log placed. Now debarking it with the axe. !useOn("pyrotech:crude_axe", "log2")
+[14:24:44] [Server thread/WARN] [net.minecraft.server.MinecraftServer]: Can't keep up! Did the system time change, or is the server overloaded? Running 2684ms behind, skipping 53 tick(s)
+[14:24:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 3001
+[14:24:46] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 1 tracked objective(s) for <bot>:
+[14:24:46] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 2482 (g3b_played)
+[14:24:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Debarked! Now using the axe on the debarked log to get a plank. !useOn("pyrotech:crude_axe", "hitwithaxe:debarked_dark_oak")
+[14:24:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:24:51] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 36ms increasing chunk view distance to: 18
+[14:24:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step first_plank done
+[14:24:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_tools started: craft Crafting Tools
+[14:24:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Hmm, no plank in the output — checking my inventory. !inventory
+[14:24:52] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-20, -8] in dimension 0 (overworld) while populating chunk [-20, -7], causing cascading worldgen lag.
+[14:24:52] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:52] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:24:53] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-6, 11] in dimension 0 (overworld) while populating chunk [-5, 11], causing cascading worldgen lag.
+[14:24:53] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:53] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-5, 12] in dimension 0 (overworld) while populating chunk [-5, 11], causing cascading worldgen lag.
+[14:24:53] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:55] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-21, 0] in dimension 0 (overworld) while populating chunk [-21, -1], causing cascading worldgen lag.
+[14:24:55] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:56] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-21, 4] in dimension 0 (overworld) while populating chunk [-20, 4], causing cascading worldgen lag.
+[14:24:56] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:56] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-20, 5] in dimension 0 (overworld) while populating chunk [-21, 4], causing cascading worldgen lag.
+[14:24:56] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:56] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-21, 5] in dimension 0 (overworld) while populating chunk [-21, 4], causing cascading worldgen lag.
+[14:24:56] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:56] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-21, 3] in dimension 0 (overworld) while populating chunk [-20, 4], causing cascading worldgen lag.
+[14:24:56] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:57] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-20, 9] in dimension 0 (overworld) while populating chunk [-20, 8], causing cascading worldgen lag.
+[14:24:57] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:57] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-21, -21] in dimension 0 (overworld) while populating chunk [-21, -20], causing cascading worldgen lag.
+[14:24:57] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:58] [Server thread/WARN] [FML]: Quark: RotN Edition loaded a new chunk [-20, -24] in dimension 0 (overworld) while populating chunk [-19, -24], causing cascading worldgen lag.
+[14:24:58] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:24:58] [Server thread/WARN] [FML]: Quark: RotN Edition loaded a new chunk [-21, -24] in dimension 0 (overworld) while populating chunk [-19, -24], causing cascading worldgen lag.
+[14:24:58] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Looks like the log splitting worked — I got 1 dark oak plank (planks:5) and bark. First plank done! Moving straight to the crafting tools step with my axe, rock, and stick. !craftRecipe("contenttweaker:crafting_tools", 1)
+[14:25:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_tools done
+[14:25:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_table started: craft a crafting table
+[14:25:06] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 28ms increasing chunk view distance to: 19
+[14:25:08] [Server thread/INFO] [com.personthecat.cavegenerator.world.feature.StructureGenerator]: Spawning ironwoodsapling at BlockPos{x=-100, y=64, z=204}
+[14:25:09] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-10, -25] in dimension 0 (overworld) while populating chunk [-9, -25], causing cascading worldgen lag.
+[14:25:09] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:09] [Server thread/INFO] [com.personthecat.cavegenerator.world.feature.StructureGenerator]: Spawning ironwoodsapling at BlockPos{x=-334, y=64, z=-177}
+[14:25:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [4, 13] in dimension 0 (overworld) while populating chunk [4, 12], causing cascading worldgen lag.
+[14:25:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [5, 12] in dimension 0 (overworld) while populating chunk [4, 12], causing cascading worldgen lag.
+[14:25:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:10] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [5, 13] in dimension 0 (overworld) while populating chunk [4, 12], causing cascading worldgen lag.
+[14:25:10] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:11] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [15, -20] in dimension 0 (overworld) while populating chunk [15, -19], causing cascading worldgen lag.
+[14:25:11] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:12] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, -20] in dimension 0 (overworld) while populating chunk [15, -19], causing cascading worldgen lag.
+[14:25:12] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:12] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, -19] in dimension 0 (overworld) while populating chunk [15, -19], causing cascading worldgen lag.
+[14:25:12] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:12] [Server thread/WARN] [net.minecraft.server.MinecraftServer]: Can't keep up! Did the system time change, or is the server overloaded? Running 2046ms behind, skipping 40 tick(s)
+[14:25:12] [Server thread/WARN] [FML]: Quark: RotN Edition loaded a new chunk [8, -26] in dimension 0 (overworld) while populating chunk [9, -26], causing cascading worldgen lag.
+[14:25:12] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:12] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, 6] in dimension 0 (overworld) while populating chunk [-22, 6], causing cascading worldgen lag.
+[14:25:12] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:12] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-22, 7] in dimension 0 (overworld) while populating chunk [-22, 6], causing cascading worldgen lag.
+[14:25:12] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:12] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, 7] in dimension 0 (overworld) while populating chunk [-22, 6], causing cascading worldgen lag.
+[14:25:12] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-17, -26] in dimension 0 (overworld) while populating chunk [-17, -25], causing cascading worldgen lag.
+[14:25:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, -25] in dimension 0 (overworld) while populating chunk [-17, -25], causing cascading worldgen lag.
+[14:25:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-18, -26] in dimension 0 (overworld) while populating chunk [-17, -25], causing cascading worldgen lag.
+[14:25:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, -20] in dimension 0 (overworld) while populating chunk [-22, -20], causing cascading worldgen lag.
+[14:25:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-22, -21] in dimension 0 (overworld) while populating chunk [-22, -20], causing cascading worldgen lag.
+[14:25:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:13] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, -21] in dimension 0 (overworld) while populating chunk [-22, -20], causing cascading worldgen lag.
+[14:25:13] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:14] [Server thread/WARN] [FML]: Quark: RotN Edition loaded a new chunk [-23, -22] in dimension 0 (overworld) while populating chunk [-22, -22], causing cascading worldgen lag.
+[14:25:14] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:15] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, 11] in dimension 0 (overworld) while populating chunk [-22, 11], causing cascading worldgen lag.
+[14:25:15] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:15] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-22, 12] in dimension 0 (overworld) while populating chunk [-22, 11], causing cascading worldgen lag.
+[14:25:15] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:15] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Crafting tools made — step 6 done! The agenda should move on to step 7 on its own.
+[14:25:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !craftRecipe("crafting_table", 1)
+[14:25:21] [Server thread/INFO] [com.dynamic_view.DynView]: Mean tick: 26ms increasing chunk view distance to: 20
+[14:25:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_table done
+[14:25:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step planks_sticks started: make planks and sticks at the table
+[14:25:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Crafting table done! Checking the next step. !agenda
+[14:25:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-6, 14] in dimension 0 (overworld) while populating chunk [-6, 13], causing cascading worldgen lag.
+[14:25:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-5, 14] in dimension 0 (overworld) while populating chunk [-6, 13], causing cascading worldgen lag.
+[14:25:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-8, -26] in dimension 0 (overworld) while populating chunk [-7, -26], causing cascading worldgen lag.
+[14:25:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:22] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-8, -27] in dimension 0 (overworld) while populating chunk [-7, -26], causing cascading worldgen lag.
+[14:25:22] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-7, -27] in dimension 0 (overworld) while populating chunk [-7, -26], causing cascading worldgen lag.
+[14:25:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [1, 14] in dimension 0 (overworld) while populating chunk [2, 13], causing cascading worldgen lag.
+[14:25:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:23] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [2, 14] in dimension 0 (overworld) while populating chunk [2, 13], causing cascading worldgen lag.
+[14:25:23] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, -15] in dimension 0 (overworld) while populating chunk [16, -14], causing cascading worldgen lag.
+[14:25:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [17, -14] in dimension 0 (overworld) while populating chunk [16, -14], causing cascading worldgen lag.
+[14:25:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:24] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [-23, 2] in dimension 0 (overworld) while populating chunk [-23, 1], causing cascading worldgen lag.
+[14:25:24] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Now step 8 — planks and sticks. I've got 10 dark oak logs to work with. !craftRecipe("planks", 2)
+[14:25:27] [Server thread/INFO] [Quark ASM]: Transforming net.minecraft.inventory.ContainerWorkbench
+[14:25:27] [Server thread/INFO] [Quark ASM]: Applying Transformation to method (Names [transferStackInSlot, func_82846_b] Descriptor (Lnet/minecraft/entity/player/EntityPlayer;I)Lnet/minecraft/item/ItemStack;)
+[14:25:27] [Server thread/INFO] [Quark ASM]: Located Method, patching...
+[14:25:27] [Server thread/INFO] [Quark ASM]: Located patch target node INVOKEVIRTUAL net/minecraft/inventory/ContainerWorkbench.func_75135_a (Lnet/minecraft/item/ItemStack;IIZ)Z
+[14:25:27] [Server thread/INFO] [Quark ASM]: Located patch target node INVOKEVIRTUAL net/minecraft/inventory/ContainerWorkbench.func_75135_a (Lnet/minecraft/item/ItemStack;IIZ)Z
+[14:25:27] [Server thread/INFO] [Quark ASM]: Located patch target node INVOKEVIRTUAL net/minecraft/inventory/ContainerWorkbench.func_75135_a (Lnet/minecraft/item/ItemStack;IIZ)Z
+[14:25:27] [Server thread/INFO] [Quark ASM]: Located patch target node INVOKEVIRTUAL net/minecraft/inventory/ContainerWorkbench.func_75135_a (Lnet/minecraft/item/ItemStack;IIZ)Z
+[14:25:27] [Server thread/INFO] [Quark ASM]: Patch result: true
+[14:25:27] [Server thread/INFO] [ASMUtil]: Transforming class net/minecraft/inventory/ContainerWorkbench
+[14:25:27] [Server thread/INFO] [ASMUtil]: Transforming class net/minecraft/inventory/ContainerWorkbench
+[14:25:28] [Server thread/WARN] [FML]: LLibrary loaded a new chunk [15, -27] in dimension 0 (overworld) while populating chunk [15, -26], causing cascading worldgen lag.
+[14:25:28] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:28] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [15, 13] in dimension 0 (overworld) while populating chunk [16, 12], causing cascading worldgen lag.
+[14:25:28] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:28] [Server thread/WARN] [FML]: CoFH World loaded a new chunk [16, 13] in dimension 0 (overworld) while populating chunk [16, 12], causing cascading worldgen lag.
+[14:25:28] [Server thread/WARN] [FML]: Please report this to the mod's issue tracker. This log can be disabled in the Forge config.
+[14:25:29] [Server thread/WARN] [net.minecraft.server.MinecraftServer]: Can't keep up! Did the system time change, or is the server overloaded? Running 2025ms behind, skipping 40 tick(s)
+[14:25:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:25:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Planks done! Now for sticks. !craftRecipe("stick", 1)
+[14:25:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step planks_sticks done
+[14:25:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_pickaxe started: craft a stone pickaxe
+[14:25:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> That's 6+ planks and 5 sticks — requirements met! !agenda
+[14:25:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Step 9: stone pickaxe! !craftRecipe("stone_pickaxe", 1)
+[14:25:41] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:25:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_pickaxe done
+[14:25:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_axe started: craft a stone axe
+[14:25:44] [Server thread/INFO] [com.personthecat.cavegenerator.world.feature.StructureGenerator]: Spawning ironwoodsapling at BlockPos{x=115, y=63, z=-410}
+[14:25:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Pickaxe done! Now step 10 — stone axe. !craftRecipe("stone_axe", 1)
+[14:25:51] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:25:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_axe done
+[14:25:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step cobblestone started: make cobblestone from rocks
+[14:25:53] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 3001
+[14:25:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:25:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 3856 (g3b_played)
+[14:25:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 19 (g3b_food)
+[14:26:01] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:26:01] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:26:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Both tools crafted! Checking what's next. !agenda
+[14:26:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Last step: cobblestone! Mining stone for rocks. !collectBlocks("pyrotech:rock", 8)
+[14:26:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:26:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Rock pile complete — now crafting cobblestone. !craftRecipe("cobblestone", 2)
+[14:26:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 4 cobble so far, need 10 total. Mining more rocks! !collectBlocks("pyrotech:rock", 8)
+[14:26:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Another 8 rocks! Crafting more cobblestone. !craftRecipe("cobblestone", 2)
+[14:27:02] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 3001
+[14:27:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:27:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 5232 (g3b_played)
+[14:27:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 19 (g3b_food)
+[14:27:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 8 cobblestone — 2 to go! One more rock run. !collectBlocks("pyrotech:rock", 8)
+[14:27:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:27:11] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:27:27] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got the last rocks! Crafting the final batch. !craftRecipe("cobblestone", 1)
+[14:27:31] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:27:33] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Let me check my cobblestone count. !inventory
+[14:27:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 5 cobblestone and 14 rocks left — that's only 3 more, totaling 8. Need a bit more. Crafting what I can. !craftRecipe("cobblestone", 3)
+[14:27:48] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 8 so far, 2 more needed. Crafting! !craftRecipe("cobblestone", 2)
+[14:27:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Need 8 more rocks. !collectBlocks("pyrotech:rock", 8)
+[14:27:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:28:09] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got them! Final craft. !craftRecipe("cobblestone", 2)
+[14:28:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 3001
+[14:28:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step cobblestone done
+[14:28:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda done
+[14:28:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:28:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 6609 (g3b_played)
+[14:28:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 19 (g3b_food)
+[14:28:13] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 10 cobblestone done! That wraps up step 11 — they're saved for the night shelter, not using them by day.
+[14:28:16] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:28:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:29:09] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [Skeleton: Object successfully summoned]
+[14:29:19] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 3001
+[14:29:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:29:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:29:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 7974 (g3b_played)
+[14:29:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 18 (g3b_food)
+[14:29:36] [Server thread/INFO] [STDERR]: [com.ferreusveritas.dynamictrees.util.Deprecatron:Complain:17]: Deprecated use of getExactSpecies method. Will be removed in the future.
+[14:30:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:30:28] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 3001
+[14:30:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:30:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 9361 (g3b_played)
+[14:30:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 18 (g3b_food)
+[14:30:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:31:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:31:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 3001
+[14:31:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:31:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 10740 (g3b_played)
+[14:31:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 18 (g3b_food)
+[14:32:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:32:46] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 3001
+[14:32:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:32:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 12111 (g3b_played)
+[14:32:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 17 (g3b_food)
+[14:33:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:33:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:33:54] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 3001
+[14:33:56] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:33:56] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 13486 (g3b_played)
+[14:33:56] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 17 (g3b_food)
+[14:34:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:35:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 4256
+[14:35:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:35:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 14863 (g3b_played)
+[14:35:05] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 17 (g3b_food)
+[14:35:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:35:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> [night] sunset is near: building a shelter
+[14:35:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> [night] in the shelter at -34, 66, -90 until morning
+[14:36:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:36:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 5631
+[14:36:14] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:36:14] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 16238 (g3b_played)
+[14:36:14] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 17 (g3b_food)
+[14:36:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:37:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 7004
+[14:37:22] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:37:22] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 17611 (g3b_played)
+[14:37:22] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 16 (g3b_food)
+[14:37:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:38:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:38:29] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 8378
+[14:38:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:38:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 18982 (g3b_played)
+[14:38:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 16 (g3b_food)
+[14:39:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:39:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 9750
+[14:39:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:39:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 20357 (g3b_played)
+[14:39:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 16 (g3b_food)
+[14:39:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:40:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:40:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 11125
+[14:40:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:40:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 21731 (g3b_played)
+[14:40:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 15 (g3b_food)
+[14:41:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:41:56] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 12504
+[14:41:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:41:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 23110 (g3b_played)
+[14:41:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 15 (g3b_food)
+[14:42:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:42:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:43:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 13878
+[14:43:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:43:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 24481 (g3b_played)
+[14:43:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 15 (g3b_food)
+[14:43:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:44:13] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 15250
+[14:44:15] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:44:15] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 25857 (g3b_played)
+[14:44:15] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 15 (g3b_food)
+[14:44:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:45:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:45:22] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 16001
+[14:45:24] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:45:24] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 27231 (g3b_played)
+[14:45:24] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 14 (g3b_food)
+[14:45:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:46:29] [Server thread/WARN] [net.minecraft.entity.EntityTrackerEntry]: Fetching addPacket for removed entity
+[14:46:30] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 16001
+[14:46:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:46:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 28603 (g3b_played)
+[14:46:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 14 (g3b_food)
+[14:46:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:47:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:47:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 16001
+[14:47:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:47:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 29979 (g3b_played)
+[14:47:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 14 (g3b_food)
+[14:48:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:48:48] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 16001
+[14:48:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:48:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 31358 (g3b_played)
+[14:48:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 13 (g3b_food)
+[14:48:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:49:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:49:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 16001
+[14:49:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:49:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 32730 (g3b_played)
+[14:49:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 13 (g3b_food)
+[14:50:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:50:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [Skeleton: Object successfully summoned]
+[14:51:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:51:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 16001
+[14:51:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:51:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 34112 (g3b_played)
+[14:51:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 13 (g3b_food)
+[14:51:26] [Server thread/FATAL] [FML]: ---- Minecraft Crash Report ----
+WARNING: coremods are present:
+  BounceablePlugin (Bounceable-1.0.1.jar)
+  The Impossible Library Core (theimpossiblelibrary-0.4.5.jar)
+  DPTCore (DefaultPotionTweaks-1.1.1.jar)
+  CoreModLoader (soundphysics-1.1.13.jar)
+  AppleCore (AppleCore-mc1.12.2-3.4.0.jar)
+  RLMixinsPlugin (RLMixins-1.3.18.jar)
+  ZenUtilsPlugin (zenutils-1.26.14.jar)
+  EC Core Plugin (enchcontrol-1.12.2-1.1.5-0.jar)
+  JustEnoughIDs Extension Plugin (RoughlyEnoughIDs-2.2.2.jar)
+  ChunkGenLimiterCoremod (chunkgenlimiter-1.1-core.jar)
+  ZenRecipeReloadingPlugin (zenrecipereloading-1.4.5.jar)
+  LoadingPlugin (HardcoreDarkness-MC1.12.2-2.0.jar)
+  ReBind Core (rebind-1.12.2-2.7.5-0.jar)
+  Vertically Stacked Dimensions ASM (VerticallyStackedDimensions-1.12.2-0.1.9.jar)
+  Content Creator (ContentCreator-1.3.92.jar)
+  Transformer (harvestcrafttweaker-1.2c.jar)
+  LoadingPlugin (RandomThings-MC1.12.2-4.2.7.4.jar)
+  RandomPatches (randompatches-1.12.2-1.22.1.10.jar)
+  Betterer Biomer Blender (betterbiomeblend-1.2.0-1.12.2.jar)
+  core (!Red-Core-MC-1.8-1.12-0.6.jar)
+  llibrary (llibrary-core-1.0.11-1.12.2.jar)
+  BNBGamingCore (BNBGamingCore-1.12.2-0.12.0.jar)
+  ShetiPhian-ASM (ShetiPhian-ASM-1.12.0.jar)
+  CoreMod (Trident-1.0.5.jar)
+  FermiumASM (fermiumasm-5.28.jar)
+  CorePlugin (ForgeEndertech-1.12.2-4.5.6.1-build.0648.jar)
+  ratscore (rats-3.2.21-1.12.2.jar)
+  ConfigAnytimePlugin (!configanytime-3.0.jar)
+  RLTweaker ASM (RLTweaker-1.12.2-0.7.4.jar)
+  WorseCore (WorseHurtTimer-1.12.2-1.5.0.3.jar)
+  Quark Plugin (QuarkRotN-r1.6-190.jar)
+  LoadingPlugin (AdPother-1.12.2-1.2.25.0-build.0673.jar)
+  MixinBooter (!mixinbooter-10.7.jar)
+  AALoadingPlugin (arcanearchives-0.2.0.25-mixins8.jar)
+  WitherConfigPlugin (Wither-Config-1.2.1.jar)
+  FermiumBooter (`FermiumBooter-1.4.1.jar)
+  Forgelin-Continuous (Forgelin-Continuous-2.1.20.0.jar)
+  NoiseThreaderPlugin (NoiseThreader-1.1.0.jar)
+  BiomeTweakerCore (BiomeTweakerCore-1.12.2-1.0.39.jar)
+  ObfuscatePlugin (obfuscate-0.4.2-1.12.2.jar)
+  LoadingPlugin (BetterWithLib-1.12-1.5.jar)
+  Inventory Tweaks Coremod (InventoryTweaks-1.63.jar)
+  MainHookLoader (hooklib-3.17.jar)
+  EditableEdiblesPlugin (EditableEdibles-1.3.2.jar)
+  RedstoneMinusCore (RedstoneMinusRedstone-0.3.1.jar)
+  StackUpCore (StackUp-0.2.5.jar)
+  Bundles (Bundles-1.2.3.jar)
+  ToolProgressionPlugin (toolprogression-core-1.12.2-1.6.12.jar)
+  MalisisCorePlugin (malisiscore-1.12.2-6.5.1.jar)
+  IvToolkit (IvToolkit-1.3.3-1.12.jar)
+  UniversalTweaksCore (UniversalTweaks-1.12.2-1.9.0.jar)
+  FutureMC (Future-MC-0.2.21.jar)
+  BHLoader (betterhorses-1.5.jar)
+  Aqua Acrobatics Transformer (AquaAcrobatics-1.15.4.jar)
+  SSLoadingPlugin (SereneSeasons-1.12.2-1.2.18-universal.jar)
+  TFCore (twilightforest-1.12.2-3.14.jar)
+  Fixeroo (Fixeroo-2.3.6.jar)
+  Snow! Real Magic! (SnowRealMagic-1.12.2-0.7.4.jar)
+  ModernSunSpiritPlugin (ModernSunSpirit-1.2.1.jar)
+  CharmLoadingPlugin (Charm-1.12.2-1.4.1.jar)
+  JSON Paintings Plugin (JSON-Paintings-v1.4.0-mc1.12.2.jar)
+  VintageFix (vintagefix-0.6.2.jar)
+  AlfheimPlugin (Alfheim-1.5.jar)
+  ExampleModLoadingPlugin (maleksinfinitygauntlet.jar)
+  iceandfire (IceAndFireRotN-1.9.1-1.2.1.jar)
+  ESCore (ExtraSounds-1.12.2-1.4.1.jar)
+  ThiccEntities Plugin (Entifier-2.0.0.jar)
+  serializationisbad (serializationisbad-1.5.2.jar)
+  SpartanWeaponry-MixinLoader (SpartanWeaponry-1.12.2-1.4.1.jar)
+  BBLSOhMyPlugin (BBLSOhMy-1.1.2.jar)
+  TNTUtilities Core (tnt_utilities-mc1.12-1.2.3.jar)
+Contact their authors BEFORE contacting forge
+// I'm sorry, Dave.
+Time: 11/6/26 2:51 PM
+Description: Ticking entity
+java.util.ConcurrentModificationException
+	at java.util.LinkedHashMap$LinkedHashIterator.nextNode(LinkedHashMap.java:719)
+	at java.util.LinkedHashMap$LinkedKeyIterator.next(LinkedHashMap.java:742)
+	at net.minecraft.entity.ai.EntityAITasks.func_75774_a(SourceFile:125)
+	at net.minecraft.entity.EntityLiving.func_70626_be(EntityLiving.java:763)
+	at net.minecraft.entity.EntityLivingBase.func_70636_d(EntityLivingBase.java:2359)
+	at net.minecraft.entity.EntityLiving.func_70636_d(EntityLiving.java:577)
+	at net.minecraft.entity.EntityAgeable.func_70636_d(EntityAgeable.java:178)
+	at net.minecraft.entity.passive.EntityAnimal.func_70636_d(SourceFile:43)
+	at com.animania.common.entities.rodents.EntityHedgehogBase.func_70636_d(EntityHedgehogBase.java:408)
+	at net.minecraft.entity.EntityLivingBase.func_70071_h_(EntityLivingBase.java:2179)
+	at net.minecraft.entity.EntityLiving.func_70071_h_(EntityLiving.java:295)
+	at net.minecraft.world.World.func_72866_a(World.java:1996)
+	at net.minecraft.world.WorldServer.func_72866_a(WorldServer.java:832)
+	at net.minecraft.world.World.func_72870_g(World.java:1958)
+	at net.minecraft.world.World.func_72939_s(World.java:1762)
+	at net.minecraft.world.WorldServer.func_72939_s(WorldServer.java:613)
+	at net.minecraft.server.MinecraftServer.func_71190_q(MinecraftServer.java:767)
+	at net.minecraft.server.dedicated.DedicatedServer.func_71190_q(DedicatedServer.java:397)
+	at net.minecraft.server.MinecraftServer.func_71217_p(MinecraftServer.java:668)
+	at net.minecraft.server.MinecraftServer.run(MinecraftServer.java:526)
+	at java.lang.Thread.run(Thread.java:750)
+No Mixin Metadata is found in the Stacktrace.
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+-- Head --
+Thread: Server thread
+Stacktrace:
+	at java.util.LinkedHashMap$LinkedHashIterator.nextNode(LinkedHashMap.java:719)
+	at java.util.LinkedHashMap$LinkedKeyIterator.next(LinkedHashMap.java:742)
+	at net.minecraft.entity.ai.EntityAITasks.func_75774_a(SourceFile:125)
+	at net.minecraft.entity.EntityLiving.func_70626_be(EntityLiving.java:763)
+	at net.minecraft.entity.EntityLivingBase.func_70636_d(EntityLivingBase.java:2359)
+	at net.minecraft.entity.EntityLiving.func_70636_d(EntityLiving.java:577)
+	at net.minecraft.entity.EntityAgeable.func_70636_d(EntityAgeable.java:178)
+	at net.minecraft.entity.passive.EntityAnimal.func_70636_d(SourceFile:43)
+	at com.animania.common.entities.rodents.EntityHedgehogBase.func_70636_d(EntityHedgehogBase.java:408)
+	at net.minecraft.entity.EntityLivingBase.func_70071_h_(EntityLivingBase.java:2179)
+	at net.minecraft.entity.EntityLiving.func_70071_h_(EntityLiving.java:295)
+	at net.minecraft.world.World.func_72866_a(World.java:1996)
+	at net.minecraft.world.WorldServer.func_72866_a(WorldServer.java:832)
+	at net.minecraft.world.World.func_72870_g(World.java:1958)
+-- Entity being ticked --
+Details:
+	Entity Type: animania:hedgehog (com.animania.common.entities.rodents.EntityHedgehog)
+	Entity ID: 24
+	Entity Name: Hedgehog
+	Entity's Exact location: -267.65, 69.00, 8.48
+	Entity's Block location: World: (-268,69,8), Chunk: (at 4,4,8 in -17,0; contains blocks -272,0,0 to -257,255,15), Region: (-1,0; contains chunks -32,0 to -1,31, blocks -512,0,0 to -1,255,511)
+	Entity's Momentum: -0.29, 0.20, 0.23
+	Entity's Passengers: []
+	Entity's Vehicle: ~~ERROR~~ NullPointerException: null
+Stacktrace:
+	at net.minecraft.world.World.func_72939_s(World.java:1762)
+	at net.minecraft.world.WorldServer.func_72939_s(WorldServer.java:613)
+	at net.minecraft.server.MinecraftServer.func_71190_q(MinecraftServer.java:767)
+	at net.minecraft.server.dedicated.DedicatedServer.func_71190_q(DedicatedServer.java:397)
+	at net.minecraft.server.MinecraftServer.func_71217_p(MinecraftServer.java:668)
+	at net.minecraft.server.MinecraftServer.run(MinecraftServer.java:526)
+	at java.lang.Thread.run(Thread.java:750)
+-- System Details --
+Details:
+	Minecraft Version: 1.12.2
+	Operating System: Linux (amd64) version 6.8.0-138-generic
+	Java Version: 1.8.0_504, Ubuntu
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode), Ubuntu
+	Memory: 4321843288 bytes (4121 MB) / 6498549760 bytes (6197 MB) up to 7635730432 bytes (7282 MB)
+	JVM Flags: 2 total; -Xms4G -Xmx8G
+	IntCache: cache: 1, tcache: 1, allocated: 0, tallocated: 8
+	FML: MCP 9.42 FermiumASM 5.28 VintageFix 0.6.2 Powered by Forge 14.23.5.2860 346 mods loaded, 346 mods active
+	States: 'U' = Unloaded 'L' = Loaded 'C' = Constructed 'H' = Pre-initialized 'I' = Initialized 'J' = Post-initialized 'A' = Available 'D' = Disabled 'E' = Errored
+	| State  | ID                       | Version                     | Source                                                    | Signature                                |
+	|:------ |:------------------------ |:--------------------------- |:--------------------------------------------------------- |:---------------------------------------- |
+	| LCHIJA | minecraft                | 1.12.2                      | minecraft.jar                                             | None                                     |
+	| LCHIJA | mcp                      | 9.42                        | minecraft.jar                                             | None                                     |
+	| LCHIJA | musictriggers            | 7.0.4                       | musictriggers-7.0.4.jar                                   | None                                     |
+	| LCHIJA | theimpossiblelibrary     | 0.4.5                       | theimpossiblelibrary-0.4.5.jar                            | None                                     |
+	| LCHIJA | FML                      | 8.0.99.99                   | forge-1.12.2-14.23.5.2860.jar                             | e3c3d50c7c986df74c645c0ac54639741c90a557 |
+	| LCHIJA | forge                    | 14.23.5.2860                | forge-1.12.2-14.23.5.2860.jar                             | e3c3d50c7c986df74c645c0ac54639741c90a557 |
+	| LCHIJA | ivtoolkit                | 1.3.3-1.12                  | minecraft.jar                                             | None                                     |
+	| LCHIJA | mixinbooter              | 10.7                        | minecraft.jar                                             | None                                     |
+	| LCHIJA | biometweakercore         | 1.0.39                      | minecraft.jar                                             | None                                     |
+	| LCHIJA | bnbgamingcore            | 0.12.0                      | minecraft.jar                                             | None                                     |
+	| LCHIJA | jsonpaintings            | 1.4.0                       | JSON-Paintings-v1.4.0-mc1.12.2.jar                        | None                                     |
+	| LCHIJA | obfuscate                | 0.4.2                       | minecraft.jar                                             | None                                     |
+	| LCHIJA | tnt_utilities_core       | 1.2.3                       | minecraft.jar                                             | None                                     |
+	| LCHIJA | randompatches            | 1.12.2-1.22.1.10            | randompatches-1.12.2-1.22.1.10.jar                        | None                                     |
+	| LCHIJA | configanytime            | 3.0                         | !configanytime-3.0.jar                                    | None                                     |
+	| LCHIJA | redcore                  | 0.6                         | !Red-Core-MC-1.8-1.12-0.6.jar                             | None                                     |
+	| LCHIJA | fermiumbooter            | 1.4.1                       | `FermiumBooter-1.4.1.jar                                  | None                                     |
+	| LCHIJA | antiqueatlas             | 4.6.3                       | antiqueatlas-1.12.2-4.6.3.jar                             | None                                     |
+	| LCHIJA | crafttweaker             | 4.1.20                      | CraftTweaker2-1.12-4.1.20.700.jar                         | None                                     |
+	| LCHIJA | aactadapter              | 1.12.2-0.1.0                | aactadapter-1.12.2-0.1.0.jar                              | None                                     |
+	| LCHIJA | reccomplex               | 1.4.8.6                     | RecurrentComplex-1.4.8.6.jar                              | None                                     |
+	| LCHIJA | aarcaddon                | 1.0.1                       | AARCAddon-1.0.1.jar                                       | None                                     |
+	| LCHIJA | forgeendertech           | 1.12.2-4.5.6.1              | ForgeEndertech-1.12.2-4.5.6.1-build.0648.jar              | None                                     |
+	| LCHIJA | adpother                 | 1.12.2-1.2.25.0             | AdPother-1.12.2-1.2.25.0-build.0673.jar                   | None                                     |
+	| LCHIJA | advancedliftingmethods   | 1.0.0                       | AdvancedLiftingMethods-1.12.2-1.0.0.jar                   | None                                     |
+	| LCHIJA | advancedmortars          | 1.12.2-1.7.1                | advancedmortars-1.12.2-1.7.1.jar                          | None                                     |
+	| LCHIJA | advancedmotd             | 1.1.0                       | AdvancedMotd-MC1.12.2-1.1.0.jar                           | None                                     |
+	| LCHIJA | aether_legacy            | 1.5.3.2                     | aether-1.12.2-v1.5.4.0.jar                                | None                                     |
+	| LCHIJA | baubles                  | 1.5.2                       | Baubles-1.12-1.5.2.jar                                    | None                                     |
+	| LCHIJA | aeble                    | 1.4.2                       | aeble_v1.4.3.jar                                          | None                                     |
+	| LCHIJA | simplecore               | 1.7.3.4                     | simplecore-1.12.2-1.7.3.4.jar                             | None                                     |
+	| LCHIJA | simpleores               | 1.11.2.2                    | simpleores-1.12.2-1.11.2.2.jar                            | None                                     |
+	| LCHIJA | aesthetics               | 1.6.0.23                    | aesthetics-1.12.2-1.6.0.23.jar                            | None                                     |
+	| LCHIJA | aether_legacy_addon      | 1.12.2-v1.3.0               | Aether Continuation v1.3.0.jar                            | None                                     |
+	| LCHIJA | aggrotp                  | 0.4.1                       | AggroTP-0.4.1.jar                                         | None                                     |
+	| LCHIJA | aireducer                | 0.3.0                       | AIReducer-1.12.2-0.3.0.jar                                | None                                     |
+	| LCHIJA | alfheim                  | 1.5                         | Alfheim-1.5.jar                                           | None                                     |
+	| LCHIJA | ancientbeasts            | 1.9.99999                   | ancientbeasts-1.9.99999.jar                               | None                                     |
+	| LCHIJA | biometweaker             | 3.2.369                     | BiomeTweaker-1.12.2-3.2.369.jar                           | 631f326344f7f5fd7df7eb940760ebd52b7c9c17 |
+	| LCHIJA | simplyhotsprings         | ${version}                  | simplyhotsprings-0.2.5.jar                                | None                                     |
+	| LCHIJA | biomesoplenty            | 7.0.1.2445                  | BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar             | None                                     |
+	| LCHIJA | craftstudioapi           | 1.0.0                       | CraftStudioAPI-universal-1.0.1.95-mc1.12-alpha.jar        | None                                     |
+	| LCHIJA | harvestcraft             | 1.12.2zb                    | Pam's HarvestCraft 1.12.2zg.jar                           | None                                     |
+	| LCHIJA | bookshelf                | 2.3.590                     | Bookshelf-1.12.2-2.3.590.jar                              | d476d1b22b218a10d845928d1665d45fce301b27 |
+	| LCHIJA | gamestages               | 2.0.123                     | GameStages-1.12.2-2.0.123.jar                             | d476d1b22b218a10d845928d1665d45fce301b27 |
+	| LCHIJA | orestages                | 2.0.37                      | OreStages-1.12.2-2.0.37.jar                               | d476d1b22b218a10d845928d1665d45fce301b27 |
+	| LCHIJA | toolprogression          | 1.12.2-1.6.12               | toolprogression-1.12.2-1.6.12.jar                         | e631d7254e451d0360d0148cb21407d5511d45e9 |
+	| LCHIJA | twilightforest           | 3.14                        | twilightforest-1.12.2-3.14.jar                            | None                                     |
+	| LCHIJA | animania                 | 1.7.3                       | animania-1.12.2-1.7.3.jar                                 | None                                     |
+	| LCHIJA | anvilpatch               | 1.1.1                       | anvilpatch-1.1.1.jar                                      | None                                     |
+	| LCHIJA | applecore                | 3.4.0                       | AppleCore-mc1.12.2-3.4.0.jar                              | None                                     |
+	| LCHIJA | aquaacrobatics           | 1.15.4                      | AquaAcrobatics-1.15.4.jar                                 | None                                     |
+	| LCHIJA | gbook_snapshot           | 2.9.1.s5                    | Guidebook-1.12.2-2.9.1.s5.jar                             | None                                     |
+	| LCHIJA | arcanearchives           | 0.2.0.25-mixins8            | arcanearchives-0.2.0.25-mixins8.jar                       | None                                     |
+	| LCHIJA | arrowharvest             | 1.12.2-1.0.3                | arrowharvest-1.12.2-1.0.3.jar                             | 1bc8f8dbe770187a854cef35dad0ff40ba441bbe |
+	| LCHIJA | artifacts                | 1.12.2-1.2.4                | artifacts-1.12.2-1.2.4.jar                                | None                                     |
+	| LCHIJA | charset                  | 0.5.6.6                     | Charset-Lib-0.5.6.6.jar                                   | None                                     |
+	| LCHIJA | mtlib                    | 3.0.7                       | MTLib-3.0.7.jar                                           | None                                     |
+	| LCHIJA | modtweaker               | 4.0.19                      | modtweaker-4.0.20.11.jar                                  | None                                     |
+	| LCHIJA | atlaslib                 | 1.1.6                       | Atlas-Lib-1.12.2-1.1.6.jar                                | None                                     |
+	| LCHIJA | hordes                   | 1.1.7                       | The-Hordes-1.12.2-1.1.7.jar                               | None                                     |
+	| LCHIJA | jei                      | 4.27.3                      | HadEnoughItems_1.12.2-4.27.3.jar                          | None                                     |
+	| LCHIJA | athenaeum                | 1.12.2-1.19.6               | athenaeum-1.12.2-1.19.6.jar                               | None                                     |
+	| LCHIJA | artisanworktables        | 1.12.2-1.24.2               | artisanworktables-1.12.2-1.24.2.jar                       | None                                     |
+	| LCHIJA | patchouli                | 1.0-28                      | Patchouli-1.0-28.jar                                      | None                                     |
+	| LCHIJA | artisanintegrations      | 1.12.2-1.3.0                | artisanintegrations-1.12.2-1.3.0.jar                      | None                                     |
+	| LCHIJA | artisanworkstumps        | 1.12.2-1.1.4                | artisanworkstumps-1.12.2-1.1.4.jar                        | None                                     |
+	| LCHIJA | asmc                     | 1.0.2                       | ASMC-1.12.2-1.0.2.jar                                     | None                                     |
+	| LCHIJA | astikorcarts             | 1.12.2-0.1.2.8              | astikorcarts-deluxe-1.12.2-0.1.2.8.jar                    | None                                     |
+	| LCHIJA | atop                     | 1.6                         | ATOP-1.12.2-v.1.6.jar                                     | None                                     |
+	| LCHIJA | quark                    | r1.6-190                    | QuarkRotN-r1.6-190.jar                                    | None                                     |
+	| LCHIJA | autoreglib               | 1.3-32                      | AutoRegLib-1.3-32.jar                                     | None                                     |
+	| LCHIJA | base                     | 3.14.0                      | base-1.12.2-3.14.0.jar                                    | None                                     |
+	| LCHIJA | primallib                | {@version}                  | primallib-v1.1.60-mc1.12.2.jar                            | None                                     |
+	| LCHIJA | basketcase               | 2.1.109                     | basketcase-v2.1.109-mc1.12.2.jar                          | None                                     |
+	| LCHIJA | bblsom                   | 1.1.2                       | BBLSOhMy-1.1.2.jar                                        | None                                     |
+	| LCHIJA | behgameon                | 1.1.0                       | behgameon-1.1.2-1.12.2.jar                                | None                                     |
+	| LCHIJA | stackup                  | 0.2.5                       | StackUp-0.2.5.jar                                         | None                                     |
+	| LCHIJA | mantle                   | 1.12-1.3.3.55               | Mantle-1.12-1.3.3.55.jar                                  | None                                     |
+	| LCHIJA | betterwithmods           | 1.12-2.3.24                 | BetterWithMods-1.12-2.3.24.jar                            | None                                     |
+	| LCHIJA | betterwithaddons         | 0.51                        | Better With Addons-0.51.jar                               | None                                     |
+	| LCHIJA | betterbiomeblend         | 1.2.0                       | betterbiomeblend-1.2.0-1.12.2.jar                         | None                                     |
+	| LCHIJA | bettercaves              | 1.12.2                      | bettercaves-1.12.2-2.0.4.jar                              | None                                     |
+	| LCHIJA | elegant_networking       | 3.16                        | elegant-networking-1.12-3.16.jar                          | None                                     |
+	| LCHIJA | betterhorses             | 1.0                         | betterhorses-1.5.jar                                      | None                                     |
+	| LCHIJA | betterinvisibility       | 1.0.5                       | betterinvisibility-1.12.2-1.0.5.jar                       | None                                     |
+	| LCHIJA | bettermineshafts         | 1.12.2-2.2.1                | BetterMineshaftsForge-1.12.2-2.2.1.jar                    | None                                     |
+	| LCHIJA | betternether             | 0.1.9.4                     | BetterNetherRotN-1.12.2-0.1.9.4.jar                       | None                                     |
+	| LCHIJA | betterslimes             | 1.3.4                       | BetterSlimes-1.12.2-1.3.4.jar                             | None                                     |
+	| LCHIJA | betterthanmending        | 1.1.2                       | BetterThanMending-1.1.2.jar                               | None                                     |
+	| LCHIJA | sbetterwatersplash       | 1.0                         | BetterWaterSplash-1.0.jar                                 | None                                     |
+	| LCHIJA | betterwithlib            | ${version}                  | BetterWithLib-1.12-1.5.jar                                | None                                     |
+	| LCHIJA | bnbgaminglib             | 2.17.6                      | BNBGamingLib-1.12.2-2.17.6.jar                            | None                                     |
+	| LCHIJA | bonemealtweaker          | 1.1.1                       | BonemealTweaker-1.12.2-1.1.1.jar                          | None                                     |
+	| LCHIJA | bounceable               | 1.0.1                       | Bounceable-1.0.1.jar                                      | None                                     |
+	| LCHIJA | bountifulbaubles         | 0.0.1                       | Bountiful Baubles-1.12.2-0.1.8.jar                        | None                                     |
+	| LCHIJA | forgelin                 | 1.8.4                       | Forgelin-Continuous-2.1.20.0.jar                          | None                                     |
+	| LCHIJA | bountiful                | 2.2.3                       | Bountiful-1.12.2-2.2.3.jar                                | None                                     |
+	| LCHIJA | brigo                    | 1.1.1                       | brigo_forge-1.1.1+1.12.x.jar                              | None                                     |
+	| LCHIJA | bundles                  | 1.2.3                       | Bundles-1.2.3.jar                                         | None                                     |
+	| LCHIJA | butterflies              | 1.12.2-1.0.3                | butterflies-1.12.2-1.0.3.jar                              | None                                     |
+	| LCHIJA | carryon                  | 1.12.3                      | carryon-1.12.2-1.12.7.23.jar                              | None                                     |
+	| LCHIJA | cavegenerator            | 1.1                         | CaveGenerator-1.2-1.12.2.jar                              | None                                     |
+	| LCHIJA | cd4017be_lib             | 6.5.1                       | CD4017BE_lib-1.12.2-6.5.1.jar                             | None                                     |
+	| LCHIJA | ceramics                 | 1.12-1.3.7b                 | Ceramics-1.12-1.3.7b.jar                                  | None                                     |
+	| LCHIJA | chargethrower            | 1.0.1                       | chargethrower-1.0.1.jar                                   | None                                     |
+	| LCHIJA | sandro                   | 1.3d                        | Redstone++ ver1.3e.jar                                    | None                                     |
+	| LCHIJA | redstoneplusplus         | 1.3e                        | Redstone++ ver1.3e.jar                                    | None                                     |
+	| LCHIJA | charm                    | 1.4                         | Charm-1.12.2-1.4.1.jar                                    | None                                     |
+	| LCHIJA | chunkgenlimit            | 1.1                         | chunkgenlimiter-1.1.jar                                   | None                                     |
+	| LCHIJA | chutes                   | 1.0.0                       | chutes-1.12.2-1.0.0.jar                                   | None                                     |
+	| LCHIJA | shadowmc                 | 3.8.0                       | ShadowMC-1.12-3.8.0.jar                                   | None                                     |
+	| LCHIJA | clipboard                | @VERSION@                   | Clipboard-1.12-1.3.0.jar                                  | None                                     |
+	| LCHIJA | cofhworld                | 1.4.0                       | CoFHWorld-1.12.2-1.4.0.1-universal.jar                    | None                                     |
+	| LCHIJA | collective               | 3.0                         | collective-1.12.2-3.0.jar                                 | None                                     |
+	| LCHIJA | combatrefined            | 1.4.1                       | combatrefined-1.4.1.jar                                   | None                                     |
+	| LCHIJA | contentcreator           | 1.3.6-5                     | ContentCreator-1.3.92.jar                                 | None                                     |
+	| LCHIJA | zenutils                 | 1.26.14                     | zenutils-1.26.14.jar                                      | None                                     |
+	| LCHIJA | contenttweaker           | 1.12.2-4.10.0               | ContentTweaker-1.12.2-4.10.0.jar                          | None                                     |
+	| LCHIJA | fantasticlib             | 1.12.2.068                  | FantasticLib-1.12.2.068.jar                               | None                                     |
+	| LCHIJA | controlledburn           | 1.12.2.024                  | Controlled Burn-1.12.2.024.jar                            | None                                     |
+	| LCHIJA | copypaste                | 1.1                         | copypaste-1.1.jar                                         | None                                     |
+	| LCHIJA | extendedrenderer         | v1.0                        | coroutil-1.12.1-1.2.37.jar                                | None                                     |
+	| LCHIJA | coroutil                 | 1.12.1-1.2.37               | coroutil-1.12.1-1.2.37.jar                                | None                                     |
+	| LCHIJA | configmod                | v1.0                        | coroutil-1.12.1-1.2.37.jar                                | None                                     |
+	| LCHIJA | cosmeticarmorreworked    | 1.12.2-v5a                  | CosmeticArmorReworked-1.12.2-v5a.jar                      | aaaf83332a11df02406e9f266b1b65c1306f0f76 |
+	| LCHIJA | corpsecomplex            | 1.0.12.0                    | corpsecomplex-1.12.2-1.0.12.0.jar                         | b33d2c8df492beff56d1bbbc92da49b8ab7345a1 |
+	| LCHIJA | craftingcraft            | 6.1.3                       | CraftingCraft_1.12-6.1.3.jar                              | None                                     |
+	| LCHIJA | crafttweakerjei          | 2.0.3                       | CraftTweaker2-1.12-4.1.20.700.jar                         | None                                     |
+	| LCHIJA | crafttweakerutils        | 0.7                         | crafttweakerutils-0.7.jar                                 | None                                     |
+	| LCHIJA | ctintegration            | 1.8.0                       | ctintegration-1.8.0.jar                                   | None                                     |
+	| LCHIJA | customdisc               | 1.3                         | customdisc-1.3.jar                                        | None                                     |
+	| LCHIJA | fastbench                | 1.7.4                       | FastWorkbench-1.12.2-1.7.4.jar                            | None                                     |
+	| LCHIJA | cyclicmagic              | 1.20.12                     | Cyclic-1.12.2-1.20.14.jar                                 | 0e5cb559be7d03f3fc18b8cba547d663e25f28af |
+	| LCHIJA | dmgcontrol               | 1.3.17                      | DamageControl-1.12.2-1.3.17.jar                           | d476d1b22b218a10d845928d1665d45fce301b27 |
+	| LCHIJA | dpt                      | 1.1.1                       | DefaultPotionTweaks-1.1.1.jar                             | None                                     |
+	| LCHIJA | defiledlands             | 1.4.3                       | defiledlands-1.12.2-1.4.3.jar                             | None                                     |
+	| LCHIJA | demonic_scythe           | 1.4                         | demonic_scythe-1.4.jar                                    | None                                     |
+	| LCHIJA | dimstages                | 2.0.23                      | DimensionStages-1.12.2-2.0.23.jar                         | d476d1b22b218a10d845928d1665d45fce301b27 |
+	| LCHIJA | doggytalents             | 1.15.1.6                    | DoggyTalents-1.12.2-1.15.1.6.jar                          | None                                     |
+	| LCHIJA | dynamictrees             | 1.12.2-0.13.4               | DramaticTrees-1.12.2-0.13.4.jar                           | None                                     |
+	| LCHIJA | dropt                    | 1.12.2-1.19.4               | dropt-1.12.2-1.19.4.jar                                   | None                                     |
+	| LCHIJA | dropt-bed                | 1.12.2-1.0.1                | dropt-bed-1.12.2-1.0.1.jar                                | None                                     |
+	| LCHIJA | dungpipe                 | 1.0                         | Dung Pipe-1.2.jar                                         | None                                     |
+	| LCHIJA | dungeontactics           | DT-0.16.9                   | DungeonTactics-1.12.2-0.16.9.jar                          | None                                     |
+	| LCHIJA | dynamictreesbop          | 1.12.2-9999.9999.9999z      | DynamicTreesBOP-1.12.2-1.5.2.jar                          | None                                     |
+	| LCHIJA | dynamictreesdefiledlands | 1.12.2-1.0.0                | dynamictreesdefiledlands-1.12.2-1.0.0.jar                 | None                                     |
+	| LCHIJA | dynamictreesphc          | 2.0.6                       | DynamicTreesPHC-1.12.2-2.0.6.jar                          | None                                     |
+	| LCHIJA | dynamictreesquark        | 1.12.2-1.0.6                | DynamicTreesQuark-1.12.2-1.0.6.jar                        | None                                     |
+	| LCHIJA | dynamictreestheaether    | 1.0.14                      | DynamicTreesTheAether-1.12.2-1.0.14.jar                   | None                                     |
+	| LCHIJA | dynamictreesttf          | 1.12.2-1.2.3                | dynamictreesTheTwilightForest-1.12.2-1.2.3.jar            | None                                     |
+	| LCHIJA | dynview                  | 1.3                         | dynviewdist-1.12-1.3.jar                                  | None                                     |
+	| LCHIJA | earthworks               | 1.3.4.3                     | Earthworks-1.12-1.3.6.jar                                 | None                                     |
+	| LCHIJA | editableedibles          | 1.3.2                       | EditableEdibles-1.3.2.jar                                 | None                                     |
+	| LCHIJA | eguilib                  | 0.1.2                       | eguilib-0.1.2.jar                                         | None                                     |
+	| LCHIJA | elenaidodge2             | 1.1.0                       | ElenaiDodge2-1.12.2-1.1.0.jar                             | None                                     |
+	| LCHIJA | eplus                    | 5.1.0                       | EnchantingPlusPlus-1.12.2-5.1.0.jar                       | None                                     |
+	| LCHIJA | enchcontrol              | 1.1.5                       | enchcontrol-1.12.2-1.1.5-0.jar                            | 503a793335572ddd78512349bd8048f536a62fdb |
+	| LCHIJA | endreborn                | 0.3.8                       | EndReborn [0.3.9].jar                                     | None                                     |
+	| LCHIJA | enhanced_snowman         | 1.0                         | EnhancedSnowman-1.12-1.0.1.jar                            | None                                     |
+	| LCHIJA | thiccentities            | GRADLE:VERSION              | Entifier-2.0.0.jar                                        | None                                     |
+	| LCHIJA | epicsiegemod             | 13.169                      | EpicSiegeMod-13.169.jar                                   | None                                     |
+	| LCHIJA | esmtweaks                | 0.4.5                       | esmtweaks-1.12.2-0.4.5.jar                                | None                                     |
+	| LCHIJA | estop                    | 1.12.1                      | estop-1.12.1.jar                                          | None                                     |
+	| LCHIJA | exsartagine              | ${version}                  | exsartagine-1.12.2-0.3.12.jar                             | None                                     |
+	| LCHIJA | morpheus                 | 1.12.2-3.5.106              | Morpheus-1.12.2-3.5.106.jar                               | None                                     |
+	| LCHIJA | silentlib                | 3.0.13                      | SilentLib-1.12.2-3.0.14+168.jar                           | None                                     |
+	| LCHIJA | extendeddays             | 0.2.9                       | ExtendedDays-1.12.2-0.2.9-28.jar                          | None                                     |
+	| LCHIJA | minerva                  | 1.0.13                      | minerva-library-1.0.13.jar                                | b851b8b7c7f4d8d0e910ff27618150ba80c026ec |
+	| LCHIJA | extraalchemy             | 0.5.4                       | extraalchemy-forge-1.12-build11-0.5.4.jar                 | b851b8b7c7f4d8d0e910ff27618150ba80c026ec |
+	| LCHIJA | golems                   | 7.1.9                       | ExtraGolems-1.12-7.1.9.jar                                | None                                     |
+	| LCHIJA | extrasounds              | 1.12.2-1.4.1                | ExtraSounds-1.12.2-1.4.1.jar                              | None                                     |
+	| LCHIJA | fairylights              | 2.1.10                      | fairylights-2.2.0-1.12.2.jar                              | None                                     |
+	| LCHIJA | normalasm                | 5.28                        | fermiumasm-5.28.jar                                       | None                                     |
+	| LCHIJA | fireresistancetiers      | 1.0                         | fireresistancetiers-1.0.jar                               | None                                     |
+	| LCHIJA | mod_lavacow              | 1.3.2                       | Fish's Undead Rising-1.3.2.jar                            | None                                     |
+	| LCHIJA | xporbclump               | 2.3.6                       | Fixeroo-2.3.6.jar                                         | None                                     |
+	| LCHIJA | forgelin_continuous      | 2.1.20.0                    | Forgelin-Continuous-2.1.20.0.jar                          | None                                     |
+	| LCHIJA | from_the_depths          | 1.3.0.1                     | from_the_depths-1.3.0.1.jar                               | None                                     |
+	| LCHIJA | iceologer                | 1.5.3                       | Frozen-Fiend-1.5.3.jar                                    | None                                     |
+	| LCHIJA | ftbbackups               | 1.1.0.1                     | FTBBackups-1.1.0.1.jar                                    | None                                     |
+	| LCHIJA | futuremc                 | 0.2.6                       | Future-MC-0.2.21.jar                                      | None                                     |
+	| LCHIJA | futurefireproof          | 1.2.2                       | futurefireproof-1.12.2-1.2.2.jar                          | None                                     |
+	| LCHIJA | fxcontrol                | 0.1.14                      | fxcontrol-1.12-0.1.15.jar                                 | None                                     |
+	| LCHIJA | gamblingstyle            | 1.1.3                       | GamblingStyle-v1.1.3-1.12.2.jar                           | None                                     |
+	| LCHIJA | geckolib3                | 3.0.30                      | geckolib-forge-1.12.2-3.0.31.jar                          | None                                     |
+	| LCHIJA | geographicraft           | 0.8.7                       | GeographiCraft-1.12-0.8.9b.jar                            | None                                     |
+	| LCHIJA | glaretorch               | 8.10                        | GlareTorch_Ver.8.11_[MC1.12](forge-1.12-14.21.1.2387).jar | None                                     |
+	| LCHIJA | globalxp                 | v1.4.10                     | globalxp-1.12.2-v1.4.10.jar                               | None                                     |
+	| LCHIJA | rustic                   | 1.1.7                       | rustic-1.1.7.jar                                          | None                                     |
+	| LCHIJA | growthcraft              | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | growthcraft_fishtrap     | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | growthcraft_apples       | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | growthcraft_cellar       | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | growthcraft_grapes       | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | growthcraft_bamboo       | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | growthcraft_bees         | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | growthcraft_rice         | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | growthcraft_hops         | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | growthcraft_milk         | 4.2.2                       | growthcraft-1.12.2-4.2.2.1.jar                            | None                                     |
+	| LCHIJA | hardcoredarkness         | 2.0                         | HardcoreDarkness-MC1.12.2-2.0.jar                         | d72e0dd57935b3e9476212aea0c0df352dd76291 |
+	| LCHIJA | harvestcrafttweaker      | @VERSION@                   | harvestcrafttweaker-1.2c.jar                              | None                                     |
+	| LCHIJA | harvestersnight          | 1.1.0                       | harvestersnight-1.12.2-1.1.0.jar                          | None                                     |
+	| LCHIJA | placebo                  | 1.6.0                       | Placebo-1.12.2-1.6.1.jar                                  | None                                     |
+	| LCHIJA | randomthings             | 4.2.7.4                     | RandomThings-MC1.12.2-4.2.7.4.jar                         | d72e0dd57935b3e9476212aea0c0df352dd76291 |
+	| LCHIJA | hitwithaxe               | 1.5.1                       | Hit With Axe-1.12.2-1.5.1.jar                             | None                                     |
+	| LCHIJA | hooklib                  | 3.16                        | hooklib-3.17.jar                                          | None                                     |
+	| LCHIJA | waila                    | 1.8.26                      | Hwyla-1.8.26-B41_1.12.2.jar                               | None                                     |
+	| LCHIJA | horsepower               | 2.6.4                       | HorsePower-1.12.2-2.6.4.74.jar                            | cd7e958342770a8b17c919055da42c24dfefd879 |
+	| LCHIJA | hungertweaker            | 1.3.0                       | HungerTweaker-1.12.2-1.3.0.jar                            | None                                     |
+	| LCHIJA | hunterillager            | 1.2                         | hunterillager-1.12.2-1.2.jar                              | None                                     |
+	| LCHIJA | llibrary                 | 1.7.20                      | llibrary-1.7.20-1.12.2.jar                                | b9f30a813bee3b9dd5652c460310cfcd54f6b7ec |
+	| LCHIJA | iceandfire               | 1.9.1-1.2.1                 | IceAndFireRotN-1.9.1-1.2.1.jar                            | None                                     |
+	| LCHIJA | bettercombat             | 1.5.6                       | ImmersiveCombat-12-13-25.jar                              | None                                     |
+	| LCHIJA | incontrol                | 3.9.18                      | incontrol-1.12-3.9.18.jar                                 | None                                     |
+	| LCHIJA | inspirations             | 1.12.2-0.2.9                | Inspirations-1.12.2-0.2.9.jar                             | None                                     |
+	| LCHIJA | inventorytweaks          | 1.63+release.109.220f184    | InventoryTweaks-1.63.jar                                  | 55d2cd4f5f0961410bf7b91ef6c6bf00a766dcbe |
+	| LCHIJA | inworldcrafting          | 1.12.2-1.2.0                | inworldcrafting-1.12.2-1.2.0-universal.jar                | None                                     |
+	| LCHIJA | ironfurnaces             | 1.3.5                       | ironfurnaces-1.3.5.jar                                    | None                                     |
+	| LCHIJA | itlt                     | 1.0.4                       | itlt-1.12.x-1.0.4.jar                                     | None                                     |
+	| LCHIJA | justenoughdimensions     | 1.6.0-dev.20200416.184714   | justenoughdimensions-1.12.2-1.6.0-dev.20200416.184714.jar | 2b03e1423915a189b8094816baa18f239d576dff |
+	| LCHIJA | letmesleep               | 1.2.2                       | LetMeSleep-v1.2.3-1.12.2.jar                              | None                                     |
+	| LCHIJA | libraryex                | 1.2.2                       | LibraryEx-1.12.2-1.2.2.jar                                | None                                     |
+	| LCHIJA | lifescroll               | 1.0                         | lifescroll-1.0.jar                                        | None                                     |
+	| LCHIJA | livingenchantment        | 3.2.3                       | living_enchantment-3.2.3.jar                              | None                                     |
+	| LCHIJA | logimmune                | 0.1                         | logimmune-0.1.jar                                         | None                                     |
+	| LCHIJA | lttweaker                | 1.1.14                      | LootTableTweaker-1.12.2-1.1.14.jar                        | d476d1b22b218a10d845928d1665d45fce301b27 |
+	| LCHIJA | loottweaker              | 0.3.1                       | LootTweaker-0.3.1+MC1.12.2.jar                            | None                                     |
+	| LCHIJA | magma_monsters           | 0.3.0                       | MagmaMonsters-0.3.0.jar                                   | None                                     |
+	| LCHIJA | maleksinfinitygauntlet   | 1.0                         | maleksinfinitygauntlet.jar                                | None                                     |
+	| LCHIJA | multiblockmobs           | 1.6                         | MaleksMultiblockMobs-1.7.jar                              | None                                     |
+	| LCHIJA | malisiscore              | 1.12.2-6.5.1-SNAPSHOT       | malisiscore-1.12.2-6.5.1.jar                              | None                                     |
+	| LCHIJA | malisisdoors             | 1.12.2-7.3.0                | malisisdoors-1.12.2-7.3.0.jar                             | None                                     |
+	| LCHIJA | mapgadgets               | @VERSION@                   | Mapmaker's+Gadgets-1.2_for_1.12.x.jar                     | None                                     |
+	| LCHIJA | materialchanger          | 1.0                         | materialchanger1.0.3-1.12.2.jar                           | None                                     |
+	| LCHIJA | mclogs                   | 1.0.6                       | Mclogs-forge-1.0.5-for-1.12.2.jar                         | None                                     |
+	| LCHIJA | mcmultipart              | 2.5.3                       | MCMultiPart-2.5.3.jar                                     | None                                     |
+	| LCHIJA | mcwbridges               | 1.0.6                       | mcw-bridges-1.0.6b-mc1.12.2.jar                           | None                                     |
+	| LCHIJA | minetraps                | 1.0.4                       | MineTraps-1.12.2-(v.1.0.4).jar                            | None                                     |
+	| LCHIJA | msunspirit               | 1.0.0                       | ModernSunSpirit-1.2.1.jar                                 | None                                     |
+	| LCHIJA | msmlegacy                | @VERSION@                   | MoreSwordsLegacy-1.12.2-1.0.7.jar                         | None                                     |
+	| LCHIJA | mowziesmobs              | 1.5.8                       | mowziesmobs-1.5.8.jar                                     | None                                     |
+	| LCHIJA | multimob                 | 1.0.5                       | multimob-1.0.5.jar                                        | None                                     |
+	| LCHIJA | naturescompass           | 1.8.5                       | NaturesCompass-1.12.2-1.8.5.jar                           | None                                     |
+	| LCHIJA | netherchest              | 1.1.1                       | netherchest-1.1.1.jar                                     | None                                     |
+	| LCHIJA | netherex                 | 2.2.5                       | NetherEx-1.12.2-2.2.5.jar                                 | None                                     |
+	| LCHIJA | noarcher                 | 1.0.0                       | noarcher-1.0.0.jar                                        | None                                     |
+	| LCHIJA | noisethreader            | 1.1.0                       | NoiseThreader-1.1.0.jar                                   | None                                     |
+	| LCHIJA | nolavabuild              | 1.12.2-1.0.0                | nolavabuild-1.12.2-1.0.0.jar                              | None                                     |
+	| LCHIJA | nyx                      | 1.6.1                       | Nyx-1.6.1.jar                                             | None                                     |
+	| LCHIJA | ometweaks                | 1.1.0                       | ometweaks-1.1.0.jar                                       | None                                     |
+	| LCHIJA | outfox                   | 0.1.5                       | outfox-0.1.5-mc1.12.2.jar                                 | None                                     |
+	| LCHIJA | guilib                   | $version                    | paintingselgui-PSG+Revamed-1.12.2-1.1.0.1.jar             | None                                     |
+	| LCHIJA | paintingselgui           | $version                    | paintingselgui-PSG+Revamed-1.12.2-1.1.0.1.jar             | None                                     |
+	| LCHIJA | paths                    | 1.7.0                       | Paths-1.7.0.jar                                           | None                                     |
+	| LCHIJA | pollutantpump            | 1.3.0                       | pollutantpump-1.12.2-1.3.0.jar                            | None                                     |
+	| LCHIJA | potioncore               | 1.9_for_1.12.2              | PotionCore-1.9_for_1.12.2.jar                             | None                                     |
+	| LCHIJA | powerdrop                | 1.0                         | PowerDrop-MC1.12.2-1.1.3.jar                              | None                                     |
+	| LCHIJA | primitivemobs            | 1.2.3a                      | primitivemobs-1.2.3a.jar                                  | None                                     |
+	| LCHIJA | pyrotech                 | 1.12.2-1.5.25               | pyrotech-1.12.2-1.5.25.jar                                | None                                     |
+	| LCHIJA | undergroundbiomes        | 1.3.14                      | UndergroundBiomesConstructs-1.12-1.3.14.jar               | None                                     |
+	| LCHIJA | pyrotech_compat          | @VERSION@                   | Pyrotech Compat-1.0.3.jar                                 | None                                     |
+	| LCHIJA | qualitytools             | 1.0.7_for_1.12.2            | QualityTools-1.0.7_for_1.12.2.jar                         | None                                     |
+	| LCHIJA | quarkoddities            | 1                           | QuarkOddities-1.12.2.jar                                  | None                                     |
+	| LCHIJA | randomenchantments       | @VERSION@                   | randomenchants-0.1.5.jar                                  | None                                     |
+	| LCHIJA | randomportals            | 1.12.2-1.8.2.4              | randomportals-1.12.2-1.8.2.4.jar                          | 20d08fb3fe9c268a63a75d337fb507464c8aaccd |
+	| LCHIJA | rats                     | 3.2.21                      | rats-3.2.21-1.12.2.jar                                    | None                                     |
+	| LCHIJA | rebind                   | 2.7.5                       | rebind-1.12.2-2.7.5-0.jar                                 | 22cc4f45e4341b5bf2de5964a37e0165d157c9a2 |
+	| LCHIJA | recipestages             | 1.1.3                       | RecipeStages-1.1.3.8.jar                                  | None                                     |
+	| LCHIJA | redstoneflux             | 2.1.1                       | RedstoneFlux-1.12-2.1.1.1-universal.jar                   | None                                     |
+	| LCHIJA | redstoneminusredstone    | @VERSION@                   | RedstoneMinusRedstone-0.3.1.jar                           | None                                     |
+	| LCHIJA | requious                 | 1.0                         | Requious Frakto-0.12.jar                                  | None                                     |
+	| LCHIJA | respawntimer             | $version                    | respawntimer-1.12.2-2.0.2.0.jar                           | None                                     |
+	| LCHIJA | rlmixins                 | 1.3.18                      | RLMixins-1.3.18.jar                                       | None                                     |
+	| LCHIJA | rltweaker                | 0.7.4                       | RLTweaker-1.12.2-0.7.4.jar                                | None                                     |
+	| LCHIJA | rockytweaks              | @VERSION@                   | rockytweaks-1.12.2-0.6.1.jar                              | None                                     |
+	| LCHIJA | roguelike                | 1.8.0                       | RoguelikeDungeons-1.12.2-1.8.0.jar                        | None                                     |
+	| LCHIJA | rotm                     | 1.1.4                       | rotm-1.12.2-1.1.4.jar                                     | None                                     |
+	| LCHIJA | rotn_blocks              | 1.0.0                       | RotN-Blocks-1.0.3.jar                                     | None                                     |
+	| LCHIJA | rotntweaker              | 0.1.0                       | RotN-Tweaker-0.1.0.jar                                    | None                                     |
+	| LCHIJA | jeid                     | 2.2.2                       | RoughlyEnoughIDs-2.2.2.jar                                | None                                     |
+	| LCHIJA | roughmobsrevamped        | 2.3.23                      | roughmobsrevamped-1.12.2-2.3.23.jar                       | None                                     |
+	| LCHIJA | rusticbopwoods           | 1.0                         | rusticbopwoods-1.0.jar                                    | None                                     |
+	| LCHIJA | rusticcompat             | 1.0                         | RusticCompat-1.3.jar                                      | None                                     |
+	| LCHIJA | salt_lamps               | 1.12.2-1.1.0                | SaltLampsReforged-1.12.2-1.1.0.jar                        | None                                     |
+	| LCHIJA | deadmanssatchel          | 1.12.2-1.0.0.20190226202924 | SBM-Dead-Mans-Satchel-1.12.2-1.0.0b20190226202928.jar     | None                                     |
+	| LCHIJA | scalinghealth            | 1.3.37                      | ScalingHealth-1.12.2-1.3.42+147.jar                       | None                                     |
+	| LCHIJA | scavenge                 | 1.8                         | Scavenge V1.12-1.8.3.2.jar                                | None                                     |
+	| LCHIJA | sereneseasons            | 1.2.18                      | SereneSeasons-1.12.2-1.2.18-universal.jar                 | None                                     |
+	| LCHIJA | serenetweaks             | 0.0.1                       | SereneTweaks-1.0.jar                                      | None                                     |
+	| LCHIJA | setbonus                 | 1.12.2.040                  | SetBonus-1.12.2.040.jar                                   | None                                     |
+	| LCHIJA | simple_paraglider        | 1.1.0                       | simple_paraglider-1.1.0.jar                               | None                                     |
+	| LCHIJA | simplewoodenpipes        | 1.8                         | simplewoodenpipes-1.8.jar                                 | None                                     |
+	| LCHIJA | snowrealmagic            | 0.7.4                       | SnowRealMagic-1.12.2-0.7.4.jar                            | None                                     |
+	| LCHIJA | soundphysics             | 1.1.13                      | soundphysics-1.1.13.jar                                   | None                                     |
+	| LCHIJA | spartanweaponry          | 1.4.1                       | SpartanWeaponry-1.12.2-1.4.1.jar                          | None                                     |
+	| LCHIJA | spartancompat            | @VERSION@                   | spartancompat-1.2.3.jar                                   | None                                     |
+	| LCHIJA | spartanfire              | 0.08                        | spartanfire-0.08.jar                                      | None                                     |
+	| LCHIJA | spartanshields           | 1.5.5                       | SpartanShields-1.12.2-1.5.5.jar                           | None                                     |
+	| LCHIJA | spartantwilight          | 1.2.0                       | spartantwilight-1.12.2-1.2.0.jar                          | None                                     |
+	| LCHIJA | specialai                | 1.1.0_for_mc1.12.2          | specialai-1.1.0_for_mc1.12.2.jar                          | None                                     |
+	| LCHIJA | specialmobs              | 1.0.4_for_mc1.12.2          | specialmobs-1.0.4_for_mc1.12.2.jar                        | None                                     |
+	| LCHIJA | spectral_edge            | 1.0                         | spectral_edge-forge-1.6.jar                               | None                                     |
+	| LCHIJA | sasit                    | 1.1.30                      | StuffASockInIt-1.12.2-1.1.30.jar                          | None                                     |
+	| LCHIJA | stygian                  | 1.0.4                       | stygian-1.0.4.jar                                         | None                                     |
+	| LCHIJA | superflatcaves           | 1.3.1                       | superflatcaves-1.3.1.jar                                  | None                                     |
+	| LCHIJA | teamsmod                 | 1.12.2-Rfinal               | teamsmod-1.12.2-Rfinal-fixed.jar                          | None                                     |
+	| LCHIJA | beneath                  | 1.7.1                       | The Beneath-1.12.2-1.7.1.jar                              | 220f10d3a93b3ff5fbaa7434cc629d863d6751b9 |
+	| LCHIJA | thirstybottles           | 2.0.1                       | ThirstyBottles-1.12.2-2.0.1.jar                           | d476d1b22b218a10d845928d1665d45fce301b27 |
+	| LCHIJA | timeshallnotpass         | 1.12.2-1.2.1                | TimeShallNotPass-1.12.2-1.2.1.jar                         | None                                     |
+	| LCHIJA | tnt_utilities            | 1.2.3                       | tnt_utilities-mc1.12-1.2.3.jar                            | None                                     |
+	| LCHIJA | toolbelt                 | 1.9.14                      | ToolBelt-1.12.2-1.9.14.jar                                | None                                     |
+	| LCHIJA | toroquest                | 1.12.2-5.3                  | ToroQuest-Revamped-3-25-2022-fix.jar                      | None                                     |
+	| LCHIJA | tpp                      | 1.0.1.1                     | TP+-1.12.2-1.0.1.1.jar                                    | None                                     |
+	| LCHIJA | trashslot                | 8.4.10                      | TrashSlot_1.12.2-8.4.10.jar                               | None                                     |
+	| LCHIJA | trident                  | 1.0.5                       | Trident-1.0.5.jar                                         | None                                     |
+	| LCHIJA | triumph                  | 3.19.2                      | Triumph-1.12.2-3.19.2.jar                                 | None                                     |
+	| LCHIJA | trumpetskeleton          | 1.12-1.0.2.1                | trumpetskeleton-1.12-1.0.2.1.jar                          | None                                     |
+	| LCHIJA | universaltweaks          | 1.9.0                       | UniversalTweaks-1.12.2-1.9.0.jar                          | None                                     |
+	| LCHIJA | vanillaanvilrepair       | 1.1                         | vanillaanvilrepair-1.1.jar                                | None                                     |
+	| LCHIJA | dimstack                 | 0.1.9                       | VerticallyStackedDimensions-1.12.2-0.1.9.jar              | None                                     |
+	| LCHIJA | vials                    | 1.2.1.5                     | Vials-MC1.12-1.2.1.5.jar                                  | None                                     |
+	| LCHIJA | villagenames             | 4.4.13                      | VillageNames-1.12.2-4.4.13.jar                            | None                                     |
+	| LCHIJA | vtt                      | 0.6.4                       | VillagerTrades-1.12-0.6.4.jar                             | None                                     |
+	| LCHIJA | vintagefix               | 0.6.2                       | vintagefix-0.6.2.jar                                      | None                                     |
+	| LCHIJA | wards                    | 1.3.1                       | wards-1.3.1.jar                                           | None                                     |
+	| LCHIJA | weakerspiderwebs         | 2.0                         | weakerspiderwebs_1.12.2-2.0.jar                           | None                                     |
+	| LCHIJA | well                     | 1.0.1                       | Well-Mod-v1.0.1-mc1.12.2.jar                              | None                                     |
+	| LCHIJA | witherconfig             | 1.2.1                       | Wither-Config-1.2.1.jar                                   | None                                     |
+	| LCHIJA | worldprimer              | 0.6.0-dev.20200122.211517   | worldprimer-1.12.2-0.6.0-dev.20200122.211517.jar          | 2b03e1423915a189b8094816baa18f239d576dff |
+	| LCHIJA | betterhurttimer          | 1.12.2-1.5.0.3              | WorseHurtTimer-1.12.2-1.5.0.3.jar                         | None                                     |
+	| LCHIJA | foundry                  | 1.7.18                      | ZenFoundry-1.7.18.jar                                     | None                                     |
+	| LCHIJA | zenrecipereloading       | 1.4.4                       | zenrecipereloading-1.4.5.jar                              | None                                     |
+	| LCHIJA | zombie_players           | 1.12.1-1.2.7                | zombie_players-1.12.1-1.2.7.jar                           | None                                     |
+	| LCHIJA | zombieawareness          | 1.12.1-1.11.16              | zombieawareness-1.12.1-1.11.16.jar                        | None                                     |
+	| LCHIJA | lemonlib                 | 1.3.0                       | lemonlib-1.12.2-1.3.0.jar                                 | None                                     |
+	| LCHIJA | arcaneworld              | 0.0.11                      | arcaneworld-1.12.2-0.1.0.jar                              | None                                     |
+	| LCHIJA | discordrpc               | 1.3.3                       | discordrpc-1.3.3-1.12.jar                                 | None                                     |
+	| LCHIJA | solcarrot                | 1.8.4                       | solcarrot-1.12.2-1.8.4.jar                                | None                                     |
+	| LCHIJA | shetiphiancore           | 3.5.9                       | shetiphiancore-1.12.0-3.5.9.jar                           | None                                     |
+	| LCHIJA | betteranimalsplus        | 9.0.1                       | betteranimalsplus-1.12.2-9.0.1.jar                        | None                                     |
+	| LCHIJA | totemexpansion           | 1.2.2                       | totemexpansion-1.2.2-1.12.2.jar                           | None                                     |
+	| LCHIJA | orelib                   | 3.6.0.1                     | OreLib-1.12.2-3.6.0.1.jar                                 | 7a2128d395ad96ceb9d9030fbd41d035b435753a |
+	| LCHIJA | hungeroverhaul           | 1.12.2-1.3.3.jenkins148     | HungerOverhaul-1.12.2-1.3.3.jenkins148.jar                | None                                     |
+	| LCHIJA | mysticallib              | 1.12.2-1.13.0               | mysticallib-1.12.2-1.13.0.jar                             | None                                     |
+	| LCHIJA | osv                      | 5.14                        | Ore Stone Variants-5.14.jar                               | None                                     |
+	Loaded coremods (and transformers): 
+BounceablePlugin (Bounceable-1.0.1.jar)
+  
+The Impossible Library Core (theimpossiblelibrary-0.4.5.jar)
+  mods.thecomputerizer.theimpossiblelibrary.legacy.v12.m2.core.asm.TILClassTransform1_12_2
+DPTCore (DefaultPotionTweaks-1.1.1.jar)
+  
+CoreModLoader (soundphysics-1.1.13.jar)
+  
+AppleCore (AppleCore-mc1.12.2-3.4.0.jar)
+  squeek.applecore.asm.TransformerModuleHandler
+RLMixinsPlugin (RLMixins-1.3.18.jar)
+  
+ZenUtilsPlugin (zenutils-1.26.14.jar)
+  youyihj.zenutils.impl.config.ClassProvider
+  youyihj.zenutils.impl.core.TConTraitRepresentationTransformer
+EC Core Plugin (enchcontrol-1.12.2-1.1.5-0.jar)
+  austeretony.enchcontrol.common.core.ECClassTransformer
+JustEnoughIDs Extension Plugin (RoughlyEnoughIDs-2.2.2.jar)
+  
+ChunkGenLimiterCoremod (chunkgenlimiter-1.1-core.jar)
+  io.github.barteks2x.chunkgenlimiter.coremod.ChunkGenLimitTransformer
+ZenRecipeReloadingPlugin (zenrecipereloading-1.4.5.jar)
+  
+LoadingPlugin (HardcoreDarkness-MC1.12.2-2.0.jar)
+  lumien.hardcoredarkness.asm.ClassTransformer
+ReBind Core (rebind-1.12.2-2.7.5-0.jar)
+  austeretony.rebind.common.core.ReBindClassTransformer
+Vertically Stacked Dimensions ASM (VerticallyStackedDimensions-1.12.2-0.1.9.jar)
+  cd4017be.dimstack.asm.ChunkPrimerTransformer
+  cd4017be.dimstack.asm.BlockPortalTransformer
+Content Creator (ContentCreator-1.3.92.jar)
+  surreal.contentcreator.core.CCClassTransformer
+Transformer (harvestcrafttweaker-1.2c.jar)
+  
+LoadingPlugin (RandomThings-MC1.12.2-4.2.7.4.jar)
+  lumien.randomthings.asm.ClassTransformer
+RandomPatches (randompatches-1.12.2-1.22.1.10.jar)
+  com.therandomlabs.randompatches.core.RPTransformer
+Betterer Biomer Blender (betterbiomeblend-1.2.0-1.12.2.jar)
+  
+core (!Red-Core-MC-1.8-1.12-0.6.jar)
+  
+llibrary (llibrary-core-1.0.11-1.12.2.jar)
+  net.ilexiconn.llibrary.server.core.plugin.LLibraryTransformer
+  net.ilexiconn.llibrary.server.core.patcher.LLibraryRuntimePatcher
+BNBGamingCore (BNBGamingCore-1.12.2-0.12.0.jar)
+  com.bloodnbonesgaming.bnbgamingcore.core.BNBGamingCoreClassTransformer
+ShetiPhian-ASM (ShetiPhian-ASM-1.12.0.jar)
+  shetiphian.asm.ClassTransformer
+CoreMod (Trident-1.0.5.jar)
+  
+FermiumASM (fermiumasm-5.28.jar)
+  
+CorePlugin (ForgeEndertech-1.12.2-4.5.6.1-build.0648.jar)
+  
+ratscore (rats-3.2.21-1.12.2.jar)
+  com.github.alexthe666.rats.server.misc.RatsRuntimePatcher
+ConfigAnytimePlugin (!configanytime-3.0.jar)
+  
+RLTweaker ASM (RLTweaker-1.12.2-0.7.4.jar)
+  com.charles445.rltweaker.asm.RLTweakerClassTransformer
+WorseCore (WorseHurtTimer-1.12.2-1.5.0.3.jar)
+  
+Quark Plugin (QuarkRotN-r1.6-190.jar)
+  vazkii.quark.base.asm.ClassTransformer
+LoadingPlugin (AdPother-1.12.2-1.2.25.0-build.0673.jar)
+  com.endertech.minecraft.mods.adpother.transformers.AcidRain$Vanilla
+  com.endertech.minecraft.mods.adpother.transformers.AcidRain$DynamicSurroundings
+  com.endertech.minecraft.mods.adpother.transformers.AcidRain$Weather2$Mesh
+  com.endertech.minecraft.mods.adpother.transformers.AcidRain$Weather2$Render
+  com.endertech.minecraft.mods.adpother.transformers.ActuallyAdditions$FurnaceDouble
+  com.endertech.minecraft.mods.adpother.transformers.ActuallyAdditions$CoalGenerator
+  com.endertech.minecraft.mods.adpother.transformers.AdvancedRocketry$Rocket
+  com.endertech.minecraft.mods.adpother.transformers.BetterWithMods$Furnace
+  com.endertech.minecraft.mods.adpother.transformers.Campfire$Cooking
+  com.endertech.minecraft.mods.adpother.transformers.ControlledBurn$Fire
+  com.endertech.minecraft.mods.adpother.transformers.CookingForBlockheads$Oven
+  com.endertech.minecraft.mods.adpother.transformers.DraconicEvolution$Generator
+  com.endertech.minecraft.mods.adpother.transformers.EmbersRekindled$EmberBore
+  com.endertech.minecraft.mods.adpother.transformers.EmbersRekindled$SteamEngine
+  com.endertech.minecraft.mods.adpother.transformers.EnderIO$CombustionGenerator
+  com.endertech.minecraft.mods.adpother.transformers.EnderIO$StirlingGenerator
+  com.endertech.minecraft.mods.adpother.transformers.EngineersDecor$DecorFurnace
+  com.endertech.minecraft.mods.adpother.transformers.Factory0Resources$BurnerDrill
+  com.endertech.minecraft.mods.adpother.transformers.FastFurnace$Burning
+  com.endertech.minecraft.mods.adpother.transformers.FastFurnace$Smelting
+  com.endertech.minecraft.mods.adpother.transformers.FurnaceOverhaul$Burning
+  com.endertech.minecraft.mods.adpother.transformers.FurnaceOverhaul$Smelting
+  com.endertech.minecraft.mods.adpother.transformers.FutureMC$AdvancedFurnace$Burning
+  com.endertech.minecraft.mods.adpother.transformers.FutureMC$AdvancedFurnace$Smelting
+  com.endertech.minecraft.mods.adpother.transformers.FloodLights$CarbonFloodlight
+  com.endertech.minecraft.mods.adpother.transformers.Galacticraft$AutoRocket
+  com.endertech.minecraft.mods.adpother.transformers.Galacticraft$Buggy
+  com.endertech.minecraft.mods.adpother.transformers.Gregicality$PrimitiveBlastFurnace
+  com.endertech.minecraft.mods.adpother.transformers.Gregtech$CokeOven
+  com.endertech.minecraft.mods.adpother.transformers.Gregtech$LargeBoilerLiquidFuel
+  com.endertech.minecraft.mods.adpother.transformers.Gregtech$LargeBoilerSolidFuel
+  com.endertech.minecraft.mods.adpother.transformers.Gregtech$BoilerRecipeLogic
+  com.endertech.minecraft.mods.adpother.transformers.Gregtech$FuelRecipeLogic
+  com.endertech.minecraft.mods.adpother.transformers.Gregtech$PrimitiveBlastFurnace
+  com.endertech.minecraft.mods.adpother.transformers.Gregtech$SteamCoalBoiler
+  com.endertech.minecraft.mods.adpother.transformers.Gregtech$SteamLavaBoiler
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$Boiler
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$BurnerPress
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$CombustionGenerator
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$DieselGenerator
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$GasFlare
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$IndustrialGeneratorSolid
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$IndustrialGeneratorLiquid
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$Turbofan
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$RadialEngine
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$Extended$Firebox
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$Extended$GasFlare
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$Extended$IronFurnace
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$Extended$HeaterOilburner
+  com.endertech.minecraft.mods.adpother.transformers.HBMsNuclearTech$Extended$SteelFurnace
+  com.endertech.minecraft.mods.adpother.transformers.ImmersiveCraft$FurnaceTE
+  com.endertech.minecraft.mods.adpother.transformers.ImmersiveEngineering$AllowSmelter
+  com.endertech.minecraft.mods.adpother.transformers.ImmersiveEngineering$BlastFurnace
+  com.endertech.minecraft.mods.adpother.transformers.ImmersiveEngineering$CokeOven
+  com.endertech.minecraft.mods.adpother.transformers.ImmersiveEngineering$DieselGenerator
+  com.endertech.minecraft.mods.adpother.transformers.ImmersivePetroleum$Motorboat
+  com.endertech.minecraft.mods.adpother.transformers.ImmersivePetroleum$PortableGenerator
+  com.endertech.minecraft.mods.adpother.transformers.ImmersiveRailroading$LocomotiveDiesel
+  com.endertech.minecraft.mods.adpother.transformers.ImmersiveRailroading$LocomotiveSteam
+  com.endertech.minecraft.mods.adpother.transformers.ImmersiveTechnology$Boiler
+  com.endertech.minecraft.mods.adpother.transformers.IndustrialForegoing$FuelGenerator
+  com.endertech.minecraft.mods.adpother.transformers.IndustrialForegoing$ReactorGenerator
+  com.endertech.minecraft.mods.adpother.transformers.IndustrialRenewal$FluidGenerator
+  com.endertech.minecraft.mods.adpother.transformers.IndustrialRenewal$SteamBoiler$LiquidFuel
+  com.endertech.minecraft.mods.adpother.transformers.IndustrialRenewal$SteamBoiler$SolidFuel
+  com.endertech.minecraft.mods.adpother.transformers.Magneticraft$CombustionChamber
+  com.endertech.minecraft.mods.adpother.transformers.Magneticraft$BigChamberSolidFuel
+  com.endertech.minecraft.mods.adpother.transformers.Magneticraft$BigChamberLiquidFuel
+  com.endertech.minecraft.mods.adpother.transformers.Mekanism$FuelwoodHeater
+  com.endertech.minecraft.mods.adpother.transformers.MekanismGenerators$BioGenerator
+  com.endertech.minecraft.mods.adpother.transformers.MekanismGenerators$GasGenerator
+  com.endertech.minecraft.mods.adpother.transformers.MekanismGenerators$HeatGenerator
+  com.endertech.minecraft.mods.adpother.transformers.Metallurgy$Alloyer
+  com.endertech.minecraft.mods.adpother.transformers.Metallurgy$Crusher
+  com.endertech.minecraft.mods.adpother.transformers.Minecraft$AnimalFeeding
+  com.endertech.minecraft.mods.adpother.transformers.Minecraft$FurnaceSmelting
+  com.endertech.minecraft.mods.adpother.transformers.MoreFurnaces$IronFurnace
+  com.endertech.minecraft.mods.adpother.transformers.MrCrayfish$Vehicle
+  com.endertech.minecraft.mods.adpother.transformers.MysticalAgriculture$InferiumFurnace
+  com.endertech.minecraft.mods.adpother.transformers.MysticalAgriculture$IntermediumFurnace
+  com.endertech.minecraft.mods.adpother.transformers.MysticalAgriculture$PrudentiumFurnace
+  com.endertech.minecraft.mods.adpother.transformers.MysticalAgriculture$SuperiumFurnace
+  com.endertech.minecraft.mods.adpother.transformers.MysticalAgriculture$SupremiumFurnace
+  com.endertech.minecraft.mods.adpother.transformers.MysticalAgriculture$UltimateFurnace
+  com.endertech.minecraft.mods.adpother.transformers.Natura$NetherrackFurnace
+  com.endertech.minecraft.mods.adpother.transformers.PneumaticCraft$AirCompressor
+  com.endertech.minecraft.mods.adpother.transformers.PrimalCore$RecipeHelper
+  com.endertech.minecraft.mods.adpother.transformers.Pyrotech$TileCombustion
+  com.endertech.minecraft.mods.adpother.transformers.RealisticBlockPhysics$FallingBlock
+  com.endertech.minecraft.mods.adpother.transformers.RealisticTorches$BlockTorch
+  com.endertech.minecraft.mods.adpother.transformers.RFTools$CoalGenerator
+  com.endertech.minecraft.mods.adpother.transformers.SRParasites$BlockInfestedStain
+  com.endertech.minecraft.mods.adpother.transformers.StevesCarts$ModuleCoal
+  com.endertech.minecraft.mods.adpother.transformers.Techguns$MachineSlot
+  com.endertech.minecraft.mods.adpother.transformers.TechReborn$TileIronAlloyFurnace
+  com.endertech.minecraft.mods.adpother.transformers.TechReborn$TileIronFurnace
+  com.endertech.minecraft.mods.adpother.transformers.TechReborn$TileSolidFuelGenerator
+  com.endertech.minecraft.mods.adpother.transformers.TerraFirmaCraft$CharcoalForge
+  com.endertech.minecraft.mods.adpother.transformers.TerraFirmaCraft$FirePit
+  com.endertech.minecraft.mods.adpother.transformers.TerraFirmaCraft$LogPile
+  com.endertech.minecraft.mods.adpother.transformers.TinkersComplement$HighOven
+  com.endertech.minecraft.mods.adpother.transformers.TinkersConstruct$HeatingStructure
+  com.endertech.minecraft.mods.adpother.transformers.TinkersConstruct$SmelteryAlloys
+  com.endertech.minecraft.mods.adpother.transformers.SimpleGrinder$CoalGrinder
+  com.endertech.minecraft.mods.adpother.transformers.UltimateCarMod$Car
+  com.endertech.minecraft.mods.adpother.transformers.ViesCraft$AirShip
+  com.endertech.minecraft.mods.adpother.renders.AerometerRender
+  com.endertech.minecraft.mods.adpother.pollution.WorldData$BlockCaughtFire
+  com.endertech.minecraft.mods.adpother.pollution.WorldData$BlockUpdateTick
+  com.endertech.minecraft.mods.adpother.pollution.WorldData$BlockExploded
+  com.endertech.minecraft.mods.adpother.pollution.WorldData$GetSkyColor
+  com.endertech.minecraft.mods.adpother.pollution.WorldData$FurnaceFuelBurned
+  com.endertech.minecraft.mods.adpother.pollution.WorldData$LavaTouchesWater
+  com.endertech.minecraft.mods.adpother.transformers.ZenFoundry$BurnerHeater
+  com.endertech.minecraft.mods.adpother.transformers.ZenFoundry$MoldStation
+MixinBooter (!mixinbooter-10.7.jar)
+  
+AALoadingPlugin (arcanearchives-0.2.0.25-mixins8.jar)
+  
+WitherConfigPlugin (Wither-Config-1.2.1.jar)
+  
+FermiumBooter (`FermiumBooter-1.4.1.jar)
+  
+Forgelin-Continuous (Forgelin-Continuous-2.1.20.0.jar)
+  
+NoiseThreaderPlugin (NoiseThreader-1.1.0.jar)
+  
+BiomeTweakerCore (BiomeTweakerCore-1.12.2-1.0.39.jar)
+  me.superckl.biometweakercore.BiomeTweakerASMTransformer
+ObfuscatePlugin (obfuscate-0.4.2-1.12.2.jar)
+  com.mrcrayfish.obfuscate.asm.ObfuscateTransformer
+LoadingPlugin (BetterWithLib-1.12-1.5.jar)
+  betterwithmods.library.core.ClassTransformer
+Inventory Tweaks Coremod (InventoryTweaks-1.63.jar)
+  invtweaks.forge.asm.ContainerTransformer
+MainHookLoader (hooklib-3.17.jar)
+  gloomyfolken.hooklib.asm.HookClassTransformer
+EditableEdiblesPlugin (EditableEdibles-1.3.2.jar)
+  
+RedstoneMinusCore (RedstoneMinusRedstone-0.3.1.jar)
+  pl.asie.redstoneminus.core.RedstoneMinusTransformer
+StackUpCore (StackUp-0.2.5.jar)
+  pl.asie.stackup.core.StackUpTransformer
+Bundles (Bundles-1.2.3.jar)
+  
+ToolProgressionPlugin (toolprogression-core-1.12.2-1.6.12.jar)
+  tyra314.toolprogression.core.asm.ToolProgressionClassTransformer
+MalisisCorePlugin (malisiscore-1.12.2-6.5.1.jar)
+  
+IvToolkit (IvToolkit-1.3.3-1.12.jar)
+  
+UniversalTweaksCore (UniversalTweaks-1.12.2-1.9.0.jar)
+  
+FutureMC (Future-MC-0.2.21.jar)
+  thedarkcolour.futuremc.asm.CoreTransformer
+BHLoader (betterhorses-1.5.jar)
+  
+Aqua Acrobatics Transformer (AquaAcrobatics-1.15.4.jar)
+  
+SSLoadingPlugin (SereneSeasons-1.12.2-1.2.18-universal.jar)
+  sereneseasons.asm.transformer.EntityRendererTransformer
+  sereneseasons.asm.transformer.WorldTransformer
+TFCore (twilightforest-1.12.2-3.14.jar)
+  
+Fixeroo (Fixeroo-2.3.6.jar)
+  
+Snow! Real Magic! (SnowRealMagic-1.12.2-0.7.4.jar)
+  
+ModernSunSpiritPlugin (ModernSunSpirit-1.2.1.jar)
+  
+CharmLoadingPlugin (Charm-1.12.2-1.4.1.jar)
+  svenhjol.charm.base.CharmClassTransformer
+JSON Paintings Plugin (JSON-Paintings-v1.4.0-mc1.12.2.jar)
+  git.jbredwards.jsonpaintings.mod.asm.transformer.EntityPaintingTransformer
+  git.jbredwards.jsonpaintings.mod.asm.transformer.EnumArtTransformer
+  git.jbredwards.jsonpaintings.mod.asm.transformer.ItemTransformer
+  git.jbredwards.jsonpaintings.mod.asm.transformer.PSGRevampedClientTransformer
+  git.jbredwards.jsonpaintings.mod.asm.transformer.PSGRevampedServerTransformer
+  git.jbredwards.jsonpaintings.mod.asm.transformer.TwilightForestTransformer
+VintageFix (vintagefix-0.6.2.jar)
+  org.embeddedt.vintagefix.transformer.ASMModParserTransformer
+AlfheimPlugin (Alfheim-1.5.jar)
+  
+ExampleModLoadingPlugin (maleksinfinitygauntlet.jar)
+  
+iceandfire (IceAndFireRotN-1.9.1-1.2.1.jar)
+  com.github.alexthe666.iceandfire.patcher.IceAndFireRuntimePatcher
+ESCore (ExtraSounds-1.12.2-1.4.1.jar)
+  
+ThiccEntities Plugin (Entifier-2.0.0.jar)
+  wiresegal.thicc.asm.ThiccAsmTransformer
+serializationisbad (serializationisbad-1.5.2.jar)
+  io.dogboy.serializationisbad.legacyforge.SIBTransformer
+SpartanWeaponry-MixinLoader (SpartanWeaponry-1.12.2-1.4.1.jar)
+  
+BBLSOhMyPlugin (BBLSOhMy-1.1.2.jar)
+  
+TNTUtilities Core (tnt_utilities-mc1.12-1.2.3.jar)
+  ljfa.tntutils.asm.ExplosionTransformer
+	Pulsar/inspirations loaded Pulses: 
+		- InspirationsShared (Enabled/Forced)
+		- InspirationsBuilding (Enabled/Not Forced)
+		- InspirationsUtility (Enabled/Not Forced)
+		- InspirationsRecipes (Enabled/Not Forced)
+		- InspirationsTweaks (Enabled/Not Forced)
+		- InspirationsShared (Enabled/Forced)
+		- WailaPlugin (Enabled/Not Forced)
+		- RatsPlugin (Enabled/Not Forced)
+		- TwilightForestPlugin (Enabled/Not Forced)
+	RLTweaker Error Report: 
+ Charm Missing Enchantment homing : 1
+ 
+[14:51:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:52:14] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 16001
+[14:52:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:52:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 35480 (g3b_played)
+[14:52:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 12 (g3b_food)
+[14:52:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:53:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:53:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 16001
+[14:53:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:53:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 36860 (g3b_played)
+[14:53:25] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 12 (g3b_food)
+[14:54:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:54:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 16001
+[14:54:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:54:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 38236 (g3b_played)
+[14:54:34] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 12 (g3b_food)
+[14:54:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:55:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:55:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 17004
+[14:55:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:55:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 39611 (g3b_played)
+[14:55:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 12 (g3b_food)
+[14:56:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:56:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 18378
+[14:56:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:56:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 40981 (g3b_played)
+[14:56:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 11 (g3b_food)
+[14:57:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:57:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:57:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 19752
+[14:58:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:58:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 42358 (g3b_played)
+[14:58:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 11 (g3b_food)
+[14:58:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:59:07] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 21125
+[14:59:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[14:59:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 43731 (g3b_played)
+[14:59:08] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 11 (g3b_food)
+[14:59:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[15:00:06] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[15:00:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 22504
+[15:00:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[15:00:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 45111 (g3b_played)
+[15:00:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 10 (g3b_food)
+[15:00:51] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[15:01:24] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 23873
+[15:01:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[15:01:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 46477 (g3b_played)
+[15:01:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 10 (g3b_food)
+[15:01:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> [night] morning: found no safe side to open; back to work
+[15:01:36] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[15:02:21] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[15:02:33] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Time is 1246
+[15:02:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Showing 2 tracked objective(s) for <bot>:
+[15:02:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_played: 47853 (g3b_played)
+[15:02:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: - g3b_food: 10 (g3b_food)
+[15:02:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3b_deaths' successfully
+[15:02:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3b_played' successfully
+[15:02:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Removed objective 'g3b_food' successfully
+[15:02:52] [Server thread/INFO] [net.minecraft.network.NetHandlerPlayServer]: <bot> lost connection: Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer
+[15:02:52] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <bot> left the game
+[15:02:52] [Server thread/INFO] [Music Triggers]: Found leaving player with UUID <uuid-v4>
+[15:02:52] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: All non-excluded players have disconnected. The following modules have been toggled on: Daylight Cycle Module
+[15:02:52] [Server thread/INFO] [com.Gr3atsaga.TimeShallNotPass.Util.LogService]: Time Shall Not Pass: Daylight Cycle Module: The daylight cycle has been disabled.
+[15:02:52] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[15:02:52] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.

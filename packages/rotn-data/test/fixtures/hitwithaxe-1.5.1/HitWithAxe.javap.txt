@@ -1,0 +1,217 @@
+# javap -c -p -constants excerpts from mods/Hit With Axe-1.12.2-1.5.1.jar in the pinned RotN 3.3.4 server pack,
+# jar SHA-256 89bd4a453ab425bcdff0e2854936a6960827cb7faa1bd2049a2a25e7f4938f41.
+# Extracted to a scratch folder outside the repo; nothing was run. Read by test/howto.test.js.
+# Three methods: HitWithAxe.onItemUse (which item may chop), DefaultTransformCall.call (what a chop does),
+# and the CraftTweaker Chopping.addRecipe overloads the pack's script uses (the recipe's harvest level).
+
+## shadows.hitwithaxe.HitWithAxe
+  public void onItemUse(net.minecraftforge.event.entity.player.PlayerInteractEvent$RightClickBlock);
+    Code:
+       0: aload_1
+       1: invokevirtual #245                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$RightClickBlock.getWorld:()Lnet/minecraft/world/World;
+       4: astore_2
+       5: aload_1
+       6: invokevirtual #249                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$RightClickBlock.getPos:()Lnet/minecraft/util/math/BlockPos;
+       9: astore_3
+      10: aload_2
+      11: aload_3
+      12: invokevirtual #255                // Method net/minecraft/world/World.func_180495_p:(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/state/IBlockState;
+      15: astore        4
+      17: aload_1
+      18: invokevirtual #259                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$RightClickBlock.getItemStack:()Lnet/minecraft/item/ItemStack;
+      21: astore        5
+      23: aload_1
+      24: invokevirtual #263                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$RightClickBlock.getEntityPlayer:()Lnet/minecraft/entity/player/EntityPlayer;
+      27: astore        6
+      29: aload         5
+      31: invokevirtual #267                // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+      34: aload         5
+      36: invokevirtual #273                // Method net/minecraft/item/Item.getToolClasses:(Lnet/minecraft/item/ItemStack;)Ljava/util/Set;
+      39: ldc_w         #275                // String axe
+      42: invokeinterface #281,  2          // InterfaceMethod java/util/Set.contains:(Ljava/lang/Object;)Z
+      47: ifeq          165
+      50: aload         6
+      52: invokestatic  #285                // Method hasFood:(Lnet/minecraft/entity/player/EntityPlayer;)Z
+      55: ifeq          165
+      58: aload         6
+      60: invokevirtual #291                // Method net/minecraft/entity/player/EntityPlayer.func_184811_cZ:()Lnet/minecraft/util/CooldownTracker;
+      63: aload         5
+      65: invokevirtual #267                // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+      68: fconst_0
+      69: invokevirtual #297                // Method net/minecraft/util/CooldownTracker.func_185143_a:(Lnet/minecraft/item/Item;F)F
+      72: fconst_0
+      73: fcmpg
+      74: ifgt          165
+      77: getstatic     #299                // Field RECIPES:Ljava/util/List;
+      80: invokeinterface #305,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+      85: astore        7
+      87: aload         7
+      89: invokeinterface #314,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+      94: ifeq          165
+      97: aload         7
+      99: invokeinterface #318,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+     104: checkcast     #320                // class shadows/hitwithaxe/TransformRecipe
+     107: astore        8
+     109: aload         8
+     111: aload         4
+     113: invokevirtual #324                // Method shadows/hitwithaxe/TransformRecipe.matches:(Lnet/minecraft/block/state/IBlockState;)Z
+     116: ifeq          162
+     119: aload         5
+     121: invokevirtual #267                // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+     124: aload         5
+     126: ldc_w         #275                // String axe
+     129: aload         6
+     131: aload         4
+     133: invokevirtual #328                // Method net/minecraft/item/Item.getHarvestLevel:(Lnet/minecraft/item/ItemStack;Ljava/lang/String;Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/block/state/IBlockState;)I
+     136: aload         8
+     138: invokevirtual #331                // Method shadows/hitwithaxe/TransformRecipe.getHarvestLevel:()I
+     141: if_icmplt     162
+     144: aload         8
+     146: aload_2
+     147: aload_3
+     148: aload         4
+     150: aload         6
+     152: aload_1
+     153: invokevirtual #335                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$RightClickBlock.getHand:()Lnet/minecraft/util/EnumHand;
+     156: invokevirtual #339                // Method shadows/hitwithaxe/TransformRecipe.action:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/util/EnumHand;)V
+     159: goto          165
+     162: goto          87
+     165: return
+
+## shadows.hitwithaxe.DefaultTransformCall
+  public void call(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, net.minecraft.entity.player.EntityPlayer, net.minecraft.util.EnumHand);
+    Code:
+       0: aload         4
+       2: aload         5
+       4: invokevirtual #30                 // Method net/minecraft/entity/player/EntityPlayer.func_184586_b:(Lnet/minecraft/util/EnumHand;)Lnet/minecraft/item/ItemStack;
+       7: astore        6
+       9: aload_1
+      10: getfield      #36                 // Field net/minecraft/world/World.field_72995_K:Z
+      13: ifne          86
+      16: aload_1
+      17: sipush        2001
+      20: aload_2
+      21: aload_3
+      22: invokestatic  #42                 // Method net/minecraft/block/Block.func_176210_f:(Lnet/minecraft/block/state/IBlockState;)I
+      25: invokevirtual #46                 // Method net/minecraft/world/World.func_175718_b:(ILnet/minecraft/util/math/BlockPos;I)V
+      28: aload_1
+      29: aload_2
+      30: aload_0
+      31: getfield      #20                 // Field outState:Lnet/minecraft/block/state/IBlockState;
+      34: invokevirtual #50                 // Method net/minecraft/world/World.func_175656_a:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z
+      37: pop
+      38: aload_0
+      39: getfield      #18                 // Field stack:Lnet/minecraft/item/ItemStack;
+      42: invokevirtual #56                 // Method net/minecraft/item/ItemStack.func_190926_b:()Z
+      45: ifne          73
+      48: aload_0
+      49: getfield      #18                 // Field stack:Lnet/minecraft/item/ItemStack;
+      52: invokevirtual #60                 // Method net/minecraft/item/ItemStack.func_77946_l:()Lnet/minecraft/item/ItemStack;
+      55: astore        7
+      57: aload_1
+      58: aload_2
+      59: aload         4
+      61: invokevirtual #64                 // Method net/minecraft/entity/player/EntityPlayer.func_174811_aO:()Lnet/minecraft/util/EnumFacing;
+      64: iconst_m1
+      65: invokevirtual #70                 // Method net/minecraft/util/math/BlockPos.func_177967_a:(Lnet/minecraft/util/EnumFacing;I)Lnet/minecraft/util/math/BlockPos;
+      68: aload         7
+      70: invokestatic  #74                 // Method net/minecraft/block/Block.func_180635_a:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/item/ItemStack;)V
+      73: aload         6
+      75: iconst_1
+      76: aload         4
+      78: invokevirtual #78                 // Method net/minecraft/item/ItemStack.func_77972_a:(ILnet/minecraft/entity/EntityLivingBase;)V
+      81: aload         4
+      83: invokestatic  #84                 // Method shadows/hitwithaxe/HitWithAxe.consumeFood:(Lnet/minecraft/entity/player/EntityPlayer;)V
+      86: aload         4
+      88: aload         5
+      90: invokevirtual #88                 // Method net/minecraft/entity/player/EntityPlayer.func_184609_a:(Lnet/minecraft/util/EnumHand;)V
+      93: aload         4
+      95: invokevirtual #92                 // Method net/minecraft/entity/player/EntityPlayer.func_184811_cZ:()Lnet/minecraft/util/CooldownTracker;
+      98: aload         6
+     100: invokevirtual #96                 // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+     103: getstatic     #100                // Field shadows/hitwithaxe/HitWithAxe.cooldown:I
+     106: invokevirtual #106                // Method net/minecraft/util/CooldownTracker.func_185145_a:(Lnet/minecraft/item/Item;I)V
+     109: return
+
+## shadows.hitwithaxe.crt.Chopping
+  public static void addRecipe(java.lang.String, int, java.lang.String, int, int, crafttweaker.api.item.IItemStack);
+    Code:
+       0: getstatic     #149                // Field net/minecraftforge/fml/common/registry/ForgeRegistries.BLOCKS:Lnet/minecraftforge/registries/IForgeRegistry;
+       3: new           #151                // class net/minecraft/util/ResourceLocation
+       6: dup
+       7: aload_0
+       8: invokespecial #154                // Method net/minecraft/util/ResourceLocation."<init>":(Ljava/lang/String;)V
+      11: invokeinterface #160,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/util/ResourceLocation;)Lnet/minecraftforge/registries/IForgeRegistryEntry;
+      16: checkcast     #162                // class net/minecraft/block/Block
+      19: iload_1
+      20: sipush        32767
+      23: if_icmpne     30
+      26: iconst_0
+      27: goto          31
+      30: iload_1
+      31: invokevirtual #170                // Method net/minecraft/block/Block.func_176203_a:(I)Lnet/minecraft/block/state/IBlockState;
+      34: astore        6
+      36: getstatic     #149                // Field net/minecraftforge/fml/common/registry/ForgeRegistries.BLOCKS:Lnet/minecraftforge/registries/IForgeRegistry;
+      39: new           #151                // class net/minecraft/util/ResourceLocation
+      42: dup
+      43: aload_2
+      44: invokespecial #154                // Method net/minecraft/util/ResourceLocation."<init>":(Ljava/lang/String;)V
+      47: invokeinterface #160,  2          // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.getValue:(Lnet/minecraft/util/ResourceLocation;)Lnet/minecraftforge/registries/IForgeRegistryEntry;
+      52: checkcast     #162                // class net/minecraft/block/Block
+      55: iload_3
+      56: sipush        32767
+      59: if_icmpne     66
+      62: iconst_0
+      63: goto          67
+      66: iload_3
+      67: invokevirtual #170                // Method net/minecraft/block/Block.func_176203_a:(I)Lnet/minecraft/block/state/IBlockState;
+      70: astore        7
+      72: aload         5
+      74: invokestatic  #176                // Method crafttweaker/api/minecraft/CraftTweakerMC.getItemStack:(Lcrafttweaker/api/item/IItemStack;)Lnet/minecraft/item/ItemStack;
+      77: astore        8
+      79: aload         6
+      81: iload_1
+      82: sipush        32767
+      85: if_icmpne     92
+      88: iconst_1
+      89: goto          93
+      92: iconst_0
+      93: aload         7
+      95: iload         4
+      97: aload         8
+      99: invokestatic  #178                // Method addRecipe:(Lnet/minecraft/block/state/IBlockState;ZLnet/minecraft/block/state/IBlockState;ILnet/minecraft/item/ItemStack;)V
+     102: return
+
+  public static void addRecipe(java.lang.String, int, int, crafttweaker.api.item.IItemStack);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: ldc           #188                // String minecraft:air
+       4: iconst_0
+       5: iload_2
+       6: aload_3
+       7: invokestatic  #190                // Method addRecipe:(Ljava/lang/String;ILjava/lang/String;IILcrafttweaker/api/item/IItemStack;)V
+      10: return
+
+  public static void addRecipe(java.lang.String, int, java.lang.String, int, crafttweaker.api.item.IItemStack);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: aload_2
+       3: iload_3
+       4: iconst_0
+       5: aload         4
+       7: invokestatic  #190                // Method addRecipe:(Ljava/lang/String;ILjava/lang/String;IILcrafttweaker/api/item/IItemStack;)V
+      10: return
+
+  public static void addRecipe(java.lang.String, int, crafttweaker.api.item.IItemStack);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: ldc           #188                // String minecraft:air
+       4: iconst_0
+       5: iconst_0
+       6: aload_2
+       7: invokestatic  #190                // Method addRecipe:(Ljava/lang/String;ILjava/lang/String;IILcrafttweaker/api/item/IItemStack;)V
+      10: return
+
