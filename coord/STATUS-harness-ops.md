@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (07:32 UTC, from `date -u`)
+Updated: 2026-11-06 (07:51 UTC, from `date -u`)
 
 ## Now: G3 smoke round 4 is over (GO 06:30Z, develop 09197157, smoke). No batch until a new GO.
 
@@ -12,12 +12,15 @@ Updated: 2026-11-06 (07:32 UTC, from `date -u`)
 | D | FAIL 3/7. Kicked for spamming 3 s after the join: the agenda catch-up burst (11 "done" lines and "agenda done") on (c)'s inventory. The "late refusal" is **my misreport**: the refusal came 1 s after the whisper (fix PR below). |
 
 - **LLM:** 0 failed replies in all four scenarios. USD 0.0114 for the round; the key reads USD 0.7707 of 4.50. Hetzner: 12 + 7 + 13 min; every server, Primary IP and SSH key verified gone. No StackUp-count or NaN guard lines from forge-bridge.
+  - By the key, the round cost USD 0.011611 (A's start to the 07:49 reading); the batch figures give 0.011406. The rest is usage OpenRouter recorded after a scenario's end reading, plus the probes (cleanup PR).
+- **Open: the cleanup PR (lead, after #257).** It explains the two usage gaps, names both probes and exempts the in-scenario login retry from the GO retry rule. deploy-eol now also checks HEAD's blobs for CR.
+  - The batch.mjs JSDoc and poll overshoot (#251), the `HCLOUD_SERVER_ID` export (`redact-evidence.mjs:58`), the 52-of-62 note (`g3a-20261106-r3b/README.md:59`) and the crafting-table anchor (`tablePlacements`) were already on develop.
 - **For skills-rotn (the lead routes):** the spam kick (D, sent). The fall during unstuck at the sticks step and the low leaf drop rate (B). The "late refusal" was not the bot: please withdraw it.
-- **Open: the round 4 evidence PR** (`test/evidence/g3/*-20261106-r4`, SMOKE), with the crafting-table answer:
+- **Merged: #254 (the round 4 evidence), #255 ((d) after an early kick; (d) in its own batch; the GO template), #257 (nits).** The crafting-table answer:
   - **Why the use stat stays 0:** Forge 1.12.x `ForgeHooks.onPlaceItemIntoWorld` sets the stack to its new count, then calls `addStat(StatList.getObjectUseStats(itemstack.getItem()))`.
   - Placing the last item of a stack leaves an empty stack, whose item is air, so the use is credited to air.
   - The bot only ever holds one table, so the stat can never count its placement. DRIVER.md and the scenario header now say so; the check is unchanged (the held count and the placed block carry it).
-- **Open: #255 (`test/` only), (d) after an early kick.** `gone()` stays true after the kick, even though the agent process rejoined before the task was sent. So the observe loop never ran, and the refusal was called late.
+- **Merged #255, (d) after an early kick.** `gone()` stays true after the kick, even though the agent process rejoined before the task was sent. So the observe loop never ran, and the refusal was called late.
   - Fix: a bot that left before the task is sent makes (d) "not reached", with the kick named, and no task is sent.
   - Offline test included.
 - **Decided (the lead, after round 4): (d) runs in its own batch on a fresh server** from round 5. There is no allowlist change. A fresh world gives the first-join inventory, so the agenda starts at `rocks`.

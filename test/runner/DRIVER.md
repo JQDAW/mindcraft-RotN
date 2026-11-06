@@ -54,6 +54,7 @@ There are three scenarios in `test/scenarios/g2/`. Each logs in first (`login_on
 - **What triggers it:** that error only, whatever the exit code. Any other error, a kick, or a second failure is a FAIL.
 - **Still required:** `login_online` needs a real join.
 - **Recorded in:** `notes.loginRetry`.
+- **Not a retry under the GO rule:** this one automatic restart is inside a running scenario, on the same server and within the batch's spend stop. The rule that a retry needs the GO or the lead's approval (the G3 GO template) covers a new paid server, not this.
 
 The bot only reports names. Every verdict comes from the server's own commands on the test server.
 
@@ -181,7 +182,7 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`.
 - **Stops:**
   - a scenario error, an infra fault (exit 125) or a harness fault stops the round before the next batch;
   - a plain check FAIL is a result, not a stop;
-  - an infrastructure failure before the bot joins may be retried once, but only if the GO allows it or the lead approves it at the time: a retry is a paid run.
+  - an infrastructure failure before the bot joins may be retried once, but only if the GO allows it or the lead approves it at the time: a retry is a paid run. The runner's automatic login retry inside a running scenario (G2, "the login retry") is not such a retry.
 - **The report after each batch:** pass/fail per check, bot findings, LLM ok/failed counts, spend, Hetzner minutes, and the server, Primary IP and SSH key verified deleted.
 
 Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
