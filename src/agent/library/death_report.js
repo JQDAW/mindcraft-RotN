@@ -151,11 +151,16 @@ export class DeathReporter {
             if (now - this.lastChatAt >= CHAT_GAP_MS) chat = `I ${line}.`;
         }
         if (chat) this.lastChatAt = now;
-        return { line, chat, lost, pos: p.pos, cause: p.cause, dimension: p.dimension, label: p.label || '', streak: streak >= STREAK_DEATHS };
+        return { line, chat, lost, pos: p.pos, cause: p.cause, at: p.at, dimension: p.dimension, label: p.label || '', streak: streak >= STREAK_DEATHS };
     }
 }
 
 const where = (p) => (p ? `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)}` : 'unknown');
+
+/** The re-plan note for a death by a falling tree: what happened and how not to repeat the cut. */
+const treeNote = (lastFell) => `A falling tree crushed you${lastFell?.pos ? ` (the one you cut at ${where(lastFell.pos)})` : ''}: `
+    + 'in RotN a cut tree falls as one piece. Get logs only with !collectBlocks("log", n), which cuts the lowest trunk block '
+    + 'from the side away from the canopy and steps back; never cut a tree by hand or from under its leaves. ';
 
 /**
  * Why the bot must not walk to `pos` now because it is near its last death spot, or null.
@@ -255,10 +260,45 @@ export function bindDeathReport(agent, { setTimer = setTimeout, clearTimer = cle
 }
 
 /** The report for the pending death: one log line, the chat line if allowed, a re-plan note. */
+/**
+ * The death message's text for the report, or null when it is not the bot's death. A modded death
+ * message (Dynamic Trees' falling tree) reaches mineflayer untranslated, as its key: it does not
+ * start with the bot's name, which is then one of its arguments (G3 round 3 B: the report had no
+ * cause). Then: "<name> died (<key>)".
+ */
+export function deathCauseText(name, message, jsonMsg) {
+    const key = jsonMsg?.translate;
+    if (typeof key !== 'string' || !key.startsWith('death')) return null;
+    // The one who died is argument 1 (%1$s); argument 2 is the killer (#242 review 3: in
+    // death.attack.player the bot can be argument 2, and that death is not the bot's).
+    const first = jsonMsg.with?.[0];
+    const who = typeof first === 'string' ? first : (first?.text ?? (typeof first?.toString === 'function' ? first.toString() : null));
+    if (who != null) return who === name ? (String(message ?? '').startsWith(name) ? String(message) : `${name} died (${key})`) : null;
+    const text = String(message ?? '');
+    return text.startsWith(name) ? text : null;
+}
+
+/** How soon after its own cut a death counts as the falling tree's when the server gave no cause. */
+export const TREE_DEATH_MS = 15_000;
+
+/**
+ * Whether the bot was crushed by a falling tree (Dynamic Trees; G3 round 3 B): the cause says so
+ * (the text or the untranslated key), or there is no cause and the bot died within TREE_DEATH_MS
+ * of cutting a tree (bot.rotnLastFell, set by skills.fellTree).
+ */
+export function treeDeath(r, lastFell) {
+    // The pack's key and text (DramaticTrees-1.12.2-0.13.4.jar, assets/dynamictrees/lang/en_us.lang):
+    // death.attack.fallingtree=%1$s was crushed by a falling tree. Also falling_tree (#242 review 4).
+    if (r?.cause) return /falling[ _]?tree/i.test(r.cause);
+    return !!lastFell && Number.isFinite(r?.at) && r.at >= lastFell.at && r.at - lastFell.at <= TREE_DEATH_MS;
+}
+
 export function reportDeath(agent, { now = Date.now() } = {}) {
     const r = agent._death?.report(agent.bot, { now });
     if (!r) return null;
-    console.log(`[death] ${r.line}`);
+    const lastFell = agent.bot?.rotnLastFell;
+    const byTree = treeDeath(r, lastFell);
+    console.log(`[death] ${r.line}${byTree && !r.cause ? ' (likely the tree it had just cut)' : ''}`);
     if (r.chat && !agent.shut_up) {
         Promise.resolve().then(() => agent.openChat(r.chat)).catch(err => console.warn(`[death] chat: ${safeError(err)}`));
     }
@@ -272,7 +312,7 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
     // death streak: then the note waits for the next prompt, so deaths cannot drive LLM calls.
     requestReplan(agent, 'death', r.label, {
         now, due: !r.streak,
-        note: `You died at ${where(r.pos)} and respawned. ${items} The spot is saved as 'last_death_position'. `
+        note: `You died at ${where(r.pos)} and respawned. ${byTree ? treeNote(lastFell) : ''}${items} The spot is saved as 'last_death_position'. `
             + `Do not go back there for ${DEATH_SPOT_WAIT_MS / 60_000} min, nor at dusk or night: what killed you may still be there, `
             + 'and a zombie rises where a player dies.',
     });
