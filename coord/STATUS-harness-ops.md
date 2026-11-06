@@ -1,8 +1,20 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (00:49 UTC, from `date -u`)
+Updated: 2026-11-06 (02:00 UTC, from `date -u`)
 
-## Now: G3 smoke round 3 paused after batch B (the lead's GO, 2026-11-06)
+## Now: HOLDING, no batch until the lead says so (the round 3 continuation GO of 01:07Z)
+
+- **Continuation batch A** (develop 73c25461, `captures/raw/r3b-g3a/`): FAIL, but it never tested the bot.
+  - Every LLM call failed: 20 "My brain disconnected" replies, 11 of them `429 Provider returned error`. The agenda stuck at `rocks` after 3 self-prompter runs (2.6 min).
+  - LLM USD 0; Hetzner 8 min; the server, Primary IP and SSH key were verified gone. Stopped before B as an infra fault.
+- **Round 3 batch B (#237) had the same fault:** its 11 "calls" were all failures, so it survived on reflexes and the night routine alone. Its README is to be corrected in the next evidence PR.
+- **Probes of `@preset/glm-5-1-mindcraft`** (01:32:08Z and 01:42:16Z): HTTP 429 both times. Provider Baidu, `tpm_rate_limit_exceeded`, `upstream_provider_shared_pool`.
+- **The human's decision:** every LLM run now uses `openrouter/@preset/glm-5-3-flash-cheap-reliable`. One PR carries both `LLM_MODEL` (harness-ops) and `profiles/rotn-bot.json` (skills-rotn's ca334176, unchanged); it supersedes #239.
+- **Next, after the lead's word:** a probe with the new preset, then A, B, C+D under the existing GO, with a probe before each batch.
+  - New stop rule: 5 or more LLM failures and no successful reply in a batch's first 5 min means an infra fault, so stop.
+- **Later (`test/` PR):** an LLM probe in the preflight, and a result note counting successful versus failed LLM calls. Plus round 3 B's README fix and the #236/#237 nits.
+
+## Earlier: G3 smoke round 3 paused after batch B (the lead's GO, 2026-11-06)
 
 - **A** (`g3-rocks-to-stone-tools`, develop 609490f6): FAIL 6 of 7.
   - Both stone tools, the table and all five crafts were done; 10 of 11 agenda steps in about 7 min, with no deaths.
@@ -16,7 +28,7 @@ Updated: 2026-11-06 (00:49 UTC, from `date -u`)
 - **Open:** #236, the log roll-over fix. The session reads the rolled-over `.gz` plus `latest.log` once the marker is gone and records `notes.logWindow`; `rotn-test console` survives it; `batch.mjs` warns about runs past 00:00 UTC.
   - The lead's review fixes are pushed (70818871): a daily-only `.gz` glob, the rotated fallback for the evidence `server.log` too, one retry on a half-written `.gz`, a `no_cheat` test across the rotation, and a doc block moved.
 - **Queued for the next evidence or redactor PR** (#237 nits): the "16 vs 17 min" wording, and masking Hetzner's numeric server IDs in the redactor.
-- **Next:** no batch until the lead brings a new human GO (C+D plus a B rerun). Targeted tests only until the lead declares round 3 over.
+- **#236 merged** (the log roll-over fix).
 
 ## Done: G3 smoke round 2 (the lead's written GO, 2026-11-05)
 
