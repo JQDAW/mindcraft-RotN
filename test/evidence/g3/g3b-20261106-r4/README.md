@@ -54,7 +54,7 @@
 ## LLM and cost
 
 - **LLM:** 12 calls: 10 agent replies and 2 memory summaries OK; 0 failed, no HTTP errors.
-- **Spend:** USD 0.001012 (key usage 0.763885 to 0.764898).
+- **Spend:** USD 0.001012 (key usage 0.763887 to 0.764898, from `batch.json`).
 - **Hetzner:** ran 7 min, billed ~1 h, est. EUR 0.1381 excl. IPv4. Server, Primary IP and SSH key verified gone; the project was empty again before batch C+D.
 
 ## Files
