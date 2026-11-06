@@ -37,6 +37,8 @@
 | `stayed_online` | not reached (scenario error) |
 | `no_cheat` | not reached (scenario error) |
 
+**`night/result.json` says `"verdict": "FAIL"` because of the runner, not the bot** (#275 review nit): the runner's own console calls failed on this Windows machine (low memory), so three checks were never run. Nothing in it is a finding about the bot.
+
 There is no `night/server.log` and no batch-level server log: both fetches failed the same way, and the server was deleted by then.
 
 ## The cause

@@ -839,6 +839,55 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         refusesCadence(cadence(1200, 2100, 3000), /the newest dispatch run \(4000\) is 20 min old \(limit 20\)/);
     });
 
+    // The helper's own dispatch (lead, after G3 smoke round 5; approved in principle in the #275 review).
+    // Ages in seconds before NOW; the helper run's own age is past (b)'s 40 min, as at 15:38Z on 2026-11-06.
+    const helperAt = (age, id = 2001, o = {}) => helperRun({ databaseId: id, createdAt: isoZ(NOW - age), ...o });
+    const passesCadence = (runs, name, re) => {
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+        ghRuns(runs);
+        const r = run(['up', '--yes', '--name', name]);
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stderr, re);
+        seed({ servers: [], primary_ips: [], ssh_keys: [] });
+    };
+
+    test('cadence path: the helper\'s own dispatch right after its scheduled run is left out (round 5 D, 15:38Z)', () => {
+        // 2026-11-06 at 15:38:47: helper 14:56:12; dispatch runs 14:45:28, 14:56:18 (the helper's), 15:00:59, 15:15:28, 15:30:45.
+        // Without the helper run the list refuses, as it did that day (14:45:28 is outside the 50 min).
+        refusesCadence(cadence(482, 1399, 2268, 2549, 3199), /dispatch-run gaps 4\.6, 14\.4, 15\.2 min are not all 10\.\.20 min/);
+        // With it, the helper's dispatch (14:56:18, id 4003) is left out. (Passing cases last: they create a server.)
+        passesCadence([...cadence(482, 1399, 2268, 2549, 3199), helperAt(2555)], 'mcr-test-hx1',
+            /sweeper OK \(via cadence\): cadence of 3 dispatch runs on develop in the last 50 min, gaps 14\.4, 15\.2 min, newest 4000 8 min ago; left out the helper's own dispatch: 4003 \(.*helper run 2001\)/);
+    });
+
+    test('cadence path: a real cron run inside the 3 min after a helper run: at most one run is left out, so it still passes', () => {
+        // Cron every 15 min (ages 700, 1600, 2500); the helper ran at 2510 (41.8 min, so (b) cannot pass) and its
+        // dispatch came at 2504: both 2504 and the cron run at 2500 are within 180 s after it. Leaving out both would
+        // leave only 2 runs; leaving out one keeps the cadence.
+        passesCadence([...cadence(700, 1600, 2500, 2504), helperAt(2510)], 'mcr-test-hx2',
+            /sweeper OK \(via cadence\): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15, 15 min, newest 4000 11\.6 min ago; left out the helper's own dispatch: 400[23] /);
+    });
+
+    test('cadence path: what the helper cannot excuse', () => {
+        // Every helper run here is over 41 min old, so (b) cannot pass and (c) decides.
+        // Cron every 15 min (ages 300, 1200, 2100, 3000) plus an extra run at 2400 (id 4003): gaps 10, 5, 15, 15.
+        const extra = cadence(300, 1200, 2100, 2400, 3000);
+        // A short gap with no helper run before it (a manual dispatch) still refuses.
+        refusesCadence(extra, /dispatch-run gaps 10, 5, 15, 15 min are not all/);
+        // An extra run more than 180 s after the helper run is not its dispatch.
+        refusesCadence([...extra, helperAt(2590)], /dispatch-run gaps 10, 5, 15, 15 min are not all/);
+        // One helper run excuses at most one run: two extra runs right after it still refuse.
+        refusesCadence([...cadence(300, 1200, 2100, 2390, 2400, 3000), helperAt(2470)], /dispatch-run gaps .* are not all 10\.\.20 min/);
+        // The helper's manual or failed runs excuse nothing (an agent could start a manual one).
+        for (const o of [{ event: 'workflow_dispatch' }, { conclusion: 'failure' }]) {
+            refusesCadence([...extra, helperAt(2470, 2001, o)], /dispatch-run gaps 10, 5, 15, 15 min are not all/);
+        }
+        // Leaving a run out never creates evidence: too few runs stay too few.
+        refusesCadence([...cadence(600, 2400, 2406), helperAt(2470)], /only 2 successful|dispatch-run gaps/);
+        // For contrast (last: it creates a server): the same extra run 70 s after a scheduled helper run (41.2 min old) is left out.
+        passesCadence([...extra, helperAt(2470)], 'mcr-test-hx3', /left out the helper's own dispatch: 4003 /);
+    });
+
     test('a newest completed sweeper run that failed blocks every path (PR #21 review finding 1)', () => {
         const failed = (event, o = {}) => ({ databaseId: 5000, event, status: 'completed', conclusion: 'failure', createdAt: isoZ(NOW - 60), headBranch: 'develop', ...o });
         const okSched = { databaseId: 1001, event: 'schedule', status: 'completed', conclusion: 'success', createdAt: isoZ(NOW - 600), headBranch: 'develop' };
