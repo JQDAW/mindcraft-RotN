@@ -81,9 +81,9 @@ export function threatFor(entity) {
 export const PLAYER_ZOMBIE = 'zombie_players:zombie_player';
 export const isPlayerZombie = (entity) => entity?.name === PLAYER_ZOMBIE;
 
-/** A sword or an axe (not a pickaxe) in the inventory. */
+/** A sword or an axe (not a pickaxe) in the inventory or the off hand (slot 45; #227 nit). */
 export function hasWeapon(bot) {
-    const items = bot?.inventory?.items?.() ?? [];
+    const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]];
     return items.some(i => typeof i?.name === 'string' && /sword|(^|[:_])axe$/.test(i.name));
 }
 
@@ -94,8 +94,10 @@ export function hasWeapon(bot) {
 export const canFightHard = (bot) => hasWeapon(bot) && bot?.health > 10;
 
 /**
- * Whether this mob hurt the bot: it is angry, or the bot was hit within PROVOKED_MS while it
- * was within PROVOKED_DIST (1.12 does not say who dealt the damage).
+ * Whether this mob hurt the bot: it is angry, or the bot was hit within PROVOKED_MS (3 s) while it
+ * was within PROVOKED_DIST (4 blocks). An approximation (#227 nit): 1.12 sends the bot's health
+ * and a hurt animation but not who dealt the damage, so another mob's hit, an arrow or fall damage
+ * with this mob close by counts too; and a mob that hit from farther away does not.
  */
 export function hurtBy(bot, entity, { now = Date.now() } = {}) {
     if (!entity?.position || !bot?.entity?.position) return false;

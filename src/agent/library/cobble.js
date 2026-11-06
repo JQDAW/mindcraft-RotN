@@ -18,7 +18,7 @@ let recipes = null;
  */
 const loadRotn = () => ({ ore: loadRotnData(PACK_VERSION).oreDict('cobblestone') ?? [], rocks: rockRecipes() ?? [] });
 
-export function cobbleRecipes(load = loadRotn) {
+export function cobbleRecipes(load = loadRotn, { tableLookup = recipesFor } = {}) {
     if (recipes) return recipes;
     let ore = [];
     let rocks = [];
@@ -26,8 +26,10 @@ export function cobbleRecipes(load = loadRotn) {
         ({ ore, rocks } = load());
     } catch { return []; }
     const inOre = (g) => ore.some(m => m.name === g.name && (m.meta == null || m.meta === WILDCARD_META || m.meta === g.meta));
+    let lookupFailed = false;
     const tableFor = (r) => {
-        try { return !!recipesFor(r.gives.name)?.find(x => x.id === r.recipeId)?.requiresTable; } catch { return false; }
+        try { return !!tableLookup(r.gives.name)?.find(x => x.id === r.recipeId)?.requiresTable; }
+        catch { lookupFailed = true; return false; } // a guess: not cached (#234 nit)
     };
     const list = rocks.filter(r => inOre(r.gives)).map(r => ({
         rock: formatName(botName(r.rock.name), r.rock.meta),
@@ -35,7 +37,7 @@ export function cobbleRecipes(load = loadRotn) {
         recipeId: r.recipeId,
         requiresTable: tableFor(r),
     }));
-    if (ore.length && list.length) recipes = list;
+    if (ore.length && list.length && !lookupFailed) recipes = list;
     return list;
 }
 

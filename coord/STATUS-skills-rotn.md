@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-05T23:52Z (from `date -u`)
+Updated: 2026-11-06T00:40Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -389,14 +389,31 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   - `craftRecipe` crafts those outputs until the count is reached, with a clear line when no kind has 4.
   - The cobblestone step's goal names that output (`goalNow(state)`; `agendaGoal` takes the state).
   - Tests: `cobble` 5/5, with sedimentary, igneous, metamorphic and plain rocks, mixed kinds, and too few. On develop the craft tests fail with "1 twilightforest:giant_cobblestone", as in round 3. `agenda` 16/16 (the goal names the output). Related 8 files pass; lint per file unchanged.
-- **#233 follow-up, open PR** (branch `agent/skills-rotn/cobble-followup`; STATUS lives here):
+- **#234 merged** (lead), the #233 follow-up:
   1. The cobble is crafted by the rock's own `recipeId` (`craftByFill`), so `recipesFor` cannot pick `undergroundbiomes:regular_cobblestone` and use the bot's modded cobble. Only the real gain counts.
   2. The rock-specific goal is sent once the bot has the rocks (`agendaTick` resends a changed goal text of the same step; not a new run). The text stays the same while the rock kind is the same.
   3. One `!craftRecipe` in the goal.
   4. A failed oredict load is not cached.
 
   Tests: `cobble` 7/7, `agenda` 17/17; every new test fails on develop (the modded cobble is used up; the goal is not resent; the empty load is cached). Related 5 files pass; lint per file unchanged.
-- **Next (lead):** review the #233 follow-up.
+- **#238 open, REQUEST CHANGES addressed** (branch `agent/skills-rotn/nits-234`; STATUS lives here):
+  1. #234 nits:
+     - the goal gives the real number (`!craftRecipe("cobblestone", 2)`, at most what the step still needs);
+     - `describeNeeds` with no inputs gives nothing, so there is no "To craft X: .";
+     - `craftByFill` says where the items came from (`needs.how`: "from your <rock> rocks");
+     - a recipe lookup error is not cached.
+  2. #225 nits:
+     - `smeltItem` picks up the furnace it placed by its position (lit or not), also on an aborted run. It now has `FURNACE_OPS` for placing and picking up, as `craftRecipe` does for its table;
+     - a `!clearFurnace` walk-then-limit test.
+  3. #227 nits: `hurtBy`'s note (an approximation: 1.12 does not name the attacker); `hasWeapon` also looks at the off hand.
+
+  Tests: `furnace` 3 (new), `cobble` 9, `agenda` 16, `threat_arbitration` 9, `action_limits` 9. On develop the new tests fail, except the clearFurnace one (behaviour already fixed in #225; the test was missing). Related 7 files pass; lint per file unchanged.
+  4. #238 review:
+     - `equipHighestAttack` moves a weapon from the off hand into the inventory and equips it in the main hand (a test checks what the bot holds when it hits);
+     - `placeFurnaceNear` trusts only its own placement: the `placeBlock` result and `bot.blockAt(pos)`, never the nearest furnace. A failed placement gives null, and `smeltItem` says "Could not place your furnace."
+
+     Tests: `furnace` 5, `use_on` 14; the three new ones fail on the previous head.
+- **Next (lead):** re-review #238. Round 3 still running: targeted tests only.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
