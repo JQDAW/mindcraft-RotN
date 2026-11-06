@@ -124,6 +124,23 @@ export class RotnData {
         return { name: r.name, meta: r.meta ?? b.defaultMeta ?? 0, propertiesKnown: true, ...b, state, ...this._fallFields(r.name) };
     }
 
+    /**
+     * What a player collides with in a block state (net-forge #259): `{ boxes, varies, source }`.
+     * From dumper 0.3.0, `boxes` is the state's `entityCollision` (addCollisionBoxToList for a
+     * player standing on the block, read at an all-air cell; [x0, y0, z0, x1, y1, z1] relative to
+     * the cell) and `varies` is `entityCollisionVaries` (true: the shape depends on the world
+     * there, e.g. a fence's connections, so a per-state table cannot give it). Before 0.3.0, or
+     * when the call threw, it falls back to `collision` (getCollisionBoundingBox) with
+     * `varies: null` and `source: 'collision'`. `null` for an unknown block or a block without a dump.
+     */
+    playerCollision(input) {
+        const b = this.getBlock(input);
+        if (!b?.propertiesKnown || !b.state) return null;
+        const s = b.state;
+        if (Array.isArray(s.entityCollision)) return { boxes: s.entityCollision, varies: s.entityCollisionVaries ?? null, source: 'entityCollision' };
+        return { boxes: s.collision ?? null, varies: null, source: 'collision' };
+    }
+
     _fallFields(name) {
         if (!this.fallingBlocks) return {};
         const f = this.fallingBlocks[name];

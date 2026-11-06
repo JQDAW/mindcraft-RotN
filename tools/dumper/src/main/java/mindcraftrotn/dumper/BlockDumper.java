@@ -2,6 +2,7 @@ package mindcraftrotn.dumper;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,19 +15,31 @@ import net.minecraft.block.Block;
 import net.minecraft.block.material.Material;
 import net.minecraft.block.properties.IProperty;
 import net.minecraft.block.state.IBlockState;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.init.Items;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import net.minecraft.world.WorldServer;
+import net.minecraftforge.common.util.FakePlayerFactory;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 /**
- * blocks.json: {"format", "blocks": {"minecraft:stone": {"defaultMeta", "class", "states": [state...]}}}
+ * blocks.json: {"format", "entityCollisionProbe", "blocks": {"minecraft:stone": {"defaultMeta", "class", "states": [state...]}}}
  * One state per metadata value m in 0..15 with getMetaFromState(getStateFromMeta(m)) == m:
  * {meta, props, displayName, hardness, explosionResistance, material, harvestTool, harvestLevel,
- *  toolRequired, solid, liquid, replaceable, light, opacity, fullCube, opaque, collision, item, drops}.
+ *  toolRequired, solid, liquid, replaceable, light, opacity, fullCube, opaque, collision,
+ *  entityCollision, entityCollisionVaries, item, drops}.
+ * "collision" is getCollisionBoundingBox at (0,0,0): one box at most. "entityCollision" (0.3.0,
+ * net-forge #259) is what addCollisionBoxToList gives a player standing on the block, the boxes an
+ * entity actually collides with (a class can override it: Dynamic Trees' leaves give a player a
+ * half-height box while getCollisionBoundingBox says a full cube). It is read at the "air" probe
+ * cell (every one of the 27 cells around it is air) and again at the "solid" probe cell (every one
+ * is a normal cube); "entityCollisionVaries" is true when the two differ, i.e. the shape depends on
+ * the world at that position (neighbours, the block really there, a tile entity). Both are read
+ * only: the queried state is never placed. Boxes are relative to the cell, rounded to 1e-6.
  * Every value is computed first and written as null if the game call throws (J).
  * Harvest tool and level come from Forge's Block#getHarvestTool/getHarvestLevel, so Tool
  * Progression's overrides are included. Hardness is read at (0,0,0) in the overworld, so
@@ -79,9 +92,74 @@ final class BlockDumper extends Part<Block> {
 
     private final World world;
     private final BlockPos pos = BlockPos.ORIGIN;
+    // entityCollision probes (found in head(); null when no such cell was found)
+    private BlockPos probeAir;
+    private BlockPos probeSolid;
+    private EntityPlayer player;
 
     BlockDumper(World world) {
         this.world = world;
+    }
+
+    /** The first cell at x = z = 0, y from y0 towards y1, whose 27-cell neighbourhood all passes the test. */
+    private BlockPos findProbe(int y0, int y1, boolean air) {
+        int step = y1 >= y0 ? 1 : -1;
+        for (int y = y0; y != y1 + step; y += step) {
+            boolean ok = true;
+            for (int dx = -1; dx <= 1 && ok; dx++) {
+                for (int dy = -1; dy <= 1 && ok; dy++) {
+                    for (int dz = -1; dz <= 1 && ok; dz++) {
+                        BlockPos p = new BlockPos(dx, y + dy, dz);
+                        ok = air ? world.isAirBlock(p) : world.getBlockState(p).isNormalCube();
+                    }
+                }
+            }
+            if (ok) return new BlockPos(0, y, 0);
+        }
+        return null;
+    }
+
+    /** addCollisionBoxToList for a player standing on the block at `at`, relative to `at`. */
+    private double[][] entityBoxes(IBlockState s, BlockPos at) {
+        player.setPosition(at.getX() + 0.5, at.getY() + 1.0, at.getZ() + 0.5);
+        List<AxisAlignedBB> out = new ArrayList<>();
+        s.addCollisionBoxToList(world, at, new AxisAlignedBB(at).grow(1.0), out, player, false);
+        double[][] r = new double[out.size()][];
+        for (int i = 0; i < out.size(); i++) {
+            AxisAlignedBB bb = out.get(i);
+            r[i] = new double[] {
+                round(bb.minX - at.getX()), round(bb.minY - at.getY()), round(bb.minZ - at.getZ()),
+                round(bb.maxX - at.getX()), round(bb.maxY - at.getY()), round(bb.maxZ - at.getZ())};
+        }
+        return r;
+    }
+
+    private static double round(double v) {
+        return Math.round(v * 1e6) / 1e6;
+    }
+
+    private static void writeBoxes(JsonWriter w, String name, double[][] boxes) throws IOException {
+        w.name(name);
+        if (boxes == null) {
+            w.nullValue();
+            return;
+        }
+        w.beginArray();
+        for (double[] box : boxes) {
+            w.beginArray();
+            for (double d : box) w.value(d);
+            w.endArray();
+        }
+        w.endArray();
+    }
+
+    private static void writePos(JsonWriter w, String name, BlockPos p) throws IOException {
+        w.name(name);
+        if (p == null) {
+            w.nullValue();
+        } else {
+            w.beginArray().value(p.getX()).value(p.getY()).value(p.getZ()).endArray();
+        }
     }
 
     static String materialName(Material m) {
@@ -100,8 +178,17 @@ final class BlockDumper extends Part<Block> {
 
     @Override
     protected void head(JsonWriter w) throws IOException {
+        player = J.get(() -> world instanceof WorldServer ? FakePlayerFactory.getMinecraft((WorldServer) world) : null);
+        probeAir = player == null ? null : J.get(() -> findProbe(250, 128, true));
+        probeSolid = player == null ? null : J.get(() -> findProbe(2, 60, false));
         w.beginObject();
         J.str(w, "format", RotnDump.FORMAT);
+        w.name("entityCollisionProbe").beginObject();
+        J.str(w, "entity", player == null ? null : "FakePlayer standing on the block (x + 0.5, y + 1, z + 0.5)");
+        J.num(w, "entityBoxGrow", 1.0);
+        writePos(w, "air", probeAir);
+        writePos(w, "solid", probeSolid);
+        w.endObject();
         w.name("blocks").beginObject();
     }
 
@@ -176,6 +263,11 @@ final class BlockDumper extends Part<Block> {
             if (bb == null || bb == Block.NULL_AABB) return new double[0][];
             return new double[][] {{bb.minX, bb.minY, bb.minZ, bb.maxX, bb.maxY, bb.maxZ}};
         });
+        // What a player collides with (null: no air probe, or the call threw); varies: null when
+        // either probe is missing or threw.
+        double[][] entityAir = probeAir == null ? null : J.get(() -> entityBoxes(s, probeAir));
+        double[][] entitySolid = probeSolid == null ? null : J.get(() -> entityBoxes(s, probeSolid));
+        Boolean entityVaries = entityAir == null || entitySolid == null ? null : !Arrays.deepEquals(entityAir, entitySolid);
         Object[] drop = J.get(() -> {
             Item d = b.getItemDropped(s, new Random(0), 0);
             int count = b.quantityDropped(s, 0, new Random(0));
@@ -202,18 +294,9 @@ final class BlockDumper extends Part<Block> {
         J.num(w, "opacity", opacity);
         J.bool(w, "fullCube", fullCube);
         J.bool(w, "opaque", opaque);
-        w.name("collision");
-        if (collision == null) {
-            w.nullValue();
-        } else {
-            w.beginArray();
-            for (double[] box : collision) {
-                w.beginArray();
-                for (double d : box) w.value(d);
-                w.endArray();
-            }
-            w.endArray();
-        }
+        writeBoxes(w, "collision", collision);
+        writeBoxes(w, "entityCollision", entityAir);
+        J.bool(w, "entityCollisionVaries", entityVaries);
         w.name("item");
         if (hasItem) {
             w.beginObject();
