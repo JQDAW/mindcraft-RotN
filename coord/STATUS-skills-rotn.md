@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T13:29Z (from `date -u`)
+Updated: 2026-11-06T13:36Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -614,6 +614,17 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
   - All new tests fail on #270's head (with a stub for `isUnderground`).
   - Related files pass: `collect_rotn`, `priority`, `death_report`, `rotn_names`, `cobble`.
   - Lint 253.
+- **2026-11-06T13:36Z: #270 merged** (`1d69707`); develop merged into this branch (the tree is unchanged: #270 was already in it). **#270 review follow-ups:**
+  1. **Clear reasons:**
+     - with no table near or held: "Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held. Get or make a table first (...). Until then, River Cane or bamboo ... work as sticks", said once and with no craft tried;
+     - a planks or sticks craft that makes nothing says so, and the run stops ("not trying again in this collect").
+  2. **Tests:**
+     - the `crafter()` mock gains `planksNeedTable` (logs to planks only at a table, as on RotN);
+     - none near or held: no craft, one reason, 0 sticks, the logs kept;
+     - a table placed near: planks at the table, then sticks (a guard; it also passes on develop).
+  3. **`underLeaves`** also counts vanilla leaves (`isLeafBlock`); new test.
+  - `fell_tree` 25. The two new non-guard tests fail on develop's `skills.js`. Lint 253.
+  - **Path choice:** rotn-data had already answered (Hit With Axe; River Cane and bamboo are `stickWood`). The path above follows it. The lead asked me to wait for that answer, so it is open to the lead's call.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

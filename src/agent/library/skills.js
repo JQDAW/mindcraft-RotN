@@ -1012,14 +1012,19 @@ export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds 
         const pairs = stickCraftsHeld(bot);
         if (pairs === 0) {
             if (logsHeld() === 0) break;
+            // Said once, with what to do instead, so the model does not retry the same command
+            // (#270 review 1; round 5 A rerun: "Crafting planks requires a crafting table").
             if (countItem(bot, 'crafting_table') === 0 && !world.getNearestBlock(bot, 'crafting_table', 16)) {
-                log(bot, 'Logs make planks only at a crafting table in RotN, and you have none near. Before the table, River Cane or bamboo (picked by hand) work as sticks for the crude axe and the Crafting Tools.');
+                log(bot, 'Not making planks: in RotN logs become planks only at a crafting table, and there is none near or held. Get or make a table first (Crafting Tools and 1 plank; your first plank comes from using the crude axe on a placed log). Until then, River Cane or bamboo (picked by hand) work as sticks for the crude axe and the Crafting Tools.');
                 break;
             }
             const before = planksHeld();
             log(bot, `Making planks from logs for sticks.`);
             await craftRecipe(bot, 'planks', Math.ceil(crafts / 2)); // 1 log: 4 planks in vanilla; another round if fewer
-            if (planksHeld() <= before) break;
+            if (planksHeld() <= before) {
+                log(bot, 'Could not make planks from your logs (the reason is above); not trying again in this collect.');
+                break;
+            }
             continue;
         }
         const before = countItem(bot, 'stick');
@@ -1027,7 +1032,10 @@ export async function sticksFromPlanks(bot, need, run = currentRun(bot), rounds 
         log(bot, `Making the other ${left} stick${left === 1 ? '' : 's'} from planks (2 planks of one kind give 4).`);
         await craftRecipe(bot, 'stick', Math.min(crafts, pairs));
         const got = Math.max(0, countItem(bot, 'stick') - before);
-        if (got === 0) break;
+        if (got === 0) {
+            log(bot, 'Could not make sticks from your planks (the reason is above); not trying again in this collect.');
+            break;
+        }
         made += got;
     }
     return made;
@@ -1192,8 +1200,12 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
     const face = sideFace(base, spot);
     // Round 5 must show the relaxed guard is safe (#268 review 1): say when the bot cut from under
     // the tree's leaves, in the log and in what the death report reads.
+    // Any leaves, vanilla too (#270 review 3: isTreeLeaves matches Dynamic Trees leaves only).
     let underLeaves = false;
-    for (let y = spot.y + 2; y <= base.y + FELL_PLAN.canopyHeight && !underLeaves; y++) underLeaves = isTreeLeaves(bot.blockAt(new Vec3(spot.x, y, spot.z)));
+    for (let y = spot.y + 2; y <= base.y + FELL_PLAN.canopyHeight && !underLeaves; y++) {
+        const b = bot.blockAt(new Vec3(spot.x, y, spot.z));
+        underLeaves = isTreeLeaves(b) || isLeafBlock(b);
+    }
     await bot.lookAt(base.offset(0.5 + face.x * 0.5, 0.5, 0.5 + face.z * 0.5));
     // Its blocks as the bot sees them now: after the fall they are skipped for this collect, so a
     // trunk the bot still sees is never cut again (round 5 A rerun: one tree cut 4 times).
