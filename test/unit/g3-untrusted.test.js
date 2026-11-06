@@ -98,7 +98,7 @@ function sim(opt = {}) {
             alive = true;
             online = true;
             serverGiver = opt.ignoreSwitch ? true : env.ROTN_G3_PRODUCTION_GIVERS !== '1';
-            output.push(`DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: 'openrouter/@preset/glm-5-1-mindcraft' }, serverTaskGiver: serverGiver,
+            output.push(`DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable' }, serverTaskGiver: serverGiver,
                 botState: { dir: 'bots/FRCFLD', movedAside: opt.stale ? [] : ['tasks.json.g3-S.bak', 'agenda.json.g3-S.bak'], fresh: !opt.stale } })}`);
             log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`);
             add(`${NAME} joined the game`);

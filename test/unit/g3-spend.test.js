@@ -94,14 +94,14 @@ describe('the key usage read: numbers only, the key never leaves the header', ()
     });
 
     test('the model of every LLM run: the OpenRouter preset (the human\'s decision, 2026-11-03), recorded from the driver', () => {
-        assert.equal(LLM_MODEL, 'openrouter/@preset/glm-5-1-mindcraft');
-        assert.equal(modelId('openrouter/@preset/glm-5-1-mindcraft'), LLM_MODEL);
-        assert.equal(modelId({ api: 'openrouter', model: '@preset/glm-5-1-mindcraft' }), LLM_MODEL, 'the object form is the same model');
-        assert.equal(modelId({ api: 'openrouter', model: 'openrouter/@preset/glm-5-1-mindcraft' }), LLM_MODEL, 'a prefixed model is not prefixed twice');
-        assert.equal(modelId({ model: 'openrouter/@preset/glm-5-1-mindcraft', params: { temperature: 0 } }), LLM_MODEL);
+        assert.equal(LLM_MODEL, 'openrouter/@preset/glm-5-3-flash-cheap-reliable');
+        assert.equal(modelId('openrouter/@preset/glm-5-3-flash-cheap-reliable'), LLM_MODEL);
+        assert.equal(modelId({ api: 'openrouter', model: '@preset/glm-5-3-flash-cheap-reliable' }), LLM_MODEL, 'the object form is the same model');
+        assert.equal(modelId({ api: 'openrouter', model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable' }), LLM_MODEL, 'a prefixed model is not prefixed twice');
+        assert.equal(modelId({ model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable', params: { temperature: 0 } }), LLM_MODEL);
         for (const bad of [undefined, null, '', 3, {}, { model: 3 }]) assert.equal(modelId(bad), null, JSON.stringify(bad));
         assert.deepEqual(modelProblems({ model: LLM_MODEL }), []);
-        assert.deepEqual(modelProblems({ model: LLM_MODEL, code_model: LLM_MODEL, vision_model: { api: 'openrouter', model: '@preset/glm-5-1-mindcraft' } }), []);
+        assert.deepEqual(modelProblems({ model: LLM_MODEL, code_model: LLM_MODEL, vision_model: { api: 'openrouter', model: '@preset/glm-5-3-flash-cheap-reliable' } }), []);
         assert.equal(modelProblems({ model: 'gpt-4o' }).length, 1);
         assert.equal(modelProblems({ model: LLM_MODEL, code_model: 'claude-sonnet-4-6' }).length, 1);
         assert.deepEqual(profileModels({ model: LLM_MODEL }), { model: LLM_MODEL, code_model: null, vision_model: null });
@@ -288,7 +288,7 @@ describe('batch.mjs: the preflight before any server exists (lead, #169 review)'
     test('driverPreflight: the Mindcraft driver with a profile on the preset passes; another model, a bad profile or a task argument refuses', async () => {
         assert.deepEqual(await driverPreflight(['node', DRIVER, '--profile', good], {}), []);
         assert.deepEqual(await driverPreflight(['node', fwd(DRIVER), '--profile', good], {}), [], 'forward slashes name the same driver');
-        assert.match((await driverPreflight(['node', DRIVER, '--profile', other], {})).join('; '), /^driver: profile .*model is 'openrouter\/openai\/gpt-4o', not openrouter\/@preset\/glm-5-1-mindcraft/);
+        assert.match((await driverPreflight(['node', DRIVER, '--profile', other], {})).join('; '), /^driver: profile .*model is 'openrouter\/openai\/gpt-4o', not openrouter\/@preset\/glm-5-3-flash-cheap-reliable/);
         assert.match((await driverPreflight(['node', DRIVER, '--profile', code], {})).join('; '), /code_model is 'openrouter\/x\/y'/);
         assert.match((await driverPreflight(['node', DRIVER, '--profile', path.join(profiles, 'none.json')], {})).join('; '), /not found/);
         assert.match((await driverPreflight(['node', DRIVER], {})).join('; '), /--profile is required/);

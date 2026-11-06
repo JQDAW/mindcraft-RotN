@@ -91,7 +91,7 @@ export function agentModels(outputLines) {
 /** result.llm for one scenario: the models, calls, the two readings and the cost; error names a reading that failed. */
 export function llmRecord(before, after, outputLines) {
     return {
-        // The model of the run (the human's decision: openrouter/@preset/glm-5-1-mindcraft for every LLM run).
+        // The model of the run (the human's decision: openrouter/@preset/glm-5-3-flash-cheap-reliable for every LLM run).
         models: agentModels(outputLines),
         calls: countLlmCalls(outputLines),
         usageBefore: before?.ok ? before.usage : null,

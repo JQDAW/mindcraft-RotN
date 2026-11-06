@@ -333,7 +333,7 @@ describe('up / run / down', () => {
             FAKE_DIR: fwd(tmp), OPENROUTER_API_KEY: 'not-a-real-key', ROTN_BATCH_PREFLIGHT: 'passed',
         });
         assert.equal(r.code, 1, r.all);
-        assert.match(r.stderr, /refused: driver: profile .*model is 'openrouter\/openai\/gpt-4o', not openrouter\/@preset\/glm-5-1-mindcraft/);
+        assert.match(r.stderr, /refused: driver: profile .*model is 'openrouter\/openai\/gpt-4o', not openrouter\/@preset\/glm-5-3-flash-cheap-reliable/);
         assert.match(r.stderr, /the G3 batch preflight refused \(exit 2\): no server was created/);
         assert.deepEqual(mutating(), [], 'no hcloud create or delete at all');
         assert.ok(!fs.existsSync(path.join(tmp, 'ran.txt')), 'no scenario ran');
