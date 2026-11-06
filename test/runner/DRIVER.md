@@ -161,6 +161,12 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
 - The first smoke batches (`test/evidence/g3/g3a-20261105/`, `g3b-20261105/` and `g3cd-20261105/`) ran before the field existed. Their `batch.json` got `"smoke": true` by hand, at the lead's request, and they have no `gate` field.
 
 - **The preflight, before any server exists** (lead, #169 review). When the run command's script is `test/runner/batch.mjs`, `test-server.sh run` first runs it with `--preflight` and the same arguments. That checks the driver, its profile, the profile's model (it must be `openrouter/@preset/glm-5-3-flash-cheap-reliable`, and so must `code_model` and `vision_model` when set) and `settings.js`, and reads the key's usage once. If anything fails, no server is created (exit 1).
+  - **The LLM probe** (lead, after round 3, when the old preset's upstream provider answered 429 for hours and two batches ran without one LLM reply):
+    - After the usage reading, the preflight sends one tiny request to `LLM_MODEL` (`probeModel` in `lib/llm-spend.mjs`; `max_tokens` 16).
+    - A failure refuses, with the HTTP status, the provider and its error code: "the LLM probe of ... failed (HTTP 429, provider Baidu, tpm_rate_limit_exceeded)". A pass is logged with the provider and model.
+    - A 200 is not enough (#246 review): an `error` in the body, or no `choices`, fails ("error in a 200 response", "no choices in the response"). A choice with empty text still passes, as at 02:42Z, when the 16 tokens ran out before any text.
+    - Only those fields are kept, each capped at 80 characters: the key goes only into the Authorization header, and the body is never echoed.
+    - `--preflight-files` (the dry run) sends no probe. In the offline test mode, `ROTN_OPENROUTER_PROBE_FILE` gives a fake answer; without it, the probe is skipped and logged as skipped, so no offline test reaches the network.
   - The driver must be `test/runner/drivers/mindcraft-driver.mjs`; a fake driver is accepted only in the offline test mode.
   - The script is recognised by its resolved path, so a path with `..` in it or a Windows path counts, and another file whose path merely ends in `test/runner/batch.mjs` does not (#176 review nit).
   - With `--dry-run`, `test-server.sh` passes `--preflight-files` instead: the same file checks, without the key's usage reading, so a dry run never contacts OpenRouter (#176 review nit).
@@ -229,7 +235,16 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
   - The spend is checked **between** scenarios, not during one, so a single scenario can run past the limit.
   - OpenRouter's usage figure can lag a little behind the newest requests.
   - The key's own credit limit (USD 5 for the test key) is the hard backstop.
-- **Records.** `result.json`'s `llm` (the models, the calls, the usage before and after, the cost) is in every record. `llm.models` is what the driver started the agent with (its `mindcraft_start` event), and a G3 run whose recorded model is not the preset is not gate-valid. Progress and killed records carry the calls so far.
+- **Records.** `result.json`'s `llm` (the models, the calls, the replies, the usage before and after, the cost) is in every record.
+  - `calls` is the requests sent, successful or not.
+  - `replies: {ok, memory, failed, disconnected, empty}` says what came back (lead, after round 3, where all "11 calls" of a run had failed):
+    - `ok`: the agent's replies;
+    - `memory`: memory summaries ("Memory updated to:"), requests of their own;
+    - `failed = disconnected + empty`: Mindcraft's stand-in replies, "My brain disconnected, try again." (also when a memory summary stores it) and "No response received." (a completion with no choices), and an answer with no text ("Error: Generated response is not a string"; round 3 continuation A had 3).
+    - **`ok + memory + failed` can be less than `calls`** (#246 review): requests that never print "Generated response:" or "Memory updated to:" (a coding request, a goal request, a request still waiting when the bot left) are in `calls` only. In the round 3 logs the sum matched `calls`, except D's request in flight at its disconnect.
+  - `httpErrors: {status: n}` counts the "Error [429]"-style lines; a retried request can add more than one.
+  - The run log says it the same way: "N LLM requests (ok replies, m memory summaries, f failed; n x HTTP 429), USD ...".
+  - Evidence counts `replies.ok` as calls, never `calls` alone. `llm.models` is what the driver started the agent with (its `mindcraft_start` event), and a G3 run whose recorded model is not the preset is not gate-valid. Progress and killed records carry the calls so far.
 - **Test mode is for the offline tests only.** `ROTN_TEST_MODE`, `ROTN_OPENROUTER_USAGE_FILE` and `ROTN_BATCH_RUNNER` make `batch.mjs` refuse to start inside a real test-server run, and the usage read ignores the fake file there. `deploy/test-server.sh run` sets `TEST_SERVER_FAKE_CLOUD=1` only against the offline fakes. `BATCH` records `testMode`.
 
 ### G3 (a): `g3-rocks-to-stone-tools` (`test/scenarios/g3/`)
@@ -249,7 +264,9 @@ The real agent plays its early-game agenda from a fresh spawn, and the runner wh
   - `stone_tools`: at least 1 stone pickaxe and 1 stone axe held;
   - `crafting_table`: at least 1 held, or placed. "Placed" means one of:
     - its use stat is at least 1;
-    - **the placed block itself** (lead, after round 3 continuation A: the bot placed its table at -42 67 -54, but `stat.useItem.minecraft.crafting_table` stayed 0). The cells the bot says it placed a table at ("Placed crafting_table at (x, y, z)" in its own output; the newest 5, `tablePlacements`) are checked at the end with the read-only `testforblock x y z minecraft:crafting_table 0`. A table the server finds counts only if the table's craft stat is at least 1, so a table that stood there before cannot pass alone. The claim is only a pointer; the server decides.
+    - **the placed block itself** (lead, after round 3 continuation A: the bot placed its table at -42 67 -54, but `stat.useItem.minecraft.crafting_table` stayed 0). The cells the bot says it placed a table at are checked at the end with the read-only `testforblock x y z minecraft:crafting_table 0`. A table the server finds counts only if the table's craft stat is at least 1, so a table that stood there before cannot pass alone. The claim is only a pointer; the server decides.
+      - **The claim is anchored on the skill's own log form** (#245 review; `tablePlacements`, the newest 5 cells). It counts only as the exact whole line `Placed crafting_table at (x, y, z).` (the skill's `placeBlock` log), inside the contiguous output block under `Agent executed: !<cmd> and got: Action output:` (or a mode's `code_return: Action output:`).
+      - Everything from "Generated response:" through the echo's closing `""` is skipped, however many lines it spans. So neither the LLM's text (even a fake header) nor chat ("<bot> received message from ...") can make a claim.
     - `notes.craftingTablePath` records `path` (`placed`, `placed-block`, `held` or `none`) and every claim with the server's answer.
   - `cobblestone`: at least 1 of the 4-rocks outputs held, by exact name and meta;
   - `crafted_by_bot` (gating, lead #101): the craft stat is at least 1 for all five items;

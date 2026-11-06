@@ -5,7 +5,8 @@
 - The scenario's next poll (00:00:56) no longer found its begin marker and stopped: "scenario marker not in the last 20000 log lines; raise logTail".
 - That was a harness failure, not a verdict on the bot. Until then (28.5 min after the join) it was online with `stat.deaths` 0.
 - **Correction (round 3 continuation, 2026-11-06):** not one LLM call of this run succeeded.
-  - `driver.log` has 20 "My brain disconnected, try again" replies and 11 `Error [429] ... Provider returned error`, and no other reply.
+  - `driver.log` shows 11 requests and 11 `Error [429] ... Provider returned error`, and no other reply: 10 "Generated response: My brain disconnected, try again." and one memory summary that stored the same stand-in ("Memory updated to:  My brain disconnected, try again.").
+  - An earlier wording said "20 ... replies"; that count included the 9 echo lines ("full response to system") and the memory line.
   - The old preset's upstream provider was rate-limited: Baidu, `tpm_rate_limit_exceeded`, confirmed by two probes at 01:32Z and 01:42Z.
   - So the bot's 28.5 min came from its reflexes and the night routine alone. This run says nothing about the LLM-driven agent.
   - Since then, every LLM run uses `@preset/glm-5-3-flash-cheap-reliable` (#241).

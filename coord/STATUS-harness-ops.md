@@ -1,10 +1,10 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (03:04 UTC, from `date -u`)
+Updated: 2026-11-06 (03:34 UTC, from `date -u`)
 
 ## Now: G3 smoke round 3 is over (the lead, 2026-11-06). No batch until a new GO.
 
-The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, from develop aec33fe7. A probe before each batch returned 200 (OpenInference), and there were 0 LLM failures in 109 replies.
+The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, from develop aec33fe7. A probe before each batch returned 200 (OpenInference). LLM, corrected (#246): 103 agent replies, 28 memory summaries and 3 failures (A's 3 empty answers); not "0 failures in 109 replies".
 
 | Batch | Result |
 | --- | --- |
@@ -14,10 +14,12 @@ The continuation ran on the new preset, `@preset/glm-5-3-flash-cheap-reliable`, 
 | D | FAIL. Kicked for spamming (an agenda catch-up burst of 11 lines at the join), then two DecoderException disconnects (NaN position, malformed packets; net-forge). |
 
 - **LLM:** USD 0.0142; cumulative by the key USD 0.7591 of the 4.50 stop. Every server, Primary IP and SSH key was verified deleted.
-- **Open:** the r3b evidence PR. It also corrects round 3 B's README (all its calls failed), the 16 vs 17 min wording, and masks Hetzner server ids in the redactor.
-- **Next (the lead's order):**
-  - (2) the `crafting_table` placed false negative: check the placed block itself, with an offline test;
-  - (3) the LLM probe in the preflight, success/failure counts in the result, and the #241 date nit.
+- **Merged:** #244 (the r3b evidence) and #245 (the crafting_table placed block).
+- **Open:** #246, in the lead's review. It holds:
+  - the LLM probe in the preflight, now also failing a 200 with `error` or no `choices`;
+  - the reply counts (agent replies, memory summaries, failed = stand-ins incl. "No response received." + empty answers);
+  - the #244/#245 nits: `HCLOUD_SERVER_ID` exported, the 52-of-62 README note, and the crafting_table claim anchored on the skill's own log block, with no LLM or chat text.
+- **Next, before the next paid round:** a small PR adding the 5-minute LLM-failure stop rule to `batch.mjs` (5 or more failures and no successful reply in a scenario's first 5 min stops the batch as an infra fault).
 - **For other agents (the lead routes):**
   - skills-rotn: felling stance (B); the death cause for "crushed by a falling tree" (B); the agenda catch-up chat burst that drew the spam kick (D).
   - net-forge: the NaN position and malformed packets (D; the lead has sent it).

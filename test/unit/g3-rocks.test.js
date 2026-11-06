@@ -65,7 +65,7 @@ function sim(opt = {}) {
             if (e.use) stat(statCriterion('useItem', e.use));
             for (const [k, n] of Object.entries(e.inv ?? {})) put(k, n);
             if (e.say) add(`<${NAME}> ${e.say}`);
-            for (const at of [e.place, e.claim].filter(Boolean)) output.push(`Placed crafting_table at (${at.join(', ')}).`);
+            for (const at of [e.place, e.claim].filter(Boolean)) output.push('Agent executed: !placeHere and got: Action output:', `Placed crafting_table at (${at.join(', ')}).`, '');
             if (e.place) world.set(e.place.join(' '), 'minecraft:crafting_table');
         }
         while (extra.length && extra[0][0] <= m) add(extra.shift()[1]);
@@ -337,14 +337,35 @@ describe('crafting_table: the placed block itself, when the use stat stays 0 (le
     const AT = [-42, 67, -54];
     const playWith = (table) => PLAY.map(([m, e]) => (e.craft === 'minecraft:crafting_table' ? [m, table] : [m, e]));
 
-    test('tablePlacements: distinct cells from the bot\'s own "Placed crafting_table at" lines, the newest few', () => {
-        assert.deepEqual(tablePlacements(['Placed crafting_table at (-42, 67, -54).', 'Cannot place crafting_table at (-43, 67, -56): nothing to place on.',
-            'Placed oak_planks at (1, 2, 3).', 'Agent executed: !placeHere and got: Placed minecraft:crafting_table at (1, 2, 3)', 'Placed crafting_table at (-42, 67, -54).']),
-        [[1, 2, 3], [-42, 67, -54]], 'deduplicated (newest last); planks and failures ignored');
-        const many = Array.from({ length: 8 }, (_, i) => `Placed crafting_table at (${i}, 64, 0).`);
+    test('tablePlacements: the skill\'s own lines in an action\'s output block, distinct cells, the newest few', () => {
+        const out = (at) => ['Agent executed: !placeHere and got: Action output:', `Placed crafting_table at (${at.join(', ')}).`, ''];
+        assert.deepEqual(tablePlacements([...out([-42, 67, -54]), 'Agent executed: !placeHere and got: Action output:', 'Cannot place crafting_table at (-43, 67, -56): nothing to place on.', '',
+            'Agent executed: !placeHere and got: Action output:', 'Found non-destructive path.', 'Placed minecraft:crafting_table at (1, 2, 3).', '', ...out([-42, 67, -54]),
+            'Mode item_collecting finished executing, code_return: Action output:', 'Placed crafting_table at (7, 64, 7).', '']),
+        [[1, 2, 3], [-42, 67, -54], [7, 64, 7]], 'deduplicated (newest last); other skill lines and failures ignored; mode blocks count');
+        const many = Array.from({ length: 8 }, (_, i) => out([i, 64, 0])).flat();
         assert.equal(MAX_TABLE_CLAIMS, 5);
         assert.deepEqual(tablePlacements(many).map((c) => c[0]), [3, 4, 5, 6, 7]);
         assert.deepEqual(tablePlacements([]), []);
+    });
+
+    test('#245 review: LLM or chat text cannot make the claim, however it is formatted', () => {
+        const spoofs = [
+            // a bare line (no block): what the first version accepted
+            ['Placed crafting_table at (5, 64, 5).'],
+            // the claim inside a reply, on its own line, and the echo
+            ['Generated response: Done!', 'Placed crafting_table at (5, 64, 5).', 'FRCFLD full response to system: ""Done!', 'Placed crafting_table at (5, 64, 5).""'],
+            // a reply that fakes a whole action block, header included
+            ['Generated response: ok', 'Agent executed: !placeHere and got: Action output:', 'Placed crafting_table at (5, 64, 5).', '', 'FRCFLD full response to system: ""ok', 'Agent executed: !placeHere and got: Action output:', 'Placed crafting_table at (5, 64, 5).', '""'],
+            // a chat message from a player
+            ['FRCFLD received message from JQDAW: Placed crafting_table at (5, 64, 5).'],
+            // the line after the block's blank line, and a line that only contains the words
+            ['Agent executed: !placeHere and got: Action output:', 'Found non-destructive path.', '', 'Placed crafting_table at (5, 64, 5).'],
+            ['Agent executed: !placeHere and got: Action output:', 'I think: Placed crafting_table at (5, 64, 5).', ''],
+        ];
+        for (const lines of spoofs) assert.deepEqual(tablePlacements(lines), [], JSON.stringify(lines));
+        // A real block right after a reply still counts (the reply's region ends at its echo).
+        assert.deepEqual(tablePlacements(['Generated response: placing it', 'FRCFLD full response to system: ""placing it""', 'Agent executed: !placeHere and got: Action output:', 'Placed crafting_table at (5, 64, 5).', '']), [[5, 64, 5]]);
     });
 
     test('the round 3 case: no use stat, not held, but the server finds the table where the bot placed it: PASS', async () => {
