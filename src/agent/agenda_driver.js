@@ -10,8 +10,9 @@
 import settings from './settings.js';
 import * as world from './library/world.js';
 import { countItem, formatName } from './library/rotn_names.js';
-import { itemVariants } from './library/rotn_sources.js';
+import { itemVariants, toolLevels } from './library/rotn_sources.js';
 import { cobbleChoices } from './library/cobble.js';
+import { isSturdy, placeableDirt, minutesToSunset } from './library/night.js';
 import { safeError } from './safe_error.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
@@ -57,6 +58,14 @@ export function agendaState(bot) {
         near: (block) => !!world.getNearestBlock(bot, block, 16),
         // the cobblestones the held rocks make, most rocks first (G3 round 3 A)
         cobble: () => cobbleChoices(bot),
+        // G3 round 6 B: the shelter's blocks held (every cobblestone and stone of the pack), and the
+        // minutes of running time to sunset (Infinity when the time is not known).
+        shelterBlocks: () => (bot.inventory?.items?.() ?? [])
+            .filter(i => isSturdy({ name: i.name, metadata: i.metadata ?? 0 })).reduce((n, i) => n + i.count, 0),
+        minutesToSunset: () => (Number.isFinite(bot.time?.timeOfDay) ? minutesToSunset(bot.time.timeOfDay) : Infinity),
+        // #284 review 2: any pickaxe held; the dirt blocks held or made from the dirt piles held.
+        hasPickaxe: () => toolLevels(bot, 'pickaxe').length > 0,
+        dirtBlocks: () => placeableDirt(bot.inventory?.items?.() ?? []),
     };
 }
 
@@ -67,6 +76,7 @@ export function agendaGoal(agenda, step, state = null) {
     if (state && typeof step.goalNow === 'function') {
         try { text = step.goalNow(state) || step.goal; } catch { text = step.goal; }
     }
+    if (step.reserve) return `RotN agenda, step ${step.id} (before night): ${text} When you hold enough, the agenda moves on by itself.`;
     return `RotN agenda, step ${n} of ${agenda.steps.length} (${step.id}): ${text} `
         + 'When this step is done, the agenda moves on by itself.';
 }
@@ -118,11 +128,20 @@ export const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
  */
 export function agendaTick(agent, { now = Date.now() } = {}) {
     const agenda = agent.agenda;
-    if (!agenda?.active) return null;
+    if (!agenda?.active && !agenda?.finished) return null;
     if (now - (agent._agenda_tick_at ?? -Infinity) < TICK_MS) return null;
     const last = agent._agenda_tick_at;
     agent._agenda_tick_at = now;
     const sp = agent.self_prompter;
+    // "agenda done": only the before-night reserve runs (G3 round 6 B), and otherwise nothing is
+    // touched (the model's own goal, a giver's goal), as before.
+    if (!agenda.active && !agenda.reserveWanted(agendaState(agent.bot))) {
+        if (agent._agenda_step === agenda.reserve?.id) {
+            if (sp.isActive() && ownsPrompt(agent)) sp.stop(false);
+            agent._agenda_step = null;
+        }
+        return null;
+    }
 
     if (settings.pause_when_empty && !othersOnline(agent)) {
         if (sp.isActive()) sp.stop(false);
@@ -158,7 +177,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     else if (newlyDone.length > 1) say(agent, `agenda steps done: ${newlyDone.map(s => s.id).join(', ')}`);
     if (!step) {
         say(agent, 'agenda done');
-        agenda.stop();
+        agenda.finish();
         if (sp.isActive()) sp.stop(false);
         agent._agenda_step = null;
         return 'done';
@@ -166,10 +185,14 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
 
     const goal = agendaGoal(agenda, step, state);
     if (agent._agenda_step !== step.id) {
+        const prev = agent._agenda_step;
         agent._agenda_step = step.id;
         agent._agenda_stopped_at = undefined;
-        // After a task (E3) the agenda says it resumed, not that the step started anew.
-        const resumed = agent._agenda_preempted;
+        // After a task (E3) the agenda says it resumed, not that the step started anew; so does
+        // the step the before-night reserve interrupted (G3 round 6 B), when the reserve is done.
+        const fromReserve = prev != null && prev === agenda.reserve?.id && agent._agenda_before_reserve === step.id;
+        if (step.reserve) agent._agenda_before_reserve = prev;
+        const resumed = agent._agenda_preempted || fromReserve;
         agent._agenda_preempted = false;
         say(agent, resumed ? `agenda resumed: ${step.id}` : `agenda step ${step.id} started: ${step.short}`);
         driveTo(agent, goal); // the self-prompter's next prompt uses it
@@ -193,6 +216,14 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     let why = null;
     if (spent.llm_ms >= budget.llm_ms) why = `${minutes(spent.llm_ms)} of self-prompting`;
     else if (!sp.isActive() && spent.attempts >= budget.attempts) why = `${spent.attempts} self-prompter runs`;
+    if (why && step.reserve) {
+        // The reserve does not pause the agenda: the shelter crafts what it can at dusk.
+        if (sp.isActive()) sp.stop(false);
+        agenda.reserveOff = true;
+        agent._agenda_step = null;
+        say(agent, `agenda step ${step.id} stuck: ${why}; going on without it until the night`);
+        return 'stuck';
+    }
     if (why) {
         if (sp.isActive()) sp.stop(false);
         agenda.markStuck(step.id, why);

@@ -1,6 +1,8 @@
 // Building the first-night shelter (skills-rotn D2b): a closed 1x2 space whose walls and roof are
-// sturdy (rock, a full cube, stone's hardness or more; night.js isSturdy). RotN's mobs dig through
-// dirt and wood, so those are replaced. The bot builds from inside, so upstream placeBlock (which
+// sturdy (night.js isSturdy: rock of stone's hardness or more, or any cobblestone or stone of the
+// pack's ore dictionary; always a full cube). RotN's mobs dig through dirt and wood, so those are
+// replaced; dirt is only the fallback when sturdy blocks or a pickaxe are missing (G3 round 6 B).
+// The bot builds from inside, so upstream placeBlock (which
 // walks away from a target closer than 1.1 blocks) is not used. No light is placed.
 //
 // The floor is kept when it is a solid block, sturdy or not: replacing it means digging under the
@@ -12,10 +14,12 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { isSturdy, shelterShell, dumpState } from './night.js';
-import { loadRotnData, PACK_VERSION, registryName } from '../../../packages/rotn-data/index.js';
+import { isSturdy, isSoftWall, isWall, handDiggable, dirtPileRecipes, shelterShell, dumpState } from './night.js';
+import { loadRotnData, PACK_VERSION, registryName, botName } from '../../../packages/rotn-data/index.js';
+import { formatName } from './rotn_names.js';
 import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
-import { log, breakBlockAt, goToGoal } from './skills.js';
+import { cobbleChoices } from './cobble.js';
+import { log, breakBlockAt, goToGoal, craftRecipe } from './skills.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const SIX = [new Vec3(0, -1, 0), ...HORIZONTAL, new Vec3(0, 1, 0)];
@@ -48,6 +52,13 @@ export function shelterItems(bot) {
         .sort((a, b) => (b.name === 'cobblestone') - (a.name === 'cobblestone') || b.count - a.count);
 }
 
+/** Inventory stacks of the fallback block (dirt), the biggest first (G3 round 6 B). */
+export function softItems(bot) {
+    return bot.inventory.items()
+        .filter(i => isSoftWall({ name: i.name, metadata: i.metadata ?? 0 }))
+        .sort((a, b) => b.count - a.count);
+}
+
 const countOf = (items) => items.reduce((n, i) => n + i.count, 0);
 
 /** The walls (4 sides x 2, lower first) and the roof of the 1x2 space at feet, in build order. */
@@ -77,7 +88,7 @@ function propFor(roof, solidAt, emptyAt) {
  * null when the site cannot be used at all: the floor is not solid, the 1x2 space is not free, a
  * shell cell is lava or fire, or a block is not loaded.
  */
-export function siteNeeds(bot, feet) {
+export function siteNeeds(bot, feet, { accept = isSturdy } = {}) {
     const p = new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
     if (!isSolid(bot.blockAt(p.offset(0, -1, 0)))) return null;
     if (!isEmpty(bot.blockAt(p)) || !isEmpty(bot.blockAt(p.offset(0, 1, 0)))) return null;
@@ -93,7 +104,7 @@ export function siteNeeds(bot, feet) {
     let blocks = 0, unsafe = null;
     for (const pos of order) {
         const b = bot.blockAt(pos);
-        if (isSturdy(b)) continue;
+        if (accept(b)) continue;
         todo.push(pos);
         if (!isEmpty(b) && !isLiquid(b)) { // dug first
             const above = bot.blockAt(pos.offset(0, 1, 0));
@@ -111,21 +122,26 @@ export function siteNeeds(bot, feet) {
         else unsupported.push(pos);
         blocks++;
     }
-    return { feet: p, todo, blocks, unsupported, unsafe };
+    // A side the bot can dig out of by hand (both cells filled with dirt or already hand-diggable):
+    // what a shelter built without a pickaxe needs (G3 round 6 B).
+    const filled = new Set(todo.map(key));
+    const byHand = (q) => filled.has(key(q)) || handDiggable(bot.blockAt(q));
+    const handExit = HORIZONTAL.some(d => byHand(p.plus(d)) && byHand(p.plus(d).offset(0, 1, 0)));
+    return { feet: p, todo, blocks, unsupported, unsafe, handExit };
 }
 
 /**
  * The site within `radius` (and 2 up or down) that needs the fewest blocks, then the nearest. Only
  * sites where digging is safe and every cell has a support face count (#195 review 1 and 3).
  */
-export function chooseSite(bot, radius = 4) {
+export function chooseSite(bot, radius = 4, { accept = isSturdy, handExit = false } = {}) {
     const base = bot.entity.position.floored();
     let best = null;
     for (let dy = -2; dy <= 2; dy++)
         for (let dx = -radius; dx <= radius; dx++)
             for (let dz = -radius; dz <= radius; dz++) {
-                const need = siteNeeds(bot, base.offset(dx, dy, dz));
-                if (!need || need.unsafe || need.unsupported.length > 0) continue;
+                const need = siteNeeds(bot, base.offset(dx, dy, dz), { accept });
+                if (!need || need.unsafe || need.unsupported.length > 0 || (handExit && !need.handExit)) continue;
                 const score = need.blocks * 4 + Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
                 if (!best || score < best.score) best = { ...need, score };
             }
@@ -174,9 +190,12 @@ export function mobIn(bot, cell) {
         && e.position.y > cell.y - (e.height ?? 1.8) && e.position.y < cell.y + 1) ?? null;
 }
 
-/** One placement of a sturdy block at target against a solid neighbour outside the 1x2 space. */
-async function placeOnce(bot, target, interior) {
-    const item = shelterItems(bot)[0];
+/**
+ * One placement at target against a solid neighbour outside the 1x2 space. mode.items(bot): the
+ * stacks to place, best first; mode.accept(block): what counts as a wall.
+ */
+async function placeOnce(bot, target, interior, mode) {
+    const item = mode.items(bot)[0];
     if (!item) return false;
     const mob = mobIn(bot, target);
     if (mob) {
@@ -195,22 +214,80 @@ async function placeOnce(bot, target, interior) {
     } catch {
         // mineflayer can throw although the block was placed (a late or missed update): look.
     }
-    return isSturdy(bot.blockAt(target));
+    return mode.accept(bot.blockAt(target));
 }
 
 /**
- * Make one cell sturdy: place, and when the block is not there, wait for a late update, look
+ * Make one cell a wall: place, and when the block is not there, wait for a late update, look
  * again and try once more (#195 review 4).
  */
-async function fillCell(bot, target, interior) {
+async function fillCell(bot, target, interior, mode) {
     for (let attempt = 0; attempt < 2; attempt++) {
-        if (isSturdy(bot.blockAt(target))) return true;
+        if (mode.accept(bot.blockAt(target))) return true;
         if (!isEmpty(bot.blockAt(target)) && !isLiquid(bot.blockAt(target))) return false;
-        if (await placeOnce(bot, target, interior)) return true;
+        if (await placeOnce(bot, target, interior, mode)) return true;
         await sleep(LATE_UPDATE_MS);
-        if (isSturdy(bot.blockAt(target))) return true;
+        if (mode.accept(bot.blockAt(target))) return true;
     }
     return false;
+}
+
+/** The refusal for a plan that cannot be built, or null. */
+function planProblem(plan, site, radius, handExit) {
+    if (!plan)
+        return site ? `Cannot repair the shelter at ${at(site.floored())}: the space or its floor is not usable.`
+            : `Found no place for a shelter within ${radius} blocks (needs a solid floor, a free 1x2 space, safe digging and a face for every block${handExit ? ', and a side you can dig out by hand' : ''}).`;
+    if (plan.unsafe) return `Cannot build the shelter at ${at(plan.feet)}: ${plan.unsafe}.`;
+    // chooseSite never returns such a site; a site the caller names is checked too (#195 nit).
+    if (plan.unsupported.length > 0)
+        return `Cannot build the shelter at ${at(plan.feet)}: nothing to place a block against at ${plan.unsupported.map(at).join('; ')}.`;
+    if (handExit && !plan.handExit) return `Cannot build the shelter at ${at(plan.feet)}: no side of it could be dug out by hand.`;
+    return null;
+}
+
+/**
+ * Craft more shelter blocks from what the bot holds, before giving up (G3 round 6 B: 44 rocks and
+ * 32 dirt piles were held at dusk): cobblestone from rocks (each rock kind makes its own), dirt
+ * from dirt piles. The caller counts again afterwards.
+ */
+async function craftMore(bot, what, short, craft) {
+    if (short <= 0) return;
+    try {
+        if (what === 'cobblestone' && cobbleChoices(bot).length > 0) {
+            log(bot, `The shelter needs ${short} more sturdy blocks: making cobblestone from your rocks.`);
+            await craft(bot, 'cobblestone', short);
+        } else if (what === 'dirt') {
+            // Each kind of pile by its own recipe (#284 nit): BWM's dirt pile makes minecraft:dirt,
+            // the loamy, sandy and silty piles make Biomes O' Plenty dirt (rotn-data).
+            let left = short;
+            for (const r of dirtPileRecipes()) {
+                const piles = countOf(bot.inventory.items().filter(i => registryName(i.name) === r.name && (i.metadata ?? 0) === r.meta));
+                const n = Math.min(left, Math.floor(piles / r.per));
+                if (n <= 0) continue;
+                const gives = formatName(botName(r.gives.name), r.gives.meta ?? 0);
+                log(bot, `The shelter needs ${left} more blocks: making ${n} ${gives} from your ${botName(r.name)} (${r.per} each).`);
+                await craft(bot, gives, n);
+                left -= n;
+                if (left <= 0) break;
+            }
+        }
+    } catch (err) {
+        console.warn(`[shelter] could not craft ${what}: ${err?.message ?? err}`);
+    }
+}
+
+/** Whether the bot holds a pickaxe of at least level, after moving one on the cursor or off hand back. */
+async function pickaxeFor(bot, level) {
+    if (toolLevels(bot, 'pickaxe').some(l => l >= level)) return { ok: true, where: '' };
+    // G3 round 2 B: a pickaxe on the cursor or in the off hand is moved back into the inventory
+    // (where every equip path looks), and pending slot updates are awaited, before concluding.
+    const isPick = (i) => /pickaxe/.test(i.name);
+    const moved = await stowCarried(bot, isPick);
+    if (moved.length) log(bot, `Moved ${moved.join(' and ')} back into the inventory.`);
+    if (toolLevels(bot, 'pickaxe').some(l => l >= level)) return { ok: true, where: '' };
+    const where = describeCarried(bot, isPick);
+    console.log(`[shelter] pickaxe check: need level ${level}; ${where}`);
+    return { ok: false, where };
 }
 
 /**
@@ -218,37 +295,61 @@ async function fillCell(bot, target, interior) {
  * no more blocks than another), go there, then make every wall and the roof sturdy, from inside.
  * It needs a pickaxe that can dig the walls, so the bot can always get out again (#195 review 2).
  * Each line it logs comes from the bot's own view of the world, never from a command's chat reply.
- * @param {{site?: Vec3, radius?: number}} [opts] site: repair the shelter at this feet position.
- * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], line: string}>} line: what it logged.
+ *
+ * G3 round 6 B: with too few sturdy blocks, cobblestone is first crafted from the rocks held. Still
+ * too few, or no pickaxe (after a death): dirt is the fallback, crafted from dirt piles when needed.
+ * Without a pickaxe only dirt is placed, and the site needs a side that can be dug out by hand.
+ * @param {{site?: Vec3, radius?: number, keepSoft?: boolean, craft?: Function}} [opts] site: repair the
+ *   shelter at this feet position; keepSoft: its dirt walls stay (the night routine's repairs);
+ *   craft: how blocks are crafted (skills.craftRecipe; tests pass their own).
+ * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], soft: number, line: string}>}
+ *   line: what it logged; soft: the dirt blocks in its walls and roof.
  */
-export async function buildShelter(bot, { site = null, radius = 4 } = {}) {
-    const plan = site ? siteNeeds(bot, site) : chooseSite(bot, radius);
-    const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, line }; };
-    if (!plan)
-        return refuse(null, [], site ? `Cannot repair the shelter at ${at(site.floored())}: the space or its floor is not usable.`
-            : `Found no place for a shelter within ${radius} blocks (needs a solid floor, a free 1x2 space, safe digging and a face for every block).`);
-    const { feet } = plan;
-    if (plan.unsafe) return refuse(feet, plan.todo, `Cannot build the shelter at ${at(feet)}: ${plan.unsafe}.`);
-    // chooseSite never returns such a site; a site the caller names is checked too (#195 nit).
-    if (plan.unsupported.length > 0)
-        return refuse(feet, plan.todo, `Cannot build the shelter at ${at(feet)}: nothing to place a block against at ${plan.unsupported.map(at).join('; ')}.`);
-    const level = exitLevel(bot, feet);
-    if (!toolLevels(bot, 'pickaxe').some(l => l >= level)) {
-        // G3 round 2 B: a pickaxe on the cursor or in the off hand is moved back into the inventory
-        // (where every equip path looks), and pending slot updates are awaited, before concluding.
-        const isPick = (i) => /pickaxe/.test(i.name);
-        const moved = await stowCarried(bot, isPick);
-        if (moved.length) log(bot, `Moved ${moved.join(' and ')} back into the inventory.`);
-        if (!toolLevels(bot, 'pickaxe').some(l => l >= level)) {
-            const where = describeCarried(bot, isPick);
-            console.log(`[shelter] pickaxe check: need level ${level}; ${where}`);
-            return refuse(feet, plan.todo, `Not building a shelter at ${at(feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`
-                + ` Pickaxes: ${where}.`);
+export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, craft = craftRecipe } = {}) {
+    const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, soft: 0, line }; };
+    // 1. A sturdy shelter (rock walls); a repair keeps the dirt walls it has.
+    let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy }) : chooseSite(bot, radius);
+    const problem = planProblem(plan, site, radius, false);
+    const level = problem ? 0 : exitLevel(bot, plan.feet);
+    const pick = await pickaxeFor(bot, level);
+    // Without a pickaxe the dirt-wall search is tried before any refusal (#284 review 3): dirt walls
+    // already there are kept, so a site the sturdy search had to dig at may need no digging.
+    if (problem && pick.ok) return refuse(plan?.feet ?? null, plan?.todo ?? [], problem);
+    const sturdy = () => countOf(shelterItems(bot));
+    if (pick.ok && sturdy() < plan.blocks) await craftMore(bot, 'cobblestone', plan.blocks - sturdy(), craft);
+    let mode = { items: shelterItems, accept: keepSoft ? isWall : isSturdy };
+
+    // 2. The dirt fallback: too few sturdy blocks, or no pickaxe to dig out of rock.
+    if (!pick.ok || sturdy() < plan.blocks) {
+        const handExit = !pick.ok;
+        const soft = site ? siteNeeds(bot, site, { accept: isWall }) : chooseSite(bot, radius, { accept: isWall, handExit });
+        // With a pickaxe, the fallback site (it may be another one) must still be one to get out of.
+        const softProblem = planProblem(soft, site, radius, handExit)
+            ?? (pick.ok && !soft.handExit && !toolLevels(bot, 'pickaxe').some(l => l >= exitLevel(bot, soft.feet))
+                ? `Cannot build the shelter at ${at(soft.feet)}: your pickaxe could not dig out of its walls.` : null);
+        // Without a pickaxe only dirt goes in: the bot must be able to dig itself out by hand.
+        const items = (b) => (pick.ok ? [...shelterItems(b), ...softItems(b)] : softItems(b));
+        if (!softProblem && countOf(items(bot)) < soft.blocks) await craftMore(bot, 'dirt', soft.blocks - countOf(items(bot)), craft);
+        const have = countOf(items(bot));
+        if (!softProblem && have >= soft.blocks) {
+            plan = soft;
+            mode = { items, accept: isWall };
+            log(bot, `Building the shelter with dirt too${pick.ok ? '' : ' (no pickaxe: dirt can be dug out by hand)'}; mobs can dig through dirt.`);
+        } else {
+            const dirt = countOf(softItems(bot));
+            const fallback = softProblem ? `the dirt fallback does not fit here either (${softProblem.replace(/\.$/, '')})`
+                : `a shelter with dirt needs ${soft.blocks} blocks, and you have ${have}${pick.ok ? '' : ' dirt'}`;
+            if (!pick.ok && problem)
+                return refuse(plan?.feet ?? soft?.feet ?? null, plan?.todo ?? [], `Not building a shelter: ${problem.replace(/\.$/, '')}. Without a pickaxe only dirt would do`
+                    + ` (Pickaxes: ${pick.where}), but ${fallback}.`);
+            if (!pick.ok)
+                return refuse(plan.feet, plan.todo, `Not building a shelter at ${at(plan.feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`
+                    + ` Pickaxes: ${pick.where}. A dirt shelter could be dug out by hand, but ${fallback}.`);
+            return refuse(plan.feet, plan.todo, `A shelter at ${at(plan.feet)} needs ${plan.blocks} sturdy blocks (cobblestone or stone); you have ${sturdy()}.`
+                + (dirt > 0 || softProblem ? ` And ${fallback}.` : ''));
         }
     }
-    const have = countOf(shelterItems(bot));
-    if (have < plan.blocks)
-        return refuse(feet, plan.todo, `A shelter at ${at(feet)} needs ${plan.blocks} sturdy blocks (cobblestone or stone); you have ${have}.`);
+    const { feet } = plan;
 
     if (!bot.entity.position.floored().equals(feet)) {
         try { await goToGoal(bot, new pf.goals.GoalBlock(feet.x, feet.y, feet.z)); } catch { /* checked below */ }
@@ -267,26 +368,28 @@ export async function buildShelter(bot, { site = null, radius = 4 } = {}) {
         for (const pos of wallsAndRoof(feet)) {
             if (bot.interrupt_code) break;
             const b = bot.blockAt(pos);
-            if (isSturdy(b)) continue;
+            if (mode.accept(b)) continue;
             if (!isEmpty(b) && !isLiquid(b)) {
                 if (!await breakBlockAt(bot, pos.x, pos.y, pos.z)) continue;
             }
             if (pos.equals(roof) && !supportFor(roof, interior, (q) => isSolid(bot.blockAt(q)))) {
                 // Nothing next to the roof cell: hold it up with one block on top of a finished wall.
-                const prop = propFor(roof, (q) => isSturdy(bot.blockAt(q)), (q) => isEmpty(bot.blockAt(q)));
-                if (prop && await fillCell(bot, prop, interior)) placed++;
+                const prop = propFor(roof, (q) => mode.accept(bot.blockAt(q)), (q) => isEmpty(bot.blockAt(q)));
+                if (prop && await fillCell(bot, prop, interior, mode)) placed++;
             }
-            if (await fillCell(bot, pos, interior)) placed++;
+            if (await fillCell(bot, pos, interior, mode)) placed++;
         }
     } finally {
         bot.rotnStationary = false;
     }
-    const missing = wallsAndRoof(feet).filter(q => !isSturdy(bot.blockAt(q)));
+    const missing = wallsAndRoof(feet).filter(q => !mode.accept(bot.blockAt(q)));
+    const soft = wallsAndRoof(feet).filter(q => !isSturdy(bot.blockAt(q)) && isSoftWall(bot.blockAt(q))).length;
     const floor = bot.blockAt(feet.offset(0, -1, 0));
     const floorNote = isSturdy(floor) ? '' : ` The floor is ${floor?.name ?? 'unknown'}, not rock.`;
+    const softNote = soft > 0 ? ` ${soft} of its walls and roof are dirt, which mobs can dig through.` : '';
     const line = missing.length === 0
-        ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${floorNote}`
+        ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${softNote}${floorNote}`
         : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(at).join('; ')}); placed ${placed}.`;
     log(bot, line);
-    return { closed: missing.length === 0, feet, placed, missing, line };
+    return { closed: missing.length === 0, feet, placed, missing, soft, line };
 }
