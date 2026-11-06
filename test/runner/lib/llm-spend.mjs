@@ -30,9 +30,12 @@ export const LLM_REQUEST_ERROR = 'Error while awaiting response';
 /**
  * openrouter.js's line per completion (lead, #271): "[openrouter] provider <name>, finish_reason <reason>,
  * content <n|null> chars". Both fields are sanitised to [\w .-] (others become ?), at most 40 characters.
- * Content null or 0 is an empty answer.
+ * Content null or 0 is an empty answer. An empty provider name (a completion without one) is accepted and
+ * counted as EMPTY_PROVIDER (#273 review 3; openrouter.js is to log "unknown" for it as well).
  */
-export const PROVIDER_LINE = /^\[openrouter\] provider ([\w .?-]{1,40}), finish_reason ([\w .?-]{1,40}), content (\d+|null) chars$/;
+export const PROVIDER_LINE = /^\[openrouter\] provider ([\w .?-]{0,40}), finish_reason ([\w .?-]{0,40}), content (\d+|null) chars$/;
+/** The name an empty provider field is counted under. */
+export const EMPTY_PROVIDER = '(none)';
 export const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /** The test-mode overrides of the spend machinery; never honoured in a real batch (#122 review). */
@@ -148,10 +151,11 @@ export function countLlmReplies(lines) {
         if (l.startsWith(LLM_EMPTY_REPLY)) empty++;
         const p = PROVIDER_LINE.exec(l);
         if (p) {
-            const s = prov(p[1]);
+            const name = p[1] || EMPTY_PROVIDER;
+            const s = prov(name);
             s.requests++;
             if (p[3] === 'null' || p[3] === '0') s.empty++;
-            summary?.providers.push(p[1]);
+            summary?.providers.push(name);
         }
         if (l.startsWith(LLM_REQUEST_ERROR) && summary) summary.requestError = true;
         if (l.startsWith(LLM_MEMORY_START)) {
@@ -170,7 +174,11 @@ export function countLlmReplies(lines) {
         }
         if (l.startsWith(MEMORY_RETURNED_LINE) || l.startsWith(MEMORY_THROW_LINE)) {
             summary ??= { providers: [], requestError: true };
-            closeSummary(l.startsWith(MEMORY_THROW_LINE) || l.includes(LLM_FAILED_REPLY) ? 'failed' : 'empty');
+            const failed = l.startsWith(MEMORY_THROW_LINE) || l.includes(LLM_FAILED_REPLY);
+            // A failed summary request completed nothing, so a completion seen while it was open belongs to
+            // another request: never charge that provider with the failure (#273 review 2).
+            if (failed) summary.requestError = true;
+            closeSummary(failed ? 'failed' : 'empty');
         }
         const m = /\bError \[(\d{3})\]/.exec(l);
         if (m) httpErrors[m[1]] = (httpErrors[m[1]] ?? 0) + 1;
