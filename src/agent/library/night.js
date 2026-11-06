@@ -17,7 +17,7 @@
 // Sturdiness comes from rotn-data's dump, never from bot.registry: forge-bridge gives
 // a modded block without known properties hardness 1.5 and no material (#181 review).
 import { Vec3 } from 'vec3';
-import { getBlock, registryName } from '../../../packages/rotn-data/index.js';
+import { getBlock, registryName, loadRotnData, howToGet, PACK_VERSION, WILDCARD_META } from '../../../packages/rotn-data/index.js';
 
 export const NIGHT_START = 12542;
 export const NIGHT_END = 23460;
@@ -115,15 +115,104 @@ export function dumpState(block) {
     return states.find(s => s.meta === meta) ?? (states.length === 1 ? states[0] : null);
 }
 
+const oreCache = new Map();
+/** rotn-data's ore dictionary members ({name, meta}); cached only when it loaded. */
+function oreMembers(ore) {
+    if (oreCache.has(ore)) return oreCache.get(ore);
+    let members = [];
+    try { members = loadRotnData(PACK_VERSION).oreDict(ore) ?? []; } catch { members = []; }
+    if (members.length) oreCache.set(ore, members);
+    return members;
+}
+
+/** Whether a block or item ({name, metadata}) is in a rotn-data ore ("cobblestone", "stone", "dirt"). */
+export function inOre(ore, thing) {
+    let name = null;
+    try { name = registryName(thing?.name); } catch { name = null; }
+    if (!name) return false;
+    const meta = Number.isInteger(thing.metadata) ? thing.metadata : 0;
+    return oreMembers(ore).some(m => m.name === name && (m.meta == null || m.meta === WILDCARD_META || m.meta === meta));
+}
+
+/** The ores whose members are the pack's cobblestones and stones (rotn-data's oredict.json). */
+export const STURDY_ORES = ['cobblestone', 'stone'];
+/** The ore of the fallback building block: dirt (mobs dig through it, but it closes a shelter). */
+export const SOFT_ORES = ['dirt'];
+
+const wholeBlock = (st) => !!st && st.fullCube === true && st.solid !== false;
+
 /**
  * A block mobs cannot simply dig or burn through, judged by the dump: rock material, a full
  * cube (no slab, stair or wall: they leave gaps), and at least stone's hardness (netherrack is
  * rock but 0.4; silverfish stone is clay). A block the dump does not know is not sturdy.
+ * G3 round 6 B: every cobblestone and stone of the pack counts too, from rotn-data's ore
+ * dictionary (Underground Biomes cobble and stone, contenttweaker:chalk_cobble, ...), whatever its
+ * hardness: soapstone cobble (undergroundbiomes:metamorphic_cobble:6) is 1.2, and 11 of them
+ * counted as 0 sturdy blocks.
  */
 export function isSturdy(block) {
     const st = dumpState(block);
-    return !!st && st.material === 'rock' && st.fullCube === true && Number(st.hardness) >= 1.5;
+    if (!wholeBlock(st)) return false;
+    if (st.material === 'rock' && Number(st.hardness) >= 1.5) return true;
+    return STURDY_ORES.some(ore => inOre(ore, block));
 }
+
+/**
+ * The fallback building block (G3 round 6 B, the lead): a whole block in rotn-data's dirt ore that
+ * is dug by hand (no tool required). A shelter of it keeps the night out until a mob digs, and the
+ * bot can dig itself out again without a pickaxe.
+ */
+export function isSoftWall(block) {
+    const st = dumpState(block);
+    return wholeBlock(st) && st.toolRequired === false && SOFT_ORES.some(ore => inOre(ore, block));
+}
+
+let pileCache = null;
+/**
+ * The dirt piles that make a dirt block in the inventory grid: [{name, meta, per, gives}] (registry
+ * names), from rotn-data's recipes for the dirt ore's blocks whose one input is a pileDirt member.
+ * On 3.3.4 only betterwithmods:dirt_pile (4 -> minecraft:dirt); the other four piles make other
+ * blocks (#284 nit). Cached only when found.
+ */
+export function dirtPileRecipes() {
+    if (pileCache) return pileCache;
+    const piles = oreMembers('pileDirt');
+    const out = [];
+    for (const name of new Set(oreMembers('dirt').map(m => m.name))) {
+        let ways = [];
+        try { ways = howToGet(name)?.ways ?? []; } catch { ways = []; }
+        for (const w of ways) {
+            if (w.kind !== 'craft' || w.requiresTable || w.inputs?.length !== 1) continue;
+            const input = w.inputs[0];
+            for (const c of input.choices ?? []) {
+                if (piles.some(p => p.name === c.name) && isSoftWall({ name: w.gives.name, metadata: w.gives.meta ?? 0 }))
+                    out.push({ name: c.name, meta: c.meta ?? 0, per: input.count, gives: w.gives });
+            }
+        }
+    }
+    if (out.length) pileCache = out;
+    return out;
+}
+
+/**
+ * The dirt blocks a set of stacks can put in a wall: dirt held, plus what the piles held make.
+ * @param {Array<{name: string, metadata?: number, count: number}>} items
+ */
+export function placeableDirt(items) {
+    let blocks = 0;
+    for (const i of items) if (isSoftWall({ name: i.name, metadata: i.metadata ?? 0 })) blocks += i.count;
+    for (const r of dirtPileRecipes()) {
+        const piles = items.filter(i => registryName(i.name) === r.name && (i.metadata ?? 0) === r.meta).reduce((k, i) => k + i.count, 0);
+        blocks += Math.floor(piles / r.per);
+    }
+    return blocks;
+}
+
+/** A shelter wall: sturdy, or the dirt fallback. */
+export const isWall = (block) => isSturdy(block) || isSoftWall(block);
+
+/** Whether a block can be dug without a tool (the dump's toolRequired is false). */
+export const handDiggable = (block) => dumpState(block)?.toolRequired === false;
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 

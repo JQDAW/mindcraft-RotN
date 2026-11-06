@@ -21,6 +21,7 @@
 // (E3 adds "agenda paused for task <id>" and "agenda resumed: <id>".)
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { SHELTER_LEAD_MIN } from './library/night.js';
 
 /**
  * RotN's first day, docs/research/rotn-progression.md section 3, steps 1-9. A rock is any
@@ -107,15 +108,71 @@ export const ROTN_EARLY_GAME = [
     },
 ];
 
+/** Sturdy blocks kept for the night's shelter (10 on open ground: 8 walls, a roof and its prop). */
+export const SHELTER_RESERVE = 10;
+/**
+ * The reserve is due this many minutes of running time before sunset (the night routine starts at
+ * SHELTER_LEAD_MIN). With the measured cycle (night.js) only about 8 min run between the morning
+ * freeze (3001) and sunset, and minutesToSunset does not count a freeze the time is already in:
+ * so the reserve is due from the morning freeze on, about 12 min before the night routine.
+ */
+export const RESERVE_LEAD_MIN = SHELTER_LEAD_MIN + 4;
+
+/**
+ * G3 round 6 B (the lead): before dusk the agenda keeps at least 9 sturdy blocks for the shelter.
+ * Not a step of the list: it is judged anew every day, comes before the current step while the
+ * night is near and the bot holds too few, and runs after "agenda done" too. s.minutesToSunset()
+ * and s.shelterBlocks() (every cobblestone and stone of the pack, night.js isSturdy) come from the
+ * driver; a state without them never makes it due.
+ */
+// #284 review 2 (lead decision): with no pickaxe held, a shelter must be one the bot can dig out of
+// by hand, and the reserve never sends the bot on a rock run before the pickaxe step. With a
+// pickaxe, it asks for sturdy blocks. #284 review 3: with no pickaxe the shelter places only dirt
+// (shelter.js), so only placeable dirt counts then (held, or what its dirt piles make): 10
+// cobblestone and no dirt is not a reserve.
+const noPickaxe = (s) => s.hasPickaxe?.() === false;
+const reserveHave = (s) => (noPickaxe(s) ? (s.dirtBlocks?.() ?? 0) : (s.shelterBlocks?.() ?? 0));
+
+export const SHELTER_RESERVE_STEP = {
+    id: 'shelter_blocks', short: `keep ${SHELTER_RESERVE} blocks for the night's shelter`,
+    reserve: true,
+    // Not at night (minutesToSunset is 0 from sunset to sunrise; #284 review 1): the night routine
+    // shelters then, and nothing may send the bot out for blocks in the dark.
+    due: (s) => { const m = s.minutesToSunset?.() ?? Infinity; return m > 0 && m <= RESERVE_LEAD_MIN; },
+    done: (s) => reserveHave(s) >= SHELTER_RESERVE,
+    // Only when goalNow fails: both cases, as goalNow tells them apart.
+    goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1), and mine stone with the pickaxe for more rocks. If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt with !collectBlocks("dirt", ${SHELTER_RESERVE}) (dirt piles count too, 4 piles make one dirt). Keep these blocks for the night: do not place them.`,
+    goalNow: (s) => {
+        const have = reserveHave(s);
+        const mins = Math.max(1, Math.round((s.minutesToSunset?.() ?? 0) - SHELTER_LEAD_MIN));
+        if (noPickaxe(s)) {
+            return `Night is near: in about ${mins} min the night routine builds a shelter. You have no pickaxe yet, so it is built of dirt, which you can dig out of by hand in the morning. `
+                + `It needs ${SHELTER_RESERVE} blocks on open ground, and you have ${have} (dirt, and dirt from your dirt piles). `
+                + `Dig dirt by hand with !collectBlocks("dirt", ${SHELTER_RESERVE - have}): dirt dug without a shovel may drop dirt piles instead, and 4 piles make one dirt, so they count too. `
+                + 'Keep these blocks for the night: do not place them.';
+        }
+        const head = `Night is near: in about ${mins} min the night routine builds a shelter from sturdy blocks (any cobblestone or stone). It needs ${SHELTER_RESERVE} on open ground, and you have ${have}. `;
+        const c = s.cobble?.()[0];
+        const how = c
+            ? `Your ${c.rock} rocks make ${c.gives}, 4 rocks each: craft it with !craftRecipe("cobblestone", ${Math.min(Math.floor(c.have / 4), SHELTER_RESERVE - have)}). `
+            : 'Collect rocks with !collectBlocks("pyrotech:rock", 8) (rock piles break by hand; stone mined with a stone pickaxe gives rocks), then make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1). ';
+        return head + how + 'Keep these blocks for the night: do not place them.';
+    },
+};
+
 export class Agenda {
     /**
      * @param {string} botName
-     * @param {{dir?: string, steps?: Array, now?: () => number}} [opts]
+     * @param {{dir?: string, steps?: Array, now?: () => number, reserve?: object|null}} [opts]
+     *   reserve: the before-night step (SHELTER_RESERVE_STEP; null for none)
      */
-    constructor(botName, { dir = `./bots/${botName}`, steps = ROTN_EARLY_GAME, now = Date.now } = {}) {
+    constructor(botName, { dir = `./bots/${botName}`, steps = ROTN_EARLY_GAME, now = Date.now, reserve = SHELTER_RESERVE_STEP } = {}) {
         this.file = path.join(dir, 'agenda.json');
         this.steps = steps;
         this.now = now;
+        this.reserve = reserve;
+        this.reserveOff = false; // its budget ran out: not again until the night is past
+        this.finished = false; // "agenda done": only the reserve runs
         this.active = false;
         this.done_at = {}; // step id -> when it was first seen done
         this.spent = {}; // step id -> {attempts, llm_ms}: the self-prompter's runs for it (#164 review)
@@ -134,6 +191,7 @@ export class Agenda {
             this.done_at = data.done_at && typeof data.done_at === 'object' ? data.done_at : {};
             this.spent = data.spent && typeof data.spent === 'object' ? data.spent : {};
             this.stuck = data.stuck && typeof data.stuck.id === 'string' ? data.stuck : null;
+            this.finished = data.finished === true;
             this.existed = true;
         } catch (err) {
             const aside = `${this.file}.corrupt-${this.now()}`;
@@ -147,7 +205,7 @@ export class Agenda {
         try {
             mkdirSync(path.dirname(this.file), { recursive: true });
             const tmp = `${this.file}.tmp`;
-            writeFileSync(tmp, JSON.stringify({ version: 1, active: this.active, done_at: this.done_at, spent: this.spent, stuck: this.stuck, updated_at: this.now() }, null, 2));
+            writeFileSync(tmp, JSON.stringify({ version: 1, active: this.active, finished: this.finished, done_at: this.done_at, spent: this.spent, stuck: this.stuck, updated_at: this.now() }, null, 2));
             renameSync(tmp, this.file);
             this.existed = true; // a later spawn (a respawn) must not autostart it either
         } catch (err) {
@@ -160,9 +218,32 @@ export class Agenda {
         if (this.active && !this.stuck) return;
         if (this.stuck) { delete this.spent[this.stuck.id]; this.stuck = null; }
         this.active = true;
+        this.finished = false;
         this.save();
     }
-    stop() { if (this.active) { this.active = false; this.save(); } }
+    stop() { if (this.active || this.finished) { this.active = false; this.finished = false; this.save(); } }
+    /** All steps done: not active, but the before-night reserve still runs (G3 round 6 B). */
+    finish() { this.active = false; this.finished = !!this.reserve; this.save(); }
+
+    /**
+     * The before-night reserve step when it is wanted now (due, too few blocks, budget not spent),
+     * else null. Once the night is no longer near, its budget is fresh again for the next dusk.
+     */
+    reserveWanted(state) {
+        const r = this.reserve;
+        if (!r) return null;
+        let due = false;
+        try { due = !!r.due(state); } catch { due = false; }
+        if (!due) {
+            this.reserveOff = false;
+            delete this.spent[r.id];
+            return null;
+        }
+        if (this.reserveOff) return null;
+        let done = false;
+        try { done = !!r.done(state); } catch { done = false; }
+        return done ? null : r;
+    }
 
     /** The self-prompter's budget spent on a step so far. */
     spentOn(id) { return this.spent[id] ?? { attempts: 0, llm_ms: 0 }; }
@@ -215,7 +296,8 @@ export class Agenda {
                 step = s;
             }
         }
-        return { step, newlyDone };
+        // Before night, too few shelter blocks: the reserve comes first (G3 round 6 B).
+        return { step: this.reserveWanted(state) ?? step, newlyDone };
     }
 }
 
@@ -224,7 +306,7 @@ export function describeAgenda(agenda, current, newlyDone = []) {
     // newlyDone: steps judge() found done that the driver has not recorded yet.
     const done = agenda.steps.filter(s => agenda.done_at[s.id] || newlyDone.includes(s)).map(s => s.id);
     const state = agenda.stuck ? `paused (step ${agenda.stuck.id} stuck: ${agenda.stuck.why}; a giver's !agendaStart retries it)`
-        : agenda.active ? 'active' : 'stopped';
+        : agenda.active ? 'active' : agenda.finished ? 'done (before night it still keeps the shelter blocks)' : 'stopped';
     const now = current ? `step ${current.id} (${current.short})` : 'all steps done';
     return `agenda: ${state}, ${now}; done: ${done.length ? done.join(', ') : 'none'}`;
 }

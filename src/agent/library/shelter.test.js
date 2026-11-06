@@ -13,9 +13,12 @@ import { getCommand } from '../commands/index.js';
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
 const key = (p) => `${p.x},${p.y},${p.z}`;
-const blockOf = (name, position) => {
+// A world cell is a block name, or {name, metadata} (G3 round 6 B: modded blocks, which the
+// vanilla registry does not know, are whole blocks here).
+const blockOf = (v, position) => {
+    const { name, metadata = 0 } = typeof v === 'string' ? { name: v } : v;
     const b = reg.blocksByName[name];
-    return { name, metadata: 0, boundingBox: b.boundingBox, material: b.material, position, canHarvest: () => true };
+    return { name, metadata, boundingBox: b?.boundingBox ?? 'block', material: b?.material, position, canHarvest: () => true };
 };
 const REACH = 4.5;
 
@@ -23,11 +26,12 @@ const REACH = 4.5;
 const hitsBot = (pos, q) => pos.x + 0.3 > q.x && pos.x - 0.3 < q.x + 1 && pos.z + 0.3 > q.z && pos.z - 0.3 < q.z + 1
     && pos.y + 1.8 > q.y && pos.y < q.y + 1;
 
-function fakeBot({ cobble = 10, pickaxe = true, set = {}, at = new Vec3(0.5, 64, 0.5), late = {} } = {}) {
+function fakeBot({ cobble = 10, pickaxe = true, set = {}, at = new Vec3(0.5, 64, 0.5), late = {}, items: more = [] } = {}) {
     const world = new Map(Object.entries(set));
     const items = [];
     if (cobble > 0) items.push({ name: 'cobblestone', metadata: 0, count: cobble });
     if (pickaxe) items.push({ name: 'stone_pickaxe', metadata: 0, count: 1 });
+    items.push(...more);
     const placed = [], dug = [], tries = [];
     let looking = null;
     const bot = {
@@ -42,7 +46,7 @@ function fakeBot({ cobble = 10, pickaxe = true, set = {}, at = new Vec3(0.5, 64,
             const q = p.floored();
             return blockOf(world.get(key(q)) ?? (q.y < 64 ? 'dirt' : 'air'), q);
         },
-        equip: async () => {},
+        equip: (item) => { bot.heldItem = item; return Promise.resolve(); }, // placeBlock places the held stack
         lookAt: (p) => { looking = p; return Promise.resolve(); },
         // Walking forward moves the bot 0.1 towards where it looks (sneaking pace).
         setControlState: (control, on) => {
@@ -60,19 +64,21 @@ function fakeBot({ cobble = 10, pickaxe = true, set = {}, at = new Vec3(0.5, 64,
             if (bot.blockAt(target).boundingBox !== 'empty' && !/water/.test(bot.blockAt(target).name)) return Promise.reject(new Error('occupied'));
             const how = late[key(target)];
             if (how === 'dropped') { delete late[key(target)]; return Promise.resolve(); } // the server lost it
-            items.find(i => i.name === 'cobblestone').count--;
+            const held = bot.heldItem ?? items.find(i => i.name === 'cobblestone');
+            held.count--;
             placed.push(key(target));
+            const block = { name: held.name, metadata: held.metadata ?? 0 };
             if (how === 'late') { // the update comes after mineflayer gave up
                 delete late[key(target)];
-                setTimeout(() => world.set(key(target), 'cobblestone'), 100);
+                setTimeout(() => world.set(key(target), block), 100);
                 return Promise.reject(new Error('Event blockUpdate did not fire within timeout of 2000ms'));
             }
-            world.set(key(target), 'cobblestone');
+            world.set(key(target), block);
             return Promise.resolve();
         },
         dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
     };
-    return { bot, placed, dug, tries, world };
+    return { bot, placed, dug, tries, world, items };
 }
 
 const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -408,4 +414,161 @@ test('#229 review 2: a click the server never answers ends at STOW_CLICK_MS; no 
     assert.deepEqual(await stowCarried(bot, () => true, { resyncMs: 0, clickMs: 200 }), []);
     assert.ok(Date.now() - t0 < 1000, `took ${Date.now() - t0} ms`);
     assert.ok(warns.some(w => /moving the off-hand stack got no answer within 0\.2 s/.test(w)));
+});
+
+// G3 round 6 B (the lead): at dusk the shelter was refused three times, "needs 9 sturdy blocks
+// (cobblestone or stone); you have 0", while the bot held 11 undergroundbiomes:metamorphic_cobble:6
+// (soapstone cobble, hardness 1.2 in the dump: under the old 1.5), 44 rocks and 32 dirt piles. A
+// zombie killed it; after the respawn (no pickaxe, nothing held) the refusal was "without a pickaxe".
+const SOAP = { name: 'undergroundbiomes:metamorphic_cobble', metadata: 6 };
+const ROCK = { name: 'pyrotech_compat:rock_metamorphic', metadata: 6 };
+const PILE = { name: 'betterwithmods:dirt_pile', metadata: 0 };
+const DIRT = { name: 'dirt', metadata: 0 };
+const n = (stack, count) => ({ ...stack, count });
+const total = (stacks) => stacks.reduce((k, i) => k + i.count, 0);
+
+/** Crafting as the server would: 4 rocks make a soapstone cobble, 4 dirt piles a dirt block. */
+function fakeCraft(items) {
+    const calls = [];
+    const craft = (bot, name, want) => {
+        calls.push([name, want]);
+        const [from, to] = name === 'cobblestone' ? [ROCK, SOAP] : name === 'dirt:0' ? [PILE, DIRT] : [null, null];
+        const stack = from && items.find(i => i.name === from.name && i.count >= 4);
+        if (!stack) return Promise.resolve(false);
+        const made = Math.min(want, Math.floor(stack.count / 4));
+        stack.count -= 4 * made;
+        items.push(n(to, made));
+        return Promise.resolve(made > 0);
+    };
+    return { craft, calls };
+}
+
+test('G3 round 6 B: every cobblestone and stone in the rotn-data ores is sturdy (soapstone cobble too); dirt is the fallback, not sturdy', async () => {
+    const { isSturdy, isSoftWall } = await import('./night.js');
+    const { loadRotnData, PACK_VERSION, WILDCARD_META } = await import('../../../packages/rotn-data/index.js');
+    const data = loadRotnData(PACK_VERSION);
+    let members = 0;
+    for (const ore of ['cobblestone', 'stone']) {
+        for (const m of data.oreDict(ore)) {
+            const metadata = m.meta === WILDCARD_META ? 0 : m.meta;
+            assert.ok(isSturdy({ name: m.name, metadata }), `${ore}: ${m.name}:${m.meta}`);
+            members++;
+        }
+    }
+    assert.ok(members >= 50, `${members} ore members`);
+    for (const b of [SOAP, { name: 'contenttweaker:chalk_cobble', metadata: 0 }, { name: 'undergroundbiomes:sedimentary_stone', metadata: 3 }])
+        assert.equal(isSturdy(b), true, b.name);
+    for (const name of ['dirt', 'grass', 'planks', 'log', 'stone_slab', 'netherrack', 'sand', 'gravel'])
+        assert.equal(isSturdy({ name, metadata: 0 }), false, name);
+    assert.equal(isSoftWall(DIRT), true);
+    for (const name of ['grass', 'sand', 'cobblestone', 'planks']) assert.equal(isSoftWall({ name, metadata: 0 }), false, name);
+    const { bot } = fakeBot({ cobble: 0, items: [n(SOAP, 11), n(ROCK, 44), n(PILE, 32)] });
+    assert.equal(total(shelterItems(bot)), 11, 'the 11 soapstone cobble count; rocks and piles do not');
+});
+
+test('G3 round 6 B replay: 11 soapstone cobble, 44 rocks, 32 dirt piles and a stone pickaxe close the shelter', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, items, world } = fakeBot({ cobble: 0, items: [n(SOAP, 11), n(ROCK, 44), n(PILE, 32)] });
+    const { craft, calls } = fakeCraft(items);
+    const r = await buildShelter(bot, { craft });
+    assert.equal(r.closed, true, bot.output);
+    assert.equal(r.placed, 10);
+    assert.equal(r.soft, 0);
+    assert.deepEqual(calls, [], 'enough already: nothing crafted');
+    assert.deepEqual(world.get('0,66,0'), SOAP, 'the roof is soapstone cobble');
+});
+
+test('G3 round 6 B: too few sturdy blocks: cobblestone is made from the rocks held first', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, items } = fakeBot({ cobble: 0, items: [n(SOAP, 3), n(ROCK, 44)] });
+    const { craft, calls } = fakeCraft(items);
+    const r = await buildShelter(bot, { craft });
+    assert.deepEqual(calls, [['cobblestone', 7]]);
+    assert.equal(r.closed, true, bot.output);
+    assert.equal(r.soft, 0);
+    assert.match(bot.output, /The shelter needs 7 more sturdy blocks: making cobblestone from your rocks\./);
+});
+
+test('G3 round 6 B: still too few: dirt is the fallback (made from dirt piles), sturdy blocks placed first', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, items, world } = fakeBot({ cobble: 0, items: [n(SOAP, 4), n(PILE, 32)] });
+    const { craft, calls } = fakeCraft(items);
+    const r = await buildShelter(bot, { craft });
+    assert.deepEqual(calls, [['dirt:0', 6]], 'no rocks: no cobblestone; 6 dirt from 24 piles');
+    assert.match(bot.output, /The shelter needs 6 more blocks: making 6 dirt:0 from your betterwithmods:dirt_pile \(4 each\)\./);
+    assert.equal(r.closed, true, bot.output);
+    assert.equal(r.soft, 5, 'the roof prop is outside the shell');
+    assert.equal([...world.values()].filter(v => v?.name === SOAP.name).length, 4, 'all 4 sturdy blocks are in the walls');
+    assert.match(bot.output, /Building the shelter with dirt too; mobs can dig through dirt\./);
+    assert.match(bot.output, /Shelter closed at 0, 64, 0: placed 10 blocks\. 5 of its walls and roof are dirt, which mobs can dig through\./);
+
+    const short = fakeBot({ cobble: 4, items: [n(DIRT, 2)] });
+    const s = await buildShelter(short.bot, { craft: fakeCraft(short.items).craft });
+    assert.equal(s.closed, false);
+    assert.deepEqual(short.placed, []);
+    assert.match(short.bot.output, /A shelter at 0, 64, 0 needs 10 sturdy blocks \(cobblestone or stone\); you have 4\. And a shelter with dirt needs 10 blocks, and you have 6\./);
+});
+
+test('G3 round 6 B: after a death (no pickaxe) a dirt shelter, dug out by hand, is built; with nothing held the refusal says what is missing', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, items, world } = fakeBot({ cobble: 10, pickaxe: false, items: [n(DIRT, 12)] });
+    const r = await buildShelter(bot, { craft: fakeCraft(items).craft });
+    assert.equal(r.closed, true, bot.output);
+    assert.equal(r.soft, 9, '9 shell cells; the roof prop is the 10th block');
+    assert.equal(items.find(i => i.name === 'cobblestone').count, 10, 'no cobblestone: it could not be dug out by hand');
+    assert.ok([...world.values()].every(v => v?.name === 'dirt'), 'only dirt placed');
+    assert.match(bot.output, /Building the shelter with dirt too \(no pickaxe: dirt can be dug out by hand\); mobs can dig through dirt\./);
+
+    const none = fakeBot({ cobble: 0, pickaxe: false });
+    const s = await buildShelter(none.bot, { craft: fakeCraft(none.items).craft });
+    assert.equal(s.closed, false);
+    assert.match(none.bot.output, /Not building a shelter at 0, 64, 0: without a pickaxe you could not dig out of it again\. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: nothing\. A dirt shelter could be dug out by hand, but a shelter with dirt needs 10 blocks, and you have 0 dirt\./);
+});
+
+test('G3 round 6 B: without a pickaxe a site with no side to dig out by hand is not used', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { isWall } = await import('./night.js');
+    // Stone walls all round, the roof open: one block would close it, but only a pickaxe gets out.
+    const set = {};
+    for (const [x, z] of SIDES) { set[`${x},64,${z}`] = 'stone'; set[`${x},65,${z}`] = 'stone'; }
+    const stone = fakeBot({ cobble: 0, pickaxe: false, set, items: [n(DIRT, 5)] });
+    assert.equal(siteNeeds(stone.bot, new Vec3(0, 64, 0), { accept: isWall }).handExit, false);
+    assert.equal(siteNeeds(fakeBot().bot, new Vec3(0, 64, 0), { accept: isWall }).handExit, true, 'open ground: every side will be dirt');
+    const r = await buildShelter(stone.bot, { radius: 0, craft: fakeCraft(stone.items).craft });
+    assert.equal(r.closed, false);
+    assert.deepEqual(stone.placed, []);
+    assert.match(stone.bot.output, /without a pickaxe you could not dig out of it again\..*the dirt fallback does not fit here either \(Found no place for a shelter within 0 blocks \(.*and a side you can dig out by hand\)\)\./);
+});
+
+// #284 review.
+test('#284 review 3: with no pickaxe, a failed sturdy-site search does not refuse before the dirt-wall search', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // Dirt walls to the east under gravel: the sturdy search would dig them (unsafe), so it finds
+    // no site; the dirt search keeps them, digs nothing and closes the rest with dirt.
+    const set = { '1,64,0': 'dirt', '1,65,0': 'dirt', '1,66,0': 'gravel' };
+    const { bot, items, dug } = fakeBot({ cobble: 0, pickaxe: false, set, items: [n(DIRT, 10)] });
+    assert.equal(chooseSite(bot, 0), null, 'the sturdy search finds nothing');
+    const r = await buildShelter(bot, { radius: 0, craft: fakeCraft(items).craft });
+    assert.equal(r.closed, true, bot.output);
+    assert.deepEqual(dug, [], 'the dirt under the gravel stays');
+    assert.equal(bot.blockAt(new Vec3(1, 66, 0)).name, 'gravel');
+
+    // With nothing to build from, the refusal names the sturdy problem, the pickaxe and the dirt.
+    const none = fakeBot({ cobble: 0, pickaxe: false, set });
+    await buildShelter(none.bot, { radius: 0, craft: fakeCraft(none.items).craft });
+    assert.match(none.bot.output, /Not building a shelter: Found no place for a shelter within 0 blocks \(.*\)\. Without a pickaxe only dirt would do \(Pickaxes: .*\), but a shelter with dirt needs \d+ blocks, and you have 0 dirt\./);
+});
+
+test('#284 nit: each kind of dirt pile is crafted by its own recipe (rotn-data): BWM piles make dirt, loamy piles Biomes O\' Plenty dirt', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { dirtPileRecipes, placeableDirt } = await import('./night.js');
+    const byPile = Object.fromEntries(dirtPileRecipes().map(r => [r.name, `${r.gives.name}:${r.gives.meta}`]));
+    assert.equal(byPile['betterwithmods:dirt_pile'], 'minecraft:dirt:0');
+    assert.equal(byPile['contenttweaker:loamy_dirt_pile'], 'biomesoplenty:dirt:0');
+    assert.equal(placeableDirt([n(PILE, 9), { name: 'contenttweaker:loamy_dirt_pile', metadata: 0, count: 4 }, n(DIRT, 1)]), 4, '2 + 1 from piles, 1 held');
+
+    const calls = [];
+    const { bot } = fakeBot({ cobble: 0, items: [{ name: 'contenttweaker:loamy_dirt_pile', metadata: 0, count: 40 }] });
+    await buildShelter(bot, { craft: (b, name, k) => { calls.push([name, k]); return Promise.resolve(false); } });
+    assert.deepEqual(calls, [['biomesoplenty:dirt:0', 10]], 'not minecraft:dirt, which loamy piles do not make');
 });

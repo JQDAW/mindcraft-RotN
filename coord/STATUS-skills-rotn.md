@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T16:56Z (from `date -u`)
+Updated: 2026-11-06T19:28Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -209,8 +209,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#274** (round 5 fixes, branch `agent/skills-rotn/r5-rerun`, opened 2026-11-06T16:02Z by `date -u`): Hit With Axe sticks, standing on a block with a check (C), the #270 follow-ups, felling drops arriving late and stuck against trunks (A rerun), the plain-text memory prompt. Review fixes pushed 2026-11-06T16:49Z; `src` and `packages` tests 903/903, lint 253. Waiting for the lead's re-review.
-- Earlier PRs (#195, #198 and the ones before) are merged.
+- **#284: round 6 B shelter** (branch `agent/skills-rotn/r6`, opened 2026-11-06T18:47Z by `date -u`): see "Round 6 B fixes" below. **#274** (round 5 fixes) is merged.
+- G3 smoke round 6 is over (lead): A 7/7, B 4/5, C 7/7, D 7/7. The memory rule is lifted.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
@@ -704,6 +704,46 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
   - The block name comes from the last 1 to 4 words before "at" (`nameIn`), so "go to gold block at X Y Z and stand on it" names gold_block.
   - **Test:** `stand_on` 10 (+1), which uses the scenario's own `taskText` (`test/scenarios/g3/g3-task-preempts-agenda.mjs`), where the coordinates come before "stand on it". It resolves to that gold block for three markers.
   - The new test fails on the old `stand_on.js` (at the missing-article case; the exact scenario text already resolved before). `src` and `packages` tests 904/904. Lint 253.
+
+## Round 6 B fixes (branch `agent/skills-rotn/r6`, 2026-11-06T18:47Z by `date -u`)
+
+- **Finding (the lead; raw `captures/raw/r6-g3b/night/`):** at dusk the shelter was refused three times ("needs 9 sturdy blocks (cobblestone or stone); you have 0"). The bot held 11 `undergroundbiomes:metamorphic_cobble:6`, 44 rocks and 32 dirt piles. A zombie killed it at 18:16:30, and after the respawn the shelter was refused "without a pickaxe".
+- **Cause:** `isSturdy` needed hardness 1.5 or more. Meta 6 is soapstone cobble, whose hardness is 1.2 in the dump, so all 11 failed. The agenda's cobblestone step (ore count) had counted them.
+- **(1) Sturdy blocks from the data:** `night.js isSturdy` also accepts every member of the rotn-data ore dictionaries `cobblestone` and `stone` (Underground Biomes cobble and stone, `contenttweaker:chalk_cobble`, vanilla, ...), when it is a whole block. A test checks every member of both ores against the real dump. The rotn-data lists are enough, so no request was needed.
+- **Dirt fallback (`shelter.js`):**
+  - With too few sturdy blocks, the shelter first makes cobblestone from the rocks held.
+  - If it is still short, dirt (`dirt` ore, dug by hand) fills the rest, made from dirt piles (`pileDirt`, 4 each) when needed. Sturdy blocks are placed first.
+  - The log says how many walls are dirt. The night routine's breach check and repairs keep dirt walls, and `digOut` opens a dirt side first.
+- **(2) Reserve:** `SHELTER_RESERVE_STEP` (`agenda.js`). When sunset is within `RESERVE_LEAD_MIN` (10 min of running time) and the bot holds fewer than 10 sturdy blocks, this step comes before the current one. It also runs after "agenda done". A spent budget skips it until the next day instead of pausing the agenda.
+  - With the measured cycle this means "from the morning freeze on", because only about 8 min run between time 3001 and sunset.
+- **(3) No pickaxe (after a death):** the shelter is built from dirt only, at a site with a side that can be dug out by hand. With nothing held, the refusal names both the pickaxe and the missing dirt.
+- **Tests:** 11 new (shelter 6, night_routine 2, agenda 3). All fail on the old source. `src` and `packages` tests 919/919; lint 253.
+- **Not tried on a server.** Crafting dirt from piles uses its own `craftRecipe` call through rotn-data's 2x2 recipe, which is untested offline beyond a fake.
+- **2026-11-06T19:09Z: #284 review fixes** (the lead's review; all three items plus the nit):
+  1. The reserve is not due at night: `due` needs `minutesToSunset` > 0, because it is 0 from sunset to sunrise.
+  2. **Lead decision:**
+     - With no pickaxe held, the reserve counts dirt and the dirt that held piles make (`placeableDirt`) toward the 10, and asks for dirt (`!collectBlocks("dirt", n)`), never for rocks.
+     - With a pickaxe, it asks for sturdy blocks only.
+  3. With no pickaxe, a failed sturdy-site search no longer refuses. The dirt-wall search is tried first, and it keeps existing dirt walls, for example under gravel.
+  - **Nit:**
+    - The data shows that all five `pileDirt` piles make a dirt-ore block, but only BWM's makes `minecraft:dirt`. The loamy, sandy and silty piles make `biomesoplenty:dirt` variants, and the aether pile makes `aether_dirt`.
+    - So `dirtPileRecipes` reads each pile's own no-table recipe from rotn-data, and each pile is crafted into its own dirt.
+  - **Tests:** 4 new (agenda 2, shelter 2) and 2 updated. All 6 fail on #284's previous head. `src` and `packages` tests 923/923; lint 253.
+- **2026-11-06T19:23Z: #284 re-review fix** (the lead):
+  - With no pickaxe, the reserve counts only placeable dirt (held, or made from the piles held), because the shelter then places only dirt. Before, 10 cobblestone and no dirt marked the reserve done, and the shelter was refused at dusk.
+  - Cobblestone is dropped from the no-pickaxe prompt.
+  - The static fallback goal now tells the two cases apart: with a pickaxe, sturdy blocks; without one, dirt only.
+  - **Tests:**
+    - `agenda.test.js` round 6 B: 10 sturdy blocks and no pickaxe are still due, and 10 dirt ends the reserve;
+    - #284 review 2: the prompt wording and the static goal are asserted.
+  - Both tests fail on the previous head. `src` and `packages` tests 924/924; lint 253. SHELTER_RESERVE stays 10 (lead).
+- **2026-11-06T19:28Z: next, after rotn-data #288 merges** (rotn-data's dirt drop rule, confirmed by the human's play):
+  - Dirt dug by hand, or with any shovel below level 1, drops 4 `betterwithmods:dirt_pile`. A level-1+ shovel gives plain dirt.
+  - #284 already counts the piles and crafts them into dirt.
+  - The follow-up PR, in my own files:
+    1. `worldSources` passes `unlessTool` through;
+    2. collecting `dirt_pile` never equips, or keeps holding, a level-1+ shovel;
+    3. the no-pickaxe reserve goal asks for `!collectBlocks("betterwithmods:dirt_pile", 4n)` instead of `"dirt"` (`collectBlocks("dirt")` gets piles and counts 0).
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

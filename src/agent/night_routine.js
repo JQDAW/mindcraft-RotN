@@ -13,7 +13,7 @@
 // first too, and the bot says the shelter waits for it.
 
 import { Vec3 } from 'vec3';
-import { NightClock, nightPhase, NIGHT_START } from './library/night.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable } from './library/night.js';
 import { buildShelter, siteNeeds, isLiquid, isFalling, isEmpty } from './library/shelter.js';
 import { breakBlockAt } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
@@ -115,7 +115,11 @@ export async function digOut(bot, feet) {
     // The pickaxe must be where breakBlockAt's equipForBlock looks (#229 review).
     const moved = await stowCarried(bot, (i) => /pickaxe/.test(i.name), { resyncMs: 0 }); // no wait: it is night
     if (moved.length) console.log(`[night] moved ${moved.join(' and ')} back into the inventory to dig out`);
-    for (const d of HORIZONTAL) {
+    // A side dug by hand (dirt, G3 round 6 B) first: it needs no pickaxe, which a bot that died
+    // and built its shelter of dirt does not have.
+    const byHand = (d) => [feet.plus(d), feet.plus(d).offset(0, 1, 0)].every(q => isEmpty(bot.blockAt(q)) || handDiggable(bot.blockAt(q)));
+    const sides = [...HORIZONTAL.filter(byHand), ...HORIZONTAL.filter(d => !byHand(d))];
+    for (const d of sides) {
         const lower = feet.plus(d), upper = lower.offset(0, 1, 0);
         const outside = [lower.plus(d), upper.plus(d)];
         if (outside.some(q => hot(bot.blockAt(q)))) continue;
@@ -260,7 +264,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             startBuilding(n, now);
             return 'night:building';
         }
-        const need = ops.siteNeeds(bot, n.site);
+        // Dirt walls (the fallback) are walls too: only an opening is a breach (G3 round 6 B).
+        const need = ops.siteNeeds(bot, n.site, { accept: isWall });
         if (!need) {
             // Fire, lava or a block in the 1x2 space: it cannot be repaired there (#204 review 2).
             bot.rotnSheltered = false;
@@ -271,7 +276,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (need.todo.length > 0) {
             bot.rotnSheltered = 'open'; // self_defense fights at the opening meanwhile
             line(agent, `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`);
-            startJob(agent, n, 'action:buildShelter', () => ops.buildShelter(bot, { site: n.site }), (r) => {
+            startJob(agent, n, 'action:buildShelter', () => ops.buildShelter(bot, { site: n.site, keepSoft: true }), (r) => {
                 if (r?.closed) bot.rotnSheltered = true;
                 else console.warn('[night] the repair did not close the shelter; trying again at the next check');
             });

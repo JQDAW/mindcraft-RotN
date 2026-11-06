@@ -428,3 +428,64 @@ test('#229 review: digOut with the pickaxe in the off hand moves it back, equips
     assert.equal(dug.length, 2);
     assert.equal(slots[45], null, 'the pickaxe left the off hand');
 });
+
+// G3 round 6 B: a shelter of dirt (the fallback, or after a death with no pickaxe).
+test('G3 round 6 B: inside a dirt shelter its dirt walls are no breach, and a repair keeps them', async (t) => {
+    quiet(t);
+    const { siteNeeds } = await import('./library/shelter.js');
+    const key = (p) => `${p.x},${p.y},${p.z}`;
+    const world = new Map();
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { world.set(`${x},64,${z}`, 'dirt'); world.set(`${x},65,${z}`, 'dirt'); }
+    world.set('0,66,0', 'dirt');
+    const agent = fakeAgent({ t: NIGHT });
+    agent.bot.blockAt = (p) => {
+        const q = p.floored();
+        const name = world.get(key(q)) ?? (q.y < 64 ? 'dirt' : 'air');
+        return { name, metadata: 0, boundingBox: reg.blocksByName[name].boundingBox, position: q };
+    };
+    const o = ops();
+    const opts = [];
+    o.buildShelter = (bot, op = {}) => { opts.push(op); return Promise.resolve({ closed: true, feet: SITE, line: 'Shelter closed' }); };
+    o.siteNeeds = siteNeeds; // the real check, on the dirt shell
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    nightTick(agent, { now: CHECK_MS + 1, ops: o });
+    await settle(agent);
+    assert.equal(opts.length, 1, 'no repair: dirt walls are walls');
+    assert.equal(agent.bot.rotnSheltered, true);
+
+    world.set('1,65,0', 'air'); // a mob dug through
+    nightTick(agent, { now: 2 * CHECK_MS + 2, ops: o });
+    await settle(agent);
+    assert.equal(opts.length, 2);
+    assert.deepEqual({ site: opts[1].site, keepSoft: opts[1].keepSoft }, { site: SITE, keepSoft: true }, 'the repair fills the hole and keeps the dirt');
+    assert.match(agent.chat.at(-1), /\[night\] the shelter is open at 1, 65, 0: repairing/);
+});
+
+test('G3 round 6 B: digOut opens a dirt side first (by hand), not the cobblestone ones', async (t) => {
+    quiet(t);
+    const key = (p) => `${p.x},${p.y},${p.z}`;
+    const world = new Map();
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { world.set(`${x},64,${z}`, 'cobblestone'); world.set(`${x},65,${z}`, 'cobblestone'); }
+    world.set('0,64,1', 'dirt'); world.set('0,65,1', 'dirt'); // south: dirt
+    const dug = [];
+    const bot = {
+        output: '',
+        entity: { position: new Vec3(0.5, 64, 0.5) },
+        modes: { isOn: () => false },
+        game: { gameMode: 'survival' },
+        tool: { equipForBlock: async () => {} },
+        heldItem: null,
+        inventory: { items: () => [], slots: [] },
+        blockAt: (p) => {
+            const q = p.floored();
+            const name = world.get(key(q)) ?? (q.y < 64 ? 'dirt' : 'air');
+            return { name, metadata: 0, boundingBox: reg.blocksByName[name].boundingBox, position: q, canHarvest: () => true };
+        },
+        dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
+    };
+    const side = await digOut(bot, SITE);
+    assert.ok(side.equals(new Vec3(0, 64, 1)), `opened ${side}`);
+    assert.deepEqual(dug, ['0,65,1', '0,64,1'], 'only the dirt side');
+});
