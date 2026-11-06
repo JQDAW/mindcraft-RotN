@@ -54,6 +54,8 @@ const V6_RUN = /[0-9A-Fa-f.:]+/g;
 const UUID = /\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-([0-9A-Fa-f])[0-9A-Fa-f]{3}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b/g;
 // This PC's user folder in any spelling (C:\Users\x, C:/Users/x, /c/Users/x, JSON-escaped).
 const LOCAL_PATH = /(?:[A-Za-z]:|\/[a-z])(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)[^\\/"'\s]+/g;
+// hcloud's numeric server ids: "(server: N" and "Server N created" (group 1 is kept).
+const HCLOUD_SERVER_ID = /(\(server: |\bServer )\d{5,}(?=[,) ]|$)/gm;
 // What is left of an address next to a redaction: "<ip>.0.113.7", "203.0.<ip>", "2001:db8:<ip>".
 const PARTIAL = /<ip>\.\d|\d\.<ip>|[0-9A-Fa-f]{1,4}:<ip>|<ip>:[0-9A-Fa-f]{1,4}:/g;
 
@@ -154,6 +156,10 @@ export function redact(text, { bot } = {}) {
     out = out.replace(QUAD_ANY, (m, offset, whole) => (isExempt(whole, offset, m) ? m : '<ip>'));
     out = out.replace(UUID, (_m, v) => `<uuid-v${v.toLowerCase()}>`);
     out = out.replace(LOCAL_PATH, '<local>');
+    // Hetzner's numeric server ids in hcloud's output (lead, #237 review nit): "(server: 174725082, ...)",
+    // "Waiting for start_server (server: 174725082) ..." and "Server 174725082 created". Masked from now on;
+    // not a leak-check rule, because earlier committed evidence keeps them (the servers are deleted).
+    out = out.replace(HCLOUD_SERVER_ID, (_m, pre) => `${pre}<server-id>`);
     if (bot) {
         if (!/^[A-Za-z0-9_]{3,16}$/.test(bot)) throw new Error('bad bot name');
         out = out.replace(new RegExp(String.raw`\b${bot}\b`, 'g'), '<bot>');

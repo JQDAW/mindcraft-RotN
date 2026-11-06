@@ -63,7 +63,7 @@ Verdict `FAIL` (a smoke batch).
 ## Cost
 
 - **LLM:** USD 0.1715 (56 calls; the key's usage went from 0.5734 to 0.7449).
-- **Hetzner:** about 17 min, 1 billed hour, about EUR 0.14 (excl. IPv4), plus 1 Primary IPv4-hour.
+- **Hetzner:** about 17 min from the create (23:08:24) to "verified gone" (23:25:07); `run.log`'s "ran 16 min" counts from the server being up. 1 billed hour, about EUR 0.14 (excl. IPv4), plus 1 Primary IPv4-hour.
 
 ## Files
 
