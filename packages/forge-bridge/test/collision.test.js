@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { RegistrySnapshot } from '../src/registries.js';
 import { extendRegistry } from '../src/registry-extension.js';
-import { applyCollisionShapes, dumpShapesByMeta, validateCollisionOverrides, loadCollisionOverrides, hazardBlockIds, liquidBlockIds, stateHazard, DYNAMIC_LEAVES_BOX } from '../src/collision.js';
+import { applyCollisionShapes, dumpShapesByMeta, validateCollisionOverrides, loadCollisionOverrides, hazardBlockIds, partialHazardBlockIds, liquidBlockIds, stateHazard, DYNAMIC_LEAVES_BOX } from '../src/collision.js';
 import { loadRotnData } from '../../rotn-data/index.js';
 
 const require = createRequire(import.meta.url);
@@ -162,6 +162,10 @@ test('hazardBlockIds, liquidBlockIds and stateHazard: by block id for avoid list
     assert.deepEqual([...hazardBlockIds(registry)].sort(), ['somemod:molten_bronze', 'somemod:spikes', 'somemod:portal', 'somemod:plant', 'somemod:nodata'].map(id).sort());
     assert.deepEqual([...hazardBlockIds(registry, { kinds: ['portal', 'fire'] })].sort(), [id('somemod:portal'), id('somemod:nodata')].sort());
     assert.ok(hazardBlockIds(registry, { kinds: ['trap'] }).has(id('somemod:plant')), 'a per-variant hazard counts');
+    // For Movements.blocksToAvoid: whole-block hazards only; the partial one goes through stateHazard.
+    assert.deepEqual([...hazardBlockIds(registry, { wholeBlockOnly: true })].sort(), ['somemod:molten_bronze', 'somemod:spikes', 'somemod:portal', 'somemod:nodata'].map(id).sort());
+    assert.deepEqual([...partialHazardBlockIds(registry)], [id('somemod:plant')]);
+    assert.deepEqual([...partialHazardBlockIds(registry, { kinds: ['fire'] })], []);
     assert.deepEqual([...liquidBlockIds(registry)], [id('somemod:molten_bronze')]);
     assert.equal(stateHazard(registry, blockOf(Block, 'somemod:plant', 4)), 'trap');
     assert.equal(stateHazard(registry, blockOf(Block, 'somemod:plant', 0)), null);
@@ -186,6 +190,7 @@ test('a bad override fails before anything changes: every modded block stays a f
     assert.throws(() => validateCollisionOverrides({ shapes: {}, blocks: { a: { shapes: 'nope' } } }), /unknown shape/);
     assert.throws(() => validateCollisionOverrides({ shapes: {}, blocks: { a: { walkThrough: 'all', liquid: true } } }), /cannot be walk-through/);
     assert.throws(() => validateCollisionOverrides({ shapes: {}, blocks: { a: { walkThrough: [16] } } }), /walkThrough/);
+    assert.throws(() => validateCollisionOverrides({ shapes: {}, blocks: { a: { hazard: 'trap', hazardByMeta: { 4: 'trap' } } } }), /together/);
 });
 
 test('a Block class made before the shapes were applied sees them too', () => {
@@ -269,6 +274,14 @@ test('the real 3.3.4 dump and data: molten metal, spikes and a modded portal non
     const trapIds = hazardBlockIds(registry, { kinds: ['trap'] });
     assert.ok(trapIds.has(registry.blocksByName['biomesoplenty:plant_0'].id), 'poison ivy makes plant_0 an avoid-list block by id');
     assert.ok(hazardBlockIds(registry, { kinds: ['fire'] }).has(registry.blocksByName['biomesoplenty:flower_0'].id), 'burning blossom');
+    const whole = hazardBlockIds(registry, { wholeBlockOnly: true });
+    const idOf = (n) => registry.blocksByName[n].id;
+    for (const n of ['biomesoplenty:plant_0', 'biomesoplenty:plant_1', 'biomesoplenty:flower_0']) {
+        assert.ok(!whole.has(idOf(n)), `${n}: partial, not for blocksToAvoid (it would avoid the harmless grass)`);
+        assert.ok(partialHazardBlockIds(registry).has(idOf(n)), n);
+    }
+    for (const n of ['minetraps:spikes', 'netherex:nether_portal', 'contenttweaker:bronze_molten', 'dungeontactics:wither_web']) assert.ok(whole.has(idOf(n)), n);
+    assert.equal(partialHazardBlockIds(registry).size, 3, 'only the reviewed per-variant BOP blocks are partial');
     assert.ok(liquidBlockIds(registry).has(registry.blocksByName['contenttweaker:bronze_molten'].id));
     assert.equal(liquidBlockIds(registry).size, data.counts.blocks.liquid);
     assert.deepEqual(byName('dynamictrees:leaves0').shapes, [DYNAMIC_LEAVES_BOX]);

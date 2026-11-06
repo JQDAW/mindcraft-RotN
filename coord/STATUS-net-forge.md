@@ -1,12 +1,20 @@
 # Status: net-forge
 
-Updated: 2026-11-06T08:51Z
+Updated: 2026-11-06T09:14Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## #256 question: Dynamic Trees leaves collision (2026-11-06T07:56Z answer; 08:30Z #259 review changes pushed)
+## #259 follow-up: whole-block vs partial hazards (2026-11-06T09:14Z, PR open)
 
-- **PR #259:** branch `agent/net-forge/collision-shapes`. Changes from the lead's REQUEST CHANGES review are pushed and waiting for re-review.
+- **Branch:** `agent/net-forge/hazard-split`, from develop `5c6aab2`. The PR is waiting for the lead's review.
+- **`hazardBlockIds(registry, { wholeBlockOnly: true })`** leaves out partial hazards. That is the set for `Movements.blocksToAvoid`.
+- **`partialHazardBlockIds(registry)`** lists the blocks to check per state with `stateHazard`. On 3.3.4 those are BOP `plant_0`, `plant_1` and `flower_0`.
+- **Rule:** a present `forge.hazardByMeta` means partial. The README documents it, and validation refuses data with both `hazard` and `hazardByMeta`.
+- **Tests:** `collision.test.js` 10/10, lint clean.
+
+## (Merged as #259) #256 question: Dynamic Trees leaves collision (2026-11-06T07:56Z answer)
+
+- **PR #259:** branch `agent/net-forge/collision-shapes`, merged.
   - **Develop:** merged in (`b1f35ed`, with #256) instead of rebased. The branch was already pushed, and a rebase would need a force-push.
 - **Walk-through is now opt-in.** The tool reviews classes:
   - **Allowed:** plant bases (BlockBush, BlockCrops, BlockSapling, ...) or blocks whose every state is plants or vine material, plus the reviewed Pyrotech and Pyrotech Compat rock piles. A class only qualifies if it has no box, no entity-contact override and no `addCollisionBoxToList` override.
