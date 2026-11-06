@@ -128,8 +128,10 @@ export class RotnData {
      * What a player collides with in a block state (net-forge #259): `{ boxes, varies, source }`.
      * From dumper 0.3.0, `boxes` is the state's `entityCollision` (addCollisionBoxToList for a
      * player standing on the block, read at an all-air cell; [x0, y0, z0, x1, y1, z1] relative to
-     * the cell) and `varies` is `entityCollisionVaries` (true: the shape depends on the world
-     * there, e.g. a fence's connections, so a per-state table cannot give it). Before 0.3.0, or
+     * the cell) and `varies` is `entityCollisionVaries` (true: the shape depends on the
+     * neighbouring blocks or on the block really in the cell, e.g. a fence's connections, so a
+     * per-state table cannot give it). It does not catch tile-entity dependence (the dumper never
+     * places the state), so `false` is not proof that the shape is fixed. Before 0.3.0, or
      * when the call threw, it falls back to `collision` (getCollisionBoundingBox) with
      * `varies: null` and `source: 'collision'`. `null` for an unknown block or a block without a dump.
      */
