@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T00:40Z (from `date -u`)
+Updated: 2026-11-06T00:53Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -396,7 +396,7 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
   4. A failed oredict load is not cached.
 
   Tests: `cobble` 7/7, `agenda` 17/17; every new test fails on develop (the modded cobble is used up; the goal is not resent; the empty load is cached). Related 5 files pass; lint per file unchanged.
-- **#238 open, REQUEST CHANGES addressed** (branch `agent/skills-rotn/nits-234`; STATUS lives here):
+- **#238 merged** (lead):
   1. #234 nits:
      - the goal gives the real number (`!craftRecipe("cobblestone", 2)`, at most what the step still needs);
      - `describeNeeds` with no inputs gives nothing, so there is no "To craft X: .";
@@ -413,7 +413,13 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
      - `placeFurnaceNear` trusts only its own placement: the `placeBlock` result and `bot.blockAt(pos)`, never the nearest furnace. A failed placement gives null, and `smeltItem` says "Could not place your furnace."
 
      Tests: `furnace` 5, `use_on` 14; the three new ones fail on the previous head.
-- **Next (lead):** re-review #238. Round 3 still running: targeted tests only.
+- **#238 nits, ready for the next PR** (branch `agent/skills-rotn/next2`, from develop, pushed without a PR as the lead said "no rush"; STATUS lives here):
+  1. `placeFurnaceNear`: when `placeBlock` returns false or throws, `blockAt(pos)` still decides, so a furnace placed anyway is picked up. `pos` was free, so a furnace there is the bot's own.
+  2. A weapon that cannot leave the off hand is logged: "Could not take the stone_sword from the off hand: the inventory is full."
+  3. A better off-hand weapon beats a worse one in the inventory, by `weaponRank`: material, then sword over axe. It is a heuristic: neither mineflayer nor rotn-data has attack damage, upstream's `attackDamage` sort was a no-op, and RotN's durabilities do not follow damage.
+
+  Tests: `furnace` 6, `use_on` 15; the new ones fail on develop. Related 4 files pass; lint per file unchanged.
+- **Next:** idle until the lead assigns work or the round 3 findings come. Round 3 still running: targeted tests only.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
