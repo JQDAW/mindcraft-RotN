@@ -14,7 +14,7 @@ import { loadRotnData } from '../../rotn-data/index.js';
 
 const require = createRequire(import.meta.url);
 const { Vec3 } = require('vec3');
-const JAVAP = fs.readFileSync(new URL('./fixtures/dynamictrees-0.13.4/BlockDynamicLeaves.javap.txt', import.meta.url), 'utf8');
+const JAVAP = fs.readFileSync(new URL('./fixtures/dynamictrees-0.13.4/BlockDynamicLeaves.javap.txt', import.meta.url), 'utf8').replace(/\r\n/g, '\n'); // autocrlf checkouts
 const FULL = [[0, 0, 0, 1, 1, 1]];
 const BOTTOM = [[0, 0, 0, 1, 0.5, 1]];
 const TOP = [[0, 0.5, 0, 1, 1, 1]];
