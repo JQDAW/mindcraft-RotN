@@ -1,8 +1,31 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (19:49 UTC, from `date -u`)
+Updated: 2026-11-06 (21:34 UTC, from `date -u`)
 
-## Next: the G3 gate plan (the lead, after #283 and #286; nothing run)
+## Now: G3 smoke round 7 (pre-gate, 42a8e94) is over: 3/4, so no gate on this commit. No batch until a new GO. Handoff for the move to the new dev server below.
+
+| Batch (evidence folder) | Result |
+| --- | --- |
+| A (`g3a-20261106-r7`) | **PASS 7/7:** dirt piles for the shelter (#288), sticks by felling, Hit With Axe plank, "agenda done". |
+| B (`g3b-20261106-r7`) | 4/5: in a working shelter for 8 min 23 s, then "no longer usable (fire, lava or a block inside)"; it left to rebuild; `self_defense` could not equip ("Server rejected transaction for clicking on slot 16"); slain by a zombie 28 s later. After the respawn "cursor: quark:tallow". |
+| C (`g3c-20261106-r7`) | **PASS 7/7:** on the gold block at minute 5.8 (checked under its feet); Near AI new in the provider rotation. |
+| D (`g3d-20261106-r7`) | **PASS 7/7:** refusal in the same second as the whisper. |
+
+- **Spend:** USD 0.030442 by the batch figures, 0.030543 by the key (to 0.846126 of 4.50). Hetzner 14 + 27 + 11 + 6 min, all verified gone; the project is empty.
+- **Memory summaries, true:** 38 stored, 0 empty. The run logs' "5 empty" (A 2, B 1, C 2) are a harness miscount: overlapping summaries (a second starts before the first's reply), which the counter's "next start closes it as empty" rule gets wrong. **The fix waits until after the gate** (lead), so the commit stays 42a8e94; the READMEs give the true figures.
+- **Corrected in the evidence:** the round 5 C and D and round 6 A-D READMEs said "the human approved the run command". Run commands go through Claude Code's auto mode (the human, via the lead); the one block (round 5 C, 15:06Z) was a one-off.
+- **For skills-rotn / net-forge (the lead routes):** B's shelter judged unusable while it worked; the rejected window click in `equip` (cursor item or inventory desync); leaving a working shelter at night.
+- **Open: the round 7 evidence PR.**
+
+### Handoff (for the next session, on the new dev server)
+
+- **Gate rule (PLAN.md, #290):** a clean smoke round A-D on the final commit, each batch on its own fresh server, must pass 4/4; then one `--gate` batch per scenario on that same commit. A gate failure: the other gate batches still run; after the fix only the failed scenario reruns, with the human's approval. The gate plan (cost about EUR 0.55 + USD 0.025, about 1 h 45 min) is in "Earlier: the G3 gate plan" below.
+- **My next code work, after the gate:** the overlapping-summary counter fix in `test/runner/lib/llm-spend.mjs` (match each "Memory updated to:" to the oldest open summary; close open ones only on a non-zero agent exit; update the #267 tests that expect "the next start closes it").
+- **Before each batch:** a detached checkout of the GO's commit and `npm ci`; `msa-login FRCFLD --check` (`MINDCRAFT_PROFILES_FOLDER` set per command, never read); an empty project; the batch preflight on its own with `ROTN_BATCH_TTL_MINUTES`; `test-server.sh up --dry-run`; free memory noted. The run command is DRIVER.md's GO template; raw logs in `captures/raw/r<N>-g3<x>/` (not committed). A sweeper "would refuse": wait and re-check, never a skip flag.
+- **Evidence:** per file with `node test/tools/redact-evidence.mjs IN OUT --bot FRCFLD` (`batch.json`, `run.log`, the scenario's `driver.log`, `result.json`, `server.log`); then `--check test/evidence` and `node test/tools/g3-batch-check.mjs --tree test/evidence`. Check summary counts by hand (starts vs "Memory updated to:") until the counter fix lands.
+- **Rules that bite:** never read keys, tokens, `.env*` or SSH keys; the OPENROUTER key is checked for presence only; a pre-join infra retry is a paid run (GO or the lead's word); tell the lead when pushing to a PR under review; STATUS times from `date -u`.
+
+## Earlier: the G3 gate plan (the lead, after #283 and #286; nothing run)
 
 **What a G3 gate claim needs** (`batch.mjs --gate`, `lib/g3.mjs`, DRIVER.md "Smoke is the default" and "Where G3 evidence goes"):
 - **A gate batch:** `batch.mjs --gate` writes `"gate": true, "smoke": false` into `batch.json`; without `--gate` a batch is smoke and never gate evidence.
@@ -30,7 +53,7 @@ Updated: 2026-11-06 (19:49 UTC, from `date -u`)
 3. **One commit for all four gate batches,** with a smoke round on that commit just before (A, C and D passed on f7fbe4fe).
 4. **A failed gate run:** it stays in the evidence as it is. A rerun is a new gate batch, a paid retry the lead approves, and the README lists every gate attempt for that scenario, so no passing run is picked from several.
 
-## Now: G3 smoke round 6 is over (smoke, develop f7fbe4fe). No batch until a new GO.
+## Earlier: G3 smoke round 6 is over (smoke, develop f7fbe4fe).
 
 | Batch (evidence folder) | Result |
 | --- | --- |
@@ -261,7 +284,7 @@ Total LLM USD 0.1805, and 3 billed server hours (about EUR 0.41 plus 3 Primary I
 3. Open question for the lead: #208 nit (2), measuring the refusal deadline from the chat line's timestamp instead of the 5 s poll.
 4. The G3 batches (A alone, B alone, C+D together) each need a written GO. Not started.
 
-## Now: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
+## Earlier: the G3 scenarios, offline only (lead, after #196 merged as a92faf0)
 
 The lead's order: one scenario per small PR, (a) first, then (b) first night, (c) a task preempts the agenda and it resumes, (d) untrusted players refused. Each gets server-side pass checks, maxBatchUsd 2 and an offline test against fakes. **No batch:** nothing is running, no paid work is pending, and nothing touches the CX23.
 
