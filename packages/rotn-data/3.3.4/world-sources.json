@@ -176,6 +176,52 @@
       "unverified": ["event-handler changes to the drop"]
     },
     {
+      "id": "dirt-piles",
+      "action": "break",
+      "summary": "Break dirt, grass, podzol, coarse dirt, mycelium, a grass path or dry farmland by hand, or with any tool except a shovel of mining level 1 or higher: it drops 4 Piles of Dirt (betterwithmods:dirt_pile), not a dirt block. 4 piles make 1 dirt in the 2x2 grid (shapeless, no table). A flint, bone, quartz, redstone or iron shovel (level 1 or higher) gets the dirt block instead; the crude, wooden, stone and golden shovels are level 0 and still give piles.",
+      "blocks": [
+        { "name": "minecraft:dirt", "meta": 0, "documented": true },
+        { "name": "minecraft:grass", "meta": 0, "documented": true },
+        { "name": "minecraft:mycelium", "meta": 0, "documented": true },
+        { "name": "minecraft:dirt", "meta": 1, "documented": true },
+        { "name": "minecraft:dirt", "meta": 2, "documented": true },
+        { "name": "minecraft:farmland", "meta": 0, "documented": true },
+        { "name": "minecraft:grass_path", "meta": 0, "documented": true },
+        { "name": "betterwithmods:fertile_farmland", "meta": 0, "documented": true },
+        { "name": "pyrotech:farmland_mulched", "meta": 0, "documented": true },
+        { "name": "growthcraft_rice:ricepaddy", "meta": 0, "documented": true }
+      ],
+      "gives": { "name": "betterwithmods:dirt_pile", "meta": 0, "count": 4 },
+      "count": 4,
+      "tool": null,
+      "unlessTool": { "type": "shovel", "minLevel": 1 },
+      "confidence": "documented",
+      "evidence": ["scripts/dropt_loose_materials.zs lines 4-16 (cited lines in packages/rotn-data/test/fixtures/rotn-3.3.4/dirt-drops.excerpt.txt): Dropt list \"pile_dirt\" matches growthcraft_rice:ricepaddy, minecraft:dirt, minecraft:grass, minecraft:mycelium, minecraft:dirt:1, minecraft:dirt:2, minecraft:farmland, minecraft:grass_path, betterwithmods:fertile_farmland and pyrotech:farmland_mulched for a PLAYER harvester whose main hand is not on the blacklist \"shovel;1;-1\", and drops <betterwithmods:dirt_pile> with Dropt.range(4)", "mods/dropt-1.12.2-1.19.4.jar (SHA-256 21837ce855ad3304fa2aa2cc4d29fe5989cd61f09fa8fc1f9f4e53dedbacfd04; excerpts in packages/rotn-data/test/fixtures/dropt-1.19.4/Dropt.javap.txt): HeldItemMatcher.matches (bytecode 169-256) fails a BLACKLIST rule only when the held item's tool classes contain the tool class and its harvest level is within [min, max]; ParserRuleMatchHarvesterHeldItem (441-577) splits \"shovel;1;-1\" at \";\" and turns a max below 0 into 2147483647, so the excluded items are shovels of level 1 or higher; DroptAPI.range(int) sets a fixed count (4). A rule replaces the drops (Rule.replaceStrategy defaults to REPLACE_ALL). athenaeum-1.12.2-1.19.6.jar RecipeItemParser.parse sets meta 0 before reading the string, so a block named without a meta (minecraft:dirt, minecraft:farmland) matches meta 0 only: wet farmland (metas 1-7) keeps its plain drop", "config/betterwithmods.cfg line 495: HCPiles=false (Better With Mods' own pile drops are off), and config/pyrotech/plugin.Dropt.cfg lines 22 and 26: Pyrotech's dirt and grass Dropt rules are off; scripts/dropt.zs names no dirt or grass block. So the pile_dirt rule is the only drop change for these blocks", "the dump: crafttweaker:ct_shapeless281424108 is shapeless, 4 betterwithmods:dirt_pile -> 1 minecraft:dirt, requiresTable false (scripts/minecraft_(max-file-size).zs lines 218 and 268); the item betterwithmods:dirt_pile is \"Pile of Dirt\" (item.bwm:dirt_pile), stack size 256", "Supporting only: the human, who plays the pack, via the lead (2026-11-06): breaking dirt by hand works but drops dirt pieces, not a dirt block, and 4 pieces in a 2x2 grid craft one dirt block. G3 smoke round 6 (the lead, #284): the bot ended up with Better With Mods dirt piles instead of dirt"],
+      "unverified": ["no harness run has checked the count of 4 (the round 6 bot's inventory was not counted)"],
+      "note": "The same script turns other soils into their own piles the same way (lines 17-110): Biomes O' Plenty silty, loamy and sandy dirt into contenttweaker:silty_dirt_pile, loamy_dirt_pile and sandy_dirt_pile; Defiled Lands dirt and grass into contenttweaker:defiled_dirt_pile; Aether dirt and grass into contenttweaker:aether_dirt_pile; Better With Mods dirt slabs into 2 dirt piles; contenttweaker:rocky_dirt into 2 dirt piles and a rock. Sand, red sand and gravel drop 4 sand, red sand and gravel piles (lines 113-152). Not encoded here."
+    },
+    {
+      "id": "dirt-with-shovel",
+      "action": "break",
+      "summary": "Dig dirt or grass with a shovel of mining level 1 or higher (flint, bone, quartz, redstone or iron): the pack's pile rule does not apply, so the block drops itself as dirt (coarse dirt gives coarse dirt; grass, podzol, mycelium, a grass path and farmland give dirt).",
+      "pairs": [
+        { "block": { "name": "minecraft:dirt", "meta": 0 }, "item": { "name": "minecraft:dirt", "meta": 0 }, "documented": true },
+        { "block": { "name": "minecraft:grass", "meta": 0 }, "item": { "name": "minecraft:dirt", "meta": 0 }, "documented": true },
+        { "block": { "name": "minecraft:mycelium", "meta": 0 }, "item": { "name": "minecraft:dirt", "meta": 0 }, "documented": true },
+        { "block": { "name": "minecraft:dirt", "meta": 1 }, "item": { "name": "minecraft:dirt", "meta": 1 }, "documented": true },
+        { "block": { "name": "minecraft:dirt", "meta": 2 }, "item": { "name": "minecraft:dirt", "meta": 0 }, "documented": true },
+        { "block": { "name": "minecraft:farmland", "meta": 0 }, "item": { "name": "minecraft:dirt", "meta": 0 }, "documented": true },
+        { "block": { "name": "minecraft:grass_path", "meta": 0 }, "item": { "name": "minecraft:dirt", "meta": 0 }, "documented": true },
+        { "block": { "name": "betterwithmods:fertile_farmland", "meta": 0 }, "item": { "name": "minecraft:dirt", "meta": 0 }, "documented": true },
+        { "block": { "name": "pyrotech:farmland_mulched", "meta": 0 }, "item": { "name": "minecraft:dirt", "meta": 0 }, "documented": true }
+      ],
+      "count": 1,
+      "tool": { "type": "shovel", "minLevel": 1 },
+      "confidence": "documented",
+      "evidence": ["the dump (blocks.json drops, getItemDropped): minecraft:dirt metas 0 and 2, minecraft:grass, minecraft:mycelium, minecraft:farmland, minecraft:grass_path, betterwithmods:fertile_farmland and pyrotech:farmland_mulched drop minecraft:dirt; minecraft:dirt meta 1 (coarse) drops minecraft:dirt:1", "the pile_dirt rule excludes these shovels (see dirt-piles): mods/dropt-1.12.2-1.19.4.jar (SHA-256 21837ce855ad3304fa2aa2cc4d29fe5989cd61f09fa8fc1f9f4e53dedbacfd04; excerpts in packages/rotn-data/test/fixtures/dropt-1.19.4/Dropt.javap.txt): HeldItemMatcher.matches (bytecode 169-256) fails a BLACKLIST rule only when the held item's tool classes contain the tool class and its harvest level is within [min, max]; ParserRuleMatchHarvesterHeldItem (441-577) splits \"shovel;1;-1\" at \";\" and turns a max below 0 into 2147483647, so the excluded items are shovels of level 1 or higher; DroptAPI.range(int) sets a fixed count (4). A rule replaces the drops (Rule.replaceStrategy defaults to REPLACE_ALL). athenaeum-1.12.2-1.19.6.jar RecipeItemParser.parse sets meta 0 before reading the string, so a block named without a meta (minecraft:dirt, minecraft:farmland) matches meta 0 only: wet farmland (metas 1-7) keeps its plain drop", "the dump (items.json toolClasses): shovel level 1 or higher: pyrotech:flint_shovel, bone_shovel, quartz_shovel and redstone_shovel, minecraft:iron_shovel and iceandfire:silver_shovel (1), minecraft:diamond_shovel and pyrotech:obsidian_shovel (2); level 0: pyrotech:crude_shovel, minecraft:wooden_shovel, stone_shovel and golden_shovel"],
+      "unverified": ["no harness run has dug dirt with a level 1 shovel yet"]
+    },
+    {
       "id": "start-kit",
       "action": "start-kit",
       "summary": "Given at the first spawn.",

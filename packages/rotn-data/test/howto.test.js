@@ -370,3 +370,63 @@ test('formatHowToGet: a short plain-text answer', () => {
     assert.match(formatHowToGet(pack.howToGet('stone_pickaxe')), /Craft 3 any rock \(e\.g\. pyrotech:rock:0\) \+ 2 any ladderMat \(e\.g\. minecraft:stick:0\) -> 1 minecraft:stone_pickaxe:0 \(crafting table\)/);
     assert.equal(formatHowToGet(null), 'Unknown item.');
 });
+
+test('#284: dirt and grass broken by hand (or with a shovel below level 1) drop 4 Piles of Dirt; a level 1 shovel gets the dirt block', () => {
+    // The pack's lines, "<line>: <text>" under "## <path>" headers.
+    const sections = new Map();
+    let cur = null;
+    for (const l of fs.readFileSync(path.join(HERE, 'fixtures/rotn-3.3.4/dirt-drops.excerpt.txt'), 'utf8').split(/\r?\n/)) {
+        if (l.startsWith('## ')) sections.set((cur = l.slice(3).split(' (SHA-256')[0]), new Map());
+        else if (cur && /^\d+: /.test(l)) sections.get(cur).set(Number(l.slice(0, l.indexOf(':'))), l.slice(l.indexOf(':') + 2));
+    }
+    const dropt = sections.get('scripts/dropt_loose_materials.zs');
+    assert.equal(dropt.get(4), 'Dropt.list("pile_dirt")');
+    assert.match(dropt.get(10), /\.mainHand\("BLACKLIST", \[\], "shovel;1;-1"\)/);
+    assert.match(dropt.get(14), /\.items\(\[<betterwithmods:dirt_pile>\], Dropt\.range\(4\)\)/);
+    // A block named without a meta is meta 0 (athenaeum's parser); "name:meta" names that meta.
+    const scriptBlocks = JSON.parse(dropt.get(7).match(/\.matchBlocks\((\[.*\])\)/)[1]).map((n) => {
+        const [mod, id, meta] = n.split(':');
+        return `${mod}:${id}:${meta ?? 0}`;
+    });
+    const piles = way(pack.howToGet('betterwithmods:dirt_pile'), 'dirt-piles');
+    assert.deepEqual(piles.blocks.map((b) => `${b.name}:${b.meta}`).sort(), scriptBlocks.sort());
+    for (const b of piles.blocks) assert.ok(pack.names.blocks.has(b.name), b.name);
+    assert.equal(piles.count, 4);
+    assert.equal(piles.tool, null);
+    assert.deepEqual(piles.unlessTool, { type: 'shovel', minLevel: 1 });
+    assert.equal(piles.confidence, 'documented');
+    assert.match(piles.evidence.at(-1), /^Supporting only: the human, who plays the pack/);
+    assert.equal(pack.getItem('betterwithmods:dirt_pile').variant.displayName, 'Pile of Dirt');
+    // Better With Mods' own piles and Pyrotech's dirt and grass rules are off.
+    assert.equal(sections.get('config/betterwithmods.cfg').get(495).trim(), 'B:HCPiles=false');
+    assert.deepEqual([22, 26].map((n) => sections.get('config/pyrotech/plugin.Dropt.cfg').get(n).trim()), ['B:dirt=false', 'B:grass=false']);
+    // 4 piles -> 1 dirt: shapeless, no table (minecraft_(max-file-size).zs 218 and 268).
+    const mc = sections.get('scripts/minecraft_(max-file-size).zs');
+    assert.match(mc.get(218), /<minecraft:dirt> : <betterwithmods:dirt_pile>,/);
+    assert.match(mc.get(268), /recipes\.addShapeless\(cobble, \[rock,rock,rock,rock\]\);/);
+    const fromPiles = pack.howToGet('dirt').ways.find((w) => w.kind === 'craft' && w.inputs.length === 1 && w.inputs[0].choices.some((c) => c.name === 'betterwithmods:dirt_pile'));
+    assert.deepEqual([fromPiles.inputs[0].count, fromPiles.gives.count, fromPiles.requiresTable], [4, 1, false]);
+    assert.match(formatHowToGet(pack.howToGet('betterwithmods:dirt_pile')), /By hand or with any tool except a shovel of mining level 1 or higher\./);
+
+    // Dropt's matcher: a BLACKLIST rule fails only for a held item of that tool class within [min, max]; max -1 is unbounded; range(4) is fixed.
+    const javap = fs.readFileSync(path.join(HERE, 'fixtures/dropt-1.19.4/Dropt.javap.txt'), 'utf8').replace(/\r\n/g, '\n');
+    assert.match(javap, /Set\.contains[^\n]*\n[^\n]*istore +12\n[^\n]*iload +12\n[^\n]*ifeq[^\n]*\n[^\n]*iload +11\n[^\n]*ifeq[^\n]*\n(?:[^\n]*\n){2,8}[^\n]*String \[MATCH\] \[!!\] Held item is excluded:/);
+    assert.match(javap, /_maxHarvestLevel:I\n[^\n]*ifge[^\n]*\n(?:[^\n]*\n)?[^\n]*int 2147483647\n[^\n]*putfield[^\n]*_maxHarvestLevel/);
+    assert.match(javap, /RandomFortuneInt range\(int\);[\s\S]*?putfield[^\n]*RandomFortuneInt\.fixed:I/);
+    assert.match(javap, /ParseResult\."<init>"[^\n]*\n(?:[^\n]*\n){1,3}[^\n]*iconst_0\n[^\n]*ParseResult\.setMeta/);
+
+    // With a level 1 shovel the rule does not fire: the plain drops (the dump) are the pairs.
+    const dug = way(pack.howToGet('dirt'), 'dirt-with-shovel');
+    assert.deepEqual(dug.tool, { type: 'shovel', minLevel: 1 });
+    assert.deepEqual(pack.howToGet('dirt').ways[0].id, 'dirt-with-shovel');
+    const rule = pack.worldSources.find((r) => r.id === 'dirt-with-shovel');
+    for (const p of rule.pairs) {
+        const drops = pack.getBlock({ name: p.block.name, meta: p.block.meta }).state.drops;
+        assert.deepEqual(drops, [{ ...p.item, count: 1 }], `${p.block.name}:${p.block.meta}`);
+    }
+    assert.deepEqual(rule.pairs.map((p) => `${p.block.name}:${p.block.meta}`).sort(), scriptBlocks.filter((b) => !b.startsWith('growthcraft_rice:')).sort());
+    // Level 1 and up: flint, bone and iron shovels; the crude, stone and wooden shovels are level 0.
+    for (const [item, level] of [['pyrotech:flint_shovel', 1], ['pyrotech:bone_shovel', 1], ['minecraft:iron_shovel', 1], ['pyrotech:crude_shovel', 0], ['minecraft:stone_shovel', 0], ['minecraft:wooden_shovel', 0]]) {
+        assert.equal(pack.getItem(item).toolClasses.shovel, level, item);
+    }
+});
