@@ -1,6 +1,23 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T21:30Z (from `date -u`)
+Updated: 2026-11-06T21:49Z (from `date -u`)
+
+## Handoff (before the move to the dev server, 2026-11-06T21:49Z by `date -u`)
+
+- **Open PRs:** **#296** (`agent/skills-rotn/r7-shelter-cursor`): the round 7 B fixes (the shelter check, cursor sync, rejected-click recovery, self-defense fights on). Full `npm test` 1360 pass, 0 fail, 3 skipped; lint 253. It waits for review.
+- **Branches:** everything is committed and pushed. Nothing is local only.
+  - `agent/skills-rotn/r7-shelter-cursor`: #296.
+  - `agent/skills-rotn/r7`: STATUS-only commits, already merged into #296's branch; no PR of its own.
+  - `agent/skills-rotn/night-threats`: 2 old commits now pushed; their change (do-not-look from rotn-data's `lookAt`) is already in develop by another commit, so the branch is stale.
+  - Every other `agent/skills-rotn/*` branch is merged.
+- **Next task:**
+  1. #296's review fixes.
+  2. Then the next smoke or gate findings for G3 (b), starting with what the new "no longer usable: <block> at <pos> (<why>)" line names in the next B run. Round 7 did not name the cause.
+  3. Watch for `[inventory]` lines (cursor put down, resync) to confirm the cursor fix live.
+- **Open requests:**
+  - Request 1 (lead, `settings.js`), the remaining parts: `pause_when_empty: false`, and `!searchWiki` in `blocked_actions` (it returns vanilla 1.21 facts). `task_givers` and `allow_server_task_giver` are in.
+  - FYI for net-forge: mineflayer 4.33 ignores the server's cursor packet (`set_slot` window -1, slot -1). #296 handles it in `src/agent`. A mineflayer patch would be the cleaner home, if net-forge wants it.
+
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -209,11 +226,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- None open. **#291** (dirt piles) is merged as develop `42a8e94`, after #284 and rotn-data #288.
-- **G3 smoke round 7 (pre-gate) is running on develop `42a8e94`** (from 2026-11-06T20:19Z by `date -u`).
-  - **Code freeze:** no PRs or pushes that change bot or harness code until the G3 gate is done; docs and STATUS only.
-  - **Memory rule:** targeted tests only.
-- **Round 7 B fixes are ready locally** (branch `agent/skills-rotn/r7-shelter-cursor`, commit `99161226`, not pushed). I open the PR when the lead says round 7 has ended, because the code freeze lifts then. Details are in "Round 7 B fixes" below.
+- **#296** (`agent/skills-rotn/r7-shelter-cursor`): the round 7 B fixes, opened 2026-11-06T21:47Z after the lead lifted the code freeze. Details are in "Round 7 B fixes" below.
+- Round 7 is over: A 7/7, B 4/5, C 7/7, D 7/7. No gate on that commit. **#291** (dirt piles) is merged as develop `42a8e94`.
 
 ## Round 7 B fixes (branch `agent/skills-rotn/r7-shelter-cursor`, 2026-11-06T21:30Z by `date -u`)
 
@@ -244,6 +258,7 @@ The log does not show what made the shelter unusable. The next run's line will n
   - the shelter test fails, at its first assertion with a stand-in `siteProblem`;
   - `inventory_sync` is a new module.
 - Lint in the touched files: `agent.js` 11 and `skills.js` 20, as in the baseline; the other files 0.
+- After the freeze lifted: full `npm test` 1363 tests (1360 pass, 0 fail, 3 skipped); `lint-baseline.mjs` 253 OK. Pushed as **#296**.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
