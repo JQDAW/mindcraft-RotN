@@ -4,7 +4,7 @@ Updated: 2026-11-06T16:24Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Collision from rotn-data `playerCollision` (#269); PR open, 2026-11-06T16:24Z
+## Collision from rotn-data `playerCollision` (#269); PR #279 open, 2026-11-06T16:24Z
 
 - **Branch:** `agent/net-forge/player-collision`, from develop `b49cf6e`. The lead approved the switch. The walk-through allowlist goes in a separate later PR (decision below).
 - **Shapes:** each modded state gets what a player collides with, from rotn-data's `RotnData.playerCollision`, passed in by `initBot`.
