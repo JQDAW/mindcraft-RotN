@@ -29,7 +29,7 @@ Updated: 2026-11-06 (07:21 UTC, from `date -u`)
      - It must be at the end of (c), not the start of (d): `clear` needs the bot online, and the burst comes within 3 s of (d)'s spawn, before a console command can reliably land.
   3. **Not recommended:** run (d) before (c). (d) runs up to 16 min while the agenda keeps going (A finished all 11 steps in 6.3 min), so (c) would inherit the same problem and could miss its active-agenda wait.
   - Either way, the catch-up burst itself needs skills-rotn's fix: a fresh inventory only removes the trigger in (d).
-- **Open: the Windows test PR** (the lead, low priority; net-forge's report). The tests did not hang: Git Bash process starts on Windows made `cx23.test.js` take 189 s and `test-server.test.js` 255 s alone, beyond tool time limits.
+- **Merged: #251, the Windows test PR** (the lead, low priority; net-forge's report). The tests did not hang: Git Bash process starts on Windows made `cx23.test.js` take 189 s and `test-server.test.js` 255 s alone, beyond tool time limits.
   - The 8 shell-heavy blocks now skip on a local Windows run with a stated reason, unless `ROTN_RUN_SHELL_TESTS=1`. They never skip on CI (`CI=true`) or on Linux.
   - `deploy-eol`'s on-disk check skips on Windows (not CI) for a stale CRLF working copy, naming the files and the verified fix (`git checkout -- deploy/cx23`).
   - Full `npm test` on Windows: 80 s, 1214 pass, 0 fail.

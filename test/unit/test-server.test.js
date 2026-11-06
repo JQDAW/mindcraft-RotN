@@ -12,6 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { writeAtomic, readJsonRetry } from './fixtures/atomic-write.mjs';
 import zlib from 'node:zlib';
 import { parseRotatedLog } from '../runner/lib/adapters.mjs';
+import { windowsShellSkip } from './fixtures/windows-skip.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
@@ -216,7 +217,7 @@ describe('render-user-data', () => {
     });
 });
 
-describe('up / run / down', () => {
+describe('up / run / down', { skip: windowsShellSkip('up / run / down', '69 s') }, () => {
     test('no hcloud auth: fails before any mutating call', () => {
         const r = run(['up', '--yes'], { FAKE_HCLOUD_NOAUTH: '1' });
         assert.notEqual(r.code, 0);
@@ -504,7 +505,7 @@ describe('up / run / down', () => {
     });
 });
 
-describe('sweep (watchdog)', () => {
+describe('sweep (watchdog)', { skip: windowsShellSkip('sweep (watchdog)', '13 s') }, () => {
     const P = { purpose: 'mindcraft-rotn-test' };
     const iso = (epoch) => new Date(epoch * 1000).toISOString().replace('.000Z', '+00:00');
 
@@ -624,7 +625,7 @@ describe('sweep (watchdog)', () => {
     });
 });
 
-describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)', () => {
+describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)', { skip: windowsShellSkip('sweeper preflight before any create (finding 5, lead rule 2026-11-01)', '117 s') }, () => {
     const upArgs = ['up', '--yes', '--name', 'mcr-test-pre'];
     const refuses = (r, re) => {
         assert.notEqual(r.code, 0, r.all);
@@ -1008,7 +1009,7 @@ describe('--allow-from (finding 8)', () => {
     });
 });
 
-describe('g0-watchdog.sh sweeper attribution (PR #5 review nit 3)', () => {
+describe('g0-watchdog.sh sweeper attribution (PR #5 review nit 3)', { skip: windowsShellSkip('g0-watchdog.sh sweeper attribution (PR #5 review nit 3)', '24 s') }, () => {
     const wd = fwd(path.join(repo, 'test', 'scenarios', 'g0-watchdog.sh'));
     const TS = '20261101-130000';
     function runWd(args, extraEnv = {}) {
@@ -1102,7 +1103,7 @@ describe('g0-watchdog.sh sweeper attribution (PR #5 review nit 3)', () => {
     });
 });
 
-describe('hcloud context pin (review finding 1)', () => {
+describe('hcloud context pin (review finding 1)', { skip: windowsShellSkip('hcloud context pin (review finding 1)', '9 s') }, () => {
     test('every hcloud call carries --context mindcraft-rotn-test and never sees HCLOUD_TOKEN', () => {
         const r = run(['run', '--yes', '--name', 'mcr-test-ctx', '--', 'true'],
             { HCLOUD_TOKEN: 'not-a-real-token', HCLOUD_CONTEXT: 'mindcraft-rotn-test' });
@@ -1157,7 +1158,7 @@ describe('pre-create guard (review finding 6)', () => {
     }
 });
 
-describe('g0-watchdog.sh against the fake API (review findings 1, 2, 4)', () => {
+describe('g0-watchdog.sh against the fake API (review findings 1, 2, 4)', { skip: windowsShellSkip('g0-watchdog.sh against the fake API (review findings 1, 2, 4)', '9 s') }, () => {
     const wd = fwd(path.join(repo, 'test', 'scenarios', 'g0-watchdog.sh'));
     const TS = '20261101-120000';
     function runWd(args, extraEnv = {}) {
