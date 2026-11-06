@@ -352,8 +352,8 @@ test('G3 round 6 B: near dusk the shelter reserve comes before the current step;
 
     agent.bot.time.timeOfDay = dayAt(7);
     assert.equal(agendaTick(agent, { now: TICK_MS }), 'shelter_blocks');
-    assert.equal(agent.said.at(-1), `agenda step shelter_blocks started: keep ${SHELTER_RESERVE} sturdy blocks for the night's shelter`);
-    assert.match(agent.self_prompter.prompt, /^RotN agenda, step shelter_blocks \(before night\): Night is near: in about \d+ min the night routine builds a shelter from sturdy blocks \(any cobblestone or stone\)\. It needs 10 on open ground, and you have 0\./);
+    assert.equal(agent.said.at(-1), `agenda step shelter_blocks started: keep ${SHELTER_RESERVE} blocks for the night's shelter`);
+    assert.match(agent.self_prompter.prompt, /^RotN agenda, step shelter_blocks \(before night\): Night is near: in about \d+ min the night routine builds a shelter\. You have no pickaxe yet, so it is built of dirt/);
 
     items.push(stack(SOAPSTONE, 6, 4), stack('cobblestone', 0, 6)); // 10 sturdy, soapstone included
     assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'sticks');
@@ -402,4 +402,35 @@ test('G3 round 6 B: a reserve that used its budget does not pause the agenda; it
     assert.equal(agendaTick(agent, { now: 2 * TICK_MS }), 'sticks');
     assert.equal(agent.agenda.reserveOff, false);
     assert.equal(agent.agenda.spentOn('shelter_blocks').llm_ms, 0);
+});
+
+// #284 review.
+test('#284 review 1: the reserve is not due at night (minutesToSunset is 0), so it never sends the bot out in the dark', (t) => {
+    const agent = fakeAgent(t, [stack('pyrotech:rock', 0, 6)]);
+    for (const timeOfDay of [NIGHT_START, 15000, 23000]) {
+        agent.bot.time = { timeOfDay };
+        assert.equal(agendaState(agent.bot).minutesToSunset(), 0);
+        assert.equal(agent.agenda.judge(agendaState(agent.bot)).step.id, 'sticks', `time ${timeOfDay}`);
+    }
+});
+
+test('#284 review 2: with no pickaxe the reserve counts dirt and dirt piles and asks for dirt, never rocks; with a pickaxe it asks for sturdy blocks', (t) => {
+    const items = [stack('pyrotech:rock', 0, 6), stack('betterwithmods:dirt_pile', 0, 8), stack('dirt', 0, 2)];
+    const agent = fakeAgent(t, items);
+    agent.bot.time = { timeOfDay: dayAt(7) };
+    assert.equal(agendaTick(agent, { now: 0 }), 'shelter_blocks');
+    const prompt = agent.self_prompter.prompt;
+    assert.match(prompt, /you have 4 \(dirt, dirt from your dirt piles, cobblestone\)\. Dig dirt by hand with !collectBlocks\("dirt", 6\)/);
+    assert.doesNotMatch(prompt, /rock/i, 'no rock run before the pickaxe step');
+
+    items[1].count = 32; // 8 dirt from piles + 2 dirt = 10
+    assert.equal(agendaTick(agent, { now: TICK_MS }), 'sticks', 'enough dirt: the tool steps go on');
+
+    // With a pickaxe, dirt does not count: it asks for sturdy blocks.
+    const withPick = [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1), stack('dirt', 0, 20), stack('cobblestone', 0, 3)];
+    const b = fakeAgent(t, withPick, { tableNear: true });
+    b.bot.time = { timeOfDay: dayAt(7) };
+    b.agenda.done_at.cobblestone = 1; // the cobblestone step was done once; the cobblestone was used since
+    assert.equal(agendaTick(b, { now: 0 }), 'shelter_blocks');
+    assert.match(b.self_prompter.prompt, /builds a shelter from sturdy blocks \(any cobblestone or stone\)\. It needs 10 on open ground, and you have 3\./);
 });

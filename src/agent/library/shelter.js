@@ -14,8 +14,9 @@
 
 import { Vec3 } from 'vec3';
 import pf from 'mineflayer-pathfinder';
-import { isSturdy, isSoftWall, isWall, handDiggable, inOre, shelterShell, dumpState } from './night.js';
-import { loadRotnData, PACK_VERSION, registryName } from '../../../packages/rotn-data/index.js';
+import { isSturdy, isSoftWall, isWall, handDiggable, dirtPileRecipes, shelterShell, dumpState } from './night.js';
+import { loadRotnData, PACK_VERSION, registryName, botName } from '../../../packages/rotn-data/index.js';
+import { formatName } from './rotn_names.js';
 import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe } from './skills.js';
@@ -59,9 +60,6 @@ export function softItems(bot) {
 }
 
 const countOf = (items) => items.reduce((n, i) => n + i.count, 0);
-/** Dirt piles (rotn-data's pileDirt ore): 4 make a dirt block in the inventory grid. */
-const PILES_PER_DIRT = 4;
-const pileCount = (bot) => countOf(bot.inventory.items().filter(i => inOre('pileDirt', { name: i.name, metadata: i.metadata ?? 0 })));
 
 /** The walls (4 sides x 2, lower first) and the roof of the 1x2 space at feet, in build order. */
 function wallsAndRoof(p) {
@@ -258,10 +256,20 @@ async function craftMore(bot, what, short, craft) {
         if (what === 'cobblestone' && cobbleChoices(bot).length > 0) {
             log(bot, `The shelter needs ${short} more sturdy blocks: making cobblestone from your rocks.`);
             await craft(bot, 'cobblestone', short);
-        } else if (what === 'dirt' && pileCount(bot) >= PILES_PER_DIRT) {
-            const n = Math.min(short, Math.floor(pileCount(bot) / PILES_PER_DIRT));
-            log(bot, `The shelter needs ${short} more blocks: making ${n} dirt from your dirt piles (${PILES_PER_DIRT} each).`);
-            await craft(bot, 'dirt', n);
+        } else if (what === 'dirt') {
+            // Each kind of pile by its own recipe (#284 nit): BWM's dirt pile makes minecraft:dirt,
+            // the loamy, sandy and silty piles make Biomes O' Plenty dirt (rotn-data).
+            let left = short;
+            for (const r of dirtPileRecipes()) {
+                const piles = countOf(bot.inventory.items().filter(i => registryName(i.name) === r.name && (i.metadata ?? 0) === r.meta));
+                const n = Math.min(left, Math.floor(piles / r.per));
+                if (n <= 0) continue;
+                const gives = formatName(botName(r.gives.name), r.gives.meta ?? 0);
+                log(bot, `The shelter needs ${left} more blocks: making ${n} ${gives} from your ${botName(r.name)} (${r.per} each).`);
+                await craft(bot, gives, n);
+                left -= n;
+                if (left <= 0) break;
+            }
         }
     } catch (err) {
         console.warn(`[shelter] could not craft ${what}: ${err?.message ?? err}`);
@@ -302,9 +310,11 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     // 1. A sturdy shelter (rock walls); a repair keeps the dirt walls it has.
     let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy }) : chooseSite(bot, radius);
     const problem = planProblem(plan, site, radius, false);
-    if (problem) return refuse(plan?.feet ?? null, plan?.todo ?? [], problem);
-    const level = exitLevel(bot, plan.feet);
+    const level = problem ? 0 : exitLevel(bot, plan.feet);
     const pick = await pickaxeFor(bot, level);
+    // Without a pickaxe the dirt-wall search is tried before any refusal (#284 review 3): dirt walls
+    // already there are kept, so a site the sturdy search had to dig at may need no digging.
+    if (problem && pick.ok) return refuse(plan?.feet ?? null, plan?.todo ?? [], problem);
     const sturdy = () => countOf(shelterItems(bot));
     if (pick.ok && sturdy() < plan.blocks) await craftMore(bot, 'cobblestone', plan.blocks - sturdy(), craft);
     let mode = { items: shelterItems, accept: keepSoft ? isWall : isSturdy };
@@ -329,6 +339,9 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
             const dirt = countOf(softItems(bot));
             const fallback = softProblem ? `the dirt fallback does not fit here either (${softProblem.replace(/\.$/, '')})`
                 : `a shelter with dirt needs ${soft.blocks} blocks, and you have ${have}${pick.ok ? '' : ' dirt'}`;
+            if (!pick.ok && problem)
+                return refuse(plan?.feet ?? soft?.feet ?? null, plan?.todo ?? [], `Not building a shelter: ${problem.replace(/\.$/, '')}. Without a pickaxe only dirt would do`
+                    + ` (Pickaxes: ${pick.where}), but ${fallback}.`);
             if (!pick.ok)
                 return refuse(plan.feet, plan.todo, `Not building a shelter at ${at(plan.feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`
                     + ` Pickaxes: ${pick.where}. A dirt shelter could be dug out by hand, but ${fallback}.`);

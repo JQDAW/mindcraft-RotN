@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T18:47Z (from `date -u`)
+Updated: 2026-11-06T19:09Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -718,7 +718,17 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
   - With the measured cycle this means "from the morning freeze on", because only about 8 min run between time 3001 and sunset.
 - **(3) No pickaxe (after a death):** the shelter is built from dirt only, at a site with a side that can be dug out by hand. With nothing held, the refusal names both the pickaxe and the missing dirt.
 - **Tests:** 11 new (shelter 6, night_routine 2, agenda 3). All fail on the old source. `src` and `packages` tests 919/919; lint 253.
-- **Not tried on a server.** Crafting dirt from piles uses `craftRecipe("dirt")` through rotn-data's 2x2 recipe, which is untested offline beyond a fake.
+- **Not tried on a server.** Crafting dirt from piles uses its own `craftRecipe` call through rotn-data's 2x2 recipe, which is untested offline beyond a fake.
+- **2026-11-06T19:09Z: #284 review fixes** (the lead's review; all three items plus the nit):
+  1. The reserve is not due at night: `due` needs `minutesToSunset` > 0, because it is 0 from sunset to sunrise.
+  2. **Lead decision:**
+     - With no pickaxe held, the reserve counts dirt and the dirt that held piles make (`placeableDirt`) toward the 10, and asks for dirt (`!collectBlocks("dirt", n)`), never for rocks.
+     - With a pickaxe, it asks for sturdy blocks only.
+  3. With no pickaxe, a failed sturdy-site search no longer refuses. The dirt-wall search is tried first, and it keeps existing dirt walls, for example under gravel.
+  - **Nit:**
+    - The data shows that all five `pileDirt` piles make a dirt-ore block, but only BWM's makes `minecraft:dirt`. The loamy, sandy and silty piles make `biomesoplenty:dirt` variants, and the aether pile makes `aether_dirt`.
+    - So `dirtPileRecipes` reads each pile's own no-table recipe from rotn-data, and each pile is crafted into its own dirt.
+  - **Tests:** 4 new (agenda 2, shelter 2) and 2 updated. All 6 fail on #284's previous head. `src` and `packages` tests 923/923; lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 

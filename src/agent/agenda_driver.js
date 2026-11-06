@@ -10,9 +10,9 @@
 import settings from './settings.js';
 import * as world from './library/world.js';
 import { countItem, formatName } from './library/rotn_names.js';
-import { itemVariants } from './library/rotn_sources.js';
+import { itemVariants, toolLevels } from './library/rotn_sources.js';
 import { cobbleChoices } from './library/cobble.js';
-import { isSturdy, minutesToSunset } from './library/night.js';
+import { isSturdy, placeableDirt, minutesToSunset } from './library/night.js';
 import { safeError } from './safe_error.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
@@ -63,6 +63,9 @@ export function agendaState(bot) {
         shelterBlocks: () => (bot.inventory?.items?.() ?? [])
             .filter(i => isSturdy({ name: i.name, metadata: i.metadata ?? 0 })).reduce((n, i) => n + i.count, 0),
         minutesToSunset: () => (Number.isFinite(bot.time?.timeOfDay) ? minutesToSunset(bot.time.timeOfDay) : Infinity),
+        // #284 review 2: any pickaxe held; the dirt blocks held or made from the dirt piles held.
+        hasPickaxe: () => toolLevels(bot, 'pickaxe').length > 0,
+        dirtBlocks: () => placeableDirt(bot.inventory?.items?.() ?? []),
     };
 }
 

@@ -432,7 +432,7 @@ function fakeCraft(items) {
     const calls = [];
     const craft = (bot, name, want) => {
         calls.push([name, want]);
-        const [from, to] = name === 'cobblestone' ? [ROCK, SOAP] : name === 'dirt' ? [PILE, DIRT] : [null, null];
+        const [from, to] = name === 'cobblestone' ? [ROCK, SOAP] : name === 'dirt:0' ? [PILE, DIRT] : [null, null];
         const stack = from && items.find(i => i.name === from.name && i.count >= 4);
         if (!stack) return Promise.resolve(false);
         const made = Math.min(want, Math.floor(stack.count / 4));
@@ -494,7 +494,8 @@ test('G3 round 6 B: still too few: dirt is the fallback (made from dirt piles), 
     const { bot, items, world } = fakeBot({ cobble: 0, items: [n(SOAP, 4), n(PILE, 32)] });
     const { craft, calls } = fakeCraft(items);
     const r = await buildShelter(bot, { craft });
-    assert.deepEqual(calls, [['dirt', 6]], 'no rocks: no cobblestone; 6 dirt from 24 piles');
+    assert.deepEqual(calls, [['dirt:0', 6]], 'no rocks: no cobblestone; 6 dirt from 24 piles');
+    assert.match(bot.output, /The shelter needs 6 more blocks: making 6 dirt:0 from your betterwithmods:dirt_pile \(4 each\)\./);
     assert.equal(r.closed, true, bot.output);
     assert.equal(r.soft, 5, 'the roof prop is outside the shell');
     assert.equal([...world.values()].filter(v => v?.name === SOAP.name).length, 4, 'all 4 sturdy blocks are in the walls');
@@ -537,4 +538,37 @@ test('G3 round 6 B: without a pickaxe a site with no side to dig out by hand is 
     assert.equal(r.closed, false);
     assert.deepEqual(stone.placed, []);
     assert.match(stone.bot.output, /without a pickaxe you could not dig out of it again\..*the dirt fallback does not fit here either \(Found no place for a shelter within 0 blocks \(.*and a side you can dig out by hand\)\)\./);
+});
+
+// #284 review.
+test('#284 review 3: with no pickaxe, a failed sturdy-site search does not refuse before the dirt-wall search', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // Dirt walls to the east under gravel: the sturdy search would dig them (unsafe), so it finds
+    // no site; the dirt search keeps them, digs nothing and closes the rest with dirt.
+    const set = { '1,64,0': 'dirt', '1,65,0': 'dirt', '1,66,0': 'gravel' };
+    const { bot, items, dug } = fakeBot({ cobble: 0, pickaxe: false, set, items: [n(DIRT, 10)] });
+    assert.equal(chooseSite(bot, 0), null, 'the sturdy search finds nothing');
+    const r = await buildShelter(bot, { radius: 0, craft: fakeCraft(items).craft });
+    assert.equal(r.closed, true, bot.output);
+    assert.deepEqual(dug, [], 'the dirt under the gravel stays');
+    assert.equal(bot.blockAt(new Vec3(1, 66, 0)).name, 'gravel');
+
+    // With nothing to build from, the refusal names the sturdy problem, the pickaxe and the dirt.
+    const none = fakeBot({ cobble: 0, pickaxe: false, set });
+    await buildShelter(none.bot, { radius: 0, craft: fakeCraft(none.items).craft });
+    assert.match(none.bot.output, /Not building a shelter: Found no place for a shelter within 0 blocks \(.*\)\. Without a pickaxe only dirt would do \(Pickaxes: .*\), but a shelter with dirt needs \d+ blocks, and you have 0 dirt\./);
+});
+
+test('#284 nit: each kind of dirt pile is crafted by its own recipe (rotn-data): BWM piles make dirt, loamy piles Biomes O\' Plenty dirt', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { dirtPileRecipes, placeableDirt } = await import('./night.js');
+    const byPile = Object.fromEntries(dirtPileRecipes().map(r => [r.name, `${r.gives.name}:${r.gives.meta}`]));
+    assert.equal(byPile['betterwithmods:dirt_pile'], 'minecraft:dirt:0');
+    assert.equal(byPile['contenttweaker:loamy_dirt_pile'], 'biomesoplenty:dirt:0');
+    assert.equal(placeableDirt([n(PILE, 9), { name: 'contenttweaker:loamy_dirt_pile', metadata: 0, count: 4 }, n(DIRT, 1)]), 4, '2 + 1 from piles, 1 held');
+
+    const calls = [];
+    const { bot } = fakeBot({ cobble: 0, items: [{ name: 'contenttweaker:loamy_dirt_pile', metadata: 0, count: 40 }] });
+    await buildShelter(bot, { craft: (b, name, k) => { calls.push([name, k]); return Promise.resolve(false); } });
+    assert.deepEqual(calls, [['biomesoplenty:dirt:0', 10]], 'not minecraft:dirt, which loamy piles do not make');
 });

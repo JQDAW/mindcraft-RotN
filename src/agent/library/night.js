@@ -17,7 +17,7 @@
 // Sturdiness comes from rotn-data's dump, never from bot.registry: forge-bridge gives
 // a modded block without known properties hardness 1.5 and no material (#181 review).
 import { Vec3 } from 'vec3';
-import { getBlock, registryName, loadRotnData, PACK_VERSION, WILDCARD_META } from '../../../packages/rotn-data/index.js';
+import { getBlock, registryName, loadRotnData, howToGet, PACK_VERSION, WILDCARD_META } from '../../../packages/rotn-data/index.js';
 
 export const NIGHT_START = 12542;
 export const NIGHT_END = 23460;
@@ -165,6 +165,47 @@ export function isSturdy(block) {
 export function isSoftWall(block) {
     const st = dumpState(block);
     return wholeBlock(st) && st.toolRequired === false && SOFT_ORES.some(ore => inOre(ore, block));
+}
+
+let pileCache = null;
+/**
+ * The dirt piles that make a dirt block in the inventory grid: [{name, meta, per, gives}] (registry
+ * names), from rotn-data's recipes for the dirt ore's blocks whose one input is a pileDirt member.
+ * On 3.3.4 only betterwithmods:dirt_pile (4 -> minecraft:dirt); the other four piles make other
+ * blocks (#284 nit). Cached only when found.
+ */
+export function dirtPileRecipes() {
+    if (pileCache) return pileCache;
+    const piles = oreMembers('pileDirt');
+    const out = [];
+    for (const name of new Set(oreMembers('dirt').map(m => m.name))) {
+        let ways = [];
+        try { ways = howToGet(name)?.ways ?? []; } catch { ways = []; }
+        for (const w of ways) {
+            if (w.kind !== 'craft' || w.requiresTable || w.inputs?.length !== 1) continue;
+            const input = w.inputs[0];
+            for (const c of input.choices ?? []) {
+                if (piles.some(p => p.name === c.name) && isSoftWall({ name: w.gives.name, metadata: w.gives.meta ?? 0 }))
+                    out.push({ name: c.name, meta: c.meta ?? 0, per: input.count, gives: w.gives });
+            }
+        }
+    }
+    if (out.length) pileCache = out;
+    return out;
+}
+
+/**
+ * The dirt blocks a set of stacks can put in a wall: dirt held, plus what the piles held make.
+ * @param {Array<{name: string, metadata?: number, count: number}>} items
+ */
+export function placeableDirt(items) {
+    let blocks = 0;
+    for (const i of items) if (isSoftWall({ name: i.name, metadata: i.metadata ?? 0 })) blocks += i.count;
+    for (const r of dirtPileRecipes()) {
+        const piles = items.filter(i => registryName(i.name) === r.name && (i.metadata ?? 0) === r.meta).reduce((k, i) => k + i.count, 0);
+        blocks += Math.floor(piles / r.per);
+    }
+    return blocks;
 }
 
 /** A shelter wall: sturdy, or the dirt fallback. */
