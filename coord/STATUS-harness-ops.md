@@ -1,8 +1,19 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (07:51 UTC, from `date -u`)
+Updated: 2026-11-06 (12:20 UTC, from `date -u`)
 
-## Now: G3 smoke round 4 is over (GO 06:30Z, develop 09197157, smoke). No batch until a new GO.
+## Now: G3 smoke round 5 is on HOLD after batch A (the lead). Do not start B; no servers until the lead says (rotn-data's dump run has the project).
+
+- **A: FAIL 3/7** (GO 11:55Z, develop c32521e5, smoke). login_online, fresh_start and no_cheat pass; stone_tools, crafting_table, cobblestone and crafted_by_bot fail because the bot was gone.
+  - **Cause: the agent crashed five times on an empty memory summary.** The summary request got null content, `history.js:44` read `.length` on it, and the agent process exited. Each restart reloaded the 14 turns in `memory.json`, summarized at once and crashed again (restarts at 10, 20, 40, 80 and 160 s). The bot was off the server from 12:08:37 to the end.
+  - **The outgoing chat limit was off all run** ("no bot._client.chat to wrap"). The lead confirmed the cause: minecraft-protocol assigns `client.chat` only once play starts.
+  - Before the crash, the falling-tree guard refused the tree at -62 64 -50 six times ("no place beside it that is out from under its canopy"); 0 sticks. No falls, deaths, spam kicks, or StackUp/NaN lines.
+  - LLM 19 requests: 11 replies, 5 empty summaries (not counted by the runner then), 3 discarded for a newer message. USD 0.001557; the key reads 0.772293 of 4.50. Hetzner 12 min; server, Primary IP and SSH key verified gone at 12:11:08.
+- **Fixes elsewhere (the lead):** null content in `src/models/openrouter.js` (the lead); `history.js` and the chat limiter (skills-rotn).
+- **Open: my fix PR (the lead's order).** The driver also moves `bots/<bot>/memory.json` aside at every start (approved for all G3 batches: a fresh start means fresh memory), and the LLM counts include empty memory summaries (`replies.memoryEmpty`, part of `empty` and `failed`). DRIVER.md records both.
+- **Next:** batches B, C and D of round 5 under the same GO, once the lead says the fixes are merged. Raw logs `captures/raw/r5-g3b|g3c|g3d`.
+
+## Earlier: G3 smoke round 4 is over (GO 06:30Z, develop 09197157, smoke).
 
 | Batch | Result |
 | --- | --- |
