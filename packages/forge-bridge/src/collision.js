@@ -8,13 +8,23 @@
 // call entities really collide through; several boxes for stairs or cauldrons), or the dumped
 // getCollisionBoundingBox (`collision`) when no playerCollision is given. A state whose shape depends
 // on its neighbours (`varies`: fences, walls, panes, Dynamic Trees branches) gets one full-width box
-// as tall as the tallest box seen for it (at least 1), because a per-state table cannot know the connections.
+// as tall as the tallest box seen for it (at least 1), because a per-state table cannot know the
+// connections. So does a state whose every box has no volume (a Dynamic Trees trunk shell, a point:
+// its box comes from the trunk next to it; Rats tubes, a plane): its real shape comes from elsewhere.
+// Tile-entity-dependent shapes are not caught: the dumper reads every state at an empty cell with no
+// tile entity (rotn-data #269), so a block whose box depends on its tile entity (Malisis doors, wells,
+// chutes) gets the box it has without one, and `varies` false is not proof that a shape is fixed.
+// Boxes may reach into the next cell (thick Dynamic Trees trunks up to [-1, 0, -1, 2, 1, 2], bridges,
+// piston heads); mineflayer's physics and the pathfinder see a box only from its own cell. Around a
+// thick trunk the next cells hold trunk shells, which are solid full cubes here (above), so the
+// pathfinder keeps out of them; an overhang into a plain air cell (a bridge rail) is not seen.
 // With data/collision-overrides-3.3.4.json (built from the pinned pack by
 // tools/build-collision-overrides.mjs; its rules are in that tool's header):
 // - walk-through is opt-in (lead decision, #259): a state a player has no box in is walk-through
 //   only if the data lists it (reviewed harmless classes: plants, flowers, grass, saplings, crops,
-//   rock piles). Every other state without a box is a solid full cube, so an unknown modded fluid,
-//   trap or portal is never air to the pathfinder;
+//   rock piles; rails, signs, torches, buttons and levers; never pressure plates or tripwire). Every
+//   other state without a box is a solid full cube, so an unknown modded fluid, trap or portal is
+//   never air to the pathfinder;
 // - `liquid: true` on modded fluids (BlockFluidBase, BlockLiquid, IFluidBlock), which stay solid;
 // - `forge.hazard` ('trap', 'fire', 'portal', 'web', 'lava') for skills-rotn's avoid lists;
 // - `shapes` names a reviewed box for a block, over the dump (unused on 3.3.4 since #269: the
@@ -73,6 +83,8 @@ export function validateCollisionOverrides(data) {
 // One full-width box from the cell's floor to the top of the tallest box, or a full cube when there
 // is no box: for a state whose shape depends on its neighbours (a fence is 1.5 high and, connected,
 // fills its row; a Dynamic Trees branch grows arms toward the next tree part).
+// A box with no volume (zero extent on an axis): a point or a plane.
+const isFlat = (b) => b[3] <= b[0] || b[4] <= b[1] || b[5] <= b[2];
 const neighbourSafeShape = (boxes) => (boxes.length ? [[0, 0, 0, 1, Math.max(1, ...boxes.map((b) => b[4])), 1]] : FULL_CUBE);
 
 /**
@@ -80,7 +92,8 @@ const neighbourSafeShape = (boxes) => (boxes.length ? [[0, 0, 0, 1, Math.max(1, 
  * the dump has no usable data for the block (no states, or a state whose `collision` is missing or
  * malformed). With `playerCollision` (rotn-data's, as `(regName, meta) => { boxes, varies } | null`)
  * each state's shape is what a player collides with; a state whose result is missing or malformed
- * keeps its `collision`, and a `varies` state gets neighbourSafeShape of both.
+ * keeps its `collision`, and a `varies` state, or one whose every box has no volume, gets
+ * neighbourSafeShape of both (counted as `varies`).
  * `sources` counts the states by where their shape came from: player, varies, collision.
  */
 export function dumpShapesByMeta(dumped, { name, playerCollision } = {}) {
@@ -91,7 +104,7 @@ export function dumpShapesByMeta(dumped, { name, playerCollision } = {}) {
     const shapeOf = (s) => {
         const pc = playerCollision?.(name, s.meta);
         if (!pc || !isShape(pc.boxes)) { sources.collision++; return s.collision; }
-        if (pc.varies === true) { sources.varies++; return neighbourSafeShape([...pc.boxes, ...s.collision]); }
+        if (pc.varies === true || (pc.boxes.length > 0 && pc.boxes.every(isFlat))) { sources.varies++; return neighbourSafeShape([...pc.boxes, ...s.collision]); }
         sources.player++;
         return pc.boxes;
     };

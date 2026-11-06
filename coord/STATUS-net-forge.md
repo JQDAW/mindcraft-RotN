@@ -1,31 +1,38 @@
 # Status: net-forge
 
-Updated: 2026-11-06T16:24Z
+Updated: 2026-11-06T16:56Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
-## Collision from rotn-data `playerCollision` (#269); PR #279 open, 2026-11-06T16:24Z
+## Walk-through allowlist and #279 nits; PR #281 open, 2026-11-06T16:56Z
 
-- **Branch:** `agent/net-forge/player-collision`, from develop `b49cf6e`. The lead approved the switch. The walk-through allowlist goes in a separate later PR (decision below).
-- **Shapes:** each modded state gets what a player collides with, from rotn-data's `RotnData.playerCollision`, passed in by `initBot`.
-  - Stairs and cauldrons get several boxes. Lily pads get their thin box: 0.09375 high, which the pathfinder treats as a carpet, so the bot walks onto it.
-  - **Neighbour-dependent states** (`varies`: fences, walls, panes, Dynamic Trees branches) get one full-width box from the floor to their tallest box, at least 1 high. A fence or wall is `[0,0,0,1,1.5,1]`; a branch is a full cube.
-    - My proposal had said "keep today's `collision` box". That box is not conservative: for a BOP fence it is a 1-high cube, and the player really collides with a 1.5-high post.
-  - A missing or malformed result keeps the dumped `collision`. Without `playerCollision`, behaviour is as before.
-- **Policy is unchanged:**
-  - Walk-through stays opt-in: a state with no player box that is not reviewed stays a full cube, for example `contenttweaker:cave_grass`.
-  - Liquids and hazards are unchanged.
-  - The generator still requires no `addCollisionBoxToList` override for walk-through classes, because the dumper cannot see tile-entity dependence.
-- **Overrides data:**
-  - Only the 24 leaves-only entries and the `dynamicLeaves` shape table went.
-  - The tool now checks all 26 Dynamic Trees leaves blocks against the box the jar and config select, in every state. The result is under `checks.dynamicLeaves`.
-  - Everything else is identical: 326 walk-through, 162 liquid, 233 hazard. `--check` reports it up to date.
+- **Branch:** `agent/net-forge/walk-allowlist`, from develop `cbeb845` (#279 merged).
+- **Allowlist (lead decision after #279):** vanilla `BlockRailBase`, `BlockSign`, `BlockTorch`, `BlockButton` and `BlockLever` subclasses become walk-through when every state has no player box and nothing in the class chain declares a contact or collision-box method.
+  - `BlockBasePressurePlate`, `BlockTripWire` and `BlockTripWireHook` are never walk-through. 24 modded pressure plates are recorded as excluded; the pack has no modded tripwire.
+  - **Reviewed vanilla contact methods** (javap on the pinned server jar, names through the SRG table):
+    - `BlockButton`'s contact method looks only for `EntityArrow`.
+    - `BlockRailDetector`'s looks only for `EntityMinecart`.
+    - Neither counts as contact, so the 41 buttons and the 2 detector rails qualify. A mod class's own contact method still excludes a block.
+  - **Result:** 73 more walk-through blocks: 41 buttons, 25 torches and candles, 4 rails, 2 signs and 1 lever (399 in all). No earlier entry changed.
+  - The Pyrotech torches stay solid: they are `'trap'` hazards because they set entities on fire.
+- **#279 nits:**
+  1. `collision.js` header: tile-entity-dependent shapes (Malisis doors, wells, chutes) are read at an empty cell, and `varies` false is not proof that a shape is fixed. It also describes boxes that reach into the next cell.
+  2. **Boxes reaching into the next cell:** a thick trunk `[-1,0,-1,2,1,2]` is surrounded by `dynamictrees:trunkshell` blocks. Their player box in the data was a point (`[0,0,0,0,0,0]`), so the pathfinder saw a floor at the bottom of the cell.
+     - New rule: a state whose every box has no volume is treated like a neighbour-dependent one (a full cube). That covers trunk shells and Rats tubes; a plane beside a real box is kept.
+     - Test: the pathfinder keeps out of the shells and stands on them at the trunk's top, and physics lands there too. It also pins the known limit: an overhang into a plain air cell (a bridge deck) is not seen.
+  3. The `fixedMini` comment now says it covers the no-playerCollision fallback and the generic `shapes` override, which the 3.3.4 path no longer uses.
+  4. The cactus branch arms went to rotn-data: #280 makes them `varies`, which this code already handles.
 - **Tests:**
-  - `collision.test.js` 13/13: 2 new #269 tests (fence landing at 65.5, lily pad at 64.09375), plus real-dump checks for stairs, fence, wall, branch and lily pad.
+  - `collision.test.js` 14/14.
   - `e2e-initbot` and `fall_safety` 18/18.
-  - Lint at baseline (253).
+  - Lint is clean on the touched files.
+  - The generator's `--check` reports the data up to date.
 
-**Lead decision (2026-11-06), for a later PR:** widen the walk-through allowlist to rails, signs, torches, buttons and levers, if they have no collision box and no contact harm. Pressure plates and tripwire stay excluded, because they trigger mechanisms and traps.
+## (Merged as #279) Collision from rotn-data `playerCollision` (#269)
+
+- **Shapes:** each modded state gets what a player collides with (`RotnData.playerCollision`, passed in by `initBot`). Stairs get several boxes; lily pads get their thin box, a carpet to the pathfinder.
+- **Neighbour-dependent states** get a full-width box at least 1 high: `[0,0,0,1,1.5,1]` for a fence or wall.
+- **Policy** (opt-in walk-through, liquids, hazards) was unchanged. The leaves shape override was replaced by a check.
 
 ## (Merged as #263) #259 follow-up: whole-block vs partial hazards
 
