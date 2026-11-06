@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { shelterItems, siteNeeds, chooseSite, buildShelter, LATE_UPDATE_MS } from './shelter.js';
+import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, LATE_UPDATE_MS } from './shelter.js';
 import { getCommand } from '../commands/index.js';
 
 const reg = minecraftData('1.12.2');
@@ -571,4 +571,43 @@ test('#284 nit: each kind of dirt pile is crafted by its own recipe (rotn-data):
     const { bot } = fakeBot({ cobble: 0, items: [{ name: 'contenttweaker:loamy_dirt_pile', metadata: 0, count: 40 }] });
     await buildShelter(bot, { craft: (b, name, k) => { calls.push([name, k]); return Promise.resolve(false); } });
     assert.deepEqual(calls, [['biomesoplenty:dirt:0', 10]], 'not minecraft:dirt, which loamy piles do not make');
+});
+
+// G3 round 7 B: the shelter the bot is in is judged by what really harms or blocks it.
+test('G3 round 7 B: siteProblem names what is where; in the shelter the bot is in, only fire, lava or a solid block in its cells counts, and a repair goes on past a carpet', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const feet = new Vec3(0, 64, 0);
+    const problem = (set, occupied) => siteProblem(fakeBot({ set: shellAt(set) }).bot, feet, { occupied })?.text ?? null;
+    // A new site needs the space free; the shelter the bot is in does not mind harmless blocks.
+    assert.equal(problem({ '0,64,0': 'carpet' }, false), 'carpet at 0, 64, 0 (the 1x2 space is not free)');
+    assert.equal(problem({ '0,64,0': 'carpet' }, true), null);
+    assert.equal(problem({ '0,65,0': 'snow_layer' }, true), null);
+    assert.equal(problem({ '0,65,0': 'torch' }, true), null);
+    assert.equal(problem({ '0,64,0': 'water' }, true), null, 'water at its feet');
+    // #296 review 1: a liquid at head height drowns the bot; lava counts anywhere.
+    assert.equal(problem({ '0,65,0': 'water' }, true), 'water at 0, 65, 0 (a liquid at head height: the bot would drown)');
+    assert.equal(problem({ '0,65,0': 'flowing_water' }, true), 'flowing_water at 0, 65, 0 (a liquid at head height: the bot would drown)');
+    assert.equal(problem({ '0,64,0': 'lava' }, true), 'lava at 0, 64, 0 (lava in the 1x2 space)');
+    assert.equal(problem({ '0,65,0': 'flowing_lava' }, true), 'flowing_lava at 0, 65, 0 (lava in the 1x2 space)');
+    assert.equal(problem({ '0,63,0': 'air' }, true), null, 'the floor: when it goes, the bot falls out of the shelter');
+    assert.equal(problem({ '0,63,0': 'air' }, false), 'air at 0, 63, 0 (the floor is not solid)');
+    // What does count, by name and place.
+    assert.equal(problem({ '0,65,0': 'cobblestone' }, true), 'cobblestone at 0, 65, 0 (a solid block in the 1x2 space)');
+    assert.equal(problem({ '0,64,0': 'fire' }, true), 'fire at 0, 64, 0 (fire in the 1x2 space)');
+    assert.equal(problem({ '1,65,0': 'lava' }, true), 'lava at 1, 65, 0 (lava in the walls or roof)');
+    assert.equal(problem({ '0,66,0': 'flowing_lava' }, false), 'flowing_lava at 0, 66, 0 (lava in the walls or roof)');
+    // A block whose name only holds "fire" (every iceandfire: block) is no hazard (rotn-data material).
+    assert.equal(problem({ '1,64,0': 'iceandfire:chared_stone', '0,66,0': 'iceandfire:dragonforge_fire_brick' }, false), null);
+    assert.equal(siteNeeds(fakeBot({ set: shellAt({ '1,64,0': 'iceandfire:chared_stone' }) }).bot, feet).todo.length, 0, 'and it is a sturdy wall');
+
+    // The repair of the shelter the bot is in: a carpet at its feet, a hole in a wall.
+    const { bot, placed } = fakeBot({ cobble: 2, set: shellAt({ '0,64,0': 'carpet', '1,65,0': 'air' }) });
+    const r = await buildShelter(bot, { site: feet, keepSoft: true });
+    assert.equal(r.closed, true, bot.output);
+    assert.deepEqual(placed, ['1,65,0']);
+    // A solid block in its cells: the refusal says what and where.
+    const blocked = fakeBot({ cobble: 2, set: shellAt({ '0,65,0': 'cobblestone', '1,65,0': 'air' }) });
+    const b = await buildShelter(blocked.bot, { site: feet, keepSoft: true });
+    assert.equal(b.closed, false);
+    assert.match(blocked.bot.output, /Cannot repair the shelter at 0, 64, 0: cobblestone at 0, 65, 0 \(a solid block in the 1x2 space\)\./);
 });

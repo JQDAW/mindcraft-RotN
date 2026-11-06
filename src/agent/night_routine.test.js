@@ -233,9 +233,10 @@ test('#204 review 2: a shelter that is no longer usable (fire, lava, a block ins
     await settle(agent);
     nightTick(agent, { now: 1, ops: o });
     o.siteNeeds = () => null;
+    o.siteProblem = () => ({ text: 'lava at 0, 65, 0 (lava in the 1x2 space)' });
     assert.equal(nightTick(agent, { now: CHECK_MS + 1, ops: o }), 'night:building');
     assert.equal(agent.bot.rotnSheltered, false, 'the movers are back on');
-    assert.match(agent.chat.at(-1), /the shelter at 0, 64, 0 is no longer usable \(fire, lava or a block inside\): building a new one/);
+    assert.match(agent.chat.at(-1), /the shelter at 0, 64, 0 is no longer usable: lava at 0, 65, 0 \(lava in the 1x2 space\); building a new one/);
 });
 
 test('#204 review 3: at dusk a running action gets DUSK_WAIT_MS, then it is stopped; by night at once', (t) => {
@@ -488,4 +489,76 @@ test('G3 round 6 B: digOut opens a dirt side first (by hand), not the cobbleston
     const side = await digOut(bot, SITE);
     assert.ok(side.equals(new Vec3(0, 64, 1)), `opened ${side}`);
     assert.deepEqual(dug, ['0,65,1', '0,64,1'], 'only the dirt side');
+});
+
+// G3 round 7 B: the bot left a closed shelter at night ("no longer usable (fire, lava or a block
+// inside)", naming nothing), and a zombie killed it outside.
+test('G3 round 7 B: inside, a dropped item, a carpet or snow in the space, or a wall of a block named "...fire..." keeps the shelter; a solid block or lava ends it, and the line says what and where', async (t) => {
+    quiet(t);
+    const { siteNeeds, siteProblem } = await import('./library/shelter.js');
+    const key = (p) => `${p.x},${p.y},${p.z}`;
+    const world = new Map();
+    const walls = () => {
+        for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { world.set(`${x},64,${z}`, 'cobblestone'); world.set(`${x},65,${z}`, 'cobblestone'); }
+        world.set('0,66,0', 'cobblestone');
+    };
+    walls();
+    const shelter = () => {
+        const agent = fakeAgent({ t: NIGHT });
+        agent.bot.blockAt = (p) => {
+            const q = p.floored();
+            const name = world.get(key(q)) ?? (q.y < 64 ? 'dirt' : 'air');
+            // A block the vanilla registry does not know (a modded one) is a whole block here.
+            return { name, metadata: 0, boundingBox: reg.blocksByName[name]?.boundingBox ?? 'block', position: q };
+        };
+        // A dropped stack where the bot stands: an entity, never a block.
+        agent.bot.entities = { 7: { type: 'object', name: 'item', position: new Vec3(0.5, 64.2, 0.5) } };
+        const o = ops();
+        o.siteNeeds = siteNeeds; // the real checks
+        o.siteProblem = siteProblem;
+        return { agent, o };
+    };
+    const { agent, o } = shelter();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    let now = 1;
+    const check = () => { now += CHECK_MS + 1; return nightTick(agent, { now, ops: o }); };
+
+    world.set('0,64,0', 'carpet'); // mineflayer: a 'block' bounding box; rotn-data: not solid
+    assert.equal(check(), 'night:inside');
+    world.set('0,64,0', 'snow_layer');
+    assert.equal(check(), 'night:inside');
+    world.set('1,64,0', 'iceandfire:chared_stone'); // "fire" in the name, rock: a wall
+    assert.equal(check(), 'night:inside');
+    assert.equal(o.builds.length, 1, 'no new shelter and no repair');
+    assert.equal(agent.bot.rotnSheltered, true);
+    assert.ok(!agent.chat.some(l => /no longer usable/.test(l)), agent.chat.join('\n'));
+
+    world.set('0,65,0', 'cobblestone'); // a solid block where the bot's head is
+    assert.equal(check(), 'night:building');
+    assert.match(agent.chat.at(-1), /^\[night\] the shelter at 0, 64, 0 is no longer usable: cobblestone at 0, 65, 0 \(a solid block in the 1x2 space\); building a new one$/);
+
+    world.clear(); walls();
+    world.set('0,64,-1', 'lava');
+    const lava = shelter();
+    lava.o.siteNeeds = () => ({ todo: [] }); // closed when it was built
+    nightTick(lava.agent, { now: 0, ops: lava.o });
+    await settle(lava.agent);
+    nightTick(lava.agent, { now: 1, ops: lava.o });
+    lava.o.siteNeeds = siteNeeds;
+    assert.equal(nightTick(lava.agent, { now: CHECK_MS + 2, ops: lava.o }), 'night:building');
+    assert.match(lava.agent.chat.at(-1), /no longer usable: lava at 0, 64, -1 \(lava in the walls or roof\); building a new one$/);
+
+    // #296 review 1: water at the bot's feet keeps the shelter; water at head height drowns it.
+    world.clear(); walls();
+    const wet = shelter();
+    nightTick(wet.agent, { now: 0, ops: wet.o });
+    await settle(wet.agent);
+    nightTick(wet.agent, { now: 1, ops: wet.o });
+    world.set('0,64,0', 'water');
+    assert.equal(nightTick(wet.agent, { now: CHECK_MS + 2, ops: wet.o }), 'night:inside');
+    world.set('0,65,0', 'water');
+    assert.equal(nightTick(wet.agent, { now: 2 * CHECK_MS + 3, ops: wet.o }), 'night:building');
+    assert.match(wet.agent.chat.at(-1), /no longer usable: water at 0, 65, 0 \(a liquid at head height: the bot would drown\); building a new one$/);
 });

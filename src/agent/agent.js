@@ -4,6 +4,7 @@ import { VisionInterpreter } from './vision/vision_interpreter.js';
 import { Prompter } from '../models/prompter.js';
 import { initModes } from './modes.js';
 import { initBot } from '../utils/mcdata.js';
+import { guardInventory } from './library/inventory_sync.js';
 import { containsCommand, commandExists, executeCommand, truncCommandMessage, isAction, blacklistCommands } from './commands/index.js';
 import { ActionManager } from './action_manager.js';
 import { NPCContoller } from './npc/controller.js';
@@ -84,6 +85,9 @@ export class Agent {
         // The outgoing chat limit (G3 round 4 C+D: kicked for spam): every packet goes through it.
         // client.chat comes only with the login, so it wraps then (and on each spawn) (G3 round 5 A).
         installChatLimit(this.bot);
+        // G3 round 7 B: the cursor follows the server, and every equip, craft or toss starts with a
+        // clear cursor and survives one rejected click (resync and one more try).
+        guardInventory(this.bot);
         
         // Connection Handler
         const onDisconnect = (event, reason) => {

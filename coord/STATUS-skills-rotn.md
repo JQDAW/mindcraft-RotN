@@ -1,6 +1,23 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T20:11Z (from `date -u`)
+Updated: 2026-11-06T22:16Z (from `date -u`)
+
+## Handoff (before the move to the dev server, 2026-11-06T21:49Z by `date -u`)
+
+- **Open PRs:** **#296** (`agent/skills-rotn/r7-shelter-cursor`): the round 7 B fixes (the shelter check, cursor sync, rejected-click recovery, self-defense fights on). Full `npm test` 1360 pass, 0 fail, 3 skipped; lint 253. The lead's review (2 safety fixes and a nit) is answered in `3db993d0` (2026-11-06T22:16Z by `date -u`): water at head height in the bot's own shelter counts as unusable (drowning), and lava anywhere; after the first failed equip of a fight no more are tried; a cursor-stack drop goes to the bot's own log. develop (#297) is merged in. It waits for the re-review.
+- **Branches:** everything is committed and pushed. Nothing is local only.
+  - `agent/skills-rotn/r7-shelter-cursor`: #296.
+  - `agent/skills-rotn/r7`: STATUS-only commits, already merged into #296's branch; no PR of its own.
+  - `agent/skills-rotn/night-threats`: 2 old commits now pushed; their change (do-not-look from rotn-data's `lookAt`) is already in develop by another commit, so the branch is stale.
+  - Every other `agent/skills-rotn/*` branch is merged.
+- **Next task:**
+  1. #296's re-review, if anything is left.
+  2. Then the next smoke or gate findings for G3 (b), starting with what the new "no longer usable: <block> at <pos> (<why>)" line names in the next B run. Round 7 did not name the cause.
+  3. Watch for `[inventory]` lines (cursor put down, resync) to confirm the cursor fix live.
+- **Open requests:**
+  - Request 1 (lead, `settings.js`), the remaining parts: `pause_when_empty: false`, and `!searchWiki` in `blocked_actions` (it returns vanilla 1.21 facts). `task_givers` and `allow_server_task_giver` are in.
+  - FYI for net-forge: mineflayer 4.33 ignores the server's cursor packet (`set_slot` window -1, slot -1). #296 handles it in `src/agent`. A mineflayer patch would be the cleaner home, if net-forge wants it.
+
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -209,8 +226,39 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#291: dirt piles follow-up** (branch `agent/skills-rotn/dirt-piles`, opened 2026-11-06T19:57Z by `date -u`): rotn-data #288. Required before the G3 gate (lead). See "Dirt piles" below.
-- **#284** (round 6 B shelter) and rotn-data **#288** are merged.
+- **#296** (`agent/skills-rotn/r7-shelter-cursor`): the round 7 B fixes, opened 2026-11-06T21:47Z after the lead lifted the code freeze. Details are in "Round 7 B fixes" below.
+- Round 7 is over: A 7/7, B 4/5, C 7/7, D 7/7. No gate on that commit. **#291** (dirt piles) is merged as develop `42a8e94`.
+
+## Round 7 B fixes (branch `agent/skills-rotn/r7-shelter-cursor`, 2026-11-06T21:30Z by `date -u`)
+
+From the run: the bot was sealed in a shelter at -36, 69, -114 at sunset. About 8 min later it logged "no longer usable (fire, lava or a block inside)" without naming anything, and started a new build. Then a zombie came: self_defense's `equipHighestAttack` threw "Server rejected transaction for clicking on slot 16" (skills.js:62), the bot never hit back, and it died. After the respawn, mineflayer still showed `quark:tallow` on the cursor.
+
+The log does not show what made the shelter unusable. The next run's line will name the block and where it is.
+
+1. **The shelter check names what it found and where** (`shelter.js` `siteProblem`). The line is now, for example, "[night] the shelter at X is no longer usable: cobblestone at 0, 65, 0 (a solid block in the 1x2 space); building a new one".
+   - Only real fire or lava (by rotn-data material), or a solid block in the bot's two cells (rotn-data `solid` with a collision box), ends a sealed shelter.
+   - A dropped item (an entity) never counts. Neither do a torch, a carpet, a snow layer, water, or a floor change: when the floor goes, the bot falls, and the position check takes over.
+   - Before, the name test `/lava|fire/` matched every `iceandfire:` block, and minecraft-data gives a carpet or a snow layer a `'block'` bounding box. Either one would have ended the shelter.
+   - The repair (`buildShelter({site})`) uses the same rules. Its refusal names the block.
+2. **The cursor and rejected clicks** (new `library/inventory_sync.js`, installed in `agent.js`).
+   - **Cause:** mineflayer 4.33 drops the server's cursor packet (`set_slot` for window -1, slot -1). A 1.12 server sends that packet with the whole window after it rejects a click, and on a respawn. So mineflayer's cursor goes stale (the tallow), and clicks built on it are rejected.
+   - **The fix:**
+     - the cursor follows the server's packet;
+     - before `equip`, `unequip`, `craft`, `toss`, `tossStack` and `moveSlotItem`, a cursor stack goes into a free slot, or is dropped when there is none;
+     - a rejected or unanswered click waits for the server's resend (window and cursor, up to 1 s), clears the cursor again, and tries once more;
+     - an operation run inside a guarded one is not retried again.
+3. **Self-defense never stops because an equip failed** (`skills.js`). `equipHighestAttack` never throws. The fight goes on with what is in hand, with one line per fight: "Could not take the stone_sword in hand (...); fighting with wheat_seeds."
+
+**Tests** (targeted only):
+- `night_routine.test.js` (1 new, 1 updated), `shelter.test.js` (1 new), `inventory_sync.test.js` (4 new), `threats.test.js` (1 new).
+- Run together with `use_on` and `dirt_piles`: 85/85 pass.
+- On the old code:
+  - the new night test and the updated one fail;
+  - the self-defense test fails (the rejection is thrown);
+  - the shelter test fails, at its first assertion with a stand-in `siteProblem`;
+  - `inventory_sync` is a new module.
+- Lint in the touched files: `agent.js` 11 and `skills.js` 20, as in the baseline; the other files 0.
+- After the freeze lifted: full `npm test` 1363 tests (1360 pass, 0 fail, 3 skipped); `lint-baseline.mjs` 253 OK. Pushed as **#296**.
 
 ## Resumed (session 3, 2026-11-04, respawned by the lead after the usage-limit pause)
 
