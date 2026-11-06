@@ -55,8 +55,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { keyFetch, readKeyUsage, spent, testOverridesAllowed, TEST_OVERRIDES } from './lib/llm-spend.mjs';
+import { keyFetch, probeFetch, probeModel, readKeyUsage, spent, testOverridesAllowed, TEST_OVERRIDES } from './lib/llm-spend.mjs';
 import { findBash } from './lib/adapters.mjs';
+import { LLM_MODEL } from './lib/g3.mjs';
 import { checkProfile, parseDriverArgs, settingsProblems } from './drivers/mindcraft-driver.mjs';
 import { loadScenarios } from './run.mjs';
 
@@ -332,7 +333,19 @@ async function main(argv) {
             log(`preflight refused: the key's usage cannot be read (${u.error}); a batch whose spend cannot be watched does not run`);
             return 2;
         }
-        log(`preflight passed: driver, profile, model and settings checked; the key's usage can be read; ${o.scenarios.length} scenario(s) (timeouts: ${timeoutText}); ${modeText(o)}`);
+        // One tiny request to the run's model (lead, after round 3: the old preset's provider answered 429 for
+        // hours, and two batches ran without one LLM reply). A failed probe refuses before any server exists.
+        const probeImpl = probeFetch(process.env);
+        let probeText = 'the LLM probe was skipped (offline test mode, no probe file)';
+        if (probeImpl) {
+            const pr = await probeModel({ key: process.env.OPENROUTER_API_KEY, model: LLM_MODEL.replace(/^openrouter\//, ''), fetchImpl: probeImpl });
+            if (!pr.ok) {
+                log(`preflight refused: the LLM probe of ${LLM_MODEL} failed (HTTP ${pr.status ?? '-'}, provider ${pr.provider ?? 'unknown'}, ${pr.error}); no batch runs on a model that does not answer`);
+                return 2;
+            }
+            probeText = `the LLM probe answered (HTTP ${pr.status}, provider ${pr.provider ?? 'unknown'}, ${pr.model ?? 'model unknown'})`;
+        }
+        log(`preflight passed: driver, profile, model and settings checked; the key's usage can be read; ${probeText}; ${o.scenarios.length} scenario(s) (timeouts: ${timeoutText}); ${modeText(o)}`);
         return 0;
     }
     // Inside a test-server run, the server exists already: the same checks must have passed before it was

@@ -161,6 +161,11 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
 - The first smoke batches (`test/evidence/g3/g3a-20261105/`, `g3b-20261105/` and `g3cd-20261105/`) ran before the field existed. Their `batch.json` got `"smoke": true` by hand, at the lead's request, and they have no `gate` field.
 
 - **The preflight, before any server exists** (lead, #169 review). When the run command's script is `test/runner/batch.mjs`, `test-server.sh run` first runs it with `--preflight` and the same arguments. That checks the driver, its profile, the profile's model (it must be `openrouter/@preset/glm-5-3-flash-cheap-reliable`, and so must `code_model` and `vision_model` when set) and `settings.js`, and reads the key's usage once. If anything fails, no server is created (exit 1).
+  - **The LLM probe** (lead, after round 3, when the old preset's upstream provider answered 429 for hours and two batches ran without one LLM reply):
+    - After the usage reading, the preflight sends one tiny request to `LLM_MODEL` (`probeModel` in `lib/llm-spend.mjs`; `max_tokens` 16).
+    - A failure refuses, with the HTTP status, the provider and its error code: "the LLM probe of ... failed (HTTP 429, provider Baidu, tpm_rate_limit_exceeded)". A pass is logged with the provider and model.
+    - Only those fields are kept: the key goes only into the Authorization header, and the body is never echoed.
+    - `--preflight-files` (the dry run) sends no probe. In the offline test mode, `ROTN_OPENROUTER_PROBE_FILE` gives a fake answer; without it, the probe is skipped and logged as skipped, so no offline test reaches the network.
   - The driver must be `test/runner/drivers/mindcraft-driver.mjs`; a fake driver is accepted only in the offline test mode.
   - The script is recognised by its resolved path, so a path with `..` in it or a Windows path counts, and another file whose path merely ends in `test/runner/batch.mjs` does not (#176 review nit).
   - With `--dry-run`, `test-server.sh` passes `--preflight-files` instead: the same file checks, without the key's usage reading, so a dry run never contacts OpenRouter (#176 review nit).
@@ -229,7 +234,12 @@ Every batch has its own spend stop (`maxBatchUsd` USD 2) and its own written GO.
   - The spend is checked **between** scenarios, not during one, so a single scenario can run past the limit.
   - OpenRouter's usage figure can lag a little behind the newest requests.
   - The key's own credit limit (USD 5 for the test key) is the hard backstop.
-- **Records.** `result.json`'s `llm` (the models, the calls, the usage before and after, the cost) is in every record. `llm.models` is what the driver started the agent with (its `mindcraft_start` event), and a G3 run whose recorded model is not the preset is not gate-valid. Progress and killed records carry the calls so far.
+- **Records.** `result.json`'s `llm` (the models, the calls, the replies, the usage before and after, the cost) is in every record.
+  - `calls` is the requests sent, successful or not.
+  - `replies: {ok, failed}` says what came back: `failed` counts Mindcraft's "My brain disconnected" stand-ins (lead, after round 3, where all "11 calls" of a run had failed).
+  - `httpErrors: {status: n}` counts the "Error [429]"-style lines; a retried request can add more than one.
+  - The run log says it the same way: "N LLM requests (ok replies, failed failed; n x HTTP 429), USD ...".
+  - Evidence counts `replies.ok` as calls, never `calls` alone. `llm.models` is what the driver started the agent with (its `mindcraft_start` event), and a G3 run whose recorded model is not the preset is not gate-valid. Progress and killed records carry the calls so far.
 - **Test mode is for the offline tests only.** `ROTN_TEST_MODE`, `ROTN_OPENROUTER_USAGE_FILE` and `ROTN_BATCH_RUNNER` make `batch.mjs` refuse to start inside a real test-server run, and the usage read ignores the fake file there. `deploy/test-server.sh run` sets `TEST_SERVER_FAKE_CLOUD=1` only against the offline fakes. `BATCH` records `testMode`.
 
 ### G3 (a): `g3-rocks-to-stone-tools` (`test/scenarios/g3/`)

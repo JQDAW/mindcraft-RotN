@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, agentModels, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL } from '../runner/lib/llm-spend.mjs';
+import { readKeyUsage, keyFetch, countLlmCalls, spent, llmRecord, agentModels, testOverridesAllowed, LLM_CALL_LINE, OPENROUTER_KEY_URL, countLlmReplies, probeModel, probeFetch, TEST_OVERRIDES } from '../runner/lib/llm-spend.mjs';
 import { LLM_MODEL, modelId, modelProblems, profileModels } from '../runner/lib/g3.mjs';
 import { G3_DEFAULTS, G3_GATE_PARAMS, TEST_TASK_GIVER, guardConsole, giverProblems, g3Policy } from '../runner/lib/g3.mjs';
 import { weakenedParams, addNotGate } from '../runner/lib/runner.mjs';
@@ -88,12 +88,12 @@ describe('the key usage read: numbers only, the key never leaves the header', ()
         assert.equal(spent({ ok: true, usage: 1 }, { ok: false, error: 'http 401' }), null);
         const start = `DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: LLM_MODEL, code_model: null, vision_model: null } })}`;
         assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1.25 }, [start, LLM_CALL_LINE, LLM_CALL_LINE]),
-            { models: { model: LLM_MODEL, code_model: null, vision_model: null }, calls: 2, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
+            { models: { model: LLM_MODEL, code_model: null, vision_model: null }, calls: 2, replies: { ok: 0, failed: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
         assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: false, error: 'timeout' }, []),
-            { models: null, calls: 0, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
+            { models: null, calls: 0, replies: { ok: 0, failed: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
     });
 
-    test('the model of every LLM run: the OpenRouter preset (the human\'s decision, 2026-11-03), recorded from the driver', () => {
+    test('the model of every LLM run: the OpenRouter preset (the human\'s decision, 2026-11-06), recorded from the driver', () => {
         assert.equal(LLM_MODEL, 'openrouter/@preset/glm-5-3-flash-cheap-reliable');
         assert.equal(modelId('openrouter/@preset/glm-5-3-flash-cheap-reliable'), LLM_MODEL);
         assert.equal(modelId({ api: 'openrouter', model: '@preset/glm-5-3-flash-cheap-reliable' }), LLM_MODEL, 'the object form is the same model');
@@ -305,7 +305,7 @@ describe('batch.mjs: the preflight before any server exists (lead, #169 review)'
     test('--preflight: passes with the preset and a usage reading, runs nothing, fetches nothing, writes no summary', { timeout: 60000 }, async () => {
         const r = await runBatch({ preflight: true, mark: '', driver: ['node', DRIVER, '--profile', good] });
         assert.equal(r.code, 0, r.out);
-        assert.match(r.out, /preflight passed: driver, profile, model and settings checked; the key's usage can be read; 3 scenario\(s\)/);
+        assert.match(r.out, /preflight passed: driver, profile, model and settings checked; the key's usage can be read; the LLM probe was skipped \(offline test mode, no probe file\); 3 scenario\(s\)/);
         assert.deepEqual([r.ran, r.ctl, r.summary], [[], '', null]);
         assert.ok(!r.out.includes(KEY), 'the key is never printed');
     });
@@ -787,5 +787,63 @@ describe('batch.mjs warns (never refuses) when a batch may run past 00:00 UTC (l
         assert.equal(r.status, 0, r.stderr);
         const crosses = midnightWarning(t(67), Date.now(), { buildMin: 20 }) !== null;
         assert.equal(/warning: this batch may run past 00:00 UTC/.test(r.stderr), crosses, r.stderr);
+    });
+});
+
+describe('LLM replies are counted as successful or failed, and the preflight probes the model (lead, after round 3)', () => {
+    const DRIVER = path.join(HERE, '..', 'runner', 'drivers', 'mindcraft-driver.mjs');
+    const fakeRes = (status, body) => () => Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) });
+    const RATE_LIMITED = { error: { message: 'Provider returned error', code: 429, metadata: { provider_name: 'Baidu', provider_error_code: 'tpm_rate_limit_exceeded', raw: 'z-ai/glm-5.1 is temporarily rate-limited upstream' } } };
+
+    test('countLlmReplies: round 3 batch B\'s pattern counts as failures, not calls', () => {
+        const lines = [LLM_CALL_LINE, 'Error while awaiting response: Error [429] (status 429): 429 Provider returned error',
+            'Generated response: My brain disconnected, try again.', LLM_CALL_LINE, 'Generated response: On it! !collectBlocks("pyrotech:rock", 6)',
+            'Error while awaiting response: Error [429] (status 429): 429 Provider returned error', 'Error [500] (status 500): x', 'NoError [429]'];
+        assert.deepEqual(countLlmReplies(lines), { ok: 1, failed: 1, httpErrors: { 429: 2, 500: 1 } });
+        assert.equal(countLlmCalls(lines), 2, 'calls stays the number of requests sent');
+        const rec = llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1 }, lines);
+        assert.deepEqual([rec.calls, rec.replies, rec.httpErrors], [2, { ok: 1, failed: 1 }, { 429: 2, 500: 1 }]);
+        assert.deepEqual(countLlmReplies([]), { ok: 0, failed: 0, httpErrors: {} });
+    });
+
+    test('probeModel: 200 names the provider; 429 gives the provider\'s error code; no key, network and timeout are reasons; the key never comes back', async () => {
+        const seen = [];
+        const ok = await probeModel({ key: 'sk-test-secret', model: '@preset/x', fetchImpl: (url, init) => { seen.push({ url, init }); return fakeRes(200, { provider: 'OpenInference', model: 'z-ai/glm-5.3-flash' })(); } });
+        assert.deepEqual(ok, { ok: true, status: 200, provider: 'OpenInference', model: 'z-ai/glm-5.3-flash', error: null });
+        assert.equal(seen[0].url, 'https://openrouter.ai/api/v1/chat/completions');
+        assert.equal(seen[0].init.headers.Authorization, 'Bearer sk-test-secret');
+        assert.deepEqual(JSON.parse(seen[0].init.body).max_tokens, 16);
+        assert.equal(JSON.parse(seen[0].init.body).model, '@preset/x');
+        const bad = await probeModel({ key: 'sk-test-secret', model: '@preset/x', fetchImpl: fakeRes(429, RATE_LIMITED) });
+        assert.deepEqual(bad, { ok: false, status: 429, provider: 'Baidu', model: null, error: 'tpm_rate_limit_exceeded' });
+        assert.ok(!JSON.stringify(bad).includes('sk-test-secret'));
+        assert.equal((await probeModel({ key: '', model: 'm', fetchImpl: fakeRes(200, {}) })).error, 'no key');
+        assert.equal((await probeModel({ key: 'k', model: 'm', fetchImpl: () => Promise.reject(new Error('down')) })).error, 'network');
+        assert.equal((await probeModel({ key: 'k', model: 'm', fetchImpl: fakeRes(503, null) })).error, 'bad response');
+    });
+
+    test('probeFetch: the real fetch outside test mode; in test mode a probe file, or no probe at all (never the network)', () => {
+        const real = () => 'real';
+        assert.equal(probeFetch({}, real), real);
+        assert.equal(probeFetch({ ROTN_TEST_MODE: '1' }, real), null);
+        assert.equal(probeFetch({ ROTN_TEST_MODE: '1', TEST_SERVER_CTL: 'ctl', TEST_SERVER_FAKE_CLOUD: '0', ROTN_OPENROUTER_PROBE_FILE: 'f' }, real), real, 'never inside a real test-server run');
+        assert.ok(TEST_OVERRIDES.includes('ROTN_OPENROUTER_PROBE_FILE'));
+    });
+
+    test('the preflight: a probe that answers passes and names the provider; a 429 refuses before anything runs', { timeout: 60000 }, async () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'g3-probe-'));
+        const good = path.join(dir, 'good.json');
+        fs.writeFileSync(good, JSON.stringify({ name: 'FRCFLD', model: LLM_MODEL }));
+        const probeFile = path.join(dir, 'probe.json');
+        fs.writeFileSync(probeFile, JSON.stringify({ status: 200, body: { provider: 'OpenInference', model: 'z-ai/glm-5.3-flash' } }));
+        const ok = await runBatch({ preflight: true, mark: '', driver: ['node', DRIVER, '--profile', good], extraEnv: { ROTN_OPENROUTER_PROBE_FILE: probeFile } });
+        assert.equal(ok.code, 0, ok.out);
+        assert.match(ok.out, /the LLM probe answered \(HTTP 200, provider OpenInference, z-ai\/glm-5\.3-flash\)/);
+        fs.writeFileSync(probeFile, JSON.stringify({ status: 429, body: RATE_LIMITED }));
+        const bad = await runBatch({ preflight: true, mark: '', driver: ['node', DRIVER, '--profile', good], extraEnv: { ROTN_OPENROUTER_PROBE_FILE: probeFile } });
+        assert.equal(bad.code, 2, bad.out);
+        assert.match(bad.out, /preflight refused: the LLM probe of openrouter\/@preset\/glm-5-3-flash-cheap-reliable failed \(HTTP 429, provider Baidu, tpm_rate_limit_exceeded\)/);
+        assert.deepEqual([bad.ran, bad.ctl, bad.summary], [[], '', null]);
+        assert.ok(!bad.out.includes(KEY), 'the key is never printed');
     });
 });

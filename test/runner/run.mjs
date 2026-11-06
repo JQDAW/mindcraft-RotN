@@ -198,7 +198,9 @@ async function main(argv) {
     finished = true;
     if (scenario.llm) {
         result.llm = llmRecord(usageBefore, await readUsage(), bot.output());
-        log(`${scenario.id}: ${result.llm.calls} LLM calls, USD ${result.llm.usd ?? 'unknown'}`);
+        // Requests sent, then what came back (lead, after round 3: failed calls are never counted as calls).
+        const http = Object.entries(result.llm.httpErrors ?? {}).map(([st, n]) => `${n} x HTTP ${st}`).join(', ');
+        log(`${scenario.id}: ${result.llm.calls} LLM requests (${result.llm.replies?.ok ?? '?'} replies, ${result.llm.replies?.failed ?? '?'} failed${http ? `; ${http}` : ''}), USD ${result.llm.usd ?? 'unknown'}`);
         if (result.llm.usd === null) addNotGate(result, `the LLM cost is unknown (${result.llm.error}): a G3 run must record its spend`);
         // Every LLM run uses the preset model (the human's decision, 2026-11-03). The Mindcraft driver refuses
         // any other; a G3 run whose recorded model is not it (or is unknown) is never a gate run.
