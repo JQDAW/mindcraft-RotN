@@ -142,3 +142,28 @@ test('#233 review 4: a failed oredict load is not cached', () => {
     assert.equal(cobbleRecipes().length, 26, 'the next call loads again');
     assert.equal(cobbleRecipes(() => { throw new Error('not called: cached now'); }).length, 26);
 });
+
+test('#234 nit: a cobble craft that gives nothing says why, without "To craft X: ." or "from mixed items"', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { craftRecipe } = await import('./skills.js');
+    const { bot } = craftBot([stack('pyrotech_compat:rock_sedimentary', 0, 4)]);
+    bot.craft = () => Promise.resolve(); // the server took nothing and gave nothing
+    assert.equal(await craftRecipe(bot, 'cobblestone', 1), false);
+    assert.match(bot.output, /Could not craft contenttweaker:chalk_cobble:0: the craft gave no contenttweaker:chalk_cobble:0\.\n/);
+    assert.doesNotMatch(bot.output, /To craft|: \.|from mixed items/);
+
+    const ok = craftBot([stack('pyrotech_compat:rock_sedimentary', 0, 4)]);
+    assert.equal(await craftRecipe(ok.bot, 'cobblestone', 1), true);
+    assert.match(ok.bot.output, /Successfully crafted contenttweaker:chalk_cobble:0 from your pyrotech_compat:rock_sedimentary:0 rocks, you now have 1/);
+});
+
+test('#234 nit: a recipe lookup error is not cached as "no table needed"', async () => {
+    const { recipesFor } = await import('../../../packages/rotn-data/index.js');
+    __resetCobbleCache();
+    const guessed = cobbleRecipes(undefined, { tableLookup: () => { throw new Error('lookup failed'); } });
+    assert.equal(guessed.length, 26);
+    const asTable = (name) => recipesFor(name).map(r => ({ ...r, requiresTable: true }));
+    assert.ok(cobbleRecipes(undefined, { tableLookup: asTable }).every(r => r.requiresTable), 'looked up again, not the cached guess');
+    __resetCobbleCache();
+    assert.ok(cobbleRecipes().every(r => r.requiresTable === false), 'the real data: all 2x2');
+});

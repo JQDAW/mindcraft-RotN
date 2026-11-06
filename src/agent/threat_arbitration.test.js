@@ -259,3 +259,14 @@ test('#226 review: !attack refuses a mob that only fights back unless it hurt th
     assert.equal(attacks, 1);
     assert.doesNotMatch(out2 ?? '', /Not attacking/);
 });
+
+test('#227 nit: a weapon in the off hand counts for the player zombie policy', () => {
+    const self = { id: 0, name: 'player', type: 'player', position: new Vec3(0, 64, 0) };
+    const z = mob(PLAYER_ZOMBIE, 3);
+    const slots = new Array(46).fill(null);
+    slots[45] = item('stone_sword');
+    const bot = { health: 18, entity: self, entities: { 0: self, [z.id]: z }, inventory: { items: () => [], slots } };
+    assert.equal(threatPlan(bot)?.action, 'fight');
+    slots[45] = null;
+    assert.equal(threatPlan(bot)?.action, 'flee');
+});

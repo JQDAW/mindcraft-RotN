@@ -2,7 +2,7 @@ import * as mc from "../../utils/mcdata.js";
 import * as world from "./world.js";
 import * as names112 from "./names112.js";
 import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, variantMeta, inventoryKey } from "./rotn_names.js";
-import { worldSources, itemVariants, toolAllows, allowedTool, describeTool } from "./rotn_sources.js";
+import { worldSources, itemVariants, toolAllows, allowedTool, describeTool, stowCarried } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
 import prismarineRecipe from "prismarine-recipe";
@@ -29,7 +29,12 @@ async function autoLight(bot) {
 }
 
 async function equipHighestAttack(bot) {
-    let weapons = bot.inventory.items().filter(item => item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
+    const isWeapon = (item) => item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe'));
+    // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory first,
+    // so it can be equipped in the main hand (#238 review 1).
+    if (!bot.inventory.items().some(isWeapon) && isWeapon({ name: bot.inventory.slots?.[45]?.name ?? '' }))
+        await stowCarried(bot, isWeapon, { resyncMs: 0 });
+    let weapons = bot.inventory.items().filter(isWeapon);
     if (weapons.length === 0)
         weapons = bot.inventory.items().filter(item => item.name.includes('pickaxe') || item.name.includes('shovel'));
     if (weapons.length === 0)
@@ -75,7 +80,7 @@ async function craftCobbleFromRocks(bot, num, ops) {
         // By the rock's own recipe (#233 review 1): bot.recipesFor could pick another recipe for the
         // same output (undergroundbiomes:regular_cobblestone turns 4 modded cobbles into vanilla).
         const before = countItem(bot, c.gives);
-        const needs = { recipeId: c.recipeId, requiresTable: c.requiresTable, ready: true, inputs: [] };
+        const needs = { recipeId: c.recipeId, requiresTable: c.requiresTable, ready: true, inputs: [], how: `from your ${c.rock} rocks` };
         await craftByFill(bot, c.gives, n, needs, null, false, ops);
         made += Math.max(0, countItem(bot, c.gives) - before);
     }
@@ -254,7 +259,7 @@ export const CRAFT_TABLE_OPS = { place: placeTableNear, pickUp: pickUpTable };
 export async function craftByFill(bot, itemName, num, needs, table = null, placed = false, ops = CRAFT_TABLE_OPS, run = currentRun(bot)) {
     if (!needs.recipeId) {
         if (placed) await ops.pickUp(bot);
-        log(bot, `Could not craft ${itemName}: rotn-data names no recipe for these items. ${describeNeeds(itemName, needs)}`);
+        log(bot, `Could not craft ${itemName}: rotn-data names no recipe for these items. ${describeNeeds(itemName, needs)}`.trimEnd());
         return false;
     }
     let made = 0;
@@ -308,11 +313,13 @@ export async function craftByFill(bot, itemName, num, needs, table = null, place
         if (placed) await ops.pickUp(bot);
     }
     if (made === 0) {
-        log(bot, `Could not craft ${itemName}: ${why ?? 'nothing was crafted'}. ${describeNeeds(itemName, needs)}`);
+        log(bot, `Could not craft ${itemName}: ${why ?? 'nothing was crafted'}. ${describeNeeds(itemName, needs)}`.trimEnd());
         return false;
     }
-    if (made < num) log(bot, `Crafted ${made} of ${num} ${itemName} from mixed items; ${why ?? 'not enough for more'}. You now have ${countItem(bot, itemName)} ${itemName}.`);
-    else log(bot, `Successfully crafted ${itemName} from mixed items, you now have ${countItem(bot, itemName)} ${itemName}.`);
+    // needs.how: where the items came from ("from your pyrotech:rock:0 rocks"); C1's default (#234 nit).
+    const how = needs.how ?? 'from mixed items';
+    if (made < num) log(bot, `Crafted ${made} of ${num} ${itemName} ${how}; ${why ?? 'not enough for more'}. You now have ${countItem(bot, itemName)} ${itemName}.`);
+    else log(bot, `Successfully crafted ${itemName} ${how}, you now have ${countItem(bot, itemName)} ${itemName}.`);
     bot.armorManager?.equipAll();
     return true;
 }
@@ -342,7 +349,7 @@ export async function wait(bot, milliseconds) {
     return true;
 }
 
-export async function smeltItem(bot, itemName, num=1) {
+export async function smeltItem(bot, itemName, num=1, ops=FURNACE_OPS) {
     /**
      * Puts 1 coal in furnace and smelts the given item name, waits until the furnace runs out of fuel or input items.
      * @param {MinecraftBot} bot, reference to the minecraft bot.
@@ -362,18 +369,25 @@ export async function smeltItem(bot, itemName, num=1) {
     }
 
     let placedFurnace = false;
+    let placedAt = null;
     let furnaceBlock = undefined;
     const furnaceRange = 16;
+    // A furnace this skill placed is picked up again however it ends (#225 nit: an aborted run left
+    // it; after smelting it is often lit_furnace, which collectBlock(bot, 'furnace') does not match).
+    const putAway = async () => {
+        if (!placedFurnace) return;
+        placedFurnace = false;
+        await ops.pickUp(bot, placedAt);
+    };
     furnaceBlock = world.getNearestBlock(bot, names112.FURNACE_BLOCKS, furnaceRange);
     if (!furnaceBlock){
         // Try to place furnace
         let hasFurnace = world.getInventoryCounts(bot)['furnace'] > 0;
         if (hasFurnace) {
-            let pos = world.getNearestFreeSpace(bot, 1, furnaceRange);
-            await placeBlock(bot, 'furnace', pos.x, pos.y, pos.z);
-            if (run.aborted) return false;
-            furnaceBlock = world.getNearestBlock(bot, names112.FURNACE_BLOCKS, furnaceRange);
-            placedFurnace = true;
+            furnaceBlock = await ops.place(bot, furnaceRange);
+            if (furnaceBlock) { placedFurnace = true; placedAt = furnaceBlock.position.clone ? furnaceBlock.position.clone() : furnaceBlock.position; }
+            else log(bot, 'Could not place your furnace.');
+            if (run.aborted) { await putAway(); return false; }
         }
     }
     if (!furnaceBlock){
@@ -382,30 +396,28 @@ export async function smeltItem(bot, itemName, num=1) {
     }
     if (bot.entity.position.distanceTo(furnaceBlock.position) > 4) {
         await goToNearestBlock(bot, names112.FURNACE_BLOCKS, 4, furnaceRange);
-        if (run.aborted) return false;
+        if (run.aborted) { await putAway(); return false; }
     }
     bot.modes.pause('unstuck');
     await bot.lookAt(furnaceBlock.position);
-    if (run.aborted) return false;
+    if (run.aborted) { await putAway(); return false; }
 
     console.log('smelting...');
     const furnace = await bot.openFurnace(furnaceBlock);
-    if (run.aborted) { closeQuietly(bot, furnace); return false; }
+    if (run.aborted) { closeQuietly(bot, furnace); await putAway(); return false; }
     // check if the furnace is already smelting something
     let input_item = furnace.inputItem();
     if (input_item && input_item.type !== mc.getItemId(itemName) && input_item.count > 0) {
         // TODO: check if furnace is currently burning fuel. furnace.fuel is always null, I think there is a bug.
         // This only checks if the furnace has an input item, but it may not be smelting it and should be cleared.
         log(bot, `The furnace is currently smelting ${mc.getItemName(input_item.type)}.`);
-        if (placedFurnace)
-            await collectBlock(bot, 'furnace', 1);
+        await putAway();
         return false;
     }
     // check if the bot has enough items to smelt
     if (countItem(bot, itemName) < num) { // "log" counts every log; "log:1" spruce only (B1b)
         log(bot, `You do not have enough ${itemName} to smelt.`);
-        if (placedFurnace)
-            await collectBlock(bot, 'furnace', 1);
+        await putAway();
         return false;
     }
 
@@ -414,8 +426,7 @@ export async function smeltItem(bot, itemName, num=1) {
         let fuel = mc.getSmeltingFuel(bot);
         if (!fuel) {
             log(bot, `You have no fuel to smelt ${itemName}, you need coal, charcoal, or wood.`);
-            if (placedFurnace)
-                await collectBlock(bot, 'furnace', 1);
+            await putAway();
             return false;
         }
         log(bot, `Using ${fuel.name} as fuel.`);
@@ -424,8 +435,7 @@ export async function smeltItem(bot, itemName, num=1) {
 
         if (fuel.count < put_fuel) {
             log(bot, `You don't have enough ${fuel.name} to smelt ${num} ${itemName}; you need ${put_fuel}.`);
-            if (placedFurnace)
-                await collectBlock(bot, 'furnace', 1);
+            await putAway();
             return false;
         }
         await furnace.putFuel(fuel.type, null, put_fuel);
@@ -465,9 +475,7 @@ export async function smeltItem(bot, itemName, num=1) {
 
     await bot.closeWindow(furnace);
 
-    if (placedFurnace) {
-        await collectBlock(bot, 'furnace', 1);
-    }
+    await putAway();
     if (total === 0) {
         log(bot, `Failed to smelt ${itemName}.`);
         return false;
@@ -479,6 +487,36 @@ export async function smeltItem(bot, itemName, num=1) {
     log(bot, `Successfully smelted ${itemName}, got ${total} ${mc.getItemName(smelted_item.type)}.`);
     return true;
 }
+
+/**
+ * Place the furnace from the inventory on the nearest free space. Its own furnace, or null: the
+ * placement must succeed and a furnace must stand at that position. Never the nearest furnace,
+ * which could be someone else's that smeltItem would then pick up (#238 review 2).
+ */
+export async function placeFurnaceNear(bot, range, { place = placeBlock, freeSpace = world.getNearestFreeSpace } = {}) {
+    const pos = freeSpace(bot, 1, range);
+    if (!pos) return null;
+    if (!await place(bot, 'furnace', pos.x, pos.y, pos.z)) return null;
+    const b = bot.blockAt(pos);
+    return b && names112.isFurnace(b.name) ? b : null;
+}
+
+/** Pick up a furnace at pos (lit or not): break it with the right tool, then take the drop. */
+export async function pickUpFurnaceAt(bot, pos) {
+    const b = pos ? bot.blockAt(pos) : null;
+    if (!b || !names112.isFurnace(b.name)) return false;
+    try {
+        if (!await breakBlockAt(bot, pos.x, pos.y, pos.z)) return false;
+        await pickupNearbyItems(bot);
+        return true;
+    } catch (err) {
+        log(bot, `Could not pick the furnace up again (${safeError(err)}).`);
+        return false;
+    }
+}
+
+/** How smeltItem places and picks up its own furnace (tests pass their own). */
+export const FURNACE_OPS = { place: placeFurnaceNear, pickUp: pickUpFurnaceAt };
 
 export async function clearNearestFurnace(bot) {
     /**

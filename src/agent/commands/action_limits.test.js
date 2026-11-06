@@ -170,3 +170,15 @@ test('craftByFill stops once its run is aborted: no walk to the table, no craft'
     assert.equal(walks, 0, 'no walk to the table');
     assert.equal(crafts, 0);
 });
+
+test('#225 nit: !clearFurnace whose limit passes during the walk to the furnace never opens it', T, async (t) => {
+    const saved = [ACTION_LIMITS_MIN.clearFurnace, STOP_GRACE.ms];
+    t.after(() => { [ACTION_LIMITS_MIN.clearFurnace, STOP_GRACE.ms] = saved; });
+    ACTION_LIMITS_MIN.clearFurnace = 0.005; // 0.3 s
+    STOP_GRACE.ms = 100;
+    const agent = fakeAgent({ gotoMs: 700, furnaceAt: at(10) });
+    const out = await perform('!clearFurnace')(agent);
+    assert.match(out, /!clearFurnace failed: time limit of 0\.3 s reached; stopped\./);
+    await new Promise(resolve => setTimeout(resolve, 900)); // the walk lands
+    assert.equal(agent.calls.furnaces, 0, 'the furnace was never opened or emptied');
+});

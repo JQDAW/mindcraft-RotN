@@ -1,0 +1,146 @@
+DRIVER {"t":"2026-11-05T23:31:23.678Z","type":"mindcraft_start","pid":27276,"main":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\main.js","settings":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\settings.js","profile":"profiles/rotn-bot.json","mindserverPort":55372,"models":{"model":"openrouter/@preset/glm-5-1-mindcraft","code_model":null,"vision_model":null},"serverTaskGiver":true,"botState":{"dir":"<local>\\orca\\workspaces\\mindcraft-RotN\\harness-ops-g0\\bots\\<bot>","movedAside":["agenda.json.g3-2026-11-05T23-31-23-664Z.bak"],"pruned":["agenda.json.g3-2026-11-05T20-19-04-138Z.bak"],"fresh":true}}
+MindServer running on port 55372 on host localhost
+MC server found. (Host: <ip>, Port: 25565, Version: 1.12.2)
+keys.json not found. Defaulting to environment variables.
+Connecting to MindServer
+Client connected
+<bot> connected to MindServer
+Starting agent
+Initializing agent <bot>...
+Error with embedding model, using word-overlap instead.
+Error with embedding model, using word-overlap instead.
+Error with embedding model, using word-overlap instead.
+Examples initialized.
+No task.
+<bot> logging into minecraft...
+<bot> updating available agents
+[forge-bridge] attached; 346 mods; REID 2.2.2; Triumph 3.19.2
+[forge-bridge] registries: aetherapi:accessories=31 aetherapi:enchantment_fuels=3 aetherapi:enchantments=879 aetherapi:freezable_fuels=1 aetherapi:freezables=11 aetherapi:moa_types=4 arcaneworld:rituals=10 artisanworktables:recipe_registry=15 artisanworktables:requirement_builder_supplier=1 artisanworktables:requirement_context_supplier=1 charset:wire=34 doggytalents:talents=17 dynamictrees:species=136 livingenchantment:personalityregistry=14 livingenchantment:talentregistry=0 mcmultipart:micro_material=0 mcmultipart:micro_type=0 mcmultipart:slots=27 minecraft:biomes=175 minecraft:blocks=4896 minecraft:dataserializers=2 minecraft:enchantments=178 minecraft:entities=971 minecraft:items=9710 minecraft:potions=263 minecraft:potiontypes=298 minecraft:recipes=10687 minecraft:soundevents=1867 minecraft:villagerprofessions=19 netherex:pigtificate_professions=5 pyrotech:bloomery_recipe=12 pyrotech:campfire_recipe=21 pyrotech:chopping_block_recipe=0 pyrotech:compacting_bin_recipe=25 pyrotech:compost_bin_recipe=1437 pyrotech:crucible_brick_recipe=11 pyrotech:crucible_stone_recipe=7 pyrotech:crude_drying_rack_recipe=7 pyrotech:drying_rack_recipe=9 pyrotech:granite_anvil_recipe=206 pyrotech:kiln_brick_recipe=122 pyrotech:kiln_pit_recipe=24 pyrotech:kiln_stone_recipe=121 pyrotech:mechanical_compacting_bin_recipe=25 pyrotech:mill_brick_recipe=324 pyrotech:mill_stone_recipe=0 pyrotech:oven_brick_recipe=10 pyrotech:oven_stone_recipe=10 pyrotech:pit_recipe=41 pyrotech:soaking_pot_recipe=55 pyrotech:wither_forge_recipe=13 pyrotech:worktable_recipe=0
+[forge-bridge] RotN recipes installed: 6089 recipes for 3666 items
+[forge-bridge] handshake complete (overrideDimension 0)
+[forge-bridge] state-id remap active: applied 506 state ids in 132 of the table's 132 blocks; conflicts 0 skipped
+<bot> logged in!
+<bot> updating available agents
+Initializing vision intepreter...
+<bot> spawned.
+received message from system : Respond with hello world and your name
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: You are self-prompting with the goal: 'Build a house'. Respond:
+Example: trade something with zorro_34
+Awaiting openrouter api response...
+Self-prompting started.
+starting self-prompt loop
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Generated response: My brain disconnected, try again.
+<bot> full response to system: """"
+<bot> received new message while generating, discarding old response.
+no response
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Generated response: My brain disconnected, try again.
+<bot> full response to system: ""My brain disconnected, try again.""
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Generated response: My brain disconnected, try again.
+<bot> full response to system: ""My brain disconnected, try again.""
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Generated response: My brain disconnected, try again.
+<bot> full response to system: ""My brain disconnected, try again.""
+Agent did not use command in the last 3 auto-prompts. Stopping auto-prompting.
+self prompt loop stopped
+Self-prompting started.
+starting self-prompt loop
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Generated response: My brain disconnected, try again.
+<bot> full response to system: ""My brain disconnected, try again.""
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Generated response: My brain disconnected, try again.
+<bot> full response to system: ""My brain disconnected, try again.""
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Generated response: My brain disconnected, try again.
+<bot> full response to system: ""My brain disconnected, try again.""
+Agent did not use command in the last 3 auto-prompts. Stopping auto-prompting.
+self prompt loop stopped
+Self-prompting started.
+starting self-prompt loop
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Generated response: My brain disconnected, try again.
+<bot> full response to system: ""My brain disconnected, try again.""
+Storing memories...
+Awaiting openrouter api response...
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Memory updated to:  My brain disconnected, try again.
+Generated response: My brain disconnected, try again.
+<bot> full response to system: ""My brain disconnected, try again.""
+received message from system : You are self-prompting with the goal: 'RotN agenda, step 1 of 11 (rocks): Collect at least 6 rocks with !collectBlocks("pyrotech:rock", 6). Rock piles lie on the ground near spawn; break them by hand. When this step is done, the agenda moves on by itself.'. Your next response MUST contain a command with this syntax: !commandName. Respond:
+Saved memory to: ./bots/<bot>/memory.json
+selected examples:
+Example: work together with the other bot to build a house
+Example: d7297: look 0 70 12 and describe what is there
+Awaiting openrouter api response...
+Generated response: My brain disconnected, try again.
+<bot> full response to system: ""My brain disconnected, try again.""
+self prompt loop stopped
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Error while awaiting response: Error [429] (status 429): 429 Provider returned error
+Agent did not use command in the last 3 auto-prompts. Stopping auto-prompting.
+[night] sunset is near: building a shelter
+executing code...
+
+[shelter] pickaxe check: need level 0; inventory: none; off hand: empty; cursor: empty; held: lifescroll:spawnscroll
+[night] shelter try 1 of 3 failed (Not building a shelter at -48, 75, -60: without a pickaxe you could not dig out of it again. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: lifescroll:spawnscroll.)
+executing code...
+
+[shelter] pickaxe check: need level 0; inventory: none; off hand: empty; cursor: empty; held: lifescroll:spawnscroll
+[night] shelter try 2 of 3 failed (Not building a shelter at -48, 75, -60: without a pickaxe you could not dig out of it again. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: lifescroll:spawnscroll.)
+executing code...
+
+[shelter] pickaxe check: need level 0; inventory: none; off hand: empty; cursor: empty; held: lifescroll:spawnscroll
+[night] no shelter after 3 tries (Not building a shelter at -48, 75, -60: without a pickaxe you could not dig out of it again. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: lifescroll:spawnscroll.); staying here until morning
