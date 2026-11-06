@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T08:13Z (from `date -u`)
+Updated: 2026-11-06T08:16Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -496,13 +496,13 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
     - low (reflex narration) is dropped when busy or after 15 s.
   - **The "late refusal"** was the harness's reading (lead: harness #255). The server log has it 1 s after the whisper.
   - **Tests:** `chat_limit` 5 and `agenda` #17; the agent wiring and agenda tests fail on develop. Full `npm test` after `npm ci`: 1331 pass. The 1 failure is `deploy-eol`, which checks `deploy/cx23/` on disk for CR; this Windows checkout converts to CRLF, and I didn't touch `deploy/`. Lint 254.
-- **#256 follow-up, ready for the next PR** (branch `agent/skills-rotn/chat-gap`, from develop, pushed without a PR; STATUS lives here):
+- **#256 follow-up, PR #260** (branch `agent/skills-rotn/chat-gap`, from develop; opened at the lead's request, waiting for review; STATUS lives here):
   - A refusal waiting in its 10 s gap no longer holds up lines that may go now: they go at once when the budget allows.
   - A new line that may go sooner moves the drain timer earlier.
   - Collapsed repeats are logged.
   - The comment notes that waiting high lines are bounded by the number of players (plus the givers' replies).
   - Tests: `chat_limit` 11; the 3 new ones (two timing tests and the collapse log) fail on develop. Lint 254.
-- **Next:** idle until the lead assigns work.
+- **Next:** #260 review fixes if any; otherwise idle until the lead assigns work.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
