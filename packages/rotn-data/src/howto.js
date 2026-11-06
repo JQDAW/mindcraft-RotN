@@ -122,6 +122,9 @@ function worldWays(catalog, want) {
             tool: rule.tool ?? null,
             // A tool that helps but is not required (fell-tree: an axe); only on rules that name one.
             ...(rule.preferredTool ? { preferredTool: rule.preferredTool } : {}),
+            // A tool that stops this way (dirt-piles: a shovel of level 1 or higher gives the plain
+            // drop instead); by hand or with any other tool the way applies. Only on rules that name one.
+            ...(rule.unlessTool ? { unlessTool: rule.unlessTool } : {}),
             confidence,
             evidence: rule.evidence ?? [],
             unverified: rule.unverified ?? [],
@@ -272,10 +275,11 @@ export function formatHowToGet(result, { maxWays = 4 } = {}) {
     const tool = (w) => {
         const t = w.tool;
         if (w.action === 'start-kit') return '';
+        const level = (x) => (x.maxLevel != null ? ` of mining level ${x.maxLevel} or lower` : x.minLevel ? ` of mining level ${x.minLevel} or higher` : '');
+        if (!t && w.unlessTool) return ` By hand or with any tool except ${article(w.unlessTool.type)} ${w.unlessTool.type}${level(w.unlessTool)}.`;
         if (!t) return ' By hand.';
         if (t.item) return ` With ${t.item}.`;
-        const level = t.maxLevel != null ? ` of mining level ${t.maxLevel} or lower` : t.minLevel ? ` of mining level ${t.minLevel} or higher` : '';
-        return ` With ${article(t.type)} ${t.type}${level}.`;
+        return ` With ${article(t.type)} ${t.type}${level(t)}.`;
     };
     const lines = [];
     for (const w of result.ways.slice(0, maxWays)) {

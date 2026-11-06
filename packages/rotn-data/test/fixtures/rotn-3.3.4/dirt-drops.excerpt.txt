@@ -1,0 +1,38 @@
+# Excerpts from the pinned RotN 3.3.4 server pack (zip SHA-256 90642fd5...f5205): what breaking dirt and grass drops.
+# Each line is "<line number>: <text>" (CRLF dropped). Read by test/howto.test.js. Sections start with "## <path> (SHA-256 <file hash>)".
+
+## scripts/dropt_loose_materials.zs (SHA-256 98d998ff8afb800c22a746914fa4d3712b8da80a28d30996f3d2545e9b3cd849)
+1: import mods.dropt.Dropt;
+2: 
+3: // piles & rocks
+4: Dropt.list("pile_dirt")
+5: 
+6:   .add(Dropt.rule()
+7:       .matchBlocks(["growthcraft_rice:ricepaddy", "minecraft:dirt", "minecraft:grass", "minecraft:mycelium", "minecraft:dirt:1", "minecraft:dirt:2", "minecraft:farmland", "minecraft:grass_path", "betterwithmods:fertile_farmland", "pyrotech:farmland_mulched"])
+8: 	  .matchHarvester(Dropt.harvester()
+9:           .type("PLAYER")
+10: 		  .mainHand("BLACKLIST", [], "shovel;1;-1")
+11: 	  )
+12:   	  .addDrop(Dropt.drop()
+13:           .selector(Dropt.weight(1))
+14:        	   .items([<betterwithmods:dirt_pile>], Dropt.range(4))
+15:       )
+16:   );
+
+## scripts/minecraft_(max-file-size).zs (SHA-256 f4ab55e3a588fb0cf31a29afa04b0efb8bdc6e108e0c990d246d0d97eb7e0ffa)
+216: // rocks/piles to cobble/blocks and viceversa 
+217: var ctr as IItemStack[IItemStack] = {
+218:   <minecraft:dirt> : <betterwithmods:dirt_pile>,
+267: for cobble, rock in ctr {
+268:   recipes.addShapeless(cobble, [rock,rock,rock,rock]);
+269:   recipes.addShapeless(rock*4, [cobble]);
+270: }
+
+## config/betterwithmods.cfg (SHA-256 852aa1942448d0c53bf425a2b3b8bfa33eff01d9cef4c2f2254dd6734648e3e3)
+494:     # Makes soils drop 75% of their content if not broken with a shovel to incentivize the use of shovels
+495:     B:HCPiles=false
+
+## config/pyrotech/plugin.Dropt.cfg (SHA-256 a37cba5dbea630de06bd0f859c31cebfa740b98a56bcd1c33e3f5e396da7a37c)
+13:     enabled_rules {
+22:         B:dirt=false
+26:         B:grass=false

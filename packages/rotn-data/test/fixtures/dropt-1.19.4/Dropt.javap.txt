@@ -1,0 +1,242 @@
+# javap -c -p -constants excerpts from mods/dropt-1.12.2-1.19.4.jar (SHA-256 21837ce855ad3304fa2aa2cc4d29fe5989cd61f09fa8fc1f9f4e53dedbacfd04)
+# and mods/athenaeum-1.12.2-1.19.6.jar (SHA-256 2aea9497d5414bfaefa05cc7c0162850f01dbb96b72ee3db36b5924573336271) in the pinned RotN 3.3.4 server pack.
+# Extracted to a scratch folder outside the repo; nothing was run. Read by test/howto.test.js.
+# How the pile_dirt rule (scripts/dropt_loose_materials.zs) reads: mainHand("BLACKLIST", [], "shovel;1;-1"), Dropt.range(4) and a block name without a meta.
+
+## com.codetaylor.mc.dropt.modules.dropt.rule.match.HeldItemMatcher
+  public boolean matches(com.codetaylor.mc.dropt.modules.dropt.rule.data.RuleMatchHarvesterHeldItem, net.minecraft.item.ItemStack, net.minecraft.block.state.IBlockState, net.minecraft.entity.player.EntityPlayer, com.codetaylor.mc.dropt.modules.dropt.rule.log.DebugFileWrapper, boolean);
+    Code:
+       0: aload_2
+       1: invokevirtual #19                 // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+       4: astore        7
+       6: aload_1
+       7: getfield      #25                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._toolClass:Ljava/lang/String;
+      10: astore        8
+      12: aload         8
+      14: ifnull        297
+      17: aload         7
+      19: aload_2
+      20: aload         8
+      22: aload         4
+      24: aload_3
+      25: invokevirtual #31                 // Method net/minecraft/item/Item.getHarvestLevel:(Lnet/minecraft/item/ItemStack;Ljava/lang/String;Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/block/state/IBlockState;)I
+      28: istore        9
+      30: aload         7
+      32: aload_2
+      33: invokevirtual #35                 // Method net/minecraft/item/Item.getToolClasses:(Lnet/minecraft/item/ItemStack;)Ljava/util/Set;
+      36: astore        10
+      38: aload_1
+      39: getfield      #39                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem.type:Lcom/codetaylor/mc/dropt/api/reference/EnumListType;
+      42: getstatic     #44                 // Field com/codetaylor/mc/dropt/api/reference/EnumListType.WHITELIST:Lcom/codetaylor/mc/dropt/api/reference/EnumListType;
+      45: if_acmpne     169
+      48: aload         10
+      50: aload         8
+      52: invokeinterface #50,  2           // InterfaceMethod java/util/Set.contains:(Ljava/lang/Object;)Z
+      57: ifne          92
+      60: iload         6
+      62: ifeq          90
+      65: aload         5
+      67: new           #52                 // class java/lang/StringBuilder
+      70: dup
+      71: invokespecial #53                 // Method java/lang/StringBuilder."<init>":()V
+      74: ldc           #55                 // String [MATCH] [!!] Held item doesn\'t have required tool class:
+      76: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      79: aload         8
+      81: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      84: invokevirtual #63                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      87: invokevirtual #69                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+      90: iconst_0
+      91: ireturn
+      92: iload         6
+      94: ifeq          122
+      97: aload         5
+      99: new           #52                 // class java/lang/StringBuilder
+     102: dup
+     103: invokespecial #53                 // Method java/lang/StringBuilder."<init>":()V
+     106: ldc           #77                 // String [MATCH] [OK] Held item has required tool class:
+     108: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     111: aload         8
+     113: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     116: invokevirtual #63                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     119: invokevirtual #69                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     122: iload         9
+     124: aload_1
+     125: getfield      #81                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._minHarvestLevel:I
+     128: if_icmplt     140
+     131: iload         9
+     133: aload_1
+     134: getfield      #84                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._maxHarvestLevel:I
+     137: if_icmple     154
+     140: iload         6
+     142: ifeq          152
+     145: aload         5
+     147: ldc           #86                 // String [MATCH] [!!] Harvest tool outside of level range
+     149: invokevirtual #69                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     152: iconst_0
+     153: ireturn
+     154: iload         6
+     156: ifeq          297
+     159: aload         5
+     161: ldc           #88                 // String [MATCH] [OK] Harvest tool inside of level range
+     163: invokevirtual #69                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     166: goto          297
+     169: iload         9
+     171: aload_1
+     172: getfield      #81                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._minHarvestLevel:I
+     175: if_icmplt     191
+     178: iload         9
+     180: aload_1
+     181: getfield      #84                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._maxHarvestLevel:I
+     184: if_icmpgt     191
+     187: iconst_1
+     188: goto          192
+     191: iconst_0
+     192: istore        11
+     194: aload         10
+     196: aload         8
+     198: invokeinterface #50,  2           // InterfaceMethod java/util/Set.contains:(Ljava/lang/Object;)Z
+     203: istore        12
+     205: iload         12
+     207: ifeq          257
+     210: iload         11
+     212: ifeq          257
+     215: iload         6
+     217: ifeq          255
+     220: aload         5
+     222: new           #52                 // class java/lang/StringBuilder
+     225: dup
+     226: invokespecial #53                 // Method java/lang/StringBuilder."<init>":()V
+     229: ldc           #90                 // String [MATCH] [!!] Held item is excluded:
+     231: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     234: aload         8
+     236: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     239: ldc           #92                 // String ;
+     241: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     244: iload         9
+     246: invokevirtual #95                 // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     249: invokevirtual #63                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     252: invokevirtual #69                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     255: iconst_0
+     256: ireturn
+     257: iload         6
+     259: ifeq          297
+     262: aload         5
+     264: new           #52                 // class java/lang/StringBuilder
+     267: dup
+     268: invokespecial #53                 // Method java/lang/StringBuilder."<init>":()V
+     271: ldc           #97                 // String [MATCH] [OK] Held item isn\'t excluded:
+     273: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     276: aload         8
+     278: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     281: ldc           #92                 // String ;
+     283: invokevirtual #59                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     286: iload         9
+     288: invokevirtual #95                 // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     291: invokevirtual #63                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     294: invokevirtual #69                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     297: aload_0
+     298: aload_1
+     299: aload_2
+     300: aload         5
+     302: iload         6
+     304: invokespecial #101                // Method checkItemList:(Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem;Lnet/minecraft/item/ItemStack;Lcom/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper;Z)Z
+     307: ireturn
+
+## com.codetaylor.mc.dropt.modules.dropt.rule.parse.ParserRuleMatchHarvesterHeldItem (the harvest level string)
+     432: astore        7
+     434: aload         7
+     436: ifnull        580
+     439: aload         7
+     441: ldc           #181                // String ;
+     443: invokevirtual #185                // Method java/lang/String.split:(Ljava/lang/String;)[Ljava/lang/String;
+     446: astore        8
+     448: aload         8
+     450: arraylength
+     451: iconst_3
+     452: if_icmpeq     485
+     455: aload         4
+     457: new           #98                 // class java/lang/StringBuilder
+     460: dup
+     461: invokespecial #99                 // Method java/lang/StringBuilder."<init>":()V
+     464: ldc           #187                // String [PARSE] Invalid harvest level string:
+     466: invokevirtual #105                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     469: aload         7
+     471: invokevirtual #105                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     474: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     477: invokeinterface #63,  2           // InterfaceMethod com/codetaylor/mc/dropt/modules/dropt/rule/log/ILogger.error:(Ljava/lang/String;)V
+     482: goto          580
+     485: aload         6
+     487: aload         8
+     489: iconst_0
+     490: aaload
+     491: putfield      #190                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._toolClass:Ljava/lang/String;
+     494: aload         6
+     496: aload         8
+     498: iconst_1
+     499: aaload
+     500: invokestatic  #196                // Method java/lang/Integer.parseInt:(Ljava/lang/String;)I
+     503: putfield      #200                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._minHarvestLevel:I
+     506: aload         6
+     508: aload         8
+     510: iconst_2
+     511: aaload
+     512: invokestatic  #196                // Method java/lang/Integer.parseInt:(Ljava/lang/String;)I
+     515: putfield      #203                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._maxHarvestLevel:I
+     518: goto          550
+     521: astore        9
+     523: aload         4
+     525: new           #98                 // class java/lang/StringBuilder
+     528: dup
+     529: invokespecial #99                 // Method java/lang/StringBuilder."<init>":()V
+     532: ldc           #187                // String [PARSE] Invalid harvest level string:
+     534: invokevirtual #105                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     537: aload         7
+     539: invokevirtual #105                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     542: invokevirtual #114                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     545: invokeinterface #63,  2           // InterfaceMethod com/codetaylor/mc/dropt/modules/dropt/rule/log/ILogger.error:(Ljava/lang/String;)V
+     550: aload         6
+     552: getfield      #200                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._minHarvestLevel:I
+     555: ifge          565
+     558: aload         6
+     560: ldc           #204                // int -2147483648
+     562: putfield      #200                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._minHarvestLevel:I
+     565: aload         6
+     567: getfield      #203                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._maxHarvestLevel:I
+     570: ifge          580
+     573: aload         6
+     575: ldc           #205                // int 2147483647
+     577: putfield      #203                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchHarvesterHeldItem._maxHarvestLevel:I
+     580: return
+
+## com.codetaylor.mc.dropt.api.DroptAPI
+  public static com.codetaylor.mc.dropt.api.api.RandomFortuneInt range(int);
+    Code:
+       0: new           #72                 // class com/codetaylor/mc/dropt/api/api/RandomFortuneInt
+       3: dup
+       4: invokespecial #73                 // Method com/codetaylor/mc/dropt/api/api/RandomFortuneInt."<init>":()V
+       7: astore_1
+       8: aload_1
+       9: iload_0
+      10: putfield      #76                 // Field com/codetaylor/mc/dropt/api/api/RandomFortuneInt.fixed:I
+      13: aload_1
+      14: areturn
+
+## com.codetaylor.mc.athenaeum.parser.recipe.item.RecipeItemParser (the default meta)
+  public com.codetaylor.mc.athenaeum.parser.recipe.item.ParseResult parse(java.lang.String) throws com.codetaylor.mc.athenaeum.parser.recipe.item.MalformedRecipeItemException;
+    Code:
+       0: aload_1
+       1: ifnull        16
+       4: ldc           #22                 // String null
+       6: aload_1
+       7: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+      10: invokevirtual #32                 // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+      13: ifeq          20
+      16: getstatic     #38                 // Field com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.NULL:Lcom/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult;
+      19: areturn
+      20: new           #34                 // class com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult
+      23: dup
+      24: invokespecial #39                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult."<init>":()V
+      27: astore_2
+      28: aload_2
+      29: iconst_0
+      30: invokevirtual #43                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setMeta:(I)V
