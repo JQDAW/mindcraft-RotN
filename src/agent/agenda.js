@@ -135,10 +135,13 @@ const noPickaxe = (s) => s.hasPickaxe?.() === false;
  * The pile that dirt dug by hand drops, and how many make one dirt (rotn-data #288 and its recipe:
  * betterwithmods:dirt_pile, 4). Dug by hand, or with a shovel below level 1, dirt drops 4 piles.
  */
-function dirtPile() {
+export function dirtPile(recipes = dirtPileRecipes) {
     let r = null;
-    try { r = dirtPileRecipes().find(x => x.gives?.name === 'minecraft:dirt') ?? null; } catch { r = null; }
-    return r ? { name: r.name.replace(/^minecraft:/, ''), per: r.per } : { name: 'betterwithmods:dirt_pile', per: 4 };
+    try { r = recipes().find(x => x.gives?.name === 'minecraft:dirt') ?? null; } catch { r = null; }
+    if (!r) return { name: 'betterwithmods:dirt_pile', per: 4 };
+    // The recipe's own variant (#291 nit): a pile with a meta other than 0 is asked for by it.
+    const name = r.name.replace(/^minecraft:/, '');
+    return { name: r.meta ? `${name}:${r.meta}` : name, per: r.per };
 }
 /** The no-pickaxe ask: piles for `blocks` dirt blocks (each dirt block dug by hand gives `per` piles). */
 const pileAsk = (blocks) => {

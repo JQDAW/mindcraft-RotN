@@ -755,10 +755,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
-    // Never hold a tool that changes the rule's drop (a shovel of level 1+ for dirt piles).
-    const putAway = async (avoid) => {
-        if (avoid && isToolFor(bot.heldItem, avoid)) await bot.unequip('hand');
-    };
+    // Never hold a tool that changes the rule's drop (a shovel of level 1+ for dirt piles); false
+    // when it cannot be let go without throwing it away (#291 review: a full inventory).
+    const handOff = async (avoid) => !avoid || await stopHolding(bot, avoid);
+    const cannotLetGo = (block) => `Not digging ${block.name}: you hold ${bot.heldItem?.name}, which would make it drop dirt instead of ${blockType}, `
+        + 'and with a full inventory and no other item in the hotbar it could only be let go by throwing it away. Free a slot first.';
     // Count what the bot really gains, not a rule's yield (#141 review): the targets in the
     // inventory before and after each break. A block with no item (water) counts 1 per success.
     const countsItems = mc.getItemId(baseType) != null;
@@ -876,7 +877,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         else if (avoidToolFor(block)) {
             // rotn-data #288: by hand (or a lesser tool), never the tool that changes the drop;
             // mineflayer-tool would pick the fastest, which is that shovel.
-            await putAway(avoidToolFor(block));
+            if (!await handOff(avoidToolFor(block))) {
+                log(bot, cannotLetGo(block));
+                break;
+            }
         }
         else {
             // A preferred tool (an axe to fell a tree, rotn-data #252) when the bot holds one; else the hand.
@@ -927,7 +931,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 if (ruleTool || avoid || mc.mustCollectManually(block.name)) {
                     await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
                     if (run.aborted) return false;
-                    await putAway(avoid); // still not holding it after the walk
+                    if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
                     await bot.dig(block);
                     if (run.aborted) return true; // broken; the gain is still counted below
                     await pickupNearbyItems(bot);
@@ -1007,6 +1011,33 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
 }
 
 let collectRouting = false; // collectByRoute's own collect does not take another route
+
+/** mineflayer's player window: the hotbar is slots 36-44. */
+const HOTBAR_START = 36;
+
+/**
+ * Stop holding a tool the spec matches (rotn-data #288: a shovel of level 1+ turns dirt piles back
+ * into dirt), never by throwing it away. #291 review: mineflayer's unequip('hand') tosses the held
+ * stack when no hotbar or inventory slot is free. So, in order: switch to an empty hotbar slot, or
+ * to one holding something else; else unequip only while an inventory slot is free. Returns
+ * whether the bot no longer holds such a tool.
+ */
+export async function stopHolding(bot, tool) {
+    if (!isToolFor(bot.heldItem, tool)) return true;
+    const slots = bot.inventory?.slots ?? [];
+    const hotbar = Array.from({ length: 9 }, (_, i) => slots[HOTBAR_START + i] ?? null);
+    let i = hotbar.findIndex(it => !it);
+    if (i < 0) i = hotbar.findIndex(it => !isToolFor(it, tool));
+    if (i >= 0 && typeof bot.setQuickBarSlot === 'function') {
+        bot.setQuickBarSlot(i);
+        return !isToolFor(bot.heldItem, tool);
+    }
+    if (bot.inventory?.firstEmptyInventorySlot?.() != null) {
+        await bot.unequip('hand'); // a free slot: it moves the stack there, nothing is tossed
+        return !isToolFor(bot.heldItem, tool);
+    }
+    return false;
+}
 
 /** How collectByRoute crafts (tests pass their own). */
 export const COLLECT_ROUTE_OPS = { craft: (...args) => craftRecipe(...args) };

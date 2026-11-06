@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T19:57Z (from `date -u`)
+Updated: 2026-11-06T20:11Z (from `date -u`)
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/skills-rotn-g3`. Session 1; Phase 3 (G3: act in RotN) starts now. I own `src/agent/` and `profiles/` only.
 
@@ -764,6 +764,17 @@ Source: the lead's A rerun findings (raw log: harness-ops `captures/raw/r5-g3a-r
   - `use_on` (2) and `names_e2e` (1) used dirt as a neutral block, so they now use sand.
   - `src` and `packages` tests 928/928; lint 253.
 - Not tried on a server.
+- **2026-11-06T20:11Z: #291 review fix** (the lead):
+  - mineflayer's `unequip('hand')` tosses the held stack when no slot is free. So `stopHolding(bot, tool)` now:
+    1. switches to an empty hotbar slot, or to one holding something that is not a level-1+ shovel;
+    2. otherwise calls `unequip` only while an inventory slot is free;
+    3. otherwise skips the dig with the reason.
+  - **Nit:** `dirtPile()` keeps the recipe's meta.
+  - **Tests:**
+    - the `dirt_piles` fake now models mineflayer's slots and `unequip`, including the toss;
+    - 1 new full-inventory test: the shovel is never tossed; another hotbar item is held, or the dig is skipped with the reason; with a free slot, `unequip` moves it;
+    - 1 new agenda test for the nit.
+  - Both new tests fail on the previous head. `src` and `packages` tests 930/930; lint 253.
 
 ## Before the restart (PAUSED, received before 2026-11-05T01:49Z by `date -u`)
 
