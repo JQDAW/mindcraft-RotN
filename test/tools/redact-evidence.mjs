@@ -55,7 +55,7 @@ const UUID = /\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-([0-9A-Fa-f])[0-9A-Fa-f]{3}-[0-9A-
 // This PC's user folder in any spelling (C:\Users\x, C:/Users/x, /c/Users/x, JSON-escaped).
 const LOCAL_PATH = /(?:[A-Za-z]:|\/[a-z])(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)[^\\/"'\s]+/g;
 // hcloud's numeric server ids: "(server: N" and "Server N created" (group 1 is kept).
-const HCLOUD_SERVER_ID = /(\(server: |\bServer )\d{5,}(?=[,) ]|$)/gm;
+export const HCLOUD_SERVER_ID = /(\(server: |\bServer )\d{5,}(?=[,) ]|$)/gm;
 // What is left of an address next to a redaction: "<ip>.0.113.7", "203.0.<ip>", "2001:db8:<ip>".
 const PARTIAL = /<ip>\.\d|\d\.<ip>|[0-9A-Fa-f]{1,4}:<ip>|<ip>:[0-9A-Fa-f]{1,4}:/g;
 

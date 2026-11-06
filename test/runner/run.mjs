@@ -200,9 +200,10 @@ async function main(argv) {
         result.llm = llmRecord(usageBefore, await readUsage(), bot.output());
         // Requests sent, then what came back (lead, after round 3: failed calls are never counted as calls).
         const http = Object.entries(result.llm.httpErrors ?? {}).map(([st, n]) => `${n} x HTTP ${st}`).join(', ');
-        log(`${scenario.id}: ${result.llm.calls} LLM requests (${result.llm.replies?.ok ?? '?'} replies, ${result.llm.replies?.failed ?? '?'} failed${http ? `; ${http}` : ''}), USD ${result.llm.usd ?? 'unknown'}`);
+        const rp = result.llm.replies ?? {};
+        log(`${scenario.id}: ${result.llm.calls} LLM requests (${rp.ok ?? '?'} replies, ${rp.memory ?? '?'} memory summaries, ${rp.failed ?? '?'} failed${http ? `; ${http}` : ''}), USD ${result.llm.usd ?? 'unknown'}`);
         if (result.llm.usd === null) addNotGate(result, `the LLM cost is unknown (${result.llm.error}): a G3 run must record its spend`);
-        // Every LLM run uses the preset model (the human's decision, 2026-11-03). The Mindcraft driver refuses
+        // Every LLM run uses the preset model (the human's decision, 2026-11-06). The Mindcraft driver refuses
         // any other; a G3 run whose recorded model is not it (or is unknown) is never a gate run.
         log(`${scenario.id}: model ${result.llm.models?.model ?? 'not reported by the driver'}`);
         if (scenario.gate === 'G3' && result.llm.models?.model !== LLM_MODEL) {

@@ -78,14 +78,35 @@ export const MAX_TABLE_CLAIMS = 5;
  * MAX_TABLE_CLAIMS. A claim is only a pointer: the server's testforblock decides.
  */
 export function tablePlacements(lines) {
+    // Anchored on the skill's own log form (lead, #245 review): the exact whole line placeBlock logs
+    // (src/agent/library/skills.js), inside the contiguous output block of an action or a mode:
+    //   Agent executed: !placeHere and got: Action output:      (or "Mode <m> finished executing, code_return: Action output:")
+    //   Placed crafting_table at (-42, 67, -54).
+    // Never from the LLM's text: Mindcraft prints a reply as "Generated response: ..." and echoes it as
+    // "<bot> full response to system: ""..."""; everything from the first through the echo's closing '""' is
+    // skipped, however many lines it spans, so a reply cannot fake a header or a claim. Chat arrives as
+    // "<bot> received message from <who>: ..." lines, which never open a block.
     const cells = [];
-    for (const l of lines) {
-        for (const m of String(l).matchAll(/\bPlaced (?:minecraft:)?crafting_table at \((-?\d+), (-?\d+), (-?\d+)\)/g)) {
-            const at = [Number(m[1]), Number(m[2]), Number(m[3])];
-            const i = cells.findIndex((c) => c.join() === at.join());
-            if (i >= 0) cells.splice(i, 1);
-            cells.push(at);
+    let inLlm = false;
+    let sawEcho = false;
+    let inOutput = false;
+    for (const raw of lines) {
+        const l = String(raw).replace(/\r$/, '');
+        if (inLlm) {
+            if (/^\S+ full response to system: ""/.test(l)) sawEcho = true;
+            if (sawEcho && l.endsWith('""')) inLlm = false;
+            continue;
         }
+        if (l.startsWith('Generated response:')) { inLlm = true; sawEcho = false; inOutput = false; continue; }
+        if (/^(?:Agent executed: !\w+ and got: |Mode \w+ finished executing, code_return: )Action output:$/.test(l)) { inOutput = true; continue; }
+        if (!inOutput) continue;
+        if (l.trim() === '') { inOutput = false; continue; }   // the block ends at its blank line
+        const m = /^Placed (?:minecraft:)?crafting_table at \((-?\d+), (-?\d+), (-?\d+)\)\.$/.exec(l);
+        if (!m) continue;
+        const at = [Number(m[1]), Number(m[2]), Number(m[3])];
+        const i = cells.findIndex((c) => c.join() === at.join());
+        if (i >= 0) cells.splice(i, 1);
+        cells.push(at);
     }
     return cells.slice(-MAX_TABLE_CLAIMS);
 }

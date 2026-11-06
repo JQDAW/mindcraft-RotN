@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { redact, findLeaks, evidenceFiles } from '../tools/redact-evidence.mjs';
+import { redact, findLeaks, evidenceFiles, HCLOUD_SERVER_ID } from '../tools/redact-evidence.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const kinds = (t) => findLeaks(t).map((l) => l.kind);
@@ -173,7 +173,7 @@ describe('one rule for the tool and the check (lead, after G2 batch 6: a bare ad
         assert.ok(files.some((f) => inGate(f, 'g0')) && files.some((f) => inGate(f, 'g1')) && files.some((f) => inGate(f, 'g2')));
         // Evidence committed before the server-id rule (#237 review nit) keeps hcloud's server ids, by decision
         // (masked from now on, existing evidence unchanged): compare with that one rule applied to both sides.
-        const ids = (s) => s.replace(/(\(server: |\bServer )\d{5,}(?=[,) ]|$)/gm, '$1<server-id>');
+        const ids = (s) => s.replace(HCLOUD_SERVER_ID, '$1<server-id>');   // the tool's own rule, not a copy (#244 nit)
         for (const f of files) {
             const t = fs.readFileSync(f, 'utf8');
             // Addresses, UUIDs and local paths everywhere. G2's logs and result.json also went through --bot;

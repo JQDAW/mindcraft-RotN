@@ -88,9 +88,9 @@ describe('the key usage read: numbers only, the key never leaves the header', ()
         assert.equal(spent({ ok: true, usage: 1 }, { ok: false, error: 'http 401' }), null);
         const start = `DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: LLM_MODEL, code_model: null, vision_model: null } })}`;
         assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1.25 }, [start, LLM_CALL_LINE, LLM_CALL_LINE]),
-            { models: { model: LLM_MODEL, code_model: null, vision_model: null }, calls: 2, replies: { ok: 0, failed: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
+            { models: { model: LLM_MODEL, code_model: null, vision_model: null }, calls: 2, replies: { ok: 0, memory: 0, failed: 0, disconnected: 0, empty: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: 1.25, usd: 0.25, error: null });
         assert.deepEqual(llmRecord({ ok: true, usage: 1 }, { ok: false, error: 'timeout' }, []),
-            { models: null, calls: 0, replies: { ok: 0, failed: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
+            { models: null, calls: 0, replies: { ok: 0, memory: 0, failed: 0, disconnected: 0, empty: 0 }, httpErrors: {}, usageBefore: 1, usageAfter: null, usd: null, error: 'timeout' });
     });
 
     test('the model of every LLM run: the OpenRouter preset (the human\'s decision, 2026-11-06), recorded from the driver', () => {
@@ -799,16 +799,33 @@ describe('LLM replies are counted as successful or failed, and the preflight pro
         const lines = [LLM_CALL_LINE, 'Error while awaiting response: Error [429] (status 429): 429 Provider returned error',
             'Generated response: My brain disconnected, try again.', LLM_CALL_LINE, 'Generated response: On it! !collectBlocks("pyrotech:rock", 6)',
             'Error while awaiting response: Error [429] (status 429): 429 Provider returned error', 'Error [500] (status 500): x', 'NoError [429]'];
-        assert.deepEqual(countLlmReplies(lines), { ok: 1, failed: 1, httpErrors: { 429: 2, 500: 1 } });
+        assert.deepEqual(countLlmReplies(lines), { ok: 1, memory: 0, failed: 1, disconnected: 1, empty: 0, httpErrors: { 429: 2, 500: 1 } });
         assert.equal(countLlmCalls(lines), 2, 'calls stays the number of requests sent');
         const rec = llmRecord({ ok: true, usage: 1 }, { ok: true, usage: 1 }, lines);
-        assert.deepEqual([rec.calls, rec.replies, rec.httpErrors], [2, { ok: 1, failed: 1 }, { 429: 2, 500: 1 }]);
-        assert.deepEqual(countLlmReplies([]), { ok: 0, failed: 0, httpErrors: {} });
+        assert.deepEqual([rec.calls, rec.replies, rec.httpErrors], [2, { ok: 1, memory: 0, failed: 1, disconnected: 1, empty: 0 }, { 429: 2, 500: 1 }]);
+        assert.deepEqual(countLlmReplies([]), { ok: 0, memory: 0, failed: 0, disconnected: 0, empty: 0, httpErrors: {} });
+    });
+
+    test('countLlmReplies: memory summaries count apart; an empty answer and a failed summary are failures (round 3 continuation A and round 3 B)', () => {
+        // Round 3 continuation A: 62 requests = 46 agent replies + 13 memory summaries + 3 empty answers.
+        const a = [
+            ...Array(46).fill('Generated response: On it! !collectBlocks("pyrotech:rock", 6)'),
+            ...Array(13).fill('Memory updated to:  RotN agenda: done rocks, sticks.'),
+            ...Array(3).fill(null).flatMap(() => ['Error: Generated response is not a string null', 'Error during message generation or file writing: Error: Generated response is not a string']),
+        ];
+        assert.deepEqual(countLlmReplies(a), { ok: 46, memory: 13, failed: 3, disconnected: 0, empty: 3, httpErrors: {} });
+        // Round 3 B: 11 requests, all failed; one was a memory summary that stored the stand-in.
+        const b = [...Array(10).fill('Generated response: My brain disconnected, try again.'), 'FRCFLD full response to system: ""My brain disconnected, try again.""',
+            'Memory updated to:  My brain disconnected, try again.', ...Array(11).fill('Error while awaiting response: Error [429] (status 429): 429 Provider returned error')];
+        assert.deepEqual(countLlmReplies(b), { ok: 0, memory: 0, failed: 11, disconnected: 11, empty: 0, httpErrors: { 429: 11 } });
+        // #246 review 2: Mindcraft's other stand-in (a completion with no choices) is a failed reply, not an answer.
+        assert.deepEqual(countLlmReplies(['Generated response: No response received.', 'Generated response: ok']),
+            { ok: 1, memory: 0, failed: 1, disconnected: 1, empty: 0, httpErrors: {} });
     });
 
     test('probeModel: 200 names the provider; 429 gives the provider\'s error code; no key, network and timeout are reasons; the key never comes back', async () => {
         const seen = [];
-        const ok = await probeModel({ key: 'sk-test-secret', model: '@preset/x', fetchImpl: (url, init) => { seen.push({ url, init }); return fakeRes(200, { provider: 'OpenInference', model: 'z-ai/glm-5.3-flash' })(); } });
+        const ok = await probeModel({ key: 'sk-test-secret', model: '@preset/x', fetchImpl: (url, init) => { seen.push({ url, init }); return fakeRes(200, { provider: 'OpenInference', model: 'z-ai/glm-5.3-flash', choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] })(); } });
         assert.deepEqual(ok, { ok: true, status: 200, provider: 'OpenInference', model: 'z-ai/glm-5.3-flash', error: null });
         assert.equal(seen[0].url, 'https://openrouter.ai/api/v1/chat/completions');
         assert.equal(seen[0].init.headers.Authorization, 'Bearer sk-test-secret');
@@ -818,6 +835,20 @@ describe('LLM replies are counted as successful or failed, and the preflight pro
         assert.deepEqual(bad, { ok: false, status: 429, provider: 'Baidu', model: null, error: 'tpm_rate_limit_exceeded' });
         assert.ok(!JSON.stringify(bad).includes('sk-test-secret'));
         assert.equal((await probeModel({ key: '', model: 'm', fetchImpl: fakeRes(200, {}) })).error, 'no key');
+        // #246 review 1: a 200 is not enough. An error in the body, or no choices, fails; empty content passes.
+        const e200 = await probeModel({ key: 'k', model: 'm', fetchImpl: fakeRes(200, { error: { code: 502, message: 'Provider returned error', metadata: { provider_name: 'X' } } }) });
+        assert.deepEqual(e200, { ok: false, status: 200, provider: 'X', model: null, error: '502' });
+        assert.deepEqual(await probeModel({ key: 'k', model: 'm', fetchImpl: fakeRes(200, { error: { message: 'm' } }) }), { ok: false, status: 200, provider: null, model: null, error: 'error in a 200 response' });
+        for (const body of [{ provider: 'P' }, { provider: 'P', choices: [] }, null]) {
+            const r = await probeModel({ key: 'k', model: 'm', fetchImpl: fakeRes(200, body) });
+            assert.equal(r.ok, false, JSON.stringify(body));
+            assert.equal(r.error, 'no choices in the response');
+        }
+        const emptyText = await probeModel({ key: 'k', model: 'm', fetchImpl: fakeRes(200, { provider: 'OpenInference', choices: [{ message: { content: null }, finish_reason: 'length' }] }) });
+        assert.equal(emptyText.ok, true, 'the 02:42Z probe: 16 tokens spent before any text still passes');
+        // #246 review 4: provider and model are capped like the error.
+        const long = await probeModel({ key: 'k', model: 'm', fetchImpl: fakeRes(200, { provider: 'p'.repeat(500), model: 'm'.repeat(500), choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] }) });
+        assert.deepEqual([long.provider.length, long.model.length], [80, 80]);
         assert.equal((await probeModel({ key: 'k', model: 'm', fetchImpl: () => Promise.reject(new Error('down')) })).error, 'network');
         assert.equal((await probeModel({ key: 'k', model: 'm', fetchImpl: fakeRes(503, null) })).error, 'bad response');
     });
@@ -835,7 +866,7 @@ describe('LLM replies are counted as successful or failed, and the preflight pro
         const good = path.join(dir, 'good.json');
         fs.writeFileSync(good, JSON.stringify({ name: 'FRCFLD', model: LLM_MODEL }));
         const probeFile = path.join(dir, 'probe.json');
-        fs.writeFileSync(probeFile, JSON.stringify({ status: 200, body: { provider: 'OpenInference', model: 'z-ai/glm-5.3-flash' } }));
+        fs.writeFileSync(probeFile, JSON.stringify({ status: 200, body: { provider: 'OpenInference', model: 'z-ai/glm-5.3-flash', choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }] } }));
         const ok = await runBatch({ preflight: true, mark: '', driver: ['node', DRIVER, '--profile', good], extraEnv: { ROTN_OPENROUTER_PROBE_FILE: probeFile } });
         assert.equal(ok.code, 0, ok.out);
         assert.match(ok.out, /the LLM probe answered \(HTTP 200, provider OpenInference, z-ai\/glm-5\.3-flash\)/);

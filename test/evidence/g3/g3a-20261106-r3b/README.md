@@ -55,7 +55,11 @@
 
 ## Cost
 
-- **LLM:** 52 successful replies, 0 failures (the result records 62 calls). USD 0.0065 (the key's usage went from 0.7449 to 0.7513).
+- **LLM:** 62 requests = **46 agent replies + 13 memory summaries + 3 empty answers** (failures). USD 0.0065 (the key's usage went from 0.7449 to 0.7513).
+  - **Correction (#246 review):** this line first said "52 successful replies, 0 failures (the result records 62 calls)". The 52 came from a `grep 'Generated response'` that also matched the 6 error lines of the 3 empty answers ("Error: Generated response is not a string null" and its follow-up). So there were 46 agent replies, not 52, and 3 failures, not 0.
+  - The 13 memory summaries ("Memory updated to:") are requests of their own. The 46 + 13 + 3 add up to the 62 requests ("Awaiting openrouter api response...").
+  - From #246 on, `result.llm.replies` counts this way (`countLlmReplies`); this batch ran before it, so its `result.json` has `calls: 62` only.
+  - The 5-minute check at 02:24:53 (33 replies, no stand-ins, no 429) was not affected: the rule needs 5 failures and no success.
 - **Hetzner:** about 15 min from the create to "verified gone" (`run.log`'s "ran 14 min" counts from the server being up), 1 billed hour, about EUR 0.14 plus 1 Primary IPv4-hour.
 
 ## Files

@@ -11,6 +11,12 @@ export const LLM_CALL_LINE = 'Awaiting openrouter api response...';
 export const LLM_REPLY_LINE = 'Generated response:';
 /** Mindcraft's stand-in reply when the request failed (src/models: "My brain disconnected, try again."). */
 export const LLM_FAILED_REPLY = 'My brain disconnected';
+/** Mindcraft's other stand-in: a completion with no choices (src/models/openrouter.js returns it; #246 review 2). */
+export const LLM_NO_RESPONSE = 'No response received.';
+/** Mindcraft's line when the model answered with no text (null content; once per empty answer, at a line start). */
+export const LLM_EMPTY_REPLY = 'Error: Generated response is not a string';
+/** Mindcraft's line after a memory summary, which is an LLM request of its own (src/agent/history.js). */
+export const LLM_MEMORY_LINE = 'Memory updated to:';
 export const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 /** The test-mode overrides of the spend machinery; never honoured in a real batch (#122 review). */
@@ -74,23 +80,35 @@ export const countLlmCalls = (lines) => lines.filter((l) => l.includes(LLM_CALL_
 
 /**
  * The replies behind those requests (lead, after round 3: evidence must never count failed calls as calls).
- * ok: "Generated response:" lines that are not Mindcraft's failure stand-in; failed: those that are ("My brain
- * disconnected"); httpErrors: {status: n} from "Error [429] (status 429)" lines (one per failed attempt, so a
- * retried request can add more than one).
+ * - ok: the agent's replies, "Generated response:" lines that are not Mindcraft's failure stand-in;
+ * - memory: memory summaries ("Memory updated to:"), LLM requests of their own;
+ * - failed = disconnected (Mindcraft's stand-in replies "My brain disconnected, try again." and "No response
+ *   received.") + empty (the model answered no text:
+ *   "Error: Generated response is not a string"; round 3 continuation A had 3);
+ * - httpErrors: {status: n} from "Error [429] (status 429)" lines (one per failed attempt).
+ * In the round 3 logs, requests = ok + memory + empty (+ a request still waiting when the bot left).
  */
 export function countLlmReplies(lines) {
     let ok = 0;
-    let failed = 0;
+    let memory = 0;
+    let disconnected = 0;
+    let empty = 0;
     const httpErrors = {};
     for (const l of lines ?? []) {
         if (l.includes(LLM_REPLY_LINE)) {
-            if (l.includes(LLM_FAILED_REPLY)) failed++;
+            if (l.includes(LLM_FAILED_REPLY) || l.includes(LLM_NO_RESPONSE)) disconnected++;
             else ok++;
+        }
+        if (l.startsWith(LLM_EMPTY_REPLY)) empty++;
+        // A memory summary whose request failed stores the stand-in itself ("Memory updated to:  My brain disconnected").
+        if (l.startsWith(LLM_MEMORY_LINE)) {
+            if (l.includes(LLM_FAILED_REPLY)) disconnected++;
+            else memory++;
         }
         const m = /\bError \[(\d{3})\]/.exec(l);
         if (m) httpErrors[m[1]] = (httpErrors[m[1]] ?? 0) + 1;
     }
-    return { ok, failed, httpErrors };
+    return { ok, memory, failed: disconnected + empty, disconnected, empty, httpErrors };
 }
 
 /** USD spent between two readings, to a millionth of a dollar; null if either is missing. */
@@ -123,7 +141,7 @@ export function llmRecord(before, after, outputLines) {
         // The model of the run (the human's decision: openrouter/@preset/glm-5-3-flash-cheap-reliable for every LLM run).
         models: agentModels(outputLines),
         calls: countLlmCalls(outputLines),
-        ...(({ ok, failed, httpErrors }) => ({ replies: { ok, failed }, httpErrors }))(countLlmReplies(outputLines)),
+        ...(({ httpErrors, ...replies }) => ({ replies, httpErrors }))(countLlmReplies(outputLines)),
         usageBefore: before?.ok ? before.usage : null,
         usageAfter: after?.ok ? after.usage : null,
         usd: spent(before, after),
@@ -167,10 +185,14 @@ export async function probeModel({ key, model, fetchImpl = globalThis.fetch, url
         let body = null;
         try { body = await res.json(); } catch { /* not JSON */ }
         const meta = body?.error?.metadata ?? {};
-        const out = { ok: res.ok, status: res.status, provider: body?.provider ?? meta.provider_name ?? null, model: body?.model ?? null };
-        if (res.ok) return { ...out, error: null };
+        const cap = (v) => (v === null || v === undefined ? null : String(v).slice(0, 80));   // #246 review 4
+        const out = { status: res.status, provider: cap(body?.provider ?? meta.provider_name), model: cap(body?.model) };
+        // A 200 can still be a failure (#246 review 1): OpenRouter sometimes reports a provider failure as a 200
+        // with `error` in the body and no `choices`. Empty `content` in a real choice still passes.
+        if (res.ok && !body?.error && Array.isArray(body?.choices) && body.choices.length > 0) return { ok: true, ...out, error: null };
         const code = meta.provider_error_code ?? body?.error?.code ?? null;
-        return { ...out, error: code !== null ? String(code).slice(0, 80) : 'bad response' };
+        const why = code !== null ? cap(code) : res.ok ? (body?.error ? 'error in a 200 response' : 'no choices in the response') : 'bad response';
+        return { ok: false, ...out, error: why };
     } catch (e) {
         return { ok: false, status: null, provider: null, model: null, error: e?.name === 'AbortError' ? 'timeout' : 'network' };
     } finally {
