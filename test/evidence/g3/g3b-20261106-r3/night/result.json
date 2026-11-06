@@ -1,0 +1,291 @@
+{
+  "scenario": "g3-first-night",
+  "gate": "G3",
+  "title": "From a fresh spawn the agent lives through its first full night (the time untouched; the server is the arbiter)",
+  "runId": "20261105t233119-963abe",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "FAIL",
+  "passed": 2,
+  "failed": 3,
+  "durationS": 1777,
+  "params": {
+    "bot": "<bot>",
+    "worldSeed": "1880465901402976865",
+    "maxMinutes": 55,
+    "nightFrom": 13000,
+    "dawnBelow": 12000,
+    "maxBatchUsd": 2,
+    "loginTimeoutMs": 240000,
+    "pollMs": 60000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "lateReplyMs": 5000,
+    "latePollMs": 1000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the bot makes it log in with its own account (online mode)"
+    },
+    {
+      "check": "fresh_start",
+      "pass": true,
+      "detail": "none of 24 target items held; the pack's first-join Bread and Bundle seen",
+      "readyToTry": "It starts as a fresh spawn: none of the early-game items held, and the pack's first-join gives seen"
+    },
+    {
+      "check": "survived_night",
+      "pass": false,
+      "detail": "not reached (scenario error)",
+      "readyToTry": "It reaches the first dawn after a full night with no death (stat.deaths 0, no death line)"
+    },
+    {
+      "check": "stayed_online",
+      "pass": false,
+      "detail": "not reached (scenario error)",
+      "readyToTry": "It stays online from the join to dawn (no leave, lost connection or kick)"
+    },
+    {
+      "check": "no_cheat",
+      "pass": false,
+      "detail": "not reached (scenario error)",
+      "readyToTry": "No give, game mode change, op or command by the bot during the run (the pack's first-join commands aside)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "objectives": [
+      {
+        "obj": "g3b_deaths",
+        "criteria": "stat.deaths",
+        "result": "added"
+      },
+      {
+        "obj": "g3b_played",
+        "criteria": "stat.playOneMinute",
+        "result": "added"
+      },
+      {
+        "obj": "g3b_food",
+        "criteria": "food",
+        "result": "added"
+      }
+    ],
+    "startCounts": {
+      "minecraft:stone_pickaxe": 0,
+      "minecraft:stone_axe": 0,
+      "minecraft:crafting_table": 0,
+      "pyrotech:crude_axe": 0,
+      "contenttweaker:crafting_tools": 0,
+      "undergroundbiomes:igneous_cobble": 0,
+      "contenttweaker:lignite_cobble": 0,
+      "undergroundbiomes:metamorphic_cobble": 0,
+      "undergroundbiomes:metamorphic_sandstone": 0,
+      "contenttweaker:chalk_cobble": 0,
+      "contenttweaker:shale_cobble": 0,
+      "contenttweaker:siltstone_cobble": 0,
+      "contenttweaker:dolomite_cobble": 0,
+      "contenttweaker:greywacke_cobble": 0,
+      "contenttweaker:chert_cobble": 0,
+      "undergroundbiomes:sedimentary_sandstone": 0,
+      "defiledlands:sandstone_defiled": 0,
+      "contenttweaker:serpentinite_cobblestone": 0,
+      "defiledlands:stone_defiled": 0,
+      "aether_legacy:holystone": 0,
+      "minecraft:cobblestone": 0,
+      "minecraft:sandstone": 0,
+      "contenttweaker:limestone_cobble": 0,
+      "minecraft:red_sandstone": 0
+    },
+    "samples": [
+      {
+        "min": 1.1,
+        "daytime": 2487,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 2.3,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 3.4,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 4.6,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 5.7,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 6.8,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 8,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 9.1,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 10.3,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 11.4,
+        "daytime": 3001,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 12.5,
+        "daytime": 4162,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 13.7,
+        "daytime": 5529,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 14.8,
+        "daytime": 6895,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 15.9,
+        "daytime": 8260,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 17.1,
+        "daytime": 9624,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 18.2,
+        "daytime": 10992,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 19.4,
+        "daytime": 12356,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 20.5,
+        "daytime": 13721,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 21.6,
+        "daytime": 15089,
+        "deaths": 0,
+        "food": null
+      },
+      {
+        "min": 22.8,
+        "daytime": 16001,
+        "deaths": 0,
+        "food": 19
+      },
+      {
+        "min": 23.9,
+        "daytime": 16001,
+        "deaths": 0,
+        "food": 19
+      },
+      {
+        "min": 25,
+        "daytime": 16001,
+        "deaths": 0,
+        "food": 19
+      },
+      {
+        "min": 26.2,
+        "daytime": 16001,
+        "deaths": 0,
+        "food": 19
+      },
+      {
+        "min": 27.3,
+        "daytime": 16001,
+        "deaths": 0,
+        "food": 18
+      },
+      {
+        "min": 28.5,
+        "daytime": 16001,
+        "deaths": 0,
+        "food": 18
+      }
+    ]
+  },
+  "botExitCode": 128,
+  "botExitSignal": "SIGTERM",
+  "botStoppedByRunner": true,
+  "error": "Error: scenario marker not in the last 20000 log lines; raise logTail\n    at Object.sinceMarker (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/session.mjs:54:35)\n    at Object.run (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/scenarios/g3/g3-first-night.mjs:151:39)\n    at async runScenario (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/lib/runner.mjs:121:9)\n    at async main (file:///<local>/orca/workspaces/mindcraft-RotN/harness-ops-g0/test/runner/run.mjs:183:26)",
+  "git": {
+    "sha": "609490f68b2b7912fde68e7366ea5cfb70ec411b",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261105-232806",
+  "driver": "node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json",
+  "llm": {
+    "models": {
+      "model": "openrouter/@preset/glm-5-1-mindcraft",
+      "code_model": null,
+      "vision_model": null
+    },
+    "calls": 11,
+    "usageBefore": 0.744861717,
+    "usageAfter": 0.744861717,
+    "usd": 0,
+    "error": null
+  },
+  "batch": "20261105T233119-9872:2"
+}
