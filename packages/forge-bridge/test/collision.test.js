@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { RegistrySnapshot } from '../src/registries.js';
 import { extendRegistry } from '../src/registry-extension.js';
-import { applyCollisionShapes, dumpShapesByMeta, validateCollisionOverrides, loadCollisionOverrides, DYNAMIC_LEAVES_BOX } from '../src/collision.js';
+import { applyCollisionShapes, dumpShapesByMeta, validateCollisionOverrides, loadCollisionOverrides, hazardBlockIds, liquidBlockIds, stateHazard, DYNAMIC_LEAVES_BOX } from '../src/collision.js';
 import { loadRotnData } from '../../rotn-data/index.js';
 
 const require = createRequire(import.meta.url);
@@ -108,7 +108,7 @@ test('dumpShapesByMeta: 16 shapes by metadata, or null for missing or malformed 
 
 test('walk-through is opt-in: reviewed rock piles and plant states only; an unreviewed state without a box is a solid full cube', () => {
     const { registry, report, Block } = fixedMini();
-    assert.deepEqual(report, { fromDump: 8, noDumpData: 2, walkThroughBlocks: 1, walkThroughSomeStates: 1, perStateEntries: 2, liquid: 1, hazard: { lava: 1, trap: 2, portal: 1, fire: 1 }, shapes: { dynamicLeaves: 1 } });
+    assert.deepEqual(report, { fromDump: 8, noDumpData: 2, walkThroughBlocks: 1, walkThroughSomeStates: 1, perStateEntries: 15, liquid: 1, hazard: { lava: 1, trap: 2, portal: 1, fire: 1 }, shapes: { dynamicLeaves: 1 } });
     const rock = blockOf(Block, 'pyrotech:rock', 6);
     assert.equal(rock.boundingBox, 'empty');
     assert.deepEqual(rock.shapes, []);
@@ -128,6 +128,9 @@ test('walk-through is opt-in: reviewed rock piles and plant states only; an unre
     assert.equal(registry.blocksByStateId[(ID['somemod:plant'] << 4) | 4].forge.hazard, 'trap');
     assert.equal(registry.blocksByStateId[(ID['somemod:plant'] << 4) | 0].forge.hazard, undefined);
     assert.equal(registry.blocksByName['somemod:plant'].boundingBox, 'block', 'the block entry is walk-through only when every state is');
+    assert.equal(registry.blocksByName['somemod:plant'].forge.hazard, 'trap', 'the block entry is a hazard when any state is (an avoid list by id)');
+    assert.deepEqual(registry.blocksByName['somemod:plant'].forge.hazardByMeta, { 4: 'trap' });
+    assert.equal(registry.blocksByStateId[(ID['somemod:plant'] << 4) | 7].forge.hazard, undefined, 'a harmless state keeps no hazard');
     assert.equal(plant4.name, 'somemod:plant');
     assert.equal(plant4.metadata, 4, 'the per-state entry keeps minStateId');
     // Shapes.
@@ -153,10 +156,27 @@ test('#259: a molten metal, a spike trap and a modded portal stay non-walkable, 
     assert.deepEqual(walkable, [false, false, false, true], 'the pathfinder walks through the rock pile only');
 });
 
+test('hazardBlockIds, liquidBlockIds and stateHazard: by block id for avoid lists, per state for one block', () => {
+    const { registry, Block } = fixedMini();
+    const id = (n) => ID[n];
+    assert.deepEqual([...hazardBlockIds(registry)].sort(), ['somemod:molten_bronze', 'somemod:spikes', 'somemod:portal', 'somemod:plant', 'somemod:nodata'].map(id).sort());
+    assert.deepEqual([...hazardBlockIds(registry, { kinds: ['portal', 'fire'] })].sort(), [id('somemod:portal'), id('somemod:nodata')].sort());
+    assert.ok(hazardBlockIds(registry, { kinds: ['trap'] }).has(id('somemod:plant')), 'a per-variant hazard counts');
+    assert.deepEqual([...liquidBlockIds(registry)], [id('somemod:molten_bronze')]);
+    assert.equal(stateHazard(registry, blockOf(Block, 'somemod:plant', 4)), 'trap');
+    assert.equal(stateHazard(registry, blockOf(Block, 'somemod:plant', 0)), null);
+    assert.equal(stateHazard(registry, (id('somemod:portal') << 4)), 'portal');
+    assert.equal(stateHazard(registry, { type: id('somemod:spikes'), metadata: 0 }), 'trap');
+    assert.equal(stateHazard(registry, blockOf(Block, 'minecraft:stone')), null);
+    assert.equal(stateHazard(registry, undefined), null);
+});
+
 test('a bad override fails before anything changes: every modded block stays a full cube', () => {
     const registry = extended(IDS);
     const bad = { ...MINI_DATA, blocks: { ...MINI_DATA.blocks, 'zzz:last': { hazard: 'lava-ish' } } };
+    const table = registry.blockCollisionShapes;
     assert.throws(() => applyCollisionShapes(registry, MINI_DUMP, { overrides: bad }), /unknown hazard 'lava-ish'/);
+    assert.equal(registry.blockCollisionShapes, table, 'the shape table is not replaced');
     const Block = require('prismarine-block')(registry);
     for (const n of NAMES) {
         const b = blockOf(Block, n);
@@ -246,6 +266,11 @@ test('the real 3.3.4 dump and data: molten metal, spikes and a modded portal non
         assert.equal(registry.blocksByStateId[(registry.blocksByName[n].id << 4) | meta].forge.hazard, hazard, `${n}:${meta} hazard`);
     });
     assert.equal(registry.blocksByName['contenttweaker:bronze_molten'].liquid, true);
+    const trapIds = hazardBlockIds(registry, { kinds: ['trap'] });
+    assert.ok(trapIds.has(registry.blocksByName['biomesoplenty:plant_0'].id), 'poison ivy makes plant_0 an avoid-list block by id');
+    assert.ok(hazardBlockIds(registry, { kinds: ['fire'] }).has(registry.blocksByName['biomesoplenty:flower_0'].id), 'burning blossom');
+    assert.ok(liquidBlockIds(registry).has(registry.blocksByName['contenttweaker:bronze_molten'].id));
+    assert.equal(liquidBlockIds(registry).size, data.counts.blocks.liquid);
     assert.deepEqual(byName('dynamictrees:leaves0').shapes, [DYNAMIC_LEAVES_BOX]);
     assert.deepEqual(byName('dynamictreesbop:leaves_palm').shapes, [DYNAMIC_LEAVES_BOX]);
 });

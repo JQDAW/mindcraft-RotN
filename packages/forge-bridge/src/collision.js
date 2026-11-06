@@ -22,7 +22,7 @@
 // change planned before the registry is touched, so a failure leaves every modded block a full cube.
 
 import fs from 'node:fs';
-import { registerShapes } from './registry-extension.js';
+import { shapeTableWith } from './registry-extension.js';
 
 const FULL_CUBE = [[0, 0, 0, 1, 1, 1]];
 // BlockDynamicLeaves.addCollisionBoxToList, bytecode 96-116 (test/fixtures/dynamictrees-0.13.4/).
@@ -103,7 +103,10 @@ function planBlock(entry, dumped, o, data) {
         stateShapes: shapes.some((s) => !sameShape(s, shapes[def])) ? shapes : null,
         boundingBox: boxes.every((b) => b === 'empty') ? 'empty' : 'block',
         boxes,
-        hazard: o?.hazard ?? null,
+        // The block-level kind: every state's, or the first harmful state's (an avoid list by block id
+        // must not miss poison ivy); each state's own kind stays on its blocksByStateId entry.
+        hazard: o?.hazard ?? hazards.find(Boolean) ?? null,
+        hazardByMeta: o?.hazardByMeta ? { ...o.hazardByMeta } : null,
         hazards,
         liquid: !!o?.liquid,
     };
@@ -131,9 +134,10 @@ export function applyCollisionShapes(registry, dumpBlocks, { overrides = loadCol
         const plan = planBlock(entry, dumpBlocks?.[regName], overrides.blocks[regName], overrides);
         plans.push([entry, plan]);
     }
-    // 2. Apply.
+    // The new collision-shape table, built before anything changes.
+    const table = shapeTableWith(registry.blockCollisionShapes, plans.filter(([, p]) => p).map(([e, p]) => ({ name: e.name, shapes: p.shapes })));
+    // 2. Apply (nothing below can throw on a valid plan).
     const report = { fromDump: 0, noDumpData: 0, walkThroughBlocks: 0, walkThroughSomeStates: 0, perStateEntries: 0, liquid: 0, hazard: {}, shapes: {} };
-    const changed = [];
     for (const [entry, plan] of plans) {
         if (!plan || plan.source === 'default') report.noDumpData++;
         if (!plan) continue;
@@ -146,6 +150,7 @@ export function applyCollisionShapes(registry, dumpBlocks, { overrides = loadCol
         if (plan.liquid) { entry.liquid = true; report.liquid++; }
         const forge = { ...entry.forge, collision: plan.source };
         if (plan.hazard) forge.hazard = plan.hazard;
+        if (plan.hazardByMeta) forge.hazardByMeta = plan.hazardByMeta;
         entry.forge = forge;
         if (plan.boundingBox === 'empty') report.walkThroughBlocks++;
         else if (plan.boxes.includes('empty')) report.walkThroughSomeStates++;
@@ -160,11 +165,53 @@ export function applyCollisionShapes(registry, dumpBlocks, { overrides = loadCol
             registry.blocksByStateId[sid] = { ...entry, boundingBox: plan.boxes[m], forge: f };
             report.perStateEntries++;
         }
-        changed.push(entry);
     }
-    registerShapes(registry, changed);
+    registry.blockCollisionShapes = table;
     const h = Object.entries(report.hazard).map(([k, n]) => `${n} ${k}`).join(', ') || 'none';
     log(`collision shapes: ${report.fromDump} modded blocks from the dump, ${report.walkThroughBlocks} walk-through `
         + `(+${report.walkThroughSomeStates} in some states), ${report.liquid} liquid, hazards: ${h}; ${report.noDumpData} without dump data keep their shape`);
     return report;
+}
+
+// ---- lookups for skills-rotn (#259 re-review): avoid lists and floor checks by block id ----
+
+/**
+ * Ids of the blocks with a hazard in any state (applyCollisionShapes sets the block-level
+ * `forge.hazard` when any state is one, so a variant like poison ivy is included), for
+ * mineflayer-pathfinder's `Movements.blocksToAvoid` and similar.
+ * @param {object} registry  bot.registry after applyCollisionShapes
+ * @param {{ kinds?: string[] }} [opts]  only these kinds (default: every kind in HAZARD_KINDS)
+ * @returns {Set<number>}
+ */
+export function hazardBlockIds(registry, { kinds = HAZARD_KINDS } = {}) {
+    const want = new Set(kinds);
+    const ids = new Set();
+    for (const b of registry?.blocksArray ?? []) {
+        const f = b?.forge;
+        if (!f?.hazard) continue;
+        if (want.has(f.hazard) || Object.values(f.hazardByMeta ?? {}).some((k) => want.has(k))) ids.add(b.id);
+    }
+    return ids;
+}
+
+/**
+ * Ids of the modded blocks applyCollisionShapes marked `liquid` (modded fluids). Vanilla water and
+ * lava are not included: minecraft-data names them.
+ * @returns {Set<number>}
+ */
+export function liquidBlockIds(registry) {
+    const ids = new Set();
+    for (const b of registry?.blocksArray ?? []) if (b?.liquid === true && b.forge) ids.add(b.id);
+    return ids;
+}
+
+/**
+ * The hazard kind of one block state, or null: a prismarine Block (its stateId, or type and
+ * metadata) or a state id. Per state, so BOP short grass is null and poison ivy 'trap'.
+ */
+export function stateHazard(registry, blockOrStateId) {
+    const b = blockOrStateId;
+    const sid = typeof b === 'number' ? b : (b?.stateId ?? (Number.isInteger(b?.type) ? (b.type << 4) | (b.metadata ?? 0) : undefined));
+    if (!Number.isInteger(sid)) return null;
+    return registry?.blocksByStateId?.[sid]?.forge?.hazard ?? null;
 }

@@ -1,6 +1,6 @@
 # Status: net-forge
 
-Updated: 2026-11-06T08:30Z
+Updated: 2026-11-06T08:51Z
 
 Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
 
@@ -30,6 +30,11 @@ Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
   - `test/collision.test.js` 9/9. It covers molten metal, spikes, a modded portal, fire, web, BOP poison and poison ivy as not walk-through, through mineflayer-pathfinder's own `Movements.getBlock().safe`. Rock piles and BOP grass are walk-through.
   - After the merge: `fall_safety.test.js` 10/10, plus 21 other files that use `initBot` or the extension.
   - Lint is clean. The tool's `--check` is up to date.
+- **Re-review additions (pushed):**
+  - **Lookups for skills-rotn:** `hazardBlockIds(registry, { kinds })`, `liquidBlockIds(registry)` and `stateHazard(registry, block)` are exported from forge-bridge.
+  - **Block-level hazard:** the block entry gets `forge.hazard` when any state is a hazard, so poison ivy puts `plant_0` on an avoid list by id. The per-state detail stays in `forge.hazardByMeta` and on each state's entry.
+  - **Shape table:** the new collision-shape table is built in the plan, before any change.
+  - **Note for skills-rotn:** avoiding `plant_0` by id also avoids BOP short grass. Use `stateHazard` per block for the finer check.
 - **Routed by the lead to skills-rotn:** `fall_safety.js` `isEmpty` should use `liquid` and `forge.hazard`.
 
 **Answer: players collide with Dynamic Trees leaves; they do not fall through.** Each leaves block is a half-height box inset by 1/8: `[0.125, 0, 0.125, 0.875, 0.5, 0.875]`. So they are ground, but the surface is 0.5 above the block, not 1.0. A player walks up onto them like a slab.
