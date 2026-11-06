@@ -888,6 +888,25 @@ describe('sweeper preflight before any create (finding 5, lead rule 2026-11-01)'
         passesCadence([...extra, helperAt(2470)], 'mcr-test-hx3', /left out the helper's own dispatch: 4003 /);
     });
 
+    test('every path checks the run\'s event itself, not only through gh\'s --event filter (#282 review nit 1)', () => {
+        // FAKE_GH_IGNORE_EVENT=1: the fake gh returns runs of every event, as a gh that ignored --event would.
+        const loose = { FAKE_GH_IGNORE_EVENT: '1' };
+        // (a): a dispatch run is not a scheduled sweeper run.
+        ghRuns([sweepRun({ databaseId: 7, createdAt: isoZ(NOW - 60) })]);
+        refuses(run(upArgs, loose), /no successful scheduled run of test-server-sweeper.yml on develop yet/);
+        // (b): a manual helper run is not a scheduled one, even with a sweeper run after it.
+        ghRuns([helperAt(600, 2001, { event: 'workflow_dispatch' }), sweepRun({ databaseId: 3001, createdAt: isoZ(NOW - 500) })]);
+        refuses(run(upArgs, loose), /via the helper: no successful scheduled run of dispatch-sweeper.yml/);
+        // (c): a manual helper run excuses nothing, and a scheduled sweeper run is not a dispatch run of the cadence.
+        const extra = cadence(300, 1200, 2100, 2400, 3000);
+        ghRuns([...extra, helperAt(2470, 2001, { event: 'workflow_dispatch' })]);
+        refuses(run(upArgs, loose), /via the cadence: dispatch-run gaps 10, 5, 15, 15 min are not all/);
+        ghRuns([sweepRun({ databaseId: 4100, createdAt: isoZ(NOW - 60) }), sweepRun({ databaseId: 4101, createdAt: isoZ(NOW - 960), event: 'schedule' }),
+            sweepRun({ databaseId: 4102, createdAt: isoZ(NOW - 1860) }), sweepRun({ databaseId: 4103, createdAt: isoZ(NOW - 3 * 3600), event: 'schedule' })]);
+        // ROTN_SWEEPER_MAX_AGE_MIN 15: the 16 min old scheduled run cannot pass (a), so (c) decides.
+        refuses(run(upArgs, { ...loose, ROTN_SWEEPER_MAX_AGE_MIN: '15' }), /via the cadence: only 2 successful dispatch runs/);
+    });
+
     test('a newest completed sweeper run that failed blocks every path (PR #21 review finding 1)', () => {
         const failed = (event, o = {}) => ({ databaseId: 5000, event, status: 'completed', conclusion: 'failure', createdAt: isoZ(NOW - 60), headBranch: 'develop', ...o });
         const okSched = { databaseId: 1001, event: 'schedule', status: 'completed', conclusion: 'success', createdAt: isoZ(NOW - 600), headBranch: 'develop' };

@@ -46,7 +46,8 @@ if (group === 'run' && verb === 'list') {
     let runs = [...st.runs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     runs = runs.filter((r) => repoOf(r) === (flag('--repo') ?? DEFAULT_REPO));
     if (flag('--workflow')) runs = runs.filter((r) => workflowOf(r) === flag('--workflow'));
-    if (flag('--event')) runs = runs.filter((r) => r.event === flag('--event'));
+    // FAKE_GH_IGNORE_EVENT=1: act like a gh that does not apply --event, so the caller's own event check is what counts (#282 review nit 1).
+    if (flag('--event') && process.env.FAKE_GH_IGNORE_EVENT !== '1') runs = runs.filter((r) => r.event === flag('--event'));
     if (flag('--branch')) runs = runs.filter((r) => r.headBranch === flag('--branch'));
     runs = runs.slice(0, Number(flag('--limit') ?? 20));
     process.stdout.write(JSON.stringify(runs.map((r) => pick(r, flag('--json') ?? 'databaseId'))) + '\n');
