@@ -175,6 +175,10 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         // takes the running loop over, and the run counts against it (#174 review 3).
         driveTo(agent, goal);
         agenda.recordAttempt(step.id);
+    } else if (ownsPrompt(agent) && agent._autonomy_prompt !== goal) {
+        // The step's goal names what the bot holds now (the cobblestone its rocks make): the next
+        // prompt uses the new text; not a new run (#233 review 2).
+        driveTo(agent, goal);
     }
 
     // The step's budget: spent means stuck, and the agenda pauses (no more LLM calls for it).

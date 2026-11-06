@@ -274,24 +274,31 @@ test('a step once done stays done: crafting the crude axe uses up sticks, the ag
     assert.ok(!agent.said.some(m => m === 'agenda step sticks started: collect 4 sticks'), 'never back to sticks');
 });
 
-test('G3 round 2 B: the cobblestone step counts rotn-data\'s cobblestone ore (Underground Biomes cobble too)', () => {
-    const tools = [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1)];
-    assert.equal(stepOf([...tools, stack('undergroundbiomes:metamorphic_cobble', 0, 9)], { tableNear: true }), 'cobblestone');
-    assert.equal(stepOf([...tools, stack('undergroundbiomes:metamorphic_cobble', 0, 10)], { tableNear: true }), null,
-        '10 metamorphic cobble (what the bot made in round 2) finish the step');
-    assert.equal(stepOf([...tools, stack('undergroundbiomes:metamorphic_cobble', 0, 6), stack('cobblestone', 0, 4)], { tableNear: true }), null, 'mixed kinds add up');
-    assert.doesNotMatch(ROTN_EARLY_GAME.find(s => s.id === 'cobblestone').goal, /!buildShelter/, 'the goal no longer invites a daytime shelter');
-});
-
-test('G3 round 3 A: the cobblestone step\'s goal names the cobblestone the held rocks make', () => {
+test('G3 round 3 A: the cobblestone step\'s goal names the cobblestone the held rocks make, with one command', () => {
     const agenda = new Agenda('x', { dir: path.join(tmpdir(), `rotn-none-${Math.random()}`) });
     const step = ROTN_EARLY_GAME.find(s => s.id === 'cobblestone');
     const goal = (items) => agendaGoal(agenda, step, agendaState(fakeBot(items)));
     assert.match(goal([stack('pyrotech_compat:rock_sedimentary', 0, 8)]),
-        /Your 8 pyrotech_compat:rock_sedimentary:0 make contenttweaker:chalk_cobble:0 \(4 rocks each\): craft it with !craftRecipe\("contenttweaker:chalk_cobble:0", 2\) or !craftRecipe\("cobblestone", 2\)\./);
+        /Your pyrotech_compat:rock_sedimentary:0 rocks make contenttweaker:chalk_cobble:0, 4 rocks each: craft it with !craftRecipe\("cobblestone", n\)/);
     assert.match(goal([stack('pyrotech_compat:rock_igneous', 3, 4)]), /make undergroundbiomes:igneous_cobble:3/);
     assert.match(goal([stack('pyrotech_compat:rock_metamorphic', 0, 4)]), /make undergroundbiomes:metamorphic_cobble:0/);
-    assert.match(goal([stack('pyrotech:rock', 0, 4)]), /Your 4 pyrotech:rock:0 make cobblestone \(4 rocks each\)/);
+    const plain = goal([stack('pyrotech:rock', 0, 4)]);
+    assert.match(plain, /Your pyrotech:rock:0 rocks make cobblestone, 4 rocks each/);
+    assert.equal(plain.match(/!craftRecipe/g).length, 1, '#233 review 3: one command, not the same one twice');
+    assert.equal(goal([stack('pyrotech:rock', 0, 4)]), goal([stack('pyrotech:rock', 0, 9)]), 'the same text while the kind is the same');
     // too few rocks of one kind: the general goal
     assert.match(goal([stack('pyrotech:rock', 0, 3)]), /make cobblestone from 4 rocks of one kind with !craftRecipe\("cobblestone", 1\): each rock kind makes its own cobblestone/);
+});
+
+test('#233 review 2: the rock-specific goal reaches the prompt once the bot has the rocks; not a new run', (t) => {
+    const items = [stack('stone_pickaxe', 0, 1), stack('stone_axe', 0, 1)];
+    const agent = fakeAgent(t, items, { tableNear: true });
+    assert.equal(agendaTick(agent, { now: 1_000 }), 'cobblestone');
+    const sp = agent.self_prompter;
+    assert.match(sp.prompt, /each rock kind makes its own cobblestone/, 'no rocks yet: the general goal');
+    const runs = agent.agenda.spentOn('cobblestone').attempts;
+    items.push(stack('pyrotech_compat:rock_sedimentary', 0, 4)); // it mined rocks
+    agendaTick(agent, { now: 1_000 + TICK_MS });
+    assert.match(sp.prompt, /make contenttweaker:chalk_cobble:0/);
+    assert.equal(agent.agenda.spentOn('cobblestone').attempts, runs, 'the same run');
 });

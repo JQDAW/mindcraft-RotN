@@ -68,16 +68,18 @@ async function craftCobbleFromRocks(bot, num, ops) {
         return false;
     }
     let made = 0;
-    let any = false;
     for (const c of choices) {
         if (made >= num) break;
         const n = Math.min(num - made, Math.floor(c.have / ROCKS_PER_COBBLE));
-        // plain rock makes vanilla cobblestone: name its variant, so this is not the general request again
-        const target = isGenericCobble(c.gives) ? `${c.gives.replace(/^minecraft:/, '')}:0` : c.gives;
         log(bot, `Cobblestone from your rocks: ${n} ${c.gives} (${ROCKS_PER_COBBLE} ${c.rock} each).`);
-        if (await craftRecipe(bot, target, n, ops)) { any = true; made += n; }
+        // By the rock's own recipe (#233 review 1): bot.recipesFor could pick another recipe for the
+        // same output (undergroundbiomes:regular_cobblestone turns 4 modded cobbles into vanilla).
+        const before = countItem(bot, c.gives);
+        const needs = { recipeId: c.recipeId, requiresTable: c.requiresTable, ready: true, inputs: [] };
+        await craftByFill(bot, c.gives, n, needs, null, false, ops);
+        made += Math.max(0, countItem(bot, c.gives) - before);
     }
-    return any;
+    return made > 0;
 }
 
 export async function craftRecipe(bot, itemName, num=1, ops=CRAFT_TABLE_OPS) {

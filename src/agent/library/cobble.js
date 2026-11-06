@@ -4,25 +4,44 @@
 // sandstones, holystone or defiled stone some rocks also make. The round 3 bot held 8 sedimentary
 // rocks, and !craftRecipe("cobblestone") looked at vanilla cobblestone's recipes (4 plain rocks,
 // or Twilight Forest's giant cobblestone) instead of chalk cobble.
-import { rockRecipes, loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../../packages/rotn-data/index.js';
+import { rockRecipes, recipesFor, loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../../packages/rotn-data/index.js';
 import { countItem, formatName } from './rotn_names.js';
 
 /** Rocks per cobblestone (every rock recipe is 4 of one kind). */
 export const ROCKS_PER_COBBLE = 4;
 
 let recipes = null;
-/** [{rock, gives, recipeId}] in bot names: the rock recipes whose output is cobblestone. */
-export function cobbleRecipes() {
+/**
+ * [{rock, gives, recipeId, requiresTable}] in bot names: the rock recipes whose output is
+ * cobblestone. Cached only when the ore and the recipes loaded (#233 review 4: a failed load was
+ * cached for the life of the process).
+ */
+const loadRotn = () => ({ ore: loadRotnData(PACK_VERSION).oreDict('cobblestone') ?? [], rocks: rockRecipes() ?? [] });
+
+export function cobbleRecipes(load = loadRotn) {
     if (recipes) return recipes;
     let ore = [];
-    try { ore = loadRotnData(PACK_VERSION).oreDict('cobblestone') ?? []; } catch { ore = []; }
+    let rocks = [];
+    try {
+        ({ ore, rocks } = load());
+    } catch { return []; }
     const inOre = (g) => ore.some(m => m.name === g.name && (m.meta == null || m.meta === WILDCARD_META || m.meta === g.meta));
-    recipes = rockRecipes().filter(r => inOre(r.gives)).map(r => ({
+    const tableFor = (r) => {
+        try { return !!recipesFor(r.gives.name)?.find(x => x.id === r.recipeId)?.requiresTable; } catch { return false; }
+    };
+    const list = rocks.filter(r => inOre(r.gives)).map(r => ({
         rock: formatName(botName(r.rock.name), r.rock.meta),
         gives: formatName(botName(r.gives.name), r.gives.meta),
         recipeId: r.recipeId,
+        requiresTable: tableFor(r),
     }));
-    return recipes;
+    if (ore.length && list.length) recipes = list;
+    return list;
+}
+
+/** Tests only: forget the cache. */
+export function __resetCobbleCache() {
+    recipes = null;
 }
 
 /** A request for cobblestone in general ("cobblestone"), not one named kind. */
