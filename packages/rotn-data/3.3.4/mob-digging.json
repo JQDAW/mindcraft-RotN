@@ -1,0 +1,320 @@
+{
+  "format": "rotn-mob-digging/1",
+  "pack": "3.3.4",
+  "description": "Which mobs dig through blocks toward their target, and which blocks they can dig, for mobDigging and canMobDig. Hand-written from the bytecode of Epic Siege Mod 13.169 (pinned pack zip), ESM-Tweaks 0.4.5 (downloaded at server start, see sources) and Tool Progression 1.6.12 (pinned pack zip), read with javap only, and from the pack's configs; excerpts and config copies in packages/rotn-data/test/fixtures/mob-digging-3.3.4/. confidence 'verified' = read from that bytecode and config; nothing here was watched in a run.",
+  "confidence": "verified",
+  "summary": "Mobs listed in diggers dig toward their attack target when they have no path to it and stand still. Those with requiresTools true dig only blocks that need no tool (dirt, grass, sand, gravel, clay, wood, logs, planks, glass, leaves, wool: material that needs no tool, or no harvest tool) unless they hold the block's tool at its level (either hand); stone and cobblestone need a pickaxe. Those with requiresTools false (silverfish, bears, yeti, minotaur, minoshroom, snow guardian, troll, wight) dig any solid, breakable block, stone included, just slower. So a cobblestone shelter stops zombies without a pickaxe, not bears, silverfish or trolls; a dirt or wooden one stops neither.",
+  "sources": {
+    "epicSiegeMod": {
+      "file": "mods/EpicSiegeMod-13.169.jar",
+      "sha256": "398b7558dce5bf903df4afc6c143347d3245959f19c98d23f2f0312fb0a9c127",
+      "from": "the pinned pack zip (SHA-256 90642fd5...f5205)"
+    },
+    "esmTweaks": {
+      "file": "esmtweaks-1.12.2-0.4.5.jar",
+      "sha256": "b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933",
+      "from": "NOT in the pinned zip: Mod Director (mods/!mod-director-launchwrapper-1.9.1.jar, config/mod-director/requisites.remote.json) downloads it at server start from https://github.com/lirkas/ESM-Tweaks/releases/download/v0.4.5-compat/esmtweaks-1.12.2-0.4.5.jar, named by the list at https://raw.githubusercontent.com/Rebirth-of-the-Night/Rebirth-Of-The-Night/stable/config/mod-director/fd-3.3.4/file-director_requisites.bundle.json (a moving branch; fetched 2026-11-07, SHA-256 48ba1339ebf6417ad571d29589e61dd0d5745dc34549b2065676ccf5a4de3792; no hash is pinned). The dump manifest and the server ping list esmtweaks 0.4.5"
+    },
+    "toolProgression": {
+      "file": "mods/toolprogression-1.12.2-1.6.12.jar",
+      "sha256": "077e0153a7347e86e75970cc900f09323b89b01effb6fb322db2591137eb354e",
+      "from": "the pinned pack zip"
+    },
+    "configs": [
+      "config/esm/entity_ai.json",
+      "config/esmtweaks.cfg",
+      "config/tool_progression/block_overwrites.cfg",
+      "config/tool_progression/blocks.cfg (a record Tool Progression writes on every launch; it matches the rule but is not read as input)"
+    ]
+  },
+  "settings": {
+    "tweakedAI": true,
+    "mustHaveCorrectTool": true,
+    "checkBothHands": true,
+    "legacyHarvestCheck": false,
+    "extraPickaxeOnSpawn": false,
+    "searchBlockInterval": 1,
+    "harvestCheckInterval": 20,
+    "taskPriority": 4,
+    "reach": 2,
+    "keepWithin": 4,
+    "verticalTrigger": 2,
+    "ticksPerHardness": {
+      "noToolNeeded": 30,
+      "toolNeededButMissing": 100
+    },
+    "blacklistApplies": false
+  },
+  "when": "Only while the mob has a live attack target within its follow range (squared distance 1 to followRange^2), its navigator has no path to it, and it has stood on the same block since the last check. It raytraces from points in its body toward the target, 'reach' (2) blocks long, and digs the first block hit if canHarvest allows it; if the target is within 2 blocks horizontally and more than 'verticalTrigger' (2) blocks above or below, it digs straight up or down instead. It keeps digging the same block while it is within 'keepWithin' (4) blocks. After a block breaks it paths to the target again.",
+  "digTime": "Per tick the block gets digSpeed / hardness / 30 when its material needs no tool or the held item can harvest it, else / 100 (the player formula); it breaks when that times (ticks + 1) reaches 1. With an empty hand on the ground and no potion effects, digSpeed is 1: about 30 x hardness ticks for dirt (0.5: 15 ticks), sand, wood (planks, logs 2.0: 60 ticks), about 100 x hardness ticks for stone (1.5: 150 ticks) and cobblestone (2.0: 200 ticks) when requiresTools is false. Off the ground or in water the speed is divided by 5; Mining Fatigue slows it further.",
+  "diggers": {
+    "specialmobs:sniperwitherskeleton": {
+      "requiresTools": true
+    },
+    "minecraft:vindication_illager": {
+      "requiresTools": true
+    },
+    "specialmobs:brutewitherskeleton": {
+      "requiresTools": true
+    },
+    "twilightforest:giant_miner": {
+      "requiresTools": true
+    },
+    "minecraft:wither_skeleton": {
+      "requiresTools": true
+    },
+    "specialmobs:toughsilverfish": {
+      "requiresTools": false
+    },
+    "betteranimalsplus:kermodebear": {
+      "requiresTools": false
+    },
+    "minecraft:zombie_villager": {
+      "requiresTools": true
+    },
+    "minecraft:silverfish": {
+      "requiresTools": false
+    },
+    "specialmobs:brutezombie": {
+      "requiresTools": true
+    },
+    "twilightforest:redcap_sapper": {
+      "requiresTools": true
+    },
+    "mod_lavacow:zombiefrozen": {
+      "requiresTools": true
+    },
+    "minecraft:husk": {
+      "requiresTools": true
+    },
+    "specialmobs:plaguezombie": {
+      "requiresTools": true
+    },
+    "specialmobs:ninjawitherskeleton": {
+      "requiresTools": true
+    },
+    "specialmobs:knightpigzombie": {
+      "requiresTools": true
+    },
+    "specialmobs:vampirepigzombie": {
+      "requiresTools": true
+    },
+    "specialmobs:bruteskeleton": {
+      "requiresTools": true
+    },
+    "specialmobs:brutepigzombie": {
+      "requiresTools": true
+    },
+    "specialmobs:poisonsilverfish": {
+      "requiresTools": false
+    },
+    "twilightforest:kobold": {
+      "requiresTools": true
+    },
+    "betteranimalsplus:blackbear": {
+      "requiresTools": false
+    },
+    "minecraft:polar_bear": {
+      "requiresTools": false
+    },
+    "twilightforest:yeti": {
+      "requiresTools": false
+    },
+    "specialmobs:spitfirewitherskeleton": {
+      "requiresTools": true
+    },
+    "mod_lavacow:zombiemushroom": {
+      "requiresTools": true
+    },
+    "specialmobs:giantpigzombie": {
+      "requiresTools": true
+    },
+    "specialmobs:hungryzombie": {
+      "requiresTools": true
+    },
+    "specialmobs:fishingpigzombie": {
+      "requiresTools": true
+    },
+    "specialmobs:knightwitherskeleton": {
+      "requiresTools": true
+    },
+    "specialmobs:gatlingwitherskeleton": {
+      "requiresTools": true
+    },
+    "twilightforest:minotaur": {
+      "requiresTools": false
+    },
+    "twilightforest:lich_minion": {
+      "requiresTools": true
+    },
+    "betteranimalsplus:brownbear": {
+      "requiresTools": false
+    },
+    "twilightforest:redcap": {
+      "requiresTools": true
+    },
+    "specialmobs:giantwitherskeleton": {
+      "requiresTools": true
+    },
+    "twilightforest:skeleton_druid": {
+      "requiresTools": true
+    },
+    "minecraft:zombie": {
+      "requiresTools": true
+    },
+    "specialmobs:knightskeleton": {
+      "requiresTools": true
+    },
+    "twilightforest:minoshroom": {
+      "requiresTools": false
+    },
+    "quark:dweller": {
+      "requiresTools": true
+    },
+    "specialmobs:blindingsilverfish": {
+      "requiresTools": false
+    },
+    "specialmobs:firezombie": {
+      "requiresTools": true
+    },
+    "twilightforest:armored_giant": {
+      "requiresTools": true
+    },
+    "specialmobs:fishingsilverfish": {
+      "requiresTools": false
+    },
+    "primitivemobs:goblin": {
+      "requiresTools": true
+    },
+    "specialmobs:specialzombie": {
+      "requiresTools": true
+    },
+    "specialmobs:plaguepigzombie": {
+      "requiresTools": true
+    },
+    "primitivemobs:skeleton_warrior": {
+      "requiresTools": true
+    },
+    "twilightforest:snow_guardian": {
+      "requiresTools": false
+    },
+    "specialmobs:flyingsilverfish": {
+      "requiresTools": false
+    },
+    "twilightforest:troll": {
+      "requiresTools": false
+    },
+    "specialmobs:giantzombie": {
+      "requiresTools": true
+    },
+    "netherex:wight": {
+      "requiresTools": false
+    },
+    "specialmobs:fishingzombie": {
+      "requiresTools": true
+    },
+    "specialmobs:hungrypigzombie": {
+      "requiresTools": true
+    }
+  },
+  "toolProgressionExceptions": {
+    "note": "Block states where config/tool_progression/block_overwrites.cfg changes the by-hand answer of the material rule (ESM-Tweaks HarvestUtil.canBreakBlockByHand reads Tool Progression's overwrites first). byHand: an optional-tool ('?') overwrite on a block whose material needs a tool; needsTool: a tool-required overwrite on a block whose material needs none. The oreDict section changes no answer; keys without a meta are invalid (Tool Progression logs and skips them).",
+    "byHand": [
+      "advancedmortars:mortar:3"
+    ],
+    "needsTool": [
+      "advancedmortars:mortar:0",
+      "betternether:quartz_glass_framed_pane:0",
+      "betternether:quartz_glass_pane:0",
+      "betterwithmods:light:0",
+      "betterwithmods:light:1",
+      "dungeontactics:caltrops:0",
+      "dungeontactics:caltrops_poison:0",
+      "earthworks:block_rammed_earth:0",
+      "earthworks:doubleslab_rammed_earth:1",
+      "earthworks:stair_rammed_earth:0",
+      "earthworks:stair_rammed_earth:1",
+      "earthworks:stair_rammed_earth:2",
+      "earthworks:stair_rammed_earth:3",
+      "earthworks:stair_rammed_earth:4",
+      "earthworks:stair_rammed_earth:5",
+      "earthworks:stair_rammed_earth:6",
+      "earthworks:stair_rammed_earth:7",
+      "earthworks:wall_rammed_earth:0",
+      "earthworks:wall_rammed_earth:1",
+      "iceandfire:myrmex_resin:0",
+      "iceandfire:myrmex_resin:1",
+      "iceandfire:myrmex_resin_sticky:0",
+      "iceandfire:myrmex_resin_sticky:1",
+      "malisisdoors:carriage_door:0",
+      "malisisdoors:garage_door:0",
+      "malisisdoors:garage_door:1",
+      "malisisdoors:garage_door:10",
+      "malisisdoors:garage_door:11",
+      "malisisdoors:garage_door:2",
+      "malisisdoors:garage_door:3",
+      "malisisdoors:garage_door:8",
+      "malisisdoors:garage_door:9",
+      "minecraft:lit_redstone_lamp:0",
+      "minecraft:redstone_lamp:0",
+      "minetraps:bear_trap:0",
+      "quark:crystal:0",
+      "quark:crystal:1",
+      "quark:crystal:2",
+      "quark:crystal:3",
+      "quark:crystal:4",
+      "quark:crystal:5",
+      "quark:crystal:6",
+      "quark:crystal:7",
+      "quark:crystal:8",
+      "quark:framed_glass:0",
+      "quark:framed_glass_pane:0",
+      "quark:nether_brick_fence_gate:0",
+      "quark:nether_brick_fence_gate:1",
+      "quark:nether_brick_fence_gate:10",
+      "quark:nether_brick_fence_gate:11",
+      "quark:nether_brick_fence_gate:12",
+      "quark:nether_brick_fence_gate:13",
+      "quark:nether_brick_fence_gate:14",
+      "quark:nether_brick_fence_gate:15",
+      "quark:nether_brick_fence_gate:2",
+      "quark:nether_brick_fence_gate:3",
+      "quark:nether_brick_fence_gate:4",
+      "quark:nether_brick_fence_gate:5",
+      "quark:nether_brick_fence_gate:6",
+      "quark:nether_brick_fence_gate:7",
+      "quark:nether_brick_fence_gate:8",
+      "quark:nether_brick_fence_gate:9",
+      "rotn_blocks:exorite_crystal:0",
+      "rotn_blocks:exorite_crystal:1",
+      "rotn_blocks:exorite_crystal:2",
+      "rotn_blocks:exorite_crystal:3",
+      "rotn_blocks:exorite_crystal:4",
+      "rotn_blocks:exorite_crystal:5",
+      "rustic:clay_wall:0",
+      "rustic:clay_wall_cross:0",
+      "rustic:clay_wall_diag:0",
+      "rustic:clay_wall_diag:1",
+      "rustic:clay_wall_diag:2",
+      "rustic:clay_wall_diag:3"
+    ]
+  },
+  "evidence": [
+    "ESM-Tweaks CommonProxy.serverAboutToStart: unregisters ESM's AdditionDigger and registers DiggingAITaskAddition when config/esmtweaks.cfg useTweakedAI=true (line 'B:useTweakedAI=true'); DiggingAITaskAddition.isValid = CfgProps.DIGGING for the entity ('Digging'), getTaskPriority 4, getAdditionalAI = AltEntityAIDigging",
+    "Which mobs: config/esm/entity_ai.json 'entities' with \"Digging\": true (56). ESM reads a mob's own entry only: EsmJsonConfig.readJson stores each entry as written (lambda$readJson$1, deepJsonCopy) and the 'default' block under the key null; get(ResourceLocation) returns the mob's entry, or the default block only when the mob has none; CfgProperty.get reads the key from that one object, and CfgPropBoolean reads it with JsonHelper.getBoolean(json, key, false) (lambda$new$0: iconst_0), which returns false when the key is missing. Nothing fills missing keys (ConfigHandler.initConfigs reads entity_ai.json, then writes it back). So the 16 diggers without 'Requires Tools' have it false, not the default block's true, and no digger has a 'Digging Blacklist' (an empty list), so the default block's blacklist protects nothing",
+    "Which blocks: AltEntityAIDigging.canHarvest: no if hardness < 0 (HarvestUtil.isBlockUnbreakable), no if in the mob's Digging Blacklist (unless inverted), no if the material is not solid (Material.isSolid), yes if 'Requires Tools' is false; otherwise, with mustHaveCorrectTool=true, canHarvestBlock: HarvestUtil.canBreakWithItem(main hand), then the off hand (checkBothHands=true). canBreakWithItem: yes if canBreakBlockByHand, else yes if one of the item's tool classes equals the block's harvest tool and its level is at least the block's harvest level",
+    "canBreakBlockByHand: no if hardness < 0; with Tool Progression loaded, yes if the block state has an overwrite with toolRequired false ('?'), or no overwrite and Material.isToolNotRequired; then yes if the block's harvest tool is null or the string 'null'; else no. Tool Progression BlockHelper.createFromConfigString: toolRequired = no '?' (the 'effective' group of its REGEX); BlockOverwriteConfig.parseBlockCategory expands meta '*' to 0-15 and needs a meta (the key regex); load() parses oreDict then block",
+    "The dump (blocks.json): material, toolRequired (= !Material.isToolNotRequired), harvestTool and harvestLevel after Tool Progression applied its overwrites (minecraft:stonebrick pickaxe level 1, hardness 27.5; minecraft:snow harvest tool 'null'). solid is Material.blocksMovement, which equals isSolid for every material in the dump except web (isSolid true)",
+    "Speed: AltEntityAIDigging.updateTask (func_75246_d): progress = HarvestUtil.getBlockStrength x (digTick + 1); at 1 or more World.destroyBlock(pos, false) and, if canHarvest, Block.harvestBlock with a fake player holding the mob's items (so it drops). getBlockStrength: hardness / digSpeed, / 30 if the material needs no tool or the item can harvest the block, else / 100; getDiggingSpeed: 1 empty-handed or the item's destroy speed, Efficiency, Haste, Mining Fatigue, / 5 in water or off the ground",
+    "When: AltEntityAIDigging.shouldExecute (func_75250_a): attack target alive, PathNavigate.noPath, squared distance at least 1 and at most getPathSearchRange^2, same BlockPos as last check, every searchBlockInterval ticks; keeps curBlock while getDistanceSq <= 16 and canHarvest; else getNextBlock(target, 2.0): rayTraceBlocks from the body toward the target, scaled by 2.0, or straight up or down by 2.0 when the target is within 2 blocks (distanceSq < 4) and more than 2 above or below",
+    "config/tool_progression/blocks.cfg agrees for the shelter blocks (a generated record, not an input): minecraft:dirt:0, grass:0, gravel:0, sand:0 '?shovel=0'; log:0, planks:0 '?axe=0'; stone:0, cobblestone:0, mossy_cobblestone:0 'pickaxe=0'; stonebrick:0 'pickaxe=1'; block_overwrites.cfg overwrites none of them (lead's #335 review input, 2026-11-07)"
+  ],
+  "unverified": [
+    "No run has watched a mob dig; the times are from the formula",
+    "Which mobs spawn holding a pickaxe or shovel, and its level (vanilla zombies can get an iron shovel; RotN's equipment mods were not read); shouldGetExtraTool=false only stops ESM-Tweaks from adding one",
+    "Mod materials other than web whose isSolid differs from blocksMovement (the dump records blocksMovement)",
+    "Griefing (ESM's AdditionGrief: chests, furnaces, crafting tables, doors, glass and crops from its Grief Targets list) and pillaring are separate AIs, not covered here",
+    "ESM-Tweaks comes from a moving remote list, not the pinned zip; a change there changes this behaviour",
+    "minecraft:bedrock is breakable in the dump (hardness 200, harvest tool null), so canMobDig answers that a digger could dig it (by hand, about 20000 ticks); why the pack's bedrock has that hardness was not checked"
+  ]
+}

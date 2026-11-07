@@ -62,6 +62,17 @@ Updated: 2026-11-07 (15:33 UTC, from `date -u`)
   - Console rules for `g4-service-reconnect` only, built like #320's kill: `kick <this run's bot>` (any other name and every selector refused; no valid bot param, no rule) and `stop` exactly. `guardConsole` lets the restart through only where the list admits `stop`.
   - **Tested** (targeted): `g4-reconnect-tools.test.js` (6 tests) and new tests in `test-server.test.js` (the helper with a fake systemctl and console: the usual case, the same-file Done, no Done, no stop, already stopped, bad timeout; the verb through the fake ssh). With runner, the G3 and G4 tests and deploy-eol: **319 pass, 0 fail**. ESLint clean; baseline 253. shellcheck is not installed on this server, so CI runs it.
 
+## Earlier (before the round 9 GO; the #326 branch): waiting for the human's GO for G3 smoke round 9 (then T1); develop frozen at 670fe8aa; branch-only G4 work
+
+- **Round 9 is ready** (checkout `/home/mindcraft-RotN-batch/670fe8aa`; A's pre-checks passed at 05:31 UTC; the run script is in place). T1 runs after the round.
+- **#324 (HOLD, approved at 61eae31e):** `test-server.sh restart` / `rotn-test restart`, `ctlServer.restart`, `g4-service-reconnect`'s kick/stop rules. It merges after the G3 gate.
+- **This branch, `agent/harness-ops/ctl-journal-metrics` (HOLD PR): the read-only ctl verbs from the G4 plan.**
+  - `mindcraft-rotn-ctl journal BOT [--since TIME]` runs `journalctl --unit=mindcraft-rotn@BOT.service --no-pager --no-hostname --utc --output=short-iso --lines=20000`.
+    - TIME: only `YYYY-MM-DD HH:MM[:SS]`, `YYYY-MM-DDTHH:MM[:SS][Z]` (normalised to "... UTC") or `@EPOCH`. Relative times, words, offsets and anything extra are refused.
+  - `mindcraft-rotn-ctl metrics BOT` runs `systemctl show --no-pager --property=MemoryCurrent,MemoryPeak,NRestarts,ActiveState` on that unit only.
+  - Exact argument counts and the existing unknown-bot refusal (now one `unit_of` helper for every per-bot action). Fixed paths (`/usr/bin/journalctl` too), no env overrides. **No new sudo rights:** the sudoers rule still allows only the ctl (the bootstrap test still pins it).
+  - **Tested:** `cx23.test.js` (3 new tests: journal with each `--since` form; 23 refused journal shapes, with journalctl never run; metrics exact, and 6 refused shapes) and `deploy-eol`: **55 pass, 1 skipped** (mode-000 as root, as before).
+
 ## Earlier: `g4-death-report` was built offline (#320, merged); its T rehearsal run plan goes to the lead. No paid run without the human's GO.
 
 - **The scenario** (`test/scenarios/g4/g4-death-report.mjs`, G4 #6, gate G4, the real agent):
