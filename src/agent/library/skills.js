@@ -855,7 +855,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // this makes all its walks fall-safe from the first collect on (fallSafe marks it, so only once).
     if (bot.collectBlock?.movements) fallSafe(bot.collectBlock.movements);
     for (let i=0; i<num && collected<num; i++) { // collected counts the items really gained (a stone can give 4 rocks)
-        if (run.aborted) break;
+        // G3 round 9 B: a stop (interrupt_code) ends the collect here too, not only at the loop's end,
+        // which a break that threw skipped: the next block was started until the stop's 10 s ran out
+        // and the process was killed ("Code execution refused stop after 10 seconds").
+        if (run.aborted || bot.interrupt_code) break;
         if (Date.now() - runStart >= CL.totalMs) {
             log(bot, `Stopped collecting ${blockType}: time limit of ${secsText(CL.totalMs)} reached.`);
             break;
@@ -1058,6 +1061,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             }
             else {
                 log(bot, `Failed to collect ${blockType}: ${err}.`);
+                if (bot.interrupt_code) break; // round 9 B: a stop makes the break throw; never the next block
                 continue;
             }
         }
@@ -1148,7 +1152,7 @@ async function collectByRoute(bot, blockType, num, route, shovelRule) {
         try { await collectBlock(bot, route.input, needInputs); } finally { collectRouting = false; }
     }
     const n = Math.min(num, Math.floor(countItem(bot, route.input) / route.per));
-    if (n > 0 && !currentRun(bot).aborted) await COLLECT_ROUTE_OPS.craft(bot, route.gives, n);
+    if (n > 0 && !currentRun(bot).aborted && !bot.interrupt_code) await COLLECT_ROUTE_OPS.craft(bot, route.gives, n);
     const gained = Math.max(0, countItem(bot, blockType) - before);
     log(bot, `Collected ${gained} ${blockType}${gained ? ` (crafted from ${route.input})` : ''}.`);
     return gained > 0;

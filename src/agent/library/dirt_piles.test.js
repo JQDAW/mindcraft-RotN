@@ -192,3 +192,36 @@ test('rotn-data #288: !collectBlocks("dirt") without a level-1 shovel collects 4
     assert.deepEqual(crafts, []);
     assert.deepEqual(withShovel.calls.heldAtDig, ['iron_shovel', 'iron_shovel']);
 });
+
+// G3 round 9 B (#330 correction, harness-ops): after the second death, !collectBlocks("dirt", 10)
+// (13:35:51) ignored the night routine's stop: action_manager.stop() asked every 300 ms
+// (requestInterrupt: interrupt_code true, stopDigging, pathfinder.stop), each cancelled dig threw,
+// collectBlock's catch logged it and went on to the next block, and after 10 s cleanKill killed the
+// agent ("Code execution refused stop after 10 seconds. Killing process.", exit 1). On the live
+// server the bot would leave and rejoin.
+test('round 9 B: a stop during !collectBlocks("dirt") ends the collect at once: no next block, no craft', { timeout: 20000 }, async (t) => {
+    quiet(t);
+    const { bot, calls } = fakeBot({ field: 20 });
+    const crafts = [];
+    t.mock.method(skills.COLLECT_ROUTE_OPS, 'craft', (b, name, n) => { crafts.push([name, n]); return Promise.resolve(true); });
+    // The stop arrives during the first dig: mineflayer's dig rejects when stopDigging cancels it.
+    bot.dig = (b) => {
+        calls.dug.push(b.name);
+        bot.interrupt_code = true;
+        return Promise.reject(new Error('Digging aborted'));
+    };
+    const started = Date.now();
+    assert.equal(await skills.collectBlock(bot, 'dirt', 10), false, bot.output);
+    assert.equal(calls.dug.length, 1, `no block after the stop: ${calls.dug.length} digs`);
+    assert.deepEqual(crafts, [], 'no craft after the stop');
+    assert.ok(Date.now() - started < 2000, 'ends well within the 10 s before the process is killed');
+});
+
+test('round 9 B: an interrupted collect of any block stops at the next block, also when its break threw', { timeout: 20000 }, async (t) => {
+    quiet(t);
+    const { bot, calls } = fakeBot({ field: 20 });
+    // A walk the stop cancelled: the break throws (PathStopped), and the interrupt is up.
+    bot.dig = () => { calls.dug.push('x'); bot.interrupt_code = true; return Promise.reject(Object.assign(new Error('Path was stopped before it could be completed!'), { name: 'PathStopped' })); };
+    await skills.collectBlock(bot, PILE, 40);
+    assert.equal(calls.dug.length, 1);
+});

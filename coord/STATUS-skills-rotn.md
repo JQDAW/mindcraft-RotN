@@ -1,6 +1,21 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:58Z (from `date -u`)
+Updated: 2026-11-07T14:47Z (from `date -u`)
+
+## Round 9 B bug: !collectBlocks ignored a stop, and the agent was killed (branch `agent/skills-rotn/collect-honors-stop`, 2026-11-07T14:47Z by `date -u`)
+
+- **Task (lead, 2026-11-07, from harness-ops' #330 correction, priority 1):** after the second death, `!collectBlocks("dirt", 10)` (13:35:51) ignored stop. The first stop request came from the night routine's `action:buildShelter` (`r9-g3b/night/driver.log` 595), then `mode:self_preservation` (606). At 13:36:12 `cleanKill` ended the agent ("Code execution refused stop after 10 seconds. Killing process.", exit 1). On the live server the bot would leave and rejoin.
+- **Cause (`skills.js` `collectBlock`):**
+  - The loop checked `bot.interrupt_code` only at the end of its body, and the top only checked `run.aborted` and the time limit.
+  - A stop (`requestInterrupt` every 300 ms: `stopDigging`, `pathfinder.stop`) makes the running dig or walk throw. The `catch` logged "Failed to collect …" and ran `continue`, which skips that end-of-body check, so the next block was started, until the 10 s ran out.
+  - "dirt" goes through `collectByRoute` (dirt piles, then craft), which would also craft after an interrupted collect.
+- **Fix:** the loop stops at its top on `interrupt_code`, and the `catch` breaks on it instead of continuing. `collectByRoute` does not craft after a stop. I checked the other loops in skills.js that dig or walk: the stick crafts and `useOn` check the stop, and `digDown` lets the aborted dig's error end it.
+- **Tests (`dirt_piles.test.js`, 2 new):**
+  - The round 9 call `collectBlock(bot, 'dirt', 10)`, where the first dig is aborted by a stop: 1 dig, no craft, done in under 2 s.
+  - The same for dirt piles with a cancelled walk (`PathStopped`).
+  - **On develop both fail:** 40 digs after the stop.
+  - With the fix: `dirt_piles`, `collect_sticks`, `collect_rotn`, `fall_safety`, `fell_tree`, `axe_chop`, `use_on` and `action_manager`, 102/102. Lint: no new errors (skills.js 20, as on develop; the test file 0).
+- **The second death report** (driver.log 646, "lost 28 betterwithmods:dirt_pile", not in chat) is the intended rate limit. The first death's chat line went out at 13:35:31, the second death came at 13:36:04, and its report about 3 s after the respawn, within `CHAT_GAP_MS` (60 s), so it was log only.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 
