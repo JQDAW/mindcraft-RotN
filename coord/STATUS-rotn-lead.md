@@ -5,7 +5,7 @@ Updated: 2026-11-07 00:10 UTC (from `date -u`)
 
 ## Current snapshot (2026-11-07 00:10 UTC): on the CX33 dev server, the move is nearly done
 
-- **Dev server:** a Hetzner **CX33** (the human corrected CPX32 to CX33 on 2026-11-07). Ubuntu 26.04.1, 4 vCPU, 7.6 GB RAM, **no swap**; everything runs as root. The memory rule (Requests item 13) still applies: during a paid batch over 20 min, no other agent runs `npm ci` or a full suite.
+- **Dev server:** a Hetzner **CX33** (the human corrected CPX32 to CX33 on 2026-11-07). Ubuntu 26.04.1, 4 vCPU, 7.6 GB RAM, **no swap**; everything runs as root. Root is for the dev server only; the CX23 keeps its `mindcraft-rotn` service user and `deploy` user (deploy/cx23/README.md), so do not copy this setup there. The memory rule (Requests item 13) still applies: during a paid batch over 20 min, no other agent runs `npm ci` or a full suite.
 - **Move checklist (coord/NEEDS-HUMAN.md):**
   - Step 1: no PR is open and no Hetzner test server exists (`hcloud server list` is empty).
   - Step 2: the base system is complete. Node 22.23.4 (nvm), npm 10.9.9, git 2.53, gh 2.103, hcloud 1.70, jq, curl, unzip, xz, ssh, scp and ssh-keygen, build-essential, python3, OpenJDK 1.8.0_504 with `javac` and `javap`.
@@ -42,7 +42,7 @@ Updated: 2026-11-07 00:10 UTC (from `date -u`)
   - Reviewers run at medium effort and never link another worktree's node_modules (the main repo has its own now).
   - harness-ops' post-gate todo: the overlapping memory-summary counter fix.
 
-## Current snapshot (2026-11-03 03:11 UTC): before the human's Orca restart
+## Earlier snapshot (2026-11-03 03:11 UTC): before the human's Orca restart
 
 - **Team:** harness-ops (worktree harness-ops-g0), rotn-data (rotn-data-g2), skills-rotn (skills-rotn-g3), net-forge (net-forge-g1, back since 2026-11-03 on the human's approval: Request 2, crafting/placing packets and probe P1). All four were asked to push everything and update STATUS before the restart.
 - **CX23 (Ubuntu 26.04, ADR 0007):** GO 2 bootstrap done by the human; deploy key login confirmed; updated and rebooted (kernel 7.0.0-42); Orca has only the "cx23 deploy" environment (folder /tmp); the root target is removed. GO 3 read-only check as deploy merged (#163). Open: sshd -T after the reboot (needs root).

@@ -15,6 +15,7 @@ Agents add items here when they need something only the human can do. The human 
      - Hetzner: an hcloud context for the **test** project (`hcloud context create mindcraft-rotn-test`, token typed by you), not an exported `HCLOUD_TOKEN`. Keep the dev server itself in a different Hetzner project from the test servers, so the sweeper can never touch it.
      - GitHub: `gh auth login` as JQDAW (the keyring, not an exported token).
      - OpenRouter: `OPENROUTER_API_KEY` (the test key) only in the session that runs batches (harness-ops), not in every agent's shell.
+       - **Open (2026-11-07):** the lead's shell on the CX33 has it set (checked set/unset only), so other agents' shells probably inherit it too. Move it out of the shared shell profile into the harness-ops session only.
      - Your SSH key for reaching the dev server.
   5. **Repo and worktrees** (agents, after 2-4): clone `JQDAW/mindcraft-RotN`, `npm ci` in each worktree (patch-package must apply), one worktree per agent on its branch, as on this PC.
      - **Done 2026-11-07** by the lead: worktrees `/home/mindcraft-RotN-worktrees/<agent>` on `agent/<agent>/cx33-start`; `npm ci` passed in each, with 8/8 patches applied.
