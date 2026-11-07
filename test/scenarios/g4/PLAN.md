@@ -37,7 +37,7 @@ G4 passes when every item of `docs/PLAN.md` "Definition of ready-to-try" is gree
   - Before the move this went through an Orca terminal on `cx23-deploy`, by hand, step by step.
   - A scenario that runs for 2 h needs a scripted channel:
     - (a) an Orca terminal driven by `orca terminal send/read` from the scenario;
-    - (b) a dedicated SSH key from the CX33 to `deploy@cx23`, limited by the existing sudo rule to `mindcraft-rotn-ctl`.
+    - (b) a dedicated SSH key from the CX33 to `deploy@cx23`. On its own, that key gives **a normal shell as `deploy`**. The existing sudo rule only limits what `deploy` may run **as root** (only `mindcraft-rotn-ctl`); it does not limit the key. Limiting the key itself needs an `authorized_keys` entry with `restrict` plus a forced `command="..."` wrapper that allows only `mindcraft-rotn-ctl` verbs (as NEEDS-HUMAN, #318, now says).
   - **Which one is the human's decision, probably an ADR.** Today agents never run `ssh` themselves.
 - **`mindcraft-rotn-ctl`:** read-only verbs `journal <bot> [--since]` and `metrics <bot>` (`MemoryCurrent`, `MemoryPeak`, `NRestarts`, `ActiveState`). The sudo rule is unchanged: still only the ctl.
 - **`test-server.sh restart`:** console `stop`, wait for the process to end, `rotn-test start`, wait for "ready".

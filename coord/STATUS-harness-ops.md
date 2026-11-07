@@ -22,7 +22,7 @@ Updated: 2026-11-07 (04:25 UTC, from `date -u`)
   - the human items;
   - order, servers, cost and time: about EUR 2.8 + USD 0.2 in all; the acceptance run (step 7) is 6 servers, about 6 h.
 - **Decisions the plan asks for (lead / human):**
-  - how the CX33 drives the CX23: a scripted Orca terminal, or a dedicated SSH key limited by the existing sudo rule (the human's decision, probably an ADR);
+  - how the CX33 drives the CX23: a scripted Orca terminal, or a dedicated SSH key, which needs `restrict` and a forced `command=` wrapper allowing only `mindcraft-rotn-ctl` verbs to be limited (the sudo rule alone limits only what `deploy` runs as root) (the human's decision, probably an ADR);
   - `kill`, `kick` and `stop` on the test-server console allowlist;
   - a startup log line with the effective `allow_insecure_coding` (`main.js`, lead-owned);
   - the soak ADR's targets;
