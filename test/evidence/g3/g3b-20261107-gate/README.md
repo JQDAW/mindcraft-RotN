@@ -52,7 +52,11 @@
 ## What happened in the night
 
 - **The head cell was blocked.** At 21:45:17 the night check found `contenttweaker:scaffolding` at -59 66 -101. That is the head cell of the shelter whose feet cell is -59 65 -101.
-  - No line says where it came from: no digging alarm, no "the shelter is open", and the server log has nothing between 21:33 and 21:45 but the scenario's reads.
+  - No line says where it came from: there was no digging alarm and no "the shelter is open".
+  - Between 21:33 and 21:45 the server log has only:
+    - the scenario's reads;
+    - `gamestages` saves for FRCFLD every 45 s;
+    - one "Fetching addPacket for removed entity" warning (`EntityTrackerEntry`) at 21:40:48, 4.5 min before the check found the scaffolding. It may relate to the scaffolding (an entity removed near the bot), but nothing shows that. The same warning also appears in the daytime, at 21:18:29 (twice), 21:20:43 and 21:24:58.
   - rotn-data's `packages/rotn-data/3.3.4/threat-reactions.json` says `minecraft:zombie` can "place weak scaffolding". That is the likely source; it is not proven.
 - **The rule that applied:** a solid block in the 1x2 space makes the shelter "no longer usable", and the bot leaves to build a new one.
   - #346's reflex ("a falling block in the shelter's head space is dug out by hand") does not cover it: scaffolding is not a falling block, and no "[reflex] dug … out of the shelter's head space" line appears.

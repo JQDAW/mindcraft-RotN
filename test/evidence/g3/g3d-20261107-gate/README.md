@@ -65,7 +65,7 @@
 
 - **The gate rule (PLAN.md) needs each gate batch to pass. B and C failed, so G3 does not pass.**
   - All four batches ran under one GO, on the same frozen commit, each on its own fresh server; each `batch.json` says `gate: true`, and each passes the single-batch gate claim check.
-  - No infra fault, no harness fault, no kick, no agent exit, no "refused stop" in any batch.
+  - No infra fault and no harness crash; C failed on a scenario-design gap (the task is sent only after a fixed warm-up). No kick, no agent exit, no "refused stop" in any batch.
 - **What the rule says next:** "the bug is then fixed, and only the failed scenario is rerun as a new gate batch, with the human's approval". Here that means B and C.
   - **B is a bot finding** for skills-rotn: a placed block (likely a zombie's scaffolding) in the shelter's head cell sends the bot out into the night, where `self_defense` interrupts the rebuild.
   - **C is a scenario-timing gap** (harness-ops): the task is sent only after a fixed 5-min warm-up and only while the agenda is active, and this agenda finished in 4.8 min.
