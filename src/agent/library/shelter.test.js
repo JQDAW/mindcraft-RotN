@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, LATE_UPDATE_MS } from './shelter.js';
+import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP } from './shelter.js';
 import { getCommand } from '../commands/index.js';
 
 const reg = minecraftData('1.12.2');
@@ -495,7 +495,9 @@ test('G3 round 6 B: still too few: dirt is the fallback (made from dirt piles), 
     const { bot, items, world } = fakeBot({ cobble: 0, items: [n(SOAP, 4), n(PILE, 32)] });
     const { craft, calls } = fakeCraft(items);
     const r = await buildShelter(bot, { craft });
-    assert.deepEqual(calls, [['dirt:0', 6]], 'no rocks: no cobblestone; 6 dirt from 24 piles');
+    // Round 9 B (fix d): after it closes, the last 8 piles make 2 dirt kept for repairs.
+    assert.deepEqual(calls, [['dirt:0', 6], ['dirt:0', 2]], 'no rocks: no cobblestone; 6 dirt from 24 piles, then the spare (as many as the piles make)');
+    assert.match(bot.output, /Keeping 4 dirt for repairs: making 2 dirt:0 from your betterwithmods:dirt_pile \(4 each\)\./);
     assert.match(bot.output, /The shelter needs 6 more blocks: making 6 dirt:0 from your betterwithmods:dirt_pile \(4 each\)\./);
     assert.equal(r.closed, true, bot.output);
     assert.equal(r.soft, 5, 'the roof prop is outside the shell');
@@ -611,6 +613,79 @@ test('G3 round 7 B: siteProblem names what is where; in the shelter the bot is i
     const b = await buildShelter(blocked.bot, { site: feet, keepSoft: true });
     assert.equal(b.closed, false);
     assert.match(blocked.bot.output, /Cannot repair the shelter at 0, 64, 0: cobblestone at 0, 65, 0 \(a solid block in the 1x2 space\)\./);
+});
+
+// ---- G3 round 9 batch B, fix (d): a repair only places; a mob in the opening is hit out of it ----
+// At 13:35:22 a digging zombie opened one side of the dirt shelter (Epic Siege Mod). The repair began
+// with "crafting..." (driver.log 473: no dirt left, only 356 piles), and the zombie came in first.
+
+test('round 9 B (d): a dirt shelter keeps SHELTER_SPARE.dirt dirt for repairs; a repair places before any craft', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // Round 9 B at dusk: no pickaxe, no dirt, 356 dirt piles.
+    const { bot, items, world } = fakeBot({ cobble: 0, pickaxe: false, items: [n(PILE, 356)] });
+    const events = [];
+    const { craft, calls } = fakeCraft(items);
+    const logged = (name, want) => { events.push(`craft ${want}`); return craft(bot, name, want); };
+    const place = bot.placeBlock;
+    bot.placeBlock = (ref, face) => { events.push('place'); return place(ref, face); };
+    const dirtHeld = () => total(items.filter(i => i.name === 'dirt'));
+
+    const r = await buildShelter(bot, { craft: (b, name, want) => logged(name, want) });
+    assert.equal(r.closed, true, bot.output);
+    assert.equal(SHELTER_SPARE.dirt, 4);
+    assert.ok(dirtHeld() >= SHELTER_SPARE.dirt, `dirt kept for repairs: ${dirtHeld()}`);
+    assert.match(bot.output, /Keeping 4 dirt for repairs: making 4 dirt:0 from your betterwithmods:dirt_pile \(4 each\)\./);
+    assert.equal(calls.length, 2, 'the build, then the spare');
+
+    // The zombie digs the east side (both cells). The repair places at once, then tops the spare up.
+    world.set('1,64,0', 'air'); world.set('1,65,0', 'air');
+    events.length = 0;
+    const repair = await buildShelter(bot, { site: r.feet, keepSoft: true, craft: (b, name, want) => logged(name, want) });
+    assert.equal(repair.closed, true, bot.output);
+    assert.deepEqual(events, ['place', 'place', 'craft 2'], 'no craft before the two placements');
+    assert.ok(dirtHeld() >= SHELTER_SPARE.dirt);
+});
+
+test('round 9 B (d): a mob standing in the opening is hit (in place) until it leaves the cell, then the cell is closed; a player is never hit', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_GAP };
+    Object.assign(SHELTER_GAP, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    const { bot, placed } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+    const zombie = { name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95 };
+    bot.entities = { 1: bot.entity, 7: zombie };
+    const hits = [];
+    bot.attack = (e) => { hits.push(e.name); if (hits.length === 2) zombie.position = new Vec3(3.5, 64, 0.5); }; // knocked back
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.deepEqual(hits, ['zombie', 'zombie']);
+    assert.equal(r.closed, true, bot.output);
+    assert.deepEqual(placed, ['1,64,0']);
+
+    const p = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+    p.bot.entities = { 1: p.bot.entity, 8: { name: 'player', username: 'giver', type: 'player', position: new Vec3(1.5, 64, 0.5), height: 1.8 } };
+    const struck = [];
+    p.bot.attack = (e) => struck.push(e.name);
+    const q = await buildShelter(p.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.deepEqual(struck, [], 'a player is never hit');
+    assert.equal(q.closed, false);
+    assert.match(p.bot.output, /Cannot close 1, 64, 0: player stands in it\./);
+});
+
+test('#333 review: a mob rotn-data says to leave alone (a wolf, a polar bear, an enderman) is not hit out of the opening', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_GAP };
+    Object.assign(SHELTER_GAP, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    for (const name of ['wolf', 'polar_bear', 'enderman']) {
+        const w = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+        w.bot.entities = { 1: w.bot.entity, 9: { name, type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.4 } };
+        const struck = [];
+        w.bot.attack = (e) => struck.push(e.name);
+        const r = await buildShelter(w.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+        assert.deepEqual(struck, [], `${name}: not hit`);
+        assert.equal(r.closed, false);
+        assert.match(w.bot.output, new RegExp(`Cannot close 1, 64, 0: ${name} stands in it\\.`));
+    }
 });
 
 // ---- G3 round 9 batch B, fix (f): the refusal leads with what is really missing ----

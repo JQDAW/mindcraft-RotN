@@ -104,6 +104,8 @@ function createLimiter(bot, client, { limits = CHAT_LIMIT, now = Date.now, setTi
         state.sent++;
         if (q.key) keySentAt.set(q.key, now());
         raw(q.text);
+        // What really went out (chat_repeat.js, #344 review 1): a dropped line is never reported.
+        try { bot?.emit?.('rotnChatSent', q.text); } catch { /* a listener must not stop the chat */ }
     };
     const short = (text) => (text.length > 60 ? `${text.slice(0, 57)}...` : text);
     const drop = (q, why) => {
