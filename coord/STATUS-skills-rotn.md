@@ -2,26 +2,46 @@
 
 Updated: 2026-11-07T07:10Z (from `date -u`)
 
-## Round 9 B bug: !collectBlocks ignored a stop, and the agent was killed (branch `agent/skills-rotn/collect-honors-stop`, 2026-11-07T14:47Z by `date -u`)
+## Decision (1) after round 9 B: low health in the night shelter, the bot stays (branch `agent/skills-rotn/shelter-hold-flee`, stacked on #331; 2026-11-07T14:48Z by `date -u`)
 
-- **Task (lead, 2026-11-07, from harness-ops' #330 correction, priority 1):** after the second death, `!collectBlocks("dirt", 10)` (13:35:51) ignored stop. The first stop request came from the night routine's `action:buildShelter` (`r9-g3b/night/driver.log` 595), then `mode:self_preservation` (606). At 13:36:12 `cleanKill` ended the agent ("Code execution refused stop after 10 seconds. Killing process.", exit 1). On the live server the bot would leave and rejoin.
-- **Cause (`skills.js` `collectBlock`):**
-  - The loop checked `bot.interrupt_code` only at the end of its body, and the top only checked `run.aborted` and the time limit.
-  - A stop (`requestInterrupt` every 300 ms: `stopDigging`, `pathfinder.stop`) makes the running dig or walk throw. The `catch` logged "Failed to collect …" and ran `continue`, which skips that end-of-body check, so the next block was started, until the 10 s ran out.
-  - "dirt" goes through `collectByRoute` (dirt piles, then craft), which would also craft after an interrupted collect.
-- **Fix:** the loop stops at its top on `interrupt_code`, and the `catch` breaks on it instead of continuing. `collectByRoute` does not craft after a stop. I checked the other loops in skills.js that dig or walk: the stick crafts and `useOn` check the stop, and `digDown` lets the aborted dig's error end it.
-- **Tests (`dirt_piles.test.js`, 2 new):**
-  - The round 9 call `collectBlock(bot, 'dirt', 10)`, where the first dig is aborted by a stop: 1 dig, no craft, done in under 2 s.
-  - The same for dirt piles with a cancelled walk (`PathStopped`).
-  - **On develop both fail:** 40 digs after the stop.
-  - With the fix: `dirt_piles`, `collect_sticks`, `collect_rotn`, `fall_safety`, `fell_tree`, `axe_chop`, `use_on` and `action_manager`, 102/102. Lint: no new errors (skills.js 20, as on develop; the test file 0).
-- **#340 review (lead, approved with nits on 8f5249c), answered (2026-11-07T15:10Z by `date -u`):**
-  1. The descent from a tree after the collect is skipped after a stop.
-  2. After a walk on the manual path, a stop returns at once, so there is no dig at a block the bot did not reach.
-  3. `pickupNearbyItems` stops on a stop.
-  4. **New test:** a real cancelled walk, where `pathfinder.goto` ends with `PathStopped` and `goToGoal` returns false: one walk, no dig, no craft. It fails on 8f5249c (a dig at the unreached block).
-  - Related files: 103/103. Lint unchanged (skills.js 20).
-- **The second death report** (driver.log 646, "lost 28 betterwithmods:dirt_pile", not in chat) is the intended rate limit. The first death's chat line went out at 13:35:31, the second death came at 13:36:04, and its report about 3 s after the respawn, within `CHAT_GAP_MS` (60 s), so it was log only.
+- **Task (lead, 2026-11-07):** "self-preservation in an open shelter at night: stay put, eat, block or fight within reach; leave only for fire, lava or drowning". A new PR after #331, with nothing pushed to #331.
+- **Change (`modes.js` self-preservation):** the low-health flee (`moveAway(20)`) no longer runs while `bot.rotnSheltered` is set, whether the shelter is closed or open. Instead:
+  - while the night's repair runs (`REPAIR_LABEL`), nothing; the repair closes the opening;
+  - else a mob within reach is hit in place (`skills.defendInPlace`, from #331);
+  - else, below food 20 with food held, the bot eats (`food.chooseFood`/`eatFood`).
+  - The hazard branches before it are unchanged: water at the head, a falling block above, fire, lava and molten metal. Outside the shelter nothing changes.
+- **Tests (`shelter_defense.test.js`, 2 new):**
+  - Hurt in the open shelter with a zombie in reach: hit in place, no walk.
+  - Hurt with nothing in reach: eats bread, no walk, no fight.
+  - Hurt while the repair runs: no interrupt.
+  - **Both fail on #331's head.**
+  - With the change: `shelter_defense`, `threat_arbitration`, `night_routine`, `quiet_reflexes`, `update_loop` and `food`, 63/63. Lint: modes.js 28, as on #331; the test file 0.
+- **Question:** a falling block above the head (sand, gravel) still moves the bot 2 blocks away, out of the shelter. I kept that with the hazards because it would suffocate the bot, like drowning. Say if it should stay put too.
+
+## Round 9 B fix (c): self-defense never takes the bot out of its night shelter (branch `agent/skills-rotn/shelter-hold-defense`, 2026-11-07T14:17Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 2):** at 13:35:22 a digging zombie (Epic Siege Mod, `minecraft:zombie` "Digging": true) opened one side of the dirt shelter. Self-defense interrupted the night's repair (`r9-g3b/night/driver.log` 471), and `defendSelf` walked out after the zombie: its `GoalFollow`/`GoalInvert` walks, and `pvp.attack`, which follows its target. The bot died outside at -78 58 -60 (487).
+- **Change:**
+  - **`library/night.js`:** adds `REPAIR_LABEL` (`action:repairShelter`). The night routine runs its repair under that label; the first build keeps `action:buildShelter`.
+  - **`modes.js` self-defense, in the shelter with a wall open:**
+    - it does not start while the repair runs;
+    - it fights only a mob within reach (`SHELTER_FIGHT.reach`, 3 blocks from the feet);
+    - it fights with the new `skills.defendInPlace`: look at the mob, `bot.attack`, every 600 ms, no pathfinder and no mineflayer-pvp.
+  - Outside the shelter nothing changes.
+- **Tests (new `src/agent/shelter_defense.test.js`, 3):**
+  - the repair is not interrupted;
+  - a zombie in the opening is hit in place until it dies, with no walk, no pvp and the bot not moved;
+  - a zombie 5 blocks away is not chased.
+  - **On develop all 3 fail,** run with develop's label `action:buildShelter`: the repair is interrupted by `mode:self_defense`, `defendSelf` walks (`GoalInvert(GoalFollow)`), and a fight starts at the far zombie.
+  - With the fix: `shelter_defense`, `night_routine`, `threat_arbitration`, `quiet_reflexes`, `update_loop`, `shelter`, `night` and `threats`, 96/96. Lint: no new errors (modes.js 28 and skills.js 20, as on develop; the others 0).
+- **#331 review (lead, REQUEST CHANGES on f54db6c), answered (2026-11-07T14:56Z by `date -u`):**
+  1. **Any hostile mob in reach is hit, whatever the plan says.** In the shelter, self-defense hits any hostile mob within reach (`threats.shelterEnemy`: any mob rotn-data does not ignore, never a calm one or the enderman family). Before, two zombies, a skeleton or a creeper near made the plan 'flee', with cowardice quiet, so nothing was hit.
+  2. **The fight goes on while an enemy is in reach,** not only while the plan says fight.
+  3. **`defendInPlace` is capped:** `maxMs` 6 s, `maxSwings` 8, and 4 hits on one mob whose known health did not drop. Afterwards self-defense rests `restMs` (1.5 s), so the night routine repairs first.
+  4. **While a wall is known open, every tick checks and repairs,** not every `CHECK_MS`. The "open … repairing" line is said once and then only logged, and a check that finds it closed again restores the shelter's rules.
+  5. **Folded in from #341 (the lead's decision):** at low health in the shelter the bot stays. The repair goes on, else it fights in reach, else it eats. It leaves only for fire, lava, drowning or a falling block. #341 is to be closed.
+  - **#334 nit:** `defendInPlace` equips the weapon just before each swing and sets `bot.rotnFightingInPlace` while it runs. When develop is merged into #334, its dig-alarm handler will skip the block equip while that flag is set.
+  - **Tests:** 6 new or changed in `shelter_defense` and `night_routine`; all 6 fail on f54db6c. With the changes: 8 related files, 107/107. Lint unchanged (modes.js 28, skills.js 20, the others 0).
 
 ## G4 item 11 prep: the task queue and agenda across a restart (branch `agent/skills-rotn/g4-restart-prep`, HOLD PR; 2026-11-07T06:55Z by `date -u`)
 

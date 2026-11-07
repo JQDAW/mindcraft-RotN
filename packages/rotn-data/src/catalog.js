@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { createTranslator } from './translate.js';
 import { howToGet, rockRecipes } from './howto.js';
 import { threatOf, nightThreats } from './threats.js';
+import { mobDigging, canMobDig } from './digging.js';
 import { canFill } from './craft-fill.js';
 import { parseOld, registryName, WILDCARD_META } from './names.js';
 
@@ -94,6 +95,9 @@ export class RotnData {
         this.worldSources = readJson(dir, 'world-sources')?.sources ?? [];
         // How to react to first-night mobs, hand-written with evidence (threat-reactions.json).
         this.threatReactions = readJson(dir, 'threat-reactions') ?? null;
+        // Which mobs dig toward their target and which blocks they can dig, from Epic Siege Mod,
+        // ESM-Tweaks and Tool Progression bytecode (mob-digging.json, hand-written with evidence).
+        this.mobDiggingData = readJson(dir, 'mob-digging') ?? null;
         // Which blocks fall (gravity), from the pack's bytecode and configs (falling-blocks.json,
         // built by tools/build-falling-blocks.mjs).
         this.fallingBlocks = readJson(dir, 'falling-blocks')?.blocks ?? null;
@@ -512,6 +516,16 @@ export class RotnData {
     /** How to react to a mob: level, reaction, summary and evidence (src/threats.js). */
     threatOf(input) {
         return threatOf(this, input);
+    }
+
+    /** The digging facts for a mob (src/digging.js), or null when it does not dig. */
+    mobDigging(entityName) {
+        return mobDigging(this, entityName);
+    }
+
+    /** Whether a digging mob can dig a block state (src/digging.js). */
+    canMobDig(entityName, blockName, opts) {
+        return canMobDig(this, entityName, blockName, opts);
     }
 
     /** Hostile mobs a biome (default: the overworld) spawns at night, most likely first (src/threats.js). */
