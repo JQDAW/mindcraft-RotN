@@ -1,6 +1,14 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T22:16Z (from `date -u`)
+Updated: 2026-11-07T00:32Z (from `date -u`)
+
+## Report to the lead: up on the CX33 (session 4, 2026-11-07T00:32Z by `date -u`)
+
+- **Where:** worktree `/home/mindcraft-RotN-worktrees/skills-rotn`, branch `agent/skills-rotn/cx33-start` from develop `c8323be8`. `npm ci` was already done. Node 22.23.4. `hcloud server list` is empty. I read CLAUDE.md, PLAN.md, my brief, this file and the lead's 2026-11-07 snapshot, and rebuilt my memory note from them.
+- **Open PRs:** none. #296 (the round 7 B fixes) is merged as `cb24eaa5`. No local-only work. The old `agent/skills-rotn/*` branches were squash-merged; `night-threats` is stale, as noted below.
+- **Check on this server:** `node --test 'src/**/*.test.js'` gives 481 tests, 480 pass and **1 fails, twice in a row**: `src/agent/library/use_on.test.js:181` "goToGoal: a walk that never arrives ends at GO_TO_LIMITS". It took 1574 ms against its 1500 ms wall-clock bound. The load average was about 5 on 4 vCPU while the other agents ran their checks. Run alone it passes 3/3. The lead's full `npm test` on `cb24eaa5` passed, so this is a timing-sensitive test, not a code fault. **Proposal (not started):** a small PR that makes the bound relative to the 300 ms limit with more headroom, or measures the time limit from the skill's own log line, so CI and the gate commit don't fail on a busy runner. I'll do it only if you give the task.
+- **Next (waiting for a task):** the next smoke or gate findings for G3 (b). In the next B run, check the new "[night] the shelter at X is no longer usable: <block> at <pos> (<why>)" line and the `[inventory]` cursor lines (cursor put down, resync) to confirm #296 live.
+- **Open requests (unchanged):** Request 1, the rest of it: `pause_when_empty: false` and `!searchWiki` in `blocked_actions` (settings.js, lead). FYI for net-forge: mineflayer 4.33 ignores the server's cursor packet (`set_slot` window -1, slot -1); #296 handles it in `src/agent`, and a mineflayer patch would be the cleaner home.
 
 ## Handoff (before the move to the dev server, 2026-11-06T21:49Z by `date -u`)
 
