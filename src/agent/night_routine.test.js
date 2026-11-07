@@ -5,6 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
+import { EventEmitter } from 'node:events';
+import { setImmediate } from 'node:timers';
 import { __setRegistryForTest } from '../utils/mcdata.js';
 import { nightTick, nightState, resetNight, isFullDay, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS } from './night_routine.js';
 import settings from './settings.js';
@@ -561,4 +563,49 @@ test('G3 round 7 B: inside, a dropped item, a carpet or snow in the space, or a 
     world.set('0,65,0', 'water');
     assert.equal(nightTick(wet.agent, { now: 2 * CHECK_MS + 3, ops: wet.o }), 'night:building');
     assert.match(wet.agent.chat.at(-1), /no longer usable: water at 0, 65, 0 \(a liquid at head height: the bot would drown\); building a new one$/);
+});
+
+// ---- G3 round 9 batch B, fix (e): a mob digging a shelter block is noticed while it digs ----
+// At 13:35:22 the check found the east side already open, with the zombie in it (Epic Siege Mod's
+// digging zombies). The dig shows first as block break progress, which mineflayer emits as
+// blockBreakProgressObserved(block, destroyStage, entity).
+
+test('round 9 B (e): digging seen on a shelter block makes the next tick check at once (not after CHECK_MS) with a block in hand', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const events = new EventEmitter();
+    const equipped = [];
+    Object.assign(agent.bot, {
+        on: events.on.bind(events), emit: events.emit.bind(events),
+        inventory: { items: () => [{ name: 'dirt', metadata: 0, count: 4 }] },
+        heldItem: null,
+        equip: (item) => { equipped.push(item.name); return Promise.resolve(); },
+    });
+    const o = ops();
+    let checks = 0;
+    const needs = o.siteNeeds;
+    o.siteNeeds = (...a) => { checks++; return needs(...a); };
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'inside');
+    nightTick(agent, { now: 1, ops: o }); // starts the check clock
+
+    // Digging next to the shelter but not at it: nothing.
+    agent.bot.emit('blockBreakProgressObserved', { position: new Vec3(5, 64, 0) }, 2, { name: 'zombie' });
+    nightTick(agent, { now: 2, ops: o });
+    assert.equal(checks, 0);
+
+    // A zombie digs the east wall (stage 3 of 9).
+    agent.bot.emit('blockBreakProgressObserved', { position: SITE.offset(1, 0, 0) }, 3, { name: 'zombie' });
+    nightTick(agent, { now: 3, ops: o });
+    assert.equal(checks, 1, 'checked at once, not after CHECK_MS');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(equipped, ['dirt'], 'a block in hand for the repair');
+
+    // It breaks through: the repair starts on the next tick.
+    o.open = [SITE.offset(1, 0, 0)];
+    nightTick(agent, { now: 4, ops: o });
+    assert.equal(agent.bot.rotnSheltered, 'open');
+    await settle(agent);
+    assert.deepEqual(o.builds, [null, SITE], 'repaired at once');
 });
