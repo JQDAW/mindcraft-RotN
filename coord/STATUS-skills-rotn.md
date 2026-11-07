@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T03:11Z (from `date -u`)
+Updated: 2026-11-07T03:53Z (from `date -u`)
 
 ## Round 8 A fix: sticks from dead bushes first, then other tree species (branch `agent/skills-rotn/stick-sources`, 2026-11-07T03:11Z by `date -u`)
 
@@ -20,6 +20,13 @@ Updated: 2026-11-07T03:11Z (from `date -u`)
   - `fall_safety.test.js`'s sticks-text test is updated to the new wording.
   - Lint: `skills.js` 20 errors, as on develop; the other touched files 0.
 - **PR:** #311, opened during the freeze; it merges after round 8.
+- **#311 review (lead, APPROVE WITH NITS on `7e20d43`), answered (2026-11-07T03:53Z by `date -u`).** origin/develop (with rotn-data #312) is merged in, not rebased.
+  1. **MUST, free attempts:** only a rule whose yield can be 0 (rotn-data `countRange.min === 0`, the dead bush) breaks without using an attempt, and at most `COLLECT_LIMITS.freeMisses` (6) times per collect. Rock piles, River Cane and other by-hand rules count every break as before. `worldSources` now passes `countRange` through.
+  2. **Bush radius:** dead bushes come first only within `handFirstRadius` (24). Then come trees; bushes up to 64 blocks away are the last resort.
+  3. **Shears:** a dead bush is broken by hand or with any non-shears item. `equipForBlock` is not called for it, and held shears are switched off by `stopHoldingWhere` (shears have no tool class, so they are matched by name).
+  4. **Species:** a species that gave 0 loses only to a tree at most `speciesDetour` (16) blocks farther. So a spruce-only area still fells the near spruce (rotn-data #312: the stick count follows the tree's shape).
+  5. **Fallback removed:** `DEAD_BUSH_STICKS` is gone; rotn-data's `deadbush-sticks` rule is used.
+  - **Tests:** `collect_sticks` 8/8 and `collect_rotn` 14/14 (one new test: rock piles that give nothing use 2 attempts, not 5). On `7e20d43`'s code, all 6 new or changed review tests fail. All 19 collecting test files: 245/245. Lint: `skills.js` 20 (same as develop), `rotn_sources.js` 0, tests 0.
 
 ## The goToGoal test is no longer flaky under load (branch `agent/skills-rotn/goto-test-load`, 2026-11-07T01:03Z by `date -u`)
 

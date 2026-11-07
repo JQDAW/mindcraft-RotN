@@ -745,6 +745,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const fellMatchers = []; // rotn-data "fell-tree": breaking a branch fells the whole tree
     const avoidTools = []; // [matcher, tool]: rules whose drop a tool changes (rotn-data #288 unlessTool)
     const handMatchers = []; // by-hand rules that fell no tree (a dead bush for sticks): tried before felling
+    const mayGiveNone = []; // rules whose yield can be 0 (rotn-data countRange.min 0: a dead bush gives 0-2 sticks)
     const sources = worldSources(blockType);
     for (const source of sources) {
         if (!toolAllows(bot, source.tool)) {
@@ -758,6 +759,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         if (source.unlessTool) avoidTools.push([blockMatcher(source.blocks), source.unlessTool]);
         if (source.id === 'fell-tree') fellMatchers.push(blockMatcher(source.blocks));
         else if (!source.tool) handMatchers.push(blockMatcher(source.blocks));
+        if (source.countRange?.min === 0) mayGiveNone.push(blockMatcher(source.blocks));
     }
     // The item's own blocks give it only with a tool the bot lacks (rotn-data #288: dirt drops
     // itself only to a shovel of level 1+; by hand it drops 4 dirt piles, and "Broke dirt but got no
@@ -772,13 +774,17 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // broken by hand drops the tree's logs and sticks): always the safe cut, never collect().
     const fellsTree = (block) => isBranch(block) || fellMatchers.some(matches => matches(block));
     // G3 round 8 A: two felled spruces gave 32 logs and 0 sticks while a dead bush stood next to the
-    // bot. So a by-hand rule that fells nothing comes first (nearest first), then trees whose species
-    // has not given this bot 0 of the item, then the rest (prefer, never forbid). Only when the item
-    // has both kinds of source, or a species already came up empty; otherwise one plain search.
+    // bot. So a by-hand rule that fells nothing comes first (nearest first, within CL.handFirstRadius),
+    // then trees and the rest, where a species that has given this bot 0 of the item loses only to a
+    // tree at most CL.speciesDetour farther (rotn-data #312: the stick count follows the tree's shape,
+    // not its species, so never a long walk for it); then by-hand blocks farther out. Only when the
+    // item has both kinds of source, or a species already came up empty; otherwise one plain search.
     const emptySpecies = emptyFelled(bot, baseType);
     const isHand = (block) => !fellsTree(block) && handMatchers.some(matches => matches(block));
+    const canGiveNone = (block) => mayGiveNone.some(matches => matches(block));
     const tierOf = (block) => (isHand(block) ? 0 : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
-    const tiers = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0 ? [0, 1, 2] : [null];
+    const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
+    let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
@@ -876,10 +882,17 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             
             return movements.safeToBreak(block) || unsafeBlocks.includes(block.name);
         };
+        const nearestOf = (tier, radius = 64) => world.getNearestBlocksWhere(bot, block => tierOf(block) === tier && wanted(block), radius, 1);
         let blocks = [];
-        for (const tier of tiers) {
-            blocks = world.getNearestBlocksWhere(bot, tier === null ? wanted : (block => tierOf(block) === tier && wanted(block)), 64, 1);
-            if (blocks.length > 0) break;
+        if (!tiered) blocks = world.getNearestBlocksWhere(bot, wanted, 64, 1);
+        else {
+            blocks = nearestOf(0, CL.handFirstRadius);
+            if (blocks.length === 0) {
+                const fresh = nearestOf(1), empty = emptySpecies.size > 0 ? nearestOf(2) : [];
+                const far = (b) => b.position.distanceTo(bot.entity.position);
+                blocks = fresh.length && (!empty.length || far(fresh[0]) <= far(empty[0]) + CL.speciesDetour) ? fresh : empty;
+            }
+            if (blocks.length === 0) blocks = nearestOf(0);
         }
 
         if (blocks.length === 0) {
@@ -911,6 +924,15 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             // mineflayer-tool would pick the fastest, which is that shovel.
             if (!await handOff(avoidToolFor(block))) {
                 log(bot, cannotLetGo(block));
+                break;
+            }
+        }
+        else if (canGiveNone(block) && isHand(block)) {
+            // #311 review: by hand or with anything but shears (sheared, a dead bush drops itself and no
+            // stick; equipForBlock could pick shears, since any tool breaks it at once). Shears have no
+            // tool class in the dump, so they are told by name.
+            if (!await stopHoldingWhere(bot, isShears)) {
+                log(bot, `Not breaking ${block.name}: you hold shears, which would make it drop itself instead of ${blockType}, and no free slot to put them in. Free a slot first.`);
                 break;
             }
         }
@@ -1004,11 +1026,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 if (countsItems && fellsTree(block)) {
                     if (gained === 0) emptySpecies.add(block.name); else emptySpecies.delete(block.name);
                 }
-                // A dead bush gives 0-2 sticks: one that gave none uses no attempt, so the next bush
-                // is tried. Never the same spot twice; bounded by the bushes in range and CL.totalMs.
-                if (isHand(block)) {
+                // A rule whose yield can be 0 (a dead bush: 0-2 sticks): a break that gave none uses no
+                // attempt, so the next is tried; never the same spot twice, and at most CL.freeMisses
+                // such breaks per collect (#311 review: any other zero gain, a full inventory or a
+                // missed pickup, counts as an attempt as before).
+                if (canGiveNone(block) && isHand(block)) {
                     givenUp.push(block.position.clone ? block.position.clone() : block.position);
-                    if (gained === 0) i--;
+                    if (gained === 0 && freeMisses < CL.freeMisses) { freeMisses++; i--; }
                 }
                 if (gained === 0) {
                     // Say what it did give (round 5 A rerun: a felled spruce gave logs, the stick
@@ -1077,21 +1101,29 @@ const HOTBAR_START = 36;
  * whether the bot no longer holds such a tool.
  */
 export async function stopHolding(bot, tool) {
-    if (!isToolFor(bot.heldItem, tool)) return true;
+    return await stopHoldingWhere(bot, (item) => isToolFor(item, tool));
+}
+
+/** stopHolding for any item the predicate matches (shears, which have no tool class). */
+export async function stopHoldingWhere(bot, isUnwanted) {
+    if (!bot.heldItem || !isUnwanted(bot.heldItem)) return true;
     const slots = bot.inventory?.slots ?? [];
     const hotbar = Array.from({ length: 9 }, (_, i) => slots[HOTBAR_START + i] ?? null);
     let i = hotbar.findIndex(it => !it);
-    if (i < 0) i = hotbar.findIndex(it => !isToolFor(it, tool));
+    if (i < 0) i = hotbar.findIndex(it => !isUnwanted(it));
     if (i >= 0 && typeof bot.setQuickBarSlot === 'function') {
         bot.setQuickBarSlot(i);
-        return !isToolFor(bot.heldItem, tool);
+        return !bot.heldItem || !isUnwanted(bot.heldItem);
     }
     if (bot.inventory?.firstEmptyInventorySlot?.() != null) {
         await bot.unequip('hand'); // a free slot: it moves the stack there, nothing is tossed
-        return !isToolFor(bot.heldItem, tool);
+        return !bot.heldItem || !isUnwanted(bot.heldItem);
     }
     return false;
 }
+
+/** Shears of any mod, by name: no shears in the dump has a "shears" tool class (rotn-data #312). */
+export const isShears = (item) => !!item && typeof item.name === 'string' && /shears/.test(item.name);
 
 /** How collectByRoute crafts (tests pass their own). */
 export const COLLECT_ROUTE_OPS = { craft: (...args) => craftRecipe(...args) };
@@ -3214,7 +3246,10 @@ export const USE_ON_LIMITS = { range: 32, candidates: 4, walkMs: 20_000, totalMs
 const STOP_SETTLE_MS = 5000;
 
 /** collectBlock (G3 review of #221): per block, and for the whole run (!collectBlocks has 10 min). */
-export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000 };
+// handFirstRadius, speciesDetour (blocks) and freeMisses: the #311 review's bounds on the stick
+// search (dead bushes near, not a walk; a species preference only between trees about as close;
+// at most this many zero-yield breaks that use no attempt).
+export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit
