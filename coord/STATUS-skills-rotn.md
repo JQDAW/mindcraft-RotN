@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:14Z (from `date -u`)
+Updated: 2026-11-07T04:22Z (from `date -u`)
 
 ## Task 3: "shelter_blocks started" before an earlier step's "done" is log order, not a step run out of order (2026-11-07T04:14Z by `date -u`)
 
@@ -33,6 +33,12 @@ Updated: 2026-11-07T04:14Z (from `date -u`)
 - **Tests:** new `equip_hand.test.js`, 4/4. It uses prismarine-windows' real player window, mineflayer 4.33's `equip`/`moveSlotItem` as they behave with a full hotbar, and a fake 1.12 server that applies a click, then compares, and rejects a put-down into the hotbar.
   - On develop's guard the 3 behaviour tests fail, and a replay prints round 8 B's lines: "rejected … slot 36", "cursor: stone_pickaxe", "put the stone_pickaxe … into slot 9", "rejected … slot 37".
   - `inventory_sync`, `threats`, `use_on` and `dirt_piles` (37/37 with the new file) pass. Lint: 0 in both files.
+- **#317 review (lead, APPROVE WITH NITS on `c76a1a9`), answered (2026-11-07T04:22Z by `date -u`).** origin/develop (with #311) is merged in, not rebased; this file's conflict is resolved with both sides kept.
+  1. If the cursor still holds a stack after the tidy, `equipToHand` uses mineflayer's `equip` with the item as it is now. A number-key click does nothing while the cursor holds a stack.
+  2. An item no longer in the inventory is an error: `[inventory] equip: the <name> is no longer in the inventory`, then a throw. The stale Item is never used, and through the guard there is no retry, because this is not a rejected click.
+  3. `currentItem` searches the hotbar first, then the main inventory, then the off hand, so a copy in the hotbar needs no click.
+  - **Tests:** `equip_hand` 6/6 (2 new tests, and `currentItem` gains the hotbar case); all 3 fail on `c76a1a9`. `inventory_sync`, `threats`, `use_on`, `dirt_piles` and `equip_hand`: 39/39. Lint: 0 in both files.
+
 ## Round 8 A fix: sticks from dead bushes first, then other tree species (branch `agent/skills-rotn/stick-sources`, 2026-11-07T03:11Z by `date -u`)
 
 - **Task (lead, 2026-11-07, approved after my round 8 A analysis):** A failed 3/7 at the agenda's sticks step.

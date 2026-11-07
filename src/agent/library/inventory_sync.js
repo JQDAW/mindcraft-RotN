@@ -125,13 +125,16 @@ const sameStack = (a, b) => sameKind(a, b) && (a.metadata ?? 0) === (b.metadata 
 /**
  * The item as the window has it now (round 8 B: a retry ran with a stale Item, its .slot from before
  * the resync): the same slot while it still holds that stack; else the first slot with the same
- * stack; else the first of the same kind (a tool's damage may have changed); else null.
+ * stack; else the first of the same kind (a tool's damage may have changed); else null. The hotbar
+ * is searched first (#317 review: a copy there needs no click), then the main inventory, then the
+ * off hand.
  */
 export function currentItem(bot, item) {
     const slots = bot?.inventory?.slots;
     if (!item || typeof item !== 'object' || !Array.isArray(slots)) return item ?? null;
     if (sameStack(slots[item.slot], item)) return slots[item.slot];
-    const order = [...Array(HOTBAR_END - MAIN + 1).keys()].map(i => i + MAIN).concat([45]);
+    const range = (from, to) => [...Array(to - from + 1).keys()].map(i => i + from);
+    const order = [...range(HOTBAR, HOTBAR_END), ...range(MAIN, HOTBAR - 1), 45];
     return order.map(k => slots[k]).find(s => sameStack(s, item))
         ?? order.map(k => slots[k]).find(s => sameKind(s, item)) ?? null;
 }
@@ -140,15 +143,23 @@ export function currentItem(bot, item) {
  * equip(item, 'hand') for an item in the main inventory: one number-key click (mode 2) swaps it with
  * a hotbar slot (an empty one, else the selected one), then that slot is selected (round 8 B). Any
  * other case (another destination, an item already in the hotbar or an armor slot, an open
- * container, a bot without these functions) is mineflayer's equip, with the item as it is now.
+ * container, a bot without these functions, or a cursor the tidy could not clear: a number-key click
+ * does nothing while the cursor holds a stack) is mineflayer's equip, with the item as it is now.
+ * An item no longer in the inventory is an error, never the stale Item (#317 review).
  */
 export async function equipToHand(bot, original, args) {
     const [arg, destination, ...rest] = args;
-    const item = typeof arg === 'object' && arg ? (currentItem(bot, arg) ?? arg) : arg;
+    const item = typeof arg === 'object' && arg ? currentItem(bot, arg) : arg;
+    if (item === null) {
+        const line = `the ${arg.name ?? 'item'} is no longer in the inventory`;
+        console.warn(`[inventory] equip: ${line}`);
+        throw new Error(`Cannot equip: ${line}.`);
+    }
     const toHand = destination == null || destination === 'hand';
     const playerWindow = !bot.currentWindow || bot.currentWindow === bot.inventory;
     const canSwap = typeof bot.clickWindow === 'function' && typeof bot.setQuickBarSlot === 'function';
-    if (!toHand || !playerWindow || !canSwap || typeof item !== 'object' || !item || !(item.slot >= MAIN && item.slot < HOTBAR))
+    const cursorClear = !bot.inventory?.selectedItem;
+    if (!toHand || !playerWindow || !canSwap || !cursorClear || typeof item !== 'object' || !item || !(item.slot >= MAIN && item.slot < HOTBAR))
         return await original.apply(bot, [item, destination, ...rest]);
     const slots = bot.inventory.slots;
     let k = [...Array(9).keys()].find(i => !slots[HOTBAR + i]);

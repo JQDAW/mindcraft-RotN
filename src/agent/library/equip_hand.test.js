@@ -14,7 +14,7 @@ import minecraftData from 'minecraft-data';
 import prismarineWindows from 'prismarine-windows';
 import prismarineItem from 'prismarine-item';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { guardInventory, currentItem } from './inventory_sync.js';
+import { guardInventory, currentItem, equipToHand } from './inventory_sync.js';
 
 const reg = minecraftData('1.12.2');
 __setRegistryForTest(reg);
@@ -156,4 +156,38 @@ test('currentItem: the same slot while it holds that stack, else the same stack 
     assert.equal(currentItem(bot, pick)?.slot, 25);
     bot.inventory.updateSlot(25, null);
     assert.equal(currentItem(bot, pick), null);
+
+    // #317 review 3: identical stacks in the main inventory and the hotbar: the hotbar copy (no click).
+    bot.inventory.updateSlot(12, make('stone_pickaxe'));
+    bot.inventory.updateSlot(41, make('stone_pickaxe'));
+    assert.equal(currentItem(bot, pick)?.slot, 41);
+});
+
+test('#317 review 1: a cursor the tidy could not clear: mineflayer\'s equip with the item as it is now, no number-key click', async (t) => {
+    quiet(t);
+    const { bot } = botAndServer();
+    bot.inventory.selectedItem = make('stick', 3); // a number-key click does nothing while the cursor holds a stack
+    const calls = [];
+    const original = (...args) => { calls.push(args); return Promise.resolve(); };
+    await equipToHand(bot, original, [bot.inventory.slots[20], 'hand']);
+    assert.deepEqual(bot.clicks, [], 'no mode-2 click');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0][0], bot.inventory.slots[20]);
+    assert.equal(calls[0][1], 'hand');
+});
+
+test('#317 review 2: an item no longer in the inventory is an error, never the stale Item', async (t) => {
+    quiet(t);
+    const { bot } = botAndServer();
+    const pick = bot.inventory.slots[20];
+    bot.inventory.updateSlot(20, null); // gone (tossed, broken, or lost at death)
+    const calls = [];
+    const original = (...args) => { calls.push(args); return Promise.resolve(); };
+    await assert.rejects(equipToHand(bot, original, [pick, 'hand']), /Cannot equip: the stone_pickaxe is no longer in the inventory\./);
+    assert.deepEqual(calls, [], 'mineflayer\'s equip is not run on the stale Item');
+    assert.deepEqual(bot.clicks, []);
+
+    guardInventory(bot); // and through the guard: the error is not a rejected click, so no retry
+    await assert.rejects(bot.equip(pick, 'hand'), /no longer in the inventory/);
+    assert.deepEqual(bot.clicks, []);
 });
