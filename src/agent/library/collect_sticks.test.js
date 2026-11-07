@@ -113,6 +113,8 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
             stop() {},
             getPathTo: () => ({ status: 'success', path: [] }),
             goto(goal) {
+                // Every walk ends on the ground (y 64): these tests check which blocks are chosen, not how
+                // the bot walks. That a real walk never climbs a tree is proven in fall_safety.test.js.
                 bot.entity.position = at(Math.floor(goal.x), 64, Math.floor(goal.z)).offset(0.5, 0, 0.5);
                 for (const [id, e] of Object.entries(entities)) {
                     if (e.name === 'item' && e.position.distanceTo(bot.entity.position) <= 1.5) {
@@ -215,9 +217,11 @@ test('#311 review: a dead bush is never broken with shears (sheared, it drops it
 
 // ---- Request 17 (rotn-data #312): leaves DO give sticks (Pyrotech: 1 stick half the time) ----
 
-test('Request 17: a leaves block is a stick source, by hand, whose yield can be 0 (rotn-data\'s rule or the cited fallback)', () => {
+test('Request 17, rotn-data #319: a leaves block is a stick source, by hand, whose yield can be 0 (its rule; the fallback is gone)', () => {
     const way = worldSources('stick').find(s => s.blocks.some(b => /leaves/.test(b)));
     assert.ok(way, 'leaves are a stick source');
+    assert.equal(way.id, 'leaves-sticks');
+    assert.equal(worldSources('stick').filter(s => s.blocks.some(b => /leaves/.test(b))).length, 1, 'one leaves rule, no duplicate');
     assert.equal(way.tool, null, 'by hand');
     assert.ok(way.blocks.includes('dynamictrees:leaves0'), 'Dynamic Trees leaves too');
     assert.equal(way.countRange?.min, 0, 'a leaf can give nothing');
@@ -234,7 +238,7 @@ test('Request 17: leaves reachable from the ground come after dead bushes and be
     assert.match(bot.output, /Collected 3 stick\./);
 });
 
-test('Request 17: leaves come before a species that gave 0 sticks; out of reach they are never broken (no climbing)', T, async (t) => {
+test('Request 17: leaves come before a species that gave 0 sticks; leaves out of reach from the ground are not chosen', T, async (t) => {
     fast(t);
     // Spruce at 3 (no reachable leaf) is nearest; the low leaves of the spruce at 30 start 31 out,
     // beyond the 24-block first search. Spruce at 3 is felled and gives 0; from its drops (x 7-9) those
