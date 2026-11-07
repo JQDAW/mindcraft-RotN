@@ -331,7 +331,7 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
     // The wrapper's paths are fixed (root runs it). The tests run a copy with exactly those two lines
     // pointed at the fake systemctl and a temp /etc; everything else is the real file.
     const SRC = fs.readFileSync(path.join(CX, 'mindcraft-rotn-ctl.sh'), 'utf8').replace(/\r/g, '');
-    const ctl = (args, extraEnv = {}) => {
+    const ctl = (args, extraEnv = {}, { bytes = null } = {}) => {
         const etc = path.join(ROOT, 'etc', 'mindcraft-rotn');
         fs.mkdirSync(etc, { recursive: true });
         fs.writeFileSync(path.join(etc, 'rotn-bot.env'), 'x=1\n');
@@ -339,7 +339,9 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
         const copy = path.join(tmp, 'ctl-under-test.sh');
         const body = SRC.replace(/^PATH=.*$/m, '')
             .replace('readonly SYSTEMCTL=/usr/bin/systemctl', `readonly SYSTEMCTL=${posix(path.join(bin, 'systemctl'))}`)
-            .replace('readonly ETC_DIR=/etc/mindcraft-rotn', `readonly ETC_DIR=${fwd(etc)}`);
+            .replace('readonly JOURNALCTL=/usr/bin/journalctl', `readonly JOURNALCTL=${posix(path.join(bin, 'journalctl'))}`)
+            .replace('readonly ETC_DIR=/etc/mindcraft-rotn', `readonly ETC_DIR=${fwd(etc)}`)
+            .replace('readonly JOURNAL_BYTES=8388608', `readonly JOURNAL_BYTES=${bytes ?? 8388608}`);
         assert.notEqual(body, SRC);
         fs.writeFileSync(copy, body);
         return run(copy, args, extraEnv);
@@ -347,9 +349,13 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
 
     test('systemctl and /etc are hard-coded and PATH is reset: the caller\'s environment cannot redirect root (PR #30 finding 8)', () => {
         assert.match(SRC, /^readonly SYSTEMCTL=\/usr\/bin\/systemctl$/m);
+        assert.match(SRC, /^readonly JOURNALCTL=\/usr\/bin\/journalctl$/m);
+        assert.match(SRC, /^readonly HEAD=\/usr\/bin\/head$/m);
+        for (const tool of ['mktemp', 'stat', 'rm']) assert.match(SRC, new RegExp(`^readonly ${tool.toUpperCase()}=/usr/bin/${tool}$`, 'm'), tool);
+        assert.match(SRC, /^readonly JOURNAL_BYTES=8388608$/m);
         assert.match(SRC, /^readonly ETC_DIR=\/etc\/mindcraft-rotn$/m);
         assert.match(SRC, /^PATH=\/usr\/sbin:\/usr\/bin:\/sbin:\/bin$/m);
-        assert.ok(!/\$\{(SYSTEMCTL|MINDCRAFT_ROTN_ETC|ETC_DIR):-/.test(SRC), 'no env overrides');
+        assert.ok(!/\$\{(SYSTEMCTL|JOURNALCTL|HEAD|MKTEMP|STAT|RM|MINDCRAFT_ROTN_ETC|ETC_DIR|JOURNAL_LINES|JOURNAL_BYTES|METRICS):-/.test(SRC), 'no env overrides');
     });
 
     test('valid actions run systemctl on exactly mindcraft-rotn@BOT.service', () => {
@@ -359,6 +365,80 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
         assert.deepEqual(called('systemctl'), [['systemctl', 'restart', 'mindcraft-rotn@rotn-bot.service'],
             ['systemctl', 'status', '--no-pager', 'mindcraft-rotn@rotn-bot.service'], ['systemctl', 'is-enabled', 'mindcraft-rotn@rotn-bot.service']]);
         assert.equal(ctl(['list']).stdout.trim(), 'rotn-bot');
+    });
+
+    test('journal (G4, read-only): journalctl on exactly mindcraft-rotn@BOT.service, UTC ISO times, a line cap; --since strictly parsed', () => {
+        const base = ['journalctl', '--unit=mindcraft-rotn@rotn-bot.service', '--no-pager', '--no-hostname', '--utc', '--output=short-iso', '--lines=20000'];
+        const out = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: '2026-11-07T05:31:00+0000 node[123]: FRCFLD joined' });
+        assert.equal(out.code, 0, out.all);
+        assert.match(out.stdout, /FRCFLD joined/);
+        for (const [since, want] of [['2026-11-07 05:31:00', '--since=2026-11-07 05:31:00 UTC'], ['2026-11-07 05:31', '--since=2026-11-07 05:31 UTC'],
+            ['2026-11-07T05:31:00Z', '--since=2026-11-07 05:31:00 UTC'], ['2026-11-07T05:31', '--since=2026-11-07 05:31 UTC'], ['@1794015555', '--since=@1794015555']]) {
+            assert.equal(ctl(['journal', 'rotn-bot', '--since', since]).code, 0, since);
+            assert.deepEqual(called('journalctl').at(-1), [...base, want], since);
+        }
+        assert.deepEqual(called('journalctl')[0], base);
+        assert.equal(called('systemctl').length, 0, 'journal never calls systemctl');
+    });
+
+    test('journal: every other shape is refused before journalctl runs', () => {
+        const bad = [['journal'], ['journal', 'rotn-bot', '--since'], ['journal', 'rotn-bot', '--until', '2026-11-07 05:31'], ['journal', 'rotn-bot', 'x', 'y'],
+            ['journal', 'rotn-bot', '--since', '2026-11-07 05:31', 'extra'], ['journal', 'other-bot'], ['journal', 'Rotn'], ['journal', '../x'],
+            ['journal', 'rotn-bot', 'rotn-bot']];
+        for (const since of ['yesterday', '-10min', 'today', '2026-11-07', '2026-11-07 5:31', '2026-11-07 05:31:00; rm -rf /', '2026-11-07T05:31:00+02:00',
+            '@', '@123abc', '@1234567890123', '2026-11-07  05:31', ' 2026-11-07 05:31', '2026-11-07 05:31 UTC', '$(id)']) bad.push(['journal', 'rotn-bot', '--since', since]);
+        for (const args of bad) {
+            const r = ctl(args);
+            assert.equal(r.code, 2, JSON.stringify(args));
+        }
+        assert.equal(called('journalctl').length, 0);
+    });
+
+    test('#326 review: --since must be a real date and time (exit 2 before journalctl), read in base 10', () => {
+        for (const since of ['2026-02-30 05:31', '2026-13-01 00:00', '2026-00-10 00:00', '2026-11-31 00:00', '2026-11-00 00:00', '2026-11-07 24:00',
+            '2026-11-07 23:60', '2026-11-07 23:59:60', '2025-02-29 00:00', '2100-02-29 00:00', '2026-04-31T10:00Z']) {
+            const r = ctl(['journal', 'rotn-bot', '--since', since]);
+            assert.equal(r.code, 2, since);
+            assert.match(r.stderr, /not a real date and time/, since);
+        }
+        assert.equal(called('journalctl').length, 0, 'never reached journalctl');
+        for (const since of ['2024-02-29 00:00', '2000-02-29 12:00', '2026-08-09 08:09:09', '2026-12-31T23:59:59Z', '2026-01-01 00:00']) {
+            assert.equal(ctl(['journal', 'rotn-bot', '--since', since]).code, 0, since);
+        }
+        assert.deepEqual(called('journalctl').at(-3).at(-1), '--since=2026-08-09 08:09:09 UTC', '08 and 09 are not octal');
+    });
+
+    test('#326 re-review: the byte cap is decided from what arrived, also just past it (no SIGPIPE): at most the cap is printed, a cut always noted', () => {
+        const before = fs.readdirSync('/tmp').filter((f) => f.startsWith('mindcraft-rotn-journal.')).length;
+        // The fake prints the value and a newline: 999 x's are exactly the cap of 1000 bytes.
+        for (const n of [999, 1000, 4999, 59999, 100000]) {
+            const r = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: 'x'.repeat(n) }, { bytes: 1000 });
+            const arrived = n + 1;
+            assert.equal(r.code, 0, `${arrived} bytes: ${r.stderr}`);
+            assert.equal(r.stdout.length, Math.min(arrived, 1000), `${arrived} bytes`);
+            if (arrived > 1000) assert.match(r.stderr, /journal cut at 1000 bytes/, `${arrived} bytes`);
+            else assert.equal(r.stderr, '', 'exactly the cap is no cut');
+        }
+        const small = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: 'one line' }, { bytes: 1000 });
+        assert.equal(small.stdout, 'one line\n');
+        assert.equal(small.stderr, '');
+        // journalctl's own failure keeps its exit code, after what it printed.
+        const failed = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: 'partial', FAKE_RC_journalctl: '1' });
+        assert.equal(failed.code, 1, 'not hidden by the pipe');
+        assert.equal(failed.stdout, 'partial\n');
+        const after = fs.readdirSync('/tmp').filter((f) => f.startsWith('mindcraft-rotn-journal.')).length;
+        assert.ok(after <= before, 'the temp file is removed');
+    });
+
+    test('metrics (G4, read-only): systemctl show of exactly the four properties on mindcraft-rotn@BOT.service; nothing else', () => {
+        const r = ctl(['metrics', 'rotn-bot'], { FAKE_OUT_systemctl: 'MemoryCurrent=412345678\nMemoryPeak=598765432\nNRestarts=0\nActiveState=active' });
+        assert.equal(r.code, 0, r.all);
+        assert.match(r.stdout, /^NRestarts=0$/m);
+        assert.deepEqual(called('systemctl'), [['systemctl', 'show', '--no-pager', '--property=MemoryCurrent,MemoryPeak,NRestarts,ActiveState', 'mindcraft-rotn@rotn-bot.service']]);
+        for (const args of [['metrics'], ['metrics', 'rotn-bot', 'x'], ['metrics', 'other-bot'], ['metrics', 'Rotn'], ['metrics', 'rotn-bot', '--property=ExecStart'], ['show', 'rotn-bot']]) {
+            assert.equal(ctl(args).code, 2, args.join(' '));
+        }
+        assert.equal(called('systemctl').length, 1, 'no further systemctl call');
     });
 
     test('anything else is refused before systemctl runs', () => {

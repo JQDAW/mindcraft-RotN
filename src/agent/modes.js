@@ -7,6 +7,7 @@ import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
+import { REPAIR_LABEL } from './library/night.js';
 import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
@@ -33,7 +34,8 @@ async function say(agent, message) {
 /**
  * Modes that would walk, dig or light the bot out of its night shelter (D2b-2). They are quiet while
  * the night routine has it sheltered (bot.rotnSheltered true). When a wall is open
- * (bot.rotnSheltered 'open') self_defense acts again, so the bot fights at the opening.
+ * (bot.rotnSheltered 'open') self_defense acts again, so the bot fights at the opening: from where it
+ * stands, only mobs within reach, and never while the night's repair runs (G3 round 9 B).
  * self_preservation (fire, lava, a falling block on its head) always acts.
  */
 export const SHELTER_QUIET_MODES = ['cowardice', 'self_defense', 'hunting', 'item_collecting', 'torch_placing', 'elbow_room', 'unstuck'];
@@ -43,6 +45,50 @@ export function shelterQuiet(name, bot) {
     if (sheltered === true) return SHELTER_QUIET_MODES.includes(name);
     if (sheltered === 'open') return name !== 'self_defense' && SHELTER_QUIET_MODES.includes(name);
     return false;
+}
+
+/** A mob in reach is named in chat at most this often from the shelter (T1: up to 24 lines a minute). */
+export const SHELTER_SAY_MS = 30_000;
+let shelterSaidAt = -Infinity;
+
+/**
+ * The fight from inside the night shelter (G3 round 9 B; #331 review 1-4): never while the night's
+ * repair runs, nor within SHELTER_FIGHT.restMs after the last such fight (the night routine checks
+ * and repairs first); else the nearest hostile mob in reach (threats.shelterEnemy, whatever the
+ * plan says) is hit in place for as long as one is in reach, capped. Returns whether it started.
+ */
+function fightInShelter(mode, agent, { override = false } = {}) {
+    const bot = agent.bot;
+    if (agent.actions.currentActionLabel === REPAIR_LABEL) return false;
+    if (Date.now() - (bot.rotnFightEndedAt ?? -Infinity) < skills.SHELTER_FIGHT.restMs) return false;
+    const target = world.getNearestEntityWhere(bot, (e) => threats.shelterEnemy(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
+    if (!target) return false;
+    if (!claimThreat(mode.name, Date.now(), { override })) return false;
+    if (Date.now() - shelterSaidAt >= SHELTER_SAY_MS) {
+        shelterSaidAt = Date.now();
+        Promise.resolve(say(agent, `Fighting ${target.name} from the shelter!`)).catch(err => reportModeError(mode.name, err));
+    }
+    execute(mode, agent, async () => {
+        await skills.defendInPlace(bot, threats.shelterEnemy);
+    }).catch(err => reportModeError(mode.name, err));
+    return true;
+}
+
+/**
+ * Low health in the night shelter (the lead's decision after G3 round 9 B): no flee out into the
+ * night. While the night's repair runs, nothing (it closes the opening). Else a mob within reach is
+ * hit from where the bot stands; else, hungry with food held, the bot eats.
+ */
+function holdInShelter(mode, agent) {
+    const bot = agent.bot;
+    if (fightInShelter(mode, agent, { override: true })) return;
+    if (agent.actions.currentActionLabel === REPAIR_LABEL) return;
+    const item = Number.isFinite(bot.food) && bot.food < 20 ? food.chooseFood(bot) : null;
+    if (!item) return;
+    execute(mode, agent, async () => {
+        const r = await food.eatFood(bot, item);
+        console.log(`[reflex] hurt in the shelter: ${r.ate ? 'ate' : 'could not eat'} ${food.foodKey(item)} (health ${bot.health}, food ${r.before})`);
+    }).catch(err => reportModeError(mode.name, err));
 }
 
 /**
@@ -148,6 +194,13 @@ const modes_list = [
             }
             else if (bot.health > 0 && bot.isAlive !== false // not while dead (it fled from the death hit)
                 && Date.now() - bot.lastDamageTime < 3000 && (bot.health < 5 || bot.lastDamageTaken >= bot.health)) {
+                // The lead's decision after G3 round 9 B: in the night shelter (closed or open) the bot
+                // stays: the repair goes on, else it hits what is in reach in place, else it eats. It
+                // leaves only for the hazards above (fire, lava, drowning, a falling block).
+                if (bot.rotnSheltered) {
+                    holdInShelter(this, agent);
+                    return;
+                }
                 claimThreat(this.name, Date.now(), { override: true }); // the low-health flee wins at once (#227 review 2)
                 say(agent, 'I\'m dying!');
                 execute(this, agent, async () => {
@@ -299,6 +352,16 @@ const modes_list = [
         on: true,
         active: false,
         update: async function (agent) {
+            // G3 round 9 B: in the shelter with a wall open, self_defense interrupted the repair and
+            // defendSelf walked out after the zombie (pvp.attack follows its target); the bot died
+            // outside. Now the repair runs on, and the fight is in place, at mobs within reach.
+            // #331 review 1 and 2: in the shelter any hostile mob in reach is hit, whatever the plan
+            // says (two zombies, a skeleton or a creeper near make it 'flee'), for as long as one is
+            // in reach (capped, review 3).
+            if (agent.bot.rotnSheltered) {
+                fightInShelter(this, agent);
+                return;
+            }
             const plan = threats.threatPlan(agent.bot);
             if (plan?.action === 'fight' && await world.isClearPath(agent.bot, plan.from)) {
                 if (!claimThreat(this.name)) return; // checked after the await: another mode may own it now

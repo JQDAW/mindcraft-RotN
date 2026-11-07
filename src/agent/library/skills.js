@@ -709,6 +709,63 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
 }
 
 
+/**
+ * In the night shelter (G3 round 9 B): how far the bot hits from where it stands, and how often.
+ * #331 review 3: a fight is capped (maxMs, maxSwings, and sameTargetSwings hits on one mob whose
+ * health did not go down), so the night routine gets to repair the opening; after a fight,
+ * self_defense waits restMs before it fights again, so the repair starts first.
+ */
+export const SHELTER_FIGHT = { reach: 3, swingMs: 600, maxMs: 6000, maxSwings: 8, sameTargetSwings: 4, restMs: 1500 };
+
+/** Whether an entity is within SHELTER_FIGHT.reach of the bot's feet. */
+export function inShelterReach(bot, entity) {
+    return !!entity?.position && bot.entity.position.distanceTo(entity.position) <= SHELTER_FIGHT.reach;
+}
+
+/** A mob's health when the bot knows it (mineflayer's entity.health, or 1.12 living metadata 7). */
+const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite(e?.metadata?.[7]) ? e.metadata[7] : null);
+
+/**
+ * Fight from where the bot stands (G3 round 9 B, its night shelter with a wall open): hit the
+ * nearest enemy within SHELTER_FIGHT.reach while one is in reach and keepFighting() holds, at
+ * most SHELTER_FIGHT.maxMs and maxSwings, and at most sameTargetSwings hits on one mob whose
+ * health does not go down (when it is known). No walk and no mineflayer-pvp (pvp.attack follows
+ * its target, which took the bot out of the shelter). While it runs, bot.rotnFightingInPlace is
+ * true (#334 nit: nothing else takes a block in hand then); at the end bot.rotnFightEndedAt is set.
+ * @returns {Promise<boolean>} true when it hit something.
+ */
+export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity), keepFighting=() => true) {
+    bot.modes.pause('self_defense');
+    bot.modes.pause('cowardice');
+    const fight = {};
+    const start = Date.now();
+    let swings = 0, why = 'nothing left in reach';
+    const same = { id: null, health: null, hits: 0 };
+    const nearest = () => world.getNearestEntityWhere(bot, (e) => isEnemy(e) && inShelterReach(bot, e), SHELTER_FIGHT.reach + 1);
+    bot.rotnFightingInPlace = true;
+    try {
+        for (let enemy = nearest(); enemy; enemy = nearest()) {
+            if (Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; break; }
+            if (swings >= SHELTER_FIGHT.maxSwings) { why = `${swings} swings`; break; }
+            const health = healthOf(enemy);
+            if (same.id !== enemy.id || health === null || health !== same.health) Object.assign(same, { id: enemy.id, health, hits: 0 });
+            else if (same.hits >= SHELTER_FIGHT.sameTargetSwings) { why = `${same.hits} hits did not hurt the ${enemy.name}`; break; }
+            await bot.lookAt(enemy.position.offset(0, (enemy.height ?? 1.8) * 0.8, 0), true);
+            await equipHighestAttack(bot, fight); // just before the swing (#334 nit)
+            bot.attack(enemy);
+            swings++;
+            same.hits++;
+            await new Promise(resolve => setTimeout(resolve, SHELTER_FIGHT.swingMs));
+            if (bot.interrupt_code) { why = 'interrupted'; break; }
+            if (!keepFighting()) { why = 'the situation changed'; break; }
+        }
+    } finally {
+        bot.rotnFightingInPlace = false;
+        bot.rotnFightEndedAt = Date.now();
+    }
+    log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.` : 'Nothing in reach to fight.');
+    return swings > 0;
+}
 
 export async function collectBlock(bot, blockType, num=1, exclude=null) {
     /**
@@ -788,6 +845,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const tierOf = (block) => (isHand(block) ? (isLeafBlock(block) ? 3 : 0) : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
     const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
     let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
+    let leafMisses = 0; // leaves out of reach after the walk (capped at CL.unreachableLeaves, then no leaves)
+    const outOfReach = unreachableLeaves(bot);
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
@@ -869,6 +928,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (block.position && givenUp.some(p => p.equals(block.position))) return false;
             // Leaves only where the bot can reach them standing on the ground: never climb for them.
             if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
+            // Round 9 B: not leaves once CL.unreachableLeaves were out of reach in this collect, nor
+            // one this bot found out of reach in the last CL.unreachableMs.
+            if (isLeafBlock(block) && leafMisses >= CL.unreachableLeaves) return false;
+            if (isLeafBlock(block) && block.position) {
+                const since = outOfReach.get(leafKey(block.position));
+                if (since !== undefined && Date.now() - since < CL.unreachableMs) return false;
+            }
             // Wood only on the surface: never a log underground (G3 round 5 A rerun).
             if (block.position && woodTarget && world.isUnderground(bot, block.position)) return false;
             if (exclude) {
@@ -963,7 +1029,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             return false;
         }
         try {
-            let success = false;
+            let success = false, unreachable = false;
             const before = heldByKey();
             const allBefore = allHeld();
             const breakIt = async () => {
@@ -982,6 +1048,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 if (isLeafBlock(block)) {
                     const r = await breakLeafFromGround(bot, block, run);
                     if (!r) givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                    // Round 9 B: out of reach after the walk is remembered, and uses no attempt (below).
+                    if (!r && !run.aborted) {
+                        outOfReach.set(leafKey(block.position), Date.now());
+                        unreachable = true;
+                    }
                     return r;
                 }
                 // A rule whose drop a tool changes is dug here too: bot.collectBlock.collect would
@@ -1013,6 +1084,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 log(bot, `Gave up on ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: time limit of ${secsText(blockMs)} reached.`);
             }
             else success = res;
+            if (unreachable && res !== TIMED_OUT) {
+                // Round 9 B: three leaves out of reach used all 3 attempts, and no tree was tried.
+                leafMisses++;
+                i--;
+                if (leafMisses === CL.unreachableLeaves)
+                    log(bot, `${leafMisses} leaves were out of reach from the ground; no more leaves in this collect.`);
+            }
             if (success) {
                 let gained = 1; // a block with no item (water): one per success
                 if (countsItems) {
@@ -1092,6 +1170,20 @@ function emptyFelled(bot, item) {
     if (!byItem.has(item)) byItem.set(item, new Set());
     return byItem.get(item);
 }
+
+/**
+ * Leaves this bot walked to and could not reach from the ground (G3 round 9 B: the same three leaves
+ * in five collects): position key -> time it was found out of reach. Kept for unreachableMs.
+ */
+const _unreachableLeaves = new WeakMap();
+function unreachableLeaves(bot) {
+    if (!bot || typeof bot !== 'object') return new Map();
+    if (!_unreachableLeaves.has(bot)) _unreachableLeaves.set(bot, new Map());
+    const byKey = _unreachableLeaves.get(bot);
+    for (const [k, since] of byKey) if (Date.now() - since >= COLLECT_LIMITS.unreachableMs) byKey.delete(k); // expired
+    return byKey;
+}
+const leafKey = (p) => `${p.x},${p.y},${p.z}`;
 
 let collectRouting = false; // collectByRoute's own collect does not take another route
 
@@ -3312,8 +3404,11 @@ const STOP_SETTLE_MS = 5000;
 /** collectBlock (G3 review of #221): per block, and for the whole run (!collectBlocks has 10 min). */
 // handFirstRadius, speciesDetour (blocks) and freeMisses: the #311 review's bounds on the stick
 // search (dead bushes near, not a walk; a species preference only between trees about as close;
-// at most this many zero-yield breaks that use no attempt).
-export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6 };
+// at most this many zero-yield breaks that use no attempt). unreachableLeaves: G3 round 9 B, leaves
+// that passed the ground check but were out of reach after the walk use no attempt, at most this
+// many per collect, then no more leaves in it; each is not tried again for unreachableMs.
+export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit
