@@ -247,3 +247,13 @@ test('nit 4: finding the tool gone does not use up an attempt', async (t) => {
     assert.match(bot.output, /No longer have a pickaxe of level 0 or lower to break stone; skipping those blocks\./);
     assert.match(bot.output, /Collected 1 pyrotech:rock \(1 pyrotech:rock:0\)\./);
 });
+
+test('#311 review: a by-hand rule that always yields (rock piles) gets no free attempts: a pile that gives nothing counts', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // A full inventory or a missed pickup: every pile breaks and gives nothing. Only rules whose yield
+    // can be 0 (rotn-data countRange.min 0: a dead bush) may break without using an attempt.
+    const piles = [1, 2, 3, 4, 5].map(x => block('pyrotech:rock', 0, at(x)));
+    const bot = fakeBot({ blocks: piles, dropsOf: () => [] });
+    assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 2), false);
+    assert.equal(bot.calls.dug.length + bot.calls.collected.length, 2, 'two attempts, not every pile in range');
+});
