@@ -196,6 +196,10 @@ test('goToGoal: a walk that never arrives ends at GO_TO_LIMITS; the search repor
     t.after(() => { skills.GO_TO_LIMITS.totalMs = saved; });
     skills.GO_TO_LIMITS.totalMs = 300;
     const bot = fakeBot({ blocks: [block('log', at(20))], arrive: 'never' });
+    // If the walk is ever unbounded again, the test fails at its timeout (T); this stop then ends
+    // the pending walk, so goToGoal clears its door-check setInterval and node --test can exit
+    // instead of hanging CI. After a passing run nothing is pending and it does nothing.
+    t.after(() => bot.pathfinder.stop());
     assert.equal(await skills.goToNearestBlock(bot, 'log', 4, 64), false);
     assert.equal(bot.calls.walks.length, 1, 'one walk');
     const { ms } = bot.calls.walks[0];
@@ -204,6 +208,8 @@ test('goToGoal: a walk that never arrives ends at GO_TO_LIMITS; the search repor
     // bound a walk has (GO_TO_LIMITS.stepMs, 15 s): 2 s leaves a loaded machine room for a late timer.
     assert.ok(ms >= 299 && ms < 2000, `the walk ran ${ms} ms; the limit is 300 ms`);
     assert.match(bot.output, /Found log at .*Navigating\.\.\./s);
+    // This line pins the exact limit: the message names the limit that ended the walk (0.3 s, the
+    // value set above). The 2000 ms above is only a ceiling on how late the timer may fire.
     assert.match(bot.output, /Pathfinding stopped: time limit of 0\.3 s reached\./);
 
     const b2 = fakeBot({ blocks: [block('log', at(20))] });
