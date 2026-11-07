@@ -1,12 +1,12 @@
 # Status: rotn-data
 
-Updated: 2026-11-07T14:35Z (from `date -u`)
+Updated: 2026-11-07T14:20Z (from `date -u`)
 
-Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/mob-digging`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/trunk-shell`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
 ## Now: trunk shells and digging mobs, from G3 round 9 B (lead task, 2026-11-07)
 
-- **(1) Trunk shell, #332 (`agent/rotn-data/trunk-shell`, `4e0662fe`): review APPROVE WITH NITS; it merges after the round 9 evidence #330. The three nits are folded into the digging PR, as you asked (see (2)).** Breaking a `dynamictrees:trunkshell` **fells the tree like a branch**, and the shell itself **drops nothing**. Cited from `DramaticTrees-1.12.2-0.13.4.jar` with javap only:
+- **(1) Trunk shell, this PR (`agent/rotn-data/trunk-shell`).** Breaking a `dynamictrees:trunkshell` **fells the tree like a branch**, and the shell itself **drops nothing**. Cited from `DramaticTrees-1.12.2-0.13.4.jar` with javap only:
   - **The break.** `BlockTrunkShell.removedByPlayer` passes the break to the thick trunk block next to it, at that block's position. The shell's meta (coredir n, nw, w, sw, s, se, e, ne) points to that block, on the same y. The trunk block's `BlockBranch.removedByPlayer` queues a `FutureBreak`, which runs `futureBreak` on the next world tick. That is the normal felling, so the drops are `fell-tree`'s.
   - **The shell's own drop:** null, with a drop count of 0.
   - **Where shells appear:** only around a trunk of radius 9 or more. Those are oak, spruce, jungle and dark oak `branch` metas 8-15 and the `branchx` blocks. Birch and acacia stop at radius 8.
@@ -18,6 +18,8 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
     - `trunk-shell.test.js` 6/6. It works out `coreOffsets` from the `Surround` bytecode, and checks `thickTrunks` against the dump.
     - rotn-data 162/162; skills-rotn's `fell_tree`, `collect_sticks`, `collect_rotn`, `fall_safety`, `axe_chop` and `agenda` 103/103; ESLint clean on the touched JS.
   - **Unverified:** what the server does after mineflayer finishes a shell dig early. My understanding of vanilla 1.12 is that it finishes the break itself once the real dig time has passed, but I haven't read that server code, and no run has broken a shell.
+- **(2) Digging mobs (Epic Siege Mod 13.169 + ESM-Tweaks): next PR, `agent/rotn-data/mob-digging`.** Findings so far are below and in my reply to the lead.
+  - **ESM-Tweaks is not in the pinned zip.** Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`, `config/mod-director/requisites.remote.json`) downloads it at server start, from a list on the RotN repo's moving `stable` branch, with no hash pinned. The dump manifest and the server ping both show `esmtweaks 0.4.5`. I disassembled the release jar `esmtweaks-1.12.2-0.4.5.jar` (SHA-256 `b57590bf...f933`) in my scratchpad; nothing went into the repo.
 - **(2) Digging mobs, this PR (`agent/rotn-data/mob-digging`).** New `3.3.4/mob-digging.json`, and `mobDigging(entity)` and `canMobDig(entity, block, { meta, held })` in `src/digging.js`.
   - **Who digs:** the 56 `config/esm/entity_ai.json` entries with `Digging: true`. ESM-Tweaks swaps ESM's own digger for its own at server start (`useTweakedAI=true`).
   - **Whether a mob needs a tool depends on its own entry.** ESM never merges an entry with the `default` block, and a missing boolean reads as false. `EsmJsonConfig.readJson` stores each entry as written; `CfgPropBoolean` reads keys with `JsonHelper.getBoolean(json, key, false)`.
@@ -584,5 +586,5 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- #332 `agent/rotn-data/trunk-shell` (`fell-tree.trunkShell`): APPROVE WITH NITS; it merges after #330.
+- `agent/rotn-data/trunk-shell` (`fell-tree.trunkShell`, from G3 round 9 B), opened 2026-11-07. #319, #312, #303 and #300 are merged.
 - `agent/rotn-data/mob-digging` (digging mobs, plus the #332 nits), opened 2026-11-07.
