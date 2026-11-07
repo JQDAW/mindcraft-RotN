@@ -1,16 +1,17 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (14:55 UTC, from `date -u`)
+Updated: 2026-11-07 (15:11 UTC, from `date -u`)
 
 ## Now: the `g4-death-report` fixes after the T1 rehearsal (this PR; the lead's decisions after T1). Next: the Mod Director downloads inventory (report first).
 
 - **`no_spam` is a loop test** (the ready-to-try wording: "without a chat-spam loop"):
   - it fails on a repeated line (near-identical lines count together), more than one death report, a spam kick, or the bot gone;
   - 40 lines a minute is a backstop only;
-  - the thresholds (4 a minute, 7 in 5 min) are calibrated on G3 rounds 2-9.
+  - the thresholds (4 a minute, 7 in 5 min) come from the G3 evidence: ordinary lines repeat at most 5 times in 5 min, while the reflex loops ("I'm dying!" 12, "Fighting zombie..." 9, "My brain disconnected" 6 in 60 s) fail, as intended;
+  - lines count together only when their keys are equal (no fuzzy match).
 - **`loss_reported`'s window runs from the kill**, and the respawn is dated by its first reading above 0.
 - **The counts are taken closer to the kill:** a pre-kill sweep, then the kill at once; each item is judged on the range of its last two counts.
-- **The loss comparison** sums variants and allows for variants among "and K more kinds" (at most K times the smallest named count).
+- **The loss comparison** sums variants and allows for variants among "and K more kinds": one shared budget of K times the smallest named count, and at most K unnamed items (#342 review). "Lost nothing" and "not reached" use the same bound.
 - **Not done (dropped):** the `stayed_online` window for `g3-first-night`. B's leave in round 9 was real: the agent's own `cleanKill` after an action refused to stop (#330, corrected).
 - **Tested:** `g4-death.test.js` 14 tests (5 new, failing on the old code), plus `g3-spend`: 95 pass. ESLint clean. `batch.mjs --preflight-files` passes (timeout 48 min).
 

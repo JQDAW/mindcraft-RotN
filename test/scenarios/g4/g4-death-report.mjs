@@ -40,10 +40,15 @@
 //                  ready-to-try item says "without a chat-spam loop"; the agent's normal narration ran 13-24 lines
 //                  a minute in T1, so a plain rate is no loop test):
 //                    - no line repeated: at most maxRepeatPerMin (4) of the same line in any 60 s, and at most
-//                      maxRepeatInWindow (7) in the window. "The same" is after chatLoopKey (case, numbers and
-//                      punctuation ignored), so near-identical lines count together. Calibrated on G3 rounds 2-9:
-//                      normal runs repeat a line at most 3-4 times a minute and 5 times in 5 min ("Picking up
-//                      item!", "agenda step ... started"); round 2 A's death loop said "I'm dying!" 12 times;
+//                      maxRepeatInWindow (7) in the window. "The same" means an EQUAL chatLoopKey (case, numbers
+//                      and punctuation ignored): lines that differ only there count together; there is no fuzzy
+//                      match, so lines that differ in any word count apart. Calibration (the committed G3 evidence,
+//                      rounds 2-9; any 60 s and any 5 min): ordinary narration and agenda lines repeat at most 5
+//                      times in 5 min and 2 in a minute ("Picking up item!", "agenda step sticks started").
+//                      Reflex lines do repeat: "I'm dying!" 12 in 5 min (4 in 60 s) and "Fighting
+//                      zombie_players:zombie_player!" 9 in 5 min (g3a-20261105-r2); "My brain disconnected, try
+//                      again." 9 in 5 min, 6 in 60 s (g3b-20261106-r3). All three fail at 4 and 7, as intended:
+//                      skills-rotn will rate-limit repeated reflex chat lines (lead, #342 review);
 //                    - at most one death report line;
 //                    - no spam kick, and the bot online throughout;
 //                    - a backstop only: at most maxChatPerMin (40) lines in any 60 s.
@@ -108,38 +113,58 @@ export function parseDeathReport(text) {
 /**
  * Is the report consistent with what the server counted? serverLoss: {id: n | [lo, hi]} for every counted item,
  * the server's loss as a number or as the range the pre-kill counts span (the bot may craft during a sweep).
- * The report's loss of an item is the sum of its named variants (parseDeathReport), R. If the report ends in
- * "and K more kinds", more variants of the same item may be among those K (T1: "3 rock_metamorphic:6" named, the
- * server counted 7 of all variants), and each unnamed kind is at most the smallest named count m (death_report.js
- * names the largest six first), so the report's true loss lies in [R, R + K * m]. Consistent when that range,
- * widened by the tolerance max(tolAbs, ceil(tolRel * max(server, reported))), meets the server's range. A report
- * that is not truncated must name every item the server surely lost (its range starts above 0). Items the
- * report names that the server did not count (not in lossItems) are not judged. Returns {ok, problems}.
+ * The report's loss of an item is the sum of its named variants (parseDeathReport), R. Per item, the tolerance is
+ * tol = max(tolAbs, ceil(tolRel * max(hi, R))).
+ * - Over-reporting: R - tol <= hi for every item.
+ * - Under-reporting: what the server counted beyond the named part, sum over items of max(0, lo - R - tol), must fit
+ *   in what "and K more kinds" can hold: K kinds of at most m each (m: the smallest named count; death_report.js
+ *   names the largest six first), ONE budget of K * m shared by all items (#342 review: never K * m per item). T1:
+ *   "3 rock_metamorphic:6" named, 7 of all variants counted, the rest among the 10 more kinds.
+ * - Each item the server surely lost (lo > 0) but the report does not name at all needs one of the K kinds, so
+ *   there are at most K such items; with no "more kinds" (K = 0) there are none: every sure loss must be named.
+ * - "lost nothing" fails if the server's count allows any loss (some hi > 0): the same bound the scenario uses for
+ *   "not reached" (nothing lost: every hi <= 0), so the two never disagree (#342 review).
+ * Items the report names that the server did not count (not in lossItems) are not judged. Returns {ok, problems}.
  */
 export function lossConsistency(serverLoss, report, { tolAbs = 2, tolRel = 0.25 } = {}) {
     const problems = [];
     const range = (v) => { const [a, b] = Array.isArray(v) ? v : [v, v]; return [Math.max(0, Math.min(a, b)), Math.max(0, a, b)]; };
-    const total = Object.values(serverLoss).reduce((a, v) => a + range(v)[0], 0);
-    if (total > 0 && report.nothing) problems.push(`the report says "lost nothing", but the server counts at least ${total} lost`);
-    const minNamed = report.named.length ? Math.min(...report.named.map((n) => n.count)) : 0;
-    const hidden = report.moreKinds > 0 ? report.moreKinds * minNamed : 0;
     const show = ([lo, hi]) => (lo === hi ? `${lo}` : `${lo}-${hi}`);
+    const most = lossUpperBound(serverLoss);
+    if (report.nothing) {
+        if (most > 0) problems.push(`the report says "lost nothing", but the server's count allows up to ${most} lost`);
+        return { ok: problems.length === 0, problems };
+    }
+    const K = report.moreKinds;
+    const m = report.named.length ? Math.min(...report.named.map((n) => n.count)) : 0;
+    const budget = K * m;
+    const beyond = [];
+    const unnamed = [];
     for (const [id, v] of Object.entries(serverLoss)) {
         const [lo, hi] = range(v);
         const R = report.items[id] ?? 0;
         const tol = Math.max(tolAbs, Math.ceil(tolRel * Math.max(hi, R)));
-        // Not truncated: death_report.js names every kind lost, so one the server surely lost (lo > 0) must be named.
-        const unnamed = R === 0 && lo > 0 && !report.moreKinds;
-        if (!unnamed && R - tol <= hi && lo <= R + hidden + tol) continue;
-        if (R === 0) problems.push(`the server counts ${show([lo, hi])} ${id} lost; the report does not name it${hidden ? ` (its ${report.moreKinds} more kinds hold at most ${hidden})` : ''}`);
-        else problems.push(`${id}: the report says ${hidden ? `${R} named (up to ${R + hidden} with its ${report.moreKinds} more kinds)` : R} lost, the server counts ${show([lo, hi])} (tolerance ${tol})`);
+        if (R - tol > hi) problems.push(`${id}: the report says ${R} lost, the server counts ${show([lo, hi])} (tolerance ${tol})`);
+        if (R === 0 && lo > 0) unnamed.push(`${show([lo, hi])} ${id}`);
+        const over = lo - R - tol;
+        if (over > 0) beyond.push({ id, over, text: `${id} ${show([lo, hi])} counted, ${R} named (tolerance ${tol})` });
     }
+    if (unnamed.length > K) {
+        problems.push(K ? `the server counts ${unnamed.length} items lost that the report does not name (${unnamed.join(', ')}), more than its ${K} more kinds`
+            : unnamed.map((u) => `the server counts ${u} lost; the report does not name it`).join('; '));
+    }
+    const sumOver = beyond.reduce((a, b) => a + b.over, 0);
+    if (sumOver > budget) problems.push(`the server counts ${sumOver} more than the report names, beyond the tolerance (${beyond.map((b) => b.text).join('; ')}); its ${K} more kinds hold at most ${budget}`);
     return { ok: problems.length === 0, problems };
 }
 
+/** The most the server's count allows to be lost in all: the sum of every item's upper bound (hi), never below 0. */
+export const lossUpperBound = (serverLoss) => Object.values(serverLoss).reduce((a, v) => a + Math.max(0, ...[v].flat()), 0);
+
 /**
  * The key two chat lines share when they are "the same line" for the loop test: lower case, every number one
- * '#', punctuation dropped, spaces collapsed. "Got 5 rocks!" and "got 7 rocks" share a key.
+ * '#', punctuation dropped, spaces collapsed. "Got 5 rocks!" and "got 7 rocks" share a key. The loop test groups
+ * lines by EQUAL keys only (no fuzzy or edit-distance match): "Got 5 rocks!" and "Got 5 more rocks" count apart.
  */
 export const chatLoopKey = (text) => String(text).toLowerCase().replace(/-?\d+(?:\.\d+)?/g, '#').replace(/[^\p{L}#\s]/gu, ' ').replace(/\s+/g, ' ').trim();
 
@@ -375,7 +400,7 @@ export default {
                 ctx.note('lossServer', lossServer);
                 // Nothing lost by the server's count (everything held was kept: main hand, off hand, armor, baubles):
                 // a report could only say "lost nothing", which proves nothing about reporting a loss (#320 review 2).
-                const total = Object.values(lossServer).reduce((a, v) => a + Math.max(0, ...[v].flat()), 0);
+                const total = lossUpperBound(lossServer);   // the same bound lossConsistency's "lost nothing" uses
                 if (total <= 0) lossNotReached = `the server counts no loss (everything held was kept: ${Object.entries(afterCounts).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ') || 'nothing'})`;
             }
             v0 = counterValue((await scores()).sc);

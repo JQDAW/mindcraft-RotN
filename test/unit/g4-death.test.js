@@ -9,7 +9,7 @@ import { runScenario } from '../runner/lib/runner.mjs';
 import { G3_CONSOLE_ALLOW, G4_TEST_SERVER_NOT_GATE, SCENARIO_CONSOLE_EXTRA, consoleAllowFor, crossCheckBatch, g3Policy, guardConsole, isG3Result } from '../runner/lib/g3.mjs';
 import { gateBatchProblems, scenarioTimeouts } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
-import g4d, { LOSS_ITEMS, chatLoopKey, lossConsistency, maxPerMinute, parseDeathReport, repeatedLines, reportBaseId, secondsBetween } from '../scenarios/g4/g4-death-report.mjs';
+import g4d, { LOSS_ITEMS, chatLoopKey, lossConsistency, lossUpperBound, maxPerMinute, parseDeathReport, repeatedLines, reportBaseId, secondsBetween } from '../scenarios/g4/g4-death-report.mjs';
 
 const NAME = 'FRCFLD';
 const tick = () => new Promise((r) => setImmediate(r));
@@ -189,7 +189,8 @@ describe('g4-death-report: the pure helpers', () => {
         const t1 = parseDeathReport('I died at -41, 67, -13; lost 10 dirt, 9 log, 6 planks, 4 betterwithmods:dirt_pile, 3 pyrotech_compat:rock_metamorphic:6, 3 sapling and 10 more kinds.');
         const single = { 'pyrotech_compat:rock_metamorphic': 7, 'pyrotech_compat:rock_sedimentary': 2, 'minecraft:stick': 4, 'minecraft:log': 11, 'minecraft:planks': 3, 'betterwithmods:dirt_pile': 4, 'minecraft:bread': 1, 'bundles:bundle': 1 };
         const one = lossConsistency(single, t1);
-        assert.deepEqual(one.problems.map((x) => x.split(':')[0] + ':' + x.split(':')[1]), ['minecraft:planks: the report says 6 named (up to 36 with its 10 more kinds) lost, the server counts 3 (tolerance 2)'.split(':').slice(0, 2).join(':')]);
+        assert.equal(one.ok, false);
+        assert.deepEqual(one.problems, ['minecraft:planks: the report says 6 lost, the server counts 3 (tolerance 2)'], 'planks is the only problem');
         // ... and pass on the range the two pre-kill sweeps give (3 then 6).
         assert.deepEqual(lossConsistency({ ...single, 'minecraft:planks': [3, 6] }, t1), { ok: true, problems: [] });
         // Without "more kinds", a named variant is the whole loss: 3 named of 7 counted fails.
@@ -198,18 +199,41 @@ describe('g4-death-report: the pure helpers', () => {
         assert.equal(lossConsistency({ 'pyrotech_compat:rock_metamorphic': 7 }, parseDeathReport('I died at 0, 0, 0; lost 4 pyrotech_compat:rock_metamorphic, 3 pyrotech_compat:rock_metamorphic:6.')).ok, true);
         // The hidden kinds are bounded: 3 named + 10 more kinds of at most 3 each, + tolerance 13, cannot reach 50.
         assert.equal(lossConsistency({ 'pyrotech_compat:rock_metamorphic': 50 }, t1).ok, false);
+        // #342 review probe: the K * m budget is ONE budget for all items, never K * m for each. 10 more kinds of at
+        // most 3 hold 30 in all; 40 log, 30 bread and 30 bundles counted against "9 log, 3 stick, ..." is 65 beyond.
+        const probe = parseDeathReport('I died at 0, 0, 0; lost 9 log, 3 stick, 3 a:b, 3 c:d, 3 e:f, 3 g:h and 10 more kinds.');
+        const wild = lossConsistency({ 'minecraft:log': 40, 'minecraft:bread': 30, 'bundles:bundle': 30 }, probe);
+        assert.equal(wild.ok, false);
+        assert.match(wild.problems.at(-1), /^the server counts 65 more than the report names, beyond the tolerance \(.*\); its 10 more kinds hold at most 30$/);
+        // Each item alone would fit in the budget (the old per-item rule passed all three): only the sum fails.
+        for (const [id, n] of [['minecraft:log', 40], ['minecraft:bread', 30], ['bundles:bundle', 30]]) assert.equal(lossConsistency({ [id]: n }, probe).ok, true, `${id} ${n} alone`);
+        // More unnamed items than "more kinds": each needs at least one of the K kinds.
+        const two = parseDeathReport('I died at 0, 0, 0; lost 9 log and 1 more kinds.');
+        const many = lossConsistency({ 'minecraft:log': 9, 'minecraft:bread': 1, 'bundles:bundle': 1 }, two);
+        assert.equal(many.ok, false);
+        assert.match(many.problems[0], /^the server counts 2 items lost that the report does not name \(1 minecraft:bread, 1 bundles:bundle\), more than its 1 more kinds$/);
         // A range that cannot meet the report still fails, and the message shows the range.
         const far = lossConsistency({ 'minecraft:log': [20, 24] }, parseDeathReport('I died at 0, 0, 0; lost 9 log.'));
         assert.equal(far.ok, false);
-        assert.match(far.problems[0], /the server counts 20-24 \(tolerance 6\)/);
+        assert.match(far.problems[0], /minecraft:log 20-24 counted, 9 named \(tolerance 6\)/);
         // A range from 0 (crafted during the counts) need not be named; a sure loss must be, when not truncated.
         assert.equal(lossConsistency({ 'minecraft:planks': [0, 4], 'minecraft:log': 5 }, parseDeathReport('I died at 0, 0, 0; lost 5 log.')).ok, true);
         assert.equal(lossConsistency({ 'minecraft:planks': [1, 4], 'minecraft:log': 5 }, parseDeathReport('I died at 0, 0, 0; lost 5 log.')).ok, false);
+        // #342 review: "lost nothing" and "not reached" use ONE bound (the upper end): ranges that all start at 0
+        // still allow a loss, so "lost nothing" fails against them, and the run is not "not reached" either.
+        const zeroToK = { 'minecraft:planks': [0, 4], 'minecraft:log': [0, 2] };
+        assert.equal(lossUpperBound(zeroToK), 6);
+        const nothing = lossConsistency(zeroToK, parseDeathReport('I died at 0, 0, 0; lost nothing.'));
+        assert.equal(nothing.ok, false);
+        assert.match(nothing.problems[0], /^the report says "lost nothing", but the server's count allows up to 6 lost$/);
+        assert.equal(lossUpperBound({ 'minecraft:log': 0, 'minecraft:stick': [0, 0] }), 0, 'nothing lost: the scenario says "not reached"');
+        assert.equal(lossConsistency({ 'minecraft:log': 0 }, parseDeathReport('I died at 0, 0, 0; lost nothing.')).ok, true);
     });
 
     test('chatLoopKey and repeatedLines: near-identical lines count together; T1\'s chat after the kill is no loop', () => {
         assert.equal(chatLoopKey('Got 5 rocks!'), chatLoopKey('got 12 rocks'));
         assert.notEqual(chatLoopKey('Got 5 rocks!'), chatLoopKey('Got 5 sticks!'));
+        assert.notEqual(chatLoopKey('Got 5 rocks!'), chatLoopKey('Got 5 more rocks'), 'equal keys only: no fuzzy match');
         const r = repeatedLines([{ t: 0, text: 'Picking up item!' }, { t: 10, text: 'picking up item' }, { t: 70, text: 'Picking up item!' }, { t: 5, text: 'Other' }]);
         assert.deepEqual(r[0], { key: 'picking up item', text: 'Picking up item!', in60: 2, total: 3 });
         // T1 (2026-11-07), the 17 lines in the 5 min after the kill, from its server.log:

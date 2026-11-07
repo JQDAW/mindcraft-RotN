@@ -481,14 +481,15 @@ Ready-to-try: "After death it respawns, reports what it lost and carries on with
   - `died`: `stat.deaths` rose, and the log has the bot's death line (`deathLines`).
   - `respawned`: `health` read 0 after the kill and then above 0 (if the 0 fell between two readings: above 0 once the death is confirmed and a second reading agrees), within `respawnS` (30) of the kill. The respawn is dated by the first reading above 0, not the confirming one (T1: 2 s, not 7). RotN's respawn timer is short (T1: under 2 s after a console kill).
   - `loss_reported` (not reached when the server counts no loss at all, everything held being kept, or when a count after the respawn is unread; #320 review): exactly one `I died at x, y, z[ (cause)]; lost ...[; XP level a -> b].` line from the bot from the kill to `reportS` (60) after the respawn reading (the report may come before that reading: T1's came 1 s before the confirming one), consistent with the server's count (`lossConsistency`):
-    - the report's loss of an item is the sum of its named variants (`log`, `log:1`, ...). If the report ends "and K more kinds", more variants may be among those K, each at most the smallest named count m, so the reported loss is the range R to R + K*m (T1: "3 rock_metamorphic:6" named, 7 of all variants counted);
-    - the server's loss is the range from the two pre-kill counts;
-    - the two ranges must meet, widened by max(2, 25 %);
-    - a report that is not truncated must name every item the server surely lost;
-    - "lost nothing" against a real loss fails;
+    - the report's loss of an item is the sum of its named variants (`log`, `log:1`, ...), R; the server's loss is the range lo to hi from the two pre-kill counts; the tolerance is max(2, 25 %);
+    - over-reporting: R - tolerance <= hi for every item;
+    - under-reporting: what the server counted beyond the named part and the tolerance, summed over all items, must fit in "and K more kinds": K kinds of at most m each (m, the smallest named count), **one budget of K*m for all items**, never K*m per item (#342 review). T1: "3 rock_metamorphic:6" named, 7 of all variants counted, the rest among the 10 more kinds;
+    - each item the server surely lost (lo > 0) but the report does not name needs one of the K kinds: at most K such items, so none when the report is not truncated;
+    - "lost nothing" fails if the server's count allows any loss (an upper end above 0), the same bound as "not reached" (#342 review);
     - items outside `lossItems` are not judged.
   - `no_spam` (lead decision after T1, 2026-11-07: the ready-to-try item says "without a chat-spam **loop**"; the agent's normal narration ran 13-24 lines a minute in T1, so a plain rate is no loop test). In the 5 min after the kill:
-    - no repeated line: at most `maxRepeatPerMin` (4) of the same line in any 60 s and `maxRepeatInWindow` (7) in the window. "The same" ignores case, numbers and punctuation (`chatLoopKey`), so near-identical lines count together. Calibrated on G3 rounds 2-9: normal runs repeat a line at most 3-4 times a minute and 5 times in 5 min ("Picking up item!", "agenda step ... started"); round 2 A's death loop said "I'm dying!" 12 times;
+    - no repeated line: at most `maxRepeatPerMin` (4) of the same line in any 60 s and `maxRepeatInWindow` (7) in the window. "The same" means an **equal** `chatLoopKey` (case, numbers and punctuation ignored): lines that differ only there count together, and there is no fuzzy match, so lines that differ in any word count apart;
+    - calibration, on the committed G3 evidence (rounds 2-9, any 60 s and any 5 min): ordinary narration and agenda lines repeat at most 5 times in 5 min and 2 in a minute ("Picking up item!", "agenda step sticks started"). Reflex lines do repeat: "I'm dying!" 12 in 5 min and "Fighting zombie_players:zombie_player!" 9 in 5 min (`g3a-20261105-r2`), "My brain disconnected, try again." 9 in 5 min and 6 in 60 s (`g3b-20261106-r3`). All three fail at 4 and 7, as intended: skills-rotn will rate-limit repeated reflex chat lines (lead, #342 review);
     - at most one death report line;
     - no spam kick, and online throughout;
     - a backstop only: at most `maxChatPerMin` (40) lines in any 60 s.
