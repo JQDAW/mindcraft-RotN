@@ -1,6 +1,16 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:58Z (from `date -u`)
+Updated: 2026-11-07T14:35Z (from `date -u`)
+
+## T1 add-on: the death chat line sums the variants of one item (branch `agent/skills-rotn/death-chat-variants`, 2026-11-07T14:35Z by `date -u`)
+
+- **Task (lead, 2026-11-07, low priority, optional):** the T1 death report worked (one report, 6 s after the kill, matching the inventory). The chat line listed the same item's variants apart.
+- **Change (`library/death_report.js`):** a new `sumVariants` sums the counts per item name, ignoring meta. The chat line uses it ("lost 7 pyrotech_compat:rock_metamorphic, …"). The log line and the LLM re-plan note keep the variants apart, because they matter for recipes. Names stay registry names; a prettier name ("metamorphic rock") would need rotn-data's display names, so I left that out.
+- **Tests (`death_report.test.js`, 1 new, 2 updated):**
+  - **New:** rock variants are summed, largest first.
+  - **Updated:** two expected chat lines now read "5 log" for "3 log:1, 2 log". The log and note expectations are unchanged.
+  - With the change: `death_report` and `threat_arbitration`, 27/27. Lint: 0 in both files.
+- **Noted (lead, from T1):** the bot narrates up to 24 chat lines a minute while working. That is not a bug, but I keep it in mind for new chat lines. The fixes above log most lines and say only a few.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 

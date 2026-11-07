@@ -70,6 +70,19 @@ export function lossDiff(before, after) {
     return lost.sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
+/**
+ * The same item's variants summed (T1, the lead: the chat line said "3 rock_metamorphic:6, 4
+ * rock_metamorphic:2"): "3 log:1, 2 log" -> "5 log", largest first. The log line keeps the variants.
+ */
+export function sumVariants(lost) {
+    const byName = new Map();
+    for (const l of lost) {
+        const name = l.key.replace(/:\d+$/, '');
+        byName.set(name, (byName.get(name) ?? 0) + l.count);
+    }
+    return [...byName].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+}
+
 /** "12 cobblestone, 3 log:1 and 5 more kinds" (at most `max` kinds named). */
 export function formatLoss(lost, max = 6) {
     if (!lost.length) return 'nothing';
@@ -138,6 +151,7 @@ export class DeathReporter {
         const xp = p.xpBefore != null && xpAfter != null && xpAfter < p.xpBefore ? `; XP level ${p.xpBefore} -> ${xpAfter}` : '';
         const cause = p.cause ? ` (${p.cause})` : '';
         const line = `died at ${at}${cause}; lost ${formatLoss(lost)}${xp}`;
+        const chatLine = `died at ${at}${cause}; lost ${formatLoss(sumVariants(lost))}${xp}`;
 
         let chat = null;
         const streak = this.deaths.filter(t => now - t < STREAK_MS).length;
@@ -148,7 +162,7 @@ export class DeathReporter {
             }
         } else {
             this.quietStreak = false;
-            if (now - this.lastChatAt >= CHAT_GAP_MS) chat = `I ${line}.`;
+            if (now - this.lastChatAt >= CHAT_GAP_MS) chat = `I ${chatLine}.`;
         }
         if (chat) this.lastChatAt = now;
         return { line, chat, lost, pos: p.pos, cause: p.cause, at: p.at, dimension: p.dimension, label: p.label || '', streak: streak >= STREAK_DEATHS };
