@@ -1,8 +1,20 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (05:07 UTC, from `date -u`)
+Updated: 2026-11-07 (14:55 UTC, from `date -u`)
 
-## Now: `g4-death-report` is built offline (this PR, for review); its T rehearsal run plan goes to the lead. No paid run without the human's GO.
+## Now: the `g4-death-report` fixes after the T1 rehearsal (this PR; the lead's decisions after T1). Next: the Mod Director downloads inventory (report first).
+
+- **`no_spam` is a loop test** (the ready-to-try wording: "without a chat-spam loop"):
+  - it fails on a repeated line (near-identical lines count together), more than one death report, a spam kick, or the bot gone;
+  - 40 lines a minute is a backstop only;
+  - the thresholds (4 a minute, 7 in 5 min) are calibrated on G3 rounds 2-9.
+- **`loss_reported`'s window runs from the kill**, and the respawn is dated by its first reading above 0.
+- **The counts are taken closer to the kill:** a pre-kill sweep, then the kill at once; each item is judged on the range of its last two counts.
+- **The loss comparison** sums variants and allows for variants among "and K more kinds" (at most K times the smallest named count).
+- **Not done (dropped):** the `stayed_online` window for `g3-first-night`. B's leave in round 9 was real: the agent's own `cleanKill` after an action refused to stop (#330, corrected).
+- **Tested:** `g4-death.test.js` 14 tests (5 new, failing on the old code), plus `g3-spend`: 95 pass. ESLint clean. `batch.mjs --preflight-files` passes (timeout 48 min).
+
+## Earlier: `g4-death-report` is built offline (this PR, for review); its T rehearsal run plan goes to the lead. No paid run without the human's GO.
 
 - **The scenario** (`test/scenarios/g4/g4-death-report.mjs`, G4 #6, gate G4, the real agent):
   1. the G2 world, production givers;

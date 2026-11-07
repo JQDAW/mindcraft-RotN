@@ -472,23 +472,29 @@ Ready-to-try: "After death it respawns, reports what it lost and carries on with
 - **Steps:**
   1. The G2 world, the production task givers. Objectives: `stat.deaths` (`g4d_d`), `health` (`g4d_h`) and (c)'s agenda counter (`g4d_a<n>`).
   2. After `warmMinutes` (3), the count-only `clear <bot> <item> -1 0` of each of `lossItems` (the early agenda's items and the first-join kit), every `heldPollS` (60) until the total reaches `minHeld` (6), at most `maxWaitHeldMin` (8).
-  3. `kill <bot>`. From then on, every time is the server's own (the reply lines' `hh:mm:ss`), never the runner's clock.
+  3. One more count of every item (the pre-kill sweep), then `kill <bot>` at once. One console call per item takes about a second, so a sweep spans about 15 s while the bot may craft (T1, 2026-11-07: planks counted 3 in the same second the bot crafted to 6). Each item's "before" is the range of its last two counts. From the kill on, every time is the server's own (the reply lines' `hh:mm:ss`), never the runner's clock.
   4. `scoreboard players list` every `pollMs` (2 s) until the respawn.
-  5. `afterRespawnS` (5) later, the same counts again. The server's loss per item is before - after; kept items (main hand, off hand, armor, baubles) are no loss on either side.
+  5. `afterRespawnS` (5) later, the same counts again. The server's loss per item is the range before - after; kept items (main hand, off hand, armor, baubles) are no loss on either side.
   6. The agenda counter every `counterPollMs` (60 s) until both `spamWindowMin` (5) after the kill and `resumeMinutes` (5) after the respawn have passed.
 - **Checks** (every window and limit compared 'equal'):
   - `had_items`: the server counts at least `minHeld` of the loss items before the kill. Otherwise everything after it is "not reached".
   - `died`: `stat.deaths` rose, and the log has the bot's death line (`deathLines`).
-  - `respawned`: `health` read 0 after the kill and then above 0 (if the 0 fell between two readings: above 0 once the death is confirmed), within `respawnS` (30) of the kill. RotN's respawn timer is about 7 s.
-  - `loss_reported` (not reached when the server counts no loss at all, everything held being kept, or when a count after the respawn is unread; #320 review): exactly one `I died at x, y, z[ (cause)]; lost ...[; XP level a -> b].` line from the bot after the kill, within `reportS` (60) of the respawn, consistent with the server's count (`lossConsistency`):
-    - per counted item, |reported - server| <= max(2, 25 %), because the counts run in the seconds before the kill;
-    - an item the server says was lost but the report does not name passes only if the report ends "and K more kinds" and the item's loss is no larger than the smallest named count (death_report.js names the six largest);
+  - `respawned`: `health` read 0 after the kill and then above 0 (if the 0 fell between two readings: above 0 once the death is confirmed and a second reading agrees), within `respawnS` (30) of the kill. The respawn is dated by the first reading above 0, not the confirming one (T1: 2 s, not 7). RotN's respawn timer is short (T1: under 2 s after a console kill).
+  - `loss_reported` (not reached when the server counts no loss at all, everything held being kept, or when a count after the respawn is unread; #320 review): exactly one `I died at x, y, z[ (cause)]; lost ...[; XP level a -> b].` line from the bot from the kill to `reportS` (60) after the respawn reading (the report may come before that reading: T1's came 1 s before the confirming one), consistent with the server's count (`lossConsistency`):
+    - the report's loss of an item is the sum of its named variants (`log`, `log:1`, ...). If the report ends "and K more kinds", more variants may be among those K, each at most the smallest named count m, so the reported loss is the range R to R + K*m (T1: "3 rock_metamorphic:6" named, 7 of all variants counted);
+    - the server's loss is the range from the two pre-kill counts;
+    - the two ranges must meet, widened by max(2, 25 %);
+    - a report that is not truncated must name every item the server surely lost;
     - "lost nothing" against a real loss fails;
     - items outside `lossItems` are not judged.
-  - `no_spam`: at most `maxChatPerMin` (10) chat lines from the bot in any 60 s of the 5 min after the kill (vanilla kicks at about 10 at once); no spam kick; online throughout.
+  - `no_spam` (lead decision after T1, 2026-11-07: the ready-to-try item says "without a chat-spam **loop**"; the agent's normal narration ran 13-24 lines a minute in T1, so a plain rate is no loop test). In the 5 min after the kill:
+    - no repeated line: at most `maxRepeatPerMin` (4) of the same line in any 60 s and `maxRepeatInWindow` (7) in the window. "The same" ignores case, numbers and punctuation (`chatLoopKey`), so near-identical lines count together. Calibrated on G3 rounds 2-9: normal runs repeat a line at most 3-4 times a minute and 5 times in 5 min ("Picking up item!", "agenda step ... started"); round 2 A's death loop said "I'm dying!" 12 times;
+    - at most one death report line;
+    - no spam kick, and online throughout;
+    - a backstop only: at most `maxChatPerMin` (40) lines in any 60 s.
   - `agenda_resumed`: the agenda counter rose within `resumeMinutes` after the respawn.
   - `no_cheat`: the console's kill is not a command the bot ran.
-- **Run time:** `runMinutes` 38.3 at the defaults, so the derived runner timeout is 47 min. A rehearsal batch takes `--ttl-hours 2` (47 + 5 + 20 build = 72 min).
+- **Run time:** `runMinutes` 39.8 at the defaults (one more count round, the pre-kill sweep), so the derived runner timeout is 48 min. A rehearsal batch takes `--ttl-hours 2` (48 + 5 + 20 build = 73 min).
 - **Offline test:** `test/unit/g4-death.test.js`. A fake server answers in 1.12's formats, and a fake agent dies, respawns and says death_report.js's line; each failure fails its own check. The wiring tests cover `kill` being refused for every G3 scenario, the G4 not-gate rule, `--gate` refused, and a gate claim refused.
 - **Evidence:** `test/evidence/g4/g4death-<date>-t<N>/` (t for test-server rehearsal), laid out like G3's, with a README that says "rehearsal, never G4 evidence".
 
