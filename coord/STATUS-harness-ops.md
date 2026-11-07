@@ -1,8 +1,21 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (14:14 UTC, from `date -u`)
+Updated: 2026-11-07 (15:11 UTC, from `date -u`)
 
-## Now: G3 smoke round 9 (670fe8aa, smoke) is over: 3/4, so no gate on this commit. T1 (the `g4-death-report` rehearsal) ran after it. Evidence: this PR.
+## Now: the `g4-death-report` fixes after the T1 rehearsal (this PR; the lead's decisions after T1). Next: the Mod Director downloads inventory (report first).
+
+- **`no_spam` is a loop test** (the ready-to-try wording: "without a chat-spam loop"):
+  - it fails on a repeated line (near-identical lines count together), more than one death report, a spam kick, or the bot gone;
+  - 40 lines a minute is a backstop only;
+  - the thresholds (4 a minute, 7 in 5 min) come from the G3 evidence: ordinary lines repeat at most 5 times in 5 min, while the reflex loops ("I'm dying!" 12, "Fighting zombie..." 9, "My brain disconnected" 6 in 60 s) fail, as intended;
+  - lines count together only when their keys are equal (no fuzzy match).
+- **`loss_reported`'s window runs from the kill**, and the respawn is dated by its first reading above 0.
+- **The counts are taken closer to the kill:** a pre-kill sweep, then the kill at once; each item is judged on the range of its last two counts.
+- **The loss comparison** sums variants and allows for variants among "and K more kinds": one shared budget of K times the smallest named count, and at most K unnamed items (#342 review). "Lost nothing" and "not reached" use the same bound.
+- **Not done (dropped):** the `stayed_online` window for `g3-first-night`. B's leave in round 9 was real: the agent's own `cleanKill` after an action refused to stop (#330, corrected).
+- **Tested:** `g4-death.test.js` 14 tests (5 new, failing on the old code), plus `g3-spend`: 95 pass. ESLint clean. `batch.mjs --preflight-files` passes (timeout 48 min).
+
+## Earlier: G3 smoke round 9 (670fe8aa, smoke) is over: 3/4, so no gate on this commit. T1 (the `g4-death-report` rehearsal) ran after it. Evidence: this PR.
 
 - **Under the human's written GOs** (round 9 at about 12:46 UTC; T1 at about 12:51 UTC, after the four batches), relayed by the lead. Each batch ran on its own fresh server after its own pre-checks, with no skip flags, no reruns and no retries. Every server, Primary IP and SSH key was verified gone (0/0/0 with `grep -c .`).
 - **Results:**
