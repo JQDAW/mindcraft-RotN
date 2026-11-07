@@ -225,3 +225,23 @@ test('round 9 B: an interrupted collect of any block stops at the next block, al
     await skills.collectBlock(bot, PILE, 40);
     assert.equal(calls.dug.length, 1);
 });
+
+test('#340 review 4: a walk the stop cancels (pathfinder.goto ends with PathStopped, goToGoal returns false): no dig and no other walk start', { timeout: 20000 }, async (t) => {
+    quiet(t);
+    const { bot, calls } = fakeBot({ field: 20 });
+    bot.entity.position = new Vec3(-10, 64, 0); // every block needs a walk
+    const gotos = [];
+    // What requestInterrupt does mid-walk: interrupt_code, then pathfinder.stop(), which ends the walk with PathStopped.
+    bot.pathfinder.goto = (goal) => {
+        gotos.push(goal);
+        bot.interrupt_code = true;
+        return Promise.reject(Object.assign(new Error('Path was stopped before it could be completed!'), { name: 'PathStopped' }));
+    };
+    const crafts = [];
+    t.mock.method(skills.COLLECT_ROUTE_OPS, 'craft', (b, name, n) => { crafts.push([name, n]); return Promise.resolve(true); });
+    assert.equal(await skills.collectBlock(bot, 'dirt', 10), false, bot.output);
+    assert.equal(gotos.length, 1, `one walk, then nothing: ${gotos.length} walks`);
+    assert.deepEqual(calls.dug, [], 'no dig at a block the bot did not reach');
+    assert.deepEqual(crafts, []);
+    assert.match(bot.output, /Walk stopped \(interrupted\)\./);
+});

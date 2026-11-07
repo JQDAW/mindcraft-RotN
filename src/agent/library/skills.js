@@ -992,7 +992,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 const avoid = avoidToolFor(block);
                 if (ruleTool || avoid || mc.mustCollectManually(block.name)) {
                     await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
-                    if (run.aborted) return false;
+                    // #340 nit 2: a stopped walk returns (goToGoal gives false on PathStopped): never a
+                    // dig at a block the bot did not reach.
+                    if (run.aborted || bot.interrupt_code) return false;
                     if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
                     await bot.dig(block);
                     if (run.aborted) return true; // broken; the gain is still counted below
@@ -1072,7 +1074,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Name what was really gained when it is not just the asked-for name (a rock can be an
     // Underground Biomes rock): "Collected 3 pyrotech:rock (2 pyrotech_compat:rock_metamorphic:0, ...)".
     // A run that ended up on a tree anyway (a pile, a pickup) climbs down before it returns.
-    if (!run.aborted && standsOnTree(bot)) await descendFromTree(bot, run);
+    if (!run.aborted && !bot.interrupt_code && standsOnTree(bot)) await descendFromTree(bot, run); // #340 nit 1: not after a stop
     // Sticks short (G3 round 5 A: no tree could be felled safely, 0 sticks): RotN keeps 2 planks
     // (ore:stickMat) -> 4 sticks in the inventory grid, so make the rest from held planks.
     let fromPlanks = 0;
@@ -1498,7 +1500,7 @@ export async function pickupNearbyItems(bot) {
         && itemOnGround(bot, entity));
     let nearestItem = getNearestItem(bot);
     let pickedUp = 0;
-    while (nearestItem) {
+    while (nearestItem && !bot.interrupt_code) { // #340 nit 3: a stop ends the pickups
         await goToGoal(bot, new pf.goals.GoalFollow(nearestItem, 1), { canDig: false });
         await new Promise(resolve => setTimeout(resolve, 200));
         let prev = nearestItem;

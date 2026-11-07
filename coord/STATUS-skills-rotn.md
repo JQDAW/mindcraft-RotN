@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T14:47Z (from `date -u`)
+Updated: 2026-11-07T15:10Z (from `date -u`)
 
 ## Round 9 B bug: !collectBlocks ignored a stop, and the agent was killed (branch `agent/skills-rotn/collect-honors-stop`, 2026-11-07T14:47Z by `date -u`)
 
@@ -15,6 +15,12 @@ Updated: 2026-11-07T14:47Z (from `date -u`)
   - The same for dirt piles with a cancelled walk (`PathStopped`).
   - **On develop both fail:** 40 digs after the stop.
   - With the fix: `dirt_piles`, `collect_sticks`, `collect_rotn`, `fall_safety`, `fell_tree`, `axe_chop`, `use_on` and `action_manager`, 102/102. Lint: no new errors (skills.js 20, as on develop; the test file 0).
+- **#340 review (lead, approved with nits on 8f5249c), answered (2026-11-07T15:10Z by `date -u`):**
+  1. The descent from a tree after the collect is skipped after a stop.
+  2. After a walk on the manual path, a stop returns at once, so there is no dig at a block the bot did not reach.
+  3. `pickupNearbyItems` stops on a stop.
+  4. **New test:** a real cancelled walk, where `pathfinder.goto` ends with `PathStopped` and `goToGoal` returns false: one walk, no dig, no craft. It fails on 8f5249c (a dig at the unreached block).
+  - Related files: 103/103. Lint unchanged (skills.js 20).
 - **The second death report** (driver.log 646, "lost 28 betterwithmods:dirt_pile", not in chat) is the intended rate limit. The first death's chat line went out at 13:35:31, the second death came at 13:36:04, and its report about 3 s after the respawn, within `CHAT_GAP_MS` (60 s), so it was log only.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
