@@ -20,7 +20,7 @@ import * as world from './world.js';
 
 const vanilla = minecraftData('1.12.2');
 const reg = { ...vanilla, blocks: { ...vanilla.blocks }, blocksByName: { ...vanilla.blocksByName }, blocksByStateId: { ...vanilla.blocksByStateId } };
-const MODDED = { 'dynamictrees:oakbranch': 4400, 'dynamictrees:leaves0': 4401, 'dynamictrees:rootydirt': 4402 };
+const MODDED = { 'dynamictrees:oakbranch': 4400, 'dynamictrees:leaves0': 4401, 'dynamictrees:rootydirt': 4402, 'dynamictrees:trunkshell': 4403 };
 // diggable, as forge-bridge's extendRegistry makes modded blocks (else the pathfinder never digs them).
 for (const [name, id] of Object.entries(MODDED)) { reg.blocks[id] = { id, name, diggable: true }; reg.blocksByName[name] = reg.blocks[id]; }
 // #259: what forge-bridge's applyCollisionShapes puts on modded entries. Molten tin: a liquid that
@@ -265,6 +265,33 @@ test('a Dynamic Trees branch is always cut the safe way (fellTree), whichever ru
     const bot = fakeBot({ blocks: { '3,66,0': BRANCH } });
     await skills.collectBlock(bot, BRANCH, 1);
     assert.deepEqual(bot.calls.collected, []);
+    assert.match(bot.output, /Not cutting the tree/);
+});
+
+test('round 9 B: a thick trunk\'s shell (dynamictrees:trunkshell) is a tree part: no leaf on it counts as from the ground, no walk breaks it, and it is only cut the safe way', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // Round 9 B (driver.log 131-133): leaves at y 73 on three corners of a 3x3 ring around (-70, -60),
+    // a thick trunk's shell, passed the ground check; each walk ended out of reach. And
+    // !collectBlocks("dynamictrees:trunkshell", 1) dug a shell as a plain block (driver.log 244).
+    const SHELL = 'dynamictrees:trunkshell';
+    const bot = fakeBot({ blocks: { '7,64,0': SHELL, '7,65,0': SHELL, '7,66,0': LEAVES, '9,66,0': SHELL } });
+    const shell = bot.blockAt(at(7, 64));
+    assert.equal(isTreePart(shell), true, 'a shell is part of a tree');
+    assert.equal(leafFromGround(bot, bot.blockAt(at(7, 66))), false, 'a leaf on a shell is not reachable from the ground');
+    assert.equal(fallSafe(new pf.Movements(bot)).safeToBreak(shell), false, 'no walk breaks a shell');
+    // rotn-data #332: a shell with no trunk next to it is air on the server (isAir), so no walk
+    // stands on any shell: on a live one it would be up a tree, on a leftover one it would fall.
+    const m = fallSafe(new pf.Movements(bot));
+    assert.ok(m.exclusionStep(bot.blockAt(at(9, 67))) >= 100, 'never a step onto a shell (here one with no trunk)');
+    assert.equal(m.exclusionStep(bot.blockAt(at(1, 64))), 0, 'a step on dirt');
+    bot.entity.position = at(7, 66).offset(0.5, 0, 0.5);
+    bot.world.set('7,66,0', 'air');
+    assert.equal(standsOnTree(bot), true, 'standing on a shell is standing on a tree');
+    bot.entity.position = at(0).offset(0.5, 0, 0.5);
+
+    // Collected, it goes to fellTree (here no trunk in sight: refused), never a plain dig or collect().
+    await skills.collectBlock(bot, SHELL, 1);
+    assert.deepEqual([bot.calls.collected, bot.calls.digs], [[], []]);
     assert.match(bot.output, /Not cutting the tree/);
 });
 

@@ -2,6 +2,26 @@
 
 Updated: 2026-11-07T07:10Z (from `date -u`)
 
+## No chat-spam loop from reflexes: an identical line at most once a minute (branch `agent/skills-rotn/chat-repeat-limit`, 2026-11-07T15:14Z by `date -u`)
+
+- **Task (lead, 2026-11-07, low priority):** reflex chat repeated identical lines: "I'm dying!" 12 times in 5 min (`g3a-20261105-r2`), "Fighting zombie_players:zombie_player!" 9 times in 5 min, and "My brain disconnected, try again." 6 times in 60 s (`g3b-20261106-r3`). Ready-to-try needs no chat-spam loop, and harness-ops' G4 `no_spam` fails at 4 identical lines a minute or 7 in 5 min.
+- **Change:**
+  - **New `chat_repeat.js`:** a per-agent limiter that lets an identical text go to chat at most once per `CHAT_REPEAT_MS` (60 s). The rest are logged ("[reflex] not repeated in chat (said within 60 s): …").
+  - **`modes.js` `say`:** every reflex line uses it. The behavior log still keeps every line.
+  - **`agent.js` `routeResponse`:** limits only the models' "My brain disconnected" reply (the text comes from `src/models/*`, which is lead-owned); other replies are never held back.
+  - At most 5 identical lines in 5 min, under the G4 thresholds.
+- **#344 review (lead, approved with nits on 262765a), answered (2026-11-07T15:29Z by `date -u`):**
+  1. A line counts as said only when the chat limit really sent it: `chat_limit.js` emits `rotnChatSent` with the text, and only that starts the 60 s. With the limit off, a line counts when it is handed to chat. A line still waiting in the queue holds an identical one back for at most `PENDING_MS` (the limit's `lowMaxWaitMs`, 15 s), so a dropped line never blocks the text for a minute.
+  2. "Identical" is harness-ops' `chatLoopKey` (#342), copied exactly: case, numbers and punctuation ignored.
+  3. The PR body notes that the brain-line limit also covers `convoManager.sendToBot`.
+  - **Tests:** 2 new, and test 1 moved to the new limiter interface; both fail on 262765a. 7 related files: 90/90. Lint unchanged.
+- **Tests (new `chat_repeat.test.js`, 3):**
+  - the limiter;
+  - "I'm dying!" 12 times in 5 min reaches chat 4 times, and the behavior log keeps all 12;
+  - the brain line 6 times in 60 s reaches chat once, while a normal reply goes out every time.
+  - **On develop's `modes.js` and `agent.js`:** 12 lines and 6 lines in chat, so the 2 behaviour tests fail.
+  - With the change: `chat_repeat`, `chat_limit`, `threat_arbitration`, `quiet_reflexes`, `update_loop`, `priority` and `log_hygiene`, 88/88. Lint unchanged (modes.js 28, agent.js 11; the new files 0).
+
 ## Decision (1) after round 9 B: low health in the night shelter, the bot stays (branch `agent/skills-rotn/shelter-hold-flee`, stacked on #331; 2026-11-07T14:48Z by `date -u`)
 
 - **Task (lead, 2026-11-07):** "self-preservation in an open shelter at night: stay put, eat, block or fight within reach; leave only for fire, lava or drowning". A new PR after #331, with nothing pushed to #331.
