@@ -1,0 +1,42 @@
+[test-server 13:00:01] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --max-batch-usd 2 --logs-out <local>/captures/raw/r9-g3b/server --summary <local>/captures/raw/r9-g3b/batch.json --scenario g3-first-night --out <local>/captures/raw/r9-g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 13:00:02] preflight passed: driver, profile, model and settings checked; the key's usage can be read; the LLM probe answered (HTTP 200, provider Wafer, z-ai/glm-5.3-flash); 1 scenario(s) (timeouts: g3-first-night 67 min); a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[test-server 13:00:10] sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15.2, 14.7 min, newest 42373882689 14.6 min ago
+[test-server 13:00:10] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 3h, sweeper deletes it) ~4 billed hours, EUR 0.55 plus Primary IPv4
+[test-server 13:00:10] creating mcr-test-20261107-130003: delete-after 2026-11-07T16:00:10Z (TTL 3h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 13:00:20] server mcr-test-20261107-130003 is at <ip>
+[test-server 13:00:20] waiting for SSH and the build (up to 120 min)
+[test-server 13:00:30] phase: unreachable
+[test-server 13:00:46] phase: booting:running
+[test-server 13:01:02] phase: pack
+[test-server 13:01:17] phase: starting
+[test-server 13:03:07] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 13:03:08] READY: mcr-test-20261107-130003 at <ip>:25565 (delete-after 2026-11-07T16:00:10Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261107-130003
+[test-server 13:03:08] running: node test/runner/batch.mjs --max-batch-usd 2 --logs-out <local>/captures/raw/r9-g3b/server --summary <local>/captures/raw/r9-g3b/batch.json --scenario g3-first-night --out <local>/captures/raw/r9-g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 13:03:08] batch 20261107T130308-610312: a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[batch 13:03:08] g3-first-night: start (spent so far USD 0 of 2; runner timeout 67 min, derived 67)
+[scenario 13:03:08] g3-first-night (G3) run 20261107t130308-fecf1a; git 670fe8aa2f29ba9b726adcf5b20f2c9be0b68b5e; driver: node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json; out: <local>/captures/raw/r9-g3b/night
+[scenario 13:04:14] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 13:04:58] PASS fresh_start: none of 24 target items held; the pack's first-join Bread and Bundle seen
+[scenario 13:36:11] FAIL survived_night: no dawn (the bot died: <bot> was slain by Zombie); stat.deaths 2; death lines 2: <bot> was slain by Zombie
+[scenario 13:36:12] FAIL stayed_online: lost (Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer); left
+[scenario 13:36:12] PASS no_cheat: nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)
+[scenario 13:36:12] g3-first-night: 27 LLM requests (21 replies, 6 memory summaries, 0 failed), USD 0.002648
+[scenario 13:36:12] g3-first-night: LLM providers: Wafer: 27 requests (0 empty), summaries 6 ok, 0 empty
+[scenario 13:36:12] g3-first-night: model openrouter/@preset/glm-5-3-flash-cheap-reliable
+[scenario 13:36:13] g3-first-night: FAIL; 3 passed, 2 failed (<local>/captures/raw/r9-g3b/night/result.json)
+<local>/captures/raw/r9-g3b/server
+BATCH {"batchId":"20261107T130308-610312","testMode":false,"gate":false,"smoke":true,"maxBatchUsd":2,"scenarios":[{"id":"g3-first-night","out":"<local>/captures/raw/r9-g3b/night","runId":"20261107t130308-fecf1a","exit":1,"spentBefore":0,"timeoutMin":67}],"stopped":null,"usageAtStart":0.882239435,"usageAtEnd":0.885695176,"spentUsd":0.003456,"exit":1,"logsFetched":true}
+[test-server 13:36:14] command exited with 1
+[test-server 13:36:14] EXIT trap: tearing down mcr-test-20261107-130003
+[test-server 13:36:14] deleting batch mcr-test-20261107-130003 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261107-130003)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 13:36:24] batch mcr-test-20261107-130003: ran 36 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 13:36:24] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261107-130003
+exit 1

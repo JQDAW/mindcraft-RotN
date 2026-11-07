@@ -1,0 +1,23 @@
+{
+  "batchId": "20261107T135214-617684",
+  "testMode": false,
+  "gate": false,
+  "smoke": true,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g3-untrusted-refused",
+      "out": "<local>/captures/raw/r9-g3d/untrusted",
+      "runId": "20261107t135214-f2219b",
+      "exit": 0,
+      "spentBefore": 0,
+      "timeoutMin": 16
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.893069312,
+  "usageAtEnd": 0.894916116,
+  "spentUsd": 0.001847,
+  "exit": 0,
+  "logsFetched": true
+}
