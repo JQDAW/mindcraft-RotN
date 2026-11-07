@@ -1,0 +1,301 @@
+{
+  "scenario": "g3-task-preempts-agenda",
+  "gate": "G3",
+  "title": "A task giver's task interrupts the agent's agenda; the agent does it, reports, and its agenda resumes (the server checks)",
+  "runId": "20261107t031934-090f5a",
+  "pass": true,
+  "checksPassed": true,
+  "gateValid": true,
+  "weakenedParams": [],
+  "verdict": "PASS",
+  "passed": 7,
+  "failed": 0,
+  "durationS": 430,
+  "params": {
+    "bot": "<bot>",
+    "worldSeed": "1880465901402976865",
+    "marker": "-42,68,-50",
+    "agendaCounter": "stat.mineBlock.pyrotech.rock,stat.mineBlock.pyrotech_compat.rock_igneous,stat.mineBlock.pyrotech_compat.rock_metamorphic,stat.mineBlock.pyrotech_compat.rock_sedimentary,stat.mineBlock.minecraft.log,stat.mineBlock.minecraft.log2,stat.craftItem.pyrotech.crude_axe,stat.craftItem.contenttweaker.crafting_tools,stat.craftItem.minecraft.crafting_table,stat.craftItem.minecraft.stone_pickaxe,stat.craftItem.minecraft.stone_axe",
+    "cancelS": 30,
+    "warmMinutes": 5,
+    "activeWaitMinutes": 5,
+    "acceptS": 60,
+    "taskMinutes": 5,
+    "resumeMinutes": 5,
+    "maxBatchUsd": 2,
+    "loginTimeoutMs": 240000,
+    "counterPollMs": 60000,
+    "taskPollMs": 5000,
+    "pollMs": 1000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "lateReplyMs": 5000,
+    "latePollMs": 1000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the bot makes it log in with its own account (online mode)"
+    },
+    {
+      "check": "fresh_bot_state",
+      "pass": true,
+      "detail": "the driver moved aside: agenda.json.g3-2026-11-07T03-19-38-106Z.bak, memory.json.g3-2026-11-07T03-19-38-106Z.bak",
+      "readyToTry": "The bot starts with no task queue or agenda state from an earlier run"
+    },
+    {
+      "check": "agenda_active",
+      "pass": true,
+      "detail": "counter 3 -> 9 over 5 min (11/11 objectives)",
+      "readyToTry": "Left alone, it pursues its agenda (the server's agenda counter rises)"
+    },
+    {
+      "check": "task_accepted",
+      "pass": true,
+      "detail": "task t1 accepted: go to the gold block at -42 68 -50 and stand on it",
+      "readyToTry": "A task giver's task is accepted in chat"
+    },
+    {
+      "check": "task_done",
+      "pass": true,
+      "detail": "the server found the bot on the marker at minute 5.6; the bot said \"task t1 done\"; the agenda was paused for it",
+      "readyToTry": "It does the task (the server finds it on the marker) and reports it done"
+    },
+    {
+      "check": "agenda_resumed",
+      "pass": true,
+      "detail": "counter 10 -> 13 within 5 min after the done line (the agent said \"agenda resumed\")",
+      "readyToTry": "Afterwards its agenda resumes (the counter rises again)"
+    },
+    {
+      "check": "no_cheat",
+      "pass": true,
+      "detail": "nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)",
+      "readyToTry": "No give, game mode change, op or command by the bot during the run (the pack's first-join commands aside)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "counterObjectives": [
+      {
+        "obj": "g3c_a0",
+        "criteria": "stat.mineBlock.pyrotech.rock",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a1",
+        "criteria": "stat.mineBlock.pyrotech_compat.rock_igneous",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a2",
+        "criteria": "stat.mineBlock.pyrotech_compat.rock_metamorphic",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a3",
+        "criteria": "stat.mineBlock.pyrotech_compat.rock_sedimentary",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a4",
+        "criteria": "stat.mineBlock.minecraft.log",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a5",
+        "criteria": "stat.mineBlock.minecraft.log2",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a6",
+        "criteria": "stat.craftItem.pyrotech.crude_axe",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a7",
+        "criteria": "stat.craftItem.contenttweaker.crafting_tools",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a8",
+        "criteria": "stat.craftItem.minecraft.crafting_table",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a9",
+        "criteria": "stat.craftItem.minecraft.stone_pickaxe",
+        "result": "added"
+      },
+      {
+        "obj": "g3c_a10",
+        "criteria": "stat.craftItem.minecraft.stone_axe",
+        "result": "added"
+      }
+    ],
+    "counterReadings": [
+      {
+        "label": "start",
+        "min": 0.6,
+        "value": 3
+      },
+      {
+        "label": "before the task",
+        "min": 5,
+        "value": 9
+      },
+      {
+        "label": "at the done line",
+        "min": 5.7,
+        "value": 10
+      },
+      {
+        "label": "after the task",
+        "min": 6.7,
+        "value": 13
+      }
+    ],
+    "markerPreflight": [
+      {
+        "cell": [
+          -42,
+          69,
+          -50
+        ],
+        "air": true,
+        "detail": "air"
+      },
+      {
+        "cell": [
+          -42,
+          70,
+          -50
+        ],
+        "air": true,
+        "detail": "air"
+      }
+    ],
+    "marker": {
+      "at": [
+        -42,
+        68,
+        -50
+      ],
+      "reply": "[03:24:51] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Block placed",
+      "goldBlock": true,
+      "detail": "found"
+    },
+    "agendaAtTask": {
+      "active": true,
+      "waitedS": 1,
+      "last": "agenda step crude_axe started: craft a crude axe"
+    },
+    "task": {
+      "giver": "Server",
+      "text": "go to the gold block at -42 68 -50 and stand on it",
+      "sentMin": 5.2
+    },
+    "taskResult": {
+      "id": "t1",
+      "onMarkerMin": 5.6,
+      "report": "task t1 done",
+      "preempted": true
+    },
+    "agendaChat": [
+      "agenda step rocks started: collect 6 rocks",
+      "agenda step rocks done",
+      "agenda step sticks started: collect 3 sticks",
+      "agenda step shelter_blocks started: keep 10 blocks for the night's shelter",
+      "agenda resumed: sticks",
+      "agenda steps done: sticks, logs",
+      "agenda step crude_axe started: craft a crude axe",
+      "agenda step crude_axe done",
+      "agenda step first_plank started: make the first plank",
+      "task t1 accepted: go to the gold block at -42 68 -50 and stand on it",
+      "agenda paused for task t1",
+      "task t1 started: go to the gold block at -42 68 -50 and stand on it",
+      "task t1 done",
+      "agenda resumed: first_plank",
+      "agenda step first_plank done",
+      "agenda step crafting_tools started: craft Crafting Tools",
+      "agenda step crafting_tools done",
+      "agenda step crafting_table started: craft a crafting table",
+      "agenda step crafting_table done",
+      "agenda step planks_sticks started: make planks and sticks at the table",
+      "agenda step planks_sticks done",
+      "agenda step stone_pickaxe started: craft a stone pickaxe",
+      "agenda step stone_pickaxe done",
+      "agenda step shelter_blocks started: keep 10 blocks for the night's shelter"
+    ],
+    "packFirstJoin": [
+      "gamerule_commandBlockOutput",
+      "gamerule_sendCommandFeedback",
+      "give_bread",
+      "give_bundle"
+    ],
+    "packRepeats": [
+      "gamerule_commandBlockOutput at 03:24:46",
+      "gamerule_sendCommandFeedback at 03:24:46"
+    ]
+  },
+  "botExitCode": 0,
+  "botExitSignal": null,
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "e5029f2307a5ab7251164de59c45d790f9d015e2",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261107-031613",
+  "driver": "node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json",
+  "llm": {
+    "models": {
+      "model": "openrouter/@preset/glm-5-3-flash-cheap-reliable",
+      "code_model": null,
+      "vision_model": null
+    },
+    "calls": 51,
+    "replies": {
+      "ok": 39,
+      "memory": 12,
+      "failed": 0,
+      "disconnected": 0,
+      "empty": 0,
+      "memoryEmpty": 0
+    },
+    "httpErrors": {},
+    "providers": {
+      "Wafer": {
+        "requests": 51,
+        "empty": 0,
+        "summaries": {
+          "ok": 11,
+          "empty": 0,
+          "failed": 0
+        }
+      }
+    },
+    "summariesUnattributed": {
+      "ok": 1,
+      "empty": 0,
+      "failed": 0
+    },
+    "usageBefore": 0.867001713,
+    "usageAfter": 0.874029605,
+    "usd": 0.007028,
+    "error": null
+  },
+  "batch": "20261107T031934-280438:2"
+}
