@@ -24,6 +24,20 @@ Updated: 2026-11-07T07:10Z (from `date -u`)
   3. (optional, done) `TaskQueue.setStatus` drops a task from `requeuedAtLoad` once it is closed (done, failed or cancelled) before it restarts. Test added.
   - Tests: 382 run, 381 pass, 1 skipped (`test/unit`), 0 fail. Lint 0 in the touched files.
 
+## Round 9 B fix (a): leaves out of reach no longer use up the stick attempts (branch `agent/skills-rotn/sticks-unreachable-leaves`, 2026-11-07T14:07Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 1):** in round 9 B, `!collectBlocks("stick", 3)` reached none of three leaves at y 73 that had passed the ground check. Each logged "Could not reach … from the ground; skipping it" and used one of the 3 attempts, so the run ended "Collected 0 stick." and no tree was tried (`r9-g3b/night/driver.log` 128-134). Four more collects tried the same three leaves (149-151, 207-209, 264-266).
+- **Change (`skills.js` `collectBlock`):**
+  - A leaf that is out of reach after the walk uses no attempt.
+  - After `COLLECT_LIMITS.unreachableLeaves` (3) such leaves, the collect takes no more leaves and says so. Trees and far dead bushes then get the attempts.
+  - Each such leaf is remembered for this bot for `unreachableMs` (10 min), so the next collect does not walk to it again.
+- **Tests (`collect_sticks.test.js`, 2 new):** the fake gains loose leaves and walks that get nowhere.
+  - The round 9 B shape: 3 unreachable leaves, then a tree within 2 attempts, and the next collect does not walk to those leaves.
+  - The cap of 3 per collect.
+  - **Both fail on develop:** "Collected 0 stick." after the "Could not reach" lines, and `unreachableLeaves` undefined.
+  - With the fix: `collect_sticks` 12/12. `collect_rotn`, `fall_safety`, `fell_tree`, `dirt_piles` and `axe_chop`: 72/72. Lint: no new errors (skills.js has the same 20 upstream errors as on develop; the test file has 0).
+- **Next:** (b), `trunkshell` as a tree part, on its own branch. Request to rotn-data via the lead: confirm from the Dynamic Trees jar that breaking `dynamictrees:trunkshell` fells the tree (`BlockTrunkShell` forwarding the break to the thick branch inside).
+
 ## G4 item 3 prep: stop, follow, come (branch `agent/skills-rotn/g4-control-prep`, branch only while develop is frozen; 2026-11-07T05:50Z by `date -u`)
 
 - **Task (lead, 2026-11-07):** check offline that `!stop`, `!followPlayer` and `!goToPlayer` work on 1.12.2 with RotN's pathfinder settings and the task-giver rules; add tests for any gap; fix on the branch only. The branch also has the two cosmetic nits after #321.
