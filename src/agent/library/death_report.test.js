@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { setImmediate } from 'node:timers';
 import {
-    inventoryCounts, lossDiff, formatLoss, DeathReporter, bindDeathReport,
+    inventoryCounts, lossDiff, formatLoss, sumVariants, DeathReporter, bindDeathReport,
     SETTLE_MS, RESPAWN_RETRY_MS, RESPAWN_RETRY_EVERY_MS, CHAT_GAP_MS, STREAK_MS,
     deathCauseText, treeDeath, TREE_DEATH_MS, deathSpotBlocked, DEATH_SPOT_WAIT_MS, DROPS_LAST_MIN, lostItemsNote,
 } from './death_report.js';
@@ -42,7 +42,8 @@ test('D3: the "before" is the fullest recent sample (slots clear a tick before h
     assert.equal(d.died({ now: 1100 }), null, 'a second death event for the same death');
     const r = d.report(invBot(kept(), { xp: 5 }), { now: 10_000 });
     assert.equal(r.line, 'died at 10, 64, -4 (FRCFLD was slain by Zombie); lost 12 cobblestone, 5 bread, 3 log:1, 2 log; XP level 10 -> 5');
-    assert.equal(r.chat, `I ${r.line}.`);
+    // T1 add-on: in chat the same item's variants are summed (3 log:1 and 2 log: 5 log); the log keeps them.
+    assert.equal(r.chat, 'I died at 10, 64, -4 (FRCFLD was slain by Zombie); lost 12 cobblestone, 5 bread, 5 log; XP level 10 -> 5.');
     assert.equal(d.report(invBot(kept()), { now: 11_000 }), null, 'reported once');
 
     // A stale death message does not name a later death.
@@ -127,7 +128,8 @@ test('D3: the agent samples while alive, retries a refused respawn, reports once
     timers.advance(10 * RESPAWN_RETRY_EVERY_MS);
     assert.equal(calls.respawn, 3, 'no retry after the respawn');
     await new Promise(r => setImmediate(r));
-    assert.deepEqual(calls.chat, ['I died at 100, 70, 200 (FRCFLD was blown up by Creeper); lost 12 cobblestone, 5 bread, 3 log:1, 2 log.']);
+    // T1 add-on: chat sums the variants (5 log); the log line and the re-plan note keep them apart.
+    assert.deepEqual(calls.chat, ['I died at 100, 70, 200 (FRCFLD was blown up by Creeper); lost 12 cobblestone, 5 bread, 5 log.']);
     assert.ok(logs.includes('[death] died at 100, 70, 200 (FRCFLD was blown up by Creeper); lost 12 cobblestone, 5 bread, 3 log:1, 2 log'), logs.join('\n'));
     assert.equal(agent.replan.modes.death, 1);
     assert.equal(agent.replan.interrupted, 'action:collectBlocks', 'the label captured at death');
@@ -336,4 +338,20 @@ test('#268 review 1: a falling-tree death says whether the last cut was from und
         const line = lines.filter(l => l.startsWith('[death]')).at(-1) ?? '';
         assert.match(line, underLeaves ? /\[its last cut was from under the tree's leaves\]/ : /\[its last cut was from under no canopy\]/, line);
     }
+});
+
+test('T1 add-on: the chat line sums the variants of one item ("7 pyrotech_compat:rock_metamorphic"); the log line keeps them apart', () => {
+    const lost = [{ key: 'pyrotech_compat:rock_metamorphic:6', count: 4 }, { key: 'pyrotech_compat:rock_igneous:7', count: 3 },
+        { key: 'pyrotech_compat:rock_metamorphic:2', count: 3 }, { key: 'pyrotech_compat:rock_sedimentary', count: 5 }];
+    assert.deepEqual(sumVariants(lost), [{ key: 'pyrotech_compat:rock_metamorphic', count: 7 },
+        { key: 'pyrotech_compat:rock_sedimentary', count: 5 }, { key: 'pyrotech_compat:rock_igneous', count: 3 }]);
+    assert.equal(formatLoss(sumVariants(lost)), '7 pyrotech_compat:rock_metamorphic, 5 pyrotech_compat:rock_sedimentary, 3 pyrotech_compat:rock_igneous');
+    assert.deepEqual(sumVariants([]), []);
+});
+
+test('#338 review: metas that are different items stay apart in chat (lapis and bone meal, charcoal, the enchanted apple)', () => {
+    const lost = [{ key: 'dye:4', count: 5 }, { key: 'dye:15', count: 3 }, { key: 'coal', count: 2 }, { key: 'coal:1', count: 4 },
+        { key: 'golden_apple:1', count: 1 }, { key: 'golden_apple', count: 1 }, { key: 'log:1', count: 2 }, { key: 'log', count: 2 }];
+    assert.deepEqual(sumVariants(lost).map(l => `${l.count} ${l.key}`).sort(),
+        ['1 golden_apple', '1 golden_apple:1', '2 coal', '3 dye:15', '4 coal:1', '4 log', '5 dye:4'].sort());
 });
