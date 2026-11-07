@@ -301,7 +301,11 @@ function taskTick(agent, task, now) {
         agent._task_id = task.id;
         agent._task_stopped_at = undefined;
         agent._task_paused = false;
-        say(agent, `task ${task.id} started: ${oneLine(task.text, 120)}`);
+        // A task that was running when the process stopped (re-queued at load) is reported as such
+        // (G4 #11 prep), so a restart never looks like a new task; its spent budget is kept. The line
+        // keeps the "task <id> started" form the harness parses (g3-untrusted-refused TASK_TAKEN).
+        const afterRestart = queue.requeuedAtLoad?.delete(task.id) === true;
+        say(agent, `task ${task.id} started: ${oneLine(task.text, 120)}${afterRestart ? ' (resumed after a restart)' : ''}`);
     } else if (agent._task_id !== task.id) {
         agent._task_id = task.id; // active already (stored as active, or taken over within this process)
         agent._task_stopped_at = undefined;

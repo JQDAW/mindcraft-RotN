@@ -25,6 +25,11 @@ if (/rotn-test phase/.test(remote)) {
     process.stdout.write('phase=ready\njava_version=openjdk version "1.8.0_504"\nonline_mode=true\n');
 } else if (/rotn-test console/.test(remote)) {
     process.stdout.write('[Server thread/INFO]: fake console output\n');
+} else if (/rotn-test restart/.test(remote)) {
+    // FAKE_SSH_RESTART_EXIT: the helper's exit (4: did not stop, 5: no new Done line); 0 prints the restarted line.
+    const code = Number(process.env.FAKE_SSH_RESTART_EXIT || 0);
+    if (code) { process.stderr.write(`rotn-test: fake restart failure ${code}\n`); process.exit(code); }
+    process.stdout.write('restarted: [12:10:00] [Server thread/INFO] [minecraft/DedicatedServer]: Done (41.2s)! For help, type "help" or "?"\n');
 } else if (/rotn-test build-log/.test(remote)) {
     process.stdout.write('fake build log\n');
 }

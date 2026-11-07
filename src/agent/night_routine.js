@@ -50,6 +50,7 @@ export function nightState(agent) {
         stopping: false,
         toldGiver: false,
         job: null, // the action running for the routine (build, repair, dig out)
+        repairStall: null, // #331 re-review: {fightEndedAt}: the last repair placed nothing
         gen: 0, // bumped by resetNight, so a job that ends after a reset changes nothing
     };
 }
@@ -63,7 +64,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
-    Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false });
+    Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null });
     n.gen++;
 }
 
@@ -260,7 +261,11 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // #331 review 4: while a wall is known open (a repair did not close it, or a fight in place
         // held it up), every tick checks and repairs, not every CHECK_MS.
         const open = bot.rotnSheltered === 'open';
-        if (!open && now - n.checkedAt < CHECK_MS) return 'night:inside';
+        // #331 re-review: a repair that placed nothing (no blocks left, a mob in the cell) is not
+        // tried again on every tick all night (thousands of log lines an hour): it waits CHECK_MS
+        // again, unless a fight in place has ended since (the cell may be free now).
+        const stalled = !!n.repairStall && n.repairStall.fightEndedAt === (bot.rotnFightEndedAt ?? null);
+        if ((!open || stalled) && now - n.checkedAt < CHECK_MS) return 'night:inside';
         n.checkedAt = now;
         if (!bot.entity.position.floored().equals(n.site)) {
             // Pushed, teleported (AggroTP) or walked out: a new shelter where it is now.
@@ -281,7 +286,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             startBuilding(n, now);
             return 'night:building';
         }
-        if (need.todo.length === 0 && open) bot.rotnSheltered = true; // closed again: the shelter's rules are back
+        if (need.todo.length === 0 && open) { bot.rotnSheltered = true; n.repairStall = null; } // closed again: the shelter's rules are back
         if (need.todo.length > 0) {
             // self_defense fights at the opening, from where the bot stands, and never during the
             // repair (G3 round 9 B: it interrupted the repair and walked out after the zombie).
@@ -289,8 +294,11 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             const text = `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`;
             if (open) console.log(text); else line(agent, text); // said once, then logged (T1: chat volume)
             startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true }), (r) => {
-                if (r?.closed) bot.rotnSheltered = true;
-                else console.warn('[night] the repair did not close the shelter; trying again at the next check');
+                if (r?.closed) { bot.rotnSheltered = true; n.repairStall = null; return; }
+                if ((r?.placed ?? 0) > 0) { n.repairStall = null; return; } // progress: the next tick tries again
+                // Nothing placed: back to every CHECK_MS until a fight in place ends (#331 re-review).
+                if (!n.repairStall) console.warn(`[night] the repair placed nothing (${r?.line ?? 'no result'}); checking again in ${CHECK_MS / 1000} s`);
+                n.repairStall = { fightEndedAt: bot.rotnFightEndedAt ?? null };
             });
         }
         return 'night:inside';
