@@ -185,7 +185,8 @@ record_extra_mods() {
   : > "$STATE/extra-mods.sha256"
   while IFS= read -r -d '' f; do
     rel=${f#"$SERVER"/}
-    want=$(awk -v r="$rel" '$2 == r { print $1; exit }' "$STATE/pack-jars.sha256")
+    # The whole path after "<64 hex>  " (column 67 on), never awk's $2: a jar name can hold spaces (round 10 A).
+    want=$(awk -v r="$rel" 'substr($0, 67) == r { print $1; exit }' "$STATE/pack-jars.sha256")
     if [[ -n $want ]]; then
       [[ $(sha256_of "$f") == "$want" ]] || fail "extra-mod: $(basename "$rel") would replace a jar of the pinned zip"
       continue
