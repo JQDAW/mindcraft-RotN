@@ -17,22 +17,41 @@
 //      respawn) and the agenda counter (g3-task-preempts-agenda.mjs's AGENDA_COUNTER, g4d_a<n>).
 //   2. After warmMinutes, the server counts what the bot holds of lossItems (count-only `clear <bot> <item> -1 0`,
 //      never a real clear), every heldPollS until the total reaches minHeld, at most maxWaitHeldMin. had_items.
-//   3. `kill <bot>` right after the last count. The server's own times (the reply lines' hh:mm:ss) date the kill,
-//      the respawn and the chat, so the runner's clock and the server's are never mixed.
+//      Then one more count of every item (the pre-kill sweep). One console call per item takes about a second,
+//      so a sweep spans about 15 s while the bot may craft (T1, 2026-11-07: planks counted 3 in the same second
+//      the bot crafted to 6). Each item's "before" is the RANGE of its last two counts, not one stale reading.
+//   3. `kill <bot>` right after the pre-kill sweep. The server's own times (the reply lines' hh:mm:ss) date the
+//      kill, the respawn and the chat, so the runner's clock and the server's are never mixed.
 //   4. Every pollMs: `scoreboard players list <bot>`. died: g4d_d rose and the log has the bot's death line.
 //      respawned: g4d_h read 0 after the kill and then above 0 (or, if the 0 fell between two polls, above 0 once
-//      the death is confirmed), within respawnS of the kill.
-//   5. afterRespawnS later, the same counts again: the server's loss per item is before - after.
+//      the death is confirmed and a second reading agrees), within respawnS of the kill. The respawn is dated by
+//      the FIRST reading above 0 (after any 0), not the reading that confirms it (T1: 14:03:35, not 14:03:40).
+//   5. afterRespawnS later, the same counts again: the server's loss per item is the range before - after.
 //   6. The agenda counter, then every counterPollMs until both spamWindowMin after the kill and resumeMinutes
 //      after the respawn have passed; the bot must stay online.
 // Checks:
 //   had_items      the bot held at least minHeld of lossItems before the kill (else the rest is "not reached");
 //   died           the server shows the death (stat.deaths rose, and the death line);
 //   respawned      the respawn within respawnS (30) of the kill, by the server's clock;
-//   loss_reported  exactly one death report line from the bot within reportS (60) of the respawn, and none more in
-//                  the window; its losses consistent with the server's (lossConsistency);
-//   no_spam        at most maxChatPerMin chat lines from the bot in any 60 s of the spamWindowMin (5) minutes after
-//                  the kill; no spam kick; the bot online throughout;
+//   loss_reported  exactly one death report line from the bot from the kill to reportS (60) after the respawn (the
+//                  report may come before the respawn reading: T1's came 1 s before the confirming one), and none
+//                  more after the kill; its losses consistent with the server's (lossConsistency);
+//   no_spam        no chat-spam LOOP in the spamWindowMin (5) minutes after the kill (lead decision after T1: the
+//                  ready-to-try item says "without a chat-spam loop"; the agent's normal narration ran 13-24 lines
+//                  a minute in T1, so a plain rate is no loop test):
+//                    - no line repeated: at most maxRepeatPerMin (4) of the same line in any 60 s, and at most
+//                      maxRepeatInWindow (7) in the window. "The same" means an EQUAL chatLoopKey (case, numbers
+//                      and punctuation ignored): lines that differ only there count together; there is no fuzzy
+//                      match, so lines that differ in any word count apart. Calibration (the committed G3 evidence,
+//                      rounds 2-9; any 60 s and any 5 min): ordinary narration and agenda lines repeat at most 5
+//                      times in 5 min and 2 in a minute ("Picking up item!", "agenda step sticks started").
+//                      Reflex lines do repeat: "I'm dying!" 12 in 5 min (4 in 60 s) and "Fighting
+//                      zombie_players:zombie_player!" 9 in 5 min (g3a-20261105-r2); "My brain disconnected, try
+//                      again." 9 in 5 min, 6 in 60 s (g3b-20261106-r3). All three fail at 4 and 7, as intended:
+//                      skills-rotn will rate-limit repeated reflex chat lines (lead, #342 review);
+//                    - at most one death report line;
+//                    - no spam kick, and the bot online throughout;
+//                    - a backstop only: at most maxChatPerMin (40) lines in any 60 s.
 //   agenda_resumed the agenda counter rose within resumeMinutes (5) after the respawn;
 //   no_cheat       cheatProblems (the console's kill is not a command the bot ran).
 import { startSession } from '../../runner/lib/session.mjs';
@@ -92,27 +111,76 @@ export function parseDeathReport(text) {
 }
 
 /**
- * Is the report consistent with what the server counted? serverLoss: {id: before - after} for every counted item.
- * Per item, the tolerance is max(tolAbs, ceil(tolRel * max(server, reported))): the counts run in the seconds
- * before the kill, while the bot may still pick something up or craft. An item the server says was lost but the
- * report does not name is fine only if the report ends in "and K more kinds" and the item's loss is no larger
- * than the smallest named count (+ tolerance): death_report.js names the largest six first. Items the report
- * names that the server did not count (not in lossItems) are not judged. Returns {ok, problems}.
+ * Is the report consistent with what the server counted? serverLoss: {id: n | [lo, hi]} for every counted item,
+ * the server's loss as a number or as the range the pre-kill counts span (the bot may craft during a sweep).
+ * The report's loss of an item is the sum of its named variants (parseDeathReport), R. Per item, the tolerance is
+ * tol = max(tolAbs, ceil(tolRel * max(hi, R))).
+ * - Over-reporting: R - tol <= hi for every item.
+ * - Under-reporting: what the server counted beyond the named part, sum over items of max(0, lo - R - tol), must fit
+ *   in what "and K more kinds" can hold: K kinds of at most m each (m: the smallest named count; death_report.js
+ *   names the largest six first), ONE budget of K * m shared by all items (#342 review: never K * m per item). T1:
+ *   "3 rock_metamorphic:6" named, 7 of all variants counted, the rest among the 10 more kinds.
+ * - Each item the server surely lost (lo > 0) but the report does not name at all needs one of the K kinds, so
+ *   there are at most K such items; with no "more kinds" (K = 0) there are none: every sure loss must be named.
+ * - "lost nothing" fails if the server's count allows any loss (some hi > 0): the same bound the scenario uses for
+ *   "not reached" (nothing lost: every hi <= 0), so the two never disagree (#342 review).
+ * Items the report names that the server did not count (not in lossItems) are not judged. Returns {ok, problems}.
  */
 export function lossConsistency(serverLoss, report, { tolAbs = 2, tolRel = 0.25 } = {}) {
     const problems = [];
-    const total = Object.values(serverLoss).reduce((a, b) => a + Math.max(0, b), 0);
-    if (total > 0 && report.nothing) problems.push(`the report says "lost nothing", but the server counts ${total} lost`);
-    const minNamed = report.named.length ? Math.min(...report.named.map((n) => n.count)) : Infinity;
-    for (const [id, raw] of Object.entries(serverLoss)) {
-        const L = Math.max(0, raw);
-        const R = report.items[id] ?? 0;
-        const tol = Math.max(tolAbs, Math.ceil(tolRel * Math.max(L, R)));
-        if (L > 0 && R === 0) {
-            if (!(report.moreKinds > 0 && L <= minNamed + tol)) problems.push(`the server counts ${L} ${id} lost; the report does not name it`);
-        } else if (Math.abs(R - L) > tol) problems.push(`${id}: the report says ${R} lost, the server counts ${L} (tolerance ${tol})`);
+    const range = (v) => { const [a, b] = Array.isArray(v) ? v : [v, v]; return [Math.max(0, Math.min(a, b)), Math.max(0, a, b)]; };
+    const show = ([lo, hi]) => (lo === hi ? `${lo}` : `${lo}-${hi}`);
+    const most = lossUpperBound(serverLoss);
+    if (report.nothing) {
+        if (most > 0) problems.push(`the report says "lost nothing", but the server's count allows up to ${most} lost`);
+        return { ok: problems.length === 0, problems };
     }
+    const K = report.moreKinds;
+    const m = report.named.length ? Math.min(...report.named.map((n) => n.count)) : 0;
+    const budget = K * m;
+    const beyond = [];
+    const unnamed = [];
+    for (const [id, v] of Object.entries(serverLoss)) {
+        const [lo, hi] = range(v);
+        const R = report.items[id] ?? 0;
+        const tol = Math.max(tolAbs, Math.ceil(tolRel * Math.max(hi, R)));
+        if (R - tol > hi) problems.push(`${id}: the report says ${R} lost, the server counts ${show([lo, hi])} (tolerance ${tol})`);
+        if (R === 0 && lo > 0) unnamed.push(`${show([lo, hi])} ${id}`);
+        const over = lo - R - tol;
+        if (over > 0) beyond.push({ id, over, text: `${id} ${show([lo, hi])} counted, ${R} named (tolerance ${tol})` });
+    }
+    if (unnamed.length > K) {
+        problems.push(K ? `the server counts ${unnamed.length} items lost that the report does not name (${unnamed.join(', ')}), more than its ${K} more kinds`
+            : unnamed.map((u) => `the server counts ${u} lost; the report does not name it`).join('; '));
+    }
+    const sumOver = beyond.reduce((a, b) => a + b.over, 0);
+    if (sumOver > budget) problems.push(`the server counts ${sumOver} more than the report names, beyond the tolerance (${beyond.map((b) => b.text).join('; ')}); its ${K} more kinds hold at most ${budget}`);
     return { ok: problems.length === 0, problems };
+}
+
+/** The most the server's count allows to be lost in all: the sum of every item's upper bound (hi), never below 0. */
+export const lossUpperBound = (serverLoss) => Object.values(serverLoss).reduce((a, v) => a + Math.max(0, ...[v].flat()), 0);
+
+/**
+ * The key two chat lines share when they are "the same line" for the loop test: lower case, every number one
+ * '#', punctuation dropped, spaces collapsed. "Got 5 rocks!" and "got 7 rocks" share a key. The loop test groups
+ * lines by EQUAL keys only (no fuzzy or edit-distance match): "Got 5 rocks!" and "Got 5 more rocks" count apart.
+ */
+export const chatLoopKey = (text) => String(text).toLowerCase().replace(/-?\d+(?:\.\d+)?/g, '#').replace(/[^\p{L}#\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+
+/**
+ * Chat lines [{t: seconds since a common start, text}] grouped by chatLoopKey: [{key, text, in60, total}] (in60:
+ * the most of that line in any 60 s; total: all of it; text: its first wording), most repeated first.
+ */
+export function repeatedLines(lines) {
+    const by = new Map();
+    for (const l of lines) {
+        const k = chatLoopKey(l.text);
+        if (!by.has(k)) by.set(k, { key: k, text: l.text, times: [] });
+        by.get(k).times.push(l.t);
+    }
+    return [...by.values()].map((e) => ({ key: e.key, text: e.text, in60: maxPerMinute(e.times), total: e.times.length }))
+        .sort((a, b) => b.in60 - a.in60 || b.total - a.total);
 }
 
 /** "hh:mm:ss" -> seconds of the day. */
@@ -146,7 +214,7 @@ export default {
         died: 'The server shows the death (stat.deaths and the death message)',
         respawned: 'After death it respawns (within 30 s, by the server)',
         loss_reported: 'It reports what it lost, once, consistent with what the server counted',
-        no_spam: 'It carries on without a chat-spam loop (chat per minute bounded for 5 min, no spam kick)',
+        no_spam: 'It carries on without a chat-spam loop (for 5 min: no repeated line, one death report, no spam kick)',
         agenda_resumed: 'It carries on: its agenda counter rises again after the respawn',
         no_cheat: 'No give, game mode change, op or command by the bot during the run (the pack\'s first-join commands aside)',
     },
@@ -163,7 +231,9 @@ export default {
         afterRespawnS: 5,
         reportS: 60,
         spamWindowMin: 5,
-        maxChatPerMin: 10,
+        maxRepeatPerMin: 4,
+        maxRepeatInWindow: 7,
+        maxChatPerMin: 40,
         resumeMinutes: 5,
         lossTolAbs: 2,
         lossTolRel: 0.25,
@@ -178,15 +248,15 @@ export default {
     },
     gateParams: {
         lossItems: 'equal', agendaCounter: 'equal', minHeld: 'equal', respawnS: 'equal', reportS: 'equal', spamWindowMin: 'equal',
-        maxChatPerMin: 'equal', resumeMinutes: 'equal', lossTolAbs: 'equal', lossTolRel: 'equal', ...G3_GATE_PARAMS,
+        maxChatPerMin: 'equal', maxRepeatPerMin: 'equal', maxRepeatInWindow: 'equal', resumeMinutes: 'equal', lossTolAbs: 'equal', lossTolRel: 'equal', ...G3_GATE_PARAMS,
     },
     // The most minutes a run can take: the login wait, warmMinutes plus the wait for items (each count round is
-    // one count-only clear per item, each up to a late reply), the respawn wait, and the longer of the spam window
-    // and the resume window (with one more count round and the counter reads).
+    // one count-only clear per item, each up to a late reply), the pre-kill sweep, the respawn wait, and the longer
+    // of the spam window and the resume window (with one more count round and the counter reads).
     runMinutes: (p) => {
         const perCall = (p.consoleWaitS + p.lateReplyMs / MS) / 60;
         const items = String(p.lossItems).split(',').length;
-        const rounds = Math.ceil((p.maxWaitHeldMin * 60) / p.heldPollS) + 2;
+        const rounds = Math.ceil((p.maxWaitHeldMin * 60) / p.heldPollS) + 3;
         return p.loginTimeoutMs / MIN + p.warmMinutes + p.maxWaitHeldMin + rounds * items * perCall
             + (p.respawnS + 15 + p.afterRespawnS) / 60 + Math.max(p.spamWindowMin, p.resumeMinutes + p.respawnS / 60) + 2;
     },
@@ -259,6 +329,14 @@ export default {
         // start event: the driver refuses a profile whose name is not this run's bot (checkProfile), so a wrong `bot`
         // parameter (for example a human's name) starts no agent, and nothing is killed (#320 review).
         if (!start) return notReached('the driver reported no mindcraft_start event: no agent of this run to kill', 'died');
+        // The pre-kill sweep: every item once more, then the kill at once. Each item's "before" is the range of
+        // this count and the one before it (lossConsistency), so a craft during the counts is no false mismatch.
+        const preKill = await countAll();
+        ctx.note('heldPreKill', preKill);
+        if (gone()) return notReached(goneText(gone()), 'died');
+        const beforeRange = Object.fromEntries(items.map((it) => [it, preKill[it] === null ? [before[it], before[it]] : [Math.min(before[it], preKill[it]), Math.max(before[it], preKill[it])]]));
+        const changed = items.filter((it) => beforeRange[it][0] !== beforeRange[it][1]);
+        ctx.note('heldChangedDuringCounts', changed.map((it) => `${it} ${before[it]} -> ${preKill[it]}`));
         const first = await scores();
         const deathsBefore = first.sc?.g4d_d ?? 0;
         const chatBefore = chatLines(s.sinceMarker(), name).length;
@@ -274,16 +352,19 @@ export default {
         let respawnTime = null;
         let respawnAt = null;
         let sawZero = false;
+        let firstAbove = null;   // the first reading above 0 after the confirmed death (and after any 0)
         while (clock.now() - killAt <= (p.respawnS + 15) * MS && respawnTime === null && !gone()) {
             const r = await scores();
             const h = r.sc?.g4d_h ?? null;
             const d = r.sc?.g4d_d ?? null;
             healthSeen.push({ time: r.time, health: h, deaths: d });
             if (d !== null && d > deathsBefore && deathAt === null) deathAt = r.time;
-            if (h !== null && h <= 0) sawZero = true;
-            // respawnTime is the server time of the FIRST poll that sees health > 0 after the confirmed death (so the
-            // respawn itself happened at or before it; respawned's seconds are an upper bound).
-            if (deathAt !== null && h !== null && h > 0 && (sawZero || healthSeen.length > 1)) { respawnTime = r.time; respawnAt = clock.now(); break; }
+            if (h !== null && h <= 0) { sawZero = true; firstAbove = null; }
+            if (deathAt !== null && h !== null && h > 0 && firstAbove === null) firstAbove = { time: r.time, at: clock.now(), index: healthSeen.length };
+            // Confirmed by a 0 before it, or by a second reading above 0 after it. The respawn is dated by the FIRST
+            // reading above 0 (the respawn happened at or before it; respawned's seconds are an upper bound), never
+            // by the confirming one (T1, 2026-11-07: 14:03:35, not 14:03:40, 2 s after the kill, not 7).
+            if (firstAbove && (sawZero || healthSeen.length > firstAbove.index)) { respawnTime = firstAbove.time; respawnAt = firstAbove.at; break; }
             await clock.sleep(p.pollMs);
         }
         ctx.note('healthAfterKill', healthSeen.slice(0, 30));
@@ -312,11 +393,14 @@ export default {
             const unreadAfter = items.filter((it) => afterCounts[it] === null);
             if (unreadAfter.length) lossNotReached = `no count from the server after the respawn for ${unreadAfter.join(', ')}`;
             else {
-                lossServer = Object.fromEntries(items.map((it) => [it, before[it] - afterCounts[it]]));
+                lossServer = Object.fromEntries(items.map((it) => {
+                    const [lo, hi] = beforeRange[it];
+                    return [it, lo === hi ? lo - afterCounts[it] : [lo - afterCounts[it], hi - afterCounts[it]]];
+                }));
                 ctx.note('lossServer', lossServer);
                 // Nothing lost by the server's count (everything held was kept: main hand, off hand, armor, baubles):
                 // a report could only say "lost nothing", which proves nothing about reporting a loss (#320 review 2).
-                const total = Object.values(lossServer).reduce((a, b) => a + Math.max(0, b), 0);
+                const total = lossUpperBound(lossServer);   // the same bound lossConsistency's "lost nothing" uses
                 if (total <= 0) lossNotReached = `the server counts no loss (everything held was kept: ${Object.entries(afterCounts).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ') || 'nothing'})`;
             }
             v0 = counterValue((await scores()).sc);
@@ -342,30 +426,41 @@ export default {
         // the report
         if (respawnTime !== null) {
             const reports = chat.map((c) => ({ ...c, report: parseDeathReport(c.text) })).filter((c) => c.report);
-            const inWindow = reports.filter((c) => secondsBetween(respawnTime, c.time) <= p.reportS && secondsBetween(killTime, c.time) >= secondsBetween(killTime, respawnTime));
+            // From the kill (every line here is after it: chatBefore) to reportS after the respawn reading: a report can
+            // only follow the respawn, but it may come before the reading that shows it (T1: 1 s before the confirming one).
+            const inWindow = reports.filter((c) => secondsBetween(killTime, c.time) <= secondsBetween(killTime, respawnTime) + p.reportS);
             const rep = inWindow[0] ?? null;
             const cons = rep && lossServer ? lossConsistency(lossServer, rep.report, { tolAbs: p.lossTolAbs, tolRel: p.lossTolRel }) : null;
             ctx.note('deathReports', reports.map((c) => ({ time: c.time, text: c.text })));
             ctx.note('lossConsistency', cons);
             ctx.check('loss_reported', lossNotReached === null && rep !== null && reports.length === 1 && cons.ok,
-                lossNotReached ? `not reached: ${lossNotReached}` : !rep ? (reports.length ? `a death report came, but not within ${p.reportS}s of the respawn: "${reports[0].text}" at ${reports[0].time}` : `no death report line in chat (${chat.length} lines after the kill)`)
+                lossNotReached ? `not reached: ${lossNotReached}` : !rep ? (reports.length ? `a death report came, but not by ${p.reportS}s after the respawn: "${reports[0].text}" at ${reports[0].time}` : `no death report line in chat (${chat.length} lines after the kill)`)
                     : reports.length > 1 ? `${reports.length} death report lines for one death: ${reports.map((c) => `${c.time} "${c.text}"`).slice(0, 3).join('; ')}`
                         : !cons.ok ? `the report "${rep.text}" does not match the server's count: ${cons.problems.slice(0, 4).join('; ')}`
-                            : `"${rep.text}" at ${rep.time}, ${secondsBetween(respawnTime, rep.time)}s after the respawn; consistent with the server's count (${Object.entries(lossServer).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${k}`).join(', ')})`);
+                            : `"${rep.text}" at ${rep.time}, ${secondsBetween(killTime, rep.time)}s after the kill; consistent with the server's count (${Object.entries(lossServer).filter(([, n]) => Math.max(...[n].flat()) > 0).map(([k, n]) => `${[n].flat().map((x) => Math.max(0, x)).join('-')} ${k}`).join(', ')})`);
             ctx.check('agenda_resumed', rose !== null,
                 rose ? `the agenda counter rose ${rose.from} -> ${rose.to} by ${rose.time}` : gone() ? goneText(gone()) : v0 === null ? 'no counter reading after the respawn' : `the agenda counter stayed at ${v0} for ${p.resumeMinutes} min after the respawn`);
         }
 
-        // no spam
+        // no spam loop (lead decision after T1): a repeated line, more than one death report, a spam kick, the bot
+        // gone; the per-minute rate is a backstop only
         const inSpam = chat.filter((c) => killTime && secondsBetween(killTime, c.time) <= p.spamWindowMin * 60);
         const perMin = maxPerMinute(inSpam.map((c) => secondsBetween(killTime, c.time)));
+        const reps = repeatedLines(inSpam.map((c) => ({ t: secondsBetween(killTime, c.time), text: c.text })));
+        const loop = reps.find((e) => e.in60 > p.maxRepeatPerMin || e.total > p.maxRepeatInWindow) ?? null;
+        const reportLines = inSpam.filter((c) => parseDeathReport(c.text)).length;
         const spamKick = s.events().filter(s.gone).find((e) => /spam/i.test(e.reason ?? ''));
         const g = gone();
-        ctx.note('chatPerMinute', { lines: inSpam.length, maxIn60s: perMin, limit: p.maxChatPerMin });
-        ctx.check('no_spam', perMin <= p.maxChatPerMin && !spamKick && !g,
+        const top = reps[0] ?? null;
+        ctx.note('chatPerMinute', { lines: inSpam.length, maxIn60s: perMin, backstop: p.maxChatPerMin });
+        ctx.note('chatRepeats', reps.slice(0, 3).map((e) => ({ text: e.text.slice(0, 120), in60: e.in60, total: e.total })));
+        const repText = (e) => `"${e.text.slice(0, 80)}" ${e.total} times, ${e.in60} in one 60 s`;
+        ctx.check('no_spam', !loop && reportLines <= 1 && perMin <= p.maxChatPerMin && !spamKick && !g,
             spamKick ? `kicked for spamming: ${spamKick.reason}` : g ? goneText(g)
-                : perMin > p.maxChatPerMin ? `${perMin} chat lines in one 60 s (limit ${p.maxChatPerMin}); ${inSpam.length} in ${p.spamWindowMin} min`
-                    : `${inSpam.length} chat lines in ${p.spamWindowMin} min after the kill, at most ${perMin} in any 60 s (limit ${p.maxChatPerMin}); online throughout`);
+                : loop ? `a repeated line: ${repText(loop)} (at most ${p.maxRepeatPerMin} in 60 s and ${p.maxRepeatInWindow} in ${p.spamWindowMin} min)`
+                    : reportLines > 1 ? `${reportLines} death report lines in ${p.spamWindowMin} min for one death`
+                        : perMin > p.maxChatPerMin ? `${perMin} chat lines in one 60 s (backstop ${p.maxChatPerMin}); ${inSpam.length} in ${p.spamWindowMin} min`
+                            : `no loop: ${inSpam.length} chat lines in ${p.spamWindowMin} min after the kill, ${reportLines} death report, most repeated ${top ? repText(top) : 'none'}; at most ${perMin} lines in any 60 s (backstop ${p.maxChatPerMin}); online throughout`);
         finish();
     },
 };
