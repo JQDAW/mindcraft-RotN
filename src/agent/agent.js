@@ -223,7 +223,14 @@ export class Agent {
             if (init_message) {
                 this.history.add('system', init_message);
             }
-            await this.self_prompter.handleLoad(save_data.self_prompt, save_data.self_prompting_state);
+            // A stored control hold (a giver's !stop, !pause or !stfu, control.json) wins at once
+            // after a restart (G4 #11 prep): the self-prompter is not restored, as it would send an
+            // LLM request before the first autonomyTick stops it. !resume lets the agenda or the
+            // task drive it again from agenda.json and tasks.json.
+            if (this.control?.hold)
+                console.log(`[control] not restoring the self-prompter: on hold (${this.control.hold.kind} by ${this.control.hold.by})`);
+            else
+                await this.self_prompter.handleLoad(save_data.self_prompt, save_data.self_prompting_state);
         }
         if (save_data?.last_sender) {
             this.last_sender = save_data.last_sender;
@@ -327,6 +334,11 @@ export class Agent {
                 } finally {
                     if (typed_action) this.control?.endTyped();
                 }
+                // A typed follow a reflex interrupted waits to resume: tasks and the agenda keep
+                // waiting for it (G4 #3 prep), or the agenda's self-prompter would block the resume.
+                const label = `action:${user_command_name.substring(1)}`;
+                if (typed_action && this.actions?.resume_func && this.actions.resume_name === label)
+                    this.control?.holdTypedResume(label, this.actions.resume_func, source);
                 if (execute_res) 
                     this.routeResponse(source, execute_res);
                 return true;
