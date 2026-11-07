@@ -1,6 +1,6 @@
 // Stick sources after G3 smoke round 8 A (lead task, 2026-11-07): a dead bush broken by hand gives
-// 0-2 sticks, every Dynamic Trees species uses the same felled-tree stick rule, and leaves broken by
-// hand do give a stick half the time (Pyrotech; a correction, no world rule yet). Each claim is checked against the dump and the
+// 0-2 sticks, leaves broken by hand give 1 stick half the time (Pyrotech), and every Dynamic Trees
+// species uses the same felled-tree stick rule. Each claim is checked against the dump and the
 // javap excerpts in fixtures/stick-sources-3.3.4/ (from the pinned pack zip; nothing was run).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -77,10 +77,16 @@ test('deadbush-sticks: the Forge-patched BlockDeadBush drops Items.STICK x Rando
     }
 });
 
-// The correction in fell-tree's evidence (leaves do give sticks, via Pyrotech) rests on these excerpts.
-// No world rule names leaves yet: skills-rotn's tests still assume none (src/agent/library/fell_tree.test.js).
-test('the leaves correction: Pyrotech adds 1 stick half the time when a player breaks leaves', () => {
-    assert.ok(!pack.howToGet('stick').ways.some((w) => w.kind === 'world' && w.blocks.some((b) => /leaves/.test(b.name))), 'no leaves rule in this PR');
+test('leaves-sticks: Pyrotech adds 1 stick half the time when a player breaks leaves', () => {
+    const w = way(pack.howToGet('stick'), 'leaves-sticks');
+    assert.ok(w);
+    assert.equal(w.action, 'break');
+    assert.equal(w.tool, null);
+    assert.equal(w.count, null);
+    assert.deepEqual(w.countRange, { min: 0, max: 1, mean: 0.5 });
+    assert.equal(w.confidence, 'documented');
+    assert.deepEqual(w.blocks.map((b) => b.name), ['dynamictrees:leaves0', 'dynamictrees:leaves1', 'minecraft:leaves', 'minecraft:leaves2']);
+    for (const b of w.blocks) assert.ok(pack.dump.blocks.blocks[b.name], `${b.name} is in the dump`);
     // Registered only with DROP_STICKS_FROM_LEAVES, which the pack's config turns on.
     assert.match(section('com.codetaylor.mc.pyrotech.modules.core.ModuleCore'), /DROP_STICKS_FROM_LEAVES:Z\n[^\n]*ifeq[^\n]*\n(?:[^\n]*\n){3}[^\n]*HarvestDropsEventHandler\$Sticks\."<init>"/);
     assert.match(section('config/pyrotech/core.cfg'), /^\s+B:DROP_STICKS_FROM_LEAVES=true$/m);
@@ -91,6 +97,7 @@ test('the leaves correction: Pyrotech adds 1 stick half the time when a player b
     assert.match(on, /110: ifnonnull\s+147/);
     assert.match(on, /147: invokestatic[^\n]*RandomHelper\.random[^\n]*\n[^\n]*nextFloat[^\n]*\n[^\n]*f2d\n[^\n]*double 0\.5d/);
     assert.match(on, /Items\.field_151055_y/);
+    assert.equal(w.countRange.mean, 0.5);
     // Which leaves: the vanilla leaves are in treeLeaves at every meta...
     const leafOre = pack.oreDict('treeLeaves');
     for (const n of ['minecraft:leaves', 'minecraft:leaves2']) assert.ok(leafOre.some((s) => s.name === n && s.meta === 32767), `${n} in treeLeaves`);
@@ -110,6 +117,9 @@ test('the leaves correction: Pyrotech adds 1 stick half the time when a player b
 test('fell-tree: one stick rule for every species, and no more "leaves never drop sticks"', () => {
     const w = way(pack.howToGet('stick'), 'fell-tree');
     assert.doesNotMatch(w.summary, /leaves never/);
+    assert.doesNotMatch(w.summary, /G3|round \d|felled spruces gave/, 'harness anecdotes stay in evidence, not in the LLM-facing summary');
+    assert.match(w.summary, /Felling may give few or no sticks/);
+    assert.ok(w.unverified.some((u) => /rounds 5 A and 8 A gave 1 stick from 5 spruces/.test(u)));
     assert.match(w.summary, /same rule \(spruce and dark oak too\)/);
     assert.ok(!('countRange' in w), 'logs and sticks: no single range');
     assert.ok(w.evidence.some((e) => /^Species \(lead's question/.test(e)));
@@ -126,9 +136,11 @@ test('fell-tree: one stick rule for every species, and no more "leaves never dro
 test('countRange appears only on rules that name one, and the text answer still forms', () => {
     const stick = pack.howToGet('stick');
     const withRange = stick.ways.filter((w) => 'countRange' in w).map((w) => w.id).sort();
-    assert.deepEqual(withRange, ['deadbush-sticks']);
+    assert.deepEqual(withRange, ['deadbush-sticks', 'leaves-sticks']);
     for (const w of stick.ways.filter((x) => x.countRange)) assert.ok(w.countRange.min <= w.countRange.mean && w.countRange.mean <= w.countRange.max);
-    assert.deepEqual(stick.ways.slice(0, 3).map((w) => w.id), ['fell-tree', 'sticks-from-planks', 'deadbush-sticks'], 'formatHowToGet shows all three by default');
+    const ids = stick.ways.map((w) => w.id);
+    for (const id of ['fell-tree', 'sticks-from-planks', 'leaves-sticks', 'deadbush-sticks']) assert.ok(ids.includes(id), `howToGet("stick") offers ${id}`);
     const text = formatHowToGet(stick, { maxWays: 8 });
     assert.match(text, /dead bush/);
+    assert.match(text, /leaves/i);
 });

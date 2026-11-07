@@ -1,7 +1,49 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:02Z (from `date -u`)
+Updated: 2026-11-07T04:58Z (from `date -u`)
 
+## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
+
+- **Task (lead, 2026-11-07, the last change before the round 9 freeze):** rotn-data #319's `leaves-sticks` rule is on develop, so the temporary `LEAVES_STICKS` fallback and `isPlainStick` come out of `rotn_sources.js`. The file is now identical to its version before #315 (`bffe1d59`). `worldSources('stick')` returns `fell-tree`, `leaves-sticks` and `deadbush-sticks`.
+- **Test names (`collect_sticks.test.js`):** no title claims "never climbs" or "no climbing" any more. The fake's walks end on the ground (y 64), and a comment there says that a real walk never climbs a tree is proven in `fall_safety.test.js`. The leaves-source test now checks rotn-data's rule id, and that there is exactly one leaves rule.
+- **Tests:** the 19 collecting test files, 248/248. Lint: 0 in both files.
+
+## Task 3: "shelter_blocks started" before an earlier step's "done" is log order, not a step run out of order (2026-11-07T04:14Z by `date -u`)
+
+- **Answer: no step runs out of order, and no code change is needed.** Two designed things meet:
+  1. **The before-night reserve interrupts.** `judge()` returns `reserveWanted(state) ?? step` (G3 round 6 B). Near sunset, `shelter_blocks` takes the self-prompter's goal from whatever step is current, says "started", and afterwards "agenda resumed: <step>".
+  2. **"Done" is when a step's condition is first seen true.** Each step is judged from the inventory on every tick, whatever its place in the order. An action or a pickup that finishes after the reserve took over is recorded on the next tick.
+- **Round 8 A** (`g3a-20261107-r8/rocks/server.log`):
+  - 02:24:32 "shelter_blocks started" interrupted sticks.
+  - 02:24:34 "logs done": the felled spruce's logs had been picked up. Logs is step 4 and was only recorded; the bot did not work on it.
+  - 02:25:06 "agenda resumed: sticks".
+- **Validation** (`g3d-20261107-v1/untrusted`):
+  - 01:55:18 "crude_axe started", and the bot issued `!craftRecipe("pyrotech:crude_axe", 1)` under that goal.
+  - 01:55:35 the reserve took the goal.
+  - 01:55:37 "crude_axe done" when the craft already running had finished. The next reply ("I already had one … Now for the shelter blocks") shows it.
+- Round 8 B and C show the same pattern. C's "agenda resumed: first_plank" at 03:25:16 is the task preempt (scenario C).
+
+## Round 8 B cursor: equip to the hand is one number-key swap (branch `agent/skills-rotn/equip-hotbar-swap`, 2026-11-07T04:13Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** in round 8 B, three equips in a row were rejected at slots 36-38. Each resync showed the stone pickaxe on the cursor, and "put the stone_pickaxe on the cursor into slot 9" did not clear it (#313, `g3b-20261107-r8/night/driver.log:1020-1028`).
+- **Finding:**
+  - The put-down did take. Each `[inventory] … trying once more` line is the first try of a separate `equip`, so 36, 37 and 38 are three equips; a retry's failure was not logged.
+  - With a full hotbar, mineflayer 4.33's `equip` (`simple_inventory.js`) moves the item into its least recently used hotbar slot with `moveSlotItem`: pick up, put down (a swap), put back. Each new equip found the pickaxe in slot 9 and lifted it onto the cursor again. The server rejected the swap into the hotbar slot and kept the pickaxe on its cursor.
+  - Also, #296's retry ran `equip` with the same Item object, whose `.slot` was stale after the resync.
+  - Which hotbar stack made the server's view differ is not in the log: the server log has nothing, and the driver log does not list hotbar slots.
+- **Fix (`inventory_sync.js`):**
+  - An item in the main inventory goes to the hand with one number-key click, `clickWindow(slot, k, 2)` then `setQuickBarSlot(k)`, where `k` is an empty hotbar slot or else the selected one. There is no cursor and no put-down, and for this click the 1.12 server returns an empty stack, so no slot's contents are compared.
+  - Every try, the retry included, takes the item from where the window has it now (`currentItem`).
+  - A failed second try is logged.
+  - Anything else (another destination, an item already in the hotbar, an open container) is mineflayer's `equip`.
+- **Tests:** new `equip_hand.test.js`, 4/4. It uses prismarine-windows' real player window, mineflayer 4.33's `equip`/`moveSlotItem` as they behave with a full hotbar, and a fake 1.12 server that applies a click, then compares, and rejects a put-down into the hotbar.
+  - On develop's guard the 3 behaviour tests fail, and a replay prints round 8 B's lines: "rejected … slot 36", "cursor: stone_pickaxe", "put the stone_pickaxe … into slot 9", "rejected … slot 37".
+  - `inventory_sync`, `threats`, `use_on` and `dirt_piles` (37/37 with the new file) pass. Lint: 0 in both files.
+- **#317 review (lead, APPROVE WITH NITS on `c76a1a9`), answered (2026-11-07T04:22Z by `date -u`).** origin/develop (with #311) is merged in, not rebased; this file's conflict is resolved with both sides kept.
+  1. If the cursor still holds a stack after the tidy, `equipToHand` uses mineflayer's `equip` with the item as it is now. A number-key click does nothing while the cursor holds a stack.
+  2. An item no longer in the inventory is an error: `[inventory] equip: the <name> is no longer in the inventory`, then a throw. The stale Item is never used, and through the guard there is no retry, because this is not a rejected click.
+  3. `currentItem` searches the hotbar first, then the main inventory, then the off hand, so a copy in the hotbar needs no click.
+  - **Tests:** `equip_hand` 6/6 (2 new tests, and `currentItem` gains the hotbar case); all 3 fail on `c76a1a9`. `inventory_sync`, `threats`, `use_on`, `dirt_piles` and `equip_hand`: 39/39. Lint: 0 in both files.
 ## Request 17: leaves give sticks (branch `agent/skills-rotn/leaves-sticks`, stacked on #311; 2026-11-07T04:02Z by `date -u`)
 
 - **Task (lead, 2026-11-07):** rotn-data #312 found that leaves DO give sticks (Pyrotech: 1 stick half the time when a player breaks leaves).

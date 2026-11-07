@@ -1,5 +1,5 @@
 # javap -c -p excerpts for the stick sources in packages/rotn-data/3.3.4/world-sources.json
-# (deadbush-sticks; fell-tree, including its correction on leaves), from the pinned RotN 3.3.4 server pack zip
+# (deadbush-sticks, leaves-sticks, fell-tree), from the pinned RotN 3.3.4 server pack zip
 # (SHA-256 90642fd5...f5205). Extracted to a scratch folder outside the repo; nothing was run.
 # Read by packages/rotn-data/test/stick-sources.test.js.
 #

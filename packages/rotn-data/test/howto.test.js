@@ -111,13 +111,14 @@ test('the G3 chain: crude axe, Crafting Tools, crafting table, stone tools, firs
     assert.deepEqual(pack.howToGet('spruce_planks').ways[0].blocks, [{ name: 'hitwithaxe:debarked_spruce' }]);
     assert.deepEqual(way(pack.howToGet('hitwithaxe:debarked_oak'), 'debark-log').blocks, [{ name: 'minecraft:log', meta: 0 }]);
     assert.deepEqual(way(pack.howToGet('spruce_log'), 'fell-tree').blocks, [{ name: 'dynamictrees:sprucebranch' }]);
-    // Round 4 B: Dynamic Trees leaves never drop sticks; a felled tree drops them, by hand too (bytecode).
+    // A felled tree drops sticks, by hand too (bytecode). Dynamic Trees' own leaf drops have none, but
+    // Pyrotech's leaf handler adds them (round 8 A correction): only leaves-sticks names leaves.
     const stick = pack.howToGet('stick');
     assert.deepEqual(stick.ways[0].id, 'fell-tree');
     assert.equal(stick.ways[0].tool, null);
     assert.equal(stick.ways[0].confidence, 'documented');
     assert.ok(stick.ways[0].blocks.some((b) => b.name === 'dynamictrees:oakbranch'));
-    assert.ok(!stick.ways.some((w) => w.kind === 'world' && w.blocks.some((b) => /leaves/.test(b.name))), 'no world rule gives sticks from leaves');
+    assert.deepEqual(stick.ways.filter((w) => w.kind === 'world' && w.blocks.some((b) => /leaves/.test(b.name))).map((w) => w.id), ['leaves-sticks']);
     assert.equal(way(pack.howToGet('oak_log'), 'fell-tree').tool, null);
     // #252 review: the axe stays preferred (equip it when the bot has one), not required.
     assert.deepEqual(stick.ways[0].preferredTool, { type: 'axe', minLevel: 0 });
