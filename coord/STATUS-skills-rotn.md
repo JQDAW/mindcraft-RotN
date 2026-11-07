@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T06:55Z (from `date -u`)
+Updated: 2026-11-07T07:10Z (from `date -u`)
 
 ## G4 item 11 prep: the task queue and agenda across a restart (branch `agent/skills-rotn/g4-restart-prep`, HOLD PR; 2026-11-07T06:55Z by `date -u`)
 
@@ -18,6 +18,11 @@ Updated: 2026-11-07T06:55Z (from `date -u`)
 - **Tests:** 6 new in `priority.test.js` (`fakeAgent` and `harnessAgent` take a `dir`, so a restart reuses the same files); 4 of them fail on develop. The existing "stored as active and taken over after a restart" test now expects the restart suffix. 14 `src/agent` files plus 6 `test/unit` files: 379 pass, 1 skipped (a `test/unit` test outside this change), 0 fail. Lint: unchanged.
 - **For the G4 scenario (harness-ops):** after `ctl restart`, look for "agenda step <id> started: <short> (resumed after a restart)" for the same step (with no "agenda step <id> done" again for earlier steps), and "task <id> started: <text> (resumed after a restart)" for a task that was running.
 - **Note:** this branch and #323 both append tests at the end of `priority.test.js`. Whichever merges second needs develop merged in.
+- **#327 review (lead, APPROVE WITH NITS on `9098c02`), answered (2026-11-07T07:10Z by `date -u`):**
+  1. `Agenda.start()` clears `loadedActive` (after its early return for an agenda already active). So `!agendaStop` then `!agendaStart` before the first step line is a fresh start with no restart label. Test added.
+  2. The PR body now says that while a hold is stored `handleLoad` is skipped, so a giver's own `!goal` text and a stored PAUSED state are not restored either. The agenda and task goals are rebuilt from their own files after `!resume`.
+  3. (optional, done) `TaskQueue.setStatus` drops a task from `requeuedAtLoad` once it is closed (done, failed or cancelled) before it restarts. Test added.
+  - Tests: 382 run, 381 pass, 1 skipped (`test/unit`), 0 fail. Lint 0 in the touched files.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 

@@ -239,6 +239,9 @@ export class Agenda {
     /** Start or resume. A giver's start after a stuck step gives that step a fresh budget. */
     start() {
         if (this.active && !this.stuck) return;
+        // A (re)start in this process is a fresh start, not the restart's resume (#327 review 1):
+        // e.g. !agendaStop then !agendaStart before the first step line.
+        this.loadedActive = false;
         if (this.stuck) { delete this.spent[this.stuck.id]; this.stuck = null; }
         this.active = true;
         this.finished = false;

@@ -784,6 +784,34 @@ test('G4 #11 (d): under a stored hold the agent does not restore the self-prompt
     assert.equal(loads.length, 1, 'restored as upstream does when nothing is held');
 });
 
+test('#327 review 1: !agendaStop then !agendaStart after a restart, before the first step line, is a fresh start (no restart label)', (t) => {
+    const agent = fakeAgent(t);
+    agent.bot = fakeBot(ROCKS);
+    autonomyTick(agent, { now: 0 }); // sticks started, agenda.json active
+    const after = restartOf(t, agent);
+    assert.equal(after.agenda.loadedActive, true);
+    after.agenda.start(); // already active: nothing new, the restart label stays
+    assert.equal(after.agenda.loadedActive, true);
+    after.agenda.stop();
+    after.agenda.start(); // a giver's !agendaStop, then !agendaStart
+    assert.equal(after.agenda.loadedActive, false);
+    assert.equal(autonomyTick(after, { now: 0 }), 'sticks');
+    assert.deepEqual(after.said, ['agenda step sticks started: collect 3 sticks'], 'no "(resumed after a restart)"');
+});
+
+test('#327 review 3: a re-queued task closed before it restarts is no longer marked as resumed after a restart', (t) => {
+    const agent = fakeAgent(t, { agenda: false });
+    agent.tasks.add({ text: 'collect 3 logs', priority: 'normal', giver: 'JQDAW' });
+    agent.tasks.add({ text: 'wave', priority: 'normal', giver: 'JQDAW' });
+    autonomyTick(agent, { now: 0 });
+    const after = restartOf(t, agent);
+    assert.deepEqual([...after.tasks.requeuedAtLoad], ['t1']);
+    after.tasks.setStatus('t1', 'cancelled', 'not needed');
+    assert.deepEqual([...after.tasks.requeuedAtLoad], []);
+    assert.equal(autonomyTick(after, { now: 0 }), 'task:t2');
+    assert.deepEqual(after.said, ['task t2 started: wave']);
+});
+
 test('G4 #11: the restart lines keep the forms the harness parses (agendaActive, TASK_TAKEN)', async () => {
     const { agendaActive } = await import('../../test/scenarios/g3/g3-task-preempts-agenda.mjs');
     const { TASK_TAKEN } = await import('../../test/scenarios/g3/g3-untrusted-refused.mjs');

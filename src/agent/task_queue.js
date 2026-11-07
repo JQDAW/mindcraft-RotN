@@ -175,6 +175,7 @@ export class TaskQueue {
         const t = this.get(id);
         if (!t) return null;
         t.status = status;
+        if (!OPEN.has(status)) this.requeuedAtLoad.delete(id); // closed before it restarted (#327 review 3)
         if (result !== null) t.result = result;
         t.updated_at = this.now();
         this.save();
