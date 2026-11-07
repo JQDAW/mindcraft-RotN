@@ -709,6 +709,63 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
 }
 
 
+/**
+ * In the night shelter (G3 round 9 B): how far the bot hits from where it stands, and how often.
+ * #331 review 3: a fight is capped (maxMs, maxSwings, and sameTargetSwings hits on one mob whose
+ * health did not go down), so the night routine gets to repair the opening; after a fight,
+ * self_defense waits restMs before it fights again, so the repair starts first.
+ */
+export const SHELTER_FIGHT = { reach: 3, swingMs: 600, maxMs: 6000, maxSwings: 8, sameTargetSwings: 4, restMs: 1500 };
+
+/** Whether an entity is within SHELTER_FIGHT.reach of the bot's feet. */
+export function inShelterReach(bot, entity) {
+    return !!entity?.position && bot.entity.position.distanceTo(entity.position) <= SHELTER_FIGHT.reach;
+}
+
+/** A mob's health when the bot knows it (mineflayer's entity.health, or 1.12 living metadata 7). */
+const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite(e?.metadata?.[7]) ? e.metadata[7] : null);
+
+/**
+ * Fight from where the bot stands (G3 round 9 B, its night shelter with a wall open): hit the
+ * nearest enemy within SHELTER_FIGHT.reach while one is in reach and keepFighting() holds, at
+ * most SHELTER_FIGHT.maxMs and maxSwings, and at most sameTargetSwings hits on one mob whose
+ * health does not go down (when it is known). No walk and no mineflayer-pvp (pvp.attack follows
+ * its target, which took the bot out of the shelter). While it runs, bot.rotnFightingInPlace is
+ * true (#334 nit: nothing else takes a block in hand then); at the end bot.rotnFightEndedAt is set.
+ * @returns {Promise<boolean>} true when it hit something.
+ */
+export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity), keepFighting=() => true) {
+    bot.modes.pause('self_defense');
+    bot.modes.pause('cowardice');
+    const fight = {};
+    const start = Date.now();
+    let swings = 0, why = 'nothing left in reach';
+    const same = { id: null, health: null, hits: 0 };
+    const nearest = () => world.getNearestEntityWhere(bot, (e) => isEnemy(e) && inShelterReach(bot, e), SHELTER_FIGHT.reach + 1);
+    bot.rotnFightingInPlace = true;
+    try {
+        for (let enemy = nearest(); enemy; enemy = nearest()) {
+            if (Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; break; }
+            if (swings >= SHELTER_FIGHT.maxSwings) { why = `${swings} swings`; break; }
+            const health = healthOf(enemy);
+            if (same.id !== enemy.id || health === null || health !== same.health) Object.assign(same, { id: enemy.id, health, hits: 0 });
+            else if (same.hits >= SHELTER_FIGHT.sameTargetSwings) { why = `${same.hits} hits did not hurt the ${enemy.name}`; break; }
+            await bot.lookAt(enemy.position.offset(0, (enemy.height ?? 1.8) * 0.8, 0), true);
+            await equipHighestAttack(bot, fight); // just before the swing (#334 nit)
+            bot.attack(enemy);
+            swings++;
+            same.hits++;
+            await new Promise(resolve => setTimeout(resolve, SHELTER_FIGHT.swingMs));
+            if (bot.interrupt_code) { why = 'interrupted'; break; }
+            if (!keepFighting()) { why = 'the situation changed'; break; }
+        }
+    } finally {
+        bot.rotnFightingInPlace = false;
+        bot.rotnFightEndedAt = Date.now();
+    }
+    log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.` : 'Nothing in reach to fight.');
+    return swings > 0;
+}
 
 export async function collectBlock(bot, blockType, num=1, exclude=null) {
     /**

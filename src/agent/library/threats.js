@@ -74,6 +74,17 @@ export function threatFor(entity) {
 }
 
 /**
+ * A mob to hit from inside the night shelter (#331 review 1): any mob rotn-data does not ignore,
+ * whatever the plan says (two zombies, a skeleton or a creeper near make the plan 'flee', and
+ * cowardice is quiet in the shelter, so the zombie in the opening was never hit). Never a calm mob
+ * (ignore-unless-provoked) and never one that must not be looked at (the enderman family).
+ */
+export function shelterEnemy(entity) {
+    const t = threatFor(entity);
+    return !!t && !t.doNotLook && t.reaction !== 'ignore' && t.reaction !== 'ignore-unless-provoked';
+}
+
+/**
  * Zombie Players' zombie (G3 round 2: "Zombie FRCFLD" killed the bot at its death spot). The mod
  * raises one where any player died; its name is not readable here (it is in the undecoded FML
  * spawn data), so it is matched by its entity type (rotn-data #226: a zombie that never despawns).
