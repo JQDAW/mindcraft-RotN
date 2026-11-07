@@ -49,7 +49,7 @@
   - The `sticks` step was one `!collectBlocks("stick", 3)` call. It broke `dynamictrees:leaves0` until it had 3 sticks: several leaf blocks gave none ("Broke dynamictrees:leaves0 but got no stick."), and the call ended "Collected 3 stick."
   - No dead bush was used: there is no dead-bush line in the driver log.
   - Felling came later, in the `logs` step: the bot cut the tree at -42 66 -69 for logs, not sticks.
-  - The 12 sticks used for the pickaxe and axe were crafted from planks at the table (`!craftRecipe("stick", 2)`).
+  - Later, at the table, about 8 more came from planks: the bot said "Planks done, I have 4 sticks already" and `!craftRecipe("stick", 2)` left it with 12 sticks for the pickaxe and axe.
 - **A short detour:** at 12:53:55, after "first_plank done", the agenda started `shelter_blocks`. The bot dug 40 dirt piles, then went back to `crafting_tools`.
 - **This is the opposite of round 8's A**, which stalled at `sticks` (felling gave no sticks, and a dead bush gave 1).
 

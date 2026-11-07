@@ -1,8 +1,8 @@
-# G4 T1 rehearsal (2026-11-07): `g4-death-report` on a test server; FAIL 7 of 9 (both fails are harness-side); on 670fe8aa; a SMOKE batch; the server is deleted
+# G4 T1 rehearsal (2026-11-07): `g4-death-report` on a test server; FAIL 7 of 9; on 670fe8aa; a SMOKE batch; the server is deleted
 
 > **A rehearsal, never G4 evidence.** G4 accepts no test-server evidence: only set-up S (the CX23 service against a CPX42) counts (`test/scenarios/g4/PLAN.md`). `result.json` says `"gate": "G4"`, `"gateValid": false`, and `batch.json` says `"gate": false, "smoke": true`.
 
-**Result in one line:** the console killed the bot at 14:03:33. It respawned within 2 s and posted one death report 6 s after the kill. The agenda resumed: the bot rebuilt 10 cobblestone and moved on to `stone_axe`. Both failed checks are harness measuring problems, not bot faults (see below). As the rehearsal it was meant to be, it found three fixes for the scenario and nothing broken in `death_report.js`.
+**Result in one line:** the console killed the bot at 14:03:33. It respawned within 2 s and posted one death report 6 s after the kill. The agenda resumed: the bot rebuilt 10 cobblestone and moved on to `stone_axe`. Of the two failed checks: `loss_reported` failed on its window, which is harness-side. The loss mismatch behind it (planks 6 vs 3, metamorphic rock 3 vs 7) is likely harness-side too (counts stale within the same second, a variant compared to a whole item), but that is not proven. `no_spam` failed because the bot did post 13 lines in one minute against the scenario's limit of 10. The lead has since redefined `no_spam` as a loop check (fix pending). As the rehearsal it was meant to be, it found fixes for the scenario and nothing shown broken in `death_report.js`.
 
 ## Run conditions
 
@@ -64,9 +64,9 @@
       - The report names variants apart (`rock_metamorphic:6` 3), and other variants are among the "10 more kinds".
       - The server counted all variants at 14:03:12. The stone pickaxe was crafted at 14:03:24-27, after that count.
       - The bot's own list at 14:02:02 had 4 `:0` and 3 `:6`, which makes 7.
-  - **Verdict:** the report is consistent with the bot's inventory at the death, as far as the logs show. The mismatch comes from the harness counting over 17 s while the bot was crafting, and from comparing a variant to a whole item.
+  - **Verdict:** the mismatch is likely harness-side (the harness counted over 17 s while the bot was crafting, and compared a variant to a whole item), but that is not proven. The logs do not show the bot's inventory at the death; they show nothing that contradicts the report.
 - **Chat lines per minute:**
-  - 17 lines in the 5 min after the kill, at most 13 in one 60 s (14:04:56-14:05:55). The limit was 10.
+  - 17 lines in the 5 min after the kill, at most 13 in one 60 s (14:04:56-14:05:55). The scenario's limit was 10, so by that rule the check failed as run; the lead has since redefined `no_spam` as a loop check.
   - Those 13 lines are ordinary work: the agent narrating each command, `!agenda`, `!inventory`, plus the agenda's own "step ... done / started" lines, while it crafted cobblestone.
   - Only 1 of the 17 is the death report. There is no repeated line and no loop, and no spam kick.
   - For comparison, before the kill the bot posted 50 lines in 5 min, at most 24 in one 60 s (fast crafting steps, each with agenda lines). After the death it was quieter, not louder.

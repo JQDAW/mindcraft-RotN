@@ -1,6 +1,6 @@
 # G3 smoke round 9, batch B (2026-11-07): `g3-first-night`, FAIL 3 of 5; on 670fe8aa; a SMOKE batch; the server is deleted
 
-**Result in one line:** the bot was in a dirt shelter 4 s after "sunset is near" and held it for about 17.5 minutes. Then the shelter was found open on one side, the bot could not repair it (no pickaxe), and a zombie killed it 3 s later. After respawning at night with nothing, it died again 33 s later. No dawn.
+**Result in one line:** the bot was in a dirt shelter 4 s after "sunset is near" and held it for about 17.5 minutes. Then the shelter was found open on one side, the bot could not repair it (no pickaxe), and a zombie killed it 3 s later. After respawning at night with nothing, it died again 39 s later, and 8 s after that the agent killed its own process. No dawn.
 
 **A smoke batch, never gate evidence:** `batch.json` says `"gate": false, "smoke": true` (written by `batch.mjs`, not edited by hand).
 
@@ -27,8 +27,10 @@
 | "[night] sunset is near: building a shelter"; "in the shelter at -77, 58, -61 until morning" | 13:17:46, 13:17:50 |
 | "the shelter is open at -77, 58, -60; -77, 59, -60: repairing" | 13:35:22 |
 | "FRCFLD was slain by Zombie" (first death) | 13:35:25 |
-| The death report: "I died at -78, 58, -60; lost 356 betterwithmods:dirt_pile, 5 ... rock_sedimentary, 3 ... rock_igneous:7, 3 ... rock_metamorphic:6 ..." | 13:35:31 |
+| The death report (the bot's own figures; the server did not count): "I died at -78, 58, -60; lost 356 betterwithmods:dirt_pile, 5 ... rock_sedimentary, 3 ... rock_igneous:7, 3 ... rock_metamorphic:6 ..." | 13:35:31 |
+| `!collectBlocks("dirt", 10)` ("Need dirt, and I can dig that by hand.") | 13:35:51 |
 | "FRCFLD was slain by Zombie" (second death) | 13:36:04 |
+| "Exiting." (the agent's `cleanKill`); FRCFLD left | 13:36:12 |
 | Command exited (check FAIL, exit 1) | 13:36:14 |
 | Server, Primary IP and SSH key verified gone | 13:36:24 |
 
@@ -49,16 +51,17 @@
   - The runner's SIGTERM came after that (`DRIVER ... "stopping"` at 13:36:12.481Z). `botStoppedByRunner: true` is set at the end of every scenario, so it does not mean the runner caused the leave.
   - On the live server this would show as a leave and a rejoin after a death.
 - **The day:**
-  - `sticks` stalled again: leaves gave nothing, the bot said "I'm stuck!" (13:06:07), and the step paused after 5 minutes.
-  - Meanwhile the bot dug dirt piles for `shelter_blocks` (356 held at the death).
+  - `sticks` stalled again: leaves gave nothing, and the step paused after 5 minutes of self-prompting (13:10:35).
+  - "I'm stuck!" (13:06:07) is the `unstuck` reflex during `!collectBlocks`, after `shelter_blocks` started (13:05:49), not the `sticks` stall.
+  - Meanwhile the bot dug dirt piles for `shelter_blocks`. Its death report says it lost 356; that is the bot's own figure, and the server did not count dirt piles (the bot's memory said 28 piles at about 13:09).
   - It never had a pickaxe.
 - **The night:**
   - The shelter held from 13:17:50 to 13:35:22.
   - The two blocks at -77 58 -60 and -77 59 -60 (the side at head and feet height) were then found open. `self_defense` interrupted the repair, and "the repair did not close the shelter".
   - After the respawn, the night routine's shelter try was refused: "Not building a shelter at -70, 63, -57: without a pickaxe you could not dig out of it again".
-  - The bot then tried `!collectBlocks("mossy_cobblestone", 10)` (no tools), then `!buildShelter()`, before the second death.
+  - The bot then tried `!collectBlocks("mossy_cobblestone", 10)` (no tools), then `!buildShelter()`, then `!collectBlocks("dirt", 10)` ("Need dirt, and I can dig that by hand.", 13:35:51), which was still running at the second death.
 - **`[inventory]` rejected-click lines (the lead asked):** none. There are 0 `[inventory]` lines in `night/driver.log`.
-- No kick, no agent exit.
+- No kick. The agent exited once, by its own `cleanKill` (above).
 - **Different from round 8's B**, which reached dawn (39.6 min online, no death).
 
 ## LLM, providers and memory summaries
