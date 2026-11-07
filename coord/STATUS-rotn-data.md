@@ -6,7 +6,7 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
 
 ## Now: stick sources after G3 round 8 A (lead task, 2026-11-07)
 
-- **PR A, `agent/rotn-data/deadbush-sticks` (in review; develop is frozen for round 8, so it waits):**
+- **PR A, #312, `agent/rotn-data/deadbush-sticks` (in review; develop is frozen for round 8, so it waits):**
   - New world rule `deadbush-sticks`: break `minecraft:deadbush` (meta 0, its only state) by hand for 0-2 sticks, `countRange {min 0, max 2, mean 1}`, `tool: null`, `count: null`, `confidence: documented`.
   - Cited from the Forge-patched `BlockDeadBush`: I applied Forge's server binpatch to the vanilla class, and its input checksum matched. `getItemDropped` returns `Items.STICK`, and `quantityDropped` is `Random.nextInt(3)`. Shears give the bush itself.
   - No pack script, Dropt rule, config or mod jar changes the drop. BBLSOhMy's dead bush mixin only widens the soils it can stand on. I checked the 5 drop handlers that name a plant type and ruled each out. The other 59 drop handlers were not read one by one (in `unverified`).
@@ -20,7 +20,7 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
   - Fixture: `packages/rotn-data/test/fixtures/stick-sources-3.3.4/stick-sources.javap.txt`, with excerpts, jar SHA-256s and the binpatch and SRG steps.
   - Tests: `stick-sources.test.js` 5/5, all rotn-data tests 156/156, and the stick- and world-source-related skills-rotn tests plus `src/utils` 172/172. ESLint is clean on the touched JS.
   - No full suite, no paid batch, no server.
-- **PR B, a `leaves-sticks` rule (prepared, not opened):** it would make `howToGet('stick')` and skills-rotn's `worldSources('stick')` offer `dynamictrees:leaves0/1` and `minecraft:leaves/leaves2` (0-1 sticks, mean 0.5, by hand). It breaks skills-rotn's `src/agent/library/fell_tree.test.js:313` ("leaves are no stick source"). It also contradicts their agenda text ("Leaves drop no sticks", `src/agent/agenda.js`, pinned by `fall_safety.test.js:271`). See Request 17.
+- **PR B, a `leaves-sticks` rule (pushed as `agent/rotn-data/leaves-sticks`, stacked on #312, no PR opened):** it would make `howToGet('stick')` and skills-rotn's `worldSources('stick')` offer `dynamictrees:leaves0/1` and `minecraft:leaves/leaves2` (0-1 sticks, mean 0.5, by hand). It breaks skills-rotn's `src/agent/library/fell_tree.test.js:313` ("leaves are no stick source"). It also contradicts their agenda text ("Leaves drop no sticks", `src/agent/agenda.js`, pinned by `fall_safety.test.js:271`). See Request 17.
 
 ## Report to the lead: started on the CX33 (2026-11-07)
 
@@ -562,4 +562,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/deadbush-sticks` (PR A above), in review; it waits for the round 8 freeze to end. #300 and #303 are merged.
+- #312, `agent/rotn-data/deadbush-sticks` (PR A above), in review; it waits for the round 8 freeze to end. #300 and #303 are merged.
