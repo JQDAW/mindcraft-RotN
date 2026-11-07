@@ -71,13 +71,13 @@ export function retryNotStarted(start, { waits = NOT_STARTED_BACKOFF_MS, pause =
 export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries = 2, backoffMs = 2000, notStartedBackoffMs = NOT_STARTED_BACKOFF_MS,
     spawn: run = spawnSync, pause = sleepSync, now = () => new Date(), freemem = os.freemem } = {}) {
     if (!ctl) throw new Error('TEST_SERVER_CTL is not set: run this through `deploy/test-server.sh run -- ...`');
-    const call = (args) => {
+    const call = (args, { ordinaryRetries = retries, callTimeoutMs = timeoutMs } = {}) => {
         let last;
         let failed = 0;      // ordinary failures retried so far
         let unstarted = 0;   // never-started processes retried so far
         const attempts = [];
         for (;;) {
-            const r = run(bash, [ctl, ...args], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024 });
+            const r = run(bash, [ctl, ...args], { encoding: 'utf8', timeout: callTimeoutMs, maxBuffer: 64 * 1024 * 1024 });
             if (r.status === 0) return r.stdout.split('\n').map((l) => l.replace(/\r$/, '')).filter(Boolean);
             const why = notStarted(r);
             const code = r.status ?? r.error?.code ?? 'no status';
@@ -85,7 +85,7 @@ export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries 
             const err = (r.stderr ?? '').trim().slice(-500);
             last = `${args[0]} failed (${code}${why && why !== code ? ` ${why}` : ''})${err ? `: ${err}` : ''}`;
             if (why && unstarted < notStartedBackoffMs.length) pause(notStartedBackoffMs[unstarted++]);
-            else if (!why && failed < retries) pause(backoffMs * 2 ** failed++);
+            else if (!why && failed < ordinaryRetries) pause(backoffMs * 2 ** failed++);
             else break;
         }
         throw new Error(`${last} (after ${attempts.length} attempts: ${attempts.join(', ')})`);
@@ -96,6 +96,10 @@ export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries 
         // The tail over the newest daily rolled-over logs/YYYY-MM-DD-N.log.gz plus latest.log (log4j rolls latest.log at 00:00 UTC):
         // {files, lines}. rotn-test's first line names the files ("##rotn-test files: a.log.gz,latest.log").
         logRotated: (n = 20000) => parseRotatedLog(call(['log', String(n), 'rotated'])),
+        // G4 #1: restart the Minecraft server (test-server.sh restart: console stop, wait for the exit, start, wait for a
+        // new Done line). Never re-sent after an ordinary failure (a second restart is not harmless); only a bash that
+        // never started (nothing ran) is retried. Up to timeoutS for each of the stop and the start, plus a margin.
+        restart: (timeoutS = 300) => call(['restart', String(timeoutS)], { ordinaryRetries: 0, callTimeoutMs: (2 * timeoutS + 60) * 1000 }),
     };
 }
 
