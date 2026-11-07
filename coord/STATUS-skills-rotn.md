@@ -1,6 +1,20 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:58Z (from `date -u`)
+Updated: 2026-11-07T14:21Z (from `date -u`)
+
+## Round 9 B fix (d): spare dirt for repairs; a mob in the opening is hit out of it (branch `agent/skills-rotn/shelter-spare-dirt`, 2026-11-07T14:21Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 2):** in round 9 B the repair at 13:35:22 began by crafting dirt from piles (`r9-g3b/night/driver.log` 473; the bot held 356 piles and no dirt), while the zombie that had dug the hole came in. A mob standing in a cell to close only got "Cannot close …: zombie stands in it".
+- **Change (`library/shelter.js`):**
+  - A shelter that closes with dirt walls keeps `SHELTER_SPARE.dirt` (4) dirt. It is crafted from piles after closing, as many as the piles make, with the line "Keeping 4 dirt for repairs: making N …". A repair with that dirt places before any craft, and tops the spare up afterwards.
+  - A mob (never a player) standing in a cell to close is hit from where the bot stands (`SHELTER_GAP`: at most 5 hits, 600 ms apart, no walk) until it is out of the cell, then the cell is closed.
+- **Tests (`shelter.test.js`, 2 new; 1 updated):**
+  - **Round 9 replay** (no pickaxe, no dirt, 356 piles): the shelter closes and keeps at least 4 dirt. After the east side is dug, the repair's events are place, place, craft 2.
+  - **Mob in the opening:** a zombie in the opening is hit twice (knocked back), and the cell is closed. A player in the cell is not hit.
+  - **Updated:** "still too few: dirt is the fallback" now also expects the spare craft (2 dirt from the last 8 piles).
+  - **On develop both new tests fail,** run from a temporary copy with stand-in constants: "dirt kept for repairs: 0", and no hits.
+  - With the fix: `shelter`, `night_routine`, `night` and `dirt_piles`, 63/63. Lint: 0 in both files, as on develop.
+- **Works with (c)** (#331): self-defense no longer interrupts the repair, so the repair itself deals with a mob in the hole.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 

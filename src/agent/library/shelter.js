@@ -25,6 +25,14 @@ const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), ne
 const SIX = [new Vec3(0, -1, 0), ...HORIZONTAL, new Vec3(0, 1, 0)];
 /** How long a placement's block update may come late (P1 measured up to 1158 ms) before a retry. */
 export const LATE_UPDATE_MS = 1200;
+/**
+ * G3 round 9 B (fix d): a digging zombie (Epic Siege Mod) opened the dirt shelter, and the repair
+ * began by crafting dirt from piles while the zombie came in. A shelter with dirt walls keeps this
+ * many dirt blocks ready (crafted from piles after it closes), so a repair only places.
+ */
+export const SHELTER_SPARE = { dirt: 4 };
+/** A mob standing in a cell to close: hit it from where the bot stands, at most `hits` times. */
+export const SHELTER_GAP = { hits: 5, swingMs: 600 };
 
 /**
  * Real fire or lava: rotn-data's material (G3 round 7 B), so a block whose name only holds "fire"
@@ -268,10 +276,27 @@ async function placeOnce(bot, target, interior, mode) {
 }
 
 /**
+ * G3 round 9 B (fix d): a mob (never a player) standing in a cell to close is hit from where the bot
+ * stands, at most SHELTER_GAP.hits times, until it is out of the cell. No walk. Returns the number of hits.
+ */
+async function hitOutOf(bot, cell) {
+    let hits = 0;
+    for (let mob = mobIn(bot, cell); mob && mob.type !== 'player' && hits < SHELTER_GAP.hits; mob = mobIn(bot, cell)) {
+        if (bot.interrupt_code || typeof bot.attack !== 'function') break;
+        await bot.lookAt(mob.position.offset(0, (mob.height ?? 1.8) * 0.8, 0), true);
+        bot.attack(mob);
+        hits++;
+        await sleep(SHELTER_GAP.swingMs);
+    }
+    return hits;
+}
+
+/**
  * Make one cell a wall: place, and when the block is not there, wait for a late update, look
- * again and try once more (#195 review 4).
+ * again and try once more (#195 review 4). A mob in the cell is hit out of it first (round 9 B).
  */
 async function fillCell(bot, target, interior, mode) {
+    if (!mode.accept(bot.blockAt(target)) && mobIn(bot, target)) await hitOutOf(bot, target);
     for (let attempt = 0; attempt < 2; attempt++) {
         if (mode.accept(bot.blockAt(target))) return true;
         if (!isEmpty(bot.blockAt(target)) && !isLiquid(bot.blockAt(target))) return false;
@@ -300,7 +325,7 @@ function planProblem(plan, site, radius, handExit, bot = null) {
  * 32 dirt piles were held at dusk): cobblestone from rocks (each rock kind makes its own), dirt
  * from dirt piles. The caller counts again afterwards.
  */
-async function craftMore(bot, what, short, craft) {
+async function craftMore(bot, what, short, craft, { spare = false } = {}) {
     if (short <= 0) return;
     try {
         if (what === 'cobblestone' && cobbleChoices(bot).length > 0) {
@@ -315,7 +340,7 @@ async function craftMore(bot, what, short, craft) {
                 const n = Math.min(left, Math.floor(piles / r.per));
                 if (n <= 0) continue;
                 const gives = formatName(botName(r.gives.name), r.gives.meta ?? 0);
-                log(bot, `The shelter needs ${left} more blocks: making ${n} ${gives} from your ${botName(r.name)} (${r.per} each).`);
+                log(bot, `${spare ? `Keeping ${left} dirt for repairs` : `The shelter needs ${left} more blocks`}: making ${n} ${gives} from your ${botName(r.name)} (${r.per} each).`);
                 await craft(bot, gives, n);
                 left -= n;
                 if (left <= 0) break;
@@ -442,5 +467,10 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
         ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${softNote}${floorNote}`
         : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(at).join('; ')}); placed ${placed}.`;
     log(bot, line);
+    // Round 9 B (fix d): dirt walls can be dug by any zombie; keep dirt ready, so a repair only places.
+    if (missing.length === 0 && soft > 0) {
+        const held = countOf(softItems(bot));
+        if (held < SHELTER_SPARE.dirt) await craftMore(bot, 'dirt', SHELTER_SPARE.dirt - held, craft, { spare: true });
+    }
     return { closed: missing.length === 0, feet, placed, missing, soft, line };
 }
