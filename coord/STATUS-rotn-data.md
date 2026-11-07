@@ -272,6 +272,15 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
+- **falling-blocks.json dump stamp (lead task, 2026-11-07; branch `agent/rotn-data/falling-blocks-stamp`, PR in review).**
+  - `source.dump` was `2026-11-02T02:37:07Z`. It is now `2026-11-06T12:22:37Z`, the `dumpedAt` of the current `manifest.json` from #269's fourth dump.
+  - Rebuilt with `node packages/rotn-data/tools/build-falling-blocks.mjs --pack "/home/RotN 3.3.4 Server Pack.zip"` on the CX33.
+  - The diff is that one line. I compared the files as parsed JSON, with `source.dump` left out: the new file is identical to develop's, with 215 falling blocks, 16 that override a fall method, 889 ruled out, 0 unreviewed and 0 unresolved.
+  - `--check` reports up to date for both `falling-blocks.json` and `food-values.json`.
+  - `falling-blocks.test.js` and `food-values.test.js` pass 13/13. ESLint is clean on the two build tools and their tests (it does not lint JSON).
+  - No full `npm test` (shared 7.6 GB), no paid batch, no server.
+  - Request 9 stays deferred until after G3 (lead, 2026-11-07).
+
 - **#188 follow-up (lead, agreed as drafted).** A class rule `ghast-blaze-variants` (pattern `(Ghast|Ghastling|GhastQueen|Blaze)$`, take-cover, ranged, inferred: every class extends vanilla EntityGhast or EntityBlaze and its base fires fireballs, read from the three jars) covers 11 ranged variants (8 Special Mobs, NetherEx's ghastling, Twilight Forest's tower and mini ghasts); after the #191 review (REQUEST CHANGES: my fighter-ghast claim was wrong, I had read only adjustTypeAttributes) a verified rule `melee-ghast-blaze-variants`, matched first, makes the six Special Mobs variants that call disableRangedAI() (fighter, baby, unholy ghasts; cinder, ember, jolt blazes) `fight`. NetherEx's Ghast Queen and Twilight Forest's Ur-Ghast (boss package classes) are `avoid` entries. README `threatOf` row updated; the cockatrice evidence names CockatriceAIAggroLook.shouldContinueExecuting (func_75253_b).
 - **#191 merged** (`b586626`): the ghast/blaze rules above.
 - **#187 merged** (`e600de0`) and **#188 merged** (`944c7b2`, with the zombie horse corrected to fight: The Hordes' MixinAbstractHorse gives it zombie AI, hordes.cfg line 131). **#186 review data requests (lead).** (1) #187: `threatOf` and `nightThreats` return `lookAt` (false: enderman, rifted enderman, Special Mobs enderman variants and ender creeper, cockatrice via its override, all cited); it also carries the sludge_wand line fix (180-198; my push to #185 came after it had merged). Review: REQUEST CHANGES (the override path), fixed. (2) #188: ender dragon and wither `avoid`, ghast and blaze `take-cover` (ranged), zombie horse `fight` (first `ignore`, corrected before merge: The Hordes makes it aggressive), gorgon `avoid` + `lookAt: false` (verified: its gaze kills a player who looks back).
