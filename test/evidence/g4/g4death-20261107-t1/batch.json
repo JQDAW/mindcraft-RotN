@@ -1,0 +1,23 @@
+{
+  "batchId": "20261107T135918-619639",
+  "testMode": false,
+  "gate": false,
+  "smoke": true,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g4-death-report",
+      "out": "<local>/captures/raw/t1-g4death/death",
+      "runId": "20261107t135918-297943",
+      "exit": 1,
+      "spentBefore": 0,
+      "timeoutMin": 47
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.895145662,
+  "usageAtEnd": 0.902050108,
+  "spentUsd": 0.006904,
+  "exit": 1,
+  "logsFetched": true
+}

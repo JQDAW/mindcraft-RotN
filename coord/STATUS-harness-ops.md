@@ -1,8 +1,23 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (05:50 UTC, from `date -u`)
+Updated: 2026-11-07 (14:14 UTC, from `date -u`)
 
-## Now: waiting for the human's GO for G3 smoke round 9 (then T1); develop frozen at 670fe8aa; branch-only work meanwhile
+## Now: G3 smoke round 9 (670fe8aa, smoke) is over: 3/4, so no gate on this commit. T1 (the `g4-death-report` rehearsal) ran after it. Evidence: this PR.
+
+- **Under the human's written GOs** (round 9 at about 12:46 UTC; T1 at about 12:51 UTC, after the four batches), relayed by the lead. Each batch ran on its own fresh server after its own pre-checks, with no skip flags, no reruns and no retries. Every server, Primary IP and SSH key was verified gone (0/0/0 with `grep -c .`).
+- **Results:**
+  - **A** `g3-rocks-to-stone-tools`: PASS 7/7. The whole agenda took 6 min; sticks came from leaves.
+  - **B** `g3-first-night`: FAIL 3/5. The shelter was opened after 17.5 min; no pickaxe, because `sticks` stalled; 2 zombie deaths. Then the agent killed its own process: after the second death, `!collectBlocks` refused to stop for 10 s, so `cleanKill` ran (`stayed_online`, a real fail; I first called it a harness false fail, which was wrong).
+  - **C** `g3-task-preempts-agenda`: PASS 7/7.
+  - **D** `g3-untrusted-refused`: PASS 7/7.
+  - **T1** `g4-death-report`: FAIL 7/9, a rehearsal and never G4 evidence. The respawn took under 2 s, the death report came 6 s after the kill, and the agenda resumed. `loss_reported` failed on its window, which is harness-side (the window started at the confirming respawn reading, 1 s after the report). The loss mismatch (planks 6 vs 3, metamorphic rock 3 vs 7) is likely harness-side too (stale counts, a variant compared to a whole item), but that is not proven. `no_spam`: the bot did post 13 lines in one minute against the limit of 10; the lead has since redefined it as a loop check (fix pending).
+- **Spend:** round 9 cost USD 0.0186 by the batch figures and T1 USD 0.0069. The key reads 0.902050 of 4.50. Hetzner: 5 servers, each billed about 1 h (about EUR 0.69 plus IPv4).
+- **Queued for after the freeze (the lead decides):**
+  - the `g4-death-report` fixes (report window from the kill, counts closer to the kill, variant-aware loss check);
+  - the `no_spam` definition.
+- **For skills-rotn (via the lead):** B's shelter breach with no pickaxe; the luck-dependent `sticks` step; and the action that would not stop after a death (a 10-second `cleanKill`, then a restart). There is no `death_report.js` fault; an optional point is to sum metadata variants in the chat line.
+
+## Earlier (before the round 9 GO): waiting for the human's GO for G3 smoke round 9 (then T1); develop frozen at 670fe8aa; branch-only work meanwhile
 
 - **Round 9, ready (05:31 UTC):**
   - the checkout `/home/mindcraft-RotN-batch/670fe8aa` (`npm ci` 8/8 patches, clean);
@@ -18,7 +33,7 @@ Updated: 2026-11-07 (05:50 UTC, from `date -u`)
   - Console rules for `g4-service-reconnect` only, built like #320's kill: `kick <this run's bot>` (any other name and every selector refused; no valid bot param, no rule) and `stop` exactly. `guardConsole` lets the restart through only where the list admits `stop`.
   - **Tested** (targeted): `g4-reconnect-tools.test.js` (6 tests) and new tests in `test-server.test.js` (the helper with a fake systemctl and console: the usual case, the same-file Done, no Done, no stop, already stopped, bad timeout; the verb through the fake ssh). With runner, the G3 and G4 tests and deploy-eol: **319 pass, 0 fail**. ESLint clean; baseline 253. shellcheck is not installed on this server, so CI runs it.
 
-## Earlier: `g4-death-report` is built offline (this PR, for review); its T rehearsal run plan goes to the lead. No paid run without the human's GO.
+## Earlier: `g4-death-report` was built offline (#320, merged); its T rehearsal run plan goes to the lead. No paid run without the human's GO.
 
 - **The scenario** (`test/scenarios/g4/g4-death-report.mjs`, G4 #6, gate G4, the real agent):
   1. the G2 world, production givers;
