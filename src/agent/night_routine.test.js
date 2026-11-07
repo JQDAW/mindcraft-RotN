@@ -1047,3 +1047,28 @@ test('G3 gate B (d): between a death and the respawn the routine does nothing: o
     assert.deepEqual(agent.chat, ['[night] it is night: building a shelter', '[night] in the shelter at 0, 64, 0 until morning']);
     assert.equal(o.builds.length, 2);
 });
+
+test('#355 review 2: a block that hurts on contact (cactus) in the bot\'s space is never kept: after the bounded breaks fail the bot leaves', async (t) => {
+    quiet(t);
+    const { SPACE_CLEAR } = await import('./night_routine.js');
+    const { siteProblem } = await import('./library/shelter.js');
+    const { agent, world, key } = gateShelter();
+    agent.bot.entities = {};
+    const o = await gateOps(world, key, { breaks: false });
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    world.set('0,64,0', 'cactus'); // at the feet: it does not suffocate, it hurts
+    const p = siteProblem(agent.bot, SITE, { occupied: true, tolerateBody: true });
+    assert.equal(p?.kind, 'body', 'not tolerated');
+    assert.deepEqual([p.suffocates, p.hurts], [false, true]);
+    world.set('0,64,0', 'contenttweaker:scaffolding');
+    assert.equal(siteProblem(agent.bot, SITE, { occupied: true, tolerateBody: true }), null, 'the pillar block is');
+    world.set('0,64,0', 'cactus');
+    let now = CHECK_MS + 2, r = null;
+    for (let i = 0; i < SPACE_CLEAR.maxClears + 1; i++) { r = nightTick(agent, { now, ops: o }); await settle(agent); now += 100; }
+    assert.equal(o.clears.length, SPACE_CLEAR.maxClears, 'tried first');
+    assert.equal(r, 'night:building');
+    assert.ok(!agent.chat.some(l => /keeps coming back/.test(l)), agent.chat.join('\n'));
+    assert.match(agent.chat.at(-1), /no longer usable: cactus at 0, 64, 0 \(a solid block in the 1x2 space\); building a new one$/);
+});

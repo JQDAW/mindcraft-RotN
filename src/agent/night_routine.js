@@ -282,9 +282,11 @@ function startBuilding(n, now) {
 /**
  * G3 gate B: what the bot does about a problem in the shelter it is in, when that problem is not
  * deadly. A solid block in its two cells (a pillaring zombie's scaffolding) is broken from inside,
- * bounded by SPACE_CLEAR; after that, a block that does not suffocate it is kept and the bot stays.
+ * bounded by SPACE_CLEAR; after that, a block that neither suffocates it nor hurts on contact is kept
+ * and the bot stays.
  * A block not loaded is looked at again on the next check. Returns the tick's result when the bot
- * stays, or null when the shelter must be left (fire, lava, drowning, a block it suffocates in).
+ * stays, or null when the shelter must be left (fire, lava, drowning, a block it suffocates in or
+ * that hurts on contact).
  */
 function keepShelter(agent, n, ops, found, now) {
     const bot = agent.bot;
@@ -302,7 +304,7 @@ function keepShelter(agent, n, ops, found, now) {
         });
         return 'night:inside';
     }
-    if (found.suffocates) return null;
+    if (found.suffocates || found.hurts) return null; // #355 review 2: never kept when it hurts on contact
     n.tolerated = true;
     line(agent, `[night] ${found.text} keeps coming back or cannot be broken; it does not suffocate me and the walls are closed: staying in the shelter`);
     n.checkedAt = -Infinity; // the walls are checked on the next tick, with the block allowed

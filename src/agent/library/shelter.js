@@ -68,6 +68,13 @@ export const suffocates = (b) => {
     if (st && typeof st.fullCube === 'boolean') return st.fullCube && st.solid !== false;
     return isSolid(b);
 };
+/**
+ * A block that hurts a body in it or against it (#355 review 2): never kept in the bot's space.
+ * rotn-data has no contact damage, so these are the pack's names (3.3.4 registry): cactus, magma,
+ * thorns, brambles, berry bushes, embers, spikes and barbed or razor wire.
+ */
+const CONTACT_HURT = /(^|:)(cactus|nether_cactus|barrel_cactus|magma|block_end_magma|thorns|thornstalk|thorn_rose|bramble_plant|cave_bramble|flower_bramble|poison_bramble|berry_bush|ember|spike|damcell_spike|spikes|spikes_on|spikes_toxic|spikes_toxic_on|wall_spikes|wall_spikes_on|dragon_ice_spikes|barbed_wire|barbed_wire_fence|razor_wire)$/;
+export const hurtsOnContact = (b) => typeof b?.name === 'string' && CONTACT_HURT.test(b.name);
 /** A block that falls when undermined: rotn-data's falls() (#205), else gravel, sand, concrete powder, anvils, the dragon egg. */
 export const isFalling = (b) => {
     if (typeof b?.name !== 'string' || !b.name) return false;
@@ -122,14 +129,15 @@ function propFor(roof, solidAt, emptyAt) {
 /**
  * Why a site cannot be used at all, or null: `{pos, block, why, kind, text}`, text naming the block
  * and where it is; kind: 'hazard' (fire or lava), 'drown', 'body' (a solid block in the bot's two
- * cells, with `suffocates`: it is at head height and suffocates), 'unloaded' or 'site' (a new site's
+ * cells, with `suffocates`: it is at head height and suffocates, and `hurts`: it hurts on contact),
+ * 'unloaded' or 'site' (a new site's
  * floor or space). A new site needs a solid floor, a free 1x2 space and no fire or lava in its walls
  * and roof. `occupied` (the shelter the bot is in, G3 round 7 B): only real fire or lava there, a
  * solid block in the bot's two cells, or a liquid at head height (drowning, #296 review 1) counts;
  * a torch, a carpet, a snow layer, grass or water at its feet does not, nor the floor (when it goes,
  * the bot falls and is no longer in the shelter).
  * `tolerateBody` (G3 gate B: the bot stays with a pillar block it could not keep out): a solid block
- * in the bot's two cells that does not suffocate it does not count.
+ * in the bot's two cells that neither suffocates it nor hurts on contact (#355 review 2) does not count.
  * Dropped items are entities, never blocks, so they never count.
  */
 export function siteProblem(bot, feet, { occupied = false, tolerateBody = false } = {}) {
@@ -147,8 +155,9 @@ export function siteProblem(bot, feet, { occupied = false, tolerateBody = false 
         if (!occupied && !isEmpty(b)) return found(q, b, 'the 1x2 space is not free', 'site');
         if (occupied && isBodyBlock(b)) {
             const chokes = q.y > p.y && suffocates(b);
-            if (tolerateBody && !chokes) continue;
-            return { ...found(q, b, 'a solid block in the 1x2 space', 'body'), suffocates: chokes };
+            const hurts = hurtsOnContact(b);
+            if (tolerateBody && !chokes && !hurts) continue;
+            return { ...found(q, b, 'a solid block in the 1x2 space', 'body'), suffocates: chokes, hurts };
         }
     }
     for (const q of wallsAndRoof(p)) {
