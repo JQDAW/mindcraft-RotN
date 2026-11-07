@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T15:14Z (from `date -u`)
+Updated: 2026-11-07T15:29Z (from `date -u`)
 
 ## No chat-spam loop from reflexes: an identical line at most once a minute (branch `agent/skills-rotn/chat-repeat-limit`, 2026-11-07T15:14Z by `date -u`)
 
@@ -10,6 +10,11 @@ Updated: 2026-11-07T15:14Z (from `date -u`)
   - **`modes.js` `say`:** every reflex line uses it. The behavior log still keeps every line.
   - **`agent.js` `routeResponse`:** limits only the models' "My brain disconnected" reply (the text comes from `src/models/*`, which is lead-owned); other replies are never held back.
   - At most 5 identical lines in 5 min, under the G4 thresholds.
+- **#344 review (lead, approved with nits on 262765a), answered (2026-11-07T15:29Z by `date -u`):**
+  1. A line counts as said only when the chat limit really sent it: `chat_limit.js` emits `rotnChatSent` with the text, and only that starts the 60 s. With the limit off, a line counts when it is handed to chat. A line still waiting in the queue holds an identical one back for at most `PENDING_MS` (the limit's `lowMaxWaitMs`, 15 s), so a dropped line never blocks the text for a minute.
+  2. "Identical" is harness-ops' `chatLoopKey` (#342), copied exactly: case, numbers and punctuation ignored.
+  3. The PR body notes that the brain-line limit also covers `convoManager.sendToBot`.
+  - **Tests:** 2 new, and test 1 moved to the new limiter interface; both fail on 262765a. 7 related files: 90/90. Lint unchanged.
 - **Tests (new `chat_repeat.test.js`, 3):**
   - the limiter;
   - "I'm dying!" 12 times in 5 min reaches chat 4 times, and the behavior log keeps all 12;

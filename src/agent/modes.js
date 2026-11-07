@@ -10,13 +10,14 @@ import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
 import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
-import { mayRepeat } from './chat_repeat.js';
+import { mayRepeat, handedToChat } from './chat_repeat.js';
 
 async function say(agent, message) {
     agent.bot.modes.behavior_log += message + '\n';
     if (agent.shut_up || !settings.narrate_behavior) return;
     // No chat-spam loop (lead, after G3 round 9): an identical reflex line at most once a minute.
     if (!mayRepeat(agent, message, { tag: '[reflex]' })) return;
+    handedToChat(agent, message); // counts as said once the chat limit sends it (#344 review 1)
     // Reflex narration is low priority for the chat limit: dropped when chat is busy (G3 round 4 C+D).
     agent.openChat(message, { priority: 'low' });
 }
