@@ -647,7 +647,7 @@ describe('batch.mjs derives each runner timeout from the scenario (lead, after #
         assert.deepEqual(timeouts.map((t) => [t.id, t.timeoutMin]), [['g3-rocks-to-stone-tools', 37], ['g3-first-night', 67], ['g3-task-preempts-agenda', 34], ['g3-untrusted-refused', 16]]);
         // (c) used to need --timeout-min 33 by hand; derived it is above that, and above each scenario's own limits.
         const c = reg['g3-task-preempts-agenda'].defaults;
-        const cOwn = 4 + c.warmMinutes + c.activeWaitMinutes + c.acceptS / 60 + c.taskMinutes + c.resumeMinutes + c.cancelS / 60;
+        const cOwn = 4 + c.minWarmMinutes + c.activeWaitMinutes + c.acceptS / 60 + c.taskMinutes + c.resumeMinutes + c.cancelS / 60;
         assert.ok(timeouts[2].timeoutMin >= 33 && timeouts[2].timeoutMin > cOwn);
         for (const id of ['g3-rocks-to-stone-tools', 'g3-first-night']) {
             const t = timeouts.find((x) => x.id === id);
