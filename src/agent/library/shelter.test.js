@@ -669,3 +669,20 @@ test('round 9 B (d): a mob standing in the opening is hit (in place) until it le
     assert.equal(q.closed, false);
     assert.match(p.bot.output, /Cannot close 1, 64, 0: player stands in it\./);
 });
+
+test('#333 review: a mob rotn-data says to leave alone (a wolf, a polar bear, an enderman) is not hit out of the opening', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_GAP };
+    Object.assign(SHELTER_GAP, { swingMs: 10 });
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    for (const name of ['wolf', 'polar_bear', 'enderman']) {
+        const w = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }) });
+        w.bot.entities = { 1: w.bot.entity, 9: { name, type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.4 } };
+        const struck = [];
+        w.bot.attack = (e) => struck.push(e.name);
+        const r = await buildShelter(w.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+        assert.deepEqual(struck, [], `${name}: not hit`);
+        assert.equal(r.closed, false);
+        assert.match(w.bot.output, new RegExp(`Cannot close 1, 64, 0: ${name} stands in it\\.`));
+    }
+});

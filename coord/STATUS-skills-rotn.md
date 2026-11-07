@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T14:21Z (from `date -u`)
+Updated: 2026-11-07T15:06Z (from `date -u`)
 
 ## Round 9 B fix (d): spare dirt for repairs; a mob in the opening is hit out of it (branch `agent/skills-rotn/shelter-spare-dirt`, 2026-11-07T14:21Z by `date -u`)
 
@@ -14,6 +14,7 @@ Updated: 2026-11-07T14:21Z (from `date -u`)
   - **Updated:** "still too few: dirt is the fallback" now also expects the spare craft (2 dirt from the last 8 piles).
   - **On develop both new tests fail,** run from a temporary copy with stand-in constants: "dirt kept for repairs: 0", and no hits.
   - With the fix: `shelter`, `night_routine`, `night` and `dirt_piles`, 63/63. Lint: 0 in both files, as on develop.
+- **#333 review (lead, approved with a change; 2026-11-07T15:06Z by `date -u`):** `hitOutOf` hit any non-player mob, bears and wolves included (bears are tool-free diggers). It now hits only `threats.shelterEnemy`: any mob rotn-data does not ignore, never a calm one, never the enderman family. That is the same function as #331's, added with identical text so the merges stay clean. Per rotn-data, wolves and polar bears are `ignore`, endermen `ignore-unless-provoked`, and zombie pigmen `fight` (hostile in RotN), so pigmen are hit. **New test:** a wolf, a polar bear or an enderman in the opening is not hit. It fails on 247d3240. `shelter` and `threats`: 43/43. Lint: 0.
 - **Works with (c)** (#331): self-defense no longer interrupts the repair, so the repair itself deals with a mob in the hole.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)

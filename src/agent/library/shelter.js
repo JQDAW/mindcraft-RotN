@@ -20,6 +20,7 @@ import { formatName } from './rotn_names.js';
 import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe } from './skills.js';
+import { shelterEnemy } from './threats.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const SIX = [new Vec3(0, -1, 0), ...HORIZONTAL, new Vec3(0, 1, 0)];
@@ -276,12 +277,14 @@ async function placeOnce(bot, target, interior, mode) {
 }
 
 /**
- * G3 round 9 B (fix d): a mob (never a player) standing in a cell to close is hit from where the bot
- * stands, at most SHELTER_GAP.hits times, until it is out of the cell. No walk. Returns the number of hits.
+ * G3 round 9 B (fix d): a hostile mob standing in a cell to close is hit from where the bot stands,
+ * at most SHELTER_GAP.hits times, until it is out of the cell. No walk. Never a player, and never a
+ * mob rotn-data says to leave alone (#333 review: a wolf or a bear, a tool-free digger, would only
+ * be angered; an enderman is never looked at): threats.shelterEnemy. Returns the number of hits.
  */
 async function hitOutOf(bot, cell) {
     let hits = 0;
-    for (let mob = mobIn(bot, cell); mob && mob.type !== 'player' && hits < SHELTER_GAP.hits; mob = mobIn(bot, cell)) {
+    for (let mob = mobIn(bot, cell); mob && shelterEnemy(mob) && hits < SHELTER_GAP.hits; mob = mobIn(bot, cell)) {
         if (bot.interrupt_code || typeof bot.attack !== 'function') break;
         await bot.lookAt(mob.position.offset(0, (mob.height ?? 1.8) * 0.8, 0), true);
         bot.attack(mob);
