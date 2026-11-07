@@ -716,6 +716,15 @@ describe('P2 (lead, after G2 batch 6): a killed runner leaves the checks it had 
         }
     });
 
+    // Is the process gone (after the kill in killDuringStay's cleanup)? Polls up to 5 s.
+    async function processGone(pid) {
+        for (let i = 0; i < 50; i++) {
+            try { process.kill(pid, 0); } catch (e) { if (e.code === 'ESRCH') return true; }
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        return false;
+    }
+
     // run.mjs on the fake test-server CLI and fake driver, G1 with a 10-minute stay, killed during the stay.
     async function killDuringStay(signal) {
         const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-kill-'));
@@ -730,6 +739,7 @@ describe('P2 (lead, after G2 batch 6): a killed runner leaves the checks it had 
         const exited = new Promise((r) => child.on('exit', (code, sig) => r({ code, sig })));
         const file = path.join(out, 'result.json');
         const read = () => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+        const driverPid = () => { try { return Number(fs.readFileSync(path.join(tmp, 'driver.pid'), 'utf8')) || null; } catch { return null; } };
         try {
             // Wait until the progress record shows the walk passed (the stay is next and lasts 10 minutes).
             let rec = null;
@@ -740,10 +750,12 @@ describe('P2 (lead, after G2 batch 6): a killed runner leaves the checks it had 
             assert.ok(rec, 'a progress record exists while the run is going');
             child.kill(signal);
             const ex = await exited;
-            return { rec: read(), ex };
+            return { rec: read(), ex, driverPid: driverPid() };
         } finally {
-            const pid = /DRIVER \{"type":"pid","pid":(\d+)\}/.exec(fs.existsSync(path.join(out, 'driver.log')) ? fs.readFileSync(path.join(out, 'driver.log'), 'utf8') : '')?.[1];
-            try { if (pid) process.kill(Number(pid), 'SIGKILL'); } catch { /* already gone */ }
+            // The fake driver outlives a hard-killed runner (its parent dies, it does not): kill it by the pid it
+            // wrote at its start (fake-driver.mjs; driver.log may not exist, see there).
+            const pid = driverPid();
+            try { if (pid) process.kill(pid, 'SIGKILL'); } catch { /* already gone */ }
             child.kill('SIGKILL');
             await new Promise((r) => setTimeout(r, 200));
             fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
@@ -751,7 +763,9 @@ describe('P2 (lead, after G2 batch 6): a killed runner leaves the checks it had 
     }
 
     test('run.mjs: a hard kill (TerminateProcess on Windows, SIGKILL elsewhere) leaves FAIL (killed) with the checks done', { timeout: 120000 }, async () => {
-        const { rec } = await killDuringStay('SIGKILL');
+        const { rec, driverPid } = await killDuringStay('SIGKILL');
+        assert.ok(driverPid, 'the fake driver wrote its pid');
+        assert.equal(await processGone(driverPid), true, 'no fake driver left running after the test');
         assert.equal(rec.pass, false);
         assert.equal(rec.gateValid, false);
         assert.equal(rec.verdict, 'FAIL (killed)');
@@ -764,7 +778,9 @@ describe('P2 (lead, after G2 batch 6): a killed runner leaves the checks it had 
     });
 
     test('run.mjs: SIGTERM where it can be caught (not Windows) names the signal and exits 143', { timeout: 120000, skip: process.platform === 'win32' && 'node cannot catch a SIGTERM sent to it on Windows (TerminateProcess)' }, async () => {
-        const { rec, ex } = await killDuringStay('SIGTERM');
+        const { rec, ex, driverPid } = await killDuringStay('SIGTERM');
+        assert.ok(driverPid, 'the fake driver wrote its pid');
+        assert.equal(await processGone(driverPid), true, 'no fake driver left running after the test');
         assert.equal(ex.code, 143);
         assert.equal(rec.pass, false);
         assert.equal(rec.verdict, 'FAIL (killed)');

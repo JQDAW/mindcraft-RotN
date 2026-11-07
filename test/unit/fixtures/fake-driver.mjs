@@ -5,6 +5,10 @@ import path from 'node:path';
 import process from 'node:process';
 
 const dir = process.env.FAKE_CTL_DIR;
+// Its pid, first and synchronously, so a test that hard-kills the runner can clean up the driver it leaves
+// behind. Not via driver.log: the runner writes that through an async stream, which a runner killed early
+// may never have opened (the hard-kill test left this driver running, 2026-11-07).
+fs.writeFileSync(path.join(dir, 'driver.pid'), String(process.pid));
 const add = (msg) => fs.appendFileSync(path.join(dir, 'server.log'), `[12:00:01] [Server thread/INFO] [x]: ${msg}\n`);
 add('UUID of player FRCFLD is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d');
 add('FRCFLD joined the game');
@@ -14,7 +18,5 @@ console.log(`DRIVER {"type":"spawn","bot":"${process.env.ROTN_SCENARIO_BOT}"}`);
 // What the runner let through (PR #9 review finding 5): never the ctl, the state dir or cloud tokens.
 console.log(`DRIVER ${JSON.stringify({ type: 'env', ctl: 'TEST_SERVER_CTL' in process.env, stateDir: 'TEST_SERVER_STATE_DIR' in process.env,
     hcloud: 'HCLOUD_TOKEN' in process.env, extra: process.env.ROTN_SCENARIO_EXTRA })}`);
-// Its pid, so a test that hard-kills the runner can clean up the driver it leaves behind.
-console.log(`DRIVER {"type":"pid","pid":${process.pid}}`);
 process.on('SIGTERM', () => process.exit(0));
 setInterval(() => {}, 1000);
