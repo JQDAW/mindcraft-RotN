@@ -268,12 +268,13 @@ test('a Dynamic Trees branch is always cut the safe way (fellTree), whichever ru
     assert.match(bot.output, /Not cutting the tree/);
 });
 
-test('the sticks step: felling, not leaves (rotn-data Request 13: leaves never drop sticks)', () => {
+test('the sticks step: dead bushes, leaves from the ground, then felling (Request 17: leaves do give sticks)', () => {
     const sticks = ROTN_EARLY_GAME.find(s => s.id === 'sticks');
-    // G3 round 8 A: dead bushes by hand first, then felling, another kind of tree after one gave none.
-    assert.match(sticks.goal, /!collectBlocks\("stick", 3\) first breaks dead bushes nearby by hand \(0-2 sticks each\), then fells trees/);
+    // G3 round 8 A and Request 17: dead bushes by hand first, then leaves from the ground, then felling,
+    // another kind of tree after one gave none.
+    assert.match(sticks.goal, /!collectBlocks\("stick", 3\) first breaks dead bushes nearby by hand \(0-2 sticks each\), then leaves you can reach from the ground \(a stick half the time; it never climbs for them\), then fells trees/);
     assert.match(sticks.goal, /trying another kind of tree after one gave no sticks/);
-    assert.match(sticks.goal, /Leaves drop no sticks/);
+    assert.doesNotMatch(sticks.goal, /Leaves drop no sticks/);
     // Round 5 A rerun: planks need a table (rotn-data), so before it River Cane or bamboo stand in.
     assert.match(sticks.goal, /Planks from ordinary logs need a crafting table here, so they come later/);
     assert.match(sticks.goal, /!collectBlocks\("biomesoplenty:plant_1:5", 3\)/);

@@ -32,17 +32,21 @@ const SPRUCE = 'dynamictrees:sprucebranch', DARK_OAK = 'dynamictrees:darkoakbran
 const LEAVES = 'dynamictrees:leaves0', ROOTY = 'dynamictrees:rootydirt', BUSH = 'deadbush';
 
 /**
- * The bot and its world. trees: [{ x, branch, sticks }]: a 5-block trunk with a canopy leaning east;
- * a cut trunk fells only that tree, which drops 3 logs and `sticks` sticks east of it after the fall.
+ * The bot and its world. trees: [{ x, branch, sticks, canopy }]: a 5-block trunk with a canopy leaning
+ * east, from y `canopy` (default 69: no leaf is reachable from the ground; 67: the lowest are); a cut
+ * trunk fells only that tree, which drops 3 logs and `sticks` sticks east of it after the fall.
  * bushes: [{ x, z, sticks }]: a dead bush that gives `sticks` sticks when broken (by hand).
+ * leafSticks: what each broken leaf gives, in turn (Pyrotech: a stick half the time). The walks keep
+ * the bot on the ground (y 64): a leaf is broken from below.
  */
-function fakeBot({ start = at(-2), trees = [], bushes = [], held = null } = {}) {
+function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSticks = [1, 0] } = {}) {
     const world = new Map(); // key -> { name, tree }
     for (const [i, tr] of trees.entries()) {
         world.set(key(at(tr.x, 63)), { name: ROOTY });
         for (let y = 64; y <= 68; y++) world.set(key(at(tr.x, y)), { name: tr.branch, tree: i });
         world.set(key(at(tr.x + 1, 67)), { name: tr.branch, tree: i }); // a limb
-        for (let dx = -1; dx <= 3; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = 67; y <= 70; y++) {
+        const low = tr.canopy ?? 69;
+        for (let dx = -1; dx <= 3; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = low; y <= low + 3; y++) {
             const p = at(tr.x + dx, y, dz);
             if (!world.has(key(p))) world.set(key(p), { name: LEAVES, tree: i });
         }
@@ -64,7 +68,7 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null } = {}) 
         const got = items.find(i => i.name === name && i.metadata === meta);
         if (got) got.count += n; else items.push({ name, metadata: meta, count: n, type: reg.itemsByName[name].id });
     };
-    let nextId = 1;
+    let nextId = 1, leaves = 0;
     const entities = {};
     const log = { digs: [] };
     const bot = {
@@ -92,6 +96,7 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null } = {}) 
             const cell = world.get(key(b.position));
             log.digs.push({ pos: key(b.position), name: cell?.name, held: bot.heldItem?.name ?? null });
             if (cell?.name === BUSH) { world.delete(key(b.position)); give('stick', 0, cell.sticks); return Promise.resolve(); }
+            if (cell?.name === LEAVES) { world.delete(key(b.position)); give('stick', 0, leafSticks[leaves++ % leafSticks.length]); return Promise.resolve(); }
             const tr = trees[cell.tree];
             for (const [k, c] of [...world]) if (c.tree === cell.tree) world.delete(k);
             const fall = { id: nextId++, name: FALLING_TREE, position: b.position.clone() };
@@ -108,7 +113,7 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null } = {}) 
             stop() {},
             getPathTo: () => ({ status: 'success', path: [] }),
             goto(goal) {
-                bot.entity.position = at(Math.floor(goal.x), Math.floor(goal.y), Math.floor(goal.z)).offset(0.5, 0, 0.5);
+                bot.entity.position = at(Math.floor(goal.x), 64, Math.floor(goal.z)).offset(0.5, 0, 0.5);
                 for (const [id, e] of Object.entries(entities)) {
                     if (e.name === 'item' && e.position.distanceTo(bot.entity.position) <= 1.5) {
                         delete entities[id];
@@ -206,4 +211,41 @@ test('#311 review: a dead bush is never broken with shears (sheared, it drops it
     bot.tool.equipForBlock = () => { bot.heldItem = shears; return Promise.resolve(); }; // as mineflayer-tool might
     assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
     assert.deepEqual(bot.log.digs.map(d => [d.name, d.held]), [[BUSH, null]], 'by hand, not with the shears');
+});
+
+// ---- Request 17 (rotn-data #312): leaves DO give sticks (Pyrotech: 1 stick half the time) ----
+
+test('Request 17: a leaves block is a stick source, by hand, whose yield can be 0 (rotn-data\'s rule or the cited fallback)', () => {
+    const way = worldSources('stick').find(s => s.blocks.some(b => /leaves/.test(b)));
+    assert.ok(way, 'leaves are a stick source');
+    assert.equal(way.tool, null, 'by hand');
+    assert.ok(way.blocks.includes('dynamictrees:leaves0'), 'Dynamic Trees leaves too');
+    assert.equal(way.countRange?.min, 0, 'a leaf can give nothing');
+});
+
+test('Request 17: leaves reachable from the ground come after dead bushes and before any felling; a leaf that gave nothing uses no attempt', T, async (t) => {
+    fast(t);
+    // The spruce at 3 has leaves from y 67 (reachable from the ground); the bush at 12 is farther.
+    const bot = fakeBot({ trees: [{ x: 3, branch: SPRUCE, sticks: 5, canopy: 67 }], bushes: [{ x: 12, sticks: 1 }], leafSticks: [0, 1, 1] });
+    assert.equal(await skills.collectBlock(bot, 'stick', 3), true, bot.output);
+    assert.deepEqual(bot.log.digs.map(d => d.name), [BUSH, LEAVES, LEAVES, LEAVES], `digs: ${JSON.stringify(bot.log.digs)}`);
+    assert.ok(bot.log.digs.every(d => d.held === null), 'by hand');
+    assert.ok(bot.log.digs.filter(d => d.name === LEAVES).every(d => Number(d.pos.split(',')[1]) === 67), 'only leaves reachable from the ground');
+    assert.match(bot.output, /Collected 3 stick\./);
+});
+
+test('Request 17: leaves come before a species that gave 0 sticks; out of reach they are never broken (no climbing)', T, async (t) => {
+    fast(t);
+    // Spruce at 3 (no reachable leaf) is nearest; the low leaves of the spruce at 30 start 31 out,
+    // beyond the 24-block first search. Spruce at 3 is felled and gives 0; from its drops (x 7-9) those
+    // leaves are within 24 and come before felling the spruce at 30 (a species that gave nothing).
+    const bot = fakeBot({ trees: [{ x: 3, branch: SPRUCE, sticks: 0 }, { x: 30, branch: SPRUCE, sticks: 3, canopy: 67 }], leafSticks: [1] });
+    // 3 attempts: the felling (0 sticks) uses one, each leaf (1 stick) one.
+    assert.equal(await skills.collectBlock(bot, 'stick', 3), true, bot.output);
+    assert.deepEqual(bot.log.digs.map(d => d.name), [SPRUCE, LEAVES, LEAVES], `digs: ${JSON.stringify(bot.log.digs)}`);
+    assert.match(bot.output, /Collected 2 stick\./);
+
+    const high = fakeBot({ trees: [{ x: 3, branch: SPRUCE, sticks: 2 }] });
+    assert.equal(await skills.collectBlock(high, 'stick', 1), true, high.output);
+    assert.deepEqual(high.log.digs.map(d => d.name), [SPRUCE], 'the canopy is out of reach: felled, no leaf');
 });
