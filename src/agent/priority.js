@@ -110,6 +110,19 @@ function yieldAgenda(agent, task) {
 }
 
 /**
+ * A giver's typed resumable action (!followPlayer) that a reflex interrupted still waits for the
+ * action manager's resume (G4 #3 prep). Once the action manager holds no such resume (!stop
+ * cancelled it, or the follow ended by itself), it is forgotten.
+ */
+function typedResumePending(agent) {
+    const label = agent.control?.typedResume;
+    if (!label) return false;
+    if (agent.actions?.resume_func && agent.actions.resume_name === label) return true;
+    agent.control.typedResume = null;
+    return false;
+}
+
+/**
  * One tick of the priority stack. Returns what it did, for tests and logs:
  * 'held:<kind>' (a control hold), 'task:<id>' or 'task:<id>:waiting' (a task runs or waits for
  * the checkpoint), 'task:<id>:yield' (a paused conversation or a giver's !goal), 'task:<id>:failed',
@@ -119,7 +132,7 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
     const sp = agent.self_prompter;
 
     // 2. Control: checked on every update, not throttled, so a typed command wins at once.
-    const hold = agent.control?.blocking();
+    const hold = agent.control?.blocking() ?? (typedResumePending(agent) ? 'command' : null);
     if (hold) {
         // A giver's typed command may walk the bot out of its night shelter (#204 re-review 1),
         // also under a stored stop, pause or quiet hold, which blocking() reports first (#204 nit).

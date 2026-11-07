@@ -2562,20 +2562,44 @@ export async function goToPlayer(bot, username, distance=3) {
         return true;
     }
 
-    bot.modes.pause('self_defense');
-    bot.modes.pause('cowardice');
-    let player = bot.players[username].entity
-    if (!player) {
-        log(bot, `Could not find ${username}.`);
+    // G4 #3 prep: an unknown name threw a TypeError (bot.players[username] undefined); the model
+    // may also write a giver's name in the wrong case.
+    const found = findPlayer(bot, username);
+    if (!found?.entity) {
+        log(bot, `Could not find ${username}: not online, or too far away to see.`);
         return false;
     }
+    bot.modes.pause('self_defense');
+    bot.modes.pause('cowardice');
 
     distance = Math.max(distance, 0.5);
-    const goal = new pf.goals.GoalFollow(player, distance);
+    const goal = new pf.goals.GoalFollow(found.entity, distance);
 
-    await goToGoal(bot, goal, true);
+    // goToGoal is fall-safe and bounded; false when the walk was stopped (G4 #3 prep: it said
+    // "You have reached" after a stopped walk too).
+    if (!await goToGoal(bot, goal)) {
+        log(bot, `Did not reach ${found.username}.`);
+        return false;
+    }
+    log(bot, `You have reached ${found.username}.`);
+    return true;
+}
 
-    log(bot, `You have reached ${username}.`);
+/**
+ * The online player of that name: the exact name, else the one name that differs only in case
+ * (the model may write "jqdaw" for JQDAW). { username, entity } (entity null while out of sight),
+ * or null.
+ */
+export function findPlayer(bot, username) {
+    const players = bot?.players ?? {};
+    if (typeof username !== 'string' || username === '') return null;
+    let p = players[username];
+    if (!p) {
+        const same = Object.keys(players).filter(n => n.toLowerCase() === username.toLowerCase());
+        if (same.length === 1) p = players[same[0]];
+    }
+    if (!p) return null;
+    return { username: p.username ?? username, entity: p.entity ?? null };
 }
 
 
@@ -2588,11 +2612,18 @@ export async function followPlayer(bot, username, distance=4) {
      * @example
      * await skills.followPlayer(bot, "player");
      **/
-    let player = bot.players[username].entity
-    if (!player)
+    // G4 #3 prep: an unknown name threw a TypeError; a name in the wrong case is found.
+    const found = findPlayer(bot, username);
+    if (!found?.entity) {
+        log(bot, `Could not find ${username}: not online, or too far away to see.`);
         return false;
+    }
+    username = found.username;
+    let player = found.entity;
 
-    const move = new pf.Movements(bot);
+    // Fall-safe, like every other walk (G3 round 4 B, fall_safety.js): no drop over 3 blocks and
+    // never a broken Dynamic Trees branch, which fells the tree onto the bot.
+    const move = fallSafe(new pf.Movements(bot));
     move.digCost = 10;
     bot.pathfinder.setMovements(move);
     let doorCheckInterval = startDoorInterval(bot);
@@ -2603,6 +2634,20 @@ export async function followPlayer(bot, username, distance=4) {
 
     while (!bot.interrupt_code) {
         await new Promise(resolve => setTimeout(resolve, 500));
+        if (bot.interrupt_code) break;
+        // The player left, or is out of sight (no entity): stop, rather than follow a stale entity.
+        // A new entity (a respawn, or back in sight) gets a new goal.
+        const now = findPlayer(bot, username)?.entity;
+        if (!now) {
+            log(bot, `Stopped following ${username}: they left, or are too far away to see.`);
+            clearInterval(doorCheckInterval);
+            bot.pathfinder.stop();
+            return false;
+        }
+        if (now !== player) {
+            player = now;
+            bot.pathfinder.setGoal(new pf.goals.GoalFollow(player, distance), true);
+        }
         // in cheat mode, if the distance is too far, teleport to the player
         const distance_from_player = bot.entity.position.distanceTo(player.position);
 

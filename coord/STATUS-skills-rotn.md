@@ -1,6 +1,23 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:58Z (from `date -u`)
+Updated: 2026-11-07T05:50Z (from `date -u`)
+
+## G4 item 3 prep: stop, follow, come (branch `agent/skills-rotn/g4-control-prep`, branch only while develop is frozen; 2026-11-07T05:50Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** check offline that `!stop`, `!followPlayer` and `!goToPlayer` work on 1.12.2 with RotN's pathfinder settings and the task-giver rules; add tests for any gap; fix on the branch only. The branch also has the two cosmetic nits after #321.
+- **Design as found, now covered by tests:**
+  - **Only task givers command.** A non-giver's typed `!followPlayer`, `!goToPlayer` or `!stop` runs nothing and sets no hold; they get "Sorry <name>, I only run commands from task givers." (new test).
+  - **A giver's `!stop` beats the agenda and a running task.** The action stops at once and the self-prompter stops. A stored `stop` hold (`control.json`, kept across a restart) returns `held:stop` on every tick, so nothing restarts by itself until a giver types `!resume`. The step or task then resumes without using a new run of its budget. The task case was tested already; the agenda case has a new test. The model's own `!stop` stops only the action.
+  - **A giver's typed action holds tasks and the agenda while it runs** (`held:command`), then autonomy carries on by itself. That is "come" (`!goToPlayer`) and "follow" while it runs.
+- **Gaps found and fixed (tests fail on develop):**
+  1. **A typed follow died at the first reflex.** A reflex (item pickup, self-defense, unstuck) interrupts the follow, the typed command returns, and the hold ended. The agenda's self-prompter then started within one tick (300 ms), and the action manager never resumes while the self-prompter is active, so the agenda took the bot over. Now a giver's typed resumable action that a reflex interrupted keeps `held:command` until it resumes, until `!stop` cancels it, or until it ends by itself (`control.typedResume`, checked in `autonomyTick`). The model's own follow holds nothing.
+  2. **An unknown player threw.** `goToPlayer` and `followPlayer` read `bot.players[name].entity`, which is a TypeError for a name not online. Now they say "Could not find <name>: not online, or too far away to see." A name in the wrong case ("jqdaw") is found (`findPlayer`).
+  3. **The follow was not fall-safe.** It walked with plain `pf.Movements`; now it uses `fallSafe(...)`, so there is no drop over 3 blocks and never a broken Dynamic Trees branch. `goToPlayer` walks through `goToGoal`, which was fall-safe already.
+  4. **The follow outlived the player.** It went on after the player left or went out of sight (a stale entity). Now it stops with a line and clears the goal, and `!followPlayer` cancels its resume, so it does not retry every second. A new entity (a respawn, or back in sight) gets a new goal.
+  5. **`goToPlayer` said "You have reached" after a stopped walk.** Now it says "Did not reach <name>." and returns false.
+- **Tests:** new `follow_player.test.js` (7) and 4 new tests in `priority.test.js`; 9 of the 11 fail on develop (the 2 design tests pass). The 27 test files that import the touched code: 373/373.
+- **Lint:** `skills.js` went from 20 to 18 errors (two upstream missing semicolons on the replaced lines), so `test/lint-baseline.json` is lowered from 253 to 251 as the ratchet requires. The other touched files are unchanged.
+- **For the G4 scenario (harness-ops):** a follow ends only with `!stop` (then `!resume` for the agenda), or when the player leaves. The log lines are "You are now actively following player <name>.", "Stopped following <name>: they left, or are too far away to see." and "You have reached <name>." / "Did not reach <name>.".
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 

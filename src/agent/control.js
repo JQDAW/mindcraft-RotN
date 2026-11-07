@@ -21,6 +21,7 @@ export class Control {
         this.now = now;
         this.hold = null; // {kind, by, at}
         this.typed = 0; // giver-typed actions running now
+        this.typedResume = null; // a giver-typed resumable action ("action:followPlayer") a reflex interrupted
         this.loadProblem = null;
         this.load();
     }
@@ -68,6 +69,13 @@ export class Control {
     /** A giver's typed action starts or ends (autonomy waits while one runs). */
     beginTyped() { this.typed++; }
     endTyped() { this.typed = Math.max(0, this.typed - 1); }
+
+    /**
+     * A giver's typed resumable action (!followPlayer) was interrupted by a reflex and waits for
+     * the action manager to resume it (G4 #3 prep): autonomy waits for it too, as while it runs.
+     * priority.js clears it once the action manager no longer holds that resume (!stop cancels it).
+     */
+    holdTypedResume(label) { this.typedResume = label; }
 
     /** What holds autonomy now: 'stop', 'pause', 'quiet', 'command' (a typed action runs), or null. */
     blocking() {

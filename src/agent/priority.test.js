@@ -668,3 +668,80 @@ test('the console sender "Server" stays a giver only while allow_server_task_giv
     assert.equal(autonomyTick(agent, { now: 0 }), 'task:t1:dropped');
     settings.allow_server_task_giver = true;
 });
+
+// ---- G4 item 3 prep (test/scenarios/g4/PLAN.md, g4-control-commands): stop, follow, come ----
+
+test('G4 #3: a task giver\'s !stop beats the agenda: held until !resume (nothing restarts it); then the step resumes without a new run', async (t) => {
+    const agent = harnessAgent(t);
+    assert.equal(autonomyTick(agent, { now: 0 }), 'rocks');
+    assert.equal(agent.self_prompter.isActive(), true);
+    await agent.handleMessage('JQDAW', '!stop');
+    assert.equal(agent.actions.stops, 1, 'the running action stops at once');
+    assert.equal(agent.self_prompter.isActive(), false);
+    for (let k = 1; k <= 5; k++) assert.equal(autonomyTick(agent, { now: k * BACKOFF_MS }), 'held:stop');
+    assert.equal(agent.self_prompter.starts.length, 1, 'the agenda does not restart by itself');
+    await agent.handleMessage('JQDAW', '!resume');
+    assert.equal(autonomyTick(agent, { now: 6 * BACKOFF_MS }), 'rocks');
+    assert.equal(agent.self_prompter.starts.length, 2);
+    assert.equal(agent.agenda.spentOn('rocks').attempts, 1, 'resuming after a hold is not a new run');
+});
+
+test('G4 #3: only task givers command: a non-giver\'s typed !followPlayer, !goToPlayer and !stop run nothing and set no hold', async (t) => {
+    const agent = harnessAgent(t);
+    let runs = 0;
+    agent.actions.runAction = () => { runs++; return Promise.resolve({ message: 'ok' }); };
+    assert.equal(autonomyTick(agent, { now: 0 }), 'rocks');
+    for (const cmd of ['!followPlayer("Alex", 3)', '!goToPlayer("Alex", 2)', '!stop']) {
+        assert.equal(await agent.handleMessage('Alex', cmd), false);
+        assert.equal(agent.routed.at(-1), 'Alex: Sorry Alex, I only run commands from task givers.');
+    }
+    assert.equal(runs, 0, 'nothing ran');
+    assert.equal(agent.actions.stops, 0, 'nothing was stopped');
+    assert.deepEqual([agent.control.hold, agent.control.typed], [null, 0]);
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'rocks', 'the agenda goes on');
+});
+
+/** The action manager's resume (mineflayer's !followPlayer is a resumable action), as far as these tests go. */
+function resumableActions(agent, outcome) {
+    const actions = agent.actions;
+    Object.assign(actions, { resume_func: null, resume_name: null, executing: false });
+    actions.cancelResume = () => { actions.resume_func = null; actions.resume_name = null; };
+    actions.runAction = (label, fn, { resume = false } = {}) => {
+        if (resume) { actions.resume_func = fn; actions.resume_name = label; }
+        return Promise.resolve(outcome(label, fn));
+    };
+}
+
+test('G4 #3: a giver\'s typed !followPlayer that a reflex interrupted keeps tasks and the agenda waiting until it resumes; !stop ends it, !resume returns to the agenda', async (t) => {
+    const agent = harnessAgent(t);
+    resumableActions(agent, () => ({ message: null, interrupted: true })); // a reflex (item pickup, self-defense) took over
+    assert.equal(autonomyTick(agent, { now: 0 }), 'rocks');
+    await agent.handleMessage('JQDAW', '!followPlayer("JQDAW", 3)');
+    assert.equal(agent.control.typed, 0, 'the typed command returned when the reflex interrupted it');
+    assert.equal(agent.actions.resume_name, 'action:followPlayer', 'the follow waits to resume');
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'held:command', 'the agenda does not take the bot over');
+    assert.equal(agent.self_prompter.isActive(), false, 'so the action manager can resume the follow');
+    assert.equal(autonomyTick(agent, { now: 10 * BACKOFF_MS }), 'held:command');
+
+    await agent.handleMessage('JQDAW', '!stop');
+    assert.equal(agent.actions.resume_name, null, 'the follow is cancelled');
+    assert.equal(autonomyTick(agent, { now: 11 * BACKOFF_MS }), 'held:stop');
+    await agent.handleMessage('JQDAW', '!resume');
+    assert.equal(autonomyTick(agent, { now: 12 * BACKOFF_MS }), 'rocks', 'back to the agenda, no follow');
+    assert.equal(agent.agenda.spentOn('rocks').attempts, 1);
+});
+
+test('G4 #3: a follow the model started itself does not hold autonomy; a typed one that ended (player gone) releases it', async (t) => {
+    const agent = harnessAgent(t);
+    resumableActions(agent, () => ({ message: null, interrupted: true }));
+    const { executeCommand } = await import('./commands/index.js');
+    await executeCommand(agent, '!followPlayer("JQDAW", 3)'); // the model's own
+    assert.equal(agent.actions.resume_name, 'action:followPlayer');
+    assert.equal(autonomyTick(agent, { now: 0 }), 'rocks', 'only a giver\'s typed command holds autonomy');
+
+    agent.actions.cancelResume();
+    resumableActions(agent, async (label, fn) => { await fn(); return { message: 'Could not find JQDAW', interrupted: false }; });
+    await agent.handleMessage('JQDAW', '!followPlayer("JQDAW", 3)'); // bot.players has no JQDAW here
+    assert.equal(agent.actions.resume_name, null, 'a follow that could not start is not resumed');
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'rocks');
+});
