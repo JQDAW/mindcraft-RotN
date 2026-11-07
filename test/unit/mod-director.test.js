@@ -277,13 +277,12 @@ describe('build.sh at Done (sourced; a fake systemctl)', () => {
 });
 
 describe('the committed list (deploy/test-server/mod-director.sha256)', () => {
-    test('full SHA-256 values, the jar as a top-level mods/ path, GitHub\'s digest, the sources and ADR 0008 cited', () => {
+    test('full SHA-256 values, only the jar (a top-level mods/ path), GitHub\'s digest, the sources and ADR 0008 cited', () => {
         const text = fs.readFileSync(committed, 'utf8');
         const entries = text.split('\n').filter((l) => l && !l.startsWith('#')).map((l) => l.split(/ {2}/));
-        assert.deepEqual(entries, [
-            ['48ba1339ebf6417ad571d29589e61dd0d5745dc34549b2065676ccf5a4de3792', BUNDLE],
-            ['b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933', ESM],
-        ]);
+        // Round 10 A: Mod Director keeps no copy of the list on disk, so the list has no line (#347 review); the jar only.
+        assert.deepEqual(entries, [['b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933', ESM]]);
+        assert.match(text, /The remote list's own hash is NOT checked: Mod Director keeps no copy of it on disk/);
         assert.match(text, /ADR 0008/);
         assert.doesNotMatch(text, /pending/);
         assert.match(text, /https:\/\/raw\.githubusercontent\.com\/Rebirth-of-the-Night\/Rebirth-Of-The-Night\/stable\/config\/mod-director\/fd-3\.3\.4\/file-director_requisites\.bundle\.json/);
