@@ -229,6 +229,7 @@ export default {
         const waitFrom = clock.now();
         const activeEnd = waitFrom + p.activeWaitMinutes * MIN;
         const ended = (a) => a.last === 'agenda done' || a.last === 'agenda stopped';
+        const finishedText = (last, time) => `the agenda finished before the task could be sent ("${last}"${time ? ` at ${time}` : ''}): a scenario-timing gap, not a bot result`;
         let counterAt = clock.now();
         let ag = agendaActive(said());
         while (!(ag.active && rose()) && !ended(ag) && clock.now() < activeEnd && !gone()) {
@@ -243,11 +244,24 @@ export default {
         if (gone()) { notReached(goneText(gone())); return finish(); }
         if (ended(ag)) {
             // Never a silent bot fail (lead, after G3 gate C): the agenda ended before the scenario could test the preemption.
-            notReached(`the agenda finished before the task could be sent ("${ag.last}"${endLine?.time ? ` at ${endLine.time}` : ''}): a scenario-timing gap, not a bot result`);
+            notReached(finishedText(ag.last, endLine?.time));
             return finish();
         }
         if (!ag.active) {
             notReached(`agenda not active at the task (not active for ${p.activeWaitMinutes} min; its last agenda line: ${ag.last ? `"${ag.last}"` : 'none'})`);
+            return finish();
+        }
+        if (!rose()) {
+            // #354 review 1: no task without the server's proof of progress. agenda_active (above) reports the counter.
+            notReached(`the agenda was active, but the server's counter had not risen (${c0 ?? '?'} -> ${c1 ?? '?'}) when the ${p.activeWaitMinutes}-min wait ran out: the task is sent only after proven progress (scenario timing, not a task result)`);
+            return finish();
+        }
+        // The last look right before the whisper: an agenda that finished since the read above gets no task either.
+        const atSend = agendaActive(said());
+        if (ended(atSend)) {
+            const at = chatLines(s.sinceMarker(), name).filter((c) => c.text === atSend.last).pop();
+            ctx.note('agendaAtSend', { last: atSend.last, endedAt: at?.time ?? null });
+            notReached(finishedText(atSend.last, at?.time));
             return finish();
         }
         const chatBefore = said().length;
@@ -284,6 +298,16 @@ export default {
         if (report) openTask = null;   // done or failed: closed
         const preempted = said().slice(chatBefore).includes(`agenda paused for task ${id}`);
         ctx.note('taskResult', { id, onMarkerMin, report, preempted });
+        // #354 review 2: the agenda finished as the task arrived (after the whisper, before any "agenda paused for task
+        // <id>"), so there was no running agenda to preempt: scenario timing, not a bot fail.
+        const endedFirst = preempted ? null : said().slice(chatBefore).find((t) => t === 'agenda done' || t === 'agenda stopped');
+        if (endedFirst) {
+            const what = `${onMarkerMin !== null ? `the server found the bot on the marker at minute ${onMarkerMin}` : 'the server never found the bot on the marker'}; ${report ? `the bot said "${report}"` : 'no done report'}`;
+            const why = `not reached: the agenda finished ("${endedFirst}") as the task arrived, before any "agenda paused for task ${id}", so there was no running agenda to preempt: a scenario-timing gap, not a bot result (${what})`;
+            ctx.check('task_done', false, why);
+            ctx.check('agenda_resumed', false, why);
+            return finish();
+        }
         const done = onMarkerMin !== null && report !== null && doneRe.test(report) && preempted;
         ctx.check('task_done', done, `${onMarkerMin !== null ? `the server found the bot on the marker at minute ${onMarkerMin}` : 'the server never found the bot on the marker'}; ${report ? `the bot said "${report}"` : 'no done report'}; ${preempted ? 'the agenda was paused for it' : `no "agenda paused for task ${id}" line`}${gone() ? `; ${goneText(gone())}` : ''}`);
         if (!done) {

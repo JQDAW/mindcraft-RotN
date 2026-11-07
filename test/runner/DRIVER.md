@@ -417,7 +417,10 @@ A task from the test-only giver `Server` interrupts the real agent's agenda. The
       - `notes.agendaAtTask` records `active`, `waitedS`, the deciding line, and `endedAt` (the server time of an `agenda done` or `agenda stopped` line).
     - **Not active by then:** the three task checks are "not reached: agenda not active at the task (...)".
     - **The agenda finished** (`agenda done` or `agenda stopped` is its last line): the wait ends at once. The three task checks are "not reached: the agenda finished before the task could be sent ("agenda done" at HH:MM:SS): a scenario-timing gap, not a bot result".
-    - Neither case is a pass or a task failure, and no task is whispered.
+    - **The agenda is active, but the counter has not risen** when the wait runs out: "not reached: the agenda was active, but the server's counter had not risen (A -> B) ...". No task goes out without proven progress (#354 review). `agenda_active` reports the counter itself.
+    - The agenda is read once more right before the whisper. One that finished in between gets the same "finished" not-reached (`notes.agendaAtSend`).
+    - In none of these cases is it a pass or a task failure, and no task is whispered.
+    - **The agenda finishes as the task arrives:** after the whisper, `agenda done` or `agenda stopped` comes before any `agenda paused for task <id>`. Then `task_done` and `agenda_resumed` are "not reached: the agenda finished (...) as the task arrived, ...: a scenario-timing gap, not a bot result", with what the server and the bot showed (#354 review). `task_accepted` stands as measured.
     - The minimum warm-up plus the wait is 10 min at most, as before. The runner timeout follows from `runMinutes` (34 min); no `--timeout-min` is needed.
   - The runner places `setblock <marker> minecraft:gold_block`, confirms it read-only with `testforblock <marker> minecraft:gold_block 0` (`placeGoldMarker` in `lib/g3.mjs`, #207 review nit; without that proof the task steps fail and nothing is whispered; `notes.marker` keeps the `setblock` answer line itself, matched as the whole server message, so a chat line never counts), and whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and stand on it", "normal")`.
   - `task_accepted`: `task <id> accepted: ...` in the bot's chat.

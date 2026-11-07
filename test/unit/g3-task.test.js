@@ -5,8 +5,12 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { G3_CONSOLE_ALLOW, statCriterion } from '../runner/lib/g3.mjs';
+import { chatLines } from '../runner/lib/server-log.mjs';
 import g3c, { AGENDA_COUNTER, MARKER as PINNED_MARKER, PINNED, agendaActive, onMarkerCommand, taskText } from '../scenarios/g3/g3-task-preempts-agenda.mjs';
 
 const NAME = 'FRCFLD';
@@ -29,7 +33,8 @@ const ROCK = statCriterion('mineBlock', 'pyrotech_compat:rock_igneous');
  * opt.stuckAt (minutes after the join): the agenda says its step is stuck and pauses (the counter stops);
  * opt.restartAt: later it starts its next step (the counter runs again); opt.noAgendaLine: no agenda chat at all;
  * opt.doneAt (minutes): with no task taken yet, the agenda finishes ("agenda done") and the counter stops (G3 gate C);
- * opt.statFrom (minutes): the counter only starts rising then.
+ * opt.statFrom (minutes): the counter only starts rising then;
+ * opt.doneOnTask: the agenda finishes ("agenda done") as the task arrives: no "agenda paused for task t1" (#354 review 2).
  */
 function sim(opt = {}) {
     const log = [];
@@ -67,7 +72,7 @@ function sim(opt = {}) {
         if (task && task.phase === 'there' && t - task.at >= 2.5 * MIN) {
             say(opt.wrongId ? 'task t9 done' : 'task t1 done');
             if (!opt.wrongId) task.closed = true;
-            say('agenda resumed: logs');
+            if (!opt.doneOnTask) say('agenda resumed: logs');
             task.phase = 'done';
         }
     };
@@ -104,8 +109,9 @@ function sim(opt = {}) {
                 add(there ? `Found ${NAME}` : `Selector '${cmd.slice(8)}' found nothing`);
             } else if ((m = /^tell (\S+) !taskAdd\("(.*)", "normal"\)$/.exec(cmd)) && online && !opt.ignore) {
                 say(`*Server used taskAdd*`);
+                if (opt.doneOnTask) { say('agenda step stone_axe done'); say('agenda done'); done = true; }
                 say(`task t1 accepted: ${m[2]}`);
-                if (!opt.noPause) say('agenda paused for task t1');
+                if (!opt.noPause && !opt.doneOnTask) say('agenda paused for task t1');
                 task = { at: t, phase: 'going' };
             }
             t += waitS * 1000;
@@ -188,7 +194,14 @@ describe('g3-task-preempts-agenda on a simulated server', () => {
     });
 
     test('an idle agent fails agenda_active; a bot that never answers fails task_accepted', async () => {
-        assert.equal(byName(await run(sim({ noAgenda: true }))).agenda_active.pass, false);
+        // #354 review 1: active agenda line, counter never rises: agenda_active fails, and no task is whispered.
+        const si = sim({ noAgenda: true });
+        const idle = byName(await run(si));
+        assert.equal(idle.agenda_active.pass, false);
+        for (const k of ['task_accepted', 'task_done', 'agenda_resumed']) {
+            assert.match(idle[k].detail, /^not reached: the agenda was active, but the server's counter had not risen \(0 -> 0\) when the 8-min wait ran out: the task is sent only after proven progress \(scenario timing, not a task result\)$/, k);
+        }
+        assert.ok(!si.sent.some((x) => x.startsWith('tell ')), 'no task without proven progress');
         const r = await run(sim({ ignore: true }));
         assert.equal(byName(r).task_accepted.pass, false);
         assert.match(byName(r).task_done.detail, /not reached: the task was not accepted/);
@@ -345,22 +358,43 @@ describe('g3-task-preempts-agenda: the task goes out while the agenda still runs
         assert.ok(r.notes.counterReadings.some((x) => x.label === 'before the task'), JSON.stringify(r.notes.counterReadings));
     });
 
-    test('replay of G3 gate C (2026-11-07, joined 21:50:45): at the 2-min mark the agenda was active; at the old 5-min mark it was done', () => {
-        // The bot's agenda lines from test/evidence/g3/g3c-20261107-gate/task/server.log (#353), with their server times.
-        const C = [['21:50:47', 'agenda step rocks started: collect 6 rocks'], ['21:51:15', 'agenda step rocks done'], ['21:51:15', 'agenda step sticks started: collect 3 sticks'],
-            ['21:51:38', 'agenda step sticks done'], ['21:51:38', 'agenda step crude_axe started: craft a crude axe'], ['21:51:45', 'agenda step crude_axe done'],
-            ['21:51:45', 'agenda step logs started: collect 3 logs'], ['21:52:12', 'agenda step logs done'], ['21:52:12', 'agenda step first_plank started: make the first plank'],
-            ['21:52:30', 'agenda step first_plank done'], ['21:52:30', 'agenda step crafting_tools started: craft Crafting Tools'], ['21:52:36', 'agenda step crafting_tools done'],
-            ['21:52:36', 'agenda step crafting_table started: craft a crafting table'], ['21:52:41', 'agenda step crafting_table done'],
-            ['21:52:41', 'agenda step planks_sticks started: make planks and sticks at the table'], ['21:52:56', 'agenda step planks_sticks done'],
-            ['21:52:56', 'agenda step stone_pickaxe started: craft a stone pickaxe'], ['21:53:17', 'agenda step shelter_blocks started: keep 10 blocks for the night\'s shelter'],
-            ['21:53:19', 'agenda step stone_pickaxe done'], ['21:54:55', 'agenda step cobblestone done'], ['21:54:55', 'agenda step stone_axe started: craft a stone axe'],
-            ['21:55:31', 'agenda step stone_axe done'], ['21:55:31', 'agenda done']];
-        const upTo = (hms) => C.filter(([t]) => t <= hms).map(([, l]) => l);
+    test('replay of G3 gate C (test/evidence/g3/g3c-20261107-gate, #353; joined 21:50:45): active at the 2-min mark, done at the old 5-min mark', () => {
+        const here = path.dirname(fileURLToPath(import.meta.url));
+        const log = fs.readFileSync(path.join(here, '..', 'evidence', 'g3', 'g3c-20261107-gate', 'task', 'server.log'), 'utf8').split('\n');
+        const C = chatLines(log, '<bot>');   // the committed log is redacted: the bot is <bot>
+        assert.equal(C.filter((c) => /^agenda /.test(c.text)).length, 23, 'the 23 agenda lines of gate C');
+        const upTo = (hms) => C.filter((c) => c.time <= hms).map((c) => c.text);
         // New rule: the minimum warm-up ends at 21:52:45; the counter had risen (crude axe, logs, Crafting Tools and the table by then).
         assert.deepEqual(agendaActive(upTo('21:52:45')), { active: true, last: 'agenda step planks_sticks started: make planks and sticks at the table' });
         // Old rule: the fixed warm-up ended at 21:55:45, 14 s after "agenda done": nothing could be sent.
         assert.deepEqual(agendaActive(upTo('21:55:45')), { active: false, last: 'agenda done' });
+        assert.equal(C.find((c) => c.text === 'agenda done').time, '21:55:31');
+    });
+
+    test('#354 review 2: the agenda finishes as the task arrives (no "agenda paused for task"): task_done and agenda_resumed are not reached, never a bot fail', async () => {
+        const s = sim({ doneOnTask: true });
+        const r = await run(s);
+        const c = byName(r);
+        assert.equal(c.task_accepted.pass, true, c.task_accepted.detail);
+        for (const k of ['task_done', 'agenda_resumed']) {
+            assert.equal(c[k].pass, false, k);
+            assert.match(c[k].detail, /^not reached: the agenda finished \("agenda done"\) as the task arrived, before any "agenda paused for task t1", so there was no running agenda to preempt: a scenario-timing gap, not a bot result \(the server found the bot on the marker at minute [\d.]+; the bot said "task t1 done"\)$/, k);
+        }
+        assert.equal(r.notes.taskResult.preempted, false);
+    });
+
+    test('#354 review 3: the agenda stalls after the 2-min minimum while the runner waits for the counter: not reached; with a restart, the task follows it', async () => {
+        const s = sim({ statFrom: 5, stuckAt: 3 });
+        const r = await run(s);
+        const c = byName(r);
+        for (const k of ['task_accepted', 'task_done', 'agenda_resumed']) {
+            assert.match(c[k].detail, /^not reached: agenda not active at the task \(not active for 8 min; its last agenda line: "agenda step rocks stuck: 5 min of self-prompting; agenda paused"\)$/, k);
+        }
+        assert.ok(!s.sent.some((x) => x.startsWith('tell ')), 'no task to a stalled agenda');
+        const s2 = sim({ statFrom: 5, stuckAt: 3, restartAt: 6 });
+        const r2 = await run(s2);
+        for (const ch of r2.checks) assert.equal(ch.pass, true, `${ch.check}: ${ch.detail}`);
+        assert.ok(r2.notes.task.sentMin >= 6, `sent after the restart and the counter's rise: minute ${r2.notes.task.sentMin}`);
     });
 
     test('the ordinary run sends the task right after the minimum warm-up', async () => {
