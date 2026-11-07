@@ -105,6 +105,21 @@ export function agendaActive(lines) {
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * The agenda's end line ("agenda done" or "agenda stopped") that raced the task, or null (#354 re-review). `after` is
+ * the bot's chat since the whisper. It counts only if it comes before the bot's "task <id> accepted" line, with no
+ * "agenda step <id> started: ..." before it; an end line after the accept is the bot's own (no preemption).
+ */
+export function raceEnd(after, id) {
+    const accepted = after.findIndex((t) => t.startsWith(`task ${id} accepted: `));
+    const upTo = accepted === -1 ? after : after.slice(0, accepted);
+    for (const t of upTo) {
+        if (/^agenda step \S+ started: /.test(t)) return null;
+        if (t === 'agenda done' || t === 'agenda stopped') return t;
+    }
+    return null;
+}
+
 export default {
     id: 'g3-task-preempts-agenda',
     gate: 'G3',
@@ -298,9 +313,11 @@ export default {
         if (report) openTask = null;   // done or failed: closed
         const preempted = said().slice(chatBefore).includes(`agenda paused for task ${id}`);
         ctx.note('taskResult', { id, onMarkerMin, report, preempted });
-        // #354 review 2: the agenda finished as the task arrived (after the whisper, before any "agenda paused for task
-        // <id>"), so there was no running agenda to preempt: scenario timing, not a bot fail.
-        const endedFirst = preempted ? null : said().slice(chatBefore).find((t) => t === 'agenda done' || t === 'agenda stopped');
+        // #354 review 2 (re-review): a race only when the agenda's end line came after the whisper but BEFORE the bot's
+        // "task <id> accepted", with no "agenda step ... started" between the whisper and it: the agenda was already
+        // finishing as the task arrived, so there was nothing running to preempt. An end line any later (the bot took the
+        // task and never paused its agenda, then the agenda finished) stays "no preemption seen": task_done FAILS.
+        const endedFirst = preempted ? null : raceEnd(said().slice(chatBefore), id);
         if (endedFirst) {
             const what = `${onMarkerMin !== null ? `the server found the bot on the marker at minute ${onMarkerMin}` : 'the server never found the bot on the marker'}; ${report ? `the bot said "${report}"` : 'no done report'}`;
             const why = `not reached: the agenda finished ("${endedFirst}") as the task arrived, before any "agenda paused for task ${id}", so there was no running agenda to preempt: a scenario-timing gap, not a bot result (${what})`;

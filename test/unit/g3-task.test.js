@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { G3_CONSOLE_ALLOW, statCriterion } from '../runner/lib/g3.mjs';
 import { chatLines } from '../runner/lib/server-log.mjs';
-import g3c, { AGENDA_COUNTER, MARKER as PINNED_MARKER, PINNED, agendaActive, onMarkerCommand, taskText } from '../scenarios/g3/g3-task-preempts-agenda.mjs';
+import g3c, { AGENDA_COUNTER, MARKER as PINNED_MARKER, PINNED, agendaActive, onMarkerCommand, raceEnd, taskText } from '../scenarios/g3/g3-task-preempts-agenda.mjs';
 
 const NAME = 'FRCFLD';
 const MIN = 60000;
@@ -34,7 +34,8 @@ const ROCK = statCriterion('mineBlock', 'pyrotech_compat:rock_igneous');
  * opt.restartAt: later it starts its next step (the counter runs again); opt.noAgendaLine: no agenda chat at all;
  * opt.doneAt (minutes): with no task taken yet, the agenda finishes ("agenda done") and the counter stops (G3 gate C);
  * opt.statFrom (minutes): the counter only starts rising then;
- * opt.doneOnTask: the agenda finishes ("agenda done") as the task arrives: no "agenda paused for task t1" (#354 review 2).
+ * opt.doneOnTask: the agenda finishes ("agenda done") as the task arrives: no "agenda paused for task t1" (#354 review 2);
+ * opt.doneDuringTask (minutes after the task): the agenda says "agenda done" while the bot does the task (#354 re-review).
  */
 function sim(opt = {}) {
     const log = [];
@@ -58,6 +59,7 @@ function sim(opt = {}) {
         if (opt.stuckAt !== undefined && !stuck && t - joinT >= opt.stuckAt * MIN) { say('agenda step rocks stuck: 5 min of self-prompting; agenda paused'); stuck = true; }
         if (opt.restartAt !== undefined && stuck && !restarted && t - joinT >= opt.restartAt * MIN) { say('agenda step sticks started: collect 4 sticks'); restarted = true; }
         if (opt.doneAt !== undefined && !done && !task && t - joinT >= opt.doneAt * MIN) { say('agenda step stone_axe done'); say('agenda done'); done = true; }
+        if (opt.doneDuringTask !== undefined && !done && task && t - task.at >= opt.doneDuringTask * MIN) { say('agenda step stone_axe done'); say('agenda done'); done = true; }
         const m = Math.floor((t - joinT) / MIN);
         for (; lastMinute < m; lastMinute++) {
             const busy = task && task.phase !== 'done';
@@ -381,6 +383,26 @@ describe('g3-task-preempts-agenda: the task goes out while the agenda still runs
             assert.match(c[k].detail, /^not reached: the agenda finished \("agenda done"\) as the task arrived, before any "agenda paused for task t1", so there was no running agenda to preempt: a scenario-timing gap, not a bot result \(the server found the bot on the marker at minute [\d.]+; the bot said "task t1 done"\)$/, k);
         }
         assert.equal(r.notes.taskResult.preempted, false);
+    });
+
+    test('#354 re-review: the bot takes the task, never pauses its agenda, and the agenda finishes during the task: task_done FAILS (no preemption seen)', async () => {
+        const r = await run(sim({ noPause: true, doneDuringTask: 1.5 }));
+        const c = byName(r);
+        assert.equal(c.task_accepted.pass, true);
+        assert.equal(c.task_done.pass, false);
+        assert.match(c.task_done.detail, /^the server found the bot on the marker at minute [\d.]+; the bot said "task t1 done"; no "agenda paused for task t1" line$/);
+        assert.equal(c.agenda_resumed.pass, false);
+        assert.equal(c.agenda_resumed.detail, 'not reached: task_done failed (no "agenda paused for task t1" line (no preemption seen))');
+        assert.doesNotMatch(c.task_done.detail, /scenario-timing/);
+    });
+
+    test('raceEnd: only an end line before the bot\'s accept, with no new step started before it, is a race', () => {
+        assert.equal(raceEnd(['agenda done', 'task t1 accepted: x'], 't1'), 'agenda done');
+        assert.equal(raceEnd(['agenda step stone_axe done', 'agenda stopped', 'task t1 accepted: x'], 't1'), 'agenda stopped');
+        assert.equal(raceEnd(['task t1 accepted: x', 'agenda done'], 't1'), null, 'after the accept: the bot\'s own (no preemption)');
+        assert.equal(raceEnd(['agenda step logs started: x', 'agenda done', 'task t1 accepted: x'], 't1'), null, 'a step started after the whisper: the agenda was running');
+        assert.equal(raceEnd(['task t9 accepted: x', 'agenda done'], 't1'), 'agenda done', 'no accept for this id: the whole window counts');
+        assert.equal(raceEnd(['task t1 accepted: x'], 't1'), null);
     });
 
     test('#354 review 3: the agenda stalls after the 2-min minimum while the runner waits for the counter: not reached; with a restart, the task follows it', async () => {
