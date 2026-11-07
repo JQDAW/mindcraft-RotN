@@ -1,6 +1,22 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T00:32Z (from `date -u`)
+Updated: 2026-11-07T01:10Z (from `date -u`)
+
+## The goToGoal test is no longer flaky under load (branch `agent/skills-rotn/goto-test-load`, 2026-11-07T01:03Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** make `src/agent/library/use_on.test.js` "goToGoal: a walk that never arrives" robust under load without weakening it. My CX33 start report (#301) is merged, and develop is merged into this branch (this file's conflict resolved, both sections kept).
+- **Cause:** the 1.5 s bound timed the whole `goToNearestBlock` call. Its first wood search in a process pays a one-off cold load of 1.1-1.3 s on the CX33 (a second identical call takes 13 ms). The bounded walk itself stopped at 300-301 ms every time.
+- **Fix (test only, no skill code):** the fake pathfinder records each walk's time from `goto` to the `stop` that ended it. The test asserts one walk, stopped (not left running), ran 299-2000 ms against the 300 ms limit, plus the unchanged "time limit of 0.3 s reached" line.
+- **Tests:** the file passes 15/15 and ESLint shows 0 problems in it.
+  - Mutations: with the walk unbounded (the old bug), the test fails at the 5 s per-test timeout. With the limit firing at 50 ms, it fails with "the walk ran 52 ms; the limit is 300 ms".
+  - Under load: 6 CPU burners on the 4 vCPU (load up to about 5.4), with the file run alternately with the old version. The old test failed 13/13 while the burners ran. The new one passed 20/20, 13 of them under load. The other 14 tests in the file never failed.
+- **Review (lead, APPROVE WITH NITS on `da54e4b`), answered (2026-11-07T01:10Z by `date -u`):**
+  1. origin/develop merged in, not rebased.
+  2. `t.after(() => bot.pathfinder.stop())`: if the walk is ever unbounded again, the test still fails at its 5 s timeout, and the stop then ends the pending walk. `goToGoal` clears its door-check `setInterval` and node exits.
+     - Shown with the unbounded mutation in scratch copies of `skills.js` and the test, deleted afterwards (`skills.js` is identical to develop). With the hook, node exits 1 after 6 s (the test is `not ok`, counted as cancelled). Without it, node was still hung at 40 s (killed by `timeout`).
+  3. A comment says the "0.3 s" message assertion pins the exact limit, and 2000 ms is only a ceiling.
+  - Tests: the file passes 15/15 and ESLint shows 0 problems.
+- **PR:** #306, waiting for the lead's re-check.
 
 ## Report to the lead: up on the CX33 (session 4, 2026-11-07T00:32Z by `date -u`)
 
