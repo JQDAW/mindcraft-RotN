@@ -6,7 +6,7 @@ Updated: 2026-11-07 (03:37 UTC, from `date -u`)
 
 | Batch (evidence folder) | Result |
 | --- | --- |
-| A (`g3a-20261107-r8`) | FAIL 3/7: stuck at `sticks` (02:28:51, "5 min of self-prompting; agenda paused"). No cane or bamboo within 511 blocks, felling gave no sticks, and a dead-bush stick was not picked up. No table, no stone tools. |
+| A (`g3a-20261107-r8`) | FAIL 3/7: stuck at `sticks` (02:28:51, "5 min of self-prompting; agenda paused"). No cane or bamboo within 511 blocks, felling gave no sticks, and a dead bush gave 1 stick (held 1 of 3). No table, no stone tools. |
 | B (`g3b-20261107-r8`) | **PASS 5/5:** all 11 steps by 02:45; in the shelter from sunset until morning; dawn, 0 deaths, food 14. |
 | C (`g3c-20261107-r8`) | **PASS 7/7:** on the gold block at minute 5.6; "task t1 done"; agenda resumed (counter 10 to 13). |
 | D (`g3d-20261107-r8`) | **PASS 7/7:** refusal in the same second as the whisper. |

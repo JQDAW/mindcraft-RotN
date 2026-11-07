@@ -1,6 +1,6 @@
 # G3 smoke round 8, batch A (2026-11-07): `g3-rocks-to-stone-tools`, FAIL 3 of 7; on e5029f23; a SMOKE batch; the server is deleted
 
-**Result in one line:** the agenda finished `rocks`, then stalled at `sticks`. No cane or bamboo was found within 511 blocks, and felling gave no sticks. A dead bush gave 1 stick that was not picked up. After 5 min of self-prompting, at 02:28:51, the bot logged "agenda step sticks stuck: 5 min of self-prompting; agenda paused". No table and no stone tools.
+**Result in one line:** the agenda finished `rocks`, then stalled at `sticks`. No cane or bamboo was found within 511 blocks, and felling gave no sticks. A dead bush gave 1 stick (held 1 of 3). After the 5-minute self-prompt step limit, at 02:28:51, the bot logged "agenda step sticks stuck: 5 min of self-prompting; agenda paused". No table and no stone tools.
 
 **A smoke batch, never gate evidence:** `batch.json` says `"gate": false, "smoke": true` (written by `batch.mjs`, not edited by hand).
 
@@ -44,9 +44,9 @@
 - No kick, no agent exit, no deaths.
 - **The sticks path, from the bot's own replies:**
   - it looked for river cane, then bamboo, at 128, 256 and 511 blocks: none found;
-  - `!collectBlocks("stick", 3)` felled trees for sticks three times; "the tree gave none" (the bot held 32 logs);
+  - `!collectBlocks("stick", 3)` was called four times (three times felling trees, once at the dead bush), each ending "Collected 0 stick" (the bot held 32 logs);
   - `!craftable` showed no stick recipe without a table;
-  - a dead bush gave 1 stick that was not picked up ("Still 1 stick — the drop didn't get picked up").
+  - a dead bush gave 1 stick (held 1 of 3): `!collectBlocks("dead_bush", 3)` logged "Broke deadbush but got no deadbush (it gave 1 stick)", and the next `!inventory` listed "stick: 1". The bot's own reply ("the drop didn't get picked up") misread that.
 - **Its `!newAction` attempt was refused:** "Code writing is off". Insecure coding stays off, as intended.
 - **Out of order:** "agenda step shelter_blocks started" (02:24:32) came before "agenda step logs done" (02:24:34), with sticks still open.
 - **Same failure as round 5's A rerun** (stuck at `sticks`). Rounds 6 and 7 passed A on felling sticks.

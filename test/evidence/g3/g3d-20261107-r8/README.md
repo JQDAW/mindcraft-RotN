@@ -64,7 +64,7 @@
 - **3 of 4, so not the clean 4/4 that the gate rule (PLAN.md) needs: no gate batch on e5029f23.** All four results are reported here, as run.
   - Under the GO there is no rerun: a rerun of A needs the lead's approval.
 - **For skills-rotn (the lead routes):**
-  - A's `sticks` stall: Dynamic Trees felling gave no sticks, no cane or bamboo was found, and a dead-bush stick was not picked up. C got sticks by felling a placed log.
+  - A's `sticks` stall: Dynamic Trees felling gave no sticks, no cane or bamboo was found, and a dead bush gave 1 stick (held 1 of 3). C got sticks by felling a placed log.
   - B's three rejected equip clicks with "cursor: stone_pickaxe" kept across each resync.
   - The out-of-order "shelter_blocks started" line before "logs done" (A) and before "crude_axe done" (the validation D batch).
   - B showed no "no longer usable" shelter line: the shelter held all night.
