@@ -182,6 +182,8 @@ G3 scenarios run only through `batch.mjs` inside `deploy/test-server.sh run`.
 - **The run:** `deploy/test-server.sh run --yes --ttl-hours <h> --seed 1880465901402976865 -- node test/runner/batch.mjs --max-batch-usd 2 --logs-out <raw>/server --summary <raw>/batch.json --scenario <id> --out <raw>/<dir> -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json`. No skip flags, no `--timeout-min` unless the GO names one.
 - **Stops:**
   - a scenario error, an infra fault (exit 125) or a harness fault stops the round before the next batch;
+  - an exit 125 with **no `running:` line** in the run log is a Mod Director infra fault (ADR 0008): the build's check at Done failed, so no scenario ran. The `mod-director:` lines name the file (`deploy/README.md`, build step 7);
+  - the next batch's evidence README records whether Mod Director kept the list's copy on disk: the run log's `mod-director: pinned config/mod-director/file-director_requisites.bundle.json` line says "OK" or "not on disk". If there is no copy, its line comes out of `deploy/test-server/mod-director.sha256` (#347 review);
   - a plain check FAIL is a result, not a stop;
   - an infrastructure failure before the bot joins may be retried once, but only if the GO allows it or the lead approves it at the time: a retry is a paid run. The runner's automatic login retry inside a running scenario (G2, "the login retry") is not such a retry.
 - **The report after each batch:** pass/fail per check, bot findings, LLM ok/failed counts, spend, Hetzner minutes, and the server, Primary IP and SSH key verified deleted.

@@ -1,8 +1,24 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (15:11 UTC, from `date -u`)
+Updated: 2026-11-07 (15:33 UTC, from `date -u`)
 
-## Now: the `g4-death-report` fixes after the T1 rehearsal (this PR; the lead's decisions after T1). Next: the Mod Director downloads inventory (report first).
+## Now: the pinned Mod Director downloads (ADR 0008; this PR). The lead chose option (a): fail closed from the first run.
+
+- **Why:** the pinned zip ships only Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`) and a pointer to a list on the pack's moving `stable` branch. That list has no hash and names `esmtweaks-1.12.2-0.4.5.jar` (GitHub release asset), installed at every start as a top-level `mods/` jar.
+- **`deploy/test-server/mod-director.sha256`** has full SHA-256 values:
+  - the jar `b57590bf…f235f933`: GitHub's digest, re-verified on the bytes downloaded on the CX33;
+  - the list's copy `48ba1339…`, checked only if Mod Director keeps it on disk.
+- **The check, `rotn-test mod-director`, at Done:**
+  - only top-level `mods/*.jar`, against the zip's top-level jars plus the list plus any `--extra-mod` hashed before start;
+  - subfolders are excluded (Forge writes there);
+  - on a problem: the server is stopped, the phase is `failed:mod-director: ...`, `test-server.sh` exits 125 before any scenario, and the hashes go into the run log.
+- **Restarts:** the `restart` verb is in #324 (HOLD). After both merge, it must run `rotn-test mod-director` after its new Done. That is a small follow-up, or an addition to #324 if the lead asks.
+- **Tested:**
+  - `mod-director.test.js` (10, on a fake server dir; a mutation that compares subfolders fails 6 of them);
+  - `test-server.test.js` (exit 125 with nothing run and all deleted; the report in the run log; the list in the user-data);
+  - 112 pass. ESLint clean.
+
+## Earlier: the `g4-death-report` fixes after the T1 rehearsal (this PR; the lead's decisions after T1). Next: the Mod Director downloads inventory (report first).
 
 - **`no_spam` is a loop test** (the ready-to-try wording: "without a chat-spam loop"):
   - it fails on a repeated line (near-identical lines count together), more than one death report, a spam kick, or the bot gone;
