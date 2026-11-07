@@ -1,8 +1,22 @@
 # Status: harness-ops
 
-Updated: 2026-11-06 (21:34 UTC, from `date -u`)
+Updated: 2026-11-07 (00:33 UTC, from `date -u`)
 
-## Now: G3 smoke round 7 (pre-gate, 42a8e94) is over: 3/4, so no gate on this commit. No batch until a new GO. Handoff for the move to the new dev server below.
+## Now: on the CX33 dev server, ready; waiting for a task (2026-11-07)
+
+- **Set up:** worktree `/home/mindcraft-RotN-worktrees/harness-ops`, branch `agent/harness-ops/cx33-start` from develop c8323be8, `npm ci` done. Read CLAUDE.md, PLAN.md, my brief, this file and the lead's 00:10 UTC snapshot.
+- **Check:** `node --test "test/unit/**/*.test.js"` on Linux: 533 tests, 531 pass, 0 fail, 2 skipped, 5 min 55 s (three other sessions running). No Hetzner server exists (`hcloud server list` empty, context `mindcraft-rotn-test`). Free memory at the check: 4.5 GB available of 7.6 GB, no swap (round 6 had 5.9-6.1 GB free on the PC).
+- **No open PRs of mine.** The round 7 evidence was merged as #292. No batch has run from this server.
+- **The lead's four items before the validation batch (read only; nothing changed):**
+  1. **Pack zip:** `deploy/test-server.sh:125` still defaults to the Windows path. Setting `ROTN_PACK_ZIP="/home/RotN 3.3.4 Server Pack.zip"` per command works as it is. Optional: change the default (one line, `deploy/`).
+  2. **`MINDCRAFT_PROFILES_FOLDER=/root/.mindcraft-rotn/FRCFLD/msa`** per command; the driver already requires it (DRIVER.md:23) and never prints it.
+  3. **Redactor: a real gap.** `test/tools/redact-evidence.mjs:56` (`LOCAL_PATH`) matches only `<drive>:/Users/<name>` and `/c/Users/<name>`. `/root/...` and `/home/...` (the worktree, `/home/RotN 3.3.4 Server Pack.zip`, the MSA folder if it ever showed up) pass through, and `--check` would not flag them. **Proposed fix (small `test/` PR, before the validation batch's evidence):** also mask `/root/<...>` and `/home/<...>` to `<local>`, with offline tests from this server's paths, and a `--check` over the existing evidence to show nothing else changes.
+  4. **Bash:** `test/runner/lib/adapters.mjs:13` uses Git Bash only on `win32` and plain `bash` elsewhere; `batch.mjs:76` and `mindcraft-driver.mjs:229` branch on `win32` the same way. Nothing to change.
+- **Memory rule still holds** (Requests item 13): during a paid batch over 20 min, no other agent runs `npm ci` or a full suite. With four sessions on 7.6 GB and no swap, the unit tests alone took 6 min, so I'd announce each batch window as before.
+- **Proposed order (the lead decides):** the redactor PR (with the pack default, if wanted), then the validation smoke batch on the lead's written GO. After the gate: the overlapping memory-summary counter fix (below).
+- **Note:** "Blocked", "Requests" and "Open PRs" at the bottom of this file date from the Windows PC ("this PC" means the old one); they are kept for the record.
+
+## Earlier: G3 smoke round 7 (pre-gate, 42a8e94) is over: 3/4, so no gate on this commit. No batch until a new GO. Handoff for the move to the new dev server below.
 
 | Batch (evidence folder) | Result |
 | --- | --- |
@@ -15,7 +29,7 @@ Updated: 2026-11-06 (21:34 UTC, from `date -u`)
 - **Memory summaries, true:** 38 stored, 0 empty. The run logs' "5 empty" (A 2, B 1, C 2) are a harness miscount: overlapping summaries (a second starts before the first's reply), which the counter's "next start closes it as empty" rule gets wrong. **The fix waits until after the gate** (lead), so the commit stays 42a8e94; the READMEs give the true figures.
 - **Corrected in the evidence:** the round 5 C and D and round 6 A-D READMEs said "the human approved the run command". Run commands go through Claude Code's auto mode (the human, via the lead); the one block (round 5 C, 15:06Z) was a one-off.
 - **For skills-rotn / net-forge (the lead routes):** B's shelter judged unusable while it worked; the rejected window click in `equip` (cursor item or inventory desync); leaving a working shelter at night.
-- **Open: the round 7 evidence PR.**
+- ~~Open: the round 7 evidence PR.~~ **Merged** (#292).
 
 ### Handoff (for the next session, on the new dev server)
 
