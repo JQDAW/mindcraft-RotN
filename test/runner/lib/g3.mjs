@@ -6,7 +6,11 @@ import { parseLine } from './server-log.mjs';
 //   - the batch spend stop: maxBatchUsd (USD 2) is a gate parameter compared 'equal';
 //   - the console sender `Server` is the test-only task giver: never in the production settings;
 //   - the console is limited to G3's approved commands; give, summon, kill and every op command
-//     (gamemode, effect, op, ...) are refused before they reach the server.
+//     (gamemode, effect, op, ...) are refused before they reach the server. One G4 scenario adds exactly
+//     what it needs, and nothing else (SCENARIO_CONSOLE_EXTRA, consoleAllowFor).
+// G4 scenarios use the same tooling (lead, 2026-11-07): their test-server runs are rehearsals, never G4
+// evidence (test/scenarios/g4/PLAN.md, #316), so g3Policy marks them not-gate and crossCheckBatch never
+// accepts one in a gate claim; batch.mjs vouches for them like G3 results (isG3Result).
 export const G3_DEFAULTS = Object.freeze({ maxBatchUsd: 2 });
 
 /**
@@ -92,13 +96,36 @@ export const G3_CONSOLE_ALLOW = [
 ];
 
 /**
+ * Console commands one scenario adds to G3_CONSOLE_ALLOW, and only that scenario (consoleAllowFor).
+ * g4-death-report (lead decision, 2026-11-07): `kill <bot>` is the scenario's stimulus, a forced death, on
+ * the disposable TEST server only (never on the live server, never to fake a pass; the same rule as the P1
+ * setup commands). A plain player name only: no selector (@a, @e, ...), so it can kill nothing else.
+ * Test-server only by construction: the console goes only through test-server.sh, which reaches only the
+ * labelled servers it created itself, with their own per-batch keys; the harness holds no address, key or
+ * RCON for the live server. With it, the read-only `health` objective that shows the respawn (0, then > 0).
+ */
+export const SCENARIO_CONSOLE_EXTRA = Object.freeze({
+    'g4-death-report': Object.freeze([
+        new RegExp(`^kill ${NAME}$`),
+        /^scoreboard objectives add [A-Za-z0-9_]{1,16} health$/,
+    ]),
+});
+
+/** The console allowlist for a scenario: G3's, plus what SCENARIO_CONSOLE_EXTRA gives that scenario alone. */
+export const consoleAllowFor = (scenario) => [...G3_CONSOLE_ALLOW, ...(SCENARIO_CONSOLE_EXTRA[scenario?.id] ?? [])];
+
+/** Why a G4 run on a test server is never G4 evidence (lead, #316 review). */
+export const G4_TEST_SERVER_NOT_GATE = 'a G4 scenario on a test server is a rehearsal: G4 evidence comes only from the CX23 service (test/scenarios/g4/PLAN.md)';
+
+/**
  * What run.mjs applies to a scenario (#122 review findings 3 and 4):
  *   guard:   the console allowlist, for every G3 scenario and every scenario that runs the real agent;
  *   notGate: a reason when a G3 run did not come from batch.mjs (no ROTN_G3_BATCH marker "<id>:<limit>"),
- *            or the marker's limit is not the run's maxBatchUsd: such a run had no spend stop over it.
+ *            or the marker's limit is not the run's maxBatchUsd: such a run had no spend stop over it;
+ *            and always for a G4 scenario (G4_TEST_SERVER_NOT_GATE).
  */
 export function g3Policy(scenario, env, maxBatchUsd) {
-    const guard = scenario.gate === 'G3' || scenario.llm === true;
+    const guard = scenario.gate === 'G3' || scenario.gate === 'G4' || scenario.llm === true;
     const marker = env.ROTN_G3_BATCH ?? null;
     let notGate = null;
     if (scenario.gate === 'G3') {
@@ -106,6 +133,7 @@ export function g3Policy(scenario, env, maxBatchUsd) {
         if (!m) notGate = 'a G3 run outside batch.mjs has no spend stop (no ROTN_G3_BATCH marker)';
         else if (Number(m[1]) !== Number(maxBatchUsd)) notGate = `the batch's spend limit ${m[1]} is not this run's maxBatchUsd ${maxBatchUsd}`;
     }
+    if (scenario.gate === 'G4') notGate = G4_TEST_SERVER_NOT_GATE;
     return { guard, notGate, batch: marker };
 }
 
@@ -159,23 +187,28 @@ export function crossCheckBatch(summary, results, { g3Scenarios = [], gate = fal
         if (stopped && !result.infraFault) p.push(`${file}: the batch stopped ${result.scenario} as an infra fault (exit ${INFRA_FAULT_EXIT}), but its result does not say infraFault`);
         if (!stopped && result.infraFault) p.push(`${file}: its result says infraFault, but the batch recorded exit ${runs[0].exit} for ${result.scenario}, not ${INFRA_FAULT_EXIT}`);
         if (gate && result.infraFault) p.push(`${file}: an infra fault (${result.infraFault.kind ?? 'unknown'}), not a bot result: never gate evidence`);
+        if (gate && isG4(result)) p.push(`${file}: a G4 result from a test server, a rehearsal: never gate evidence`);
     }
     return p;
 }
 
 /**
- * A G3 result, so that neither dropping nor re-spelling a field dodges the cross-check (#129 re-review nit 2):
- * its gate is G3 in any case or spacing, or its scenario starts with g3- (any case), or its scenario is one
- * that loadScenarios marks gate G3 (g3Scenarios: those ids, compared without case or surrounding spaces,
+ * A result that a batch.json must vouch for: a G3 result, or a G4 one (G4 uses the same tooling, 2026-11-07),
+ * so that neither dropping nor re-spelling a field dodges the cross-check (#129 re-review nit 2): its gate is
+ * G3 or G4 in any case or spacing, or its scenario starts with g3- or g4- (any case), or its scenario is one
+ * that loadScenarios marks gate G3 or G4 (g3Scenarios: those ids, compared without case or surrounding spaces,
  * #139 review nit 1). Only the top-level object is a result: one wrapped in an array or a parent object is
  * not detected (#139 review nit 2; DRIVER.md says so, and the evidence review covers it).
  */
 export function isG3Result(result, g3Scenarios = []) {
     if (!result || typeof result !== 'object' || Array.isArray(result)) return false;
-    if (String(result.gate ?? '').trim().toUpperCase() === 'G3') return true;
+    if (['G3', 'G4'].includes(String(result.gate ?? '').trim().toUpperCase())) return true;
     const id = String(result.scenario ?? '').trim().toLowerCase();
-    return id.startsWith('g3-') || (id !== '' && g3Scenarios.some((s) => String(s).trim().toLowerCase() === id));
+    return /^g[34]-/.test(id) || (id !== '' && g3Scenarios.some((s) => String(s).trim().toLowerCase() === id));
 }
+
+/** A G4 result (gate G4, or a g4- scenario): never gate evidence from a test server. */
+const isG4 = (result) => String(result?.gate ?? '').trim().toUpperCase() === 'G4' || /^g4-/.test(String(result?.scenario ?? '').trim().toLowerCase());
 
 /** The verb of a console command, for error messages (never the arguments). */
 const verb = (cmd) => String(cmd).trim().split(/\s+/)[0] || '(empty)';
