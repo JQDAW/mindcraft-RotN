@@ -1,9 +1,31 @@
 # Status: rotn-lead
 
-Updated: 2026-11-06 22:04 UTC (from `date -u`)
+Updated: 2026-11-07 00:10 UTC (from `date -u`)
 
 
-## Handoff snapshot (2026-11-06 22:04 UTC): before the move to the CPX32 dev server
+## Current snapshot (2026-11-07 00:10 UTC): on the CX33 dev server, the move is nearly done
+
+- **Dev server:** a Hetzner **CX33** (the human corrected CPX32 to CX33 on 2026-11-07). Ubuntu 26.04.1, 4 vCPU, 7.6 GB RAM, **no swap**; everything runs as root. The memory rule (Requests item 13) still applies: during a paid batch over 20 min, no other agent runs `npm ci` or a full suite.
+- **Move checklist (coord/NEEDS-HUMAN.md):**
+  - Step 1: no PR is open and no Hetzner test server exists (`hcloud server list` is empty).
+  - Step 2: the base system is complete. Node 22.23.4 (nvm), npm 10.9.9, git 2.53, gh 2.103, hcloud 1.70, jq, curl, unzip, xz, ssh, scp and ssh-keygen, build-essential, python3, OpenJDK 1.8.0_504 with `javac` and `javap`.
+  - Step 3: the pack zip is at `/home/RotN 3.3.4 Server Pack.zip`, and its SHA-256 matches `90642fd5...f5205`.
+  - Step 4: gh is logged in as JQDAW. The active hcloud context is `mindcraft-rotn-test`, and `HCLOUD_TOKEN` is not exported. `OPENROUTER_API_KEY` is set in the lead's shell (checked set/unset only). The checklist wants it only in the batch session, so that is with the human.
+  - Step 5: done by the lead. The main checkout `/home/mindcraft-RotN` (develop) passed `npm ci` (8/8 patches), `npm test` (1468 pass, 0 fail, 2 skipped) and lint (253, the baseline). Worktrees `/home/mindcraft-RotN-worktrees/<agent>` are each on a fresh `agent/<agent>/cx33-start` from develop `cb24eaa5` (every earlier branch was merged), and each passed `npm ci` with 8/8 patches.
+  - Step 6: done. The human did the FRCFLD device-code login (profile `FRCFLD`). The lead's `msa-login.mjs FRCFLD --check` passed. The folder is `/root/.mindcraft-rotn/FRCFLD/msa`, mode 0700.
+  - Step 7 is open: the human starts the four agent sessions.
+  - Step 8 is open: one validation smoke batch, on the lead's GO.
+- **Git:** remote `upstream` = mindcraft-bots/mindcraft, fetch only (its push URL is disabled). `gh repo set-default JQDAW/mindcraft-RotN`, so `gh` keeps using the fork now that a second remote exists.
+- **For harness-ops, before the validation batch:**
+  - set `ROTN_PACK_ZIP="/home/RotN 3.3.4 Server Pack.zip"` (the `deploy/test-server.sh` default is still the Windows path);
+  - set `MINDCRAFT_PROFILES_FOLDER=/root/.mindcraft-rotn/FRCFLD/msa` per command;
+  - check that `test/tools/redact-evidence.mjs` covers Linux paths: `LOCAL_PATH` matches only Windows user folders, and this server's paths are `/root/...` and `/home/mindcraft-RotN-worktrees/...`;
+  - the Git Bash and Windows branches in `test/runner/lib/adapters.mjs` fall back to plain bash here.
+- **For net-forge:** `xz` is on PATH, and the pack zip path is above (`build-collision-overrides.mjs --pack`).
+- **For rotn-data:** the cobblestone variant list was in the old PC's scratchpad. Rebuild it from `packages/rotn-data/3.3.4/` only if skills-rotn asks.
+
+
+## Handoff snapshot (2026-11-06 22:04 UTC): before the move to the dev server (a CX33; first written as CPX32)
 
 - **G3:** smoke rounds 1-7 are done. Round 7 on `42a8e94` scored A 7/7, B 4/5, C 7/7 and D 7/7 (evidence: test/evidence/g3/*-r7, #292). B died to a zombie after leaving a working shelter: the shelter check misjudged it, and the equip click was rejected (cursor desync). skills-rotn's fix is **#296**, in review.
 - **Gate rule** (docs/PLAN.md, the human's decision 2026-11-06): a clean 4/4 smoke round A-D on the final commit, each batch on its own fresh server; then one `batch.mjs --gate` batch per scenario on that commit, each on a fresh server. On a failure the rest still run, and only the failed scenario is rerun, with the human's approval. A batch run only to validate the dev server never counts.
