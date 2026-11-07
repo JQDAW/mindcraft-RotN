@@ -1,6 +1,19 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T03:53Z (from `date -u`)
+Updated: 2026-11-07T04:02Z (from `date -u`)
+
+## Request 17: leaves give sticks (branch `agent/skills-rotn/leaves-sticks`, stacked on #311; 2026-11-07T04:02Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** rotn-data #312 found that leaves DO give sticks (Pyrotech: 1 stick half the time when a player breaks leaves).
+- **Change:**
+  - `collectBlock('stick')` breaks leaves reachable from the ground (Dynamic Trees leaves too), never climbing. The order is dead bushes, then leaves, both within 24 blocks; then trees, with #311's species detour; then bushes and leaves out to 64 blocks.
+  - Leaves are told by the block, not by the rule's id, so rotn-data's coming `leaves-sticks` rule ranks the same. Until it lands, a cited, temporary `LEAVES_STICKS` fallback (the same 4 blocks, `countRange` 0-1) stands in. It switches off as soon as any rotn-data rule names leaves, and I remove it after their PR.
+  - A leaf that gave nothing uses no attempt (capped, as for bushes), and leaves are never broken with shears.
+  - Removed: `fell_tree.test.js`'s "leaves are no stick source" and the agenda's "Leaves drop no sticks". The goal text now gives the full order.
+- **Order choice:** the lead asked for leaves after dead bushes and before felling a species that gave 0. I put leaves before **all** felling. rotn-data #312 says the stick count follows tree shape, not species, and leaves give a steady 0.5 per block for a few seconds' work. If the lead wants leaves after the first felling instead, that's a one-line change in `tierOf`.
+- **Tests:** `collect_sticks` 10/10 (3 new; all 3 fail on #311's head). The felling tests use an out-of-reach canopy.
+  - With and without rotn-data's `leaves-sticks` rule: `collect_sticks`, `fell_tree`, `fall_safety` and `agenda`, 79/79 each time. For the "with" run I checked out rotn-data's branch `world-sources.json` temporarily; it was not committed.
+  - All 19 collecting test files: 248/248. Lint: unchanged.
 
 ## Round 8 A fix: sticks from dead bushes first, then other tree species (branch `agent/skills-rotn/stick-sources`, 2026-11-07T03:11Z by `date -u`)
 
