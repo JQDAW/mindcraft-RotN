@@ -1,8 +1,23 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (01:03 UTC, from `date -u`)
+Updated: 2026-11-07 (01:57 UTC, from `date -u`)
 
-## Now: the Linux-paths PR (the lead's task before the validation batch) is open, for review
+## Now: the dev-server validation batch (G3 smoke D, validation only) PASSED 7/7; evidence PR open
+
+| Batch (evidence folder) | Result |
+| --- | --- |
+| D, validation only (`g3d-20261107-v1`, develop 198bacbb) | **PASS 7/7:** the refusal came 1 s after the whisper; no kick, no deaths. A SMOKE batch that never counts toward G3. |
+
+- **This validates the CX33 as the batch machine:** Linux paths, plain bash, Node 22, the token cache at `/root/.mindcraft-rotn/FRCFLD/msa`, the test key in the batch session, the sweeper check, and Linux-path redaction (#305).
+  - The pack zip upload was not exercised: the server used the CurseForge download. The `/home` default was checked by the pre-batch dry run (pin matched).
+- **LLM:** 14 requests: 12 replies and 2 memory summaries stored. 0 failed, 0 empty, all Wafer.
+- **Spend:** USD 0.002393 by the batch figure. The key reads USD 0.849107 of the 4.50 stop (01:56:32 UTC).
+- **Hetzner:** 6 min, billed about 1 h, est. EUR 0.1381. Server, Primary IP and SSH key verified gone; the project had 0/0/0 (counted with `grep -c .`) at 01:56:20.
+- **Observation for skills-rotn (the lead routes; no effect on the checks):** "agenda step shelter_blocks started" was logged 2 s before "agenda step crude_axe done".
+- **Corrected:** during prep I reported Hetzner resources appearing and vanishing. That was my miscount: an empty `hcloud ... -o noheader` prints one blank line, and `wc -l` counted it. From now on I count with `grep -c .`.
+- **Next (the lead's order):** find the unit test that leaves `fake-driver.mjs` running after it ends (offline, targeted runs only), and fix it in a separate small PR.
+
+## Earlier: the Linux-paths PR (the lead's task before the validation batch); merged as #305
 
 Branch `agent/harness-ops/linux-paths` from develop c8323be8. It carries #302's STATUS commit (identical hunks, so either merge order is clean; if this one merges first, #302 can be closed).
 
