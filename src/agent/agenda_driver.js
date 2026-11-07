@@ -194,7 +194,13 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         if (step.reserve) agent._agenda_before_reserve = prev;
         const resumed = agent._agenda_preempted || fromReserve;
         agent._agenda_preempted = false;
-        say(agent, resumed ? `agenda resumed: ${step.id}` : `agenda step ${step.id} started: ${step.short}`);
+        // The first step after a process restart (agenda.json said active) is not a new start (G4
+        // #11 prep): its done steps stay done and its spent runs are kept. The line keeps the
+        // "agenda step <id> started: " form the harness parses (g3-task-preempts-agenda agendaActive).
+        const afterRestart = agenda.loadedActive === true;
+        agenda.loadedActive = false;
+        say(agent, resumed ? `agenda resumed: ${step.id}`
+            : `agenda step ${step.id} started: ${step.short}${afterRestart ? ' (resumed after a restart)' : ''}`);
         driveTo(agent, goal); // the self-prompter's next prompt uses it
         // A run still going from the step before now works on this one: it is this step's run
         // (#164 nit: it was not counted, so a step could get one run more than its budget).
