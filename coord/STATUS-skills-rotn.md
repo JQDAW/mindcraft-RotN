@@ -1,16 +1,30 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T01:03Z (from `date -u`)
+Updated: 2026-11-07T01:10Z (from `date -u`)
 
 ## The goToGoal test is no longer flaky under load (branch `agent/skills-rotn/goto-test-load`, 2026-11-07T01:03Z by `date -u`)
 
-- **Task (lead, 2026-11-07):** make `src/agent/library/use_on.test.js` "goToGoal: a walk that never arrives" robust under load without weakening it. My CX33 start report (#301, branch `cx33-start`) is still in review and this branch leaves it alone. Both edit the top of this file, so whichever merges second needs develop merged in. I'll do that when asked.
+- **Task (lead, 2026-11-07):** make `src/agent/library/use_on.test.js` "goToGoal: a walk that never arrives" robust under load without weakening it. My CX33 start report (#301) is merged, and develop is merged into this branch (this file's conflict resolved, both sections kept).
 - **Cause:** the 1.5 s bound timed the whole `goToNearestBlock` call. Its first wood search in a process pays a one-off cold load of 1.1-1.3 s on the CX33 (a second identical call takes 13 ms). The bounded walk itself stopped at 300-301 ms every time.
 - **Fix (test only, no skill code):** the fake pathfinder records each walk's time from `goto` to the `stop` that ended it. The test asserts one walk, stopped (not left running), ran 299-2000 ms against the 300 ms limit, plus the unchanged "time limit of 0.3 s reached" line.
 - **Tests:** the file passes 15/15 and ESLint shows 0 problems in it.
   - Mutations: with the walk unbounded (the old bug), the test fails at the 5 s per-test timeout. With the limit firing at 50 ms, it fails with "the walk ran 52 ms; the limit is 300 ms".
   - Under load: 6 CPU burners on the 4 vCPU (load up to about 5.4), with the file run alternately with the old version. The old test failed 13/13 while the burners ran. The new one passed 20/20, 13 of them under load. The other 14 tests in the file never failed.
-- **PR:** #306, waiting for review.
+- **Review (lead, APPROVE WITH NITS on `da54e4b`), answered (2026-11-07T01:10Z by `date -u`):**
+  1. origin/develop merged in, not rebased.
+  2. `t.after(() => bot.pathfinder.stop())`: if the walk is ever unbounded again, the test still fails at its 5 s timeout, and the stop then ends the pending walk. `goToGoal` clears its door-check `setInterval` and node exits.
+     - Shown with the unbounded mutation in scratch copies of `skills.js` and the test, deleted afterwards (`skills.js` is identical to develop). With the hook, node exits 1 after 6 s (the test is `not ok`, counted as cancelled). Without it, node was still hung at 40 s (killed by `timeout`).
+  3. A comment says the "0.3 s" message assertion pins the exact limit, and 2000 ms is only a ceiling.
+  - Tests: the file passes 15/15 and ESLint shows 0 problems.
+- **PR:** #306, waiting for the lead's re-check.
+
+## Report to the lead: up on the CX33 (session 4, 2026-11-07T00:32Z by `date -u`)
+
+- **Where:** worktree `/home/mindcraft-RotN-worktrees/skills-rotn`, branch `agent/skills-rotn/cx33-start` from develop `c8323be8`. `npm ci` was already done. Node 22.23.4. `hcloud server list` is empty. I read CLAUDE.md, PLAN.md, my brief, this file and the lead's 2026-11-07 snapshot, and rebuilt my memory note from them.
+- **Open PRs:** none. #296 (the round 7 B fixes) is merged as `cb24eaa5`. No local-only work. The old `agent/skills-rotn/*` branches were squash-merged; `night-threats` is stale, as noted below.
+- **Check on this server:** `node --test 'src/**/*.test.js'` gives 481 tests, 480 pass and **1 fails, twice in a row**: `src/agent/library/use_on.test.js:181` "goToGoal: a walk that never arrives ends at GO_TO_LIMITS". It took 1574 ms against its 1500 ms wall-clock bound. The load average was about 5 on 4 vCPU while the other agents ran their checks. Run alone it passes 3/3. The lead's full `npm test` on `cb24eaa5` passed, so this is a timing-sensitive test, not a code fault. **Proposal (not started):** a small PR that makes the bound relative to the 300 ms limit with more headroom, or measures the time limit from the skill's own log line, so CI and the gate commit don't fail on a busy runner. I'll do it only if you give the task.
+- **Next (waiting for a task):** the next smoke or gate findings for G3 (b). In the next B run, check the new "[night] the shelter at X is no longer usable: <block> at <pos> (<why>)" line and the `[inventory]` cursor lines (cursor put down, resync) to confirm #296 live.
+- **Open requests (unchanged):** Request 1, the rest of it: `pause_when_empty: false` and `!searchWiki` in `blocked_actions` (settings.js, lead). FYI for net-forge: mineflayer 4.33 ignores the server's cursor packet (`set_slot` window -1, slot -1); #296 handles it in `src/agent`, and a mineflayer patch would be the cleaner home.
 
 ## Handoff (before the move to the dev server, 2026-11-06T21:49Z by `date -u`)
 

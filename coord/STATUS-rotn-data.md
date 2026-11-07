@@ -1,10 +1,25 @@
 # Status: rotn-data
 
-Updated: 2026-11-06T21:46Z (from `date -u`)
+Updated: 2026-11-07T00:30Z (from `date -u`)
 
-Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/cx33-start`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
-## Handoff (before the move to the dev server, 2026-11-06)
+## Report to the lead: started on the CX33 (2026-11-07)
+
+- **Read:** CLAUDE.md, docs/PLAN.md, docs/briefs/rotn-data.md, this file's handoff, and your 2026-11-07 00:10 UTC snapshot.
+- **Worktree:** clean, on develop `c8323be8`, with `npm ci` already done. Node 22.23.4.
+- **Offline checks (no server, no LLM, no paid work), all on this machine:**
+  - `node --test "packages/rotn-data/test/**/*.test.js"`: 151/151 pass.
+  - `node --test src/utils/*.test.js` (mcdata.rotn and the related tests): 21/21 pass.
+  - `build-food-values.mjs --pack "/home/RotN 3.3.4 Server Pack.zip" --check`: up to date (20 s, about 1.0 GB peak). The pack-reading tools work with the Linux zip path.
+  - `build-falling-blocks.mjs --pack ... --check` reports "differs". I rebuilt it into my scratchpad and diffed it. **The only difference is the `dump` timestamp** (`2026-11-02T02:37:07Z` committed, `2026-11-06T12:22:37Z` rebuilt). The tool copies that stamp from `manifest.json`, which #269's fourth dump replaced. The falling-block content is identical. A one-line data refresh fixes it; I have not touched it. It is a follow-up for whenever you want it, and it does not affect G3.
+- **Nothing lost in the move:** every `agent/rotn-data/*` branch is on origin. The one local-only commit from the old PC (`b4eaf1da`, on `cite-paths-readme`) was already on develop. The old Windows scratchpads (jars, javap helpers, the cobblestone list) are gone. Anything I need comes again from the pinned zip at `/home/RotN 3.3.4 Server Pack.zip` (SHA-256 checked by you).
+- **Open PRs:** none of mine, apart from this STATUS-only one. **Running:** nothing (no jobs, no subagents, no Hetzner servers).
+- **Still open, unchanged:** Request 2 (`bot.registry` properties for net-forge, on its request) and Request 9 (the prismarine-recipe `outShape` patch, your call). Low-priority follow-ups are listed under "Follow-ups" below. The cobblestone and stone variant list for skills-rotn is rebuilt only if they ask.
+- **Rules I follow here:** no new work without your task; no paid batch or Hetzner server without your written GO; reviewers at medium effort; no keys, tokens, `.env*` or token cache; targeted tests only while a paid batch over 20 min runs (the memory rule); never force-push.
+- **Waiting for a task.**
+
+## Handoff (before the move to the dev server, 2026-11-06; superseded by the report above)
 
 - **Open PRs:** none of mine. My last five are merged: #269, #272, #278, #280 and #288 (`6f1847f2`, the dirt drop rule). This handoff is STATUS only, on `agent/rotn-data/handoff`.
 - **Branches:** every `agent/rotn-data/*` branch is pushed and merged. One exception: the local `agent/rotn-data/cite-paths-readme` has one commit the remote lacks (`b4eaf1da`, the sludge lord line citation, lines 180-198). That line is already on develop, so nothing is lost. The local commit is not pushed, because pushing it would need a force-push.
@@ -508,4 +523,4 @@ Findings for skills-rotn (via the lead): see Request 8.
    - **Data:** `world-sources.json` gets `dirt-piles` (tool null, a new optional `unlessTool: {type: shovel, minLevel: 1}`, which howto passes through) and `dirt-with-shovel` (shovel level 1, the dump's plain drops). The other soils (Biomes O' Plenty, Defiled Lands, Aether), sand, red sand and gravel follow the same pattern in the script and are named in the rule's note, not encoded.
 ## Open PRs
 
-- None. #288 is merged (`6f1847f2`).
+- None apart from the CX33 start STATUS PR. #288 is merged (`6f1847f2`).
