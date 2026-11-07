@@ -50,11 +50,11 @@ function fakeSelfPrompter() {
     sp.stop = () => { sp.state = 'stopped'; sp.stops++; };
     return sp;
 }
-function fakeAgent(t, { agenda = true } = {}) {
+function fakeAgent(t, { agenda = true, dir = null } = {}) {
     // A stored task's giver is checked again when it runs (G3 (c)/(d) review): the givers these
     // tests use. JQDAW is a player here; "Server" is the console sender (a test-server setting).
     Object.assign(settings, { task_givers: ['JQDAW'], allow_server_task_giver: true });
-    const dir = tempDir(t);
+    dir ??= tempDir(t); // the same dir: the same bot after a process restart (G4 #11 prep)
     const said = [];
     const agent = {
         name: 'FRCFLD',
@@ -580,12 +580,12 @@ function t_log(fn) {
 }
 
 // A real Agent's handleMessage, respondFunc and commands over fakes (no server, no LLM).
-function harnessAgent(t) {
+function harnessAgent(t, { dir = null, agenda = true } = {}) {
     const before = { ...settings };
     Object.assign(settings, { language: 'en', task_givers: ['JQDAW'], only_chat_with: [], show_command_syntax: 'none', max_commands: -1 });
     t.after(() => { for (const k of Object.keys(settings)) delete settings[k]; Object.assign(settings, before); });
     t.mock.method(console, 'log', () => {});
-    const base = fakeAgent(t);
+    const base = fakeAgent(t, { dir, agenda });
     const agent = Object.create(Agent.prototype);
     const routed = [];
     Object.assign(agent, base, {
@@ -642,7 +642,7 @@ test('a task stored as active and taken over after a restart: its giver is check
     agent.tasks = new TaskQueue('FRCFLD', { dir: agent.dir });
     agent._task_id = null;
     assert.equal(autonomyTick(agent, { now: 0 }), 'task:t1');
-    assert.equal(agent.said.at(-1), 'task t1 started: build a hut');
+    assert.equal(agent.said.at(-1), 'task t1 started: build a hut (resumed after a restart)', 'G4 #11 prep: a restart is reported');
     assert.equal(agent.tasks.get('t1').status, 'active');
 
     // The same, but the giver was removed: dropped, and its restored self-prompter goal stopped.
@@ -667,4 +667,126 @@ test('the console sender "Server" stays a giver only while allow_server_task_giv
     agent.tasks = new TaskQueue('FRCFLD', { dir: agent.dir });
     assert.equal(autonomyTick(agent, { now: 0 }), 'task:t1:dropped');
     settings.allow_server_task_giver = true;
+});
+
+// ---- G4 item 11 prep (test/scenarios/g4/PLAN.md, g4-restart-persistence): across a restart ----
+
+const stack = (name, metadata, count) => ({ name, metadata, count });
+const ROCKS = [stack('pyrotech:rock', 0, 6)];
+/** The same bot after a process restart: new objects from the same files; upstream's memory.json may restore the self-prompter's prompt. */
+function restartOf(t, before, { restoredPrompt = null } = {}) {
+    const agent = fakeAgent(t, { agenda: false, dir: before.dir });
+    agent.bot = fakeBot(before.bot.inventory.items());
+    if (restoredPrompt) { agent.self_prompter.start(restoredPrompt); agent.self_prompter.starts.length = 0; }
+    return agent;
+}
+
+test('G4 #11 (a): after a restart the agenda goes on at the same step: no step done twice, the runs it spent kept (never reset), and it says so', (t) => {
+    const agent = fakeAgent(t);
+    agent.bot = fakeBot(ROCKS);
+    assert.equal(autonomyTick(agent, { now: 0 }), 'sticks');
+    assert.deepEqual(agent.said, ['agenda step rocks done', 'agenda step sticks started: collect 3 sticks']);
+    assert.equal(agent.agenda.spentOn('sticks').attempts, 1);
+
+    // With the prompt restored from memory.json: the agenda takes it over; that run counts.
+    const after = restartOf(t, agent, { restoredPrompt: agent.self_prompter.prompt });
+    assert.equal(autonomyTick(after, { now: 0 }), 'sticks');
+    assert.deepEqual(after.said, ['agenda step sticks started: collect 3 sticks (resumed after a restart)'], 'rocks is not done again, sticks is not new');
+    assert.equal(after.agenda.spentOn('sticks').attempts, 2, 'a restart never resets the runs; its own run counts');
+    assert.equal(after.self_prompter.isActive(), true);
+
+    // Without a restored prompt: the self-prompter starts after the back-off, as after any stop; that run counts too.
+    const again = restartOf(t, after);
+    assert.equal(autonomyTick(again, { now: 0 }), 'sticks');
+    assert.deepEqual(again.said, ['agenda step sticks started: collect 3 sticks (resumed after a restart)']);
+    assert.equal(again.self_prompter.isActive(), false);
+    assert.equal(autonomyTick(again, { now: BACKOFF_MS }), 'sticks');
+    assert.equal(again.self_prompter.isActive(), false, 'the back-off doubles: 2 runs spent, so 60 s');
+    assert.equal(autonomyTick(again, { now: 2 * BACKOFF_MS }), 'sticks');
+    assert.equal(again.self_prompter.isActive(), true);
+    assert.equal(again.agenda.spentOn('sticks').attempts, 3);
+    // A crash loop ends with the step stuck, not with endless runs.
+    const last = restartOf(t, again);
+    assert.equal(autonomyTick(last, { now: 0 }), 'stuck', 'its 3 runs are spent: stuck at the first tick');
+    assert.equal(last.said.at(-1), 'agenda step sticks stuck: 3 self-prompter runs; agenda paused');
+    assert.equal(autonomyTick(last, { now: 10 * BACKOFF_MS }), null, 'paused: no more runs');
+    assert.equal(last.self_prompter.isActive(), false);
+});
+
+test('G4 #11 (b): a giver\'s queued task survives a restart and runs', (t) => {
+    const agent = fakeAgent(t);
+    agent.bot = fakeBot(ROCKS);
+    autonomyTick(agent, { now: 0 });
+    agent.tasks.add({ text: 'collect 3 logs', priority: 'normal', giver: 'JQDAW' });
+    const after = restartOf(t, agent);
+    assert.equal(after.tasks.get('t1').status, 'queued');
+    assert.equal(autonomyTick(after, { now: 0 }), 'task:t1');
+    assert.equal(after.tasks.get('t1').status, 'active');
+    assert.deepEqual(after.said, ['task t1 started: collect 3 logs'], 'a task that never ran starts');
+});
+
+test('G4 #11 (c): a task that was running at the restart is resumed and reported, with its spent budget kept; never dropped', (t) => {
+    const agent = fakeAgent(t);
+    agent.bot = fakeBot(ROCKS);
+    agent.tasks.add({ text: 'collect 3 logs', priority: 'normal', giver: 'JQDAW' });
+    assert.equal(autonomyTick(agent, { now: 0 }), 'task:t1');
+    assert.equal(agent.tasks.spentOn('t1').attempts, 1);
+
+    const after = restartOf(t, agent, { restoredPrompt: taskGoal(agent.tasks.get('t1')) });
+    assert.equal(after.tasks.get('t1').status, 'queued', 'queued again at load');
+    assert.equal(autonomyTick(after, { now: 0 }), 'task:t1');
+    assert.equal(after.tasks.get('t1').status, 'active');
+    assert.deepEqual(after.said, ['task t1 started: collect 3 logs (resumed after a restart)']);
+    assert.ok(after.tasks.spentOn('t1').attempts >= 1, 'its budget is not reset');
+
+    // Without a restored prompt it is resumed too (after the back-off), and only the first start says so.
+    const again = restartOf(t, after);
+    assert.equal(autonomyTick(again, { now: 0 }), 'task:t1');
+    assert.deepEqual(again.said, ['task t1 started: collect 3 logs (resumed after a restart)']);
+    assert.equal(autonomyTick(again, { now: BACKOFF_MS }), 'task:t1');
+    assert.equal(again.self_prompter.isActive(), true);
+    finishTask(again, 'done', 'got the logs');
+    assert.equal(again.tasks.get('t1').status, 'done');
+});
+
+test('G4 #11 (d): a giver\'s !stop survives a restart: held at the first tick, a restored self-prompter stopped; after !resume the task resumes, reported', async (t) => {
+    const agent = harnessAgent(t);
+    agent.bot.inventory = fakeBot(ROCKS).inventory;
+    agent.tasks.add({ text: 'collect 3 logs', priority: 'normal', giver: 'JQDAW' });
+    assert.equal(autonomyTick(agent, { now: 0 }), 'task:t1');
+    await agent.handleMessage('JQDAW', '!stop');
+
+    const after = harnessAgent(t, { dir: agent.dir, agenda: false });
+    after.bot.inventory = fakeBot(ROCKS).inventory;
+    after.self_prompter.start(taskGoal(after.tasks.get('t1'))); // memory.json said active (saved before the stop)
+    assert.equal(after.control.hold.kind, 'stop');
+    assert.equal(autonomyTick(after, { now: 0 }), 'held:stop');
+    assert.equal(after.self_prompter.isActive(), false);
+    for (let k = 1; k <= 3; k++) assert.equal(autonomyTick(after, { now: k * BACKOFF_MS }), 'held:stop');
+    assert.deepEqual(after.said, [], 'nothing resumed or started on its own');
+    await after.handleMessage('JQDAW', '!resume');
+    assert.equal(autonomyTick(after, { now: 4 * BACKOFF_MS }), 'task:t1');
+    assert.equal(after.said.at(-1), 'task t1 started: collect 3 logs (resumed after a restart)');
+});
+
+test('G4 #11 (d): under a stored hold the agent does not restore the self-prompter at startup (it would send an LLM request before the first tick)', async (t) => {
+    const agent = harnessAgent(t);
+    const loads = [];
+    agent.self_prompter.handleLoad = (prompt, state) => { loads.push([prompt, state]); return Promise.resolve(); };
+    agent.control.setHold('stop', 'JQDAW');
+    await withChatHandlers(agent);
+    agent.bot.on = () => {};
+    await agent._setupEventHandlers({ self_prompt: 'Player task t1 (normal) from the task giver JQDAW.', self_prompting_state: 2 }, null);
+    assert.deepEqual(loads, [], 'not restored while held');
+
+    agent.control.release();
+    await agent._setupEventHandlers({ self_prompt: 'Player task t1 (normal) from the task giver JQDAW.', self_prompting_state: 2 }, null);
+    assert.equal(loads.length, 1, 'restored as upstream does when nothing is held');
+});
+
+test('G4 #11: the restart lines keep the forms the harness parses (agendaActive, TASK_TAKEN)', async () => {
+    const { agendaActive } = await import('../../test/scenarios/g3/g3-task-preempts-agenda.mjs');
+    const { TASK_TAKEN } = await import('../../test/scenarios/g3/g3-untrusted-refused.mjs');
+    assert.equal(agendaActive(['agenda paused for task t1', 'agenda step sticks started: collect 3 sticks (resumed after a restart)']).active, true);
+    assert.ok(TASK_TAKEN('Alex').test('task t1 started: collect 3 logs (resumed after a restart)'));
 });

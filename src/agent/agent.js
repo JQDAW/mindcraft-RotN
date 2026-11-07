@@ -223,7 +223,14 @@ export class Agent {
             if (init_message) {
                 this.history.add('system', init_message);
             }
-            await this.self_prompter.handleLoad(save_data.self_prompt, save_data.self_prompting_state);
+            // A stored control hold (a giver's !stop, !pause or !stfu, control.json) wins at once
+            // after a restart (G4 #11 prep): the self-prompter is not restored, as it would send an
+            // LLM request before the first autonomyTick stops it. !resume lets the agenda or the
+            // task drive it again from agenda.json and tasks.json.
+            if (this.control?.hold)
+                console.log(`[control] not restoring the self-prompter: on hold (${this.control.hold.kind} by ${this.control.hold.by})`);
+            else
+                await this.self_prompter.handleLoad(save_data.self_prompt, save_data.self_prompting_state);
         }
         if (save_data?.last_sender) {
             this.last_sender = save_data.last_sender;

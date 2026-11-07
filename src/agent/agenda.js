@@ -200,6 +200,7 @@ export class Agenda {
         this.stuck = null; // {id, why, at}: a step whose budget ran out; the agenda is paused
         this.loadProblem = null;
         this.existed = false; // a readable agenda.json was there: autostart leaves it alone
+        this.loadedActive = false; // agenda.json said active: the first step it names says "resumed after a restart" (G4 #11 prep)
         this.load();
     }
 
@@ -209,6 +210,7 @@ export class Agenda {
             const data = JSON.parse(readFileSync(this.file, 'utf8'));
             if (!data || typeof data !== 'object' || typeof data.active !== 'boolean') throw new Error('no agenda state');
             this.active = data.active;
+            this.loadedActive = data.active;
             this.done_at = data.done_at && typeof data.done_at === 'object' ? data.done_at : {};
             this.spent = data.spent && typeof data.spent === 'object' ? data.spent : {};
             this.stuck = data.stuck && typeof data.stuck.id === 'string' ? data.stuck : null;
