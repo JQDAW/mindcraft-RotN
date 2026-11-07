@@ -523,7 +523,7 @@ test('G3 round 6 B: after a death (no pickaxe) a dirt shelter, dug out by hand, 
     const none = fakeBot({ cobble: 0, pickaxe: false });
     const s = await buildShelter(none.bot, { craft: fakeCraft(none.items).craft });
     assert.equal(s.closed, false);
-    assert.match(none.bot.output, /Not building a shelter at 0, 64, 0: you have 0 dirt and 0 dirt piles, and a dirt shelter needs 10 dirt \(4 piles make 1\)\. Dig dirt or grass by hand for dirt piles\. Without a pickaxe only dirt will do: you could not dig out of rock walls again\. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: nothing\./);
+    assert.match(none.bot.output, /Not building a shelter at 0, 64, 0: you have 0 dirt and 0 dirt piles, and a dirt shelter needs 10 dirt \(40 dirt piles: 4 piles make 1 dirt, which the shelter crafts itself\)\. Dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 40\); not with a flint, bone or iron shovel, which gets the dirt block instead\. Without a pickaxe only dirt will do: you could not dig out of rock walls again\. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: nothing\./);
 });
 
 test('G3 round 6 B: without a pickaxe a site with no side to dig out by hand is not used', async (t) => {
@@ -623,11 +623,13 @@ test('round 9 B (f): with no pickaxe and too little dirt the refusal leads with 
     const none = fakeBot({ cobble: 0, pickaxe: false });
     const r = await buildShelter(none.bot, { craft: fakeCraft(none.items).craft });
     assert.equal(r.closed, false);
-    assert.match(none.bot.output, /^Not building a shelter at 0, 64, 0: you have 0 dirt and 0 dirt piles, and a dirt shelter needs 10 dirt \(4 piles make 1\)\. Dig dirt or grass by hand for dirt piles\./m);
+    assert.match(none.bot.output, /^Not building a shelter at 0, 64, 0: you have 0 dirt and 0 dirt piles, and a dirt shelter needs 10 dirt \(40 dirt piles: 4 piles make 1 dirt, which the shelter crafts itself\)\. Dig dirt or grass by hand with !collectBlocks\("betterwithmods:dirt_pile", 40\);/m);
     assert.match(none.bot.output, /Without a pickaxe only dirt will do: you could not dig out of rock walls again\. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: nothing\./);
 
     // Some dirt and piles: what is held after crafting what the piles make.
     const some = fakeBot({ cobble: 0, pickaxe: false, items: [n(DIRT, 3), n(PILE, 10)] });
     await buildShelter(some.bot, { craft: fakeCraft(some.items).craft });
-    assert.match(some.bot.output, /^Not building a shelter at 0, 64, 0: you have 5 dirt and 2 dirt piles, and a dirt shelter needs 10 dirt/m);
+    assert.match(some.bot.output, /^Not building a shelter at 0, 64, 0: you have 5 dirt and 2 dirt piles, and a dirt shelter needs 10 dirt \(40 dirt piles/m);
+    // #336 review: the piles still needed: (10 - 5) x 4 - 2 held = 18.
+    assert.match(some.bot.output, /!collectBlocks\("betterwithmods:dirt_pile", 18\)/);
 });
