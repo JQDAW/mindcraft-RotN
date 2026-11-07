@@ -1,6 +1,21 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T06:31Z (from `date -u`)
+Updated: 2026-11-07T15:14Z (from `date -u`)
+
+## No chat-spam loop from reflexes: an identical line at most once a minute (branch `agent/skills-rotn/chat-repeat-limit`, 2026-11-07T15:14Z by `date -u`)
+
+- **Task (lead, 2026-11-07, low priority):** reflex chat repeated identical lines: "I'm dying!" 12 times in 5 min (`g3a-20261105-r2`), "Fighting zombie_players:zombie_player!" 9 times in 5 min, and "My brain disconnected, try again." 6 times in 60 s (`g3b-20261106-r3`). Ready-to-try needs no chat-spam loop, and harness-ops' G4 `no_spam` fails at 4 identical lines a minute or 7 in 5 min.
+- **Change:**
+  - **New `chat_repeat.js`:** a per-agent limiter that lets an identical text go to chat at most once per `CHAT_REPEAT_MS` (60 s). The rest are logged ("[reflex] not repeated in chat (said within 60 s): …").
+  - **`modes.js` `say`:** every reflex line uses it. The behavior log still keeps every line.
+  - **`agent.js` `routeResponse`:** limits only the models' "My brain disconnected" reply (the text comes from `src/models/*`, which is lead-owned); other replies are never held back.
+  - At most 5 identical lines in 5 min, under the G4 thresholds.
+- **Tests (new `chat_repeat.test.js`, 3):**
+  - the limiter;
+  - "I'm dying!" 12 times in 5 min reaches chat 4 times, and the behavior log keeps all 12;
+  - the brain line 6 times in 60 s reaches chat once, while a normal reply goes out every time.
+  - **On develop's `modes.js` and `agent.js`:** 12 lines and 6 lines in chat, so the 2 behaviour tests fail.
+  - With the change: `chat_repeat`, `chat_limit`, `threat_arbitration`, `quiet_reflexes`, `update_loop`, `priority` and `log_hygiene`, 88/88. Lint unchanged (modes.js 28, agent.js 11; the new files 0).
 
 ## G4 item 3 prep: stop, follow, come (branch `agent/skills-rotn/g4-control-prep`, branch only while develop is frozen; 2026-11-07T05:50Z by `date -u`)
 
