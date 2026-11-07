@@ -11,12 +11,30 @@
 #                                        "##rotn-test files: <a.log.gz>,latest.log"
 #   rotn-test build-log [N]              tail the first-boot build log
 #   rotn-test verify                     key=value facts for the G0 checks
+#   rotn-test restart [--timeout S]      restart the Minecraft server (G4 #1, server restart; test server only):
+#                                        console `stop`, wait until rotn-server has exited, start it again, and wait
+#                                        for a NEW "Done" line; prints "restarted: <done line>". Exit 4 if it does
+#                                        not stop, 5 if it does not come back within S seconds (default 300).
 set -euo pipefail
 
-STATE=/var/lib/rotn-test
-SERVER=${ROTN_TEST_SERVER_DIR:-/opt/rotn/server}   # the override (and ROTN_TEST_GZ_RETRY_S) is for the offline tests only
+# The overrides (ROTN_TEST_SERVER_DIR, ROTN_TEST_STATE_DIR, ROTN_TEST_SYSTEMCTL, ROTN_TEST_CONSOLE_SEND,
+# ROTN_TEST_POLL_S, ROTN_TEST_GZ_RETRY_S) are for the offline tests only.
+STATE=${ROTN_TEST_STATE_DIR:-/var/lib/rotn-test}
+SERVER=${ROTN_TEST_SERVER_DIR:-/opt/rotn/server}
+SYSTEMCTL=${ROTN_TEST_SYSTEMCTL:-systemctl}
 SOCK=/opt/rotn/console.sock
 LOG=$SERVER/logs/latest.log
+# build.sh's "server ready" line: [12:00:00] [Server thread/INFO] [minecraft/DedicatedServer]: Done (41.2s)! For help, ...
+DONE_REGEX='\]: Done \([0-9.,]+s\)! For help'
+
+# Type one line into the Forge console (the tmux session rotn-server runs in).
+send_line() {
+  if [[ -n ${ROTN_TEST_CONSOLE_SEND:-} ]]; then "$ROTN_TEST_CONSOLE_SEND" "$1"; return; fi
+  runuser -u minecraft -- tmux -S "$SOCK" send-keys -t rotn -l -- "$1"
+  runuser -u minecraft -- tmux -S "$SOCK" send-keys -t rotn Enter
+}
+done_count() { local n; n=$(grep -cE "$DONE_REGEX" "$LOG" 2>/dev/null) || true; echo "${n:-0}"; }
+log_inode() { stat -c %i "$LOG" 2>/dev/null || echo none; }
 
 prop() { awk -v k="$1" '{ sub(/\r$/, "") } index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' "$SERVER/server.properties" 2>/dev/null || true; }
 state() { tr -d '\n' < "$STATE/$1" 2>/dev/null || true; }
@@ -41,8 +59,7 @@ case $cmd in
     [[ -n $line ]] || { echo "usage: rotn-test console [--wait S] CMD" >&2; exit 2; }
     before=0
     [[ -f $LOG ]] && before=$(wc -l < "$LOG")
-    runuser -u minecraft -- tmux -S "$SOCK" send-keys -t rotn -l -- "$line"
-    runuser -u minecraft -- tmux -S "$SOCK" send-keys -t rotn Enter
+    send_line "$line"
     sleep "$wait"
     if [[ -f $LOG ]]; then
       now=$(wc -l < "$LOG")
@@ -100,8 +117,39 @@ case $cmd in
     echo "mem_total_mb=$(awk '/MemTotal/ { printf "%d", $2 / 1024 }' /proc/meminfo)"
     echo "cloud_init_schema=$(cloud-init schema --system > /dev/null 2>&1 && echo valid || echo invalid)"
     ;;
+  restart)
+    timeout=300
+    if [[ ${1:-} == --timeout ]]; then timeout=$2; shift 2; fi
+    [[ $timeout =~ ^[0-9]+$ ]] || { echo "usage: rotn-test restart [--timeout S]" >&2; exit 2; }
+    poll=${ROTN_TEST_POLL_S:-5}
+    echo restarting > "$STATE/phase"
+    # 1. console stop (the server saves and exits; the tmux session, and so rotn-server, end with it)
+    if $SYSTEMCTL is-active --quiet rotn-server; then
+      send_line stop
+      waited=0
+      while $SYSTEMCTL is-active --quiet rotn-server; do
+        if (( waited >= timeout )); then echo "failed:restart: still running ${timeout}s after stop" > "$STATE/phase"; echo "rotn-test: the server is still running ${timeout}s after 'stop'" >&2; exit 4; fi
+        sleep "$poll"; waited=$(( waited + poll ))
+      done
+    fi
+    # 2. start, then a NEW Done line: log4j rolls latest.log over at startup (a new file), else more Done lines than before
+    ino=$(log_inode); dc=$(done_count)
+    $SYSTEMCTL start rotn-server
+    waited=0
+    while :; do
+      now_ino=$(log_inode); now_dc=$(done_count)
+      if { [[ $now_ino != "$ino" ]] && (( now_dc >= 1 )); } || { [[ $now_ino == "$ino" ]] && (( now_dc > dc )); }; then break; fi
+      if (( waited > 20 )) && ! $SYSTEMCTL is-active --quiet rotn-server; then
+        echo "failed:restart: exited before Done" > "$STATE/phase"; echo "rotn-test: the server exited before its Done line (see $SERVER/logs)" >&2; exit 5
+      fi
+      if (( waited >= timeout )); then echo "failed:restart: no Done in ${timeout}s" > "$STATE/phase"; echo "rotn-test: no new Done line ${timeout}s after the start" >&2; exit 5; fi
+      sleep "$poll"; waited=$(( waited + poll ))
+    done
+    echo ready > "$STATE/phase"
+    echo "restarted: $(grep -E "$DONE_REGEX" "$LOG" 2>/dev/null | tail -n 1)"   # the newest Done line
+    ;;
   *)
-    sed -n '2,12p' "$0"
+    sed -n '2,17p' "$0"
     [[ $cmd == help ]] || exit 2
     ;;
 esac
