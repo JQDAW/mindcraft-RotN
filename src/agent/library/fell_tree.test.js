@@ -30,11 +30,11 @@ const key = (p) => `${p.x},${p.y},${p.z}`;
 const BRANCH = 'dynamictrees:sprucebranch', LEAVES = 'dynamictrees:leaves0', ROOTY = 'dynamictrees:rootydirt';
 
 /** A spruce on rooty dirt at x: a 5-block trunk, a limb and a canopy that leans east (+x). */
-function tree(world, x, z = 0, { lean = 1 } = {}) {
+function tree(world, x, z = 0, { lean = 1, canopy = 67 } = {}) {
     world.set(key(at(x, 63, z)), ROOTY);
     for (let y = 64; y <= 68; y++) world.set(key(at(x, y, z)), BRANCH);
     world.set(key(at(x + lean, 67, z)), BRANCH); // a limb
-    for (let dx = -1; dx <= 3; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = 67; y <= 70; y++) {
+    for (let dx = -1; dx <= 3; dx++) for (let dz = -2; dz <= 2; dz++) for (let y = canopy; y <= canopy + 3; y++) {
         const p = at(x + dx * lean, y, z + dz);
         if (!world.has(key(p))) world.set(key(p), LEAVES);
     }
@@ -44,9 +44,9 @@ function tree(world, x, z = 0, { lean = 1 } = {}) {
  * The bot and its world. A cut trunk turns the whole tree into a falling tree entity for fallMs;
  * then its logs lie where it landed (log:1 each), east of the trunk (the canopy side).
  */
-function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false, approachMs = 0, axe = true, sticks = 0, ghost = false } = {}) {
+function fakeBot({ start = at(-2), fallMs = 600, trees = [[3]], drops = null, unreachable = [], onGround = [], build = null, stuck = false, approachMs = 0, axe = true, sticks = 0, ghost = false, canopy = 67 } = {}) {
     const world = new Map();
-    for (const [x, z = 0] of trees) tree(world, x, z);
+    for (const [x, z = 0] of trees) tree(world, x, z, { canopy });
     build?.(world);
     const blockAt = (p) => {
         const q = p.floored ? p.floored() : p;
@@ -310,16 +310,16 @@ test('#252: sticks come from felling, by hand when there is no axe, with an axe 
     assert.ok(way, 'fell-tree gives sticks');
     assert.equal(way.tool, null, 'no tool is required');
     assert.deepEqual(way.preferredTool, { type: 'axe', minLevel: 0 });
-    assert.ok(!worldSources('stick').some(s => s.blocks.some(b => /leaves/.test(b))), 'leaves are no stick source');
-
-    const handOnly = fakeBot({ axe: false, sticks: 3 });
+    // Request 17 (rotn-data #312): leaves DO give sticks, and leaves reachable from the ground come
+    // before felling (collect_sticks.test.js). Here the canopy starts 5 above the ground: out of reach.
+    const handOnly = fakeBot({ axe: false, sticks: 3, canopy: 69 });
     assert.equal(await skills.collectBlock(handOnly, 'stick', 2), true, handOnly.output);
     assert.equal(handOnly.log.digs.length, 1);
     assert.equal(handOnly.log.digs[0].held, null, 'by hand');
     assert.doesNotMatch(handOnly.output, /needs an axe/);
     assert.match(handOnly.output, /Collected 3 stick/);
 
-    const withAxe = fakeBot({ sticks: 2 });
+    const withAxe = fakeBot({ sticks: 2, canopy: 69 });
     assert.equal(await skills.collectBlock(withAxe, 'stick', 2), true, withAxe.output);
     assert.equal(withAxe.log.digs[0].held, 'stone_axe', 'the preferred axe');
 });
@@ -517,7 +517,7 @@ test('round 5 A rerun: a felled tree the bot still sees is never cut again; its 
 
 test('round 5 A rerun: a felled tree that gave logs but no stick says what it gave, and that sticks are rare', T, async (t) => {
     fast(t);
-    const bot = fakeBot({ sticks: 0 });
+    const bot = fakeBot({ sticks: 0, canopy: 69 }); // leaves out of reach from the ground (Request 17)
     assert.equal(await skills.collectBlock(bot, 'stick', 1), false);
     assert.match(bot.output, /Broke dynamictrees:sprucebranch but got no stick \(it gave 3 log:1\)\. A felled tree drops few sticks, often none\./);
 });

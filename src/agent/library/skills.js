@@ -774,15 +774,18 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // broken by hand drops the tree's logs and sticks): always the safe cut, never collect().
     const fellsTree = (block) => isBranch(block) || fellMatchers.some(matches => matches(block));
     // G3 round 8 A: two felled spruces gave 32 logs and 0 sticks while a dead bush stood next to the
-    // bot. So a by-hand rule that fells nothing comes first (nearest first, within CL.handFirstRadius),
-    // then trees and the rest, where a species that has given this bot 0 of the item loses only to a
-    // tree at most CL.speciesDetour farther (rotn-data #312: the stick count follows the tree's shape,
-    // not its species, so never a long walk for it); then by-hand blocks farther out. Only when the
-    // item has both kinds of source, or a species already came up empty; otherwise one plain search.
+    // bot. So a by-hand rule that fells nothing comes first (nearest first, within CL.handFirstRadius):
+    // a dead bush (tier 0), then leaves reachable from the ground (tier 3; Request 17: a stick half the
+    // time; wanted() never offers others). Then trees and the rest, where a species that has given this
+    // bot 0 of the item loses only to a tree at most CL.speciesDetour farther (rotn-data #312: the stick
+    // count follows the tree's shape, not its species, so never a long walk for it); then by-hand blocks
+    // farther out. Leaves are told by the block, not the rule's id, so rotn-data's leaves rule and the
+    // fallback rank alike. Only when the item has both kinds of source, or a species already came up
+    // empty; otherwise one plain search.
     const emptySpecies = emptyFelled(bot, baseType);
     const isHand = (block) => !fellsTree(block) && handMatchers.some(matches => matches(block));
     const canGiveNone = (block) => mayGiveNone.some(matches => matches(block));
-    const tierOf = (block) => (isHand(block) ? 0 : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
+    const tierOf = (block) => (isHand(block) ? (isLeafBlock(block) ? 3 : 0) : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
     const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
     let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
     const woodTarget = isWoodSearch(blockType);
@@ -887,12 +890,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         if (!tiered) blocks = world.getNearestBlocksWhere(bot, wanted, 64, 1);
         else {
             blocks = nearestOf(0, CL.handFirstRadius);
+            if (blocks.length === 0) blocks = nearestOf(3, CL.handFirstRadius);
             if (blocks.length === 0) {
                 const fresh = nearestOf(1), empty = emptySpecies.size > 0 ? nearestOf(2) : [];
                 const far = (b) => b.position.distanceTo(bot.entity.position);
                 blocks = fresh.length && (!empty.length || far(fresh[0]) <= far(empty[0]) + CL.speciesDetour) ? fresh : empty;
             }
             if (blocks.length === 0) blocks = nearestOf(0);
+            if (blocks.length === 0) blocks = nearestOf(3);
         }
 
         if (blocks.length === 0) {
@@ -1026,7 +1031,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 if (countsItems && fellsTree(block)) {
                     if (gained === 0) emptySpecies.add(block.name); else emptySpecies.delete(block.name);
                 }
-                // A rule whose yield can be 0 (a dead bush: 0-2 sticks): a break that gave none uses no
+                // A rule whose yield can be 0 (a dead bush: 0-2 sticks; a leaf: 0-1): a break that gave none uses no
                 // attempt, so the next is tried; never the same spot twice, and at most CL.freeMisses
                 // such breaks per collect (#311 review: any other zero gain, a full inventory or a
                 // missed pickup, counts as an attempt as before).

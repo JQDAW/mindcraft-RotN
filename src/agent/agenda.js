@@ -38,8 +38,9 @@ export const ROTN_EARLY_GAME = [
     },
     {
         id: 'sticks', short: 'collect 3 sticks',
-        // G3 round 4 B and rotn-data Request 13: leaves never drop sticks on this pack; a felled
-        // tree does (0-7 with its logs), and a trunk broken by hand fells it too. collectBlock fells
+        // G3 round 4 B: a felled tree drops sticks (0-7 with its logs), and a trunk broken by hand
+        // fells it too. (rotn-data Request 13 said leaves never drop sticks; rotn-data #312 corrected
+        // it: Pyrotech adds a stick half the time when a player breaks leaves. Request 17.) collectBlock fells
         // it safely (fellTree) and picks the sticks up with the logs.
         // G3 round 5 A rerun: 3 felled spruces gave 25 logs and 1 stick, and planks need a table
         // (every log -> planks recipe is a 1x3 column; rotn-data). Before the table the bot needs
@@ -48,7 +49,7 @@ export const ROTN_EARLY_GAME = [
         // G3 round 8 A: two felled spruces gave 0 sticks while a dead bush stood near; broken by hand
         // it gave a stick. collectBlock now breaks dead bushes first, and tries other tree species
         // after one gave none.
-        goal: 'Get at least 3 sticks: 2 for the crude axe and 1 for the Crafting Tools. !collectBlocks("stick", 3) first breaks dead bushes nearby by hand (0-2 sticks each), then fells trees (breaking a trunk, even by hand), trying another kind of tree after one gave no sticks; a felled tree drops few sticks, often none. River Cane (tall cane by rivers) and bamboo work as sticks in both recipes and break by hand: !collectBlocks("biomesoplenty:plant_1:5", 3) or !collectBlocks("biomesoplenty:bamboo", 3). Planks from ordinary logs need a crafting table here, so they come later. Leaves drop no sticks.',
+        goal: 'Get at least 3 sticks: 2 for the crude axe and 1 for the Crafting Tools. !collectBlocks("stick", 3) first breaks dead bushes nearby by hand (0-2 sticks each), then leaves you can reach from the ground (a stick half the time; it never climbs for them), then fells trees (breaking a trunk, even by hand), trying another kind of tree after one gave no sticks; a felled tree drops few sticks, often none. River Cane (tall cane by rivers) and bamboo work as sticks in both recipes and break by hand: !collectBlocks("biomesoplenty:plant_1:5", 3) or !collectBlocks("biomesoplenty:bamboo", 3). Planks from ordinary logs need a crafting table here, so they come later.',
         done: (s) => s.countOre('stickWood') >= 3 || s.count('stone_pickaxe') > 0,
     },
     {
