@@ -1,0 +1,470 @@
+# javap -c -p excerpts for the stick sources in packages/rotn-data/3.3.4/world-sources.json
+# (deadbush-sticks; fell-tree, including its correction on leaves), from the pinned RotN 3.3.4 server pack zip
+# (SHA-256 90642fd5...f5205). Extracted to a scratch folder outside the repo; nothing was run.
+# Read by packages/rotn-data/test/stick-sources.test.js.
+#
+# Jars (SHA-256):
+#   minecraft_server.1.12.2.jar                 fe1f9274e6dad9191bf6e6e8e36ee6ebc737f373603df0946aafcded0d53167e
+#   libraries/.../forge-1.12.2-14.23.5.2860.jar cd3fbf85d7ca744507fd6a37a41b90122d43e616a4f8962332b1b658655e8a64
+#   mods/pyrotech-1.12.2-1.5.25.jar             2b28dd9274ca66e4d981547c4cce36bc081b2bc925d694dda4249f412cdbf36a
+#   mods/DramaticTrees-1.12.2-0.13.4.jar        b86dae768ccc1182c52e5b9a8756a5906da53dc125d48bfe1c8dc69204a77ffe
+#   mods/athenaeum-1.12.2-1.19.6.jar            (OreDictHelper.contains: OreDictionary.getOreIDs(stack) contains the ore id)
+#
+# Vanilla classes are obfuscated. Forge patches some of them at load time (binpatches.pack.lzma in the
+# Forge jar: LZMA, then pack200, then one GDIFF patch per class). The vanilla sections below are the
+# classes AFTER applying Forge's server binpatch; each patch's input Adler-32 matched the shipped class.
+# Names come from the Forge jar's deobfuscation_data-1.12.2.lzma (notch -> SRG), lines in "## SRG".
+
+## SRG
+CL: air net/minecraft/init/Items
+FD: air/B net/minecraft/init/Items/field_151055_y
+FD: air/bm net/minecraft/init/Items/field_151097_aZ
+CL: aow net/minecraft/block/Block
+MD: aow/a (Lamu;Let;Lawt;FI)V net/minecraft/block/Block/func_180653_a (Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;FI)V
+CL: aox net/minecraft/init/Blocks
+FD: aox/I net/minecraft/init/Blocks/field_150330_I
+CL: apu net/minecraft/block/BlockDeadBush
+MD: apu/a (Lamu;Laed;Let;Lawt;Lavj;Laip;)V net/minecraft/block/BlockDeadBush/func_180657_a (Lnet/minecraft/world/World;Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/tileentity/TileEntity;Lnet/minecraft/item/ItemStack;)V
+MD: apu/a (Ljava/util/Random;)I net/minecraft/block/BlockDeadBush/func_149745_a (Ljava/util/Random;)I
+MD: apu/x (Lawt;)Z net/minecraft/block/BlockDeadBush/func_185514_i (Lnet/minecraft/block/state/IBlockState;)Z
+CL: arr net/minecraft/block/BlockLeaves
+MD: arr/a (Lamu;Let;Lawt;FI)V net/minecraft/block/BlockLeaves/func_180653_a (Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;FI)V
+MD: apu/a (Lawt;Ljava/util/Random;I)Lain; net/minecraft/block/BlockDeadBush/func_180660_a (Lnet/minecraft/block/state/IBlockState;Ljava/util/Random;I)Lnet/minecraft/item/Item;
+CL: asn net/minecraft/block/BlockOldLeaf
+CL: asg net/minecraft/block/BlockNewLeaf
+FD: aox/m net/minecraft/init/Blocks/field_150354_m
+FD: aox/cz net/minecraft/init/Blocks/field_150405_ch
+FD: aox/cu net/minecraft/init/Blocks/field_150406_ce
+FD: aox/d net/minecraft/init/Blocks/field_150346_d
+MD: aow/a (Lamu;Let;Lawt;)Laip; net/minecraft/block/Block/func_185473_a (Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Lnet/minecraft/item/ItemStack;
+
+## apu (net.minecraft.block.BlockDeadBush, Forge-patched)
+public class apu extends apc implements net.minecraftforge.common.IShearable {
+  protected boolean x(awt);
+    Code:
+       0: aload_1
+       1: invokeinterface #49,  1           // InterfaceMethod awt.u:()Laow;
+       6: getstatic     #55                 // Field aox.m:Latn;
+       9: if_acmpeq     48
+      12: aload_1
+      13: invokeinterface #49,  1           // InterfaceMethod awt.u:()Laow;
+      18: getstatic     #59                 // Field aox.cz:Laow;
+      21: if_acmpeq     48
+      24: aload_1
+      25: invokeinterface #49,  1           // InterfaceMethod awt.u:()Laow;
+      30: getstatic     #62                 // Field aox.cu:Laow;
+      33: if_acmpeq     48
+      36: aload_1
+      37: invokeinterface #49,  1           // InterfaceMethod awt.u:()Laow;
+      42: getstatic     #65                 // Field aox.d:Laow;
+      45: if_acmpne     52
+      48: iconst_1
+      49: goto          53
+      52: iconst_0
+      53: ireturn
+  public int a(java.util.Random);
+    Code:
+       0: aload_1
+       1: iconst_3
+       2: invokevirtual #73                 // Method java/util/Random.nextInt:(I)I
+       5: ireturn
+  public ain a(awt, java.util.Random, int);
+    Code:
+       0: getstatic     #82                 // Field air.B:Lain;
+       3: areturn
+  public void a(amu, aed, et, awt, avj, aip);
+    Code:
+       0: aload_1
+       1: getfield      #93                 // Field amu.G:Z
+       4: ifne          46
+       7: aload         6
+       9: invokevirtual #98                 // Method aip.c:()Lain;
+      12: getstatic     #102                // Field air.bm:Lajl;
+      15: if_acmpne     46
+      18: aload_2
+      19: aload_0
+      20: invokestatic  #107                // Method qs.a:(Laow;)Lqo;
+      23: invokevirtual #112                // Method aed.b:(Lqo;)V
+      26: aload_1
+      27: aload_3
+      28: new           #95                 // class aip
+      31: dup
+      32: getstatic     #114                // Field aox.I:Lapu;
+      35: iconst_1
+      36: iconst_0
+      37: invokespecial #117                // Method aip."<init>":(Laow;II)V
+      40: invokestatic  #120                // Method a:(Lamu;Let;Laip;)V
+      43: goto          59
+      46: aload_0
+      47: aload_1
+      48: aload_2
+      49: aload_3
+      50: aload         4
+      52: aload         5
+      54: aload         6
+      56: invokespecial #122                // Method apc.a:(Lamu;Laed;Let;Lawt;Lavj;Laip;)V
+      59: return
+  public boolean isShearable(aip, amy, et);
+    Code:
+       0: iconst_1
+       1: ireturn
+  public java.util.List<aip> onSheared(aip, amy, et, int);
+    Code:
+       0: iconst_1
+       1: anewarray     #95                 // class aip
+       4: dup
+       5: iconst_0
+       6: new           #95                 // class aip
+       9: dup
+      10: getstatic     #114                // Field aox.I:Lapu;
+      13: invokespecial #139                // Method aip."<init>":(Laow;)V
+      16: aastore
+      17: invokestatic  #145                // Method java/util/Arrays.asList:([Ljava/lang/Object;)Ljava/util/List;
+      20: areturn
+
+## arr (net.minecraft.block.BlockLeaves, Forge-patched): every method; no harvestBlock override
+public abstract class arr extends aow implements net.minecraftforge.common.IShearable {
+  public static final axf a;
+  public static final axf b;
+  protected boolean c;
+  int[] d;
+  public arr();
+  public void b(amu, et, awt);
+  public void b(amu, et, awt, java.util.Random);
+  private void b(amu, et);
+  public void a(awt, amu, et, java.util.Random);
+  public int a(java.util.Random);
+  public ain a(awt, java.util.Random, int);
+  public void a(amu, et, awt, float, int);
+  protected void a(amu, et, awt, int);
+  protected int x(awt);
+  public boolean b(awt);
+  public void b(boolean);
+  public amm f();
+  public boolean t(awt);
+  public abstract asr$a b(int);
+  public boolean isShearable(aip, amy, et);
+  public boolean isLeaves(awt, amy, et);
+  public void beginLeavesDecay(awt, amu, et);
+  public void getDrops(fi<aip>, amy, et, awt, int);
+  public boolean a(awt, amy, et, fa);
+  static {};
+}
+  public void a(amu, et, awt, float, int);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: aload_3
+       4: fload         4
+       6: iload         5
+       8: invokespecial #240                // Method aow.a:(Lamu;Let;Lawt;FI)V
+      11: return
+
+## aow (net.minecraft.block.Block, Forge-patched): dropBlockAsItemWithChance (func_180653_a)
+  public void a(amu, et, awt, float, int);
+    Code:
+       0: aload_1
+       1: getfield      #573                // Field amu.G:Z
+       4: ifne          104
+       7: aload_1
+       8: getfield      #576                // Field amu.restoringBlockSnapshots:Z
+      11: ifne          104
+      14: aload_0
+      15: aload_1
+      16: aload_2
+      17: aload_3
+      18: iload         5
+      20: invokevirtual #580                // Method getDrops:(Lamy;Let;Lawt;I)Ljava/util/List;
+      23: astore        6
+      25: aload         6
+      27: aload_1
+      28: aload_2
+      29: aload_3
+      30: iload         5
+      32: fload         4
+      34: iconst_0
+      35: aload_0
+      36: getfield      #296                // Field harvesters:Ljava/lang/ThreadLocal;
+      39: invokevirtual #584                // Method java/lang/ThreadLocal.get:()Ljava/lang/Object;
+      42: checkcast     #586                // class aed
+      45: invokestatic  #592                // Method net/minecraftforge/event/ForgeEventFactory.fireBlockHarvesting:(Ljava/util/List;Lamu;Let;Lawt;IFZLaed;)F
+      48: fstore        4
+      50: aload         6
+      52: invokeinterface #596,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+      57: astore        7
+      59: aload         7
+      61: invokeinterface #601,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+      66: ifeq          104
+      69: aload         7
+      71: invokeinterface #604,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+      76: checkcast     #606                // class aip
+      79: astore        8
+      81: aload_1
+      82: getfield      #608                // Field amu.r:Ljava/util/Random;
+      85: invokevirtual #614                // Method java/util/Random.nextFloat:()F
+      88: fload         4
+      90: fcmpg
+      91: ifgt          101
+      94: aload_1
+      95: aload_2
+      96: aload         8
+      98: invokestatic  #617                // Method a:(Lamu;Let;Laip;)V
+     101: goto          59
+     104: return
+
+## com.codetaylor.mc.pyrotech.modules.core.event.HarvestDropsEventHandler$Sticks
+  public void on(net.minecraftforge.event.world.BlockEvent$HarvestDropsEvent);
+    Code:
+       0: aload_1
+       1: invokevirtual #28                 // Method net/minecraftforge/event/world/BlockEvent$HarvestDropsEvent.getDrops:()Ljava/util/List;
+       4: astore_2
+       5: aload_1
+       6: invokevirtual #32                 // Method net/minecraftforge/event/world/BlockEvent$HarvestDropsEvent.getState:()Lnet/minecraft/block/state/IBlockState;
+       9: astore_3
+      10: aload_3
+      11: invokeinterface #38,  1           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      16: astore        4
+      18: aload_1
+      19: invokevirtual #42                 // Method net/minecraftforge/event/world/BlockEvent$HarvestDropsEvent.getPos:()Lnet/minecraft/util/math/BlockPos;
+      22: astore        5
+      24: aload_1
+      25: invokevirtual #46                 // Method net/minecraftforge/event/world/BlockEvent$HarvestDropsEvent.getWorld:()Lnet/minecraft/world/World;
+      28: astore        6
+      30: aload_1
+      31: invokevirtual #50                 // Method net/minecraftforge/event/world/BlockEvent$HarvestDropsEvent.getHarvester:()Lnet/minecraft/entity/player/EntityPlayer;
+      34: astore        7
+      36: aload         4
+      38: aload         6
+      40: aload         5
+      42: aload_3
+      43: invokevirtual #56                 // Method net/minecraft/block/Block.func_185473_a:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Lnet/minecraft/item/ItemStack;
+      46: astore        8
+      48: goto          98
+      51: astore        9
+      53: aload         4
+      55: invokevirtual #68                 // Method net/minecraft/block/Block.getRegistryName:()Lnet/minecraft/util/ResourceLocation;
+      58: astore        10
+      60: aload         10
+      62: ifnull        97
+      65: getstatic     #74                 // Field com/codetaylor/mc/pyrotech/modules/core/ModuleCore.LOGGER:Lorg/apache/logging/log4j/Logger;
+      68: ldc           #76                 // String A mod [%s] threw an exception when calling getItem on a block [%s]
+      70: iconst_2
+      71: anewarray     #4                  // class java/lang/Object
+      74: dup
+      75: iconst_0
+      76: aload         10
+      78: invokevirtual #82                 // Method net/minecraft/util/ResourceLocation.func_110624_b:()Ljava/lang/String;
+      81: aastore
+      82: dup
+      83: iconst_1
+      84: aload         10
+      86: aastore
+      87: invokestatic  #88                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+      90: aload         9
+      92: invokeinterface #94,  3           // InterfaceMethod org/apache/logging/log4j/Logger.error:(Ljava/lang/String;Ljava/lang/Throwable;)V
+      97: return
+      98: ldc           #98                 // String treeLeaves
+     100: aload         8
+     102: invokestatic  #104                // Method com/codetaylor/mc/athenaeum/util/OreDictHelper.contains:(Ljava/lang/String;Lnet/minecraft/item/ItemStack;)Z
+     105: ifeq          178
+     108: aload         7
+     110: ifnonnull     147
+     113: invokestatic  #110                // Method com/codetaylor/mc/athenaeum/util/RandomHelper.random:()Ljava/util/Random;
+     116: invokevirtual #116                // Method java/util/Random.nextFloat:()F
+     119: f2d
+     120: ldc2_w        #117                // double 0.1d
+     123: dcmpg
+     124: ifge          178
+     127: aload_2
+     128: new           #96                 // class net/minecraft/item/ItemStack
+     131: dup
+     132: getstatic     #124                // Field net/minecraft/init/Items.field_151055_y:Lnet/minecraft/item/Item;
+     135: invokespecial #127                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;)V
+     138: invokeinterface #131,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     143: pop
+     144: goto          178
+     147: invokestatic  #110                // Method com/codetaylor/mc/athenaeum/util/RandomHelper.random:()Ljava/util/Random;
+     150: invokevirtual #116                // Method java/util/Random.nextFloat:()F
+     153: f2d
+     154: ldc2_w        #132                // double 0.5d
+     157: dcmpg
+     158: ifge          178
+     161: aload_2
+     162: new           #96                 // class net/minecraft/item/ItemStack
+     165: dup
+     166: getstatic     #124                // Field net/minecraft/init/Items.field_151055_y:Lnet/minecraft/item/Item;
+     169: invokespecial #127                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;)V
+     172: invokeinterface #131,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     177: pop
+     178: return
+    Exception table:
+       from    to  target type
+          36    48    51   Class java/lang/Exception
+}
+
+## com.codetaylor.mc.pyrotech.modules.core.ModuleCore (excerpt, offsets 87-106: the handler is registered only if DROP_STICKS_FROM_LEAVES)
+  public void onPreInitializationEvent(net.minecraftforge.fml.common.event.FMLPreInitializationEvent);
+    Code:
+      87: getstatic     #226                // Field com/codetaylor/mc/pyrotech/modules/core/ModuleCoreConfig.TWEAKS:Lcom/codetaylor/mc/pyrotech/modules/core/ModuleCoreConfig$Tweaks;
+      90: getfield      #229                // Field com/codetaylor/mc/pyrotech/modules/core/ModuleCoreConfig$Tweaks.DROP_STICKS_FROM_LEAVES:Z
+      93: ifeq          109
+      96: getstatic     #127                // Field net/minecraftforge/common/MinecraftForge.EVENT_BUS:Lnet/minecraftforge/fml/common/eventhandler/EventBus;
+      99: new           #48                 // class com/codetaylor/mc/pyrotech/modules/core/event/HarvestDropsEventHandler$Sticks
+     102: dup
+     103: invokespecial #230                // Method com/codetaylor/mc/pyrotech/modules/core/event/HarvestDropsEventHandler$Sticks."<init>":()V
+     106: invokevirtual #133                // Method net/minecraftforge/fml/common/eventhandler/EventBus.register:(Ljava/lang/Object;)V
+
+## config/pyrotech/core.cfg lines 5-8
+    tweaks {
+        # Set to false to disable dropping sticks from leaves.
+        # Default: true
+        B:DROP_STICKS_FROM_LEAVES=true
+
+## com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves
+public class com.ferreusveritas.dynamictrees.blocks.BlockDynamicLeaves extends net.minecraft.block.BlockLeaves implements com.ferreusveritas.dynamictrees.api.treedata.ITreePart,com.ferreusveritas.dynamictrees.api.IAgeable,com.ferreusveritas.dynamictrees.util.IRayTraceCollision {
+  overrides of harvestBlock, dropBlockAsItemWithChance, dropBlockAsItem, removedByPlayer: 0
+  public net.minecraft.item.ItemStack func_185473_a(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState);
+    Code:
+       0: aload_0
+       1: aload_3
+       2: invokevirtual #128                // Method getProperties:(Lnet/minecraft/block/state/IBlockState;)Lcom/ferreusveritas/dynamictrees/api/treedata/ILeavesProperties;
+       5: invokeinterface #132,  1          // InterfaceMethod com/ferreusveritas/dynamictrees/api/treedata/ILeavesProperties.getPrimitiveLeavesItemStack:()Lnet/minecraft/item/ItemStack;
+      10: areturn
+
+## com.ferreusveritas.dynamictrees.trees.Species
+  public com.ferreusveritas.dynamictrees.trees.Species$LogsAndSticks getLogsAndSticks(float);
+    Code:
+       0: fload_1
+       1: f2i
+       2: istore_2
+       3: fload_1
+       4: iload_2
+       5: i2f
+       6: fsub
+       7: ldc_w         #589                // float 8.0f
+      10: fmul
+      11: f2i
+      12: istore_3
+      13: new           #8                  // class com/ferreusveritas/dynamictrees/trees/Species$LogsAndSticks
+      16: dup
+      17: aload_0
+      18: iload_2
+      19: iload_3
+      20: invokespecial #592                // Method com/ferreusveritas/dynamictrees/trees/Species$LogsAndSticks."<init>":(Lcom/ferreusveritas/dynamictrees/trees/Species;II)V
+      23: areturn
+
+## com.ferreusveritas.dynamictrees.systems.nodemappers.NodeNetVolume
+  public boolean run(net.minecraft.block.state.IBlockState, net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.util.EnumFacing);
+    Code:
+       0: aload_1
+       1: invokestatic  #25                 // Method com/ferreusveritas/dynamictrees/api/TreeHelper.isBranch:(Lnet/minecraft/block/state/IBlockState;)Z
+       4: ifeq          36
+       7: aload_1
+       8: invokestatic  #29                 // Method com/ferreusveritas/dynamictrees/api/TreeHelper.getTreePart:(Lnet/minecraft/block/state/IBlockState;)Lcom/ferreusveritas/dynamictrees/api/treedata/ITreePart;
+      11: aload_1
+      12: invokeinterface #35,  2           // InterfaceMethod com/ferreusveritas/dynamictrees/api/treedata/ITreePart.getRadius:(Lnet/minecraft/block/state/IBlockState;)I
+      17: istore        5
+      19: aload_0
+      20: dup
+      21: getfield      #37                 // Field volume:I
+      24: iload         5
+      26: iload         5
+      28: imul
+      29: bipush        64
+      31: imul
+      32: iadd
+      33: putfield      #37                 // Field volume:I
+      36: iconst_1
+      37: ireturn
+  public float getVolume();
+    Code:
+       0: aload_0
+       1: getfield      #37                 // Field volume:I
+       4: i2f
+       5: ldc           #50                 // float 4096.0f
+       7: fdiv
+       8: freturn
+}
+
+## com.ferreusveritas.dynamictrees.blocks.BlockBranch
+  public java.util.List<net.minecraft.item.ItemStack> getLogDrops(net.minecraft.world.World, net.minecraft.util.math.BlockPos, com.ferreusveritas.dynamictrees.trees.Species, float);
+    Code:
+       0: new           #272                // class java/util/ArrayList
+       3: dup
+       4: invokespecial #273                // Method java/util/ArrayList."<init>":()V
+       7: astore        5
+       9: fload         4
+      11: getstatic     #567                // Field com/ferreusveritas/dynamictrees/ModConfigs.treeHarvestMultiplier:F
+      14: fmul
+      15: fstore        4
+      17: aload_3
+      18: aload_1
+      19: aload_2
+      20: aload         5
+      22: fload         4
+      24: invokevirtual #571                // Method com/ferreusveritas/dynamictrees/trees/Species.getLogsDrops:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Ljava/util/List;F)Ljava/util/List;
+      27: areturn
+
+## aow (net.minecraft.block.Block, Forge-patched): getItem (func_185473_a), the default: the block's own item at damageDropped
+  public aip a(amu, et, awt);
+    Code:
+       0: new           #606                // class aip
+       3: dup
+       4: aload_0
+       5: invokestatic  #557                // Method ain.a:(Laow;)Lain;
+       8: iconst_1
+       9: aload_0
+      10: aload_3
+      11: invokevirtual #842                // Method d:(Lawt;)I
+      14: invokespecial #799                // Method aip."<init>":(Lain;II)V
+      17: areturn
+
+## asn (net.minecraft.block.BlockOldLeaf, Forge-patched): getItem overrides: 0 (so Block's default: minecraft:leaves)
+
+## asg (net.minecraft.block.BlockNewLeaf, Forge-patched): getItem -> this block (minecraft:leaves2), meta & 3
+  public aip a(amu, et, awt);
+    Code:
+       0: new           #78                 // class aip
+       3: dup
+       4: aload_0
+       5: iconst_1
+       6: aload_3
+       7: invokeinterface #107,  1          // InterfaceMethod awt.u:()Laow;
+      12: aload_3
+      13: invokevirtual #111                // Method aow.e:(Lawt;)I
+      16: iconst_3
+      17: iand
+      18: invokespecial #114                // Method aip."<init>":(Laow;II)V
+      21: areturn
+
+## DramaticTrees assets/dynamictrees/leaves/common.json (the vanilla families' primitive leaves)
+{
+	"oak":		{"leaves":"minecraft:leaves variant=oak" },
+	"spruce":	{"leaves":"minecraft:leaves variant=spruce", "color":"@biome", "smother":3, "cellkit":"conifer" },
+	"birch":	{"leaves":"minecraft:leaves variant=birch", "color":"@biome" },
+	"jungle":	{"leaves":"minecraft:leaves variant=jungle", "light":12 },
+	"acacia":	{"leaves":"minecraft:leaves2 variant=acacia", "cellkit":"acacia", "smother":2 },
+	"darkoak":	{"leaves":"minecraft:leaves2 variant=dark_oak", "cellkit":"darkoak", "smother":3 }
+}
+## com.ferreusveritas.dynamictrees.blocks.LeavesPropertiesJson (excerpt: the primitive leaves stack = Item.getItemFromBlock(block), damageDropped(state))
+  private static com.ferreusveritas.dynamictrees.blocks.LeavesPropertiesJson$PrimitiveLeavesComponents getPrimitiveLeaves(java.lang.String);
+    Code: (offsets 28-67)
+      28: invokevirtual #259                // Method net/minecraft/block/Block.func_180651_a:(Lnet/minecraft/block/state/IBlockState;)I
+      31: istore_3
+      32: aload_1
+      33: invokeinterface #247,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      38: getstatic     #263                // Field net/minecraft/init/Blocks.field_150361_u:Lnet/minecraft/block/BlockLeaves;
+      41: if_acmpne     52
+      44: iload_3
+      45: iconst_4
+      46: if_icmplt     52
+      49: iinc          3, -4
+      52: new           #74                 // class net/minecraft/item/ItemStack
+      55: dup
+      56: aload_1
+      57: invokeinterface #247,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      62: invokestatic  #269                // Method net/minecraft/item/Item.func_150898_a:(Lnet/minecraft/block/Block;)Lnet/minecraft/item/Item;
+      65: iconst_1
+      66: iload_3
+      67: invokespecial #272                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;II)V
