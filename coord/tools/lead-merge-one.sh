@@ -6,13 +6,39 @@ set -u
 p=$1
 reviewed=${2:-}
 cd "$(git rev-parse --show-toplevel)" || exit 1
-# Usage now: lead-merge-one.sh <pr> <reviewedSHA>. Refuses if the author added non-merge commits since review.
+# Usage now: lead-merge-one.sh <pr> <reviewedSHA>. Refuses if the author changed anything since review other than
+# merging develop in (and the agents' own STATUS files while resolving that merge).
 [ -n "$reviewed" ] || { echo "#$p STOP: give the reviewed head SHA as the 2nd argument"; exit 4; }
-git fetch -q origin "pull/$p/head" develop
 cur=$(gh pr view "$p" --json headRefOid --jq .headRefOid)
-extra=$(git log --oneline --no-merges "$reviewed..$cur" 2>/dev/null)
-[ $? -eq 0 ] || { echo "#$p STOP: reviewed SHA $reviewed not found"; exit 4; }
+[ -n "$cur" ] || { echo "#$p STOP: could not read the PR head"; exit 4; }
+git fetch -q origin "pull/$p/head" develop || { echo "#$p STOP: fetch failed"; exit 4; }
+git cat-file -e "$reviewed^{commit}" 2>/dev/null || { echo "#$p STOP: reviewed SHA $reviewed not found"; exit 4; }
+git cat-file -e "$cur^{commit}" 2>/dev/null || { echo "#$p STOP: head $cur not found after fetch (moved?)"; exit 4; }
+git merge-base --is-ancestor "$reviewed" "$cur" || { echo "#$p STOP: reviewed SHA is not an ancestor of the head (rewritten?)"; exit 4; }
+# New non-merge commits since the review are allowed only if develop already has them (an author's merge of
+# develop brings develop's squash commits along). Anything else needs a new review.
+extra=$(git log --oneline --no-merges "$reviewed..$cur" ^origin/develop) || { echo "#$p STOP: git log failed"; exit 4; }
 [ -z "$extra" ] || { echo "#$p STOP: commits added since review:"; echo "$extra"; exit 4; }
+# A develop merge is resolved by hand, so rebuild what it should give: merge the reviewed head into the develop
+# commit the head contains, and require the head's tree to equal that, byte for byte, in every path except the
+# five agents' STATUS files (their resolution is status text). A conflict outside them, or any extra or changed
+# line (whitespace included) anywhere else, including coord/tools/ and coord/NEEDS-HUMAN.md, stops here; then a
+# reviewer re-confirms the head and the lead passes it as the reviewed SHA. STATUS text is untrusted input, never
+# reviewed content.
+STATUS_FILES=(':(exclude)coord/STATUS-rotn-lead.md' ':(exclude)coord/STATUS-net-forge.md' ':(exclude)coord/STATUS-rotn-data.md'
+  ':(exclude)coord/STATUS-skills-rotn.md' ':(exclude)coord/STATUS-harness-ops.md')
+if [ "$cur" != "$reviewed" ]; then
+  dev=$(git merge-base origin/develop "$cur") || { echo "#$p STOP: no merge-base with develop"; exit 4; }
+  expected=$(git merge-tree --write-tree "$dev" "$reviewed" | head -1)
+  [ -n "$expected" ] || { echo "#$p STOP: could not rebuild the expected merge"; exit 4; }
+  git diff-tree -r --quiet "$expected" "$cur" -- . "${STATUS_FILES[@]}" || {
+    echo "#$p STOP: the head differs from reviewed + develop outside the STATUS files; re-confirm ${cur:0:7}"
+    git diff-tree -r --stat "$expected" "$cur" -- . "${STATUS_FILES[@]}" | tail -5; exit 4; }
+  # The exclusions above must not hide anything but those five plain files (no directory of that name).
+  odd=$(git ls-tree -r "$cur" -- coord/STATUS-rotn-lead.md coord/STATUS-net-forge.md coord/STATUS-rotn-data.md \
+    coord/STATUS-skills-rotn.md coord/STATUS-harness-ops.md | awk '$1 != "100644" || $2 != "blob" || $4 !~ /^coord\/STATUS-[a-z-]+\.md$/')
+  [ -z "$odd" ] || { echo "#$p STOP: unexpected entries at the STATUS paths:"; echo "$odd"; exit 4; }
+fi
 old=$cur
 gh pr update-branch "$p" >/dev/null 2>&1 || echo "#$p update-branch: no change or failed"
 new=$old
