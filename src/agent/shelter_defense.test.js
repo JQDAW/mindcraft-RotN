@@ -204,3 +204,48 @@ test('#331 review 4: right after a fight in place self_defense waits restMs, so 
     await selfDefense(agent);
     assert.deepEqual(ran, ['mode:self_defense'], 'after the rest it fights again');
 });
+
+// ---- The lead's decision after #331: a falling block in the shelter's head space ----
+// self_preservation moved the bot 2 blocks away (moveAway) when sand or gravel was at its head,
+// out of the shelter into the night. In the shelter it now digs the block out by hand (sand and
+// gravel need no tool) and stays; it leaves only when that dig fails (it would suffocate).
+
+function sandAtHead(fake, { digWorks = true } = {}) {
+    const { bot, calls } = fake;
+    const head = new Vec3(0, 65, 0);
+    let sand = true;
+    calls.digs = [];
+    Object.assign(bot, {
+        rotnSheltered: true, health: 20, lastDamageTime: -1e9, setControlState() {}, clearControlStates() {},
+        game: { gameMode: 'survival' }, tool: { equipForBlock: () => Promise.resolve() },
+        blockAt: (p) => {
+            const q = p.floored ? p.floored() : p;
+            const isSand = sand && q.x === head.x && q.y === head.y && q.z === head.z;
+            return { name: isSand ? 'sand' : 'air', position: q, boundingBox: isSand ? 'block' : 'empty', canHarvest: () => true };
+        },
+        dig: (b) => { calls.digs.push(`${b.position.x},${b.position.y},${b.position.z}`); if (digWorks) { sand = false; return Promise.resolve(); } return Promise.reject(new Error('Digging aborted')); },
+    });
+    bot.modes.isOn = () => false;
+    bot.pathfinder.getPathTo = () => ({ status: 'success', path: [] }); // goToGoal plans first
+    return head;
+}
+
+test('falling block (lead): sand in the shelter\'s head space is dug out by hand, and the bot stays', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const fake = shelter({ zombieAt: 9 });
+    sandAtHead(fake);
+    const before = fake.self.position.clone();
+    await selfPreservation(fake.agent);
+    assert.deepEqual(fake.calls.digs, ['0,65,0'], 'dug at its head');
+    assert.deepEqual(fake.calls.gotos, [], 'no walk out of the shelter');
+    assert.ok(fake.self.position.equals(before));
+});
+
+test('falling block (lead): when the dig fails the bot still gets out (it would suffocate)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const fake = shelter({ zombieAt: 9 });
+    sandAtHead(fake, { digWorks: false });
+    await selfPreservation(fake.agent);
+    assert.equal(fake.calls.digs.length, 1);
+    assert.ok(fake.calls.gotos.length >= 1, 'moveAway walked');
+});

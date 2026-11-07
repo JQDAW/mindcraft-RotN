@@ -151,6 +151,20 @@ const modes_list = [
             }
             else if (this.fall_blocks.some(name => blockAbove.name?.includes(name))) {
                 execute(this, agent, async () => {
+                    // The lead's decision after #331: in the night shelter, sand or gravel at the head is
+                    // dug out by hand (no tool needed) and the bot stays; it leaves only when the dig
+                    // fails, since it would suffocate.
+                    if (bot.rotnSheltered) {
+                        const head = bot.entity.position.floored().offset(0, 1, 0);
+                        let dug = false;
+                        try { dug = await skills.breakBlockAt(bot, head.x, head.y, head.z); } catch { dug = false; }
+                        const still = bot.blockAt(head);
+                        if (dug && !this.fall_blocks.some(name => still?.name?.includes(name))) {
+                            console.log(`[reflex] dug ${blockAbove.name} out of the shelter's head space; staying in`);
+                            return;
+                        }
+                        console.warn(`[reflex] could not dig ${blockAbove.name} out of the head space; getting out`);
+                    }
                     await skills.moveAway(bot, 2);
                 });
             }

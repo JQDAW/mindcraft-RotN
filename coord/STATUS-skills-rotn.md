@@ -1,6 +1,16 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T14:56Z (from `date -u`)
+Updated: 2026-11-07T15:27Z (from `date -u`)
+
+## A falling block in the shelter's head space is dug out, not fled from (branch `agent/skills-rotn/shelter-falling-block`, stacked on #331; 2026-11-07T15:27Z by `date -u`)
+
+- **Task (lead, 2026-11-07, answer (b)):** "a falling block (sand/gravel) into the shelter's head space: stay put and dig it out by hand (no tool needed); leave only if suffocating and the dig fails". A small follow-up PR after the current ones.
+- **Change (`modes.js` self-preservation):** in the night shelter, sand or gravel at the head is dug by hand (`breakBlockAt`) and the bot stays. Only when the dig fails, or the block is still there, does it `moveAway(2)` as before, since it would suffocate. Outside the shelter nothing changes.
+- **Tests (`shelter_defense.test.js`, 2 new):**
+  - sand at the head is dug, with no walk;
+  - a failed dig, then `moveAway` walks.
+  - **Both fail on #331's head.**
+  - With the change: `shelter_defense`, `threat_arbitration`, `night_routine`, `quiet_reflexes` and `update_loop`, 59/59. Lint: modes.js 28, as before.
 
 ## Decision (1) after round 9 B: low health in the night shelter, the bot stays (branch `agent/skills-rotn/shelter-hold-flee`, stacked on #331; 2026-11-07T14:48Z by `date -u`)
 
