@@ -38,6 +38,7 @@ deploy/test-server.sh up --yes [--capture] [--extra-mod dumper.jar] [--console "
 deploy/test-server.sh console "list"     # type into the server console
 deploy/test-server.sh fetch logs         # copy /opt/rotn/server/logs into the batch's out/
 deploy/test-server.sh verify             # key=value G0 facts from the box
+deploy/test-server.sh restart [300]      # G4 #1: console stop, wait for the exit, start, wait for a new Done line
 deploy/test-server.sh down               # delete and verify
 
 deploy/test-server.sh list               # labelled resources and time left
