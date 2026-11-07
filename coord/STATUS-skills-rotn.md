@@ -2,44 +2,46 @@
 
 Updated: 2026-11-07T07:10Z (from `date -u`)
 
-## Round 9 B fix (h): after a night-time death with nothing (branch `agent/skills-rotn/night-death-plan`, 2026-11-07T14:32Z by `date -u`)
+## Decision (1) after round 9 B: low health in the night shelter, the bot stays (branch `agent/skills-rotn/shelter-hold-flee`, stacked on #331; 2026-11-07T14:48Z by `date -u`)
 
-- **Task (lead, 2026-11-07, round 9 B fixes, priority 3):** the bot respawned 9 blocks from where it died, at night, with nothing (`r9-g3b/night/driver.log` 502). The shelter was refused for want of dirt (501), and it died again to the zombie risen at the spot ("slain by Zombie FRCFLD", `server.log` 575).
+- **Task (lead, 2026-11-07):** "self-preservation in an open shelter at night: stay put, eat, block or fight within reach; leave only for fire, lava or drowning". A new PR after #331, with nothing pushed to #331.
+- **Change (`modes.js` self-preservation):** the low-health flee (`moveAway(20)`) no longer runs while `bot.rotnSheltered` is set, whether the shelter is closed or open. Instead:
+  - while the night's repair runs (`REPAIR_LABEL`), nothing; the repair closes the opening;
+  - else a mob within reach is hit in place (`skills.defendInPlace`, from #331);
+  - else, below food 20 with food held, the bot eats (`food.chooseFood`/`eatFood`).
+  - The hazard branches before it are unchanged: water at the head, a falling block above, fire, lava and molten metal. Outside the shelter nothing changes.
+- **Tests (`shelter_defense.test.js`, 2 new):**
+  - Hurt in the open shelter with a zombie in reach: hit in place, no walk.
+  - Hurt with nothing in reach: eats bread, no walk, no fight.
+  - Hurt while the repair runs: no interrupt.
+  - **Both fail on #331's head.**
+  - With the change: `shelter_defense`, `threat_arbitration`, `night_routine`, `quiet_reflexes`, `update_loop` and `food`, 63/63. Lint: modes.js 28, as on #331; the test file 0.
+- **Question:** a falling block above the head (sand, gravel) still moves the bot 2 blocks away, out of the shelter. I kept that with the hazards because it would suffocate the bot, like drowning. Say if it should stay put too.
+
+## Round 9 B fix (c): self-defense never takes the bot out of its night shelter (branch `agent/skills-rotn/shelter-hold-defense`, 2026-11-07T14:17Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 2):** at 13:35:22 a digging zombie (Epic Siege Mod, `minecraft:zombie` "Digging": true) opened one side of the dirt shelter. Self-defense interrupted the night's repair (`r9-g3b/night/driver.log` 471), and `defendSelf` walked out after the zombie: its `GoalFollow`/`GoalInvert` walks, and `pvp.attack`, which follows its target. The bot died outside at -78 58 -60 (487).
 - **Change:**
-  - **New `library/pit.js`:** a shelter that needs nothing in the inventory.
-    - `choosePit`/`pitProblem` pick a surface cell within 3 blocks. It needs hand-diggable ground 3 deep, a floor, walls the shelter check counts as walls, no liquid or falling block around, and a side to dig stairs out of by hand.
-    - `digPit` digs straight down 3 blocks by hand.
-    - The roof goes in the top cell, flush with the ground. It has to be 3 deep: in a 2-deep hole the roof cell has nothing beside it to place against. The roof is placed by the shelter's own repair (`buildShelter` with the site), which crafts it from the 12 piles the dig gave.
-    - `pitOut` digs the roof and a 3-block staircase on one side by hand and walks up.
-    - `moveAwayFrom` walks until at least `PIT.awayFrom` (28) from a spot.
-  - **`night_routine.js`:**
-    - **Away first:** at night, if the bot died less than `DEATH_NEAR_MS` (20 min) ago within 28 blocks, it first walks away from the spot ("[night] I died N blocks from here; moving at least 28 away before sheltering").
-    - **Then a hole:** a build try that fails is followed once a night by a hole shelter, which does not count as a try.
-    - **Out by the stairs:** in the morning a hole is left with `pitOut`, not `digOut`.
-    - **Exposed and unarmed:** the routine turns cowardice on until morning and restores it then.
-- **Tests:**
-  - **`pit.test.js` (4 new):**
-    - with nothing held, a hole is dug (3 digs, 12 piles) and roofed with one placement, and closes;
-    - a stone column, water, sand nearby or no stair side is refused, and the nearest good cell is chosen;
-    - in the morning the roof plus 3 stair blocks are dug and the bot walks up;
-    - `moveAwayFrom` uses `GoalInvert(GoalNear(spot, 28))` and does no walk when already far.
-  - **`night_routine.test.js` (3 new):**
-    - the round 9 order: away, then build (refused), then hole and roof, then inside, then `pitOut` in the morning;
-    - no walk for a death 30 min ago, and the hole only once a night;
-    - cowardice on while exposed without a weapon and off in the morning, untouched with a sword.
-  - **On develop:** the 3 night tests fail (run against develop's `night_routine.js`); `pit.test.js` has no module there.
-  - With the fix: `night_routine`, `pit`, `shelter`, `night`, `priority`, `threat_arbitration` and `death_report`, 119/119. Lint: 0 in all four files.
-- **#337 review (lead, REQUEST CHANGES on 36bb947), answered (2026-11-07T15:04Z by `date -u`):**
-  1. A hole needs a side whose two cells beside the bot dig by hand. Without one, the roofing (no pickaxe) is refused and the hole would stay open.
-  2. A walk that runs out of time stops the pathfinder (`boundedWalk`).
-  3. The column needs a block that gives dirt piles (rotn-data's `dirt-piles` rule), so not clay.
-  4. A falling floor is refused (gravel over a cave).
-  5. `pitOut` checks for a stair side before it digs the roof, and stairs may be dug through ground (a hillside exit). With no side the roof stays on and it says so.
-  6. An interrupted hole stays next and goes on in the same hole (`digPit` progress).
-  7. The exposed line says "no weapon: keeping away from mobs until morning" when cowardice goes on, else "staying here until morning".
-  8. The tries are the 3 builds; the hole is one more, right after the first failed build, and is not counted.
-  - **Tests:** 4 new in `pit.test.js` and 2 in `night_routine.test.js`; all 6 fail on 36bb947. With the changes: `pit` 8/8, `night_routine` 27/27. Lint: 0.
-- **Not done (step 5 of the plan):** recovering the dropped items at dawn. The death report already says how long they last (10 min, Corpse Complex), and by dawn they are gone; the agenda restarts from the inventory by itself.
+  - **`library/night.js`:** adds `REPAIR_LABEL` (`action:repairShelter`). The night routine runs its repair under that label; the first build keeps `action:buildShelter`.
+  - **`modes.js` self-defense, in the shelter with a wall open:**
+    - it does not start while the repair runs;
+    - it fights only a mob within reach (`SHELTER_FIGHT.reach`, 3 blocks from the feet);
+    - it fights with the new `skills.defendInPlace`: look at the mob, `bot.attack`, every 600 ms, no pathfinder and no mineflayer-pvp.
+  - Outside the shelter nothing changes.
+- **Tests (new `src/agent/shelter_defense.test.js`, 3):**
+  - the repair is not interrupted;
+  - a zombie in the opening is hit in place until it dies, with no walk, no pvp and the bot not moved;
+  - a zombie 5 blocks away is not chased.
+  - **On develop all 3 fail,** run with develop's label `action:buildShelter`: the repair is interrupted by `mode:self_defense`, `defendSelf` walks (`GoalInvert(GoalFollow)`), and a fight starts at the far zombie.
+  - With the fix: `shelter_defense`, `night_routine`, `threat_arbitration`, `quiet_reflexes`, `update_loop`, `shelter`, `night` and `threats`, 96/96. Lint: no new errors (modes.js 28 and skills.js 20, as on develop; the others 0).
+- **#331 review (lead, REQUEST CHANGES on f54db6c), answered (2026-11-07T14:56Z by `date -u`):**
+  1. **Any hostile mob in reach is hit, whatever the plan says.** In the shelter, self-defense hits any hostile mob within reach (`threats.shelterEnemy`: any mob rotn-data does not ignore, never a calm one or the enderman family). Before, two zombies, a skeleton or a creeper near made the plan 'flee', with cowardice quiet, so nothing was hit.
+  2. **The fight goes on while an enemy is in reach,** not only while the plan says fight.
+  3. **`defendInPlace` is capped:** `maxMs` 6 s, `maxSwings` 8, and 4 hits on one mob whose known health did not drop. Afterwards self-defense rests `restMs` (1.5 s), so the night routine repairs first.
+  4. **While a wall is known open, every tick checks and repairs,** not every `CHECK_MS`. The "open … repairing" line is said once and then only logged, and a check that finds it closed again restores the shelter's rules.
+  5. **Folded in from #341 (the lead's decision):** at low health in the shelter the bot stays. The repair goes on, else it fights in reach, else it eats. It leaves only for fire, lava, drowning or a falling block. #341 is to be closed.
+  - **#334 nit:** `defendInPlace` equips the weapon just before each swing and sets `bot.rotnFightingInPlace` while it runs. When develop is merged into #334, its dig-alarm handler will skip the block equip while that flag is set.
+  - **Tests:** 6 new or changed in `shelter_defense` and `night_routine`; all 6 fail on f54db6c. With the changes: 8 related files, 107/107. Lint unchanged (modes.js 28, skills.js 20, the others 0).
 
 ## G4 item 11 prep: the task queue and agenda across a restart (branch `agent/skills-rotn/g4-restart-prep`, HOLD PR; 2026-11-07T06:55Z by `date -u`)
 

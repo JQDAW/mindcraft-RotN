@@ -563,6 +563,60 @@ test('G3 round 7 B: inside, a dropped item, a carpet or snow in the space, or a 
     assert.match(wet.agent.chat.at(-1), /no longer usable: water at 0, 65, 0 \(a liquid at head height: the bot would drown\); building a new one$/);
 });
 
+test('#331 review 4: while a wall is known open, every tick checks and repairs (not every CHECK_MS); the line is said once', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o }); // starts the check clock
+    o.open = [SITE.offset(1, 1, 0)];
+    // The repair makes progress but does not close it (one of two cells placed).
+    o.buildShelter = (bot, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, feet: SITE, placed: 1 }); };
+    nightTick(agent, { now: CHECK_MS + 2, ops: o });
+    await settle(agent);
+    assert.equal(agent.bot.rotnSheltered, 'open');
+    assert.equal(o.builds.length, 2);
+    nightTick(agent, { now: CHECK_MS + 3, ops: o }); // one tick later: not CHECK_MS later
+    await settle(agent);
+    assert.equal(o.builds.length, 3, 'repaired again at once');
+    assert.equal(agent.chat.filter(l => /the shelter is open/.test(l)).length, 1, 'said once, then logged');
+    o.open = []; // closed again (another repair, a block placed)
+    nightTick(agent, { now: CHECK_MS + 4, ops: o });
+    assert.equal(agent.bot.rotnSheltered, true, 'the shelter\'s rules are back');
+});
+
+test('#331 re-review: a repair that placed nothing waits CHECK_MS again (no repair every tick all night), unless a fight in place ended since', async (t) => {
+    quiet(t);
+    const warns = [];
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    o.open = [SITE.offset(1, 0, 0)];
+    // No blocks left (or a mob in the cell): the repair places nothing.
+    o.buildShelter = (bot, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, feet: SITE, placed: 0, line: 'no dirt' }); };
+    let now = CHECK_MS + 2;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    assert.equal(o.builds.length, 2, 'the first repair');
+    for (let i = 0; i < 20; i++) { now += 300; nightTick(agent, { now, ops: o }); await settle(agent); } // 6 s of ticks
+    assert.equal(o.builds.length, 2, 'no repair on every tick');
+    now += CHECK_MS;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    assert.equal(o.builds.length, 3, 'again after CHECK_MS');
+    assert.equal(warns.filter(w => /placed nothing/.test(w)).length, 1, 'said once in the log, not on every try');
+    // A fight in place ends (the mob in the cell is gone or knocked back): the next tick tries at once.
+    agent.bot.rotnFightEndedAt = 12345;
+    now += 300;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    assert.equal(o.builds.length, 4, 'at once after a fight');
+});
+
 // ---- G3 round 9 batch B, fix (h): after a night-time death with nothing ----
 // The bot respawned 9 blocks from where it died, at night, with nothing (driver.log 502); the
 // shelter was refused for want of dirt (501), and it died again to the zombie risen at the spot

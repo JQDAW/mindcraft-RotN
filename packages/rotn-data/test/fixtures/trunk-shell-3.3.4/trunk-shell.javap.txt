@@ -4,7 +4,7 @@
 # Read with javap only (no mod code was run). Only the methods the trunkShell claims rest on.
 # SRG names (MCP stable-39-1.12): func_180650_b updateTick, func_176195_g getBlockHardness,
 #   func_185496_a getBoundingBox, func_180640_a getCollisionBoundingBox, func_180660_a getItemDropped,
-#   func_149745_a quantityDropped, func_177971_a BlockPos.add(Vec3i), func_176730_m EnumFacing.getDirectionVec,
+#   func_149745_a quantityDropped, isAir (Forge), func_177971_a BlockPos.add(Vec3i), func_176730_m EnumFacing.getDirectionVec,
 #   func_180497_b World.scheduleUpdate, func_175698_g World.setBlockToAir, field_151575_d Material.WOOD.
 
 ## BlockTrunkShell
@@ -252,6 +252,22 @@ public class com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell extends net.
     Code:
        0: iconst_0
        1: ireturn
+  public boolean isAir(net.minecraft.block.state.IBlockState, net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos);
+    Code:
+       0: aload_3
+       1: ifnonnull     6
+       4: iconst_0
+       5: ireturn
+       6: aload_0
+       7: aload_2
+       8: aload_1
+       9: aload_3
+      10: invokevirtual #122                // Method getMuse:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/math/BlockPos;)Lcom/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse;
+      13: ifnonnull     20
+      16: iconst_1
+      17: goto          21
+      20: iconst_0
+      21: ireturn
 
 ## BlockTrunkShell$ShellMuse
 public class com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell$ShellMuse

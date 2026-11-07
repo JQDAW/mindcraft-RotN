@@ -22,6 +22,15 @@ describe('ctlServer.restart: test-server.sh restart, never re-sent', () => {
         assert.deepEqual(seen[1].args, ['/ctl', 'restart', '120']);
     });
 
+    test('#347 (ADR 0008): the error carries the exit code, so a scenario can tell a Mod Director re-check failure (125)', () => {
+        const ctl = ctlServer('/ctl', { spawn: () => ({ status: 125, stderr: 'rotn-test: after the restart, Mod Director\'s downloads fail the pinned check (ADR 0008); the server is stopped\n' }), pause: () => {} });
+        assert.throws(() => ctl.restart(), (e) => e.exitCode === 125 && /restart failed \(125\): rotn-test: after the restart, Mod Director/.test(e.message));
+        const five = ctlServer('/ctl', { spawn: () => ({ status: 5, stderr: 'x' }), pause: () => {} });
+        assert.throws(() => five.restart(), (e) => e.exitCode === 5);
+        const killed = ctlServer('/ctl', { spawn: () => ({ status: null, signal: 'SIGTERM', error: { code: 'ETIMEDOUT' } }), pause: () => {} });
+        assert.throws(() => killed.restart(), (e) => e.exitCode === null);
+    });
+
     test('an ordinary failure (the helper\'s exit 4 or 5, or ssh) is never retried: a second restart is not harmless', () => {
         let calls = 0;
         const pauses = [];

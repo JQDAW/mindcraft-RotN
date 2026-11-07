@@ -19,6 +19,11 @@
 import { Vec3 } from 'vec3';
 import { getBlock, registryName, loadRotnData, howToGet, PACK_VERSION, WILDCARD_META } from '../../../packages/rotn-data/index.js';
 
+/**
+ * The label of the night routine's repair action (G3 round 9 B, fix c): self_defense does not
+ * interrupt it, so a breach is closed instead of the bot walking out to fight.
+ */
+export const REPAIR_LABEL = 'action:repairShelter';
 export const NIGHT_START = 12542;
 export const NIGHT_END = 23460;
 export const MORNING_FREEZE = 3001;

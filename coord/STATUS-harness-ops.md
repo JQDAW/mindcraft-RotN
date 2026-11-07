@@ -1,8 +1,24 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (15:11 UTC, from `date -u`)
+Updated: 2026-11-07 (15:33 UTC, from `date -u`)
 
-## Now: the `g4-death-report` fixes after the T1 rehearsal (this PR; the lead's decisions after T1). Next: the Mod Director downloads inventory (report first).
+## Now: the pinned Mod Director downloads (ADR 0008; this PR). The lead chose option (a): fail closed from the first run.
+
+- **Why:** the pinned zip ships only Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`) and a pointer to a list on the pack's moving `stable` branch. That list has no hash and names `esmtweaks-1.12.2-0.4.5.jar` (GitHub release asset), installed at every start as a top-level `mods/` jar.
+- **`deploy/test-server/mod-director.sha256`** has full SHA-256 values:
+  - the jar `b57590bf…f235f933`: GitHub's digest, re-verified on the bytes downloaded on the CX33;
+  - the list's copy `48ba1339…`, checked only if Mod Director keeps it on disk.
+- **The check, `rotn-test mod-director`, at Done:**
+  - only top-level `mods/*.jar`, against the zip's top-level jars plus the list plus any `--extra-mod` hashed before start;
+  - subfolders are excluded (Forge writes there);
+  - on a problem: the server is stopped, the phase is `failed:mod-director: ...`, `test-server.sh` exits 125 before any scenario, and the hashes go into the run log.
+- **Restarts:** the `restart` verb is in #324 (HOLD). After both merge, it must run `rotn-test mod-director` after its new Done. That is a small follow-up, or an addition to #324 if the lead asks.
+- **Tested:**
+  - `mod-director.test.js` (10, on a fake server dir; a mutation that compares subfolders fails 6 of them);
+  - `test-server.test.js` (exit 125 with nothing run and all deleted; the report in the run log; the list in the user-data);
+  - 112 pass. ESLint clean.
+
+## Earlier: the `g4-death-report` fixes after the T1 rehearsal (this PR; the lead's decisions after T1). Next: the Mod Director downloads inventory (report first).
 
 - **`no_spam` is a loop test** (the ready-to-try wording: "without a chat-spam loop"):
   - it fails on a repeated line (near-identical lines count together), more than one death report, a spam kick, or the bot gone;
@@ -45,6 +61,17 @@ Updated: 2026-11-07 (15:11 UTC, from `date -u`)
   - `ctlServer.restart()`: never re-sent after an ordinary failure, only after a bash that never started.
   - Console rules for `g4-service-reconnect` only, built like #320's kill: `kick <this run's bot>` (any other name and every selector refused; no valid bot param, no rule) and `stop` exactly. `guardConsole` lets the restart through only where the list admits `stop`.
   - **Tested** (targeted): `g4-reconnect-tools.test.js` (6 tests) and new tests in `test-server.test.js` (the helper with a fake systemctl and console: the usual case, the same-file Done, no Done, no stop, already stopped, bad timeout; the verb through the fake ssh). With runner, the G3 and G4 tests and deploy-eol: **319 pass, 0 fail**. ESLint clean; baseline 253. shellcheck is not installed on this server, so CI runs it.
+
+## Earlier (before the round 9 GO; the #326 branch): waiting for the human's GO for G3 smoke round 9 (then T1); develop frozen at 670fe8aa; branch-only G4 work
+
+- **Round 9 is ready** (checkout `/home/mindcraft-RotN-batch/670fe8aa`; A's pre-checks passed at 05:31 UTC; the run script is in place). T1 runs after the round.
+- **#324 (HOLD, approved at 61eae31e):** `test-server.sh restart` / `rotn-test restart`, `ctlServer.restart`, `g4-service-reconnect`'s kick/stop rules. It merges after the G3 gate.
+- **This branch, `agent/harness-ops/ctl-journal-metrics` (HOLD PR): the read-only ctl verbs from the G4 plan.**
+  - `mindcraft-rotn-ctl journal BOT [--since TIME]` runs `journalctl --unit=mindcraft-rotn@BOT.service --no-pager --no-hostname --utc --output=short-iso --lines=20000`.
+    - TIME: only `YYYY-MM-DD HH:MM[:SS]`, `YYYY-MM-DDTHH:MM[:SS][Z]` (normalised to "... UTC") or `@EPOCH`. Relative times, words, offsets and anything extra are refused.
+  - `mindcraft-rotn-ctl metrics BOT` runs `systemctl show --no-pager --property=MemoryCurrent,MemoryPeak,NRestarts,ActiveState` on that unit only.
+  - Exact argument counts and the existing unknown-bot refusal (now one `unit_of` helper for every per-bot action). Fixed paths (`/usr/bin/journalctl` too), no env overrides. **No new sudo rights:** the sudoers rule still allows only the ctl (the bootstrap test still pins it).
+  - **Tested:** `cx23.test.js` (3 new tests: journal with each `--since` form; 23 refused journal shapes, with journalctl never run; metrics exact, and 6 refused shapes) and `deploy-eol`: **55 pass, 1 skipped** (mode-000 as root, as before).
 
 ## Earlier: `g4-death-report` was built offline (#320, merged); its T rehearsal run plan goes to the lead. No paid run without the human's GO.
 
