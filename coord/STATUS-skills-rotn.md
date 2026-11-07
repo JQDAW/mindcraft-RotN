@@ -10,7 +10,7 @@ Updated: 2026-11-07T01:03Z (from `date -u`)
 - **Tests:** the file passes 15/15 and ESLint shows 0 problems in it.
   - Mutations: with the walk unbounded (the old bug), the test fails at the 5 s per-test timeout. With the limit firing at 50 ms, it fails with "the walk ran 52 ms; the limit is 300 ms".
   - Under load: 6 CPU burners on the 4 vCPU (load up to about 5.4), with the file run alternately with the old version. The old test failed 13/13 while the burners ran. The new one passed 20/20, 13 of them under load. The other 14 tests in the file never failed.
-- **PR:** see "Open PRs" in the PR list (`agent/skills-rotn/goto-test-load`). It waits for review.
+- **PR:** #306, waiting for review.
 
 ## Handoff (before the move to the dev server, 2026-11-06T21:49Z by `date -u`)
 
