@@ -7,16 +7,15 @@ Updated: 2026-11-07 (14:14 UTC, from `date -u`)
 - **Under the human's written GOs** (round 9 at about 12:46 UTC; T1 at about 12:51 UTC, after the four batches), relayed by the lead. Each batch ran on its own fresh server after its own pre-checks, with no skip flags, no reruns and no retries. Every server, Primary IP and SSH key was verified gone (0/0/0 with `grep -c .`).
 - **Results:**
   - **A** `g3-rocks-to-stone-tools`: PASS 7/7. The whole agenda took 6 min; sticks came from leaves.
-  - **B** `g3-first-night`: FAIL 3/5. The shelter was opened after 17.5 min; no pickaxe, because `sticks` stalled; 2 zombie deaths. Its `stayed_online` fail is a harness false fail (the runner's own stop).
+  - **B** `g3-first-night`: FAIL 3/5. The shelter was opened after 17.5 min; no pickaxe, because `sticks` stalled; 2 zombie deaths. Then the agent killed its own process: after the second death, `!collectBlocks` refused to stop for 10 s, so `cleanKill` ran (`stayed_online`, a real fail; I first called it a harness false fail, which was wrong).
   - **C** `g3-task-preempts-agenda`: PASS 7/7.
   - **D** `g3-untrusted-refused`: PASS 7/7.
   - **T1** `g4-death-report`: FAIL 7/9, a rehearsal and never G4 evidence. The respawn took under 2 s, the death report came 6 s after the kill, and the agenda resumed. Both fails are the harness's: the report window started at the confirmed respawn reading (1 s after the report), and the 10/min chat limit is below the agent's normal narration rate. The offline loss check also shows the item counts were stale (taken over 17 s while the bot crafted) and compared a variant to a whole item.
 - **Spend:** round 9 cost USD 0.0186 by the batch figures and T1 USD 0.0069. The key reads 0.902050 of 4.50. Hetzner: 5 servers, each billed about 1 h (about EUR 0.69 plus IPv4).
 - **Queued for after the freeze (the lead decides):**
-  - the `stayed_online` window;
   - the `g4-death-report` fixes (report window from the kill, counts closer to the kill, variant-aware loss check);
   - the `no_spam` definition.
-- **For skills-rotn (via the lead):** B's shelter breach with no pickaxe, and the luck-dependent `sticks` step. There is no `death_report.js` fault; an optional point is to sum metadata variants in the chat line.
+- **For skills-rotn (via the lead):** B's shelter breach with no pickaxe; the luck-dependent `sticks` step; and the action that would not stop after a death (a 10-second `cleanKill`, then a restart). There is no `death_report.js` fault; an optional point is to sum metadata variants in the chat line.
 
 ## Earlier: `g4-death-report` was built offline (#320, merged); its T rehearsal run plan goes to the lead. No paid run without the human's GO.
 

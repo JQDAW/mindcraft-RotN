@@ -57,7 +57,7 @@
 | Batch | Result |
 | --- | --- |
 | A (`g3a-20261107-r9`) | **PASS 7/7**: the whole agenda in 6 min; sticks from leaves |
-| B (`g3b-20261107-r9`) | FAIL 3/5: in the shelter for 17.5 min, then the shelter was opened and a zombie killed the bot; killed again after the respawn (`stat.deaths` 2) |
+| B (`g3b-20261107-r9`) | FAIL 3/5: in the shelter for 17.5 min, then the shelter was opened and a zombie killed the bot; killed again after the respawn (`stat.deaths` 2); then the agent killed its own process (`stayed_online`) |
 | C (`g3c-20261107-r9`) | **PASS 7/7** |
 | D (`g3d-20261107-r9`) | **PASS 7/7** |
 
@@ -73,9 +73,10 @@
     - After the respawn, the shelter rule refused to build without a pickaxe (by design), so the bot had no shelter and died again.
     - **The root cause** is that `sticks` stalled again (leaves gave nothing, "agenda paused" at 13:10:35), so there was no pickaxe all day.
   - **The `sticks` step is still luck-dependent:** in A, leaves gave sticks in 34 s; in B, they gave none in 5 min.
-- **A harness item for me (after the freeze):** B's `stayed_online` is a false fail.
-  - With no dawn, the online window ran to the end and caught the runner's own stop (`botStoppedByRunner: true`, 1 s after `survived_night` failed).
-  - B's verdict would be FAIL anyway.
+  - **B's agent killed its own process after the second death** (`stayed_online`, a real fail; corrected in this PR, it was first called a harness false fail).
+    - The death asked `!collectBlocks("dirt", 10)` to stop. It did not stop within 10 s, so `action_manager.js` called `cleanKill` ("Code execution refused stop after 10 seconds. Killing process.", from the bot's saved history).
+    - The bot said "Exiting.", left, and `agent_process` restarted it (exit 1, requested restart).
+    - After the first death, and after T1's forced death, the running action did stop in time.
 - **Memory summaries:** 35 stored, 0 empty (A 12, B 6, C 14, D 3).
 - **Providers:** Wafer only. 154 requests, 0 empty answers, 0 failed; one reply in C has no provider line.
 - **Spend:** USD 0.018623 by the four batch figures. By the key, 0.875739 (A's start) to 0.894916 (D's end) is USD 0.019177, including the four preflight probes. The key reads 0.894916 of the 4.50 stop.

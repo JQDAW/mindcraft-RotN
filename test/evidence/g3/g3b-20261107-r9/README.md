@@ -39,14 +39,15 @@
 | `login_online` | PASS |
 | `fresh_start` | PASS |
 | `survived_night` | FAIL: no dawn (the bot died: FRCFLD was slain by Zombie); `stat.deaths` 2 |
-| `stayed_online` | FAIL: "lost (... Connection reset by peer); left" at 13:36:12 |
+| `stayed_online` | FAIL: "lost (... Connection reset by peer); left" at 13:36:12: the agent killed its own process (see below) |
 | `no_cheat` | PASS |
 
-- **`stayed_online` is a false fail of the harness:**
-  - the result says `botStoppedByRunner: true`;
-  - the lost connection at 13:36:12 is the runner stopping the bot itself, 1 s after `survived_night` failed at 13:36:11;
-  - with no dawn, the online window ran to the end and caught that teardown.
-  - The verdict would be FAIL anyway; the fix (end the window when the run ends) waits until after the freeze.
+- **`stayed_online` is a real fail: the agent killed its own process 8 s after the second death.** (Corrected in this PR: a first version of this README called it a harness false fail, the runner's own stop. It is not.)
+  - After the respawn the bot ran `!collectBlocks("dirt", 10)`. The second death (13:36:04) asked that action to stop, and it did not stop: `driver.log` shows "waiting for code to finish executing..." until the process exits.
+  - `action_manager.js`'s 10-second stop timeout then called `cleanKill`. The bot's saved history (`memory.json`, moved aside by batch C's start) ends with: "Code execution refused stop after 10 seconds. Killing process."
+  - The bot said "Exiting." (13:36:12), "Agent process exited with code 1", and `agent_process` started a restart ("requested_restart; restarting in 0 s").
+  - The runner's SIGTERM came after that (`DRIVER ... "stopping"` at 13:36:12.481Z). `botStoppedByRunner: true` is set at the end of every scenario, so it does not mean the runner caused the leave.
+  - On the live server this would show as a leave and a rejoin after a death.
 - **The day:**
   - `sticks` stalled again: leaves gave nothing, the bot said "I'm stuck!" (13:06:07), and the step paused after 5 minutes.
   - Meanwhile the bot dug dirt piles for `shelter_blocks` (356 held at the death).
