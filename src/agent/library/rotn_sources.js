@@ -51,6 +51,24 @@ export function itemVariants(name) {
 export function worldSources(name) {
     const result = lookup(name);
     if (!result) return [];
+    const sources = rulesOf(result, name);
+    if (isPlainStick(name) && !sources.some(s => s.blocks.includes(DEAD_BUSH_STICKS.blocks[0]))) sources.push({ ...DEAD_BUSH_STICKS });
+    return sources;
+}
+
+/**
+ * TEMPORARY, until rotn-data's by-hand dead bush rule for sticks lands (lead, G3 round 8 A); remove it
+ * then. It stands in only while no rotn-data rule names the dead bush. Evidence: round 8 A, a dead
+ * bush broken by hand gave a stick ("Broke deadbush ... (it gave 1 stick)"); vanilla 1.12
+ * BlockDeadBush drops 0-2 sticks when not sheared, and the pack has no override for it.
+ */
+const DEAD_BUSH_STICKS = {
+    blocks: ['deadbush'], tool: null, preferredTool: null, unlessTool: null, id: 'dead-bush-fallback', count: 1,
+    text: 'Break a dead bush by hand: it drops 0-2 sticks.',
+};
+const isPlainStick = (name) => { const p = parseName(name); return p?.name === 'stick' && (p.meta == null || p.meta === 0); };
+
+function rulesOf(result, name) {
     // A bare name ("pyrotech:rock") means every member of the rule's ore; an explicit variant
     // ("pyrotech:rock:0") only the blocks that drop that variant (#145 review nit).
     const bare = parseName(name)?.meta == null;

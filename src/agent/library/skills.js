@@ -744,6 +744,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const needsTool = [];
     const fellMatchers = []; // rotn-data "fell-tree": breaking a branch fells the whole tree
     const avoidTools = []; // [matcher, tool]: rules whose drop a tool changes (rotn-data #288 unlessTool)
+    const handMatchers = []; // by-hand rules that fell no tree (a dead bush for sticks): tried before felling
     const sources = worldSources(blockType);
     for (const source of sources) {
         if (!toolAllows(bot, source.tool)) {
@@ -756,6 +757,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         else if (source.preferredTool) preferredTools.push([blockMatcher(source.blocks), source.preferredTool]);
         if (source.unlessTool) avoidTools.push([blockMatcher(source.blocks), source.unlessTool]);
         if (source.id === 'fell-tree') fellMatchers.push(blockMatcher(source.blocks));
+        else if (!source.tool) handMatchers.push(blockMatcher(source.blocks));
     }
     // The item's own blocks give it only with a tool the bot lacks (rotn-data #288: dirt drops
     // itself only to a shovel of level 1+; by hand it drops 4 dirt piles, and "Broke dirt but got no
@@ -769,6 +771,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Any Dynamic Trees branch fells its tree, whichever rule names it (rotn-data #13: a branch
     // broken by hand drops the tree's logs and sticks): always the safe cut, never collect().
     const fellsTree = (block) => isBranch(block) || fellMatchers.some(matches => matches(block));
+    // G3 round 8 A: two felled spruces gave 32 logs and 0 sticks while a dead bush stood next to the
+    // bot. So a by-hand rule that fells nothing comes first (nearest first), then trees whose species
+    // has not given this bot 0 of the item, then the rest (prefer, never forbid). Only when the item
+    // has both kinds of source, or a species already came up empty; otherwise one plain search.
+    const emptySpecies = emptyFelled(bot, baseType);
+    const isHand = (block) => !fellsTree(block) && handMatchers.some(matches => matches(block));
+    const tierOf = (block) => (isHand(block) ? 0 : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
+    const tiers = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0 ? [0, 1, 2] : [null];
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
@@ -841,7 +851,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             log(bot, `Stopped collecting ${blockType}: time limit of ${secsText(CL.totalMs)} reached.`);
             break;
         }
-        let blocks = world.getNearestBlocksWhere(bot, block => {
+        const wanted = (block) => {
             if (!isWanted(block)) {
                 return false;
             }
@@ -865,7 +875,12 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             }
             
             return movements.safeToBreak(block) || unsafeBlocks.includes(block.name);
-        }, 64, 1);
+        };
+        let blocks = [];
+        for (const tier of tiers) {
+            blocks = world.getNearestBlocksWhere(bot, tier === null ? wanted : (block => tierOf(block) === tier && wanted(block)), 64, 1);
+            if (blocks.length > 0) break;
+        }
 
         if (blocks.length === 0) {
             if (collected === 0)
@@ -984,6 +999,17 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                     }
                 }
                 collected += gained;
+                // Round 8 A: a felled species that gave none of the item is tried last from now on
+                // (this bot, every collect); one that gave some is back to normal.
+                if (countsItems && fellsTree(block)) {
+                    if (gained === 0) emptySpecies.add(block.name); else emptySpecies.delete(block.name);
+                }
+                // A dead bush gives 0-2 sticks: one that gave none uses no attempt, so the next bush
+                // is tried. Never the same spot twice; bounded by the bushes in range and CL.totalMs.
+                if (isHand(block)) {
+                    givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                    if (gained === 0) i--;
+                }
                 if (gained === 0) {
                     // Say what it did give (round 5 A rerun: a felled spruce gave logs, the stick
                     // line said only "got no stick"), and that sticks are rare from felling.
@@ -1025,6 +1051,17 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}.`);
     return collected > 0;
+}
+
+// Per bot and item: the Dynamic Trees branch names (one per species) whose felled tree gave none of
+// the item (G3 round 8 A: spruces, 0 sticks). In memory only; a restart starts fresh.
+const _emptyFelled = new WeakMap();
+function emptyFelled(bot, item) {
+    if (!bot || typeof bot !== 'object') return new Set();
+    if (!_emptyFelled.has(bot)) _emptyFelled.set(bot, new Map());
+    const byItem = _emptyFelled.get(bot);
+    if (!byItem.has(item)) byItem.set(item, new Set());
+    return byItem.get(item);
 }
 
 let collectRouting = false; // collectByRoute's own collect does not take another route
