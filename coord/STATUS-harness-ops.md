@@ -1,8 +1,18 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (15:33 UTC, from `date -u`)
+Updated: 2026-11-07 (20:50 UTC, from `date -u`)
 
-## Now: the pinned Mod Director downloads (ADR 0008; this PR). The lead chose option (a): fail closed from the first run.
+## Now: G3 smoke round 10 evidence (this PR). The restart on `0daeef2d` passed 4 of 4 (smoke).
+
+- **Attempt 1, on `12fd263e`** (`g3a-20261107-r10-attempt1`): an infra fault, exit 125, before any scenario.
+  - The #347 check refused the zip's jar names with spaces. #351 fixed it and dropped the unused list pin (Mod Director keeps no copy on disk).
+- **The restart on `0daeef2d`** (human-approved): A PASS 7/7, B PASS 5/5 (a night in the shelter, 0 deaths), C PASS 7/7, D PASS 7/7. Smoke, never gate evidence.
+- **Spend:** USD 0.022691 (`batch.json`). Hetzner: 5 servers, 81 min, about EUR 0.69. All servers, IPs and keys are gone (0/0/0).
+- **Watch items:** in D's README (the round summary). gz+b64 booted on all five servers; the Mod Director check passed 4/4 (337 zip jars + ESM-Tweaks).
+  - B's shelter paths (digging alarm, repairs, fights, falling blocks) were not exercised: no mob came.
+- **Next, after the round (lead):** a small PR with the #351 nits (awk `ENVIRON` in `build.sh`, a newline-name test, a missing non-jar pin fails closed).
+
+## Earlier: the pinned Mod Director downloads (ADR 0008; #347, merged). The lead chose option (a): fail closed from the first run.
 
 - **Why:** the pinned zip ships only Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`) and a pointer to a list on the pack's moving `stable` branch. That list has no hash and names `esmtweaks-1.12.2-0.4.5.jar` (GitHub release asset), installed at every start as a top-level `mods/` jar.
 - **`deploy/test-server/mod-director.sha256`** has full SHA-256 values:
