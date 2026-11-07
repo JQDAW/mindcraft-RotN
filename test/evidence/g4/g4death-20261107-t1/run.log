@@ -1,0 +1,45 @@
+[test-server 13:56:10] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --max-batch-usd 2 --logs-out <local>/captures/raw/t1-g4death/server --summary <local>/captures/raw/t1-g4death/batch.json --scenario g4-death-report --out <local>/captures/raw/t1-g4death/death -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 13:56:11] preflight passed: driver, profile, model and settings checked; the key's usage can be read; the LLM probe answered (HTTP 200, provider Wafer, z-ai/glm-5.3-flash); 1 scenario(s) (timeouts: g4-death-report 47 min); a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[test-server 13:56:20] sweeper OK (via helper): helper scheduled run 42379092436 on JQDAW/rotn-sweeper-cron succeeded 1 min ago (limit 40 min), then sweeper run 42379097722 (workflow_dispatch) on develop succeeded
+[test-server 13:56:21] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 13:56:21] creating mcr-test-20261107-135615: delete-after 2026-11-07T15:56:21Z (TTL 2h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 13:56:29] server mcr-test-20261107-135615 is at <ip>
+[test-server 13:56:29] waiting for SSH and the build (up to 120 min)
+[test-server 13:56:39] phase: unreachable
+[test-server 13:56:56] phase: booting:running
+[test-server 13:57:27] phase: starting
+[test-server 13:59:17] phase: ready
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 13:59:18] READY: mcr-test-20261107-135615 at <ip>:25565 (delete-after 2026-11-07T15:56:21Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261107-135615
+[test-server 13:59:18] running: node test/runner/batch.mjs --max-batch-usd 2 --logs-out <local>/captures/raw/t1-g4death/server --summary <local>/captures/raw/t1-g4death/batch.json --scenario g4-death-report --out <local>/captures/raw/t1-g4death/death -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 13:59:18] batch 20261107T135918-619639: a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[batch 13:59:18] g4-death-report: start (spent so far USD 0 of 2; runner timeout 47 min, derived 47)
+[scenario 13:59:18] g4-death-report (G4) run 20261107t135918-297943; git 670fe8aa2f29ba9b726adcf5b20f2c9be0b68b5e; driver: node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json; out: <local>/captures/raw/t1-g4death/death
+[scenario 13:59:30] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 13:59:30] PASS fresh_bot_state: the driver moved aside: agenda.json.g3-2026-11-07T13-59-22-168Z.bak, memory.json.g3-2026-11-07T13-59-22-168Z.bak
+[scenario 14:03:31] PASS had_items: the server counts 33 of the loss items (at least 6 needed): 7 pyrotech_compat:rock_metamorphic, 2 pyrotech_compat:rock_sedimentary, 4 minecraft:stick, 11 minecraft:log, 3 minecraft:planks, 4 betterwithmods:dirt_pile, 1 minecraft:bread, 1 bundles:bundle
+[scenario 14:03:41] PASS died: stat.deaths 0 -> more; "<bot> fell out of the world" at 14:03:33
+[scenario 14:03:41] PASS respawned: health above 0 at 14:03:40, 7s after the kill (the 0 fell between two readings)
+[scenario 14:08:41] FAIL loss_reported: a death report came, but not within 60s of the respawn: "I died at -41, 67, -13; lost 10 dirt, 9 log, 6 planks, 4 betterwithmods:dirt_pile, 3 pyrotech_compat:rock_metamorphic:6, 3 sapling and 10 more kinds." at 14:03:39
+[scenario 14:08:41] PASS agenda_resumed: the agenda counter rose 20 -> 21 by 14:05:10
+[scenario 14:08:42] FAIL no_spam: 13 chat lines in one 60 s (limit 10); 17 in 5 min
+[scenario 14:09:01] PASS no_cheat: nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)
+[scenario 14:09:01] g4-death-report: 56 LLM requests (43 replies, 13 memory summaries, 0 failed), USD 0.006904
+[scenario 14:09:01] g4-death-report: LLM providers: Wafer: 56 requests (0 empty), summaries 13 ok, 0 empty
+[scenario 14:09:01] g4-death-report: model openrouter/@preset/glm-5-3-flash-cheap-reliable
+[scenario 14:09:02] g4-death-report: FAIL; 7 passed, 2 failed (<local>/captures/raw/t1-g4death/death/result.json)
+<local>/captures/raw/t1-g4death/server
+BATCH {"batchId":"20261107T135918-619639","testMode":false,"gate":false,"smoke":true,"maxBatchUsd":2,"scenarios":[{"id":"g4-death-report","out":"<local>/captures/raw/t1-g4death/death","runId":"20261107t135918-297943","exit":1,"spentBefore":0,"timeoutMin":47}],"stopped":null,"usageAtStart":0.895145662,"usageAtEnd":0.902050108,"spentUsd":0.006904,"exit":1,"logsFetched":true}
+[test-server 14:09:03] command exited with 1
+[test-server 14:09:03] EXIT trap: tearing down mcr-test-20261107-135615
+[test-server 14:09:03] deleting batch mcr-test-20261107-135615 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261107-135615)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 14:09:16] batch mcr-test-20261107-135615: ran 12 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 14:09:16] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261107-135615
+exit 1
