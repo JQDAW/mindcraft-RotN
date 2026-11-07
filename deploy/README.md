@@ -13,7 +13,13 @@ Owner: harness-ops. Test server first (gate G0); CX23 provisioning, the systemd 
   3. Unpacks it with default configs. It changes only `online-mode=true` and `white-list=true` (plus `network-compression-threshold=-1` with `--capture`). The world is fresh every time. `eula=true` is shipped by the pack and re-asserted.
   4. Writes `whitelist.json` before the first start, with UUIDs the PC resolved from Mojang's profile API. 1.12.2's own `whitelist add` uses a legacy lookup that is known to fail, and Mojang blocks some datacenter IPs.
   5. Starts `forge-1.12.2-14.23.5.2860.jar` with `-Xms4G -Xmx8G` as user `minecraft`, in a tmux console under systemd (`rotn-server.service`).
-  6. Waits for the `Done (...)! For help` line, then checks that every name is still whitelisted. A missing name fails the build.
+  6. Waits for the `Done (...)! For help` line.
+  7. **Checks what Mod Director downloaded (ADR 0008)** with `rotn-test mod-director`:
+     - **Why:** the pinned zip ships only Mod Director itself (`mods/!mod-director-launchwrapper-1.9.1.jar`) and `config/mod-director/requisites.remote.json`. That file points to a list on the pack's **moving `stable` branch** (`https://raw.githubusercontent.com/Rebirth-of-the-Night/Rebirth-Of-The-Night/stable/config/mod-director/fd-3.3.4/file-director_requisites.bundle.json`), with no hash. At every start, Mod Director fetches it and installs `esmtweaks-1.12.2-0.4.5.jar` from GitHub as a top-level jar: "Installed mod file /opt/rotn/server/mods/esmtweaks-1.12.2-0.4.5.jar".
+     - **The check:** only top-level `mods/*.jar` are compared. Each must be a top-level jar of the pinned zip (the build records the verified zip's file list), a download pinned by full SHA-256 in `test-server/mod-director.sha256` (the jar's hash is the binding check), or an `--extra-mod` the PC uploaded (hashed before the first start).
+     - **Excluded:** the subfolders `mods/memory_repo/` and `mods/1.12.2/`, because Forge writes into them at run time. The list's local copy is checked only if Mod Director keeps it on disk. The server never fetches the URL for the check.
+     - **On a mismatch, a missing pinned jar or an unexpected top-level jar:** the server is stopped, the phase is `failed:mod-director: ...`, and `test-server.sh` exits **125** (an infra fault) before any scenario. At READY, the check's lines (one per file, with the hash) go into the run log.
+  8. Checks that every name is still whitelisted. A missing name fails the build.
 
 ### Commands
 

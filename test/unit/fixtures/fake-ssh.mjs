@@ -27,5 +27,8 @@ if (/rotn-test phase/.test(remote)) {
     process.stdout.write('[Server thread/INFO]: fake console output\n');
 } else if (/rotn-test build-log/.test(remote)) {
     process.stdout.write('fake build log\n');
+} else if (/cat \/var\/lib\/rotn-test\/mod-director\.txt/.test(remote)) {
+    // The build's Mod Director check at Done (rotn-test mod-director), as stored on the server.
+    process.stdout.write(process.env.FAKE_SSH_MODDIR ?? 'mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bf OK\nmod-director: OK: 1 pinned download(s) match; 337 top-level jars of the pinned zip present; 0 extra mod(s)\n');
 }
 process.exit(0);

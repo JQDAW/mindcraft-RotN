@@ -1,0 +1,30 @@
+# What RotN 3.3.4's Mod Director downloads at every test-server start, pinned by full SHA-256 (ADR 0008, which
+# extends ADR 0005's pin of the server pack zip to these downloads). Format: sha256sum's ("<sha256>  <path>"), paths
+# relative to the server directory. `rotn-test mod-director` checks them at each Done (deploy/test-server/rotn-test.sh).
+#
+# Why: the pinned zip ships only Mod Director itself (mods/!mod-director-launchwrapper-1.9.1.jar) and
+# config/mod-director/requisites.remote.json, a pointer to a list on the pack's MOVING `stable` branch:
+#   https://raw.githubusercontent.com/Rebirth-of-the-Night/Rebirth-Of-The-Night/stable/config/mod-director/fd-3.3.4/file-director_requisites.bundle.json
+# Neither that list nor its entries carry a hash. Every server start fetches the list, then the files it names:
+#   - esmtweaks-1.12.2-0.4.5.jar from
+#     https://github.com/lirkas/ESM-Tweaks/releases/download/v0.4.5-compat/esmtweaks-1.12.2-0.4.5.jar, installed as a
+#     TOP-LEVEL jar in mods/: "Installed mod file /opt/rotn/server/mods/esmtweaks-1.12.2-0.4.5.jar" (the server log of
+#     every test server we have logs for: rounds 8 and 9, T1, the validation batch);
+#   - OptiFine (client only: the server skips it, "shouldTryInstall() returned false").
+#
+# The check (ADR 0008): only top-level mods/*.jar are compared, against the zip's top-level jars plus this list;
+# subfolders (mods/memory_repo/, mods/1.12.2/) are excluded, because Forge writes into them at run time. The jar's
+# full SHA-256 is the binding check: a mismatch, a missing pinned jar or an unexpected top-level jar fails the build
+# closed (phase failed:mod-director, the server stopped, test-server.sh exit 125 before any scenario).
+# The list's line below is checked only if Mod Director keeps a copy on disk at that path: the server log says
+# "Loading config /opt/rotn/server/config/mod-director/file-director_requisites.bundle.json" right after loading
+# requisites.remote.json; no file listing of a server has confirmed the copy yet. If the file is absent, the check
+# says "not on disk (not checked)"; nothing on the test server ever fetches the URL for the check.
+#
+# Provenance (2026-11-07, read-only, from the CX33, no server):
+#   - the jar: GitHub's asset digest sha256:b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 (asset
+#     last updated 2025-10-09); the bytes downloaded on the CX33 hash to the same value (re-verified for this PR);
+#   - the list: the raw file on `stable` (one commit on its path, 971b77a1, 2026-02-02), fetched twice, identical.
+# esmtweaks@0.4.5 is in the server mod list of all 45 G1-G3 runs with a join line; no earlier run hashed it.
+48ba1339ebf6417ad571d29589e61dd0d5745dc34549b2065676ccf5a4de3792  config/mod-director/file-director_requisites.bundle.json
+b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933  mods/esmtweaks-1.12.2-0.4.5.jar

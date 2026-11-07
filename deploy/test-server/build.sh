@@ -5,7 +5,7 @@
 # deploy/test-server.sh into the user-data). Progress goes to /var/lib/rotn-test/phase, which
 # the PC polls over SSH:
 #
-#   packages -> pack -> [need-pack] -> unpack -> configured -> [hold] -> starting -> whitelist -> ready
+#   packages -> pack -> [need-pack] -> unpack -> configured -> [hold] -> starting -> mod-director -> whitelist -> ready
 #   any step can end in failed:<reason>
 #
 # No secrets are ever written to user-data or to this server.
@@ -17,6 +17,7 @@ ROOT=${ROTN_TEST_ROOT:-/opt/rotn}
 SERVER=$ROOT/server
 INCOMING=$ROOT/incoming
 BUILD_LOG=${ROTN_TEST_BUILD_LOG:-/var/log/rotn-test-build.log}
+HELPER=${ROTN_TEST_HELPER:-/usr/local/sbin/rotn-test}
 
 log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
@@ -165,6 +166,32 @@ wait_for_done() {
   log "server ready after ~${waited}s: $(cat "$STATE/done-line")"
 }
 
+# record_extra_mods: the --extra-mod jars the PC uploaded during the hold (top-level mods/*.jar that are not in
+# the pinned zip), hashed before the first start, so `rotn-test mod-director` accepts exactly these bytes.
+record_extra_mods() {
+  local f rel
+  : > "$STATE/extra-mods.sha256"
+  while IFS= read -r -d '' f; do
+    rel=${f#"$SERVER"/}
+    grep -qxF -- "$rel" "$STATE/pack-files.list" && continue
+    printf '%s  %s\n' "$(sha256_of "$f")" "$rel" >> "$STATE/extra-mods.sha256"
+  done < <(find "$SERVER/mods" -maxdepth 1 -type f -name '*.jar' -print0 | sort -z)
+}
+
+# check_mod_director: at Done, what Mod Director downloaded must match the pinned list (ADR 0008;
+# deploy/test-server/mod-director.sha256). Any problem: the server is stopped and the build fails closed
+# (phase failed:mod-director: ...), which test-server.sh turns into exit 125 before any scenario runs.
+check_mod_director() {
+  local out rc=0
+  out=$("$HELPER" mod-director 2>&1) || rc=$?
+  printf '%s\n' "$out" > "$STATE/mod-director.txt"
+  log "$out"
+  if (( rc )); then
+    systemctl stop rotn-server || true
+    fail "mod-director: $(grep -m1 -E '^mod-director: (MISMATCH|MISSING|EXTRA|FAILED)' <<< "$out" | sed 's/^mod-director: //' || echo "check exit $rc")"
+  fi
+}
+
 # write_whitelist: WHITELIST_ENTRIES ("Name:uuid ...", resolved on the PC) -> whitelist.json.
 # Written before the first start, so the server never needs its own (unreliable) name lookup.
 write_whitelist() {
@@ -215,6 +242,9 @@ main() {
   rm -rf "$SERVER"
   mkdir -p "$SERVER"
   unzip -q "$INCOMING/pack.zip" -d "$SERVER"
+  # The verified zip's own file list: what rotn-test mod-director accepts under mods/ besides the pinned downloads.
+  unzip -Z1 "$INCOMING/pack.zip" > "$STATE/pack-files.list"
+  rm -f "$STATE/extra-mods.sha256"
   rm -f "$INCOMING/pack.zip"
   configure_server
   phase configured
@@ -224,12 +254,16 @@ main() {
     log "waiting up to ${HOLD_WAIT_SECONDS}s for the PC to upload extra mods and request start"
     wait_for_file "$STATE/start-requested" "$HOLD_WAIT_SECONDS" || fail "timed out waiting for start request"
     chown -R minecraft:minecraft "$SERVER/mods"
+    record_extra_mods
   fi
 
   phase starting
   systemctl daemon-reload
   systemctl start rotn-server
   wait_for_done
+
+  phase mod-director
+  check_mod_director
 
   phase whitelist
   check_whitelist

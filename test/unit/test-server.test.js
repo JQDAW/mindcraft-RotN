@@ -156,6 +156,9 @@ describe('render-user-data', () => {
         assert.equal(files['/usr/local/sbin/rotn-test-build'].content, lf('deploy/test-server/build.sh'));
         assert.equal(files['/usr/local/sbin/rotn-test'].content, lf('deploy/test-server/rotn-test.sh'));
         assert.equal(files['/etc/systemd/system/rotn-server.service'].content, lf('deploy/test-server/rotn-server.service'));
+        // ADR 0008: the pinned Mod Director downloads go to the server with the build, byte-for-byte.
+        assert.equal(files['/etc/rotn-test/mod-director.sha256'].content, lf('deploy/test-server/mod-director.sha256'));
+        assert.equal(files['/etc/rotn-test/mod-director.sha256'].mode, '0644');
         assert.equal(files['/usr/local/sbin/rotn-test-build'].mode, '0755');
         const cfg = files['/etc/rotn-test/config.env'].content;
         assert.match(cfg, new RegExp(`^PACK_SHA256=${PIN}$`, 'm'));
@@ -286,6 +289,32 @@ describe('up / run / down', { skip: windowsShellSkip('up / run / down', '69 s') 
         assert.equal(archive.length, 1);
         assert.ok(!fs.existsSync(path.join(env.ROTN_TEST_STATE_DIR, 'archive', archive[0], 'id_ed25519')), 'private key removed');
         assert.match(r.stderr, /verified gone: server, Primary IPv4 and SSH key of mcr-test-run/);
+    });
+
+    test('run + ADR 0008: a Mod Director mismatch at Done is an infra fault (exit 125); no command runs; all deleted', () => {
+        const marker = path.join(tmp, 'moddir-ran.txt');
+        const r = run(['run', '--yes', '--name', 'mcr-test-moddir', '--', BASH, '-c', `touch "${fwd(marker)}"`], {
+            FAKE_SSH_PHASES: 'packages,starting,mod-director,failed:mod-director: MISMATCH mods/esmtweaks-1.12.2-0.4.5.jar sha256 00ff != b575 (pinned)',
+            FAKE_SSH_MODDIR: 'mod-director: MISMATCH mods/esmtweaks-1.12.2-0.4.5.jar sha256 00ff != b575 (pinned)\nmod-director: FAILED: 1 problem(s)\n',
+        });
+        assert.equal(r.code, 125, r.all);
+        assert.ok(!fs.existsSync(marker), 'the batch command never ran');
+        assert.match(r.stderr, /mod-director: MISMATCH mods\/esmtweaks-1\.12\.2-0\.4\.5\.jar sha256 00ff != b575 \(pinned\)/, 'the hashes are in the run log');
+        assert.match(r.stderr, /ERROR: build failed: failed:mod-director: MISMATCH/);
+        assert.match(r.stderr, /an infra fault \(the pinned Mod Director downloads\): exit 125, no scenario runs/);
+        const st = state();
+        assert.equal(st.servers.length + st.primary_ips.length + st.ssh_keys.length, 0);
+        assert.match(r.stderr, /verified gone: server, Primary IPv4 and SSH key of mcr-test-moddir/);
+    });
+
+    test('run + ADR 0008: at READY the build\'s Mod Director check (the hashes) goes into the run log', () => {
+        const r = run(['run', '--yes', '--name', 'mcr-test-moddir-ok', '--', BASH, '-c', 'true']);
+        assert.equal(r.code, 0, r.all);
+        const lines = r.stderr.split('\n');
+        const iMd = lines.findIndex((l) => /\] mod-director: pinned mods\/esmtweaks-1\.12\.2-0\.4\.5\.jar sha256 b57590bf OK$/.test(l));
+        const iRun = lines.findIndex((l) => /\] running: /.test(l));
+        assert.ok(iMd >= 0 && iMd < iRun, 'logged before the command runs');
+        assert.ok(lines.some((l) => /\] mod-director: OK: 1 pinned download\(s\) match/.test(l)));
     });
 
     test('run: a failing command still tears down and its exit code is returned', () => {

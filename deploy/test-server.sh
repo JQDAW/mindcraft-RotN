@@ -356,6 +356,10 @@ write_files:
     permissions: '0644'
     encoding: b64
     content: $(b64 "$cfg")
+  - path: /etc/rotn-test/mod-director.sha256
+    permissions: '0644'
+    encoding: b64
+    content: $(b64 "$REMOTE_DIR/mod-director.sha256")
   - path: /usr/local/sbin/rotn-test-build
     permissions: '0755'
     encoding: b64
@@ -726,6 +730,13 @@ wait_ready() {
         rssh 'tail -n 60 /var/log/cloud-init-output.log' >&2 || true
         die "cloud-init finished ($ph) but the build never started" ;;
       hold) if (( !modded )); then modded=1; upload_mods; fi ;;
+      failed:mod-director*)
+        # What Mod Director downloaded does not match the pinned list (deploy/test-server/mod-director.sha256,
+        # ADR 0008): the build stopped the server. An infra fault, not a bot result: exit 125, no scenario.
+        rssh 'cat /var/lib/rotn-test/mod-director.txt' 2>/dev/null | tr -d '\r' | while IFS= read -r l; do log "$l"; done || true
+        log "ERROR: build failed: $ph"
+        log "an infra fault (the pinned Mod Director downloads): exit 125, no scenario runs"
+        exit 125 ;;
       failed*)
         rssh 'rotn-test build-log 60' >&2 || true
         rssh 'tail -n 40 /opt/rotn/server/logs/latest.log' >&2 2>/dev/null || true
@@ -804,6 +815,9 @@ do_up() {
   log "server $NAME is at $IP"
 
   wait_ready
+
+  # The pinned Mod Director downloads as the build checked them at Done, one line per file, into the run log.
+  rssh 'cat /var/lib/rotn-test/mod-director.txt' 2>/dev/null | tr -d '\r' | while IFS= read -r l; do [[ -n $l ]] && log "$l"; done || true
 
   rssh 'rotn-test verify' | tr -d '\r' > "$SDIR/verify.txt" || warn "verify failed"
   if $STATUS_PING_CMD --host "$IP" --port 25565 --out "$SDIR/ping.json" >&2; then :; else

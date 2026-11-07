@@ -1,8 +1,24 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (14:14 UTC, from `date -u`)
+Updated: 2026-11-07 (15:33 UTC, from `date -u`)
 
-## Now: G3 smoke round 9 (670fe8aa, smoke) is over: 3/4, so no gate on this commit. T1 (the `g4-death-report` rehearsal) ran after it. Evidence: this PR.
+## Now: the pinned Mod Director downloads (ADR 0008; this PR). The lead chose option (a): fail closed from the first run.
+
+- **Why:** the pinned zip ships only Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`) and a pointer to a list on the pack's moving `stable` branch. That list has no hash and names `esmtweaks-1.12.2-0.4.5.jar` (GitHub release asset), installed at every start as a top-level `mods/` jar.
+- **`deploy/test-server/mod-director.sha256`** has full SHA-256 values:
+  - the jar `b57590bf…f235f933`: GitHub's digest, re-verified on the bytes downloaded on the CX33;
+  - the list's copy `48ba1339…`, checked only if Mod Director keeps it on disk.
+- **The check, `rotn-test mod-director`, at Done:**
+  - only top-level `mods/*.jar`, against the zip's top-level jars plus the list plus any `--extra-mod` hashed before start;
+  - subfolders are excluded (Forge writes there);
+  - on a problem: the server is stopped, the phase is `failed:mod-director: ...`, `test-server.sh` exits 125 before any scenario, and the hashes go into the run log.
+- **Restarts:** the `restart` verb is in #324 (HOLD). After both merge, it must run `rotn-test mod-director` after its new Done. That is a small follow-up, or an addition to #324 if the lead asks.
+- **Tested:**
+  - `mod-director.test.js` (10, on a fake server dir; a mutation that compares subfolders fails 6 of them);
+  - `test-server.test.js` (exit 125 with nothing run and all deleted; the report in the run log; the list in the user-data);
+  - 112 pass. ESLint clean.
+
+## Earlier: G3 smoke round 9 (670fe8aa, smoke) is over: 3/4, so no gate on this commit. T1 (the `g4-death-report` rehearsal) ran after it. Evidence: this PR.
 
 - **Under the human's written GOs** (round 9 at about 12:46 UTC; T1 at about 12:51 UTC, after the four batches), relayed by the lead. Each batch ran on its own fresh server after its own pre-checks, with no skip flags, no reruns and no retries. Every server, Primary IP and SSH key was verified gone (0/0/0 with `grep -c .`).
 - **Results:**
