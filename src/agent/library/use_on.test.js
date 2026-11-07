@@ -28,9 +28,11 @@ const stack = (name, count, metadata = 0) => ({ name, count, metadata, type: reg
 /**
  * arrive: 'never' (goto pends until pathfinder.stop, which rejects it as the real one does),
  * or 'yes' (the bot ends next to the goal). onUse(block, bot) simulates the server's answer.
+ * calls.walks has one { ms } per goto: how long that walk ran before something stopped it
+ * (null while it runs, or when it arrived), so a test can time the walk itself.
  */
 function fakeBot({ blocks = [], arrive = 'yes', onUse = () => {} } = {}) {
-    const calls = { goto: 0, stop: 0, used: [] };
+    const calls = { goto: 0, stop: 0, used: [], walks: [] };
     const slots = new Array(46).fill(null);
     slots[36] = stack('pyrotech:crude_axe', 1);
     let pending = null;
@@ -57,11 +59,19 @@ function fakeBot({ blocks = [], arrive = 'yes', onUse = () => {} } = {}) {
         pathfinder: {
             setMovements() {}, setGoal() {}, isMoving: () => false,
             getPathTo: () => ({ status: arrive === 'yes' ? 'success' : 'noPath', path: [] }),
-            stop() { calls.stop++; if (pending) { const r = pending; pending = null; r(new Error('Path was stopped before it could be completed!')); } },
+            stop() {
+                calls.stop++;
+                if (!pending) return;
+                const { reject, walk } = pending; pending = null;
+                walk.ms = Date.now() - walk.start;
+                reject(new Error('Path was stopped before it could be completed!'));
+            },
             goto(goal) {
                 calls.goto++;
+                const walk = { start: Date.now(), ms: null };
+                calls.walks.push(walk);
                 if (arrive === 'yes') { bot.entity.position = at(goal.x + 1, goal.y, goal.z); return Promise.resolve(); }
-                return new Promise((_, reject) => { pending = reject; });
+                return new Promise((_, reject) => { pending = { reject, walk }; });
             },
         },
     };
@@ -178,15 +188,21 @@ test('useOn: a missing tool is refused at once (the upstream check was always fa
 
 // G3 smoke C+D: !searchForBlock("log", 64) never returned (goToNearestBlock -> goToPosition ->
 // goToGoal, whose pathfinder.goto has no time limit). Every goToGoal walk is bounded now.
+// The walk itself is timed (goto until the stop), not the whole call: the first wood search in a
+// process pays a one-off cold load before the walk (1.1-1.3 s measured on the CX33 dev server,
+// 13 ms on a second call), which broke the old whole-call bound of 1.5 s under load.
 test('goToGoal: a walk that never arrives ends at GO_TO_LIMITS; the search reports failure', T, async (t) => {
     const saved = skills.GO_TO_LIMITS.totalMs;
     t.after(() => { skills.GO_TO_LIMITS.totalMs = saved; });
     skills.GO_TO_LIMITS.totalMs = 300;
     const bot = fakeBot({ blocks: [block('log', at(20))], arrive: 'never' });
-    const t0 = Date.now();
     assert.equal(await skills.goToNearestBlock(bot, 'log', 4, 64), false);
-    assert.ok(Date.now() - t0 < 1500, `took ${Date.now() - t0} ms`);
-    assert.ok(bot.calls.stop >= 1, 'the walk was stopped');
+    assert.equal(bot.calls.walks.length, 1, 'one walk');
+    const { ms } = bot.calls.walks[0];
+    assert.notEqual(ms, null, 'the walk was stopped, not left running');
+    // Not before the limit (a timer may fire 1 ms early by the clock), and nowhere near the next
+    // bound a walk has (GO_TO_LIMITS.stepMs, 15 s): 2 s leaves a loaded machine room for a late timer.
+    assert.ok(ms >= 299 && ms < 2000, `the walk ran ${ms} ms; the limit is 300 ms`);
     assert.match(bot.output, /Found log at .*Navigating\.\.\./s);
     assert.match(bot.output, /Pathfinding stopped: time limit of 0\.3 s reached\./);
 

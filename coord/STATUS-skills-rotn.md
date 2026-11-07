@@ -1,6 +1,16 @@
 # Status: skills-rotn
 
-Updated: 2026-11-06T22:16Z (from `date -u`)
+Updated: 2026-11-07T01:03Z (from `date -u`)
+
+## The goToGoal test is no longer flaky under load (branch `agent/skills-rotn/goto-test-load`, 2026-11-07T01:03Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** make `src/agent/library/use_on.test.js` "goToGoal: a walk that never arrives" robust under load without weakening it. My CX33 start report (#301, branch `cx33-start`) is still in review and this branch leaves it alone. Both edit the top of this file, so whichever merges second needs develop merged in. I'll do that when asked.
+- **Cause:** the 1.5 s bound timed the whole `goToNearestBlock` call. Its first wood search in a process pays a one-off cold load of 1.1-1.3 s on the CX33 (a second identical call takes 13 ms). The bounded walk itself stopped at 300-301 ms every time.
+- **Fix (test only, no skill code):** the fake pathfinder records each walk's time from `goto` to the `stop` that ended it. The test asserts one walk, stopped (not left running), ran 299-2000 ms against the 300 ms limit, plus the unchanged "time limit of 0.3 s reached" line.
+- **Tests:** the file passes 15/15 and ESLint shows 0 problems in it.
+  - Mutations: with the walk unbounded (the old bug), the test fails at the 5 s per-test timeout. With the limit firing at 50 ms, it fails with "the walk ran 52 ms; the limit is 300 ms".
+  - Under load: 6 CPU burners on the 4 vCPU (load up to about 5.4), with the file run alternately with the old version. The old test failed 13/13 while the burners ran. The new one passed 20/20, 13 of them under load. The other 14 tests in the file never failed.
+- **PR:** see "Open PRs" in the PR list (`agent/skills-rotn/goto-test-load`). It waits for review.
 
 ## Handoff (before the move to the dev server, 2026-11-06T21:49Z by `date -u`)
 
