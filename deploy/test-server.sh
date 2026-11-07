@@ -29,7 +29,8 @@
 #   verify        Print the on-server G0 facts (key=value).
 #   restart [TIMEOUT_S]  Restart the Minecraft server (G4 #1): console stop, wait for the exit, start, wait for a
 #                 new Done line (each step up to TIMEOUT_S, 30..900, default 300). Exit 4: no stop; 5: no Done;
-#                 6: the start failed.
+#                 6: the start failed; 125: after the new Done, Mod Director's downloads fail the pinned check
+#                 (ADR 0008; the server is stopped, phase failed:mod-director), an infra fault as at first start.
 #   log [N] [rotated]  Tail the server log; with rotated, over the newest rolled-over log too (log4j rolls
 #                 latest.log at 00:00 UTC; the first line names the files).
 #   build-log [N]  Tail the cloud-init build log.
@@ -309,7 +310,10 @@ resolve_whitelist() {
 valid_rel_path() { [[ $1 =~ ^[A-Za-z0-9._/-]+$ && $1 != /* && $1 != *..* ]]; }
 
 # ---------------------------------------------------------------- user-data
-b64() { tr -d '\r' < "$1" | base64 -w0; }
+# gzip, then base64 (cloud-init's write_files encoding gz+b64): the scripts and the pinned lists together are over
+# Hetzner's 32 KiB user-data limit as plain base64 (#347: 38937 bytes with #324's restart verb and the ADR 0008 check).
+# gzip -n: no name or time stamp, so the same file always gives the same bytes.
+gzb64() { tr -d '\r' < "$1" | gzip -9n | base64 -w0; }
 
 render_config_env() {
   local jvm_extra=''
@@ -357,24 +361,24 @@ packages:
 write_files:
   - path: /etc/rotn-test/config.env
     permissions: '0644'
-    encoding: b64
-    content: $(b64 "$cfg")
+    encoding: gz+b64
+    content: $(gzb64 "$cfg")
   - path: /etc/rotn-test/mod-director.sha256
     permissions: '0644'
-    encoding: b64
-    content: $(b64 "$REMOTE_DIR/mod-director.sha256")
+    encoding: gz+b64
+    content: $(gzb64 "$REMOTE_DIR/mod-director.sha256")
   - path: /usr/local/sbin/rotn-test-build
     permissions: '0755'
-    encoding: b64
-    content: $(b64 "$REMOTE_DIR/build.sh")
+    encoding: gz+b64
+    content: $(gzb64 "$REMOTE_DIR/build.sh")
   - path: /usr/local/sbin/rotn-test
     permissions: '0755'
-    encoding: b64
-    content: $(b64 "$REMOTE_DIR/rotn-test.sh")
+    encoding: gz+b64
+    content: $(gzb64 "$REMOTE_DIR/rotn-test.sh")
   - path: /etc/systemd/system/rotn-server.service
     permissions: '0644'
-    encoding: b64
-    content: $(b64 "$REMOTE_DIR/rotn-server.service")
+    encoding: gz+b64
+    content: $(gzb64 "$REMOTE_DIR/rotn-server.service")
 runcmd:
   - [/usr/local/sbin/rotn-test-build]
 EOF
@@ -1169,7 +1173,14 @@ main() {
       [[ $rt =~ ^[1-9][0-9]*$ ]] && (( rt >= 30 && rt <= 900 )) || die "usage: restart [TIMEOUT_S, 30..900]"
       load_meta
       log "restarting the Minecraft server of $NAME (console stop, wait for the exit, start, wait for Done; up to ${rt}s each)"
-      rssh "rotn-test restart --timeout $rt" | tr -d '\r' ;;
+      local rc=0
+      rssh "rotn-test restart --timeout $rt" | tr -d '\r' || rc=$?
+      if (( rc == 125 )); then
+        # ADR 0008: Mod Director ran again at this start, and its downloads fail the pinned check (the lines above).
+        log "ERROR: after the restart, Mod Director's downloads fail the pinned check; the server is stopped"
+        log "an infra fault (the pinned Mod Director downloads): exit 125"
+      fi
+      exit "$rc" ;;
     log)
       # log [N] [rotated]: rotated also reads the newest daily rolled-over logs/YYYY-MM-DD-N.log.gz (00:00 UTC; rotn-test.sh).
       [[ ${ARGS[0]:-100} =~ ^[0-9]+$ && ( -z ${ARGS[1]:-} || ${ARGS[1]:-} == rotated ) ]] || die "usage: log [N] [rotated]"

@@ -48,6 +48,8 @@ beforeEach(() => {
         'mods/memory_repo/', 'mods/memory_repo/a/b/core-3.6.0.jar', 'config/mod-director/requisites.remote.json'];
     for (const z of zip) if (!z.endsWith('/')) put(z);
     fs.writeFileSync(path.join(state, 'pack-files.list'), zip.join('\n') + '\n');
+    // What build.sh's hash_pack_jars writes right after the unpack: the zip's top-level jars, by full SHA-256.
+    fs.writeFileSync(path.join(state, 'pack-jars.sha256'), zip.filter((z) => /^mods\/[^/]+\.jar$/.test(z)).map((z) => `${sha(Buffer.from(z))}  ${z}`).join('\n') + '\n');
     put(ESM, ESM_BYTES);                                     // Mod Director's install, top level
     put(BUNDLE, BUNDLE_BYTES);                               // its copy of the list, if it keeps one
     put('mods/1.12.2/chunkgenlimiter-1.1-core.jar');         // Forge's ContainedDep extraction (round 9's log)
@@ -66,7 +68,8 @@ describe('rotn-test mod-director (ADR 0008)', () => {
         assert.equal(r.status, 0, r.stdout + r.stderr);
         assert.match(r.stdout, new RegExp(`^mod-director: pinned ${ESM.replace(/\./g, '\\.')} sha256 ${sha(ESM_BYTES)} OK$`, 'm'));
         assert.match(r.stdout, new RegExp(`^mod-director: pinned ${BUNDLE.replace(/\./g, '\\.')} sha256 ${sha(BUNDLE_BYTES)} OK$`, 'm'));
-        assert.match(r.stdout, /^mod-director: OK: 2 pinned download\(s\) match; 2 top-level jars of the pinned zip present; 0 extra mod\(s\)$/m);
+        assert.match(r.stdout, /^mod-director: OK: 2 pinned download\(s\) match; 2 jars of the pinned zip match; 0 extra mod\(s\)$/m);
+        assert.doesNotMatch(r.stdout, /mowziesmobs/, 'the zip\'s jars only as a count when they match');
         assert.doesNotMatch(r.stdout, /chunkgenlimiter|memory_repo|1\.12\.2\/|musictriggers/, 'subfolders and non-jars are not compared');
     });
 
@@ -96,9 +99,34 @@ describe('rotn-test mod-director (ADR 0008)', () => {
         t.put('mods/esmtweaks-1.12.2-0.4.6.jar', Buffer.from('a newer list named a newer jar'));
         r = check();
         assert.equal(r.status, 1);
-        assert.match(r.stdout, /^mod-director: MISSING mods\/mowziesmobs-1\.5\.8\.jar \(a top-level jar of the pinned zip\)$/m);
+        assert.match(r.stdout, /^mod-director: MISSING mods\/mowziesmobs-1\.5\.8\.jar \(pack\)$/m);
         assert.match(r.stdout, /^mod-director: EXTRA mods\/esmtweaks-1\.12\.2-0\.4\.6\.jar sha256 [0-9a-f]{64} \(not in the pinned zip or the pinned list\)$/m);
         assert.match(r.stdout, /^mod-director: FAILED: 2 problem\(s\)$/m);
+    });
+
+    test('#347 review: the zip\'s jars are checked by their bytes, not only by name', () => {
+        fs.writeFileSync(path.join(t.server, 'mods/mowziesmobs-1.5.8.jar'), 'same name, other bytes');
+        const r = check();
+        assert.equal(r.status, 1);
+        assert.match(r.stdout, /^mod-director: MISMATCH mods\/mowziesmobs-1\.5\.8\.jar sha256 [0-9a-f]{64} != [0-9a-f]{64} \(pack\)$/m);
+    });
+
+    test('#347 review: a symlinked top-level jar is compared too (! -type d), a dangling one as unreadable', () => {
+        const target = path.join(t.root, 'outside.jar');
+        fs.writeFileSync(target, 'outside');
+        fs.symlinkSync(target, path.join(t.server, 'mods/linked.jar'));
+        let r = check();
+        assert.equal(r.status, 1);
+        assert.match(r.stdout, new RegExp(`^mod-director: EXTRA mods/linked\\.jar sha256 ${sha(Buffer.from('outside'))} \\(not in the pinned zip or the pinned list\\)$`, 'm'));
+        fs.rmSync(target);
+        r = check();
+        assert.equal(r.status, 1);
+        assert.match(r.stdout, /^mod-director: EXTRA mods\/linked\.jar sha256 unreadable /m);
+        // A symlink in place of the pinned jar is judged by the bytes it points to.
+        fs.rmSync(path.join(t.server, 'mods/linked.jar'));
+        fs.renameSync(path.join(t.server, ESM), path.join(t.root, 'esm-real.jar'));
+        fs.symlinkSync(path.join(t.root, 'esm-real.jar'), path.join(t.server, ESM));
+        assert.equal(check().status, 0);
     });
 
     test('an --extra-mod the harness uploaded is accepted at its recorded hash only', () => {
@@ -126,8 +154,10 @@ describe('rotn-test mod-director (ADR 0008)', () => {
         assert.equal(r.status, 3);
         assert.match(r.stdout, /cannot check: no pinned list/);
         fs.writeFileSync(t.list, `${sha(ESM_BYTES)}  ${ESM}\n`);
-        fs.rmSync(path.join(t.state, 'pack-files.list'));
-        assert.equal(check().status, 3);
+        fs.rmSync(path.join(t.state, 'pack-jars.sha256'));
+        r = check();
+        assert.equal(r.status, 3);
+        assert.match(r.stdout, /cannot check: no hashes of the pinned zip's jars/);
     });
 });
 
@@ -156,21 +186,45 @@ describe('build.sh at Done (sourced; a fake systemctl)', () => {
         assert.match(fs.readFileSync(path.join(t.state, 'mod-director.txt'), 'utf8'), /FAILED: 1 problem/);
     });
 
-    test('record_extra_mods hashes only the top-level jars the zip does not have', () => {
+    test('#347 review: hash_pack_jars hashes the zip\'s top-level jars only, from the zip\'s own file list', () => {
+        fs.rmSync(path.join(t.state, 'pack-jars.sha256'));
+        const r = buildFn('hash_pack_jars');
+        assert.equal(r.status, 0, r.stderr);
+        assert.equal(fs.readFileSync(path.join(t.state, 'pack-jars.sha256'), 'utf8'),
+            ['mods/!mod-director-launchwrapper-1.9.1.jar', 'mods/mowziesmobs-1.5.8.jar'].map((z) => `${sha(Buffer.from(z))}  ${z}`).join('\n') + '\n');
+    });
+
+    test('#347 review: an --extra-mod that would replace a jar of the pinned zip is refused before the start', () => {
+        fs.writeFileSync(path.join(t.server, 'mods/mowziesmobs-1.5.8.jar'), 'an upload with a zip jar\'s name');
+        const r = buildFn('record_extra_mods; echo survived');
+        assert.equal(r.status, 1);
+        assert.doesNotMatch(r.stdout, /survived/);
+        assert.equal(phase(), 'failed:extra-mod: mowziesmobs-1.5.8.jar would replace a jar of the pinned zip');
+        // The same bytes under the zip's name change nothing: not refused, and not recorded as an extra.
+        fs.writeFileSync(path.join(t.server, 'mods/mowziesmobs-1.5.8.jar'), 'mods/mowziesmobs-1.5.8.jar');
+        const same = buildFn('record_extra_mods; echo survived');
+        assert.match(same.stdout, /survived/, same.stderr);
+        assert.doesNotMatch(fs.readFileSync(path.join(t.state, 'extra-mods.sha256'), 'utf8'), /mowziesmobs/);
+    });
+
+    test('record_extra_mods hashes only the top-level jars the zip does not have (symlinks included)', () => {
         t.put('mods/extra-test.jar', Buffer.from('ours'));
+        fs.writeFileSync(path.join(t.root, 'linked-target.jar'), 'linked');
+        fs.symlinkSync(path.join(t.root, 'linked-target.jar'), path.join(t.server, 'mods/linked-extra.jar'));
         const r = buildFn('record_extra_mods');
         assert.equal(r.status, 0, r.stderr);
         // The pinned download is also outside the zip; before the first start it is not there yet. Here it is, so it is
         // recorded too, which is harmless: the pinned list is checked first, with its own hash.
         const rec = fs.readFileSync(path.join(t.state, 'extra-mods.sha256'), 'utf8');
         assert.match(rec, new RegExp(`^${sha(Buffer.from('ours'))}  mods/extra-test\\.jar$`, 'm'));
+        assert.match(rec, new RegExp(`^${sha(Buffer.from('linked'))}  mods/linked-extra\\.jar$`, 'm'));
         assert.doesNotMatch(rec, /mowziesmobs|memory_repo|1\.12\.2\/|musictriggers/);
     });
 
     test('main runs the check right after the first Done, before the whitelist and ready', () => {
         const src = fs.readFileSync(build, 'utf8');
         assert.match(src, /wait_for_done\n\n {2}phase mod-director\n {2}check_mod_director\n\n {2}phase whitelist/);
-        assert.match(src, /unzip -Z1 "\$INCOMING\/pack\.zip" > "\$STATE\/pack-files\.list"\n(.*\n)? {2}rm -f "\$INCOMING\/pack\.zip"/);
+        assert.match(src, /unzip -Z1 "\$INCOMING\/pack\.zip" > "\$STATE\/pack-files\.list"\n {2}hash_pack_jars\n(.*\n)? {2}rm -f "\$INCOMING\/pack\.zip"/);
         assert.match(src, /chown -R minecraft:minecraft "\$SERVER\/mods"\n {4}record_extra_mods/);
     });
 });

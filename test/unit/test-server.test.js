@@ -3,6 +3,7 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -120,9 +121,11 @@ function seed(st) {
 
 function decodeWriteFiles(userData) {
     const files = {};
-    const re = /- path: (\S+)\n\s+permissions: '(\d+)'\n\s+encoding: b64\n\s+content: (\S+)/g;
+    // gz+b64 (#347: plain base64 went over Hetzner's 32 KiB user-data limit); cloud-init's own decoding of the same
+    // user-data is checked in the next describe when cloud-init is installed.
+    const re = /- path: (\S+)\n\s+permissions: '(\d+)'\n\s+encoding: gz\+b64\n\s+content: (\S+)/g;
     let m;
-    while ((m = re.exec(userData))) files[m[1]] = { mode: m[2], content: Buffer.from(m[3], 'base64').toString('utf8') };
+    while ((m = re.exec(userData))) files[m[1]] = { mode: m[2], content: zlib.gunzipSync(Buffer.from(m[3], 'base64')).toString('utf8') };
     return files;
 }
 
@@ -144,6 +147,33 @@ describe('scripts', () => {
 });
 
 describe('render-user-data', () => {
+    // #347: the user-data is gz+b64 now (plain base64 went over Hetzner's 32 KiB). Where cloud-init is installed (the
+    // CX33 dev server: Ubuntu 26.04, as the test servers), its own schema check and its own write_files decoding must
+    // give back every file byte-for-byte.
+    const cloudInit = spawnSync('cloud-init', ['--version'], { encoding: 'utf8' }).status === 0;
+    test('cloud-init itself validates the user-data and decodes every gz+b64 file to the repo\'s bytes', { skip: !cloudInit && 'cloud-init is not installed here' }, () => {
+        const r = run(['render-user-data', '--name', 'mcr-test-ci']);
+        assert.equal(r.code, 0, r.stderr);
+        const f = path.join(tmp, 'user-data.yaml');
+        fs.writeFileSync(f, r.stdout);
+        const schema = spawnSync('cloud-init', ['schema', '-c', f], { encoding: 'utf8' });
+        assert.equal(schema.status, 0, schema.stdout + schema.stderr);
+        const py = spawnSync('python3', ['-I', '-c', `
+import hashlib, json, sys, yaml
+from cloudinit.config.cc_write_files import extract_contents, canonicalize_extraction
+doc = yaml.safe_load(open(sys.argv[1]))
+print(json.dumps({w['path']: hashlib.sha256(extract_contents(w['content'], canonicalize_extraction(w['encoding']))).hexdigest() for w in doc['write_files']}))
+`, f], { encoding: 'utf8' });
+        assert.equal(py.status, 0, py.stderr);
+        const got = JSON.parse(py.stdout);
+        const lf = (p) => crypto.createHash('sha256').update(fs.readFileSync(path.join(repo, p), 'utf8').replace(/\r/g, '')).digest('hex');
+        for (const [dest, src] of [['/usr/local/sbin/rotn-test-build', 'deploy/test-server/build.sh'], ['/usr/local/sbin/rotn-test', 'deploy/test-server/rotn-test.sh'],
+            ['/etc/systemd/system/rotn-server.service', 'deploy/test-server/rotn-server.service'], ['/etc/rotn-test/mod-director.sha256', 'deploy/test-server/mod-director.sha256']]) {
+            assert.equal(got[dest], lf(src), dest);
+        }
+        assert.ok(got['/etc/rotn-test/config.env'], 'the config too');
+    });
+
     test('embeds the remote scripts byte-for-byte (LF) and the pinned config', () => {
         const r = run(['render-user-data', '--name', 'mcr-test-unit']);
         assert.equal(r.code, 0, r.stderr);
@@ -494,8 +524,14 @@ describe('up / run / down', { skip: windowsShellSkip('up / run / down', '69 s') 
         assert.equal(run(['restart', '120', '--name', 'mcr-test-rs']).code, 0);
         assert.ok(sshCalls().some((c) => c.join(' ').endsWith('rotn-test restart --timeout 120')));
         const failed = run(['restart', '--name', 'mcr-test-rs'], { FAKE_SSH_RESTART_EXIT: '5' });
-        assert.notEqual(failed.code, 0);
+        assert.equal(failed.code, 5, 'the server\'s exit code passes through');
         assert.match(failed.stderr, /fake restart failure 5/);
+        assert.doesNotMatch(failed.stderr, /infra fault/);
+        // #347 review (ADR 0008): Mod Director's downloads fail the re-check after the restart: exit 125, an infra fault.
+        const md = run(['restart', '--name', 'mcr-test-rs'], { FAKE_SSH_RESTART_EXIT: '125' });
+        assert.equal(md.code, 125, md.all);
+        assert.match(md.stderr, /ERROR: after the restart, Mod Director's downloads fail the pinned check; the server is stopped/);
+        assert.match(md.stderr, /an infra fault \(the pinned Mod Director downloads\): exit 125/);
         // #324 review: whole numbers 30..900 with no leading zero, and one argument at most (like the other verbs).
         for (const bad of [['10'], ['901'], ['x'], ['0'], ['0300'], ['-300'], ['300', 'junk']]) {
             const u = run(['restart', ...bad, '--name', 'mcr-test-rs']);
@@ -1439,10 +1475,18 @@ describe('rotn-test restart (G4 #1): console stop, wait for the exit, start, wai
     // A fake systemctl (the server is active while <dir>/active exists) and a fake console sender (it records each line;
     // `stop` ends the server unless FAKE_STOP_IGNORED). FAKE_START_MODE: rotate (log4j rolls latest.log at startup and the
     // new one gets a Done line), append (the same file gets one more Done line), nodone (it starts but never says Done).
+    // ADR 0008 (#347): a restart re-runs the Mod Director check after its new Done, so the fake server has a zip jar,
+    // the pinned download, their hashes and the pinned list. FAKE_START_TAMPER: at the start, Mod Director installs
+    // other bytes for the pinned jar (jar) or one more jar (extra).
+    const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
     const setup = ({ active = true } = {}) => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-restart-'));
-        for (const d of ['server/logs', 'state', 'bin']) fs.mkdirSync(path.join(dir, d), { recursive: true });
+        for (const d of ['server/logs', 'server/mods', 'state', 'bin']) fs.mkdirSync(path.join(dir, d), { recursive: true });
         const D = fwd(dir);
+        fs.writeFileSync(path.join(dir, 'server/mods/zip-mod.jar'), 'zip jar');
+        fs.writeFileSync(path.join(dir, 'server/mods/esmtweaks-1.12.2-0.4.5.jar'), 'esm jar');
+        fs.writeFileSync(path.join(dir, 'state/pack-jars.sha256'), `${sha('zip jar')}  mods/zip-mod.jar\n`);
+        fs.writeFileSync(path.join(dir, 'mod-director.sha256'), `${sha('esm jar')}  mods/esmtweaks-1.12.2-0.4.5.jar\n`);
         fs.writeFileSync(path.join(dir, 'server', 'logs', 'latest.log'), `${DONE('11:00:00')}\nold line\n`);
         if (active) fs.writeFileSync(path.join(dir, 'active'), '');
         fs.writeFileSync(path.join(dir, 'state', 'phase'), 'ready\n');
@@ -1453,11 +1497,16 @@ case "$1" in
     echo "start $2" >> "${D}/systemctl.log"
     [[ -z \${FAKE_START_FAIL:-} ]] || { echo "Job for rotn-server.service failed." >&2; exit 1; }
     touch "${D}/active"
+    case "\${FAKE_START_TAMPER:-}" in
+      jar) echo 'other bytes' > "${D}/server/mods/esmtweaks-1.12.2-0.4.5.jar" ;;
+      extra) echo 'newer' > "${D}/server/mods/esmtweaks-1.12.2-0.4.6.jar" ;;
+    esac
     case "\${FAKE_START_MODE:-rotate}" in
       rotate) mv "${D}/server/logs/latest.log" "${D}/server/logs/2026-11-07-1.log"; printf '%s\\n' 'booting' '${DONE('12:10:00')}' > "${D}/server/logs/latest.log" ;;
       append) printf '%s\\n' '${DONE('12:10:00')}' >> "${D}/server/logs/latest.log" ;;
       nodone) printf '%s\\n' 'booting' >> "${D}/server/logs/latest.log" ;;
     esac ;;
+  stop) echo "stop $2" >> "${D}/systemctl.log"; rm -f "${D}/active" ;;
   *) exit 3 ;;
 esac
 `, { mode: 0o755 });
@@ -1469,14 +1518,16 @@ if [[ $1 == stop && -z \${FAKE_STOP_IGNORED:-} ]]; then rm -f "${D}/active"; fi
     };
     const restart = ({ dir, D }, args = [], extra = {}) => spawnSync(bash, [helper, 'restart', ...args], { encoding: 'utf8', env: { ...process.env,
         ROTN_TEST_SERVER_DIR: `${D}/server`, ROTN_TEST_REMOTE_STATE_DIR: `${D}/state`, ROTN_TEST_SYSTEMCTL: `${D}/bin/systemctl`,
-        ROTN_TEST_CONSOLE_SEND: `${D}/bin/send`, ROTN_TEST_POLL_S: '1', ...extra } });
+        ROTN_TEST_CONSOLE_SEND: `${D}/bin/send`, ROTN_TEST_POLL_S: '1', ROTN_TEST_MODDIR_LIST: `${D}/mod-director.sha256`, ...extra } });
+    const lastLine = (out) => out.trim().split('\n').at(-1);
     const read = (dir, f) => (fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), 'utf8') : '');
 
     test('the usual case: stop, the exit, the start, the rolled-over log\'s new Done line; phase ready', () => {
         const t = setup();
         const r = restart(t);
         assert.equal(r.status, 0, r.stderr);
-        assert.equal(r.stdout.trim(), `restarted: ${DONE('12:10:00')}`);
+        assert.equal(lastLine(r.stdout), `restarted: ${DONE('12:10:00')}`);
+        assert.match(r.stdout, /^mod-director: OK: 1 pinned download\(s\) match; 1 jars of the pinned zip match; 0 extra mod\(s\)$/m, 'the ADR 0008 re-check ran');
         assert.equal(read(t.dir, 'sent.log'), 'stop\n');
         assert.equal(read(t.dir, 'systemctl.log'), 'start rotn-server\n');
         assert.equal(read(t.dir, 'state/phase').trim(), 'ready');
@@ -1486,7 +1537,7 @@ if [[ $1 == stop && -z \${FAKE_STOP_IGNORED:-} ]]; then rm -f "${D}/active"; fi
         const t = setup();
         const r = restart(t, [], { FAKE_START_MODE: 'append' });
         assert.equal(r.status, 0, r.stderr);
-        assert.equal(r.stdout.trim(), `restarted: ${DONE('12:10:00')}`, 'the newest Done line, not the old one');
+        assert.equal(lastLine(r.stdout), `restarted: ${DONE('12:10:00')}`, 'the newest Done line, not the old one');
         const n = setup();
         const none = restart(n, ['--timeout', '2'], { FAKE_START_MODE: 'nodone' });
         assert.equal(none.status, 5, 'the old Done line in the same file is not a restart');
@@ -1528,6 +1579,21 @@ if [[ $1 == stop && -z \${FAKE_STOP_IGNORED:-} ]]; then rm -f "${D}/active"; fi
         assert.match(r.stderr, /rotn-test: 'systemctl start rotn-server' failed/);
         assert.equal(read(t.dir, 'state/phase').trim(), 'failed:restart: start failed');
         assert.equal(read(t.dir, 'sent.log'), 'stop\n', 'it had stopped first');
+    });
+
+    test('#347 review (ADR 0008): after the new Done, a Mod Director mismatch fails closed: server stopped, failed:mod-director, exit 125', () => {
+        for (const [tamper, problem] of [['jar', /^failed:mod-director: MISMATCH mods\/esmtweaks-1\.12\.2-0\.4\.5\.jar sha256 [0-9a-f]{64} != [0-9a-f]{64} \(pinned\)$/],
+            ['extra', /^failed:mod-director: EXTRA mods\/esmtweaks-1\.12\.2-0\.4\.6\.jar sha256 [0-9a-f]{64} \(not in the pinned zip or the pinned list\)$/]]) {
+            const t = setup();
+            const r = restart(t, [], { FAKE_START_TAMPER: tamper });
+            assert.equal(r.status, 125, `${tamper}: ${r.stdout} ${r.stderr}`);
+            assert.match(read(t.dir, 'state/phase').trim(), problem, tamper);
+            assert.equal(read(t.dir, 'systemctl.log'), 'start rotn-server\nstop rotn-server\n', `${tamper}: started, then stopped by the check`);
+            assert.match(r.stdout, /^mod-director: FAILED: 1 problem\(s\)$/m, 'the check\'s lines are printed');
+            assert.doesNotMatch(r.stdout, /^restarted: /m, 'never reported as restarted');
+            assert.match(r.stderr, /after the restart, Mod Director's downloads fail the pinned check \(ADR 0008\); the server is stopped/);
+            assert.match(read(t.dir, 'state/mod-director.txt'), /FAILED: 1 problem/);
+        }
     });
 });
 

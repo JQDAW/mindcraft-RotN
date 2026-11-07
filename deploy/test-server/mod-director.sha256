@@ -19,7 +19,10 @@
 # The list's line below is checked only if Mod Director keeps a copy on disk at that path: the server log says
 # "Loading config /opt/rotn/server/config/mod-director/file-director_requisites.bundle.json" right after loading
 # requisites.remote.json; no file listing of a server has confirmed the copy yet. If the file is absent, the check
-# says "not on disk (not checked)"; nothing on the test server ever fetches the URL for the check.
+# says "not on disk (not checked)"; nothing on the test server ever fetches the URL for the check. The next batch's
+# evidence README records which it was; if there is no copy, the list's line below is removed (#347 review).
+# The zip's own top-level jars are checked by full SHA-256 too (hashed by the build right after the unpack).
+# At every restart, `rotn-test restart` runs the same check after its new Done (exit 125 on a problem).
 #
 # Provenance (2026-11-07, read-only, from the CX33, no server):
 #   - the jar: GitHub's asset digest sha256:b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 (asset

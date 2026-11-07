@@ -15,9 +15,11 @@
 #                                        console `stop`, wait until rotn-server has exited, start it again, and wait
 #                                        for a NEW "Done" line; prints "restarted: <done line>". S: a positive whole
 #                                        number of seconds (default 300). Exit 2: usage; 4: it does not stop within
-#                                        S; 5: no new Done line within S (or it exits first); 6: the start failed.
+#                                        S; 5: no new Done line within S (or it exits first); 6: the start failed;
+#                                        125: after the new Done, Mod Director's downloads fail the pinned check
+#                                        (ADR 0008; phase failed:mod-director, the server stopped), as at first start.
 #   rotn-test mod-director               check what Mod Director downloaded against the pinned list (ADR 0008):
-#                                        exit 0 OK, 1 a problem, 3 cannot check; one line per file
+#                                        exit 0 OK, 1 a problem, 3 cannot check; one line per pinned file
 set -euo pipefail
 
 # The overrides (ROTN_TEST_SERVER_DIR, ROTN_TEST_REMOTE_STATE_DIR, ROTN_TEST_SYSTEMCTL, ROTN_TEST_CONSOLE_SEND,
@@ -42,6 +44,63 @@ log_inode() { stat -c %i "$LOG" 2>/dev/null || echo none; }
 
 prop() { awk -v k="$1" '{ sub(/\r$/, "") } index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' "$SERVER/server.properties" 2>/dev/null || true; }
 state() { tr -d '\n' < "$STATE/$1" 2>/dev/null || true; }
+
+# mod_director_check (ADR 0008). Mod Director (in the pinned zip) fetches a list from the pack's moving `stable`
+# branch at every start, then the jars it names, with no hash (mod-director.sha256 has the URLs); it installs them
+# as top-level jars in mods/ ("Installed mod file /opt/rotn/server/mods/esmtweaks-1.12.2-0.4.5.jar", every server
+# log of rounds 8 and 9). Run at each Done: build.sh at the first start, `restart` after its new Done. Only
+# TOP-LEVEL mods/*.jar (files or symlinks: ! -type d) are compared, each by its full SHA-256: a jar of the pinned
+# zip ($STATE/pack-jars.sha256, hashed by the build right after unpacking the verified zip), a pinned download
+# (/etc/rotn-test/mod-director.sha256; the binding check), or an --extra-mod this harness uploaded
+# ($STATE/extra-mods.sha256, hashed before the first start). Subfolders (mods/memory_repo/, mods/1.12.2/) are never
+# compared: Forge writes into them at run time. A pinned entry outside mods/ (the list's local copy) is checked
+# only if that file is on disk; nothing here fetches. Exit 0 OK, 1 a problem, 3 cannot check. Prints one line per
+# pinned or extra file (the zip's jars only as a count, or when one fails).
+mod_director_check() {
+  local list=${ROTN_TEST_MODDIR_LIST:-/etc/rotn-test/mod-director.sha256} packjars=$STATE/pack-jars.sha256 extras=$STATE/extra-mods.sha256
+  local problems=0 npinned=0 npack=0 nextra=0 f rel got
+  local -A known=()
+  md() { printf 'mod-director: %s\n' "$*"; }
+  top_jar() { [[ $1 =~ ^mods/[^/]+\.jar$ ]]; }
+  hash_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1 || true; }   # empty for a dangling symlink (never a silent exit)
+  [[ -r $list ]] || { md "FAILED: cannot check: no pinned list $list"; exit 3; }
+  [[ -s $packjars ]] || { md "FAILED: cannot check: no hashes of the pinned zip's jars $packjars"; exit 3; }
+  [[ -d $SERVER/mods ]] || { md "FAILED: cannot check: no $SERVER/mods"; exit 3; }
+  # check_sums FILE KIND: every "<sha256>  <path>" line of FILE must name a file whose full SHA-256 matches.
+  check_sums() {
+    local want rel got ok
+    while read -r want rel; do
+      [[ -z $want || $want == \#* ]] && continue
+      ok=1
+      [[ $want =~ ^[0-9a-f]{64}$ && -n $rel && $rel != /* && $rel != *..* && $rel != *" "* ]] || ok=0
+      [[ $rel == mods/* ]] && ! top_jar "$rel" && ok=0   # under mods/, only a top-level jar is compared
+      [[ $2 != pinned ]] && ! top_jar "$rel" && ok=0      # the zip's and the extra jars are top-level jars
+      (( ok )) || { md "FAILED: cannot check: a bad line in $1"; exit 3; }
+      known[$rel]=$2
+      if [[ ! -f $SERVER/$rel ]]; then
+        if top_jar "$rel"; then md "MISSING $rel ($2)"; problems=$(( problems + 1 ))
+        else md "$2 $rel not on disk: Mod Director kept no copy here (not checked)"; fi
+        continue
+      fi
+      got=$(hash_of "$SERVER/$rel")
+      if [[ $got == "$want" ]]; then [[ $2 == pack ]] || md "$2 $rel sha256 $got OK"
+      else md "MISMATCH $rel sha256 ${got:-unreadable} != $want ($2)"; problems=$(( problems + 1 )); fi
+      case $2 in pinned) npinned=$(( npinned + 1 )) ;; pack) npack=$(( npack + 1 )) ;; *) nextra=$(( nextra + 1 )) ;; esac
+    done < "$1"
+  }
+  check_sums "$list" pinned
+  check_sums "$packjars" pack
+  [[ -f $extras ]] && check_sums "$extras" extra-mod
+  while IFS= read -r -d '' f; do
+    rel=${f#"$SERVER"/}
+    [[ -n ${known[$rel]:-} ]] && continue
+    got=$(hash_of "$f")
+    md "EXTRA $rel sha256 ${got:-unreadable} (not in the pinned zip or the pinned list)"
+    problems=$(( problems + 1 ))
+  done < <(find "$SERVER/mods" -maxdepth 1 -name '*.jar' ! -type d -print0 | sort -z)
+  if (( problems )); then md "FAILED: $problems problem(s)"; exit 1; fi
+  md "OK: $npinned pinned download(s) match; $npack jars of the pinned zip match; $nextra extra mod(s)"
+}
 
 cmd=${1:-help}
 [[ $# -gt 0 ]] && shift
@@ -121,6 +180,9 @@ case $cmd in
     echo "mem_total_mb=$(awk '/MemTotal/ { printf "%d", $2 / 1024 }' /proc/meminfo)"
     echo "cloud_init_schema=$(cloud-init schema --system > /dev/null 2>&1 && echo valid || echo invalid)"
     ;;
+  mod-director)
+    mod_director_check
+    ;;
   restart)
     # [--timeout S], S a positive whole number with no leading zero (#324 review: no 0, no octal); nothing else.
     restart_usage() { echo "usage: rotn-test restart [--timeout S] (S: whole seconds, 1 or more)" >&2; exit 2; }
@@ -157,69 +219,21 @@ case $cmd in
       if (( waited >= timeout )); then echo "failed:restart: no Done in ${timeout}s" > "$STATE/phase"; echo "rotn-test: no new Done line ${timeout}s after the start" >&2; exit 5; fi
       sleep "$poll"; waited=$(( waited + poll ))
     done
+    # 3. ADR 0008: Mod Director ran again at this start; the same check as at the first start (build.sh), fail closed.
+    rc=0
+    md_out=$(mod_director_check) || rc=$?
+    printf '%s\n' "$md_out" | tee "$STATE/mod-director.txt"
+    if (( rc )); then
+      $SYSTEMCTL stop rotn-server || true
+      echo "failed:mod-director: $(grep -m1 -E '^mod-director: (MISMATCH|MISSING|EXTRA|FAILED)' <<< "$md_out" | sed 's/^mod-director: //')" > "$STATE/phase"
+      echo "rotn-test: after the restart, Mod Director's downloads fail the pinned check (ADR 0008); the server is stopped" >&2
+      exit 125
+    fi
     echo ready > "$STATE/phase"
     echo "restarted: $(grep -E "$DONE_REGEX" "$LOG" 2>/dev/null | tail -n 1)"   # the newest Done line
     ;;
-  mod-director)
-    # ADR 0008. Mod Director (in the pinned zip) fetches a list from the pack's moving `stable` branch at every
-    # start, then the jars it names, with no hash (mod-director.sha256 has the URLs); it installs them as top-level
-    # jars in mods/ ("Installed mod file /opt/rotn/server/mods/esmtweaks-1.12.2-0.4.5.jar", every server log of
-    # rounds 8 and 9). Run at each Done (build.sh; restarts too). Only TOP-LEVEL mods/*.jar are compared: each must
-    # be a top-level jar of the pinned zip ($STATE/pack-files.list, written by the build from the verified zip), a
-    # pinned download with its full SHA-256 (/etc/rotn-test/mod-director.sha256; the binding check), or an
-    # --extra-mod this harness uploaded ($STATE/extra-mods.sha256, hashed before the first start). Subfolders
-    # (mods/memory_repo/, mods/1.12.2/) are never compared: Forge writes into them at run time. A pinned entry
-    # outside mods/ (the list's local copy) is checked only if that file is on disk; this helper never fetches.
-    list=${ROTN_TEST_MODDIR_LIST:-/etc/rotn-test/mod-director.sha256}
-    packlist=$STATE/pack-files.list
-    extras=$STATE/extra-mods.sha256
-    md() { printf 'mod-director: %s\n' "$*"; }
-    top_jar() { [[ $1 =~ ^mods/[^/]+\.jar$ ]]; }
-    [[ -r $list ]] || { md "FAILED: cannot check: no pinned list $list"; exit 3; }
-    [[ -s $packlist ]] || { md "FAILED: cannot check: no pack file list $packlist"; exit 3; }
-    [[ -d $SERVER/mods ]] || { md "FAILED: cannot check: no $SERVER/mods"; exit 3; }
-    declare -A known=()
-    problems=0 npinned=0 npack=0 nextra=0
-    # check_sums FILE KIND: every "<sha256>  <path>" line of FILE must name a file whose full SHA-256 matches.
-    check_sums() {
-      local want rel got ok
-      while read -r want rel; do
-        [[ -z $want || $want == \#* ]] && continue
-        ok=1
-        [[ $want =~ ^[0-9a-f]{64}$ && -n $rel && $rel != /* && $rel != *..* && $rel != *" "* ]] || ok=0
-        [[ $rel == mods/* ]] && ! top_jar "$rel" && ok=0   # under mods/, only a top-level jar can be pinned
-        (( ok )) || { md "FAILED: cannot check: a bad line in $1"; exit 3; }
-        known[$rel]=$2
-        if [[ ! -f $SERVER/$rel ]]; then
-          if top_jar "$rel"; then md "MISSING $rel ($2)"; problems=$(( problems + 1 ))
-          else md "$2 $rel not on disk: Mod Director kept no copy here (not checked)"; fi
-          continue
-        fi
-        got=$(sha256sum "$SERVER/$rel" | cut -d' ' -f1)
-        if [[ $got == "$want" ]]; then md "$2 $rel sha256 $got OK"
-        else md "MISMATCH $rel sha256 $got != $want ($2)"; problems=$(( problems + 1 )); fi
-        if [[ $2 == pinned ]]; then npinned=$(( npinned + 1 )); else nextra=$(( nextra + 1 )); fi
-      done < "$1"
-    }
-    check_sums "$list" pinned
-    [[ -f $extras ]] && check_sums "$extras" extra-mod
-    while IFS= read -r rel; do
-      top_jar "$rel" || continue
-      [[ -n ${known[$rel]:-} ]] || known[$rel]=pack
-      npack=$(( npack + 1 ))
-      [[ -f $SERVER/$rel ]] || { md "MISSING $rel (a top-level jar of the pinned zip)"; problems=$(( problems + 1 )); }
-    done < "$packlist"
-    while IFS= read -r -d '' f; do
-      rel=${f#"$SERVER"/}
-      [[ -n ${known[$rel]:-} ]] && continue
-      md "EXTRA $rel sha256 $(sha256sum "$f" | cut -d' ' -f1) (not in the pinned zip or the pinned list)"
-      problems=$(( problems + 1 ))
-    done < <(find "$SERVER/mods" -maxdepth 1 -type f -name '*.jar' -print0 | sort -z)
-    if (( problems )); then md "FAILED: $problems problem(s)"; exit 1; fi
-    md "OK: $npinned pinned download(s) match; $npack top-level jars of the pinned zip present; $nextra extra mod(s)"
-    ;;
   *)
-    sed -n '2,20p' "$0"
+    sed -n '2,22p' "$0"
     [[ $cmd == help ]] || exit 2
     ;;
 esac
