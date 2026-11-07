@@ -14,7 +14,8 @@ Updated: 2026-11-07T14:11Z (from `date -u`)
 - **Tests (`fall_safety.test.js`, 1 new):** checks that a shell is a tree part, a leaf on a shell is not reachable from the ground, a walk never breaks a shell, standing on one is standing on a tree, and collecting one goes to `fellTree` with no plain dig and no `collect()`.
   - **On develop it fails:** "a shell is part of a tree", false.
   - With the fix: `fall_safety`, `fell_tree`, `collect_sticks`, `collect_rotn`, `axe_chop` and `stand_on`, 89/89. `update_loop`, `quiet_reflexes` and `shelter`, 45/45. Lint: no new errors (skills.js 20 before and after; the other 3 files 0).
-- **Request (to rotn-data, via the lead):** confirm from the Dynamic Trees jar that breaking `dynamictrees:trunkshell` fells the tree (`BlockTrunkShell` forwarding the break to the thick branch inside). The change is safe either way: a shell is only ever cut through `fellTree`, which cuts the trunk's branch.
+- **Confirmed by rotn-data #332 (from the jar):** breaking a shell passes the break to the thick trunk next to it (normal felling), and the shell drops nothing. A shell with no trunk next to it is air on the server (`isAir`).
+- **Follow-up from #332:** `fallSafe` now never steps onto a shell (`exclusionAreasStep`). A live shell would put the bot up a tree, and a leftover one is air on the server. The test gains that check: a step onto a leftover shell is excluded, and a step on dirt is not. It fails before the change. After it: the 10 related files, 149/149. Lint: 0 in `fall_safety.js` and its test.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 

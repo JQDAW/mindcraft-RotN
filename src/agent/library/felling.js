@@ -13,8 +13,10 @@ export const isTreeLeaves = (b) => !!b && DT.test(b.name) && /leaves/.test(b.nam
 /**
  * A thick trunk's shell (dynamictrees:trunkshell, G3 round 9 B): the blocks around a thick branch.
  * Not a branch to the plan (treeBase finds the branch inside), but part of the tree: it goes with
- * the tree, so it is never ground under a leaf or the bot, never broken on a walk, and collecting
- * one fells the tree the safe way (skills.fellTree).
+ * the tree, so it is never ground under a leaf or the bot, never broken or stood on by a walk, and
+ * collecting one fells the tree the safe way (skills.fellTree). rotn-data #332 (from the jar):
+ * breaking a shell passes the break to the thick trunk next to it (normal felling) and the shell
+ * drops nothing; a shell with no trunk next to it is air on the server.
  */
 export const isTrunkShell = (b) => !!b && DT.test(b.name) && /trunkshell/.test(b.name);
 const isCanopy = (b) => isBranch(b) || isTreeLeaves(b);

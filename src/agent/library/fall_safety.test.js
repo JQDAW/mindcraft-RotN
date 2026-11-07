@@ -279,6 +279,11 @@ test('round 9 B: a thick trunk\'s shell (dynamictrees:trunkshell) is a tree part
     assert.equal(isTreePart(shell), true, 'a shell is part of a tree');
     assert.equal(leafFromGround(bot, bot.blockAt(at(7, 66))), false, 'a leaf on a shell is not reachable from the ground');
     assert.equal(fallSafe(new pf.Movements(bot)).safeToBreak(shell), false, 'no walk breaks a shell');
+    // rotn-data #332: a shell with no trunk next to it is air on the server (isAir), so no walk
+    // stands on any shell: on a live one it would be up a tree, on a leftover one it would fall.
+    const m = fallSafe(new pf.Movements(bot));
+    assert.ok(m.exclusionStep(bot.blockAt(at(9, 67))) >= 100, 'never a step onto a shell (here one with no trunk)');
+    assert.equal(m.exclusionStep(bot.blockAt(at(1, 64))), 0, 'a step on dirt');
     bot.entity.position = at(7, 66).offset(0.5, 0, 0.5);
     bot.world.set('7,66,0', 'air');
     assert.equal(standsOnTree(bot), true, 'standing on a shell is standing on a tree');

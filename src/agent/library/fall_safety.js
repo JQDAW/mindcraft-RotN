@@ -142,6 +142,10 @@ export function fallSafe(movements) {
     if (!movements || movements.rotnFallSafe) return movements;
     movements.maxDropDown = PATHFINDER_MAX_DROP_DOWN;
     movements.exclusionAreasBreak.push((b) => (isBranch(b) || isTrunkShell(b) ? NEVER : 0));
+    // rotn-data #332: a thick trunk's shell with no trunk next to it is air on the server (isAir),
+    // though the bot sees a block: never stand on one (on a live one the bot is up a tree).
+    const bot = movements.bot;
+    if (bot) movements.exclusionAreasStep.push((b) => (b?.position && isTrunkShell(blockAt(bot, offset(b.position, -1))) ? NEVER : 0));
     liquidAndHazardSafe(movements);
     movements.rotnFallSafe = true;
     return movements;
