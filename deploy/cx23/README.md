@@ -10,7 +10,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
 | `mindcraft-rotn@.service` | `/etc/systemd/system/` | The unit template, one instance per bot (`mindcraft-rotn@<bot>`). |
 | `check-env-names.sh` | `/usr/local/lib/mindcraft-rotn/check-env-names` | First `ExecStartPre`, **as root** (`+`; the env file is `root:root` 0600): only allowlisted variable names in the env file. |
 | `check-env.sh`, `check-env.mjs` | `/usr/local/lib/mindcraft-rotn/check-env`, `check-env.mjs` | `ExecStartPre`: refuses to start a bot on an unsafe environment. |
-| `mindcraft-rotn-ctl.sh` | `/usr/local/sbin/mindcraft-rotn-ctl` | The only command `deploy` may run with sudo: start/stop/restart/status of one bot unit. |
+| `mindcraft-rotn-ctl.sh` | `/usr/local/sbin/mindcraft-rotn-ctl` | The only command `deploy` may run with sudo: start/stop/restart/status of one bot unit, and the read-only `journal BOT [--since TIME]` and `metrics BOT` for the G4 scenarios (`test/scenarios/g4/PLAN.md`). |
 | `bot.env.example` | `/etc/mindcraft-rotn/<bot>.env` (via `add-bot`) | Per-bot settings: token-cache folder, OpenRouter key placeholder, profile, ports. |
 | `deploy.sh` | (run as `deploy` from a copy) | Tag-based deploy, automatic rollback on a failed health check, manual rollback. |
 
@@ -116,7 +116,7 @@ bash deploy.sh status
 - **Restarts.**
   - `Restart=always` with `RestartPreventExitStatus=0 3`: exit 0 (requested stop) and exit 3 (fatal: mod rejection, ban, not whitelisted, auth needs a human) are never restarted. Anything else is.
   - `StartLimitBurst=6` per 10 min stops crash loops.
-- **Narrow sudo.** `deploy` may run only `mindcraft-rotn-ctl` without a password. The wrapper's `systemctl` and `/etc` paths are fixed, and it accepts exactly one action and one bot name matching `^[a-z0-9][a-z0-9-]{0,31}$` with an env file. A sudoers wildcard on `systemctl` would also have matched other units.
+- **Narrow sudo.** `deploy` may run only `mindcraft-rotn-ctl` without a password. The wrapper's `systemctl` and `/etc` paths are fixed, and it accepts exactly one action and one bot name matching `^[a-z0-9][a-z0-9-]{0,31}$` with an env file. The read-only `journal` (journalctl on that unit only, UTC, at most 20000 lines; `--since` only as `YYYY-MM-DD HH:MM[:SS]`, `YYYY-MM-DDTHH:MM[:SS][Z]` or `@EPOCH`) and `metrics` (`systemctl show` of MemoryCurrent, MemoryPeak, NRestarts and ActiveState only) take nothing else; the sudoers rule is unchanged. A sudoers wildcard on `systemctl` would also have matched other units.
 
 ## NodeSource key
 
