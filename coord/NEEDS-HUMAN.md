@@ -11,7 +11,6 @@ Agents add items here when they need something only the human can do. The human 
 - [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key, which is under Done): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
 - [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
 - [ ] **Whitelist the bot** on the live server when the lead asks. This comes after G4, not G3: G4 runs only against disposable test servers, and the first live join follows the proven ready-to-try list (lead, 2026-11-07, aligned with `test/scenarios/g4/PLAN.md`).
-- [x] **G4: decide how the dev server drives the CX23**: done by the human on 2026-11-07, option (b). A dedicated key from the CX33 to `deploy@cx23`, restricted with `from=` (the CX33), `restrict` and a forced command, `/usr/local/sbin/mindcraft-rotn-ssh-gate`, which allows only `status`, `start` and `stop` with a valid bot name through `sudo -n mindcraft-rotn-ctl`. See ADR 0009.
 - [ ] **G4: extend the SSH gate for the read-only `journal` and `metrics` verbs** (later; ADR 0009). harness-ops will put the gate script in `deploy/cx23/` for review; you install the reviewed version on the CX23.
 - [ ] **G4: a trusted player for the control and task checks** (later). Follow, come, one trusted task, and a task kept across a service restart need a real player who is a task giver. Choose one:
   - about 10 minutes of you playing as JQDAW on a disposable test server, at a time harness-ops arranges;
@@ -41,6 +40,7 @@ Agents add items here when they need something only the human can do. The human 
 
 ## Done
 
+- [x] **G4: decide how the dev server drives the CX23**: done by the human on 2026-11-07, option (b). A dedicated key from the CX33 to `deploy@cx23`, restricted with `from=` (the CX33), `restrict` and a forced command, `/usr/local/sbin/mindcraft-rotn-ssh-gate`, which allows only `status`, `start` and `stop` with a valid bot name through `sudo -n mindcraft-rotn-ctl`. See ADR 0009.
 - [x] **CX23: swap the Orca targets** (done by the human, 2026-11-03 about 02:00 UTC, as they reported in the lead session; `orca environment list` on this PC shows only `cx23 deploy`). The deploy user has its own Orca environment with a folder workspace at /tmp; the root target is removed. Root SSH stays enabled on the server, key only, for the human.
 - [x] **CX23: reboot for the pending kernel** (done by the human, 2026-11-03 about 01:50 UTC: updated and rebooted). GO 3 evidence shows kernel 7.0.0-42-generic, Ubuntu 26.04.1 (test/evidence/cx23/post-bootstrap-20261103/check.txt:16).
 - [x] **OpenRouter test key (USD 5 limit) for G3 batches:** stored by the human as the Windows user environment variable `OPENROUTER_API_KEY` (2026-11-03 about 02:50 UTC; the lead checked only that it is set). Orca terminals see it after an Orca restart, scheduled by the lead before the first G3 batch; if Orca filters it, the human runs the batch command in their own PowerShell. Model for all LLM runs: `@preset/glm-5-3-flash-cheap-reliable`.

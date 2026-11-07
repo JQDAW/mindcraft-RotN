@@ -50,6 +50,7 @@ Need a change in a file you do not own? Write it in your `coord/STATUS-<agent>.m
 - No `--dangerously-skip-permissions` anywhere.
 - The live RotN server is the human's. Agents never get op, console or RCON on it. Tests run on the disposable CPX42 test server only.
 - Hetzner test servers must be deleted (not just powered off) after each test batch, and must have a delete-after watchdog (default 8 hours).
+- The CX23 bot host is production (though not the live server). Its SSH key on the CX33 (ADR 0009) is used only through `ssh` under a written lead GO, never read or copied; a bot `start` also needs the human's GO confirming the bot's env file names a test server.
 
 ## Useful facts about this codebase
 
