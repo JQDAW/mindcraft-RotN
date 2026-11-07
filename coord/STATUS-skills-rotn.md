@@ -19,7 +19,7 @@ Updated: 2026-11-07T03:11Z (from `date -u`)
   - The 19 test files that use collecting (241/241) and `test/unit/g3-untrusted` plus `mindcraft-driver` (27 pass, 1 skipped) all pass.
   - `fall_safety.test.js`'s sticks-text test is updated to the new wording.
   - Lint: `skills.js` 20 errors, as on develop; the other touched files 0.
-- **PR:** opened during the freeze; it merges after round 8.
+- **PR:** #311, opened during the freeze; it merges after round 8.
 
 ## The goToGoal test is no longer flaky under load (branch `agent/skills-rotn/goto-test-load`, 2026-11-07T01:03Z by `date -u`)
 
