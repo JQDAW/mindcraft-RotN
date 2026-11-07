@@ -6,7 +6,17 @@ Agents add items here when they need something only the human can do. The human 
 
 - [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key, which is under Done): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
 - [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
-- [ ] **Whitelist the bot** on the live server when the lead asks (after G3).
+- [ ] **Whitelist the bot** on the live server when the lead asks. This comes after G4, not G3: G4 runs only against disposable test servers, and the first live join follows the proven ready-to-try list (lead, 2026-11-07, aligned with `test/scenarios/g4/PLAN.md`).
+- [ ] **G4: decide how the dev server drives the CX23** (lead, 2026-11-07). This is for later and is not needed before G3. G4's service scenarios run up to 2 hours unattended, so they need a scripted channel from the CX33 to `deploy@cx23`. Today agents never have shell access to the bot host. Options:
+  - (a) an Orca terminal on a `cx23-deploy` target, driven by `orca terminal send/read`;
+  - (b) a dedicated SSH key from the CX33, usable only as `deploy`, whose sudo rule already limits it to `mindcraft-rotn-ctl`.
+
+  Both give agents scripted access to the production bot host, so this is your decision. The lead will write an ADR for the option you pick.
+- [ ] **G4: a trusted player for the control and task checks** (later). Follow, come, one trusted task, and a task kept across a service restart need a real player who is a task giver. Choose one:
+  - about 10 minutes of you playing as JQDAW on a disposable test server, at a time harness-ops arranges;
+  - a second, scripted account that you add to `task_givers` (your decision).
+- [ ] **G4: a second Minecraft account** (later) for the "second bot profile" smoke test. The profile name must equal the account name, and one account can't be online twice. It needs its own device-code login, done by you.
+- [ ] **G4: the CX23's IPv4 for each service batch** (later): give it in each GO message for `--allow-from`. It never goes in the repo.
 - [ ] **Move the lead and the four dev agents to the CX33 dev server** (the human's plan, 2026-11-06; the human corrected the type from CPX32 to CX33 on 2026-11-07; after G3 smoke round 7; it ends the RAM pressure on the Windows PC). Every step marked *you* involves a secret or an account, so no agent does it.
   1. **Before** (the lead confirms): every agent has pushed its branches and STATUS handoff; no Hetzner test server exists; no batch is running.
   2. **Base system** (you): Node.js 22 LTS (same major as here, ADR 0002), git, build tools for native modules (`build-essential`, `python3`), `gh`, `hcloud`, `jq`, `bash`, `curl`, `unzip`, `openssh-client` (`ssh`, `ssh-keygen`, `scp`), and a JDK 8 (rotn-data uses `javap` to cite pack bytecode; `tools/dumper/build.sh` needs JDK 8).
