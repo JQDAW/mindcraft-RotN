@@ -1,6 +1,12 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:22Z (from `date -u`)
+Updated: 2026-11-07T04:58Z (from `date -u`)
+
+## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
+
+- **Task (lead, 2026-11-07, the last change before the round 9 freeze):** rotn-data #319's `leaves-sticks` rule is on develop, so the temporary `LEAVES_STICKS` fallback and `isPlainStick` come out of `rotn_sources.js`. The file is now identical to its version before #315 (`bffe1d59`). `worldSources('stick')` returns `fell-tree`, `leaves-sticks` and `deadbush-sticks`.
+- **Test names (`collect_sticks.test.js`):** no title claims "never climbs" or "no climbing" any more. The fake's walks end on the ground (y 64), and a comment there says that a real walk never climbs a tree is proven in `fall_safety.test.js`. The leaves-source test now checks rotn-data's rule id, and that there is exactly one leaves rule.
+- **Tests:** the 19 collecting test files, 248/248. Lint: 0 in both files.
 
 ## Task 3: "shelter_blocks started" before an earlier step's "done" is log order, not a step run out of order (2026-11-07T04:14Z by `date -u`)
 

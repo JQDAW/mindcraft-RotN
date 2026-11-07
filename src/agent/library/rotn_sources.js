@@ -51,27 +51,6 @@ export function itemVariants(name) {
 export function worldSources(name) {
     const result = lookup(name);
     if (!result) return [];
-    const sources = rulesOf(result, name);
-    if (isPlainStick(name) && !sources.some(s => s.blocks.some(b => /leaves/.test(b)))) sources.push({ ...LEAVES_STICKS, blocks: [...LEAVES_STICKS.blocks] });
-    return sources;
-}
-
-/**
- * TEMPORARY, until rotn-data's leaves-sticks rule lands (lead, Request 17; rotn-data opens it after
- * this PR merges); remove it then. It stands in only while no rotn-data rule names a leaves block.
- * Evidence (rotn-data #312, correcting its #256 claim): Pyrotech's HarvestDropsEventHandler$Sticks is
- * on (config/pyrotech/core.cfg line 8, DROP_STICKS_FROM_LEAVES=true) and adds 1 stick with chance
- * 0.5 when a player breaks a block whose pick-block item is in ore treeLeaves; Dynamic Trees leaves
- * pick their family's vanilla leaves. The blocks and the yield are those of rotn-data's ready rule.
- */
-const LEAVES_STICKS = {
-    blocks: ['dynamictrees:leaves0', 'dynamictrees:leaves1', 'leaves', 'leaves2'], tool: null, preferredTool: null, unlessTool: null,
-    id: 'leaves-fallback', count: 1, countRange: { min: 0, max: 1, mean: 0.5 },
-    text: 'Break leaves you can reach from the ground, by hand (not with shears): each drops a stick half the time.',
-};
-const isPlainStick = (name) => { const p = parseName(name); return p?.name === 'stick' && (p.meta == null || p.meta === 0); };
-
-function rulesOf(result, name) {
     // A bare name ("pyrotech:rock") means every member of the rule's ore; an explicit variant
     // ("pyrotech:rock:0") only the blocks that drop that variant (#145 review nit).
     const bare = parseName(name)?.meta == null;
