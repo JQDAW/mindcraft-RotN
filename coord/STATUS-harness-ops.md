@@ -1,6 +1,6 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (04:51 UTC, from `date -u`)
+Updated: 2026-11-07 (05:07 UTC, from `date -u`)
 
 ## Now: `g4-death-report` is built offline (this PR, for review); its T rehearsal run plan goes to the lead. No paid run without the human's GO.
 
@@ -16,7 +16,8 @@ Updated: 2026-11-07 (04:51 UTC, from `date -u`)
   - `agenda_resumed`: (c)'s agenda counter rises within 5 min;
   - `no_cheat`.
 - **The wiring** (lead's rule: test-server G4 runs are rehearsals):
-  - `kill <name>` (no selector) and the read-only `health` objective are allowed for this scenario alone (`SCENARIO_CONSOLE_EXTRA`, `consoleAllowFor`; G3 scenarios still cannot kill);
+  - `kill` only of this run's bot by its exact name (built from the run's parameters; `kill JQDAW`, any other name and every selector are refused; #320 review), and the read-only `health` objective, for this scenario alone (`SCENARIO_CONSOLE_EXTRA`, `consoleAllowFor`; G3 scenarios still cannot kill);
+  - #320 review fixes: `loss_reported` is "not reached" when the server counts no loss (all kept) or an after-respawn count is unread; no kill without our driver's start event;
   - `g3Policy` marks every G4 run not-gate;
   - `batch.mjs --gate` refuses a G4 scenario;
   - G4 results need a vouching `batch.json` and are never accepted in a gate claim;

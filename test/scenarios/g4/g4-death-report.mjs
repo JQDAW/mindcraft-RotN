@@ -255,7 +255,10 @@ export default {
             unread.length ? `no count from the server for ${unread.join(', ')}` : `the server counts ${sum(before)} of the loss items (at least ${p.minHeld} needed): ${Object.entries(before).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ')}`);
         if (sum(before) < p.minHeld || unread.length) return notReached(`the bot held ${sum(before)} of the loss items after ${p.maxWaitHeldMin} min`, 'died');
 
-        // 3. the forced death (the test server's console; this scenario's stimulus only)
+        // 3. the forced death (the test server's console; this scenario's stimulus only). Never without our own driver's
+        // start event: the driver refuses a profile whose name is not this run's bot (checkProfile), so a wrong `bot`
+        // parameter (for example a human's name) starts no agent, and nothing is killed (#320 review).
+        if (!start) return notReached('the driver reported no mindcraft_start event: no agent of this run to kill', 'died');
         const first = await scores();
         const deathsBefore = first.sc?.g4d_d ?? 0;
         const chatBefore = chatLines(s.sinceMarker(), name).length;
@@ -278,6 +281,8 @@ export default {
             healthSeen.push({ time: r.time, health: h, deaths: d });
             if (d !== null && d > deathsBefore && deathAt === null) deathAt = r.time;
             if (h !== null && h <= 0) sawZero = true;
+            // respawnTime is the server time of the FIRST poll that sees health > 0 after the confirmed death (so the
+            // respawn itself happened at or before it; respawned's seconds are an upper bound).
             if (deathAt !== null && h !== null && h > 0 && (sawZero || healthSeen.length > 1)) { respawnTime = r.time; respawnAt = clock.now(); break; }
             await clock.sleep(p.pollMs);
         }
@@ -297,13 +302,23 @@ export default {
 
         // 5. what the bot still holds, so the server's loss per item
         let lossServer = null;
+        let lossNotReached = null;   // why the loss cannot be judged (then loss_reported is "not reached")
         let v0 = null;
         if (respawnTime !== null) {
             await clock.sleep(p.afterRespawnS * MS);
             const afterCounts = await countAll();
-            lossServer = Object.fromEntries(items.map((it) => [it, (before[it] ?? 0) - (afterCounts[it] ?? 0)]));
             ctx.note('heldAfter', afterCounts);
-            ctx.note('lossServer', lossServer);
+            // An unread count is never read as "none left", so never as a full loss (#320 review 3): as for had_items.
+            const unreadAfter = items.filter((it) => afterCounts[it] === null);
+            if (unreadAfter.length) lossNotReached = `no count from the server after the respawn for ${unreadAfter.join(', ')}`;
+            else {
+                lossServer = Object.fromEntries(items.map((it) => [it, before[it] - afterCounts[it]]));
+                ctx.note('lossServer', lossServer);
+                // Nothing lost by the server's count (everything held was kept: main hand, off hand, armor, baubles):
+                // a report could only say "lost nothing", which proves nothing about reporting a loss (#320 review 2).
+                const total = Object.values(lossServer).reduce((a, b) => a + Math.max(0, b), 0);
+                if (total <= 0) lossNotReached = `the server counts no loss (everything held was kept: ${Object.entries(afterCounts).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(', ') || 'nothing'})`;
+            }
             v0 = counterValue((await scores()).sc);
         }
 
@@ -329,11 +344,11 @@ export default {
             const reports = chat.map((c) => ({ ...c, report: parseDeathReport(c.text) })).filter((c) => c.report);
             const inWindow = reports.filter((c) => secondsBetween(respawnTime, c.time) <= p.reportS && secondsBetween(killTime, c.time) >= secondsBetween(killTime, respawnTime));
             const rep = inWindow[0] ?? null;
-            const cons = rep ? lossConsistency(lossServer, rep.report, { tolAbs: p.lossTolAbs, tolRel: p.lossTolRel }) : null;
+            const cons = rep && lossServer ? lossConsistency(lossServer, rep.report, { tolAbs: p.lossTolAbs, tolRel: p.lossTolRel }) : null;
             ctx.note('deathReports', reports.map((c) => ({ time: c.time, text: c.text })));
             ctx.note('lossConsistency', cons);
-            ctx.check('loss_reported', rep !== null && reports.length === 1 && cons.ok,
-                !rep ? (reports.length ? `a death report came, but not within ${p.reportS}s of the respawn: "${reports[0].text}" at ${reports[0].time}` : `no death report line in chat (${chat.length} lines after the kill)`)
+            ctx.check('loss_reported', lossNotReached === null && rep !== null && reports.length === 1 && cons.ok,
+                lossNotReached ? `not reached: ${lossNotReached}` : !rep ? (reports.length ? `a death report came, but not within ${p.reportS}s of the respawn: "${reports[0].text}" at ${reports[0].time}` : `no death report line in chat (${chat.length} lines after the kill)`)
                     : reports.length > 1 ? `${reports.length} death report lines for one death: ${reports.map((c) => `${c.time} "${c.text}"`).slice(0, 3).join('; ')}`
                         : !cons.ok ? `the report "${rep.text}" does not match the server's count: ${cons.problems.slice(0, 4).join('; ')}`
                             : `"${rep.text}" at ${rep.time}, ${secondsBetween(respawnTime, rep.time)}s after the respawn; consistent with the server's count (${Object.entries(lossServer).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${k}`).join(', ')})`);

@@ -96,23 +96,30 @@ export const G3_CONSOLE_ALLOW = [
 ];
 
 /**
- * Console commands one scenario adds to G3_CONSOLE_ALLOW, and only that scenario (consoleAllowFor).
+ * Console commands one scenario adds to G3_CONSOLE_ALLOW, and only that scenario (consoleAllowFor), built from
+ * the run's effective parameters.
  * g4-death-report (lead decision, 2026-11-07): `kill <bot>` is the scenario's stimulus, a forced death, on
  * the disposable TEST server only (never on the live server, never to fake a pass; the same rule as the P1
- * setup commands). A plain player name only: no selector (@a, @e, ...), so it can kill nothing else.
- * Test-server only by construction: the console goes only through test-server.sh, which reaches only the
- * labelled servers it created itself, with their own per-batch keys; the harness holds no address, key or
- * RCON for the live server. With it, the read-only `health` objective that shows the respawn (0, then > 0).
+ * setup commands). Only THIS run's bot, by its exact name (#320 review: the human may be on that server as
+ * JQDAW, so `kill JQDAW` or any other name, and every selector (@a, @e, ...), is refused). No valid bot name
+ * in the parameters: no kill at all. Test-server only by construction: the console goes only through
+ * test-server.sh, which reaches only the labelled servers it created itself, with their own per-batch keys;
+ * the harness holds no address, key or RCON for the live server. With it, the read-only `health` objective
+ * that shows the respawn (0, then > 0).
  */
 export const SCENARIO_CONSOLE_EXTRA = Object.freeze({
-    'g4-death-report': Object.freeze([
-        new RegExp(`^kill ${NAME}$`),
+    'g4-death-report': (params) => [
+        ...(/^[A-Za-z0-9_]{3,16}$/.test(String(params?.bot ?? '')) ? [new RegExp(`^kill ${esc(String(params.bot))}$`)] : []),
         /^scoreboard objectives add [A-Za-z0-9_]{1,16} health$/,
-    ]),
+    ],
 });
 
-/** The console allowlist for a scenario: G3's, plus what SCENARIO_CONSOLE_EXTRA gives that scenario alone. */
-export const consoleAllowFor = (scenario) => [...G3_CONSOLE_ALLOW, ...(SCENARIO_CONSOLE_EXTRA[scenario?.id] ?? [])];
+/**
+ * The console allowlist for a scenario: G3's, plus what SCENARIO_CONSOLE_EXTRA gives that scenario alone for
+ * these parameters. params: the run's effective parameters (run.mjs: the scenario's defaults under --param);
+ * without them, the scenario's defaults.
+ */
+export const consoleAllowFor = (scenario, params = scenario?.defaults) => [...G3_CONSOLE_ALLOW, ...(SCENARIO_CONSOLE_EXTRA[scenario?.id]?.(params ?? {}) ?? [])];
 
 /** Why a G4 run on a test server is never G4 evidence (lead, #316 review). */
 export const G4_TEST_SERVER_NOT_GATE = 'a G4 scenario on a test server is a rehearsal: G4 evidence comes only from the CX23 service (test/scenarios/g4/PLAN.md)';

@@ -463,7 +463,10 @@ A short session of the real agent with the **production** task-giver list. `Serv
 
 Ready-to-try: "After death it respawns, reports what it lost and carries on without a chat-spam loop." The bot side is skills-rotn's `src/agent/library/death_report.js` (D3), which this scenario never changes. If it finds something to fix there, harness-ops reports it.
 - **The stimulus (lead decision, 2026-11-07):** the console's `kill <bot>`, on the disposable **test** server only, never on the live server and never to fake a pass (the same rule as the P1 setup commands).
-  - It is on this scenario's console list alone (`SCENARIO_CONSOLE_EXTRA` in `lib/g3.mjs`, applied by `consoleAllowFor`), with a plain player name. No selector (`@a`, `@e`, `@p`) is accepted.
+  - It is on this scenario's console list alone (`SCENARIO_CONSOLE_EXTRA` in `lib/g3.mjs`, applied by `consoleAllowFor`).
+  - It is built from the run's effective parameters: `^kill <this run's bot, exactly>$` (#320 review: the human may be on that server as JQDAW). Any other name and every selector (`@a`, `@e`, `@p`) are refused.
+  - No valid bot name in the parameters means no kill at all.
+  - The driver refuses a profile whose name is not the run's bot, and the scenario sends no kill without that driver's `mindcraft_start` event.
   - The read-only `health` objective comes with it.
   - **Test-server only by construction:** the console goes only through `test-server.sh`, which reaches only the labelled servers it created itself, with their own per-batch keys. The harness holds no address, key or RCON for the live server.
 - **Steps:**
@@ -477,7 +480,7 @@ Ready-to-try: "After death it respawns, reports what it lost and carries on with
   - `had_items`: the server counts at least `minHeld` of the loss items before the kill. Otherwise everything after it is "not reached".
   - `died`: `stat.deaths` rose, and the log has the bot's death line (`deathLines`).
   - `respawned`: `health` read 0 after the kill and then above 0 (if the 0 fell between two readings: above 0 once the death is confirmed), within `respawnS` (30) of the kill. RotN's respawn timer is about 7 s.
-  - `loss_reported`: exactly one `I died at x, y, z[ (cause)]; lost ...[; XP level a -> b].` line from the bot after the kill, within `reportS` (60) of the respawn, consistent with the server's count (`lossConsistency`):
+  - `loss_reported` (not reached when the server counts no loss at all, everything held being kept, or when a count after the respawn is unread; #320 review): exactly one `I died at x, y, z[ (cause)]; lost ...[; XP level a -> b].` line from the bot after the kill, within `reportS` (60) of the respawn, consistent with the server's count (`lossConsistency`):
     - per counted item, |reported - server| <= max(2, 25 %), because the counts run in the seconds before the kill;
     - an item the server says was lost but the report does not name passes only if the report ends "and K more kinds" and the item's loss is no larger than the smallest named count (death_report.js names the six largest);
     - "lost nothing" against a real loss fails;

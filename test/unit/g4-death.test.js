@@ -31,7 +31,9 @@ const reportFor = (lost, cause = `${NAME} fell out of the world`) => {
 /**
  * opt: fewItems (only the first-join kit), respawnMs (default 8 s; null never), report (a text instead of the
  * true one; null for none), extraReportMs (a second report this long after the first), reportDelayMs (default
- * 3 s), spam (n lines right after the report), spamKick, noAgenda, noKillReply, kept ({id: n} kept on death).
+ * 3 s), spam (n lines right after the report), spamKick, noAgenda, noKillReply, kept ({id: n} kept on death),
+ * unreadAfter (an item whose count the server never answers once the bot has died), noStart (the driver reports no
+ * mindcraft_start event).
  */
 function sim(opt = {}) {
     const log = [];
@@ -83,6 +85,7 @@ function sim(opt = {}) {
                 add(`Showing ${objs.size} tracked objective(s) for ${NAME}:`);
                 for (const o of objs) add(`- ${o}: ${val(o)} (${o})`);
             } else if ((m = /^clear (\S+) (\S+) -1 0$/.exec(cmd))) {
+                if (opt.unreadAfter === m[2] && deaths > 0) { t += 300; return log.slice(start); }   // no answer at all
                 const n = dead ? 0 : held[m[2]] ?? 0;
                 add(n ? `${NAME} has ${n} items that match the criteria.` : `Could not clear the inventory of ${NAME}, no items to remove`);
             } else if (cmd === `kill ${NAME}`) {
@@ -118,7 +121,7 @@ function sim(opt = {}) {
         start() {
             alive = true;
             joinedAt = t;
-            output.push(`DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable' }, serverTaskGiver: false,
+            if (!opt.noStart) output.push(`DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable' }, serverTaskGiver: false,
                 botState: { dir: 'bots/FRCFLD', movedAside: ['agenda.json.g3-S.bak'], fresh: true } })}`);
             log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`);
             add(`${NAME} joined the game`);
@@ -214,6 +217,21 @@ describe('g4-death-report on a simulated server', () => {
         assert.doesNotMatch(c.loss_reported.detail, / log/);
     });
 
+    test('#320 review: no loss by the server\'s count (all kept), an unread count after the respawn, and no driver start are "not reached"', async () => {
+        const kept = byName(await run(sim({ kept: { ...HELD }, report: 'I died at -40, 66, -60; lost nothing.' })));
+        assert.equal(kept.had_items.pass, true, 'the kept items count as held');
+        assert.equal(kept.loss_reported.pass, false, 'a "lost nothing" report proves nothing when nothing was lost');
+        assert.match(kept.loss_reported.detail, /^not reached: the server counts no loss \(everything held was kept: /);
+        const unread = byName(await run(sim({ unreadAfter: 'minecraft:stick' })));
+        assert.equal(unread.loss_reported.pass, false);
+        assert.match(unread.loss_reported.detail, /^not reached: no count from the server after the respawn for minecraft:stick$/);
+        const s = sim({ noStart: true });
+        const nostart = byName(await run(s));
+        assert.equal(nostart.fresh_bot_state.pass, false);
+        assert.match(nostart.died.detail, /^not reached: the driver reported no mindcraft_start event/);
+        assert.ok(!s.sent.some((x) => x.startsWith('kill ')), 'nothing is killed without our own agent');
+    });
+
     test('each failure fails its own check', async () => {
         const few = byName(await run(sim({ fewItems: true }), { maxWaitHeldMin: 2 }));
         assert.equal(few.had_items.pass, false);
@@ -257,6 +275,16 @@ describe('the G4 wiring in the G3 tooling', () => {
         assert.equal(ok(g4, 'kill FRCFLD'), true);
         assert.equal(ok(g4, 'scoreboard objectives add g4d_h health'), true);
         for (const bad of ['kill @a', 'kill @e[type=Zombie]', 'kill', 'kill FRCFLD JQDAW', 'kill @p']) assert.equal(ok(g4, bad), false, bad);
+        // #320 review: only THIS run's bot, by its exact name: the human may be on the server as JQDAW.
+        for (const list of [g4, consoleAllowFor(g4d, { ...g4d.defaults }), consoleAllowFor(g4d, { bot: 'FRCFLD' })]) {
+            assert.equal(ok(list, 'kill FRCFLD'), true);
+            for (const other of ['kill JQDAW', 'kill Steve', 'kill FRCFLD2', 'kill frcfld', 'kill XFRCFLD', 'kill FRCFL']) assert.equal(ok(list, other), false, other);
+        }
+        assert.equal(ok(consoleAllowFor(g4d, { bot: 'Other_Bot' }), 'kill Other_Bot'), true, 'built from the run\'s parameters');
+        assert.equal(ok(consoleAllowFor(g4d, { bot: 'Other_Bot' }), 'kill FRCFLD'), false);
+        for (const bad of ['', 'x.*', 'a b', '@a', 'ab']) {
+            assert.ok(!consoleAllowFor(g4d, { bot: bad }).some((re) => /^\^kill /.test(re.source)), `no kill rule for bot '${bad}'`);
+        }
         const registry = await loadScenarios();
         for (const sc of Object.values(registry).filter((x) => x.gate === 'G3')) {
             assert.equal(ok(consoleAllowFor(sc), 'kill FRCFLD'), false, `${sc.id} must not kill`);
