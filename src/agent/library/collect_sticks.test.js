@@ -221,7 +221,7 @@ test('#311 review: a dead bush is never broken with shears (sheared, it drops it
 
 // ---- Request 17 (rotn-data #312): leaves DO give sticks (Pyrotech: 1 stick half the time) ----
 
-test('Request 17, rotn-data #319: a leaves block is a stick source, by hand, whose yield can be 0 (its rule; the fallback is gone)', () => {
+test('Request 17, rotn-data #319: a leaves block is a stick source, by hand, whose yield can be 0 (rotn-data\'s leaves-sticks rule)', () => {
     const way = worldSources('stick').find(s => s.blocks.some(b => /leaves/.test(b)));
     assert.ok(way, 'leaves are a stick source');
     assert.equal(way.id, 'leaves-sticks');
