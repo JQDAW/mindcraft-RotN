@@ -6,14 +6,14 @@ Updated: 2026-11-07 05:22 UTC (from `date -u`)
 ## Current snapshot (2026-11-07 05:22 UTC): round 8 was 3/4; fixes merged; round 9 waits for the human's GO
 
 - **G3 smoke round 8** (develop `e5029f23`, the human's advance GO, evidence #313): **3/4**, so the round is not clean.
-  - A FAILED 3/7, stuck at `sticks`. The bot spawned on a tree canopy and went to spruces. Felled Dynamic Trees spruces gave 0 sticks, and the 5-minute step limit ran out. This was not a regression from #296/#304.
+  - A FAILED 3/7, stuck at `sticks`. The bot spawned on a tree canopy and went to spruces. Felled Dynamic Trees spruces gave 0 sticks, and one dead bush gave 1 (it held 1 of 3). The 5-minute step limit ran out. This was not a regression from #296/#304.
   - B 5/5, C 7/7, D 7/7.
-  - LLM USD 0.027; the key reads 0.876 of the 4.50 stop. Servers about EUR 0.55. All deleted.
+  - LLM USD 0.027; the key reads 0.876 of the 4.50 stop. Servers about EUR 0.55 plus Primary IPv4. All deleted.
   - Within the GO: no reruns, no gate batches.
 - **Fixes merged since:**
-  - #311 and #321 (skills-rotn): sticks come from dead bushes first, then leaves reachable safely from the ground, then felling a species that has given sticks. The 0-yield free misses are capped. No shears are used.
+  - #311 (skills-rotn): sticks come from dead bushes first, then felling a species that has given sticks. The 0-yield free misses are capped. No shears are used. #321 removed #315's temporary leaves fallback.
   - #312 and #319 (rotn-data): cited stick sources: a dead bush gives 0-2; leaves give 1 stick half the time when a player breaks them (Pyrotech); one felled-tree rule for every species. This corrects #256, which said leaves never drop sticks.
-  - #315 (skills-rotn): leaves as a stick source.
+  - #315 (skills-rotn): leaves reachable safely from the ground are a stick source, after dead bushes and before felling.
   - #317 (skills-rotn): round 8 B's rejected equip clicks. Equipping to the hand is one number-key swap, and the retry uses the item where it is now.
   - #314 (harness-ops): the memory-summary counter no longer miscounts overlapping summaries.
   - #313: round 8 evidence.
@@ -21,11 +21,11 @@ Updated: 2026-11-07 05:22 UTC (from `date -u`)
 - **G4 preparation:**
   - #316: `test/scenarios/g4/PLAN.md`. G4 accepts no test-server evidence. Test-server runs are rehearsals; step 7 proves every item on the CX23 service.
   - #318: the G4 human items are in NEEDS-HUMAN, including the CX33-to-CX23 channel decision, and the whitelist moves to after G4.
-  - #320 (`g4-death-report`, offline) is in review. The console `kill` is allowed only for that scenario and only for the bot's own name, on the test server only.
+  - #320 (`g4-death-report`, offline) is merged (`1e6a80f`). The console `kill` is allowed only for that scenario and only for the bot's own name, on the test server only.
 - **Next (each needs the human's GO):**
-  1. G3 smoke round 9: A-D on the develop commit after #320 and this STATUS, frozen. About 1.5 h, EUR 0.55 + about USD 0.03.
+  1. G3 smoke round 9: A-D on the develop commit with #320 and this STATUS, frozen. About 1.5 h, EUR 0.55 plus Primary IPv4, + about USD 0.03.
   2. Optional: a `g4-death-report` rehearsal (T1). About 20 min, EUR 0.14 + about USD 0.02; never G4 evidence.
-- **Agents:** net-forge closed (no task). rotn-data and skills-rotn are idle. harness-ops is on #320.
+- **Agents:** net-forge closed (no task). rotn-data and skills-rotn are idle. harness-ops waits for the GO.
 
 ## Earlier snapshot (2026-11-07 02:02 UTC): the move is done, validation passed, smoke round 8 is next
 
