@@ -1,8 +1,42 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (03:37 UTC, from `date -u`)
+Updated: 2026-11-07 (04:25 UTC, from `date -u`)
 
-## Now: G3 smoke round 8 (e5029f23, smoke, the first full round from the CX33) is over: 3/4, so no gate on this commit. No batch until a new GO.
+## Now: the G4 plan (#316) is updated after the lead's review; building `g4-death-report` (the lead's pick) offline
+
+- **#316 review (REQUEST CHANGES, bdc7143), all applied:**
+  - G4 accepts no test-server evidence: T runs are rehearsals only;
+  - step 7 runs every item #1-#12 on S, with 6 servers listed, and steps 1-4 give their server counts;
+  - C (#10) and the task queue (#11) need a trusted player on S (JQDAW, or a second scripted account, the human's call);
+  - #6 on S has its own forced `kill`;
+  - #1 passes on `agent_process.js`'s in-process restart line plus the rejoin (`NRestarts` stays the soak's measure);
+  - "today" is G3 smoke only, and no G3 gate batch has passed;
+  - the CX33-to-CX23 channel is the human's decision (probably an ADR);
+  - the console `kill`, `kick` and `stop` are test-server only by construction;
+  - the live whitelist comes after G4 has passed.
+
+- **`test/scenarios/g4/PLAN.md` (this PR):** each of the 12 ready-to-try items mapped to:
+  - what covers it today (G1-G3 on a test server, unit tests, `test/evidence/cx23`);
+  - the new scenario it needs (`g4-service-reconnect`, `g4-death-report`, `g4-control-commands`, `g4-restart-persistence`, `g4-soak-2h`, `g4-second-bot`);
+  - G4 evidence only from the CX23 service against a CPX42 (S); test-server runs (T) are rehearsals;
+  - the human items;
+  - order, servers, cost and time: about EUR 2.8 + USD 0.2 in all; the acceptance run (step 7) is 6 servers, about 6 h.
+- **Decisions the plan asks for (lead / human):**
+  - how the CX33 drives the CX23: a scripted Orca terminal, or a dedicated SSH key, which needs `restrict` and a forced `command=` wrapper allowing only `mindcraft-rotn-ctl` verbs to be limited (the sudo rule alone limits only what `deploy` runs as root) (the human's decision, probably an ADR);
+  - `kill`, `kick` and `stop` on the test-server console allowlist;
+  - a startup log line with the effective `allow_insecure_coding` (`main.js`, lead-owned);
+  - the soak ADR's targets;
+  - a second Minecraft account (#12), and the human's 10 min as JQDAW (follow, come, trusted task).
+- **Suggested first build:** `g4-death-report`. It needs no CX23 and no human item, only `kill` on the test console.
+- **#314 (merged): the memory-summary counter fix.**
+  - Open summaries are a queue, and each outcome line closes the oldest. A new start closes nothing. A non-zero exit empties all open ones. Overlapped summaries are never attributed to a provider.
+  - Recounted, only round 7 A, B and C change (2, 1 and 2 empty become 0, as their READMEs said).
+  - Tests: 126 pass. The updated and new tests fail on the old counter.
+- **#313 (round 8 evidence):** the review nits are fixed (text only, ee3e7bb). The dead bush gave 1 stick, held (1 of 3); there were four `!collectBlocks("stick", 3)` calls, each "Collected 0 stick".
+- #313 (round 8 evidence) is merged too.
+- **Cleanup:** both batch checkouts under `/home/mindcraft-RotN-batch/` are removed.
+
+## Earlier: G3 smoke round 8 (e5029f23, smoke, the first full round from the CX33) is over: 3/4, so no gate on this commit.
 
 | Batch (evidence folder) | Result |
 | --- | --- |
