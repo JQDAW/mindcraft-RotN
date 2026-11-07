@@ -1,6 +1,6 @@
 # Status: rotn-data
 
-Updated: 2026-11-07T03:47Z (from `date -u`)
+Updated: 2026-11-07T04:39Z (from `date -u`)
 
 Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/leaves-sticks`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
@@ -20,15 +20,20 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
   - Fixture: `packages/rotn-data/test/fixtures/stick-sources-3.3.4/stick-sources.javap.txt`, with excerpts, jar SHA-256s and the binpatch and SRG steps.
   - Tests: `stick-sources.test.js` 5/5, all rotn-data tests 156/156, and the stick- and world-source-related skills-rotn tests plus `src/utils` 172/172. ESLint is clean on the touched JS.
   - No full suite, no paid batch, no server.
-- **PR B, `agent/rotn-data/leaves-sticks`: Request 17 APPROVED by the lead (2026-11-07), sequenced so CI stays green. It is prepared and pushed, and I open the PR only after skills-rotn's leaves PR merges.**
+- **PR B, `agent/rotn-data/leaves-sticks`: Request 17 APPROVED by the lead (2026-11-07), sequenced so CI stays green. skills-rotn's #315 is merged, and the PR is open from this branch.**
   - The rule: `leaves-sticks` offers `dynamictrees:leaves0/1` and `minecraft:leaves/leaves2` by hand, 0-1 sticks (mean 0.5), cited in the fixture.
   - develop (with #312) is merged in, with no rebase. #312 was squash-merged, so its files conflicted with my original commit. Develop's files are identical to #312's reviewed head (`087358ad`), so the package files keep this branch's version and STATUS keeps develop's. The branch now differs from develop by PR B's changes only.
   - #312 nits folded in:
     - (a) The `fell-tree` summary gives advice ("Felling may give few or no sticks: for sticks, prefer dead bushes and leaves you can reach from the ground"). The 5-spruce observation stays in evidence and `unverified`, and a test keeps harness anecdotes out of the summary.
     - (b) `stick-sources.test.js` checks that the stick ways are present, not their order.
     - (c) The Request 11 paragraph is joined.
-  - Waiting for skills-rotn's PR to: drop `src/agent/library/fell_tree.test.js:313`, rework the agenda's stick step, and break only leaves reachable from the ground. Until it merges, that one assertion fails on this branch (81/82 in the four skills-rotn files). rotn-data is 156/156 and ESLint is clean.
-  - Before opening: merge develop again, re-run the targeted tests including skills-rotn's `fell_tree`, `agenda`, `fall_safety` and `collect_rotn`, then open the PR.
+  - develop with #315 is merged in again, with no rebase (clean merge).
+  - Tests:
+    - rotn-data 156/156;
+    - skills-rotn's `fell_tree`, `agenda`, `fall_safety`, `collect_rotn` and `collect_sticks` 93/93;
+    - `axe_chop`, `craft_needs`, `crafting_plan`, `action_limits`, `inventory_sync`, `rotn_names` and `src/utils` 90/90;
+    - ESLint clean on the touched JS.
+  - `worldSources('stick')` now returns `fell-tree`, `leaves-sticks` (`dynamictrees:leaves0`, `dynamictrees:leaves1`, `leaves`, `leaves2`) and `deadbush-sticks`.
 
 ## Report to the lead: started on the CX33 (2026-11-07)
 
@@ -569,4 +574,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- None open. #312, #300 and #303 are merged. `agent/rotn-data/leaves-sticks` (PR B) opens after skills-rotn's leaves PR merges.
+- `agent/rotn-data/leaves-sticks` (PR B, the `leaves-sticks` rule plus the #312 nits), in review. #312, #300 and #303 are merged.
