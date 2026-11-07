@@ -161,6 +161,8 @@ function watchDigging(agent, bot) {
         n.digAt = { pos: block.position, tick: null }; // the next tick times it, on its own clock
         if (!first) return;
         console.log(`[night] ${entity?.name ?? 'something'} is digging the shelter at ${at(block.position)}: checking at once, ready to repair`);
+        // Not while a fight in place runs (#334 review nit after #331): its weapon stays in hand.
+        if (bot.rotnFightingInPlace) return;
         const item = [...shelterItems(bot), ...softItems(bot)][0];
         if (item && bot.heldItem?.name !== item.name)
             Promise.resolve(bot.equip(item, 'hand')).catch(err => console.warn(`[night] could not take ${item.name} in hand: ${err?.message ?? err}`));

@@ -663,3 +663,50 @@ test('round 9 B (e): digging seen on a shelter block makes the next tick check a
     await settle(agent);
     assert.deepEqual(o.builds, [null, SITE], 'repaired at once');
 });
+
+// ---- #334 after #331 (lead): the dig alarm and #331's no-progress stall, and the fight's weapon ----
+
+test('#334 after #331: digging seen at the shelter ends a no-progress stall wait: the next tick checks and repairs', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const events = new EventEmitter();
+    Object.assign(agent.bot, { on: events.on.bind(events), emit: events.emit.bind(events), inventory: { items: () => [] }, heldItem: null, equip: () => Promise.resolve() });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    o.open = [SITE.offset(1, 0, 0)];
+    o.buildShelter = (bot, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, feet: SITE, placed: 0 }); };
+    let now = CHECK_MS + 2;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    now += 300;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    assert.equal(o.builds.length, 2, 'stalled: no repair on the next tick');
+    agent.bot.emit('blockBreakProgressObserved', { position: SITE.offset(-1, 1, 0) }, 4, { name: 'zombie' });
+    now += 300;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    assert.equal(o.builds.length, 3, 'the dig alarm ends the stall wait');
+});
+
+test('#334 after #331: the dig alarm puts no block in hand while a fight in place runs (its weapon stays)', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const events = new EventEmitter();
+    const equipped = [];
+    Object.assign(agent.bot, {
+        on: events.on.bind(events), emit: events.emit.bind(events),
+        inventory: { items: () => [{ name: 'dirt', metadata: 0, count: 4 }] }, heldItem: { name: 'stone_sword' },
+        equip: (item) => { equipped.push(item.name); return Promise.resolve(); },
+    });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    agent.bot.rotnFightingInPlace = true;
+    agent.bot.emit('blockBreakProgressObserved', { position: SITE.offset(1, 0, 0) }, 3, { name: 'zombie' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(equipped, [], 'no dirt in hand mid-fight');
+    assert.ok(nightState(agent).digAt, 'the alarm itself is still raised');
+});
