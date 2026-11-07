@@ -791,3 +791,130 @@ test('#334 re-review 2 nit: a reset, leaving for a giver and a new shelter clear
     assert.equal(n.state, 'inside');
     assert.equal(n.repairStall, null, 'a new shelter');
 });
+
+// ---- G3 round 9 batch B, fix (h): after a night-time death with nothing ----
+// The bot respawned 9 blocks from where it died, at night, with nothing (driver.log 502); the
+// shelter was refused for want of dirt (501), and it died again to the zombie risen at the spot
+// (server.log 575: "slain by Zombie FRCFLD").
+
+function deathOps() {
+    const o = { calls: [], away: null };
+    o.moveAwayFrom = (bot, pos, dist) => { o.calls.push('away'); o.away = { pos, dist }; return Promise.resolve(true); };
+    o.buildShelter = (bot, opts = {}) => {
+        o.calls.push(opts.site ? 'roof' : 'build');
+        return Promise.resolve(opts.site
+            ? { closed: true, feet: opts.site, line: 'Shelter closed' }
+            : { closed: false, feet: null, line: 'Not building a shelter at 0, 64, 0: you have 0 dirt and 0 dirt piles' });
+    };
+    o.digPit = () => { o.calls.push('pit'); return Promise.resolve(SITE.offset(0, -3, 0)); };
+    o.pitOut = () => { o.calls.push('pitOut'); return Promise.resolve(SITE.offset(3, 0, 0)); };
+    o.digOut = () => { o.calls.push('digOut'); return Promise.resolve(SITE.offset(1, 0, 0)); };
+    o.siteNeeds = () => ({ todo: [] });
+    return o;
+}
+
+test('round 9 B (h): after a night death nearby: away from the death spot first, then a shelter; with no dirt a hole; out of the hole in the morning', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    agent._death = { last: { at: -60_000, pos: { x: -8.5, y: 64, z: 0.5 }, dimension: null } }; // a minute ago, 9 blocks off
+    const o = deathOps();
+    let now = 0;
+    const run = async () => { nightTick(agent, { now: ++now, ops: o }); await settle(agent); };
+    await run();
+    assert.deepEqual(o.calls, ['away'], 'first away from the spot');
+    assert.equal(o.away.dist, 28);
+    assert.match(agent.chat.at(-1), /\[night\] I died 9 blocks from here; moving at least 28 away before sheltering/);
+    await run();
+    assert.deepEqual(o.calls, ['away', 'build'], 'then the shelter, which is refused: no dirt');
+    await run();
+    assert.deepEqual(o.calls, ['away', 'build', 'pit', 'roof'], 'then a hole, roofed with the shelter\'s repair');
+    assert.equal(nightState(agent).state, 'inside');
+    assert.equal(nightState(agent).pit, true);
+    assert.ok(nightState(agent).site.equals(SITE.offset(0, -3, 0)));
+
+    agent.bot.time.timeOfDay = MORNING;
+    await run();
+    assert.deepEqual(o.calls.slice(-1), ['pitOut'], 'out of the hole by its stairs, not digOut');
+    assert.equal(nightState(agent).state, 'day');
+});
+
+test('round 9 B (h): no walk away when the death was long ago or far off; a hole is tried once a night', async (t) => {
+    quiet(t);
+    const old = fakeAgent({ t: NIGHT });
+    old._death = { last: { at: -30 * 60_000, pos: { x: -8.5, y: 64, z: 0.5 }, dimension: null } };
+    const o = deathOps();
+    o.digPit = () => { o.calls.push('pit'); return Promise.resolve(null); }; // no place for a hole
+    for (let now = 1; now < 3; now++) { nightTick(old, { now, ops: o }); await settle(old); }
+    assert.deepEqual(o.calls, ['build', 'pit'], 'no walk: the death was 30 min ago');
+    nightTick(old, { now: 3, ops: o }); // sets the next try's time
+    nightTick(old, { now: 4 + RETRY_MS, ops: o }); await settle(old);
+    assert.deepEqual(o.calls, ['build', 'pit', 'build'], 'the hole only once; then the build tries go on');
+});
+
+test('round 9 B (h): exposed with no weapon, the bot keeps away from mobs (cowardice) until morning', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const on = { cowardice: false };
+    agent.bot.modes = { anyActive: () => false, isOn: (m) => on[m], setOn: (m, v) => { on[m] = v; return true; } };
+    agent.bot.inventory = { items: () => [], slots: [] };
+    const o = ops({ closed: false });
+    let now = 0;
+    for (let i = 0; i < 4 * BUILD_ATTEMPTS && nightState(agent).state !== 'exposed'; i++) { now += RETRY_MS + 1; nightTick(agent, { now, ops: o }); await settle(agent); }
+    assert.equal(nightState(agent).state, 'exposed');
+    assert.equal(on.cowardice, true);
+    agent.bot.time.timeOfDay = MORNING;
+    nightTick(agent, { now: now + 1, ops: o });
+    assert.equal(on.cowardice, false, 'back as it was');
+
+    const armed = fakeAgent({ t: NIGHT });
+    const on2 = { cowardice: false };
+    armed.bot.modes = { anyActive: () => false, isOn: (m) => on2[m], setOn: (m, v) => { on2[m] = v; return true; } };
+    armed.bot.inventory = { items: () => [{ name: 'stone_sword', count: 1 }], slots: [] };
+    now = 0;
+    for (let i = 0; i < 4 * BUILD_ATTEMPTS && nightState(armed).state !== 'exposed'; i++) { now += RETRY_MS + 1; nightTick(armed, { now, ops: o }); await settle(armed); }
+    assert.equal(nightState(armed).state, 'exposed');
+    assert.equal(on2.cowardice, false, 'with a weapon its reflexes stay as they are');
+});
+
+// ---- #337 review (lead, REQUEST CHANGES on 36bb947) ----
+
+test('#337 review 6: an interrupted hole is tried again next, in the same hole (its progress is kept)', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = deathOps();
+    const seen = [];
+    o.digPit = (bot, { progress }) => { seen.push(progress); progress.P ??= SITE; o.calls.push('pit'); return Promise.resolve(SITE.offset(0, -3, 0)); };
+    let now = 0;
+    const run = async () => { nightTick(agent, { now: ++now, ops: o }); await settle(agent); };
+    await run(); // build: refused
+    agent.actions.interruptNext = true;
+    await run(); // the hole: interrupted (a reflex)
+    assert.equal(nightState(agent).pitNext, true, 'the hole is still next');
+    await run(); // the hole again
+    assert.deepEqual(o.calls, ['build', 'pit', 'roof']);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0], nightState(agent).pitProgress, 'the same progress object');
+    assert.equal(nightState(agent).state, 'inside');
+});
+
+test('#337 review 7 and 8: the tries are the 3 builds, the hole is one more; the exposed line matches what the bot does', async (t) => {
+    quiet(t);
+    const play = async (items) => {
+        const agent = fakeAgent({ t: NIGHT });
+        const on = { cowardice: false };
+        agent.bot.modes = { anyActive: () => false, isOn: (m) => on[m], setOn: (m, v) => { on[m] = v; return true; } };
+        agent.bot.inventory = { items: () => items, slots: [] };
+        const o = deathOps();
+        o.digPit = () => { o.calls.push('pit'); return Promise.resolve(null); };
+        let now = 0;
+        for (let i = 0; i < 20 && nightState(agent).state !== 'exposed'; i++) { now += RETRY_MS + 1; nightTick(agent, { now, ops: o }); await settle(agent); }
+        return { agent, o, on };
+    };
+    const bare = await play([]);
+    assert.deepEqual(bare.o.calls, ['build', 'pit', 'build', 'build'], '3 builds and one hole');
+    assert.match(bare.agent.chat.at(-1), /no shelter after 3 tries and a hole shelter \(.*\); no weapon: keeping away from mobs until morning$/);
+    assert.equal(bare.on.cowardice, true);
+    const armed = await play([{ name: 'stone_sword', count: 1 }]);
+    assert.match(armed.agent.chat.at(-1), /no shelter after 3 tries and a hole shelter \(.*\); staying here until morning$/);
+    assert.equal(armed.on.cowardice, false);
+});
