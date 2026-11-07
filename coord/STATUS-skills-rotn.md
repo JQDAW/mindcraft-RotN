@@ -1,6 +1,22 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T14:17Z (from `date -u`)
+Updated: 2026-11-07T14:48Z (from `date -u`)
+
+## Decision (1) after round 9 B: low health in the night shelter, the bot stays (branch `agent/skills-rotn/shelter-hold-flee`, stacked on #331; 2026-11-07T14:48Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** "self-preservation in an open shelter at night: stay put, eat, block or fight within reach; leave only for fire, lava or drowning". A new PR after #331, with nothing pushed to #331.
+- **Change (`modes.js` self-preservation):** the low-health flee (`moveAway(20)`) no longer runs while `bot.rotnSheltered` is set, whether the shelter is closed or open. Instead:
+  - while the night's repair runs (`REPAIR_LABEL`), nothing; the repair closes the opening;
+  - else a mob within reach is hit in place (`skills.defendInPlace`, from #331);
+  - else, below food 20 with food held, the bot eats (`food.chooseFood`/`eatFood`).
+  - The hazard branches before it are unchanged: water at the head, a falling block above, fire, lava and molten metal. Outside the shelter nothing changes.
+- **Tests (`shelter_defense.test.js`, 2 new):**
+  - Hurt in the open shelter with a zombie in reach: hit in place, no walk.
+  - Hurt with nothing in reach: eats bread, no walk, no fight.
+  - Hurt while the repair runs: no interrupt.
+  - **Both fail on #331's head.**
+  - With the change: `shelter_defense`, `threat_arbitration`, `night_routine`, `quiet_reflexes`, `update_loop` and `food`, 63/63. Lint: modes.js 28, as on #331; the test file 0.
+- **Question:** a falling block above the head (sand, gravel) still moves the bot 2 blocks away, out of the shelter. I kept that with the hazards because it would suffocate the bot, like drowning. Say if it should stay put too.
 
 ## Round 9 B fix (c): self-defense never takes the bot out of its night shelter (branch `agent/skills-rotn/shelter-hold-defense`, 2026-11-07T14:17Z by `date -u`)
 
