@@ -1,12 +1,12 @@
 # Status: rotn-data
 
-Updated: 2026-11-07T14:20Z (from `date -u`)
+Updated: 2026-11-07T14:35Z (from `date -u`)
 
-Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/trunk-shell`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/mob-digging`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
 ## Now: trunk shells and digging mobs, from G3 round 9 B (lead task, 2026-11-07)
 
-- **(1) Trunk shell, this PR (`agent/rotn-data/trunk-shell`).** Breaking a `dynamictrees:trunkshell` **fells the tree like a branch**, and the shell itself **drops nothing**. Cited from `DramaticTrees-1.12.2-0.13.4.jar` with javap only:
+- **(1) Trunk shell, #332 (`agent/rotn-data/trunk-shell`, `4e0662fe`): review APPROVE WITH NITS; it merges after the round 9 evidence #330. The three nits are folded into the digging PR, as you asked (see (2)).** Breaking a `dynamictrees:trunkshell` **fells the tree like a branch**, and the shell itself **drops nothing**. Cited from `DramaticTrees-1.12.2-0.13.4.jar` with javap only:
   - **The break.** `BlockTrunkShell.removedByPlayer` passes the break to the thick trunk block next to it, at that block's position. The shell's meta (coredir n, nw, w, sw, s, se, e, ne) points to that block, on the same y. The trunk block's `BlockBranch.removedByPlayer` queues a `FutureBreak`, which runs `futureBreak` on the next world tick. That is the normal felling, so the drops are `fell-tree`'s.
   - **The shell's own drop:** null, with a drop count of 0.
   - **Where shells appear:** only around a trunk of radius 9 or more. Those are oak, spruce, jungle and dark oak `branch` metas 8-15 and the `branchx` blocks. Birch and acacia stop at radius 8.
@@ -18,8 +18,31 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
     - `trunk-shell.test.js` 6/6. It works out `coreOffsets` from the `Surround` bytecode, and checks `thickTrunks` against the dump.
     - rotn-data 162/162; skills-rotn's `fell_tree`, `collect_sticks`, `collect_rotn`, `fall_safety`, `axe_chop` and `agenda` 103/103; ESLint clean on the touched JS.
   - **Unverified:** what the server does after mineflayer finishes a shell dig early. My understanding of vanilla 1.12 is that it finishes the break itself once the real dig time has passed, but I haven't read that server code, and no run has broken a shell.
-- **(2) Digging mobs (Epic Siege Mod 13.169 + ESM-Tweaks): next PR, `agent/rotn-data/mob-digging`.** Findings so far are below and in my reply to the lead.
-  - **ESM-Tweaks is not in the pinned zip.** Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`, `config/mod-director/requisites.remote.json`) downloads it at server start, from a list on the RotN repo's moving `stable` branch, with no hash pinned. The dump manifest and the server ping both show `esmtweaks 0.4.5`. I disassembled the release jar `esmtweaks-1.12.2-0.4.5.jar` (SHA-256 `b57590bf...f933`) in my scratchpad; nothing went into the repo.
+- **(2) Digging mobs, this PR (`agent/rotn-data/mob-digging`).** New `3.3.4/mob-digging.json`, and `mobDigging(entity)` and `canMobDig(entity, block, { meta, held })` in `src/digging.js`.
+  - **Who digs:** the 56 `config/esm/entity_ai.json` entries with `Digging: true`. ESM-Tweaks swaps ESM's own digger for its own at server start (`useTweakedAI=true`).
+  - **Whether a mob needs a tool depends on its own entry.** ESM never merges an entry with the `default` block, and a missing boolean reads as false. `EsmJsonConfig.readJson` stores each entry as written; `CfgPropBoolean` reads keys with `JsonHelper.getBoolean(json, key, false)`.
+    - 40 diggers set `Requires Tools: true`. Zombies are among them. They dig only blocks that need no tool (dirt, grass, sand, gravel, wood, glass), or the rest while holding the block's tool at its level in either hand. Stone and cobblestone need a pickaxe, and stone brick a level 1 pickaxe.
+    - **The other 16 read it as false and dig any solid, breakable block, stone included.** They are the silverfish types, the bears, yeti, minotaur, minoshroom, snow guardian, troll and wight. Your note that these 16 inherit the default is not what the code does.
+    - No digger has a `Digging Blacklist`, so the default block's blacklist protects nothing.
+  - **Dig time:** about 30 × hardness ticks for a block that needs no tool, otherwise 100 × hardness, empty-handed on the ground. Dirt takes 15 ticks, cobblestone 200 ticks for a mob that needs no tool, and stone brick 2750.
+  - **When:** only when the mob has a target and no path to it, and has stood still. It digs the first block within 2 blocks of its body on a line toward the target, or straight up or down, and keeps digging a block up to 4 blocks away.
+  - **ToolProgression:** `block_overwrites.cfg` changes the by-hand answer for 75 block states, none of them vanilla shelter blocks. The test recomputes that list. `tool_progression/blocks.cfg` is a record ToolProgression writes on every launch, not an input; it agrees with the rule, and the data cites it as such.
+  - **ESM-Tweaks is not in the pinned zip.** Mod Director downloads it at server start from a list on a moving branch, with no hash pinned. Its source URL and SHA-256s are in `sources.esmTweaks`.
+  - **#332 nits folded in.** I merged `agent/rotn-data/trunk-shell` in (no rebase), so this PR's diff includes #332's changes until #332 merges.
+    - (a) The `trunkShell` summary says a leftover shell counts as air on the server (`isAir`).
+    - (b) The `getMuse` wording now says that with radius 8 or less the break still goes to the trunk before the clearing tick, so the tree is felled.
+    - (c) The early-shell-dig server behaviour stays unverified until a run breaks a shell.
+    - The fixture gains `isAir`, and there is a new test.
+  - **Tests:**
+    - `mob-digging.test.js` 8/8 and `trunk-shell.test.js` 7/7.
+    - rotn-data 171/171.
+    - skills-rotn's `fell_tree`, `collect_sticks`, `collect_rotn`, `fall_safety`, `axe_chop`, `threats`, `shelter`, `night` and `agenda`: 148/148.
+    - ESLint clean on the touched JS.
+  - **Unverified:**
+    - No run has watched a mob dig.
+    - Which mobs spawn holding pickaxes, and at what level.
+    - Griefing and pillaring are separate AIs, not covered here.
+    - The pack's bedrock has hardness 200 in the dump, so `canMobDig` treats it as diggable.
 
 ## Report to the lead: started on the CX33 (2026-11-07)
 
@@ -561,4 +584,5 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/trunk-shell` (`fell-tree.trunkShell`, from G3 round 9 B), opened 2026-11-07. #319, #312, #303 and #300 are merged.
+- #332 `agent/rotn-data/trunk-shell` (`fell-tree.trunkShell`): APPROVE WITH NITS; it merges after #330.
+- `agent/rotn-data/mob-digging` (digging mobs, plus the #332 nits), opened 2026-11-07.
