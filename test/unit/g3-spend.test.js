@@ -833,9 +833,10 @@ describe('LLM replies are counted as successful or failed, and the preflight pro
             'TypeError: Cannot read properties of null (reading \'length\')'];
         const r5a = [...Array(11).fill('Generated response: !inventory'), ...Array(5).fill(crash).flat()];
         assert.deepEqual(counts(r5a), { ok: 11, memory: 0, failed: 5, disconnected: 0, empty: 5, memoryEmpty: 5, httpErrors: {} });
-        // A summary cut short by the next one, and an empty or "null" stored memory, are empty too.
+        // An empty or "null" stored memory is empty too. Overlapping summaries (lead, after round 8): each outcome
+        // closes the oldest open one, a new start closes none, and the one still open at the end is not counted.
         assert.deepEqual(counts(['Storing memories...', 'Storing memories...', 'Memory updated to:  ', 'Storing memories...', 'Memory updated to:  null']),
-            { ok: 0, memory: 0, failed: 3, disconnected: 0, empty: 3, memoryEmpty: 3, httpErrors: {} });
+            { ok: 0, memory: 0, failed: 2, disconnected: 0, empty: 2, memoryEmpty: 2, httpErrors: {} });
         // Mindcraft's no-choices stand-in stored as the memory is a disconnected reply, not a memory.
         assert.deepEqual(counts(['Storing memories...', 'Memory updated to:  No response received.']),
             { ok: 0, memory: 0, failed: 1, disconnected: 1, empty: 0, memoryEmpty: 0, httpErrors: {} });
@@ -862,6 +863,43 @@ describe('LLM replies are counted as successful or failed, and the preflight pro
             assert.equal(counts(['Storing memories...', exit]).memoryEmpty, 0, exit);
         }
         assert.equal(counts(['Storing memories...', 'Agent process exited with code 1 and signal null']).memoryEmpty, 1);
+    });
+
+    test('countLlmReplies: overlapping summaries, each outcome closes the oldest open one (lead, after round 8: B read 16 stored + 1 empty for 16 summaries)', () => {
+        const pl = (name, chars) => `[openrouter] provider ${name}, finish_reason stop, content ${chars} chars`;
+        const kept = '[memory] summary returned failure reply "No response received."; keeping the previous memory';
+        // Round 8 B's shape: a second summary starts before the first's reply; both store. 2 stored, 0 empty.
+        assert.deepEqual(counts(['Storing memories...', LLM_CALL_LINE, 'Storing memories...', LLM_CALL_LINE, pl('Wafer', 300), 'Memory updated to:  RotN: a',
+            pl('Wafer', 310), 'Memory updated to:  RotN: b']), { ok: 0, memory: 2, failed: 0, disconnected: 0, empty: 0, memoryEmpty: 0, httpErrors: {} });
+        // Three open at once, mixed outcomes: 2 stored, 1 empty, in any order of outcomes.
+        assert.deepEqual(counts(['Storing memories...', 'Storing memories...', 'Storing memories...', 'Memory updated to:  x', kept, 'Memory updated to:  y']),
+            { ok: 0, memory: 2, failed: 1, disconnected: 0, empty: 1, memoryEmpty: 1, httpErrors: {} });
+        // A non-zero exit makes every open summary empty; a clean exit or a signal leaves them uncounted.
+        assert.equal(counts(['Storing memories...', 'Storing memories...', 'Agent process exited with code 1 and signal null']).memoryEmpty, 2);
+        for (const exit of ['Agent process exited with code 0 and signal null', 'Agent process exited with code null and signal SIGTERM']) {
+            const r = counts(['Storing memories...', 'Storing memories...', exit, 'Memory updated to:  late']);
+            assert.deepEqual([r.memory, r.memoryEmpty], [1, 0], `${exit}: the two open ones are dropped; a later outcome with none open still counts once`);
+        }
+        // Never attributed while overlapping: which completion and which outcome belong to which summary is not known.
+        const r = countLlmReplies(['Storing memories...', LLM_CALL_LINE, pl('Wafer', 300), 'Storing memories...', 'Memory updated to:  a',
+            LLM_CALL_LINE, pl('Wafer', 310), 'Memory updated to:  b', 'Storing memories...', LLM_CALL_LINE, pl('Wafer', 320), 'Memory updated to:  c']);
+        assert.deepEqual([r.memory, r.memoryEmpty], [3, 0]);
+        assert.deepEqual(r.providers.Wafer.summaries, { ok: 1, empty: 0, failed: 0 }, 'only the third, alone in flight, is attributed');
+        assert.deepEqual(r.summariesUnattributed, { ok: 2, empty: 0, failed: 0 });
+        // A request error while two are open marks both: neither is attributed.
+        const e = countLlmReplies(['Storing memories...', 'Storing memories...', 'Error while awaiting response: Error [500] (status 500): x', pl('Wafer', 5), kept, kept]);
+        assert.deepEqual([e.providers.Wafer.summaries, e.summariesUnattributed], [{ ok: 0, empty: 0, failed: 0 }, { ok: 0, empty: 2, failed: 0 }]);
+    });
+
+    test('countLlmReplies on round 7\'s committed driver logs: the true summary figures (A 13, B 14, C 10, D 1 stored, 0 empty), not the old "5 empty"', () => {
+        const ev = path.join(HERE, '..', 'evidence', 'g3');
+        const want = { 'g3a-20261106-r7/rocks': 13, 'g3b-20261106-r7/night': 14, 'g3c-20261106-r7/task': 10, 'g3d-20261106-r7/untrusted': 1 };
+        for (const [dir, stored] of Object.entries(want)) {
+            const lines = fs.readFileSync(path.join(ev, dir, 'driver.log'), 'utf8').split('\n');
+            const r = countLlmReplies(lines);
+            assert.deepEqual([r.memory, r.memoryEmpty], [stored, 0], dir);
+            assert.equal(r.memory, lines.filter((l) => l.startsWith('Memory updated to:')).length, `${dir}: one stored summary per "Memory updated to:"`);
+        }
     });
 
     test('countLlmReplies: providers from openrouter.js\'s line (#271), and summaries attributed only when unambiguous (lead, after round 5 B)', () => {
