@@ -1,8 +1,27 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (01:57 UTC, from `date -u`)
+Updated: 2026-11-07 (03:37 UTC, from `date -u`)
 
-## Now: the dev-server validation batch (G3 smoke D, validation only) PASSED 7/7; evidence PR open
+## Now: G3 smoke round 8 (e5029f23, smoke, the first full round from the CX33) is over: 3/4, so no gate on this commit. No batch until a new GO.
+
+| Batch (evidence folder) | Result |
+| --- | --- |
+| A (`g3a-20261107-r8`) | FAIL 3/7: stuck at `sticks` (02:28:51, "5 min of self-prompting; agenda paused"). No cane or bamboo within 511 blocks, felling gave no sticks, and a dead bush gave 1 stick (held 1 of 3). No table, no stone tools. |
+| B (`g3b-20261107-r8`) | **PASS 5/5:** all 11 steps by 02:45; in the shelter from sunset until morning; dawn, 0 deaths, food 14. |
+| C (`g3c-20261107-r8`) | **PASS 7/7:** on the gold block at minute 5.6; "task t1 done"; agenda resumed (counter 10 to 13). |
+| D (`g3d-20261107-r8`) | **PASS 7/7:** refusal in the same second as the whisper. |
+
+- **The GO's limits held:** no rerun, no gate batch, no retry, no skip flags. A's FAIL is a check result (exit 1), not an infra or harness fault, so the round went on. Every per-batch pre-check passed (`msa-login`, key present, empty project counted with `grep -c .`, sweeper, preflight with probe, dry run, free memory 5.1-5.6 GB).
+- **For skills-rotn (the lead routes):**
+  - A's `sticks` stall (round 5 A rerun again);
+  - B's three rejected equip clicks, with "cursor: stone_pickaxe" kept across each resync;
+  - "shelter_blocks started" logged before "logs done" (A) and before "crude_axe done" (the validation batch);
+  - **B showed no "no longer usable" shelter line this round** (the shelter held all night), so #296's new line was not exercised.
+- **LLM:** 158 requests, all Wafer, 0 empty answers. Memory summaries: 36 stored, 0 empty. B's "1 empty" in its `result.json` is the overlapping-summary miscount.
+- **Spend:** USD 0.026617 by the batch figures, 0.026625 by the key (0.849110 to 0.875735 of the 4.50 stop). Hetzner: 14 + 43 + 10 + 8 min, 4 servers at about EUR 0.14 each; every server, Primary IP and SSH key was verified gone.
+- **Open:** the round 8 evidence PR. My next code work, after the gate, is the overlapping-summary counter fix.
+
+## Earlier: the dev-server validation batch (G3 smoke D, validation only) PASSED 7/7; merged as #308; the fake-driver leak fix merged as #309
 
 | Batch (evidence folder) | Result |
 | --- | --- |
