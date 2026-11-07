@@ -15,7 +15,7 @@ import { TICK_MS, BACKOFF_MS, STEP_LLM_MS, SAVE_EVERY_MS } from './agenda_driver
 import { readFileSync } from 'node:fs';
 import process from 'node:process';
 import { setImmediate } from 'node:timers';
-import { autonomyTick, taskGoal, finishTask, PREEMPT_GRACE_MS } from './priority.js';
+import { autonomyTick, taskGoal, finishTask, PREEMPT_GRACE_MS, TYPED_RESUME } from './priority.js';
 import { Control } from './control.js';
 import { TaskQueue, markUntrusted } from './task_queue.js';
 import { SelfPrompter } from './self_prompter.js';
@@ -704,7 +704,8 @@ test('G4 #3: only task givers command: a non-giver\'s typed !followPlayer, !goTo
 /** The action manager's resume (mineflayer's !followPlayer is a resumable action), as far as these tests go. */
 function resumableActions(agent, outcome) {
     const actions = agent.actions;
-    Object.assign(actions, { resume_func: null, resume_name: null, executing: false });
+    Object.assign(actions, { resume_func: null, resume_name: null, executing: false, currentActionLabel: '', resumes: 0 });
+    actions.resumeAction = () => { actions.resumes++; return Promise.resolve(); }; // what agent.js calls on 'idle'
     actions.cancelResume = () => { actions.resume_func = null; actions.resume_name = null; };
     actions.runAction = (label, fn, { resume = false } = {}) => {
         if (resume) { actions.resume_func = fn; actions.resume_name = label; }
@@ -744,4 +745,66 @@ test('G4 #3: a follow the model started itself does not hold autonomy; a typed o
     await agent.handleMessage('JQDAW', '!followPlayer("JQDAW", 3)'); // bot.players has no JQDAW here
     assert.equal(agent.actions.resume_name, null, 'a follow that could not start is not resumed');
     assert.equal(autonomyTick(agent, { now: TICK_MS }), 'rocks');
+});
+
+test('#323 review 1: interrupted, no idle: the follow is resumed after TYPED_RESUME.waitMs; after the last try that did not start it, the hold is dropped and the resume cancelled', async (t) => {
+    const agent = harnessAgent(t);
+    t.mock.method(console, 'warn', () => {});
+    resumableActions(agent, () => ({ message: null, interrupted: true })); // e.g. onTeleport: stopped, no 'idle'
+    await agent.handleMessage('JQDAW', '!followPlayer("JQDAW", 3)');
+    const W = TYPED_RESUME.waitMs;
+    assert.equal(autonomyTick(agent, { now: 0 }), 'held:command');
+    assert.equal(autonomyTick(agent, { now: W - 1 }), 'held:command');
+    assert.equal(agent.actions.resumes, 0, 'not before waitMs');
+    assert.equal(autonomyTick(agent, { now: W }), 'held:command');
+    assert.equal(agent.actions.resumes, 1, 'resumed here, as no idle came');
+    // The resume did not start it (nothing executes): tried again each waitMs, then given up.
+    for (let k = 2; k <= TYPED_RESUME.kicks; k++) autonomyTick(agent, { now: k * W });
+    assert.equal(agent.actions.resumes, TYPED_RESUME.kicks);
+    assert.equal(autonomyTick(agent, { now: (TYPED_RESUME.kicks + 1) * W }), 'rocks', 'the agenda carries on');
+    assert.equal(agent.actions.resume_func, null, 'the resume is cancelled, so it cannot start later on its own');
+    assert.equal(agent.control.typedResume, null);
+    assert.ok(agent.said.includes("JQDAW's !followPlayer did not resume after 3 tries; tasks and the agenda carry on"), agent.said.join(' | '));
+
+    // When the resume does start it, the hold stays.
+    const again = harnessAgent(t);
+    resumableActions(again, () => ({ message: null, interrupted: true }));
+    again.actions.resumeAction = () => { again.actions.resumes++; Object.assign(again.actions, { executing: true, currentActionLabel: 'action:followPlayer' }); return Promise.resolve(); };
+    await again.handleMessage('JQDAW', '!followPlayer("JQDAW", 3)');
+    autonomyTick(again, { now: 0 });
+    autonomyTick(again, { now: W });
+    assert.equal(again.actions.resumes, 1);
+    for (let k = 2; k <= 10; k++) assert.equal(autonomyTick(again, { now: k * W }), 'held:command', 'it runs: no further tries, no drop');
+    assert.equal(again.actions.resumes, 1);
+});
+
+test('#323 review 3: the hold is tied to the giver\'s own follow: a follow the model starts in its place (same label) holds nothing', async (t) => {
+    const agent = harnessAgent(t);
+    resumableActions(agent, () => ({ message: null, interrupted: true }));
+    await agent.handleMessage('JQDAW', '!followPlayer("JQDAW", 3)');
+    assert.equal(autonomyTick(agent, { now: 0 }), 'held:command');
+    const { executeCommand } = await import('./commands/index.js');
+    await executeCommand(agent, '!followPlayer("JQDAW", 3)'); // the model's own: a new resume function
+    assert.equal(agent.actions.resume_name, 'action:followPlayer');
+    assert.equal(autonomyTick(agent, { now: TICK_MS }), 'rocks');
+    assert.equal(agent.control.typedResume, null);
+});
+
+test('#323 review 4: the hold lasts while the resumed follow runs, and ends when the follow ends by itself (its player gone)', async (t) => {
+    const agent = harnessAgent(t);
+    resumableActions(agent, () => ({ message: null, interrupted: true }));
+    await agent.handleMessage('JQDAW', '!followPlayer("JQDAW", 3)');
+    // The action manager resumed it on 'idle': it runs.
+    Object.assign(agent.actions, { executing: true, currentActionLabel: 'action:followPlayer' });
+    for (let k = 0; k < 5; k++) assert.equal(autonomyTick(agent, { now: k * BACKOFF_MS }), 'held:command');
+    assert.equal(agent.actions.resumes, 0, 'no extra resume while it runs');
+    // It ends by itself: followPlayer returned false (the player was gone for FOLLOW_LIMITS.lostMs),
+    // and !followPlayer cancels its resume. Run that path for real.
+    const { skills } = { skills: await import('./library/skills.js') };
+    assert.equal(await skills.followPlayer(agent.bot, 'JQDAW', 3), false, 'no JQDAW in bot.players here');
+    await agent.actions.resume_func(); // the resumed follow, as the action manager runs it
+    Object.assign(agent.actions, { executing: false, currentActionLabel: '' });
+    assert.equal(agent.actions.resume_func, null);
+    assert.equal(autonomyTick(agent, { now: 6 * BACKOFF_MS }), 'rocks', 'tasks and the agenda carry on');
+    assert.equal(agent.agenda.spentOn('rocks').attempts, 1);
 });

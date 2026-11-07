@@ -102,15 +102,43 @@ test('G4 #3: followPlayer walks with the fall-safe movements (no drop over 3, no
     assert.equal(bot.calls.goals[0].entity, bot.players.JQDAW.entity);
 });
 
-test('G4 #3: followPlayer ends when the player leaves (or goes out of sight), and stops the walk', T, async (t) => {
+/** FOLLOW_LIMITS.lostMs for one test. */
+function lostMs(t, ms) {
+    const saved = skills.FOLLOW_LIMITS.lostMs;
+    skills.FOLLOW_LIMITS.lostMs = ms;
+    t.after(() => { skills.FOLLOW_LIMITS.lostMs = saved; });
+}
+
+test('G4 #3, #323 review 2: followPlayer ends only after the player has been gone FOLLOW_LIMITS.lostMs, and stops the walk', T, async (t) => {
     t.mock.method(console, 'log', () => {});
+    lostMs(t, 1500);
+    assert.equal(skills.FOLLOW_LIMITS.lostMs, 1500);
     const bot = fakeBot();
-    setTimeout(() => { delete bot.players.JQDAW; }, 700);
-    setTimeout(() => { bot.interrupt_code = true; }, 4000); // a safety net: the test must not hang
+    let goneAt = 0;
+    setTimeout(() => { delete bot.players.JQDAW; goneAt = Date.now(); }, 700);
+    setTimeout(() => { bot.interrupt_code = true; }, 6000); // a safety net: the test must not hang
     assert.equal(await skills.followPlayer(bot, 'JQDAW', 3), false);
     assert.equal(bot.interrupt_code, false, 'it ended by itself, before the safety net');
-    assert.match(bot.output, /Stopped following JQDAW: they left, or are too far away to see\./);
+    assert.ok(Date.now() - goneAt >= 1500, 'not before the grace period');
+    assert.match(bot.output, /Lost sight of JQDAW; waiting up to 1\.5 s for them\./);
+    assert.match(bot.output, /Stopped following JQDAW: not seen for 1\.5 s \(they left, or are too far away to see\)\./);
     assert.ok(bot.calls.stops >= 1, 'the follow goal is cleared');
+});
+
+test('#323 review 2: a player out of sight for less than FOLLOW_LIMITS.lostMs (a death, a dimension change) is followed again', T, async (t) => {
+    t.mock.method(console, 'log', () => {});
+    lostMs(t, 3000);
+    const bot = fakeBot();
+    const entity = bot.players.JQDAW.entity;
+    setTimeout(() => { bot.players.JQDAW.entity = null; }, 600); // mineflayer clears it on a death
+    setTimeout(() => { bot.players.JQDAW.entity = { position: at(12), username: 'JQDAW', type: 'player' }; }, 1700); // the respawn
+    setTimeout(() => { bot.interrupt_code = true; }, 2800);
+    assert.equal(await skills.followPlayer(bot, 'JQDAW', 3), true, 'still following when stopped');
+    assert.match(bot.output, /Lost sight of JQDAW; waiting up to 3 s for them\./);
+    assert.match(bot.output, /Following JQDAW again\./);
+    assert.doesNotMatch(bot.output, /Stopped following/);
+    assert.equal(bot.calls.goals[0].entity, entity);
+    assert.equal(bot.calls.goals.at(-1).entity, bot.players.JQDAW.entity, 'the goal follows the new entity');
 });
 
 test('G4 #3: followPlayer keeps following when the player\'s entity is replaced (a respawn, or back in sight)', T, async (t) => {

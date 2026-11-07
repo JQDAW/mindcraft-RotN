@@ -110,16 +110,50 @@ function yieldAgenda(agent, task) {
 }
 
 /**
- * A giver's typed resumable action (!followPlayer) that a reflex interrupted still waits for the
- * action manager's resume (G4 #3 prep). Once the action manager holds no such resume (!stop
- * cancelled it, or the follow ended by itself), it is forgotten.
+ * How long a giver's interrupted follow may wait, with nothing running, for the action manager to
+ * resume it, and how many resumes are tried before the hold is dropped (#323 review 1).
  */
-function typedResumePending(agent) {
-    const label = agent.control?.typedResume;
-    if (!label) return false;
-    if (agent.actions?.resume_func && agent.actions.resume_name === label) return true;
-    agent.control.typedResume = null;
-    return false;
+export const TYPED_RESUME = { waitMs: 5000, kicks: 3 };
+
+/**
+ * A giver's typed resumable action (!followPlayer) that a reflex interrupted still waits for the
+ * action manager's resume (G4 #3 prep). Tied to that action's own resume function (#323 review 3):
+ * once the action manager holds another resume, or none (!stop cancelled it, or the follow ended by
+ * itself), it is forgotten.
+ * #323 review 1: the action manager resumes only on 'idle', and an interrupted action emits none
+ * (onTeleport stops the action and starts nothing). So when nothing has run for TYPED_RESUME.waitMs,
+ * the resume is started here: the giver's command still stands, and a teleport must not end it.
+ * After TYPED_RESUME.kicks tries that did not start it, the hold is dropped and the resume cancelled,
+ * with a log line, so tasks, the agenda and the night routine are never blocked for good.
+ */
+function typedResumePending(agent, now) {
+    const control = agent.control;
+    const t = control?.typedResume;
+    if (!t) return false;
+    const actions = agent.actions;
+    if (!actions?.resume_func || actions.resume_func !== t.fn) {
+        control.typedResume = null;
+        return false;
+    }
+    if (actions.executing) { // the follow (resumed) or a reflex runs
+        t.idleSince = null;
+        if (actions.currentActionLabel === t.label) t.kicks = 0;
+        return true;
+    }
+    t.idleSince ??= now;
+    if (now - t.idleSince < TYPED_RESUME.waitMs) return true;
+    if (t.kicks >= TYPED_RESUME.kicks) {
+        control.typedResume = null;
+        actions.cancelResume?.();
+        const line = `${t.by}'s ${t.label.replace(/^action:/, '!')} did not resume after ${t.kicks} tries; tasks and the agenda carry on`;
+        console.warn(`[control] ${line}`);
+        say(agent, line);
+        return false;
+    }
+    t.kicks++;
+    t.idleSince = now;
+    Promise.resolve(actions.resumeAction?.()).catch(err => console.warn(`[control] resuming ${t.label}: ${err?.message ?? err}`));
+    return true;
 }
 
 /**
@@ -132,7 +166,7 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
     const sp = agent.self_prompter;
 
     // 2. Control: checked on every update, not throttled, so a typed command wins at once.
-    const hold = agent.control?.blocking() ?? (typedResumePending(agent) ? 'command' : null);
+    const hold = agent.control?.blocking() ?? (typedResumePending(agent, now) ? 'command' : null);
     if (hold) {
         // A giver's typed command may walk the bot out of its night shelter (#204 re-review 1),
         // also under a stored stop, pause or quiet hold, which blocking() reports first (#204 nit).

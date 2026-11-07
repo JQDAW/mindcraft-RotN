@@ -2603,6 +2603,9 @@ export function findPlayer(bot, username) {
 }
 
 
+/** How long a follow waits for a player it cannot see before it stops (#323 review 2). */
+export const FOLLOW_LIMITS = { lostMs: 12_000 };
+
 export async function followPlayer(bot, username, distance=4) {
     /**
      * Follow the given player endlessly. Will not return until the code is manually stopped.
@@ -2632,20 +2635,31 @@ export async function followPlayer(bot, username, distance=4) {
     log(bot, `You are now actively following player ${username}.`);
 
 
+    let lostSince = null; // when the player's entity went (a death, a dimension change, out of sight)
     while (!bot.interrupt_code) {
         await new Promise(resolve => setTimeout(resolve, 500));
         if (bot.interrupt_code) break;
-        // The player left, or is out of sight (no entity): stop, rather than follow a stale entity.
-        // A new entity (a respawn, or back in sight) gets a new goal.
-        const now = findPlayer(bot, username)?.entity;
-        if (!now) {
-            log(bot, `Stopped following ${username}: they left, or are too far away to see.`);
+        // No entity: mineflayer clears it on a death, a dimension change or a short loss of
+        // tracking, so wait FOLLOW_LIMITS.lostMs for it to come back (#323 review 2); only then stop,
+        // rather than follow a stale entity. A new entity (a respawn, back in sight) gets a new goal.
+        const seen = findPlayer(bot, username)?.entity;
+        if (!seen) {
+            if (lostSince === null) {
+                lostSince = Date.now();
+                log(bot, `Lost sight of ${username}; waiting up to ${secsText(FOLLOW_LIMITS.lostMs)} for them.`);
+            }
+            if (Date.now() - lostSince < FOLLOW_LIMITS.lostMs) continue;
+            log(bot, `Stopped following ${username}: not seen for ${secsText(FOLLOW_LIMITS.lostMs)} (they left, or are too far away to see).`);
             clearInterval(doorCheckInterval);
             bot.pathfinder.stop();
             return false;
         }
-        if (now !== player) {
-            player = now;
+        if (lostSince !== null) {
+            lostSince = null;
+            log(bot, `Following ${username} again.`);
+        }
+        if (seen !== player) {
+            player = seen;
             bot.pathfinder.setGoal(new pf.goals.GoalFollow(player, distance), true);
         }
         // in cheat mode, if the distance is too far, teleport to the player
