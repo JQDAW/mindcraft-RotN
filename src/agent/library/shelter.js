@@ -354,6 +354,14 @@ async function craftMore(bot, what, short, craft, { spare = false } = {}) {
     }
 }
 
+/** The dirt piles held, of every kind rotn-data has a dirt recipe for (round 9 B, fix f). */
+function pilesHeld(bot) {
+    // Each kind of pile once (#336 nit): rotn-data may list one pile for several dirt recipes.
+    const kinds = new Map(dirtPileRecipes().map(r => [`${r.name}:${r.meta}`, r]));
+    return [...kinds.values()].reduce((k, r) => k + countOf(bot.inventory.items()
+        .filter(i => registryName(i.name) === r.name && (i.metadata ?? 0) === r.meta)), 0);
+}
+
 /** Whether the bot holds a pickaxe of at least level, after moving one on the cursor or off hand back. */
 async function pickaxeFor(bot, level) {
     if (toolLevels(bot, 'pickaxe').some(l => l >= level)) return { ok: true, where: '' };
@@ -421,6 +429,20 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
             if (!pick.ok && problem)
                 return refuse(plan?.feet ?? soft?.feet ?? null, plan?.todo ?? [], `Not building a shelter: ${problem.replace(/\.$/, '')}. Without a pickaxe only dirt would do`
                     + ` (Pickaxes: ${pick.where}), but ${fallback}.`);
+            // G3 round 9 B (fix f): a dirt shelter fits here, only the dirt is short: say that first.
+            // After the death the line began "without a pickaxe", and the model went for rock.
+            // #336 review: the ratio from rotn-data's recipe, the piles needed, and the command for them.
+            if (!pick.ok && !softProblem) {
+                // The pile dirt dug by hand drops: the recipe that gives minecraft:dirt (as agenda.dirtPile).
+                const pile = dirtPileRecipes().find(r => r.gives?.name === 'minecraft:dirt') ?? { name: 'betterwithmods:dirt_pile', meta: 0, per: 4 };
+                const pileName = formatName(botName(pile.name), pile.meta ?? 0);
+                const held = pilesHeld(bot);
+                const more = Math.max(pile.per, pile.per * (soft.blocks - dirt) - held);
+                return refuse(soft.feet, soft.todo, `Not building a shelter at ${at(soft.feet)}: you have ${dirt} dirt and ${held} dirt piles,`
+                    + ` and a dirt shelter needs ${soft.blocks} dirt (${pile.per * soft.blocks} dirt piles: ${pile.per} piles make 1 dirt, which the shelter crafts itself).`
+                    + ` Dig dirt or grass by hand with !collectBlocks("${pileName}", ${more}); not with a flint, bone or iron shovel, which gets the dirt block instead.`
+                    + ` Without a pickaxe only dirt will do: you could not dig out of rock walls again. Pickaxes: ${pick.where}.`);
+            }
             if (!pick.ok)
                 return refuse(plan.feet, plan.todo, `Not building a shelter at ${at(plan.feet)}: without a pickaxe${level > 0 ? ` of level ${level}` : ''} you could not dig out of it again.`
                     + ` Pickaxes: ${pick.where}. A dirt shelter could be dug out by hand, but ${fallback}.`);
