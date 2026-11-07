@@ -1,9 +1,31 @@
 # Status: rotn-lead
 
-Updated: 2026-11-07 00:10 UTC (from `date -u`)
+Updated: 2026-11-07 02:02 UTC (from `date -u`)
 
 
-## Current snapshot (2026-11-07 00:10 UTC): on the CX33 dev server, the move is nearly done
+## Current snapshot (2026-11-07 02:02 UTC): the move is done, validation passed, smoke round 8 is next
+
+- **Human GO in advance for G3 smoke round 8** (2026-11-07, about 02:00 UTC; the human is away for some time). Scope: one full round of A, B, C and D, each batch on its own fresh server, on the final develop commit. It does **not** cover the `--gate` batches, any rerun after a failure, or any retry of a failure before the bot joins. Those need the human again. The lead starts the round once #308 and #309 are reviewed and merged, then freezes develop.
+- **Validation batch (NEEDS-HUMAN step 8): PASS 7/7.** Smoke D `g3-untrusted-refused` on develop `198bacbb`, run from the CX33 under the lead's written GO.
+  - Refusal 1 s after the whisper; no kick or death.
+  - 14 LLM requests, all Wafer, with 0 failed and 0 empty; USD 0.0024; the key reads 0.849 of the 4.50 stop.
+  - The server ran 6 min (about EUR 0.14), and its server, IP and key were verified gone.
+  - Evidence PR #308 is in review. It is validation-only and never gate evidence.
+- **The move is complete.** Steps 7 and 8 are done. The lead started the agents in Orca terminals as plain `claude` in auto mode, after the human removed Orca's saved `--dangerously-skip-permissions` launch argument on 2026-11-07. The first attempt had picked up that argument, and Claude Code refused to run it as root. net-forge is closed (no task; PLAN allows at most three dev agents), and its worktree is kept.
+- **Merged since 00:10 UTC:**
+  - #298-#302: STATUS reports;
+  - #303: falling-blocks stamp;
+  - #304: settings.js, `pause_when_empty: false`, `!searchWiki` blocked (skills-rotn Request 1 done);
+  - #305: the redactor masks Linux paths, and the pack zip defaults to /home;
+  - #306: the use_on test is no longer flaky under load and cannot hang CI;
+  - #307: `.claude/agents` on Linux paths; reviewers fetch into a named ref and confirm the head SHA.
+- **In review:** #308 (validation evidence) and #309 (the runner test no longer leaves `fake-driver.mjs` running; the lead killed two orphans).
+- **Lessons:**
+  - `hcloud ... -o noheader` prints one blank line when empty, so count with `grep -c .`. A `wc -l` count caused a false "phantom server" report.
+  - `coord/tools/lead-merge-one.sh` stops when an author merges develop in after review, because develop's squash commits count as new. Then the reviewer confirms the new head, and the lead merges at that SHA.
+- **Open for the human:** move `OPENROUTER_API_KEY` out of the shared shell profile (NEEDS-HUMAN step 4).
+
+## Earlier snapshot (2026-11-07 00:10 UTC): on the CX33 dev server, the move is nearly done
 
 - **Dev server:** a Hetzner **CX33** (the human corrected CPX32 to CX33 on 2026-11-07). Ubuntu 26.04.1, 4 vCPU, 7.6 GB RAM, **no swap**; everything runs as root. Root is for the dev server only; the CX23 keeps its `mindcraft-rotn` service user and `deploy` user (deploy/cx23/README.md), so do not copy this setup there. The memory rule (Requests item 13) still applies: during a paid batch over 20 min, no other agent runs `npm ci` or a full suite.
 - **Move checklist (coord/NEEDS-HUMAN.md):**
