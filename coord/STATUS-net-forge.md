@@ -1,8 +1,21 @@
 # Status: net-forge
 
-Updated: 2026-11-06T21:45Z
+Updated: 2026-11-07T00:30Z
 
-Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`.
+Worktree `/home/mindcraft-RotN-worktrees/net-forge` on the CX33 dev server (was `C:/Users/admin/orca/workspaces/mindcraft-RotN/net-forge-g1`).
+
+## Report to the lead: session start on the CX33, 2026-11-07T00:30Z
+
+- **State:** idle, waiting for a task. No open PR except this STATUS update. Branch `agent/net-forge/cx33-start` from develop `c8323be8`; `npm ci` was already done.
+- **Read:** CLAUDE.md, docs/PLAN.md, my brief, this file's handoff, and the 2026-11-07 CX33 snapshot in STATUS-rotn-lead.
+- **Environment checked (nothing paid, no server, no network to Minecraft):**
+  - Node 22.23.4, npm 10.9.9, `xz`, `java`/`javap` 1.8.0_504 on PATH.
+  - `node --test 'packages/forge-bridge/test/**/*.test.js'`: 305/305 pass. I did not run the full suite or lint, because four sessions had just started on 7.6 GB.
+  - `build-collision-overrides.mjs --pack "/home/RotN 3.3.4 Server Pack.zip" --check`: "collision overrides: up to date" (31 s).
+  - The minecraft-data patch is already named `minecraft-data+3.119.0.patch`, so the old rename request (lead STATUS, "For net-forge") is done.
+- **Rules I carry over:** reviewers at medium effort; no reading keys, tokens, `.env*` or the token cache (`/root/.mindcraft-rotn/FRCFLD/msa` is passed only as a path); no paid batch or Hetzner server without the lead's written GO; during a paid batch over 20 min, no `npm ci` or full suite.
+- **Candidate follow-ups (not started, the lead decides):** the same two as in the handoff below: collision overhangs into a plain air cell, and tile-entity-dependent shapes.
+- **Open requests:** none.
 
 ## Handoff for the move to the new dev server, 2026-11-06T21:45Z
 

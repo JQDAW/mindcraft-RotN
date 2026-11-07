@@ -1,10 +1,25 @@
 # Status: rotn-data
 
-Updated: 2026-11-06T21:46Z (from `date -u`)
+Updated: 2026-11-07T00:30Z (from `date -u`)
 
-Worktree `C:/Users/admin/orca/workspaces/mindcraft-RotN/rotn-data-g2`. G2 brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/cx33-start`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
-## Handoff (before the move to the dev server, 2026-11-06)
+## Report to the lead: started on the CX33 (2026-11-07)
+
+- **Read:** CLAUDE.md, docs/PLAN.md, docs/briefs/rotn-data.md, this file's handoff, and your 2026-11-07 00:10 UTC snapshot.
+- **Worktree:** clean, on develop `c8323be8`, with `npm ci` already done. Node 22.23.4.
+- **Offline checks (no server, no LLM, no paid work), all on this machine:**
+  - `node --test "packages/rotn-data/test/**/*.test.js"`: 151/151 pass.
+  - `node --test src/utils/*.test.js` (mcdata.rotn and the related tests): 21/21 pass.
+  - `build-food-values.mjs --pack "/home/RotN 3.3.4 Server Pack.zip" --check`: up to date (20 s, about 1.0 GB peak). The pack-reading tools work with the Linux zip path.
+  - `build-falling-blocks.mjs --pack ... --check` reports "differs". I rebuilt it into my scratchpad and diffed it. **The only difference is the `dump` timestamp** (`2026-11-02T02:37:07Z` committed, `2026-11-06T12:22:37Z` rebuilt). The tool copies that stamp from `manifest.json`, which #269's fourth dump replaced. The falling-block content is identical. A one-line data refresh fixes it; I have not touched it. It is a follow-up for whenever you want it, and it does not affect G3.
+- **Nothing lost in the move:** every `agent/rotn-data/*` branch is on origin. The one local-only commit from the old PC (`b4eaf1da`, on `cite-paths-readme`) was already on develop. The old Windows scratchpads (jars, javap helpers, the cobblestone list) are gone. Anything I need comes again from the pinned zip at `/home/RotN 3.3.4 Server Pack.zip` (SHA-256 checked by you).
+- **Open PRs:** none of mine, apart from this STATUS-only one. **Running:** nothing (no jobs, no subagents, no Hetzner servers).
+- **Still open, unchanged:** Request 2 (`bot.registry` properties for net-forge, on its request) and Request 9 (the prismarine-recipe `outShape` patch, your call). Low-priority follow-ups are listed under "Follow-ups" below. The cobblestone and stone variant list for skills-rotn is rebuilt only if they ask.
+- **Rules I follow here:** no new work without your task; no paid batch or Hetzner server without your written GO; reviewers at medium effort; no keys, tokens, `.env*` or token cache; targeted tests only while a paid batch over 20 min runs (the memory rule); never force-push.
+- **Waiting for a task.**
+
+## Handoff (before the move to the dev server, 2026-11-06; superseded by the report above)
 
 - **Open PRs:** none of mine. My last five are merged: #269, #272, #278, #280 and #288 (`6f1847f2`, the dirt drop rule). This handoff is STATUS only, on `agent/rotn-data/handoff`.
 - **Branches:** every `agent/rotn-data/*` branch is pushed and merged. One exception: the local `agent/rotn-data/cite-paths-readme` has one commit the remote lacks (`b4eaf1da`, the sludge lord line citation, lines 180-198). That line is already on develop, so nothing is lost. The local commit is not pushed, because pushing it would need a force-push.
@@ -272,6 +287,15 @@ Blocks with a remap (`idMeta>stateMeta`; `*` = the id the server sends for that 
 
 ## Doing
 
+- **falling-blocks.json dump stamp (lead task, 2026-11-07; branch `agent/rotn-data/falling-blocks-stamp`, PR in review).**
+  - `source.dump` was `2026-11-02T02:37:07Z`. It is now `2026-11-06T12:22:37Z`, the `dumpedAt` of the current `manifest.json` from #269's fourth dump.
+  - Rebuilt with `node packages/rotn-data/tools/build-falling-blocks.mjs --pack "/home/RotN 3.3.4 Server Pack.zip"` on the CX33.
+  - The diff is that one line. I compared the files as parsed JSON, with `source.dump` left out: the new file is identical to develop's, with 215 falling blocks, 16 that override a fall method, 889 ruled out, 0 unreviewed and 0 unresolved.
+  - `--check` reports up to date for both `falling-blocks.json` and `food-values.json`.
+  - `falling-blocks.test.js` and `food-values.test.js` pass 13/13. ESLint is clean on the two build tools and their tests (it does not lint JSON).
+  - No full `npm test` (shared 7.6 GB), no paid batch, no server.
+  - Request 9 stays deferred until after G3 (lead, 2026-11-07).
+
 - **#188 follow-up (lead, agreed as drafted).** A class rule `ghast-blaze-variants` (pattern `(Ghast|Ghastling|GhastQueen|Blaze)$`, take-cover, ranged, inferred: every class extends vanilla EntityGhast or EntityBlaze and its base fires fireballs, read from the three jars) covers 11 ranged variants (8 Special Mobs, NetherEx's ghastling, Twilight Forest's tower and mini ghasts); after the #191 review (REQUEST CHANGES: my fighter-ghast claim was wrong, I had read only adjustTypeAttributes) a verified rule `melee-ghast-blaze-variants`, matched first, makes the six Special Mobs variants that call disableRangedAI() (fighter, baby, unholy ghasts; cinder, ember, jolt blazes) `fight`. NetherEx's Ghast Queen and Twilight Forest's Ur-Ghast (boss package classes) are `avoid` entries. README `threatOf` row updated; the cockatrice evidence names CockatriceAIAggroLook.shouldContinueExecuting (func_75253_b).
 - **#191 merged** (`b586626`): the ghast/blaze rules above.
 - **#187 merged** (`e600de0`) and **#188 merged** (`944c7b2`, with the zombie horse corrected to fight: The Hordes' MixinAbstractHorse gives it zombie AI, hordes.cfg line 131). **#186 review data requests (lead).** (1) #187: `threatOf` and `nightThreats` return `lookAt` (false: enderman, rifted enderman, Special Mobs enderman variants and ender creeper, cockatrice via its override, all cited); it also carries the sludge_wand line fix (180-198; my push to #185 came after it had merged). Review: REQUEST CHANGES (the override path), fixed. (2) #188: ender dragon and wither `avoid`, ghast and blaze `take-cover` (ranged), zombie horse `fight` (first `ignore`, corrected before merge: The Hordes makes it aggressive), gorgon `avoid` + `lookAt: false` (verified: its gaze kills a player who looks back).
@@ -508,4 +532,4 @@ Findings for skills-rotn (via the lead): see Request 8.
    - **Data:** `world-sources.json` gets `dirt-piles` (tool null, a new optional `unlessTool: {type: shovel, minLevel: 1}`, which howto passes through) and `dirt-with-shovel` (shovel level 1, the dump's plain drops). The other soils (Biomes O' Plenty, Defiled Lands, Aether), sand, red sand and gravel follow the same pattern in the script and are named in the rule's note, not encoded.
 ## Open PRs
 
-- None. #288 is merged (`6f1847f2`).
+- None apart from the CX33 start STATUS PR. #288 is merged (`6f1847f2`).
