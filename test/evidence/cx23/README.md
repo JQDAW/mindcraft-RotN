@@ -4,9 +4,9 @@ harness-ops ran this on the lead's GO 1, by the terminal route the lead gave onc
 
 - **How:** one Orca terminal on the cx23 Orca server, in the workspace the human opened (`/tmp/mindcraft-RotN`, a clone of this fork at develop 997da58; that commit and the folder come from the lead's GO message, which relayed what the human set up, since the probe ran no git command). Command:
   `orca terminal create --environment cx23 --worktree "path:/tmp/mindcraft-RotN" --title cx23-probe`.
-- **What ran:** only the approved read-only commands, with `ls -la /root` last. No installs, no writes, no `apt update`, nothing in the clone. Not read: `authorized_keys`, shadow, environment variables, history, `ip addr`, and anything under `/root/.ssh`.
+- **What ran:** only the approved read-only commands, with `ls -la /root` last. No installs, no writes, no `apt update`, nothing in the clone. Not read: `authorized_keys`, shadow, environment variables, history, `ip addr`, and anything under `<local>/.ssh`.
 - **The terminal** was opened at 22:05:21 and closed at 22:06:05 UTC. These times were recorded on this PC when `orca terminal create` and `orca terminal close` ran; they are not in the capture. The capture's own first line shows the probe starting at 22:05:37Z.
-- **The human's other workspaces on cx23** were left alone and are only recorded: `/tmp/mindcraft` (the upstream clone) and its Orca worktree `/root/orca/workspaces/mindcraft/tunicate`. Their two terminals stayed open. This comes from `orca terminal list` after the close, not from the capture.
+- **The human's other workspaces on cx23** were left alone and are only recorded: `/tmp/mindcraft` (the upstream clone) and its Orca worktree `<local>/orca/workspaces/mindcraft/tunicate`. Their two terminals stayed open. This comes from `orca terminal list` after the close, not from the capture.
 
 **Files:** `probe-20261103.txt` is the full terminal output, produced from the git-ignored raw capture by `test/tools/redact-evidence.mjs`, with no hand edits. The CI leak check passes.
 

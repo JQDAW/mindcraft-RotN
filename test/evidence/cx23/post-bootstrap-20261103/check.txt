@@ -28,7 +28,7 @@ uid=1000(deploy) gid=1000(deploy) groups=1000(deploy),27(sudo),983(mindcraft-rot
 deploy@ubuntu-4gb-hel1-2:/tmp$id mindcraft-rotn
 uid=999(mindcraft-rotn) gid=983(mindcraft-rotn) groups=983(mindcraft-rotn)
 deploy@ubuntu-4gb-hel1-2:/tmp$getent passwd deploy mindcraft-rotn
-deploy:x:<ip>/home/deploy:/bin/bash
+deploy:x:<ip><local>:/bin/bash
 mindcraft-rotn:x:<ip>/var/lib/mindcraft-rotn:/usr/sbin/nologin
 deploy@ubuntu-4gb-hel1-2:/tmp$ls -ld /opt/mindcraft-rotn /var/lib/mindcraft-rotn /etc/mindcraft-rotn /usr/local/lib/mindcraft-rotn
 drwxr-x--- 2 root           mindcraft-rotn 4096 Nov  3 01:23 /etc/mindcraft-rotn

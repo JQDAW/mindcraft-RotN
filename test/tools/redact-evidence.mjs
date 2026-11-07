@@ -31,11 +31,12 @@
 //     127.x.x.x                 loopback (127.0.0.0/8), e.g. 127.0.0.1 and systemd-resolved's 127.0.0.53
 //     0.0.0.0                   the IPv4 wildcard ("all addresses")
 //   IPv6 "::" and "::1" were never addresses to this tool (see isAddress6).
-//   It also flags any IPv6 address, any UUID, this PC's user paths, and partial leftovers next to
+//   It also flags any IPv6 address, any UUID, this PC's user paths (Windows, and the Linux dev server's /root,
+//   /home/<user> and checkout folders), and partial leftovers next to
 //   <ip> (e.g. "<ip>.0.113.7"). Committed evidence comes out of this tool, never from hand edits: a form
 //   the check flags and the tool misses is fixed in the tool, with a test.
 // - UUIDs become <uuid-vN> (N = the version nibble; G1's <uuid-v4> for Mojang player UUIDs). The bot's
-//   name becomes <bot>; this PC's user paths become <local>.
+//   name becomes <bot>; this PC's user paths become <local> (see LOCAL_PATH and LINUX_PATH).
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
@@ -54,6 +55,18 @@ const V6_RUN = /[0-9A-Fa-f.:]+/g;
 const UUID = /\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-([0-9A-Fa-f])[0-9A-Fa-f]{3}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b/g;
 // This PC's user folder in any spelling (C:\Users\x, C:/Users/x, /c/Users/x, JSON-escaped).
 const LOCAL_PATH = /(?:[A-Za-z]:|\/[a-z])(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)[^\\/"'\s]+/g;
+// The Linux dev server's (the CX33, 2026-11-07) home and checkout folders, with "/" or JSON's "\/" between the parts
+// (also inside a file:/// URL): the worktrees folder with the agent's folder (/home/mindcraft-RotN-worktrees/<agent>),
+// any /home/<user> (the main checkout /home/mindcraft-RotN, the CX23's /home/deploy) and /root when a path goes on
+// below it (/root/.mindcraft-rotn/...). The pinned pack zip in /home keeps its name (<local>/RotN 3.3.4 Server Pack.zip,
+// as on Windows). A bare "/root", "/home" or "/home/*" is no one's folder and stays. A folder name ends at a separator,
+// a space, a quote, ":;,", a bracket or "*" (so /home/deploy:/bin/bash keeps ":/bin/bash"). Not after a
+// word character, ".", "~", "-" or "\" (no URL path, no relative path such as ./root/x or a/home/b).
+const LSEP = String.raw`\\?\/`;
+const LSEG = String.raw`[^\\/"'\s*:;,()[\]{}<>]+`;
+const LINUX_PATH = new RegExp(String.raw`(?<![\w.~\\-])${LSEP}(?:home${LSEP}mindcraft-RotN-worktrees${LSEP}${LSEG}`
+    + String.raw`|home(?=${LSEP}RotN 3\.3\.4 Server Pack\.zip)|home${LSEP}${LSEG}|root(?=${LSEP}${LSEG}))`, 'g');
+const LOCAL_PATHS = [LOCAL_PATH, LINUX_PATH];
 // hcloud's numeric server ids: "(server: N" and "Server N created" (group 1 is kept).
 export const HCLOUD_SERVER_ID = /(\(server: |\bServer )\d{5,}(?=[,) ]|$)/gm;
 // What is left of an address next to a redaction: "<ip>.0.113.7", "203.0.<ip>", "2001:db8:<ip>".
@@ -155,7 +168,7 @@ export function redact(text, { bot } = {}) {
     // The check's own rule (findLeaks): every quad that is not host-less or one of the exact version forms.
     out = out.replace(QUAD_ANY, (m, offset, whole) => (isExempt(whole, offset, m) ? m : '<ip>'));
     out = out.replace(UUID, (_m, v) => `<uuid-v${v.toLowerCase()}>`);
-    out = out.replace(LOCAL_PATH, '<local>');
+    for (const re of LOCAL_PATHS) out = out.replace(re, '<local>');
     // Hetzner's numeric server ids in hcloud's output (lead, #237 review nit): "(server: 174725082, ...)",
     // "Waiting for start_server (server: 174725082) ..." and "Server 174725082 created". Masked from now on;
     // not a leak-check rule, because earlier committed evidence keeps them (the servers are deleted).
@@ -177,7 +190,7 @@ export function findLeaks(text) {
     }
     for (const m of text.matchAll(PARTIAL)) leaks.push({ kind: 'partial-ip', line: lineOf(m.index) });
     for (const m of text.matchAll(UUID)) leaks.push({ kind: 'uuid', line: lineOf(m.index) });
-    for (const m of text.matchAll(LOCAL_PATH)) leaks.push({ kind: 'local-path', line: lineOf(m.index) });
+    for (const re of LOCAL_PATHS) for (const m of text.matchAll(re)) leaks.push({ kind: 'local-path', line: lineOf(m.index) });
     return leaks.sort((a, b) => a.line - b.line);
 }
 
