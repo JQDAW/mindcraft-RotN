@@ -31,6 +31,7 @@ const settings = {
     "only_chat_with": [], // users that the bots listen to and send general messages to. if empty it will chat publicly
     "task_givers": ["JQDAW"], // RotN: players whose typed commands and tasks the bot accepts; everyone else may only chat (#146)
     "allow_server_task_giver": false, // RotN: test servers only; lets the console whisper sender "Server" give tasks. Never true in a committed file
+    "pause_when_empty": false, // RotN: true pauses the autonomous agenda while no other player is online (PLAN priority stack: default off; skills-rotn Request 1)
     "place_block_timeout_ms": 2000, // RotN: how long block placement waits for the server's update before it reports failure (50-60000; #155). A lagging modded server needs more than upstream's 500
 
     "speak": false,
@@ -45,7 +46,7 @@ const settings = {
 
     "allow_insecure_coding": false, // allows newAction command and model can write/run code on your computer. enable at own risk
     "allow_vision": false, // allows vision model to interpret screenshots as inputs
-    "blocked_actions" : ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel"] , // commands to disable and remove from docs. Ex: ["!setMode"]
+    "blocked_actions" : ["!checkBlueprint", "!checkBlueprintLevel", "!getBlueprint", "!getBlueprintLevel", "!searchWiki"] , // commands to disable and remove from docs. Ex: ["!setMode"]. RotN: !searchWiki returns vanilla 1.21 facts (skills-rotn Request 1)
     "code_timeout_mins": -1, // minutes code is allowed to run. -1 for no timeout
     "relevant_docs_count": 5, // number of relevant code function docs to select for prompting. -1 for all
 
