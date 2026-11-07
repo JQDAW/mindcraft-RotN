@@ -39,7 +39,7 @@ const LEAVES = 'dynamictrees:leaves0', ROOTY = 'dynamictrees:rootydirt', BUSH = 
  * leafSticks: what each broken leaf gives, in turn (Pyrotech: a stick half the time). The walks keep
  * the bot on the ground (y 64): a leaf is broken from below.
  */
-function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSticks = [1, 0] } = {}) {
+function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSticks = [1, 0], leaves: loose = [], stuckAt = () => false } = {}) {
     const world = new Map(); // key -> { name, tree }
     for (const [i, tr] of trees.entries()) {
         world.set(key(at(tr.x, 63)), { name: ROOTY });
@@ -52,6 +52,7 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
         }
     }
     for (const b of bushes) world.set(key(at(b.x, 64, b.z ?? 0)), { name: BUSH, sticks: b.sticks });
+    for (const p of loose) world.set(key(p), { name: LEAVES }); // leaves of no tree in this world (on a trunk the bot does not know)
     const blockAt = (p) => {
         const q = p.floored ? p.floored() : p;
         const name = world.get(key(q))?.name ?? (q.y < 64 ? 'dirt' : 'air');
@@ -70,7 +71,7 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
     };
     let nextId = 1, leaves = 0;
     const entities = {};
-    const log = { digs: [] };
+    const log = { digs: [], walks: [] };
     const bot = {
         log, world, registry: reg, version: '1.12.2', output: '', interrupt_code: false,
         game: { gameMode: 'survival' },
@@ -115,6 +116,9 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
             goto(goal) {
                 // Every walk ends on the ground (y 64): these tests check which blocks are chosen, not how
                 // the bot walks. That a real walk never climbs a tree is proven in fall_safety.test.js.
+                // stuckAt(goal): a walk that gets nowhere (the bot stays where it is).
+                log.walks.push(key(at(Math.floor(goal.x), Math.floor(goal.y), Math.floor(goal.z))));
+                if (stuckAt(goal)) return Promise.resolve();
                 bot.entity.position = at(Math.floor(goal.x), 64, Math.floor(goal.z)).offset(0.5, 0, 0.5);
                 for (const [id, e] of Object.entries(entities)) {
                     if (e.name === 'item' && e.position.distanceTo(bot.entity.position) <= 1.5) {
@@ -252,4 +256,42 @@ test('Request 17: leaves come before a species that gave 0 sticks; leaves out of
     const high = fakeBot({ trees: [{ x: 3, branch: SPRUCE, sticks: 2 }] });
     assert.equal(await skills.collectBlock(high, 'stick', 1), true, high.output);
     assert.deepEqual(high.log.digs.map(d => d.name), [SPRUCE], 'the canopy is out of reach: felled, no leaf');
+});
+
+// ---- G3 round 9 B: leaves that looked reachable from the ground were not ----
+
+test('round 9 B: leaves out of reach use no attempt; after 3 the collect moves on to trees, and the next collect does not walk to them again', T, async (t) => {
+    fast(t);
+    // Round 9 B (driver.log 128-134): three leaves at y 73 on a thick trunk passed the ground check, each
+    // walk ended out of reach ("Could not reach ... from the ground; skipping it"), each used one of the
+    // 3 attempts: "Collected 0 stick." with trees around; four more collects tried the same three.
+    // Here: three leaves 6-8 blocks west, firm ground 3 below, every walk to them gets nowhere; trees at
+    // x 10 and 20 (canopy out of reach), 2 sticks each.
+    const loose = [at(-8, 67), at(-8, 67, 2), at(-10, 67)];
+    const isLoose = (g) => loose.some(p => p.x === Math.floor(g.x) && p.y === Math.floor(g.y) && p.z === Math.floor(g.z));
+    const bot = fakeBot({ leaves: loose, stuckAt: isLoose, trees: [{ x: 10, branch: DARK_OAK, sticks: 2 }, { x: 20, branch: DARK_OAK, sticks: 2 }] });
+    const leafWalks = () => bot.log.walks.filter(k => loose.some(p => key(p) === k)).length;
+    assert.equal(await skills.collectBlock(bot, 'stick', 2), true, bot.output);
+    assert.equal((bot.output.match(/Could not reach dynamictrees:leaves0/g) ?? []).length, 3, bot.output);
+    assert.deepEqual(bot.log.digs.map(d => d.name), [DARK_OAK], 'then a tree, within the 2 attempts');
+    assert.match(bot.output, /Collected 2 stick\./);
+    assert.equal(leafWalks(), 3);
+
+    // The next collect remembers them: no walk to those leaves, straight to the other tree.
+    bot.output = '';
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
+    assert.equal(leafWalks(), 3, 'no new walk to a leaf found out of reach');
+    assert.doesNotMatch(bot.output, /Could not reach/);
+    assert.deepEqual(bot.log.digs.map(d => d.name), [DARK_OAK, DARK_OAK]);
+});
+
+test('round 9 B: at most COLLECT_LIMITS.unreachableLeaves leaves out of reach per collect, then no more leaves in it', T, async (t) => {
+    fast(t);
+    const loose = [-7, -9, -11, -13, -15, -17].map(x => at(x, 67));
+    const isLoose = (g) => loose.some(p => p.x === Math.floor(g.x) && p.y === Math.floor(g.y));
+    const bot = fakeBot({ leaves: loose, stuckAt: isLoose });
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), false, bot.output);
+    assert.equal(skills.COLLECT_LIMITS.unreachableLeaves, 3);
+    assert.equal((bot.output.match(/Could not reach/g) ?? []).length, 3, bot.output);
+    assert.match(bot.output, /Collected 0 stick\./);
 });
