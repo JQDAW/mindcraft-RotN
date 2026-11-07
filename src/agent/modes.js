@@ -43,6 +43,33 @@ export function shelterQuiet(name, bot) {
     return false;
 }
 
+/** A mob in reach is named in chat at most this often from the shelter (T1: up to 24 lines a minute). */
+export const SHELTER_SAY_MS = 30_000;
+let shelterSaidAt = -Infinity;
+
+/**
+ * The fight from inside the night shelter (G3 round 9 B; #331 review 1-4): never while the night's
+ * repair runs, nor within SHELTER_FIGHT.restMs after the last such fight (the night routine checks
+ * and repairs first); else the nearest hostile mob in reach (threats.shelterEnemy, whatever the
+ * plan says) is hit in place for as long as one is in reach, capped. Returns whether it started.
+ */
+function fightInShelter(mode, agent, { override = false } = {}) {
+    const bot = agent.bot;
+    if (agent.actions.currentActionLabel === REPAIR_LABEL) return false;
+    if (Date.now() - (bot.rotnFightEndedAt ?? -Infinity) < skills.SHELTER_FIGHT.restMs) return false;
+    const target = world.getNearestEntityWhere(bot, (e) => threats.shelterEnemy(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
+    if (!target) return false;
+    if (!claimThreat(mode.name, Date.now(), { override })) return false;
+    if (Date.now() - shelterSaidAt >= SHELTER_SAY_MS) {
+        shelterSaidAt = Date.now();
+        Promise.resolve(say(agent, `Fighting ${target.name} from the shelter!`)).catch(err => reportModeError(mode.name, err));
+    }
+    execute(mode, agent, async () => {
+        await skills.defendInPlace(bot, threats.shelterEnemy);
+    }).catch(err => reportModeError(mode.name, err));
+    return true;
+}
+
 /**
  * Low health in the night shelter (the lead's decision after G3 round 9 B): no flee out into the
  * night. While the night's repair runs, nothing (it closes the opening). Else a mob within reach is
@@ -50,17 +77,8 @@ export function shelterQuiet(name, bot) {
  */
 function holdInShelter(mode, agent) {
     const bot = agent.bot;
+    if (fightInShelter(mode, agent, { override: true })) return;
     if (agent.actions.currentActionLabel === REPAIR_LABEL) return;
-    const plan = threats.threatPlan(bot);
-    const isEnemy = plan?.isEnemy ?? ((e) => mc.isHostile(e));
-    const inReach = world.getNearestEntityWhere(bot, (e) => isEnemy(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
-    if (inReach) {
-        claimThreat(mode.name, Date.now(), { override: true });
-        execute(mode, agent, async () => {
-            await skills.defendInPlace(bot, isEnemy);
-        }).catch(err => reportModeError(mode.name, err));
-        return;
-    }
     const item = Number.isFinite(bot.food) && bot.food < 20 ? food.chooseFood(bot) : null;
     if (!item) return;
     execute(mode, agent, async () => {
@@ -333,18 +351,14 @@ const modes_list = [
             // G3 round 9 B: in the shelter with a wall open, self_defense interrupted the repair and
             // defendSelf walked out after the zombie (pvp.attack follows its target); the bot died
             // outside. Now the repair runs on, and the fight is in place, at mobs within reach.
-            const sheltered = agent.bot.rotnSheltered;
-            if (sheltered && agent.actions.currentActionLabel === REPAIR_LABEL) return;
-            const plan = threats.threatPlan(agent.bot);
-            if (sheltered && plan?.action === 'fight') {
-                if (!skills.inShelterReach(agent.bot, plan.from)) return;
-                if (!claimThreat(this.name)) return;
-                Promise.resolve(say(agent, `Fighting ${plan.from.name} from the shelter!`)).catch(err => reportModeError(this.name, err));
-                execute(this, agent, async () => {
-                    await skills.defendInPlace(agent.bot, plan.isEnemy, () => threats.threatPlan(agent.bot)?.action === 'fight');
-                }).catch(err => reportModeError(this.name, err));
+            // #331 review 1 and 2: in the shelter any hostile mob in reach is hit, whatever the plan
+            // says (two zombies, a skeleton or a creeper near make it 'flee'), for as long as one is
+            // in reach (capped, review 3).
+            if (agent.bot.rotnSheltered) {
+                fightInShelter(this, agent);
                 return;
             }
+            const plan = threats.threatPlan(agent.bot);
             if (plan?.action === 'fight' && await world.isClearPath(agent.bot, plan.from)) {
                 if (!claimThreat(this.name)) return; // checked after the await: another mode may own it now
                 say(agent, `Fighting ${plan.from.name}!`);

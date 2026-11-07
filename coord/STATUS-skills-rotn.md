@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T14:48Z (from `date -u`)
+Updated: 2026-11-07T14:56Z (from `date -u`)
 
 ## Decision (1) after round 9 B: low health in the night shelter, the bot stays (branch `agent/skills-rotn/shelter-hold-flee`, stacked on #331; 2026-11-07T14:48Z by `date -u`)
 
@@ -34,7 +34,15 @@ Updated: 2026-11-07T14:48Z (from `date -u`)
   - a zombie 5 blocks away is not chased.
   - **On develop all 3 fail,** run with develop's label `action:buildShelter`: the repair is interrupted by `mode:self_defense`, `defendSelf` walks (`GoalInvert(GoalFollow)`), and a fight starts at the far zombie.
   - With the fix: `shelter_defense`, `night_routine`, `threat_arbitration`, `quiet_reflexes`, `update_loop`, `shelter`, `night` and `threats`, 96/96. Lint: no new errors (modes.js 28 and skills.js 20, as on develop; the others 0).
-- **Question for the lead (not in this PR):** the low-health flee (`self_preservation`) still walks the bot out of an open shelter, by design ("always acts"). In round 9 it came only after the bot was already outside. Should it also stay in place while the shelter is open (at night, outside is worse), or keep its current priority?
+- **#331 review (lead, REQUEST CHANGES on f54db6c), answered (2026-11-07T14:56Z by `date -u`):**
+  1. **Any hostile mob in reach is hit, whatever the plan says.** In the shelter, self-defense hits any hostile mob within reach (`threats.shelterEnemy`: any mob rotn-data does not ignore, never a calm one or the enderman family). Before, two zombies, a skeleton or a creeper near made the plan 'flee', with cowardice quiet, so nothing was hit.
+  2. **The fight goes on while an enemy is in reach,** not only while the plan says fight.
+  3. **`defendInPlace` is capped:** `maxMs` 6 s, `maxSwings` 8, and 4 hits on one mob whose known health did not drop. Afterwards self-defense rests `restMs` (1.5 s), so the night routine repairs first.
+  4. **While a wall is known open, every tick checks and repairs,** not every `CHECK_MS`. The "open … repairing" line is said once and then only logged, and a check that finds it closed again restores the shelter's rules.
+  5. **Folded in from #341 (the lead's decision):** at low health in the shelter the bot stays. The repair goes on, else it fights in reach, else it eats. It leaves only for fire, lava, drowning or a falling block. #341 is to be closed.
+  - **#334 nit:** `defendInPlace` equips the weapon just before each swing and sets `bot.rotnFightingInPlace` while it runs. When develop is merged into #334, its dig-alarm handler will skip the block equip while that flag is set.
+  - **Tests:** 6 new or changed in `shelter_defense` and `night_routine`; all 6 fail on f54db6c. With the changes: 8 related files, 107/107. Lint unchanged (modes.js 28, skills.js 20, the others 0).
+
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 

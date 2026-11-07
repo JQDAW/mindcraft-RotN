@@ -562,3 +562,25 @@ test('G3 round 7 B: inside, a dropped item, a carpet or snow in the space, or a 
     assert.equal(nightTick(wet.agent, { now: 2 * CHECK_MS + 3, ops: wet.o }), 'night:building');
     assert.match(wet.agent.chat.at(-1), /no longer usable: water at 0, 65, 0 \(a liquid at head height: the bot would drown\); building a new one$/);
 });
+
+test('#331 review 4: while a wall is known open, every tick checks and repairs (not every CHECK_MS); the line is said once', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o }); // starts the check clock
+    o.open = [SITE.offset(1, 1, 0)];
+    o.buildShelter = (bot, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, feet: SITE }); }; // the repair fails
+    nightTick(agent, { now: CHECK_MS + 2, ops: o });
+    await settle(agent);
+    assert.equal(agent.bot.rotnSheltered, 'open');
+    assert.equal(o.builds.length, 2);
+    nightTick(agent, { now: CHECK_MS + 3, ops: o }); // one tick later: not CHECK_MS later
+    await settle(agent);
+    assert.equal(o.builds.length, 3, 'repaired again at once');
+    assert.equal(agent.chat.filter(l => /the shelter is open/.test(l)).length, 1, 'said once, then logged');
+    o.open = []; // closed again (another repair, a block placed)
+    nightTick(agent, { now: CHECK_MS + 4, ops: o });
+    assert.equal(agent.bot.rotnSheltered, true, 'the shelter\'s rules are back');
+});

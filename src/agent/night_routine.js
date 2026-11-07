@@ -257,7 +257,10 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             return 'night:inside';
         }
         if (n.checkedAt === null) n.checkedAt = now;
-        if (now - n.checkedAt < CHECK_MS) return 'night:inside';
+        // #331 review 4: while a wall is known open (a repair did not close it, or a fight in place
+        // held it up), every tick checks and repairs, not every CHECK_MS.
+        const open = bot.rotnSheltered === 'open';
+        if (!open && now - n.checkedAt < CHECK_MS) return 'night:inside';
         n.checkedAt = now;
         if (!bot.entity.position.floored().equals(n.site)) {
             // Pushed, teleported (AggroTP) or walked out: a new shelter where it is now.
@@ -278,11 +281,13 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             startBuilding(n, now);
             return 'night:building';
         }
+        if (need.todo.length === 0 && open) bot.rotnSheltered = true; // closed again: the shelter's rules are back
         if (need.todo.length > 0) {
             // self_defense fights at the opening, from where the bot stands, and never during the
             // repair (G3 round 9 B: it interrupted the repair and walked out after the zombie).
             bot.rotnSheltered = 'open';
-            line(agent, `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`);
+            const text = `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`;
+            if (open) console.log(text); else line(agent, text); // said once, then logged (T1: chat volume)
             startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true }), (r) => {
                 if (r?.closed) bot.rotnSheltered = true;
                 else console.warn('[night] the repair did not close the shelter; trying again at the next check');
