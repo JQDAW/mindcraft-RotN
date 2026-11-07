@@ -69,6 +69,8 @@ if (process.env.SETTINGS_JSON) {
         console.error("Failed to parse environment variable for SETTINGS_JSON:", err);
     }
 }
+// RotN (G4 ready-to-try: "insecure coding is off"): log the value every agent receives, after all overrides.
+console.log(`[settings] effective allow_insecure_coding=${JSON.stringify(settings.allow_insecure_coding)}`);
 
 
 Mindcraft.init(false, settings.mindserver_port, settings.auto_open_ui);
