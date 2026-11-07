@@ -73,11 +73,13 @@ describe('rotn-test mod-director (ADR 0008)', () => {
         assert.doesNotMatch(r.stdout, /chunkgenlimiter|memory_repo|1\.12\.2\/|musictriggers/, 'subfolders and non-jars are not compared');
     });
 
-    test('the list copy is checked only if Mod Director kept it on disk', () => {
+    test('#351 review: a pinned entry outside mods/ that is not on disk fails closed (MISSING), as a missing jar does', () => {
         fs.rmSync(path.join(t.server, BUNDLE));
         const r = check();
-        assert.equal(r.status, 0, r.stdout);
-        assert.match(r.stdout, /^mod-director: pinned config\/mod-director\/file-director_requisites\.bundle\.json not on disk: Mod Director kept no copy here \(not checked\)$/m);
+        assert.equal(r.status, 1, r.stdout);
+        assert.match(r.stdout, /^mod-director: MISSING config\/mod-director\/file-director_requisites\.bundle\.json \(pinned\)$/m);
+        assert.match(r.stdout, /^mod-director: FAILED: 1 problem\(s\)$/m);
+        assert.doesNotMatch(r.stdout, /not checked/);
         fs.writeFileSync(path.join(t.server, BUNDLE), 'a different list');
         const bad = check();
         assert.equal(bad.status, 1);
@@ -266,6 +268,35 @@ describe('build.sh at Done (sourced; a fake systemctl)', () => {
         const up = buildFn('record_extra_mods; echo survived');
         assert.equal(up.status, 1);
         assert.equal(phase(), 'failed:extra-mod: Aether Continuation v1.3.0.jar would replace a jar of the pinned zip');
+    });
+
+    test('#351 review: a backslash in a zip jar\'s name reaches awk unchanged (ENVIRON, not -v): no false extra, the refusal still works', () => {
+        const SLASHED = 'mods/odd\\name-1.0.jar';   // a real backslash in the file name
+        t.put(SLASHED);
+        fs.appendFileSync(path.join(t.state, 'pack-files.list'), SLASHED + '\n');
+        fs.rmSync(path.join(t.state, 'pack-jars.sha256'));
+        const r = buildFn('hash_pack_jars && record_extra_mods && echo survived');
+        assert.match(r.stdout, /survived/, r.stderr);
+        assert.doesNotMatch(fs.readFileSync(path.join(t.state, 'extra-mods.sha256'), 'utf8'), /odd/, 'the zip\'s own jar is not an extra mod');
+        // Hashed from stdin: a plain 64-hex hash, never sha256sum's escaped "\\<hash>" for such a name, so the check accepts it.
+        assert.ok(fs.readFileSync(path.join(t.state, 'pack-jars.sha256'), 'utf8').includes(`${sha(Buffer.from(SLASHED))}  ${SLASHED}\n`));
+        const ok = check();
+        assert.equal(ok.status, 0, ok.stdout);
+        fs.writeFileSync(path.join(t.server, SLASHED), 'an upload');
+        const up = buildFn('record_extra_mods; echo survived');
+        assert.equal(up.status, 1);
+        assert.equal(phase(), 'failed:extra-mod: odd\\name-1.0.jar would replace a jar of the pinned zip');
+    });
+
+    test('#351 review: a jar name with a line break is refused as an extra mod, and the check reports it as EXTRA (fails closed)', () => {
+        t.put('mods/two\nlines.jar', Buffer.from('ours'));
+        const r = buildFn('record_extra_mods; echo survived');
+        assert.equal(r.status, 1);
+        assert.doesNotMatch(r.stdout, /survived/);
+        assert.equal(phase(), 'failed:extra-mod: a jar name with a line break cannot be pinned: mods/two\\nlines.jar');
+        const c = check();
+        assert.equal(c.status, 1, c.stdout);
+        assert.match(c.stdout, new RegExp(`^mod-director: EXTRA mods/two\\\\nlines\\.jar sha256 ${sha(Buffer.from('ours'))} \\(not in the pinned zip or the pinned list\\)$`, 'm'));
     });
 
     test('main runs the check right after the first Done, before the whitelist and ready', () => {
