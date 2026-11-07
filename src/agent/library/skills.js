@@ -779,9 +779,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // time; wanted() never offers others). Then trees and the rest, where a species that has given this
     // bot 0 of the item loses only to a tree at most CL.speciesDetour farther (rotn-data #312: the stick
     // count follows the tree's shape, not its species, so never a long walk for it); then by-hand blocks
-    // farther out. Leaves are told by the block, not the rule's id, so rotn-data's leaves rule and the
-    // fallback rank alike. Only when the item has both kinds of source, or a species already came up
-    // empty; otherwise one plain search.
+    // farther out. Leaves are told by the block, not by the rule's id (rotn-data's leaves-sticks rule).
+    // Only when the item has both kinds of source, or a species already came up empty; otherwise one
+    // plain search.
     const emptySpecies = emptyFelled(bot, baseType);
     const isHand = (block) => !fellsTree(block) && handMatchers.some(matches => matches(block));
     const canGiveNone = (block) => mayGiveNone.some(matches => matches(block));
@@ -2562,22 +2562,49 @@ export async function goToPlayer(bot, username, distance=3) {
         return true;
     }
 
-    bot.modes.pause('self_defense');
-    bot.modes.pause('cowardice');
-    let player = bot.players[username].entity
-    if (!player) {
-        log(bot, `Could not find ${username}.`);
+    // G4 #3 prep: an unknown name threw a TypeError (bot.players[username] undefined); the model
+    // may also write a giver's name in the wrong case.
+    const found = findPlayer(bot, username);
+    if (!found?.entity) {
+        log(bot, `Could not find ${username}: not online, or too far away to see.`);
         return false;
     }
+    bot.modes.pause('self_defense');
+    bot.modes.pause('cowardice');
 
     distance = Math.max(distance, 0.5);
-    const goal = new pf.goals.GoalFollow(player, distance);
+    const goal = new pf.goals.GoalFollow(found.entity, distance);
 
-    await goToGoal(bot, goal, true);
-
-    log(bot, `You have reached ${username}.`);
+    // goToGoal is fall-safe and bounded; false when the walk was stopped (G4 #3 prep: it said
+    // "You have reached" after a stopped walk too).
+    if (!await goToGoal(bot, goal)) {
+        log(bot, `Did not reach ${found.username}.`);
+        return false;
+    }
+    log(bot, `You have reached ${found.username}.`);
+    return true;
 }
 
+/**
+ * The online player of that name: the exact name, else the one name that differs only in case
+ * (the model may write "jqdaw" for JQDAW). { username, entity } (entity null while out of sight),
+ * or null.
+ */
+export function findPlayer(bot, username) {
+    const players = bot?.players ?? {};
+    if (typeof username !== 'string' || username === '') return null;
+    let p = players[username];
+    if (!p) {
+        const same = Object.keys(players).filter(n => n.toLowerCase() === username.toLowerCase());
+        if (same.length === 1) p = players[same[0]];
+    }
+    if (!p) return null;
+    return { username: p.username ?? username, entity: p.entity ?? null };
+}
+
+
+/** How long a follow waits for a player it cannot see before it stops (#323 review 2). */
+export const FOLLOW_LIMITS = { lostMs: 12_000 };
 
 export async function followPlayer(bot, username, distance=4) {
     /**
@@ -2588,11 +2615,18 @@ export async function followPlayer(bot, username, distance=4) {
      * @example
      * await skills.followPlayer(bot, "player");
      **/
-    let player = bot.players[username].entity
-    if (!player)
+    // G4 #3 prep: an unknown name threw a TypeError; a name in the wrong case is found.
+    const found = findPlayer(bot, username);
+    if (!found?.entity) {
+        log(bot, `Could not find ${username}: not online, or too far away to see.`);
         return false;
+    }
+    username = found.username;
+    let player = found.entity;
 
-    const move = new pf.Movements(bot);
+    // Fall-safe, like every other walk (G3 round 4 B, fall_safety.js): no drop over 3 blocks and
+    // never a broken Dynamic Trees branch, which fells the tree onto the bot.
+    const move = fallSafe(new pf.Movements(bot));
     move.digCost = 10;
     bot.pathfinder.setMovements(move);
     let doorCheckInterval = startDoorInterval(bot);
@@ -2601,8 +2635,33 @@ export async function followPlayer(bot, username, distance=4) {
     log(bot, `You are now actively following player ${username}.`);
 
 
+    let lostSince = null; // when the player's entity went (a death, a dimension change, out of sight)
     while (!bot.interrupt_code) {
         await new Promise(resolve => setTimeout(resolve, 500));
+        if (bot.interrupt_code) break;
+        // No entity: mineflayer clears it on a death, a dimension change or a short loss of
+        // tracking, so wait FOLLOW_LIMITS.lostMs for it to come back (#323 review 2); only then stop,
+        // rather than follow a stale entity. A new entity (a respawn, back in sight) gets a new goal.
+        const seen = findPlayer(bot, username)?.entity;
+        if (!seen) {
+            if (lostSince === null) {
+                lostSince = Date.now();
+                log(bot, `Lost sight of ${username}; waiting up to ${secsText(FOLLOW_LIMITS.lostMs)} for them.`);
+            }
+            if (Date.now() - lostSince < FOLLOW_LIMITS.lostMs) continue;
+            log(bot, `Stopped following ${username}: not seen for ${secsText(FOLLOW_LIMITS.lostMs)} (they left, or are too far away to see).`);
+            clearInterval(doorCheckInterval);
+            bot.pathfinder.stop();
+            return false;
+        }
+        if (lostSince !== null) {
+            lostSince = null;
+            log(bot, `Following ${username} again.`);
+        }
+        if (seen !== player) {
+            player = seen;
+            bot.pathfinder.setGoal(new pf.goals.GoalFollow(player, distance), true);
+        }
         // in cheat mode, if the distance is too far, teleport to the player
         const distance_from_player = bot.entity.position.distanceTo(player.position);
 
