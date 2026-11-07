@@ -1,39 +1,25 @@
 # Status: rotn-data
 
-Updated: 2026-11-07T04:39Z (from `date -u`)
+Updated: 2026-11-07T14:20Z (from `date -u`)
 
-Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/leaves-sticks`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/trunk-shell`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
 
-## Now: stick sources after G3 round 8 A (lead task, 2026-11-07)
+## Now: trunk shells and digging mobs, from G3 round 9 B (lead task, 2026-11-07)
 
-- **PR A, #312, `agent/rotn-data/deadbush-sticks`: MERGED** (review APPROVE WITH NITS; the nits go into PR B, below):
-  - New world rule `deadbush-sticks`: break `minecraft:deadbush` (meta 0, its only state) by hand for 0-2 sticks, `countRange {min 0, max 2, mean 1}`, `tool: null`, `count: null`, `confidence: documented`.
-  - Cited from the Forge-patched `BlockDeadBush`: I applied Forge's server binpatch to the vanilla class, and its input checksum matched. `getItemDropped` returns `Items.STICK`, and `quantityDropped` is `Random.nextInt(3)`. Shears give the bush itself.
-  - No pack script, Dropt rule, config or mod jar changes the drop. BBLSOhMy's dead bush mixin only widens the soils it can stand on. I checked the 5 drop handlers that name a plant type and ruled each out. The other 59 drop handlers were not read one by one (in `unverified`).
-  - Shears are not encoded as `unlessTool`, because no shears in the dump has a `shears` tool class.
-  - `howToGet` passes the new `countRange` field through. The README documents it.
-  - **Species (spruce vs dark oak):** my data can't single out a species. No vanilla Dynamic Trees species overrides the stick computation. Sticks are the leftover eighths of V = 1.5 × Σradius²/64, so the count depends on the tree's shape. Rounds 5 A and 8 A gave 1 stick from 5 spruces, far below the ~3.5 per tree an even spread would give. That gap is not explained by the data and is noted as unverified. `fell-tree`'s summary now tells the bot not to count on felling for sticks.
-  - **Correction of my own earlier claim (#256): leaves DO give sticks.**
-    - Pyrotech's `HarvestDropsEventHandler$Sticks` is on, because `config/pyrotech/core.cfg` line 8 sets `DROP_STICKS_FROM_LEAVES=true`. It adds 1 stick 50% of the time when a player breaks a block whose pick-block item is in ore `treeLeaves`.
-    - Dynamic Trees leaves pick their family's vanilla leaves (`assets/dynamictrees/leaves/common.json`), so they count too. I checked the Forge-patched drop path end to end.
-    - PR A corrects only the `fell-tree` text and evidence. It adds no leaves rule.
-  - Fixture: `packages/rotn-data/test/fixtures/stick-sources-3.3.4/stick-sources.javap.txt`, with excerpts, jar SHA-256s and the binpatch and SRG steps.
-  - Tests: `stick-sources.test.js` 5/5, all rotn-data tests 156/156, and the stick- and world-source-related skills-rotn tests plus `src/utils` 172/172. ESLint is clean on the touched JS.
-  - No full suite, no paid batch, no server.
-- **PR B, `agent/rotn-data/leaves-sticks`: Request 17 APPROVED by the lead (2026-11-07), sequenced so CI stays green. skills-rotn's #315 is merged, and the PR is open from this branch.**
-  - The rule: `leaves-sticks` offers `dynamictrees:leaves0/1` and `minecraft:leaves/leaves2` by hand, 0-1 sticks (mean 0.5), cited in the fixture.
-  - develop (with #312) is merged in, with no rebase. #312 was squash-merged, so its files conflicted with my original commit. Develop's files are identical to #312's reviewed head (`087358ad`), so the package files keep this branch's version and STATUS keeps develop's. The branch now differs from develop by PR B's changes only.
-  - #312 nits folded in:
-    - (a) The `fell-tree` summary gives advice ("Felling may give few or no sticks: for sticks, prefer dead bushes and leaves you can reach from the ground"). The 5-spruce observation stays in evidence and `unverified`, and a test keeps harness anecdotes out of the summary.
-    - (b) `stick-sources.test.js` checks that the stick ways are present, not their order.
-    - (c) The Request 11 paragraph is joined.
-  - develop with #315 is merged in again, with no rebase (clean merge).
-  - Tests:
-    - rotn-data 156/156;
-    - skills-rotn's `fell_tree`, `agenda`, `fall_safety`, `collect_rotn` and `collect_sticks` 93/93;
-    - `axe_chop`, `craft_needs`, `crafting_plan`, `action_limits`, `inventory_sync`, `rotn_names` and `src/utils` 90/90;
-    - ESLint clean on the touched JS.
-  - `worldSources('stick')` now returns `fell-tree`, `leaves-sticks` (`dynamictrees:leaves0`, `dynamictrees:leaves1`, `leaves`, `leaves2`) and `deadbush-sticks`.
+- **(1) Trunk shell, this PR (`agent/rotn-data/trunk-shell`).** Breaking a `dynamictrees:trunkshell` **fells the tree like a branch**, and the shell itself **drops nothing**. Cited from `DramaticTrees-1.12.2-0.13.4.jar` with javap only:
+  - **The break.** `BlockTrunkShell.removedByPlayer` passes the break to the thick trunk block next to it, at that block's position. The shell's meta (coredir n, nw, w, sw, s, se, e, ne) points to that block, on the same y. The trunk block's `BlockBranch.removedByPlayer` queues a `FutureBreak`, which runs `futureBreak` on the next world tick. That is the normal felling, so the drops are `fell-tree`'s.
+  - **The shell's own drop:** null, with a drop count of 0.
+  - **Where shells appear:** only around a trunk of radius 9 or more. Those are oak, spruce, jungle and dark oak `branch` metas 8-15 and the `branchx` blocks. Birch and acacia stop at radius 8.
+  - **Catch: the dump's numbers for the shell are wrong.** It lists hardness 0, harvestTool null and an empty collision box. Those are the values a shell reports with no trunk next to it. In game it has the trunk's hardness (20.25-144) and box.
+  - **Effect on the bot:** mineflayer's `dig()` takes its time from that hardness 0. It finishes at once, sets the shell to air locally and resolves before the server breaks anything. So a finished `dig()` on a shell doesn't prove the tree fell.
+  - **Data added:** `fell-tree.trunkShell`, with `block`, `fells`, `drops`, `coreOffsets` (meta to `[dx, dy, dz]`), `minTrunkRadius`, `thickTrunks`, `dumpUnreliable` and `summary`. `howToGet` passes it through, and the README documents it.
+  - **Tests and checks:**
+    - Fixture: `test/fixtures/trunk-shell-3.3.4/trunk-shell.javap.txt`.
+    - `trunk-shell.test.js` 6/6. It works out `coreOffsets` from the `Surround` bytecode, and checks `thickTrunks` against the dump.
+    - rotn-data 162/162; skills-rotn's `fell_tree`, `collect_sticks`, `collect_rotn`, `fall_safety`, `axe_chop` and `agenda` 103/103; ESLint clean on the touched JS.
+  - **Unverified:** what the server does after mineflayer finishes a shell dig early. My understanding of vanilla 1.12 is that it finishes the break itself once the real dig time has passed, but I haven't read that server code, and no run has broken a shell.
+- **(2) Digging mobs (Epic Siege Mod 13.169 + ESM-Tweaks): next PR, `agent/rotn-data/mob-digging`.** Findings so far are below and in my reply to the lead.
+  - **ESM-Tweaks is not in the pinned zip.** Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`, `config/mod-director/requisites.remote.json`) downloads it at server start, from a list on the RotN repo's moving `stable` branch, with no hash pinned. The dump manifest and the server ping both show `esmtweaks 0.4.5`. I disassembled the release jar `esmtweaks-1.12.2-0.4.5.jar` (SHA-256 `b57590bf...f933`) in my scratchpad; nothing went into the repo.
 
 ## Report to the lead: started on the CX33 (2026-11-07)
 
@@ -74,6 +60,7 @@ Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, bran
 
 ## Done
 
+- **#312 and #319 merged** (`999b4910`, 2026-11-07): stick sources after G3 round 8 A. `deadbush-sticks` (0-2 sticks), `leaves-sticks` (Pyrotech: 1 stick half the time when a player breaks leaves), every Dynamic Trees species on the same felling rule, and the correction of my #256 "leaves give no sticks" claim. `howToGet` passes `countRange` through.
 - **#34 merged** (`3158776`): the dumper mod, `tools/dumper/`. It is opt-in, writes in batches with `.tmp` + rename and `DONE` last, and builds with ForgeGradle 3.0.197 (the lead accepted it and writes the ADR 0004 addendum).
 - **#37 merged** (`441020b`): `packages/rotn-data`, with translation, catalog, importer and the scripts cross-check fixture.
 - **#43 merged**: translation follow-ups 4-6 (reverse coverage, strict block metas, the export-contract test).
@@ -574,4 +561,4 @@ Findings for skills-rotn (via the lead): see Request 8.
 
 ## Open PRs
 
-- `agent/rotn-data/leaves-sticks` (PR B, the `leaves-sticks` rule plus the #312 nits), in review. #312, #300 and #303 are merged.
+- `agent/rotn-data/trunk-shell` (`fell-tree.trunkShell`, from G3 round 9 B), opened 2026-11-07. #319, #312, #303 and #300 are merged.
