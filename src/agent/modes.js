@@ -8,6 +8,14 @@ import * as threats from './library/threats.js';
 import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
 import { REPAIR_LABEL } from './library/night.js';
+import { isFalling } from './library/shelter.js';
+
+/**
+ * A falling block at the head in the night shelter (#346 review 1): dig it out by hand and stay, but
+ * wait settleMs after each dig and look again (a falling column lands one block after another); leave
+ * after maxDigs digs within windowMs, or below minHealth (it suffocates meanwhile).
+ */
+export const HEAD_DIG = { settleMs: 300, maxDigs: 3, windowMs: 10_000, minHealth: 6 };
 import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
@@ -156,14 +164,26 @@ const modes_list = [
                     // fails, since it would suffocate.
                     if (bot.rotnSheltered) {
                         const head = bot.entity.position.floored().offset(0, 1, 0);
-                        let dug = false;
-                        try { dug = await skills.breakBlockAt(bot, head.x, head.y, head.z); } catch { dug = false; }
-                        const still = bot.blockAt(head);
-                        if (dug && !this.fall_blocks.some(name => still?.name?.includes(name))) {
-                            console.log(`[reflex] dug ${blockAbove.name} out of the shelter's head space; staying in`);
-                            return;
+                        // rotn-data's gravity first (#346 nit: modded falling blocks; not sandstone).
+                        const falling = (b) => !!b && b.name !== 'air' && (isFalling(b) || this.fall_blocks.some(name => b.name?.includes(name)));
+                        let why = null;
+                        for (;;) {
+                            const recent = (bot.rotnHeadDigs ?? []).filter(at => Date.now() - at < HEAD_DIG.windowMs);
+                            bot.rotnHeadDigs = recent;
+                            if (recent.length >= HEAD_DIG.maxDigs) { why = `${recent.length} digs in ${HEAD_DIG.windowMs / 1000} s and it keeps falling`; break; }
+                            if ((bot.health ?? 20) < HEAD_DIG.minHealth) { why = `health ${bot.health}`; break; }
+                            let dug = false;
+                            try { dug = await skills.breakBlockAt(bot, head.x, head.y, head.z); } catch { dug = false; }
+                            recent.push(Date.now());
+                            if (!dug) { why = 'the dig failed'; break; }
+                            await new Promise(resolve => setTimeout(resolve, HEAD_DIG.settleMs)); // the next block of a column lands
+                            if (bot.interrupt_code) return;
+                            if (!falling(bot.blockAt(head))) {
+                                console.log(`[reflex] dug ${blockAbove.name} out of the shelter's head space; staying in`);
+                                return;
+                            }
                         }
-                        console.warn(`[reflex] could not dig ${blockAbove.name} out of the head space; getting out`);
+                        console.warn(`[reflex] ${blockAbove.name} at the head in the shelter (${why}); getting out`);
                     }
                     await skills.moveAway(bot, 2);
                 });
