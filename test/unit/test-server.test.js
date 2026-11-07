@@ -467,11 +467,14 @@ describe('up / run / down', { skip: windowsShellSkip('up / run / down', '69 s') 
         const failed = run(['restart', '--name', 'mcr-test-rs'], { FAKE_SSH_RESTART_EXIT: '5' });
         assert.notEqual(failed.code, 0);
         assert.match(failed.stderr, /fake restart failure 5/);
-        for (const bad of ['10', '901', 'x']) {
-            const u = run(['restart', bad, '--name', 'mcr-test-rs']);
-            assert.notEqual(u.code, 0, bad);
-            assert.match(u.stderr, /usage: restart \[TIMEOUT_S, 30\.\.900\]/);
+        // #324 review: whole numbers 30..900 with no leading zero, and one argument at most (like the other verbs).
+        for (const bad of [['10'], ['901'], ['x'], ['0'], ['0300'], ['-300'], ['300', 'junk']]) {
+            const u = run(['restart', ...bad, '--name', 'mcr-test-rs']);
+            assert.notEqual(u.code, 0, bad.join(' '));
+            // '-300' is refused earlier, by the option parser (an unknown option), like any other verb's.
+            if (!bad[0].startsWith('-')) assert.match(u.stderr, /usage: restart \[TIMEOUT_S, 30\.\.900\]/, bad.join(' '));
         }
+        assert.ok(!sshCalls().some((c) => /rotn-test restart --timeout (10|901|0|0300|-300)\b/.test(c.join(' '))), 'a refused timeout never reaches the server');
         assert.equal(mutating().filter((a) => /delete$/.test(verbOf(a))).length, 0, 'a restart deletes nothing');
         assert.equal(run(['down', '--name', 'mcr-test-rs']).code, 0);
     });
@@ -1419,6 +1422,7 @@ case "$1" in
   is-active) [[ -f "${D}/active" ]] ;;
   start)
     echo "start $2" >> "${D}/systemctl.log"
+    [[ -z \${FAKE_START_FAIL:-} ]] || { echo "Job for rotn-server.service failed." >&2; exit 1; }
     touch "${D}/active"
     case "\${FAKE_START_MODE:-rotate}" in
       rotate) mv "${D}/server/logs/latest.log" "${D}/server/logs/2026-11-07-1.log"; printf '%s\\n' 'booting' '${DONE('12:10:00')}' > "${D}/server/logs/latest.log" ;;
@@ -1435,7 +1439,7 @@ if [[ $1 == stop && -z \${FAKE_STOP_IGNORED:-} ]]; then rm -f "${D}/active"; fi
         return { dir, D };
     };
     const restart = ({ dir, D }, args = [], extra = {}) => spawnSync(bash, [helper, 'restart', ...args], { encoding: 'utf8', env: { ...process.env,
-        ROTN_TEST_SERVER_DIR: `${D}/server`, ROTN_TEST_STATE_DIR: `${D}/state`, ROTN_TEST_SYSTEMCTL: `${D}/bin/systemctl`,
+        ROTN_TEST_SERVER_DIR: `${D}/server`, ROTN_TEST_REMOTE_STATE_DIR: `${D}/state`, ROTN_TEST_SYSTEMCTL: `${D}/bin/systemctl`,
         ROTN_TEST_CONSOLE_SEND: `${D}/bin/send`, ROTN_TEST_POLL_S: '1', ...extra } });
     const read = (dir, f) => (fs.existsSync(path.join(dir, f)) ? fs.readFileSync(path.join(dir, f), 'utf8') : '');
 
@@ -1475,12 +1479,26 @@ if [[ $1 == stop && -z \${FAKE_STOP_IGNORED:-} ]]; then rm -f "${D}/active"; fi
         assert.equal(read(s.dir, 'systemctl.log'), 'start rotn-server\n');
     });
 
-    test('a bad --timeout is a usage error (exit 2) and changes nothing', () => {
+    test('#324 review: a bad, missing or zero --timeout, or any extra argument, is a usage error (exit 2) and changes nothing', () => {
+        for (const args of [['--timeout', 'x'], ['--timeout', '0'], ['--timeout', '0300'], ['--timeout', '-1'], ['--timeout', '1.5'], ['--timeout', ''],
+            ['--timeout'], ['--timeout', '5', 'junk'], ['junk'], ['300']]) {
+            const t = setup();
+            const r = restart(t, args);
+            assert.equal(r.status, 2, JSON.stringify(args));
+            assert.match(r.stderr, /usage: rotn-test restart \[--timeout S\]/, JSON.stringify(args));
+            assert.equal(read(t.dir, 'sent.log'), '', `${JSON.stringify(args)}: nothing sent`);
+            assert.equal(read(t.dir, 'systemctl.log'), '', `${JSON.stringify(args)}: nothing started`);
+            assert.equal(read(t.dir, 'state/phase').trim(), 'ready', `${JSON.stringify(args)}: phase unchanged`);
+        }
+    });
+
+    test('#324 review: a failed systemctl start: exit 6 and phase "failed:restart: start failed", not a raw exit', () => {
         const t = setup();
-        const r = restart(t, ['--timeout', 'x']);
-        assert.equal(r.status, 2);
-        assert.equal(read(t.dir, 'sent.log'), '');
-        assert.equal(read(t.dir, 'state/phase').trim(), 'ready');
+        const r = restart(t, [], { FAKE_START_FAIL: '1' });
+        assert.equal(r.status, 6, r.stderr);
+        assert.match(r.stderr, /rotn-test: 'systemctl start rotn-server' failed/);
+        assert.equal(read(t.dir, 'state/phase').trim(), 'failed:restart: start failed');
+        assert.equal(read(t.dir, 'sent.log'), 'stop\n', 'it had stopped first');
     });
 });
 

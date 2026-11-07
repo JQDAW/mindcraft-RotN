@@ -28,7 +28,8 @@
 #   fetch PATH    Copy PATH (relative to the server dir, e.g. logs) into --out DIR.
 #   verify        Print the on-server G0 facts (key=value).
 #   restart [TIMEOUT_S]  Restart the Minecraft server (G4 #1): console stop, wait for the exit, start, wait for a
-#                 new Done line (each step up to TIMEOUT_S, 30..900, default 300). Exit 4: no stop; 5: no Done.
+#                 new Done line (each step up to TIMEOUT_S, 30..900, default 300). Exit 4: no stop; 5: no Done;
+#                 6: the start failed.
 #   log [N] [rotated]  Tail the server log; with rotated, over the newest rolled-over log too (log4j rolls
 #                 latest.log at 00:00 UTC; the first line names the files).
 #   build-log [N]  Tail the cloud-init build log.
@@ -1148,8 +1149,10 @@ main() {
     restart)
       # G4 #1 (a server restart): console stop, wait for the exit, start, wait for a new Done line (rotn-test restart).
       # Test server only, like every verb here: it reaches only the labelled servers this script created.
+      # One optional argument, a whole number 30..900 with no leading zero (#324 review); anything more is refused.
+      (( ${#ARGS[@]} <= 1 )) || die "usage: restart [TIMEOUT_S, 30..900]"
       local rt=${ARGS[0]:-300}
-      [[ $rt =~ ^[0-9]+$ ]] && (( rt >= 30 && rt <= 900 )) || die "usage: restart [TIMEOUT_S, 30..900]"
+      [[ $rt =~ ^[1-9][0-9]*$ ]] && (( rt >= 30 && rt <= 900 )) || die "usage: restart [TIMEOUT_S, 30..900]"
       load_meta
       log "restarting the Minecraft server of $NAME (console stop, wait for the exit, start, wait for Done; up to ${rt}s each)"
       rssh "rotn-test restart --timeout $rt" | tr -d '\r' ;;

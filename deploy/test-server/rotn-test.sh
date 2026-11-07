@@ -13,13 +13,15 @@
 #   rotn-test verify                     key=value facts for the G0 checks
 #   rotn-test restart [--timeout S]      restart the Minecraft server (G4 #1, server restart; test server only):
 #                                        console `stop`, wait until rotn-server has exited, start it again, and wait
-#                                        for a NEW "Done" line; prints "restarted: <done line>". Exit 4 if it does
-#                                        not stop, 5 if it does not come back within S seconds (default 300).
+#                                        for a NEW "Done" line; prints "restarted: <done line>". S: a positive whole
+#                                        number of seconds (default 300). Exit 2: usage; 4: it does not stop within
+#                                        S; 5: no new Done line within S (or it exits first); 6: the start failed.
 set -euo pipefail
 
-# The overrides (ROTN_TEST_SERVER_DIR, ROTN_TEST_STATE_DIR, ROTN_TEST_SYSTEMCTL, ROTN_TEST_CONSOLE_SEND,
+# The overrides (ROTN_TEST_SERVER_DIR, ROTN_TEST_REMOTE_STATE_DIR, ROTN_TEST_SYSTEMCTL, ROTN_TEST_CONSOLE_SEND,
 # ROTN_TEST_POLL_S, ROTN_TEST_GZ_RETRY_S) are for the offline tests only.
-STATE=${ROTN_TEST_STATE_DIR:-/var/lib/rotn-test}
+# (REMOTE: never the PC's own ROTN_TEST_STATE_DIR, which test-server.sh uses for its local state; #324 review.)
+STATE=${ROTN_TEST_REMOTE_STATE_DIR:-/var/lib/rotn-test}
 SERVER=${ROTN_TEST_SERVER_DIR:-/opt/rotn/server}
 SYSTEMCTL=${ROTN_TEST_SYSTEMCTL:-systemctl}
 SOCK=/opt/rotn/console.sock
@@ -118,9 +120,15 @@ case $cmd in
     echo "cloud_init_schema=$(cloud-init schema --system > /dev/null 2>&1 && echo valid || echo invalid)"
     ;;
   restart)
+    # [--timeout S], S a positive whole number with no leading zero (#324 review: no 0, no octal); nothing else.
+    restart_usage() { echo "usage: rotn-test restart [--timeout S] (S: whole seconds, 1 or more)" >&2; exit 2; }
     timeout=300
-    if [[ ${1:-} == --timeout ]]; then timeout=$2; shift 2; fi
-    [[ $timeout =~ ^[0-9]+$ ]] || { echo "usage: rotn-test restart [--timeout S]" >&2; exit 2; }
+    if [[ ${1:-} == --timeout ]]; then
+      (( $# >= 2 )) || restart_usage
+      timeout=$2; shift 2
+    fi
+    (( $# == 0 )) || restart_usage
+    [[ $timeout =~ ^[1-9][0-9]*$ ]] || restart_usage
     poll=${ROTN_TEST_POLL_S:-5}
     echo restarting > "$STATE/phase"
     # 1. console stop (the server saves and exits; the tmux session, and so rotn-server, end with it)
@@ -134,7 +142,9 @@ case $cmd in
     fi
     # 2. start, then a NEW Done line: log4j rolls latest.log over at startup (a new file), else more Done lines than before
     ino=$(log_inode); dc=$(done_count)
-    $SYSTEMCTL start rotn-server
+    if ! $SYSTEMCTL start rotn-server; then
+      echo "failed:restart: start failed" > "$STATE/phase"; echo "rotn-test: 'systemctl start rotn-server' failed" >&2; exit 6
+    fi
     waited=0
     while :; do
       now_ino=$(log_inode); now_dc=$(done_count)
@@ -149,7 +159,7 @@ case $cmd in
     echo "restarted: $(grep -E "$DONE_REGEX" "$LOG" 2>/dev/null | tail -n 1)"   # the newest Done line
     ;;
   *)
-    sed -n '2,17p' "$0"
+    sed -n '2,18p' "$0"
     [[ $cmd == help ]] || exit 2
     ;;
 esac
