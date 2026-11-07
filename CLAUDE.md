@@ -11,7 +11,7 @@ Read `docs/PLAN.md` once at the start of every session. Read your own brief in `
 | Thing | Version |
 | --- | --- |
 | Minecraft | 1.12.2 (Forge, FML protocol 2) |
-| RotN pack | 3.3.4, server pack zip SHA-256 `90642fd5...f5205`, default configs (ADR 0005) |
+| RotN pack | 3.3.4, server pack zip SHA-256 `90642fd5...f5205`, default configs (ADR 0005), plus the Mod Director download hash list on test servers (ADR 0008) |
 | Node.js | 22 LTS (ADR 0002; mineflayer 4.26+ needs >=22, Mindcraft warns that v24+ breaks native deps) |
 | Java on test server | 8 |
 | Integration branch | `develop` (this fork's default branch) |
