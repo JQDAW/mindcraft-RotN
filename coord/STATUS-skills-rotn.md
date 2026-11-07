@@ -1,6 +1,24 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:58Z (from `date -u`)
+Updated: 2026-11-07T14:17Z (from `date -u`)
+
+## Round 9 B fix (c): self-defense never takes the bot out of its night shelter (branch `agent/skills-rotn/shelter-hold-defense`, 2026-11-07T14:17Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 2):** at 13:35:22 a digging zombie (Epic Siege Mod, `minecraft:zombie` "Digging": true) opened one side of the dirt shelter. Self-defense interrupted the night's repair (`r9-g3b/night/driver.log` 471), and `defendSelf` walked out after the zombie: its `GoalFollow`/`GoalInvert` walks, and `pvp.attack`, which follows its target. The bot died outside at -78 58 -60 (487).
+- **Change:**
+  - **`library/night.js`:** adds `REPAIR_LABEL` (`action:repairShelter`). The night routine runs its repair under that label; the first build keeps `action:buildShelter`.
+  - **`modes.js` self-defense, in the shelter with a wall open:**
+    - it does not start while the repair runs;
+    - it fights only a mob within reach (`SHELTER_FIGHT.reach`, 3 blocks from the feet);
+    - it fights with the new `skills.defendInPlace`: look at the mob, `bot.attack`, every 600 ms, no pathfinder and no mineflayer-pvp.
+  - Outside the shelter nothing changes.
+- **Tests (new `src/agent/shelter_defense.test.js`, 3):**
+  - the repair is not interrupted;
+  - a zombie in the opening is hit in place until it dies, with no walk, no pvp and the bot not moved;
+  - a zombie 5 blocks away is not chased.
+  - **On develop all 3 fail,** run with develop's label `action:buildShelter`: the repair is interrupted by `mode:self_defense`, `defendSelf` walks (`GoalInvert(GoalFollow)`), and a fight starts at the far zombie.
+  - With the fix: `shelter_defense`, `night_routine`, `threat_arbitration`, `quiet_reflexes`, `update_loop`, `shelter`, `night` and `threats`, 96/96. Lint: no new errors (modes.js 28 and skills.js 20, as on develop; the others 0).
+- **Question for the lead (not in this PR):** the low-health flee (`self_preservation`) still walks the bot out of an open shelter, by design ("always acts"). In round 9 it came only after the bot was already outside. Should it also stay in place while the shelter is open (at night, outside is worse), or keep its current priority?
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 

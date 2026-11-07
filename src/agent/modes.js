@@ -7,6 +7,7 @@ import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
+import { REPAIR_LABEL } from './library/night.js';
 import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
@@ -29,7 +30,8 @@ async function say(agent, message) {
 /**
  * Modes that would walk, dig or light the bot out of its night shelter (D2b-2). They are quiet while
  * the night routine has it sheltered (bot.rotnSheltered true). When a wall is open
- * (bot.rotnSheltered 'open') self_defense acts again, so the bot fights at the opening.
+ * (bot.rotnSheltered 'open') self_defense acts again, so the bot fights at the opening: from where it
+ * stands, only mobs within reach, and never while the night's repair runs (G3 round 9 B).
  * self_preservation (fire, lava, a falling block on its head) always acts.
  */
 export const SHELTER_QUIET_MODES = ['cowardice', 'self_defense', 'hunting', 'item_collecting', 'torch_placing', 'elbow_room', 'unstuck'];
@@ -295,7 +297,21 @@ const modes_list = [
         on: true,
         active: false,
         update: async function (agent) {
+            // G3 round 9 B: in the shelter with a wall open, self_defense interrupted the repair and
+            // defendSelf walked out after the zombie (pvp.attack follows its target); the bot died
+            // outside. Now the repair runs on, and the fight is in place, at mobs within reach.
+            const sheltered = agent.bot.rotnSheltered;
+            if (sheltered && agent.actions.currentActionLabel === REPAIR_LABEL) return;
             const plan = threats.threatPlan(agent.bot);
+            if (sheltered && plan?.action === 'fight') {
+                if (!skills.inShelterReach(agent.bot, plan.from)) return;
+                if (!claimThreat(this.name)) return;
+                Promise.resolve(say(agent, `Fighting ${plan.from.name} from the shelter!`)).catch(err => reportModeError(this.name, err));
+                execute(this, agent, async () => {
+                    await skills.defendInPlace(agent.bot, plan.isEnemy, () => threats.threatPlan(agent.bot)?.action === 'fight');
+                }).catch(err => reportModeError(this.name, err));
+                return;
+            }
             if (plan?.action === 'fight' && await world.isClearPath(agent.bot, plan.from)) {
                 if (!claimThreat(this.name)) return; // checked after the await: another mode may own it now
                 say(agent, `Fighting ${plan.from.name}!`);

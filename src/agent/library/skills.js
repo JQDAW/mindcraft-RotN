@@ -709,6 +709,43 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
 }
 
 
+/** In the night shelter (G3 round 9 B): how far the bot hits from where it stands, and how often. */
+export const SHELTER_FIGHT = { reach: 3, swingMs: 600 };
+
+/** Whether an entity is within SHELTER_FIGHT.reach of the bot's feet. */
+export function inShelterReach(bot, entity) {
+    return !!entity?.position && bot.entity.position.distanceTo(entity.position) <= SHELTER_FIGHT.reach;
+}
+
+/**
+ * Fight from where the bot stands (G3 round 9 B, its night shelter with a wall open): hit the
+ * nearest enemy within SHELTER_FIGHT.reach until none is left in reach. No walk and no
+ * mineflayer-pvp (pvp.attack follows its target, which took the bot out of the shelter).
+ * @returns {Promise<boolean>} true when it hit something.
+ */
+export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity), keepFighting=() => true) {
+    bot.modes.pause('self_defense');
+    bot.modes.pause('cowardice');
+    const fight = {};
+    let attacked = false;
+    const nearest = () => world.getNearestEntityWhere(bot, (e) => isEnemy(e) && inShelterReach(bot, e), SHELTER_FIGHT.reach + 1);
+    let enemy = nearest();
+    while (enemy) {
+        await equipHighestAttack(bot, fight);
+        await bot.lookAt(enemy.position.offset(0, (enemy.height ?? 1.8) * 0.8, 0), true);
+        bot.attack(enemy);
+        attacked = true;
+        await new Promise(resolve => setTimeout(resolve, SHELTER_FIGHT.swingMs));
+        if (bot.interrupt_code) return attacked;
+        if (!keepFighting()) {
+            log(bot, 'Stopped fighting: the situation changed.');
+            break;
+        }
+        enemy = nearest();
+    }
+    log(bot, attacked ? 'Fought off what came into reach, without leaving the shelter.' : 'Nothing in reach to fight.');
+    return attacked;
+}
 
 export async function collectBlock(bot, blockType, num=1, exclude=null) {
     /**
