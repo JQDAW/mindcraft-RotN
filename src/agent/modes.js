@@ -61,12 +61,13 @@ let shelterSaidAt = -Infinity;
 
 /**
  * The night routine's own work, which the in-shelter fight and eating never interrupt: the repair
- * (REPAIR_LABEL), and (#355 review 1) everything while it leaves a deadly shelter with a mob near
- * (agent._night.leaveFrom, set until the bot is out of the cell): fighting or eating there keeps
- * the bot in a cell that drowns, suffocates or burns it.
+ * (REPAIR_LABEL), and (#355 review 1) the routine's job (the build or hole dig) that leaves a deadly
+ * shelter with a mob near (agent._night.leaveFrom), while it runs: fighting or eating then keeps
+ * the bot in a cell that drowns, suffocates or burns it. Between tries (no job, #355 re-review) the
+ * bot fights in place and eats as in any shelter: cowardice and the flee are quiet there too.
  */
 function nightRoutineBusy(agent) {
-    return agent.actions.currentActionLabel === REPAIR_LABEL || !!agent._night?.leaveFrom;
+    return agent.actions.currentActionLabel === REPAIR_LABEL || (!!agent._night?.leaveFrom && !!agent._night?.job);
 }
 
 /**
