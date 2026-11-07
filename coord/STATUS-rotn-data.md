@@ -1,8 +1,26 @@
 # Status: rotn-data
 
-Updated: 2026-11-07T00:30Z (from `date -u`)
+Updated: 2026-11-07T03:24Z (from `date -u`)
 
-Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/cx33-start`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+Worktree `/home/mindcraft-RotN-worktrees/rotn-data` on the CX33 dev server, branch `agent/rotn-data/deadbush-sticks`. Brief items: (1) dumper, (2) data package, (3) name translation, (4) `mcdata.js` name/registry helpers on `bot.registry`.
+
+## Now: stick sources after G3 round 8 A (lead task, 2026-11-07)
+
+- **PR A, `agent/rotn-data/deadbush-sticks` (in review; develop is frozen for round 8, so it waits):**
+  - New world rule `deadbush-sticks`: break `minecraft:deadbush` (meta 0, its only state) by hand for 0-2 sticks, `countRange {min 0, max 2, mean 1}`, `tool: null`, `count: null`, `confidence: documented`.
+  - Cited from the Forge-patched `BlockDeadBush`: I applied Forge's server binpatch to the vanilla class, and its input checksum matched. `getItemDropped` returns `Items.STICK`, and `quantityDropped` is `Random.nextInt(3)`. Shears give the bush itself.
+  - No pack script, Dropt rule, config or mod jar changes the drop. BBLSOhMy's dead bush mixin only widens the soils it can stand on. I checked the 5 drop handlers that name a plant type and ruled each out. The other 59 drop handlers were not read one by one (in `unverified`).
+  - Shears are not encoded as `unlessTool`, because no shears in the dump has a `shears` tool class.
+  - `howToGet` passes the new `countRange` field through. The README documents it.
+  - **Species (spruce vs dark oak):** my data can't single out a species. No vanilla Dynamic Trees species overrides the stick computation. Sticks are the leftover eighths of V = 1.5 × Σradius²/64, so the count depends on the tree's shape. Rounds 5 A and 8 A gave 1 stick from 5 spruces, far below the ~3.5 per tree an even spread would give. That gap is not explained by the data and is noted as unverified. `fell-tree`'s summary now tells the bot not to count on felling for sticks.
+  - **Correction of my own earlier claim (#256): leaves DO give sticks.**
+    - Pyrotech's `HarvestDropsEventHandler$Sticks` is on, because `config/pyrotech/core.cfg` line 8 sets `DROP_STICKS_FROM_LEAVES=true`. It adds 1 stick 50% of the time when a player breaks a block whose pick-block item is in ore `treeLeaves`.
+    - Dynamic Trees leaves pick their family's vanilla leaves (`assets/dynamictrees/leaves/common.json`), so they count too. I checked the Forge-patched drop path end to end.
+    - PR A corrects only the `fell-tree` text and evidence. It adds no leaves rule.
+  - Fixture: `packages/rotn-data/test/fixtures/stick-sources-3.3.4/stick-sources.javap.txt`, with excerpts, jar SHA-256s and the binpatch and SRG steps.
+  - Tests: `stick-sources.test.js` 5/5, all rotn-data tests 156/156, and the stick- and world-source-related skills-rotn tests plus `src/utils` 172/172. ESLint is clean on the touched JS.
+  - No full suite, no paid batch, no server.
+- **PR B, a `leaves-sticks` rule (prepared, not opened):** it would make `howToGet('stick')` and skills-rotn's `worldSources('stick')` offer `dynamictrees:leaves0/1` and `minecraft:leaves/leaves2` (0-1 sticks, mean 0.5, by hand). It breaks skills-rotn's `src/agent/library/fell_tree.test.js:313` ("leaves are no stick source"). It also contradicts their agenda text ("Leaves drop no sticks", `src/agent/agenda.js`, pinned by `fall_safety.test.js:271`). See Request 17.
 
 ## Report to the lead: started on the CX33 (2026-11-07)
 
@@ -423,7 +441,8 @@ Findings for skills-rotn (via the lead): see Request 8.
    - Tell me the shape you want for PR 2 (`howToGet`) and PR 3 (first-night threats) before I fix it.
    - **From skills-rotn Request 9 (PR `agent/rotn-data/huntable-baby`):** on 1.12.2 the baby flag is entity metadata index **12** (EntityAgeable, Boolean) and a villager's profession is index **13** (VarInt). Source: wiki.vg "Entity metadata", revision of 18 May 2018 (`https://minecraft.wiki/w/Java_Edition_protocol/Entity_metadata?oldid=2768639`). `mcdata.isHuntable` is fixed; `mcdata.isBaby(entity)` and `mcdata.BABY_METADATA_INDEX` are exported. Still on the 1.21 indices in `src/agent/` (yours): `commands/queries.js:181`, `library/skills.js:1692` and `:1713` (`metadata[16] === 1` for baby villagers; use `mc.isBaby`), and `library/world.js:238-248` (`metadata[18]` for the villager profession; 13 on 1.12).
 9. **Lead: a prismarine-recipe patch?** (from PR #112). `node_modules/prismarine-recipe/lib/recipe.js` `computeDelta` > `applyShape` reads `recipe.inShape[y]` where it should read `shape[y]`, so any `outShape` adds back every input. A one-line patch would let rotn-data emit `outShape` from the dump's `remaining` (1,116 recipes: buckets, knives), which mineflayer's `craft.js` `updateOutShape` then handles correctly. Not needed for G3 (no G3 recipe has remaining items). `patches/` for prismarine-recipe is not on net-forge's list, so it's your call: patch it (who?), or leave `outShape` out.
-11. **CLOSED (lead confirmed 2026-11-05: covered by #206; skills-rotn's `src/agent/library/food.js` calls `foodValues`/`avoidFood` directly, auto-eat off).** **Lead or net-forge: a call site for `installFoods(bot.registry)`** (food-values PR). mineflayer-auto-eat reads `bot.registry.foodsByName`, which has minecraft-data's vanilla 1.12.2 values (bread 5) until this runs. It must run once per login after forge-bridge's `extendRegistry`, next to `installRotnRecipesOnce` in `initBot` (net-forge's part of `src/utils/mcdata.js`). One line, like Request 7's. The same place (or skills-rotn's eating) must set auto-eat's `bannedFood` from `avoidFood` and check `avoidFood(name, meta)` on the stack before eating: `installFoods` bans nothing, and a pufferfish (`fish` meta 3) shares the cod's entry (#209 review).
+11. **CLOSED (lead confirmed 2026-11-05: covered by #206; skills-rotn's `src/agent/library/food.js` calls `foodValues`/`avoidFood` directly, auto-eat off).** **Lead or net-forge: a call site for `installFoods(bot.registry)`** (food-values PR). mineflayer-auto-eat reads `bot.registry.foodsByName`, which has minecraft-data's vanilla 1.12.2 values (bread 5) until this runs. It must run once per login after forge-bridge's `extendRegistry`, next to `installRotnRecipesOnce` in `initBot` (net-forge's part of `src/utils/mcdata.js`). One line, like Request 7's.
+ The same place (or skills-rotn's eating) must set auto-eat's `bannedFood` from `avoidFood` and check `avoidFood(name, meta)` on the stack before eating: `installFoods` bans nothing, and a pufferfish (`fish` meta 3) shares the cod's entry (#209 review).
 12. **skills-rotn (FYI, no change required by me): the player zombie never burns or despawns** (#243). No `src/agent/` code assumes it burns by day (checked on develop: `library/threats.js` 143-148, `library/death_report.js` 33-43 and 170-187). But `death_report.js`'s rule "no walking within DEATH_SPOT_RADIUS while a player zombie is loaded there" then never ends by itself: the zombie stays until something kills it, and Corpse Complex's drops despawn after 600 s (`config/corpsecomplex.cfg` line 195). If you want the bot to get its items back, the way is to kill it (your `canFightHard` path) within those 10 minutes, not to wait for day; otherwise the drops are lost and the spot stays blocked while the zombie is loaded.
 13. **skills-rotn (answer to the lead's round 4 batch B question, 2026-11-06): where sticks come from.** Sources: the pinned pack zip (SHA-256 `90642fd5...f5205`). Bytecode was read with javap (no mod code run) from `mods/DramaticTrees-1.12.2-0.13.4.jar` (SHA-256 `b86dae76...7ffe`, which holds the `com.ferreusveritas.dynamictrees` classes; there is no separate Dynamic Trees jar). Recipes come from our `recipes.json.br` dump.
    - **Dynamic Trees leaves never drop sticks.**
@@ -530,6 +549,17 @@ Findings for skills-rotn (via the lead): see Request 8.
    - **Shovels:** level 1 or higher (dirt block): pyrotech flint, bone, quartz and redstone shovels, the iron and silver shovels; 2: diamond, obsidian. Level 0 (piles): crude, wooden, stone, golden.
    - **Back to dirt:** `crafttweaker:ct_shapeless281424108`, 4 dirt piles -> 1 dirt, shapeless, no table (`minecraft_(max-file-size).zs` 218, 268).
    - **Data:** `world-sources.json` gets `dirt-piles` (tool null, a new optional `unlessTool: {type: shovel, minLevel: 1}`, which howto passes through) and `dirt-with-shovel` (shovel level 1, the dump's plain drops). The other soils (Biomes O' Plenty, Defiled Lands, Aether), sand, red sand and gravel follow the same pattern in the script and are named in the rule's note, not encoded.
+17. **Lead, then skills-rotn (round 8 A, 2026-11-07): leaves give sticks after all, and a dead bush rule is coming.**
+   - **For skills-rotn now (PR A, the API shape):**
+     - `worldSources('stick')` gains a third `break` rule with no code change: `{ id: 'deadbush-sticks', blocks: ['deadbush'], tool: null, preferredTool: null, unlessTool: null, count: 1 }` (checked by calling `worldSources('stick')` on this branch). Your wrapper turns a `null` count into 1, which is also the rule's mean.
+     - `howToGet('stick')` carries the new field `countRange: { min: 0, max: 2, mean: 1 }` on that way. It is absent on rules without a random yield. Use it if you want "about 3 bushes for 3 sticks"; the summary says so too.
+     - Shears give the bush, not sticks. That is only in the summary, because shears have no tool class to match.
+   - **Decision for the lead (PR B):** a `leaves-sticks` rule, cited in full in PR A's `fell-tree` evidence and fixture, with blocks `dynamictrees:leaves0`, `dynamictrees:leaves1`, `minecraft:leaves` and `minecraft:leaves2`, `countRange {0, 1, 0.5}` and tool null. Merging it needs skills-rotn to first:
+     - drop the assertion at `src/agent/library/fell_tree.test.js:313` ("leaves are no stick source");
+     - rework the agenda's sticks goal ("Leaves drop no sticks", `src/agent/agenda.js` and its pin in `fall_safety.test.js:271`);
+     - decide how the bot may break leaves safely (fall_safety already keeps it off trees).
+     I can open PR B as soon as you say so. Until then the bot is told nothing about leaves.
+
 ## Open PRs
 
-- None apart from the CX33 start STATUS PR. #288 is merged (`6f1847f2`).
+- `agent/rotn-data/deadbush-sticks` (PR A above), in review; it waits for the round 8 freeze to end. #300 and #303 are merged.
