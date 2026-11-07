@@ -646,3 +646,46 @@ test('round 9 B (h): exposed with no weapon, the bot keeps away from mobs (cowar
     assert.equal(nightState(armed).state, 'exposed');
     assert.equal(on2.cowardice, false, 'with a weapon its reflexes stay as they are');
 });
+
+// ---- #337 review (lead, REQUEST CHANGES on 36bb947) ----
+
+test('#337 review 6: an interrupted hole is tried again next, in the same hole (its progress is kept)', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = deathOps();
+    const seen = [];
+    o.digPit = (bot, { progress }) => { seen.push(progress); progress.P ??= SITE; o.calls.push('pit'); return Promise.resolve(SITE.offset(0, -3, 0)); };
+    let now = 0;
+    const run = async () => { nightTick(agent, { now: ++now, ops: o }); await settle(agent); };
+    await run(); // build: refused
+    agent.actions.interruptNext = true;
+    await run(); // the hole: interrupted (a reflex)
+    assert.equal(nightState(agent).pitNext, true, 'the hole is still next');
+    await run(); // the hole again
+    assert.deepEqual(o.calls, ['build', 'pit', 'roof']);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0], nightState(agent).pitProgress, 'the same progress object');
+    assert.equal(nightState(agent).state, 'inside');
+});
+
+test('#337 review 7 and 8: the tries are the 3 builds, the hole is one more; the exposed line matches what the bot does', async (t) => {
+    quiet(t);
+    const play = async (items) => {
+        const agent = fakeAgent({ t: NIGHT });
+        const on = { cowardice: false };
+        agent.bot.modes = { anyActive: () => false, isOn: (m) => on[m], setOn: (m, v) => { on[m] = v; return true; } };
+        agent.bot.inventory = { items: () => items, slots: [] };
+        const o = deathOps();
+        o.digPit = () => { o.calls.push('pit'); return Promise.resolve(null); };
+        let now = 0;
+        for (let i = 0; i < 20 && nightState(agent).state !== 'exposed'; i++) { now += RETRY_MS + 1; nightTick(agent, { now, ops: o }); await settle(agent); }
+        return { agent, o, on };
+    };
+    const bare = await play([]);
+    assert.deepEqual(bare.o.calls, ['build', 'pit', 'build', 'build'], '3 builds and one hole');
+    assert.match(bare.agent.chat.at(-1), /no shelter after 3 tries and a hole shelter \(.*\); no weapon: keeping away from mobs until morning$/);
+    assert.equal(bare.on.cowardice, true);
+    const armed = await play([{ name: 'stone_sword', count: 1 }]);
+    assert.match(armed.agent.chat.at(-1), /no shelter after 3 tries and a hole shelter \(.*\); staying here until morning$/);
+    assert.equal(armed.on.cowardice, false);
+});

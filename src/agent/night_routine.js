@@ -58,6 +58,7 @@ export function nightState(agent) {
         pit: false, // round 9 B (fix h): the shelter is a hole (its morning exit is pitOut)
         pitNext: false, // the next build try is a hole
         pitTried: false, // a hole was tried this night
+        pitProgress: {}, // the hole being dug (digPit's progress.P), so an interrupted dig goes on in it
         leftDeathSpot: false, // the walk away from a recent death spot was done (or not needed)
         cowardiceOn: false, // the routine turned cowardice on while exposed with no weapon
         gen: 0, // bumped by resetNight, so a job that ends after a reset changes nothing
@@ -73,7 +74,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, pitProgress: {} });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false });
     n.gen++;
@@ -164,13 +165,17 @@ function deathSpotNear(agent, now) {
     return d < PIT.awayFrom ? { pos: last.pos, d } : null;
 }
 
-/** Exposed with no weapon (round 9 B, fix h): keep away from mobs rather than fight bare-handed. */
+/**
+ * Exposed with no weapon (round 9 B, fix h): keep away from mobs rather than fight bare-handed.
+ * Returns whether the bot keeps away now (cowardice on, by the routine or already).
+ */
 function keepAwayIfUnarmed(agent, n) {
     const modes = agent.bot?.modes;
-    if (!modes?.isOn || !modes.setOn || hasWeapon(agent.bot) || modes.isOn('cowardice')) return;
-    if (modes.setOn('cowardice', true) === false) return;
+    if (!modes?.isOn || !modes.setOn || hasWeapon(agent.bot)) return false;
+    if (modes.isOn('cowardice')) return true;
+    if (modes.setOn('cowardice', true) === false) return false;
     n.cowardiceOn = true;
-    console.log('[night] no weapon: keeping away from mobs (cowardice on) until morning');
+    return true;
 }
 
 function restoreCowardice(agent, n) {
@@ -183,8 +188,8 @@ function restoreCowardice(agent, n) {
  * A hole shelter (round 9 B, fix h): dig the hole, then roof it with the shelter's own repair at
  * the hole (which crafts the roof's dirt from the dug piles).
  */
-async function pitShelter(bot, ops) {
-    const feet = await ops.digPit(bot);
+async function pitShelter(bot, ops, progress) {
+    const feet = await ops.digPit(bot, { progress });
     if (!feet) return { closed: false, feet: null, line: 'found no place to dig a hole shelter' };
     return ops.buildShelter(bot, { site: feet, keepSoft: true });
 }
@@ -261,7 +266,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         bot.rotnSheltered = false;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, pitProgress: {} });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -282,9 +287,9 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (n.nextAt === null) n.nextAt = now + RETRY_MS;
         if (now < n.nextAt) return 'night:building';
         const pit = n.pitNext;
-        startJob(agent, n, pit ? 'action:digPit' : 'action:buildShelter', () => (pit ? pitShelter(bot, ops) : ops.buildShelter(bot)), (r, ret) => {
-            n.pitNext = false;
+        startJob(agent, n, pit ? 'action:digPit' : 'action:buildShelter', () => (pit ? pitShelter(bot, ops, n.pitProgress) : ops.buildShelter(bot)), (r, ret) => {
             if (r?.closed) {
+                n.pitNext = false;
                 n.state = 'inside';
                 n.site = r.feet;
                 n.pit = pit;
@@ -294,26 +299,32 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 return;
             }
             if (ret?.interrupted) {
-                // A reflex or a command stopped it: not a try; build again once it is done.
+                // A reflex or a command stopped it: not a try; build again once it is done. A hole
+                // stays next (#337 review 6), and its dig goes on in the same hole (pitProgress).
                 n.nextAt = 0;
-                console.log('[night] the shelter build was interrupted; it does not count as a try');
+                console.log(`[night] the ${pit ? 'hole shelter' : 'shelter build'} was interrupted; it does not count as a try`);
                 return;
             }
+            n.pitNext = false;
             const why = r?.line ?? 'the build ended without a result';
-            // Round 9 B (fix h): a shelter that could not be built is followed by a hole, once a night;
-            // it needs nothing in the inventory.
+            // #337 review 8: the tries are the shelter builds (BUILD_ATTEMPTS); the hole is one more,
+            // once a night, right after the first failed build, and it is not counted.
+            if (!pit) n.attempts++;
+            // Round 9 B (fix h): a shelter that could not be built is followed by a hole; it needs
+            // nothing in the inventory.
             if (!pit && !n.pitTried && ops.digPit) {
                 n.pitTried = true;
                 n.pitNext = true;
                 n.nextAt = 0;
-                console.warn(`[night] no shelter (${why}); digging a hole shelter instead`);
+                console.warn(`[night] shelter try ${n.attempts} of ${BUILD_ATTEMPTS} failed (${why}); digging a hole shelter instead`);
                 return;
             }
-            n.attempts++;
             if (n.attempts >= BUILD_ATTEMPTS) {
                 n.state = 'exposed';
-                line(agent, `[night] no shelter after ${n.attempts} tries (${why}); staying here until morning`);
-                keepAwayIfUnarmed(agent, n);
+                // #337 review 7: the line says what the bot does.
+                const away = keepAwayIfUnarmed(agent, n);
+                const tries = `${n.attempts} tries${n.pitTried ? ' and a hole shelter' : ''}`;
+                line(agent, `[night] no shelter after ${tries} (${why}); ${away ? 'no weapon: keeping away from mobs until morning' : 'staying here until morning'}`);
             } else {
                 n.nextAt = null; // the next tick waits RETRY_MS from its own clock
                 console.warn(`[night] shelter try ${n.attempts} of ${BUILD_ATTEMPTS} failed (${why})`);
@@ -329,7 +340,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 bot.rotnSheltered = false;
                 n.state = 'day';
                 n.site = null;
-                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false });
+                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, pitProgress: {} });
                 line(agent, side ? `[night] morning: dug out of the shelter at ${at(side)}; back to work`
                     : '[night] morning: found no safe side to open; back to work');
             });

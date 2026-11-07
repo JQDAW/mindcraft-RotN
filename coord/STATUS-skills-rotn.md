@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T14:32Z (from `date -u`)
+Updated: 2026-11-07T15:04Z (from `date -u`)
 
 ## Round 9 B fix (h): after a night-time death with nothing (branch `agent/skills-rotn/night-death-plan`, 2026-11-07T14:32Z by `date -u`)
 
@@ -29,6 +29,16 @@ Updated: 2026-11-07T14:32Z (from `date -u`)
     - cowardice on while exposed without a weapon and off in the morning, untouched with a sword.
   - **On develop:** the 3 night tests fail (run against develop's `night_routine.js`); `pit.test.js` has no module there.
   - With the fix: `night_routine`, `pit`, `shelter`, `night`, `priority`, `threat_arbitration` and `death_report`, 119/119. Lint: 0 in all four files.
+- **#337 review (lead, REQUEST CHANGES on 36bb947), answered (2026-11-07T15:04Z by `date -u`):**
+  1. A hole needs a side whose two cells beside the bot dig by hand. Without one, the roofing (no pickaxe) is refused and the hole would stay open.
+  2. A walk that runs out of time stops the pathfinder (`boundedWalk`).
+  3. The column needs a block that gives dirt piles (rotn-data's `dirt-piles` rule), so not clay.
+  4. A falling floor is refused (gravel over a cave).
+  5. `pitOut` checks for a stair side before it digs the roof, and stairs may be dug through ground (a hillside exit). With no side the roof stays on and it says so.
+  6. An interrupted hole stays next and goes on in the same hole (`digPit` progress).
+  7. The exposed line says "no weapon: keeping away from mobs until morning" when cowardice goes on, else "staying here until morning".
+  8. The tries are the 3 builds; the hole is one more, right after the first failed build, and is not counted.
+  - **Tests:** 4 new in `pit.test.js` and 2 in `night_routine.test.js`; all 6 fail on 36bb947. With the changes: `pit` 8/8, `night_routine` 27/27. Lint: 0.
 - **Not done (step 5 of the plan):** recovering the dropped items at dawn. The death report already says how long they last (10 min, Corpse Complex), and by dawn they are gone; the agenda restarts from the inventory by itself.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)

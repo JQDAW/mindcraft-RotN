@@ -106,7 +106,7 @@ test('round 9 B (h): no hole where the column is not hand-diggable, by water or 
     assert.match(p({ '1,62,0': 'water' }), /water at 1, 62, 0/);
     assert.match(p({ '2,63,0': 'sand' }), /sand at 2, 63, 0 would flow or fall in/);
     const noStairs = {};
-    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) noStairs[`${x},62,${z}`] = 'stone'; // step 1 cannot be dug
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) noStairs[`${x},63,${z}`] = 'stone'; // step 1's head space cannot be dug
     assert.match(p(noStairs), /no side to dig stairs out of by hand/);
     // choosePit takes the nearest good cell.
     const { bot } = fakeBot({ set: { '0,62,0': 'stone' } });
@@ -140,4 +140,75 @@ test('round 9 B (h): moveAwayFrom walks until at least PIT.awayFrom from the dea
     assert.deepEqual([g.goal.x, g.goal.z, g.goal.rangeSq], [-79, -60, 28 * 28]);
     assert.equal(await moveAwayFrom(bot, spot), true, 'already far: no walk');
     assert.equal(calls.gotos.length, 1);
+});
+
+// ---- #337 review (lead, REQUEST CHANGES on 36bb947) ----
+
+test('#337 review 1, 3, 4: no hole with rock beside its bottom on every side, with no dirt-pile block in the column, or on a falling floor', () => {
+    const at = new Vec3(0, 64, 0);
+    const p = (set) => pitProblem(fakeBot({ set }).bot, at)?.why ?? null;
+    // Rock beside the bottom cell (y 61) all round: without a pickaxe the shelter refuses the roof.
+    const rock61 = {};
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) rock61[`${x},61,${z}`] = 'stone';
+    assert.match(p(rock61), /no side beside the bottom of the hole could be dug out by hand/);
+    const oneSide = { ...rock61 }; delete oneSide['1,61,0'];
+    assert.equal(p(oneSide), null, 'one side of dirt is enough');
+    // A clay column digs by hand but gives no dirt piles for the roof.
+    assert.match(p({ '0,63,0': 'clay', '0,62,0': 'clay', '0,61,0': 'clay' }), /gives dirt piles for the roof/);
+    assert.equal(p({ '0,63,0': 'clay', '0,62,0': 'clay' }), null, 'one dirt in the column is enough');
+    // Gravel as the floor (over a cave).
+    assert.match(p({ '0,60,0': 'gravel' }), /no firm floor at 0, 60, 0/);
+});
+
+test('#337 review 2: a walk to the hole that runs out of time stops the pathfinder', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...PIT };
+    Object.assign(PIT, { walkMs: 50 });
+    t.after(() => Object.assign(PIT, saved));
+    const { bot } = fakeBot({ set: { '0,62,0': 'stone' } }); // the bot's own cell is no place: it must walk
+    let stops = 0, pending = null;
+    // Never arrives; mineflayer's pathfinder.stop() ends the walk with PathStopped.
+    bot.pathfinder.goto = () => new Promise((resolve, reject) => { pending = reject; });
+    bot.pathfinder.stop = () => { stops++; pending?.(Object.assign(new Error('stopped'), { name: 'PathStopped' })); };
+    assert.equal(await digPit(bot), null);
+    assert.ok(stops >= 1, 'stopped, not left walking');
+    assert.match(bot.output, /Could not reach the place for a hole shelter/);
+});
+
+test('#337 review 5: with no side to dig stairs out of, the roof stays on in the morning; stairs may be dug through ground', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, items, calls, world } = fakeBot();
+    const feet = await digPit(bot);
+    await buildShelter(bot, { site: feet, keepSoft: true, craft: craft(items) });
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) world.set(`${x},63,${z}`, 'stone'); // every step 1 blocked
+    calls.digs.length = 0;
+    assert.equal(await pitOut(bot, feet), null);
+    assert.deepEqual(calls.digs, [], 'the roof was not dug');
+    assert.match(bot.output, /No side of the hole shelter at 0, 61, 0 to dig stairs out of by hand; staying in it\./);
+
+    // A hillside: the exit cell is dirt, not air: dug as part of the stairs.
+    const hill = fakeBot({ set: { '3,64,0': 'dirt' } });
+    const f2 = await digPit(hill.bot);
+    await buildShelter(hill.bot, { site: f2, keepSoft: true, craft: craft(hill.items) });
+    hill.calls.digs.length = 0;
+    const exit = await pitOut(hill.bot, f2);
+    assert.ok(exit, hill.bot.output);
+    assert.ok(hill.calls.digs.includes('0,63,0'), 'the roof');
+});
+
+test('#337 review 6: an interrupted dig goes on in the same hole', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, calls } = fakeBot();
+    const progress = {};
+    bot.interrupt_code = false;
+    const dig = bot.dig;
+    bot.dig = (b) => { const r = dig(b); if (calls.digs.length === 1) bot.interrupt_code = true; return r; }; // stopped after the first
+    assert.equal(await digPit(bot, { progress }), null);
+    assert.ok(progress.P?.equals(new Vec3(0, 64, 0)));
+    bot.interrupt_code = false;
+    bot.dig = dig;
+    const feet = await digPit(bot, { progress });
+    assert.ok(feet?.equals(new Vec3(0, 61, 0)), `feet ${feet}`);
+    assert.deepEqual(calls.digs, ['0,63,0', '0,62,0', '0,61,0'], 'the same column, no new hole');
+    assert.match(bot.output, /Going on with a hole shelter at 0, 64, 0/);
 });
