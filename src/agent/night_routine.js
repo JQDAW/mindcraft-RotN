@@ -13,12 +13,14 @@
 // first too, and the bot says the shelter waits for it.
 
 import { Vec3 } from 'vec3';
-import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable } from './library/night.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, REPAIR_LABEL } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, isLiquid, isFalling, isEmpty } from './library/shelter.js';
 import { breakBlockAt } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
 import { say, isGiverGoal } from './agenda_driver.js';
 import settings from './settings.js';
+
+export { REPAIR_LABEL };
 
 /** How often the bot inside checks its shelter for a breach or for having left it. */
 export const CHECK_MS = 10_000;
@@ -277,9 +279,11 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             return 'night:building';
         }
         if (need.todo.length > 0) {
-            bot.rotnSheltered = 'open'; // self_defense fights at the opening meanwhile
+            // self_defense fights at the opening, from where the bot stands, and never during the
+            // repair (G3 round 9 B: it interrupted the repair and walked out after the zombie).
+            bot.rotnSheltered = 'open';
             line(agent, `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`);
-            startJob(agent, n, 'action:buildShelter', () => ops.buildShelter(bot, { site: n.site, keepSoft: true }), (r) => {
+            startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true }), (r) => {
                 if (r?.closed) bot.rotnSheltered = true;
                 else console.warn('[night] the repair did not close the shelter; trying again at the next check');
             });
