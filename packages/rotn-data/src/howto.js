@@ -128,6 +128,9 @@ function worldWays(catalog, want) {
             // A tool that stops this way (dirt-piles: a shovel of level 1 or higher gives the plain
             // drop instead); by hand or with any other tool the way applies. Only on rules that name one.
             ...(rule.unlessTool ? { unlessTool: rule.unlessTool } : {}),
+            // fell-tree only: the thick-trunk shell block (breaking one fells the tree from the trunk
+            // block next to it; its dumped hardness and collision are not the real ones). A copy.
+            ...(rule.trunkShell ? { trunkShell: structuredClone(rule.trunkShell) } : {}),
             confidence,
             evidence: rule.evidence ?? [],
             unverified: rule.unverified ?? [],
