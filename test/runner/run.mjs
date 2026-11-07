@@ -31,7 +31,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runScenario, addNotGate } from './lib/runner.mjs';
 import { ctlServer, driverProcess, wallClock } from './lib/adapters.mjs';
 import { linesAfter } from './lib/server-log.mjs';
-import { guardConsole, g3Policy, LLM_MODEL } from './lib/g3.mjs';
+import { consoleAllowFor, guardConsole, g3Policy, LLM_MODEL } from './lib/g3.mjs';
 import { keyFetch, llmRecord, providerSummary, readKeyUsage } from './lib/llm-spend.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -163,7 +163,7 @@ async function main(argv) {
     // that never finishes still shows what it used. The after-reading exists only in the final result.
     const stamp = (r) => Object.assign(r, { git, server: process.env.TEST_SERVER_NAME ?? null, driver: o.driver.join(' ') },
         scenario.llm && !r.llm ? { llm: llmRecord(usageBefore, { ok: false, error: 'the run did not finish' }, bot.output()) } : {},
-        scenario.gate === 'G3' ? { batch: policy.batch } : {});
+        scenario.gate === 'G3' || scenario.gate === 'G4' ? { batch: policy.batch } : {});
     let finished = false;
     const onProgress = (rec) => {
         if (finished) return;
@@ -190,7 +190,9 @@ async function main(argv) {
     for (const sig of Object.keys(signals)) process.on(sig, () => onSignal(sig));
     // Only the approved console commands reach the server (no give, summon or op commands); a scenario that
     // runs the real agent (llm: true) records its LLM calls and cost.
-    const scenarioServer = policy.guard ? guardConsole(server) : server;
+    // The scenario's own console additions are built from the run's effective parameters (#320 review: `kill` only
+    // for this run's bot).
+    const scenarioServer = policy.guard ? guardConsole(server, consoleAllowFor(scenario, { ...scenario.defaults, ...o.params })) : server;
     const readUsage = () => readKeyUsage({ key: process.env.OPENROUTER_API_KEY, fetchImpl: keyFetch(process.env) });
     if (scenario.llm) usageBefore = await readUsage();
     const result = stamp(await runScenario(scenario, { server: scenarioServer, bot, clock: wallClock, params: o.params, runId, log, onProgress, control }));

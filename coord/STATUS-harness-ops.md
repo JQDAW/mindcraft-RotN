@@ -1,8 +1,33 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (04:25 UTC, from `date -u`)
+Updated: 2026-11-07 (05:07 UTC, from `date -u`)
 
-## Now: the G4 plan (#316) is updated after the lead's review; building `g4-death-report` (the lead's pick) offline
+## Now: `g4-death-report` is built offline (this PR, for review); its T rehearsal run plan goes to the lead. No paid run without the human's GO.
+
+- **The scenario** (`test/scenarios/g4/g4-death-report.mjs`, G4 #6, gate G4, the real agent):
+  1. the G2 world, production givers;
+  2. the server counts what the bot holds (count-only `clear` of 15 early-agenda items) until it holds at least 6;
+  3. `kill <bot>` on the test console, then the server's own times (`hh:mm:ss`) for the kill, the respawn and the chat.
+- **Checks:**
+  - `had_items` and `died` (`stat.deaths` plus the death line);
+  - `respawned` (`health` 0, then above 0, within 30 s);
+  - `loss_reported`: exactly one `I died at ...; lost ...` line within 60 s of the respawn, consistent with the server's count per item (max(2, 25 %); unnamed only when truncated);
+  - `no_spam`: at most 10 lines in any 60 s for 5 min, no spam kick, online;
+  - `agenda_resumed`: (c)'s agenda counter rises within 5 min;
+  - `no_cheat`.
+- **The wiring** (lead's rule: test-server G4 runs are rehearsals):
+  - `kill` only of this run's bot by its exact name (built from the run's parameters; `kill JQDAW`, any other name and every selector are refused; #320 review), and the read-only `health` objective, for this scenario alone (`SCENARIO_CONSOLE_EXTRA`, `consoleAllowFor`; G3 scenarios still cannot kill);
+  - #320 review fixes: `loss_reported` is "not reached" when the server counts no loss (all kept) or an after-respawn count is unread; no kill without our driver's start event;
+  - `g3Policy` marks every G4 run not-gate;
+  - `batch.mjs --gate` refuses a G4 scenario;
+  - G4 results need a vouching `batch.json` and are never accepted in a gate claim;
+  - `run.mjs` stamps their batch marker.
+- **Tested** (targeted only): `g4-death.test.js` (9 tests: the helpers on real death-report lines, the full pass, kept items, every failure mode, the wiring), plus g3-spend, the four G3 scenario tests and runner: **204 pass, 0 fail**.
+  - `batch.mjs --preflight-files` passes for the rehearsal command (timeout 47 min) and refuses `--gate`.
+  - Every loss item id is in rotn-data's 3.3.4 item list. ESLint clean; baseline 253.
+- **Nothing in `src/agent/` changed.** If the rehearsal finds something in `death_report.js`, I report it to skills-rotn via the lead.
+
+## Earlier: the G4 plan (#316, merged) after the lead's review
 
 - **#316 review (REQUEST CHANGES, bdc7143), all applied:**
   - G4 accepts no test-server evidence: T runs are rehearsals only;
@@ -16,7 +41,7 @@ Updated: 2026-11-07 (04:25 UTC, from `date -u`)
   - the live whitelist comes after G4 has passed.
 
 - **`test/scenarios/g4/PLAN.md` (this PR):** each of the 12 ready-to-try items mapped to:
-  - what covers it today (G1-G3 on a test server, unit tests, `test/evidence/cx23`);
+  - what exists today (G1-G3 smoke on a test server, unit tests, `test/evidence/cx23`); none of it is G4 evidence;
   - the new scenario it needs (`g4-service-reconnect`, `g4-death-report`, `g4-control-commands`, `g4-restart-persistence`, `g4-soak-2h`, `g4-second-bot`);
   - G4 evidence only from the CX23 service against a CPX42 (S); test-server runs (T) are rehearsals;
   - the human items;
@@ -26,8 +51,8 @@ Updated: 2026-11-07 (04:25 UTC, from `date -u`)
   - `kill`, `kick` and `stop` on the test-server console allowlist;
   - a startup log line with the effective `allow_insecure_coding` (`main.js`, lead-owned);
   - the soak ADR's targets;
-  - a second Minecraft account (#12), and the human's 10 min as JQDAW (follow, come, trusted task).
-- **Suggested first build:** `g4-death-report`. It needs no CX23 and no human item, only `kill` on the test console.
+  - a second Minecraft account (#12), and a trusted player on S: the human as JQDAW for about 15 min (follow, come, stop, one trusted task, one task across a restart), or a second scripted trusted account.
+- **First build (the lead's pick): `g4-death-report`.** Its T rehearsal needs no CX23 and no human item, only `kill` on the test console. Plan step 1's dry run on S needs the CX23 and H4, H5 and H6.
 - **#314 (merged): the memory-summary counter fix.**
   - Open summaries are a queue, and each outcome line closes the oldest. A new start closes nothing. A non-zero exit empties all open ones. Overlapped summaries are never attributed to a provider.
   - Recounted, only round 7 A, B and C change (2, 1 and 2 empty become 0, as their READMEs said).
