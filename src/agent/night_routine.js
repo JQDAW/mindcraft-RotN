@@ -13,12 +13,14 @@
 // first too, and the bot says the shelter waits for it.
 
 import { Vec3 } from 'vec3';
-import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, shelterShell } from './library/night.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, REPAIR_LABEL, shelterShell } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, isLiquid, isFalling, isEmpty, shelterItems, softItems } from './library/shelter.js';
 import { breakBlockAt } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
 import { say, isGiverGoal } from './agenda_driver.js';
 import settings from './settings.js';
+
+export { REPAIR_LABEL };
 
 /** How often the bot inside checks its shelter for a breach or for having left it. */
 export const CHECK_MS = 10_000;
@@ -54,6 +56,7 @@ export function nightState(agent) {
         stopping: false,
         toldGiver: false,
         job: null, // the action running for the routine (build, repair, dig out)
+        repairStall: null, // #331 re-review: {fightEndedAt}: the last repair placed nothing
         digAt: null, // round 9 B: {pos, tick}: digging last seen on a shelter block (tick: when a nightTick saw it)
         gen: 0, // bumped by resetNight, so a job that ends after a reset changes nothing
     };
@@ -68,7 +71,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
-    Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, digAt: null });
+    Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     n.gen++;
 }
 
@@ -297,8 +300,16 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             return 'night:inside';
         }
         if (n.checkedAt === null) n.checkedAt = now;
-        // Round 9 B: while something digs at the shelter, every tick checks (not every CHECK_MS).
-        if (!digAlarm(n, now) && now - n.checkedAt < CHECK_MS) return 'night:inside';
+        // #331 review 4: while a wall is known open (a repair did not close it, or a fight in place
+        // held it up), every tick checks and repairs, not every CHECK_MS.
+        const open = bot.rotnSheltered === 'open';
+        // #331 re-review: a repair that placed nothing (no blocks left, a mob in the cell) is not
+        // tried again on every tick all night (thousands of log lines an hour): it waits CHECK_MS
+        // again, unless a fight in place has ended since (the cell may be free now).
+        const stalled = !!n.repairStall && n.repairStall.fightEndedAt === (bot.rotnFightEndedAt ?? null);
+        // Round 9 B (#334): while something digs at the shelter, every tick checks, a stall too
+        // (the dig alarm ends the stall wait: the wall is being opened now).
+        if ((!open || stalled) && !digAlarm(n, now) && now - n.checkedAt < CHECK_MS) return 'night:inside';
         n.checkedAt = now;
         if (!bot.entity.position.floored().equals(n.site)) {
             // Pushed, teleported (AggroTP) or walked out: a new shelter where it is now.
@@ -319,12 +330,19 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             startBuilding(n, now);
             return 'night:building';
         }
+        if (need.todo.length === 0 && open) { bot.rotnSheltered = true; n.repairStall = null; } // closed again: the shelter's rules are back
         if (need.todo.length > 0) {
-            bot.rotnSheltered = 'open'; // self_defense fights at the opening meanwhile
-            line(agent, `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`);
-            startJob(agent, n, 'action:buildShelter', () => ops.buildShelter(bot, { site: n.site, keepSoft: true }), (r) => {
-                if (r?.closed) bot.rotnSheltered = true;
-                else console.warn('[night] the repair did not close the shelter; trying again at the next check');
+            // self_defense fights at the opening, from where the bot stands, and never during the
+            // repair (G3 round 9 B: it interrupted the repair and walked out after the zombie).
+            bot.rotnSheltered = 'open';
+            const text = `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`;
+            if (open) console.log(text); else line(agent, text); // said once, then logged (T1: chat volume)
+            startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true }), (r) => {
+                if (r?.closed) { bot.rotnSheltered = true; n.repairStall = null; return; }
+                if ((r?.placed ?? 0) > 0) { n.repairStall = null; return; } // progress: the next tick tries again
+                // Nothing placed: back to every CHECK_MS until a fight in place ends (#331 re-review).
+                if (!n.repairStall) console.warn(`[night] the repair placed nothing (${r?.line ?? 'no result'}); checking again in ${CHECK_MS / 1000} s`);
+                n.repairStall = { fightEndedAt: bot.rotnFightEndedAt ?? null };
             });
         }
         return 'night:inside';
