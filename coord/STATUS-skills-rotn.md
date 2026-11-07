@@ -1,6 +1,35 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:58Z (from `date -u`)
+Updated: 2026-11-07T14:32Z (from `date -u`)
+
+## Round 9 B fix (h): after a night-time death with nothing (branch `agent/skills-rotn/night-death-plan`, 2026-11-07T14:32Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 3):** the bot respawned 9 blocks from where it died, at night, with nothing (`r9-g3b/night/driver.log` 502). The shelter was refused for want of dirt (501), and it died again to the zombie risen at the spot ("slain by Zombie FRCFLD", `server.log` 575).
+- **Change:**
+  - **New `library/pit.js`:** a shelter that needs nothing in the inventory.
+    - `choosePit`/`pitProblem` pick a surface cell within 3 blocks. It needs hand-diggable ground 3 deep, a floor, walls the shelter check counts as walls, no liquid or falling block around, and a side to dig stairs out of by hand.
+    - `digPit` digs straight down 3 blocks by hand.
+    - The roof goes in the top cell, flush with the ground. It has to be 3 deep: in a 2-deep hole the roof cell has nothing beside it to place against. The roof is placed by the shelter's own repair (`buildShelter` with the site), which crafts it from the 12 piles the dig gave.
+    - `pitOut` digs the roof and a 3-block staircase on one side by hand and walks up.
+    - `moveAwayFrom` walks until at least `PIT.awayFrom` (28) from a spot.
+  - **`night_routine.js`:**
+    - **Away first:** at night, if the bot died less than `DEATH_NEAR_MS` (20 min) ago within 28 blocks, it first walks away from the spot ("[night] I died N blocks from here; moving at least 28 away before sheltering").
+    - **Then a hole:** a build try that fails is followed once a night by a hole shelter, which does not count as a try.
+    - **Out by the stairs:** in the morning a hole is left with `pitOut`, not `digOut`.
+    - **Exposed and unarmed:** the routine turns cowardice on until morning and restores it then.
+- **Tests:**
+  - **`pit.test.js` (4 new):**
+    - with nothing held, a hole is dug (3 digs, 12 piles) and roofed with one placement, and closes;
+    - a stone column, water, sand nearby or no stair side is refused, and the nearest good cell is chosen;
+    - in the morning the roof plus 3 stair blocks are dug and the bot walks up;
+    - `moveAwayFrom` uses `GoalInvert(GoalNear(spot, 28))` and does no walk when already far.
+  - **`night_routine.test.js` (3 new):**
+    - the round 9 order: away, then build (refused), then hole and roof, then inside, then `pitOut` in the morning;
+    - no walk for a death 30 min ago, and the hole only once a night;
+    - cowardice on while exposed without a weapon and off in the morning, untouched with a sword.
+  - **On develop:** the 3 night tests fail (run against develop's `night_routine.js`); `pit.test.js` has no module there.
+  - With the fix: `night_routine`, `pit`, `shelter`, `night`, `priority`, `threat_arbitration` and `death_report`, 119/119. Lint: 0 in all four files.
+- **Not done (step 5 of the plan):** recovering the dropped items at dawn. The death report already says how long they last (10 min, Corpse Complex), and by dawn they are gone; the agenda restarts from the inventory by itself.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 
