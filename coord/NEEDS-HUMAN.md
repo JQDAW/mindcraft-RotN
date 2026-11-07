@@ -9,12 +9,14 @@ Agents add items here when they need something only the human can do. The human 
 - [ ] **Whitelist the bot** on the live server when the lead asks. This comes after G4, not G3: G4 runs only against disposable test servers, and the first live join follows the proven ready-to-try list (lead, 2026-11-07, aligned with `test/scenarios/g4/PLAN.md`).
 - [ ] **G4: decide how the dev server drives the CX23** (lead, 2026-11-07). This is for later and is not needed before G3. G4's service scenarios run up to 2 hours unattended, so they need a scripted channel from the CX33 to `deploy@cx23`. Today agents never have shell access to the bot host. Options:
   - (a) an Orca terminal on a `cx23-deploy` target, driven by `orca terminal send/read`;
-  - (b) a dedicated SSH key from the CX33, usable only as `deploy`, whose sudo rule already limits it to `mindcraft-rotn-ctl`.
+  - (b) a dedicated SSH key from the CX33 to `deploy@cx23`. On its own, such a key gives a normal shell as `deploy` on the bot host; the sudo rule only limits what `deploy` may run as root (`mindcraft-rotn-ctl`). To limit the key itself, its `authorized_keys` line would carry `restrict` and a forced `command=` (a wrapper that allows only `mindcraft-rotn-ctl` verbs).
 
   Both give agents scripted access to the production bot host, so this is your decision. The lead will write an ADR for the option you pick.
 - [ ] **G4: a trusted player for the control and task checks** (later). Follow, come, one trusted task, and a task kept across a service restart need a real player who is a task giver. Choose one:
   - about 10 minutes of you playing as JQDAW on a disposable test server, at a time harness-ops arranges;
   - a second, scripted account that you add to `task_givers` (your decision).
+
+  One extra account could serve both this item and the next one (not at the same time).
 - [ ] **G4: a second Minecraft account** (later) for the "second bot profile" smoke test. The profile name must equal the account name, and one account can't be online twice. It needs its own device-code login, done by you.
 - [ ] **G4: the CX23's IPv4 for each service batch** (later): give it in each GO message for `--allow-from`. It never goes in the repo.
 - [ ] **Move the lead and the four dev agents to the CX33 dev server** (the human's plan, 2026-11-06; the human corrected the type from CPX32 to CX33 on 2026-11-07; after G3 smoke round 7; it ends the RAM pressure on the Windows PC). Every step marked *you* involves a secret or an account, so no agent does it.
