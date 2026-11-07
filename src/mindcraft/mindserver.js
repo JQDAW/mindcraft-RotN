@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as mindcraft from './mindcraft.js';
 import { readFileSync } from 'fs';
+import { requestsInsecureCoding, INSECURE_REFUSAL } from './insecure_guard.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Mindserver is:
@@ -122,6 +123,11 @@ export function createMindServer(host_public = false, port = 8080) {
 
         socket.on('create-agent', async (settings, callback) => {
             console.log('API create agent...');
+            if (requestsInsecureCoding(settings)) { // RotN: insecure coding stays off
+                console.warn(`[mindserver] refused create-agent: ${INSECURE_REFUSAL}`);
+                callback({ success: false, error: INSECURE_REFUSAL });
+                return;
+            }
             for (let key in settings_spec) {
                 if (!(key in settings)) {
                     if (settings_spec[key].required) {
@@ -207,6 +213,10 @@ export function createMindServer(host_public = false, port = 8080) {
         });
 
         socket.on('set-agent-settings', (agentName, settings) => {
+            if (requestsInsecureCoding(settings)) { // RotN: insecure coding stays off
+                console.warn(`[mindserver] refused set-agent-settings for ${agentName}: ${INSECURE_REFUSAL}`);
+                return;
+            }
             const agent = agent_connections[agentName];
             if (agent) {
                 agent.setSettings(settings);
