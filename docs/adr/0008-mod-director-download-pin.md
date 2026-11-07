@@ -1,4 +1,4 @@
-# ADR 0008: Pin the Mod Director download (ESM-Tweaks) on test servers
+# ADR 0008: Pin the Mod Director download (ESM-Tweaks) on test servers (amends ADR 0005)
 
 - Status: accepted (test servers). The live-server part is the human's decision, open in `coord/NEEDS-HUMAN.md`.
 - Date: 2026-11-07
@@ -9,7 +9,7 @@
 ADR 0005 pins RotN 3.3.4 by the server pack zip's SHA-256. During the G3 round 9 batch B analysis, rotn-data (PR #339) found that the zip does not hold the full mod set the server loads:
 
 - The zip ships `mods/!mod-director-launchwrapper-1.9.1.jar` and `config/mod-director/requisites.remote.json`. That file only names a remote list: `https://raw.githubusercontent.com/Rebirth-of-the-Night/Rebirth-Of-The-Night/stable/config/mod-director/fd-3.3.4/file-director_requisites.bundle.json`, on the moving `stable` branch.
-- At every server start, Mod Director downloads what that list names. The #339 reviewer compared the 347 mod ids the server loaded with the zip's jars: **ESM-Tweaks 0.4.5 is the only loaded mod missing from the zip**, so it is the only mod Mod Director adds.
+- At every server start, Mod Director downloads what that list names. The #339 reviewer compared the 347 mod ids the server loaded with the zip's jars (ADR 0005 counts 337 jar files; one jar can carry several mods, and Forge and Minecraft add their own ids): **ESM-Tweaks 0.4.5 is the only loaded mod missing from the zip**, so it is the only mod Mod Director adds.
 - ESM-Tweaks is not cosmetic. It replaces Epic Siege Mod's digging AI and sets `mustHaveCorrectTool=true`, which decides whether zombies can dig the bot's shelter (`docs/research/rotn-progression.md`, section B).
 - harness-ops checked 10 raw log sets (the validation batch, rounds 8 and 9, T1): each shows the same URL, file and version. No run recorded a hash, so identical bytes are not proven. Mod Director has hash support, but we have not confirmed that the bundle uses it.
 
@@ -25,7 +25,9 @@ So the pin in ADR 0005 does not cover one mod that shapes night-time survival, a
 
 Option 2 for every disposable test server:
 
-- `rotn-test` compares `mods/` with the pinned zip's file list plus a committed SHA-256 list of what Mod Director adds (today: ESM-Tweaks 0.4.5), and the remote list's hash. It checks at each `Done`, restarts included.
+- At each `Done` (restarts included), `rotn-test` compares the **top-level `mods/*.jar` files** with the pinned zip's top-level jars plus a committed SHA-256 list of what Mod Director adds (today: ESM-Tweaks 0.4.5, full SHA-256 in the list, which harness-ops names and commits under `deploy/test-server/`). Subfolders such as `mods/memory_repo/` and `mods/1.12.2/` are excluded, because Forge writes into them at run time.
+- The remote list's own hash is checked only if Mod Director keeps a copy of it on disk (harness-ops confirms the path from a server's files or logs). `rotn-test` does not fetch the URL itself: a second fetch would add a network call and could see different bytes than Mod Director did. The jar's hash is the binding check either way.
+- harness-ops confirms from the log inventory where Mod Director writes the jar, and names that path in the check.
 - An extra file, a missing file or a mismatch sets the phase `failed:mod-director`, stops the server, and ends the batch as an infra fault (exit 125) before any scenario runs. The hashes go into `run.log` as evidence.
 - A change upstream therefore stops our tests visibly, and the lead decides whether to adopt it (a new hash list in a reviewed PR) instead of it slipping in.
 - The pack as tested is now: the zip of ADR 0005 **plus** the committed Mod Director hash list.
