@@ -1,6 +1,20 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:58Z (from `date -u`)
+Updated: 2026-11-07T14:11Z (from `date -u`)
+
+## Round 9 B fix (b): a thick trunk's shell is a tree part (branch `agent/skills-rotn/trunkshell-tree-part`, 2026-11-07T14:11Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 1 with (a), which is PR #328):** the three leaves that passed the ground check in round 9 B sit at three corners of a 3×3 ring around (-70, -60), a thick Dynamic Trees trunk (`r9-g3b/night/driver.log` 131-133). `dynamictrees:trunkshell` is not a branch to `isBranch`, so `leafFromGround` took the shell under them as firm ground. The same gap let the LLM's `!collectBlocks("dynamictrees:trunkshell", 1)` dig a shell as a plain block (244).
+- **Change:**
+  - `felling.js` gets `isTrunkShell`.
+  - `fall_safety.js`: `isTreePart` includes it, so it is not ground under a leaf or the bot and `standsOnTree` is true on it. `fallSafe` never breaks one on a walk.
+  - `skills.js`: `fellsTree` includes it, so collecting a shell goes to `fellTree`'s safe cut. `treeBase` still looks for the branch inside, and with none in sight it refuses.
+  - `isBranch` is unchanged, so the felling plan (`treeBase`, `standSpots`, `canopyOf`) is as before.
+  - `world.js`'s underground check now treats a shell overhead as a tree, not a roof.
+- **Tests (`fall_safety.test.js`, 1 new):** checks that a shell is a tree part, a leaf on a shell is not reachable from the ground, a walk never breaks a shell, standing on one is standing on a tree, and collecting one goes to `fellTree` with no plain dig and no `collect()`.
+  - **On develop it fails:** "a shell is part of a tree", false.
+  - With the fix: `fall_safety`, `fell_tree`, `collect_sticks`, `collect_rotn`, `axe_chop` and `stand_on`, 89/89. `update_loop`, `quiet_reflexes` and `shelter`, 45/45. Lint: no new errors (skills.js 20 before and after; the other 3 files 0).
+- **Request (to rotn-data, via the lead):** confirm from the Dynamic Trees jar that breaking `dynamictrees:trunkshell` fells the tree (`BlockTrunkShell` forwarding the break to the thick branch inside). The change is safe either way: a shell is only ever cut through `fellTree`, which cuts the trunk's branch.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 
