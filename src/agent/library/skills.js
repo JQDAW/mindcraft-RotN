@@ -779,9 +779,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // time; wanted() never offers others). Then trees and the rest, where a species that has given this
     // bot 0 of the item loses only to a tree at most CL.speciesDetour farther (rotn-data #312: the stick
     // count follows the tree's shape, not its species, so never a long walk for it); then by-hand blocks
-    // farther out. Leaves are told by the block, not the rule's id, so rotn-data's leaves rule and the
-    // fallback rank alike. Only when the item has both kinds of source, or a species already came up
-    // empty; otherwise one plain search.
+    // farther out. Leaves are told by the block, not by the rule's id (rotn-data's leaves-sticks rule).
+    // Only when the item has both kinds of source, or a species already came up empty; otherwise one
+    // plain search.
     const emptySpecies = emptyFelled(bot, baseType);
     const isHand = (block) => !fellsTree(block) && handMatchers.some(matches => matches(block));
     const canGiveNone = (block) => mayGiveNone.some(matches => matches(block));
