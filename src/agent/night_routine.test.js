@@ -742,3 +742,52 @@ test('#334 re-review: one dig at one block, with events on every tick, ends a no
     await settle(agent);
     assert.equal(o.builds.length, before + 1);
 });
+
+test('#334 re-review 2: two diggers on different shelter blocks, events alternating, let a stalled repair through at most once per block', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const events = new EventEmitter();
+    Object.assign(agent.bot, { on: events.on.bind(events), emit: events.emit.bind(events), inventory: { items: () => [] }, heldItem: null, equip: () => Promise.resolve() });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    o.open = [SITE.offset(1, 0, 0)];
+    o.buildShelter = (bot, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, feet: SITE, placed: 0 }); };
+    let now = CHECK_MS + 2;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    const afterStall = o.builds.length;
+    const A = SITE.offset(-1, 0, 0), B = SITE.offset(0, 0, 1);
+    for (let i = 0; i < 30; i++) {
+        agent.bot.emit('blockBreakProgressObserved', { position: i % 2 ? B : A }, i % 10, { name: 'zombie' });
+        now += 300;
+        nightTick(agent, { now, ops: o });
+        await settle(agent);
+    }
+    assert.ok(o.builds.length - afterStall <= 2, `${o.builds.length - afterStall} repairs in 30 ticks (the reviewer saw 30)`);
+});
+
+test('#334 re-review 2 nit: a reset, leaving for a giver and a new shelter clear the repair stall', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    const n = nightState(agent);
+    n.repairStall = { fightEndedAt: null, dug: new Set(['1,64,0']), retry: false };
+    resetNight(agent, 'death');
+    assert.equal(n.repairStall, null, 'reset');
+    nightTick(agent, { now: 1, ops: o });
+    await settle(agent);
+    assert.equal(n.state, 'inside');
+    n.repairStall = { fightEndedAt: null, dug: new Set(), retry: false };
+    const { leaveShelterFor } = await import('./night_routine.js');
+    leaveShelterFor(agent, 'a test');
+    assert.equal(n.repairStall, null, 'leaving for a giver');
+    n.repairStall = { fightEndedAt: null, dug: new Set(), retry: false };
+    nightTick(agent, { now: 2, ops: o });
+    await settle(agent);
+    assert.equal(n.state, 'inside');
+    assert.equal(n.repairStall, null, 'a new shelter');
+});
