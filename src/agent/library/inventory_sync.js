@@ -12,6 +12,19 @@
 //   or dropped when there is none (clearCursor);
 // - a rejected or unanswered click is answered by waiting for the server's resend of the window
 //   (the resync), clearing the cursor again, and one more try (guardInventory).
+//
+// G3 round 8 B: three equips of the stone pickaxe in a row were rejected at hotbar slots 36, 37 and
+// 38, each resync showed the pickaxe on the cursor, and each "put the stone_pickaxe on the cursor
+// into slot 9" was followed by the same rejection. The put-down did take: the next equip found the
+// pickaxe in slot 9 and lifted it onto the cursor again. With a full hotbar, mineflayer 4.33's
+// equip (simple_inventory.js) moves an item into its least recently used hotbar slot with
+// moveSlotItem: pick up, put down (a swap with that slot's stack), put back. The server rejected
+// that put-down and left the pickaxe on its cursor, every time. And the guard's retry ran equip with
+// the same Item object, whose .slot was stale after the resync. So now (equipToHand):
+// - an item in the main inventory goes to the hand with one number-key click (mode 2): the server
+//   swaps it with a hotbar slot directly; no cursor, and the server checks no slot's contents
+//   against the client's for it (1.12 returns an empty stack for a swap click);
+// - every try, the retry included, takes the item from where the window has it now.
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import prismarineItem from 'prismarine-item';
@@ -103,9 +116,51 @@ export async function clearCursor(bot, click = (...a) => bot.clickWindow(...a)) 
     return line;
 }
 
+/** The player window's hotbar (slots 36-44) and main inventory (9-35). */
+const HOTBAR = 36, HOTBAR_END = 44, MAIN = 9;
+const sameKind = (a, b) => !!a && !!b && a.type === b.type;
+const sameStack = (a, b) => sameKind(a, b) && (a.metadata ?? 0) === (b.metadata ?? 0)
+    && JSON.stringify(a.nbt ?? null) === JSON.stringify(b.nbt ?? null);
+
+/**
+ * The item as the window has it now (round 8 B: a retry ran with a stale Item, its .slot from before
+ * the resync): the same slot while it still holds that stack; else the first slot with the same
+ * stack; else the first of the same kind (a tool's damage may have changed); else null.
+ */
+export function currentItem(bot, item) {
+    const slots = bot?.inventory?.slots;
+    if (!item || typeof item !== 'object' || !Array.isArray(slots)) return item ?? null;
+    if (sameStack(slots[item.slot], item)) return slots[item.slot];
+    const order = [...Array(HOTBAR_END - MAIN + 1).keys()].map(i => i + MAIN).concat([45]);
+    return order.map(k => slots[k]).find(s => sameStack(s, item))
+        ?? order.map(k => slots[k]).find(s => sameKind(s, item)) ?? null;
+}
+
+/**
+ * equip(item, 'hand') for an item in the main inventory: one number-key click (mode 2) swaps it with
+ * a hotbar slot (an empty one, else the selected one), then that slot is selected (round 8 B). Any
+ * other case (another destination, an item already in the hotbar or an armor slot, an open
+ * container, a bot without these functions) is mineflayer's equip, with the item as it is now.
+ */
+export async function equipToHand(bot, original, args) {
+    const [arg, destination, ...rest] = args;
+    const item = typeof arg === 'object' && arg ? (currentItem(bot, arg) ?? arg) : arg;
+    const toHand = destination == null || destination === 'hand';
+    const playerWindow = !bot.currentWindow || bot.currentWindow === bot.inventory;
+    const canSwap = typeof bot.clickWindow === 'function' && typeof bot.setQuickBarSlot === 'function';
+    if (!toHand || !playerWindow || !canSwap || typeof item !== 'object' || !item || !(item.slot >= MAIN && item.slot < HOTBAR))
+        return await original.apply(bot, [item, destination, ...rest]);
+    const slots = bot.inventory.slots;
+    let k = [...Array(9).keys()].find(i => !slots[HOTBAR + i]);
+    if (k === undefined) k = Number.isInteger(bot.quickBarSlot) ? bot.quickBarSlot : 0;
+    await bot.clickWindow(item.slot, k, 2);
+    bot.setQuickBarSlot(k);
+}
+
 /**
  * Run an inventory operation with a clear cursor; when the server rejects (or never answers) one of
- * its clicks: resync, clear the cursor again and try once more. Its second failure is thrown.
+ * its clicks: resync, clear the cursor again and try once more. Its second failure is thrown (and
+ * logged, round 8 B: the log did not say how a retry ended).
  */
 export async function withCleanCursor(bot, label, op, { resyncMs = RESYNC_MS } = {}) {
     const tidy = async () => {
@@ -130,7 +185,12 @@ export async function withCleanCursor(bot, label, op, { resyncMs = RESYNC_MS } =
         console.log(`[inventory] resync: ${came ? 'the server resent the window' : `no resend within ${resyncMs} ms`}; `
             + `cursor: ${clickedWindow(bot)?.selectedItem?.name ?? 'empty'}`);
         await tidy();
-        return await op();
+        try {
+            return await op();
+        } catch (again) {
+            console.warn(`[inventory] ${label}: the second try failed too: ${again?.message ?? again}`);
+            throw again;
+        }
     }
 }
 
@@ -150,9 +210,11 @@ export function guardInventory(bot) {
         for (const name of GUARDED) {
             const original = bot[name];
             if (typeof original !== 'function' || original.rotnGuarded) continue;
+            // equip: a number-key swap into the hotbar, on the item as the window has it at each try.
+            const run = name === 'equip' ? (args) => equipToHand(bot, original, args) : (args) => original.apply(bot, args);
             const guarded = function (...args) {
                 if (insideGuard.getStore()) return original.apply(bot, args);
-                return insideGuard.run(true, () => withCleanCursor(bot, name, () => original.apply(bot, args)));
+                return insideGuard.run(true, () => withCleanCursor(bot, name, () => run(args)));
             };
             guarded.rotnGuarded = true;
             bot[name] = guarded;

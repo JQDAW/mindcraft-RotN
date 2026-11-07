@@ -1,6 +1,23 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T01:10Z (from `date -u`)
+Updated: 2026-11-07T04:13Z (from `date -u`)
+
+## Round 8 B cursor: equip to the hand is one number-key swap (branch `agent/skills-rotn/equip-hotbar-swap`, 2026-11-07T04:13Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** in round 8 B, three equips in a row were rejected at slots 36-38. Each resync showed the stone pickaxe on the cursor, and "put the stone_pickaxe on the cursor into slot 9" did not clear it (#313, `g3b-20261107-r8/night/driver.log:1020-1028`).
+- **Finding:**
+  - The put-down did take. Each `[inventory] … trying once more` line is the first try of a separate `equip`, so 36, 37 and 38 are three equips; a retry's failure was not logged.
+  - With a full hotbar, mineflayer 4.33's `equip` (`simple_inventory.js`) moves the item into its least recently used hotbar slot with `moveSlotItem`: pick up, put down (a swap), put back. Each new equip found the pickaxe in slot 9 and lifted it onto the cursor again. The server rejected the swap into the hotbar slot and kept the pickaxe on its cursor.
+  - Also, #296's retry ran `equip` with the same Item object, whose `.slot` was stale after the resync.
+  - Which hotbar stack made the server's view differ is not in the log: the server log has nothing, and the driver log does not list hotbar slots.
+- **Fix (`inventory_sync.js`):**
+  - An item in the main inventory goes to the hand with one number-key click, `clickWindow(slot, k, 2)` then `setQuickBarSlot(k)`, where `k` is an empty hotbar slot or else the selected one. There is no cursor and no put-down, and for this click the 1.12 server returns an empty stack, so no slot's contents are compared.
+  - Every try, the retry included, takes the item from where the window has it now (`currentItem`).
+  - A failed second try is logged.
+  - Anything else (another destination, an item already in the hotbar, an open container) is mineflayer's `equip`.
+- **Tests:** new `equip_hand.test.js`, 4/4. It uses prismarine-windows' real player window, mineflayer 4.33's `equip`/`moveSlotItem` as they behave with a full hotbar, and a fake 1.12 server that applies a click, then compares, and rejects a put-down into the hotbar.
+  - On develop's guard the 3 behaviour tests fail, and a replay prints round 8 B's lines: "rejected … slot 36", "cursor: stone_pickaxe", "put the stone_pickaxe … into slot 9", "rejected … slot 37".
+  - `inventory_sync`, `threats`, `use_on` and `dirt_piles` (37/37 with the new file) pass. Lint: 0 in both files.
 
 ## The goToGoal test is no longer flaky under load (branch `agent/skills-rotn/goto-test-load`, 2026-11-07T01:03Z by `date -u`)
 
