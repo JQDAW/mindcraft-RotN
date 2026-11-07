@@ -1,8 +1,31 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (03:37 UTC, from `date -u`)
+Updated: 2026-11-07 (04:05 UTC, from `date -u`)
 
-## Now: G3 smoke round 8 (e5029f23, smoke, the first full round from the CX33) is over: 3/4, so no gate on this commit. No batch until a new GO.
+## Now: the G4 plan PR is open; waiting for the lead's pick of the first G4 scenario to build
+
+- **`test/scenarios/g4/PLAN.md` (this PR):** each of the 12 ready-to-try items mapped to:
+  - what covers it today (G1-G3 on a test server, unit tests, `test/evidence/cx23`);
+  - the new scenario it needs (`g4-service-reconnect`, `g4-death-report`, `g4-control-commands`, `g4-restart-persistence`, `g4-soak-2h`, `g4-second-bot`);
+  - where it runs: the CX23 service against a CPX42, or a test server only;
+  - the human items;
+  - order, cost and time: about EUR 2.1 + USD 0.2 in all.
+- **Decisions the plan asks for (lead / human):**
+  - how the CX33 drives the CX23: a scripted Orca terminal, or a dedicated SSH key limited by the existing sudo rule;
+  - `kill`, `kick` and `stop` on the test-server console allowlist;
+  - a startup log line with the effective `allow_insecure_coding` (`main.js`, lead-owned);
+  - the soak ADR's targets;
+  - a second Minecraft account (#12), and the human's 10 min as JQDAW (follow, come, trusted task).
+- **Suggested first build:** `g4-death-report`. It needs no CX23 and no human item, only `kill` on the test console.
+- **#314 (open, in review): the memory-summary counter fix.**
+  - Open summaries are a queue, and each outcome line closes the oldest. A new start closes nothing. A non-zero exit empties all open ones. Overlapped summaries are never attributed to a provider.
+  - Recounted, only round 7 A, B and C change (2, 1 and 2 empty become 0, as their READMEs said).
+  - Tests: 126 pass. The updated and new tests fail on the old counter.
+- **#313 (round 8 evidence):** the review nits are fixed (text only, ee3e7bb). The dead bush gave 1 stick, held (1 of 3); there were four `!collectBlocks("stick", 3)` calls, each "Collected 0 stick".
+- **This branch is stacked on #313** (for the STATUS hunk). Merge #313 first; then this PR's diff is the plan and STATUS only.
+- **Cleanup:** both batch checkouts under `/home/mindcraft-RotN-batch/` are removed.
+
+## Earlier: G3 smoke round 8 (e5029f23, smoke, the first full round from the CX33) is over: 3/4, so no gate on this commit.
 
 | Batch (evidence folder) | Result |
 | --- | --- |
