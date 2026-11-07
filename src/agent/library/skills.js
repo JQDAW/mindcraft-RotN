@@ -5,7 +5,7 @@ import { countItem, parseName, formatName, findItem, itemMatches, blockMatcher, 
 import { worldSources, itemVariants, toolAllows, allowedTool, allowedTools, toolUsesLeft, describeTool, stowCarried, isToolFor, handRoute } from "./rotn_sources.js";
 import { craftNeeds, describeNeeds, fillNow, filledRecipe } from "./craft_needs.js";
 import { isGenericCobble, cobbleChoices, cobbleRocksHeld, ROCKS_PER_COBBLE } from "./cobble.js";
-import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
+import { treeBase, canopyOf, standSpots, retreatFrom, sideFace, isBranch, isTrunkShell, isTreeLeaves, branchesNear, FALLING_TREE, FELL_PLAN } from "./felling.js";
 import { oreMemberNames } from "../agenda_driver.js";
 import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBlock, leafFromGround, itemOnGround } from "./fall_safety.js";
 import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
@@ -829,7 +829,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     }
     // Any Dynamic Trees branch fells its tree, whichever rule names it (rotn-data #13: a branch
     // broken by hand drops the tree's logs and sticks): always the safe cut, never collect().
-    const fellsTree = (block) => isBranch(block) || fellMatchers.some(matches => matches(block));
+    // Round 9 B: a thick trunk's shell too (it was dug as a plain block).
+    const fellsTree = (block) => isBranch(block) || isTrunkShell(block) || fellMatchers.some(matches => matches(block));
     // G3 round 8 A: two felled spruces gave 32 logs and 0 sticks while a dead bush stood next to the
     // bot. So a by-hand rule that fells nothing comes first (nearest first, within CL.handFirstRadius):
     // a dead bush (tier 0), then leaves reachable from the ground (tier 3; Request 17: a stick half the
