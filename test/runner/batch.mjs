@@ -162,6 +162,16 @@ export function scenarioTimeouts(scenarios, registry, { maxBatchUsd, testMode = 
 }
 
 /**
+ * A gate batch may hold no G4 scenario (lead, #316 review): G4 runs on a test server are rehearsals, never G4
+ * evidence, so `--gate` with one is refused before anything runs. registry: loadScenarios() output.
+ */
+export function gateBatchProblems(o, registry) {
+    if (!o.gate) return [];
+    return o.scenarios.filter((sc) => registry?.[sc.id]?.gate === 'G4')
+        .map((sc) => `--gate with ${sc.id}: a G4 scenario on a test server is a rehearsal, never gate evidence (run it as a smoke batch)`);
+}
+
+/**
  * A warning, never a refusal (lead, after round 3 batch B): whether this batch could still be running at 00:00 UTC,
  * when log4j rolls the server's logs/latest.log over. The session then reads the rolled-over file too
  * (lib/session.mjs, notes.logWindow), so a run survives it; the warning says to expect that. From nowMs: buildMin
@@ -370,7 +380,13 @@ async function main(argv) {
         return 2;
     }
     // Each scenario's runner timeout comes from the scenario (lead, after #230), in the preflight too.
-    const tos = scenarioTimeouts(o.scenarios, await loadScenarios(), { maxBatchUsd: o.maxBatchUsd, testMode: testOverridesAllowed(process.env) });
+    const registry = await loadScenarios();
+    const gp = gateBatchProblems(o, registry);
+    if (gp.length) {
+        for (const p of gp) log(`refused: ${p}`);
+        return 2;
+    }
+    const tos = scenarioTimeouts(o.scenarios, registry, { maxBatchUsd: o.maxBatchUsd, testMode: testOverridesAllowed(process.env) });
     if (tos.problems.length) {
         for (const p of tos.problems) log(`refused: ${p}`);
         return 2;

@@ -19,6 +19,8 @@
 // vouch for it. A *.json that cannot be read, or a batch.json that is itself a G3 result, is a problem
 // too, since either could hide a G3 result. CI runs it over test/evidence/ (test/unit/g3-spend.test.js).
 // Gate reviews accept G3 evidence only from test/evidence/g3/<batch>/ (test/runner/DRIVER.md).
+// G4 results (G4 rehearsals on a test server, 2026-11-07) are checked the same way (isG3Result counts them), and
+// are never gate evidence: crossCheckBatch refuses a G4 result in a gate claim.
 //
 // Prints one line per problem; exit 0 = consistent, 1 = not, 2 = usage. See crossCheckBatch in
 // test/runner/lib/g3.mjs.

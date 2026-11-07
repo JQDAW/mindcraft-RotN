@@ -447,6 +447,51 @@ A short session of the real agent with the **production** task-giver list. `Serv
   - `no_cheat`.
 - **Offline test:** `test/unit/g3-untrusted.test.js`. The driver's switch and state clearing are unit-tested in `mindcraft-driver.test.js`.
 
+## G4 rehearsals on a test server (`test/scenarios/g4/`)
+
+**G4 accepts no test-server evidence** (lead, #316 review; `test/scenarios/g4/PLAN.md`). A G4 scenario on a CPX42 with the driver on the CX33 is a **rehearsal**: it builds and debugs the scenario before its run on the CX23 service (set-up S).
+- `g3Policy` marks every G4 run not-gate: `weakenedParams` names `G4_TEST_SERVER_NOT_GATE`. So the best verdict is `SMOKE-PASS (not a gate pass)`, and run.mjs exits 4.
+- `batch.mjs --gate` refuses a batch with a G4 scenario (`gateBatchProblems`). A rehearsal batch is always smoke.
+- **The G3 tooling applies otherwise:**
+  - the batch marker is stamped;
+  - the spend stop (`maxBatchUsd` USD 2) and the LLM-failure stop apply;
+  - the console allowlist applies;
+  - `isG3Result` counts G4 results too, so every G4 result under `test/evidence/` needs a vouching `batch.json` (`g3-batch-check --tree`);
+  - `crossCheckBatch` never accepts one in a gate claim.
+
+### G4 #6: `g4-death-report`
+
+Ready-to-try: "After death it respawns, reports what it lost and carries on without a chat-spam loop." The bot side is skills-rotn's `src/agent/library/death_report.js` (D3), which this scenario never changes. If it finds something to fix there, harness-ops reports it.
+- **The stimulus (lead decision, 2026-11-07):** the console's `kill <bot>`, on the disposable **test** server only, never on the live server and never to fake a pass (the same rule as the P1 setup commands).
+  - It is on this scenario's console list alone (`SCENARIO_CONSOLE_EXTRA` in `lib/g3.mjs`, applied by `consoleAllowFor`).
+  - It is built from the run's effective parameters: `^kill <this run's bot, exactly>$` (#320 review: the human may be on that server as JQDAW). Any other name and every selector (`@a`, `@e`, `@p`) are refused.
+  - No valid bot name in the parameters means no kill at all.
+  - The driver refuses a profile whose name is not the run's bot, and the scenario sends no kill without that driver's `mindcraft_start` event.
+  - The read-only `health` objective comes with it.
+  - **Test-server only by construction:** the console goes only through `test-server.sh`, which reaches only the labelled servers it created itself, with their own per-batch keys. The harness holds no address, key or RCON for the live server.
+- **Steps:**
+  1. The G2 world, the production task givers. Objectives: `stat.deaths` (`g4d_d`), `health` (`g4d_h`) and (c)'s agenda counter (`g4d_a<n>`).
+  2. After `warmMinutes` (3), the count-only `clear <bot> <item> -1 0` of each of `lossItems` (the early agenda's items and the first-join kit), every `heldPollS` (60) until the total reaches `minHeld` (6), at most `maxWaitHeldMin` (8).
+  3. `kill <bot>`. From then on, every time is the server's own (the reply lines' `hh:mm:ss`), never the runner's clock.
+  4. `scoreboard players list` every `pollMs` (2 s) until the respawn.
+  5. `afterRespawnS` (5) later, the same counts again. The server's loss per item is before - after; kept items (main hand, off hand, armor, baubles) are no loss on either side.
+  6. The agenda counter every `counterPollMs` (60 s) until both `spamWindowMin` (5) after the kill and `resumeMinutes` (5) after the respawn have passed.
+- **Checks** (every window and limit compared 'equal'):
+  - `had_items`: the server counts at least `minHeld` of the loss items before the kill. Otherwise everything after it is "not reached".
+  - `died`: `stat.deaths` rose, and the log has the bot's death line (`deathLines`).
+  - `respawned`: `health` read 0 after the kill and then above 0 (if the 0 fell between two readings: above 0 once the death is confirmed), within `respawnS` (30) of the kill. RotN's respawn timer is about 7 s.
+  - `loss_reported` (not reached when the server counts no loss at all, everything held being kept, or when a count after the respawn is unread; #320 review): exactly one `I died at x, y, z[ (cause)]; lost ...[; XP level a -> b].` line from the bot after the kill, within `reportS` (60) of the respawn, consistent with the server's count (`lossConsistency`):
+    - per counted item, |reported - server| <= max(2, 25 %), because the counts run in the seconds before the kill;
+    - an item the server says was lost but the report does not name passes only if the report ends "and K more kinds" and the item's loss is no larger than the smallest named count (death_report.js names the six largest);
+    - "lost nothing" against a real loss fails;
+    - items outside `lossItems` are not judged.
+  - `no_spam`: at most `maxChatPerMin` (10) chat lines from the bot in any 60 s of the 5 min after the kill (vanilla kicks at about 10 at once); no spam kick; online throughout.
+  - `agenda_resumed`: the agenda counter rose within `resumeMinutes` after the respawn.
+  - `no_cheat`: the console's kill is not a command the bot ran.
+- **Run time:** `runMinutes` 38.3 at the defaults, so the derived runner timeout is 47 min. A rehearsal batch takes `--ttl-hours 2` (47 + 5 + 20 build = 72 min).
+- **Offline test:** `test/unit/g4-death.test.js`. A fake server answers in 1.12's formats, and a fake agent dies, respawns and says death_report.js's line; each failure fails its own check. The wiring tests cover `kill` being refused for every G3 scenario, the G4 not-gate rule, `--gate` refused, and a gate claim refused.
+- **Evidence:** `test/evidence/g4/g4death-<date>-t<N>/` (t for test-server rehearsal), laid out like G3's, with a README that says "rehearsal, never G4 evidence".
+
 ## S1: survey and smoke before G3
 
 S1 (`test/scenarios/s1/`) is a survey, not a gate. **Every S1 run is not gate-valid:** `run()` first records "S1 is a survey/smoke, never a gate pass" as a notGate reason, so its verdict is at best `SMOKE-PASS (not a gate pass)`. Its findings are data the lead uses to pin G3's world, dawn bound and arbiters (`coord/STATUS-harness-ops.md`, "G3 batches"). The driver is the G2 one (`g1-driver.mjs` with `attachScenario` and `attachG2`); S1 needs one more behaviour:
