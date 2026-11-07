@@ -15,7 +15,7 @@
 // leaves never digs, towers or jumps gaps, and never stands on a tree; only leaves reachable from
 // the ground are broken; a bot that is on a tree climbs down first (skills.descendFromTree).
 import { Vec3 } from 'vec3';
-import { isBranch } from './felling.js';
+import { isBranch, isTrunkShell } from './felling.js';
 import { stateHazard, hazardBlockIds } from '../../../packages/forge-bridge/src/collision.js';
 
 /** The highest drop a walk may take: a fall of 3 blocks does no damage (fall damage is height - 3). */
@@ -33,8 +33,8 @@ const NEVER = 1000;
 
 /** Any leaves block: vanilla leaves, leaves2, Dynamic Trees leaves, other mods' leaves. */
 export const isLeafBlock = (b) => !!b && typeof b.name === 'string' && /leaves/.test(b.name);
-/** A part of a tree that can vanish under the bot: leaves, or a branch (which fells the tree). */
-export const isTreePart = (b) => isBranch(b) || isLeafBlock(b);
+/** A part of a tree that can vanish under the bot: leaves, a branch (which fells the tree) or a thick trunk's shell. */
+export const isTreePart = (b) => isBranch(b) || isTrunkShell(b) || isLeafBlock(b);
 
 const offset = (pos, dy) => (pos?.offset ? pos.offset(0, dy, 0) : new Vec3(pos.x, pos.y + dy, pos.z));
 const blockAt = (bot, pos) => { try { return bot.blockAt(pos) ?? null; } catch { return null; } };
@@ -141,7 +141,7 @@ export function itemOnGround(bot, entity) {
 export function fallSafe(movements) {
     if (!movements || movements.rotnFallSafe) return movements;
     movements.maxDropDown = PATHFINDER_MAX_DROP_DOWN;
-    movements.exclusionAreasBreak.push((b) => (isBranch(b) ? NEVER : 0));
+    movements.exclusionAreasBreak.push((b) => (isBranch(b) || isTrunkShell(b) ? NEVER : 0));
     liquidAndHazardSafe(movements);
     movements.rotnFallSafe = true;
     return movements;
