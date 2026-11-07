@@ -4,6 +4,10 @@ Agents add items here when they need something only the human can do. The human 
 
 ## Open
 
+- [ ] **Your live server: the one mod the pack downloads at start** (lead, 2026-11-07; ADR 0008). The pinned zip doesn't contain ESM-Tweaks 0.4.5. Mod Director downloads it at every server start, from a list on the RotN GitHub `stable` branch. That mod decides whether zombies can dig through dirt and wood. The test servers now pin its SHA-256 and stop on any change. Your choice for the live server:
+  - (a) keep the auto-download and accept that the mod may change upstream;
+  - (b) pin it too, for example with a local copy of the jar and the list.
+  This isn't needed for G3; it matters before the bot joins the live server.
 - [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key, which is under Done): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
 - [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
 - [ ] **Whitelist the bot** on the live server when the lead asks. This comes after G4, not G3: G4 runs only against disposable test servers, and the first live join follows the proven ready-to-try list (lead, 2026-11-07, aligned with `test/scenarios/g4/PLAN.md`).
