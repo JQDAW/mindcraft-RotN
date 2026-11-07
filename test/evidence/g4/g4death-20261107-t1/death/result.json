@@ -1,0 +1,360 @@
+{
+  "scenario": "g4-death-report",
+  "gate": "G4",
+  "title": "After a forced death the bot respawns, reports what it lost (as the server counted it) and carries on without a chat-spam loop",
+  "runId": "20261107t135918-297943",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": false,
+  "weakenedParams": [
+    "a G4 scenario on a test server is a rehearsal: G4 evidence comes only from the CX23 service (test/scenarios/g4/PLAN.md)"
+  ],
+  "verdict": "FAIL",
+  "passed": 7,
+  "failed": 2,
+  "durationS": 583,
+  "params": {
+    "bot": "<bot>",
+    "worldSeed": "1880465901402976865",
+    "lossItems": "pyrotech:rock,pyrotech_compat:rock_igneous,pyrotech_compat:rock_metamorphic,pyrotech_compat:rock_sedimentary,minecraft:stick,minecraft:log,minecraft:log2,minecraft:planks,betterwithmods:dirt_pile,dynamictrees:oakseed,undergroundbiomes:igneous_cobble,undergroundbiomes:metamorphic_cobble,minecraft:cobblestone,minecraft:bread,bundles:bundle",
+    "agendaCounter": "stat.mineBlock.pyrotech.rock,stat.mineBlock.pyrotech_compat.rock_igneous,stat.mineBlock.pyrotech_compat.rock_metamorphic,stat.mineBlock.pyrotech_compat.rock_sedimentary,stat.mineBlock.minecraft.log,stat.mineBlock.minecraft.log2,stat.craftItem.pyrotech.crude_axe,stat.craftItem.contenttweaker.crafting_tools,stat.craftItem.minecraft.crafting_table,stat.craftItem.minecraft.stone_pickaxe,stat.craftItem.minecraft.stone_axe",
+    "warmMinutes": 3,
+    "minHeld": 6,
+    "heldPollS": 60,
+    "maxWaitHeldMin": 8,
+    "respawnS": 30,
+    "afterRespawnS": 5,
+    "reportS": 60,
+    "spamWindowMin": 5,
+    "maxChatPerMin": 10,
+    "resumeMinutes": 5,
+    "lossTolAbs": 2,
+    "lossTolRel": 0.25,
+    "maxBatchUsd": 2,
+    "loginTimeoutMs": 240000,
+    "counterPollMs": 60000,
+    "pollMs": 2000,
+    "logTail": 20000,
+    "consoleWaitS": 1,
+    "lateReplyMs": 5000,
+    "latePollMs": 1000
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "Starting the bot makes it log in with its own account (online mode)"
+    },
+    {
+      "check": "fresh_bot_state",
+      "pass": true,
+      "detail": "the driver moved aside: agenda.json.g3-2026-11-07T13-59-22-168Z.bak, memory.json.g3-2026-11-07T13-59-22-168Z.bak",
+      "readyToTry": "The bot starts with no task queue or agenda state from an earlier run"
+    },
+    {
+      "check": "had_items",
+      "pass": true,
+      "detail": "the server counts 33 of the loss items (at least 6 needed): 7 pyrotech_compat:rock_metamorphic, 2 pyrotech_compat:rock_sedimentary, 4 minecraft:stick, 11 minecraft:log, 3 minecraft:planks, 4 betterwithmods:dirt_pile, 1 minecraft:bread, 1 bundles:bundle",
+      "readyToTry": "Before the death the bot holds items it can lose (the server counts them)"
+    },
+    {
+      "check": "died",
+      "pass": true,
+      "detail": "stat.deaths 0 -> more; \"<bot> fell out of the world\" at 14:03:33",
+      "readyToTry": "The server shows the death (stat.deaths and the death message)"
+    },
+    {
+      "check": "respawned",
+      "pass": true,
+      "detail": "health above 0 at 14:03:40, 7s after the kill (the 0 fell between two readings)",
+      "readyToTry": "After death it respawns (within 30 s, by the server)"
+    },
+    {
+      "check": "loss_reported",
+      "pass": false,
+      "detail": "a death report came, but not within 60s of the respawn: \"I died at -41, 67, -13; lost 10 dirt, 9 log, 6 planks, 4 betterwithmods:dirt_pile, 3 pyrotech_compat:rock_metamorphic:6, 3 sapling and 10 more kinds.\" at 14:03:39",
+      "readyToTry": "It reports what it lost, once, consistent with what the server counted"
+    },
+    {
+      "check": "no_spam",
+      "pass": false,
+      "detail": "13 chat lines in one 60 s (limit 10); 17 in 5 min",
+      "readyToTry": "It carries on without a chat-spam loop (chat per minute bounded for 5 min, no spam kick)"
+    },
+    {
+      "check": "agenda_resumed",
+      "pass": true,
+      "detail": "the agenda counter rose 20 -> 21 by 14:05:10",
+      "readyToTry": "It carries on: its agenda counter rises again after the respawn"
+    },
+    {
+      "check": "no_cheat",
+      "pass": true,
+      "detail": "nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)",
+      "readyToTry": "No give, game mode change, op or command by the bot during the run (the pack's first-join commands aside)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "checked": false,
+      "why": "this scenario names nothing"
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "objectives": [
+      {
+        "obj": "g4d_d",
+        "criteria": "stat.deaths",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_h",
+        "criteria": "health",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a0",
+        "criteria": "stat.mineBlock.pyrotech.rock",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a1",
+        "criteria": "stat.mineBlock.pyrotech_compat.rock_igneous",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a2",
+        "criteria": "stat.mineBlock.pyrotech_compat.rock_metamorphic",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a3",
+        "criteria": "stat.mineBlock.pyrotech_compat.rock_sedimentary",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a4",
+        "criteria": "stat.mineBlock.minecraft.log",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a5",
+        "criteria": "stat.mineBlock.minecraft.log2",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a6",
+        "criteria": "stat.craftItem.pyrotech.crude_axe",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a7",
+        "criteria": "stat.craftItem.contenttweaker.crafting_tools",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a8",
+        "criteria": "stat.craftItem.minecraft.crafting_table",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a9",
+        "criteria": "stat.craftItem.minecraft.stone_pickaxe",
+        "result": "added"
+      },
+      {
+        "obj": "g4d_a10",
+        "criteria": "stat.craftItem.minecraft.stone_axe",
+        "result": "added"
+      }
+    ],
+    "heldRounds": [
+      {
+        "min": 4,
+        "total": 33
+      }
+    ],
+    "heldBefore": {
+      "pyrotech:rock": 0,
+      "pyrotech_compat:rock_igneous": 0,
+      "pyrotech_compat:rock_metamorphic": 7,
+      "pyrotech_compat:rock_sedimentary": 2,
+      "minecraft:stick": 4,
+      "minecraft:log": 11,
+      "minecraft:log2": 0,
+      "minecraft:planks": 3,
+      "betterwithmods:dirt_pile": 4,
+      "dynamictrees:oakseed": 0,
+      "undergroundbiomes:igneous_cobble": 0,
+      "undergroundbiomes:metamorphic_cobble": 0,
+      "minecraft:cobblestone": 0,
+      "minecraft:bread": 1,
+      "bundles:bundle": 1
+    },
+    "kill": {
+      "time": "14:03:33",
+      "reply": [
+        "<bot> fell out of the world",
+        "Killed <bot>"
+      ]
+    },
+    "healthAfterKill": [
+      {
+        "time": "14:03:35",
+        "health": 20,
+        "deaths": 1
+      },
+      {
+        "time": "14:03:40",
+        "health": 20,
+        "deaths": 1
+      }
+    ],
+    "deathLines": [
+      {
+        "time": "14:03:33",
+        "msg": "<bot> fell out of the world"
+      }
+    ],
+    "heldAfter": {
+      "pyrotech:rock": 0,
+      "pyrotech_compat:rock_igneous": 0,
+      "pyrotech_compat:rock_metamorphic": 0,
+      "pyrotech_compat:rock_sedimentary": 0,
+      "minecraft:stick": 0,
+      "minecraft:log": 0,
+      "minecraft:log2": 0,
+      "minecraft:planks": 0,
+      "betterwithmods:dirt_pile": 0,
+      "dynamictrees:oakseed": 0,
+      "undergroundbiomes:igneous_cobble": 0,
+      "undergroundbiomes:metamorphic_cobble": 0,
+      "minecraft:cobblestone": 0,
+      "minecraft:bread": 0,
+      "bundles:bundle": 0
+    },
+    "lossServer": {
+      "pyrotech:rock": 0,
+      "pyrotech_compat:rock_igneous": 0,
+      "pyrotech_compat:rock_metamorphic": 7,
+      "pyrotech_compat:rock_sedimentary": 2,
+      "minecraft:stick": 4,
+      "minecraft:log": 11,
+      "minecraft:log2": 0,
+      "minecraft:planks": 3,
+      "betterwithmods:dirt_pile": 4,
+      "dynamictrees:oakseed": 0,
+      "undergroundbiomes:igneous_cobble": 0,
+      "undergroundbiomes:metamorphic_cobble": 0,
+      "minecraft:cobblestone": 0,
+      "minecraft:bread": 1,
+      "bundles:bundle": 1
+    },
+    "counterReadings": [
+      {
+        "label": "after respawn",
+        "value": 20
+      },
+      {
+        "label": "poll",
+        "time": "14:05:10",
+        "value": 21
+      }
+    ],
+    "chatAfterKill": [
+      "14:03:39 I died at -41, 67, -13; lost 10 dirt, 9 log, 6 planks, 4 betterwithmods:dirt_pile, 3 pyrotech_compat:rock_metamorphic:6, 3 sapling and 10 more kinds.",
+      "14:03:43 Died and dropped everything — rough! But the stone pickaxe survived with me. I still need 10 cobblestone fast. Mining stone directly gives rocks. !collectBlocks(\"pyrotech:rock\", 8)",
+      "14:04:26 Got 4 rocks (2 igneous, 2 metamorphic) but cobblestone needs 4 of one kind. Collecting more. !collectBlocks(\"pyrotech:rock\", 4)",
+      "14:04:52 14 metamorphic rocks now. Crafting cobblestone. !craftRecipe(\"cobblestone\", 3)",
+      "14:04:56 3 cobblestone made, need 7 more. Collecting more rocks. !collectBlocks(\"pyrotech:rock\", 12)",
+      "14:05:24 16 more rocks. Crafting 4 more cobblestone now. !craftRecipe(\"cobblestone\", 4)",
+      "14:05:30 14 cobblestone now — that's over 10! Night shelter blocks ready. !agenda",
+      "14:05:33 14 cobblestone held and agenda still shows shelter_blocks — it should move on by itself. Waiting for it to tick over.",
+      "14:05:37 !agenda",
+      "14:05:40 !inventory",
+      "14:05:43 Only 7 cobblestone actually — the craft didn't stack as I thought. I have 18 rocks, so crafting 3 more cobblestone gets me to 10. !craftRecipe(\"cobblestone\", 3)",
+      "14:05:45 agenda step cobblestone done",
+      "14:05:45 agenda step stone_axe started: craft a stone axe",
+      "14:05:46 10 cobblestone — that's the goal! Night shelter blocks secured. !agenda",
+      "14:05:51 Agenda moved on to stone_axe. I need 2 sticks but don't see any in inventory — let me check what I can craft. !craftable",
+      "14:05:52 No sticks in the craftable list — I'm out of planks too. I'll grab sticks from a tree. !collectBlocks(\"stick\", 2)",
+      "14:05:55 Tree's out of reach. Moving closer first. !goToCoordinates(-61, 64, -76, 2)"
+    ],
+    "deathReports": [
+      {
+        "time": "14:03:39",
+        "text": "I died at -41, 67, -13; lost 10 dirt, 9 log, 6 planks, 4 betterwithmods:dirt_pile, 3 pyrotech_compat:rock_metamorphic:6, 3 sapling and 10 more kinds."
+      }
+    ],
+    "lossConsistency": null,
+    "chatPerMinute": {
+      "lines": 17,
+      "maxIn60s": 13,
+      "limit": 10
+    },
+    "packFirstJoin": [
+      "gamerule_commandBlockOutput",
+      "gamerule_sendCommandFeedback",
+      "give_bread",
+      "give_bundle"
+    ],
+    "packRepeats": [
+      "gamerule_commandBlockOutput at 14:01:06",
+      "gamerule_sendCommandFeedback at 14:01:06"
+    ]
+  },
+  "botExitCode": 0,
+  "botExitSignal": null,
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "670fe8aa2f29ba9b726adcf5b20f2c9be0b68b5e",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261107-135615",
+  "driver": "node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json",
+  "llm": {
+    "models": {
+      "model": "openrouter/@preset/glm-5-3-flash-cheap-reliable",
+      "code_model": null,
+      "vision_model": null
+    },
+    "calls": 56,
+    "replies": {
+      "ok": 43,
+      "memory": 13,
+      "failed": 0,
+      "disconnected": 0,
+      "empty": 0,
+      "memoryEmpty": 0
+    },
+    "httpErrors": {},
+    "providers": {
+      "Wafer": {
+        "requests": 56,
+        "empty": 0,
+        "summaries": {
+          "ok": 13,
+          "empty": 0,
+          "failed": 0
+        }
+      }
+    },
+    "summariesUnattributed": {
+      "ok": 0,
+      "empty": 0,
+      "failed": 0
+    },
+    "usageBefore": 0.895145662,
+    "usageAfter": 0.902050108,
+    "usd": 0.006904,
+    "error": null
+  },
+  "batch": "20261107T135918-619639:2"
+}

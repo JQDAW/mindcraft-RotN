@@ -334,6 +334,11 @@ export class Agent {
                 } finally {
                     if (typed_action) this.control?.endTyped();
                 }
+                // A typed follow a reflex interrupted waits to resume: tasks and the agenda keep
+                // waiting for it (G4 #3 prep), or the agenda's self-prompter would block the resume.
+                const label = `action:${user_command_name.substring(1)}`;
+                if (typed_action && this.actions?.resume_func && this.actions.resume_name === label)
+                    this.control?.holdTypedResume(label, this.actions.resume_func, source);
                 if (execute_res) 
                     this.routeResponse(source, execute_res);
                 return true;
