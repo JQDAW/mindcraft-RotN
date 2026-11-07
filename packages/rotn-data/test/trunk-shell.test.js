@@ -65,6 +65,18 @@ test('breaking a shell breaks the trunk block it belongs to, which queues the fe
     assert.match(section('FutureBreak'), /IFutureBreakable\.futureBreak/);
 });
 
+test('#332 nits: a shell with no trunk is air on the server; next to a thin trunk the break still goes to it', () => {
+    // isAir: true when getMuse finds no muse (a position given).
+    const isAir = method(shellSec, 'public boolean isAir(net.minecraft.block.state.IBlockState, net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos);');
+    assert.match(isAir, /Method getMuse:[\s\S]*13: ifnonnull +20\n\s+16: iconst_1/);
+    assert.match(shell.summary, /reports itself as air on the server \(isAir\)/);
+    // getMuse returns the muse even when it schedules clearing (radius <= 8): removedByPlayer still uses it.
+    const getMuse = method(shellSec, 'public com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell$ShellMuse getMuse(net.minecraft.world.IBlockAccess, net.minecraft.block.state.IBlockState, net.minecraft.util.math.BlockPos);');
+    assert.match(getMuse, /Method scheduleForClearing:[^\n]*\n\s+30: aload +4\n\s+32: areturn/);
+    assert.ok(fellTree.evidence.some((e) => /still passes the break to that trunk before the clearing tick, so the tree is felled/.test(e)));
+    assert.ok(fellTree.unverified.some((u) => /keep this unverified until a run breaks a shell/.test(u)));
+});
+
 test('the shell drops nothing of its own', () => {
     assert.match(method(shellSec, 'public net.minecraft.item.Item func_180660_a(net.minecraft.block.state.IBlockState, java.util.Random, int);'), /aconst_null\n\s+1: areturn/);
     assert.match(method(shellSec, 'public int func_149745_a(java.util.Random);'), /iconst_0\n\s+1: ireturn/);

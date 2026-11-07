@@ -73,6 +73,7 @@ export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries 
     if (!ctl) throw new Error('TEST_SERVER_CTL is not set: run this through `deploy/test-server.sh run -- ...`');
     const call = (args, { ordinaryRetries = retries, callTimeoutMs = timeoutMs } = {}) => {
         let last;
+        let lastCode = null; // the last attempt's exit status (a number), for the caller (#347: 125 is an infra fault)
         let failed = 0;      // ordinary failures retried so far
         let unstarted = 0;   // never-started processes retried so far
         const attempts = [];
@@ -81,6 +82,7 @@ export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries 
             if (r.status === 0) return r.stdout.split('\n').map((l) => l.replace(/\r$/, '')).filter(Boolean);
             const why = notStarted(r);
             const code = r.status ?? r.error?.code ?? 'no status';
+            lastCode = typeof r.status === 'number' ? r.status : null;
             attempts.push(`${now().toISOString().slice(11, 19)}Z ${why ?? code} (free ${Math.round(freemem() / 2 ** 20)} MB)`);
             const err = (r.stderr ?? '').trim().slice(-500);
             last = `${args[0]} failed (${code}${why && why !== code ? ` ${why}` : ''})${err ? `: ${err}` : ''}`;
@@ -88,7 +90,9 @@ export function ctlServer(ctl, { bash = findBash(), timeoutMs = 120000, retries 
             else if (!why && failed < ordinaryRetries) pause(backoffMs * 2 ** failed++);
             else break;
         }
-        throw new Error(`${last} (after ${attempts.length} attempts: ${attempts.join(', ')})`);
+        // err.exitCode: the last attempt's exit status, or null. A restart's 125 means Mod Director's downloads failed
+        // the pinned re-check after the new Done (ADR 0008): an infra fault, not a bot result.
+        throw Object.assign(new Error(`${last} (after ${attempts.length} attempts: ${attempts.join(', ')})`), { exitCode: lastCode });
     };
     return {
         console: (cmd, waitS = 3) => call(['console', '--wait', String(waitS), '--', cmd]),

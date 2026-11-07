@@ -2,18 +2,6 @@
 
 Updated: 2026-11-07T07:10Z (from `date -u`)
 
-## Round 9 B fix (e): digging at the shelter is noticed while it happens (branch `agent/skills-rotn/shelter-dig-alarm`, 2026-11-07T14:23Z by `date -u`)
-
-- **Task (lead, 2026-11-07, round 9 B fixes, priority 2):** at 13:35:22 the 10-second check found the east side already open, with the zombie in it (`r9-g3b/night/server.log` 536-537). Epic Siege Mod's digging shows first as block break progress, which mineflayer emits as `blockBreakProgressObserved(block, destroyStage, entity)`.
-- **Change (`night_routine.js`):**
-  - Once per bot, the routine listens for that event. Digging seen on a shelter block (`shelterShell`) while the bot is inside raises an alarm: it logs "[night] zombie is digging the shelter at …: checking at once, ready to repair" and puts a block in hand (sturdy first, else dirt).
-  - For `DIG_ALARM_MS` (15 s) after the last such event, every tick checks the shelter instead of every `CHECK_MS` (10 s), so the repair starts on the tick after the block breaks.
-  - A reset, leaving for a giver, and a new shelter clear the alarm.
-- **Tests (`night_routine.test.js`, 1 new):** digging 5 blocks away does nothing. Digging the east wall makes the next tick check at once (well before `CHECK_MS`) with dirt in hand, and when it breaks through the repair starts on the next tick.
-  - **On develop it fails:** "checked at once, not after CHECK_MS", 0 checks.
-  - With the fix: `night_routine`, `shelter`, `night` and `priority`, 87/87. Lint: 0 in both files, as on develop.
-- **Unverified:** that Epic Siege Mod's digging (ESM-Tweaks' digging AI) sends the break progress packet. Its config talks of partly mined blocks being "visually reset", which suggests it does. If it doesn't, nothing changes: the 10-second check stays.
-
 ## Decision (1) after round 9 B: low health in the night shelter, the bot stays (branch `agent/skills-rotn/shelter-hold-flee`, stacked on #331; 2026-11-07T14:48Z by `date -u`)
 
 - **Task (lead, 2026-11-07):** "self-preservation in an open shelter at night: stay put, eat, block or fight within reach; leave only for fire, lava or drowning". A new PR after #331, with nothing pushed to #331.
