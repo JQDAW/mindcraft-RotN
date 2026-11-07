@@ -61,6 +61,9 @@ export class TaskQueue {
         this.now = now;
         this.tasks = [];
         this.nextId = 1;
+        // Tasks that were running when the process stopped and were queued again at load (G4 #11
+        // prep): their next start says "resumed after a restart", not "started". In memory only.
+        this.requeuedAtLoad = new Set();
         this.load();
     }
 
@@ -94,6 +97,7 @@ export class TaskQueue {
             if (t.status === 'active') {
                 t.status = 'queued';
                 t.updated_at = this.now();
+                this.requeuedAtLoad.add(t.id);
                 requeued = true;
             }
         }
@@ -171,6 +175,7 @@ export class TaskQueue {
         const t = this.get(id);
         if (!t) return null;
         t.status = status;
+        if (!OPEN.has(status)) this.requeuedAtLoad.delete(id); // closed before it restarted (#327 review 3)
         if (result !== null) t.result = result;
         t.updated_at = this.now();
         this.save();
