@@ -1,6 +1,21 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:13Z (from `date -u`)
+Updated: 2026-11-07T04:14Z (from `date -u`)
+
+## Task 3: "shelter_blocks started" before an earlier step's "done" is log order, not a step run out of order (2026-11-07T04:14Z by `date -u`)
+
+- **Answer: no step runs out of order, and no code change is needed.** Two designed things meet:
+  1. **The before-night reserve interrupts.** `judge()` returns `reserveWanted(state) ?? step` (G3 round 6 B). Near sunset, `shelter_blocks` takes the self-prompter's goal from whatever step is current, says "started", and afterwards "agenda resumed: <step>".
+  2. **"Done" is when a step's condition is first seen true.** Each step is judged from the inventory on every tick, whatever its place in the order. An action or a pickup that finishes after the reserve took over is recorded on the next tick.
+- **Round 8 A** (`g3a-20261107-r8/rocks/server.log`):
+  - 02:24:32 "shelter_blocks started" interrupted sticks.
+  - 02:24:34 "logs done": the felled spruce's logs had been picked up. Logs is step 4 and was only recorded; the bot did not work on it.
+  - 02:25:06 "agenda resumed: sticks".
+- **Validation** (`g3d-20261107-v1/untrusted`):
+  - 01:55:18 "crude_axe started", and the bot issued `!craftRecipe("pyrotech:crude_axe", 1)` under that goal.
+  - 01:55:35 the reserve took the goal.
+  - 01:55:37 "crude_axe done" when the craft already running had finished. The next reply ("I already had one … Now for the shelter blocks") shows it.
+- Round 8 B and C show the same pattern. C's "agenda resumed: first_plank" at 03:25:16 is the task preempt (scenario C).
 
 ## Round 8 B cursor: equip to the hand is one number-key swap (branch `agent/skills-rotn/equip-hotbar-swap`, 2026-11-07T04:13Z by `date -u`)
 
