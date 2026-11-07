@@ -13,8 +13,8 @@
 // first too, and the bot says the shelter waits for it.
 
 import { Vec3 } from 'vec3';
-import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, REPAIR_LABEL } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, isLiquid, isFalling, isEmpty } from './library/shelter.js';
+import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, REPAIR_LABEL, shelterShell } from './library/night.js';
+import { buildShelter, siteNeeds, siteProblem, isLiquid, isFalling, isEmpty, shelterItems, softItems } from './library/shelter.js';
 import { breakBlockAt } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
 import { say, isGiverGoal } from './agenda_driver.js';
@@ -29,6 +29,12 @@ export const RETRY_MS = 30_000;
 export const BUILD_ATTEMPTS = 3;
 /** At dusk a running action gets this long to finish; by night it is stopped at once (#204 review 3). */
 export const DUSK_WAIT_MS = 60_000;
+/**
+ * G3 round 9 B (fix e): a digging zombie (Epic Siege Mod) opened the dirt shelter between two checks.
+ * Digging shows first as block break progress; for this long after it is seen on a shelter block,
+ * the shelter is checked on every tick instead of every CHECK_MS.
+ */
+export const DIG_ALARM_MS = 15_000;
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const at = (p) => `${p.x}, ${p.y}, ${p.z}`;
@@ -50,7 +56,8 @@ export function nightState(agent) {
         stopping: false,
         toldGiver: false,
         job: null, // the action running for the routine (build, repair, dig out)
-        repairStall: null, // #331 re-review: {fightEndedAt}: the last repair placed nothing
+        repairStall: null, // #331 re-review: {fightEndedAt, dug, retry}: the last repair placed nothing (#334: dug, the blocks seen dug since)
+        digAt: null, // round 9 B: {pos, tick}: digging last seen on a shelter block (tick: when a nightTick saw it)
         gen: 0, // bumped by resetNight, so a job that ends after a reset changes nothing
     };
 }
@@ -64,7 +71,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
-    Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null });
+    Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     n.gen++;
 }
 
@@ -78,7 +85,7 @@ export function leaveShelterFor(agent, why) {
     if (!n || n.state !== 'inside') return false;
     if (agent.bot) agent.bot.rotnSheltered = false;
     console.log(`[night] ${why} takes over: the shelter's rules are off until it is done`);
-    Object.assign(n, { state: 'building', attempts: 0, nextAt: 0, site: null });
+    Object.assign(n, { state: 'building', attempts: 0, nextAt: 0, site: null, digAt: null, repairStall: null });
     return true;
 }
 
@@ -136,6 +143,45 @@ export async function digOut(bot, feet) {
     return null;
 }
 
+const watchedBots = new WeakSet();
+
+/**
+ * Listen for digging on the shelter (round 9 B, fix e), once per bot: mineflayer emits
+ * blockBreakProgressObserved(block, destroyStage, entity) for another entity's digging. Digging at
+ * a shelter block while the bot is inside raises the alarm, and a block for the repair goes in hand.
+ */
+function watchDigging(agent, bot) {
+    if (watchedBots.has(bot) || typeof bot.on !== 'function') return;
+    watchedBots.add(bot);
+    bot.on('blockBreakProgressObserved', (block, stage, entity) => {
+        const n = agent._night;
+        if (!n || n.state !== 'inside' || !n.site || !block?.position) return;
+        if (!shelterShell(n.site).some(q => q.equals(block.position))) return;
+        const first = !n.digAt;
+        n.digAt = { pos: block.position, tick: null }; // the next tick times it, on its own clock
+        // #334 re-review 2: a no-progress repair stall lets one retry through per block first seen dug
+        // since the stall began (two diggers alternating events do not retry it on every tick).
+        const key = `${block.position.x},${block.position.y},${block.position.z}`;
+        if (n.repairStall && !n.repairStall.dug.has(key)) { n.repairStall.dug.add(key); n.repairStall.retry = true; }
+        if (!first) return;
+        console.log(`[night] ${entity?.name ?? 'something'} is digging the shelter at ${at(block.position)}: checking at once, ready to repair`);
+        // Not while a fight in place runs (#334 review nit after #331): its weapon stays in hand.
+        if (bot.rotnFightingInPlace) return;
+        const item = [...shelterItems(bot), ...softItems(bot)][0];
+        if (item && bot.heldItem?.name !== item.name)
+            Promise.resolve(bot.equip(item, 'hand')).catch(err => console.warn(`[night] could not take ${item.name} in hand: ${err?.message ?? err}`));
+    });
+}
+
+/** Whether digging was seen on the shelter within DIG_ALARM_MS (and ends the alarm after it). */
+function digAlarm(n, now) {
+    if (!n.digAt) return false;
+    n.digAt.tick ??= now;
+    if (now - n.digAt.tick < DIG_ALARM_MS) return true;
+    n.digAt = null;
+    return false;
+}
+
 /** What the routine does in the world (tests pass their own). */
 export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem };
 
@@ -163,6 +209,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         return null;
     }
     const n = nightState(agent);
+    watchDigging(agent, bot);
     n.clock.observe(bot.time?.timeOfDay, now);
     const t = n.clock.timeOfDay(now);
     if (t === null) return null;
@@ -222,6 +269,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             if (r?.closed) {
                 n.state = 'inside';
                 n.site = r.feet;
+                n.digAt = null; // digging seen at an earlier shelter is not this one's
+                n.repairStall = null;
                 n.checkedAt = null; // set by the next tick, on its clock
                 bot.rotnSheltered = true;
                 line(agent, `[night] in the shelter at ${at(r.feet)} until morning`);
@@ -264,8 +313,12 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // #331 re-review: a repair that placed nothing (no blocks left, a mob in the cell) is not
         // tried again on every tick all night (thousands of log lines an hour): it waits CHECK_MS
         // again, unless a fight in place has ended since (the cell may be free now).
-        const stalled = !!n.repairStall && n.repairStall.fightEndedAt === (bot.rotnFightEndedAt ?? null);
-        if ((!open || stalled) && now - n.checkedAt < CHECK_MS) return 'night:inside';
+        // ... or a block not yet seen dug since the stall began is dug (#334 re-review 2: once per block).
+        const stalled = !!n.repairStall && n.repairStall.fightEndedAt === (bot.rotnFightEndedAt ?? null)
+            && !n.repairStall.retry;
+        // Round 9 B (#334): while something digs at the shelter, every tick checks; a stall still waits
+        // CHECK_MS, unless a block not yet seen dug since the stall began is dug (#334 re-review 2).
+        if (((!open && !digAlarm(n, now)) || stalled) && now - n.checkedAt < CHECK_MS) return 'night:inside';
         n.checkedAt = now;
         if (!bot.entity.position.floored().equals(n.site)) {
             // Pushed, teleported (AggroTP) or walked out: a new shelter where it is now.
@@ -298,7 +351,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 if ((r?.placed ?? 0) > 0) { n.repairStall = null; return; } // progress: the next tick tries again
                 // Nothing placed: back to every CHECK_MS until a fight in place ends (#331 re-review).
                 if (!n.repairStall) console.warn(`[night] the repair placed nothing (${r?.line ?? 'no result'}); checking again in ${CHECK_MS / 1000} s`);
-                n.repairStall = { fightEndedAt: bot.rotnFightEndedAt ?? null };
+                // The same stall goes on: the blocks already seen dug do not let another retry through.
+                n.repairStall = { fightEndedAt: bot.rotnFightEndedAt ?? null, dug: n.repairStall?.dug ?? new Set(), retry: false };
             });
         }
         return 'night:inside';
