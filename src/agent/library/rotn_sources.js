@@ -71,6 +71,9 @@ export function worldSources(name) {
             unlessTool: w.unlessTool ?? null,
             id: w.id ?? null, // the rule ("fell-tree": a Dynamic Trees branch fells the tree)
             count: typeof w.count === 'number' && w.count > 0 ? w.count : 1,
+            // A yield that varies (rotn-data #312: a dead bush gives 0-2 sticks), or null. A rule with
+            // min 0 can break fine and give nothing, so collectBlock does not count that as an attempt.
+            countRange: w.countRange ?? null,
             text: w.summary ?? w.action ?? '',
         }));
 }

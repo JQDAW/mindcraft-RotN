@@ -106,15 +106,17 @@ export const countLlmCalls = (lines) => lines.filter((l) => l.includes(LLM_CALL_
  *   "Error: Generated response is not a string"; round 3 continuation A had 3) + memoryEmpty;
  * - memoryEmpty (part of empty): memory summaries that got no text back (lead, round 5 A, where a null
  *   summary reply crashed the agent five times and none of it was counted). A summary is open from
- *   "Storing memories..." until its outcome:
+ *   "Storing memories..." until its outcome. Summaries can overlap (a second starts before the first's reply;
+ *   rounds 5-8), so the open ones are a queue and each outcome line closes the OLDEST open one (lead, after
+ *   round 8: the old "the next start closes it as empty" rule counted B's 16 summaries as 16 stored + 1 empty):
  *   - "Memory updated to:" stores it (memory), or is empty when nothing (or "null") follows; the stand-ins
  *     after it are disconnected (logs before #266);
  *   - "[memory] summary returned ..." (history.js since round 5 A) is disconnected for "My brain disconnected",
  *     else empty ("No response received.", which openrouter.js returns for empty content since #266, an empty
  *     or a null reply); "[memory] summary failed (...)" (a throw) is disconnected;
- *   - the next summary's start, or the agent process exiting with a non-zero code (#267 review), while it is
- *     open makes it empty. A summary still open when the log ends, or at an exit with code 0 or a signal (the
- *     bot was stopped while its request waited), is not counted, like any request still waiting.
+ *   - the agent process exiting with a non-zero code (#267 review) makes every open summary empty. A summary
+ *     still open when the log ends, or at an exit with code 0 or a signal (the bot was stopped while its request
+ *     waited), is not counted, like any request still waiting. A new start never closes an older summary.
  * - httpErrors: {status: n} from "Error [429] (status 429)" lines (one per failed attempt).
  * - providers / summariesUnattributed: see the provider line below (lead, after round 5 B).
  * In the round 3 logs, requests = ok + memory + empty (+ a request still waiting when the bot left);
@@ -129,19 +131,23 @@ export function countLlmReplies(lines) {
     const httpErrors = {};
     const providers = {};
     const summariesUnattributed = { ok: 0, empty: 0, failed: 0 };
-    let summary = null;   // the open summary: {providers: [names seen since it started], requestError}
+    // The open summaries, oldest first: {providers: [names seen while it was open], requestError, overlapped}.
+    const open = [];
     const prov = (name) => (providers[name] ??= { requests: 0, empty: 0, summaries: { ok: 0, empty: 0, failed: 0 } });
-    const closeSummary = (outcome) => {
-        if (!summary) return;
+    // Close the oldest open summary (an outcome line with none open, from a log cut before its start, counts too,
+    // never attributed).
+    const closeSummary = (outcome, { failedRequest = false } = {}) => {
+        const summary = open.shift() ?? { providers: [], requestError: true, overlapped: false };
+        if (failedRequest) summary.requestError = true;
         if (outcome === 'ok') memory++;
         else if (outcome === 'empty') memoryEmpty++;
         else disconnected++;
-        // Attributed only when exactly one completion came back while it was open and no request failed then:
-        // that completion was the summary's own. Anything else is never guessed.
+        // Attributed only when exactly one completion came back while it was open, no request failed then, and no
+        // other summary was open at the same time: that completion was the summary's own. Anything else is never
+        // guessed (with two open, which completion and which outcome line belong to which is not known).
         const key = outcome === 'ok' ? 'ok' : outcome === 'empty' ? 'empty' : 'failed';
-        if (summary.providers.length === 1 && !summary.requestError) prov(summary.providers[0]).summaries[key]++;
+        if (summary.providers.length === 1 && !summary.requestError && !summary.overlapped) prov(summary.providers[0]).summaries[key]++;
         else summariesUnattributed[key]++;
-        summary = null;
     };
     for (const l of lines ?? []) {
         if (l.includes(LLM_REPLY_LINE)) {
@@ -155,32 +161,30 @@ export function countLlmReplies(lines) {
             const s = prov(name);
             s.requests++;
             if (p[3] === 'null' || p[3] === '0') s.empty++;
-            summary?.providers.push(name);
+            for (const o of open) o.providers.push(name);
         }
-        if (l.startsWith(LLM_REQUEST_ERROR) && summary) summary.requestError = true;
+        if (l.startsWith(LLM_REQUEST_ERROR)) for (const o of open) o.requestError = true;
         if (l.startsWith(LLM_MEMORY_START)) {
-            closeSummary('empty');
-            summary = { providers: [], requestError: false };
+            const next = { providers: [], requestError: false, overlapped: open.length > 0 };
+            for (const o of open) o.overlapped = true;
+            open.push(next);
         }
         const exit = /^Agent process exited with code (-?\d+)/.exec(l);
-        if (exit && exit[1] !== '0') closeSummary('empty');
-        else if (l.startsWith(AGENT_EXIT_LINE)) summary = null;   // code 0, or a signal: still waiting, not counted
+        if (exit && exit[1] !== '0') while (open.length) closeSummary('empty');
+        else if (l.startsWith(AGENT_EXIT_LINE)) open.length = 0;   // code 0, or a signal: still waiting, not counted
         if (l.startsWith(LLM_MEMORY_LINE)) {
             const stored = l.slice(LLM_MEMORY_LINE.length).trim();
-            summary ??= { providers: [], requestError: true };   // no start line seen: never attributed
             if (l.includes(LLM_FAILED_REPLY) || l.includes(LLM_NO_RESPONSE)) closeSummary('failed');
             else if (stored === '' || stored === 'null' || stored === 'undefined') closeSummary('empty');
             else closeSummary('ok');
         }
         if (l.startsWith(MEMORY_RETURNED_LINE) || l.startsWith(MEMORY_THROW_LINE)) {
-            summary ??= { providers: [], requestError: true };
             const failed = l.startsWith(MEMORY_THROW_LINE) || l.includes(LLM_FAILED_REPLY);
             // A failed summary: its request either completed nothing (a network or HTTP error, no provider line)
             // or completed with finish_reason "length", which logs its provider line and then throws. So a
             // completion seen while it was open may be another request's or the summary's own; which one is not
             // known, and the failure is never charged to a provider (#273 review 2, #276 review).
-            if (failed) summary.requestError = true;
-            closeSummary(failed ? 'failed' : 'empty');
+            closeSummary(failed ? 'failed' : 'empty', { failedRequest: failed });
         }
         const m = /\bError \[(\d{3})\]/.exec(l);
         if (m) httpErrors[m[1]] = (httpErrors[m[1]] ?? 0) + 1;
