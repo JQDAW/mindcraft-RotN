@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T15:11Z (from `date -u`)
+Updated: 2026-11-07T07:10Z (from `date -u`)
 
 ## T1 add-on: the death chat line sums the variants of one item (branch `agent/skills-rotn/death-chat-variants`, 2026-11-07T14:35Z by `date -u`)
 
@@ -12,6 +12,42 @@ Updated: 2026-11-07T15:11Z (from `date -u`)
   - With the change: `death_report` and `threat_arbitration`, 27/27. Lint: 0 in both files.
 - **#338 review (lead, approved with a nit; 2026-11-07T15:11Z by `date -u`):** a short exception list, `DISTINCT_METAS` (dye, coal, golden_apple), for metas that are different items. Those stay apart in chat too: lapis (dye:4) and bone meal (dye:15), charcoal (coal:1), the enchanted apple (golden_apple:1). **New test**; `death_report` and `threat_arbitration`, 28/28. Lint: 0.
 - **Noted (lead, from T1):** the bot narrates up to 24 chat lines a minute while working. That is not a bug, but I keep it in mind for new chat lines. The fixes above log most lines and say only a few.
+
+## G4 item 11 prep: the task queue and agenda across a restart (branch `agent/skills-rotn/g4-restart-prep`, HOLD PR; 2026-11-07T06:55Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** check offline that after a process restart (a) the agenda continues at the same step, with no step done twice and no attempt-counter reset; (b) a giver's queued task is still queued and runs; (c) a task running at the restart is resumed or reported, not silently dropped; (d) a `!stop` hold survives the restart.
+- **Design as found** (`agenda.json`, `tasks.json` and `control.json` are written atomically):
+  - (a) `done_at` and `spent` are kept, so a done step stays done. Every run is saved when it starts (`recordAttempt`), so a restart never resets the count. The restart's own run counts: at once with the self-prompter restored from `memory.json`, otherwise after the back-off, which doubles per run. A crash loop therefore ends with the step stuck (at the first tick once its 3 runs are spent), never with endless runs.
+  - (b) A queued task stays queued and runs.
+  - (c) A task that was active is queued again at load and runs again, with its spent budget kept (in the task).
+  - (d) The hold is reloaded, so the first tick returns `held:stop` and stops a restored self-prompter. Nothing restarts until `!resume`.
+- **Gaps found and fixed** (their tests fail on develop):
+  1. **(a), (c): a restart looked like a new start.** The agenda said "agenda step <id> started: …" again for the step it was on, and a task that was running said "task <id> started: …", so nothing reported that it was interrupted.
+     - Now the first such line after a restart ends with " (resumed after a restart)": `Agenda.loadedActive`, and `TaskQueue.requeuedAtLoad` (in memory, from the load).
+     - The lines keep the "started:" form that harness-ops' parsers match (`agendaActive` in `g3-task-preempts-agenda.mjs`, `TASK_TAKEN` in `g3-untrusted-refused.mjs`). A test runs both parsers on the new lines.
+  2. **(d): under a stored hold, startup restored upstream's self-prompter** from `memory.json`. That sent one LLM request before the first `autonomyTick` (about 300 ms later) stopped it. Now `_setupEventHandlers` does not restore it while a hold is stored, and logs `[control] not restoring the self-prompter: on hold (…)`. After `!resume`, the agenda or the task drives it again from its own files.
+- **Tests:** 6 new in `priority.test.js` (`fakeAgent` and `harnessAgent` take a `dir`, so a restart reuses the same files); 4 of them fail on develop. The existing "stored as active and taken over after a restart" test now expects the restart suffix. 14 `src/agent` files plus 6 `test/unit` files: 379 pass, 1 skipped (a `test/unit` test outside this change), 0 fail. Lint: unchanged.
+- **For the G4 scenario (harness-ops):** after `ctl restart`, look for "agenda step <id> started: <short> (resumed after a restart)" for the same step (with no "agenda step <id> done" again for earlier steps), and "task <id> started: <text> (resumed after a restart)" for a task that was running.
+- **Note:** this branch and #323 both append tests at the end of `priority.test.js`. Whichever merges second needs develop merged in.
+- **#327 review (lead, APPROVE WITH NITS on `9098c02`), answered (2026-11-07T07:10Z by `date -u`):**
+  1. `Agenda.start()` clears `loadedActive` (after its early return for an agenda already active). So `!agendaStop` then `!agendaStart` before the first step line is a fresh start with no restart label. Test added.
+  2. The PR body now says that while a hold is stored `handleLoad` is skipped, so a giver's own `!goal` text and a stored PAUSED state are not restored either. The agenda and task goals are rebuilt from their own files after `!resume`.
+  3. (optional, done) `TaskQueue.setStatus` drops a task from `requeuedAtLoad` once it is closed (done, failed or cancelled) before it restarts. Test added.
+  - Tests: 382 run, 381 pass, 1 skipped (`test/unit`), 0 fail. Lint 0 in the touched files.
+
+## Round 9 B fix (a): leaves out of reach no longer use up the stick attempts (branch `agent/skills-rotn/sticks-unreachable-leaves`, 2026-11-07T14:07Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 1):** in round 9 B, `!collectBlocks("stick", 3)` reached none of three leaves at y 73 that had passed the ground check. Each logged "Could not reach … from the ground; skipping it" and used one of the 3 attempts, so the run ended "Collected 0 stick." and no tree was tried (`r9-g3b/night/driver.log` 128-134). Four more collects tried the same three leaves (149-151, 207-209, 264-266).
+- **Change (`skills.js` `collectBlock`):**
+  - A leaf that is out of reach after the walk uses no attempt.
+  - After `COLLECT_LIMITS.unreachableLeaves` (3) such leaves, the collect takes no more leaves and says so. Trees and far dead bushes then get the attempts.
+  - Each such leaf is remembered for this bot for `unreachableMs` (10 min), so the next collect does not walk to it again.
+- **Tests (`collect_sticks.test.js`, 2 new):** the fake gains loose leaves and walks that get nowhere.
+  - The round 9 B shape: 3 unreachable leaves, then a tree within 2 attempts, and the next collect does not walk to those leaves.
+  - The cap of 3 per collect.
+  - **Both fail on develop:** "Collected 0 stick." after the "Could not reach" lines, and `unreachableLeaves` undefined.
+  - With the fix: `collect_sticks` 12/12. `collect_rotn`, `fall_safety`, `fell_tree`, `dirt_piles` and `axe_chop`: 72/72. Lint: no new errors (skills.js has the same 20 upstream errors as on develop; the test file has 0).
+- **Next:** (b), `trunkshell` as a tree part, on its own branch. Request to rotn-data via the lead: confirm from the Dynamic Trees jar that breaking `dynamictrees:trunkshell` fells the tree (`BlockTrunkShell` forwarding the break to the thick branch inside).
 
 ## G4 item 3 prep: stop, follow, come (branch `agent/skills-rotn/g4-control-prep`, branch only while develop is frozen; 2026-11-07T05:50Z by `date -u`)
 

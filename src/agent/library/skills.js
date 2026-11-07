@@ -788,6 +788,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const tierOf = (block) => (isHand(block) ? (isLeafBlock(block) ? 3 : 0) : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
     const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
     let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
+    let leafMisses = 0; // leaves out of reach after the walk (capped at CL.unreachableLeaves, then no leaves)
+    const outOfReach = unreachableLeaves(bot);
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
@@ -869,6 +871,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (block.position && givenUp.some(p => p.equals(block.position))) return false;
             // Leaves only where the bot can reach them standing on the ground: never climb for them.
             if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
+            // Round 9 B: not leaves once CL.unreachableLeaves were out of reach in this collect, nor
+            // one this bot found out of reach in the last CL.unreachableMs.
+            if (isLeafBlock(block) && leafMisses >= CL.unreachableLeaves) return false;
+            if (isLeafBlock(block) && block.position) {
+                const since = outOfReach.get(leafKey(block.position));
+                if (since !== undefined && Date.now() - since < CL.unreachableMs) return false;
+            }
             // Wood only on the surface: never a log underground (G3 round 5 A rerun).
             if (block.position && woodTarget && world.isUnderground(bot, block.position)) return false;
             if (exclude) {
@@ -963,7 +972,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             return false;
         }
         try {
-            let success = false;
+            let success = false, unreachable = false;
             const before = heldByKey();
             const allBefore = allHeld();
             const breakIt = async () => {
@@ -982,6 +991,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 if (isLeafBlock(block)) {
                     const r = await breakLeafFromGround(bot, block, run);
                     if (!r) givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                    // Round 9 B: out of reach after the walk is remembered, and uses no attempt (below).
+                    if (!r && !run.aborted) {
+                        outOfReach.set(leafKey(block.position), Date.now());
+                        unreachable = true;
+                    }
                     return r;
                 }
                 // A rule whose drop a tool changes is dug here too: bot.collectBlock.collect would
@@ -1013,6 +1027,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 log(bot, `Gave up on ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: time limit of ${secsText(blockMs)} reached.`);
             }
             else success = res;
+            if (unreachable && res !== TIMED_OUT) {
+                // Round 9 B: three leaves out of reach used all 3 attempts, and no tree was tried.
+                leafMisses++;
+                i--;
+                if (leafMisses === CL.unreachableLeaves)
+                    log(bot, `${leafMisses} leaves were out of reach from the ground; no more leaves in this collect.`);
+            }
             if (success) {
                 let gained = 1; // a block with no item (water): one per success
                 if (countsItems) {
@@ -1092,6 +1113,20 @@ function emptyFelled(bot, item) {
     if (!byItem.has(item)) byItem.set(item, new Set());
     return byItem.get(item);
 }
+
+/**
+ * Leaves this bot walked to and could not reach from the ground (G3 round 9 B: the same three leaves
+ * in five collects): position key -> time it was found out of reach. Kept for unreachableMs.
+ */
+const _unreachableLeaves = new WeakMap();
+function unreachableLeaves(bot) {
+    if (!bot || typeof bot !== 'object') return new Map();
+    if (!_unreachableLeaves.has(bot)) _unreachableLeaves.set(bot, new Map());
+    const byKey = _unreachableLeaves.get(bot);
+    for (const [k, since] of byKey) if (Date.now() - since >= COLLECT_LIMITS.unreachableMs) byKey.delete(k); // expired
+    return byKey;
+}
+const leafKey = (p) => `${p.x},${p.y},${p.z}`;
 
 let collectRouting = false; // collectByRoute's own collect does not take another route
 
@@ -3312,8 +3347,11 @@ const STOP_SETTLE_MS = 5000;
 /** collectBlock (G3 review of #221): per block, and for the whole run (!collectBlocks has 10 min). */
 // handFirstRadius, speciesDetour (blocks) and freeMisses: the #311 review's bounds on the stick
 // search (dead bushes near, not a walk; a species preference only between trees about as close;
-// at most this many zero-yield breaks that use no attempt).
-export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6 };
+// at most this many zero-yield breaks that use no attempt). unreachableLeaves: G3 round 9 B, leaves
+// that passed the ground check but were out of reach after the walk use no attempt, at most this
+// many per collect, then no more leaves in it; each is not tried again for unreachableMs.
+export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit

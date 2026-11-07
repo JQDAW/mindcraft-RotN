@@ -108,6 +108,13 @@ export const G3_CONSOLE_ALLOW = [
  * that shows the respawn (0, then > 0).
  */
 export const SCENARIO_CONSOLE_EXTRA = Object.freeze({
+    // g4-service-reconnect (G4 #1; lead, 2026-11-07, built like g4-death-report's kill): `kick <bot>`, only this run's
+    // bot by its exact name (never another player or a selector), and the server's own `stop`, which also allows the
+    // ctl's restart (guardConsole). The same test-server-only construction as above.
+    'g4-service-reconnect': (params) => [
+        ...(/^[A-Za-z0-9_]{3,16}$/.test(String(params?.bot ?? '')) ? [new RegExp(`^kick ${esc(String(params.bot))}$`)] : []),
+        /^stop$/,
+    ],
     'g4-death-report': (params) => [
         ...(/^[A-Za-z0-9_]{3,16}$/.test(String(params?.bot ?? '')) ? [new RegExp(`^kill ${esc(String(params.bot))}$`)] : []),
         /^scoreboard objectives add [A-Za-z0-9_]{1,16} health$/,
@@ -220,10 +227,18 @@ const isG4 = (result) => String(result?.gate ?? '').trim().toUpperCase() === 'G4
 /** The verb of a console command, for error messages (never the arguments). */
 const verb = (cmd) => String(cmd).trim().split(/\s+/)[0] || '(empty)';
 
-/** A server whose console refuses anything not on the allowlist (it throws; nothing is sent). */
+/**
+ * A server whose console refuses anything not on the allowlist (it throws; nothing is sent). The ctl's restart
+ * (console stop, then a new start) counts as the console's `stop`: refused unless the allowlist admits `stop`.
+ */
 export function guardConsole(server, allow = G3_CONSOLE_ALLOW) {
     return {
         ...server,
+        restart(timeoutS) {
+            if (!allow.some((re) => re.test('stop'))) throw new Error('server restart refused: this scenario\'s console list does not admit \'stop\'');
+            if (typeof server.restart !== 'function') throw new Error('server restart: this server has no restart');
+            return server.restart(timeoutS);
+        },
         console(cmd, waitS) {
             if (!allow.some((re) => re.test(cmd))) {
                 throw new Error(`console command refused in G3: '${verb(cmd)}' is not on the approved list (give, summon and op commands never reach the server)`);
