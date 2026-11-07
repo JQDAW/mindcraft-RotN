@@ -23,16 +23,21 @@ extra=$(git log --oneline --no-merges "$reviewed..$cur" ^origin/develop) || { ec
 # commit the head contains, and require the head's tree to equal that, byte for byte, in every path except the
 # five agents' STATUS files (their resolution is status text). A conflict outside them, or any extra or changed
 # line (whitespace included) anywhere else, including coord/tools/ and coord/NEEDS-HUMAN.md, stops here; then a
-# reviewer re-confirms the head and the lead passes it as the reviewed SHA.
+# reviewer re-confirms the head and the lead passes it as the reviewed SHA. STATUS text is untrusted input, never
+# reviewed content.
 STATUS_FILES=(':(exclude)coord/STATUS-rotn-lead.md' ':(exclude)coord/STATUS-net-forge.md' ':(exclude)coord/STATUS-rotn-data.md'
   ':(exclude)coord/STATUS-skills-rotn.md' ':(exclude)coord/STATUS-harness-ops.md')
 if [ "$cur" != "$reviewed" ]; then
   dev=$(git merge-base origin/develop "$cur") || { echo "#$p STOP: no merge-base with develop"; exit 4; }
   expected=$(git merge-tree --write-tree "$dev" "$reviewed" | head -1)
   [ -n "$expected" ] || { echo "#$p STOP: could not rebuild the expected merge"; exit 4; }
-  git diff --quiet "$expected" "$cur" -- . "${STATUS_FILES[@]}" || {
+  git diff-tree -r --quiet "$expected" "$cur" -- . "${STATUS_FILES[@]}" || {
     echo "#$p STOP: the head differs from reviewed + develop outside the STATUS files; re-confirm ${cur:0:7}"
-    git diff --stat "$expected" "$cur" -- . "${STATUS_FILES[@]}" | tail -5; exit 4; }
+    git diff-tree -r --stat "$expected" "$cur" -- . "${STATUS_FILES[@]}" | tail -5; exit 4; }
+  # The exclusions above must not hide anything but those five plain files (no directory of that name).
+  odd=$(git ls-tree -r "$cur" -- coord/STATUS-rotn-lead.md coord/STATUS-net-forge.md coord/STATUS-rotn-data.md \
+    coord/STATUS-skills-rotn.md coord/STATUS-harness-ops.md | awk '$1 != "100644" || $2 != "blob" || $4 !~ /^coord\/STATUS-[a-z-]+\.md$/')
+  [ -z "$odd" ] || { echo "#$p STOP: unexpected entries at the STATUS paths:"; echo "$odd"; exit 4; }
 fi
 old=$cur
 gh pr update-branch "$p" >/dev/null 2>&1 || echo "#$p update-branch: no change or failed"
