@@ -159,6 +159,10 @@ function watchDigging(agent, bot) {
         if (!shelterShell(n.site).some(q => q.equals(block.position))) return;
         const first = !n.digAt;
         n.digAt = { pos: block.position, tick: null }; // the next tick times it, on its own clock
+        // #334 re-review: digging at another block than the last one is new digging (digSeq); a
+        // no-progress repair stall ends once per new digging, not on every event of the same dig.
+        const key = `${block.position.x},${block.position.y},${block.position.z}`;
+        if (n.digKey !== key) { n.digKey = key; n.digSeq = (n.digSeq ?? 0) + 1; }
         if (!first) return;
         console.log(`[night] ${entity?.name ?? 'something'} is digging the shelter at ${at(block.position)}: checking at once, ready to repair`);
         // Not while a fight in place runs (#334 review nit after #331): its weapon stays in hand.
@@ -308,10 +312,12 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // #331 re-review: a repair that placed nothing (no blocks left, a mob in the cell) is not
         // tried again on every tick all night (thousands of log lines an hour): it waits CHECK_MS
         // again, unless a fight in place has ended since (the cell may be free now).
-        const stalled = !!n.repairStall && n.repairStall.fightEndedAt === (bot.rotnFightEndedAt ?? null);
-        // Round 9 B (#334): while something digs at the shelter, every tick checks, a stall too
-        // (the dig alarm ends the stall wait: the wall is being opened now).
-        if ((!open || stalled) && !digAlarm(n, now) && now - n.checkedAt < CHECK_MS) return 'night:inside';
+        // ... or digging at a new block (#334 re-review: one event stream of one dig ends it once).
+        const stalled = !!n.repairStall && n.repairStall.fightEndedAt === (bot.rotnFightEndedAt ?? null)
+            && n.repairStall.digSeq === (n.digSeq ?? 0);
+        // Round 9 B (#334): while something digs at the shelter, every tick checks; a stall still waits
+        // CHECK_MS, unless that digging is at a new block (#334 re-review).
+        if (((!open && !digAlarm(n, now)) || stalled) && now - n.checkedAt < CHECK_MS) return 'night:inside';
         n.checkedAt = now;
         if (!bot.entity.position.floored().equals(n.site)) {
             // Pushed, teleported (AggroTP) or walked out: a new shelter where it is now.
@@ -344,7 +350,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 if ((r?.placed ?? 0) > 0) { n.repairStall = null; return; } // progress: the next tick tries again
                 // Nothing placed: back to every CHECK_MS until a fight in place ends (#331 re-review).
                 if (!n.repairStall) console.warn(`[night] the repair placed nothing (${r?.line ?? 'no result'}); checking again in ${CHECK_MS / 1000} s`);
-                n.repairStall = { fightEndedAt: bot.rotnFightEndedAt ?? null };
+                n.repairStall = { fightEndedAt: bot.rotnFightEndedAt ?? null, digSeq: n.digSeq ?? 0 };
             });
         }
         return 'night:inside';
