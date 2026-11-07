@@ -101,3 +101,51 @@ test('round 9 B (c): with a wall open, a mob out of reach is not chased', async 
     assert.deepEqual(ran, [], 'no fight started');
     assert.deepEqual([calls.gotos.length, calls.pvp.length, calls.attacks.length], [0, 0, 0]);
 });
+
+// ---- The lead's decision (1) after round 9 B: low health in the shelter at night ----
+// self_preservation's low-health flee walked the bot 20 blocks away (moveAway), out of the shelter,
+// into the night. In the shelter it now stays: the night's repair goes on (it closes the opening);
+// otherwise it hits what is in reach, in place, or eats; it leaves only for fire, lava or drowning.
+
+async function selfPreservation(agent) {
+    const mode = __modeForTest('self_preservation');
+    await mode.update(agent);
+    for (let i = 0; i < 50 && mode.active; i++) await new Promise(resolve => setTimeout(resolve, 50));
+    await flush();
+    return mode;
+}
+const hurt = (bot) => Object.assign(bot, { health: 3, lastDamageTime: Date.now(), lastDamageTaken: 2, setControlState() {}, clearControlStates() {} });
+
+test('decision (1): hurt in the open shelter, the bot hits the mob in reach in place instead of fleeing out', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { agent, bot, calls, ran, self } = shelter();
+    hurt(bot);
+    const before = self.position.clone();
+    await selfPreservation(agent);
+    assert.deepEqual(ran, ['mode:self_preservation']);
+    assert.deepEqual(calls.gotos, [], 'no walk (moveAway walked 20 blocks out)');
+    assert.deepEqual(calls.attacks, [1, 1], 'hit in place');
+    assert.ok(self.position.equals(before));
+});
+
+test('decision (1): hurt in the shelter with nothing in reach, the bot eats instead of fleeing; it never interrupts the repair', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { agent, bot, calls, ran } = shelter({ zombieAt: 6 });
+    hurt(bot);
+    bot.food = 10;
+    const bread = { name: 'bread', metadata: 0, count: 2, type: 297 };
+    const eaten = [];
+    bot.inventory = { items: () => (bread.count > 0 ? [bread] : []), slots: [] };
+    bot.consume = () => { eaten.push(bot.heldItem?.name); bread.count--; bot.food += 5; return Promise.resolve(); };
+    bot.equip = (item) => { bot.heldItem = item; return Promise.resolve(); };
+    await selfPreservation(agent);
+    assert.deepEqual(ran, ['mode:self_preservation']);
+    assert.deepEqual(eaten, ['bread']);
+    assert.deepEqual([calls.gotos.length, calls.attacks.length], [0, 0], 'no walk, no fight out of reach');
+
+    const busy = shelter({ label: REPAIR_LABEL });
+    hurt(busy.bot);
+    await selfPreservation(busy.agent);
+    assert.deepEqual(busy.interrupts, [], 'the repair goes on');
+    assert.deepEqual(busy.calls.gotos, []);
+});

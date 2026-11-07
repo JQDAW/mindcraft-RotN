@@ -44,6 +44,32 @@ export function shelterQuiet(name, bot) {
 }
 
 /**
+ * Low health in the night shelter (the lead's decision after G3 round 9 B): no flee out into the
+ * night. While the night's repair runs, nothing (it closes the opening). Else a mob within reach is
+ * hit from where the bot stands; else, hungry with food held, the bot eats.
+ */
+function holdInShelter(mode, agent) {
+    const bot = agent.bot;
+    if (agent.actions.currentActionLabel === REPAIR_LABEL) return;
+    const plan = threats.threatPlan(bot);
+    const isEnemy = plan?.isEnemy ?? ((e) => mc.isHostile(e));
+    const inReach = world.getNearestEntityWhere(bot, (e) => isEnemy(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
+    if (inReach) {
+        claimThreat(mode.name, Date.now(), { override: true });
+        execute(mode, agent, async () => {
+            await skills.defendInPlace(bot, isEnemy);
+        }).catch(err => reportModeError(mode.name, err));
+        return;
+    }
+    const item = Number.isFinite(bot.food) && bot.food < 20 ? food.chooseFood(bot) : null;
+    if (!item) return;
+    execute(mode, agent, async () => {
+        const r = await food.eatFood(bot, item);
+        console.log(`[reflex] hurt in the shelter: ${r.ate ? 'ate' : 'could not eat'} ${food.foodKey(item)} (health ${bot.health}, food ${r.before})`);
+    }).catch(err => reportModeError(mode.name, err));
+}
+
+/**
  * One owner per threat (G3 round 2 batch A: self_preservation and self_defense kept interrupting
  * each other while a Grove Sprite attacked; each switch stopped the other action, so the bot
  * neither fled nor fought, and died). A threat mode (cowardice, self_defense) claims the threat
@@ -146,6 +172,13 @@ const modes_list = [
             }
             else if (bot.health > 0 && bot.isAlive !== false // not while dead (it fled from the death hit)
                 && Date.now() - bot.lastDamageTime < 3000 && (bot.health < 5 || bot.lastDamageTaken >= bot.health)) {
+                // The lead's decision after G3 round 9 B: in the night shelter (closed or open) the bot
+                // stays: the repair goes on, else it hits what is in reach in place, else it eats. It
+                // leaves only for the hazards above (fire, lava, drowning, a falling block).
+                if (bot.rotnSheltered) {
+                    holdInShelter(this, agent);
+                    return;
+                }
                 claimThreat(this.name, Date.now(), { override: true }); // the low-health flee wins at once (#227 review 2)
                 say(agent, 'I\'m dying!');
                 execute(this, agent, async () => {
