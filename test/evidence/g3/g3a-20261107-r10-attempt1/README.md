@@ -9,7 +9,7 @@
 - **GO:** the lead's written GO for G3 smoke round 10, under the human's advance GO (2026-11-07, about 16:35 UTC).
   - Scope: one smoke batch each of A, B, C, D, each on its own fresh server.
   - Stop the round on an infra fault (exit 125) or a harness fault.
-- **Code:** a clean detached checkout of `12fd263ec8af` (develop, frozen), after `npm ci`.
+- **Code:** a clean detached checkout of `12fd263ec8af` (develop, frozen), after `npm ci`. The commit is recorded in this README only: no batch started, so `run.log` names no commit (there is no `batch.json` or `result.json`).
 - **Free memory at 18:22 UTC:** 4,403 MB available of 7,746 MB.
 - **Checks right before the create (18:22:03-18:22:16 UTC), all passed:**
   - `msa-login`, the key, an empty project (0/0/0, `grep -c .`);

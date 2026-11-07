@@ -57,7 +57,7 @@
   - Two later "Picked up 1 items" lines made up the count ("Collected 3 stick"). So the sticks came from leaf or dead-bush drops picked up after the break had been reported as giving none.
   - For skills-rotn (minor): the "got no stick" lines undercount.
   - The tree was felled later, for logs ("Cut the tree at -48, 65, -59").
-- **Chat (#344 at work):** the reflex line "Picking up item!" was said at 20:24 and 20:25, and held back twice afterwards: "[reflex] not repeated in chat (said within 60 s): Picking up item!". No identical bot line within 60 s in the server log.
+- **Chat (#344 at work):** the reflex line "Picking up item!" was said at 20:24, 20:25 and 20:30:06 (each more than 60 s after the one before), and held back twice in between: "[reflex] not repeated in chat (said within 60 s): Picking up item!". No identical bot line within 60 s in the server log.
 - **Stop refusals:** none in `driver.log` or the bot's saved history. The task's stop of `collectBlocks` took one "waiting for code to finish executing..." line. No agent exit.
 
 ## LLM, providers and memory summaries

@@ -66,9 +66,8 @@
   - The bot said "I'm stuck!" at 19:24:23 and "I'm free." at 19:24:27. In that same second it was "crushed by a falling tree" at that spot.
   - It had 1 stick, lost with the death. The shortened action output does not say which block gave it.
 - **The second call (19:24:42):**
-  - It skipped `dynamictrees:leaves0` blocks it could not reach from the ground (#328: "Could not reach … from the ground; skipping it").
-  - Then it felled the tree at -69 63 -75: "Collected 7 stick".
-  - No dead bush or trunk shell was involved.
+  - Its first outputs skip `dynamictrees:leaves0` blocks it could not reach from the ground (#328: "Could not reach … from the ground; skipping it").
+  - **Source partly elided; the call ended with a felling:** the action output was shortened ("…skipping many lines", `rocks/driver.log` lines 174-189). Its final outputs show "Felled the tree at -69, 63, -75" and then "Collected 7 stick", so which blocks gave which sticks is not shown.
 - **For skills-rotn (the lead routes):** `unstuck` moved the bot under a tree that was coming down. The collect was interrupted with 8 "waiting for code to finish executing..." lines, and it did stop.
 
 ## Other watch items

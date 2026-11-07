@@ -98,8 +98,8 @@
    - No "refused stop after 10 seconds" in any batch (driver logs and the bot's saved history), and no agent exit in any batch.
    - Open for skills-rotn: the dawn line "found no safe side to open; back to work".
 4. **Sticks:**
-   - A: the first collect ended in the death (1 stick lost); then 7 from felling after skipping leaves out of reach (#328).
-   - B: leaves, 2 + 1, in 72 s (round 9 B stalled here).
+   - A: the first collect ended in the death (1 stick lost). The second skipped leaves out of reach (#328) and got 7. Its source is partly elided; the call ended with a felling.
+   - B: 2 from the first call (leaves likely, but the output is elided), then 4 calls gave 0 (including cane and bamboo) before `!newAction`, then 1 picked up from the ground; 72 s in all (round 9 B stalled here).
    - C: leaf and dead-bush drops, picked up late (3).
    - D: felling, 4.
    - No trunk-shell line was seen.

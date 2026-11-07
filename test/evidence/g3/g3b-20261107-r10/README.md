@@ -64,8 +64,8 @@
 ## Where the sticks came from
 
 - **The `sticks` step took 72 s.** In round 9 B it stalled and paused the agenda.
-- **The first `!collectBlocks("stick", 3)`:** 2 sticks, from `dynamictrees:leaves0` (two other leaf breaks gave none).
-- **The next two calls:** gave 0 ("No cane or bamboo nearby either").
+- **The first `!collectBlocks("stick", 3)`:** "Collected 2 stick". A `dynamictrees:leaves0` source is likely, but the output was shortened (`night/driver.log` lines 177-193): it shows leaf breaks that gave none, a "Picked up 1 items", and a pathfinding timeout.
+- **Then 4 calls gave 0 before `!newAction`:** `!collectBlocks("stick", 1)`, river cane (`biomesoplenty:plant_1:5`), bamboo (`biomesoplenty:bamboo`), and another `!collectBlocks("stick", 1)` ("No cane or bamboo nearby either").
 - **`!newAction`:** the bot tried it; it is disabled and said so.
 - **A fourth call (`"stick", 1`, "Under the leaves now"):** picked up 1 stick, so the source is a leaf drop on the ground.
 - **No dead bush.** The bot felled trees only later, for logs ("Cut the tree at -46, 65, -54"; "Felled the tree at -50, 64, -66").
