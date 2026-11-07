@@ -576,3 +576,32 @@ test('#270 review 3: a cut from under vanilla leaves counts as from under leaves
     assert.match(bot.output, /away from its canopy \(from under its leaves\); stepping back\./);
     assert.equal(bot.rotnLastFell.underLeaves, true);
 });
+
+// G3 round 10 A: the bot waited out its own cut; a tree still fell more than 15 s after it, and the
+// unstuck reflex (20 s in one place) walked the bot into the fall: "crushed by a falling tree".
+// Scaled down: the fall lasts longer than the fall wait plus the drop wait.
+test('round 10 A: the bot stands still on purpose (rotnStationary) until the fall is over, and walks to no drop while the tree falls', T, async (t) => {
+    assert.ok(skills.TREE_FALL.maxMs >= 30_000, `the fall wait: ${skills.TREE_FALL.maxMs} ms`);
+    fast(t);
+    // An old drop lies near the tree, so the walks could start before the logs land.
+    const bot = fakeBot({ fallMs: 5000, onGround: [at(1, 64, 3)] });
+    const samples = [];
+    const timer = setInterval(() => samples.push({
+        stationary: bot.rotnStationary === true,
+        falling: Object.values(bot.entities).some(e => e.name === FALLING_TREE),
+    }), 100);
+    try {
+        assert.equal(await skills.collectBlock(bot, 'log', 1), true, bot.output);
+    } finally {
+        clearInterval(timer);
+    }
+    assert.equal(bot.log.digs.length, 1);
+    const whileFalling = samples.filter(s => s.falling);
+    assert.ok(whileFalling.length >= 30, `the fall was sampled: ${whileFalling.length}`);
+    assert.ok(whileFalling.every(s => s.stationary), 'rotnStationary for the whole fall');
+    assert.notEqual(bot.rotnStationary, true, 'released after the fell');
+    // The step back right after the cut is the one move allowed while it falls.
+    const walksWhileFalling = bot.log.positions.filter(p => p.falling);
+    assert.ok(walksWhileFalling.length <= 1, `walks while the tree fell: ${JSON.stringify(walksWhileFalling)}`);
+    assert.ok(bot.log.pickups.every(p => !p.falling), 'no pickup while the tree was falling');
+});

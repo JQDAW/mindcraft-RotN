@@ -1678,8 +1678,11 @@ export const FELL_LIMITS = { radius: 20, settleMs: 15_000, quietMs: 2000, walkMs
  * item within `radius` of the branch, nearest first, each walk and the whole run bounded.
  * The caller counts the real gain from the inventory. Returns the number of walks that arrived.
  */
-/** How long the falling tree may take to appear after the cut, and to be gone. */
-export const TREE_FALL = { appearMs: 3000, maxMs: 15_000, stepAwayMs: 4000 };
+/**
+ * How long the falling tree may take to appear after the cut, and to be gone. G3 round 10 A: a
+ * tree still fell more than 15 s after the cut (a giant taiga spruce), so the wait is 30 s.
+ */
+export const TREE_FALL = { appearMs: 3000, maxMs: 30_000, stepAwayMs: 4000 };
 
 /**
  * Fell a Dynamic Trees tree safely (G3 round 3 B: the bot was crushed by a falling tree it cut):
@@ -1747,28 +1750,37 @@ export async function fellTree(bot, block, run = currentRun(bot), refused = null
     // Its blocks as the bot sees them now: after the fall they are skipped for this collect, so a
     // trunk the bot still sees is never cut again (round 5 A rerun: one tree cut 4 times).
     const standing = treeBlocks(base);
-    await bot.dig(trunk, true, face);
-    bot.rotnLastFell = { at: Date.now(), pos: base.clone ? base.clone() : base, underLeaves }; // the death report reads it
-    log(bot, `Cut the tree at ${at(base)} from ${at(spot)}, away from its canopy${underLeaves ? ' (from under its leaves)' : ''}; stepping back.`);
-    // Step back at once: the tree falls a moment after the cut.
-    const away = retreatFrom(base, spot);
-    await walk(new pf.goals.GoalNear(away.x, away.y, away.z, 1), TREE_FALL.stepAwayMs); // a failed step back: still wait
-    // Collect only after the falling tree is gone (or never showed up in time).
-    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-    const falling = () => Object.values(bot.entities ?? {}).some(e => e?.name === FALLING_TREE && e.position && e.position.distanceTo(base) <= 32);
-    const start = Date.now();
-    let seen = false;
-    while (Date.now() - start < TREE_FALL.maxMs && !bot.interrupt_code && !run.aborted) {
-        if (falling()) seen = true;
-        else if (seen || Date.now() - start >= TREE_FALL.appearMs) break;
-        await sleep(200);
+    // From the cut until the fall and the drops have settled the bot stands still on purpose: the
+    // unstuck reflex must not walk it off (G3 round 10 A: it walked the bot into the fall).
+    const wasStationary = bot.rotnStationary;
+    const release = () => { bot.rotnStationary = wasStationary ?? false; };
+    bot.rotnStationary = true;
+    try {
+        await bot.dig(trunk, true, face);
+        bot.rotnLastFell = { at: Date.now(), pos: base.clone ? base.clone() : base, underLeaves }; // the death report reads it
+        log(bot, `Cut the tree at ${at(base)} from ${at(spot)}, away from its canopy${underLeaves ? ' (from under its leaves)' : ''}; stepping back.`);
+        // Step back at once: the tree falls a moment after the cut.
+        const away = retreatFrom(base, spot);
+        await walk(new pf.goals.GoalNear(away.x, away.y, away.z, 1), TREE_FALL.stepAwayMs); // a failed step back: still wait
+        // Collect only after the falling tree is gone (or never showed up in time).
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        const falling = () => Object.values(bot.entities ?? {}).some(e => e?.name === FALLING_TREE && e.position && e.position.distanceTo(base) <= 32);
+        const start = Date.now();
+        let seen = false;
+        while (Date.now() - start < TREE_FALL.maxMs && !bot.interrupt_code && !run.aborted) {
+            if (falling()) seen = true;
+            else if (seen || Date.now() - start >= TREE_FALL.appearMs) break;
+            await sleep(200);
+        }
+        if (run.aborted) return { cut: true, skip: standing };
+        await collectFelledDrops(bot, base, {}, itemsBefore, { onSettled: release });
+        return { cut: true, skip: standing };
+    } finally {
+        release();
     }
-    if (run.aborted) return { cut: true, skip: standing };
-    await collectFelledDrops(bot, base, {}, itemsBefore);
-    return { cut: true, skip: standing };
 }
 
-async function collectFelledDrops(bot, center, limits = {}, baseline = null) {
+async function collectFelledDrops(bot, center, limits = {}, baseline = null, { onSettled = null } = {}) {
     const L = { ...FELL_LIMITS, ...limits };
     const start = Date.now();
     const left = () => L.totalMs - (Date.now() - start);
@@ -1795,6 +1807,11 @@ async function collectFelledDrops(bot, center, limits = {}, baseline = null) {
     const tried = new Set();
     let walked = 0;
     while (!bot.interrupt_code && left() > 0) {
+        // No walk while a tree is still falling near the drops (G3 round 10 A): wait it out, bounded.
+        if (Object.values(bot.entities ?? {}).some(e => e?.name === FALLING_TREE && e.position && e.position.distanceTo(center) <= L.radius + 12)) {
+            await sleep(Math.min(200, left()));
+            continue;
+        }
         const here = bot.entity.position;
         // Only drops on firm ground: one caught in another tree's leaves would lead the bot up (G3 round 4 B).
         const item = dropsNear().filter(e => !tried.has(e.id ?? e) && itemOnGround(bot, e))
@@ -1802,6 +1819,7 @@ async function collectFelledDrops(bot, center, limits = {}, baseline = null) {
         if (!item) break;
         tried.add(item.id ?? item);
         const p = item.position;
+        onSettled?.(); // the walks to the drops start: the bot no longer stands still on purpose
         try {
             const walk = await within(goToGoal(bot, new pf.goals.GoalNear(p.x, p.y, p.z, 1)),
                 Math.min(L.walkMs, left()), () => stopWalking(bot));

@@ -145,3 +145,26 @@ export function retreatFrom(base, spot, plan = FELL_PLAN) {
 
 /** The falling tree entity Dynamic Trees spawns when a trunk is cut. */
 export const FALLING_TREE = 'dynamictrees:falling_tree';
+
+/**
+ * How long after its own cut the bot treats the tree as still falling, whether or not it sees the
+ * falling tree entity (G3 round 10 A: the unstuck reflex walked the bot into the fall about 27 s
+ * after a cut, and the bot was crushed).
+ */
+export const FELL_HOLD_MS = 30_000;
+
+/**
+ * A falling tree near the bot, or null: a falling tree entity within `radius` blocks, else the
+ * bot's own cut (bot.rotnLastFell, set by skills.fellTree) less than FELL_HOLD_MS ago.
+ * Returns {pos, why}; nothing that moves the bot on its own may walk while this is not null.
+ */
+export function fallingTreeNear(bot, { now = Date.now(), radius = 32 } = {}) {
+    const here = bot?.entity?.position;
+    if (here) {
+        const tree = Object.values(bot.entities ?? {}).find(e => e?.name === FALLING_TREE && e.position && e.position.distanceTo(here) <= radius);
+        if (tree) return { pos: tree.position, why: 'a falling tree' };
+    }
+    const cut = bot?.rotnLastFell;
+    if (cut && Number.isFinite(cut.at) && now >= cut.at && now - cut.at < FELL_HOLD_MS) return { pos: cut.pos, why: 'the tree it just cut' };
+    return null;
+}
