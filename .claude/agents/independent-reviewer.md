@@ -39,6 +39,7 @@ Steps:
      - Always fetch into the named `review-<n>` ref, never use `FETCH_HEAD`: reviews run in parallel, and another review's fetch overwrites the shared `FETCH_HEAD`. Confirm the scratch HEAD is the PR head before trusting any result, and name that SHA in the verdict.
      - Only ever symlink `node_modules` from the main checkout `/home/mindcraft-RotN`, never from an agent's worktree under `/home/mindcraft-RotN-worktrees/`.
      - If a `review-<n>` branch or worktree is left over from an earlier run, remove it first (`worktree remove --force`, `worktree prune`, `branch -D`).
+     - Reviews run in parallel: if more than one review may touch the same PR, or you need a second worktree (for example develop's code), add a random suffix to every path and ref (`/home/rv/review-<n>-<6 chars>`) and never reuse a path you did not create. Never run `git stash` in a worktree: the stash list is shared by the whole repository.
      - The dev server (a CX33) has 7.6 GB of RAM and no swap, shared with the agent sessions: run a full `npm test` only when the PR needs it, and never during a paid batch.
      - `npm test` takes about 6-7 minutes on the dev server, close to the 600 s foreground limit, so run it in the background.
 4. Verdict: APPROVE, APPROVE WITH NITS, or REQUEST CHANGES, followed by a numbered list of findings, most severe first, each with file and line.
