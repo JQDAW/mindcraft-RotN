@@ -22,20 +22,24 @@ Steps:
      - any new `eslint-disable` comment.
 
      Say whether the change weakens a gate. Raising the lint baseline needs a lead approval cited in the PR body.
-   - Where to run tests: never in an agent's live worktree, where the agent may switch branches mid-run. Create a scratch worktree of the PR head outside the repo, run `npm ci` and the tests there, then remove it:
+   - Where to run tests: never in an agent's live worktree, where the agent may switch branches mid-run. Create a scratch worktree of the PR head outside the repo, give it dependencies (below) and run the tests there, then remove it:
 
      ```bash
-     git -C C:/Users/admin/source/mindcraft-RotN fetch origin pull/<n>/head:review-<n>
-     git -C C:/Users/admin/source/mindcraft-RotN worktree add C:/Users/admin/rv/review-<n> review-<n>
-     # run npm ci and the tests in C:/Users/admin/rv/review-<n>
-     git -C C:/Users/admin/source/mindcraft-RotN worktree remove --force C:/Users/admin/rv/review-<n>
-     git -C C:/Users/admin/source/mindcraft-RotN branch -D review-<n>
+     git -C /home/mindcraft-RotN fetch origin pull/<n>/head:review-<n>
+     git -C /home/mindcraft-RotN worktree add --detach /home/rv/review-<n> review-<n>
+     git -C /home/rv/review-<n> rev-parse HEAD   # must equal the PR's headRefOid
+     # node_modules: if package-lock.json and patches/ match develop's, symlink the main checkout's
+     #   ln -s /home/mindcraft-RotN/node_modules /home/rv/review-<n>/node_modules
+     # otherwise run npm ci in /home/rv/review-<n>. Then run the tests there.
+     git -C /home/mindcraft-RotN worktree remove --force /home/rv/review-<n>
+     git -C /home/mindcraft-RotN branch -D review-<n>
      ```
 
-     - Keep the scratch path short (`C:/Users/admin/rv/`): deep paths hit Windows "Filename too long" when removing `node_modules`.
+     - Always fetch into the named `review-<n>` ref, never use `FETCH_HEAD`: reviews run in parallel, and another review's fetch overwrites the shared `FETCH_HEAD`. Confirm the scratch HEAD is the PR head before trusting any result, and name that SHA in the verdict.
+     - Only ever symlink `node_modules` from the main checkout `/home/mindcraft-RotN`, never from an agent's worktree under `/home/mindcraft-RotN-worktrees/`.
      - If a `review-<n>` branch or worktree is left over from an earlier run, remove it first (`worktree remove --force`, `worktree prune`, `branch -D`).
-     - Node 22 is at `/c/nvm4w/nodejs` if it is not on PATH.
-     - `npm test` takes about 3-4 minutes, so run it in the background, or with a timeout above 300 s.
+     - The dev server (a CX33) has 7.6 GB of RAM and no swap, shared with the agent sessions: run a full `npm test` only when the PR needs it, and never during a paid batch.
+     - `npm test` takes about 6-7 minutes on the dev server, so run it in the background, or with a timeout above 600 s.
 4. Verdict: APPROVE, APPROVE WITH NITS, or REQUEST CHANGES, followed by a numbered list of findings, most severe first, each with file and line.
 
 You may run read-only commands and tests through Bash. Do not edit files, commit or push. Return the review as your final answer; the lead posts it on the PR.
