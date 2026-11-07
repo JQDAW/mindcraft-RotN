@@ -22,7 +22,9 @@ Agents add items here when they need something only the human can do. The human 
   6. **Bot account** (you, after 5): run the device-code login for FRCFLD once, `node packages/forge-bridge/tools/msa-login.mjs` with `MINDCRAFT_PROFILES_FOLDER` set (deploy/cx23/README.md); harness-ops gives you the exact command and folder, then checks it with `--check`.
      - **Done 2026-11-07** by the human: the profile was `FRCFLD`. The lead's `--check` passed. Folder `/root/.mindcraft-rotn/FRCFLD/msa`, mode 0700, root only. harness-ops sets `MINDCRAFT_PROFILES_FOLDER` to it for batches.
   7. **Agent sessions** (you): start the lead and the four agents the way you prefer (Orca or another terminal manager), never in bypass-permissions mode. Orca's agent launch can add the bypass flag: decline that prompt and start plain `claude` instead. The lead rebuilds its own memory notes from STATUS and PLAN.
+     - **Done 2026-11-07:** the human removed Orca's saved bypass argument. The lead started rotn-data, skills-rotn and harness-ops in Orca terminals as plain `claude` (auto mode). net-forge was started, then closed for lack of a task.
   8. **Validation** (the lead gives a GO): one G3 smoke batch from the dev server, all checks as usual. It only checks the environment and never counts toward the gate: under docs/PLAN.md the full 4/4 A-D smoke round on the final commit still runs before any gate batch. The test-server sweeper and watchdog are unchanged.
+     - **Done 2026-11-07:** smoke D on `198bacbb`, PASS 7/7 (evidence PR #308, validation only).
 
 ## Done
 
