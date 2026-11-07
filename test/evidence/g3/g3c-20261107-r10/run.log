@@ -1,0 +1,46 @@
+[test-server 20:20:16] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --max-batch-usd 2 --logs-out <local>/captures/raw/r10r-g3c/server --summary <local>/captures/raw/r10r-g3c/batch.json --scenario g3-task-preempts-agenda --out <local>/captures/raw/r10r-g3c/task -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 20:20:17] preflight passed: driver, profile, model and settings checked; the key's usage can be read; the LLM probe answered (HTTP 200, provider Wafer, z-ai/glm-5.3-flash); 1 scenario(s) (timeouts: g3-task-preempts-agenda 34 min); a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[test-server 20:20:21] sweeper OK: scheduled run 42403319244 on JQDAW/mindcraft-RotN succeeded 89 min ago (limit 120 min)
+[test-server 20:20:21] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 20:20:22] creating mcr-test-20261107-202018: delete-after 2026-11-07T22:20:21Z (TTL 2h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 20:20:30] server mcr-test-20261107-202018 is at <ip>
+[test-server 20:20:30] waiting for SSH and the build (up to 120 min)
+[test-server 20:20:40] phase: unreachable
+[test-server 20:20:57] phase: booting:running
+[test-server 20:21:28] phase: unpack
+[test-server 20:21:44] phase: starting
+[test-server 20:23:18] phase: ready
+[test-server 20:23:18] mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 OK
+[test-server 20:23:18] mod-director: OK: 1 pinned download(s) match; 337 jars of the pinned zip match; 0 extra mod(s)
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 20:23:19] READY: mcr-test-20261107-202018 at <ip>:25565 (delete-after 2026-11-07T22:20:21Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261107-202018
+[test-server 20:23:19] running: node test/runner/batch.mjs --max-batch-usd 2 --logs-out <local>/captures/raw/r10r-g3c/server --summary <local>/captures/raw/r10r-g3c/batch.json --scenario g3-task-preempts-agenda --out <local>/captures/raw/r10r-g3c/task -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 20:23:19] batch 20261107T202319-1134449: a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[batch 20:23:20] g3-task-preempts-agenda: start (spent so far USD 0 of 2; runner timeout 34 min, derived 34)
+[scenario 20:23:20] g3-task-preempts-agenda (G3) run 20261107t202320-91fade; git 0daeef2da14fe6cf2e50e8dd6282b7144670df6f; driver: node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json; out: <local>/captures/raw/r10r-g3c/task
+[scenario 20:23:32] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 20:23:32] PASS fresh_bot_state: the driver moved aside: agenda.json.g3-2026-11-07T20-23-23-610Z.bak, memory.json.g3-2026-11-07T20-23-23-610Z.bak
+[scenario 20:28:33] PASS agenda_active: counter 3 -> 14 over 5 min (11/11 objectives)
+[scenario 20:28:42] PASS task_accepted: task t1 accepted: go to the gold block at -42 68 -50 and stand on it
+[scenario 20:29:46] PASS task_done: the server found the bot on the marker at minute 6.2; the bot said "task t1 done"; the agenda was paused for it
+[scenario 20:30:50] PASS agenda_resumed: counter 14 -> 15 within 5 min after the done line (the agent said "agenda resumed")
+[scenario 20:31:07] PASS no_cheat: nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)
+[scenario 20:31:07] g3-task-preempts-agenda: 50 LLM requests (38 replies, 12 memory summaries, 0 failed), USD 0.005872
+[scenario 20:31:07] g3-task-preempts-agenda: LLM providers: Wafer: 50 requests (0 empty), summaries 9 ok, 0 empty; summaries not attributed: 3 ok, 0 empty
+[scenario 20:31:07] g3-task-preempts-agenda: model openrouter/@preset/glm-5-3-flash-cheap-reliable
+[scenario 20:31:08] g3-task-preempts-agenda: PASS; 7 passed, 0 failed (<local>/captures/raw/r10r-g3c/task/result.json)
+<local>/captures/raw/r10r-g3c/server
+BATCH {"batchId":"20261107T202319-1134449","testMode":false,"gate":false,"smoke":true,"maxBatchUsd":2,"scenarios":[{"id":"g3-task-preempts-agenda","out":"<local>/captures/raw/r10r-g3c/task","runId":"20261107t202320-91fade","exit":0,"spentBefore":0,"timeoutMin":34}],"stopped":null,"usageAtStart":0.917165791,"usageAtEnd":0.923038223,"spentUsd":0.005872,"exit":0,"logsFetched":true}
+[test-server 20:31:08] command exited with 0
+[test-server 20:31:09] EXIT trap: tearing down mcr-test-20261107-202018
+[test-server 20:31:09] deleting batch mcr-test-20261107-202018 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261107-202018)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 20:31:19] batch mcr-test-20261107-202018: ran 10 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 20:31:19] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261107-202018
+exit 0
