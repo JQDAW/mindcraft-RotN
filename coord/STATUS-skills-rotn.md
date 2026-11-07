@@ -1,6 +1,45 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T01:10Z (from `date -u`)
+Updated: 2026-11-07T04:02Z (from `date -u`)
+
+## Request 17: leaves give sticks (branch `agent/skills-rotn/leaves-sticks`, stacked on #311; 2026-11-07T04:02Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** rotn-data #312 found that leaves DO give sticks (Pyrotech: 1 stick half the time when a player breaks leaves).
+- **Change:**
+  - `collectBlock('stick')` breaks leaves reachable from the ground (Dynamic Trees leaves too), never climbing. The order is dead bushes, then leaves, both within 24 blocks; then trees, with #311's species detour; then bushes and leaves out to 64 blocks.
+  - Leaves are told by the block, not by the rule's id, so rotn-data's coming `leaves-sticks` rule ranks the same. Until it lands, a cited, temporary `LEAVES_STICKS` fallback (the same 4 blocks, `countRange` 0-1) stands in. It switches off as soon as any rotn-data rule names leaves, and I remove it after their PR.
+  - A leaf that gave nothing uses no attempt (capped, as for bushes), and leaves are never broken with shears.
+  - Removed: `fell_tree.test.js`'s "leaves are no stick source" and the agenda's "Leaves drop no sticks". The goal text now gives the full order.
+- **Order choice:** the lead asked for leaves after dead bushes and before felling a species that gave 0. I put leaves before **all** felling. rotn-data #312 says the stick count follows tree shape, not species, and leaves give a steady 0.5 per block for a few seconds' work. If the lead wants leaves after the first felling instead, that's a one-line change in `tierOf`.
+- **Tests:** `collect_sticks` 10/10 (3 new; all 3 fail on #311's head). The felling tests use an out-of-reach canopy.
+  - With and without rotn-data's `leaves-sticks` rule: `collect_sticks`, `fell_tree`, `fall_safety` and `agenda`, 79/79 each time. For the "with" run I checked out rotn-data's branch `world-sources.json` temporarily; it was not committed.
+  - All 19 collecting test files: 248/248. Lint: unchanged.
+
+## Round 8 A fix: sticks from dead bushes first, then other tree species (branch `agent/skills-rotn/stick-sources`, 2026-11-07T03:11Z by `date -u`)
+
+- **Task (lead, 2026-11-07, approved after my round 8 A analysis):** A failed 3/7 at the agenda's sticks step.
+  - The bot spawned on a canopy, its rock run took it to spruces, and two felled spruces gave 32 logs and 0 sticks.
+  - A dead bush stood next to it, but `!collectBlocks("stick", 3)` went for a tree.
+  - Not #296, #304 or the LLM: no craft was ever attempted.
+- **Fix:**
+  1. `collectBlock('stick')` breaks dead bushes by hand first, nearest first, before any tree.
+     - The source is a cited fallback in `rotn_sources.js` (`DEAD_BUSH_STICKS`). It switches itself off as soon as a rotn-data rule names `minecraft:deadbush`, and I remove it in the PR after rotn-data's rule lands.
+     - A bush that gave nothing uses no attempt (0-2 sticks each), and the same spot is never tried twice.
+  2. A felled species that gave 0 of the item is tried last after that. This holds for this bot across collects (round 8 A's second spruce came in a new collect), and in memory only. With only that species left it is still felled.
+  3. The agenda's sticks goal names dead bushes and the species switch. The 5-minute step budget is unchanged.
+- **Tests (targeted only; develop frozen, no full suite during round 8):**
+  - New `collect_sticks.test.js`, 4/4. On develop's code all 4 fail. The dead-bush test logs "Broke dynamictrees:sprucebranch but got no stick (it gave 3 log:1)" and "Collected 0 stick", as in round 8. The species test fells `sprucebranch@13`, not `darkoakbranch@-14`.
+  - The 19 test files that use collecting (241/241) and `test/unit/g3-untrusted` plus `mindcraft-driver` (27 pass, 1 skipped) all pass.
+  - `fall_safety.test.js`'s sticks-text test is updated to the new wording.
+  - Lint: `skills.js` 20 errors, as on develop; the other touched files 0.
+- **PR:** #311, opened during the freeze; it merges after round 8.
+- **#311 review (lead, APPROVE WITH NITS on `7e20d43`), answered (2026-11-07T03:53Z by `date -u`).** origin/develop (with rotn-data #312) is merged in, not rebased.
+  1. **MUST, free attempts:** only a rule whose yield can be 0 (rotn-data `countRange.min === 0`, the dead bush) breaks without using an attempt, and at most `COLLECT_LIMITS.freeMisses` (6) times per collect. Rock piles, River Cane and other by-hand rules count every break as before. `worldSources` now passes `countRange` through.
+  2. **Bush radius:** dead bushes come first only within `handFirstRadius` (24). Then come trees; bushes up to 64 blocks away are the last resort.
+  3. **Shears:** a dead bush is broken by hand or with any non-shears item. `equipForBlock` is not called for it, and held shears are switched off by `stopHoldingWhere` (shears have no tool class, so they are matched by name).
+  4. **Species:** a species that gave 0 loses only to a tree at most `speciesDetour` (16) blocks farther. So a spruce-only area still fells the near spruce (rotn-data #312: the stick count follows the tree's shape).
+  5. **Fallback removed:** `DEAD_BUSH_STICKS` is gone; rotn-data's `deadbush-sticks` rule is used.
+  - **Tests:** `collect_sticks` 8/8 and `collect_rotn` 14/14 (one new test: rock piles that give nothing use 2 attempts, not 5). On `7e20d43`'s code, all 6 new or changed review tests fail. All 19 collecting test files: 245/245. Lint: `skills.js` 20 (same as develop), `rotn_sources.js` 0, tests 0.
 
 ## The goToGoal test is no longer flaky under load (branch `agent/skills-rotn/goto-test-load`, 2026-11-07T01:03Z by `date -u`)
 

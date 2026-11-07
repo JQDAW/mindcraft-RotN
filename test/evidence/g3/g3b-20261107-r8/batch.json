@@ -1,0 +1,23 @@
+{
+  "batchId": "20261107T023439-269888",
+  "testMode": false,
+  "gate": false,
+  "smoke": true,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g3-first-night",
+      "out": "<local>/captures/raw/r8-g3b/night",
+      "runId": "20261107t023440-3f2406",
+      "exit": 0,
+      "spentBefore": 0,
+      "timeoutMin": 67
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.856083234,
+  "usageAtEnd": 0.866998899,
+  "spentUsd": 0.010916,
+  "exit": 0,
+  "logsFetched": true
+}
