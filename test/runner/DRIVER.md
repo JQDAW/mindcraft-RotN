@@ -404,15 +404,21 @@ A task from the test-only giver `Server` interrupts the real agent's agenda. The
   - **The record:** its start event's `botState` lists `movedAside` and `pruned`, and the `fresh_bot_state` check reads it.
   - **`memory.json` too, from round 5 B** (lead, after round 5 A; approved for all G3 batches): a fresh start means fresh memory. `memory.json` holds the bot's memory summary and its recent turns, which `history.js` reloads at every start. In round 5 A it held 14 turns, so each restart reached the summary limit at once and crashed again on the same empty reply. The old file stays as its `.bak` for the record; `histories/` and the rest are not touched.
   - (c) ends with no open task: a task still open at the end is cancelled with the giver's `!taskCancel("<id>")` (`notes.openTaskAtEnd`).
-- **The steps and checks** (`warmMinutes` 5, `activeWaitMinutes` 5, `acceptS` 60, `taskMinutes` 5 and `resumeMinutes` 5 are compared 'equal'):
-  - `agenda_active`: the counter rises over the warm-up.
+- **The steps and checks** (`minWarmMinutes` 2, `activeWaitMinutes` 8, `acceptS` 60, `taskMinutes` 5 and `resumeMinutes` 5 are compared 'equal'):
+  - `agenda_active`: the counter rises before the task (read after the minimum warm-up, and again while the runner waits to send the task).
   - **The task is sent only while the agenda is active** (lead, after smoke round 2, where the agenda had paused itself as stuck 13 s before the task, so there was no preemption to see).
     - The agenda's state comes from its own chat (`agendaActive`), and the last relevant line wins.
     - Active after `agenda step <id> started: ...`, `agenda resumed: <id>` or `agenda started`.
     - Not active after `agenda step <id> stuck: ...; agenda paused`, `agenda paused for task <id>`, `agenda done` or `agenda stopped`.
-    - After the marker is placed, the runner waits up to `activeWaitMinutes` (5) for an active agenda. `notes.agendaAtTask` records `active`, `waitedS` and the deciding line.
-    - Not active by then: the three task checks are "not reached: agenda not active at the task (...)". That is neither a pass nor a task failure, and no task is whispered.
-    - The wait makes (c) up to 5 min longer. Its runner timeout follows from `runMinutes` (34 min); no `--timeout-min` is needed.
+    - **The task goes out while the agenda still runs** (lead, after G3 gate C, 2026-11-07):
+      - The old design was a fixed 5-min warm-up. There, an agenda that took 4.8 min ended before the task, so no task was sent and the three task checks failed as "not reached".
+      - Now the agent plays for at least `minWarmMinutes` (2). Then the marker is placed, and the task is whispered at the **first** moment the agenda is active **and** the server's counter has risen.
+      - The runner waits up to `activeWaitMinutes` (8) for that, and reads the counter at most every `counterPollMs` while it waits.
+      - `notes.agendaAtTask` records `active`, `waitedS`, the deciding line, and `endedAt` (the server time of an `agenda done` or `agenda stopped` line).
+    - **Not active by then:** the three task checks are "not reached: agenda not active at the task (...)".
+    - **The agenda finished** (`agenda done` or `agenda stopped` is its last line): the wait ends at once. The three task checks are "not reached: the agenda finished before the task could be sent ("agenda done" at HH:MM:SS): a scenario-timing gap, not a bot result".
+    - Neither case is a pass or a task failure, and no task is whispered.
+    - The minimum warm-up plus the wait is 10 min at most, as before. The runner timeout follows from `runMinutes` (34 min); no `--timeout-min` is needed.
   - The runner places `setblock <marker> minecraft:gold_block`, confirms it read-only with `testforblock <marker> minecraft:gold_block 0` (`placeGoldMarker` in `lib/g3.mjs`, #207 review nit; without that proof the task steps fail and nothing is whispered; `notes.marker` keeps the `setblock` answer line itself, matched as the whole server message, so a chat line never counts), and whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and stand on it", "normal")`.
   - `task_accepted`: `task <id> accepted: ...` in the bot's chat.
   - `task_done`: the bot said `agenda paused for task <id>` (the preemption, #207 review), and the server finds the bot standing on the marker (`testfor @a[name=<bot>,x=X,y=Y+1,z=Z,dx=0,dy=1,dz=0]`, 1.12's volume selector), **and** the bot says `task <id> done`. The agent's word alone never passes. `task <id> failed: ...` ends the step.

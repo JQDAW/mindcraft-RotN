@@ -345,6 +345,24 @@ describe('g3-task-preempts-agenda: the task goes out while the agenda still runs
         assert.ok(r.notes.counterReadings.some((x) => x.label === 'before the task'), JSON.stringify(r.notes.counterReadings));
     });
 
+    test('replay of G3 gate C (2026-11-07, joined 21:50:45): at the 2-min mark the agenda was active; at the old 5-min mark it was done', () => {
+        // The bot's agenda lines from test/evidence/g3/g3c-20261107-gate/task/server.log (#353), with their server times.
+        const C = [['21:50:47', 'agenda step rocks started: collect 6 rocks'], ['21:51:15', 'agenda step rocks done'], ['21:51:15', 'agenda step sticks started: collect 3 sticks'],
+            ['21:51:38', 'agenda step sticks done'], ['21:51:38', 'agenda step crude_axe started: craft a crude axe'], ['21:51:45', 'agenda step crude_axe done'],
+            ['21:51:45', 'agenda step logs started: collect 3 logs'], ['21:52:12', 'agenda step logs done'], ['21:52:12', 'agenda step first_plank started: make the first plank'],
+            ['21:52:30', 'agenda step first_plank done'], ['21:52:30', 'agenda step crafting_tools started: craft Crafting Tools'], ['21:52:36', 'agenda step crafting_tools done'],
+            ['21:52:36', 'agenda step crafting_table started: craft a crafting table'], ['21:52:41', 'agenda step crafting_table done'],
+            ['21:52:41', 'agenda step planks_sticks started: make planks and sticks at the table'], ['21:52:56', 'agenda step planks_sticks done'],
+            ['21:52:56', 'agenda step stone_pickaxe started: craft a stone pickaxe'], ['21:53:17', 'agenda step shelter_blocks started: keep 10 blocks for the night\'s shelter'],
+            ['21:53:19', 'agenda step stone_pickaxe done'], ['21:54:55', 'agenda step cobblestone done'], ['21:54:55', 'agenda step stone_axe started: craft a stone axe'],
+            ['21:55:31', 'agenda step stone_axe done'], ['21:55:31', 'agenda done']];
+        const upTo = (hms) => C.filter(([t]) => t <= hms).map(([, l]) => l);
+        // New rule: the minimum warm-up ends at 21:52:45; the counter had risen (crude axe, logs, Crafting Tools and the table by then).
+        assert.deepEqual(agendaActive(upTo('21:52:45')), { active: true, last: 'agenda step planks_sticks started: make planks and sticks at the table' });
+        // Old rule: the fixed warm-up ended at 21:55:45, 14 s after "agenda done": nothing could be sent.
+        assert.deepEqual(agendaActive(upTo('21:55:45')), { active: false, last: 'agenda done' });
+    });
+
     test('the ordinary run sends the task right after the minimum warm-up', async () => {
         const r = await run(sim());
         assert.ok(r.notes.task.sentMin >= 2 && r.notes.task.sentMin < 2.5, `minute ${r.notes.task.sentMin}`);
