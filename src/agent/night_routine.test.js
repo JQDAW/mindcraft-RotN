@@ -5,6 +5,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
+import { EventEmitter } from 'node:events';
+import { setImmediate } from 'node:timers';
 import { __setRegistryForTest } from '../utils/mcdata.js';
 import { nightTick, nightState, resetNight, isFullDay, digOut, CHECK_MS, RETRY_MS, BUILD_ATTEMPTS, DUSK_WAIT_MS } from './night_routine.js';
 import settings from './settings.js';
@@ -615,4 +617,177 @@ test('#331 re-review: a repair that placed nothing waits CHECK_MS again (no repa
     nightTick(agent, { now, ops: o });
     await settle(agent);
     assert.equal(o.builds.length, 4, 'at once after a fight');
+});
+
+// ---- G3 round 9 batch B, fix (e): a mob digging a shelter block is noticed while it digs ----
+// At 13:35:22 the check found the east side already open, with the zombie in it (Epic Siege Mod's
+// digging zombies). The dig shows first as block break progress, which mineflayer emits as
+// blockBreakProgressObserved(block, destroyStage, entity).
+
+test('round 9 B (e): digging seen on a shelter block makes the next tick check at once (not after CHECK_MS) with a block in hand', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const events = new EventEmitter();
+    const equipped = [];
+    Object.assign(agent.bot, {
+        on: events.on.bind(events), emit: events.emit.bind(events),
+        inventory: { items: () => [{ name: 'dirt', metadata: 0, count: 4 }] },
+        heldItem: null,
+        equip: (item) => { equipped.push(item.name); return Promise.resolve(); },
+    });
+    const o = ops();
+    let checks = 0;
+    const needs = o.siteNeeds;
+    o.siteNeeds = (...a) => { checks++; return needs(...a); };
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'inside');
+    nightTick(agent, { now: 1, ops: o }); // starts the check clock
+
+    // Digging next to the shelter but not at it: nothing.
+    agent.bot.emit('blockBreakProgressObserved', { position: new Vec3(5, 64, 0) }, 2, { name: 'zombie' });
+    nightTick(agent, { now: 2, ops: o });
+    assert.equal(checks, 0);
+
+    // A zombie digs the east wall (stage 3 of 9).
+    agent.bot.emit('blockBreakProgressObserved', { position: SITE.offset(1, 0, 0) }, 3, { name: 'zombie' });
+    nightTick(agent, { now: 3, ops: o });
+    assert.equal(checks, 1, 'checked at once, not after CHECK_MS');
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(equipped, ['dirt'], 'a block in hand for the repair');
+
+    // It breaks through: the repair starts on the next tick.
+    o.open = [SITE.offset(1, 0, 0)];
+    nightTick(agent, { now: 4, ops: o });
+    assert.equal(agent.bot.rotnSheltered, 'open');
+    await settle(agent);
+    assert.deepEqual(o.builds, [null, SITE], 'repaired at once');
+});
+
+// ---- #334 after #331 (lead): the dig alarm and #331's no-progress stall, and the fight's weapon ----
+
+test('#334 after #331: digging seen at the shelter ends a no-progress stall wait: the next tick checks and repairs', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const events = new EventEmitter();
+    Object.assign(agent.bot, { on: events.on.bind(events), emit: events.emit.bind(events), inventory: { items: () => [] }, heldItem: null, equip: () => Promise.resolve() });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    o.open = [SITE.offset(1, 0, 0)];
+    o.buildShelter = (bot, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, feet: SITE, placed: 0 }); };
+    let now = CHECK_MS + 2;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    now += 300;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    assert.equal(o.builds.length, 2, 'stalled: no repair on the next tick');
+    agent.bot.emit('blockBreakProgressObserved', { position: SITE.offset(-1, 1, 0) }, 4, { name: 'zombie' });
+    now += 300;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    assert.equal(o.builds.length, 3, 'the dig alarm ends the stall wait');
+});
+
+test('#334 after #331: the dig alarm puts no block in hand while a fight in place runs (its weapon stays)', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const events = new EventEmitter();
+    const equipped = [];
+    Object.assign(agent.bot, {
+        on: events.on.bind(events), emit: events.emit.bind(events),
+        inventory: { items: () => [{ name: 'dirt', metadata: 0, count: 4 }] }, heldItem: { name: 'stone_sword' },
+        equip: (item) => { equipped.push(item.name); return Promise.resolve(); },
+    });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    agent.bot.rotnFightingInPlace = true;
+    agent.bot.emit('blockBreakProgressObserved', { position: SITE.offset(1, 0, 0) }, 3, { name: 'zombie' });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(equipped, [], 'no dirt in hand mid-fight');
+    assert.ok(nightState(agent).digAt, 'the alarm itself is still raised');
+});
+
+test('#334 re-review: one dig at one block, with events on every tick, ends a no-progress stall at most once (no repair every 300 ms)', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const events = new EventEmitter();
+    Object.assign(agent.bot, { on: events.on.bind(events), emit: events.emit.bind(events), inventory: { items: () => [] }, heldItem: null, equip: () => Promise.resolve() });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    o.open = [SITE.offset(1, 0, 0)];
+    o.buildShelter = (bot, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, feet: SITE, placed: 0 }); };
+    let now = CHECK_MS + 2;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    const afterStall = o.builds.length;
+    // An Epic Siege Mod zombie digs the west wall: an event every few ticks, 20 ticks (6 s).
+    for (let i = 0; i < 20; i++) {
+        agent.bot.emit('blockBreakProgressObserved', { position: SITE.offset(-1, 0, 0) }, i % 10, { name: 'zombie' });
+        now += 300;
+        nightTick(agent, { now, ops: o });
+        await settle(agent);
+    }
+    assert.ok(o.builds.length - afterStall <= 1, `${o.builds.length - afterStall} repairs in 20 ticks of digging (the reviewer saw 20)`);
+    // Digging at another block is new digging: the stall ends once more.
+    const before = o.builds.length;
+    agent.bot.emit('blockBreakProgressObserved', { position: SITE.offset(0, 2, 0) }, 1, { name: 'zombie' });
+    now += 300;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    assert.equal(o.builds.length, before + 1);
+});
+
+test('#334 re-review 2: two diggers on different shelter blocks, events alternating, let a stalled repair through at most once per block', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const events = new EventEmitter();
+    Object.assign(agent.bot, { on: events.on.bind(events), emit: events.emit.bind(events), inventory: { items: () => [] }, heldItem: null, equip: () => Promise.resolve() });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    nightTick(agent, { now: 1, ops: o });
+    o.open = [SITE.offset(1, 0, 0)];
+    o.buildShelter = (bot, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: false, feet: SITE, placed: 0 }); };
+    let now = CHECK_MS + 2;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    const afterStall = o.builds.length;
+    const A = SITE.offset(-1, 0, 0), B = SITE.offset(0, 0, 1);
+    for (let i = 0; i < 30; i++) {
+        agent.bot.emit('blockBreakProgressObserved', { position: i % 2 ? B : A }, i % 10, { name: 'zombie' });
+        now += 300;
+        nightTick(agent, { now, ops: o });
+        await settle(agent);
+    }
+    assert.ok(o.builds.length - afterStall <= 2, `${o.builds.length - afterStall} repairs in 30 ticks (the reviewer saw 30)`);
+});
+
+test('#334 re-review 2 nit: a reset, leaving for a giver and a new shelter clear the repair stall', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    const n = nightState(agent);
+    n.repairStall = { fightEndedAt: null, dug: new Set(['1,64,0']), retry: false };
+    resetNight(agent, 'death');
+    assert.equal(n.repairStall, null, 'reset');
+    nightTick(agent, { now: 1, ops: o });
+    await settle(agent);
+    assert.equal(n.state, 'inside');
+    n.repairStall = { fightEndedAt: null, dug: new Set(), retry: false };
+    const { leaveShelterFor } = await import('./night_routine.js');
+    leaveShelterFor(agent, 'a test');
+    assert.equal(n.repairStall, null, 'leaving for a giver');
+    n.repairStall = { fightEndedAt: null, dug: new Set(), retry: false };
+    nightTick(agent, { now: 2, ops: o });
+    await settle(agent);
+    assert.equal(n.state, 'inside');
+    assert.equal(n.repairStall, null, 'a new shelter');
 });

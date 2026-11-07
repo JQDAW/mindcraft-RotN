@@ -10,6 +10,15 @@ import { Vec3 } from 'vec3';
 const DT = /^dynamictrees[a-z]*:/;
 export const isBranch = (b) => !!b && DT.test(b.name) && /branch/.test(b.name);
 export const isTreeLeaves = (b) => !!b && DT.test(b.name) && /leaves/.test(b.name);
+/**
+ * A thick trunk's shell (dynamictrees:trunkshell, G3 round 9 B): the blocks around a thick branch.
+ * Not a branch to the plan (treeBase finds the branch inside), but part of the tree: it goes with
+ * the tree, so it is never ground under a leaf or the bot, never broken or stood on by a walk, and
+ * collecting one fells the tree the safe way (skills.fellTree). rotn-data #332 (from the jar):
+ * breaking a shell passes the break to the thick trunk next to it (normal felling) and the shell
+ * drops nothing; a shell with no trunk next to it is air on the server.
+ */
+export const isTrunkShell = (b) => !!b && DT.test(b.name) && /trunkshell/.test(b.name);
 const isCanopy = (b) => isBranch(b) || isTreeLeaves(b);
 /** Dynamic Trees' rooty soil under a trunk (rootydirt, rootysand, ...). */
 export const isRooty = (b) => !!b && DT.test(b.name) && /rooty/.test(b.name);
