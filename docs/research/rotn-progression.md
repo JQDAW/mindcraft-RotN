@@ -215,7 +215,10 @@ Registry ids for the Scroll of New Life, the Bundle and the Stone Kiln block are
   - Just Enough Dimensions (`justenoughdimensions/justenoughdimensions.cfg`) and Biome Tweaker.
   - Extra dimensions: The Aether Legacy, Twilight Forest, The Beneath, End Reborn, NetherEx, Better Nether.
   - Dimension 7 appears in the Pyrotech worldgen config, and "Unloading dimension 7" is the server's ready message at startup `[R:_server-only/READ ME!!!!!!.txt]`. Which dimension id the bot spawns in is UNVERIFIED; read it from the JoinGame packet at login.
-- **Not found in the configs.** Tough As Nails or any thirst or temperature mod (no `toughasnails` config), Epic Siege Mod, Hostile Worlds. A mod without a config file would not show up here, so absence is not proof.
+- **Not found in the configs.** Tough As Nails or any thirst or temperature mod (no `toughasnails` config), Hostile Worlds. A mod without a config file would not show up here, so absence is not proof.
+- **Correction (rotn-lead, 2026-11-07): Epic Siege Mod IS in the pack.** This list first named it as not found, which was wrong. It is `mods/EpicSiegeMod-13.169.jar`, configured by `config/esm/epicsiegemod.cfg`, `config/esm/entity_ai.json` and `config/esmtweaks.cfg` (all in the pinned zip). G3 smoke round 9 batch B found it when a zombie dug open the bot's dirt shelter.
+  - **Digging** is off by default (`entity_ai.json` general `"Digging": false`) but on for 56 mobs, among them `minecraft:zombie`, `minecraft:husk`, `minecraft:zombie_villager`, `minecraft:silverfish`, many Special Mobs variants, Twilight Forest miners and redcaps, and Better Animals Plus bears.
+  - **Tools:** every digging mob has `"Requires Tools": true`, and ESM-Tweaks sets `mustHaveCorrectTool=true` and `shouldGetExtraTool=false` (no extra pickaxe on spawn). So without the right tool in hand, they dig soft blocks (dirt, grass and similar) but not stone or cobblestone. A dirt shelter is not safe at night; a stone one is, unless the mob holds a pickaxe. rotn-data is adding cited threat data for this.
 - **Thirst.** `thirsty-bottles.cfg` exists but was not opened. Whether it adds thirst is UNVERIFIED.
 
 ---
