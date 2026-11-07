@@ -15,6 +15,7 @@ import { __setRegistryForTest } from '../utils/mcdata.js';
 import './agent.js'; // the real import order (commands/index.js first)
 import { __modeForTest, __resetThreatLease } from './modes.js';
 import { SHELTER_FIGHT } from './library/skills.js';
+import { HEAD_DIG } from './modes.js';
 import { REPAIR_LABEL } from './night_routine.js';
 
 const reg = minecraftData('1.12.2');
@@ -203,4 +204,88 @@ test('#331 review 4: right after a fight in place self_defense waits restMs, so 
     t.after(() => Object.assign(SHELTER_FIGHT, saved));
     await selfDefense(agent);
     assert.deepEqual(ran, ['mode:self_defense'], 'after the rest it fights again');
+});
+
+// ---- The lead's decision after #331: a falling block in the shelter's head space ----
+// self_preservation moved the bot 2 blocks away (moveAway) when sand or gravel was at its head,
+// out of the shelter into the night. In the shelter it now digs the block out by hand (sand and
+// gravel need no tool) and stays; it leaves only when that dig fails (it would suffocate).
+
+function sandAtHead(fake, { digWorks = true, column = 1, landsMs = 100 } = {}) {
+    const { bot, calls } = fake;
+    const head = new Vec3(0, 65, 0);
+    let sand = true, left = column; // a column of `column` blocks: after a dig the next lands landsMs later
+    calls.digs = [];
+    Object.assign(bot, {
+        rotnSheltered: true, health: 20, lastDamageTime: -1e9, setControlState() {}, clearControlStates() {},
+        game: { gameMode: 'survival' }, tool: { equipForBlock: () => Promise.resolve() },
+        blockAt: (p) => {
+            const q = p.floored ? p.floored() : p;
+            const isSand = sand && q.x === head.x && q.y === head.y && q.z === head.z;
+            return { name: isSand ? 'sand' : 'air', position: q, boundingBox: isSand ? 'block' : 'empty', canHarvest: () => true };
+        },
+        dig: (b) => {
+            calls.digs.push(`${b.position.x},${b.position.y},${b.position.z}`);
+            if (!digWorks) return Promise.reject(new Error('Digging aborted'));
+            sand = false;
+            if (--left > 0) setTimeout(() => { sand = true; }, landsMs);
+            return Promise.resolve();
+        },
+    });
+    bot.modes.isOn = () => false;
+    bot.pathfinder.getPathTo = () => ({ status: 'success', path: [] }); // goToGoal plans first
+    return head;
+}
+
+test('falling block (lead): sand in the shelter\'s head space is dug out by hand, and the bot stays', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const fake = shelter({ zombieAt: 9 });
+    sandAtHead(fake);
+    const before = fake.self.position.clone();
+    await selfPreservation(fake.agent);
+    assert.deepEqual(fake.calls.digs, ['0,65,0'], 'dug at its head');
+    assert.deepEqual(fake.calls.gotos, [], 'no walk out of the shelter');
+    assert.ok(fake.self.position.equals(before));
+});
+
+test('falling block (lead): when the dig fails the bot still gets out (it would suffocate)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const fake = shelter({ zombieAt: 9 });
+    sandAtHead(fake, { digWorks: false });
+    await selfPreservation(fake.agent);
+    assert.equal(fake.calls.digs.length, 1);
+    assert.ok(fake.calls.gotos.length >= 1, 'moveAway walked');
+});
+
+// ---- #346 review 1: a falling column must not keep the bot digging until it suffocates ----
+
+test('#346 review 1: a falling column (each dig, the next block lands): the bot digs at most HEAD_DIG.maxDigs times, then gets out', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const saved = { ...HEAD_DIG };
+    Object.assign(HEAD_DIG, { settleMs: 150 });
+    t.after(() => Object.assign(HEAD_DIG, saved));
+    const fake = shelter({ zombieAt: 9 });
+    sandAtHead(fake, { column: 6, landsMs: 50 }); // lands before the 150 ms look again
+    await selfPreservation(fake.agent);
+    assert.equal(fake.calls.digs.length, HEAD_DIG.maxDigs, 'bounded');
+    assert.ok(fake.calls.gotos.length >= 1, 'then moveAway');
+
+    // A short column (2 blocks) is dug out and the bot stays.
+    const short = shelter({ zombieAt: 9 });
+    sandAtHead(short, { column: 2, landsMs: 50 });
+    await selfPreservation(short.agent);
+    assert.equal(short.calls.digs.length, 2);
+    assert.deepEqual(short.calls.gotos, [], 'stays');
+});
+
+test('#346 review 1: below HEAD_DIG.minHealth the bot gets out at once instead of digging', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const fake = shelter({ zombieAt: 9 });
+    sandAtHead(fake);
+    fake.bot.health = HEAD_DIG.minHealth - 1;
+    await selfPreservation(fake.agent);
+    assert.deepEqual(fake.calls.digs, []);
+    assert.ok(fake.calls.gotos.length >= 1);
 });
