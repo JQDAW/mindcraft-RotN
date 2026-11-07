@@ -72,7 +72,9 @@ mod_director_check() {
     while read -r want rel; do
       [[ -z $want || $want == \#* ]] && continue
       ok=1
-      [[ $want =~ ^[0-9a-f]{64}$ && -n $rel && $rel != /* && $rel != *..* && $rel != *" "* ]] || ok=0
+      # A path may hold spaces, quotes and brackets (round 10 A: "mods/Aether Continuation v1.3.0.jar" and 15 more of
+      # the pinned zip's jars): `read` gives the whole rest of the line after the hash and two spaces.
+      [[ $want =~ ^[0-9a-f]{64}$ && -n $rel && $rel != /* && $rel != *..* ]] || ok=0
       [[ $rel == mods/* ]] && ! top_jar "$rel" && ok=0   # under mods/, only a top-level jar is compared
       [[ $2 != pinned ]] && ! top_jar "$rel" && ok=0      # the zip's and the extra jars are top-level jars
       (( ok )) || { md "FAILED: cannot check: a bad line in $1"; exit 3; }
