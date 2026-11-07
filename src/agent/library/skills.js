@@ -915,7 +915,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // this makes all its walks fall-safe from the first collect on (fallSafe marks it, so only once).
     if (bot.collectBlock?.movements) fallSafe(bot.collectBlock.movements);
     for (let i=0; i<num && collected<num; i++) { // collected counts the items really gained (a stone can give 4 rocks)
-        if (run.aborted) break;
+        // G3 round 9 B: a stop (interrupt_code) ends the collect here too, not only at the loop's end,
+        // which a break that threw skipped: the next block was started until the stop's 10 s ran out
+        // and the process was killed ("Code execution refused stop after 10 seconds").
+        if (run.aborted || bot.interrupt_code) break;
         if (Date.now() - runStart >= CL.totalMs) {
             log(bot, `Stopped collecting ${blockType}: time limit of ${secsText(CL.totalMs)} reached.`);
             break;
@@ -1061,7 +1064,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 const avoid = avoidToolFor(block);
                 if (ruleTool || avoid || mc.mustCollectManually(block.name)) {
                     await goToPosition(bot, block.position.x, block.position.y, block.position.z, 2);
-                    if (run.aborted) return false;
+                    // #340 nit 2: a stopped walk returns (goToGoal gives false on PathStopped): never a
+                    // dig at a block the bot did not reach.
+                    if (run.aborted || bot.interrupt_code) return false;
                     if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
                     await bot.dig(block);
                     if (run.aborted) return true; // broken; the gain is still counted below
@@ -1137,6 +1142,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             }
             else {
                 log(bot, `Failed to collect ${blockType}: ${err}.`);
+                if (bot.interrupt_code) break; // round 9 B: a stop makes the break throw; never the next block
                 continue;
             }
         }
@@ -1147,7 +1153,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Name what was really gained when it is not just the asked-for name (a rock can be an
     // Underground Biomes rock): "Collected 3 pyrotech:rock (2 pyrotech_compat:rock_metamorphic:0, ...)".
     // A run that ended up on a tree anyway (a pile, a pickup) climbs down before it returns.
-    if (!run.aborted && standsOnTree(bot)) await descendFromTree(bot, run);
+    if (!run.aborted && !bot.interrupt_code && standsOnTree(bot)) await descendFromTree(bot, run); // #340 nit 1: not after a stop
     // Sticks short (G3 round 5 A: no tree could be felled safely, 0 sticks): RotN keeps 2 planks
     // (ore:stickMat) -> 4 sticks in the inventory grid, so make the rest from held planks.
     let fromPlanks = 0;
@@ -1241,7 +1247,7 @@ async function collectByRoute(bot, blockType, num, route, shovelRule) {
         try { await collectBlock(bot, route.input, needInputs); } finally { collectRouting = false; }
     }
     const n = Math.min(num, Math.floor(countItem(bot, route.input) / route.per));
-    if (n > 0 && !currentRun(bot).aborted) await COLLECT_ROUTE_OPS.craft(bot, route.gives, n);
+    if (n > 0 && !currentRun(bot).aborted && !bot.interrupt_code) await COLLECT_ROUTE_OPS.craft(bot, route.gives, n);
     const gained = Math.max(0, countItem(bot, blockType) - before);
     log(bot, `Collected ${gained} ${blockType}${gained ? ` (crafted from ${route.input})` : ''}.`);
     return gained > 0;
@@ -1587,7 +1593,7 @@ export async function pickupNearbyItems(bot) {
         && itemOnGround(bot, entity));
     let nearestItem = getNearestItem(bot);
     let pickedUp = 0;
-    while (nearestItem) {
+    while (nearestItem && !bot.interrupt_code) { // #340 nit 3: a stop ends the pickups
         await goToGoal(bot, new pf.goals.GoalFollow(nearestItem, 1), { canDig: false });
         await new Promise(resolve => setTimeout(resolve, 200));
         let prev = nearestItem;

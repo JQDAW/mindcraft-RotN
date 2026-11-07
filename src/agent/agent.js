@@ -21,6 +21,7 @@ import { Agenda } from './agenda.js';
 import { Control } from './control.js';
 import { autonomyTick } from './priority.js';
 import { autoEatBannedFood } from './library/food.js';
+import { mayRepeat, handedToChat, BRAIN_DISCONNECTED } from './chat_repeat.js';
 import { resetNight } from './night_routine.js';
 import { hordeWarning, JumpWatch } from './library/hazard_watch.js';
 import { requestReplan } from './replan.js';
@@ -450,6 +451,10 @@ export class Agent {
 
     async routeResponse(to_player, message, { priority = null, key = null } = {}) {
         if (this.shut_up) return;
+        // The models' "My brain disconnected, try again." at most once a minute (G3 round 3 B: 6 in 60 s).
+        // Also on the way to another bot (convoManager.sendToBot below): the check is before the route.
+        const brain = BRAIN_DISCONNECTED.test(String(message ?? ''));
+        if (brain && !mayRepeat(this, message, { tag: '[chat]' })) return;
         let self_prompt = to_player === 'system' || to_player === this.name;
         // The chat limit's priority (chat_limit.js, G3 round 4 C+D): a reply to a task giver goes
         // first and is never dropped; other replies wait their turn. Refusals pass 'high' and a key.
@@ -463,9 +468,11 @@ export class Agent {
         if (convoManager.isOtherAgent(to_player) && convoManager.inConversation(to_player)) {
             // if we're in an ongoing conversation with the other bot, send the response to it
             convoManager.sendToBot(to_player, message);
+            if (brain) handedToChat(this, message, { viaLimit: false });
         }
         else {
             // otherwise, use open chat, with the chat limit's priority
+            if (brain) handedToChat(this, message);
             this.openChat(message, { priority, key });
             // note that to_player could be another bot, but if we get here the conversation has ended
         }
