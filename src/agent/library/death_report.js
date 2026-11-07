@@ -74,10 +74,20 @@ export function lossDiff(before, after) {
  * The same item's variants summed (T1, the lead: the chat line said "3 rock_metamorphic:6, 4
  * rock_metamorphic:2"): "3 log:1, 2 log" -> "5 log", largest first. The log line keeps the variants.
  */
+/**
+ * Items whose meta is a different item, kept apart in the chat line too (#338 review): dye:4 is
+ * lapis and dye:15 bone meal, coal:1 is charcoal, golden_apple:1 the enchanted apple.
+ */
+export const DISTINCT_METAS = new Set(['dye', 'coal', 'golden_apple']);
+const baseOf = (key) => {
+    const name = key.replace(/:\d+$/, '');
+    return DISTINCT_METAS.has(name.replace(/^minecraft:/, '')) ? key : name;
+};
+
 export function sumVariants(lost) {
     const byName = new Map();
     for (const l of lost) {
-        const name = l.key.replace(/:\d+$/, '');
+        const name = baseOf(l.key);
         byName.set(name, (byName.get(name) ?? 0) + l.count);
     }
     return [...byName].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));

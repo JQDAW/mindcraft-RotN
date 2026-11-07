@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T14:35Z (from `date -u`)
+Updated: 2026-11-07T15:11Z (from `date -u`)
 
 ## T1 add-on: the death chat line sums the variants of one item (branch `agent/skills-rotn/death-chat-variants`, 2026-11-07T14:35Z by `date -u`)
 
@@ -10,6 +10,7 @@ Updated: 2026-11-07T14:35Z (from `date -u`)
   - **New:** rock variants are summed, largest first.
   - **Updated:** two expected chat lines now read "5 log" for "3 log:1, 2 log". The log and note expectations are unchanged.
   - With the change: `death_report` and `threat_arbitration`, 27/27. Lint: 0 in both files.
+- **#338 review (lead, approved with a nit; 2026-11-07T15:11Z by `date -u`):** a short exception list, `DISTINCT_METAS` (dye, coal, golden_apple), for metas that are different items. Those stay apart in chat too: lapis (dye:4) and bone meal (dye:15), charcoal (coal:1), the enchanted apple (golden_apple:1). **New test**; `death_report` and `threat_arbitration`, 28/28. Lint: 0.
 - **Noted (lead, from T1):** the bot narrates up to 24 chat lines a minute while working. That is not a bug, but I keep it in mind for new chat lines. The fixes above log most lines and say only a few.
 
 ## G4 item 3 prep: stop, follow, come (branch `agent/skills-rotn/g4-control-prep`, branch only while develop is frozen; 2026-11-07T05:50Z by `date -u`)

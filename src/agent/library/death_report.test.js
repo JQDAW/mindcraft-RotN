@@ -348,3 +348,10 @@ test('T1 add-on: the chat line sums the variants of one item ("7 pyrotech_compat
     assert.equal(formatLoss(sumVariants(lost)), '7 pyrotech_compat:rock_metamorphic, 5 pyrotech_compat:rock_sedimentary, 3 pyrotech_compat:rock_igneous');
     assert.deepEqual(sumVariants([]), []);
 });
+
+test('#338 review: metas that are different items stay apart in chat (lapis and bone meal, charcoal, the enchanted apple)', () => {
+    const lost = [{ key: 'dye:4', count: 5 }, { key: 'dye:15', count: 3 }, { key: 'coal', count: 2 }, { key: 'coal:1', count: 4 },
+        { key: 'golden_apple:1', count: 1 }, { key: 'golden_apple', count: 1 }, { key: 'log:1', count: 2 }, { key: 'log', count: 2 }];
+    assert.deepEqual(sumVariants(lost).map(l => `${l.count} ${l.key}`).sort(),
+        ['1 golden_apple', '1 golden_apple:1', '2 coal', '3 dye:15', '4 coal:1', '4 log', '5 dye:4'].sort());
+});
