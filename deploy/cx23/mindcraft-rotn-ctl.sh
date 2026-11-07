@@ -25,6 +25,9 @@ readonly SYSTEMCTL=/usr/bin/systemctl
 readonly JOURNALCTL=/usr/bin/journalctl
 readonly ETC_DIR=/etc/mindcraft-rotn
 readonly HEAD=/usr/bin/head
+readonly MKTEMP=/usr/bin/mktemp
+readonly STAT=/usr/bin/stat
+readonly RM=/usr/bin/rm
 readonly JOURNAL_LINES=20000
 readonly JOURNAL_BYTES=8388608
 readonly METRICS=MemoryCurrent,MemoryPeak,NRestarts,ActiveState
@@ -81,18 +84,24 @@ case $action in
         die "bad --since '$t' (YYYY-MM-DD HH:MM[:SS], YYYY-MM-DDTHH:MM[:SS][Z] or @EPOCH_SECONDS)"
       fi
     fi
-    # The line cap, and a byte cap on top (#326 review). A journalctl stopped by the byte cap (SIGPIPE, 141) is a
-    # cut, noted on stderr; any other failure of journalctl is its own exit code.
+    # The line cap, and a byte cap on top (#326 review). Whether the output was cut is decided from what arrived,
+    # never from how journalctl ended (#326 re-review: up to a pipe buffer past the cap, journalctl exits 0 and a
+    # SIGPIPE never comes): one byte more than the cap is read into a root-only temp file, at most the cap is
+    # printed, and a cut is noted on stderr. journalctl's own failure keeps its exit code (after what it printed).
+    tmpf=$("$MKTEMP" /tmp/mindcraft-rotn-journal.XXXXXX)   # a fixed template: no TMPDIR from the caller
+    trap '"$RM" -f "$tmpf"' EXIT
     set +e
-    "$JOURNALCTL" "--unit=$unit" --no-pager --no-hostname --utc --output=short-iso "--lines=$JOURNAL_LINES" "${since[@]}" | "$HEAD" -c "$JOURNAL_BYTES"
+    "$JOURNALCTL" "--unit=$unit" --no-pager --no-hostname --utc --output=short-iso "--lines=$JOURNAL_LINES" "${since[@]}" \
+      | "$HEAD" -c "$(( JOURNAL_BYTES + 1 ))" > "$tmpf"
     st=("${PIPESTATUS[@]}")
     set -e
     (( st[1] == 0 )) || exit "${st[1]}"
-    case ${st[0]} in
-      0) exit 0 ;;
-      141) echo "mindcraft-rotn-ctl: journal cut at $JOURNAL_BYTES bytes (the newest $JOURNAL_LINES lines were more)" >&2; exit 0 ;;
-      *) exit "${st[0]}" ;;
-    esac ;;
+    size=$("$STAT" -c %s "$tmpf")
+    "$HEAD" -c "$JOURNAL_BYTES" "$tmpf"
+    if (( size > JOURNAL_BYTES )); then echo "mindcraft-rotn-ctl: journal cut at $JOURNAL_BYTES bytes (the newest $JOURNAL_LINES lines were more)" >&2; fi
+    # 141: journalctl stopped by the full read above (SIGPIPE), which is the cut, not a failure.
+    (( st[0] == 0 || st[0] == 141 )) || exit "${st[0]}"
+    exit 0 ;;
   metrics)
     (( $# == 2 )) || die "usage: mindcraft-rotn-ctl metrics BOT"
     unit=$(unit_of "$2")

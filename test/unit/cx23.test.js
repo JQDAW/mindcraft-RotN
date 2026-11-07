@@ -351,10 +351,11 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
         assert.match(SRC, /^readonly SYSTEMCTL=\/usr\/bin\/systemctl$/m);
         assert.match(SRC, /^readonly JOURNALCTL=\/usr\/bin\/journalctl$/m);
         assert.match(SRC, /^readonly HEAD=\/usr\/bin\/head$/m);
+        for (const tool of ['mktemp', 'stat', 'rm']) assert.match(SRC, new RegExp(`^readonly ${tool.toUpperCase()}=/usr/bin/${tool}$`, 'm'), tool);
         assert.match(SRC, /^readonly JOURNAL_BYTES=8388608$/m);
         assert.match(SRC, /^readonly ETC_DIR=\/etc\/mindcraft-rotn$/m);
         assert.match(SRC, /^PATH=\/usr\/sbin:\/usr\/bin:\/sbin:\/bin$/m);
-        assert.ok(!/\$\{(SYSTEMCTL|JOURNALCTL|HEAD|MINDCRAFT_ROTN_ETC|ETC_DIR|JOURNAL_LINES|JOURNAL_BYTES|METRICS):-/.test(SRC), 'no env overrides');
+        assert.ok(!/\$\{(SYSTEMCTL|JOURNALCTL|HEAD|MKTEMP|STAT|RM|MINDCRAFT_ROTN_ETC|ETC_DIR|JOURNAL_LINES|JOURNAL_BYTES|METRICS):-/.test(SRC), 'no env overrides');
     });
 
     test('valid actions run systemctl on exactly mindcraft-rotn@BOT.service', () => {
@@ -407,18 +408,26 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
         assert.deepEqual(called('journalctl').at(-3).at(-1), '--since=2026-08-09 08:09:09 UTC', '08 and 09 are not octal');
     });
 
-    test('#326 review: the journal is also capped in bytes; a cut is noted on stderr; journalctl\'s own failure keeps its exit code', () => {
-        const big = 'x'.repeat(100000);
-        const cut = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: big }, { bytes: 100 });
-        assert.equal(cut.code, 0, cut.stderr);
-        assert.equal(cut.stdout.length, 100);
-        assert.match(cut.stderr, /journal cut at 100 bytes/);
-        const small = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: 'one line' }, { bytes: 100 });
-        assert.equal(small.code, 0);
-        assert.equal(small.stdout.trim(), 'one line');
+    test('#326 re-review: the byte cap is decided from what arrived, also just past it (no SIGPIPE): at most the cap is printed, a cut always noted', () => {
+        const before = fs.readdirSync('/tmp').filter((f) => f.startsWith('mindcraft-rotn-journal.')).length;
+        // The fake prints the value and a newline: 999 x's are exactly the cap of 1000 bytes.
+        for (const n of [999, 1000, 4999, 59999, 100000]) {
+            const r = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: 'x'.repeat(n) }, { bytes: 1000 });
+            const arrived = n + 1;
+            assert.equal(r.code, 0, `${arrived} bytes: ${r.stderr}`);
+            assert.equal(r.stdout.length, Math.min(arrived, 1000), `${arrived} bytes`);
+            if (arrived > 1000) assert.match(r.stderr, /journal cut at 1000 bytes/, `${arrived} bytes`);
+            else assert.equal(r.stderr, '', 'exactly the cap is no cut');
+        }
+        const small = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: 'one line' }, { bytes: 1000 });
+        assert.equal(small.stdout, 'one line\n');
         assert.equal(small.stderr, '');
-        const failed = ctl(['journal', 'rotn-bot'], { FAKE_RC_journalctl: '1' });
-        assert.equal(failed.code, 1, 'journalctl\'s failure is not hidden by the pipe');
+        // journalctl's own failure keeps its exit code, after what it printed.
+        const failed = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: 'partial', FAKE_RC_journalctl: '1' });
+        assert.equal(failed.code, 1, 'not hidden by the pipe');
+        assert.equal(failed.stdout, 'partial\n');
+        const after = fs.readdirSync('/tmp').filter((f) => f.startsWith('mindcraft-rotn-journal.')).length;
+        assert.ok(after <= before, 'the temp file is removed');
     });
 
     test('metrics (G4, read-only): systemctl show of exactly the four properties on mindcraft-rotn@BOT.service; nothing else', () => {
