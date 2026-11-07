@@ -6,23 +6,33 @@ set -u
 p=$1
 reviewed=${2:-}
 cd "$(git rev-parse --show-toplevel)" || exit 1
-# Usage now: lead-merge-one.sh <pr> <reviewedSHA>. Refuses if the author added non-merge commits since review, or if a
-# develop merge changed the PR's own change outside coord/.
+# Usage now: lead-merge-one.sh <pr> <reviewedSHA>. Refuses if the author changed anything since review other than
+# merging develop in (and the agents' own STATUS files while resolving that merge).
 [ -n "$reviewed" ] || { echo "#$p STOP: give the reviewed head SHA as the 2nd argument"; exit 4; }
-git fetch -q origin "pull/$p/head" develop
 cur=$(gh pr view "$p" --json headRefOid --jq .headRefOid)
+[ -n "$cur" ] || { echo "#$p STOP: could not read the PR head"; exit 4; }
+git fetch -q origin "pull/$p/head" develop || { echo "#$p STOP: fetch failed"; exit 4; }
 git cat-file -e "$reviewed^{commit}" 2>/dev/null || { echo "#$p STOP: reviewed SHA $reviewed not found"; exit 4; }
-# New non-merge commits since the review are allowed only if develop already has them (an author's
-# merge of develop brings develop's squash commits along). Anything else needs a new review.
-extra=$(git log --oneline --no-merges "$reviewed..$cur" ^origin/develop)
+git cat-file -e "$cur^{commit}" 2>/dev/null || { echo "#$p STOP: head $cur not found after fetch (moved?)"; exit 4; }
+git merge-base --is-ancestor "$reviewed" "$cur" || { echo "#$p STOP: reviewed SHA is not an ancestor of the head (rewritten?)"; exit 4; }
+# New non-merge commits since the review are allowed only if develop already has them (an author's merge of
+# develop brings develop's squash commits along). Anything else needs a new review.
+extra=$(git log --oneline --no-merges "$reviewed..$cur" ^origin/develop) || { echo "#$p STOP: git log failed"; exit 4; }
 [ -z "$extra" ] || { echo "#$p STOP: commits added since review:"; echo "$extra"; exit 4; }
-# A develop merge resolves conflicts by hand, so also check that the PR's own change outside coord/
-# (status files) is the same as at review time: compare patch-ids of each head against its merge-base
-# with develop. Different context lines (develop edited next to the PR's hunks) also stop here; then a
-# reviewer re-confirms the new head and the lead passes that head as the reviewed SHA.
-ownpid() { git diff "$(git merge-base origin/develop "$1")" "$1" -- . ':(exclude)coord' | git patch-id --stable | cut -d' ' -f1; }
-if [ "$cur" != "$reviewed" ] && [ "$(ownpid "$reviewed")" != "$(ownpid "$cur")" ]; then
-  echo "#$p STOP: the PR's own change outside coord/ differs from the reviewed head; re-confirm ${cur:0:7}"; exit 4
+# A develop merge is resolved by hand, so rebuild what it should give: merge the reviewed head into the develop
+# commit the head contains, and require the head's tree to equal that, byte for byte, in every path except the
+# five agents' STATUS files (their resolution is status text). A conflict outside them, or any extra or changed
+# line (whitespace included) anywhere else, including coord/tools/ and coord/NEEDS-HUMAN.md, stops here; then a
+# reviewer re-confirms the head and the lead passes it as the reviewed SHA.
+STATUS_FILES=(':(exclude)coord/STATUS-rotn-lead.md' ':(exclude)coord/STATUS-net-forge.md' ':(exclude)coord/STATUS-rotn-data.md'
+  ':(exclude)coord/STATUS-skills-rotn.md' ':(exclude)coord/STATUS-harness-ops.md')
+if [ "$cur" != "$reviewed" ]; then
+  dev=$(git merge-base origin/develop "$cur") || { echo "#$p STOP: no merge-base with develop"; exit 4; }
+  expected=$(git merge-tree --write-tree "$dev" "$reviewed" | head -1)
+  [ -n "$expected" ] || { echo "#$p STOP: could not rebuild the expected merge"; exit 4; }
+  git diff --quiet "$expected" "$cur" -- . "${STATUS_FILES[@]}" || {
+    echo "#$p STOP: the head differs from reviewed + develop outside the STATUS files; re-confirm ${cur:0:7}"
+    git diff --stat "$expected" "$cur" -- . "${STATUS_FILES[@]}" | tail -5; exit 4; }
 fi
 old=$cur
 gh pr update-branch "$p" >/dev/null 2>&1 || echo "#$p update-branch: no change or failed"
