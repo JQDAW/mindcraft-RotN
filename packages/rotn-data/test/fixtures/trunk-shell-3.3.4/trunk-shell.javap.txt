@@ -1,0 +1,628 @@
+# Dynamic Trees trunk shell (dynamictrees:trunkshell): javap -c -p -constants excerpts
+# Source: mods/DramaticTrees-1.12.2-0.13.4.jar from the pinned RotN 3.3.4 server pack zip
+#   (pack SHA-256 90642fd5...f5205; jar SHA-256 b86dae768ccc1182c52e5b9a8756a5906da53dc125d48bfe1c8dc69204a77ffe).
+# Read with javap only (no mod code was run). Only the methods the trunkShell claims rest on.
+# SRG names (MCP stable-39-1.12): func_180650_b updateTick, func_176195_g getBlockHardness,
+#   func_185496_a getBoundingBox, func_180640_a getCollisionBoundingBox, func_180660_a getItemDropped,
+#   func_149745_a quantityDropped, func_177971_a BlockPos.add(Vec3i), func_176730_m EnumFacing.getDirectionVec,
+#   func_180497_b World.scheduleUpdate, func_175698_g World.setBlockToAir, field_151575_d Material.WOOD.
+
+## BlockTrunkShell
+public class com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell extends net.minecraft.block.Block
+  public com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell();
+    Code:
+       0: aload_0
+       1: getstatic     #30                 // Field net/minecraft/block/material/Material.field_151575_d:Lnet/minecraft/block/material/Material;
+       4: invokespecial #33                 // Method net/minecraft/block/Block."<init>":(Lnet/minecraft/block/material/Material;)V
+       7: aload_0
+       8: aload_0
+       9: getfield      #37                 // Field field_176227_L:Lnet/minecraft/block/state/BlockStateContainer;
+      12: invokevirtual #43                 // Method net/minecraft/block/state/BlockStateContainer.func_177621_b:()Lnet/minecraft/block/state/IBlockState;
+      15: getstatic     #45                 // Field COREDIR:Lnet/minecraft/block/properties/PropertyEnum;
+      18: getstatic     #49                 // Field com/ferreusveritas/dynamictrees/util/CoordUtils$Surround.S:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+      21: invokeinterface #55,  3           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177226_a:(Lnet/minecraft/block/properties/IProperty;Ljava/lang/Comparable;)Lnet/minecraft/block/state/IBlockState;
+      26: invokevirtual #59                 // Method func_180632_j:(Lnet/minecraft/block/state/IBlockState;)V
+      29: aload_0
+      30: ldc           #22                 // String trunkshell
+      32: invokevirtual #63                 // Method setRegistryName:(Ljava/lang/String;)Lnet/minecraftforge/registries/IForgeRegistryEntry;
+      35: pop
+      36: aload_0
+      37: ldc           #22                 // String trunkshell
+      39: invokevirtual #67                 // Method func_149663_c:(Ljava/lang/String;)Lnet/minecraft/block/Block;
+      42: pop
+      43: return
+  public boolean removedByPlayer(net.minecraft.block.state.IBlockState, net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.entity.player.EntityPlayer, boolean);
+    Code:
+       0: aload_0
+       1: aload_2
+       2: aload_1
+       3: aload_3
+       4: invokevirtual #122                // Method getMuse:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/math/BlockPos;)Lcom/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse;
+       7: astore        6
+       9: aload         6
+      11: ifnull        43
+      14: aload         6
+      16: getfield      #124                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.state:Lnet/minecraft/block/state/IBlockState;
+      19: invokeinterface #128,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      24: aload         6
+      26: getfield      #124                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.state:Lnet/minecraft/block/state/IBlockState;
+      29: aload_2
+      30: aload         6
+      32: getfield      #130                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.pos:Lnet/minecraft/util/math/BlockPos;
+      35: aload         4
+      37: iload         5
+      39: invokevirtual #132                // Method net/minecraft/block/Block.removedByPlayer:(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/entity/player/EntityPlayer;Z)Z
+      42: ireturn
+      43: iconst_0
+      44: ireturn
+  public com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell$ShellMuse getMuseUnchecked(net.minecraft.world.IBlockAccess, net.minecraft.block.state.IBlockState, net.minecraft.util.math.BlockPos);
+    Code:
+       0: aload_0
+       1: aload_2
+       2: aload_3
+       3: invokevirtual #182                // Method getMuseDir:(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/math/BlockPos;)Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+       6: astore        4
+       8: aload_3
+       9: aload         4
+      11: invokevirtual #186                // Method com/ferreusveritas/dynamictrees/util/CoordUtils$Surround.getOffset:()Lnet/minecraft/util/math/Vec3i;
+      14: invokevirtual #192                // Method net/minecraft/util/math/BlockPos.func_177971_a:(Lnet/minecraft/util/math/Vec3i;)Lnet/minecraft/util/math/BlockPos;
+      17: astore        5
+      19: aload_1
+      20: aload         5
+      22: invokeinterface #180,  2          // InterfaceMethod net/minecraft/world/IBlockAccess.func_180495_p:(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/state/IBlockState;
+      27: astore        6
+      29: aload         6
+      31: invokeinterface #128,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      36: astore        7
+      38: aload         7
+      40: instanceof    #194                // class com/ferreusveritas/dynamictrees/blocks/IMusable
+      43: ifeq          73
+      46: aload         7
+      48: checkcast     #194                // class com/ferreusveritas/dynamictrees/blocks/IMusable
+      51: invokeinterface #198,  1          // InterfaceMethod com/ferreusveritas/dynamictrees/blocks/IMusable.isMusable:()Z
+      56: ifeq          73
+      59: new           #9                  // class com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse
+      62: dup
+      63: aload         6
+      65: aload         5
+      67: aload         4
+      69: invokespecial #201                // Method com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse."<init>":(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/math/BlockPos;Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;)V
+      72: areturn
+      73: aconst_null
+      74: areturn
+  public com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell$ShellMuse getMuse(net.minecraft.world.IBlockAccess, net.minecraft.block.state.IBlockState, net.minecraft.util.math.BlockPos);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: aload_3
+       4: invokevirtual #105                // Method getMuseUnchecked:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/math/BlockPos;)Lcom/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse;
+       7: astore        4
+       9: aload         4
+      11: ifnull        24
+      14: aload         4
+      16: invokevirtual #209                // Method com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.getRadius:()I
+      19: bipush        8
+      21: if_icmpgt     30
+      24: aload_0
+      25: aload_1
+      26: aload_3
+      27: invokevirtual #213                // Method scheduleForClearing:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/util/math/BlockPos;)V
+      30: aload         4
+      32: areturn
+  public void scheduleForClearing(net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos);
+    Code:
+       0: aload_1
+       1: instanceof    #107                // class net/minecraft/world/World
+       4: ifeq          30
+       7: aload_1
+       8: checkcast     #107                // class net/minecraft/world/World
+      11: astore_3
+      12: aload_3
+      13: getfield      #216                // Field net/minecraft/world/World.field_72995_K:Z
+      16: ifne          30
+      19: aload_3
+      20: aload_2
+      21: invokevirtual #220                // Method net/minecraft/util/math/BlockPos.func_185334_h:()Lnet/minecraft/util/math/BlockPos;
+      24: aload_0
+      25: iconst_0
+      26: iconst_3
+      27: invokevirtual #224                // Method net/minecraft/world/World.func_180497_b:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/Block;II)V
+      30: return
+  public void func_180650_b(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, java.util.Random);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_3
+       3: aload_2
+       4: invokevirtual #105                // Method getMuseUnchecked:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/math/BlockPos;)Lcom/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse;
+       7: ifnonnull     16
+      10: aload_1
+      11: aload_2
+      12: invokevirtual #111                // Method net/minecraft/world/World.func_175698_g:(Lnet/minecraft/util/math/BlockPos;)Z
+      15: pop
+      16: return
+  public float func_176195_g(net.minecraft.block.state.IBlockState, net.minecraft.world.World, net.minecraft.util.math.BlockPos);
+    Code:
+       0: aload_2
+       1: ifnonnull     10
+       4: aload_3
+       5: ifnonnull     10
+       8: fconst_2
+       9: freturn
+      10: aload_0
+      11: aload_2
+      12: aload_1
+      13: aload_3
+      14: invokevirtual #122                // Method getMuse:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/math/BlockPos;)Lcom/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse;
+      17: astore        4
+      19: aload         4
+      21: ifnull        51
+      24: aload         4
+      26: getfield      #124                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.state:Lnet/minecraft/block/state/IBlockState;
+      29: invokeinterface #128,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      34: aload         4
+      36: getfield      #124                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.state:Lnet/minecraft/block/state/IBlockState;
+      39: aload_2
+      40: aload         4
+      42: getfield      #130                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.pos:Lnet/minecraft/util/math/BlockPos;
+      45: invokevirtual #143                // Method net/minecraft/block/Block.func_176195_g:(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;)F
+      48: goto          52
+      51: fconst_0
+      52: freturn
+  public net.minecraft.util.math.AxisAlignedBB func_185496_a(net.minecraft.block.state.IBlockState, net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos);
+    Code:
+       0: aload_0
+       1: aload_2
+       2: aload_1
+       3: aload_3
+       4: invokevirtual #122                // Method getMuse:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/math/BlockPos;)Lcom/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse;
+       7: astore        4
+       9: aload         4
+      11: ifnull        59
+      14: aload         4
+      16: getfield      #124                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.state:Lnet/minecraft/block/state/IBlockState;
+      19: aload_2
+      20: aload         4
+      22: getfield      #130                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.pos:Lnet/minecraft/util/math/BlockPos;
+      25: invokeinterface #234,  3          // InterfaceMethod net/minecraft/block/state/IBlockState.func_185900_c:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/util/math/AxisAlignedBB;
+      30: astore        5
+      32: aload         5
+      34: new           #188                // class net/minecraft/util/math/BlockPos
+      37: dup
+      38: aload         4
+      40: getfield      #237                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.dir:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+      43: invokevirtual #186                // Method com/ferreusveritas/dynamictrees/util/CoordUtils$Surround.getOffset:()Lnet/minecraft/util/math/Vec3i;
+      46: invokespecial #240                // Method net/minecraft/util/math/BlockPos."<init>":(Lnet/minecraft/util/math/Vec3i;)V
+      49: invokevirtual #246                // Method net/minecraft/util/math/AxisAlignedBB.func_186670_a:(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/util/math/AxisAlignedBB;
+      52: getstatic     #250                // Field field_185505_j:Lnet/minecraft/util/math/AxisAlignedBB;
+      55: invokevirtual #254                // Method net/minecraft/util/math/AxisAlignedBB.func_191500_a:(Lnet/minecraft/util/math/AxisAlignedBB;)Lnet/minecraft/util/math/AxisAlignedBB;
+      58: areturn
+      59: new           #242                // class net/minecraft/util/math/AxisAlignedBB
+      62: dup
+      63: dconst_0
+      64: dconst_0
+      65: dconst_0
+      66: dconst_0
+      67: dconst_0
+      68: dconst_0
+      69: invokespecial #257                // Method net/minecraft/util/math/AxisAlignedBB."<init>":(DDDDDD)V
+      72: areturn
+  public net.minecraft.util.math.AxisAlignedBB func_180640_a(net.minecraft.block.state.IBlockState, net.minecraft.world.World, net.minecraft.util.math.BlockPos);
+    Code:
+       0: aload_0
+       1: aload_2
+       2: aload_1
+       3: aload_3
+       4: invokevirtual #105                // Method getMuseUnchecked:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/util/math/BlockPos;)Lcom/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse;
+       7: astore        4
+       9: aload         4
+      11: getfield      #124                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.state:Lnet/minecraft/block/state/IBlockState;
+      14: aload_2
+      15: aload         4
+      17: getfield      #130                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.pos:Lnet/minecraft/util/math/BlockPos;
+      20: invokeinterface #234,  3          // InterfaceMethod net/minecraft/block/state/IBlockState.func_185900_c:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/util/math/AxisAlignedBB;
+      25: aload         4
+      27: getfield      #130                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.pos:Lnet/minecraft/util/math/BlockPos;
+      30: invokevirtual #246                // Method net/minecraft/util/math/AxisAlignedBB.func_186670_a:(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/util/math/AxisAlignedBB;
+      33: areturn
+  public void onBlockExploded(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.world.Explosion);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: invokevirtual #162                // Method getMuse:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/util/math/BlockPos;)Lcom/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse;
+       6: astore        4
+       8: aload         4
+      10: ifnull        33
+      13: aload         4
+      15: getfield      #124                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.state:Lnet/minecraft/block/state/IBlockState;
+      18: invokeinterface #128,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      23: aload_1
+      24: aload         4
+      26: getfield      #130                // Field com/ferreusveritas/dynamictrees/blocks/BlockTrunkShell$ShellMuse.pos:Lnet/minecraft/util/math/BlockPos;
+      29: aload_3
+      30: invokevirtual #308                // Method net/minecraft/block/Block.onBlockExploded:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/world/Explosion;)V
+      33: return
+  public net.minecraft.item.Item func_180660_a(net.minecraft.block.state.IBlockState, java.util.Random, int);
+    Code:
+       0: aconst_null
+       1: areturn
+  public int func_149745_a(java.util.Random);
+    Code:
+       0: iconst_0
+       1: ireturn
+
+## BlockTrunkShell$ShellMuse
+public class com.ferreusveritas.dynamictrees.blocks.BlockTrunkShell$ShellMuse
+  public int getRadius();
+    Code:
+       0: aload_0
+       1: getfield      #26                 // Field state:Lnet/minecraft/block/state/IBlockState;
+       4: invokeinterface #40,  1           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+       9: astore_1
+      10: aload_1
+      11: instanceof    #42                 // class com/ferreusveritas/dynamictrees/blocks/BlockBranch
+      14: ifeq          31
+      17: aload_1
+      18: checkcast     #42                 // class com/ferreusveritas/dynamictrees/blocks/BlockBranch
+      21: aload_0
+      22: getfield      #26                 // Field state:Lnet/minecraft/block/state/IBlockState;
+      25: invokevirtual #45                 // Method com/ferreusveritas/dynamictrees/blocks/BlockBranch.getRadius:(Lnet/minecraft/block/state/IBlockState;)I
+      28: goto          32
+      31: iconst_0
+      32: ireturn
+}
+
+## CoordUtils$Surround
+public final class com.ferreusveritas.dynamictrees.util.CoordUtils$Surround extends java.lang.Enum<com.ferreusveritas.dynamictrees.util.CoordUtils$Surround> implements net.minecraft.util.IStringSerializable
+  private com.ferreusveritas.dynamictrees.util.CoordUtils$Surround(java.lang.String, net.minecraft.util.EnumFacing...);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: iload_2
+       3: invokespecial #45                 // Method java/lang/Enum."<init>":(Ljava/lang/String;I)V
+       6: aload_0
+       7: aload_3
+       8: putfield      #47                 // Field name:Ljava/lang/String;
+      11: getstatic     #53                 // Field net/minecraft/util/math/BlockPos.field_177992_a:Lnet/minecraft/util/math/BlockPos;
+      14: astore        5
+      16: aload         4
+      18: astore        6
+      20: aload         6
+      22: arraylength
+      23: istore        7
+      25: iconst_0
+      26: istore        8
+      28: iload         8
+      30: iload         7
+      32: if_icmpge     60
+      35: aload         6
+      37: iload         8
+      39: aaload
+      40: astore        9
+      42: aload         5
+      44: aload         9
+      46: invokevirtual #63                 // Method net/minecraft/util/EnumFacing.func_176730_m:()Lnet/minecraft/util/math/Vec3i;
+      49: invokevirtual #67                 // Method net/minecraft/util/math/BlockPos.func_177971_a:(Lnet/minecraft/util/math/Vec3i;)Lnet/minecraft/util/math/BlockPos;
+      52: astore        5
+      54: iinc          8, 1
+      57: goto          28
+      60: aload_0
+      61: aload         5
+      63: putfield      #69                 // Field offset:Lnet/minecraft/util/math/Vec3i;
+      66: return
+  static {};
+    Code:
+       0: new           #2                  // class com/ferreusveritas/dynamictrees/util/CoordUtils$Surround
+       3: dup
+       4: ldc           #93                 // String N
+       6: iconst_0
+       7: ldc           #95                 // String n
+       9: iconst_1
+      10: anewarray     #59                 // class net/minecraft/util/EnumFacing
+      13: dup
+      14: iconst_0
+      15: getstatic     #98                 // Field net/minecraft/util/EnumFacing.NORTH:Lnet/minecraft/util/EnumFacing;
+      18: aastore
+      19: invokespecial #100                // Method "<init>":(Ljava/lang/String;ILjava/lang/String;[Lnet/minecraft/util/EnumFacing;)V
+      22: putstatic     #102                // Field N:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+      25: new           #2                  // class com/ferreusveritas/dynamictrees/util/CoordUtils$Surround
+      28: dup
+      29: ldc           #103                // String NW
+      31: iconst_1
+      32: ldc           #105                // String nw
+      34: iconst_2
+      35: anewarray     #59                 // class net/minecraft/util/EnumFacing
+      38: dup
+      39: iconst_0
+      40: getstatic     #98                 // Field net/minecraft/util/EnumFacing.NORTH:Lnet/minecraft/util/EnumFacing;
+      43: aastore
+      44: dup
+      45: iconst_1
+      46: getstatic     #108                // Field net/minecraft/util/EnumFacing.WEST:Lnet/minecraft/util/EnumFacing;
+      49: aastore
+      50: invokespecial #100                // Method "<init>":(Ljava/lang/String;ILjava/lang/String;[Lnet/minecraft/util/EnumFacing;)V
+      53: putstatic     #110                // Field NW:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+      56: new           #2                  // class com/ferreusveritas/dynamictrees/util/CoordUtils$Surround
+      59: dup
+      60: ldc           #111                // String W
+      62: iconst_2
+      63: ldc           #113                // String w
+      65: iconst_1
+      66: anewarray     #59                 // class net/minecraft/util/EnumFacing
+      69: dup
+      70: iconst_0
+      71: getstatic     #108                // Field net/minecraft/util/EnumFacing.WEST:Lnet/minecraft/util/EnumFacing;
+      74: aastore
+      75: invokespecial #100                // Method "<init>":(Ljava/lang/String;ILjava/lang/String;[Lnet/minecraft/util/EnumFacing;)V
+      78: putstatic     #115                // Field W:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+      81: new           #2                  // class com/ferreusveritas/dynamictrees/util/CoordUtils$Surround
+      84: dup
+      85: ldc           #116                // String SW
+      87: iconst_3
+      88: ldc           #118                // String sw
+      90: iconst_2
+      91: anewarray     #59                 // class net/minecraft/util/EnumFacing
+      94: dup
+      95: iconst_0
+      96: getstatic     #121                // Field net/minecraft/util/EnumFacing.SOUTH:Lnet/minecraft/util/EnumFacing;
+      99: aastore
+     100: dup
+     101: iconst_1
+     102: getstatic     #108                // Field net/minecraft/util/EnumFacing.WEST:Lnet/minecraft/util/EnumFacing;
+     105: aastore
+     106: invokespecial #100                // Method "<init>":(Ljava/lang/String;ILjava/lang/String;[Lnet/minecraft/util/EnumFacing;)V
+     109: putstatic     #123                // Field SW:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     112: new           #2                  // class com/ferreusveritas/dynamictrees/util/CoordUtils$Surround
+     115: dup
+     116: ldc           #124                // String S
+     118: iconst_4
+     119: ldc           #126                // String s
+     121: iconst_1
+     122: anewarray     #59                 // class net/minecraft/util/EnumFacing
+     125: dup
+     126: iconst_0
+     127: getstatic     #121                // Field net/minecraft/util/EnumFacing.SOUTH:Lnet/minecraft/util/EnumFacing;
+     130: aastore
+     131: invokespecial #100                // Method "<init>":(Ljava/lang/String;ILjava/lang/String;[Lnet/minecraft/util/EnumFacing;)V
+     134: putstatic     #128                // Field S:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     137: new           #2                  // class com/ferreusveritas/dynamictrees/util/CoordUtils$Surround
+     140: dup
+     141: ldc           #129                // String SE
+     143: iconst_5
+     144: ldc           #131                // String se
+     146: iconst_2
+     147: anewarray     #59                 // class net/minecraft/util/EnumFacing
+     150: dup
+     151: iconst_0
+     152: getstatic     #121                // Field net/minecraft/util/EnumFacing.SOUTH:Lnet/minecraft/util/EnumFacing;
+     155: aastore
+     156: dup
+     157: iconst_1
+     158: getstatic     #134                // Field net/minecraft/util/EnumFacing.EAST:Lnet/minecraft/util/EnumFacing;
+     161: aastore
+     162: invokespecial #100                // Method "<init>":(Ljava/lang/String;ILjava/lang/String;[Lnet/minecraft/util/EnumFacing;)V
+     165: putstatic     #136                // Field SE:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     168: new           #2                  // class com/ferreusveritas/dynamictrees/util/CoordUtils$Surround
+     171: dup
+     172: ldc           #137                // String E
+     174: bipush        6
+     176: ldc           #139                // String e
+     178: iconst_1
+     179: anewarray     #59                 // class net/minecraft/util/EnumFacing
+     182: dup
+     183: iconst_0
+     184: getstatic     #134                // Field net/minecraft/util/EnumFacing.EAST:Lnet/minecraft/util/EnumFacing;
+     187: aastore
+     188: invokespecial #100                // Method "<init>":(Ljava/lang/String;ILjava/lang/String;[Lnet/minecraft/util/EnumFacing;)V
+     191: putstatic     #141                // Field E:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     194: new           #2                  // class com/ferreusveritas/dynamictrees/util/CoordUtils$Surround
+     197: dup
+     198: ldc           #142                // String NE
+     200: bipush        7
+     202: ldc           #144                // String ne
+     204: iconst_2
+     205: anewarray     #59                 // class net/minecraft/util/EnumFacing
+     208: dup
+     209: iconst_0
+     210: getstatic     #98                 // Field net/minecraft/util/EnumFacing.NORTH:Lnet/minecraft/util/EnumFacing;
+     213: aastore
+     214: dup
+     215: iconst_1
+     216: getstatic     #134                // Field net/minecraft/util/EnumFacing.EAST:Lnet/minecraft/util/EnumFacing;
+     219: aastore
+     220: invokespecial #100                // Method "<init>":(Ljava/lang/String;ILjava/lang/String;[Lnet/minecraft/util/EnumFacing;)V
+     223: putstatic     #146                // Field NE:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     226: bipush        8
+     228: anewarray     #2                  // class com/ferreusveritas/dynamictrees/util/CoordUtils$Surround
+     231: dup
+     232: iconst_0
+     233: getstatic     #102                // Field N:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     236: aastore
+     237: dup
+     238: iconst_1
+     239: getstatic     #110                // Field NW:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     242: aastore
+     243: dup
+     244: iconst_2
+     245: getstatic     #115                // Field W:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     248: aastore
+     249: dup
+     250: iconst_3
+     251: getstatic     #123                // Field SW:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     254: aastore
+     255: dup
+     256: iconst_4
+     257: getstatic     #128                // Field S:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     260: aastore
+     261: dup
+     262: iconst_5
+     263: getstatic     #136                // Field SE:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     266: aastore
+     267: dup
+     268: bipush        6
+     270: getstatic     #141                // Field E:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     273: aastore
+     274: dup
+     275: bipush        7
+     277: getstatic     #146                // Field NE:Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     280: aastore
+     281: putstatic     #30                 // Field $VALUES:[Lcom/ferreusveritas/dynamictrees/util/CoordUtils$Surround;
+     284: return
+}
+
+## BlockBranchThick
+  public static final int RADMAX_THICK = 24;
+public class com.ferreusveritas.dynamictrees.blocks.BlockBranchThick extends com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic implements com.ferreusveritas.dynamictrees.blocks.IMusable
+  public boolean isMusable();
+    Code:
+       0: iconst_1
+       1: ireturn
+  public int getRadius(net.minecraft.block.state.IBlockState);
+    Code:
+       0: aload_1
+       1: invokeinterface #210,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+       6: aload_0
+       7: if_acmpne     58
+      10: aload_1
+      11: getstatic     #83                 // Field RADIUSNYBBLE:Lnet/minecraft/block/properties/PropertyInteger;
+      14: invokeinterface #167,  2          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177229_b:(Lnet/minecraft/block/properties/IProperty;)Ljava/lang/Comparable;
+      19: checkcast     #85                 // class java/lang/Integer
+      22: invokevirtual #171                // Method java/lang/Integer.intValue:()I
+      25: aload_1
+      26: invokeinterface #210,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      31: checkcast     #2                  // class com/ferreusveritas/dynamictrees/blocks/BlockBranchThick
+      34: getfield      #67                 // Field extended:Z
+      37: ifeq          45
+      40: bipush        17
+      42: goto          46
+      45: iconst_1
+      46: iadd
+      47: iconst_1
+      48: aload_0
+      49: invokevirtual #213                // Method getMaxRadius:()I
+      52: invokestatic  #219                // Method net/minecraft/util/math/MathHelper.func_76125_a:(III)I
+      55: goto          59
+      58: iconst_0
+      59: ireturn
+
+## BlockBranchBasic
+public class com.ferreusveritas.dynamictrees.blocks.BlockBranchBasic extends com.ferreusveritas.dynamictrees.blocks.BlockBranch
+  public float func_176195_g(net.minecraft.block.state.IBlockState, net.minecraft.world.World, net.minecraft.util.math.BlockPos);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokevirtual #138                // Method getRadius:(Lnet/minecraft/block/state/IBlockState;)I
+       5: istore        4
+       7: aload_0
+       8: invokevirtual #251                // Method getFamily:()Lcom/ferreusveritas/dynamictrees/trees/TreeFamily;
+      11: invokevirtual #256                // Method com/ferreusveritas/dynamictrees/trees/TreeFamily.getPrimitiveLog:()Lnet/minecraft/block/state/IBlockState;
+      14: invokeinterface #228,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      19: aload_1
+      20: aload_2
+      21: aload_3
+      22: invokevirtual #258                // Method net/minecraft/block/Block.func_176195_g:(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;)F
+      25: iload         4
+      27: iload         4
+      29: imul
+      30: i2f
+      31: fmul
+      32: ldc_w         #259                // float 64.0f
+      35: fdiv
+      36: ldc_w         #260                // float 8.0f
+      39: fmul
+      40: fstore        5
+      42: fload         5
+      44: getstatic     #265                // Field com/ferreusveritas/dynamictrees/ModConfigs.maxTreeHardness:F
+      47: invokestatic  #271                // Method java/lang/Math.min:(FF)F
+      50: fstore        5
+      52: fload         5
+      54: freturn
+
+## BlockBranch
+public abstract class com.ferreusveritas.dynamictrees.blocks.BlockBranch extends net.minecraft.block.Block implements com.ferreusveritas.dynamictrees.api.treedata.ITreePart,com.ferreusveritas.dynamictrees.api.IFutureBreakable
+  public boolean removedByPlayer(net.minecraft.block.state.IBlockState, net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.entity.player.EntityPlayer, boolean);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: aload_3
+       4: aload         4
+       6: invokevirtual #706                // Method removedByEntity:(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/entity/EntityLivingBase;)Z
+       9: ireturn
+  public boolean removedByEntity(net.minecraft.block.state.IBlockState, net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.entity.EntityLivingBase);
+    Code:
+       0: new           #709                // class com/ferreusveritas/dynamictrees/event/FutureBreak
+       3: dup
+       4: aload_1
+       5: aload_2
+       6: aload_3
+       7: aload         4
+       9: iconst_0
+      10: invokespecial #712                // Method com/ferreusveritas/dynamictrees/event/FutureBreak."<init>":(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/entity/EntityLivingBase;I)V
+      13: invokestatic  #716                // Method com/ferreusveritas/dynamictrees/event/FutureBreak.add:(Lcom/ferreusveritas/dynamictrees/event/FutureBreak;)V
+      16: iconst_0
+      17: ireturn
+
+## FutureBreak
+public class com.ferreusveritas.dynamictrees.event.FutureBreak
+  public static void process(net.minecraft.world.World);
+    Code:
+       0: getstatic     #45                 // Field futureBreaks:Ljava/util/List;
+       3: invokeinterface #57,  1           // InterfaceMethod java/util/List.isEmpty:()Z
+       8: ifne          126
+      11: getstatic     #45                 // Field futureBreaks:Ljava/util/List;
+      14: invokeinterface #61,  1           // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+      19: astore_1
+      20: aload_1
+      21: invokeinterface #66,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+      26: ifeq          126
+      29: aload_1
+      30: invokeinterface #70,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+      35: checkcast     #2                  // class com/ferreusveritas/dynamictrees/event/FutureBreak
+      38: astore_2
+      39: aload_0
+      40: aload_2
+      41: getfield      #29                 // Field world:Lnet/minecraft/world/World;
+      44: if_acmpne     123
+      47: aload_2
+      48: getfield      #27                 // Field state:Lnet/minecraft/block/state/IBlockState;
+      51: invokeinterface #76,  1           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      56: instanceof    #78                 // class com/ferreusveritas/dynamictrees/api/IFutureBreakable
+      59: ifeq          117
+      62: aload_2
+      63: dup
+      64: getfield      #25                 // Field ticks:I
+      67: dup_x1
+      68: iconst_1
+      69: isub
+      70: putfield      #25                 // Field ticks:I
+      73: ifgt          123
+      76: aload_2
+      77: getfield      #27                 // Field state:Lnet/minecraft/block/state/IBlockState;
+      80: invokeinterface #76,  1           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      85: checkcast     #78                 // class com/ferreusveritas/dynamictrees/api/IFutureBreakable
+      88: astore_3
+      89: aload_3
+      90: aload_2
+      91: getfield      #27                 // Field state:Lnet/minecraft/block/state/IBlockState;
+      94: aload_0
+      95: aload_2
+      96: getfield      #31                 // Field pos:Lnet/minecraft/util/math/BlockPos;
+      99: aload_2
+     100: getfield      #33                 // Field entity:Lnet/minecraft/entity/EntityLivingBase;
+     103: invokeinterface #82,  5           // InterfaceMethod com/ferreusveritas/dynamictrees/api/IFutureBreakable.futureBreak:(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/entity/EntityLivingBase;)V
+     108: aload_1
+     109: invokeinterface #85,  1           // InterfaceMethod java/util/Iterator.remove:()V
+     114: goto          123
+     117: aload_1
+     118: invokeinterface #85,  1           // InterfaceMethod java/util/Iterator.remove:()V
+     123: goto          20
+     126: return
+
+## config/dynamictrees.cfg (pinned pack zip)
+30:    I:axeDamageMode=1
+96:    B:dropSticks=true
+108:    S:harvestMultiplier=1.5
+114:    S:maxTreeHardness=200.0
