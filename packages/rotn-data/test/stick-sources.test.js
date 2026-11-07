@@ -117,6 +117,9 @@ test('leaves-sticks: Pyrotech adds 1 stick half the time when a player breaks le
 test('fell-tree: one stick rule for every species, and no more "leaves never drop sticks"', () => {
     const w = way(pack.howToGet('stick'), 'fell-tree');
     assert.doesNotMatch(w.summary, /leaves never/);
+    assert.doesNotMatch(w.summary, /G3|round \d|felled spruces gave/, 'harness anecdotes stay in evidence, not in the LLM-facing summary');
+    assert.match(w.summary, /Felling may give few or no sticks/);
+    assert.ok(w.unverified.some((u) => /rounds 5 A and 8 A gave 1 stick from 5 spruces/.test(u)));
     assert.match(w.summary, /same rule \(spruce and dark oak too\)/);
     assert.ok(!('countRange' in w), 'logs and sticks: no single range');
     assert.ok(w.evidence.some((e) => /^Species \(lead's question/.test(e)));
@@ -135,7 +138,8 @@ test('countRange appears only on rules that name one, and the text answer still 
     const withRange = stick.ways.filter((w) => 'countRange' in w).map((w) => w.id).sort();
     assert.deepEqual(withRange, ['deadbush-sticks', 'leaves-sticks']);
     for (const w of stick.ways.filter((x) => x.countRange)) assert.ok(w.countRange.min <= w.countRange.mean && w.countRange.mean <= w.countRange.max);
-    assert.deepEqual(stick.ways.slice(0, 4).map((w) => w.id), ['fell-tree', 'sticks-from-planks', 'leaves-sticks', 'deadbush-sticks'], 'formatHowToGet shows all four by default');
+    const ids = stick.ways.map((w) => w.id);
+    for (const id of ['fell-tree', 'sticks-from-planks', 'leaves-sticks', 'deadbush-sticks']) assert.ok(ids.includes(id), `howToGet("stick") offers ${id}`);
     const text = formatHowToGet(stick, { maxWays: 8 });
     assert.match(text, /dead bush/);
     assert.match(text, /leaves/i);

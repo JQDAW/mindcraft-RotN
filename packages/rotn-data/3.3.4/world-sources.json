@@ -66,7 +66,7 @@
     {
       "id": "fell-tree",
       "action": "break",
-      "summary": "Break a Dynamic Trees branch, by hand or with an axe (no tool is required; use an axe when you have one, it is much faster on a thick trunk: preferredTool): the part of the tree above it falls in the break direction and drops its logs plus 0-7 sticks (the part of a log left over). Every tree species uses the same rule (spruce and dark oak too): the stick count depends on how much wood falls, not on the species. In G3 runs, 5 felled spruces gave only 1 stick in total, so do not count on sticks from felling: leaves broken by hand (leaves-sticks) and dead bushes (deadbush-sticks) are surer. Break the thinnest trunk you can reach (by hand about 1.5 s per hardness point: radius 4 about 6 s, radius 8 about 24 s) and stand to the side.",
+      "summary": "Break a Dynamic Trees branch, by hand or with an axe (no tool is required; use an axe when you have one, it is much faster on a thick trunk: preferredTool): the part of the tree above it falls in the break direction and drops its logs plus 0-7 sticks (the part of a log left over). Every tree species uses the same rule (spruce and dark oak too): the stick count depends on how much wood falls, not on the species. Felling may give few or no sticks: for sticks, prefer dead bushes (deadbush-sticks) and leaves you can reach from the ground (leaves-sticks). Break the thinnest trunk you can reach (by hand about 1.5 s per hardness point: radius 4 about 6 s, radius 8 about 24 s) and stand to the side.",
       "pairs": [
         { "block": { "name": "dynamictrees:oakbranch" }, "item": { "name": "minecraft:log", "meta": 0 } },
         { "block": { "name": "dynamictrees:sprucebranch" }, "item": { "name": "minecraft:log", "meta": 1 } },
