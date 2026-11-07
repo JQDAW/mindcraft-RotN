@@ -249,7 +249,10 @@ export const actionsList = [
             'follow_dist': {type: 'float', description: 'The distance to follow from.', domain: [0, Infinity]}
         },
         perform: runAsAction(async (agent, player_name, follow_dist) => {
-            await skills.followPlayer(agent.bot, player_name, follow_dist);
+            // A follow that could not start, or whose player left (false), is not resumed again
+            // after the next idle (G4 #3 prep): it would retry every second, and a giver's typed
+            // follow would hold tasks and the agenda for nothing.
+            if (await skills.followPlayer(agent.bot, player_name, follow_dist) === false) agent.actions.cancelResume();
         }, true)
     },
     {
