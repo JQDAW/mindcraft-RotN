@@ -11,11 +11,8 @@ Agents add items here when they need something only the human can do. The human 
 - [ ] **OpenRouter production key for the bot on the CX23** (later; not the test key, which is under Done): create a key with a credit limit; harness-ops will tell you where to put it on the CX23.
 - [ ] **Bot Microsoft account login on the CX23:** a one-time device-code login on the CX23 when harness-ops asks.
 - [ ] **Whitelist the bot** on the live server when the lead asks. This comes after G4, not G3: G4 runs only against disposable test servers, and the first live join follows the proven ready-to-try list (lead, 2026-11-07, aligned with `test/scenarios/g4/PLAN.md`).
-- [ ] **G4: decide how the dev server drives the CX23** (lead, 2026-11-07). This is for later and is not needed before G3. G4's service scenarios run up to 2 hours unattended, so they need a scripted channel from the CX33 to `deploy@cx23`. Today agents never have shell access to the bot host. Options:
-  - (a) an Orca terminal on a `cx23-deploy` target, driven by `orca terminal send/read`;
-  - (b) a dedicated SSH key from the CX33 to `deploy@cx23`. On its own, such a key gives a normal shell as `deploy` on the bot host; the sudo rule only limits what `deploy` may run as root (`mindcraft-rotn-ctl`). To limit the key itself, its `authorized_keys` line would carry `restrict` and a forced `command=` (a wrapper that allows only `mindcraft-rotn-ctl` verbs).
-
-  Both give agents scripted access to the production bot host, so this is your decision. The lead will write an ADR for the option you pick.
+- [x] **G4: decide how the dev server drives the CX23**: done by the human on 2026-11-07, option (b). A dedicated key from the CX33 to `deploy@cx23`, restricted with `from=` (the CX33), `restrict` and a forced command, `/usr/local/sbin/mindcraft-rotn-ssh-gate`, which allows only `status`, `start` and `stop` with a valid bot name through `sudo -n mindcraft-rotn-ctl`. See ADR 0009.
+- [ ] **G4: extend the SSH gate for the read-only `journal` and `metrics` verbs** (later; ADR 0009). harness-ops will put the gate script in `deploy/cx23/` for review; you install the reviewed version on the CX23.
 - [ ] **G4: a trusted player for the control and task checks** (later). Follow, come, one trusted task, and a task kept across a service restart need a real player who is a task giver. Choose one:
   - about 10 minutes of you playing as JQDAW on a disposable test server, at a time harness-ops arranges;
   - a second, scripted account that you add to `task_givers` (your decision).
