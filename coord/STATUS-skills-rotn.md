@@ -1,6 +1,16 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T04:58Z (from `date -u`)
+Updated: 2026-11-07T14:25Z (from `date -u`)
+
+## Round 9 B fix (f): the no-pickaxe refusal leads with the dirt it lacks (branch `agent/skills-rotn/shelter-refusal-dirt-first`, 2026-11-07T14:25Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 2):** after the night-time death the bot held no dirt (all 356 piles lay at the death spot). The refusal began "without a pickaxe you could not dig out of it again" (`r9-g3b/night/driver.log` 501, 574), and the model went for mossy cobblestone, which it cannot break by hand (558).
+- **Change (`library/shelter.js`):** when there is no pickaxe and a dirt shelter would fit but the dirt is short, the line is now: "Not building a shelter at X: you have N dirt and M dirt piles, and a dirt shelter needs 10 dirt (4 piles make 1). Dig dirt or grass by hand for dirt piles. Without a pickaxe only dirt will do: you could not dig out of rock walls again. Pickaxes: …". The piles counted are every kind rotn-data has a dirt recipe for. The other refusals (no site, no side to dig out by hand) are unchanged.
+- **Tests (`shelter.test.js`, 1 new; 3 updated to the new wording):**
+  - With nothing held, the line leads with the dirt.
+  - With 3 dirt and 10 piles, it reads "you have 5 dirt and 2 dirt piles" after the bot crafts what the piles make.
+  - **On develop the new test fails.**
+  - With the fix: `shelter`, `night_routine` and `night`, 58/58. Lint: 0 in both files, as on develop.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 

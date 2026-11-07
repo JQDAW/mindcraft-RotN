@@ -134,7 +134,8 @@ test('D2b review 2: without a pickaxe it does not seal itself in', async (t) => 
     const r = await buildShelter(bot);
     assert.equal(r.closed, false);
     assert.deepEqual(placed, []);
-    assert.match(bot.output, /Not building a shelter at 0, 64, 0: without a pickaxe you could not dig out of it again\./);
+    // Round 9 B (fix f): the line leads with the dirt it lacks; the pickaxe reason follows.
+    assert.match(bot.output, /Not building a shelter at 0, 64, 0: you have 0 dirt and 0 dirt piles, .* Without a pickaxe only dirt will do: you could not dig out of rock walls again\./);
 });
 
 test('D2b: a breached shelter is repaired with one block; dirt in a wall is dug and replaced', async (t) => {
@@ -333,7 +334,7 @@ test('#229 review: with no pickaxe anywhere the refusal (after the resync wait) 
     const none = fakeBot({ pickaxe: false });
     slotInventory(none.bot, { offHand: { name: 'torch', count: 1 } });
     await buildShelter(none.bot);
-    assert.match(none.bot.output, /without a pickaxe you could not dig out of it again\. Pickaxes: inventory: none; off hand: torch; cursor: empty; held: nothing\./);
+    assert.match(none.bot.output, /you could not dig out of rock walls again\. Pickaxes: inventory: none; off hand: torch; cursor: empty; held: nothing\./);
     assert.ok(lines.some(l => /^\[shelter\] pickaxe check: need level 0; inventory: none; off hand: torch/.test(l)));
 });
 
@@ -522,7 +523,7 @@ test('G3 round 6 B: after a death (no pickaxe) a dirt shelter, dug out by hand, 
     const none = fakeBot({ cobble: 0, pickaxe: false });
     const s = await buildShelter(none.bot, { craft: fakeCraft(none.items).craft });
     assert.equal(s.closed, false);
-    assert.match(none.bot.output, /Not building a shelter at 0, 64, 0: without a pickaxe you could not dig out of it again\. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: nothing\. A dirt shelter could be dug out by hand, but a shelter with dirt needs 10 blocks, and you have 0 dirt\./);
+    assert.match(none.bot.output, /Not building a shelter at 0, 64, 0: you have 0 dirt and 0 dirt piles, and a dirt shelter needs 10 dirt \(4 piles make 1\)\. Dig dirt or grass by hand for dirt piles\. Without a pickaxe only dirt will do: you could not dig out of rock walls again\. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: nothing\./);
 });
 
 test('G3 round 6 B: without a pickaxe a site with no side to dig out by hand is not used', async (t) => {
@@ -610,4 +611,23 @@ test('G3 round 7 B: siteProblem names what is where; in the shelter the bot is i
     const b = await buildShelter(blocked.bot, { site: feet, keepSoft: true });
     assert.equal(b.closed, false);
     assert.match(blocked.bot.output, /Cannot repair the shelter at 0, 64, 0: cobblestone at 0, 65, 0 \(a solid block in the 1x2 space\)\./);
+});
+
+// ---- G3 round 9 batch B, fix (f): the refusal leads with what is really missing ----
+// After the night-time death (all 356 dirt piles left at the death spot) the refusal began "without
+// a pickaxe you could not dig out of it again" (driver.log 501, 574); the model went for mossy
+// cobblestone (558), which it cannot break by hand. The real shortage was dirt.
+
+test('round 9 B (f): with no pickaxe and too little dirt the refusal leads with the dirt it lacks and how to get it', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const none = fakeBot({ cobble: 0, pickaxe: false });
+    const r = await buildShelter(none.bot, { craft: fakeCraft(none.items).craft });
+    assert.equal(r.closed, false);
+    assert.match(none.bot.output, /^Not building a shelter at 0, 64, 0: you have 0 dirt and 0 dirt piles, and a dirt shelter needs 10 dirt \(4 piles make 1\)\. Dig dirt or grass by hand for dirt piles\./m);
+    assert.match(none.bot.output, /Without a pickaxe only dirt will do: you could not dig out of rock walls again\. Pickaxes: inventory: none; off hand: empty; cursor: empty; held: nothing\./);
+
+    // Some dirt and piles: what is held after crafting what the piles make.
+    const some = fakeBot({ cobble: 0, pickaxe: false, items: [n(DIRT, 3), n(PILE, 10)] });
+    await buildShelter(some.bot, { craft: fakeCraft(some.items).craft });
+    assert.match(some.bot.output, /^Not building a shelter at 0, 64, 0: you have 5 dirt and 2 dirt piles, and a dirt shelter needs 10 dirt/m);
 });
