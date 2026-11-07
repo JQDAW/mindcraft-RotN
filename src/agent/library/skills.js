@@ -779,15 +779,17 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // time; wanted() never offers others). Then trees and the rest, where a species that has given this
     // bot 0 of the item loses only to a tree at most CL.speciesDetour farther (rotn-data #312: the stick
     // count follows the tree's shape, not its species, so never a long walk for it); then by-hand blocks
-    // farther out. Leaves are told by the block, not the rule's id, so rotn-data's leaves rule and the
-    // fallback rank alike. Only when the item has both kinds of source, or a species already came up
-    // empty; otherwise one plain search.
+    // farther out. Leaves are told by the block, not by the rule's id (rotn-data's leaves-sticks rule).
+    // Only when the item has both kinds of source, or a species already came up empty; otherwise one
+    // plain search.
     const emptySpecies = emptyFelled(bot, baseType);
     const isHand = (block) => !fellsTree(block) && handMatchers.some(matches => matches(block));
     const canGiveNone = (block) => mayGiveNone.some(matches => matches(block));
     const tierOf = (block) => (isHand(block) ? (isLeafBlock(block) ? 3 : 0) : fellsTree(block) && emptySpecies.has(block.name) ? 2 : 1);
     const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
     let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
+    let leafMisses = 0; // leaves out of reach after the walk (capped at CL.unreachableLeaves, then no leaves)
+    const outOfReach = unreachableLeaves(bot);
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
@@ -869,6 +871,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (block.position && givenUp.some(p => p.equals(block.position))) return false;
             // Leaves only where the bot can reach them standing on the ground: never climb for them.
             if (isLeafBlock(block) && !leafFromGround(bot, block)) return false;
+            // Round 9 B: not leaves once CL.unreachableLeaves were out of reach in this collect, nor
+            // one this bot found out of reach in the last CL.unreachableMs.
+            if (isLeafBlock(block) && leafMisses >= CL.unreachableLeaves) return false;
+            if (isLeafBlock(block) && block.position) {
+                const since = outOfReach.get(leafKey(block.position));
+                if (since !== undefined && Date.now() - since < CL.unreachableMs) return false;
+            }
             // Wood only on the surface: never a log underground (G3 round 5 A rerun).
             if (block.position && woodTarget && world.isUnderground(bot, block.position)) return false;
             if (exclude) {
@@ -963,7 +972,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             return false;
         }
         try {
-            let success = false;
+            let success = false, unreachable = false;
             const before = heldByKey();
             const allBefore = allHeld();
             const breakIt = async () => {
@@ -982,6 +991,11 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 if (isLeafBlock(block)) {
                     const r = await breakLeafFromGround(bot, block, run);
                     if (!r) givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                    // Round 9 B: out of reach after the walk is remembered, and uses no attempt (below).
+                    if (!r && !run.aborted) {
+                        outOfReach.set(leafKey(block.position), Date.now());
+                        unreachable = true;
+                    }
                     return r;
                 }
                 // A rule whose drop a tool changes is dug here too: bot.collectBlock.collect would
@@ -1013,6 +1027,13 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 log(bot, `Gave up on ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: time limit of ${secsText(blockMs)} reached.`);
             }
             else success = res;
+            if (unreachable && res !== TIMED_OUT) {
+                // Round 9 B: three leaves out of reach used all 3 attempts, and no tree was tried.
+                leafMisses++;
+                i--;
+                if (leafMisses === CL.unreachableLeaves)
+                    log(bot, `${leafMisses} leaves were out of reach from the ground; no more leaves in this collect.`);
+            }
             if (success) {
                 let gained = 1; // a block with no item (water): one per success
                 if (countsItems) {
@@ -1092,6 +1113,20 @@ function emptyFelled(bot, item) {
     if (!byItem.has(item)) byItem.set(item, new Set());
     return byItem.get(item);
 }
+
+/**
+ * Leaves this bot walked to and could not reach from the ground (G3 round 9 B: the same three leaves
+ * in five collects): position key -> time it was found out of reach. Kept for unreachableMs.
+ */
+const _unreachableLeaves = new WeakMap();
+function unreachableLeaves(bot) {
+    if (!bot || typeof bot !== 'object') return new Map();
+    if (!_unreachableLeaves.has(bot)) _unreachableLeaves.set(bot, new Map());
+    const byKey = _unreachableLeaves.get(bot);
+    for (const [k, since] of byKey) if (Date.now() - since >= COLLECT_LIMITS.unreachableMs) byKey.delete(k); // expired
+    return byKey;
+}
+const leafKey = (p) => `${p.x},${p.y},${p.z}`;
 
 let collectRouting = false; // collectByRoute's own collect does not take another route
 
@@ -2562,22 +2597,49 @@ export async function goToPlayer(bot, username, distance=3) {
         return true;
     }
 
-    bot.modes.pause('self_defense');
-    bot.modes.pause('cowardice');
-    let player = bot.players[username].entity
-    if (!player) {
-        log(bot, `Could not find ${username}.`);
+    // G4 #3 prep: an unknown name threw a TypeError (bot.players[username] undefined); the model
+    // may also write a giver's name in the wrong case.
+    const found = findPlayer(bot, username);
+    if (!found?.entity) {
+        log(bot, `Could not find ${username}: not online, or too far away to see.`);
         return false;
     }
+    bot.modes.pause('self_defense');
+    bot.modes.pause('cowardice');
 
     distance = Math.max(distance, 0.5);
-    const goal = new pf.goals.GoalFollow(player, distance);
+    const goal = new pf.goals.GoalFollow(found.entity, distance);
 
-    await goToGoal(bot, goal, true);
-
-    log(bot, `You have reached ${username}.`);
+    // goToGoal is fall-safe and bounded; false when the walk was stopped (G4 #3 prep: it said
+    // "You have reached" after a stopped walk too).
+    if (!await goToGoal(bot, goal)) {
+        log(bot, `Did not reach ${found.username}.`);
+        return false;
+    }
+    log(bot, `You have reached ${found.username}.`);
+    return true;
 }
 
+/**
+ * The online player of that name: the exact name, else the one name that differs only in case
+ * (the model may write "jqdaw" for JQDAW). { username, entity } (entity null while out of sight),
+ * or null.
+ */
+export function findPlayer(bot, username) {
+    const players = bot?.players ?? {};
+    if (typeof username !== 'string' || username === '') return null;
+    let p = players[username];
+    if (!p) {
+        const same = Object.keys(players).filter(n => n.toLowerCase() === username.toLowerCase());
+        if (same.length === 1) p = players[same[0]];
+    }
+    if (!p) return null;
+    return { username: p.username ?? username, entity: p.entity ?? null };
+}
+
+
+/** How long a follow waits for a player it cannot see before it stops (#323 review 2). */
+export const FOLLOW_LIMITS = { lostMs: 12_000 };
 
 export async function followPlayer(bot, username, distance=4) {
     /**
@@ -2588,11 +2650,18 @@ export async function followPlayer(bot, username, distance=4) {
      * @example
      * await skills.followPlayer(bot, "player");
      **/
-    let player = bot.players[username].entity
-    if (!player)
+    // G4 #3 prep: an unknown name threw a TypeError; a name in the wrong case is found.
+    const found = findPlayer(bot, username);
+    if (!found?.entity) {
+        log(bot, `Could not find ${username}: not online, or too far away to see.`);
         return false;
+    }
+    username = found.username;
+    let player = found.entity;
 
-    const move = new pf.Movements(bot);
+    // Fall-safe, like every other walk (G3 round 4 B, fall_safety.js): no drop over 3 blocks and
+    // never a broken Dynamic Trees branch, which fells the tree onto the bot.
+    const move = fallSafe(new pf.Movements(bot));
     move.digCost = 10;
     bot.pathfinder.setMovements(move);
     let doorCheckInterval = startDoorInterval(bot);
@@ -2601,8 +2670,33 @@ export async function followPlayer(bot, username, distance=4) {
     log(bot, `You are now actively following player ${username}.`);
 
 
+    let lostSince = null; // when the player's entity went (a death, a dimension change, out of sight)
     while (!bot.interrupt_code) {
         await new Promise(resolve => setTimeout(resolve, 500));
+        if (bot.interrupt_code) break;
+        // No entity: mineflayer clears it on a death, a dimension change or a short loss of
+        // tracking, so wait FOLLOW_LIMITS.lostMs for it to come back (#323 review 2); only then stop,
+        // rather than follow a stale entity. A new entity (a respawn, back in sight) gets a new goal.
+        const seen = findPlayer(bot, username)?.entity;
+        if (!seen) {
+            if (lostSince === null) {
+                lostSince = Date.now();
+                log(bot, `Lost sight of ${username}; waiting up to ${secsText(FOLLOW_LIMITS.lostMs)} for them.`);
+            }
+            if (Date.now() - lostSince < FOLLOW_LIMITS.lostMs) continue;
+            log(bot, `Stopped following ${username}: not seen for ${secsText(FOLLOW_LIMITS.lostMs)} (they left, or are too far away to see).`);
+            clearInterval(doorCheckInterval);
+            bot.pathfinder.stop();
+            return false;
+        }
+        if (lostSince !== null) {
+            lostSince = null;
+            log(bot, `Following ${username} again.`);
+        }
+        if (seen !== player) {
+            player = seen;
+            bot.pathfinder.setGoal(new pf.goals.GoalFollow(player, distance), true);
+        }
         // in cheat mode, if the distance is too far, teleport to the player
         const distance_from_player = bot.entity.position.distanceTo(player.position);
 
@@ -3253,8 +3347,11 @@ const STOP_SETTLE_MS = 5000;
 /** collectBlock (G3 review of #221): per block, and for the whole run (!collectBlocks has 10 min). */
 // handFirstRadius, speciesDetour (blocks) and freeMisses: the #311 review's bounds on the stick
 // search (dead bushes near, not a walk; a species preference only between trees about as close;
-// at most this many zero-yield breaks that use no attempt).
-export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6 };
+// at most this many zero-yield breaks that use no attempt). unreachableLeaves: G3 round 9 B, leaves
+// that passed the ground check but were out of reach after the walk use no attempt, at most this
+// many per collect, then no more leaves in it; each is not tried again for unreachableMs.
+export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit

@@ -9,7 +9,7 @@ import { runScenario } from '../runner/lib/runner.mjs';
 import { G3_CONSOLE_ALLOW, G4_TEST_SERVER_NOT_GATE, SCENARIO_CONSOLE_EXTRA, consoleAllowFor, crossCheckBatch, g3Policy, guardConsole, isG3Result } from '../runner/lib/g3.mjs';
 import { gateBatchProblems, scenarioTimeouts } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
-import g4d, { LOSS_ITEMS, lossConsistency, maxPerMinute, parseDeathReport, reportBaseId, secondsBetween } from '../scenarios/g4/g4-death-report.mjs';
+import g4d, { LOSS_ITEMS, chatLoopKey, lossConsistency, lossUpperBound, maxPerMinute, parseDeathReport, repeatedLines, reportBaseId, secondsBetween } from '../scenarios/g4/g4-death-report.mjs';
 
 const NAME = 'FRCFLD';
 const tick = () => new Promise((r) => setImmediate(r));
@@ -33,7 +33,9 @@ const reportFor = (lost, cause = `${NAME} fell out of the world`) => {
  * true one; null for none), extraReportMs (a second report this long after the first), reportDelayMs (default
  * 3 s), spam (n lines right after the report), spamKick, noAgenda, noKillReply, kept ({id: n} kept on death),
  * unreadAfter (an item whose count the server never answers once the bot has died), noStart (the driver reports no
- * mindcraft_start event).
+ * mindcraft_start event), craftAtClear ({n, held}: from the n-th count-only clear on, the bot holds `held` instead:
+ * a craft during the counts), healthLagMs (the health score shows the respawn this long after it), chatty (n
+ * different lines, one a second, right after the report), loop (n near-identical lines, one every 5 s).
  */
 function sim(opt = {}) {
     const log = [];
@@ -47,6 +49,7 @@ function sim(opt = {}) {
     let deaths = 0;
     let health = 20;
     let held = {};
+    let clears = 0;
     let gathered = false;   // the agenda's items, once, 2 min after the join
     let frozenAt = null;   // the agenda counter's value while it does not move
     let resumeAt = Infinity;
@@ -85,6 +88,8 @@ function sim(opt = {}) {
                 add(`Showing ${objs.size} tracked objective(s) for ${NAME}:`);
                 for (const o of objs) add(`- ${o}: ${val(o)} (${o})`);
             } else if ((m = /^clear (\S+) (\S+) -1 0$/.exec(cmd))) {
+                clears++;
+                if (opt.craftAtClear && clears === opt.craftAtClear.n) held = { ...opt.craftAtClear.held };
                 if (opt.unreadAfter === m[2] && deaths > 0) { t += 300; return log.slice(start); }   // no answer at all
                 const n = dead ? 0 : held[m[2]] ?? 0;
                 add(n ? `${NAME} has ${n} items that match the criteria.` : `Could not clear the inventory of ${NAME}, no items to remove`);
@@ -100,7 +105,7 @@ function sim(opt = {}) {
                 if (respawnMs !== null) {
                     at(t + respawnMs, () => {
                         dead = false;
-                        health = 20;
+                        if (opt.healthLagMs) at(t + opt.healthLagMs, () => { health = 20; }); else health = 20;
                         held = { ...(opt.kept ?? {}) };
                         resumeAt = t + 90000;
                         const text = opt.report === undefined ? reportFor(lost) : opt.report;
@@ -108,6 +113,9 @@ function sim(opt = {}) {
                         if (text !== null) at(t + rd, () => add(`<${NAME}> ${text}`));
                         if (opt.extraReportMs && text !== null) at(t + rd + opt.extraReportMs, () => add(`<${NAME}> ${text}`));
                         for (let i = 0; i < (opt.spam ?? 0); i++) at(t + rd + 1000 + i * 1000, () => add(`<${NAME}> I will get my stuff back, step ${i}`));
+                        const words = 'apple birch cedar daisy elder fern grove hazel iris juniper kelp lilac maple nettle oak pine quince reed sage thyme'.split(' ');
+                        for (let i = 0; i < (opt.chatty ?? 0); i++) at(t + rd + 1000 + i * 1000, () => add(`<${NAME}> Now the ${words[i % words.length]} step, as planned. !agenda`));
+                        for (let i = 0; i < (opt.loop ?? 0); i++) at(t + rd + 1000 + i * 5000, () => add(`<${NAME}> Got ${i + 2} rocks!`));
                         if (opt.spamKick) at(t + 20000, () => { add(`${NAME} lost connection: Kicked for spamming`); add(`${NAME} left the game`); alive = false; });
                     });
                 }
@@ -175,6 +183,82 @@ describe('g4-death-report: the pure helpers', () => {
         assert.equal(lossConsistency({}, rep('I died at 0, 0, 0; lost 6 x:y.')).ok, true, 'items the server did not count are not judged');
     });
 
+    test('lossConsistency (after T1): a range from a craft during the counts, and variants among "more kinds"', () => {
+        // T1's own report and the server's single counts: metamorphic rock now passes (a variant named, more among
+        // the 10 more kinds); planks still fail on one stale count (3, before the bot crafted to 6) ...
+        const t1 = parseDeathReport('I died at -41, 67, -13; lost 10 dirt, 9 log, 6 planks, 4 betterwithmods:dirt_pile, 3 pyrotech_compat:rock_metamorphic:6, 3 sapling and 10 more kinds.');
+        const single = { 'pyrotech_compat:rock_metamorphic': 7, 'pyrotech_compat:rock_sedimentary': 2, 'minecraft:stick': 4, 'minecraft:log': 11, 'minecraft:planks': 3, 'betterwithmods:dirt_pile': 4, 'minecraft:bread': 1, 'bundles:bundle': 1 };
+        const one = lossConsistency(single, t1);
+        assert.equal(one.ok, false);
+        assert.deepEqual(one.problems, ['minecraft:planks: the report says 6 lost, the server counts 3 (tolerance 2)'], 'planks is the only problem');
+        // ... and pass on the range the two pre-kill sweeps give (3 then 6).
+        assert.deepEqual(lossConsistency({ ...single, 'minecraft:planks': [3, 6] }, t1), { ok: true, problems: [] });
+        // Without "more kinds", a named variant is the whole loss: 3 named of 7 counted fails.
+        assert.equal(lossConsistency({ 'pyrotech_compat:rock_metamorphic': 7 }, parseDeathReport('I died at 0, 0, 0; lost 3 pyrotech_compat:rock_metamorphic:6.')).ok, false);
+        // Two named variants are summed: 3 :6 + 4 :0 = 7.
+        assert.equal(lossConsistency({ 'pyrotech_compat:rock_metamorphic': 7 }, parseDeathReport('I died at 0, 0, 0; lost 4 pyrotech_compat:rock_metamorphic, 3 pyrotech_compat:rock_metamorphic:6.')).ok, true);
+        // The hidden kinds are bounded: 3 named + 10 more kinds of at most 3 each, + tolerance 13, cannot reach 50.
+        assert.equal(lossConsistency({ 'pyrotech_compat:rock_metamorphic': 50 }, t1).ok, false);
+        // #342 review probe: the K * m budget is ONE budget for all items, never K * m for each. 10 more kinds of at
+        // most 3 hold 30 in all; 40 log, 30 bread and 30 bundles counted against "9 log, 3 stick, ..." is 65 beyond.
+        const probe = parseDeathReport('I died at 0, 0, 0; lost 9 log, 3 stick, 3 a:b, 3 c:d, 3 e:f, 3 g:h and 10 more kinds.');
+        const wild = lossConsistency({ 'minecraft:log': 40, 'minecraft:bread': 30, 'bundles:bundle': 30 }, probe);
+        assert.equal(wild.ok, false);
+        assert.match(wild.problems.at(-1), /^the server counts 65 more than the report names, beyond the tolerance \(.*\); its 10 more kinds hold at most 30$/);
+        // Each item alone would fit in the budget (the old per-item rule passed all three): only the sum fails.
+        for (const [id, n] of [['minecraft:log', 40], ['minecraft:bread', 30], ['bundles:bundle', 30]]) assert.equal(lossConsistency({ [id]: n }, probe).ok, true, `${id} ${n} alone`);
+        // More unnamed items than "more kinds": each needs at least one of the K kinds.
+        const two = parseDeathReport('I died at 0, 0, 0; lost 9 log and 1 more kinds.');
+        const many = lossConsistency({ 'minecraft:log': 9, 'minecraft:bread': 1, 'bundles:bundle': 1 }, two);
+        assert.equal(many.ok, false);
+        assert.match(many.problems[0], /^the server counts 2 items lost that the report does not name \(1 minecraft:bread, 1 bundles:bundle\), more than its 1 more kinds$/);
+        // A range that cannot meet the report still fails, and the message shows the range.
+        const far = lossConsistency({ 'minecraft:log': [20, 24] }, parseDeathReport('I died at 0, 0, 0; lost 9 log.'));
+        assert.equal(far.ok, false);
+        assert.match(far.problems[0], /minecraft:log 20-24 counted, 9 named \(tolerance 6\)/);
+        // A range from 0 (crafted during the counts) need not be named; a sure loss must be, when not truncated.
+        assert.equal(lossConsistency({ 'minecraft:planks': [0, 4], 'minecraft:log': 5 }, parseDeathReport('I died at 0, 0, 0; lost 5 log.')).ok, true);
+        assert.equal(lossConsistency({ 'minecraft:planks': [1, 4], 'minecraft:log': 5 }, parseDeathReport('I died at 0, 0, 0; lost 5 log.')).ok, false);
+        // #342 review: "lost nothing" and "not reached" use ONE bound (the upper end): ranges that all start at 0
+        // still allow a loss, so "lost nothing" fails against them, and the run is not "not reached" either.
+        const zeroToK = { 'minecraft:planks': [0, 4], 'minecraft:log': [0, 2] };
+        assert.equal(lossUpperBound(zeroToK), 6);
+        const nothing = lossConsistency(zeroToK, parseDeathReport('I died at 0, 0, 0; lost nothing.'));
+        assert.equal(nothing.ok, false);
+        assert.match(nothing.problems[0], /^the report says "lost nothing", but the server's count allows up to 6 lost$/);
+        assert.equal(lossUpperBound({ 'minecraft:log': 0, 'minecraft:stick': [0, 0] }), 0, 'nothing lost: the scenario says "not reached"');
+        assert.equal(lossConsistency({ 'minecraft:log': 0 }, parseDeathReport('I died at 0, 0, 0; lost nothing.')).ok, true);
+    });
+
+    test('chatLoopKey and repeatedLines: near-identical lines count together; T1\'s chat after the kill is no loop', () => {
+        assert.equal(chatLoopKey('Got 5 rocks!'), chatLoopKey('got 12 rocks'));
+        assert.notEqual(chatLoopKey('Got 5 rocks!'), chatLoopKey('Got 5 sticks!'));
+        assert.notEqual(chatLoopKey('Got 5 rocks!'), chatLoopKey('Got 5 more rocks'), 'equal keys only: no fuzzy match');
+        const r = repeatedLines([{ t: 0, text: 'Picking up item!' }, { t: 10, text: 'picking up item' }, { t: 70, text: 'Picking up item!' }, { t: 5, text: 'Other' }]);
+        assert.deepEqual(r[0], { key: 'picking up item', text: 'Picking up item!', in60: 2, total: 3 });
+        // T1 (2026-11-07), the 17 lines in the 5 min after the kill, from its server.log:
+        const t1 = [['14:03:39', 'I died at -41, 67, -13; lost 10 dirt, 9 log, 6 planks, 4 betterwithmods:dirt_pile, 3 pyrotech_compat:rock_metamorphic:6, 3 sapling and 10 more kinds.'],
+            ['14:03:43', 'Died and dropped everything — rough! But the stone pickaxe survived with me. I still need 10 cobblestone fast. Mining stone directly gives rocks. !collectBlocks("pyrotech:rock", 8)'],
+            ['14:04:26', 'Got 4 rocks (2 igneous, 2 metamorphic) but cobblestone needs 4 of one kind. Collecting more. !collectBlocks("pyrotech:rock", 4)'],
+            ['14:04:52', '14 metamorphic rocks now. Crafting cobblestone. !craftRecipe("cobblestone", 3)'],
+            ['14:04:56', '3 cobblestone made, need 7 more. Collecting more rocks. !collectBlocks("pyrotech:rock", 12)'],
+            ['14:05:24', '16 more rocks. Crafting 4 more cobblestone now. !craftRecipe("cobblestone", 4)'],
+            ['14:05:30', '14 cobblestone now — that\'s over 10! Night shelter blocks ready. !agenda'],
+            ['14:05:33', '14 cobblestone held and agenda still shows shelter_blocks — it should move on by itself. Waiting for it to tick over.'],
+            ['14:05:37', '!agenda'], ['14:05:40', '!inventory'],
+            ['14:05:43', 'Only 7 cobblestone actually — the craft didn\'t stack as I thought. I have 18 rocks, so crafting 3 more cobblestone gets me to 10. !craftRecipe("cobblestone", 3)'],
+            ['14:05:45', 'agenda step cobblestone done'], ['14:05:45', 'agenda step stone_axe started: craft a stone axe'],
+            ['14:05:46', '10 cobblestone — that\'s the goal! Night shelter blocks secured. !agenda'],
+            ['14:05:51', 'Agenda moved on to stone_axe. I need 2 sticks but don\'t see any in inventory — let me check what I can craft. !craftable'],
+            ['14:05:52', 'No sticks in the craftable list — I\'m out of planks too. I\'ll grab sticks from a tree. !collectBlocks("stick", 2)'],
+            ['14:05:55', 'Tree\'s out of reach. Moving closer first. !goToCoordinates(-61, 64, -76, 2)']].map(([time, text]) => ({ t: secondsBetween('14:03:33', time), text }));
+        assert.equal(t1.length, 17);
+        assert.equal(maxPerMinute(t1.map((x) => x.t)), 13, 'the old rule\'s 13 in one 60 s');
+        const top = repeatedLines(t1)[0];
+        assert.ok(top.in60 <= g4d.defaults.maxRepeatPerMin && top.total <= g4d.defaults.maxRepeatInWindow, JSON.stringify(top));
+        assert.ok(13 <= g4d.defaults.maxChatPerMin, 'under the backstop');
+    });
+
     test('maxPerMinute and secondsBetween (across midnight)', () => {
         assert.equal(maxPerMinute([]), 0);
         assert.equal(maxPerMinute([0, 10, 59, 60, 61]), 4, '10..61 lie within 51 s');
@@ -192,7 +276,7 @@ describe('g4-death-report on a simulated server', () => {
         assert.equal(g4d.defaults.respawnS, 30);
         assert.equal(g4d.defaults.spamWindowMin, 5);
         assert.equal(g4d.defaults.lossItems, LOSS_ITEMS);
-        for (const k of ['respawnS', 'reportS', 'spamWindowMin', 'maxChatPerMin', 'resumeMinutes', 'minHeld', 'maxBatchUsd']) assert.equal(g4d.gateParams[k], 'equal', k);
+        for (const k of ['respawnS', 'reportS', 'spamWindowMin', 'maxChatPerMin', 'maxRepeatPerMin', 'maxRepeatInWindow', 'resumeMinutes', 'minHeld', 'maxBatchUsd']) assert.equal(g4d.gateParams[k], 'equal', k);
         const tos = scenarioTimeouts([{ id: 'g4-death-report', timeoutMin: null }], { 'g4-death-report': g4d }, { maxBatchUsd: 2 });
         assert.deepEqual(tos.problems, []);
         assert.ok(tos.timeouts[0].derivedMin >= 40 && tos.timeouts[0].derivedMin <= 55, `derived ${tos.timeouts[0].derivedMin}`);
@@ -203,12 +287,51 @@ describe('g4-death-report on a simulated server', () => {
         const r = await run(s);
         const c = byName(r);
         for (const k of Object.keys(g4d.checks)) assert.equal(c[k].pass, true, `${k}: ${c[k].detail} ${r.error ?? ''}`);
-        assert.match(c.respawned.detail, /^health above 0 at \S+, (8|9)s after the kill$/);
-        assert.match(c.loss_reported.detail, /^"I died at -40, 66, -60 \(FRCFLD fell out of the world\); lost 7 pyrotech:rock, 5 log, 2 stick, 1 bread, 1 bundles:bundle\." at /);
+        assert.match(c.respawned.detail, /^health above 0 at \S+, (8|9|10)s after the kill$/);
+        assert.match(c.loss_reported.detail, /^"I died at -40, 66, -60 \(FRCFLD fell out of the world\); lost 7 pyrotech:rock, 5 log, 2 stick, 1 bread, 1 bundles:bundle\." at \S+, 1\ds after the kill; consistent/);
+        assert.match(c.no_spam.detail, /^no loop: \d+ chat lines in 5 min after the kill, 1 death report, most repeated /);
         assert.equal(s.sent.filter((x) => x.startsWith('kill ')).length, 1, 'one forced death');
         assert.ok(s.sent.every((x) => !/^clear \S+ \S+ -?\d+ [1-9]/.test(x)), 'never a real clear');
         for (const cmd of s.sent) assert.ok(consoleAllowFor(g4d).some((re) => re.test(cmd)), `not approved: ${cmd}`);
         assert.deepEqual(r.notes.lossServer['pyrotech:rock'], 7);
+    });
+
+    test('after T1: a craft during the counts, a respawn dated by its first reading, a report before the respawn reading', async () => {
+        // The bot crafts 6 logs into planks while the server counts (after the 1st sweep counted logs and planks).
+        const crafted = { ...HELD, 'minecraft:log': 3, 'minecraft:planks': 8 };
+        const s = sim({ craftAtClear: { n: 10, held: crafted } });
+        const r = await run(s);
+        const c = byName(r);
+        assert.equal(c.loss_reported.pass, true, c.loss_reported.detail);
+        assert.deepEqual(r.notes.lossServer['minecraft:planks'], [0, 8]);
+        assert.deepEqual(r.notes.lossServer['minecraft:log'], [3, 5]);
+        assert.ok(r.notes.heldChangedDuringCounts.includes('minecraft:planks 0 -> 8'));
+        assert.equal(s.sent.filter((x) => x.startsWith('clear ')).length, 3 * LOSS_ITEMS.split(',').length, 'the held round, the pre-kill sweep, and after the respawn');
+        const iKill = s.sent.findIndex((x) => x.startsWith('kill '));
+        assert.ok(s.sent.slice(iKill - LOSS_ITEMS.split(',').length - 1, iKill - 1).every((x) => x.startsWith('clear ')), 'the kill follows the pre-kill sweep (and one score read)');
+        // The 0 falls between readings (respawn in 0.1 s): dated by the first reading above 0, not the confirming one.
+        const quick = byName(await run(sim({ respawnMs: 100 })));
+        assert.match(quick.respawned.detail, /, [01]s after the kill \(the 0 fell between two readings\)$/);
+        // The health score shows the respawn 6 s late; the report (3 s after the respawn) comes before that reading.
+        const lag = byName(await run(sim({ healthLagMs: 6000 })));
+        assert.equal(lag.loss_reported.pass, true, lag.loss_reported.detail);
+    });
+
+    test('no_spam is a loop test: chatty is fine; a repeated line, two reports, the backstop fail', async () => {
+        const chatty = byName(await run(sim({ chatty: 20 })));
+        assert.equal(chatty.no_spam.pass, true, chatty.no_spam.detail);
+        assert.match(chatty.no_spam.detail, /at most 2\d lines in any 60 s \(backstop 40\)/);
+        const loop = byName(await run(sim({ loop: 8 })));
+        assert.equal(loop.no_spam.pass, false);
+        assert.match(loop.no_spam.detail, /^a repeated line: "Got 2 rocks!" 8 times/);
+        const slowLoop = byName(await run(sim({ loop: 6 }), { maxRepeatPerMin: 10 }));
+        assert.equal(slowLoop.no_spam.pass, true, `6 in 30 s, within limits: ${slowLoop.no_spam.detail}`);
+        const twice = byName(await run(sim({ extraReportMs: 30000 })));
+        assert.equal(twice.no_spam.pass, false);
+        assert.match(twice.no_spam.detail, /^2 death report lines in 5 min for one death/);
+        const backstop = byName(await run(sim({ chatty: 20 }), { maxChatPerMin: 15 }));
+        assert.equal(backstop.no_spam.pass, false);
+        assert.match(backstop.no_spam.detail, /chat lines in one 60 s \(backstop 15\)/);
     });
 
     test('kept items (the main hand) are no loss on either side', async () => {
@@ -253,10 +376,10 @@ describe('g4-death-report on a simulated server', () => {
         const twice = byName(await run(sim({ extraReportMs: 70000 })));
         assert.match(twice.loss_reported.detail, /^2 death report lines for one death/);
         const late = byName(await run(sim({ reportDelayMs: 90000 })));
-        assert.match(late.loss_reported.detail, /not within 60s of the respawn/);
+        assert.match(late.loss_reported.detail, /not by 60s after the respawn/);
         const spam = byName(await run(sim({ spam: 15 })));
         assert.equal(spam.no_spam.pass, false);
-        assert.match(spam.no_spam.detail, /^1\d chat lines in one 60 s \(limit 10\)/);
+        assert.match(spam.no_spam.detail, /^a repeated line: "I will get my stuff back, step 0" 15 times, 15 in one 60 s/);
         const kicked = byName(await run(sim({ spamKick: true })));
         assert.equal(kicked.no_spam.pass, false);
         assert.match(kicked.no_spam.detail, /kicked for spamming|the bot is gone/);
@@ -291,7 +414,7 @@ describe('the G4 wiring in the G3 tooling', () => {
             assert.equal(ok(consoleAllowFor(sc), 'scoreboard objectives add h health'), false, sc.id);
         }
         assert.equal(ok(G3_CONSOLE_ALLOW, 'kill FRCFLD'), false);
-        assert.deepEqual(Object.keys(SCENARIO_CONSOLE_EXTRA), ['g4-death-report']);
+        assert.ok(Object.keys(SCENARIO_CONSOLE_EXTRA).includes('g4-death-report'));
         assert.throws(() => guardConsole({ console: () => [] }).console('kill FRCFLD'), /not on the approved list/);
     });
 

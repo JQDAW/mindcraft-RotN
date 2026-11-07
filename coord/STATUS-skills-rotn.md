@@ -1,6 +1,6 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T15:04Z (from `date -u`)
+Updated: 2026-11-07T07:10Z (from `date -u`)
 
 ## Round 9 B fix (h): after a night-time death with nothing (branch `agent/skills-rotn/night-death-plan`, 2026-11-07T14:32Z by `date -u`)
 
@@ -40,6 +40,66 @@ Updated: 2026-11-07T15:04Z (from `date -u`)
   8. The tries are the 3 builds; the hole is one more, right after the first failed build, and is not counted.
   - **Tests:** 4 new in `pit.test.js` and 2 in `night_routine.test.js`; all 6 fail on 36bb947. With the changes: `pit` 8/8, `night_routine` 27/27. Lint: 0.
 - **Not done (step 5 of the plan):** recovering the dropped items at dawn. The death report already says how long they last (10 min, Corpse Complex), and by dawn they are gone; the agenda restarts from the inventory by itself.
+
+## G4 item 11 prep: the task queue and agenda across a restart (branch `agent/skills-rotn/g4-restart-prep`, HOLD PR; 2026-11-07T06:55Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** check offline that after a process restart (a) the agenda continues at the same step, with no step done twice and no attempt-counter reset; (b) a giver's queued task is still queued and runs; (c) a task running at the restart is resumed or reported, not silently dropped; (d) a `!stop` hold survives the restart.
+- **Design as found** (`agenda.json`, `tasks.json` and `control.json` are written atomically):
+  - (a) `done_at` and `spent` are kept, so a done step stays done. Every run is saved when it starts (`recordAttempt`), so a restart never resets the count. The restart's own run counts: at once with the self-prompter restored from `memory.json`, otherwise after the back-off, which doubles per run. A crash loop therefore ends with the step stuck (at the first tick once its 3 runs are spent), never with endless runs.
+  - (b) A queued task stays queued and runs.
+  - (c) A task that was active is queued again at load and runs again, with its spent budget kept (in the task).
+  - (d) The hold is reloaded, so the first tick returns `held:stop` and stops a restored self-prompter. Nothing restarts until `!resume`.
+- **Gaps found and fixed** (their tests fail on develop):
+  1. **(a), (c): a restart looked like a new start.** The agenda said "agenda step <id> started: …" again for the step it was on, and a task that was running said "task <id> started: …", so nothing reported that it was interrupted.
+     - Now the first such line after a restart ends with " (resumed after a restart)": `Agenda.loadedActive`, and `TaskQueue.requeuedAtLoad` (in memory, from the load).
+     - The lines keep the "started:" form that harness-ops' parsers match (`agendaActive` in `g3-task-preempts-agenda.mjs`, `TASK_TAKEN` in `g3-untrusted-refused.mjs`). A test runs both parsers on the new lines.
+  2. **(d): under a stored hold, startup restored upstream's self-prompter** from `memory.json`. That sent one LLM request before the first `autonomyTick` (about 300 ms later) stopped it. Now `_setupEventHandlers` does not restore it while a hold is stored, and logs `[control] not restoring the self-prompter: on hold (…)`. After `!resume`, the agenda or the task drives it again from its own files.
+- **Tests:** 6 new in `priority.test.js` (`fakeAgent` and `harnessAgent` take a `dir`, so a restart reuses the same files); 4 of them fail on develop. The existing "stored as active and taken over after a restart" test now expects the restart suffix. 14 `src/agent` files plus 6 `test/unit` files: 379 pass, 1 skipped (a `test/unit` test outside this change), 0 fail. Lint: unchanged.
+- **For the G4 scenario (harness-ops):** after `ctl restart`, look for "agenda step <id> started: <short> (resumed after a restart)" for the same step (with no "agenda step <id> done" again for earlier steps), and "task <id> started: <text> (resumed after a restart)" for a task that was running.
+- **Note:** this branch and #323 both append tests at the end of `priority.test.js`. Whichever merges second needs develop merged in.
+- **#327 review (lead, APPROVE WITH NITS on `9098c02`), answered (2026-11-07T07:10Z by `date -u`):**
+  1. `Agenda.start()` clears `loadedActive` (after its early return for an agenda already active). So `!agendaStop` then `!agendaStart` before the first step line is a fresh start with no restart label. Test added.
+  2. The PR body now says that while a hold is stored `handleLoad` is skipped, so a giver's own `!goal` text and a stored PAUSED state are not restored either. The agenda and task goals are rebuilt from their own files after `!resume`.
+  3. (optional, done) `TaskQueue.setStatus` drops a task from `requeuedAtLoad` once it is closed (done, failed or cancelled) before it restarts. Test added.
+  - Tests: 382 run, 381 pass, 1 skipped (`test/unit`), 0 fail. Lint 0 in the touched files.
+
+## Round 9 B fix (a): leaves out of reach no longer use up the stick attempts (branch `agent/skills-rotn/sticks-unreachable-leaves`, 2026-11-07T14:07Z by `date -u`)
+
+- **Task (lead, 2026-11-07, round 9 B fixes, priority 1):** in round 9 B, `!collectBlocks("stick", 3)` reached none of three leaves at y 73 that had passed the ground check. Each logged "Could not reach … from the ground; skipping it" and used one of the 3 attempts, so the run ended "Collected 0 stick." and no tree was tried (`r9-g3b/night/driver.log` 128-134). Four more collects tried the same three leaves (149-151, 207-209, 264-266).
+- **Change (`skills.js` `collectBlock`):**
+  - A leaf that is out of reach after the walk uses no attempt.
+  - After `COLLECT_LIMITS.unreachableLeaves` (3) such leaves, the collect takes no more leaves and says so. Trees and far dead bushes then get the attempts.
+  - Each such leaf is remembered for this bot for `unreachableMs` (10 min), so the next collect does not walk to it again.
+- **Tests (`collect_sticks.test.js`, 2 new):** the fake gains loose leaves and walks that get nowhere.
+  - The round 9 B shape: 3 unreachable leaves, then a tree within 2 attempts, and the next collect does not walk to those leaves.
+  - The cap of 3 per collect.
+  - **Both fail on develop:** "Collected 0 stick." after the "Could not reach" lines, and `unreachableLeaves` undefined.
+  - With the fix: `collect_sticks` 12/12. `collect_rotn`, `fall_safety`, `fell_tree`, `dirt_piles` and `axe_chop`: 72/72. Lint: no new errors (skills.js has the same 20 upstream errors as on develop; the test file has 0).
+- **Next:** (b), `trunkshell` as a tree part, on its own branch. Request to rotn-data via the lead: confirm from the Dynamic Trees jar that breaking `dynamictrees:trunkshell` fells the tree (`BlockTrunkShell` forwarding the break to the thick branch inside).
+
+## G4 item 3 prep: stop, follow, come (branch `agent/skills-rotn/g4-control-prep`, branch only while develop is frozen; 2026-11-07T05:50Z by `date -u`)
+
+- **Task (lead, 2026-11-07):** check offline that `!stop`, `!followPlayer` and `!goToPlayer` work on 1.12.2 with RotN's pathfinder settings and the task-giver rules; add tests for any gap; fix on the branch only. The branch also has the two cosmetic nits after #321.
+- **Design as found, now covered by tests:**
+  - **Only task givers command.** A non-giver's typed `!followPlayer`, `!goToPlayer` or `!stop` runs nothing and sets no hold; they get "Sorry <name>, I only run commands from task givers." (new test).
+  - **A giver's `!stop` beats the agenda and a running task.** The action stops at once and the self-prompter stops. A stored `stop` hold (`control.json`, kept across a restart) returns `held:stop` on every tick, so nothing restarts by itself until a giver types `!resume`. The step or task then resumes without using a new run of its budget. The task case was tested already; the agenda case has a new test. The model's own `!stop` stops only the action.
+  - **A giver's typed action holds tasks and the agenda while it runs** (`held:command`), then autonomy carries on by itself. That is "come" (`!goToPlayer`) and "follow" while it runs.
+- **Gaps found and fixed (tests fail on develop):**
+  1. **A typed follow died at the first reflex.** A reflex (item pickup, self-defense, unstuck) interrupts the follow, the typed command returns, and the hold ended. The agenda's self-prompter then started within one tick (300 ms), and the action manager never resumes while the self-prompter is active, so the agenda took the bot over. Now a giver's typed resumable action that a reflex interrupted keeps `held:command` until it resumes, until `!stop` cancels it, or until it ends by itself (`control.typedResume`, checked in `autonomyTick`). The model's own follow holds nothing.
+  2. **An unknown player threw.** `goToPlayer` and `followPlayer` read `bot.players[name].entity`, which is a TypeError for a name not online. Now they say "Could not find <name>: not online, or too far away to see." A name in the wrong case ("jqdaw") is found (`findPlayer`).
+  3. **The follow was not fall-safe.** It walked with plain `pf.Movements`; now it uses `fallSafe(...)`, so there is no drop over 3 blocks and never a broken Dynamic Trees branch. `goToPlayer` walks through `goToGoal`, which was fall-safe already.
+  4. **The follow outlived the player.** It went on after the player left or went out of sight (a stale entity). Now, with no entity, it waits `FOLLOW_LIMITS.lostMs` (12 s) and says "Lost sight of <name>; waiting up to 12 s for them." If the player is back within that time (a respawn, a dimension change, a short loss of tracking), it says "Following <name> again." with a new goal. Only after 12 s does it stop with a line and clear the goal, and then `!followPlayer` cancels its resume, so it does not retry every second.
+  5. **`goToPlayer` said "You have reached" after a stopped walk.** Now it says "Did not reach <name>." and returns false.
+- **Tests:** new `follow_player.test.js` (7) and 4 new tests in `priority.test.js`; 9 of the 11 fail on develop (the 2 design tests pass). The 27 test files that import the touched code: 373/373.
+- **Lint:** `skills.js` went from 20 to 18 errors (two upstream missing semicolons on the replaced lines), so `test/lint-baseline.json` is lowered from 253 to 251 as the ratchet requires. The other touched files are unchanged.
+- **For the G4 scenario (harness-ops):** a follow ends with `!stop` (then `!resume` for the agenda), when the player has been out of sight for 12 s, or when its resume could not be started (below). The log lines are "You are now actively following player <name>.", "Lost sight of <name>; waiting up to 12 s for them.", "Following <name> again.", "Stopped following <name>: not seen for 12 s (they left, or are too far away to see).", and "You have reached <name>." / "Did not reach <name>.".
+- **PR #323** (title "HOLD until after G3 round 9/gate: …"). The lead approved the lint baseline 253 → 251. **#323 review (lead, APPROVE WITH NITS on `9b6c07d`), answered (2026-11-07T06:31Z by `date -u`):**
+  1. **MUST, a stall without 'idle':** the action manager resumes only on 'idle', and an interrupted action emits none (`onTeleport` stops the action and starts nothing). Now, when a giver's follow waits to resume and nothing has executed for `TYPED_RESUME.waitMs` (5 s), `autonomyTick` calls `resumeAction()`. After `TYPED_RESUME.kicks` (3) tries that did not start it, the hold is dropped, the resume is cancelled, and the bot says "<giver>'s !followPlayer did not resume after 3 tries; tasks and the agenda carry on".
+     - Why resume rather than drop at once: the giver's command still stands, and a teleport should not end it. The tries are bounded, so tasks, the agenda and the night routine are never blocked for good.
+  2. **The follow ended at the first missed entity:** now there is the 12 s grace above, and the claim is fixed here and in the PR body.
+  3. **The hold matched the label only:** it is now tied to the giver's own follow (`control.typedResume.fn` is that follow's `resume_func`, and `by` is the giver). A follow the model starts in its place holds nothing.
+  4. **New test:** the hold lasts while the resumed follow runs (no extra tries) and ends when the follow ends by itself (the real `followPlayer` returns false and `!followPlayer` cancels its resume).
+  - **Tests:** `follow_player` 8/8 (the leave test now checks the grace period, plus a new come-back test) and 3 new `priority` tests. On `9b6c07d`, review tests 1 and 3 fail; test 4 is coverage and passes on both. The 27 files: 377/377. Lint: unchanged, baseline 251 OK.
 
 ## The leaves fallback is removed (branch `agent/skills-rotn/leaves-fallback-out`, 2026-11-07T04:58Z by `date -u`)
 
