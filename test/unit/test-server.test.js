@@ -490,6 +490,38 @@ describe('up / run / down', { skip: windowsShellSkip('up / run / down', '69 s') 
         assert.equal(state().servers.length, 0);
     });
 
+    test('the pack zip default: /home on Linux (the CX33), the Windows folder under Git Bash; ROTN_PACK_ZIP, then --pack-zip, win', () => {
+        // --pack-source upload checks the local zip before any create; fake stat and sha256sum pass the pin and
+        // record the file they were given (the real 791 MB zip may sit at the default place and is never hashed).
+        const fakes = path.join(tmp, 'packbin');
+        fs.mkdirSync(fakes);
+        const seen = path.join(tmp, 'pack-seen.txt');
+        writeExe(path.join(fakes, 'sha256sum'), `#!/usr/bin/env bash\nprintf '%s\\n' "$1" >> "${fwd(seen)}"\necho "${PIN}  $1"\n`);
+        writeExe(path.join(fakes, 'stat'), '#!/usr/bin/env bash\necho 791130136\n');
+        const zipFor = (extraEnv, extraArgs = []) => {
+            fs.rmSync(seen, { force: true });
+            const r = run(['up', '--dry-run', '--name', 'mcr-test-packdef', '--pack-source', 'upload', ...extraArgs], extraEnv, fakes);
+            const hashed = fs.existsSync(seen) ? fs.readFileSync(seen, 'utf8').trim() : null;
+            const missing = /pack zip not found: (.+) \(set --pack-zip or ROTN_PACK_ZIP\)/.exec(r.stderr)?.[1] ?? null;
+            assert.ok((hashed === null) !== (missing === null), `either hashed or not found: ${r.all}`);
+            assert.equal(r.code, hashed ? 0 : 1, r.all);
+            return hashed ?? missing;
+        };
+        const LINUX = '/home/RotN 3.3.4 Server Pack.zip';
+        const WINDOWS = 'C:/Users/admin/source/RotN 3.3.4 Server Pack.zip';
+        assert.equal(zipFor({ ROTN_PACK_ZIP: '', OSTYPE: 'linux-gnu' }), LINUX);
+        assert.equal(zipFor({ ROTN_PACK_ZIP: '', OSTYPE: 'msys' }), WINDOWS);
+        assert.equal(zipFor({ ROTN_PACK_ZIP: '', OSTYPE: 'cygwin' }), WINDOWS);
+        const zip = fwd(path.join(tmp, 'my pack.zip'));
+        fs.writeFileSync(zip, 'not really a zip');
+        assert.equal(zipFor({ ROTN_PACK_ZIP: zip, OSTYPE: 'linux-gnu' }), zip, 'ROTN_PACK_ZIP wins on Linux');
+        assert.equal(zipFor({ ROTN_PACK_ZIP: zip, OSTYPE: 'msys' }), zip, 'ROTN_PACK_ZIP wins under Git Bash');
+        const other = fwd(path.join(tmp, 'other.zip'));
+        fs.writeFileSync(other, 'not really a zip');
+        assert.equal(zipFor({ ROTN_PACK_ZIP: zip, OSTYPE: 'linux-gnu' }, ['--pack-zip', other]), other, '--pack-zip wins over ROTN_PACK_ZIP');
+        assert.equal(mutating().length, 0, 'dry run: nothing created');
+    });
+
     test('hold: uploads extra mods, then releases the start', () => {
         const jar = path.join(tmp, 'rotn-dumper-0.1.jar');
         fs.writeFileSync(jar, 'jar');

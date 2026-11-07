@@ -117,6 +117,39 @@ describe('UUIDs, the bot name and local paths', () => {
             '<local>/y and <local>/z and "<local>\\\\w"');
     });
 
+    test('the Linux dev server\'s paths (the CX33, 2026-11-07): redacted and flagged, in every spelling', () => {
+        // The worktrees (the agent's folder goes too), the main checkout, /root below it, any /home/<user>.
+        both('at /home/mindcraft-RotN-worktrees/harness-ops/test/runner/run.mjs:12', 'at <local>/test/runner/run.mjs:12', 'local-path');
+        both('cwd /home/mindcraft-RotN-worktrees/skills-rotn', 'cwd <local>', 'local-path');
+        both('cwd /home/mindcraft-RotN/node_modules/mineflayer', 'cwd <local>/node_modules/mineflayer', 'local-path');
+        both('MINDCRAFT_PROFILES_FOLDER=/root/.mindcraft-rotn/FRCFLD/msa', 'MINDCRAFT_PROFILES_FOLDER=<local>/.mindcraft-rotn/FRCFLD/msa', 'local-path');
+        both('state in /home/someone/.mindcraft-rotn/test-server', 'state in <local>/.mindcraft-rotn/test-server', 'local-path');
+        // Node's ESM stack frames, JSON's escaped slash, quotes, brackets, and a passwd line's ":".
+        both('    at file:///home/mindcraft-RotN-worktrees/net-forge/src/a.js:1:2', '    at file://<local>/src/a.js:1:2', 'local-path');
+        both('{"cwd":"\\/home\\/mindcraft-RotN-worktrees\\/rotn-data\\/x","h":"\\/root\\/y"}', '{"cwd":"<local>\\/x","h":"<local>\\/y"}', 'local-path');
+        both('{"cwd":"/home/mindcraft-RotN"}', '{"cwd":"<local>"}', 'local-path');
+        both("'/root/a' [/home/deploy] (/root/b)", "'<local>/a' [<local>] (<local>/b)", 'local-path');
+        both('deploy:x:1001:1001:Deploy:/home/deploy:/bin/bash', 'deploy:x:1001:1001:Deploy:<local>:/bin/bash', 'local-path');
+        // The pinned pack zip keeps its name, as on Windows (<local>/source/RotN 3.3.4 Server Pack.zip).
+        both('pack zip not found: /home/RotN 3.3.4 Server Pack.zip (set --pack-zip or ROTN_PACK_ZIP)',
+            'pack zip not found: <local>/RotN 3.3.4 Server Pack.zip (set --pack-zip or ROTN_PACK_ZIP)', 'local-path');
+        assert.deepEqual(kinds('a /root/x and /home/y/z\nthen /home/mindcraft-RotN-worktrees/a/b'),
+            ['local-path', 'local-path', 'local-path'], 'each path counts');
+        // The bot's name below <local> goes with --bot.
+        assert.equal(redact('/root/.mindcraft-rotn/FRCFLD/msa', { bot: 'FRCFLD' }), '<local>/.mindcraft-rotn/<bot>/msa');
+    });
+
+    test('Linux paths that are no one\'s folder stay, and are not flagged', () => {
+        const kept = [
+            'ls -la /root; ls -ld /home/*; cd /home; ls /root/ ; root@host',   // bare folders and a glob (the CX23 probe)
+            '/rootfs/x /home2/y /homes/z /opt/rotn/server/logs/latest.log /tmp/x',   // other top-level folders
+            'https://github.com/root/x https://example.com/home/a/b',   // URL paths
+            './root/x ../home/a a/home/b a/root/c ~/root/x x-/home/a x.\\/root\\/y',   // relative paths
+        ].join('\n');
+        assert.deepEqual(findLeaks(kept), [], 'not flagged');
+        assert.equal(redact(kept), kept, 'not redacted');
+    });
+
     test('line numbers are reported, never the address', () => {
         const raw = 'line one\nFRCFLD[/203.0.113.7:51234] logged in\nUUID 0f9e2c4a-1b2c-4d3e-8f40-123456789abc';
         assert.deepEqual(findLeaks(raw), [{ kind: 'ipv4', line: 2 }, { kind: 'uuid', line: 3 }]);

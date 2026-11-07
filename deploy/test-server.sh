@@ -47,7 +47,8 @@
 #                                 `whitelist add` lookup is unreliable (legacy API, datacenter IPs blocked).
 #   --seed SEED  --heap-min 4G  --heap-max 8G
 #   --pack-source auto|url|upload (auto: CurseForge download if its SHA-256 matches, else upload)
-#   --pack-zip PATH               local zip for upload (default: $ROTN_PACK_ZIP)
+#   --pack-zip PATH               local zip for upload (default: $ROTN_PACK_ZIP, else '/home/RotN 3.3.4 Server Pack.zip',
+#                                 or 'C:/Users/admin/source/RotN 3.3.4 Server Pack.zip' under Git Bash on Windows)
 #   --ready-timeout MIN (120, restarts after a pack upload)  --yes (no cost prompt)  --allow-multiple  --keep-on-failure
 #   --allow-from CIDR             open 22 and 25565 only to CIDR (repeatable; default: $ROTN_TEST_ALLOW_FROM, else
 #                                 the whole internet). Include this PC's public address, or SSH and the tests fail.
@@ -120,9 +121,16 @@ MOJANG_PROFILE_URL=${MOJANG_PROFILE_URL:-https://api.mojang.com/users/profiles/m
 STATE_ROOT=${ROTN_TEST_STATE_DIR:-$HOME/.mindcraft-rotn/test-server}
 
 # ---- Option defaults ----
+# The pinned pack zip's usual place (ADR 0005): the Windows PC's folder under Git Bash, else the Linux dev server's
+# /home (the CX33, 2026-11-07). ROTN_PACK_ZIP, then --pack-zip, win over it; every zip still has to match the pin.
+if [[ $OSTYPE == msys* || $OSTYPE == cygwin* ]]; then
+  DEFAULT_PACK_ZIP='C:/Users/admin/source/RotN 3.3.4 Server Pack.zip'
+else
+  DEFAULT_PACK_ZIP='/home/RotN 3.3.4 Server Pack.zip'
+fi
 TYPE=cpx42 LOCATION=nbg1 IMAGE=ubuntu-24.04 NAME=${TEST_SERVER_NAME:-}
 TTL_HOURS=$DEFAULT_TTL_HOURS CAPTURE=0 SEED='' HEAP_MIN=4G HEAP_MAX=8G
-PACK_SOURCE=auto PACK_ZIP=${ROTN_PACK_ZIP:-C:/Users/admin/source/RotN 3.3.4 Server Pack.zip}
+PACK_SOURCE=auto PACK_ZIP=${ROTN_PACK_ZIP:-$DEFAULT_PACK_ZIP}
 READY_TIMEOUT_MIN=120 YES=0 ALLOW_MULTIPLE=0 KEEP_ON_FAILURE=0 DRY_RUN=0 OUT_DIR='' WAIT_S=5 SKIP_SWEEPER_CHECK=0
 CONTEXT=${HCLOUD_CONTEXT:-$TEST_CONTEXT}
 # hcloud auth: "context" (PC, default) or "env-token" (the GitHub sweeper only; see check_context).

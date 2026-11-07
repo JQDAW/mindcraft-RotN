@@ -1,8 +1,29 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (00:33 UTC, from `date -u`)
+Updated: 2026-11-07 (01:03 UTC, from `date -u`)
 
-## Now: on the CX33 dev server, ready; waiting for a task (2026-11-07)
+## Now: the Linux-paths PR (the lead's task before the validation batch) is open, for review
+
+Branch `agent/harness-ops/linux-paths` from develop c8323be8. It carries #302's STATUS commit (identical hunks, so either merge order is clean; if this one merges first, #302 can be closed).
+
+- **(1) `test/tools/redact-evidence.mjs`:** a second local-path rule, `LINUX_PATH`, used by both the tool and `--check` (kind `local-path`):
+  - `/home/mindcraft-RotN-worktrees/<agent>` (the agent's folder goes too), any `/home/<user>` (the main checkout `/home/mindcraft-RotN`, the CX23's `/home/deploy`), and `/root` when a path goes on below it, all become `<local>`;
+  - spellings: `/`, JSON's `\/`, and inside `file:///` URLs (Node's ESM stack frames). Backslash spellings are Windows-only and stay with the old rule;
+  - the pinned zip keeps its name: `<local>/RotN 3.3.4 Server Pack.zip`, as on Windows;
+  - kept: a bare `/root`, `/home` or `/home/*`, `/rootfs`, `/home2`, `/opt/...`, URL paths and relative paths (`./root/x`, `a/home/b`, `~/root/x`).
+- **Two committed CX23 evidence files now count as leaks and were re-run through the tool** (committed evidence comes out of the tool):
+  - `test/evidence/cx23/README.md`: `/root/.ssh` and `/root/orca/workspaces/mindcraft/tunicate` became `<local>/...`;
+  - `test/evidence/cx23/post-bootstrap-20261103/check.txt:31`: `/home/deploy` became `<local>`.
+  - Those are CX23 paths, not this server's; the rule can't tell machines apart, so it fails closed. **Lead's call** if you'd rather keep them.
+- **(2) `deploy/test-server.sh`:** `PACK_ZIP` defaults to `/home/RotN 3.3.4 Server Pack.zip`, and to the old Windows path under Git Bash or Cygwin (`$OSTYPE`). `ROTN_PACK_ZIP`, then `--pack-zip`, still win. The size and SHA-256 pin check is unchanged. The usage text says so.
+- **Tested** (targeted only, no full `npm test`):
+  - `node --test` over `evidence-redaction`, `test-server`, `g2`, `g3-rocks`, `g3-spend` and `deploy-eol` (the unit files that touch the redactor, the evidence or the script): 305 pass, 0 fail (6.5 min).
+  - The new pack-default test failed against the old script (got the Windows path) and passes now. It uses fake `stat` and `sha256sum` and never hashes the real zip.
+  - `redact-evidence.mjs --check test/evidence` is clean; `g3-batch-check --tree test/evidence` exits 0; ESLint on the three touched JS files is clean; the lint baseline is 253 (unchanged).
+- **For the lead (not mine, info only):** `.claude/agents/independent-reviewer.md:28-32` and `.claude/agents/rotn-gameplay-analyst.md:11` still name `C:/Users/admin/...` paths.
+- No paid batch, no Hetzner server.
+
+## Earlier: on the CX33 dev server, ready; waiting for a task (2026-11-07)
 
 - **Set up:** worktree `/home/mindcraft-RotN-worktrees/harness-ops`, branch `agent/harness-ops/cx33-start` from develop c8323be8, `npm ci` done. Read CLAUDE.md, PLAN.md, my brief, this file and the lead's 00:10 UTC snapshot.
 - **Check:** `node --test "test/unit/**/*.test.js"` on Linux: 533 tests, 531 pass, 0 fail, 2 skipped, 5 min 55 s (three other sessions running). No Hetzner server exists (`hcloud server list` empty, context `mindcraft-rotn-test`). Free memory at the check: 4.5 GB available of 7.6 GB, no swap (round 6 had 5.9-6.1 GB free on the PC).
