@@ -119,6 +119,9 @@ function worldWays(catalog, want) {
             summary: rule.summary,
             blocks,
             count: rule.count ?? rule.gives?.count ?? null,
+            // A random yield ({min, max, mean} per block; deadbush-sticks: 0-2, mean 1). Only on rules
+            // that name one; count stays null for them.
+            ...(rule.countRange ? { countRange: { ...rule.countRange } } : {}),
             tool: rule.tool ?? null,
             // A tool that helps but is not required (fell-tree: an axe); only on rules that name one.
             ...(rule.preferredTool ? { preferredTool: rule.preferredTool } : {}),
