@@ -58,6 +58,16 @@ const isBodyBlock = (b) => {
     if (st && typeof st.solid === 'boolean') return st.solid && (st.collision?.length ?? 0) > 0;
     return isSolid(b);
 };
+/**
+ * A block that suffocates a player whose eyes are in it: in 1.12 a block whose material blocks
+ * movement and that is a full cube (rotn-data's fullCube). Epic Siege Mod's pillar block
+ * (contenttweaker:scaffolding) is solid but not a full cube, so it does not.
+ */
+export const suffocates = (b) => {
+    const st = dumpState(b);
+    if (st && typeof st.fullCube === 'boolean') return st.fullCube && st.solid !== false;
+    return isSolid(b);
+};
 /** A block that falls when undermined: rotn-data's falls() (#205), else gravel, sand, concrete powder, anvils, the dragon egg. */
 export const isFalling = (b) => {
     if (typeof b?.name !== 'string' || !b.name) return false;
@@ -110,33 +120,42 @@ function propFor(roof, solidAt, emptyAt) {
 }
 
 /**
- * Why a site cannot be used at all, or null: `{pos, block, why, text}`, text naming the block and
- * where it is. A new site needs a solid floor, a free 1x2 space and no fire or lava in its walls
+ * Why a site cannot be used at all, or null: `{pos, block, why, kind, text}`, text naming the block
+ * and where it is; kind: 'hazard' (fire or lava), 'drown', 'body' (a solid block in the bot's two
+ * cells, with `suffocates`: it is at head height and suffocates), 'unloaded' or 'site' (a new site's
+ * floor or space). A new site needs a solid floor, a free 1x2 space and no fire or lava in its walls
  * and roof. `occupied` (the shelter the bot is in, G3 round 7 B): only real fire or lava there, a
  * solid block in the bot's two cells, or a liquid at head height (drowning, #296 review 1) counts;
  * a torch, a carpet, a snow layer, grass or water at its feet does not, nor the floor (when it goes,
  * the bot falls and is no longer in the shelter).
+ * `tolerateBody` (G3 gate B: the bot stays with a pillar block it could not keep out): a solid block
+ * in the bot's two cells that does not suffocate it does not count.
  * Dropped items are entities, never blocks, so they never count.
  */
-export function siteProblem(bot, feet, { occupied = false } = {}) {
+export function siteProblem(bot, feet, { occupied = false, tolerateBody = false } = {}) {
     const p = new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
-    const found = (pos, b, why) => ({ pos, block: b?.name ?? 'unloaded', why, text: `${b?.name ?? 'an unloaded block'} at ${at(pos)} (${why})` });
+    const found = (pos, b, why, kind) => ({ pos, block: b?.name ?? 'unloaded', why, kind, text: `${b?.name ?? 'an unloaded block'} at ${at(pos)} (${why})` });
     const floor = p.offset(0, -1, 0);
-    if (!occupied && !isSolid(bot.blockAt(floor))) return found(floor, bot.blockAt(floor), 'the floor is not solid');
+    if (!occupied && !isSolid(bot.blockAt(floor))) return found(floor, bot.blockAt(floor), 'the floor is not solid', 'site');
     for (const q of [p, p.offset(0, 1, 0)]) {
         const b = bot.blockAt(q);
-        if (!b) return found(q, b, 'not loaded');
+        if (!b) return found(q, b, 'not loaded', 'unloaded');
         const hazard = hazardOf(b);
-        if (hazard) return found(q, b, `${hazard} in the 1x2 space`);
+        if (hazard) return found(q, b, `${hazard} in the 1x2 space`, 'hazard');
         // #296 review 1: any liquid at head height drowns the bot (water at its feet does not).
-        if (occupied && q.y > p.y && isLiquid(b)) return found(q, b, 'a liquid at head height: the bot would drown');
-        if (occupied ? isBodyBlock(b) : !isEmpty(b)) return found(q, b, occupied ? 'a solid block in the 1x2 space' : 'the 1x2 space is not free');
+        if (occupied && q.y > p.y && isLiquid(b)) return found(q, b, 'a liquid at head height: the bot would drown', 'drown');
+        if (!occupied && !isEmpty(b)) return found(q, b, 'the 1x2 space is not free', 'site');
+        if (occupied && isBodyBlock(b)) {
+            const chokes = q.y > p.y && suffocates(b);
+            if (tolerateBody && !chokes) continue;
+            return { ...found(q, b, 'a solid block in the 1x2 space', 'body'), suffocates: chokes };
+        }
     }
     for (const q of wallsAndRoof(p)) {
         const b = bot.blockAt(q);
-        if (!b) return found(q, b, 'not loaded');
+        if (!b) return found(q, b, 'not loaded', 'unloaded');
         const hazard = hazardOf(b);
-        if (hazard) return found(q, b, `${hazard} in the walls or roof`);
+        if (hazard) return found(q, b, `${hazard} in the walls or roof`, 'hazard');
     }
     return null;
 }
@@ -147,11 +166,11 @@ export function siteProblem(bot, feet, { occupied = false } = {}) {
  * why digging would be unsafe (`unsafe`: a falling block above or a liquid next to a cell to dig).
  * null when the site cannot be used at all (siteProblem says why): the floor is not solid, the 1x2
  * space is not free, a shell cell is lava or fire, or a block is not loaded. `occupied`: the
- * shelter the bot is in (siteProblem).
+ * shelter the bot is in (siteProblem); tolerateBody: see siteProblem.
  */
-export function siteNeeds(bot, feet, { accept = isSturdy, occupied = false } = {}) {
+export function siteNeeds(bot, feet, { accept = isSturdy, occupied = false, tolerateBody = false } = {}) {
     const p = new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
-    if (siteProblem(bot, p, { occupied })) return null;
+    if (siteProblem(bot, p, { occupied, tolerateBody })) return null;
     const order = wallsAndRoof(p);
 
     const interior = new Set([key(p), key(p.offset(0, 1, 0))]);
@@ -310,6 +329,29 @@ async function fillCell(bot, target, interior, mode) {
     return false;
 }
 
+/**
+ * Break a block in the bot's own 1x2 space from inside the shelter (G3 gate B: a pillaring zombie's
+ * scaffolding at the head). Never when a liquid is next to the cell or a falling block is above it
+ * (it would come in). Returns whether the block was broken.
+ */
+export async function clearSpace(bot, pos) {
+    const p = new Vec3(Math.floor(pos.x), Math.floor(pos.y), Math.floor(pos.z));
+    const b = bot.blockAt(p);
+    if (!b || isEmpty(b)) return !!b;
+    const wet = SIX.map(d => p.plus(d)).find(q => isLiquid(bot.blockAt(q)));
+    const above = bot.blockAt(p.offset(0, 1, 0));
+    if (wet || isFalling(above)) {
+        log(bot, `Not breaking ${b.name} at ${at(p)}: ${wet ? `${bot.blockAt(wet).name} next to it would flow in` : `${above.name} above it would fall in`}.`);
+        return false;
+    }
+    try {
+        return await breakBlockAt(bot, p.x, p.y, p.z);
+    } catch (err) {
+        log(bot, `Could not break ${b.name} at ${at(p)}: ${err?.message ?? err}.`);
+        return false;
+    }
+}
+
 /** The refusal for a plan that cannot be built, or null. */
 function planProblem(plan, site, radius, handExit, bot = null) {
     if (!plan)
@@ -385,17 +427,18 @@ async function pickaxeFor(bot, level) {
  * G3 round 6 B: with too few sturdy blocks, cobblestone is first crafted from the rocks held. Still
  * too few, or no pickaxe (after a death): dirt is the fallback, crafted from dirt piles when needed.
  * Without a pickaxe only dirt is placed, and the site needs a side that can be dug out by hand.
- * @param {{site?: Vec3, radius?: number, keepSoft?: boolean, craft?: Function}} [opts] site: repair the
+ * @param {{site?: Vec3, radius?: number, keepSoft?: boolean, tolerateBody?: boolean, craft?: Function}} [opts] site: repair the
  *   shelter at this feet position; keepSoft: its dirt walls stay (the night routine's repairs);
+ *   tolerateBody: a solid block in the bot's space that does not suffocate it stays (siteProblem);
  *   craft: how blocks are crafted (skills.craftRecipe; tests pass their own).
  * @returns {Promise<{closed: boolean, feet: Vec3|null, placed: number, missing: Vec3[], soft: number, line: string}>}
  *   line: what it logged; soft: the dirt blocks in its walls and roof.
  */
-export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, craft = craftRecipe } = {}) {
+export async function buildShelter(bot, { site = null, radius = 4, keepSoft = false, tolerateBody = false, craft = craftRecipe } = {}) {
     const refuse = (feet, missing, line) => { log(bot, line); return { closed: false, feet, placed: 0, missing, soft: 0, line }; };
     // 1. A sturdy shelter (rock walls); a repair keeps the dirt walls it has.
     // A repair is of the shelter the bot is in: only fire, lava or a solid block there stops it (G3 round 7 B).
-    let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy, occupied: true }) : chooseSite(bot, radius);
+    let plan = site ? siteNeeds(bot, site, { accept: keepSoft ? isWall : isSturdy, occupied: true, tolerateBody }) : chooseSite(bot, radius);
     const problem = planProblem(plan, site, radius, false, bot);
     const level = problem ? 0 : exitLevel(bot, plan.feet);
     const pick = await pickaxeFor(bot, level);
@@ -409,7 +452,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     // 2. The dirt fallback: too few sturdy blocks, or no pickaxe to dig out of rock.
     if (!pick.ok || sturdy() < plan.blocks) {
         const handExit = !pick.ok;
-        const soft = site ? siteNeeds(bot, site, { accept: isWall, occupied: true }) : chooseSite(bot, radius, { accept: isWall, handExit });
+        const soft = site ? siteNeeds(bot, site, { accept: isWall, occupied: true, tolerateBody }) : chooseSite(bot, radius, { accept: isWall, handExit });
         // With a pickaxe, the fallback site (it may be another one) must still be one to get out of.
         const softProblem = planProblem(soft, site, radius, handExit, bot)
             ?? (pick.ok && !soft.handExit && !toolLevels(bot, 'pickaxe').some(l => l >= exitLevel(bot, soft.feet))

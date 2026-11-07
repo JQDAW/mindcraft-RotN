@@ -289,3 +289,48 @@ test('#346 review 1: below HEAD_DIG.minHealth the bot gets out at once instead o
     assert.deepEqual(fake.calls.digs, []);
     assert.ok(fake.calls.gotos.length >= 1);
 });
+
+// G3 gate B (0daeef2d): the night routine called the shelter "no longer usable" and set
+// rotnSheltered false at once; self_defense then ran defendSelf ("Fighting zombie!", server.log 534),
+// chased the zombie out of the shelter and the bot died. Leaving a deadly shelter with a hostile mob
+// near now keeps the in-shelter rules ('open': fight only in reach, in place) until out of the cell.
+test('G3 gate B (e): a deadly shelter left with a zombie 4 blocks away: self_defense fights in place only, never chases; out of the cell the normal rules are back', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const { nightTick, nightState, hostileNear } = await import('./night_routine.js');
+    const { agent, bot, calls, ran, self } = shelter({ zombieAt: 4 });
+    const site = new Vec3(0, 64, 0);
+    bot.rotnSheltered = false;
+    bot.time = { timeOfDay: 15000 };
+    bot.modes.anyActive = () => false;
+    agent.self_prompter = { active: false, loop_active: false, isActive() { return this.active; }, stop() {}, isPaused: () => false };
+    agent.actions.executing = false;
+    agent.actions.stop = () => Promise.resolve();
+    let deadly = false;
+    const o = {
+        builds: [],
+        buildShelter: (b, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: true, feet: site, line: 'Shelter closed' }); },
+        siteNeeds: () => (deadly ? null : { todo: [] }),
+        siteProblem: () => ({ kind: 'hazard', pos: site, block: 'lava', text: 'lava at 0, 64, 0 (lava in the 1x2 space)' }),
+        hostileNear,
+        clearSpace: () => Promise.resolve(false),
+    };
+    const settle = async () => { while (nightState(agent).job) await nightState(agent).job; };
+    nightTick(agent, { now: 0, ops: o });
+    await settle();
+    assert.equal(bot.rotnSheltered, true);
+    nightTick(agent, { now: 1, ops: o });
+    deadly = true;
+    assert.equal(nightTick(agent, { now: 20_000, ops: o }), 'night:building');
+    assert.equal(bot.rotnSheltered, 'open', 'the in-shelter fight rules hold while still in the cell');
+
+    await selfDefense(agent);
+    assert.deepEqual(calls.gotos, [], 'no pathfinder walk after the zombie');
+    assert.deepEqual(calls.pvp, [], 'no mineflayer-pvp chase');
+    assert.ok(!ran.includes('mode:self_defense') || calls.attacks.length === 0, 'nothing out of reach is hit');
+
+    self.position = new Vec3(2.5, 64, 3.5); // out of the old cell (the build walked it out)
+    nightTick(agent, { now: 20_001, ops: o });
+    assert.equal(bot.rotnSheltered, false, 'out of the cell: the normal rules');
+    await settle();
+});

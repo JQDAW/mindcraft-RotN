@@ -2,9 +2,9 @@
 // daylight the bot is in a closed rock shelter, and tasks and the agenda wait. No LLM call.
 //
 //   day -> (dusk or night) build a shelter (!buildShelter's skill) -> inside: stay; every
-//   CHECK_MS look for a breach and repair it, or build again when the bot is no longer in it or
-//   the shelter is no longer usable -> full daylight: dig out one side and hand back to the task
-//   or agenda that was running.
+//   CHECK_MS look for a breach and repair it, break a block that got into the bot's space, or build
+//   again when the bot is no longer in it or the shelter is deadly (fire, lava, drowning) -> full
+//   daylight: dig out one side and hand back to the task or agenda that was running.
 //
 // When no shelter can be built (BUILD_ATTEMPTS failures, for example too few blocks), the bot
 // stays where it is until morning ('exposed'), with its normal reflexes (lead decision on #204).
@@ -14,11 +14,11 @@
 
 import { Vec3 } from 'vec3';
 import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, REPAIR_LABEL, shelterShell } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, isLiquid, isFalling, isEmpty, shelterItems, softItems } from './library/shelter.js';
+import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, shelterItems, softItems } from './library/shelter.js';
 import { breakBlockAt } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
 import { digPit, pitOut, moveAwayFrom, PIT } from './library/pit.js';
-import { hasWeapon } from './library/threats.js';
+import { hasWeapon, shelterEnemy } from './library/threats.js';
 import { say, isGiverGoal } from './agenda_driver.js';
 import settings from './settings.js';
 
@@ -42,6 +42,18 @@ export const DIG_ALARM_MS = 15_000;
  * killer, and the player zombie that rises there) when that was less than this long ago.
  */
 export const DEATH_NEAR_MS = 20 * 60_000;
+/**
+ * G3 gate B: a pillaring zombie (Epic Siege Mod) put its scaffolding into the bot's head cell, and
+ * the bot left its closed shelter and died. A block in the bot's two cells that is no hazard is
+ * broken from inside, at most maxClears times within windowMs; then, if it does not suffocate the
+ * bot, the bot stays with it (the walls are still closed).
+ */
+export const SPACE_CLEAR = { maxClears: 3, windowMs: 60_000 };
+/**
+ * Leaving a deadly shelter at night with a hostile mob this close: the in-shelter fight rules
+ * (rotnSheltered 'open': fight in place, no chase, no flee) hold until the bot is out of the cell.
+ */
+export const LEAVE_MOB_RANGE = 8;
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const at = (p) => `${p.x}, ${p.y}, ${p.z}`;
@@ -70,6 +82,10 @@ export function nightState(agent) {
         pitTried: false, // a hole was tried this night
         pitProgress: {}, // the hole being dug (digPit's progress.P), so an interrupted dig goes on in it
         leftDeathSpot: false, // the walk away from a recent death spot was done (or not needed)
+        clears: [], // G3 gate B: when a block in the bot's space was broken from inside (SPACE_CLEAR)
+        tolerated: false, // a block in the bot's space that does not suffocate it is kept (it came back too often)
+        clearSaid: false, // the clear was said in chat this shelter (then only logged)
+        leaveFrom: null, // the deadly shelter left with a mob near: 'open' until the bot is out of this cell
         cowardiceOn: false, // the routine turned cowardice on while exposed with no weapon
         gen: 0, // bumped by resetNight, so a job that ends after a reset changes nothing
     };
@@ -87,6 +103,7 @@ export function resetNight(agent, why) {
     Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, pitProgress: {} });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null });
     n.gen++;
 }
 
@@ -101,6 +118,7 @@ export function leaveShelterFor(agent, why) {
     if (agent.bot) agent.bot.rotnSheltered = false;
     console.log(`[night] ${why} takes over: the shelter's rules are off until it is done`);
     Object.assign(n, { state: 'building', attempts: 0, nextAt: 0, site: null, digAt: null, repairStall: null });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null });
     return true;
 }
 
@@ -197,8 +215,15 @@ function digAlarm(n, now) {
     return false;
 }
 
+/** A hostile mob (one the shelter fight would hit) within range of the bot. */
+export function hostileNear(bot, range = LEAVE_MOB_RANGE) {
+    const here = bot?.entity?.position;
+    if (!here) return false;
+    return Object.values(bot.entities ?? {}).some(e => e && e !== bot.entity && e.position && shelterEnemy(e) && e.position.distanceTo(here) <= range);
+}
+
 /** What the routine does in the world (tests pass their own). */
-export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, digPit, pitOut, moveAwayFrom };
+export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, moveAwayFrom };
 
 /**
  * The bot's last death spot when it died less than DEATH_NEAR_MS ago, in this dimension, and is
@@ -255,6 +280,36 @@ function startBuilding(n, now) {
 }
 
 /**
+ * G3 gate B: what the bot does about a problem in the shelter it is in, when that problem is not
+ * deadly. A solid block in its two cells (a pillaring zombie's scaffolding) is broken from inside,
+ * bounded by SPACE_CLEAR; after that, a block that does not suffocate it is kept and the bot stays.
+ * A block not loaded is looked at again on the next check. Returns the tick's result when the bot
+ * stays, or null when the shelter must be left (fire, lava, drowning, a block it suffocates in).
+ */
+function keepShelter(agent, n, ops, found, now) {
+    const bot = agent.bot;
+    if (found?.kind === 'unloaded') return 'night:inside';
+    if (found?.kind !== 'body') return null;
+    n.clears = n.clears.filter(t => now - t < SPACE_CLEAR.windowMs);
+    if (n.clears.length < SPACE_CLEAR.maxClears && ops.clearSpace) {
+        n.clears.push(now);
+        const text = `[night] ${found.text}: breaking it from inside; staying in the shelter`;
+        if (n.clearSaid) console.log(text); else { n.clearSaid = true; line(agent, text); } // said once, then logged (T1)
+        // The repair's label: self_defense waits for it, as for a repair, and no reflex walks the bot out.
+        startJob(agent, n, REPAIR_LABEL, () => ops.clearSpace(bot, found.pos), (ok) => {
+            if (!ok) console.warn(`[night] could not break ${found.block} at ${at(found.pos)}`);
+            n.checkedAt = -Infinity; // look again on the next tick
+        });
+        return 'night:inside';
+    }
+    if (found.suffocates) return null;
+    n.tolerated = true;
+    line(agent, `[night] ${found.text} keeps coming back or cannot be broken; it does not suffocate me and the walls are closed: staying in the shelter`);
+    n.checkedAt = -Infinity; // the walls are checked on the next tick, with the block allowed
+    return 'night:inside';
+}
+
+/**
  * One tick of the night routine. null when it is day and nothing night-related runs (the priority
  * stack goes on to tasks and the agenda); otherwise 'night:<state>' and nothing below it runs.
  */
@@ -267,7 +322,15 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         return null;
     }
     const n = nightState(agent);
+    // G3 gate B: between a death and the respawn nothing night-related runs (the night line was said
+    // and a build started while dead, then again after the spawn's reset).
+    if (bot.isAlive === false) return 'night:dead';
     watchDigging(agent, bot);
+    // A deadly shelter left with a mob near (LEAVE_MOB_RANGE): out of its cell, the normal rules are back.
+    if (n.leaveFrom && !bot.entity.position.floored().equals(n.leaveFrom)) {
+        if (bot.rotnSheltered === 'open') bot.rotnSheltered = false;
+        n.leaveFrom = null;
+    }
     n.clock.observe(bot.time?.timeOfDay, now);
     const t = n.clock.timeOfDay(now);
     if (t === null) return null;
@@ -316,7 +379,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         bot.rotnSheltered = false;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, pitProgress: {} });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, pitProgress: {}, leaveFrom: null });
         line(agent, '[night] morning: back to work');
         return null;
     }
@@ -345,6 +408,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 n.pit = pit;
                 n.digAt = null; // digging seen at an earlier shelter is not this one's
                 n.repairStall = null;
+                Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null });
                 n.checkedAt = null; // set by the next tick, on its clock
                 bot.rotnSheltered = true;
                 line(agent, `[night] in the shelter at ${at(r.feet)} until morning`);
@@ -373,6 +437,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             }
             if (n.attempts >= BUILD_ATTEMPTS) {
                 n.state = 'exposed';
+                if (n.leaveFrom && bot.rotnSheltered === 'open') bot.rotnSheltered = false; // no shelter: the normal rules
+                n.leaveFrom = null;
                 // #337 review 7: the line says what the bot does.
                 const away = keepAwayIfUnarmed(agent, n);
                 const tries = `${n.attempts} tries${n.pitTried ? ' and a hole shelter' : ''}`;
@@ -422,12 +488,20 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // Dirt walls (the fallback) are walls too: only an opening is a breach (G3 round 6 B). Only
         // real fire or lava, or a solid block in the bot's two cells, makes the shelter unusable: a
         // dropped item or a harmless block (a torch, a carpet, snow) never does (G3 round 7 B).
-        const need = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true });
+        const tolerateBody = n.tolerated;
+        const need = ops.siteNeeds(bot, n.site, { accept: isWall, occupied: true, tolerateBody });
         if (!need) {
-            // It cannot be repaired there (#204 review 2); say exactly what is where (G3 round 7 B).
-            const found = ops.siteProblem?.(bot, n.site, { occupied: true });
-            bot.rotnSheltered = false;
-            line(agent, `[night] the shelter at ${at(n.site)} is no longer usable: ${found?.text ?? 'the check found it unusable but named nothing'}; building a new one`);
+            // Say exactly what is where (G3 round 7 B).
+            const found = ops.siteProblem?.(bot, n.site, { occupied: true, tolerateBody });
+            const kept = keepShelter(agent, n, ops, found, now);
+            if (kept) return kept;
+            // Deadly (fire, lava, drowning, a block it suffocates in and cannot break): it cannot be
+            // repaired there (#204 review 2). G3 gate B: with a hostile mob near, the in-shelter fight
+            // rules hold until the bot is out of this cell (no chase, no flee into the open).
+            const mob = !!ops.hostileNear?.(bot, LEAVE_MOB_RANGE);
+            bot.rotnSheltered = mob ? 'open' : false;
+            n.leaveFrom = mob ? n.site.clone() : null;
+            line(agent, `[night] the shelter at ${at(n.site)} is no longer usable: ${found?.text ?? 'the check found it unusable but named nothing'}; building a new one${mob ? ' (a hostile mob is near: fighting only in reach until out)' : ''}`);
             startBuilding(n, now);
             return 'night:building';
         }
@@ -438,7 +512,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             bot.rotnSheltered = 'open';
             const text = `[night] the shelter is open at ${need.todo.map(at).join('; ')}: repairing`;
             if (open) console.log(text); else line(agent, text); // said once, then logged (T1: chat volume)
-            startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true }), (r) => {
+            startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody }), (r) => {
                 if (r?.closed) { bot.rotnSheltered = true; n.repairStall = null; return; }
                 if ((r?.placed ?? 0) > 0) { n.repairStall = null; return; } // progress: the next tick tries again
                 // Nothing placed: back to every CHECK_MS until a fight in place ends (#331 re-review).
