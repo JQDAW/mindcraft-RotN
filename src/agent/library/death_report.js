@@ -44,6 +44,13 @@ export const STREAK_MS = 10 * 60_000;
 export const DEATH_SPOT_WAIT_MS = 5 * 60_000;
 export const DEATH_SPOT_NIGHT_MS = 20 * 60_000;
 export const DEATH_SPOT_RADIUS = 24;
+/**
+ * CX23 soak (rotn-v0.1.3): 14 deaths in a ring around the spawn, each raising a player zombie that
+ * never despawns. The recent death spots (not only the last), kept DEATH_SPOTS_KEPT_MS and at most
+ * DEATH_SPOTS_MAX, for the walk away after a respawn and for keeping gathering out of their radius.
+ */
+export const DEATH_SPOTS_KEPT_MS = 30 * 60_000;
+export const DEATH_SPOTS_MAX = 20;
 export const HOME_RADIUS = 4;
 const HOME_NAMES = /home|shelter|bed|base/i;
 
@@ -111,6 +118,12 @@ export class DeathReporter {
         this.deaths = [];           // times of recent deaths (streak)
         this.lastChatAt = -Infinity;
         this.quietStreak = false;   // the streak note was given
+        this.spots = [];            // recent death spots [{at, pos, dimension}], newest last (CX23 soak)
+    }
+
+    /** The death spots of the last DEATH_SPOTS_KEPT_MS (newest last). */
+    recentSpots(now = Date.now()) {
+        return this.spots.filter(s => now - s.at < DEATH_SPOTS_KEPT_MS);
     }
 
     /** While alive (health > 0), about once a second. */
@@ -132,7 +145,10 @@ export class DeathReporter {
         this.samples = [];
         this.deaths = this.deaths.filter(t => now - t < STREAK_MS);
         this.deaths.push(now);
-        if (this.pending.pos) this.last = { at: now, pos: this.pending.pos, dimension };
+        if (this.pending.pos) {
+            this.last = { at: now, pos: this.pending.pos, dimension };
+            this.spots = [...this.recentSpots(now), this.last].slice(-DEATH_SPOTS_MAX);
+        }
         return this.pending;
     }
 
@@ -280,6 +296,8 @@ export function bindDeathReport(agent, { setTimer = setTimeout, clearTimer = cle
     const bot = agent.bot;
     const d = agent._death = new DeathReporter();
     let lastSample = -Infinity, retry = null, settle = null;
+    // CX23 soak: the recent death spots, for skills (collectBlock keeps its targets out of their radius).
+    bot.rotnDeathSpots = (now = Date.now()) => d.recentSpots(now);
 
     bot.on('physicsTick', () => {
         if (!(bot.health > 0) || bot.isAlive === false || d.pending) return;

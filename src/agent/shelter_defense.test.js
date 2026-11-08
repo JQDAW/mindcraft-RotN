@@ -448,3 +448,28 @@ test('#355 re-review: leaving a deadly shelter, between build tries (no job) the
     assert.ok(calls.attacks.length > before, 'hit again between tries');
     assert.ok(ran.includes('mode:self_defense'));
 });
+
+test('CX23 soak: after a fight in place, hurt and too hungry to heal (food below 18), the bot eats; fed enough, it does not', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const { agent, bot } = shelter();
+    const bread = { name: 'bread', metadata: 0, count: 2, type: reg.itemsByName.bread.id };
+    bot.inventory = { items: () => [bread].filter(i => i.count > 0), slots: [] };
+    Object.assign(bot, { health: 14, food: 10 });
+    bot.consume = () => { bread.count--; bot.food += 5; return Promise.resolve(); };
+    await selfDefense(agent);
+    for (let i = 0; i < 40 && bread.count === 2; i++) await new Promise(r => setTimeout(r, 50));
+    assert.equal(bread.count, 1, 'one bread eaten after the fight');
+    assert.ok(logs.some(l => /^\[reflex\] ate between fights in the shelter \(health 14, food 10 -> 15\)$/.test(l)), logs.join('\n'));
+
+    const fed = shelter();
+    const b2 = { name: 'bread', metadata: 0, count: 2, type: reg.itemsByName.bread.id };
+    fed.bot.inventory = { items: () => [b2], slots: [] };
+    Object.assign(fed.bot, { health: 14, food: 18 });
+    let eaten = 0;
+    fed.bot.consume = () => { eaten++; return Promise.resolve(); };
+    await selfDefense(fed.agent);
+    await new Promise(r => setTimeout(r, 100));
+    assert.equal(eaten, 0);
+});
+
