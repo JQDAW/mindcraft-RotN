@@ -475,19 +475,24 @@ A short session of the real agent with the **production** task-giver list. `Serv
 
 ### G4 set-up S: the CX23 service as the bot (`--service BOT`, `lib/service.mjs`)
 
-- **No spawned bot.** `run.mjs --scenario <id> --service frcfld [--service-host cx23-ctl]` takes no driver after `--` and no `--pass-env`. The bot is the CX23's `mindcraft-rotn@frcfld` unit. Its environment is its env file, which only the human sets (ADR 0009).
-- **Every action goes through the human's ssh alias** for the restricted key, as `ssh -o BatchMode=yes -o ConnectTimeout=15 -T cx23-ctl <verb> frcfld [--since T]`.
-  - The arguments are separate argv entries, never a shell string. The key is never read.
-  - The verb is one of the gate's, the name follows the ctl's rule, and `--since` is the gate's T form. All are checked before anything is sent.
+- **No spawned bot.** `run.mjs --scenario <id> --service frcfld` takes no driver after `--` and no `--pass-env`. The bot is the CX23's `mindcraft-rotn@frcfld` unit. Its environment is its env file, which only the human sets (ADR 0009).
+- **The GO marker** (#371 review): `start` and `stop` refuse unless the environment has `ROTN_SERVICE_GO=<the lead's GO id>:test-server-host-confirmed`. Set it only under the lead's written GO, after the human confirmed that the env file's host is a disposable test server. `result.json` records `service.goId`.
+- **Every action goes through the human's ssh alias, hard-wired as `cx23-ctl`** (no option changes it): `ssh -o BatchMode=yes -o ConnectTimeout=15 -o ClearAllForwardings=yes -o ForwardAgent=no -o ForwardX11=no -T cx23-ctl <verb> frcfld [--since T]`.
+  - It uses async `execFile` with `shell: false`, so arguments are separate argv entries and never a shell string. The key is never read.
+  - The verb, the name (the ctl's rule) and `--since` (the gate's T form) are checked before anything is sent.
+  - Nothing blocks the event loop.
 - **What each call does:**
-  - **`start(env)`:** `start`. `env` is ignored.
-  - **`alive()`:** the unit's `ActiveState` from `metrics`, where `active`, `activating` (ExecStartPre, a systemd auto-restart) and `reloading` count as up. Not `status`'s exit code, which is 3 for an activating unit too. Cached for 10 s.
-  - **`output()`:** the "driver log". It is the unit's journal, read with `--since` 60 s before the start (for clock skew) and counted from the first `Starting mindcraft-rotn@<bot>.service` line. Messages only; cached for 15 s.
-  - **`stop()`:** `stop`, then waits for `inactive` and writes the raw journal to the run's `driver.log`.
-  - **`exitCode()`:** the `ActiveState` once the unit is down.
-  - **`metrics()`:** returns `{MemoryCurrent, MemoryPeak, NRestarts, ActiveState}`.
-- **Exit 126 is a gate refusal: an ADR 0009 incident.** `GateRefusal` is thrown at once, with no retry, which ends the scenario. Report it to the human. The ctl's own refusal (2) is an ordinary error. ssh's own failure (255) is retried twice; `start` and `stop` are safe to repeat.
-- **Tests:** `test/unit/g4-service.test.js`, with a fake ssh playing the gate and the ctl. Nothing runs against the CX23 before the human's step 0 and a written GO.
+  - **`start()`:** sends `start` asynchronously and records that a start was sent first. A failure (or a 255) leaves the unit's state unknown: it is kept in `startError` and never retried.
+  - **`alive()` and `output()`:** synchronous, from caches that refresh in the background (10 s and 15 s).
+    - `alive()` is true while the start is in flight, then follows `ActiveState`: `active`, `activating` or `reloading`.
+    - `output()` is the unit's journal from 60 s before the start (for clock skew), counted from the first `Starting mindcraft-rotn@<bot>.service` line. It ends with `[service] ...` lines for a failed start or an incident.
+  - **`refresh()`** forces both caches. **`exitCode()`** is always null; `unitState()` is the `ActiveState`.
+  - **`stop()`:** sends `stop` once a start was sent, also after a failed one, never retried. It waits for `inactive` and writes the journal to `driver.log`.
+  - **`metrics()`, `journal()`, `statusText()`:** async.
+- **The cleanup** (`runner.mjs`): the runner stops the bot when `alive()` is true **or** `needsStop()` is (a start was sent and no stop finished), and a throwing `alive()` never skips the stop. A failing stop becomes the run's error.
+- **Exit 126 is a gate refusal: an ADR 0009 incident.** `GateRefusal` is never retried. It is kept in `incident`, logged by `run.mjs` as `INCIDENT: ...`, and makes the run not-gate. Report it to the human. The ctl's own refusal (2) is an ordinary error. ssh's own failure (255) is retried twice, for the reads only.
+- **stderr** (#371 review): ssh's own stderr can name the host and its address, so it is never kept. On a 255 it is dropped; otherwise only the gate's and the ctl's own lines are kept, with any IPv4 or IPv6 address redacted.
+- **Tests:** `test/unit/g4-service.test.js`, with an async fake ssh playing the gate and the ctl. Nothing runs against the CX23 before the human's step 0 and a written GO.
 
 ### G4 #1: `g4-service-reconnect` (set-up S; offline-built, not yet run)
 

@@ -126,9 +126,16 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
         // A driver still running at the end is stopped by the runner (SIGTERM). Its exit code is then
         // 128 (adapters.mjs: "ended by a signal") with botExitSignal "SIGTERM" and botStoppedByRunner
         // true: the normal end of a scenario, not a crash (G2 batch 5, lead question 3).
-        if (bot.alive()) {
+        // The service adapter (G4 set-up S, #371 review): stop once a start was sent (needsStop), even when alive()
+        // fails or a failed start left the unit's state unknown; a throwing alive() never skips the stop.
+        let alive = true;
+        try { alive = bot.alive(); } catch (e) { log(`bot.alive() failed at the end (${e?.message ?? e}); stopping it anyway`); }
+        if (alive || bot.needsStop?.() === true) {
             botStoppedByRunner = true;
-            await bot.stop();
+            try { await bot.stop(); } catch (e) {
+                log(`bot.stop() failed: ${e?.message ?? e}`);
+                if (!error) error = `bot.stop() failed at the end: ${e?.message ?? e}`;
+            }
         }
     }
     const result = build(error);

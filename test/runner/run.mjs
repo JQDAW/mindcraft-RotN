@@ -30,7 +30,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runScenario, addNotGate } from './lib/runner.mjs';
 import { ctlServer, driverProcess, wallClock } from './lib/adapters.mjs';
-import { serviceBot } from './lib/service.mjs';
+import { HOST, serviceBot } from './lib/service.mjs';
 import { linesAfter } from './lib/server-log.mjs';
 import { consoleAllowFor, guardConsole, g3Policy, LLM_MODEL } from './lib/g3.mjs';
 import { keyFetch, llmRecord, providerSummary, readKeyUsage } from './lib/llm-spend.mjs';
@@ -93,7 +93,7 @@ export function gitInfo(cwd = path.join(here, '..', '..'), exec = execFileSync) 
  * so `--param worldSeed=1880465901402976865` keeps every digit.
  */
 export function parseArgs(argv) {
-    const o = { params: {}, driver: [], list: false, scenario: null, out: null, passEnv: [], service: null, serviceHost: 'cx23-ctl' };
+    const o = { params: {}, driver: [], list: false, scenario: null, out: null, passEnv: [], service: null };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--') { o.driver = argv.slice(i + 1); break; }
@@ -101,9 +101,9 @@ export function parseArgs(argv) {
         else if (a === '--scenario') o.scenario = argv[++i];
         else if (a === '--out') o.out = argv[++i];
         else if (a === '--pass-env') o.passEnv.push(argv[++i]);
-        // G4 set-up S: the bot is the CX23's service, driven through the ssh gate (lib/service.mjs), not a driver child.
+        // G4 set-up S: the bot is the CX23's service, driven through the ssh gate as `cx23-ctl` (lib/service.mjs; the
+        // alias is hard-wired, #371 review), not a driver child.
         else if (a === '--service') o.service = argv[++i] ?? '';
-        else if (a === '--service-host') o.serviceHost = argv[++i] ?? '';
         else if (a === '--param') {
             const [k, ...v] = (argv[++i] ?? '').split('=');
             if (!k || !v.length) throw new Error(`--param needs key=value, got '${argv[i]}'`);
@@ -153,7 +153,7 @@ async function main(argv) {
     let bot;
     try {
         bot = o.service !== null
-            ? serviceBot(o.service, path.join(outDir, 'driver.log'), { host: o.serviceHost })   // driver.log is the unit's journal
+            ? serviceBot(o.service, path.join(outDir, 'driver.log'))   // driver.log is the unit's journal
             : driverProcess(o.driver, path.join(outDir, 'driver.log'), { passEnv: o.passEnv });
     } catch (e) {
         console.error(e.message);
@@ -161,7 +161,8 @@ async function main(argv) {
     }
     // The code under test, read before the run starts: a dirty tree is not reproducible gate evidence.
     const git = gitInfo();
-    log(`${scenario.id} (${scenario.gate}) run ${runId}; git ${git.sha ?? 'unknown'}${git.dirty ? ' (DIRTY: uncommitted changes)' : ''}; driver: ${o.service !== null ? `service ${o.service} via ssh ${o.serviceHost}` : o.driver.join(' ')}; out: ${outDir}`);
+    const driverName = o.service !== null ? `service ${o.service} via ${HOST}` : o.driver.join(' ');
+    log(`${scenario.id} (${scenario.gate}) run ${runId}; git ${git.sha ?? 'unknown'}${git.dirty ? ' (DIRTY: uncommitted changes)' : ''}; driver: ${driverName}; out: ${outDir}`);
     const resultFile = path.join(outDir, 'result.json');
     // G3 (#116 and #122 reviews): the console allowlist whenever the real agent runs or the gate is G3, and a
     // G3 run is gate-valid only under batch.mjs's spend stop (its ROTN_G3_BATCH marker).
@@ -169,7 +170,8 @@ async function main(argv) {
     let usageBefore = null;
     // Every record, the progress and killed ones too, carries the LLM calls so far (#122 review nit): a run
     // that never finishes still shows what it used. The after-reading exists only in the final result.
-    const stamp = (r) => Object.assign(r, { git, server: process.env.TEST_SERVER_NAME ?? null, driver: o.driver.join(' ') },
+    const stamp = (r) => Object.assign(r, { git, server: process.env.TEST_SERVER_NAME ?? null, driver: driverName },
+        bot.kind === 'service' ? { service: { goId: bot.goId ?? null, startError: bot.startError ?? null, incident: bot.incident ?? null } } : {},
         scenario.llm && !r.llm ? { llm: llmRecord(usageBefore, { ok: false, error: 'the run did not finish' }, bot.output()) } : {},
         scenario.gate === 'G3' || scenario.gate === 'G4' ? { batch: policy.batch } : {});
     let finished = false;
@@ -221,6 +223,11 @@ async function main(argv) {
         if (scenario.gate === 'G3' && result.llm.models?.model !== LLM_MODEL) {
             addNotGate(result, `the run's model is ${result.llm.models?.model ?? 'not reported'}, not ${LLM_MODEL}`);
         }
+    }
+    if (bot.incident) {
+        // A gate refusal (exit 126) is an ADR 0009 incident: never a pass; report it to the human (#371 review).
+        log(`INCIDENT: ${bot.incident}`);
+        addNotGate(result, `an ADR 0009 incident: ${bot.incident}`);
     }
     if (policy.notGate) addNotGate(result, policy.notGate);
     try {
