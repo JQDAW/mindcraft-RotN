@@ -11,6 +11,7 @@ import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBl
 import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
+import { DEATH_SPOT_RADIUS } from "./death_report.js";
 import { logAte, fightJournal } from "./survival_log.js";
 import { foodKey } from "./food.js";
 import pf from 'mineflayer-pathfinder';
@@ -908,6 +909,18 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     };
 
     let collected = 0;
+    // CX23 soak: no target within DEATH_SPOT_RADIUS of a recent death spot for deathSpotMs: a
+    // player zombie rose there and never leaves (the agenda dug dirt among them, death after death).
+    // #416 review 2: not for a crafting table the bot placed and picks up again (pickUpTable).
+    const deathSpots = (baseType === 'crafting_table' || typeof bot.rotnDeathSpots !== 'function' ? [] : bot.rotnDeathSpots())
+        .filter(s => s.pos && Date.now() - s.at < COLLECT_LIMITS.deathSpotMs && (s.dimension == null || bot.game?.dimension == null || s.dimension === bot.game.dimension));
+    const nearDeath = (p) => deathSpots.some(s => Math.hypot(p.x - s.pos.x, p.z - s.pos.z) <= DEATH_SPOT_RADIUS);
+    let deathSkips = 0, deathSkipsSaid = false;
+    const sayDeathSkips = () => {
+        if (deathSkips === 0 || deathSkipsSaid) return;
+        deathSkipsSaid = true;
+        log(bot, `Some were left alone: within ${DEATH_SPOT_RADIUS} blocks of where you died recently (a player zombie rises there and never leaves).`);
+    };
     // Gate2 B (late pickups): a drop can land after its break was counted (a stick from leaves,
     // still falling through the canopy) and be picked up with a later break, or after the last.
     // The collect's final count is checked against what it started with (below); a break that
@@ -965,6 +978,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             if (block.position) {
                 const since = outOfReach.get(leafKey(block.position));
                 if (since !== undefined && Date.now() - since < CL.unreachableMs) return false;
+                if (deathSpots.length && nearDeath(block.position)) { deathSkips++; return false; }
             }
             // Wood only on the surface: never a log underground (G3 round 5 A rerun).
             if (block.position && woodTarget && world.isUnderground(bot, block.position)) return false;
@@ -1002,6 +1016,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 log(bot, `No ${blockType} nearby to collect.`);
             else
                 log(bot, `No more ${blockType} nearby to collect.`);
+            sayDeathSkips();
             // Say which other source the bot could use with the right tool (B2).
             for (const source of needsTool)
                 log(bot, `${source.text} That needs ${describeTool(source.tool)}.`);
@@ -1228,6 +1243,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const gainedNames = Object.entries(gainedByKey);
     const details = gainedNames.length && !(gainedNames.length === 1 && gainedNames[0][0] === blockType)
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
+    sayDeathSkips(); // #416 nit: also when the collect ended otherwise (a time limit, its attempts)
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.`);
     return collected > 0;
 }
@@ -3617,9 +3633,10 @@ const STOP_SETTLE_MS = 5000;
 // many per collect, then no more leaves in it; each is not tried again for unreachableMs.
 // unreachableTargets: G3 round 10 B, any other target the walk did not reach (or whose walk threw
 // the pathfinder's Timeout or NoPath) uses no attempt, at most this many per collect; each is not
-// tried again for unreachableMs.
+// tried again for unreachableMs. deathSpotMs: CX23 soak, no target within DEATH_SPOT_RADIUS of a
+// death spot this recent (a player zombie rose there).
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
-    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3 };
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3, deathSpotMs: 20 * 60_000 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit

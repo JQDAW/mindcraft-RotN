@@ -396,3 +396,26 @@ test('#375 nit 3: with gate2 B\'s tail of lines, the cut output still holds the 
     assert.ok(cut.endsWith(`\n${leafBreak}\nFound non-destructive path.\nPicked up 1 items.\n${final}`), cut);
     assert.ok(!/^Picked up \d+ more/m.test(bot.output), `no extra line for the late pickups: ${bot.output}`);
 });
+
+// CX23 soak (rotn-v0.1.3): the agenda sent the bot to dig dirt among the player zombies that rose at
+// its death spots, death after death. A collect leaves targets near a recent death spot alone.
+test('CX23 soak: a collect skips targets within 24 blocks of a recent death spot (COLLECT_LIMITS.deathSpotMs); an old death spot does not count', T, async (t) => {
+    fast(t);
+    const now = Date.now();
+    const bot = fakeBot({ bushes: [{ x: 8, sticks: 1 }, { x: 40, sticks: 1 }] });
+    bot.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(6), dimension: null }];
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
+    assert.deepEqual(bot.log.digs.map(d => d.pos), ['40,64,0'], 'the bush 2 blocks from the death spot is left');
+    // Every target near one: nothing, and the line says why.
+    const all = fakeBot({ bushes: [{ x: 8, sticks: 1 }, { x: 12, sticks: 1 }] });
+    all.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(10), dimension: null }];
+    assert.equal(await skills.collectBlock(all, 'stick', 1), false);
+    assert.deepEqual(all.log.digs, []);
+    assert.match(all.output, /Some were left alone: within 24 blocks of where you died recently \(a player zombie rises there and never leaves\)\./);
+    // A death spot older than deathSpotMs: no longer avoided.
+    const old = fakeBot({ bushes: [{ x: 8, sticks: 1 }] });
+    old.rotnDeathSpots = () => [{ at: now - skills.COLLECT_LIMITS.deathSpotMs - 1000, pos: at(6), dimension: null }];
+    assert.equal(await skills.collectBlock(old, 'stick', 1), true);
+    assert.deepEqual(old.log.digs.map(d => d.pos), ['8,64,0']);
+});
+

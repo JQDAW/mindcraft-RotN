@@ -167,7 +167,9 @@ export const SHELTER_RESERVE_STEP = {
     goal: `Night is near. At dusk the night routine builds a shelter of ${SHELTER_RESERVE} blocks on open ground. If you have a pickaxe, it is built from sturdy blocks (any cobblestone or stone): make cobblestone from 4 rocks of one kind with !craftRecipe("cobblestone", 1), and mine stone with the pickaxe for more rocks. If you have no pickaxe, it is built of dirt only, which you can dig out of by hand: dig dirt or grass by hand with !collectBlocks("betterwithmods:dirt_pile", ${4 * SHELTER_RESERVE}) (4 piles make one dirt, which the shelter crafts itself). Keep these blocks for the night: do not place them.`,
     goalNow: (s) => {
         const have = reserveHave(s);
-        const mins = Math.max(1, Math.round((s.minutesToSunset?.() ?? 0) - SHELTER_LEAD_MIN));
+        // CX23 soak: what the bot is told counts the morning freeze still to run (sunsetEstimateMin);
+        // the due rule above keeps the least certain time.
+        const mins = Math.max(1, Math.round((s.sunsetEstimateMin?.() ?? s.minutesToSunset?.() ?? 0) - SHELTER_LEAD_MIN));
         if (noPickaxe(s)) {
             return `Night is near: in about ${mins} min the night routine builds a shelter. You have no pickaxe yet, so it is built of dirt, which you can dig out of by hand in the morning. `
                 + `It needs ${SHELTER_RESERVE} blocks on open ground, and you have ${have} (dirt, and dirt from your dirt piles). `
