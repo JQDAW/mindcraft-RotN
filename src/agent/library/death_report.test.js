@@ -137,7 +137,7 @@ test('D3: the agent samples while alive, retries a refused respawn, reports once
     const quiet = { now: timers.now() + QUIET_MS, idle: true, reflexActive: false, selfPrompting: false, lastPromptAt: -Infinity };
     assert.equal(replanPromptDue(agent, quiet), true);
     const note = takeReplanNote(agent);
-    assert.match(note, /^Reflexes \(death\) interrupted 'action:collectBlocks'\. You died at 100, 70, 200 and respawned\. You no longer have 12 cobblestone, 5 bread, 3 log:1, 2 log\. They lie at the death spot for about 9 more minutes \(10 minutes from your death\), and a zombie rises there \(Zombie Players: it never burns in daylight and never leaves\)\. They are lost unless that zombie is killed before then; waiting for day does not help\. Go back for them only with a weapon and more than half your health; otherwise move on and do not plan around the lost items\. The spot is saved as 'last_death_position'\. Do not go back there for 5 min, nor at dusk or night: what killed you may still be there, and a zombie rises where a player dies. Check your state/);
+    assert.match(note, /^Reflexes \(death\) interrupted 'action:collectBlocks'\. You died at 100, 70, 200 and respawned\. You no longer have 12 cobblestone, 5 bread, 3 log:1, 2 log\. They lie at the death spot for about 9 more minutes \(10 minutes from your death\), and a zombie rises there \(Zombie Players: it never burns in daylight and never leaves\)\. They are lost unless that zombie is killed before then; waiting for day does not help\. Go back for them only with a weapon and more than half your health; otherwise move on and do not plan around the lost items\. You now hold 4 torch, 1 leather_helmet, 1 stone_pickaxe; plan only with what you hold now\. The spot is saved as 'last_death_position'\. Do not go back there for 5 min, nor at dusk or night: what killed you may still be there, and a zombie rises where a player dies. Check your state/);
     assert.ok(!/do not despawn|unconfirmed/.test(note), 'only what rotn-data confirmed (600 s, the zombie)');
     assert.ok(!note.includes('Creeper'), 'the server text never reaches the LLM');
 
@@ -354,4 +354,47 @@ test('#338 review: metas that are different items stay apart in chat (lapis and 
         { key: 'golden_apple:1', count: 1 }, { key: 'golden_apple', count: 1 }, { key: 'log:1', count: 2 }, { key: 'log', count: 2 }];
     assert.deepEqual(sumVariants(lost).map(l => `${l.count} ${l.key}`).sort(),
         ['1 golden_apple', '1 golden_apple:1', '2 coal', '3 dye:15', '4 coal:1', '4 log', '5 dye:4'].sort());
+});
+
+// G3 gate B (0daeef2d): the re-plan note said "You no longer have 64 betterwithmods:dirt_pile, ... and
+// 6 more kinds" and never what was left; the memory written next still said the bot had "10
+// undergroundbiomes:metamorphic_cobble for night routine". Now the note names every kind lost and what
+// the bot holds after the respawn (Corpse Complex keeps the main hand), read from its slots.
+test('G3 gate B: the re-plan note lists every kind lost and what the bot now holds, with its hand; the log line lists every kind too', (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const timers = fakeTimers();
+    const { agent, bot } = fakeAgent();
+    bindDeathReport(agent, timers);
+    const s = bot.inventory.slots;
+    s.fill(null);
+    const before = [['betterwithmods:dirt_pile', 64], ['pyrotech_compat:rock_metamorphic', 33], ['stick', 8], ['harvestcraft:pearitem', 4],
+        ['planks', 4], ['bread', 1], ['crafting_table', 1], ['stone_axe', 1], ['harvestcraft:cranberryitem', 2], ['torch', 3], ['dirt', 2], ['apple', 1]];
+    before.forEach(([name, count], i) => { s[9 + i] = item(name, count); });
+    s[36] = item('undergroundbiomes:metamorphic_cobble', 10); // in hand (hotbar 0)
+    bot.quickBarSlot = 0;
+    Object.defineProperty(bot, 'heldItem', { get: () => s[36], configurable: true });
+    bot.emit('physicsTick');
+    for (let i = 9; i < 36; i++) s[i] = null; // dropped at the death spot; the hand is kept
+    bot.health = 0; bot.isAlive = false; bot.emit('death');
+    bot.health = 20; bot.isAlive = true; bot.emit('spawn');
+    timers.advance(SETTLE_MS + 1000);
+    const note = takeReplanNote(agent);
+    assert.ok(!/more kinds/.test(note), note);
+    for (const [name, count] of before) assert.ok(note.includes(`${count} ${name}`), `${name} named: ${note}`);
+    assert.match(note, /You now hold 10 undergroundbiomes:metamorphic_cobble \(in your hand: 10 undergroundbiomes:metamorphic_cobble\); plan only with what you hold now\./);
+    const line = logs.find(l => /^\[death\] died at .*; lost /.test(l));
+    assert.ok(line && !/more kinds/.test(line) && line.includes('1 apple'), line);
+
+    // Nothing kept: it says so.
+    const bare = fakeAgent();
+    const t2 = fakeTimers();
+    bindDeathReport(bare.agent, t2);
+    bare.bot.emit('physicsTick');
+    bare.bot.inventory.slots.fill(null);
+    bare.bot.health = 0; bare.bot.isAlive = false; bare.bot.emit('death');
+    bare.bot.health = 20; bare.bot.isAlive = true; bare.bot.emit('spawn');
+    t2.advance(SETTLE_MS + 1000);
+    assert.match(takeReplanNote(bare.agent), /You now hold nothing\./);
 });

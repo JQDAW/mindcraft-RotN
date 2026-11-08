@@ -1,0 +1,224 @@
+# Why bedrock is breakable in RotN 3.3.4 (lead's #339 review, 2026-11-07). Excerpts only.
+# Jar: mods/UniversalTweaks-1.12.2-1.9.0.jar from the pinned pack zip (SHA-256 90642fd5...f5205),
+#   jar SHA-256 114ef8ca0fca59e9823c189170bd52005eb0d3ae5b4dd87959948aad11d4e479.
+# Config: config/Universal Tweaks - Tweaks.cfg from the same zip,
+#   SHA-256 3312a633a11bc4de517e7eda4cb8b9e9be988f78c91b5369527bea43d0bcf33b.
+# Made with `javap -c -p` (and `-v` for constants and annotations) from JDK 8 tools; obfuscated
+# names: func_149671_p Block.registerBlocks, func_176219_a Block.registerBlock(int, String, Block),
+# func_149711_c setHardness, func_149752_b setResistance, func_149663_c setTranslationKey,
+# func_149647_a setCreativeTab, field_151576_e Material.ROCK, field_150357_h Blocks.BEDROCK,
+# func_184614_ca EntityPlayer.getHeldItemMainhand, func_77973_b ItemStack.getItem.
+
+## UTBreakableBedrockMixin (mixins.tweaks.blocks.breakablebedrock.json), javap -v
+{
+  "package": "mod.acgaming.universaltweaks.tweaks.blocks.breakablebedrock.mixin",
+  "refmap": "universaltweaks.refmap.json",
+  "minVersion": "0.8",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": ["UTBreakableBedrockMixin"]
+}
+   #6 = Utf8               Lorg/spongepowered/asm/mixin/Mixin;
+   #7 = Utf8               value
+   #8 = Utf8               Lnet/minecraft/block/Block;
+   #9 = Utf8               <init>
+  #10 = Utf8               ()V
+  #11 = NameAndType        #9:#10         // "<init>":()V
+  #12 = Methodref          #4.#11         // java/lang/Object."<init>":()V
+  #13 = Utf8               this
+  #14 = Utf8               Lmod/acgaming/universaltweaks/tweaks/blocks/breakablebedrock/mixin/UTBreakableBedrockMixin;
+  #15 = Utf8               utBreakableBedrock
+  #16 = Utf8               (ILjava/lang/String;Lnet/minecraft/block/Block;)V
+  #17 = Utf8               Lorg/spongepowered/asm/mixin/injection/Redirect;
+  #18 = Utf8               method
+  #19 = Utf8               registerBlocks
+  #20 = Utf8               at
+  #21 = Utf8               Lorg/spongepowered/asm/mixin/injection/At;
+  #22 = Utf8               INVOKE
+  #23 = Utf8               target
+  #24 = Utf8               Lnet/minecraft/block/Block;registerBlock(ILjava/lang/String;Lnet/minecraft/block/Block;)V
+  #25 = Utf8               ordinal
+  #26 = Integer            6
+  private static void utBreakableBedrock(int, java.lang.String, net.minecraft.block.Block);
+    descriptor: (ILjava/lang/String;Lnet/minecraft/block/Block;)V
+    flags: ACC_PRIVATE, ACC_STATIC
+    Code:
+      stack=5, locals=3, args_size=3
+         0: iload_0
+         1: aload_1
+         2: new           #28                 // class net/minecraft/block/Block
+         5: dup
+         6: getstatic     #34                 // Field net/minecraft/block/material/Material.field_151576_e:Lnet/minecraft/block/material/Material;
+         9: invokespecial #37                 // Method net/minecraft/block/Block."<init>":(Lnet/minecraft/block/material/Material;)V
+        12: ldc           #38                 // float 200.0f
+        14: invokevirtual #42                 // Method net/minecraft/block/Block.func_149711_c:(F)Lnet/minecraft/block/Block;
+        17: ldc           #43                 // float 6000000.0f
+        19: invokevirtual #46                 // Method net/minecraft/block/Block.func_149752_b:(F)Lnet/minecraft/block/Block;
+        22: aload_1
+        23: invokevirtual #50                 // Method net/minecraft/block/Block.func_149663_c:(Ljava/lang/String;)Lnet/minecraft/block/Block;
+        26: getstatic     #56                 // Field net/minecraft/creativetab/CreativeTabs.field_78030_b:Lnet/minecraft/creativetab/CreativeTabs;
+        29: invokevirtual #60                 // Method net/minecraft/block/Block.func_149647_a:(Lnet/minecraft/creativetab/CreativeTabs;)Lnet/minecraft/block/Block;
+        32: invokestatic  #63                 // Method net/minecraft/block/Block.func_176219_a:(ILjava/lang/String;Lnet/minecraft/block/Block;)V
+        35: return
+    RuntimeVisibleAnnotations:
+      0: #17(#18=[s#19],#20=@#21(#7=s#22,#23=s#24,#25=I#26))
+RuntimeInvisibleAnnotations (class):
+  0: #6(#7=[c#8])
+
+## universaltweaks.refmap.json (mappings for the mixin)
+    "mod/acgaming/universaltweaks/tweaks/blocks/breakablebedrock/mixin/UTBreakableBedrockMixin": {
+      "Lnet/minecraft/block/Block;registerBlock(ILjava/lang/String;Lnet/minecraft/block/Block;)V": "Lnet/minecraft/block/Block;func_176219_a(ILjava/lang/String;Lnet/minecraft/block/Block;)V",
+      "registerBlocks": "Lnet/minecraft/block/Block;func_149671_p()V"
+    },
+
+## UTLoadingPlugin.shouldMixinConfigQueue (server branch: a String switch on the config name)
+  public boolean shouldMixinConfigQueue(java.lang.String);
+    Code:
+       0: getstatic     #393                // Field isDev:Z
+       3: ifeq          8
+       6: iconst_1
+       7: ireturn
+       8: getstatic     #158                // Field isClient:Z
+      11: ifeq          1176
+      ...
+    1176: aload_1
+    1177: astore_2
+    1178: iconst_m1
+    1179: istore_3
+    1180: aload_2
+    1181: invokevirtual #397                // Method java/lang/String.hashCode:()I
+    1184: lookupswitch  { // 77
+      ...
+    2276: aload_2
+    2277: ldc_w         #296                // String mixins.tweaks.blocks.breakablebedrock.json
+    2280: invokevirtual #400                // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+    2283: ifeq          3024
+    2286: bipush        30
+    2288: istore_3
+    2289: goto          3024
+      ...
+    3024: iload_3
+    3025: tableswitch   { // 0 to 76
+                    30: 3623
+      ...
+    3623: getstatic     #656                // Field mod/acgaming/universaltweaks/config/UTConfigTweaks.BLOCKS:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory;
+    3626: getfield      #663                // Field mod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory.BREAKABLE_BEDROCK:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory$BreakableBedrockCategory;
+    3629: getfield      #666                // Field mod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory$BreakableBedrockCategory.utBreakableBedrockToggle:Z
+    3632: ireturn
+
+## UTConfigTweaks$BlocksCategory$BreakableBedrockCategory (config names; code defaults), javap -v / -c
+  #26 = Utf8               utBreakableBedrockToggle
+  #27 = Utf8               Z
+  #28 = Utf8               Lnet/minecraftforge/common/config/Config$RequiresMcRestart;
+  #29 = Utf8               Lnet/minecraftforge/common/config/Config$Name;
+  #30 = Utf8               value
+  #31 = Utf8               [1] Breakable Bedrock Toggle
+  #32 = Utf8               Lnet/minecraftforge/common/config/Config$Comment;
+  #33 = Utf8               Allows customizable mining of bedrock
+  #34 = Utf8               utBreakableBedrockToolList
+  #35 = Utf8               [Ljava/lang/String;
+  #36 = Utf8               [2] Tool List
+  #37 = Utf8               List of tools concerning mining bedrock
+  #38 = Utf8               Behavior depends on the list mode
+  #39 = Utf8               Syntax: modid:tool
+  #40 = Utf8               utBreakableBedrockToolListMode
+  #41 = Utf8               Lmod/acgaming/universaltweaks/config/UTConfigTweaks$EnumLists;
+  #42 = Utf8               [3] List Mode
+  #43 = Utf8               Blacklist Mode: Tools which can't mine bedrock, others can
+  #44 = Utf8               Whitelist Mode: Tools which can mine bedrock, others can't
+  public mod.acgaming.universaltweaks.config.UTConfigTweaks$BlocksCategory$BreakableBedrockCategory();
+    Code:
+       0: aload_0
+       1: invokespecial #48                 // Method java/lang/Object."<init>":()V
+       4: aload_0
+       5: iconst_0
+       6: putfield      #50                 // Field utBreakableBedrockToggle:Z
+       9: aload_0
+      10: iconst_0
+      11: anewarray     #52                 // class java/lang/String
+      14: putfield      #54                 // Field utBreakableBedrockToolList:[Ljava/lang/String;
+      17: aload_0
+      18: getstatic     #57                 // Field mod/acgaming/universaltweaks/config/UTConfigTweaks$EnumLists.BLACKLIST:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$EnumLists;
+      21: putfield      #59                 // Field utBreakableBedrockToolListMode:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$EnumLists;
+      24: return
+
+## UTBreakableBedrock.utMineBedrock (a @SubscribeEvent handler for the player's LeftClickBlock), javap -c -p / -v
+  #121 = Utf8               Lnet/minecraftforge/fml/common/eventhandler/SubscribeEvent;
+  public static void utMineBedrock(net.minecraftforge.event.entity.player.PlayerInteractEvent$LeftClickBlock);
+    Code:
+         0: getstatic     #62                 // Field mod/acgaming/universaltweaks/config/UTConfigTweaks.BLOCKS:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory;
+         3: getfield      #66                 // Field mod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory.BREAKABLE_BEDROCK:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory$BreakableBedrockCategory;
+         6: getfield      #125                // Field mod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory$BreakableBedrockCategory.utBreakableBedrockToggle:Z
+         9: ifne          13
+        12: return
+        13: getstatic     #129                // Field mod/acgaming/universaltweaks/config/UTConfigGeneral.DEBUG:Lmod/acgaming/universaltweaks/config/UTConfigGeneral$DebugCategory;
+        16: getfield      #132                // Field mod/acgaming/universaltweaks/config/UTConfigGeneral$DebugCategory.utDebugToggle:Z
+        19: ifeq          32
+        22: getstatic     #105                // Field mod/acgaming/universaltweaks/UniversalTweaks.LOGGER:Lorg/apache/logging/log4j/Logger;
+        25: ldc           #134                // String UTBreakableBedrock ::: Left click block event
+        27: invokeinterface #137,  2          // InterfaceMethod org/apache/logging/log4j/Logger.debug:(Ljava/lang/String;)V
+        32: aload_0
+        33: invokevirtual #141                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$LeftClickBlock.getEntityPlayer:()Lnet/minecraft/entity/player/EntityPlayer;
+        36: invokevirtual #147                // Method net/minecraft/entity/player/EntityPlayer.func_184614_ca:()Lnet/minecraft/item/ItemStack;
+        39: invokevirtual #153                // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+        42: astore_1
+        43: getstatic     #62                 // Field mod/acgaming/universaltweaks/config/UTConfigTweaks.BLOCKS:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory;
+        46: getfield      #66                 // Field mod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory.BREAKABLE_BEDROCK:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory$BreakableBedrockCategory;
+        49: getfield      #157                // Field mod/acgaming/universaltweaks/config/UTConfigTweaks$BlocksCategory$BreakableBedrockCategory.utBreakableBedrockToolListMode:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$EnumLists;
+        52: getstatic     #160                // Field mod/acgaming/universaltweaks/config/UTConfigTweaks$EnumLists.WHITELIST:Lmod/acgaming/universaltweaks/config/UTConfigTweaks$EnumLists;
+        55: if_acmpne     62
+        58: iconst_1
+        59: goto          63
+        62: iconst_0
+        63: istore_2
+        64: getstatic     #53                 // Field toolList:Ljava/util/List;
+        67: aload_1
+        68: invokeinterface #165,  2          // InterfaceMethod java/util/List.contains:(Ljava/lang/Object;)Z
+        73: iload_2
+        74: if_icmpne     78
+        77: return
+        78: aload_0
+        79: invokevirtual #169                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$LeftClickBlock.getWorld:()Lnet/minecraft/world/World;
+        82: astore_3
+        83: aload_0
+        84: invokevirtual #173                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$LeftClickBlock.getPos:()Lnet/minecraft/util/math/BlockPos;
+        87: astore        4
+        89: aload_3
+        90: aload         4
+        92: invokevirtual #179                // Method net/minecraft/world/World.func_180495_p:(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/state/IBlockState;
+        95: invokeinterface #185,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+       100: astore        5
+       102: aload         5
+       104: getstatic     #191                // Field net/minecraft/init/Blocks.field_150357_h:Lnet/minecraft/block/Block;
+       107: if_acmpne     129
+       110: aload_0
+       111: getstatic     #195                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.DENY:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+       114: invokevirtual #199                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$LeftClickBlock.setUseBlock:(Lnet/minecraftforge/fml/common/eventhandler/Event$Result;)V
+       117: aload_0
+       118: getstatic     #195                // Field net/minecraftforge/fml/common/eventhandler/Event$Result.DENY:Lnet/minecraftforge/fml/common/eventhandler/Event$Result;
+       121: invokevirtual #202                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$LeftClickBlock.setUseItem:(Lnet/minecraftforge/fml/common/eventhandler/Event$Result;)V
+       124: aload_0
+       125: iconst_1
+       126: invokevirtual #206                // Method net/minecraftforge/event/entity/player/PlayerInteractEvent$LeftClickBlock.setCanceled:(Z)V
+       129: return
+    RuntimeVisibleAnnotations:
+      0: #121()
+
+## config/Universal Tweaks - Tweaks.cfg lines 71-88
+        "breakable bedrock" {
+            # Allows customizable mining of bedrock
+            B:"[1] Breakable Bedrock Toggle"=true
+
+            # List of tools concerning mining bedrock
+            # Behavior depends on the list mode
+            # Syntax: modid:tool
+            S:"[2] Tool List" <
+                twilightforest:fiery_pickaxe
+             >
+
+            # Blacklist Mode: Tools which can't mine bedrock, others can
+            # Whitelist Mode: Tools which can mine bedrock, others can't
+            # Valid values:
+            # WHITELIST
+            # BLACKLIST
+            S:"[3] List Mode"=WHITELIST
+        }
