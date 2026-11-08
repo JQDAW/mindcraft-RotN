@@ -692,7 +692,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             if (open) console.log(text); else line(agent, text); // said once, then logged (T1: chat volume)
             startJob(agent, n, REPAIR_LABEL, () => ops.buildShelter(bot, { site: n.site, keepSoft: true, tolerateBody }), (r) => {
                 if (r?.closed) { bot.rotnSheltered = true; n.repairStall = null; return; }
-                if ((r?.placed ?? 0) > 0) { n.repairStall = null; return; } // progress: the next tick tries again
+                // CX23 soak: why cells stay open, in the journal (r.line names each cell and its reason).
+                if ((r?.placed ?? 0) > 0) { console.log(`[night] the repair placed ${r.placed} but left some open (${r.line})`); n.repairStall = null; return; } // progress: the next tick tries again
                 // Nothing placed: back to every CHECK_MS until a fight in place ends (#331 re-review).
                 if (!n.repairStall) console.warn(`[night] the repair placed nothing (${r?.line ?? 'no result'}); checking again in ${CHECK_MS / 1000} s`);
                 // The same stall goes on: the blocks already seen dug do not let another retry through.

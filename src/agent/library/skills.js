@@ -52,7 +52,7 @@ export function weaponRank(item) {
  * failed equip of a fight, no more are tried in it (#296 review 2: each try can wait about 11 s for
  * an unanswered click and its retry, while the bot does not attack).
  */
-async function equipHighestAttack(bot, fight = {}) {
+export async function equipHighestAttack(bot, fight = {}) {
     const isWeapon = (item) => !!item && (item.name.includes('sword') || (item.name.includes('axe') && !item.name.includes('pickaxe')));
     const best = (items) => items.filter(isWeapon).sort((a, b) => weaponRank(b) - weaponRank(a))[0] ?? null;
     // A weapon in the off hand (which threats.hasWeapon counts) is moved into the inventory when
