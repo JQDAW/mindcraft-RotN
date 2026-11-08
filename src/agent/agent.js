@@ -34,6 +34,7 @@ import { installChatLimit, withChatPriority } from './chat_limit.js';
 import { installWalkSafety } from './library/fall_safety.js';
 import { bindDamageRecord } from './damage_record.js';
 import { startStateLine } from './state_report.js';
+import { chatFrom } from './chat_sender.js';
 import { reportNamingNearSpawn } from './library/naming_report.js';
 import { bindSurvivalLog } from './library/survival_log.js';
 import { EAT_AT } from './library/food.js';
@@ -215,12 +216,15 @@ export class Agent {
 
 		this.respondFunc = respondFunc;
 
-        this.bot.on('whisper', respondFunc);
-        
-        this.bot.on('chat', (username, message) => {
-            if (serverProxy.getNumOtherAgents() > 0) return;
+        // Security (after G4 #10): the sender comes only from the packet's chat component
+        // (chat_sender.js), never from mineflayer's 'chat'/'whisper' text patterns, which take any
+        // "[Server] JQDAW: !stop" announcement for a line from JQDAW. Player chat and whispers only.
+        this.bot.on('message', (jsonMsg, position) => {
+            const m = chatFrom(jsonMsg, position);
+            if (!m) return;
             // only respond to open chat messages when there are no other agents
-            respondFunc(username, message);
+            if (m.kind === 'chat' && serverProxy.getNumOtherAgents() > 0) return;
+            respondFunc(m.username, m.message);
         });
 
         // Set up auto-eat. It stays off: the 'eating' mode eats by rotn-data's pack food values and
