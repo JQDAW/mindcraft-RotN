@@ -575,14 +575,13 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **Open for the lead:** on S the bot's agenda state persists on the CX23 (`/var/lib/mindcraft-rotn/bots/frcfld/agenda.json`), and the gate has no verb to reset it. A run on a bot whose agenda is already done is "not reached". The human resets the state under the GO.
 - **Tests:** `test/unit/g4-restart-persistence.test.js`: a simulated server and bot (S and T), and one test through the real `serviceBot`.
 
-### G4 #7 (with #2, #4, #5): `g4-soak-2h` (offline-built, not yet run; the targets are TBD)
+### G4 #7 (with #2, #4, #5): `g4-soak-2h` (measuring run M1 done, #419; the targets are ADR 0010's)
 
 - **What it shows:** 2 hours of the CX23 service on a fresh test server (`ROTN_SERVICE_GO=<GO id>:frcfld:test-server-host-confirmed run.mjs --scenario g4-soak-2h --service frcfld`).
   - Every `sampleMinutes` (5) for `durationMinutes` (120): `metrics` (`MemoryCurrent`, `MemoryPeak`, `NRestarts`, `ActiveState`) and a fresh journal read.
   - The journal is read with `lib/survival.mjs`.
-- **The targets are TBD** (lead, 2026-11-08). `peakMemoryMaxMb` and `usdPerHourMax` stay `"TBD"` until the soak ADR sets them after the first measuring run.
-  - A check whose target is TBD records the measurement and says "not reached: no target yet (TBD)", never a pass.
-  - The run is not-gate while either target is TBD.
+- **The targets are ADR 0010's** (`docs/adr/0010-soak-targets.md`, from the measuring run M1, `test/evidence/g4/g4soak-m1-20261108/`): `peakMemoryMaxMb` **850** (MiB: `MemoryCurrent`/`MemoryPeak` / 1048576; M1 peaked at 634) and `usdPerHourMax` **0.05** (USD per hour of soak time; M1: 0.0116). They are the defaults and gate params (`equal`): other values make the run not-gate. The messages say MiB.
+  - A measuring run may still pass a target as `TBD`: that check records the measurement and says "not reached: no target yet (TBD)", never a pass, and the run is not-gate.
 - **The checks:**
   - **`login_online`:** as in #374 (this run's bot, an inactive unit).
   - **`naming` (#2), the lead's decisions on #394:** the deterministic block line from `src/agent/library/naming_report.js` (#396) is the only pass source: `[naming] <bot> near spawn: <kinds> kinds; unknown <n>; <key>:<count> ...` (the count is after the last `:`; an unnamed block's key is `#<type>:<meta>`).
@@ -592,8 +591,8 @@ A short session of the real agent with the **production** task-giver list. `Serv
     - **The agent's own `!nearbyBlocks` results** are a note (`notes.nearbyBlocks`: the names and any `blockNameProblem`), never a pass. Their format: `NEARBY_BLOCKS` on the line after `Agent executed: !nearbyBlocks and got: ` or on the same line; `- water (source|flowing)`; `- Block Below|at Legs|at Head: <name>`; `- First Solid Block Above Head: <name> (N blocks up)` or `none`; `NEARBY_BLOCKS: none`; a bare `-` is an empty name.
   - **`no_crash` (#7):** online to the end; no agent_process restart, fatal or exit line; `NRestarts` unchanged; `active` at every sample whose metrics read worked (S).
     - A unit state `unknown` (the adapter's `STATUS_FAIL_LIMIT` failed status reads) is no departure: the soak runs on. Still unknown at the end, the check is "not reached (infra)"; recovered, it is a note (`notes.stateUnknown`).
-  - **`peak_memory` (#7, S):** the highest `MemoryCurrent` (or `MemoryPeak`) within the target.
-  - **`usd_per_hour` (#7):** the sum of `cost_usd` over the run's `[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X` lines (#395), per hour of the journal's covered time. One `cost_usd unknown`, or no usage line at all, makes it not reached, with the count.
+  - **`peak_memory` (#7, S):** the highest `MemoryCurrent` (or `MemoryPeak`), in MiB, at most `peakMemoryMaxMb` (850, ADR 0010).
+  - **`usd_per_hour` (#7):** the sum of `cost_usd` over the run's `[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X` lines (#395), per hour of the journal's covered time, at most `usdPerHourMax` (0.05, ADR 0010). One `cost_usd unknown`, or no usage line at all, makes it not reached, with the count.
   - **`agenda_done` (#4):** `agenda done` within the soak.
   - **`food_floor` (#5):** every `[survival] food` line at or above `foodFloor` (6).
   - **`ate_when_low` (#5):** after each `low` food line, an `ate` line within the next `eatWithinMinutes` (5) food lines (one a minute at most).
