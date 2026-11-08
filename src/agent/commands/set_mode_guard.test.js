@@ -16,7 +16,9 @@ test('CX23 soak: the RotN profile turns cowardice, self_defense and self_preserv
     for (const m of ['cowardice', 'self_defense', 'self_preservation']) assert.equal(profile.modes?.[m], true, m);
     // prompter.js merges profiles per top-level key: a "modes" object here replaces assistant.json's.
     assert.deepEqual(Object.keys(profile.modes).sort(), Object.keys(assistant.modes).sort(), 'no mode silently dropped');
-    for (const [m, on] of Object.entries(assistant.modes)) if (m !== 'cowardice') assert.equal(profile.modes[m], on, `${m} as the base profile has it`);
+    for (const [m, on] of Object.entries(assistant.modes)) if (m !== 'cowardice' && m !== 'hunting') assert.equal(profile.modes[m], on, `${m} as the base profile has it`);
+    // G4 #5: hunting is on, but it acts only when food is short (modes.js foodDue, hunting.js).
+    assert.equal(profile.modes.hunting, true);
     assert.equal(profile.modes.cheat, false);
 });
 
