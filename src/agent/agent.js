@@ -34,6 +34,7 @@ import { installChatLimit, withChatPriority } from './chat_limit.js';
 import { installWalkSafety } from './library/fall_safety.js';
 import { bindDamageRecord } from './damage_record.js';
 import { startStateLine } from './state_report.js';
+import { namingLine, blocksNearSpawn } from './library/naming_report.js';
 import { bindSurvivalLog } from './library/survival_log.js';
 import { EAT_AT } from './library/food.js';
 
@@ -145,6 +146,11 @@ export class Agent {
             await new Promise((resolve) => setTimeout(resolve, 1000));
             
             console.log(`${this.name} spawned.`);
+            // G4 #2: the block names near spawn, once per process, from the bot's own naming (no LLM, no chat).
+            if (typeof this.bot?.findBlocks === 'function') {
+                try { console.log(namingLine(this.name, blocksNearSpawn(this.bot))); }
+                catch (err) { console.warn(`[naming] near spawn: could not read the blocks (${safeError(err)})`); }
+            }
             this.clearBotLogs();
           
             this._setupEventHandlers(save_data, init_message);
