@@ -482,16 +482,17 @@ A short session of the real agent with the **production** task-giver list. `Serv
   - The verb, the name (the ctl's rule) and `--since` (the gate's T form) are checked before anything is sent.
   - Nothing blocks the event loop.
 - **What each call does:**
-  - **`start()`:** sends `start` asynchronously and records that a start was sent first. A failure (or a 255) leaves the unit's state unknown: it is kept in `startError` and never retried.
+  - **`start()`:** sends `start` asynchronously and records that a start was sent first. A failure (or a 255) leaves the unit's state unknown: it is kept in `startError` and never retried. `startSession`'s one-time login retry never applies to the service, so a start is never sent twice; systemd's `Restart=` covers that case. A service that is not up before joining is reported as "the service was not up before joining (unit <state>; <start error>)", not as an exit code.
   - **`alive()` and `output()`:** synchronous, from caches that refresh in the background (10 s and 15 s).
     - `alive()` is true while the start is in flight, then follows `ActiveState`: `active`, `activating` or `reloading`.
+    - After 3 failed status refreshes in a row (`STATUS_FAIL_LIMIT`), the state is `unknown` and `alive()` is false, never a stale "active". `result.json`'s `service.stateUnknown` records when, how many failures and the last error. A good refresh recovers.
     - `output()` is the unit's journal from 60 s before the start (for clock skew), counted from the first `Starting mindcraft-rotn@<bot>.service` line. It ends with `[service] ...` lines for a failed start or an incident.
   - **`refresh()`** forces both caches. **`exitCode()`** is always null; `unitState()` is the `ActiveState`.
-  - **`stop()`:** sends `stop` once a start was sent, also after a failed one, never retried. It waits for `inactive` and writes the journal to `driver.log`.
+  - **`stop()`:** sends `stop` once a start was sent, also after a failed one. It retries a 255 up to twice, since `stop` is idempotent in systemd. It waits for `inactive` and writes the journal to `driver.log`.
   - **`metrics()`, `journal()`, `statusText()`:** async.
 - **The cleanup** (`runner.mjs`): the runner stops the bot when `alive()` is true **or** `needsStop()` is (a start was sent and no stop finished), and a throwing `alive()` never skips the stop. A failing stop becomes the run's error.
-- **Exit 126 is a gate refusal: an ADR 0009 incident.** `GateRefusal` is never retried. It is kept in `incident`, logged by `run.mjs` as `INCIDENT: ...`, and makes the run not-gate. Report it to the human. The ctl's own refusal (2) is an ordinary error. ssh's own failure (255) is retried twice, for the reads only.
-- **stderr** (#371 review): ssh's own stderr can name the host and its address, so it is never kept. On a 255 it is dropped; otherwise only the gate's and the ctl's own lines are kept, with any IPv4 or IPv6 address redacted.
+- **Exit 126 is a gate refusal: an ADR 0009 incident.** `GateRefusal` is never retried. It is kept in `incident`, logged by `run.mjs` as `INCIDENT: ...`, and makes the run not-gate. Report it to the human. The ctl's own refusal (2) is an ordinary error. ssh's own failure (255) is retried twice for the reads and for `stop`, never for `start`.
+- **stderr** (#371 review): ssh's own stderr can name the host and its address, so it is never kept. On a 255 it is dropped; otherwise only the gate's and the ctl's own lines are kept, with any IPv4 or IPv6 address redacted. An IPv6 candidate counts only if node's own parser takes it, so a time such as `12:34:56` stays.
 - **Tests:** `test/unit/g4-service.test.js`, with an async fake ssh playing the gate and the ctl. Nothing runs against the CX23 before the human's step 0 and a written GO.
 
 ### G4 #1: `g4-service-reconnect` (set-up S; offline-built, not yet run)

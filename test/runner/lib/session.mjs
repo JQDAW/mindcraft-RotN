@@ -108,9 +108,11 @@ export async function startSession(ctx, { name, env = {}, naming = null, checkNa
     };
     // One retry, only for the profile-fetch failure, only if the driver exited before any join or kick
     // (lead, #71). login_online still needs a real join; any other failure, or a second one, is a FAIL.
+    // Never for the CX23 service (#371 review): systemd's Restart= covers it, and a start is never sent twice.
+    const service = bot.kind === 'service';
     let { ev: first, lines } = await attempt();
     const retry = { retried: false };
-    if (first?.type === 'exited' && isProfileFetchFailure(lines, name)) {
+    if (!service && first?.type === 'exited' && isProfileFetchFailure(lines, name)) {
         Object.assign(retry, { retried: true, at: new Date().toISOString(), reason: 'profile fetch failed before joining (minecraft-protocol: "Failed to obtain profile data")',
             firstExitCode: bot.exitCode(), delayMs: RETRY_DELAY_MS });
         await clock.sleep(RETRY_DELAY_MS);
@@ -125,7 +127,10 @@ export async function startSession(ctx, { name, env = {}, naming = null, checkNa
     ctx.note('uuidVersion', uuidVersion(uuid));
     const base = { sinceMarker, events, gone, joinedAt, uuidVersion: uuidVersion(uuid), naming: agent };
     if (first?.type !== 'joined') {
-        const why = first?.type === 'exited' ? `driver exited with code ${bot.exitCode()} before joining`
+        const stopped = service
+            ? `the service was not up before joining (unit ${bot.unitState?.() ?? 'state unknown'}${bot.startError ? `; ${bot.startError}` : ''})`
+            : `driver exited with code ${bot.exitCode()} before joining`;
+        const why = first?.type === 'exited' ? stopped
             : first ? `${first.type}: ${first.reason ?? ''} (${classifyKick(first.reason)})` : `no join within ${p.loginTimeoutMs / MS}s`;
         return { ...base, ok: false, why: retry.retried ? `${why} (after one login retry for a profile-fetch failure)` : why };
     }

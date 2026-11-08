@@ -9,7 +9,9 @@
 //                rejects; a failure is kept in startError (and shown in output()). The journal is read from 60 s
 //                before the call (clock skew), from the first "Starting mindcraft-rotn@<bot>.service" line on.
 //   alive()      synchronous, from a cache: true while the start is in flight, then the unit's ActiveState (from
-//                `metrics`) is active, activating (ExecStartPre or a systemd auto-restart) or reloading. A stale
+//                `metrics`) is active, activating (ExecStartPre or a systemd auto-restart) or reloading. After
+//                STATUS_FAIL_LIMIT (3) failed refreshes in a row the state is 'unknown' (not alive), and stateUnknown
+//                records when and why (run.mjs puts it in result.json). A stale
 //                cache starts a background refresh and returns at once (no blocking call: timers, watchers and
 //                the runner's 20 s signal race keep running).
 //   output()     synchronous, from a cache refreshed the same way: the journal's messages since the start (the
@@ -28,10 +30,11 @@
 //     The keys are never read: ssh finds them through the alias's own config.
 //   - Exit 126 is a GATE REFUSAL, an ADR 0009 incident: GateRefusal, never retried, kept in `incident` (run.mjs
 //     reports it). Exit 2 is the ctl's own refusal, an ordinary error.
-//   - ssh's own failure (255) is retried twice for the reads only (status, metrics, journal), never for start or
-//     stop. ssh's own stderr is never kept (it can name hosts and addresses): on 255 it is dropped, and otherwise
+//   - ssh's own failure (255) is retried twice for the reads (status, metrics, journal) and for stop (idempotent in
+//     systemd), never for start: a start is never sent twice. ssh's own stderr is never kept (it can name hosts and addresses): on 255 it is dropped, and otherwise
 //     only the gate's and the ctl's own lines are kept, with any IPv4 or IPv6 address redacted.
 import fs from 'node:fs';
+import net from 'node:net';
 import process from 'node:process';
 import { execFile } from 'node:child_process';
 
@@ -43,7 +46,10 @@ export const BOT_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export const SINCE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?Z?$|^@\d{1,12}$/;
 export const GO_RE = /^([A-Za-z0-9][A-Za-z0-9._-]{2,63}):test-server-host-confirmed$/;
 export const VERBS = ['status', 'start', 'stop', 'metrics', 'journal'];
-const READS = ['status', 'metrics', 'journal'];
+// 255 (ssh's own failure) is retried for the reads and for stop, which systemd makes idempotent; never for start.
+const RETRY_ON_255 = ['status', 'metrics', 'journal', 'stop'];
+/** Background status refreshes that may fail in a row before alive() reports the state unknown (#371 review). */
+export const STATUS_FAIL_LIMIT = 3;
 /** BatchMode: never a prompt; no forwarding of any kind; -T: no pty (the key has `restrict` anyway). */
 export const SSH_OPTS = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', '-o', 'ClearAllForwardings=yes', '-o', 'ForwardAgent=no', '-o', 'ForwardX11=no', '-T'];
 /** systemd ActiveStates in which the bot's unit is up or coming up (an auto-restart is 'activating'). */
@@ -76,8 +82,10 @@ export function keptStderr(stderr, code) {
     return [kept.join(' | ').slice(0, 300), dropped ? `(${dropped} other stderr line${dropped === 1 ? '' : 's'} not kept)` : ''].filter(Boolean).join(' ');
 }
 export function redactAddresses(s) {
+    // IPv6: a run of hex digits and colons counts only if node's own parser takes it as an address, so a time such as
+    // 12:34:56 stays (#371 review).
     return s.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '<ip>')
-        .replace(/(?<![\w:])(?:[0-9a-f]{0,4}:){2,7}[0-9a-f]{0,4}(?![\w:])/gi, (m) => (/[0-9a-f]/i.test(m) ? '<ip>' : m));
+        .replace(/(?<![\w:])[0-9a-f:]*:[0-9a-f:]*:[0-9a-f:]*(?![\w:])/gi, (m) => (net.isIPv6(m) ? '<ip>' : m));
 }
 
 /**
@@ -134,6 +142,8 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
     let lastError = null;
     let goId = null;
     let status = { at: -Infinity, state: null };
+    let statusFails = 0;          // background status refreshes failed in a row
+    let stateUnknown = null;      // {since, failures, lastError} once they reach STATUS_FAIL_LIMIT
     let journal = { at: -Infinity, lines: [], raw: [] };
     const inflight = new Set();
 
@@ -162,7 +172,7 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
                 incident = incident ?? e.message;
                 throw e;
             }
-            if (r.code !== SSH_FAILED || !READS.includes(verb) || attempt >= retries) break;
+            if (r.code !== SSH_FAILED || !RETRY_ON_255.includes(verb) || attempt >= retries) break;
             await sleep(backoffMs * 2 ** attempt);
         }
         return { code: r.code, stdout: r.stdout ?? '', stderr: keptStderr(r.stderr, r.code), request };
@@ -175,6 +185,7 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
         if (r.code !== 0) throw failed(r, 'metrics');
         const m = parseMetrics(lines(r.stdout));
         status = { at: now(), state: m.ActiveState ?? null };
+        statusFails = 0;
         return m;
     };
     const readJournal = async () => {
@@ -205,6 +216,7 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
         get incident() { return incident; },
         get startError() { return startError; },
         get lastError() { return lastError; },
+        get stateUnknown() { return stateUnknown; },
         start() {
             go('start');
             since = sinceStamp(now() - SKEW_MS);
@@ -225,7 +237,17 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
             if (!startSent || stopped) return false;
             if (starting) return true;
             if (startError) return false;
-            if (now() - status.at >= statusRefreshMs) background('status', metrics);
+            if (now() - status.at >= statusRefreshMs) {
+                background('status', () => metrics().catch((e) => {
+                    // After STATUS_FAIL_LIMIT failures in a row the state is unknown, never a stale "active" (#371 review).
+                    if (++statusFails >= STATUS_FAIL_LIMIT) {
+                        stateUnknown = stateUnknown ?? { since: new Date(now()).toISOString(), failures: statusFails, lastError: String(e?.message ?? e) };
+                        stateUnknown.failures = statusFails;
+                        status = { at: now(), state: 'unknown' };
+                    }
+                    throw e;
+                }));
+            }
             return status.state === null || ALIVE_STATES.includes(status.state);
         },
         unitState: () => status.state,

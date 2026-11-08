@@ -171,7 +171,7 @@ async function main(argv) {
     // Every record, the progress and killed ones too, carries the LLM calls so far (#122 review nit): a run
     // that never finishes still shows what it used. The after-reading exists only in the final result.
     const stamp = (r) => Object.assign(r, { git, server: process.env.TEST_SERVER_NAME ?? null, driver: driverName },
-        bot.kind === 'service' ? { service: { goId: bot.goId ?? null, startError: bot.startError ?? null, incident: bot.incident ?? null } } : {},
+        bot.kind === 'service' ? { service: { goId: bot.goId ?? null, startError: bot.startError ?? null, incident: bot.incident ?? null, stateUnknown: bot.stateUnknown ?? null } } : {},
         scenario.llm && !r.llm ? { llm: llmRecord(usageBefore, { ok: false, error: 'the run did not finish' }, bot.output()) } : {},
         scenario.gate === 'G3' || scenario.gate === 'G4' ? { batch: policy.batch } : {});
     let finished = false;
