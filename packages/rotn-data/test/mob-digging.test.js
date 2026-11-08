@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import minecraftData from 'minecraft-data';
 import { loadRotnData } from '../src/catalog.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -213,4 +214,127 @@ test('sources name the ESM-Tweaks download (not in the pinned zip) and the jar h
     const mods = JSON.parse(fs.readFileSync(path.join(HERE, '../3.3.4/manifest.json'), 'utf8')).mods;
     assert.ok(mods.some((m) => m.id === 'esmtweaks' && m.version === '0.4.5'));
     assert.ok(mods.some((m) => m.id === 'epicsiegemod' && m.version === '13.169'));
+});
+
+test('bedrock: Universal Tweaks makes it hardness 200 for every digger; its tool whitelist is a player-click check only', () => {
+    const ut = read('universaltweaks-bedrock.javap.txt');
+    const utSection = (title) => {
+        const i = ut.indexOf(`\n## ${title}`);
+        assert.ok(i >= 0, `fixture section ${title}`);
+        return ut.slice(i + 1).split(/\n## /)[0];
+    };
+    assert.match(ut, new RegExp(data.sources.universalTweaks.sha256));
+    assert.ok(data.sources.configs.some((c) => c.startsWith('config/Universal Tweaks - Tweaks.cfg')));
+    // The mixin redirects the 7th registerBlock(int, String, Block) call in Block.registerBlocks to a rock block, hardness 200.
+    const mixin = utSection('UTBreakableBedrockMixin');
+    assert.match(mixin, /Lnet\/minecraft\/block\/Block;registerBlock\(ILjava\/lang\/String;Lnet\/minecraft\/block\/Block;\)V/);
+    assert.match(mixin, /#19 = Utf8 +registerBlocks/);
+    assert.match(mixin, /#26 = Integer +6\n/);
+    assert.match(mixin, /#17\(#18=\[s#19\],#20=@#21\(#7=s#22,#23=s#24,#25=I#26\)\)/); // @Redirect(method, @At(INVOKE, target, ordinal))
+    inOrder(mixin, 'Material.field_151576_e', 'float 200.0f', 'func_149711_c', 'float 6000000.0f', 'func_149752_b', 'Block.func_176219_a');
+    assert.match(utSection('universaltweaks.refmap.json'), /"registerBlocks": "Lnet\/minecraft\/block\/Block;func_149671_p\(\)V"/);
+    // The server queues that mixin config only when the toggle is on; the code default is off, the pack turns it on.
+    const plugin = utSection('UTLoadingPlugin.shouldMixinConfigQueue');
+    inOrder(plugin, 'Field isClient:Z', 'ifeq          1176', '1176:', 'String mixins.tweaks.blocks.breakablebedrock.json', 'bipush        30',
+        'tableswitch', '30: 3623', '3623:', 'BREAKABLE_BEDROCK', 'utBreakableBedrockToggle:Z', 'ireturn');
+    const cat = utSection('UTConfigTweaks$BlocksCategory$BreakableBedrockCategory');
+    inOrder(cat, '[1] Breakable Bedrock Toggle', '[2] Tool List', '[3] List Mode');
+    inOrder(cat, 'iconst_0', 'utBreakableBedrockToggle:Z', 'EnumLists.BLACKLIST', 'utBreakableBedrockToolListMode');
+    const cfg = utSection('config/Universal Tweaks - Tweaks.cfg');
+    assert.match(cfg, /B:"\[1\] Breakable Bedrock Toggle"=true/);
+    assert.match(cfg, /S:"\[2\] Tool List" <\n\s+twilightforest:fiery_pickaxe\n\s+>/);
+    assert.match(cfg, /S:"\[3\] List Mode"=WHITELIST/);
+    // The tool list is checked only on a player's LeftClickBlock event; mobs dig with World.destroyBlock.
+    const click = utSection('UTBreakableBedrock.utMineBedrock');
+    assert.match(click, /public static void utMineBedrock\(net\.minecraftforge\.event\.entity\.player\.PlayerInteractEvent\$LeftClickBlock\);/);
+    assert.match(click, /#121 = Utf8 +Lnet\/minecraftforge\/fml\/common\/eventhandler\/SubscribeEvent;[\s\S]*RuntimeVisibleAnnotations:\n\s+0: #121\(\)/);
+    inOrder(click, 'utBreakableBedrockToggle', 'func_184614_ca', 'EnumLists.WHITELIST', 'List.contains', 'Blocks.field_150357_h', 'setCanceled');
+    inOrder(method(section('ESM-Tweaks AltEntityAIDigging'), 'public void func_75246_d();'), 'getBlockStrength', 'World.func_175655_b');
+    assert.match(method(section('ESM-Tweaks HarvestUtil'), 'isBlockUnbreakable'), /fconst_0\n\s+\d+: fcmpg\n\s+\d+: ifge/);
+    // The dump agrees: bedrock is the only hardness-200 block; rock, no harvest tool, resistance 6000000 (x 3 / 5).
+    const b = blocks['minecraft:bedrock'].states[0];
+    assert.deepEqual([b.hardness, b.material, b.harvestTool, b.toolRequired, b.explosionResistance], [200, 'rock', null, true, 6000000 * 3 / 5]);
+    assert.deepEqual(Object.keys(blocks).filter((k) => blocks[k].states.some((s) => s.hardness === 200)), ['minecraft:bedrock']);
+    // So any digger digs it by hand, at the 100 rate (rock needs a tool): about 20000 ticks.
+    for (const mob of ['minecraft:zombie', 'betteranimalsplus:brownbear']) {
+        const r = pack.canMobDig(mob, 'minecraft:bedrock');
+        assert.equal(r.canDig, true, mob);
+        assert.equal(r.byHand, true, mob);
+        assert.equal(r.ticksByHand, 20000, mob);
+    }
+    assert.ok(data.evidence.some((e) => e.startsWith('Bedrock is breakable (Universal Tweaks 1.9.0')));
+    assert.ok(!data.unverified.some((u) => /bedrock/i.test(u)));
+});
+
+test('hardness 0: ESM-Tweaks never finishes the dig, so canMobDig says no for a cited real 0; ticksByHand comes after the checks', () => {
+    const strength = method(section('ESM-Tweaks HarvestUtil'), 'getBlockStrength');
+    assert.match(strength, /func_185887_b[^\n]*\n\s+\d+: fstore +5\n\s+\d+: fload +5\n\s+\d+: fconst_0\n\s+\d+: fcmpg\n\s+\d+: ifgt +32\n\s+30: fconst_0\n\s+31: freturn/);
+    assert.match(method(section('ESM-Tweaks AltEntityAIDigging'), 'public void func_75246_d();'), /getBlockStrength[^\n]*\n[^\n]*\n[^\n]*digTick:I\n[^\n]*i2f\n[^\n]*fconst_1\n[^\n]*fadd\n[^\n]*fmul/);
+    for (const mob of ['minecraft:zombie', 'betteranimalsplus:brownbear']) {
+        const r = pack.canMobDig(mob, 'minecraft:tnt');
+        assert.deepEqual(r, { canDig: false, byHand: false, needs: null, ticksByHand: null, uncertain: false, reason: 'hardness 0: the dig never finishes' }, mob);
+    }
+    // The unverified note counts the dump's solid hardness-0 states.
+    let n = 0;
+    for (const b of Object.values(blocks)) for (const s of b.states) if (s.hardness === 0 && (s.solid || s.material === 'web')) n++;
+    assert.ok(data.unverified.some((u) => u.startsWith(`The dump records hardness 0 for ${n} solid states`)), String(n));
+    // No answer depends on ticksByHand being computed for a block the mob cannot dig.
+    assert.equal(pack.canMobDig('minecraft:zombie', 'minecraft:barrier').ticksByHand, null);
+});
+
+test('hardness 0 elsewhere is uncertain: never a confident mob-proof answer (#350 review)', () => {
+    const hz = data.hardnessZero;
+    assert.deepEqual(hz.knownReal, ['minecraft:slime', 'minecraft:tnt']);
+    // Each known-real 0: every state is 0 in the dump and vanilla's hardness is 0 (minecraft-data 1.12.2).
+    const vanilla = minecraftData('1.12.2');
+    for (const name of hz.knownReal) {
+        assert.ok(blocks[name].states.every((s) => s.hardness === 0), name);
+        assert.equal(vanilla.blocksByName[name.slice('minecraft:'.length)].hardness, 0, name);
+    }
+    assert.equal(blocks['minecraft:tnt'].class, 'net.minecraft.block.BlockTNT');
+    // This pack's slime is Quark's: it extends BlockSlime, sets only its sound, and keeps vanilla's hardness.
+    const quark = read('hardness-zero.javap.txt').split('\n## Quark BlockSpringySlime')[1];
+    assert.ok(quark, 'fixture section');
+    assert.equal(blocks['minecraft:slime'].class, 'vazkii.quark.tweaks.block.BlockSpringySlime');
+    assert.match(quark, /public class vazkii\.quark\.tweaks\.block\.BlockSpringySlime extends net\.minecraft\.block\.BlockSlime \{/);
+    assert.match(quark, /BlockSlime\."<init>":\(\)V\n\s+4: aload_0\n[^\n]*SoundType[^\n]*\n[^\n]*func_149672_a[^\n]*\n\s+11: pop\n\s+12: return/);
+    assert.doesNotMatch(quark, /func_149711_c|func_176195_g/);
+    // Vanilla says these dumped zeros are wrong, so they must not read as certain.
+    for (const name of ['sponge', 'stone_slab2']) assert.ok(vanilla.blocksByName[name].hardness > 0, name);
+    const bear = (b) => pack.canMobDig('betteranimalsplus:brownbear', b);
+    const z = (b, opts) => pack.canMobDig('minecraft:zombie', b, opts);
+    for (const b of ['minecraft:sponge', 'minecraft:stone_slab2', 'contentcreator:limestone_brick_slab']) {
+        const r = bear(b);
+        assert.equal(r.canDig, true, b);
+        assert.equal(r.uncertain, true, b);
+        assert.equal(r.ticksByHand, null, b);
+        assert.match(r.reason, /hardness unknown \(the dump says 0\)/, b);
+    }
+    // A zombie follows the tool rules as if the hardness were above 0: sponge needs no tool, the stone slab a pickaxe.
+    assert.equal(z('minecraft:sponge').canDig, true);
+    assert.equal(z('minecraft:sponge').uncertain, true);
+    const slab = z('minecraft:stone_slab2');
+    assert.deepEqual([slab.canDig, slab.uncertain, slab.needs?.type], [false, true, 'pickaxe']);
+    assert.equal(z('minecraft:stone_slab2', { held: [{ type: 'pickaxe', level: 3 }] }).canDig, true);
+    // Over the whole dump: a hardness-0 answer is certain only for the known-real blocks, and no answer
+    // for any other block is uncertain.
+    let uncertainStates = 0;
+    for (const [name, b] of Object.entries(blocks)) {
+        for (const s of b.states) {
+            const r = pack.canMobDig('betteranimalsplus:brownbear', name, { meta: s.meta });
+            if (!r) continue;
+            const zero = s.hardness === 0 && (s.solid || s.material === 'web');
+            assert.equal(r.uncertain, zero && !hz.knownReal.includes(name), `${name}:${s.meta}`);
+            if (r.uncertain) {
+                uncertainStates++;
+                assert.equal(r.canDig, true, `${name}:${s.meta}`);
+            }
+        }
+    }
+    assert.equal(uncertainStates, 564 - 3);
+    assert.match(hz.note, /564 in 207 blocks/);
+    // Known answers stay certain.
+    assert.equal(z('minecraft:dirt').uncertain, false);
+    assert.equal(z('minecraft:bedrock').uncertain, false);
+    assert.equal(z('minecraft:barrier').uncertain, false);
 });

@@ -1,0 +1,36 @@
+# Hardness-0 blocks whose 0 is real (lead's #350 review, 2026-11-08). Excerpts only.
+# minecraft:slime in this pack is Quark's BlockSpringySlime: mods/QuarkRotN-r1.6-190.jar from the pinned
+#   pack zip (SHA-256 90642fd5...f5205), jar SHA-256 a79751417149459395984cc7ee83195ce8dcb4b2e6adbf7abb1ccc650f816dd4.
+# Made with `javap -c -p` from JDK 8 tools; the whole class follows. It extends vanilla BlockSlime, its
+# constructor only sets the sound type (func_149672_a), and it neither calls setHardness (func_149711_c)
+# nor overrides getBlockHardness (func_176195_g), so vanilla BlockSlime's hardness (0) stands.
+# minecraft:tnt is vanilla net.minecraft.block.BlockTNT (the dump's class). Vanilla hardness of both
+# is 0 in minecraft-data 3.119.0 data/pc/1.12/blocks.json (the test reads it).
+
+## Quark BlockSpringySlime (vazkii/quark/tweaks/block/BlockSpringySlime.class)
+Compiled from "BlockSpringySlime.java"
+public class vazkii.quark.tweaks.block.BlockSpringySlime extends net.minecraft.block.BlockSlime {
+  public vazkii.quark.tweaks.block.BlockSpringySlime();
+    Code:
+       0: aload_0
+       1: invokespecial #9                  // Method net/minecraft/block/BlockSlime."<init>":()V
+       4: aload_0
+       5: getstatic     #15                 // Field net/minecraft/block/SoundType.field_185859_l:Lnet/minecraft/block/SoundType;
+       8: invokevirtual #19                 // Method func_149672_a:(Lnet/minecraft/block/SoundType;)Lnet/minecraft/block/Block;
+      11: pop
+      12: return
+
+  public void func_180634_a(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, net.minecraft.entity.Entity);
+    Code:
+       0: aload_2
+       1: aload         4
+       3: invokestatic  #29                 // Method vazkii/quark/tweaks/feature/SpringySlime.collideWithSlimeBlock:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/entity/Entity;)V
+       6: return
+
+  public void func_176216_a(net.minecraft.world.World, net.minecraft.entity.Entity);
+    Code:
+       0: aload_2
+       1: dconst_0
+       2: putfield      #46                 // Field net/minecraft/entity/Entity.field_70181_x:D
+       5: return
+}
