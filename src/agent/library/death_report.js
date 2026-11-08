@@ -184,6 +184,12 @@ const where = (p) => (p ? `${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(
 
 /** How long Corpse Complex keeps the dropped items at the death spot (config: Drop Despawn Timer 600). */
 export const DROPS_LAST_MIN = 10;
+/**
+ * #360 follow-up: the most kinds the re-plan note names in each list (lost, held), most first;
+ * the rest are "N more kinds". A bot with a full inventory (36 slots of different kinds) made a
+ * note of hundreds of words in every prompt. The log line still names every kind.
+ */
+export const NOTE_KINDS = 20;
 
 /**
  * What the model is told about the items it dropped (lead decision on rotn-data Request 12), with
@@ -368,7 +374,7 @@ export function holdingNote(bot) {
     if (!held.length) return 'You now hold nothing.';
     const h = bot?.heldItem;
     const hand = h?.name && h.count > 0 ? ` (in your hand: ${h.count} ${h.metadata ? `${h.name}:${h.metadata}` : h.name})` : '';
-    return `You now hold ${formatLoss(held, Infinity)}${hand}; plan only with what you hold now.`;
+    return `You now hold ${formatLoss(held, NOTE_KINDS)}${hand}; plan only with what you hold now.`;
 }
 
 export function reportDeath(agent, { now = Date.now() } = {}) {
@@ -388,7 +394,7 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
     // and never despawns; lead decision on rotn-data Request 12).
     // G3 gate B: every kind lost, and what the bot holds now, from its real slots.
     const items = (r.lost.length
-        ? `You no longer have ${formatLoss(r.lost, Infinity)}. ${lostItemsNote(Math.floor(DROPS_LAST_MIN - (now - (r.at ?? now)) / 60_000))}`
+        ? `You no longer have ${formatLoss(r.lost, NOTE_KINDS)}. ${lostItemsNote(Math.floor(DROPS_LAST_MIN - (now - (r.at ?? now)) / 60_000))}`
         : 'Your inventory looks unchanged.') + ` ${holdingNote(agent.bot)}`;
     // A death is due for a prompt even when nothing was running (#215 review 1), except in a
     // death streak: then the note waits for the next prompt, so deaths cannot drive LLM calls.
