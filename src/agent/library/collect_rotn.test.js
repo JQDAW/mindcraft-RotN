@@ -288,3 +288,23 @@ test('#366 review 2: a block whose walk throws NoPath or Timeout uses no attempt
     assert.deepEqual(bot.calls.collected.map(b => b.position.x), [2, 3, 4, 5], 'no new try at 2 or 3');
     assert.match(bot.output, /No sand nearby to collect\./);
 });
+
+// #416 review 2: the death-spot filter (CX23 soak) must not keep the bot from picking up the crafting
+// table it placed for a craft (pickUpTable collects it): a crafting table is exempt.
+test('#416 review 2: a crafting table near a recent death spot is still picked up; other targets there are left (said once, also on a partial collect)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const now = Date.now();
+    const own = (b) => [[b.name, b.metadata, 1]];
+    const table = fakeBot({ blocks: [block('crafting_table', 0, at(2))], dropsOf: own });
+    table.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(3), dimension: null }];
+    assert.equal(await skills.collectBlock(table, 'crafting_table', 1), true, table.output);
+    assert.equal(countItem(table, 'crafting_table'), 1);
+    assert.doesNotMatch(table.output, /left alone/);
+    // Two rock piles, one 2 blocks from a recent death spot: the far one only; the line once.
+    const piles = fakeBot({ blocks: [block('pyrotech:rock', 0, at(2)), block('pyrotech:rock', 0, at(40))] });
+    piles.rotnDeathSpots = () => [{ at: now - 60_000, pos: at(3), dimension: null }];
+    assert.equal(await skills.collectBlock(piles, 'pyrotech:rock', 2), true, piles.output);
+    assert.deepEqual(piles.calls.dug.map(b => b.position.x), [40]);
+    assert.equal((piles.output.match(/Some were left alone: within 24 blocks of where you died recently/g) ?? []).length, 1, piles.output);
+});
+

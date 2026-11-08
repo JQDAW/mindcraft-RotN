@@ -11,7 +11,7 @@ import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
 import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile } from './agenda.js';
-import { NIGHT_START, TICKS_PER_MIN } from './library/night.js';
+import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
 import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS } from './agenda_driver.js';
 import { Agent } from './agent.js';
 import { parseCommandMessage } from './commands/index.js';
@@ -501,3 +501,32 @@ test('#291 nit: the pile the reserve asks for keeps its recipe variant (meta); o
     assert.deepEqual(dirtPile(recipe(3)), { name: 'somemod:dirt_bits:3', per: 8 });
     assert.deepEqual(dirtPile(recipe(0)), { name: 'somemod:dirt_bits', per: 8 });
 });
+
+// CX23 soak (rotn-v0.1.3): "Night is near: in about 2 min" at 17:07, with sunset at about 17:19.
+// The time stood at the morning freeze (3001), and the minutes counted none of the freeze still to
+// run. The minutes the bot is told now count it (FREEZE_MIN less the minutes the time has stood);
+// the reserve is still due from the freeze on.
+test('CX23 soak: at the morning freeze the reserve says the minutes left with the freeze still to run, not the least certain time', (t) => {
+    const items = [stack('pyrotech:rock', 0, 6)];
+    const at = (agentNow, frozenSince) => {
+        const agent = fakeAgent(t, items);
+        agent.bot.time = { timeOfDay: MORNING_FREEZE };
+        const clock = new NightClock({ log: () => {} });
+        clock.observe(MORNING_FREEZE, frozenSince);
+        agent._night = { clock };
+        t.mock.timers.enable({ apis: ['Date'], now: agentNow });
+        assert.equal(agendaTick(agent, { now: agentNow }), 'shelter_blocks', 'due from the freeze on, as before');
+        t.mock.timers.reset();
+        return /Night is near: in about (\d+) min/.exec(agent.self_prompter.prompt)?.[1];
+    };
+    const base = (NIGHT_START - MORNING_FREEZE) / TICKS_PER_MIN; // ~7.96 min after the freeze
+    // Just frozen (the soak at 17:07): about 8 + 10 - 6 = 12 min, not 2.
+    assert.equal(at(100_000, 100_000), String(Math.round(base + FREEZE_MIN - 6)));
+    // Frozen for 8 min: 2 min of the freeze left: about 4.
+    assert.equal(at(1_000_000, 1_000_000 - 8 * 60_000), String(Math.round(base + 2 - 6)));
+    // Frozen longer than the freeze: the least certain time again.
+    assert.equal(at(2_000_000, 2_000_000 - 30 * 60_000), String(Math.round(base - 6)));
+    assert.equal(sunsetEstimateMin(MORNING_FREEZE, 0), minutesToSunset(MORNING_FREEZE) + FREEZE_MIN);
+    assert.equal(sunsetEstimateMin(dayAt(5), 3), minutesToSunset(dayAt(5)), 'away from the freeze: unchanged');
+});
+
