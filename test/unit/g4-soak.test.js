@@ -142,11 +142,13 @@ const run = (s, params = {}) => runScenario(soak, { ...s, runId: 'r1', params: {
 const byName = (r) => Object.fromEntries(r.checks.map((c) => [c.check, c]));
 
 describe('g4-soak-2h: the module and the journal parsers', () => {
-    test('G4, no runner LLM accounting; the targets are TBD placeholders; runMinutes', () => {
+    test('G4, no runner LLM accounting; the targets are ADR 0010\'s (850 MiB, USD 0.05/h) and gate params; runMinutes', () => {
         assert.equal(soak.gate, 'G4');
         assert.equal(soak.llm, false);
-        assert.equal(soak.defaults.peakMemoryMaxMb, TBD);
-        assert.equal(soak.defaults.usdPerHourMax, TBD);
+        assert.equal(soak.defaults.peakMemoryMaxMb, 850);
+        assert.equal(soak.defaults.usdPerHourMax, 0.05);
+        assert.equal(soak.gateParams.peakMemoryMaxMb, 'equal');
+        assert.equal(soak.gateParams.usdPerHourMax, 'equal');
         assert.equal(soak.defaults.durationMinutes, 120);
         assert.equal(soak.defaults.sampleMinutes, 5);
         assert.equal(soak.runMinutes(soak.defaults), 125);
@@ -176,31 +178,41 @@ describe('g4-soak-2h: the module and the journal parsers', () => {
 });
 
 describe('g4-soak-2h on a simulated service', () => {
-    test('two hours, all well: every check passes but the two TBD targets, which are not reached with the measurement; not-gate (TBD)', async () => {
+    test('two hours, all well, with ADR 0010\'s targets: every check passes, memory labelled MiB; no TBD not-gate reason', async () => {
         const r = await run(sim({ memoryMb: [300, 420, 610, 580] }));
         const c = byName(r);
-        for (const k of ['login_online', 'naming', 'no_crash', 'agenda_done', 'food_floor', 'ate_when_low', 'deaths_reported']) assert.equal(c[k].pass, true, `${k}: ${c[k].detail} ${r.error ?? ''}`);
-        assert.equal(c.peak_memory.pass, false);
-        assert.equal(c.peak_memory.detail, 'not reached: no target yet (TBD); measured peak 610 MB');
-        assert.match(c.usd_per_hour.detail, /^not reached: no target yet \(TBD\); measured USD 0\.012\/h \(USD 0\.024 over 120 min, 120 completions\)$/);
+        for (const k of Object.keys(soak.checks)) assert.equal(c[k].pass, true, `${k}: ${c[k].detail} ${r.error ?? ''}`);
+        assert.equal(c.peak_memory.detail, 'peak 610 MiB (target 850 MiB)');
+        assert.match(c.usd_per_hour.detail, /^USD 0\.012\/h \(target 0\.05; USD 0\.024 over 120 min, 120 completions\)$/);
         assert.equal(r.notes.samples.length, 25, 'one at the start and every 5 min for 120 min');
         assert.deepEqual(r.notes.survival, { eats: 0, fights: 1, fightOutcomes: { killed: 1 }, flees: 1, foodLines: 120 });
-        assert.equal(r.gateValid, false);
-        assert.ok(r.weakenedParams.some((w) => /targets are TBD/.test(w)));
+        assert.ok(!r.weakenedParams.some((w) => /targets are TBD/.test(w)), r.weakenedParams.join(' | '));
     });
 
-    test('with the targets set: peak memory passes within it and fails above it', async () => {
-        const ok = byName(await run(sim({ memoryMb: [300, 500] }), { peakMemoryMaxMb: 1024, usdPerHourMax: 0.05 }));
-        assert.equal(ok.peak_memory.pass, true);
-        assert.equal(ok.peak_memory.detail, 'peak 500 MB (target 1024 MB)');
-        assert.equal(ok.usd_per_hour.pass, true);
-        assert.match(ok.usd_per_hour.detail, /^USD 0\.012\/h \(target 0\.05; USD 0\.024 over 120 min, 120 completions\)$/);
-        const costly = byName(await run(sim({ costUsd: 0.002 }), { peakMemoryMaxMb: 1024, usdPerHourMax: 0.05 }));
-        assert.equal(costly.usd_per_hour.pass, false);
-        assert.match(costly.usd_per_hour.detail, /^USD 0\.12\/h \(target 0\.05;/);
-        const over = byName(await run(sim({ memoryMb: [300, 1400] }), { peakMemoryMaxMb: 1024, usdPerHourMax: 0.05 }));
+    test('ADR 0010: the measuring run\'s 634 MiB and USD 0.0116/h pass both checks; 900 MiB and USD 0.06/h fail them', async () => {
+        // One completion a minute for 120 min: 0.0116/h is 0.0232 in all, 0.000193333 each; 0.06/h is 0.001 each.
+        const m1 = byName(await run(sim({ memoryMb: [352, 590, 634, 632], costUsd: 0.000193333 })));
+        assert.equal(m1.peak_memory.pass, true, m1.peak_memory.detail);
+        assert.equal(m1.peak_memory.detail, 'peak 634 MiB (target 850 MiB)');
+        assert.equal(m1.usd_per_hour.pass, true, m1.usd_per_hour.detail);
+        assert.match(m1.usd_per_hour.detail, /^USD 0\.0116\/h \(target 0\.05; USD 0\.0232 over 120 min, 120 completions\)$/);
+        const over = byName(await run(sim({ memoryMb: [352, 900, 880], costUsd: 0.001 })));
         assert.equal(over.peak_memory.pass, false);
-        assert.equal(over.peak_memory.detail, 'peak 1400 MB (target 1024 MB)');
+        assert.equal(over.peak_memory.detail, 'peak 900 MiB (target 850 MiB)');
+        assert.equal(over.usd_per_hour.pass, false);
+        assert.match(over.usd_per_hour.detail, /^USD 0\.06\/h \(target 0\.05; USD 0\.12 over 120 min, 120 completions\)$/);
+        const edge = byName(await run(sim({ memoryMb: [850] })));
+        assert.equal(edge.peak_memory.pass, true, 'at the target is within it');
+    });
+
+    test('a measuring run (targets passed as TBD): both are not reached with the measurement, and the run is not-gate', async () => {
+        const r = await run(sim({ memoryMb: [300, 420, 610, 580] }), { peakMemoryMaxMb: TBD, usdPerHourMax: TBD });
+        const c = byName(r);
+        assert.equal(c.peak_memory.pass, false);
+        assert.equal(c.peak_memory.detail, 'not reached: no target yet (TBD); measured peak 610 MiB');
+        assert.match(c.usd_per_hour.detail, /^not reached: no target yet \(TBD\); measured USD 0\.012\/h \(USD 0\.024 over 120 min, 120 completions\)$/);
+        assert.equal(r.gateValid, false);
+        assert.ok(r.weakenedParams.some((w) => /targets are TBD/.test(w)));
     });
 
     test('naming (#2): a bad !nearbyBlocks name is a note, never the verdict; no [naming] line fails', async () => {
@@ -248,7 +260,7 @@ describe('g4-soak-2h on a simulated service', () => {
         const r = await run(sim({ driver: true }));
         const c = byName(r);
         assert.equal(c.peak_memory.detail, 'not reached: not the CX23 service (no metrics)');
-        assert.match(c.usd_per_hour.detail, /^not reached: no target yet \(TBD\); measured USD/, 'T reads the same usage lines');
+        assert.match(c.usd_per_hour.detail, /^USD 0\.012\/h \(target 0\.05;/, 'T reads the same usage lines');
         for (const k of ['naming', 'agenda_done', 'food_floor', 'deaths_reported']) assert.equal(c[k].pass, true, `${k}: ${c[k].detail}`);
         assert.ok(r.weakenedParams.some((w) => /set-up T/.test(w)));
     });

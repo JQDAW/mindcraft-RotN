@@ -3,9 +3,10 @@
 // g4/PLAN.md step 5. Set-up S: the CX23 service (run.mjs --service frcfld, lib/service.mjs) on a fresh test server. On a
 // spawned driver (set-up T) it is a rehearsal: the service-only checks (memory, NRestarts) are not reached.
 //
-// THE TARGETS ARE NOT SET YET (lead, 2026-11-08): peakMemoryMaxMb and usdPerHourMax are "TBD" until the soak ADR sets
-// them after the first measuring run. A check whose target is TBD records the measurement and says "not reached: no
-// target yet (TBD)": never a pass.
+// THE TARGETS (docs/adr/0010-soak-targets.md, after the measuring run M1, test/evidence/g4/g4soak-m1-20261108/):
+// peakMemoryMaxMb 850 (MiB: MemoryCurrent / 1048576) and usdPerHourMax 0.05 (USD per hour of soak time). They are
+// gate params ('equal'), so other values make the run not-gate. A target passed as "TBD" (a measuring run) records
+// the measurement and says "not reached: no target yet (TBD)": never a pass.
 //
 // Every sampleMinutes (5) for durationMinutes (120): metrics (MemoryCurrent, MemoryPeak, NRestarts, ActiveState; S only)
 // and a fresh journal read. What the bot logs (lib/survival.mjs): the [naming] line (#396), the [survival] lines (#384,
@@ -26,8 +27,8 @@
 //   no_crash           (#7) online to the end; NRestarts unchanged (S); no agent_process restart, fatal or exit line;
 //                      ActiveState active at every sample whose metrics read worked (S). An unknown state at the end:
 //                      not reached (infra).
-//   peak_memory        (#7, S) the highest MemoryCurrent (and MemoryPeak, if set) within peakMemoryMaxMb (TBD)
-//   usd_per_hour       (#7) the LLM spend per hour within usdPerHourMax (TBD): the sum of cost_usd over the run's
+//   peak_memory        (#7, S) the highest MemoryCurrent (and MemoryPeak, if set) within peakMemoryMaxMb (850 MiB, ADR 0010)
+//   usd_per_hour       (#7) the LLM spend per hour within usdPerHourMax (USD 0.05, ADR 0010): the sum of cost_usd over the run's
 //                      "[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X" lines (#395), per covered
 //                      hour. A cost_usd unknown, or no usage line at all, makes it not reached, with the count.
 //   agenda_done        (#4) "agenda done" within the soak
@@ -59,8 +60,8 @@ export default {
         login_online: 'The bot logs in with its own account (online mode); on S from an inactive unit of this run\'s bot',
         naming: 'The bot\'s [naming] line near spawn shows RotN names: no unknown, numeric or placeholder ids (#2)',
         no_crash: 'Two hours with no crash: online to the end, no agent exit or restart, NRestarts unchanged (#7)',
-        peak_memory: 'Peak memory within the soak ADR\'s target (#7; the target is TBD until the ADR)',
-        usd_per_hour: 'The LLM spend per hour within the soak ADR\'s target (#7; the target is TBD until the ADR)',
+        peak_memory: 'Peak memory within the soak ADR\'s target (#7; ADR 0010: 850 MiB)',
+        usd_per_hour: 'The LLM spend per hour within the soak ADR\'s target (#7; ADR 0010: USD 0.05 per hour)',
         agenda_done: 'The early-game agenda finishes from a fresh spawn (#4)',
         food_floor: 'The food level never falls below the floor (#5)',
         ate_when_low: 'When the food level is low, the bot eats (#5)',
@@ -71,8 +72,8 @@ export default {
         worldSeed: G2_WORLD_SEED,
         durationMinutes: 120,
         sampleMinutes: 5,
-        peakMemoryMaxMb: TBD,
-        usdPerHourMax: TBD,
+        peakMemoryMaxMb: 850,   // MiB (MemoryCurrent / 1048576), ADR 0010
+        usdPerHourMax: 0.05,    // USD per hour of soak time, ADR 0010
         foodFloor: 6,
         eatWithinMinutes: 5,
         loginTimeoutMs: 240 * MS,
@@ -214,8 +215,8 @@ export default {
         else {
             const peak = Math.max(...samples.map((x) => Math.max(x.memoryMb ?? 0, x.peakMb ?? 0)));
             ctx.note('peakMemoryMb', peak);
-            if (!set(p.peakMemoryMaxMb)) ctx.check('peak_memory', false, `not reached: no target yet (TBD); measured peak ${peak} MB`);
-            else ctx.check('peak_memory', peak <= Number(p.peakMemoryMaxMb), `peak ${peak} MB (target ${p.peakMemoryMaxMb} MB)`);
+            if (!set(p.peakMemoryMaxMb)) ctx.check('peak_memory', false, `not reached: no target yet (TBD); measured peak ${peak} MiB`);
+            else ctx.check('peak_memory', peak <= Number(p.peakMemoryMaxMb), `peak ${peak} MiB (target ${p.peakMemoryMaxMb} MiB)`);
         }
 
         // USD per hour (#7): the sum of cost_usd over the run's "[openrouter] usage ..." lines (#395), over the minutes the
