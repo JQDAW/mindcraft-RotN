@@ -12,6 +12,8 @@
 #   sshd -T                           the effective config from $ROOT's sshd_config and its Include (first value wins)
 #   systemctl is-active ... / cat ... 3 if $FAKE_SSH_INACTIVE / 1 if $FAKE_NO_SSH_UNIT is set, else 0
 #   ufw allow/delete/enable/show added/status   kept as state under $ROOT (see below)
+#   npm                               exits 1 while it has been called at most $FAKE_FAIL_FIRST_npm times
+#                                     (deploy.sh's npm ci retry), else FAKE_RC_npm
 #   sudo --version, sudo -l -U USER   sudo-rs, and the rule installed under $ROOT/etc/sudoers.d
 #   sudo -n /usr/local/sbin/mindcraft-rotn-ctl ACTION [BOT]
 #        list        prints $FAKE_BOTS (space-separated)
@@ -30,6 +32,9 @@ out_var="FAKE_OUT_$key"
 rc_var="FAKE_RC_$key"
 
 case $name in
+  npm)
+    if [[ -n ${FAKE_FAIL_FIRST_npm:-} ]] && (( $(grep -c $'^npm\t' "$FAKE_LOG") <= FAKE_FAIL_FIRST_npm )); then exit 1; fi
+    exit "${FAKE_RC_npm:-0}" ;;
   ln)
     printf '%s\n' "${@: -2:1}" > "${@: -1}"
     exit 0 ;;
