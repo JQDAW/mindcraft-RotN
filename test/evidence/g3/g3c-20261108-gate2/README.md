@@ -27,7 +27,8 @@
 | The whisper (`!taskAdd("go to the gold block at -42 68 -50 and stand on it", "normal")`), minute 2.2; "task t1 accepted"; "agenda paused for task t1" | 00:54:09 |
 | "task t1: stopping collectBlocks to start it"; "task t1 started" | 00:54:16, 00:54:20 |
 | The server finds the bot on the marker (minute 2.5); "task t1 done"; "agenda resumed: shelter_blocks" | 00:54:28 |
-| Agenda steps after the task: logs, first_plank, crafting_tools, crafting_table, planks_sticks, stone_pickaxe done | 00:55:56 to 00:56:58 |
+| The agenda restarts its interrupted step: "agenda step logs started: collect 3 logs" (30 s after the resume) | 00:54:58 |
+| Agenda steps then done: logs, first_plank, crafting_tools, crafting_table, planks_sticks, stone_pickaxe | 00:55:56 to 00:56:58 |
 | Command exited (PASS, exit 0) | 00:57:02 |
 | Server, Primary IP and SSH key verified gone | 00:57:18 |
 
