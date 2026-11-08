@@ -605,3 +605,31 @@ test('round 10 A: the bot stands still on purpose (rotnStationary) until the fal
     assert.ok(walksWhileFalling.length <= 1, `walks while the tree fell: ${JSON.stringify(walksWhileFalling)}`);
     assert.ok(bot.log.pickups.every(p => !p.falling), 'no pickup while the tree was falling');
 });
+
+// #356 review 1: a fell could take about 94 s after the cut, over COLLECT_LIMITS.blockMs (90 s); on
+// the time limit collectBlock moved on after STOP_SETTLE_MS while fellTree went on waiting with
+// rotnStationary set, so the unstuck reflex stayed off during the next walk and two walks overlapped.
+test('#356 review 1: a fell has its own time limit; when it passes, the fell ends and the bot no longer stands still on purpose', T, async (t) => {
+    assert.ok(skills.fellBlockMs() >= skills.COLLECT_LIMITS.blockMs + skills.TREE_FALL.stepAwayMs + skills.TREE_FALL.maxMs + skills.FELL_LIMITS.totalMs,
+        `a fell's limit covers the walk and cut plus the fall and the drops: ${skills.fellBlockMs()} ms`);
+    fast(t);
+    // Scaled: the fall wait and the drop wait are long, the run's time left is 3 s.
+    const saved = { ...skills.COLLECT_LIMITS }, savedFall = { ...skills.TREE_FALL }, savedDrops = { ...skills.FELL_LIMITS };
+    Object.assign(skills.COLLECT_LIMITS, { totalMs: 3000 });
+    Object.assign(skills.TREE_FALL, { maxMs: 15_000 });
+    Object.assign(skills.FELL_LIMITS, { settleMs: 15_000, totalMs: 15_000 });
+    t.after(() => { Object.assign(skills.COLLECT_LIMITS, saved); Object.assign(skills.TREE_FALL, savedFall); Object.assign(skills.FELL_LIMITS, savedDrops); });
+    const bot = fakeBot({ fallMs: 20_000 }); // the tree is still in the air when the limit passes
+    const started = Date.now();
+    await skills.collectBlock(bot, 'log', 1);
+    const took = Date.now() - started;
+    assert.equal(bot.log.digs.length, 1, 'cut once');
+    assert.match(bot.output, /Gave up on dynamictrees:sprucebranch at .*: time limit of 3 s reached\./);
+    assert.ok(took < 3000 + 2000, `the collect ended soon after the limit, not after the fell's own waits: ${took} ms`);
+    assert.notEqual(bot.rotnStationary, true, 'released when the collect moves on');
+    // Nothing of the fell runs on afterwards: no walk, still not stationary.
+    const walks = bot.log.positions.length;
+    await new Promise(r => setTimeout(r, 1500));
+    assert.equal(bot.log.positions.length, walks, 'no walk after the collect ended');
+    assert.notEqual(bot.rotnStationary, true);
+});

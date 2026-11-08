@@ -10,7 +10,7 @@ import { requestReplan, takeReplanNote, replanPromptDue, hasReplan, QUIET_MS, MI
 import { initModes, execute, __modeForTest } from './modes.js';
 import { SelfPrompter } from './self_prompter.js';
 import { isClearPath, CLEAR_PATH_LIMITS } from './library/world.js';
-import { FALLING_TREE, FELL_HOLD_MS } from './library/felling.js';
+import { FALLING_TREE, FELL_HOLD_MS, FALLING_SEEN_MAX_MS, fallingTreeNear } from './library/felling.js';
 
 const quiet = { log: () => {} };
 
@@ -340,6 +340,49 @@ test('round 10 A: unstuck never moves the bot while a tree falls near it or just
     }
     // Control: the cut long ago and no tree in the air: unstuck moves as before.
     const { agent, mode, gotos } = setup({ rotnLastFell: { at: Date.now() - FELL_HOLD_MS - 1000, pos: position } });
+    await mode.update(agent);
+    const started = Date.now();
+    while (mode.active && Date.now() - started < 2000) await new Promise(r => setTimeout(r, 10));
+    assert.equal(gotos.length, 1, 'unstuck moved away');
+});
+
+// #356 review 2: a falling tree entity in sight held unstuck with no time limit (a missed destroy
+// packet, someone else's tree that never lands).
+test('#356 review 2: a falling tree entity seen for FALLING_SEEN_MAX_MS no longer holds unstuck; a new one does', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    assert.equal(FALLING_SEEN_MAX_MS, 60_000);
+    const here = new Vec3(0, 64, 0);
+    const bot = { entity: { position: here }, entities: { 7: { id: 7, name: FALLING_TREE, position: here.offset(5, 2, 0) } } };
+    assert.ok(fallingTreeNear(bot, { now: 1000 }), 'first seen: held');
+    assert.ok(fallingTreeNear(bot, { now: 1000 + FALLING_SEEN_MAX_MS - 1 }), 'still within the cap');
+    assert.equal(fallingTreeNear(bot, { now: 1000 + FALLING_SEEN_MAX_MS }), null, 'seen too long: ignored');
+    bot.entities[8] = { id: 8, name: FALLING_TREE, position: here.offset(-4, 2, 0) };
+    assert.ok(fallingTreeNear(bot, { now: 1000 + FALLING_SEEN_MAX_MS + 1 }), 'another tree falls: held again');
+    // Gone and back (a new entity with the same id after a respawn): seen afresh.
+    delete bot.entities[7]; delete bot.entities[8];
+    assert.equal(fallingTreeNear(bot, { now: 2 * FALLING_SEEN_MAX_MS }), null);
+    bot.entities[7] = { id: 7, name: FALLING_TREE, position: here.offset(5, 2, 0) };
+    assert.ok(fallingTreeNear(bot, { now: 2 * FALLING_SEEN_MAX_MS + 1 }));
+
+    // In the reflex: an entity in sight since more than the cap, the bot stuck 20 s: unstuck moves.
+    const position = new Vec3(-78, 63, -89);
+    const agent = fakeAgent();
+    agent.isIdle = () => false;
+    initModes(agent);
+    agent.bot.modes.setOn('cheat', false);
+    const gotos = [];
+    Object.assign(agent.bot, {
+        registry: minecraftData('1.12.2'), version: '1.12.2', output: '',
+        entity: { position: position.clone() }, targetDigBlock: null,
+        entities: { 9: { id: 9, name: FALLING_TREE, position: position.offset(6, 2, 0) } },
+        pathfinder: { setMovements() {}, getPathTo: () => ({ status: 'success', path: [] }), goto: (g) => { gotos.push(g); return Promise.resolve(); }, stop() {} },
+    });
+    fallingTreeNear(agent.bot, { now: Date.now() - FALLING_SEEN_MAX_MS - 1000 }); // first seen over a minute ago
+    const mode = __modeForTest('unstuck');
+    mode.prev_location = position.clone();
+    mode.stuck_time = mode.max_stuck_time + 1;
+    mode.last_time = Date.now();
     await mode.update(agent);
     const started = Date.now();
     while (mode.active && Date.now() - started < 2000) await new Promise(r => setTimeout(r, 10));
