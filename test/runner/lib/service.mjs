@@ -18,15 +18,17 @@
 //                "driver log"), plus a "[service] ..." line for a failed start or an incident.
 //   exitCode()   always null (a unit has no exit code here); unitState() gives the ActiveState.
 //   stop()       async: `stop <bot>` once a start was sent (also after a failed start: its state is unknown), then
-//                waits for inactive and writes the journal to outFile. Needs the GO marker too.
+//                waits for inactive and writes the journal to outFile. It uses the GO checked at that start and does not
+//                re-read the marker (the cleanup must stop what was started); with no start sent it sends nothing.
 //   needsStop()  true once a start was sent and no stop has finished (runner.mjs's cleanup uses it).
 //   Also async: metrics(), journal(since), statusText(), refresh() (force both caches), settle() (await refreshes).
 //
 // Rules (lead, #371 review):
-//   - The GO marker, per bot (lead, #401 review): start and stop refuse unless the environment has
+//   - The GO marker, per bot (lead, #401 review): start refuses unless the environment has
 //     ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed naming THIS adapter's unit, set only under the lead's
 //     written GO for that bot after the human confirmed that its env file's host is a disposable test server (ADR 0009).
-//     A marker for another unit, or the old form without a unit, refuses before anything is sent. goId is recorded;
+//     A marker for another unit, or the old form without a unit, refuses before anything is sent. goId is recorded, and
+//     the stop of a started unit uses it (never refused: the cleanup must stop what was started);
 //     goStatus() reads the marker without sending anything (a scenario checks it before its own first command).
 //   - argv only, never a shell string; the verb, the bot name (the ctl's rule) and a --since T form are checked first.
 //     The keys are never read: ssh finds them through the alias's own config.
@@ -304,8 +306,10 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
             return { code: r.code, lines: lines(r.stdout) };
         },
         async stop() {
+            // No start sent: nothing to stop, nothing sent. Once a start went out, the stop uses the GO and the unit checked
+            // at that start (goId, bot) and never re-reads the marker, so the runner's cleanup always stops a unit it
+            // started, whatever the environment says by then (#401 re-review).
             if (!startSent || stopped) return;
-            go('stop');
             if (starting) await starting;
             const r = await call('stop');
             if (r.code !== 0) throw failed(r, 'stop');

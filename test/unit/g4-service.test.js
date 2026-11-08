@@ -126,18 +126,24 @@ describe('#371 review 1: the per-run GO marker', () => {
         // #401 review: the old form without a unit is named as such.
         const old = serviceBot('frcfld', null, { exec: fakeCx23().exec, env: { ROTN_SERVICE_GO: 'g4-s1:test-server-host-confirmed' } });
         assert.throws(() => old.start(), /service start refused: the GO marker has the old form without a unit\. Set ROTN_SERVICE_GO=<the lead's GO id>:frcfld:test-server-host-confirmed/);
-        // stop needs it too (a start sent under one GO, the marker gone at the stop).
+        // #401 re-review: a stop with no start sends nothing; once a start went out under a checked marker, the stop uses
+        // that start's GO and unit, even with the marker gone by then (the cleanup must stop what was started).
+        const none = fakeCx23();
+        await serviceBot('frcfld', null, { exec: none.exec, env: {} }).stop();
+        await serviceBot('frcfld', null, { exec: none.exec, env: GO }).stop();
+        assert.equal(none.calls.length, 0, 'no start, no stop sent');
         const cx = fakeCx23();
         const env = { ...GO };
         const b = serviceBot('frcfld', null, { exec: cx.exec, env, now: () => cx.clock.t, sleep: () => Promise.resolve() });
         await b.start();
         assert.equal(b.goId, 'g4-s1-20261108');
         delete env.ROTN_SERVICE_GO;
-        await assert.rejects(() => b.stop(), /service stop refused: no GO marker/);
-        assert.deepEqual(cx.verbs(), ['start']);
+        await b.stop();
+        assert.deepEqual(cx.verbs().filter((v) => v === 'start' || v === 'stop'), ['start', 'stop']);
+        assert.equal(b.goId, 'g4-s1-20261108');
     });
 
-    test('#401 review: the marker is per bot: a frcfld GO cannot start or stop rotnbot2, nor a rotnbot2 GO frcfld; nothing is sent', async () => {
+    test('#401 review: the marker is per bot: a frcfld GO cannot start rotnbot2, nor a rotnbot2 GO frcfld (nothing sent); a started unit\'s stop is its own', async () => {
         for (const [unit, other] of [['rotnbot2', 'frcfld'], ['frcfld', 'rotnbot2']]) {
             const cx = fakeCx23();
             const env = { ROTN_SERVICE_GO: `g4-12a:${other}:test-server-host-confirmed` };
@@ -145,15 +151,37 @@ describe('#371 review 1: the per-run GO marker', () => {
             assert.deepEqual(b.goStatus(), { ok: false, why: `the GO marker names ${other}, not this unit ${unit}` });
             assert.throws(() => b.start(), new RegExp(`^Error: service start refused: the GO marker names ${other}, not this unit ${unit}$`));
             assert.equal(cx.calls.length, 0, `${unit}: nothing sent`);
-            // A start under this unit's own GO, then the marker switched to the other unit: the stop refuses too.
+            // A start under this unit's own GO, then the marker switched to the other unit: the stop still stops THIS unit
+            // (the GO and unit of its start, #401 re-review), and nothing ever goes to the other unit.
             env.ROTN_SERVICE_GO = `g4-12a:${unit}:test-server-host-confirmed`;
             assert.deepEqual(b.goStatus(), { ok: true, goId: 'g4-12a' });
             await b.start();
             env.ROTN_SERVICE_GO = `g4-12a:${other}:test-server-host-confirmed`;
-            await assert.rejects(() => b.stop(), new RegExp(`service stop refused: the GO marker names ${other}, not this unit ${unit}`));
-            assert.deepEqual(cx.verbs(), ['start'], `${unit}: only its own start went out`);
-            assert.ok(cx.calls.every((c) => c.argv.at(-1) === unit));
+            await b.stop();
+            assert.deepEqual(cx.verbs().filter((v) => v === 'start' || v === 'stop'), ['start', 'stop'], `${unit}: its own start and stop`);
+            assert.ok(cx.calls.every((c) => c.argv[SSH_OPTS.length + 2] === unit), `${unit}: nothing to ${other}`);
         }
+    });
+
+    test('#401 re-review: the runner\'s cleanup stops a unit it started even when the marker breaks after the start and the scenario throws', async () => {
+        const cx = fakeCx23();
+        const env = { ...GO };
+        const b = serviceBot('frcfld', null, { exec: cx.exec, env, now: () => cx.clock.t, sleep: (ms) => { cx.clock.t += ms; return Promise.resolve(); } });
+        const breaks = {
+            id: 'marker-breaks', gate: 'G4', title: 'test', checks: { started: 'x' }, defaults: {},
+            async run(ctx) {
+                await ctx.bot.start();
+                ctx.check('started', true, 'sent');
+                delete env.ROTN_SERVICE_GO;
+                throw new Error('the scenario failed after the start');
+            },
+        };
+        const r = await runScenario(breaks, { server: { console: () => [], log: () => [] }, bot: b, clock: { now: () => cx.clock.t, sleep: () => Promise.resolve() }, runId: 'r1' });
+        assert.match(r.error, /the scenario failed after the start/);
+        assert.equal(r.botStoppedByRunner, true);
+        assert.deepEqual(cx.verbs().filter((v) => v === 'start' || v === 'stop'), ['start', 'stop']);
+        assert.deepEqual(cx.calls.filter((c) => c.argv[SSH_OPTS.length + 1] === 'stop').map((c) => c.argv.slice(SSH_OPTS.length)), [[HOST, 'stop', 'frcfld']]);
+        assert.equal(cx.st.state, 'inactive');
     });
 
     test('#401 review: a failed request carries its exit code (exitCode), so the ctl\'s refusal (2) is told apart', async () => {
