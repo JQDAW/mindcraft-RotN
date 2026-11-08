@@ -48,6 +48,11 @@ jobs:
           node-version: 22        # ADR 0002
           cache: npm
 
+      # G4 #8 (no secrets in the repo): every tracked file, before anything is installed; about 1 s. A false
+      # positive goes into test/tools/secret-scan-allow.txt with its reason; test/evidence has its own leak check.
+      - name: Secret scan (tracked files)
+        run: node test/tools/secret-scan.mjs
+
       - name: npm ci
         run: npm ci --no-audit --no-fund
 

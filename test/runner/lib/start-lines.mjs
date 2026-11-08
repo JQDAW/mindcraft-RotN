@@ -9,6 +9,11 @@
 import { TEST_TASK_GIVER } from './g3.mjs';
 
 export const SETTINGS_RE = /^\[settings\] effective task_givers=(\[.*\]) allow_server_task_giver=(\S+)$/;
+/** The same line matched loosely first, so a malformed value is named as such, not as a missing line (#389 review). */
+export const SETTINGS_LOOSE_RE = /^\[settings\] effective task_givers=(.*) allow_server_task_giver=(\S+)$/;
+export const STATE_LOOSE_RE = /^\[state\] (\S+) at start: (.*)$/;
+/** A missing start line (lead, #389 review): a failed check, worded as the release's gap. */
+export const missingLine = (what) => `the release prints no ${what} line (setup gap?)`;
 export const STATE_RE = /^\[state\] (\S+) at start: tasks=(absent|corrupt|\d+) agenda=(absent|corrupt|all-done|[\w:.-]+) memory=(absent|corrupt|\d+)$/;
 
 const parse = (s) => { try { return { ok: true, value: JSON.parse(s) }; } catch { return { ok: false }; } };
@@ -18,12 +23,12 @@ const parse = (s) => { try { return { ok: true, value: JSON.parse(s) }; } catch 
  * sender (Server) is not in task_givers. -> {pass, detail, line}
  */
 export function productionGiversAtStart(lines) {
-    const line = lines.find((l) => SETTINGS_RE.test(l)) ?? null;
-    if (!line) return { pass: false, line, detail: 'no "[settings] effective task_givers=... allow_server_task_giver=..." line from this start' };
-    const [, giversText, allowText] = SETTINGS_RE.exec(line);
+    const line = lines.find((l) => SETTINGS_LOOSE_RE.test(l)) ?? null;
+    if (!line) return { pass: false, line, detail: missingLine('[settings] effective task_givers=... allow_server_task_giver=...') };
+    const [, giversText, allowText] = SETTINGS_LOOSE_RE.exec(line);
     const givers = parse(giversText);
     const allow = parse(allowText);
-    if (!givers.ok || !Array.isArray(givers.value)) return { pass: false, line, detail: `at start: task_givers is not a JSON array (${giversText.slice(0, 120)})` };
+    if (!SETTINGS_RE.test(line) || !givers.ok || !Array.isArray(givers.value)) return { pass: false, line, detail: `at start: task_givers is not a JSON array (${giversText.slice(0, 120)})` };
     if (!allow.ok) return { pass: false, line, detail: `at start: allow_server_task_giver is not JSON (${allowText.slice(0, 40)})` };
     const hasServer = givers.value.some((g) => String(g) === TEST_TASK_GIVER);
     const pass = allow.value === false && !hasServer;
@@ -40,7 +45,11 @@ export function freshStateAtStart(lines, name) {
     const m = parsed.find((x) => x[1].toLowerCase() === lower) ?? null;
     if (!m) {
         const other = parsed[0];
-        return { pass: false, line: other?.[0] ?? null, detail: other ? `the [state] line names ${other[1]}, not ${name}` : `no "[state] ${name} at start: ..." line from this start` };
+        if (other) return { pass: false, line: other[0], detail: `the [state] line names ${other[1]}, not ${name}` };
+        // A [state] line of another form is named as such, not as a missing line (#389 review).
+        const loose = lines.map((l) => STATE_LOOSE_RE.exec(l)).find((x) => x && x[1].toLowerCase() === lower);
+        if (loose) return { pass: false, line: loose[0], detail: `the [state] line is not in the expected form (${loose[2].slice(0, 120)})` };
+        return { pass: false, line: null, detail: missingLine(`[state] ${name} at start: ...`) };
     }
     const values = { tasks: m[2], agenda: m[3], memory: m[4] };
     const present = Object.entries(values).filter(([, v]) => v !== 'absent');
