@@ -28,6 +28,7 @@ ROOT=${ROOT:-}
 REPO_URL=${MINDCRAFT_ROTN_REPO_URL:-https://github.com/JQDAW/mindcraft-RotN.git}
 BASE=$ROOT/opt/mindcraft-rotn
 BOTS_DIR=/var/lib/mindcraft-rotn/bots
+BOTS_FS=$ROOT$BOTS_DIR   # the same folder on this file system (ROOT is the tests' fake root)
 SVC_GROUP=mindcraft-rotn
 HEALTH_WAIT_S=${HEALTH_WAIT_S:-45}
 KEEP_RELEASES=${KEEP_RELEASES:-5}
@@ -71,6 +72,44 @@ enabled_bots() {
 restart_bots() {
   local b
   for b in "$@"; do log "restarting $b"; "${CTL[@]}" restart "$b"; done
+}
+
+# The release's tracked files under bots/ (G4 step 0, 2026-11-08: bots/execTemplate.js and bots/lintTemplate.js,
+# which the Coder reads). A release's bots/ is the link to the shared $BOTS_DIR, so build() keeps the tracked files
+# in RELEASE/.bots-tracked/ with their list in RELEASE/.bots-files, and install_bot_files puts them into $BOTS_DIR
+# before every switch (deploy and rollback), overwriting, 0644. $BOTS_DIR must be writable by deploy: bootstrap.sh
+# makes it 2770 mindcraft-rotn:mindcraft-rotn (an older CX23: run `chmod 2770 /var/lib/mindcraft-rotn/bots` as root).
+readonly BOTS_FILE_RE='^bots/[A-Za-z0-9_][A-Za-z0-9._-]*(/[A-Za-z0-9_][A-Za-z0-9._-]*)*$'
+
+# install_bot_files RELEASE_DIR: copy the release's tracked bots/ files into $BOTS_DIR and check them; dies on any
+# problem, so a caller that has not switched yet changes nothing. A release built before this fix has no list: logged.
+install_bot_files() {
+  local rel=$1 f dst tmpf
+  [[ -f $rel/.bots-files ]] || { log "$(basename "$rel") has no .bots-files (built before the bots/ fix): no files installed"; return 0; }
+  [[ -d $BOTS_FS && -w $BOTS_FS ]] \
+    || die "$BOTS_DIR is not a folder deploy can write: as root, once: chmod 2770 $BOTS_DIR (bootstrap.sh makes it so; G4 step 0)"
+  while IFS= read -r f; do
+    [[ -n $f ]] || continue
+    [[ $f =~ $BOTS_FILE_RE ]] || die "$(basename "$rel"): bad name in .bots-files: '$f'"
+    dst=$BOTS_FS/${f#bots/}
+    tmpf=$(dirname "$dst")/.$(basename "$dst").new-$$
+    mkdir -p "$(dirname "$dst")"
+    cp "$rel/.bots-tracked/${f#bots/}" "$tmpf" && chmod 0644 "$tmpf" && mv -f "$tmpf" "$dst" \
+      || { rm -f "$tmpf"; die "could not install $f into $BOTS_DIR"; }
+  done < "$rel/.bots-files"
+  bot_files_ok "$rel" || die "the bots/ files of $(basename "$rel") are not in $BOTS_DIR after the install"
+  log "installed $(grep -c . "$rel/.bots-files") tracked bots/ file(s) into $BOTS_DIR"
+}
+
+# bot_files_ok RELEASE_DIR: 0 if every file on the release's list is in $BOTS_DIR as the release has it.
+bot_files_ok() {
+  local rel=$1 f ok=0
+  [[ -f $rel/.bots-files ]] || return 0
+  while IFS= read -r f; do
+    [[ -n $f ]] || continue
+    cmp -s "$rel/.bots-tracked/${f#bots/}" "$BOTS_FS/${f#bots/}" || { log "missing or different in $BOTS_DIR: ${f#bots/}"; ok=1; }
+  done < "$rel/.bots-files"
+  return $ok
 }
 
 # healthy BOT...: 0 if every bot is active after HEALTH_WAIT_S.
@@ -137,7 +176,10 @@ build() {
     sleep "$NPM_CI_RETRY_S"
     try=$((try + 1))
   done
-  rm -rf "$tmp/bots"
+  # Keep the tracked bots/ files (the release's bots/ becomes the link to the shared folder): the list from git,
+  # the files moved to .bots-tracked/ (G4 step 0: deleting them crash-looped the Coder).
+  git_ ls-tree -r --name-only "$sha" -- bots/ > "$tmp/.bots-files" || { rm -rf "$tmp"; die "$tag: could not list bots/"; }
+  if [[ -d $tmp/bots ]]; then mv -T "$tmp/bots" "$tmp/.bots-tracked"; else mkdir -p "$tmp/.bots-tracked"; fi
   ln -sfn "$BOTS_DIR" "$tmp/bots"
   chgrp -R "$SVC_GROUP" "$tmp"
   chmod -R g+rX,g-w,o-rwx "$tmp"
@@ -171,10 +213,11 @@ do_deploy() {
   if [[ -f $BASE/releases/$name/.release-ok ]]; then log "reusing releases/$name"
   else build "$tag" "$sha" "$name"; fi
   mapfile -t bots < <(enabled_bots)
+  install_bot_files "$BASE/releases/$name"
   switch_to "$name"
   [[ $name == "$cur" ]] || state_set "$name" "$cur"
   restart_bots "${bots[@]}"
-  if healthy "${bots[@]}"; then
+  if bot_files_ok "$BASE/releases/$name" && healthy "${bots[@]}"; then
     ledger "deploy $tag $sha $name ok bots=${bots[*]:-none}"
     log "deployed $name (bots: ${bots[*]:-none})"
     prune "$name" "$cur"
@@ -182,6 +225,7 @@ do_deploy() {
   fi
   if [[ -n $cur && $cur != "$name" && -f $BASE/releases/$cur/.release-ok ]]; then
     log "health check failed: rolling back to $cur"
+    install_bot_files "$BASE/releases/$cur"
     switch_to "$cur"
     state_set "$cur" "$prev"
     restart_bots "${bots[@]}"
@@ -200,10 +244,11 @@ do_rollback() {
   [[ -n $prev ]] || die "no previous release to roll back to"
   [[ -f $BASE/releases/$prev/.release-ok ]] || die "previous release $prev is not on disk"
   mapfile -t bots < <(enabled_bots)
+  install_bot_files "$BASE/releases/$prev"
   switch_to "$prev"
   state_set "$prev" "$cur"
   restart_bots "${bots[@]}"
-  if healthy "${bots[@]}"; then
+  if bot_files_ok "$BASE/releases/$prev" && healthy "${bots[@]}"; then
     ledger "rollback to $prev from $cur ok"
     log "rolled back to $prev"
     return 0

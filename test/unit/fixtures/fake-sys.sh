@@ -19,6 +19,7 @@
 #        list        prints $FAKE_BOTS (space-separated)
 #        is-enabled  0 if BOT is in $FAKE_ENABLED
 #        is-active   1 if the release in $FAKE_CURRENT_FILE matches $FAKE_BAD_RELEASE, else 0
+#        restart     0; removes $FAKE_RESTART_RM first when set (a file that goes missing while the bots restart)
 #        other       0
 name=$1
 shift
@@ -103,6 +104,7 @@ case $name in
     case $action in
       list) for b in ${FAKE_BOTS:-}; do echo "$b"; done; exit 0 ;;
       is-enabled) [[ " ${FAKE_ENABLED:-} " == *" $bot "* ]]; exit $? ;;
+      restart) [[ -n ${FAKE_RESTART_RM:-} ]] && rm -f "$FAKE_RESTART_RM"; exit 0 ;;
       is-active)
         if [[ -n ${FAKE_BAD_RELEASE:-} && -f ${FAKE_CURRENT_FILE:-} ]] && grep -q -- "$FAKE_BAD_RELEASE" "$FAKE_CURRENT_FILE"; then exit 3; fi
         exit 0 ;;
