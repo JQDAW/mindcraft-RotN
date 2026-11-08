@@ -19,6 +19,9 @@
 # "allow_insecure_coding": false, turns on the test-only allow_server_task_giver, or names "Server" as a
 # task giver (#146, #157 review). After the switch it restarts the enabled bots, waits HEALTH_WAIT_S
 # (default 45 s), and if any is not active it switches back to the previous release by itself.
+# npm ci gets NPM_CI_TRIES (3) tries, NPM_CI_RETRY_S (120 s) apart: canvas and gl download prebuilt binaries
+# from GitHub's release downloads, which answered 504 for every repo on 2026-11-08 (#394, #397); with no
+# prebuild they fall back to node-gyp, which cannot build here (no compiler or pkg-config, by design).
 set -Eeuo pipefail
 
 ROOT=${ROOT:-}
@@ -28,6 +31,8 @@ BOTS_DIR=/var/lib/mindcraft-rotn/bots
 SVC_GROUP=mindcraft-rotn
 HEALTH_WAIT_S=${HEALTH_WAIT_S:-45}
 KEEP_RELEASES=${KEEP_RELEASES:-5}
+readonly NPM_CI_TRIES=3
+NPM_CI_RETRY_S=${NPM_CI_RETRY_S:-120}
 # Only this fork's release tags (lead, rotn-v0.1.0): the repo also carries upstream Mindcraft's v0.x tags, and upstream
 # v0.1.0 is an ancestor of develop, so `deploy v0.1.0` would pass the on-develop check and deploy plain Mindcraft.
 TAG_RE='^rotn-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
@@ -124,7 +129,14 @@ build() {
     *) rm -rf "$tmp"; die "$tag: settings.js does not evaluate to allow_insecure_coding === false; refusing" ;;
   esac
   log "npm ci in $name"
-  (cd "$tmp" && npm ci --no-audit --no-fund) || { rm -rf "$tmp"; die "$tag: npm ci failed"; }
+  # npm ci starts from a clean node_modules each time, so a retry is safe.
+  local try=1
+  until (cd "$tmp" && npm ci --no-audit --no-fund); do
+    (( try < NPM_CI_TRIES )) || { rm -rf "$tmp"; die "$tag: npm ci failed ($try tries; if it says \"No prebuilt binaries found\", check GitHub's release downloads)"; }
+    log "npm ci failed (try $try of $NPM_CI_TRIES); trying again in $NPM_CI_RETRY_S s"
+    sleep "$NPM_CI_RETRY_S"
+    try=$((try + 1))
+  done
   rm -rf "$tmp/bots"
   ln -sfn "$BOTS_DIR" "$tmp/bots"
   chgrp -R "$SVC_GROUP" "$tmp"

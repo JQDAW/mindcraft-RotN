@@ -88,6 +88,37 @@ jobs:
           useradd --create-home --shell /bin/bash ci
           chown -R ci:ci "$GITHUB_WORKSPACE"
 
+      # canvas and gl download prebuilt binaries from GitHub's release downloads. On 2026-11-08 those answered 504 for
+      # every repo (#394, #397): prebuild-install then says only "No prebuilt binaries found" and node-gyp fails on
+      # pkg-config, which reads like a code or node fault. This names the outage first: a 5xx (or no answer) fails the
+      # job as external; any other non-200 (e.g. a 404 after a version bump changed the file name) is only a warning,
+      # and npm ci decides. The URLs follow prebuild-install's pattern for the lockfile's versions.
+      - name: GitHub release downloads answer (canvas and gl prebuilds)
+        run: |
+          set -eu
+          cd "$GITHUB_WORKSPACE"
+          urls=$(node -e '
+            const p = require("./package-lock.json").packages;
+            const v = (m) => p["node_modules/" + m].version;
+            const gh = "https://github.com";
+            console.log(`${gh}/Automattic/node-canvas/releases/download/v${v("canvas")}/canvas-v${v("canvas")}-napi-v7-linux-x64.tar.gz`);
+            console.log(`${gh}/stackgl/headless-gl/releases/download/v${v("gl")}/gl-v${v("gl")}-node-v${process.versions.modules}-linux-x64.tar.gz`);
+          ')
+          down=0
+          for u in $urls; do
+            code=$(curl -sS -o /dev/null -L -I --retry 2 --retry-delay 10 --max-time 30 -w '%{http_code}' "$u" || true)
+            echo "$code $u"
+            case $code in
+              200) ;;
+              5??|000) down=1 ;;
+              *) echo "::warning::$u answered $code (not a 5xx): the probe's file name may be stale; npm ci decides" ;;
+            esac
+          done
+          if [ "$down" = 1 ]; then
+            echo "::error::GitHub release downloads are failing (5xx or no answer): an external outage, not a code or node fault. canvas and gl cannot fetch their prebuilt binaries; re-run this job once github.com/<owner>/<repo>/releases/download/ answers 200."
+            exit 1
+          fi
+
       # Each npm and node step changes to the checkout itself (#135 review nit): in a container job,
       # ${{ github.workspace }} is the HOST's path, so working-directory is not used; $GITHUB_WORKSPACE
       # inside the step is the container's.

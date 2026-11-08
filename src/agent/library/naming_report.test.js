@@ -89,9 +89,10 @@ test('G4 #2, #396 review 3: the entity line: as !entities lists them (16 blocks,
     ];
     const { bot } = worldBot([], ents);
     const line = entityLine('FRCFLD', entitiesNearSpawn(bot), 0);
-    assert.equal(line, '[naming] FRCFLD entities +0s: 7 kinds; unknown 4; cow:2 #77:1 #?:1 mocreatures:entity_12:1 quark:crab:1 unknown:1 zombie:1');
+    // #396 nit 1: "unknown" and the nameless one are keyed by their type (#?: none known), like blocks.
+    assert.equal(line, '[naming] FRCFLD entities +0s: 6 kinds; unknown 3; #?:2 cow:2 #77:1 mocreatures:entity_12:1 quark:crab:1 zombie:1');
     const { m } = parse(line, ENTITY_RE);
-    assert.deepEqual([m[2], m[3], m[4]], ['0', '7', '4']);
+    assert.deepEqual([m[2], m[3], m[4]], ['0', '6', '3']);
     assert.ok(!line.includes('JQDAW') && !line.includes('item') && !line.includes('skeleton'));
     assert.equal(unknownEntityName('mod:entity_3'), true);
     assert.equal(unknownEntityName('zombie_players:zombie_player'), false);
@@ -200,3 +201,27 @@ test('#396 review 4: the report is wired to the first spawn only: bot.once(\'spa
     assert.match(body, /this\._namingReport = reportNamingNearSpawn\(/, 'kept, not awaited');
     assert.equal(src.split('reportNamingNearSpawn(').length - 1, 1, 'nowhere else');
 });
+
+test('#396 nit 1: an unknown entity (type "other" with a name forge-bridge does not know, or "unknown") is keyed #<entityType>, else #<modId>:<modEntityTypeId>; a known name is kept', () => {
+    const ents = [
+        { name: 'mocreatures:entity_12', type: 'other', entityType: null, forge: { modId: 'mocreatures', modEntityTypeId: 12, nameKnown: false } },
+        { name: 'mocreatures:entity_12', type: 'other', entityType: null, forge: { modId: 'mocreatures', modEntityTypeId: 12, nameKnown: false } },
+        { name: 'iceandfire:entity_3', type: 'other', entityType: 300, forge: { modId: 'iceandfire', modEntityTypeId: 3, nameKnown: false } },
+        { name: 'unknown', type: 'mob', entityType: 5 },
+        { name: 'quark:crab', type: 'other', entityType: null, forge: { modId: 'quark', modEntityTypeId: 7, nameKnown: true } }, // known: kept
+    ];
+    const line = entityLine('FRCFLD', entitiesNearSpawn(worldBot([], ents).bot), 0);
+    assert.equal(line, '[naming] FRCFLD entities +0s: 4 kinds; unknown 3; #mocreatures:12:2 #300:1 #5:1 quark:crab:1');
+    assert.match(line, ENTITY_RE);
+});
+
+test('#396 nit 2: a failure is logged with safeError (one line, no stack)', async (t) => {
+    const warns = [];
+    t.mock.method(console, 'warn', (...a) => warns.push(a.join(' ')));
+    const c = fakeTime();
+    await reportNamingNearSpawn({ findBlocks() { throw new Error('no world'); }, entity: {} }, 'FRCFLD', { now: c.now, sleep: c.sleep, log: () => {} });
+    assert.equal(warns.length, 1);
+    assert.match(warns[0], /^\[naming\] near spawn: could not read the world \(.*no world.*\)$/);
+    assert.ok(!/\n\s*at /.test(warns[0]), 'no stack frames');
+});
+

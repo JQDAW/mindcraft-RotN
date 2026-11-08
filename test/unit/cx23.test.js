@@ -994,7 +994,7 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         fs.mkdirSync(rootFile('opt/mindcraft-rotn/releases'), { recursive: true });
     };
     const BASE = 'opt/mindcraft-rotn';
-    const env = () => ({ MINDCRAFT_ROTN_REPO_URL: fwd(src), HEALTH_WAIT_S: '0', FAKE_BOTS: 'rotn-bot idle-bot', FAKE_ENABLED: 'rotn-bot',
+    const env = () => ({ MINDCRAFT_ROTN_REPO_URL: fwd(src), HEALTH_WAIT_S: '0', NPM_CI_RETRY_S: '0', FAKE_BOTS: 'rotn-bot idle-bot', FAKE_ENABLED: 'rotn-bot',
         FAKE_CURRENT_FILE: fwd(rootFile(`${BASE}/current`)) });
     const dep = (args, extra = {}) => {
         fs.rmSync(path.join(bin, 'node'), { force: true }); // deploy.sh evaluates settings.js with the real node
@@ -1103,11 +1103,26 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         assert.match(read(`${BASE}/deploys.log`), new RegExp(`deploy rotn-v0\\.0\\.2 [0-9a-f]{40} ${r2} FAILED rolled-back-to=${r1}`));
     });
 
+    test('npm ci is retried (GitHub release-download outage, 2026-11-08): two failures, then the third try deploys; the wait is NPM_CI_RETRY_S', () => {
+        setupRepo();
+        const r = dep(['deploy', 'rotn-v0.0.1'], { FAKE_FAIL_FIRST_npm: '2' });
+        assert.equal(r.code, 0, r.all);
+        const npm = called('npm');
+        assert.equal(npm.length, 3);
+        assert.equal(new Set(npm.map((c) => c.at(-1))).size, 1, 'every try runs in the same new release');
+        assert.match(r.stderr, /npm ci failed \(try 1 of 3\); trying again in 0 s/);
+        assert.match(r.stderr, /npm ci failed \(try 2 of 3\); trying again in 0 s/);
+        assert.equal(releases().length, 1);
+        assert.match(fs.readFileSync(path.join(CX, 'deploy.sh'), 'utf8'), /^NPM_CI_RETRY_S=\$\{NPM_CI_RETRY_S:-120\}$/m, 'two minutes apart by default');
+        assert.match(fs.readFileSync(path.join(CX, 'deploy.sh'), 'utf8'), /^readonly NPM_CI_TRIES=3$/m);
+    });
+
     test('npm ci failing leaves no release behind; a held lock refuses; old releases are pruned, never current or previous', () => {
         setupRepo();
         const r = dep(['deploy', 'rotn-v0.0.1'], { FAKE_RC_npm: '1' });
         assert.equal(r.code, 1);
-        assert.match(r.stderr, /npm ci failed/);
+        assert.match(r.stderr, /npm ci failed \(3 tries; if it says "No prebuilt binaries found", check GitHub's release downloads\)/);
+        assert.equal(called('npm').length, 3, 'three tries, then it gives up');
         assert.deepEqual(releases(), []);
         fs.mkdirSync(rootFile(`${BASE}/.deploy.lock`));
         assert.match(dep(['deploy', 'rotn-v0.0.1']).stderr, /another deploy is running/);
