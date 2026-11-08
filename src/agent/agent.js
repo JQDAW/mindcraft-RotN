@@ -33,6 +33,7 @@ import { bindDeathReport, deathCauseText } from './library/death_report.js';
 import { installChatLimit, withChatPriority } from './chat_limit.js';
 import { installWalkSafety } from './library/fall_safety.js';
 import { bindDamageRecord } from './damage_record.js';
+import { startStateLine } from './state_report.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -60,6 +61,9 @@ export class Agent {
         this.agenda = new Agenda(this.name); // the RotN agenda, ./bots/<name>/agenda.json (E2)
         this.control = new Control(this.name); // a giver's !stop/!pause/!stfu hold, ./bots/<name>/control.json (E3)
         this.shut_up = this.control.hold?.kind === 'quiet';
+        // G4 #10: which state files this bot started with, once per start, before anything can
+        // call an LLM (the examples' embeddings below, the self-prompter, the first message).
+        console.log(startStateLine(this.name, { tasks: this.tasks, agenda: this.agenda, memoryFile: this.history.memory_fp }));
         this.coder = new Coder(this);
         this.npc = new NPCContoller(this);
         this.memory_bank = new MemoryBank();
