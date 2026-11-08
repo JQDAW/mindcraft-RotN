@@ -24,16 +24,21 @@
 // Steps (no tp of any form, lead #201; the server is the arbiter, the agent's chat is checked against it):
 //   1. login_online, fresh_bot_state; objectives g3c_a<n> for every criterion of agendaCounter (the counter
 //      is their sum; one the server rejects is recorded, not counted, and makes the run not gate-valid).
-//   2. Warm-up: the agent plays its agenda for warmMinutes (5). agenda_active: the counter rose.
+//   2. Warm-up: the agent plays its agenda for at least minWarmMinutes (2). agenda_active: the counter rose
+//      before the task (it is read again while the runner waits for the moment to send it, step 3).
 //   3. The preflight, read-only: `testforblock X Y+1 Z minecraft:air 0` and the same for Y+2. Then
 //      `setblock <marker> minecraft:gold_block` (approved for the task marker only), confirmed read-only with
 //      `testforblock <marker> minecraft:gold_block 0` (placeGoldMarker; no proof: the task steps fail), then the test-only
 //      giver whispers what a player would type: `tell <bot> !taskAdd("go to the gold block at X Y Z and
 //      stand on it", "normal")`, but only while the agenda is active (lead, after smoke round 2: there the
 //      agenda had paused itself as stuck 13 s before the task, so there was no preemption to see). The
-//      agenda's state is read from its own chat (agendaActive). It waits up to activeWaitMinutes (5); if
-//      the agenda is not active by then, the task steps are "not reached: agenda not active at the task"
-//      (not a pass, and not a task failure), and no task is whispered.
+//      agenda's state is read from its own chat (agendaActive). The task goes out at the FIRST moment after the
+//      minimum warm-up when the agenda is active and the counter has risen (G3 gate C, 2026-11-07: a fixed
+//      5-min warm-up let an agenda that took 4.8 min end before the task, so nothing was tested). It waits up
+//      to activeWaitMinutes (8). If the agenda is not active by then, the task steps are "not reached: agenda
+//      not active at the task". If the agenda has FINISHED ("agenda done" or "agenda stopped"), the wait ends at
+//      once and the task steps are "not reached: the agenda finished before the task could be sent ...: a
+//      scenario-timing gap, not a bot result". Either way: not a pass, not a task failure, no task whispered.
 //   4. task_accepted: "task <id> accepted: ..." in the bot's chat within acceptS (60 s).
 //   5. task_done: within taskMinutes (5), the server finds the bot standing on the marker, by
 //      `testfor @a[name=<bot>,x=X,y=Y+1,z=Z,dx=0,dy=1,dz=0]` (1.12's volume selector: the bot's box is in the
@@ -100,6 +105,21 @@ export function agendaActive(lines) {
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * The agenda's end line ("agenda done" or "agenda stopped") that raced the task, or null (#354 re-review). `after` is
+ * the bot's chat since the whisper. It counts only if it comes before the bot's "task <id> accepted" line, with no
+ * "agenda step <id> started: ..." before it; an end line after the accept is the bot's own (no preemption).
+ */
+export function raceEnd(after, id) {
+    const accepted = after.findIndex((t) => t.startsWith(`task ${id} accepted: `));
+    const upTo = accepted === -1 ? after : after.slice(0, accepted);
+    for (const t of upTo) {
+        if (/^agenda step \S+ started: /.test(t)) return null;
+        if (t === 'agenda done' || t === 'agenda stopped') return t;
+    }
+    return null;
+}
+
 export default {
     id: 'g3-task-preempts-agenda',
     gate: 'G3',
@@ -120,8 +140,8 @@ export default {
         marker: MARKER,
         agendaCounter: AGENDA_COUNTER,
         cancelS: 30,
-        warmMinutes: 5,
-        activeWaitMinutes: 5,
+        minWarmMinutes: 2,
+        activeWaitMinutes: 8,
         acceptS: 60,
         taskMinutes: 5,
         resumeMinutes: 5,
@@ -135,11 +155,11 @@ export default {
         lateReplyMs: 5 * MS,
         latePollMs: 1 * MS,
     },
-    gateParams: { marker: 'equal', agendaCounter: 'equal', warmMinutes: 'equal', activeWaitMinutes: 'equal', acceptS: 'equal', taskMinutes: 'equal', resumeMinutes: 'equal', ...G3_GATE_PARAMS },
+    gateParams: { marker: 'equal', agendaCounter: 'equal', minWarmMinutes: 'equal', activeWaitMinutes: 'equal', acceptS: 'equal', taskMinutes: 'equal', resumeMinutes: 'equal', ...G3_GATE_PARAMS },
     // The most minutes a run can take from its start (batch.mjs derives its runner timeout from it, plus a margin):
-    // the login wait, the warm-up, the wait for an active agenda, the accept window, the task, the resume window
-    // and the closing cancel.
-    runMinutes: (p) => p.loginTimeoutMs / MIN + p.warmMinutes + p.activeWaitMinutes + p.acceptS / 60 + p.taskMinutes + p.resumeMinutes + p.cancelS / 60,
+    // the login wait, the minimum warm-up, the wait for an active agenda, the accept window, the task, the resume
+    // window and the closing cancel.
+    runMinutes: (p) => p.loginTimeoutMs / MIN + p.minWarmMinutes + p.activeWaitMinutes + p.acceptS / 60 + p.taskMinutes + p.resumeMinutes + p.cancelS / 60,
 
     async run(ctx) {
         const { bot, clock, params: p } = ctx;
@@ -201,35 +221,62 @@ export default {
         };
         const notReached = (why) => { for (const k of ['task_accepted', 'task_done', 'agenda_resumed']) ctx.check(k, false, `not reached: ${why}`); };
 
-        // 2. the warm-up
+        // 2. the minimum warm-up
         const c0 = await counter('start');
-        const warmEnd = s.joinedAt + p.warmMinutes * MIN;
+        const warmEnd = s.joinedAt + p.minWarmMinutes * MIN;
         while (clock.now() < warmEnd && !gone()) await clock.sleep(Math.min(p.counterPollMs, Math.max(MS, warmEnd - clock.now())));
-        const c1 = await counter('before the task');
-        ctx.check('agenda_active', counted.length > 0 && c1 > c0,
-            counted.length ? `counter ${c0 ?? '?'} -> ${c1 ?? '?'} over ${p.warmMinutes} min (${counted.length}/${stats.length} objectives)` : 'no counter objective was added');
-        if (gone()) { notReached(goneText(gone())); return finish(); }
-        if (!marker) { notReached(`no task marker: '${p.marker}' is not "x,y,z" (the lead pins it, #101)`); return finish(); }
+        let c1 = await counter('after the minimum warm-up');
+        const rose = () => counted.length > 0 && c1 > c0;
+        const checkActive = () => ctx.check('agenda_active', rose(),
+            counted.length ? `counter ${c0 ?? '?'} -> ${c1 ?? '?'} by minute ${readings[readings.length - 1].min} (${counted.length}/${stats.length} objectives)` : 'no counter objective was added');
+        if (gone()) { checkActive(); notReached(goneText(gone())); return finish(); }
+        if (!marker) { checkActive(); notReached(`no task marker: '${p.marker}' is not "x,y,z" (the lead pins it, #101)`); return finish(); }
 
         // 3. the preflight (read-only): the two cells above the marker must be air, then the marker and the task
         const above = await airAbove(confirm, marker);
         ctx.note('markerPreflight', above);
-        if (!above.every((c) => c.air)) { notReached(`site not clear: ${notClearText(above)}`); return finish(); }
+        if (!above.every((c) => c.air)) { checkActive(); notReached(`site not clear: ${notClearText(above)}`); return finish(); }
         const placed = await placeGoldMarker(confirm, marker);
         ctx.note('marker', placed);
-        if (!placed.goldBlock) { notReached(`the gold block is not at the marker: ${placed.detail}`); return finish(); }
-        // only while the agenda is active (lead, after smoke round 2), bounded by activeWaitMinutes
+        if (!placed.goldBlock) { checkActive(); notReached(`the gold block is not at the marker: ${placed.detail}`); return finish(); }
+        // The first moment the agenda is active and the counter has risen (G3 gate C), bounded by activeWaitMinutes.
+        // An agenda that has finished will not start again: the wait ends at once (below).
         const waitFrom = clock.now();
         const activeEnd = waitFrom + p.activeWaitMinutes * MIN;
+        const ended = (a) => a.last === 'agenda done' || a.last === 'agenda stopped';
+        const finishedText = (last, time) => `the agenda finished before the task could be sent ("${last}"${time ? ` at ${time}` : ''}): a scenario-timing gap, not a bot result`;
+        let counterAt = clock.now();
         let ag = agendaActive(said());
-        while (!ag.active && clock.now() < activeEnd && !gone()) {
+        while (!(ag.active && rose()) && !ended(ag) && clock.now() < activeEnd && !gone()) {
             await clock.sleep(Math.min(p.pollMs, Math.max(MS, activeEnd - clock.now())));
             ag = agendaActive(said());
+            if (ag.active && !rose() && clock.now() - counterAt >= p.counterPollMs) { c1 = await counter('before the task'); counterAt = clock.now(); }
         }
-        ctx.note('agendaAtTask', { active: ag.active, waitedS: Math.round((clock.now() - waitFrom) / MS), last: ag.last });
+        if (!rose()) c1 = await counter('before the task');
+        checkActive();
+        const endLine = ended(ag) ? chatLines(s.sinceMarker(), name).filter((c) => c.text === ag.last).pop() : null;
+        ctx.note('agendaAtTask', { active: ag.active, waitedS: Math.round((clock.now() - waitFrom) / MS), last: ag.last, ...(endLine ? { endedAt: endLine.time } : {}) });
         if (gone()) { notReached(goneText(gone())); return finish(); }
+        if (ended(ag)) {
+            // Never a silent bot fail (lead, after G3 gate C): the agenda ended before the scenario could test the preemption.
+            notReached(finishedText(ag.last, endLine?.time));
+            return finish();
+        }
         if (!ag.active) {
             notReached(`agenda not active at the task (not active for ${p.activeWaitMinutes} min; its last agenda line: ${ag.last ? `"${ag.last}"` : 'none'})`);
+            return finish();
+        }
+        if (!rose()) {
+            // #354 review 1: no task without the server's proof of progress. agenda_active (above) reports the counter.
+            notReached(`the agenda was active, but the server's counter had not risen (${c0 ?? '?'} -> ${c1 ?? '?'}) when the ${p.activeWaitMinutes}-min wait ran out: the task is sent only after proven progress (scenario timing, not a task result)`);
+            return finish();
+        }
+        // The last look right before the whisper: an agenda that finished since the read above gets no task either.
+        const atSend = agendaActive(said());
+        if (ended(atSend)) {
+            const at = chatLines(s.sinceMarker(), name).filter((c) => c.text === atSend.last).pop();
+            ctx.note('agendaAtSend', { last: atSend.last, endedAt: at?.time ?? null });
+            notReached(finishedText(atSend.last, at?.time));
             return finish();
         }
         const chatBefore = said().length;
@@ -266,6 +313,18 @@ export default {
         if (report) openTask = null;   // done or failed: closed
         const preempted = said().slice(chatBefore).includes(`agenda paused for task ${id}`);
         ctx.note('taskResult', { id, onMarkerMin, report, preempted });
+        // #354 review 2 (re-review): a race only when the agenda's end line came after the whisper but BEFORE the bot's
+        // "task <id> accepted", with no "agenda step ... started" between the whisper and it: the agenda was already
+        // finishing as the task arrived, so there was nothing running to preempt. An end line any later (the bot took the
+        // task and never paused its agenda, then the agenda finished) stays "no preemption seen": task_done FAILS.
+        const endedFirst = preempted ? null : raceEnd(said().slice(chatBefore), id);
+        if (endedFirst) {
+            const what = `${onMarkerMin !== null ? `the server found the bot on the marker at minute ${onMarkerMin}` : 'the server never found the bot on the marker'}; ${report ? `the bot said "${report}"` : 'no done report'}`;
+            const why = `not reached: the agenda finished ("${endedFirst}") as the task arrived, before any "agenda paused for task ${id}", so there was no running agenda to preempt: a scenario-timing gap, not a bot result (${what})`;
+            ctx.check('task_done', false, why);
+            ctx.check('agenda_resumed', false, why);
+            return finish();
+        }
         const done = onMarkerMin !== null && report !== null && doneRe.test(report) && preempted;
         ctx.check('task_done', done, `${onMarkerMin !== null ? `the server found the bot on the marker at minute ${onMarkerMin}` : 'the server never found the bot on the marker'}; ${report ? `the bot said "${report}"` : 'no done report'}; ${preempted ? 'the agenda was paused for it' : `no "agenda paused for task ${id}" line`}${gone() ? `; ${goneText(gone())}` : ''}`);
         if (!done) {
