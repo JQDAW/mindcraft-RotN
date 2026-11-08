@@ -130,6 +130,8 @@ test('D1: the eating mode eats the chosen food, and only when it should', async 
     await settled();
     assert.deepEqual(idle.eaten, ['rustic:wildberries']);
     assert.ok(logs.includes('[reflex] ate rustic:wildberries:0 at food 12'), logs.join('\n'));
+    // G4 #5: the journal's eat line, with the food level after it.
+    assert.ok(logs.includes('[survival] ate rustic:wildberries:0 food 12->15'), logs.join('\n'));
 
     const busy = eatBot([stack('rustic:wildberries', 0, 3)], 10);
     await mode.update(modeAgent(busy.bot, { idle: false, label: 'action:collectBlocks' }));
