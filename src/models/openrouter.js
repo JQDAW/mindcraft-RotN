@@ -4,6 +4,7 @@ import { strictFormat } from '../utils/text.js';
 import { safeError } from '../agent/safe_error.js';
 
 // One line per completion with its token counts and cost in USD (G4 #7 soak): numbers only, never the body.
+// OpenRouter always includes usage (prompt_tokens, completion_tokens, cost in USD credits) on Chat Completions.
 // "unknown" when OpenRouter sent no usage or a field is not a finite non-negative number.
 export function usageLine(usage) {
     const num = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0) ? String(v) : 'unknown';
@@ -40,9 +41,6 @@ export class OpenRouter {
         };
         // A null or empty stop_seq sends no stop sequence at all (memory summaries).
         if (stop_seq) pack.stop = stop_seq;
-        // RotN (G4 #7, soak USD/h on the CX23): ask OpenRouter for usage accounting,
-        // so each completion reports its own cost without reading the key's balance.
-        pack.usage = { include: true };
 
         let res = null;
         try {

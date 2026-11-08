@@ -12,12 +12,12 @@ import process from 'node:process';
 
 const FAKE_KEY = 'sk-or-v1-0123456789abcdefABCDEF0123456789abcdef';
 const KEY_BEFORE = process.env.OPENROUTER_API_KEY;
-let OpenRouter;
+let OpenRouter, usageLine;
 
 before(async () => {
     // Set before the constructor's getKey() runs; no real key is ever used.
     process.env.OPENROUTER_API_KEY = FAKE_KEY;
-    ({ OpenRouter } = await import('../models/openrouter.js'));
+    ({ OpenRouter, usageLine } = await import('../models/openrouter.js'));
 });
 
 after(() => {
@@ -126,8 +126,11 @@ test('each completion logs one provider line: name, finish reason and length onl
 
     logs.length = 0;
     await modelWith(() => Promise.resolve({ provider: 'P', choices: [{ message: { content: 'x' }, finish_reason: 'stop\n[openrouter] forged' }] })).sendRequest([], 'system');
-    const l3 = logs.filter(l => l.startsWith('[openrouter]'));
+    const l3 = logs.filter(l => l.startsWith('[openrouter] provider '));
     assert.equal(l3.length, 1);
+    // The forged finish_reason adds no line either: one provider line and one usage line only.
+    assert.equal(logs.filter(l => l.startsWith('[openrouter]')).length, 2);
+    assert.equal(logs.filter(l => l.startsWith('[openrouter] usage ')).length, 1);
     assert.match(l3[0], /^\[openrouter\] provider P, finish_reason [\w .?-]{1,40}, content 1 chars$/);
 
     logs.length = 0;
@@ -171,3 +174,23 @@ test('a normal response is unchanged', async (t) => {
     assert.equal(res, 'hi');
     assert.equal(lines.length, 0);
 });
+
+// G4 #7 (soak USD/h): the per-completion usage line.
+const USAGE_RE = /^\[openrouter\] usage prompt_tokens (\d+|unknown), completion_tokens (\d+|unknown), cost_usd ([0-9.e-]+|unknown)$/;
+
+test('usageLine: numbers from OpenRouter usage accounting', () => {
+    const l = usageLine({ prompt_tokens: 1200, completion_tokens: 85, cost: 0.000412 });
+    assert.equal(l, '[openrouter] usage prompt_tokens 1200, completion_tokens 85, cost_usd 0.000412');
+    assert.match(l, USAGE_RE);
+});
+
+test('usageLine: missing or odd values print unknown, never text from the response', () => {
+    assert.equal(usageLine(undefined), '[openrouter] usage prompt_tokens unknown, completion_tokens unknown, cost_usd unknown');
+    assert.equal(usageLine({ prompt_tokens: '12', completion_tokens: -1, cost: 'sk-or-x' }), '[openrouter] usage prompt_tokens unknown, completion_tokens unknown, cost_usd unknown');
+    assert.equal(usageLine({ prompt_tokens: 3, completion_tokens: NaN, cost: Infinity }), '[openrouter] usage prompt_tokens 3, completion_tokens unknown, cost_usd unknown');
+});
+
+test('usageLine never matches the provider line the G3 spend parser counts', () => {
+    assert.doesNotMatch(usageLine({}), /^\[openrouter\] provider /);
+});
+
