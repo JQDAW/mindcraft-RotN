@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import soak, { TBD } from '../scenarios/g4/g4-soak-2h.mjs';
-import { agentExits, blockNameProblem, deathEvents, nearbyBlocksResults, survivalEvents } from '../runner/lib/survival.mjs';
+import { agentExits, blockNameProblem, deathEvents, llmUsage, nearbyBlocksResults, survivalEvents } from '../runner/lib/survival.mjs';
 
 const NAME = 'FRCFLD';
 const MIN = 60000;
@@ -17,13 +17,20 @@ const stamp = (ms) => {
     return [Math.floor(s / 3600) % 24, Math.floor(s / 60) % 60, s % 60].map((n) => String(n).padStart(2, '0')).join(':');
 };
 const line = (ms, msg) => `[${stamp(ms)}] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: ${msg}`;
-const NEARBY = ['dirt', 'grass', 'dynamictrees:trunkshell', 'biomesoplenty:plant_0', 'stone', 'pyrotech:rock'];
+// A real !nearbyBlocks result, as agent.js logs it (copied from test/evidence/g3/g3a-20261105/rocks/driver.log 149-158 and
+// g3a-20261107-gate 460-463): the header on the line after "and got: ", a liquid with "(source)", the Block lines.
+const REAL_NEARBY = ['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS', '- dynamictrees:trunkshell', '- biomesoplenty:plant_0', '- dirt',
+    '- dynamictrees:sprucebranch', '- grass', '- tallgrass', '- dynamictrees:rootydirt', '- water (source)', '- rustic:cohosh',
+    '- Block Below: undergroundbiomes:metamorphic_stone', '- Block at Legs: air', '- Block at Head: air', '- First Solid Block Above Head: none', ''];
 
 /**
  * opt.driver (set-up T); opt.badName (a name in the !nearbyBlocks result); opt.noNearby; opt.memoryMb (per sample);
  * opt.nRestartsAt (minute when systemd restarts it); opt.agentRestartAt (an agent_process restart line); opt.leaveAt
  * (minute the bot leaves for good); opt.noAgenda; opt.lowFood (food drops to it once); opt.noEatAfterLow;
- * opt.deaths (minutes of deaths); opt.unreported (deaths with no report); opt.unitBot; opt.unitActive.
+ * opt.deaths (minutes of deaths); opt.unreported (deaths with no report); opt.unitBot; opt.unitActive;
+ * opt.nearbyAt (minute of the !nearbyBlocks result, default 3); opt.sameLineHeader; opt.nearbyNone (an empty result first);
+ * opt.costUsd (per completion, default 0.0002); opt.unknownCost (one completion's cost unknown); opt.noUsage;
+ * opt.refreshFailAt (minute from which journal reads fail).
  */
 function sim(opt = {}) {
     let t = 0;
@@ -40,7 +47,15 @@ function sim(opt = {}) {
     const advance = () => {
         if (started === null) return;
         at(0.3, 'join', () => { online = true; log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`); add(`${NAME} joined the game`); });
-        if (!opt.noNearby) at(3, 'nearby', () => jr('Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS', ...[...NEARBY, ...(opt.badName ? [opt.badName] : [])].map((n) => `- ${n}`), ''));
+        if (opt.nearbyNone) at(2, 'nearbyNone', () => jr('Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS: none', ''));
+        if (!opt.noNearby) {
+            at(opt.nearbyAt ?? 3, 'nearby', () => {
+                const block = [...REAL_NEARBY];
+                if (opt.badName) block.splice(3, 0, `- ${opt.badName}`);
+                if (opt.sameLineHeader) block.splice(0, 2, 'Agent executed: !nearbyBlocks and got: NEARBY_BLOCKS');
+                jr(...block);
+            });
+        }
         for (let m = 1; m <= 125; m++) {
             at(m, `food${m}`, () => jr(`[survival] food ${opt.lowFood !== undefined && m === 50 ? opt.lowFood : 18} health 20 (${opt.lowFood !== undefined && m === 50 ? 'low' : 'check'})`));
             // the eat at 51.5 min, in time order with the food lines (a sample writes all lines that came due since the last one)
@@ -48,7 +63,12 @@ function sim(opt = {}) {
         }
         at(30, 'fight', () => jr('[survival] fight start zombie (shelter)', '[survival] fight end zombie killed after 6 s'));
         at(35, 'flee', () => jr('[survival] flee creeper (low health)'));
-        for (let m = 1; m <= 125; m += 1) at(m, `llm${m}`, () => jr('[openrouter] provider Wafer, finish_reason stop, content 300 chars'));
+        for (let m = 1; m <= 125; m += 1) {
+            at(m, `llm${m}`, () => {
+                jr('[openrouter] provider Wafer, finish_reason stop, content 300 chars');
+                if (!opt.noUsage) jr(`[openrouter] usage prompt_tokens 900, completion_tokens 80, cost_usd ${opt.unknownCost && m === 7 ? 'unknown' : opt.costUsd ?? 0.0002}`);
+            });
+        }
         if (!opt.noAgenda) at(40, 'agenda', () => { jr('agenda done'); add(`<${NAME}> agenda done`); });
         for (const d of opt.deaths ?? []) at(d, `death${d}`, () => { jr('[death] died at 1, 64, 2; waiting for the respawn'); if (!(opt.unreported ?? []).includes(d)) jr('[death] died at 1, 64, 2 (Zombie); lost 3 minecraft:dirt:0'); });
         if (opt.agentRestartAt) at(opt.agentRestartAt, 'arestart', () => jr(`[agent_process] ${NAME}: network; restarting in 10 s.`));
@@ -70,7 +90,8 @@ function sim(opt = {}) {
     };
     let sampleN = 0;
     const bot = {
-        ...(opt.driver ? {} : { kind: 'service', bot: opt.unitBot ?? 'frcfld', refresh: () => { advance(); return Promise.resolve(); } }),
+        ...(opt.driver ? {} : { kind: 'service', bot: opt.unitBot ?? 'frcfld',
+            refresh: () => { advance(); return opt.refreshFailAt && started !== null && t - started >= opt.refreshFailAt * MIN ? Promise.reject(new Error("service journal: 'journal frcfld' exited 255")) : Promise.resolve(); } }),
         start() { started = t; unit.state = 'active'; jr('Starting mindcraft-rotn@frcfld.service - Mindcraft RotN bot frcfld...'); return Promise.resolve(); },
         alive: () => unit.state === 'active',
         needsStop: () => unit.state === 'active',
@@ -109,10 +130,18 @@ describe('g4-soak-2h: the module and the journal parsers', () => {
         assert.deepEqual([sv.ate.length, sv.fightStart.length, sv.fightEnd[0].outcome, sv.flee[0].why, sv.food[0].food, sv.food[0].reason, sv.food[1].food], [1, 1, 'gone', 'low health', 12, 'low', null]);
         const de = deathEvents(['[death] died at 1, 2, 3; waiting for the respawn', '[death] died at 1, 2, 3 (Zombie); lost nothing', '[death] chat: x']);
         assert.deepEqual([de.deaths.length, de.reports.length], [1, 1]);
-        assert.deepEqual(nearbyBlocksResults(['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS', '- dirt', '- a:b', '', 'next']), [{ at: 0, names: ['dirt', 'a:b'] }]);
+        // #394 review: the real format (the header on the next line or the same), liquids' suffix, the Block lines, none.
+        assert.deepEqual(nearbyBlocksResults(REAL_NEARBY), [{ at: 0, none: false, names: ['dynamictrees:trunkshell', 'biomesoplenty:plant_0', 'dirt', 'dynamictrees:sprucebranch',
+            'grass', 'tallgrass', 'dynamictrees:rootydirt', 'water', 'rustic:cohosh', 'undergroundbiomes:metamorphic_stone', 'air', 'air'] }]);
+        assert.deepEqual(nearbyBlocksResults(['Agent executed: !nearbyBlocks and got: NEARBY_BLOCKS', '- stone', '- First Solid Block Above Head: leaves (3 blocks up)']),
+            [{ at: 0, none: false, names: ['stone', 'leaves'] }]);
+        assert.deepEqual(nearbyBlocksResults(['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS: none']), [{ at: 0, none: true, names: [] }]);
+        assert.deepEqual(nearbyBlocksResults(['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS', '- water (flowing)']), [{ at: 0, none: false, names: ['water'] }]);
+        assert.deepEqual(llmUsage(['[openrouter] usage prompt_tokens 10, completion_tokens 5, cost_usd 0.0001', '[openrouter] usage prompt_tokens 1, completion_tokens 1, cost_usd 0.00025',
+            '[openrouter] usage prompt_tokens unknown, completion_tokens unknown, cost_usd unknown', '[openrouter] provider Wafer']), { lines: 3, known: 2, unknown: 1, usd: 0.00035 });
         for (const n of ['dirt', 'grass', 'dynamictrees:trunkshell', 'biomesoplenty:plant_0', 'minecraft:stone']) assert.equal(blockNameProblem(n), null, n);
-        assert.deepEqual(['1', '35:2', 'unknown', 'mod:unknown_block', 'block_123', 'mod:entity_7', 'Dirt', ''].map(blockNameProblem),
-            ['a numeric id', 'a numeric id', 'unknown', 'unknown', 'a placeholder', 'a placeholder', 'not a registry name', 'empty']);
+        assert.deepEqual(['1', '35:2', 'unknown', 'mod:unknown_block', 'block_123', 'mod:entity_7', 'Dirt', '', 'undefined', 'null'].map(blockNameProblem),
+            ['a numeric id', 'a numeric id', 'unknown', 'unknown', 'a placeholder', 'a placeholder', 'not a registry name', 'empty', 'undefined', 'null']);
         assert.equal(agentExits(['[agent_process] FRCFLD: network; restarting in 10 s.', 'Agent process exited with code 1 and signal null', '[agent_process] OTHER: x; restarting in 1 s.', 'y'], NAME).length, 2);
     });
 });
@@ -124,7 +153,7 @@ describe('g4-soak-2h on a simulated service', () => {
         for (const k of ['login_online', 'naming', 'no_crash', 'agenda_done', 'food_floor', 'ate_when_low', 'deaths_reported']) assert.equal(c[k].pass, true, `${k}: ${c[k].detail} ${r.error ?? ''}`);
         assert.equal(c.peak_memory.pass, false);
         assert.equal(c.peak_memory.detail, 'not reached: no target yet (TBD); measured peak 610 MB');
-        assert.match(c.usd_per_hour.detail, /^not reached: the CX23 key's spend is read separately \(lead, #389\), not by the runner; no target yet \(TBD\); \d+ LLM calls \([\d.]+\/h\)$/);
+        assert.match(c.usd_per_hour.detail, /^not reached: no target yet \(TBD\); measured USD 0\.012\/h \(USD 0\.024 over 120 min, 120 completions\)$/);
         assert.equal(r.notes.samples.length, 25, 'one at the start and every 5 min for 120 min');
         assert.deepEqual(r.notes.survival, { eats: 0, fights: 1, fightOutcomes: { killed: 1 }, flees: 1, foodLines: 120 });
         assert.equal(r.gateValid, false);
@@ -135,7 +164,11 @@ describe('g4-soak-2h on a simulated service', () => {
         const ok = byName(await run(sim({ memoryMb: [300, 500] }), { peakMemoryMaxMb: 1024, usdPerHourMax: 0.05 }));
         assert.equal(ok.peak_memory.pass, true);
         assert.equal(ok.peak_memory.detail, 'peak 500 MB (target 1024 MB)');
-        assert.match(ok.usd_per_hour.detail, /target USD 0\.05\/h/);
+        assert.equal(ok.usd_per_hour.pass, true);
+        assert.match(ok.usd_per_hour.detail, /^USD 0\.012\/h \(target 0\.05; USD 0\.024 over 120 min, 120 completions\)$/);
+        const costly = byName(await run(sim({ costUsd: 0.002 }), { peakMemoryMaxMb: 1024, usdPerHourMax: 0.05 }));
+        assert.equal(costly.usd_per_hour.pass, false);
+        assert.match(costly.usd_per_hour.detail, /^USD 0\.12\/h \(target 0\.05;/);
         const over = byName(await run(sim({ memoryMb: [300, 1400] }), { peakMemoryMaxMb: 1024, usdPerHourMax: 0.05 }));
         assert.equal(over.peak_memory.pass, false);
         assert.equal(over.peak_memory.detail, 'peak 1400 MB (target 1024 MB)');
@@ -184,8 +217,40 @@ describe('g4-soak-2h on a simulated service', () => {
         const r = await run(sim({ driver: true }));
         const c = byName(r);
         assert.equal(c.peak_memory.detail, 'not reached: not the CX23 service (no metrics)');
-        assert.match(c.usd_per_hour.detail, /^not reached: a rehearsal: the batch's key reading has the spend;/);
+        assert.match(c.usd_per_hour.detail, /^not reached: no target yet \(TBD\); measured USD/, 'T reads the same usage lines');
         for (const k of ['naming', 'agenda_done', 'food_floor', 'deaths_reported']) assert.equal(c[k].pass, true, `${k}: ${c[k].detail}`);
         assert.ok(r.weakenedParams.some((w) => /set-up T/.test(w)));
+    });
+
+});
+
+describe('#394 review: naming in the real format, a failed read is no crash, the naming window, USD from the usage lines', () => {
+    test('the !nearbyBlocks header on the same line also counts; an empty result first is skipped; a first result after the window is not reached', async () => {
+        assert.equal(byName(await run(sim({ sameLineHeader: true }))).naming.pass, true);
+        const none = byName(await run(sim({ nearbyNone: true })));
+        assert.equal(none.naming.pass, true, none.naming.detail);
+        const late = byName(await run(sim({ nearbyAt: 31 })));
+        assert.match(late.naming.detail, /^not reached: the first !nearbyBlocks result came at minute 35, after the 20-min window$/);
+    });
+
+    test('an undefined, null or unknown name fails naming', async () => {
+        for (const bad of ['undefined', 'null', 'unknown']) {
+            const c = byName(await run(sim({ badName: bad })));
+            assert.equal(c.naming.pass, false, bad);
+            assert.match(c.naming.detail, new RegExp(`"${bad}"`), bad);
+        }
+    });
+
+    test('journal reads that fail from minute 60: an infra note in the samples, never a crash', async () => {
+        const r = await run(sim({ refreshFailAt: 60 }));
+        const c = byName(r);
+        assert.equal(c.no_crash.pass, true, c.no_crash.detail);
+        assert.ok(r.notes.infraSamples.count >= 12, JSON.stringify(r.notes.infraSamples));
+        assert.match(r.notes.infraSamples.first.error, /exited 255/);
+    });
+
+    test('usd_per_hour: a cost_usd unknown, or no usage line at all, is not reached with the count', async () => {
+        assert.match(byName(await run(sim({ unknownCost: true }))).usd_per_hour.detail, /^not reached: 1 of 120 usage line\(s\) have cost_usd unknown; the known ones sum to USD 0\.0238$/);
+        assert.match(byName(await run(sim({ noUsage: true }))).usd_per_hour.detail, /^not reached: no "\[openrouter\] usage \.\.\." line in the log \(120 LLM calls\): the release prints no usage line \(setup gap\?\)$/);
     });
 });

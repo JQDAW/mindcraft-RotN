@@ -544,15 +544,18 @@ A short session of the real agent with the **production** task-giver list. `Serv
   - The run is not-gate while either target is TBD.
 - **The checks:**
   - **`login_online`:** as in #374 (this run's bot, an inactive unit).
-  - **`naming` (#2):** the agent's own first `!nearbyBlocks` result lists at least `minNamedBlocks` (5) names, none numeric, `unknown` or a placeholder. Bare vanilla names (`dirt`) count, as the agent lists them.
+  - **`naming` (#2):** the agent's own first `!nearbyBlocks` result with blocks, first seen at a sample within `namingWindowMinutes` (20), lists at least `minNamedBlocks` (5) names, none numeric, `unknown`, `undefined`, `null` or a placeholder.
+    - The real format: `NEARBY_BLOCKS` on the line after `Agent executed: !nearbyBlocks and got: `, or on the same line; `- water (source|flowing)`; `- Block Below|at Legs|at Head: <name>`; `- First Solid Block Above Head: <name> (N blocks up)` or `none`; `NEARBY_BLOCKS: none`. The suffixes and labels are stripped.
+    - Bare vanilla names (`dirt`) count.
+    - The lead's next step is skills-rotn's one-time `[naming]` line after the spawn; this parser then stays as the fallback.
   - **`no_crash` (#7):** online to the end; no agent_process restart, fatal or exit line; `NRestarts` unchanged; `active` at every sample (S).
   - **`peak_memory` (#7, S):** the highest `MemoryCurrent` (or `MemoryPeak`) within the target.
-  - **`usd_per_hour` (#7):** on S the runner cannot read the CX23 key (lead, #389), so it is not reached. The journal's LLM calls per hour (`[openrouter] provider` lines) are recorded, to set against the spend read separately. On T, the batch's key reading has the spend.
+  - **`usd_per_hour` (#7):** the sum of `cost_usd` over the run's `[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X` lines (#395), per hour. One `cost_usd unknown`, or no usage line at all, makes it not reached, with the count.
   - **`agenda_done` (#4):** `agenda done` within the soak.
   - **`food_floor` (#5):** every `[survival] food` line at or above `foodFloor` (6).
   - **`ate_when_low` (#5):** after each `low` food line, an `ate` line within the next `eatWithinMinutes` (5) food lines (one a minute at most).
   - **`deaths_reported` (#5, as in #6):** each `[death] died at ...; waiting for the respawn` has its `[death] died at ...; lost ...` report before the next death.
-- **Notes:** every sample, the survival counts (eats, fights by outcome, flees), the deaths, and the LLM calls per hour.
+- **Notes:** every sample, the survival counts (eats, fights by outcome, flees), the deaths, and the LLM usage. A sample whose reads fail (ssh, gate) records its error and is an infra note (`notes.infraSamples`), never a crash.
 - **Tests:** `test/unit/g4-soak.test.js`, with fakes only.
 
 ### G4 #6: `g4-death-report`

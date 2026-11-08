@@ -39,17 +39,33 @@ export function deathEvents(lines) {
     return { deaths, reports };
 }
 
-/** Each "!nearbyBlocks" result: the "- <name>" lines after "NEARBY_BLOCKS". -> [{at, names}] */
+/**
+ * Each "!nearbyBlocks" result (src/agent/commands/queries.js): "NEARBY_BLOCKS", then "- <name>" lines, a liquid with
+ * " (source)" or " (flowing)", then "- Block Below: <name>", "- Block at Legs: <name>", "- Block at Head: <name>" and
+ * "- First Solid Block Above Head: <name> (N blocks up)" or "none"; or "NEARBY_BLOCKS: none". agent.js logs it as
+ * console.log('Agent executed:', name, 'and got:', result), and the result starts with a newline (pad), so the header
+ * is on the next line (G3 evidence, e.g. g3a-20261105 driver.log 149-150); the same line is accepted too.
+ * -> [{at, names, none}]: names with every suffix stripped and the "Block ...: " labels dropped; "none" skipped.
+ */
 export function nearbyBlocksResults(lines) {
     const out = [];
+    const LABEL = /^(Block Below|Block at Legs|Block at Head|First Solid Block Above Head): (.*)$/;
+    const name = (x) => {
+        const m = LABEL.exec(x);
+        const v = (m ? m[2] : x).replace(/ \((source|flowing)\)$/, '').replace(/ \(\d+ blocks? up\)$/, '').trim();
+        return v === 'none' && m ? null : v;
+    };
     for (let i = 0; i < lines.length; i++) {
-        if (!/^Agent executed: !nearbyBlocks and got:/.test(lines[i])) continue;
+        const m = /^Agent executed: !nearbyBlocks and got:\s*(.*)$/.exec(lines[i]);
+        if (!m) continue;
         let j = i + 1;
-        while (j < lines.length && !lines[j].trim()) j++;
-        if (lines[j] !== 'NEARBY_BLOCKS') continue;
+        let header = m[1].trim();
+        if (!header) { while (j < lines.length && !lines[j].trim()) j++; header = (lines[j++] ?? '').trim(); }
+        if (header === 'NEARBY_BLOCKS: none') { out.push({ at: i, names: [], none: true }); continue; }
+        if (header !== 'NEARBY_BLOCKS') continue;
         const names = [];
-        for (j++; j < lines.length && /^- /.test(lines[j]); j++) names.push(lines[j].slice(2).trim());
-        out.push({ at: i, names });
+        for (; j < lines.length && /^- /.test(lines[j]); j++) { const n = name(lines[j].slice(2)); if (n !== null) names.push(n); }
+        out.push({ at: i, names, none: false });
     }
     return out;
 }
@@ -60,11 +76,28 @@ export function nearbyBlocksResults(lines) {
  */
 export function blockNameProblem(n) {
     if (!n) return 'empty';
+    if (/^(undefined|null)$/.test(n)) return n;
     if (/^\d+(:\d+)?$/.test(n)) return 'a numeric id';
     if (/(^|[:_/])unknown([_/]|$)/.test(n)) return 'unknown';
     if (/(^|:)(block|entity|item)_\d+$/.test(n)) return 'a placeholder';
     if (!/^([a-z][a-z0-9_.-]*:)?[a-z0-9_./-]*[a-z][a-z0-9_./-]*$/.test(n)) return 'not a registry name';
     return null;
+}
+
+/**
+ * The cost of each LLM completion, from openrouter.js's (#395) "[openrouter] usage prompt_tokens <n|unknown>,
+ * completion_tokens <n|unknown>, cost_usd <number|unknown>". -> {lines, known, unknown, usd}
+ */
+export function llmUsage(lines) {
+    let n = 0, unknown = 0, usd = 0;
+    for (const l of lines) {
+        const m = /^\[openrouter\] usage prompt_tokens \S+, completion_tokens \S+, cost_usd (\S+)$/.exec(l);
+        if (!m) continue;
+        n++;
+        const v = Number(m[1]);
+        if (m[1] === 'unknown' || !Number.isFinite(v)) unknown++; else usd += v;
+    }
+    return { lines: n, known: n - unknown, unknown, usd: Math.round(usd * 1e6) / 1e6 };
 }
 
 /** agent_process restarts and agent exits in the log (an in-process restart, or the process ending). */

@@ -13,14 +13,17 @@
 // !nearbyBlocks results, and the agenda's lines.
 // Checks:
 //   login_online       S: this run's bot (case aside) from an inactive unit; the join with an online UUID
-//   naming             (#2) the agent's first !nearbyBlocks result within namingWindowMinutes lists at least
-//                      minNamedBlocks blocks, none with a numeric, unknown or placeholder name. None run: not reached.
+//   naming             (#2) the agent's first !nearbyBlocks result with blocks, first seen at a sample within
+//                      namingWindowMinutes, lists at least minNamedBlocks blocks, none with a numeric, unknown, undefined,
+//                      null or placeholder name. None, or later: not reached. (skills-rotn's one-time [naming] line after
+//                      the spawn is to replace it; this stays the fallback.)
+// A sample whose reads fail is an infra note (notes.infraSamples), never a crash.
 //   no_crash           (#7) online to the end; NRestarts unchanged (S); no agent_process restart, fatal or exit line;
 //                      ActiveState active at every sample (S)
 //   peak_memory        (#7, S) the highest MemoryCurrent (and MemoryPeak, if set) within peakMemoryMaxMb (TBD)
-//   usd_per_hour       (#7) the LLM spend per hour within usdPerHourMax (TBD). On S the runner cannot read the CX23 key
-//                      (its spend is read separately; lead, #389), so this is not reached there; the LLM calls per hour
-//                      from the journal are recorded to set against that reading.
+//   usd_per_hour       (#7) the LLM spend per hour within usdPerHourMax (TBD): the sum of cost_usd over the run's
+//                      "[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X" lines (#395), per hour. A
+//                      cost_usd unknown, or no usage line at all, makes it not reached, with the count.
 //   agenda_done        (#4) "agenda done" within the soak
 //   food_floor         (#5) the food level in every [survival] food line stays at or above foodFloor
 //   ate_when_low       (#5) every "low" food line is followed by an "ate" line within eatWithinMinutes
@@ -30,7 +33,7 @@
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED } from '../../runner/lib/g2.mjs';
 import { exitedText } from '../../runner/lib/service.mjs';
-import { agentExits, blockNameProblem, deathEvents, nearbyBlocksResults, survivalEvents } from '../../runner/lib/survival.mjs';
+import { agentExits, blockNameProblem, deathEvents, llmUsage, nearbyBlocksResults, survivalEvents } from '../../runner/lib/survival.mjs';
 
 const MS = 1000;
 const MIN = 60 * MS;
@@ -106,11 +109,17 @@ export default {
         const startedAt = clock.now();
         const end = startedAt + p.durationMinutes * MIN;
         const samples = [];
+        // A sample whose reads fail (an ssh or gate error, #394 review) records the error: an infra note, never a crash.
+        let namingSeenMin = null;
         const sample = async () => {
-            await fresh();
+            const min = Math.round(((clock.now() - startedAt) / MIN) * 10) / 10;
+            let readError = null;
+            try { await fresh(); } catch (e) { readError = String(e?.message ?? e); }
             const m = service ? await bot.metrics().catch((e) => ({ error: String(e?.message ?? e) })) : null;
-            samples.push({ min: Math.round(((clock.now() - startedAt) / MIN) * 10) / 10, ...(m ? { memoryMb: m.MemoryCurrent != null ? Math.round(Number(m.MemoryCurrent) / 1048576) : null,
-                peakMb: Number.isFinite(Number(m.MemoryPeak)) ? Math.round(Number(m.MemoryPeak) / 1048576) : null, nRestarts: m.NRestarts ?? null, state: m.ActiveState ?? null, error: m.error } : {}) });
+            if (namingSeenMin === null && nearbyBlocksResults(bot.output()).some((r) => r.names.length)) namingSeenMin = min;
+            samples.push({ min, ...(m ? { memoryMb: m.MemoryCurrent != null ? Math.round(Number(m.MemoryCurrent) / 1048576) : null,
+                peakMb: Number.isFinite(Number(m.MemoryPeak)) ? Math.round(Number(m.MemoryPeak) / 1048576) : null, nRestarts: m.NRestarts ?? null, state: m.ActiveState ?? null } : {}),
+                ...(readError || m?.error ? { error: [readError, m?.error].filter(Boolean).join('; ') } : {}) });
             ctx.note('samples', samples);
         };
         await sample();
@@ -120,14 +129,20 @@ export default {
             await sample();
             if (!left && gone()) { left = gone(); break; }
         }
-        await fresh();
+        try { await fresh(); } catch (e) { ctx.note('lastReadError', String(e?.message ?? e)); }
         const out = bot.output();
         const minutes = (clock.now() - startedAt) / MIN;
+        const failed = samples.filter((x) => x.error);
+        if (failed.length) ctx.note('infraSamples', { count: failed.length, first: failed[0] });
 
-        // naming (#2): the agent's first !nearbyBlocks result in the window (its own command; the console is no giver)
-        const nb = nearbyBlocksResults(out)[0] ?? null;
-        if (!nb) notReached(['naming'], `the agent ran no !nearbyBlocks in the soak's log`);
-        else {
+        // naming (#2): the agent's first !nearbyBlocks result with names (its own command; the console is no giver), seen
+        // at a sample within namingWindowMinutes. (The lead's next step: skills-rotn's one-time [naming] line after the
+        // spawn; this parser stays as the fallback.)
+        const nb = nearbyBlocksResults(out).find((r) => r.names.length) ?? null;
+        if (!nb) notReached(['naming'], 'the agent ran no !nearbyBlocks with any block in the soak\'s log');
+        else if (namingSeenMin !== null && namingSeenMin > p.namingWindowMinutes) {
+            notReached(['naming'], `the first !nearbyBlocks result came at minute ${namingSeenMin}, after the ${p.namingWindowMinutes}-min window`);
+        } else {
             const bad = nb.names.map((n) => [n, blockNameProblem(n)]).filter(([, w]) => w);
             ctx.note('nearbyBlocks', nb.names);
             ctx.check('naming', nb.names.length >= p.minNamedBlocks && bad.length === 0,
@@ -137,7 +152,8 @@ export default {
         // no crash (#7)
         const exits = agentExits(out, name);
         const nr = samples.map((x) => x.nRestarts).filter((x) => x !== null && x !== undefined);
-        const notActive = samples.filter((x) => service && x.state !== undefined && x.state !== 'active');
+        // Only a sample that read the unit counts: a failed read is an infra note (above), not a crash.
+        const notActive = samples.filter((x) => service && !x.error && x.state !== undefined && x.state !== 'active');
         const crashBits = [left && `gone at minute ${Math.round(minutes)}: ${left.type}${left.reason ? ` (${left.reason})` : ''}`,
             exits.length && `${exits.length} agent restart or exit line(s): "${exits[0].line}"`,
             service && nr.length && nr.some((x) => x !== nr[0]) && `NRestarts ${nr[0]} -> ${nr.at(-1)}`,
@@ -154,12 +170,17 @@ export default {
             else ctx.check('peak_memory', peak <= Number(p.peakMemoryMaxMb), `peak ${peak} MB (target ${p.peakMemoryMaxMb} MB)`);
         }
 
-        // USD per hour (#7): not readable on S; the calls per hour are the journal's side of it
+        // USD per hour (#7): the sum of cost_usd over the run's "[openrouter] usage ..." lines (#395), per hour. A line with
+        // cost_usd unknown makes it not reached, with the count.
         const calls = out.filter((l) => /^\[openrouter\] provider /.test(l)).length;
-        const callsPerHour = minutes > 0 ? Math.round((calls / minutes) * 60 * 10) / 10 : null;
-        ctx.note('llmCalls', { calls, minutes: Math.round(minutes), callsPerHour });
-        notReached(['usd_per_hour'], `${service ? 'the CX23 key\'s spend is read separately (lead, #389), not by the runner' : 'a rehearsal: the batch\'s key reading has the spend'}; `
-            + `${set(p.usdPerHourMax) ? `target USD ${p.usdPerHourMax}/h` : 'no target yet (TBD)'}; ${calls} LLM calls (${callsPerHour ?? '?'}/h)`);
+        const u = llmUsage(out);
+        const hours = minutes / 60;
+        const usdPerHour = hours > 0 ? Math.round((u.usd / hours) * 1e6) / 1e6 : null;
+        ctx.note('llmUsage', { calls, usageLines: u.lines, unknown: u.unknown, usd: u.usd, minutes: Math.round(minutes), usdPerHour });
+        if (!u.lines) notReached(['usd_per_hour'], `no "[openrouter] usage ..." line in the log (${calls} LLM calls): the release prints no usage line (setup gap?)`);
+        else if (u.unknown) notReached(['usd_per_hour'], `${u.unknown} of ${u.lines} usage line(s) have cost_usd unknown; the known ones sum to USD ${u.usd}`);
+        else if (!set(p.usdPerHourMax)) ctx.check('usd_per_hour', false, `not reached: no target yet (TBD); measured USD ${usdPerHour}/h (USD ${u.usd} over ${Math.round(minutes)} min, ${u.lines} completions)`);
+        else ctx.check('usd_per_hour', usdPerHour <= Number(p.usdPerHourMax), `USD ${usdPerHour}/h (target ${p.usdPerHourMax}; USD ${u.usd} over ${Math.round(minutes)} min, ${u.lines} completions)`);
 
         // the agenda (#4)
         const done = out.some((l) => l === 'agenda done') || s.events().some((e) => e.type === 'chat' && e.text === 'agenda done');
