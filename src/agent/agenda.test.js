@@ -530,3 +530,14 @@ test('CX23 soak: at the morning freeze the reserve says the minutes left with th
     assert.equal(sunsetEstimateMin(dayAt(5), 3), minutesToSunset(dayAt(5)), 'away from the freeze: unchanged');
 });
 
+test('#418 nit: just before the morning freeze (2996-3000) the freeze is counted once, not twice', () => {
+    for (const t of [2996, 2998, 3000]) {
+        assert.equal(sunsetEstimateMin(t, 0), minutesToSunset(t), `${t}: minutesToSunset already counts the freeze ahead`);
+        assert.ok(minutesToSunset(t) > (NIGHT_START - t) / TICKS_PER_MIN + FREEZE_MIN - 0.01, `${t}: with the freeze`);
+    }
+    // At the freeze and just past it (the tolerance), the part still to run is added, as before.
+    assert.equal(sunsetEstimateMin(MORNING_FREEZE, 0), minutesToSunset(MORNING_FREEZE) + FREEZE_MIN);
+    assert.ok(Math.abs(sunsetEstimateMin(MORNING_FREEZE + 3, 4) - (minutesToSunset(MORNING_FREEZE + 3) + FREEZE_MIN - 4)) < 1e-9);
+    assert.equal(sunsetEstimateMin(MORNING_FREEZE + 50, 0), minutesToSunset(MORNING_FREEZE + 50), 'well past it: as minutesToSunset');
+});
+

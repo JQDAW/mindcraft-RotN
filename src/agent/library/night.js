@@ -58,7 +58,10 @@ export function minutesToSunset(timeOfDay) {
  */
 export function sunsetEstimateMin(timeOfDay, frozenForMin = 0) {
     const base = minutesToSunset(timeOfDay);
-    if (Math.abs(norm(timeOfDay) - MORNING_FREEZE) > FREEZE_TOLERANCE) return base;
+    // #418 nit: only at the freeze or just past it (3001-3006). Below 3001 minutesToSunset counts
+    // the whole freeze already (it is still ahead): adding it again counted it twice.
+    const t = norm(timeOfDay);
+    if (t < MORNING_FREEZE || t - MORNING_FREEZE > FREEZE_TOLERANCE) return base;
     return base + Math.max(0, FREEZE_MIN - Math.max(0, frozenForMin));
 }
 
