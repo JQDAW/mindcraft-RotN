@@ -1,8 +1,33 @@
 # Status: harness-ops
 
-Updated: 2026-11-07 (15:33 UTC, from `date -u`)
+Updated: 2026-11-08 (01:05 UTC, from `date -u`)
 
-## Now: the pinned Mod Director downloads (ADR 0008; this PR). The lead chose option (a): fail closed from the first run.
+## Now: G3 PASSES (lead, after #361). A and D on `0daeef2d` (#353); B and C on `8aaf370c`, rerun after their fixes (#361).
+
+- **The rerun (2026-11-08, the human's GO):** B PASS 5/5 (in its shelter all night, after one unexplained move one block lower), C PASS 7/7 (the task at minute 2.2 while the agenda ran; paused, done, resumed). Spend USD 0.014972; 2 servers, 54 min; all gone (0/0/0). B started after 00:00 UTC (DRIVER.md).
+- **The fixes behind it:** #354 (our C scenario: a 2-min minimum warm-up, the task at the first active-and-progressing moment; an agenda that ends first is an explicit "not reached") and skills-rotn's #355 (B's pillar block; its path was not exercised in the rerun).
+- **Open:**
+  - #359 (the #351 nits: awk ENVIRON, line breaks, a missing pin fails closed; sha256 from stdin);
+  - this wording PR (the gate2 READMEs).
+  - For skills-rotn: B's move one block lower at 00:19:39, and the dawn line "found no safe side to open".
+
+## Earlier: the first G3 gate batches on `0daeef2d` (#353): A PASS, B FAIL, C FAIL, D PASS.
+
+- **B (`survived_night`):** scaffolding in the shelter's head cell (likely a zombie's) made it "no longer usable". The bot left, `self_defense` interrupted the rebuild, and a zombie killed it. This is for skills-rotn.
+- **C (task steps "not reached"):** the agenda finished in 4.8 min, inside the scenario's 5-min warm-up, so no task was sent. This is a scenario-timing gap in our `g3-task-preempts-agenda`; the fix needs the lead's decision.
+- **Then (the gate rule):** fixed, and B and C rerun as new gate batches with the human's approval (#361).
+- **Gate spend:** USD 0.019575; 4 servers, 64 min; all gone (0/0/0).
+
+## Earlier: G3 smoke round 10 evidence (#352). The restart on `0daeef2d` passed 4 of 4 (smoke).
+
+- **Attempt 1, on `12fd263e`** (`g3a-20261107-r10-attempt1`): an infra fault, exit 125, before any scenario.
+  - The #347 check refused the zip's jar names with spaces. #351 fixed it and dropped the unused list pin (Mod Director keeps no copy on disk).
+- **The restart on `0daeef2d`** (human-approved): A PASS 7/7, B PASS 5/5 (a night in the shelter, 0 deaths), C PASS 7/7, D PASS 7/7. Smoke, never gate evidence.
+- **Spend:** USD 0.022691 (`batch.json`). Hetzner: 5 servers, 81 min, about EUR 0.69. All servers, IPs and keys are gone (0/0/0).
+- **Watch items:** in D's README (the round summary). gz+b64 booted on all five servers; the Mod Director check passed 4/4 (337 zip jars + ESM-Tweaks).
+  - B's shelter paths (digging alarm, repairs, fights, falling blocks) were not exercised: no mob came.
+
+## Earlier: the pinned Mod Director downloads (ADR 0008; #347, merged). The lead chose option (a): fail closed from the first run.
 
 - **Why:** the pinned zip ships only Mod Director (`mods/!mod-director-launchwrapper-1.9.1.jar`) and a pointer to a list on the pack's moving `stable` branch. That list has no hash and names `esmtweaks-1.12.2-0.4.5.jar` (GitHub release asset), installed at every start as a top-level `mods/` jar.
 - **`deploy/test-server/mod-director.sha256`** has full SHA-256 values:

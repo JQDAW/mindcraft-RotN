@@ -1,0 +1,23 @@
+{
+  "batchId": "20261107T192246-1121657",
+  "testMode": false,
+  "gate": false,
+  "smoke": true,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g3-rocks-to-stone-tools",
+      "out": "<local>/captures/raw/r10r-g3a/rocks",
+      "runId": "20261107t192246-535696",
+      "exit": 0,
+      "spentBefore": 0,
+      "timeoutMin": 37
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.902245024,
+  "usageAtEnd": 0.910402091,
+  "spentUsd": 0.008157,
+  "exit": 0,
+  "logsFetched": true
+}

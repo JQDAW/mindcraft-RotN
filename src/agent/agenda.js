@@ -152,6 +152,8 @@ const pileAsk = (blocks) => {
     const p = dirtPile();
     return `Dig dirt or grass by hand with !collectBlocks("${p.name}", ${p.per * blocks}): dug by hand (or with a shovel below level 1) it drops ${p.per} piles of dirt, not a dirt block, and ${p.per} piles make one dirt, which the shelter crafts itself. Do not use a flint, bone or iron shovel for it: those get the dirt block instead.`;
 };
+/** What the reserve needs now: dirt without a pickaxe, sturdy blocks with one. */
+const reserveNeed = (s) => (noPickaxe(s) ? 'dirt' : 'sturdy');
 const reserveHave = (s) => (noPickaxe(s) ? (s.dirtBlocks?.() ?? 0) : (s.shelterBlocks?.() ?? 0));
 
 export const SHELTER_RESERVE_STEP = {
@@ -254,6 +256,9 @@ export class Agenda {
     /**
      * The before-night reserve step when it is wanted now (due, too few blocks, budget not spent),
      * else null. Once the night is no longer near, its budget is fresh again for the next dusk.
+     * When a pickaxe comes or goes, the reserve needs other blocks (dirt or sturdy blocks): the
+     * first such change in a dusk gives it a fresh budget, a later one does not (G3 round 10 A:
+     * 4 min went on dirt, the stone pickaxe then asked for cobblestone, and 1 min was left).
      */
     reserveWanted(state) {
         const r = this.reserve;
@@ -264,6 +269,16 @@ export class Agenda {
             this.reserveOff = false;
             delete this.spent[r.id];
             return null;
+        }
+        const need = reserveNeed(state);
+        const b = this.spent[r.id];
+        if (b && b.need === undefined) b.need = need; // the need its budget was first spent on
+        else if (b && b.need !== need) {
+            if (b.refreshed) b.need = need;
+            else {
+                this.spent[r.id] = { attempts: 0, llm_ms: 0, need, refreshed: true };
+                this.reserveOff = false;
+            }
         }
         if (this.reserveOff) return null;
         let done = false;
@@ -276,13 +291,13 @@ export class Agenda {
     /** One more self-prompter run for a step (saved: a crash loop cannot reset it). */
     recordAttempt(id) {
         const b = this.spentOn(id);
-        this.spent[id] = { attempts: b.attempts + 1, llm_ms: b.llm_ms };
+        this.spent[id] = { ...b, attempts: b.attempts + 1 }; // keeps the reserve's need and refresh
         this.save();
     }
     /** Time the self-prompter (the LLM) ran for a step; saved by the caller now and then. */
     addLlmTime(id, ms) {
         const b = this.spentOn(id);
-        this.spent[id] = { attempts: b.attempts, llm_ms: b.llm_ms + ms };
+        this.spent[id] = { ...b, llm_ms: b.llm_ms + ms };
     }
     /** A step's budget is spent: pause the agenda until a giver starts it again. */
     markStuck(id, why) {

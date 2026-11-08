@@ -61,6 +61,17 @@ export const SHELTER_SAY_MS = 30_000;
 let shelterSaidAt = -Infinity;
 
 /**
+ * The night routine's own work, which the in-shelter fight and eating never interrupt: the repair
+ * (REPAIR_LABEL), and (#355 review 1) the routine's job (the build or hole dig) that leaves a deadly
+ * shelter with a mob near (agent._night.leaveFrom), while it runs: fighting or eating then keeps
+ * the bot in a cell that drowns, suffocates or burns it. Between tries (no job, #355 re-review) the
+ * bot fights in place and eats as in any shelter: cowardice and the flee are quiet there too.
+ */
+function nightRoutineBusy(agent) {
+    return agent.actions.currentActionLabel === REPAIR_LABEL || (!!agent._night?.leaveFrom && !!agent._night?.job);
+}
+
+/**
  * The fight from inside the night shelter (G3 round 9 B; #331 review 1-4): never while the night's
  * repair runs, nor within SHELTER_FIGHT.restMs after the last such fight (the night routine checks
  * and repairs first); else the nearest hostile mob in reach (threats.shelterEnemy, whatever the
@@ -68,7 +79,7 @@ let shelterSaidAt = -Infinity;
  */
 function fightInShelter(mode, agent, { override = false } = {}) {
     const bot = agent.bot;
-    if (agent.actions.currentActionLabel === REPAIR_LABEL) return false;
+    if (nightRoutineBusy(agent)) return false;
     if (Date.now() - (bot.rotnFightEndedAt ?? -Infinity) < skills.SHELTER_FIGHT.restMs) return false;
     const target = world.getNearestEntityWhere(bot, (e) => threats.shelterEnemy(e) && skills.inShelterReach(bot, e), skills.SHELTER_FIGHT.reach + 1);
     if (!target) return false;
@@ -91,7 +102,7 @@ function fightInShelter(mode, agent, { override = false } = {}) {
 function holdInShelter(mode, agent) {
     const bot = agent.bot;
     if (fightInShelter(mode, agent, { override: true })) return;
-    if (agent.actions.currentActionLabel === REPAIR_LABEL) return;
+    if (nightRoutineBusy(agent)) return;
     const item = Number.isFinite(bot.food) && bot.food < 20 ? food.chooseFood(bot) : null;
     if (!item) return;
     execute(mode, agent, async () => {

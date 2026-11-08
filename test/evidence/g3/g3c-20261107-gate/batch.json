@@ -1,0 +1,23 @@
+{
+  "batchId": "20261107T215034-1152692",
+  "testMode": false,
+  "gate": true,
+  "smoke": false,
+  "maxBatchUsd": 2,
+  "scenarios": [
+    {
+      "id": "g3-task-preempts-agenda",
+      "out": "<local>/captures/raw/g3gate-g3c/task",
+      "runId": "20261107t215035-1f2177",
+      "exit": 1,
+      "spentBefore": 0,
+      "timeoutMin": 34
+    }
+  ],
+  "stopped": null,
+  "usageAtStart": 0.939264702,
+  "usageAtEnd": 0.944209754,
+  "spentUsd": 0.004945,
+  "exit": 1,
+  "logsFetched": true
+}

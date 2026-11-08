@@ -289,3 +289,158 @@ test('#346 review 1: below HEAD_DIG.minHealth the bot gets out at once instead o
     assert.deepEqual(fake.calls.digs, []);
     assert.ok(fake.calls.gotos.length >= 1);
 });
+
+// G3 gate B (0daeef2d): the night routine called the shelter "no longer usable" and set
+// rotnSheltered false at once; self_defense then ran defendSelf ("Fighting zombie!", server.log 534),
+// chased the zombie out of the shelter and the bot died. Leaving a deadly shelter with a hostile mob
+// near now keeps the in-shelter rules ('open': fight only in reach, in place) until out of the cell.
+test('G3 gate B (e): a deadly shelter left with a zombie 4 blocks away: self_defense fights in place only, never chases; out of the cell the normal rules are back', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const { nightTick, nightState, hostileNear } = await import('./night_routine.js');
+    const { agent, bot, calls, ran, self } = shelter({ zombieAt: 4 });
+    const site = new Vec3(0, 64, 0);
+    bot.rotnSheltered = false;
+    bot.time = { timeOfDay: 15000 };
+    bot.modes.anyActive = () => false;
+    agent.self_prompter = { active: false, loop_active: false, isActive() { return this.active; }, stop() {}, isPaused: () => false };
+    agent.actions.executing = false;
+    agent.actions.stop = () => Promise.resolve();
+    let deadly = false;
+    const o = {
+        builds: [],
+        buildShelter: (b, opts = {}) => { o.builds.push(opts.site ?? null); return Promise.resolve({ closed: true, feet: site, line: 'Shelter closed' }); },
+        siteNeeds: () => (deadly ? null : { todo: [] }),
+        siteProblem: () => ({ kind: 'hazard', pos: site, block: 'lava', text: 'lava at 0, 64, 0 (lava in the 1x2 space)' }),
+        hostileNear,
+        clearSpace: () => Promise.resolve(false),
+    };
+    const settle = async () => { while (nightState(agent).job) await nightState(agent).job; };
+    nightTick(agent, { now: 0, ops: o });
+    await settle();
+    assert.equal(bot.rotnSheltered, true);
+    nightTick(agent, { now: 1, ops: o });
+    deadly = true;
+    assert.equal(nightTick(agent, { now: 20_000, ops: o }), 'night:building');
+    assert.equal(bot.rotnSheltered, 'open', 'the in-shelter fight rules hold while still in the cell');
+
+    await selfDefense(agent);
+    assert.deepEqual(calls.gotos, [], 'no pathfinder walk after the zombie');
+    assert.deepEqual(calls.pvp, [], 'no mineflayer-pvp chase');
+    assert.ok(!ran.includes('mode:self_defense') || calls.attacks.length === 0, 'nothing out of reach is hit');
+
+    self.position = new Vec3(2.5, 64, 3.5); // out of the old cell (the build walked it out)
+    nightTick(agent, { now: 20_001, ops: o });
+    assert.equal(bot.rotnSheltered, false, 'out of the cell: the normal rules');
+    await settle();
+});
+
+// #355 review 1 (REQUEST CHANGES on 7d1c5c7c): leaving a deadly shelter with a mob near, the
+// in-shelter fight and eating interrupted the leaving build (fightInShelter stood aside only for the
+// repair), and the cycle kept the bot in a cell that drowned, suffocated or burned it.
+test('#355 review 1: leaving a deadly shelter with a zombie in reach, neither self_defense nor eating interrupts the leaving build', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const { nightTick, nightState, hostileNear } = await import('./night_routine.js');
+    const { agent, bot, calls, interrupts } = shelter({ zombieAt: 1 });
+    const site = new Vec3(0, 64, 0);
+    bot.rotnSheltered = false;
+    bot.time = { timeOfDay: 15000 };
+    bot.modes.anyActive = () => false;
+    agent.self_prompter = { active: false, loop_active: false, isActive() { return this.active; }, stop() {}, isPaused: () => false };
+    agent.actions.executing = false;
+    agent.actions.stop = () => Promise.resolve();
+    let deadly = false, finishBuild = null;
+    const o = {
+        builds: [],
+        buildShelter: (b, opts = {}) => {
+            o.builds.push(opts.site ?? null);
+            if (o.builds.length === 1) return Promise.resolve({ closed: true, feet: site, line: 'Shelter closed' });
+            return new Promise(resolve => { finishBuild = () => resolve({ closed: true, feet: new Vec3(5, 64, 5), line: 'Shelter closed' }); });
+        },
+        siteNeeds: () => (deadly ? null : { todo: [] }),
+        siteProblem: () => ({ kind: 'drown', pos: site.offset(0, 1, 0), block: 'water', text: 'water at 0, 65, 0 (a liquid at head height: the bot would drown)' }),
+        hostileNear,
+        clearSpace: () => Promise.resolve(false),
+    };
+    nightTick(agent, { now: 0, ops: o });
+    while (nightState(agent).job) await nightState(agent).job;
+    nightTick(agent, { now: 1, ops: o });
+    deadly = true;
+    assert.equal(nightTick(agent, { now: 20_000, ops: o }), 'night:building');
+    assert.equal(bot.rotnSheltered, 'open');
+    nightTick(agent, { now: 20_001, ops: o }); // the leaving build starts and runs
+    await flush();
+    assert.equal(agent.actions.currentActionLabel, 'action:buildShelter', 'the leaving build is running');
+
+    await selfDefense(agent);
+    hurt(bot);
+    bot.food = 10;
+    const bread = { name: 'bread', metadata: 0, count: 2, type: 297 };
+    const eaten = [];
+    bot.inventory = { items: () => (bread.count > 0 ? [bread] : []), slots: [] };
+    bot.consume = () => { eaten.push('bread'); bread.count--; return Promise.resolve(); };
+    await selfPreservation(agent);
+    assert.deepEqual(interrupts, [], 'the leaving build goes on');
+    assert.deepEqual(calls.attacks, [], 'no fight in the deadly cell');
+    assert.deepEqual(eaten, [], 'no eating in the deadly cell');
+    assert.deepEqual([calls.gotos.length, calls.pvp.length], [0, 0], 'no chase');
+
+    finishBuild();
+    while (nightState(agent).job) await nightState(agent).job;
+    assert.equal(nightState(agent).leaveFrom, null, 'in the new shelter the routine is not leaving any more');
+});
+
+// #355 re-review (REQUEST CHANGES on 6d910bcb): the in-shelter fight stood aside whenever leaveFrom
+// was set, also between build tries (RETRY_MS, no job), when cowardice and the flee are quiet too,
+// so the bot stood defenceless in the deadly cell with a zombie in reach.
+test('#355 re-review: leaving a deadly shelter, between build tries (no job) the zombie in reach is hit in place', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const { nightTick, nightState, hostileNear } = await import('./night_routine.js');
+    const { agent, bot, calls, ran } = shelter({ zombieAt: 1, killAfter: 100 });
+    const site = new Vec3(0, 64, 0);
+    bot.rotnSheltered = false;
+    bot.time = { timeOfDay: 15000 };
+    bot.modes.anyActive = () => false;
+    agent.self_prompter = { active: false, loop_active: false, isActive() { return this.active; }, stop() {}, isPaused: () => false };
+    agent.actions.executing = false;
+    agent.actions.stop = () => Promise.resolve();
+    let deadly = false;
+    const o = {
+        builds: [],
+        buildShelter: (b, opts = {}) => {
+            o.builds.push(opts.site ?? null);
+            return Promise.resolve(o.builds.length === 1
+                ? { closed: true, feet: site, line: 'Shelter closed' }
+                : { closed: false, feet: null, line: 'Not building a shelter: too few blocks.' });
+        },
+        siteNeeds: () => (deadly ? null : { todo: [] }),
+        siteProblem: () => ({ kind: 'drown', pos: site.offset(0, 1, 0), block: 'water', text: 'water at 0, 65, 0 (a liquid at head height: the bot would drown)' }),
+        hostileNear,
+        clearSpace: () => Promise.resolve(false),
+    };
+    const settle = async () => { while (nightState(agent).job) await nightState(agent).job; };
+    nightTick(agent, { now: 0, ops: o });
+    await settle();
+    nightTick(agent, { now: 1, ops: o });
+    deadly = true;
+    assert.equal(nightTick(agent, { now: 20_000, ops: o }), 'night:building');
+    assert.ok(nightState(agent).leaveFrom, 'leaving');
+    assert.equal(nightState(agent).job, null, 'no job yet');
+
+    await selfDefense(agent);
+    assert.ok(calls.attacks.length > 0, 'the zombie in reach is hit before the build starts');
+    assert.deepEqual([calls.gotos.length, calls.pvp.length], [0, 0], 'in place');
+
+    nightTick(agent, { now: 20_001, ops: o }); // the build try runs and fails
+    await settle();
+    assert.equal(o.builds.length, 2);
+    assert.equal(nightState(agent).job, null, 'between tries (RETRY_MS)');
+    assert.ok(nightState(agent).leaveFrom, 'still in the deadly cell');
+    const before = calls.attacks.length;
+    await new Promise(resolve => setTimeout(resolve, SHELTER_FIGHT.restMs + 50)); // past the rest after a fight
+    await selfDefense(agent);
+    assert.ok(calls.attacks.length > before, 'hit again between tries');
+    assert.ok(ran.includes('mode:self_defense'));
+});
