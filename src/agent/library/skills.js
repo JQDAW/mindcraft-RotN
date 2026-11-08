@@ -1701,9 +1701,11 @@ export const CANOPY_DESCENT = { maxDigs: 40, minHealthAfterDrop: 10, landMs: 200
 /**
  * Off a tree, safely (G3 round 4 B): walk to the nearest place on firm ground (not leaves, not a
  * branch) with fall-safe movements: no drop over 3 blocks, no broken branch, no tower, no parkour.
- * Leaves may be dug on the way down. Bounded by TREE_SAFETY.descendMs. When there is no such walk,
- * it digs down through the leaves under it (digDownThroughLeaves). Returns true when the bot is no
- * longer on a tree; false leaves it where it is, which is safer than a jump.
+ * Leaves may be dug on the way down. The walk is bounded by TREE_SAFETY.descendMs. When there is no
+ * such walk, it digs down through the leaves under it (digDownThroughLeaves: falls of 3 or less,
+ * and one larger drop as the last resort while health stays at least 10). `run`: the caller's run
+ * token; aborting it ends the dig too (#415 review 1). Returns true when the bot is off the tree;
+ * false leaves it where it is.
  */
 export async function descendFromTree(bot, run = currentRun(bot)) {
     if (!standsOnTree(bot)) return true;
@@ -1721,7 +1723,7 @@ export async function descendFromTree(bot, run = currentRun(bot)) {
     catch { /* no path: checked below */ }
     if (run.aborted) return !standsOnTree(bot);
     const down = !standsOnTree(bot) || await digDownThroughLeaves(bot, run);
-    if (!down) log(bot, 'Found no safe way down from the tree (no drop over 3 blocks); staying put.');
+    if (!down && !run.aborted) log(bot, 'Found no safe way down from the tree (no walk with falls of 3 or less, and no leaves it could dig down through); staying put.');
     return down;
 }
 
@@ -1735,6 +1737,10 @@ export async function descendFromTree(bot, run = currentRun(bot)) {
 export async function digDownThroughLeaves(bot, run = currentRun(bot)) {
     let bigDrop = false;
     for (let i = 0; i < CANOPY_DESCENT.maxDigs && standsOnTree(bot); i++) {
+        if (run.aborted || bot.interrupt_code) return false;
+        // #415 review 2: standsOnTree looks at the block under the centre only; a bot off the
+        // middle of its cell may stand on the next block too, and would not fall. Sneak to the middle.
+        await centreOnCell(bot, run);
         if (run.aborted || bot.interrupt_code) return false;
         const feet = bot.entity.position.floored();
         const below = bot.blockAt(feet.offset(0, -1, 0));
@@ -1762,16 +1768,42 @@ export async function digDownThroughLeaves(bot, run = currentRun(bot)) {
         try {
             await bot.dig(below, true);
         } catch (err) {
+            if (run.aborted) return false;
             log(bot, `Could not dig the leaves under you (${safeError(err)}).`);
             return false;
         }
         // Wait for the landing (the bot falls once the leaf is gone).
         const landY = land.block.position.y + 1;
-        for (let waited = 0; bot.entity.position.y > landY + 0.01 && waited < CANOPY_DESCENT.landMs; waited += 50)
+        for (let waited = 0; bot.entity.position.y > landY + 0.01 && waited < CANOPY_DESCENT.landMs && !run.aborted; waited += 50)
             await new Promise(resolve => setTimeout(resolve, 50));
+        if (run.aborted) return false;
+        // #415 review 2: it must really be down there; still up means it stands on something else.
+        if (bot.entity.position.y > landY + 0.01) {
+            log(bot, `Not digging down further: you did not fall (you stand at ${bot.entity.position.y.toFixed(2)}, not ${landY}).`);
+            return false;
+        }
     }
     if (!standsOnTree(bot)) log(bot, 'Dug down through the leaves: on the ground.');
     return !standsOnTree(bot);
+}
+
+/** Sneak to the middle of the bot's cell (within 0.15), at most 1.5 s, so its body rests on that block only. */
+async function centreOnCell(bot, run) {
+    const p = bot.entity.position;
+    const c = p.floored().offset(0.5, 0, 0.5);
+    const off = () => Math.hypot(bot.entity.position.x - c.x, bot.entity.position.z - c.z);
+    if (off() <= 0.15 || typeof bot.setControlState !== 'function') return;
+    try {
+        bot.setControlState('sneak', true);
+        for (let waited = 0; off() > 0.15 && waited < 1500 && !run.aborted; waited += 50) {
+            await bot.lookAt(new Vec3(c.x, bot.entity.position.y + 1.62, c.z), true);
+            bot.setControlState('forward', true);
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+    } finally {
+        bot.setControlState('forward', false);
+        bot.setControlState('sneak', false);
+    }
 }
 
 /**

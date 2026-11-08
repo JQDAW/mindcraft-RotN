@@ -491,3 +491,53 @@ test('CX23 soak: with no walk down, the bot digs the leaf under it by hand; one 
     assert.deepEqual(shell.calls.digs, []);
 });
 
+test('#415 review 1: the unstuck reflex\'s timeout aborts the dig down too (it does not run on beside the next action)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // Ten leaves under the bot, each dig takes 200 ms; the reflex gives up after 300 ms.
+    const blocks = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`0,${64 + i},0`, LEAVES]));
+    const bot = fakeBot({ blocks, start: at(0, 74) });
+    const dig = bot.dig;
+    let stopped = 0;
+    bot.stopDigging = () => { stopped++; };
+    bot.dig = (b) => new Promise(resolve => setTimeout(() => resolve(dig(b)), 200));
+    const r = await moveAwayWithin(bot, 5, 300);
+    assert.equal(r.outcome, 'timeout');
+    const atTimeout = bot.calls.digs.length;
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    assert.ok(bot.calls.digs.length <= atTimeout + 1, `digs after the timeout: ${atTimeout} -> ${bot.calls.digs.length}`);
+    assert.ok(bot.calls.digs.length < 4, 'nowhere near the 10 it would have dug');
+    assert.equal(stopped, 1, 'a dig in progress is stopped');
+});
+
+test('#415 review 2: off the middle of its cell the bot sneaks to the middle first; one that does not fall stops (never "on the ground" up there)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const blocks = { '0,66,0': LEAVES, '0,65,0': LEAVES, '0,64,0': LEAVES };
+    const bot = fakeBot({ blocks, start: at(0, 67) });
+    bot.entity.position = new Vec3(0.9, 67, 0.5); // on the edge, over the next block too
+    let looking = null;
+    bot.lookAt = (p) => { looking = p; return Promise.resolve(); };
+    const controls = [];
+    bot.setControlState = (c, on) => {
+        controls.push(`${c}:${on}`);
+        if (c !== 'forward' || !on || !looking) return;
+        const pos = bot.entity.position, dx = looking.x - pos.x, dz = looking.z - pos.z, d = Math.hypot(dx, dz);
+        if (d > 0) bot.entity.position = pos.offset(dx / d * Math.min(0.1, d), 0, dz / d * Math.min(0.1, d));
+    };
+    const dig = bot.dig;
+    const xs = [];
+    bot.dig = (b) => { xs.push(bot.entity.position.x); return dig(b); };
+    assert.equal(await skills.digDownThroughLeaves(bot), true);
+    assert.ok(xs[0] <= 0.65, `centred before the first dig (x ${xs[0]})`);
+    assert.ok(controls.includes('sneak:true') && controls.at(-1) === 'sneak:false');
+
+    // A bot that does not fall once the leaf is gone (it stands on something else): it stops.
+    const held = fakeBot({ blocks, start: at(0, 67) });
+    held.dig = (b) => { held.calls.digs.push(`${b.position.x},${b.position.y},${b.position.z}`); held.world.set(`${b.position.x},${b.position.y},${b.position.z}`, 'air'); return Promise.resolve(); };
+    const saved = { ...skills.CANOPY_DESCENT };
+    Object.assign(skills.CANOPY_DESCENT, { landMs: 100 });
+    t.after(() => Object.assign(skills.CANOPY_DESCENT, saved));
+    assert.equal(await skills.digDownThroughLeaves(held), false);
+    assert.deepEqual(held.calls.digs, ['0,66,0'], 'one dig, then it stops');
+    assert.match(held.output, /Not digging down further: you did not fall \(you stand at 67\.00, not 66\)/);
+});
+
