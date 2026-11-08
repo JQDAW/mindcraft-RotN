@@ -13,6 +13,7 @@ import { __setRegistryForTest } from '../../utils/mcdata.js';
 import { worldSources } from './rotn_sources.js';
 import { FALLING_TREE } from './felling.js';
 import * as skills from './skills.js';
+import { shortenOutput } from '../action_manager.js';
 
 const vanilla = minecraftData('1.12.2');
 const reg = { ...vanilla, blocks: { ...vanilla.blocks }, blocksByName: { ...vanilla.blocksByName } };
@@ -352,27 +353,46 @@ test('round 10 B: a dead bush the walk does not reach is not dug from afar; it u
 
 // Gate2 B (g3b-20261108-gate2, night/driver.log): leaf breaks said "got no stick", then "Picked up 2
 // items" and "Collected 3 stick": a stick that landed late was picked up with a later break.
-test('gate2 B: a stick picked up with a later break: the first break says none right after it, and the final line says a later pickup is in the count', T, async (t) => {
+test('gate2 B: a stick picked up with a later break: the first break says no stick yet (never "got no stick"); the total counts it', T, async (t) => {
     fast(t);
     // The bush at x 8 drops its stick where the bush at x 12 is: the walk there picks it up.
     const bot = fakeBot({ bushes: [{ x: 8, sticks: 1, landsAt: at(12).offset(0.5, 0, 0.5) }, { x: 12, sticks: 1 }] });
     assert.equal(await skills.collectBlock(bot, 'stick', 2), true, bot.output);
     assert.deepEqual(bot.log.digs.map(d => d.pos), ['8,64,0', '12,64,0']);
-    assert.match(bot.output, /Broke deadbush but picked up no stick right after it\./);
-    assert.ok(!/got no stick/.test(bot.output), bot.output);
-    assert.match(bot.output, /Collected 2 stick\. 1 break had none right after it; a drop picked up later is in this count\./);
-    // A collect where every break gave its own: no note.
+    assert.match(bot.output, /Broke deadbush: no stick yet\./);
+    assert.ok(!/got no stick/.test(bot.output), bot.output); // the old wording is gone
+    // Which break it came with is not known, so no note: the total is right.
+    assert.match(bot.output, /Collected 2 stick\.$/m);
+    // A collect where every break gave its own: the same final line.
     const plain = fakeBot({ bushes: [{ x: 8, sticks: 1 }, { x: 12, sticks: 1 }] });
     assert.equal(await skills.collectBlock(plain, 'stick', 2), true);
     assert.match(plain.output, /Collected 2 stick\.$/m);
 });
 
-test('gate2 B: a stick picked up after the last break was counted is in the final count, with a line saying so', T, async (t) => {
+test('gate2 B: a stick picked up after the last break was counted is in the final count, which says so', T, async (t) => {
     fast(t);
     const bot = fakeBot({ bushes: [{ x: 8, sticks: 0, late: 1 }] });
     assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
-    assert.match(bot.output, /Broke deadbush but picked up no stick right after it\./);
-    assert.match(bot.output, /Picked up 1 more stick after the break that dropped it was counted\./);
-    assert.match(bot.output, /Collected 1 stick\. 1 break had none right after it; a drop picked up later is in this count\./);
+    assert.match(bot.output, /Broke deadbush: no stick yet\./);
+    assert.match(bot.output, /Collected 1 stick, late pickups included\./);
     assert.equal(bot.inventory.items().find(i => i.name === 'stick')?.count, 1);
+});
+
+// #375 nit 3: the agent reads a long output cut to its first and last 250 chars (shortenOutput).
+// Gate2 B's tail held the last breaks, the pickups and "Collected 3 stick." in those 250 chars;
+// the late-pickup wording must not push the final line or the last break before it out.
+test('#375 nit 3: with gate2 B\'s tail of lines, the cut output still holds the final line and the last break before it', T, async (t) => {
+    fast(t);
+    const bot = fakeBot({ bushes: [{ x: 8, sticks: 0, late: 1 }, { x: 10, sticks: 0, late: 1 }, { x: 12, sticks: 1 }] });
+    assert.equal(await skills.collectBlock(bot, 'stick', 3), true, bot.output);
+    const lines = bot.output.trim().split('\n');
+    const final = lines.at(-1);
+    assert.equal(final, 'Collected 3 stick, late pickups included.');
+    // Gate2 B's tail (night/driver.log): the pathfinder and pickup lines around each leaf break.
+    const leafBreak = 'Broke dynamictrees:leaves0: no stick yet.';
+    const tail = [leafBreak, 'Found non-destructive path.', 'Found non-destructive path.', 'Picked up 2 items.', 'Picked up 0 items.',
+        leafBreak, 'Found non-destructive path.', 'Picked up 1 items.', final].join('\n');
+    const cut = shortenOutput('x'.repeat(600) + '\n' + tail);
+    assert.ok(cut.endsWith(`\n${leafBreak}\nFound non-destructive path.\nPicked up 1 items.\n${final}`), cut);
+    assert.ok(!/^Picked up \d+ more/m.test(bot.output), `no extra line for the late pickups: ${bot.output}`);
 });
