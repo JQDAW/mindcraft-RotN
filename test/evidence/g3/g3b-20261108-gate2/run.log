@@ -1,0 +1,44 @@
+[test-server 00:01:15] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --gate --max-batch-usd 2 --logs-out <local>/captures/raw/g3gate2-g3b/server --summary <local>/captures/raw/g3gate2-g3b/batch.json --scenario g3-first-night --out <local>/captures/raw/g3gate2-g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 00:01:16] preflight passed: driver, profile, model and settings checked; the key's usage can be read; the LLM probe answered (HTTP 200, provider Wafer, z-ai/glm-5.3-flash); 1 scenario(s) (timeouts: g3-first-night 67 min); a GATE batch (gate: true)
+[test-server 00:01:20] sweeper OK: scheduled run 42420325161 on JQDAW/mindcraft-RotN succeeded 98 min ago (limit 120 min)
+[test-server 00:01:20] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 3h, sweeper deletes it) ~4 billed hours, EUR 0.55 plus Primary IPv4
+[test-server 00:01:20] creating mcr-test-20261108-000117: delete-after 2026-11-08T03:01:20Z (TTL 3h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 00:01:31] server mcr-test-20261108-000117 is at <ip>
+[test-server 00:01:31] waiting for SSH and the build (up to 120 min)
+[test-server 00:01:41] phase: unreachable
+[test-server 00:02:12] phase: booting:running
+[test-server 00:02:28] phase: unpack
+[test-server 00:02:43] phase: starting
+[test-server 00:04:33] phase: ready
+[test-server 00:04:33] mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 OK
+[test-server 00:04:33] mod-director: OK: 1 pinned download(s) match; 337 jars of the pinned zip match; 0 extra mod(s)
+status-ping {"version":"1.12.2","protocol":340,"modinfoType":"FML","modCount":346,"forge":"14.23.5.2860","jeid":"2.2.2","playersOnline":0,"playersMax":10}
+[test-server 00:04:35] READY: mcr-test-20261108-000117 at <ip>:25565 (delete-after 2026-11-08T03:01:20Z); state in <local>/.mindcraft-rotn/test-server/active/mcr-test-20261108-000117
+[test-server 00:04:35] running: node test/runner/batch.mjs --gate --max-batch-usd 2 --logs-out <local>/captures/raw/g3gate2-g3b/server --summary <local>/captures/raw/g3gate2-g3b/batch.json --scenario g3-first-night --out <local>/captures/raw/g3gate2-g3b/night -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 00:04:35] batch 20261108T000435-1293817: a GATE batch (gate: true)
+[batch 00:04:35] g3-first-night: start (spent so far USD 0 of 2; runner timeout 67 min, derived 67)
+[scenario 00:04:35] g3-first-night (G3) run 20261108t000435-13d47f; git 8aaf370c77b4515f6e0a67d4dd66fd1b48902b80; driver: node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json; out: <local>/captures/raw/g3gate2-g3b/night
+[scenario 00:05:41] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 00:06:25] PASS fresh_start: none of 24 target items held; the pack's first-join Bread and Bundle seen
+[scenario 00:45:13] PASS survived_night: dawn reached; stat.deaths 0; death lines 0
+[scenario 00:45:14] PASS stayed_online: online from the join to the end (39.6 min)
+[scenario 00:45:14] PASS no_cheat: nothing found (the pack's first-join commands: gamerule_commandBlockOutput, gamerule_sendCommandFeedback, give_bread, give_bundle)
+[scenario 00:45:14] g3-first-night: 72 LLM requests (55 replies, 17 memory summaries, 0 failed), USD 0.009309
+[scenario 00:45:14] g3-first-night: LLM providers: Wafer: 72 requests (0 empty), summaries 12 ok, 0 empty; summaries not attributed: 5 ok, 0 empty
+[scenario 00:45:14] g3-first-night: model openrouter/@preset/glm-5-3-flash-cheap-reliable
+[scenario 00:45:15] g3-first-night: PASS; 5 passed, 0 failed (<local>/captures/raw/g3gate2-g3b/night/result.json)
+<local>/captures/raw/g3gate2-g3b/server
+BATCH {"batchId":"20261108T000435-1293817","testMode":false,"gate":true,"smoke":false,"maxBatchUsd":2,"scenarios":[{"id":"g3-first-night","out":"<local>/captures/raw/g3gate2-g3b/night","runId":"20261108t000435-13d47f","exit":0,"spentBefore":0,"timeoutMin":67}],"stopped":null,"usageAtStart":0.946289506,"usageAtEnd":0.955598377,"spentUsd":0.009309,"exit":0,"logsFetched":true}
+[test-server 00:45:15] command exited with 0
+[test-server 00:45:15] EXIT trap: tearing down mcr-test-20261108-000117
+[test-server 00:45:16] deleting batch mcr-test-20261108-000117 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261108-000117)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 00:45:29] batch mcr-test-20261108-000117: ran 44 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 00:45:29] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261108-000117
+exit 0
