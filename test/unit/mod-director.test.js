@@ -60,7 +60,28 @@ beforeEach(() => {
     const env = { ...process.env, ROTN_TEST_SERVER_DIR: fwd(server), ROTN_TEST_REMOTE_STATE_DIR: fwd(state), ROTN_TEST_MODDIR_LIST: fwd(list) };
     t = { root, server, state, list, put, env };
 });
-const check = () => spawnSync(BASH, [fwd(helper), 'mod-director'], { encoding: 'utf8', env: t.env });
+const check = (env = {}) => spawnSync(BASH, [fwd(helper), 'mod-director'], { encoding: 'utf8', env: { ...t.env, ...env } });
+/** A PATH like the system's, without `find` (symlinks to every other program in /usr/bin and /bin), for the #359 review test. */
+function pathWithout(tool) {
+    const dir = path.join(t.root, `no-${tool}`);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir);
+        for (const d of ['/usr/bin', '/bin']) {
+            for (const n of fs.existsSync(d) ? fs.readdirSync(d) : []) {
+                if (n === tool || fs.existsSync(path.join(dir, n))) continue;
+                try { fs.symlinkSync(path.join(d, n), path.join(dir, n)); } catch { /* a name both dirs have */ }
+            }
+        }
+    }
+    return dir;
+}
+/** A PATH whose first `find` fails with exit 1 (it cannot read the folder, say). */
+function pathWithFailing(tool) {
+    const dir = path.join(t.root, `failing-${tool}`);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, tool), '#!/bin/bash\necho "fake $0: cannot read" >&2\nexit 1\n', { mode: 0o755 });
+    return `${dir}:${process.env.PATH}`;
+}
 
 describe('rotn-test mod-director (ADR 0008)', () => {
     test('OK: the pinned jar and the list copy match; the zip\'s top-level jars are there; subfolders are never compared', () => {
@@ -163,10 +184,36 @@ describe('rotn-test mod-director (ADR 0008)', () => {
     });
 });
 
+describe('#359 review: the check fails closed when find cannot run (exit 3, "cannot check")', () => {
+    test('find off PATH: an unknown top-level jar must never pass as OK', () => {
+        t.put('mods/unknown-extra.jar', Buffer.from('an unknown jar'));
+        assert.equal(check().status, 1, 'with find, the unknown jar is an EXTRA');
+        const r = check({ PATH: pathWithout('find') });
+        assert.equal(r.status, 3, r.stdout + r.stderr);
+        assert.match(r.stdout, /^mod-director: FAILED: cannot check: no find on PATH$/m);
+        assert.doesNotMatch(r.stdout, /^mod-director: OK/m);
+    });
+
+    test('a find that fails (exit 1): its exit code is seen through the listing file, exit 3', () => {
+        t.put('mods/unknown-extra.jar', Buffer.from('an unknown jar'));
+        const r = check({ PATH: pathWithFailing('find') });
+        assert.equal(r.status, 3, r.stdout + r.stderr);
+        assert.match(r.stdout, new RegExp(`^mod-director: FAILED: cannot check: listing ${fwd(t.server).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/mods failed \\(find 1, sort 0\\)$`, 'm'));
+    });
+
+    test('sha256sum or sort off PATH: cannot check, exit 3', () => {
+        for (const tool of ['sha256sum', 'sort']) {
+            const r = check({ PATH: pathWithout(tool) });
+            assert.equal(r.status, 3, `${tool}: ${r.stdout}`);
+            assert.match(r.stdout, new RegExp(`^mod-director: FAILED: cannot check: no ${tool} on PATH$`, 'm'));
+        }
+    });
+});
+
 describe('build.sh at Done (sourced; a fake systemctl)', () => {
-    const buildFn = (snippet) => spawnSync(BASH, ['-c', `source "${fwd(build)}"; systemctl() { echo "systemctl $*" >> "${fwd(t.state)}/systemctl.calls"; }; ${snippet}`], {
+    const buildFn = (snippet, extraEnv = {}) => spawnSync(BASH, ['-c', `source "${fwd(build)}"; systemctl() { echo "systemctl $*" >> "${fwd(t.state)}/systemctl.calls"; }; ${snippet}`], {
         encoding: 'utf8',
-        env: { ...t.env, ROTN_TEST_STATE: fwd(t.state), ROTN_TEST_ROOT: fwd(t.root), ROTN_TEST_BUILD_LOG: fwd(path.join(t.root, 'build.log')), ROTN_TEST_HELPER: fwd(helper) },
+        env: { ...t.env, ROTN_TEST_STATE: fwd(t.state), ROTN_TEST_ROOT: fwd(t.root), ROTN_TEST_BUILD_LOG: fwd(path.join(t.root, 'build.log')), ROTN_TEST_HELPER: fwd(helper), ...extraEnv },
     });
     const phase = () => fs.readFileSync(path.join(t.state, 'phase'), 'utf8').trim();
 
@@ -297,6 +344,17 @@ describe('build.sh at Done (sourced; a fake systemctl)', () => {
         const c = check();
         assert.equal(c.status, 1, c.stdout);
         assert.match(c.stdout, new RegExp(`^mod-director: EXTRA mods/two\\\\nlines\\.jar sha256 ${sha(Buffer.from('ours'))} \\(not in the pinned zip or the pinned list\\)$`, 'm'));
+    });
+
+    test('#359 review: record_extra_mods fails closed when find cannot run (off PATH, or failing): never "no extra mod"', () => {
+        t.put('mods/unknown-extra.jar', Buffer.from('an unknown jar'));
+        const off = buildFn('record_extra_mods; echo survived', { PATH: pathWithout('find') });
+        assert.equal(off.status, 1, off.stdout + off.stderr);
+        assert.doesNotMatch(off.stdout, /survived/);
+        assert.equal(phase(), `failed:extra-mod: cannot list ${fwd(t.server)}/mods: no find on PATH`);
+        const failing = buildFn('record_extra_mods; echo survived', { PATH: pathWithFailing('find') });
+        assert.equal(failing.status, 1);
+        assert.equal(phase(), `failed:extra-mod: cannot list ${fwd(t.server)}/mods (find 1, sort 0)`);
     });
 
     test('main runs the check right after the first Done, before the whitelist and ready', () => {
