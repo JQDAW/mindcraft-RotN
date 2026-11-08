@@ -37,6 +37,7 @@ import { startStateLine } from './state_report.js';
 import { chatFrom } from './chat_sender.js';
 import { reportNamingNearSpawn } from './library/naming_report.js';
 import { bindSurvivalLog } from './library/survival_log.js';
+import { trackBotPlaced } from './library/hunting.js';
 import { EAT_AT } from './library/food.js';
 
 export class Agent {
@@ -98,6 +99,8 @@ export class Agent {
         // G3 round 7 B: the cursor follows the server, and every equip, craft or toss starts with a
         // clear cursor and survives one rejected click (resync and one more try).
         guardInventory(this.bot);
+        // G4 #5: the blocks the bot places itself never make an animal look like a player's (hunting.js).
+        trackBotPlaced(this.bot);
         
         // Connection Handler
         const onDisconnect = (event, reason) => {

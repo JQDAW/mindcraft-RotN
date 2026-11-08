@@ -1517,3 +1517,20 @@ test('CX23 soak: a repair that placed some blocks but left cells open says which
     assert.ok(logs.includes(`[night] the repair placed 1 but left some open (${line})`), logs.join('\n'));
 });
 
+test('G4 #5: at dusk the night routine logs the food held for the night (6 wanted); with too little it stays sealed anyway', async (t) => {
+    quiet(t);
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const agent = fakeAgent({ t: DUSK });
+    Object.assign(agent.bot, { food: 14, inventory: { items: () => [{ name: 'bread', metadata: 0, count: 2 }] } });
+    nightTick(agent, { now: 0, ops: ops() });
+    await settle(agent);
+    assert.ok(logs.includes('[night] food for the night: food worth 6 hunger held, food 14; enough'), logs.join('\n'));
+    const poor = fakeAgent({ t: DUSK });
+    Object.assign(poor.bot, { food: 9, inventory: { items: () => [] } });
+    nightTick(poor, { now: 0, ops: ops() });
+    await settle(poor);
+    assert.ok(logs.includes('[night] food for the night: food worth 0 hunger held, food 9; less than 6: staying sealed anyway (never out for food at night)'), logs.join('\n'));
+    assert.equal(nightState(poor).state, 'inside', 'it shelters as usual');
+});
+
