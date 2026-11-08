@@ -29,6 +29,7 @@ import settings from './settings.js';
 import { agendaTick, say, minutes, ownsPrompt, driveTo, isGiverGoal, stepBudget, TICK_MS, BACKOFF_MS, STEP_ATTEMPTS, SAVE_EVERY_MS } from './agenda_driver.js';
 import { quoteData, isTaskGiver } from './task_queue.js';
 import { nightTick, leaveShelterFor } from './night_routine.js';
+import { relocateTick } from './respawn_relocate.js';
 import { parseStandOn, standCheck, describeTarget } from './library/stand_on.js';
 
 /**
@@ -195,6 +196,11 @@ export function autonomyTick(agent, { now = Date.now() } = {}) {
         yieldAgenda(agent, task);
         return taskTick(agent, task, now);
     }
+
+    // 3b. CX23 soak: after a respawn (or a player zombie at the spawn), away from the spawn and the
+    // recent death spots first; the agenda and the model's goal wait. A giver's task above does not.
+    const away = relocateTick(agent, { now });
+    if (away) return away;
 
     // 4. The agenda.
     const res = agendaTick(agent, { now });
