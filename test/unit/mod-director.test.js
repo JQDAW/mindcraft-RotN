@@ -221,6 +221,53 @@ describe('build.sh at Done (sourced; a fake systemctl)', () => {
         assert.doesNotMatch(rec, /mowziesmobs|memory_repo|1\.12\.2\/|musictriggers/);
     });
 
+    // G3 round 10 A (infra fault, exit 125): 16 of the pinned zip's 337 top-level jars have spaces in their names, and
+    // the check refused its own pack-jars.sha256 ("a bad line"); record_extra_mods' awk $2 saw only the first word.
+    // These are real names from the zip (`unzip -Z1`): spaces, quotes, brackets, parentheses, a backtick, a plus.
+    const ODD = ['mods/Aether Continuation v1.3.0.jar', 'mods/EndReborn [0.3.9].jar', 'mods/Fish\'s Undead Rising-1.3.2.jar',
+        'mods/GlareTorch_Ver.8.11_[MC1.12](forge-1.12-14.21.1.2387).jar', 'mods/Mapmaker\'s+Gadgets-1.2_for_1.12.x.jar',
+        'mods/MineTraps-1.12.2-(v.1.0.4).jar', 'mods/Pam\'s HarvestCraft 1.12.2zg.jar', 'mods/[___MixinCompat-1.1-1.12.2___].jar',
+        'mods/`FermiumBooter-1.4.1.jar'];
+    const addOdd = () => {
+        for (const z of ODD) t.put(z);
+        fs.appendFileSync(path.join(t.state, 'pack-files.list'), ODD.join('\n') + '\n');
+        fs.rmSync(path.join(t.state, 'pack-jars.sha256'));
+    };
+
+    test('round 10 A: the zip\'s jar names with spaces, quotes and brackets go through the whole chain: hash, extras, check', () => {
+        addOdd();
+        const r = buildFn('hash_pack_jars && record_extra_mods && check_mod_director && echo survived');
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.match(r.stdout, /survived/);
+        const packJars = fs.readFileSync(path.join(t.state, 'pack-jars.sha256'), 'utf8');
+        for (const z of ODD) assert.ok(packJars.includes(`${sha(Buffer.from(z))}  ${z}\n`), z);
+        // Not one of the zip's jars is taken for an extra mod (only the pinned download, which is not in the zip).
+        assert.equal(fs.readFileSync(path.join(t.state, 'extra-mods.sha256'), 'utf8'), `${sha(ESM_BYTES)}  ${ESM}\n`);
+        assert.match(fs.readFileSync(path.join(t.state, 'mod-director.txt'), 'utf8'),
+            new RegExp(`^mod-director: OK: 2 pinned download\\(s\\) match; ${2 + ODD.length} jars of the pinned zip match; 1 extra mod\\(s\\)$`, 'm'));
+        assert.ok(!fs.existsSync(path.join(t.state, 'systemctl.calls')), 'the server keeps running');
+    });
+
+    test('round 10 A: a changed or missing jar with such a name is a MISMATCH or MISSING, never "a bad line"', () => {
+        addOdd();
+        assert.equal(buildFn('hash_pack_jars').status, 0);
+        fs.writeFileSync(path.join(t.server, ODD[0]), 'other bytes');
+        fs.rmSync(path.join(t.server, ODD[1]));
+        t.put('mods/A New Mod (1.0).jar');
+        const r = check();
+        assert.equal(r.status, 1, r.stdout);
+        assert.match(r.stdout, /^mod-director: MISMATCH mods\/Aether Continuation v1\.3\.0\.jar sha256 [0-9a-f]{64} != [0-9a-f]{64} \(pack\)$/m);
+        assert.match(r.stdout, /^mod-director: MISSING mods\/EndReborn \[0\.3\.9\]\.jar \(pack\)$/m);
+        assert.match(r.stdout, /^mod-director: EXTRA mods\/A New Mod \(1\.0\)\.jar sha256 [0-9a-f]{64} \(not in the pinned zip or the pinned list\)$/m);
+        assert.match(r.stdout, /^mod-director: FAILED: 3 problem\(s\)$/m);
+        assert.doesNotMatch(r.stdout, /bad line/);
+        // An --extra-mod upload under such a zip name, with other bytes, is still refused by name.
+        fs.writeFileSync(path.join(t.server, ODD[0]), 'an upload');
+        const up = buildFn('record_extra_mods; echo survived');
+        assert.equal(up.status, 1);
+        assert.equal(phase(), 'failed:extra-mod: Aether Continuation v1.3.0.jar would replace a jar of the pinned zip');
+    });
+
     test('main runs the check right after the first Done, before the whitelist and ready', () => {
         const src = fs.readFileSync(build, 'utf8');
         assert.match(src, /wait_for_done\n\n {2}phase mod-director\n {2}check_mod_director\n\n {2}phase whitelist/);
@@ -230,13 +277,12 @@ describe('build.sh at Done (sourced; a fake systemctl)', () => {
 });
 
 describe('the committed list (deploy/test-server/mod-director.sha256)', () => {
-    test('full SHA-256 values, the jar as a top-level mods/ path, GitHub\'s digest, the sources and ADR 0008 cited', () => {
+    test('full SHA-256 values, only the jar (a top-level mods/ path), GitHub\'s digest, the sources and ADR 0008 cited', () => {
         const text = fs.readFileSync(committed, 'utf8');
         const entries = text.split('\n').filter((l) => l && !l.startsWith('#')).map((l) => l.split(/ {2}/));
-        assert.deepEqual(entries, [
-            ['48ba1339ebf6417ad571d29589e61dd0d5745dc34549b2065676ccf5a4de3792', BUNDLE],
-            ['b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933', ESM],
-        ]);
+        // Round 10 A: Mod Director keeps no copy of the list on disk, so the list has no line (#347 review); the jar only.
+        assert.deepEqual(entries, [['b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933', ESM]]);
+        assert.match(text, /The remote list's own hash is NOT checked: Mod Director keeps no copy of it on disk/);
         assert.match(text, /ADR 0008/);
         assert.doesNotMatch(text, /pending/);
         assert.match(text, /https:\/\/raw\.githubusercontent\.com\/Rebirth-of-the-Night\/Rebirth-Of-The-Night\/stable\/config\/mod-director\/fd-3\.3\.4\/file-director_requisites\.bundle\.json/);

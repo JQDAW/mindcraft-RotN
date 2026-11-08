@@ -1,0 +1,30 @@
+[test-server 18:22:38] G3 batch preflight (no server yet): node test/runner/batch.mjs --preflight --max-batch-usd 2 --logs-out <local>/captures/raw/r10-g3a/server --summary <local>/captures/raw/r10-g3a/batch.json --scenario g3-rocks-to-stone-tools --out <local>/captures/raw/r10-g3a/rocks -- node test/runner/drivers/mindcraft-driver.mjs --profile profiles/rotn-bot.json
+[batch 18:22:39] preflight passed: driver, profile, model and settings checked; the key's usage can be read; the LLM probe answered (HTTP 200, provider Wafer, z-ai/glm-5.3-flash); 1 scenario(s) (timeouts: g3-rocks-to-stone-tools 37 min); a SMOKE batch (the default: gate: false, smoke: true, never gate evidence)
+[test-server 18:22:47] sweeper OK (via cadence): cadence of 3 dispatch runs on develop in the last 50 min, gaps 15.4, 14.5 min, newest 42400369979 7.2 min ago
+[test-server 18:22:47] plan: cpx42 in nbg1 at EUR 0.1381/h gross; worst case (TTL 2h, sweeper deletes it) ~3 billed hours, EUR 0.41 plus Primary IPv4
+[test-server 18:22:47] creating mcr-test-20261107-182240: delete-after 2026-11-07T20:22:47Z (TTL 2h)
+Waiting for create_server (server: <server-id>, image: 161547269) ...
+Waiting for start_server (server: <server-id>) ...
+Waiting for create_server (server: <server-id>, image: 161547269) ... done
+Waiting for start_server (server: <server-id>) ... done
+Server <server-id> created
+[test-server 18:23:03] server mcr-test-20261107-182240 is at <ip>
+[test-server 18:23:03] waiting for SSH and the build (up to 120 min)
+[test-server 18:23:13] phase: unreachable
+[test-server 18:23:30] phase: booting:running
+[test-server 18:24:18] phase: unpack
+[test-server 18:24:34] phase: starting
+[test-server 18:27:43] phase: mod-director
+[test-server 18:27:59] phase: failed:mod-director: FAILED: cannot check: a bad line in /var/lib/rotn-test/pack-jars.sha256
+[test-server 18:27:59] mod-director: pinned config/mod-director/file-director_requisites.bundle.json not on disk: Mod Director kept no copy here (not checked)
+[test-server 18:27:59] mod-director: pinned mods/esmtweaks-1.12.2-0.4.5.jar sha256 b57590bfb8d0fcb343af837a818efd8e4bcf7d6cea9a74e73da188e98235f933 OK
+[test-server 18:27:59] mod-director: FAILED: cannot check: a bad line in /var/lib/rotn-test/pack-jars.sha256
+[test-server 18:27:59] ERROR: build failed: failed:mod-director: FAILED: cannot check: a bad line in /var/lib/rotn-test/pack-jars.sha256
+[test-server 18:27:59] an infra fault (the pinned Mod Director downloads): exit 125, no scenario runs
+[test-server 18:27:59] EXIT trap: tearing down mcr-test-20261107-182240
+[test-server 18:27:59] deleting batch mcr-test-20261107-182240 (selector purpose=mindcraft-rotn-test,batch=mcr-test-20261107-182240)
+Waiting for delete_server (server: <server-id>) ...
+Waiting for delete_server (server: <server-id>) ... done
+[test-server 18:28:12] batch mcr-test-20261107-182240: ran 5 min, billed ~1h, est. EUR 0.1381 (excl. IPv4)
+[test-server 18:28:12] verified gone: server, Primary IPv4 and SSH key of mcr-test-20261107-182240
+exit 125
