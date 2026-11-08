@@ -1,6 +1,69 @@
 # Status: skills-rotn
 
-Updated: 2026-11-07T07:10Z (from `date -u`)
+Updated: 2026-11-08T04:37Z (from `date -u`)
+
+## Rounds 9 and 10, the G3 gate and the follow-ups (summary, 2026-11-08T04:37Z by `date -u`)
+
+All of the work below is merged into develop (head 0911b9ba when written). **No skills-rotn PR is open.**
+
+### Round 9 B (failed 2026-11-07): fixes, all merged
+- **(a) #328:** leaves out of reach no longer use up the stick attempts.
+- **(b) #329:** a thick trunk's shell (`dynamictrees:trunkshell`) is a tree part.
+- **(c) #331:** self-defense never takes the bot out of its night shelter; it fights only in reach and in place. Decision (1), the bot stays in the shelter at low health, was folded in from #341, which was closed.
+- **(d) #333:** spare dirt is kept for repairs, and a mob in the opening is hit out of it.
+- **(e) #334:** digging at the shelter is noticed while it happens.
+- **(f) #336:** the no-pickaxe refusal leads with the dirt it lacks.
+- **(h) #337:** after a death at night with nothing, the bot moves away from the spot, then builds a hole shelter.
+- **Also:**
+  - **#338:** the death chat line sums the variants of one item.
+  - **#340:** `!collectBlocks` ends at once on a stop.
+  - **#344:** an identical reflex line goes to chat at most once a minute.
+  - **#346:** a falling block in the head space is dug out by hand.
+- **The held G4 preps** were merged after the gate: #323 (stop, follow, come) and #327 (a restart is reported, not taken as a new start).
+
+### Round 10 (smoke on 0daeef2d)
+- **A, merged:**
+  - **#356:** no walk into a falling tree. Unstuck holds still, and `fellTree` keeps the bot still until the fall is over. A fell has its own limit (`fellBlockMs`) and is cancelled at the block's timeout. A falling-tree entity in sight for 60 s or more is ignored.
+  - **#357:** the shelter reserve gets a fresh budget once per dusk when the pickaxe changes what it needs.
+  - **#358:** a death clears the last-damage record.
+- **B, merged:**
+  - **#364 morning exit.** The bot steps up or tunnels out of the shelter, up to EXIT_DEPTH 3, and tries again RETRY_MS later, up to 3 times. It never digs a tree part, never opens over a drop of more than 3 blocks, and never opens while a mob is near. Breach repair and the dig alarm still run between tries.
+  - **#366 slow sticks.** The cause was the pickup walk's uncaught Timeout after a leaf break. Now an item it cannot walk to is skipped. A target the walk does not reach is skipped, remembered for 10 min (every block type) and uses no attempt, at most 3 times per collect.
+
+### The G3 gate
+- **Gate on 0daeef2d:** A and D passed; B and C failed.
+- **B's fix #355:** a pillar block in the bot's space is broken from inside, and the bot stays in its shelter.
+- **#360:** the death re-plan note lists every kind lost and what the bot now holds.
+- **G3 passed** on 2026-11-08 (PLAN #362), and develop was unfrozen at 29492632.
+
+### Follow-ups after the gate (2026-11-08), all merged
+- **#370:** digOut walks through no cell without firm ground right under it (the tunnel cells and the wall cell).
+- **#372:** a hostile mob near in the morning keeps the bot in its shelter, with no try used, until it leaves.
+  - The bound is the end of the full day (about 5348 on this clock; the lead accepted this in place of noon 6000, which comes after dusk starts). At the bound the bot warns, naming the mob, and stays in for the night.
+  - `hostileNear` now returns the mob.
+- **#373:** the death re-plan note names at most 20 kinds per list.
+- **#375 and #376:** late pickups.
+  - A break with no gain says `Broke X: no Y yet.`
+  - The final count includes items picked up outside the breaks' counts, and only then adds `, late pickups included`.
+  - The wording fits the last 250 chars of the cut output.
+
+### Open items
+1. **Gate2 B: the move one block lower at 00:19:39** (`test/evidence/g3/g3b-20261108-gate2/`). Reported to the lead on 2026-11-08; the fix is waiting for a GO.
+   - **What the evidence shows:**
+     - The shelter at -74, 60, -67 closed at 00:19:29.
+     - The next 10 s check (00:19:39) found the bot's block position at y 59.
+     - A new shelter at -74, 59, -67 closed 3 s later.
+     - Nothing in between: no dig alarm, repair, fight, reflex or block line.
+     - The logs don't record what the bot stood on, or its exact height.
+   - **Likely causes, from the code:**
+     1. **The floor wasn't a full-height block.** A new site's floor only has to have `boundingBox === 'block'` (`shelter.js` `isSolid`). The build's "at the site" check (`buildShelter`, `position.floored().equals(feet)`) doesn't check that the bot is on the ground. A bot mid-jump or bobbing at y 60 would pass, the walls would go up at 60-61, and the bot would then settle into 59. The 3 s second build fits this: the old lower walls become the new upper walls.
+     2. **The floor block went away** (for example, a tree part rotting). Nothing digging was seen, and the dig alarm does watch the floor.
+     3. **Water nearby.** The bot's positions just before (y 56 to 60 around -74, -68) and its memory ("Water spots trap pathfinding") suggest it was bobbing in water before dusk, which would fit cause 1.
+   - **Proposed small PR (needs a GO):**
+     - When the bot is found out of its shelter, log its exact position and the floor block's name at closing and now, so the next case shows the cause.
+     - A new site's floor must be a full-height block that is not a tree part.
+     - The build checks that the bot is standing on that floor before it reports the shelter closed.
+2. **Cosmetic, low:** a `collect_sticks.test.js` test title still says "the fallback is gone" (rotn-data #312 test). The matching `skills.js` comment is already gone.
 
 ## No chat-spam loop from reflexes: an identical line at most once a minute (branch `agent/skills-rotn/chat-repeat-limit`, 2026-11-07T15:14Z by `date -u`)
 
@@ -452,8 +515,8 @@ harness-ops writes the G3 harness scenarios, and batches run only on the lead's 
 
 ## Open PRs
 
-- **#296** (`agent/skills-rotn/r7-shelter-cursor`): the round 7 B fixes, opened 2026-11-06T21:47Z after the lead lifted the code freeze. Details are in "Round 7 B fixes" below.
-- Round 7 is over: A 7/7, B 4/5, C 7/7, D 7/7. No gate on that commit. **#291** (dirt piles) is merged as develop `42a8e94`.
+- None (2026-11-08T04:37Z). The round 9, round 10 and follow-up PRs are listed in the summary at the top.
+- Earlier history: #296 (round 7 B) and #291 (dirt piles) are merged.
 
 ## Round 7 B fixes (branch `agent/skills-rotn/r7-shelter-cursor`, 2026-11-06T21:30Z by `date -u`)
 
