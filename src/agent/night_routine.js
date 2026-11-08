@@ -177,7 +177,8 @@ const standable = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b) && !ho
  * No cell is dug that has liquid or fire next to it or a falling block over it (#204 review 5), nor a
  * Dynamic Trees branch or trunk shell (#364 review 1: breaking one fells the tree onto the bot). A
  * level or tunnel exit needs firm ground with a fall of at most MAX_SAFE_DROP from the exit cell (#364 review 2: no
- * opening over a cliff, no tunnel into a cave's drop).
+ * opening over a cliff, no tunnel into a cave's drop), and every cell walked through on the way
+ * (the side's wall cell and each tunnel cell) needs firm ground right under it (#364 follow-up a).
  */
 function exitPlan(bot, feet, d) {
     const dig = [];
@@ -198,10 +199,16 @@ function exitPlan(bot, feet, d) {
         }
         return `a drop of more than ${MAX_SAFE_DROP} blocks beyond ${at(exit)}`;
     };
+    // #364 follow-up (a): every cell the bot walks through has firm ground right under it (a dug
+    // tunnel cell over a cave would drop the bot into it on the way out).
+    const noFloor = (q) => {
+        const b = bot.blockAt(q.offset(0, -1, 0));
+        return standable(b) ? null : `no firm floor under ${at(q)} (${b?.name ?? 'unloaded'})`;
+    };
     const take = (q) => { if (!isEmpty(bot.blockAt(q))) dig.push(q); };
     for (let k = 1; k <= EXIT_DEPTH; k++) {
         const lower = feet.plus(d.scaled(k)), upper = lower.offset(0, 1, 0);
-        const why = unsafe(upper) ?? unsafe(lower);
+        const why = unsafe(upper) ?? unsafe(lower) ?? noFloor(lower);
         if (why) return { why };
         take(upper); take(lower);
         const nextLower = lower.plus(d), nextUpper = upper.plus(d), nextHead = nextUpper.offset(0, 1, 0);
