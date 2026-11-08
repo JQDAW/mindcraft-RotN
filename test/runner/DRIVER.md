@@ -489,6 +489,22 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **Exit 126 is a gate refusal: an ADR 0009 incident.** `GateRefusal` is thrown at once, with no retry, which ends the scenario. Report it to the human. The ctl's own refusal (2) is an ordinary error. ssh's own failure (255) is retried twice; `start` and `stop` are safe to repeat.
 - **Tests:** `test/unit/g4-service.test.js`, with a fake ssh playing the gate and the ctl. Nothing runs against the CX23 before the human's step 0 and a written GO.
 
+### G4 #1: `g4-service-reconnect` (set-up S; offline-built, not yet run)
+
+- **What it shows:** the CX23 service reconnects in-process after a console kick and after a test-server restart, and a ctl stop ends it cleanly. Run it as `run.mjs --scenario g4-service-reconnect --service frcfld` under a test server's `run`, after the human's G4 step 0 and a written GO.
+- **The console:** `kick <bot>` (this run's bot by its exact name) and `stop`, for this scenario alone (`SCENARIO_CONSOLE_EXTRA`, #324). `stop` is what `guardConsole` requires before `server.restart()` (`test-server.sh restart`).
+- **The checks:**
+  - **`login_online`:** from an **inactive** unit (`metrics`). A running unit's journal would be another run's.
+  - **`kick_rejoin`:** after `kick`, the server shows the bot gone, the journal has a new `[agent_process] <bot>: <class>; restarting in N s.` line, and the bot joins again within `kickRejoinMinutes` (3). A `FATAL (...)` line fails it.
+  - **`restart_rejoin`:** after `server.restart(restartTimeoutS)` returns (a new Done), the same within `restartRejoinMinutes` (10). The backoff doubles from 10 s while the server is down. The log rolls over at the restart, and `sinceMarker` reads the rotated window.
+  - **`no_systemd_restart`:** `NRestarts` after the reconnects equals its value before the kick. A kick or a server stop must never reach systemd.
+  - **`clean_stop`:** after the ctl's stop, `ActiveState` is `inactive` (not `failed`), `NRestarts` is unchanged, and there is no restart or fatal line after the stop.
+- **On a spawned driver (set-up T):** a rehearsal, not-gate. `no_systemd_restart` and `clean_stop` are "not reached".
+- **Not yet decided:** every G4 run is not-gate on a test server (`G4_TEST_SERVER_NOT_GATE`). How an S run becomes G4 evidence is the lead's to set.
+- **`llm: false`:** the bot's calls go to the CX23's own key, which the runner cannot read.
+- **Not checked yet:** `main.js` prints no effective `allow_insecure_coding` line (PLAN #8, lead-owned). `notes.effectiveSettingsLine` says so.
+- **Tests:** `test/unit/g4-service-reconnect.test.js` (a simulated server and service, including a log roll-over).
+
 ### G4 #6: `g4-death-report`
 
 Ready-to-try: "After death it respawns, reports what it lost and carries on without a chat-spam loop." The bot side is skills-rotn's `src/agent/library/death_report.js` (D3), which this scenario never changes. If it finds something to fix there, harness-ops reports it.
