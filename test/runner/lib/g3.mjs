@@ -115,7 +115,7 @@ export const SCENARIO_CONSOLE_EXTRA = Object.freeze({
         ...(/^[A-Za-z0-9_]{3,16}$/.test(String(params?.bot ?? '')) ? [new RegExp(`^kick ${esc(String(params.bot))}$`)] : []),
         /^stop$/,
     ],
-    // g4-control-commands (G4 #3, proposed in #399; pending the lead's approval): the distance between this run's bot and
+    // g4-control-commands (G4 #3; lead-approved in the #399 review): the distance between this run's bot and
     // the giver (or itself, the probe), `execute <bot> ~ ~ ~ testfor @a[name=<bot|giver>,r=<n>]`: the executor is always
     // the bot (an op's admin echo then names the bot, which ignores its own name), with exactly that read-only testfor
     // inside and the exact names from the parameters (no selector as the executor, no other inner command). No `say`:

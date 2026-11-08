@@ -73,6 +73,18 @@ export const REQUESTS = Object.freeze({
     stop: (t) => /^\s*!stop\b/.test(t) || (!isCommandText(t) && /\bstop\b/i.test(t)),
 });
 
+/**
+ * S's console: on top of the allowlist, the only tell is the prompt whisper to the giver, exactly
+ * `tell <giver> [g4] <printable text>` (#399 review); the bot is never told anything. Anything else is refused (throws).
+ */
+export function giverOnlyTells(server, giver) {
+    const ok = new RegExp(`^tell ${ESC(giver)} ${ESC(PROMPT_TAG)} [ -~]{1,240}$`);
+    return { ...server, console(cmd, waitS) {
+        if (/^tell /.test(cmd) && !ok.test(cmd)) throw new Error(`console command refused on S: only '${promptTell(giver, '<text>')}' is a tell here`);
+        return server.console(cmd, waitS);
+    } };
+}
+
 /** The index of the console's own line for a prompt whisper ("You whisper to <giver>: [g4] <text>"), or -1. */
 export function promptIndex(lines, giver, text) {
     const want = `You whisper to ${giver}: ${PROMPT_TAG} ${text}`;
@@ -214,11 +226,7 @@ export default {
         const giver = service ? p.giver : TEST_TASK_GIVER;
         const guarded = guardConsole(ctx.server, consoleAllowFor({ id: 'g4-control-commands' }, p));
         // On S the only tell is the prompt whisper to the giver (#399 review); the bot is never told anything.
-        const tellRe = new RegExp(`^tell ${ESC(p.giver)} ${ESC(PROMPT_TAG)} [ -~]{1,240}$`);
-        const server = service ? { ...guarded, console(cmd, waitS) {
-            if (/^tell /.test(cmd) && !tellRe.test(cmd)) throw new Error(`console command refused on S: only '${promptTell(p.giver, '<text>')}' is a tell here`);
-            return guarded.console(cmd, waitS);
-        } } : guarded;
+        const server = service ? giverOnlyTells(guarded, p.giver) : guarded;
         const lc = lateConsole(server, clock, { waitS: p.consoleWaitS, lateMs: p.lateReplyMs, pollMs: p.latePollMs });
         const steps = ['chat_answer', 'come', 'follow', 'stop', 'no_command_echo'];
         const done = new Set();

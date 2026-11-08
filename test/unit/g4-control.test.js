@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { consoleAllowFor, guardConsole } from '../runner/lib/g3.mjs';
-import control, { HOLD_REPLY, PROMPT_TAG, REQUESTS, answerLine, chatForms, giversAtStart, heardEchoes, isCommandText, journalResponses, promptIndex } from '../scenarios/g4/g4-control-commands.mjs';
+import control, { HOLD_REPLY, PROMPT_TAG, REQUESTS, answerLine, chatForms, giverOnlyTells, giversAtStart, heardEchoes, isCommandText, journalResponses, promptIndex } from '../scenarios/g4/g4-control-commands.mjs';
 
 const NAME = 'FRCFLD';
 const GIVER = 'JQDAW';
@@ -265,6 +265,18 @@ describe('g4-control-commands: the module, the console list and the helpers', ()
         }
         const other = guardConsole(fake, consoleAllowFor({ id: 'g4-restart-persistence' }, control.defaults));
         assert.throws(() => other.console('execute FRCFLD ~ ~ ~ testfor @a[name=JQDAW,r=20]'), /refused/);
+    });
+
+    test('S\'s console: a tell other than the prompt to the giver throws (tell FRCFLD !stop above all), before it is sent', () => {
+        const sentHere = [];
+        const s = giverOnlyTells(guardConsole({ console: (cmd) => { sentHere.push(cmd); return [cmd]; } }, consoleAllowFor(control)), GIVER);
+        for (const bad of ['tell FRCFLD !stop', 'tell FRCFLD !resume', 'tell JQDAW !stop', 'tell JQDAW hello', 'tell JQDAW [g4] two\nlines', 'tell Other [g4] x']) {
+            assert.throws(() => s.console(bad), /refused on S: only 'tell JQDAW \[g4\] <text>' is a tell here/, bad);
+        }
+        assert.deepEqual(sentHere, [], 'nothing reached the server');
+        assert.doesNotThrow(() => s.console('tell JQDAW [g4] 4/4 stop: type !stop'));
+        assert.doesNotThrow(() => s.console('execute FRCFLD ~ ~ ~ testfor @a[name=JQDAW,r=8]'));
+        assert.deepEqual(sentHere, ['tell JQDAW [g4] 4/4 stop: type !stop', 'execute FRCFLD ~ ~ ~ testfor @a[name=JQDAW,r=8]']);
     });
 
     test('helpers: promptIndex, giversAtStart, journalResponses (multi-line, every response), chatForms, answerLine, REQUESTS, heardEchoes', () => {
