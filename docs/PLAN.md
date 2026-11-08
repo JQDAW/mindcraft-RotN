@@ -162,6 +162,38 @@ If G1 fails outright, the lead writes an ADR choosing: (a) a real headless Forge
     - Naming was checked through the harness driver (`g1-driver.mjs` with `initBot`, mcdata.js and forge-bridge). The full Mindcraft agent and its LLM command path must prove it at G3/G4.
 - **Phase 3 (G3: act in RotN) starts (2026-11-02):** skills-rotn starts at G2 (this plan, "Phases": "skills-rotn starts at G2"). At most three dev agents run at once, so the human chose to **pause net-forge**: its G2 work is done, and its worktree is kept so it can be respawned for protocol issues. The Phase 3 team is skills-rotn, rotn-data and harness-ops.
 
+- 2026-11-08, **G3 passed** under the G3 gate rule, with the human's GOs at each step.
+  - **Smoke round 10** (restart on `0daeef2d`, evidence #352): PASS 4/4. The first attempt on `12fd263e` was an infra fault in the new Mod Director check (#351 fixed it); the human approved the restart.
+  - **Gate batches:**
+
+    | Scenario | Commit | Result | Evidence |
+    | --- | --- | --- | --- |
+    | A, rocks to stone tools | `0daeef2d` | PASS 7/7 | #353 |
+    | B, first night | `0daeef2d` | FAIL 4/5 | #353 |
+    | C, a task preempts the agenda | `0daeef2d` | FAIL 4/7 | #353 |
+    | D, untrusted task refused | `0daeef2d` | PASS 7/7 | #353 |
+    | B, rerun | `8aaf370c` | PASS 5/5 | #361 |
+    | C, rerun | `8aaf370c` | PASS 7/7 | #361 |
+
+    - B failed because the bot left a closed shelter after a scaffolding block (`contenttweaker:scaffolding`, likely mob-placed: it is Epic Siege Mod's pillar block, not proven) appeared in its head cell, and was slain. #355 fixed it: the bot breaks such a block and stays.
+    - C failed on a scenario-design gap: the agenda finished during a fixed warm-up, so the task was never sent. #354 fixed it.
+    - The human approved rerunning only B and C. `8aaf370c` adds only #352-#355 to `0daeef2d`.
+  - **Since round 9:**
+    - Out-of-reach leaves no longer use up stick attempts (#328), and thick trunk shells are recognised (#329). Dead bushes and leaves as stick sources (#311, #315) shipped before round 9.
+    - Shelter defence: the bot fights in place, a digging alarm triggers repairs, the repair storms are bounded, and falling blocks are handled.
+    - The bot has a hole-shelter plan after a death at night.
+    - A stop no longer kills the agent.
+    - Chat repeats are rate-limited.
+    - The Mod Director download is pinned on test servers (ADR 0008).
+  - **Caveats carried into G4:**
+    - "Near spawn" is still one fixed world (seed `1880465901402976865`).
+    - #355's mob-placed-block path has not been exercised on a real server.
+    - At dawn in B the bot logged "found no safe side to open"; skills-rotn is checking the morning exit.
+    - A and D were not rerun on `8aaf370c`, which adds #355's shelter code changes. The human accepted rerunning only the failed scenarios, as the gate rule says.
+    - Other findings are addressed in open `[after G3]` PRs: from round 10, a falling-tree death after unstuck (#356), the shelter-step budget (#357) and "I'm dying!" said after the respawn (#358); from gate B, stale memory after a death (#360). Slow sticks has no PR yet.
+  - **Cost:** the batches of 2026-11-07/08 (including the validation batch and the G4 T1 rehearsal) came to about USD 0.115 of LLM (the key went from 0.846 to 0.961 of the 4.50 stop) and about EUR 2.9 of Hetzner (validation 0.14, round 8 0.55, round 9 incl. T1 0.69, round 10 0.69, gate 0.55, rerun 0.28), plus Primary IPv4-hours.
+- **Phase 4 (G4: deploy and harden) starts (2026-11-08)**, following `test/scenarios/g4/PLAN.md`. G4 accepts no test-server evidence: test-server runs are rehearsals, and every ready-to-try item is proven on the CX23 service. The CX33-to-CX23 channel is the human's restricted SSH key (ADR 0009). The first steps need the human: add the bot on the CX23, the production OpenRouter key, the FRCFLD device-code login on the CX23, and a reviewed version of the SSH gate with the `journal` and `metrics` verbs.
+
 ## Open items
 
 - Task givers: `JQDAW` (human, 2026-11-01); more later. skills-rotn reads the list from a setting.
