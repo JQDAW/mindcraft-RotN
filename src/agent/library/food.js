@@ -13,6 +13,8 @@ import { logAte } from './survival_log.js';
 export const EAT_AT = 12;
 /** At this food level or lower the bot eats even during an action or a fight. */
 export const EAT_NOW_AT = 6;
+/** 1.12: health regenerates only at this food level or higher (CX23 soak: eat between fights). */
+export const REGEN_FOOD = 18;
 /** An eat that throws (mineflayer's 2500 ms consume timeout) is judged this long after. */
 export const CONSUME_CHECK_MS = 1000;
 
@@ -132,3 +134,16 @@ export async function eatFood(bot, item, { checkMs = CONSUME_CHECK_MS } = {}) {
     if (ate) await logAte(bot, key, before);
     return { ate, threw, before, after: bot.food };
 }
+
+/**
+ * CX23 soak: hurt with food below REGEN_FOOD (no regeneration), eat the chosen food once, e.g.
+ * between two fights in the night shelter. Returns eatFood's result, or null when there is no need
+ * or no safe food.
+ */
+export async function eatToHeal(bot, { checkMs = CONSUME_CHECK_MS } = {}) {
+    if (!(bot?.health < 20) || !(bot?.food < REGEN_FOOD)) return null;
+    const item = chooseFood(bot);
+    if (!item) return null;
+    return await eatFood(bot, item, { checkMs });
+}
+

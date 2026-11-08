@@ -100,6 +100,11 @@ function fightInShelter(mode, agent, { override = false } = {}) {
     }
     execute(mode, agent, async () => {
         await skills.defendInPlace(bot, threats.shelterEnemy);
+        // CX23 soak: between fights, hurt and too hungry to heal (food below REGEN_FOOD): eat.
+        if (!bot.interrupt_code) {
+            const ate = await food.eatToHeal(bot);
+            if (ate?.ate) console.log(`[reflex] ate between fights in the shelter (health ${bot.health}, food ${ate.before} -> ${bot.food})`);
+        }
     }).catch(err => reportModeError(mode.name, err));
     return true;
 }
