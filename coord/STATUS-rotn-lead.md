@@ -3,35 +3,23 @@
 Updated: 2026-11-08 01:10 UTC (from `date -u`)
 
 
-## Current snapshot (2026-11-08 01:10 UTC): G3 passed; G4 starts
+## Current snapshot (2026-11-08 13:00 UTC): G4 offline work done; G4 step 0 under way
 
-- **G3 passed** (docs/PLAN.md status entry, 2026-11-08):
-  - Smoke round 10 on `0daeef2d` (#352): 4/4.
-  - Gate on `0daeef2d` (#353): A and D pass, B and C fail.
-  - The human approved rerunning only B and C. Both passed on `8aaf370c` (#361).
-- **Human decisions recorded today:**
-  - Advance GOs for rounds 8 and 10.
-  - The round 10 restart.
-  - The gate and the B/C rerun.
-  - ADR 0009: the CX33-to-CX23 key, option (b), with `from=`, `restrict` and a forced gate.
-  - First use: `ssh cx23-ctl status frcfld` answered "no env file for 'frcfld'"; the bot has not been added on the CX23 yet.
-- **Process changes today:**
-  - `coord/tools/lead-merge-one.sh` (#348) accepts an author's develop merge only when the tree equals reviewed + develop, outside the five agent STATUS files.
-  - Agents no longer edit STATUS in fix PRs.
-  - Reviewers use random-suffixed scratch paths and never `git stash`.
-  - The lead's branch work happens in `/home/mindcraft-RotN-worktrees/lead`, never by switching the main checkout while merge runs execute the script from it.
-  - Merges run as one plain sequence: no waiter loops, which deadlocked.
-- **Next, after the freeze ends:**
-  - Merge the `[after G3]` PRs: #356-#358 and #360, the stale-memory fix (skills-rotn), #359 (harness-ops #351 nits) and #350 (rotn-data).
-  - Then the morning-exit fix (the B dawn line) and slow sticks, which have no PR yet.
-- **G4, following `test/scenarios/g4/PLAN.md`. The human's items, in coord/NEEDS-HUMAN.md:**
-  - `bootstrap.sh add-bot frcfld` and the production OpenRouter key on the CX23;
-  - FRCFLD's device-code login there;
-  - the reviewed SSH gate with `journal` and `metrics`;
-  - a trusted player;
-  - a second account;
-  - the live server's Mod Director choice (ADR 0008).
-- **Spend:** the key reads 0.961 of the 4.50 stop. No Hetzner server exists.
+- **G3 passed** (docs/PLAN.md, 2026-11-08): smoke round 10 4/4 on `0daeef2d` (#352); gate A/D pass on `0daeef2d` (#353); B/C rerun pass on `8aaf370c` (#361).
+- **G4 offline work merged today (#370-#406):**
+  - Scenarios: reconnect (#374), restart persistence (#383), D on the CX23 service (#389), the 2-hour soak with TBD targets (#394), control commands (#399), second bot (#401), death report (earlier, #320/#342).
+  - Service adapter (#371, #379, #382, #401): per-bot GO marker `ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed`; `start` never retried; a started unit is always stopped at cleanup; ssh stderr redacted; host fixed to `cx23-ctl`.
+  - Bot log lines the checks read: `[survival]` (#384, #387), `[state]` (#386), `[naming]` (#396, #397), `[openrouter] usage` cost per completion (#395), effective task givers (#385); soak memory bounds (#392).
+  - Security: the chat sender now comes only from the chat component (#400); a non-op cannot pose as JQDAW.
+  - CI secret scan (#390, #393); reviewers flag scan and allowlist changes (#391).
+  - Shelter and morning-exit fixes (#370, #372, #381), death-note cap (#373), stick logging (#375, #376).
+  - TRY_IT.md draft (#405; the human reviews it at G4 step 7). Research correction: death drops despawn after 10 min (#406).
+- **Incident, 2026-11-08 ~08:40-12:00 UTC:** GitHub release downloads answered 504 on and off, breaking `npm ci` in ci-ubuntu-2604 (canvas/gl prebuilds) and the sweeper's hcloud install. External, not node (the lead first misread it as a node bump). Hardened: CI probe names the outage (#398), `deploy.sh` retries `npm ci` (#398), the sweeper caches a verified hcloud (#403). No test server existed; each server's own delete-after watchdog does not depend on GitHub.
+- **Release:** `rotn-v0.1.2` (develop `9971d26`, CI green) replaces `rotn-v0.1.1` for G4 step 0.
+- **G4 step 0 (the human, on the CX23):** B1 done 2026-11-08 ~13:00 UTC: the installed `mindcraft-rotn-ctl` (`613c02d9…8b94`) and `mindcraft-rotn-ssh-gate` (`911ba9f7…05a7`) match the repo exactly (same at `rotn-v0.1.1` and `rotn-v0.1.2`). Under ADR 0009, `start`/`stop` through the CX33 key are now allowed in principle; every start still needs the lead's written GO and the human's GO confirming the env host is a test server. Waiting for: the rest of B1 (sshd -T, permissions), B2-B4, C1 (deploy; check GitHub downloads first), C2 (FRCFLD login), C3 (first start).
+- **Open decisions for the human:** a respond-only-when-addressed setting before the live server (every public line the bot reads is a model call); the live server's Mod Director choice (ADR 0008).
+- **Lead next:** after step 0, a measuring soak run (needs a GO) to set the soak ADR's memory and USD/h targets.
+- **Spend:** the key reads 0.961 of the 4.50 stop (no paid runs on 2026-11-08 after G3). No Hetzner server exists.
 
 ## Earlier snapshot (2026-11-07 05:22 UTC): round 8 was 3/4; fixes merged; round 9 waits for the human's GO
 
