@@ -88,11 +88,6 @@ export function gitInfo(cwd = path.join(here, '..', '..'), exec = execFileSync) 
 }
 
 /**
- * --param key=value: numbers stay numbers, everything else is a string. An integer too large for a JS
- * number to hold exactly (beyond Number.MAX_SAFE_INTEGER, e.g. a 19-digit world seed) stays a string,
- * so `--param worldSeed=1880465901402976865` keeps every digit.
- */
-/**
  * What a run on the CX23 service changes (#389 review): a G3 scenario run with --service is a G4 S run, never G3 gate
  * evidence (notGate); and no scenario's LLM spend is read from the runner's key on S (the bot's calls go to the CX23's
  * own key, which is read separately). -> {notGate: string|null, llmOn: boolean, llmNote: object|null}
@@ -106,6 +101,11 @@ export function serviceRunPolicy(scenario, bot) {
     };
 }
 
+/**
+ * --param key=value: numbers stay numbers, everything else is a string. An integer too large for a JS
+ * number to hold exactly (beyond Number.MAX_SAFE_INTEGER, e.g. a 19-digit world seed) stays a string,
+ * so `--param worldSeed=1880465901402976865` keeps every digit.
+ */
 export function parseArgs(argv) {
     const o = { params: {}, driver: [], list: false, scenario: null, out: null, passEnv: [], service: null };
     for (let i = 0; i < argv.length; i++) {
