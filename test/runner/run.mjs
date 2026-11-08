@@ -221,7 +221,7 @@ async function main(argv) {
     const scenarioServer = policy.guard ? guardConsole(server, consoleAllowFor(scenario, { ...scenario.defaults, ...o.params })) : server;
     const readUsage = () => readKeyUsage({ key: process.env.OPENROUTER_API_KEY, fetchImpl: keyFetch(process.env) });
     if (svc.llmOn) usageBefore = await readUsage();
-    const result = stamp(await runScenario(scenario, { server: scenarioServer, bot, clock: wallClock, params: o.params, runId, log, onProgress, control }));
+    const result = stamp(await runScenario(scenario, { server: scenarioServer, bot, clock: wallClock, params: o.params, runId, log, onProgress, control, env: process.env }));
     if (finished) return new Promise(() => {});   // a signal arrived first: its handler writes and exits
     finished = true;
     if (svc.llmOn) {

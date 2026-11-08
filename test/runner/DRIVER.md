@@ -501,6 +501,22 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **stderr** (#371 review): ssh's own stderr can name the host and its address, so it is never kept. On a 255 it is dropped; otherwise only the gate's and the ctl's own lines are kept, with any IPv4 or IPv6 address redacted. An IPv6 candidate counts only if node's own parser takes it, so a time such as `12:34:56` stays.
 - **Tests:** `test/unit/g4-service.test.js`, with an async fake ssh playing the gate and the ctl. Nothing runs against the CX23 before the human's step 0 and a written GO.
 
+### G4 #12: `g4-second-bot` (S only, smoke; offline-built, not yet run)
+
+- **What it shows:** a second bot profile starts through the template unit (`mindcraft-rotn@<unit>`), logs in with its own account and stops, with no code change.
+- **The human's part first (NEEDS-HUMAN):** a second Minecraft account; `bootstrap.sh add-bot <unit>`; its env file (the OpenRouter key, the test server's `host`, its profile, whose name is the account's); the account's first device-code login. Agents never see or change the env file.
+- **On S:** `ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed ROTN_SECOND_BOT_GO=<GO id>:<unit> run.mjs --scenario g4-second-bot --service <unit> --param bot=<account name>`.
+  - **Its own GO marker:** `ROTN_SECOND_BOT_GO=<GO id>:<unit>` must name exactly this run's unit. Without it, naming another unit, with the first bot (`firstBot`, `frcfld`) as the service, or without a valid `bot` parameter, nothing is started (no marker `say` either). `run.mjs` passes its environment to the scenario (`ctx.env`); the runner engine reads none itself.
+- **On T:** there is no template unit: every check is "not reached" and nothing starts.
+- **The checks:**
+  - **`second_bot_go`:** the marker names this unit, which is not the first bot.
+  - **`login_online`:** the unit was inactive; started through the ctl, the account joins with an online (version-4) UUID within `loginTimeoutMs` (240 s).
+  - **`own_profile`:** the agent's `[state] <bot> at start: ...` line (#386) names this bot, so the template unit and the env file chose its own profile. Another name, or no line, fails.
+  - **`stays_up`:** online, no kick or exit, for `stayS` (60) after the join.
+  - **`stopped`:** the ctl's `stop` (the adapter waits for inactive), the unit inactive after it, and `<bot> left the game` within `leaveWaitS` (30).
+- **Notes:** the GO id, the `[settings]` production check (#385), the metrics before and after.
+- **Tests:** `test/unit/g4-second-bot.test.js`: a simulated second unit, and one run through the real `serviceBot` whose fake exec checks that every gate call names the second unit.
+
 ### G4 #1: `g4-service-reconnect` (set-up S; offline-built, not yet run)
 
 - **What it shows:** the CX23 service reconnects in-process after a console kick and after a test-server restart, and a ctl stop ends it cleanly. Run it as `ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed run.mjs --scenario g4-service-reconnect --service frcfld` under a test server's `run`, after the human's G4 step 0 and a written GO.
