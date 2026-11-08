@@ -277,7 +277,7 @@ export const queryList = [
         description: 'Show the RotN agenda: whether it is active, the current step, and the steps done.',
         perform: function (agent) {
             // judge, not evaluate: a query records nothing, so the driver still posts "step <id> done".
-            const { step, newlyDone } = agent.agenda.judge(agendaState(agent.bot));
+            const { step, newlyDone } = agent.agenda.judge(agendaState(agent.bot, agent._night?.clock));
             const hold = agent.control?.hold; // E3: why nothing moves
             const held = hold ? `; on hold (${hold.kind} by ${hold.by}; a task giver's !resume ends it)` : '';
             return describeAgenda(agent.agenda, step, newlyDone) + held;
