@@ -133,7 +133,7 @@ ADR 0009's rules still apply:
 This is `test/scenarios/g4/PLAN.md` step 0. **Nothing secret goes into the repo, a chat or a status file.** The key, the device code and the addresses stay in your own terminals.
 
 **What you need from the lead first:**
-- **`<TAG>`:** the lead's release tag on `develop`, which contains this README, the gate and the ctl's `journal`/`metrics`. For the first run, **`<TAG>` = `rotn-v0.1.0`**. Only `rotn-v…` tags deploy: the repo's `v0.x` tags are upstream Mindcraft's.
+- **`<TAG>`:** the lead's release tag on `develop`, which contains this README, the gate and the ctl's `journal`/`metrics`. **`<TAG>` is the release tag named in the lead GO / `coord/NEEDS-HUMAN.md`** (never an upstream `v0.x` tag). Only `rotn-v…` tags deploy: the repo's `v0.x` tags are upstream Mindcraft's.
 - **The first-start GO** (for step C3 only): it names the test server, and harness-ops creates that server with `--allow-from <the CX23's IPv4>/32`.
 
 You give the lead the CX23's IPv4 in that GO (H6). Agents do not look it up.

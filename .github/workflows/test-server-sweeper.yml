@@ -47,16 +47,60 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install hcloud (pinned, checksum-verified)
+      # hcloud survives a GitHub release-download outage (2026-11-08: 504s at 11:00 and 11:45 failed this sweep). The
+      # pinned tarball is cached by version and checksum, and its SHA-256 is checked on EVERY run, cached or downloaded,
+      # right before use; a cached copy that does not match is discarded, never used. A miss downloads with a bounded
+      # retry (3 tries, 45 s each, 20 s and 40 s apart), and only a verified download is saved to the cache.
+      - name: Restore the verified hcloud download (cache)
+        id: hcloud-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/rotn-hcloud
+          key: hcloud-linux-amd64-${{ env.HCLOUD_VERSION }}-${{ env.HCLOUD_SHA256 }}
+
+      - name: Install hcloud (pinned, checksum-verified on every run, cached, bounded retry)
+        id: hcloud
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP"
-          curl -fsSL -o hcloud.tar.gz \
-            "https://github.com/hetznercloud/cli/releases/download/${HCLOUD_VERSION}/hcloud-linux-amd64.tar.gz"
-          echo "${HCLOUD_SHA256}  hcloud.tar.gz" | sha256sum -c -
-          mkdir -p bin
-          tar -xzf hcloud.tar.gz -C bin hcloud
+          dir="$HOME/.cache/rotn-hcloud"
+          tgz="$dir/hcloud-linux-amd64.tar.gz"
+          url="https://github.com/hetznercloud/cli/releases/download/${HCLOUD_VERSION}/hcloud-linux-amd64.tar.gz"
+          verified() { echo "${HCLOUD_SHA256}  $1" | sha256sum -c --status -; }
+          mkdir -p "$dir"
+          if [ -f "$tgz" ] && verified "$tgz"; then
+            echo "hcloud ${HCLOUD_VERSION}: the cached download matches HCLOUD_SHA256"
+            echo "fresh=false" >> "$GITHUB_OUTPUT"
+          else
+            if [ -f "$tgz" ]; then echo "::warning::the cached hcloud download does not match HCLOUD_SHA256: discarded, downloading"; fi
+            rm -f "$tgz" "$tgz.part"
+            ok=0
+            for try in 1 2 3; do
+              if curl -fsSL --proto '=https' --tlsv1.2 --max-time 45 -o "$tgz.part" "$url" && verified "$tgz.part"; then ok=1; break; fi
+              rm -f "$tgz.part"
+              if [ "$try" -lt 3 ]; then
+                echo "hcloud download try $try failed (or did not match HCLOUD_SHA256); trying again in $((try * ${HCLOUD_RETRY_S:-20})) s"
+                sleep "$((try * ${HCLOUD_RETRY_S:-20}))"
+              fi
+            done
+            if [ "$ok" != 1 ]; then
+              echo "::error::no verified hcloud ${HCLOUD_VERSION}: 3 downloads failed (GitHub release downloads down?) and no verified cached copy"
+              exit 1
+            fi
+            mv "$tgz.part" "$tgz"
+            echo "fresh=true" >> "$GITHUB_OUTPUT"
+          fi
+          verified "$tgz"
+          mkdir -p "$RUNNER_TEMP/bin"
+          tar -xzf "$tgz" -C "$RUNNER_TEMP/bin" hcloud
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # Saved right after a verified download (not in a post step), so a sweep that fails later still leaves the cache.
+      - name: Save the verified hcloud download (cache)
+        if: steps.hcloud.outputs.fresh == 'true' && steps.hcloud-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/rotn-hcloud
+          key: hcloud-linux-amd64-${{ env.HCLOUD_VERSION }}-${{ env.HCLOUD_SHA256 }}
 
       - name: Sweep expired labelled test resources
         env:
