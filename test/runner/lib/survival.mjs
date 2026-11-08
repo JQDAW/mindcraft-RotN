@@ -9,6 +9,7 @@
 //   src/agent/library/death_report.js:
 //     [death] died at <x, y, z>; waiting for the respawn   (the death)
 //     [death] died at <x, y, z>[ (<cause>)]; lost ...       (its report)
+//   src/agent/library/naming_report.js (#396, #397): the [naming] block and entity lines, below.
 //   the agent's command output: "Agent executed: !nearbyBlocks and got: " then "NEARBY_BLOCKS" and "- <name>" lines.
 //   agent_process.js: "[agent_process] <bot>: <class>; restarting in N s." and "Agent process exited with code ...".
 
@@ -72,22 +73,35 @@ export function nearbyBlocksResults(lines) {
 }
 
 /**
- * skills-rotn's one-time naming line after the first spawn (#396):
- *   [naming] <bot> near spawn: <kinds> kinds; unknown <n>; <name>:<count> <name>:<count> ...
- * (the top 50 non-air kinds by count; the name is everything before the last ':'; an empty name prints as ""), or its
- * warning "[naming] near spawn: could not read the blocks (...)". -> the first line for this bot:
- * {line, kinds, unknown, entries: [{name, count}]}, or {line, error} for the warning, or null.
+ * skills-rotn's naming lines, once per process after the first spawn (src/agent/library/naming_report.js, #396, #397):
+ *   [naming] <bot> near spawn: <kinds> kinds; unknown <n>; <key>:<count> <key>:<count> ...
+ *   [naming] <bot> entities +<secs>s: <kinds> kinds; unknown <n>; <key>:<count> ...
+ *   [naming] near spawn: could not read the world (<error>)          (console.warn, when the scan threw)
+ * The top 50 kinds by count; the count is after the last ':' (a key may hold colons). An unnamed block's key is
+ * "#<type>:<meta>"; an unknown entity's (#397) "#<entityType>", "#<modId>:<modEntityTypeId>" or "#?". The "unknown <n>"
+ * field is the authority on how many of those kinds have no real name.
  */
 export const NAMING_RE = /^\[naming\] (\S+) near spawn: (\d+) kinds; unknown (\d+);((?: \S+:\d+)*)$/;
+export const ENTITY_NAMING_RE = /^\[naming\] (\S+) entities \+(\d+)s: (\d+) kinds; unknown (\d+);((?: \S+:\d+)*)$/;
+export const NAMING_WARNING_RE = /^\[naming\] near spawn: could not read the world \(/;
+const census = (list) => (list.trim() ? list.trim().split(' ').map((e) => { const x = /^(\S+):(\d+)$/.exec(e); return { name: x[1], count: Number(x[2]) }; }) : []);
+const sameBot = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+
+/** The first block line for this bot (case aside), or the warning: {line, kinds, unknown, entries} | {line, error} | null. */
 export function namingAtStart(lines, bot) {
-    const lower = String(bot).toLowerCase();
     for (const l of lines) {
         const m = NAMING_RE.exec(l);
-        if (m && m[1].toLowerCase() === lower) {
-            const entries = m[4].trim() ? m[4].trim().split(' ').map((e) => { const x = /^(\S+):(\d+)$/.exec(e); return { name: x[1] === '""' ? '' : x[1], count: Number(x[2]) }; }) : [];
-            return { line: l, kinds: Number(m[2]), unknown: Number(m[3]), entries };
-        }
-        if (/^\[naming\] near spawn: could not read the blocks/.test(l)) return { line: l, error: l.slice('[naming] '.length) };
+        if (m && sameBot(m[1], bot)) return { line: l, kinds: Number(m[2]), unknown: Number(m[3]), entries: census(m[4]) };
+        if (NAMING_WARNING_RE.test(l)) return { line: l, error: l.slice('[naming] '.length) };
+    }
+    return null;
+}
+
+/** The first entity line for this bot (case aside): {line, secs, kinds, unknown, entries} | null. */
+export function entityNamingAtStart(lines, bot) {
+    for (const l of lines) {
+        const m = ENTITY_NAMING_RE.exec(l);
+        if (m && sameBot(m[1], bot)) return { line: l, secs: Number(m[2]), kinds: Number(m[3]), unknown: Number(m[4]), entries: census(m[5]) };
     }
     return null;
 }
@@ -101,6 +115,7 @@ export const isAir = (n) => /^(minecraft:)?(air|cave_air|void_air)$/.test(n);
  */
 export function blockNameProblem(n) {
     if (!n) return 'empty';
+    if (/^#/.test(n)) return 'unnamed (#<type>:<meta>)';
     if (/^(undefined|null)$/.test(n)) return n;
     if (/^\d+(:\d+)?$/.test(n)) return 'a numeric id';
     if (/(^|[:_/])unknown([_/]|$)/.test(n)) return 'unknown';

@@ -544,12 +544,11 @@ A short session of the real agent with the **production** task-giver list. `Serv
   - The run is not-gate while either target is TBD.
 - **The checks:**
   - **`login_online`:** as in #374 (this run's bot, an inactive unit).
-  - **`naming` (#2):** the primary source is skills-rotn's one-time line after the first spawn (#396): `[naming] <bot> near spawn: <kinds> kinds; unknown <n>; <name>:<count> ...` (the name is everything before the last `:`; an empty name prints as `""`).
-    - It passes only with `unknown 0`, at least `minNamedBlocks` (5) unique non-air names, and each name real: none numeric, `unknown`, `undefined`, `null`, empty or a placeholder (`blockNameProblem`).
-    - `0 kinds`, or the warning `[naming] near spawn: could not read the blocks (...)`, is not reached.
-    - **The fallback, with no `[naming]` line:** the agent's own first `!nearbyBlocks` result with blocks, first seen at a good read within `namingWindowMinutes` (20), judged the same way (unique non-air names). Seen later, or only in the final read, it is not reached.
-    - The `!nearbyBlocks` format: `NEARBY_BLOCKS` on the line after `Agent executed: !nearbyBlocks and got: `, or on the same line; `- water (source|flowing)`; `- Block Below|at Legs|at Head: <name>`; `- First Solid Block Above Head: <name> (N blocks up)` or `none`; `NEARBY_BLOCKS: none`. The suffixes and labels are stripped.
-    - A bare `-` list line is an empty name (flagged). Bare vanilla names (`dirt`) count.
+  - **`naming` (#2), the lead's decisions on #394:** the deterministic block line from `src/agent/library/naming_report.js` (#396) is the only pass source: `[naming] <bot> near spawn: <kinds> kinds; unknown <n>; <key>:<count> ...` (the count is after the last `:`; an unnamed block's key is `#<type>:<meta>`).
+    - **It passes only with** `unknown 0`, at least `NAMING_MIN_KINDS` (3, as in naming_report.js; a unit test reads the source to keep them equal) kinds, and every name real (`blockNameProblem`: none numeric, `unknown`, `undefined`, `null`, empty, `#…` or a placeholder).
+    - **It fails on:** no block line (the release lacks #396, or the bot never spawned; with a journal gap that is "not reached (infra)" instead), fewer than 3 kinds (0 included), or the warning `[naming] near spawn: could not read the world (...)`.
+    - **The entity line** `[naming] <bot> entities +<secs>s: ...`: when it lists any kind, `unknown` must be 0. The field is the authority, since #397 keys unknown entities `#<entityType>`, `#<modId>:<modEntityTypeId>` or `#?`. Nothing near (0 kinds, or no entity line) is a note (`notes.namingEntities`).
+    - **The agent's own `!nearbyBlocks` results** are a note (`notes.nearbyBlocks`: the names and any `blockNameProblem`), never a pass. Their format: `NEARBY_BLOCKS` on the line after `Agent executed: !nearbyBlocks and got: ` or on the same line; `- water (source|flowing)`; `- Block Below|at Legs|at Head: <name>`; `- First Solid Block Above Head: <name> (N blocks up)` or `none`; `NEARBY_BLOCKS: none`; a bare `-` is an empty name.
   - **`no_crash` (#7):** online to the end; no agent_process restart, fatal or exit line; `NRestarts` unchanged; `active` at every sample whose metrics read worked (S).
     - A unit state `unknown` (the adapter's `STATUS_FAIL_LIMIT` failed status reads) is no departure: the soak runs on. Still unknown at the end, the check is "not reached (infra)"; recovered, it is a note (`notes.stateUnknown`).
   - **`peak_memory` (#7, S):** the highest `MemoryCurrent` (or `MemoryPeak`) within the target.

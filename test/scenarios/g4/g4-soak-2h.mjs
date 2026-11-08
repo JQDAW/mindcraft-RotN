@@ -18,10 +18,11 @@
 // "not reached (infra)", and USD per hour is measured over the covered minutes.
 // Checks:
 //   login_online       S: this run's bot (case aside) from an inactive unit; the join with an online UUID
-//   naming             (#2) the [naming] line: unknown 0, at least minNamedBlocks unique non-air names, each a real name
-//                      (no numeric, unknown, undefined, null, placeholder or empty one); 0 kinds or its warning: not
-//                      reached. No [naming] line: the fallback, the agent's first !nearbyBlocks result with blocks, first
-//                      seen at a good read within namingWindowMinutes (later, or only in the final read: not reached).
+//   naming             (#2) the deterministic "[naming] <bot> near spawn" line (naming_report.js, #396) is the only pass
+//                      source: unknown 0, at least NAMING_MIN_KINDS (3) kinds, each name real (blockNameProblem). No
+//                      line (the release lacks #396, or the bot never spawned), fewer kinds, or its could-not-read
+//                      warning: a fail. The entity line, if it lists any kind, needs unknown 0 (its keys are #<id> forms
+//                      since #397, so the field is the authority); none near is a note. !nearbyBlocks: a note only.
 //   no_crash           (#7) online to the end; NRestarts unchanged (S); no agent_process restart, fatal or exit line;
 //                      ActiveState active at every sample whose metrics read worked (S). An unknown state at the end:
 //                      not reached (infra).
@@ -38,11 +39,13 @@
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED } from '../../runner/lib/g2.mjs';
 import { exitedText } from '../../runner/lib/service.mjs';
-import { agentExits, blockNameProblem, deathEvents, isAir, llmUsage, namingAtStart, nearbyBlocksResults, survivalEvents } from '../../runner/lib/survival.mjs';
+import { agentExits, blockNameProblem, deathEvents, entityNamingAtStart, isAir, llmUsage, namingAtStart, nearbyBlocksResults, survivalEvents } from '../../runner/lib/survival.mjs';
 
 const MS = 1000;
 const MIN = 60 * MS;
 export const TBD = 'TBD';
+/** naming_report.js's NAMING_MIN_KINDS (#396): fewer kinds near spawn is a scan of unloaded chunks (lead: a fail). */
+export const NAMING_MIN_KINDS = 3;
 const set = (v) => v !== TBD && v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
 
 export default {
@@ -54,7 +57,7 @@ export default {
     title: 'A 2-hour soak of the CX23 service: no crash, memory and hourly cost within the soak ADR\'s targets, the agenda done, eats when low, deaths reported',
     checks: {
         login_online: 'The bot logs in with its own account (online mode); on S from an inactive unit of this run\'s bot',
-        naming: 'The agent\'s first !nearbyBlocks result shows RotN names: no numeric, unknown or placeholder ids (#2)',
+        naming: 'The bot\'s [naming] line near spawn shows RotN names: no unknown, numeric or placeholder ids (#2)',
         no_crash: 'Two hours with no crash: online to the end, no agent exit or restart, NRestarts unchanged (#7)',
         peak_memory: 'Peak memory within the soak ADR\'s target (#7; the target is TBD until the ADR)',
         usd_per_hour: 'The LLM spend per hour within the soak ADR\'s target (#7; the target is TBD until the ADR)',
@@ -68,8 +71,6 @@ export default {
         worldSeed: G2_WORLD_SEED,
         durationMinutes: 120,
         sampleMinutes: 5,
-        namingWindowMinutes: 20,
-        minNamedBlocks: 5,
         peakMemoryMaxMb: TBD,
         usdPerHourMax: TBD,
         foodFloor: 6,
@@ -120,15 +121,13 @@ export default {
         const samples = [];
         // A sample whose reads fail (an ssh or gate error, #394 review) records the error: an infra note, never a crash.
         // After a failed refresh, output() is the cached journal of the last good read (#394 re-review): lastReadMin is
-        // the minute of the last good read, and only a good read can date the !nearbyBlocks fallback.
-        let namingSeenMin = null;
+        // the minute of the last good read.
         let lastReadMin = null;
         const sample = async () => {
             const min = minuteNow();
             let readError = null;
             try { await fresh(); lastReadMin = min; } catch (e) { readError = String(e?.message ?? e); }
             const m = service ? await bot.metrics().catch((e) => ({ error: String(e?.message ?? e) })) : null;
-            if (!readError && namingSeenMin === null && nearbyBlocksResults(bot.output()).some((r) => r.names.length)) namingSeenMin = min;
             samples.push({ min, ...(m ? { memoryMb: m.MemoryCurrent != null ? Math.round(Number(m.MemoryCurrent) / 1048576) : null,
                 peakMb: Number.isFinite(Number(m.MemoryPeak)) ? Math.round(Number(m.MemoryPeak) / 1048576) : null, nRestarts: m.NRestarts ?? null, state: m.ActiveState ?? null } : {}),
                 ...(readError ? { readError } : {}), ...(m?.error ? { metricsError: m.error } : {}) });
@@ -155,7 +154,7 @@ export default {
         // own output is complete.
         const startLine = /^Starting mindcraft-rotn@\S+\.service/.test(out[0] ?? '');
         const gap = !service ? null
-            : !finalReadOk ? `the journal was last read at minute ${lastReadMin ?? 'none'} of ${Math.round(minutes)} (reads failing: infra)`
+            : !finalReadOk ? (lastReadMin === null ? 'no journal read worked (reads failing: infra)' : `the journal was last read at minute ${lastReadMin} of ${Math.round(minutes)} (reads failing: infra)`)
                 : !startLine ? 'the journal read does not start at the unit\'s "Starting mindcraft-rotn@" line (cut by the ctl\'s line cap?)' : null;
         const coveredMinutes = gap ? (startLine ? lastReadMin ?? 0 : 0) : minutes;
         ctx.note('journalCoverage', { complete: !gap, coveredMinutes: Math.round(coveredMinutes * 10) / 10, minutes: Math.round(minutes * 10) / 10, ...(gap ? { gap } : {}) });
@@ -164,37 +163,32 @@ export default {
         const infra = (k, detail) => ctx.check(k, false, `not reached (infra): ${gap}; ${detail}`);
         const partial = (k, pass, detail) => (gap && pass ? infra(k, `on what was read: ${detail}`) : ctx.check(k, pass, detail));
 
-        // naming (#2). The primary source is skills-rotn's one-time "[naming] <bot> near spawn: ..." line (#396): it passes
-        // only with unknown 0, at least minNamedBlocks unique non-air names, each one a real name (blockNameProblem;
-        // an empty name is flagged). The fallback, with no [naming] line, is the agent's own first !nearbyBlocks result
-        // with names, first seen at a good read within namingWindowMinutes.
+        // naming (#2), lead's decisions on #394: the deterministic "[naming] <bot> near spawn" line is the only pass source.
+        // It passes with unknown 0, at least NAMING_MIN_KINDS kinds and every name real (blockNameProblem; an unnamed
+        // block prints "#<type>:<meta>"). No line, fewer kinds, or the could-not-read warning fails; with a journal gap a
+        // missing line is not reached (infra), as the line may lie past the last good read. The entity line, when it lists
+        // any kind, needs unknown 0 (the field is the authority: #397 keys unknown entities "#<id>"); nothing near (0 kinds,
+        // or no entity line) is a note. The agent's own !nearbyBlocks results are a note, never a pass.
         const nl = namingAtStart(out, name);
-        if (nl?.error) notReached(['naming'], `the bot could not read the blocks near spawn: "${nl.line}"`);
-        else if (nl) {
+        const el = entityNamingAtStart(out, name);
+        const nb = nearbyBlocksResults(out).find((r) => r.names.length) ?? null;
+        if (nb) ctx.note('nearbyBlocks', { names: nb.names, problems: nb.names.map((n) => [n, blockNameProblem(n)]).filter(([, w]) => w) });
+        ctx.note('naming', { block: nl, entity: el });
+        if (!nl) {
+            if (gap) infra('naming', `no "[naming] ${name} near spawn" line in what was read`);
+            else ctx.check('naming', false, `no "[naming] ${name} near spawn" line: the release lacks #396, or the bot never spawned`);
+        } else if (nl.error) ctx.check('naming', false, `the bot could not read the world near spawn: "${nl.line}"`);
+        else {
             const names = [...new Set(nl.entries.map((e) => e.name))].filter((n) => !isAir(n));
             const bad = names.map((n) => [n, blockNameProblem(n)]).filter(([, w]) => w);
-            ctx.note('naming', { source: '[naming]', kinds: nl.kinds, unknown: nl.unknown, names });
-            if (nl.kinds === 0) notReached(['naming'], 'the [naming] line lists 0 kinds near spawn (an empty world around the bot?)');
-            else {
-                ctx.check('naming', nl.unknown === 0 && bad.length === 0 && names.length >= p.minNamedBlocks,
-                    [nl.unknown && `unknown ${nl.unknown} in the [naming] line`,
-                        bad.length && `${bad.length} bad name(s): ${bad.slice(0, 5).map(([n, w]) => `"${n}" (${w})`).join(', ')}`,
-                        names.length < p.minNamedBlocks && `${names.length} unique non-air names (need at least ${p.minNamedBlocks})`].filter(Boolean).join('; ')
-                    || `[naming]: ${names.length} unique non-air names, unknown 0, all real (need at least ${p.minNamedBlocks})`);
-            }
-        } else {
-            const nb = nearbyBlocksResults(out).find((r) => r.names.length) ?? null;
-            if (!nb) notReached(['naming'], `no [naming] line and the agent ran no !nearbyBlocks with any block in the soak's log${gap ? ` (${gap})` : ''}`);
-            else if (namingSeenMin === null) notReached(['naming'], 'no [naming] line; the first !nearbyBlocks result was found only in the final read, after the window');
-            else if (namingSeenMin > p.namingWindowMinutes) {
-                notReached(['naming'], `no [naming] line; the first !nearbyBlocks result came at minute ${namingSeenMin}, after the ${p.namingWindowMinutes}-min window`);
-            } else {
-                const names = [...new Set(nb.names)].filter((n) => !isAir(n));
-                const bad = names.map((n) => [n, blockNameProblem(n)]).filter(([, w]) => w);
-                ctx.note('naming', { source: '!nearbyBlocks', names });
-                ctx.check('naming', names.length >= p.minNamedBlocks && bad.length === 0,
-                    bad.length ? `${bad.length} bad name(s): ${bad.slice(0, 5).map(([n, w]) => `"${n}" (${w})`).join(', ')}` : `!nearbyBlocks (no [naming] line): ${names.length} unique non-air names, all real (need at least ${p.minNamedBlocks})`);
-            }
+            const entityBad = el && el.kinds > 0 && el.unknown > 0;
+            const why = [nl.kinds < NAMING_MIN_KINDS && `${nl.kinds} kind(s) near spawn (need at least ${NAMING_MIN_KINDS})`,
+                nl.unknown && `unknown ${nl.unknown} in the block line`,
+                bad.length && `${bad.length} bad name(s): ${bad.slice(0, 5).map(([n, w]) => `"${n}" (${w})`).join(', ')}`,
+                entityBad && `unknown ${el.unknown} of ${el.kinds} kind(s) in the entity line (${el.entries.filter((e) => e.name.startsWith('#')).slice(0, 5).map((e) => e.name).join(' ') || 'see the line'})`].filter(Boolean);
+            const entities = !el ? 'no entity line (nothing near?)' : el.kinds === 0 ? `no entity near (+${el.secs}s)` : `entities: ${el.kinds} kinds, unknown 0`;
+            if (!el || el.kinds === 0) ctx.note('namingEntities', entities);
+            ctx.check('naming', why.length === 0, why.length ? why.join('; ') : `[naming]: ${nl.kinds} kinds, unknown 0, all real; ${entities}`);
         }
 
         // no crash (#7). A seen crash fails on any read. With none seen: an unknown unit state at the end (status reads
@@ -232,7 +226,7 @@ export default {
         const usdPerHour = hours > 0 ? Math.round((u.usd / hours) * 1e6) / 1e6 : null;
         const over = `USD ${u.usd} over ${Math.round(coveredMinutes)} min, ${u.lines} completions`;
         ctx.note('llmUsage', { calls, usageLines: u.lines, unknown: u.unknown, usd: u.usd, minutes: Math.round(coveredMinutes), usdPerHour });
-        if (gap) infra('usd_per_hour', `measured USD ${usdPerHour}/h over the covered time (${over})`);
+        if (gap) infra('usd_per_hour', coveredMinutes > 0 ? `measured USD ${usdPerHour}/h over the covered time (${over})` : `no covered minute to measure over (USD ${u.usd} in what was read, ${u.lines} completions)`);
         else if (!u.lines) notReached(['usd_per_hour'], `no "[openrouter] usage ..." line in the log (${calls} LLM calls): the release prints no usage line (setup gap?)`);
         else if (u.unknown) notReached(['usd_per_hour'], `${u.unknown} of ${u.lines} usage line(s) have cost_usd unknown; the known ones sum to USD ${u.usd}`);
         else if (!set(p.usdPerHourMax)) ctx.check('usd_per_hour', false, `not reached: no target yet (TBD); measured USD ${usdPerHour}/h (${over})`);

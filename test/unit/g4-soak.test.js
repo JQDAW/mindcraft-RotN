@@ -4,10 +4,11 @@
 // agenda. Fakes only: no server, no ssh.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
-import soak, { TBD } from '../scenarios/g4/g4-soak-2h.mjs';
-import { agentExits, blockNameProblem, deathEvents, isAir, llmUsage, namingAtStart, nearbyBlocksResults, survivalEvents } from '../runner/lib/survival.mjs';
+import soak, { NAMING_MIN_KINDS, TBD } from '../scenarios/g4/g4-soak-2h.mjs';
+import { agentExits, blockNameProblem, deathEvents, entityNamingAtStart, isAir, llmUsage, namingAtStart, nearbyBlocksResults, survivalEvents } from '../runner/lib/survival.mjs';
 
 const NAME = 'FRCFLD';
 const MIN = 60000;
@@ -19,6 +20,18 @@ const stamp = (ms) => {
 const line = (ms, msg) => `[${stamp(ms)}] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: ${msg}`;
 // A real !nearbyBlocks result, as agent.js logs it (copied from test/evidence/g3/g3a-20261105/rocks/driver.log 149-158 and
 // g3a-20261107-gate 460-463): the header on the line after "and got: ", a liquid with "(source)", the Block lines.
+// The [naming] lines, copied from the merged src/agent/library/naming_report.test.js (#396: lines 53, 58, 64, 92, 98,
+// 145) and from #397's body (the entity keys by type).
+const NAMING_OK = '[naming] FRCFLD near spawn: 6 kinds; unknown 0; stone:100 dirt:60 dynamictrees:leaves0:20 grass:20 undergroundbiomes:metamorphic_stone:7 water:5';
+const NAMING_EMPTY = '[naming] FRCFLD near spawn: 0 kinds; unknown 0;';
+const NAMING_UNKNOWN = '[naming] FRCFLD near spawn: 9 kinds; unknown 7; stone:50 dirt:40 #4321:2:12 unknown:6 1234:4 #4322:0:3 4321:2:2 #97:5:1 rustic:unknown_block:1';
+const NAMING_THREE = '[naming] FRCFLD near spawn: 3 kinds; unknown 0; stone:30 dirt:20 grass:5';
+const ENTITIES_OK = '[naming] FRCFLD entities +120s: 1 kinds; unknown 0; cow:1';
+const ENTITIES_NONE = '[naming] FRCFLD entities +240s: 0 kinds; unknown 0;';
+const ENTITIES_396 = '[naming] FRCFLD entities +0s: 7 kinds; unknown 4; cow:2 #77:1 #?:1 mocreatures:entity_12:1 quark:crab:1 unknown:1 zombie:1';
+const ENTITIES_397 = '[naming] FRCFLD entities +0s: 4 kinds; unknown 3; #mocreatures:12:2 #300:1 #5:1 quark:crab:1';
+// naming_report.js line 116 (merged): console.warn(`[naming] near spawn: could not read the world (${err?.message ?? err})`)
+const NAMING_WARNING = '[naming] near spawn: could not read the world (bot.entity is undefined)';
 const REAL_NEARBY = ['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS', '- dynamictrees:trunkshell', '- biomesoplenty:plant_0', '- dirt',
     '- dynamictrees:sprucebranch', '- grass', '- tallgrass', '- dynamictrees:rootydirt', '- water (source)', '- rustic:cohosh',
     '- Block Below: undergroundbiomes:metamorphic_stone', '- Block at Legs: air', '- Block at Head: air', '- First Solid Block Above Head: none', ''];
@@ -34,8 +47,8 @@ const REAL_NEARBY = ['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS',
  * adapter, output() is then the cached journal of the last good read (#394 re-review), not the live one.
  * opt.unknownFrom/opt.unknownUntil (minutes the unit's state is 'unknown': status and metrics reads fail, alive() false,
  * stateUnknown set); opt.cutStart (the read lost the "Starting mindcraft-rotn@" line to the ctl's line cap);
- * opt.naming (a "[naming] ..." line at minute 0.5, #396); opt.failFirstReads (the first N refreshes fail, so the
- * final read is the first good one).
+ * opt.naming (the "[naming] ... near spawn" line at minute 0.9, NAMING_OK by default; null: none); opt.entities (the
+ * entity line at minute 2, ENTITIES_OK by default; null: none).
  */
 function sim(opt = {}) {
     let t = 0;
@@ -50,8 +63,7 @@ function sim(opt = {}) {
     let cache = [];
     const sinceStart = () => (started === null ? -1 : (t - started) / MIN);
     const within = (from, until) => from !== undefined && sinceStart() >= from && (until === undefined || sinceStart() < until);
-    let refreshes = 0;
-    const readOk = () => !(opt.failFirstReads && refreshes <= opt.failFirstReads) && !within(opt.refreshFailAt, opt.refreshOkAt) && !within(opt.unknownFrom, opt.unknownUntil);
+    const readOk = () => !within(opt.refreshFailAt, opt.refreshOkAt) && !within(opt.unknownFrom, opt.unknownUntil);
     const statusOk = () => !within(opt.unknownFrom, opt.unknownUntil);
     let stateUnknown = null;
     const read = () => { if (readOk()) cache = opt.cutStart ? journal.slice(1) : [...journal]; return readOk(); };
@@ -60,7 +72,8 @@ function sim(opt = {}) {
     const advance = () => {
         if (started === null) return;
         at(0.3, 'join', () => { online = true; log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`); add(`${NAME} joined the game`); });
-        if (opt.naming) at(0.5, 'naming', () => jr(opt.naming));
+        if (opt.naming !== null) at(0.9, 'naming', () => jr(opt.naming ?? NAMING_OK));
+        if (opt.entities !== null) at(2, 'entities', () => jr(opt.entities ?? ENTITIES_OK));
         if (opt.nearbyNone) at(2, 'nearbyNone', () => jr('Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS: none', ''));
         if (!opt.noNearby) {
             at(opt.nearbyAt ?? 3, 'nearby', () => {
@@ -105,7 +118,7 @@ function sim(opt = {}) {
     let sampleN = 0;
     const bot = {
         ...(opt.driver ? {} : { kind: 'service', bot: opt.unitBot ?? 'frcfld',
-            refresh: () => { advance(); refreshes++; return read() ? Promise.resolve() : Promise.reject(new Error("service journal: 'journal frcfld' exited 255")); } }),
+            refresh: () => { advance(); return read() ? Promise.resolve() : Promise.reject(new Error("service journal: 'journal frcfld' exited 255")); } }),
         start() { started = t; unit.state = 'active'; jr('Starting mindcraft-rotn@frcfld.service - Mindcraft RotN bot frcfld...'); return Promise.resolve(); },
         alive() { advance(); if (!opt.driver && !statusOk()) stateUnknown = stateUnknown ?? { since: `minute ${Math.round(sinceStart())}`, failures: 3 }; return statusOk() && unit.state === 'active'; },
         needsStop: () => unit.state === 'active',
@@ -190,11 +203,13 @@ describe('g4-soak-2h on a simulated service', () => {
         assert.equal(over.peak_memory.detail, 'peak 1400 MB (target 1024 MB)');
     });
 
-    test('naming (#2): a numeric or unknown name fails; no !nearbyBlocks is not reached', async () => {
-        const bad = byName(await run(sim({ badName: '35:2' })));
-        assert.equal(bad.naming.pass, false);
-        assert.equal(bad.naming.detail, '1 bad name(s): "35:2" (a numeric id)');
-        assert.match(byName(await run(sim({ noNearby: true }))).naming.detail, /^not reached: no \[naming\] line and the agent ran no !nearbyBlocks/);
+    test('naming (#2): a bad !nearbyBlocks name is a note, never the verdict; no [naming] line fails', async () => {
+        const r = await run(sim({ badName: '35:2' }));
+        assert.equal(byName(r).naming.pass, true, 'the [naming] line decides');
+        assert.deepEqual(r.notes.nearbyBlocks.problems, [['35:2', 'a numeric id']]);
+        const none = byName(await run(sim({ naming: null })));
+        assert.equal(none.naming.pass, false);
+        assert.equal(none.naming.detail, 'no "[naming] FRCFLD near spawn" line: the release lacks #396, or the bot never spawned');
     });
 
     test('no_crash (#7): systemd restarted it, an agent_process restart, or it left: each fails, named', async () => {
@@ -241,19 +256,18 @@ describe('g4-soak-2h on a simulated service', () => {
 });
 
 describe('#394 review: naming in the real format, a failed read is no crash, the naming window, USD from the usage lines', () => {
-    test('the !nearbyBlocks header on the same line also counts; an empty result first is skipped; a first result after the window is not reached', async () => {
-        assert.equal(byName(await run(sim({ sameLineHeader: true }))).naming.pass, true);
-        const none = byName(await run(sim({ nearbyNone: true })));
-        assert.equal(none.naming.pass, true, none.naming.detail);
-        const late = byName(await run(sim({ nearbyAt: 31 })));
-        assert.match(late.naming.detail, /^not reached: no \[naming\] line; the first !nearbyBlocks result came at minute 35, after the 20-min window$/);
+    test('the !nearbyBlocks note: the header on the same line too; an empty result first is skipped; never a pass without [naming]', async () => {
+        assert.equal((await run(sim({ sameLineHeader: true }))).notes.nearbyBlocks.names.length, 12);
+        assert.equal((await run(sim({ nearbyNone: true }))).notes.nearbyBlocks.names[0], 'dynamictrees:trunkshell');
+        const r = await run(sim({ naming: null }));
+        assert.equal(byName(r).naming.pass, false, 'a clean !nearbyBlocks result is no pass');
+        assert.deepEqual(r.notes.nearbyBlocks.problems, []);
     });
 
-    test('an undefined, null or unknown name fails naming', async () => {
+    test('an undefined, null or unknown !nearbyBlocks name is recorded in the note', async () => {
         for (const bad of ['undefined', 'null', 'unknown']) {
-            const c = byName(await run(sim({ badName: bad })));
-            assert.equal(c.naming.pass, false, bad);
-            assert.match(c.naming.detail, new RegExp(`"${bad}"`), bad);
+            const r = await run(sim({ badName: bad }));
+            assert.deepEqual(r.notes.nearbyBlocks.problems.map(([n]) => n), [bad], bad);
         }
     });
 
@@ -274,32 +288,57 @@ describe('#394 review: naming in the real format, a failed read is no crash, the
 });
 
 describe('#394 re-review: the [naming] line first, journal coverage, an unknown unit state, the final read', () => {
-    const GOOD = '[naming] FRCFLD near spawn: 7 kinds; unknown 0; dynamictrees:trunkshell:40 dirt:30 grass:20 undergroundbiomes:metamorphic_stone:12 rustic:cohosh:3 water:2 biomesoplenty:plant_0:1';
-
-    test('parser: the #396 forms (unknown entries, a name with colons, "" as an empty name, 0 kinds, the warning, another bot)', () => {
-        const n = namingAtStart(['x', '[naming] FRCFLD near spawn: 4 kinds; unknown 3; stone:50 undefined:12 4321:2:2 "":1'], 'frcfld');
-        assert.deepEqual([n.kinds, n.unknown, n.entries], [4, 3, [{ name: 'stone', count: 50 }, { name: 'undefined', count: 12 }, { name: '4321:2', count: 2 }, { name: '', count: 1 }]]);
-        assert.deepEqual(namingAtStart(['[naming] FRCFLD near spawn: 0 kinds; unknown 0;'], NAME).entries, []);
-        assert.match(namingAtStart(['[naming] near spawn: could not read the blocks (no bot)'], NAME).error, /could not read the blocks/);
-        assert.equal(namingAtStart(['[naming] OTHER near spawn: 1 kinds; unknown 0; stone:1'], NAME), null);
+    test('parser: the merged forms (#<type>:<meta> keys with colons, 0 kinds, the entity line, #397\'s keys, the warning, another bot)', () => {
+        const n = namingAtStart(['x', NAMING_UNKNOWN], 'frcfld');
+        assert.deepEqual([n.kinds, n.unknown, n.entries.slice(2, 3), n.entries.at(-1)], [9, 7, [{ name: '#4321:2', count: 12 }], { name: 'rustic:unknown_block', count: 1 }]);
+        assert.deepEqual(namingAtStart([NAMING_EMPTY], NAME).entries, []);
+        assert.match(namingAtStart([NAMING_WARNING], NAME).error, /^near spawn: could not read the world \(/);
+        assert.equal(namingAtStart(['[naming] OTHER near spawn: 3 kinds; unknown 0; stone:1 dirt:1 sand:1', ENTITIES_OK], NAME), null, 'another bot\'s line, and the entity line, are not the block line');
+        const e = entityNamingAtStart([NAMING_OK, ENTITIES_397], NAME);
+        assert.deepEqual([e.secs, e.kinds, e.unknown, e.entries[0]], [0, 4, 3, { name: '#mocreatures:12', count: 2 }]);
+        assert.deepEqual([entityNamingAtStart([ENTITIES_396], NAME).unknown, entityNamingAtStart([ENTITIES_NONE], NAME).kinds], [4, 0]);
+        assert.equal(blockNameProblem('#4321:2'), 'unnamed (#<type>:<meta>)');
         assert.deepEqual(nearbyBlocksResults(['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS', '- dirt', '-']), [{ at: 0, none: false, names: ['dirt', ''] }], 'a bare "-" is an empty name');
         assert.deepEqual(['air', 'minecraft:cave_air', 'stone'].map(isAir), [true, true, false]);
     });
 
-    test('naming: a good [naming] line passes and outranks a bad !nearbyBlocks; unknown, an empty or bad name, too few names fail; 0 kinds or the warning is not reached', async () => {
-        const good = byName(await run(sim({ naming: GOOD, badName: '35:2' })));
-        assert.equal(good.naming.pass, true, good.naming.detail);
-        assert.equal(good.naming.detail, '[naming]: 7 unique non-air names, unknown 0, all real (need at least 5)');
-        const unknown = byName(await run(sim({ naming: '[naming] FRCFLD near spawn: 7 kinds; unknown 1; stone:9 dirt:8 grass:7 sand:6 gravel:5 clay:4 mod:unknown_block:1' })));
+    test('naming_report.js\'s NAMING_MIN_KINDS is the scenario\'s (read from the source text, offline)', () => {
+        const src = fs.readFileSync(new URL('../../src/agent/library/naming_report.js', import.meta.url), 'utf8');
+        assert.equal(Number(/export const NAMING_MIN_KINDS = (\d+);/.exec(src)?.[1]), NAMING_MIN_KINDS);
+        assert.equal(NAMING_MIN_KINDS, 3);
+    });
+
+    test('naming: the merged lines pass; unknown or #<type>:<meta> names, fewer than 3 kinds, 0 kinds and the warning fail', async () => {
+        const good = byName(await run(sim()));
+        assert.equal(good.naming.detail, '[naming]: 6 kinds, unknown 0, all real; entities: 1 kinds, unknown 0');
+        assert.equal(byName(await run(sim({ naming: NAMING_THREE }))).naming.pass, true, 'exactly NAMING_MIN_KINDS passes');
+        const unknown = byName(await run(sim({ naming: NAMING_UNKNOWN })));
         assert.equal(unknown.naming.pass, false);
-        assert.equal(unknown.naming.detail, 'unknown 1 in the [naming] line; 1 bad name(s): "mod:unknown_block" (unknown)');
-        const empty = byName(await run(sim({ naming: '[naming] FRCFLD near spawn: 6 kinds; unknown 0; stone:9 dirt:8 grass:7 sand:6 gravel:5 "":4' })));
-        assert.equal(empty.naming.pass, false);
-        assert.match(empty.naming.detail, /"" \(empty\)/);
-        const few = byName(await run(sim({ naming: '[naming] FRCFLD near spawn: 2 kinds; unknown 0; stone:9 dirt:8' })));
-        assert.equal(few.naming.detail, '2 unique non-air names (need at least 5)');
-        assert.match(byName(await run(sim({ naming: '[naming] FRCFLD near spawn: 0 kinds; unknown 0;' }))).naming.detail, /^not reached: the \[naming\] line lists 0 kinds/);
-        assert.match(byName(await run(sim({ naming: '[naming] near spawn: could not read the blocks (timeout)' }))).naming.detail, /^not reached: the bot could not read the blocks near spawn/);
+        assert.match(unknown.naming.detail, /^unknown 7 in the block line; \d+ bad name\(s\): "#4321:2" \(unnamed \(#<type>:<meta>\)\), "unknown" \(unknown\), "1234" \(a numeric id\)/);
+        assert.equal(byName(await run(sim({ naming: '[naming] FRCFLD near spawn: 2 kinds; unknown 0; stone:9 dirt:8' }))).naming.detail, '2 kind(s) near spawn (need at least 3)');
+        assert.equal(byName(await run(sim({ naming: NAMING_EMPTY }))).naming.detail, '0 kind(s) near spawn (need at least 3)');
+        const warned = byName(await run(sim({ naming: NAMING_WARNING, entities: null })));
+        assert.equal(warned.naming.pass, false);
+        assert.equal(warned.naming.detail, `the bot could not read the world near spawn: "${NAMING_WARNING}"`);
+    });
+
+    test('naming, the entity line: unknown > 0 fails (#396 and #397 keys); none near, or no entity line, is a note', async () => {
+        const e397 = byName(await run(sim({ entities: ENTITIES_397 })));
+        assert.equal(e397.naming.pass, false);
+        assert.equal(e397.naming.detail, 'unknown 3 of 4 kind(s) in the entity line (#mocreatures:12 #300 #5)');
+        assert.match(byName(await run(sim({ entities: ENTITIES_396 }))).naming.detail, /^unknown 4 of 7 kind\(s\) in the entity line/);
+        const none = await run(sim({ entities: ENTITIES_NONE }));
+        assert.equal(byName(none).naming.pass, true);
+        assert.equal(none.notes.namingEntities, 'no entity near (+240s)');
+        const absent = await run(sim({ entities: null }));
+        assert.equal(byName(absent).naming.pass, true);
+        assert.equal(absent.notes.namingEntities, 'no entity line (nothing near?)');
+    });
+
+    test('naming: no [naming] line in a journal with a gap is not reached (infra), not a fail', async () => {
+        const c = byName(await run(sim({ naming: null, refreshFailAt: 0 })));
+        assert.equal(c.naming.detail, 'not reached (infra): no journal read worked (reads failing: infra); no "[naming] FRCFLD near spawn" line in what was read');
+        assert.match(c.usd_per_hour.detail, /^not reached \(infra\): no journal read worked .*; no covered minute to measure over \(USD 0 in what was read, 0 completions\)$/);
     });
 
     test('the repro: reads fail from minute 70 and a crash at 80 goes unseen: no_crash and the journal checks are not reached (infra), usd per hour over the covered 65 min', async () => {
@@ -333,8 +372,4 @@ describe('#394 re-review: the [naming] line first, journal coverage, an unknown 
         assert.equal(back.notes.infraSamples.count, 2);
     });
 
-    test('naming: a !nearbyBlocks result found only in the final read is not reached (after the window)', async () => {
-        const c = byName(await run(sim({ failFirstReads: 25 })));
-        assert.equal(c.naming.detail, 'not reached: no [naming] line; the first !nearbyBlocks result was found only in the final read, after the window');
-    });
 });
