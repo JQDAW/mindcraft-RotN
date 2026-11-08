@@ -23,8 +23,9 @@
 // are never gate evidence: crossCheckBatch refuses a G4 result in a gate claim.
 // One exception (lead, #419): a G4 SERVICE run (set-up S, run.mjs --service through cx23-ctl) is no batch: it runs
 // under a written GO on the CX23's own key, so no batch.json vouches for it. isG4ServiceResult skips exactly those:
-// gate G4, a g4- scenario that is not a G3 one, the runner's service record with a GO id, and a "service <unit> via
-// cx23-ctl" driver. Anything less (a G4 T rehearsal, anything claiming G3 or a g3 scenario) is checked as before.
+// gate exactly "G4", a KNOWN g4- scenario whose own gate is G4, the runner's service record with a GO id, and a
+// "service <unit> via cx23-ctl" driver; it fails closed (an unknown id is checked). Anything less (a G4 T rehearsal,
+// anything claiming G3 or a g3 scenario) is checked as before.
 //
 // Prints one line per problem; exit 0 = consistent, 1 = not, 2 = usage. See crossCheckBatch in
 // test/runner/lib/g3.mjs.
@@ -80,21 +81,25 @@ function nearestBatch(file, root) {
 }
 
 /**
- * Every G3 result under root must be covered by its nearest batch.json, and each such batch.json must
- * vouch for all the G3 results it covers. Returns the problems (empty = consistent, or no G3 results).
+ * A G4 service run's result (see the header): skipped by the tree check, never by the gate claim check. Fails closed
+ * (lead, #419 review): gate exactly "G4" (no whitespace, no other case); the scenario id exactly as loadScenarios
+ * names it (lower case, g4-), and a KNOWN scenario whose own gate is exactly G4 in scenarioGates ({id: gate} from
+ * scenarioGates()); an unknown id, or no scenarioGates at all, is not skipped.
  */
-/** A G4 service run's result (see the header): skipped by the tree check, never by the gate claim check. */
-// scenarioGates: {id: gate} from loadScenarios (scenarioGates()); a g4- id whose scenario is not G4 is not skipped.
 export function isG4ServiceResult(result, scenarioGates = {}) {
     if (!result || typeof result !== 'object' || Array.isArray(result)) return false;
-    const id = String(result.scenario ?? '').trim().toLowerCase();
-    const known = Object.entries(scenarioGates).find(([k]) => String(k).trim().toLowerCase() === id);
-    return String(result.gate ?? '').trim() === 'G4' && /^g4-[a-z0-9-]+$/.test(id)
-        && (!known || String(known[1]).trim().toUpperCase() === 'G4')
+    const id = result.scenario;
+    return result.gate === 'G4' && typeof id === 'string' && /^g4-[a-z0-9-]+$/.test(id)
+        && Object.prototype.hasOwnProperty.call(scenarioGates, id) && scenarioGates[id] === 'G4'
         && typeof result.service?.goId === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$/.test(result.service.goId)
         && /^service [a-z0-9][a-z0-9-]{0,31} via cx23-ctl$/.test(String(result.driver ?? ''));
 }
 
+
+/**
+ * Every G3 result under root must be covered by its nearest batch.json, and each such batch.json must
+ * vouch for all the G3 results it covers. Returns the problems (empty = consistent, or no G3 results).
+ */
 export function checkEvidenceTree(root, { g3Scenarios = [], scenarioGates = {} } = {}) {
     if (!fs.existsSync(root)) return [];
     const problems = [];
@@ -159,13 +164,13 @@ export function infraFaultsUnder(dir) {
     }).sort();
 }
 
-/** The ids of the scenarios that loadScenarios marks gate G3. */
 /** {id: gate} of every scenario loadScenarios knows (the G4 service exception needs the gate, not just "G3 or G4"). */
 export async function scenarioGates() {
     const { loadScenarios } = await import('../runner/run.mjs');
     return Object.fromEntries(Object.values(await loadScenarios()).map((s) => [s.id, String(s.gate)]));
 }
 
+/** The ids of the scenarios that loadScenarios marks gate G3 (isG3Result: G3, and G4 too). */
 export async function g3ScenarioIds() {
     const { loadScenarios } = await import('../runner/run.mjs');
     return Object.values(await loadScenarios()).filter((s) => isG3Result({ gate: s.gate })).map((s) => s.id);

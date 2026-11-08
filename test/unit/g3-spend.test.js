@@ -517,7 +517,10 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
         put('g4/m1/result.json', service);
         const gates = { 'g3-first-night': 'G3', 'g4-soak-2h': 'G4', 'g4-first-night': 'G3' };
         assert.deepEqual(checkEvidenceTree(root, { g3Scenarios: ['g3-first-night', 'g4-soak-2h'], scenarioGates: gates }), [], 'a G4 service run needs no batch.json');
-        assert.equal(isG4ServiceResult(service), true);
+        assert.equal(isG4ServiceResult(service, gates), true);
+        // #419 review nit 1: it fails closed: without the scenario's gate, or for an unknown g4- id, it is not skipped.
+        assert.equal(isG4ServiceResult(service), false, 'no scenarioGates: not skipped');
+        assert.equal(isG4ServiceResult(service, {}), false);
         // Not skipped, so a missing batch.json is still a problem:
         for (const [label, r] of [
             ['a G4 T rehearsal (a driver, no service record)', { gate: 'G4', scenario: 'g4-death-report', driver: 'node mindcraft-driver.mjs' }],
@@ -527,10 +530,18 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
             ['no GO id', { ...service, service: { goId: null } }],
             ['a driver that is not the service', { ...service, driver: 'service frcfld via elsewhere' }],
             ['gate g4 in lower case', { ...service, gate: 'g4' }],
+            ['gate " G4" with whitespace', { ...service, gate: ' G4' }],
+            ['gate "G4 " with whitespace', { ...service, gate: 'G4 ' }],
+            ['an unknown g4- id (g4-made-up)', { ...service, scenario: 'g4-made-up' }],
+            ['a scenario id not in lower case', { ...service, scenario: 'G4-soak-2h' }],
+            ['a scenario id with whitespace', { ...service, scenario: ' g4-soak-2h' }],
         ]) {
             put('g4/m1/result.json', r);
             assert.match(checkEvidenceTree(root, { g3Scenarios: ['g3-first-night', 'g4-first-night'], scenarioGates: gates }).join('\n'), /a G3 result that no batch\.json covers/, label);
         }
+        // With no scenarioGates at all (fail closed), even the real shape is checked.
+        put('g4/m1/result.json', service);
+        assert.match(checkEvidenceTree(root, { g3Scenarios: ['g4-soak-2h'] }).join('\n'), /a G3 result that no batch\.json covers/, 'no scenarioGates');
         // A service-shaped result named batch.json is still a problem (it could hide a result).
         fs.rmSync(path.join(root, 'g4'), { recursive: true });
         put('g4/m1/batch.json', service);
