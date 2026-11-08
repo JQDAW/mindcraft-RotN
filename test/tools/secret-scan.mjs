@@ -17,8 +17,10 @@
 // Known false positives go into test/tools/secret-scan-allow.txt, one per line, "<path><TAB><hash><TAB><why>": the hash
 // is the one this tool prints (the first 16 hex digits of the match's SHA-256; "secret-file" for a file name), so the
 // allowlist never holds a secret's plaintext.
-// The output never shows a match: each finding is "path:line: kind (length N, starts "<at most 6 characters>", hash H)".
-// Symlinks are skipped (lstat); files over 2 MB are skipped and named in the summary.
+// The output never shows a match: each finding is "path:line: kind (length N, starts "<at most 6 characters>", hash H)";
+// an ipv4 finding shows no start at all (#390 review: a few octets narrow an address down).
+// Symlinks are skipped (lstat). Every file is read in chunks of whole lines (#390 review: a large file is scanned in
+// full, never skipped), so the line numbers hold across chunks.
 // Exit 0 clean, 1 findings, 2 a usage or git error.
 //
 //   node test/tools/secret-scan.mjs                 the tracked files of this checkout
@@ -27,12 +29,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import crypto from 'node:crypto';
+import { Buffer } from 'node:buffer';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULT_ALLOW = path.join(here, 'secret-scan-allow.txt');
-export const MAX_BYTES = 2 * 1024 * 1024;
+/** The read size of one chunk; a file is scanned in chunks of whole lines, whatever its size. */
+export const CHUNK_BYTES = 1024 * 1024;
 // Built from parts, so this file itself never matches its own patterns.
 const BEGIN = '-----' + 'BEGIN';
 const SK_OR = 'sk-' + 'or-';
@@ -116,7 +120,7 @@ export function loadAllow(file) {
 }
 
 /** Findings in one file's text: [{path, line, kind, hash, length, prefix}], the allowlisted ones left out. */
-export function scanText(p, text, allow = new Set(), { evidence = false } = {}) {
+export function scanText(p, text, allow = new Set(), { evidence = false, lineOffset = 0 } = {}) {
     const out = [];
     text.split('\n').forEach((l, i) => {
         const seen = new Set();   // one finding per place (a reverse-DNS quad matches both ipv4 rules)
@@ -131,20 +135,48 @@ export function scanText(p, text, allow = new Set(), { evidence = false } = {}) 
                 seen.add(m.index);
                 const hash = matchHash(s);
                 if (allow.has(`${p}\t${hash}`)) continue;
-                out.push({ path: p, line: i + 1, kind: r.kind, hash, length: s.length, prefix: s.slice(0, Math.min(6, Math.max(0, s.length - 4))) });
+                out.push({ path: p, line: i + 1 + lineOffset, kind: r.kind, hash, length: s.length, prefix: r.kind === 'ipv4' ? '' : s.slice(0, Math.min(6, Math.max(0, s.length - 4))) });
             }
         }
     });
     return out;
 }
 
-/** Scan a checkout's tracked files. -> {findings, files, skippedLarge, skippedLinks, ms} */
-export function scanRepo(root, { allowFile = DEFAULT_ALLOW, lsFiles = null, maxBytes = MAX_BYTES } = {}) {
+/**
+ * One file in chunks of whole lines (the last partial line carried into the next chunk), line numbers kept.
+ * -> findings, or null for a binary file (a NUL byte in its first chunk).
+ */
+export function scanFile(p, abs, allow, { evidence = false, chunkBytes = CHUNK_BYTES } = {}) {
+    const fd = fs.openSync(abs, 'r');
+    try {
+        const buf = Buffer.alloc(chunkBytes);
+        const out = [];
+        let carry = Buffer.alloc(0);
+        let lineOffset = 0;
+        let first = true;
+        for (;;) {
+            const n = fs.readSync(fd, buf, 0, chunkBytes, null);
+            if (first && buf.subarray(0, n).includes(0)) return null;
+            first = false;
+            const data = Buffer.concat([carry, buf.subarray(0, n)]);
+            const end = n === 0 ? data.length : data.lastIndexOf(10) + 1;   // whole lines only, unless this is the end
+            const text = data.subarray(0, end).toString('utf8');
+            if (text) {
+                out.push(...scanText(p, text, allow, { evidence, lineOffset }));
+                lineOffset += text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
+            }
+            carry = Buffer.from(data.subarray(end));
+            if (n === 0) return out;
+        }
+    } finally { fs.closeSync(fd); }
+}
+
+/** Scan a checkout's tracked files. -> {findings, files, skippedLinks, ms} */
+export function scanRepo(root, { allowFile = DEFAULT_ALLOW, lsFiles = null, chunkBytes = CHUNK_BYTES } = {}) {
     const t0 = Date.now();
     const allow = loadAllow(allowFile);
     const files = lsFiles ?? execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\0').filter(Boolean);
     const findings = [];
-    const skippedLarge = [];
     let skippedLinks = 0;
     for (const p of files) {
         const why = secretFile(p);
@@ -154,17 +186,16 @@ export function scanRepo(root, { allowFile = DEFAULT_ALLOW, lsFiles = null, maxB
         try { st = fs.lstatSync(abs); } catch { continue; }   // deleted in the working tree
         if (st.isSymbolicLink()) { skippedLinks++; continue; }
         if (!st.isFile()) continue;
-        if (st.size > maxBytes) { skippedLarge.push(p); continue; }
-        const buf = fs.readFileSync(abs);
-        if (buf.includes(0)) continue;                         // binary
-        findings.push(...scanText(p, buf.toString('utf8'), allow, { evidence: p.startsWith('test/evidence/') }));
+        const found = scanFile(p, abs, allow, { evidence: p.startsWith('test/evidence/'), chunkBytes });
+        if (found) findings.push(...found);                    // null: binary
     }
-    return { findings, files: files.length, skippedLarge, skippedLinks, ms: Date.now() - t0 };
+    return { findings, files: files.length, skippedLinks, ms: Date.now() - t0 };
 }
 
 /** One finding as printed: never the match itself. */
 export function formatFinding(f) {
     if (f.kind === 'secret-file') return `${f.path}: secret-file: ${f.prefix} (allowlist key: secret-file)`;
+    if (f.kind === 'ipv4') return `${f.path}:${f.line}: ipv4 (length ${f.length}, hash ${f.hash})`;
     return `${f.path}:${f.line}: ${f.kind} (length ${f.length}, starts "${f.prefix}", hash ${f.hash})`;
 }
 
@@ -177,8 +208,7 @@ function main(argv) {
     let r;
     try { r = scanRepo(root); } catch (e) { console.error(`secret-scan: ${e.message}`); return 2; }
     for (const f of r.findings) console.log(formatFinding(f));
-    const skipped = [r.skippedLarge.length ? `${r.skippedLarge.length} file(s) over ${MAX_BYTES / 1048576} MB not read: ${r.skippedLarge.join(', ')}` : '',
-        r.skippedLinks ? `${r.skippedLinks} symlink(s) skipped` : ''].filter(Boolean).join('; ');
+    const skipped = r.skippedLinks ? `${r.skippedLinks} symlink(s) skipped` : '';
     console.log(`secret-scan: ${r.findings.length} finding(s) in ${r.files} tracked files (${r.ms} ms)${skipped ? `; ${skipped}` : ''}`
         + `${r.findings.length ? '; a false positive goes into test/tools/secret-scan-allow.txt as "<path><TAB><hash><TAB><why>"' : ''}`);
     return r.findings.length ? 1 : 0;

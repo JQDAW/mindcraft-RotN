@@ -92,6 +92,20 @@ export function gitInfo(cwd = path.join(here, '..', '..'), exec = execFileSync) 
  * number to hold exactly (beyond Number.MAX_SAFE_INTEGER, e.g. a 19-digit world seed) stays a string,
  * so `--param worldSeed=1880465901402976865` keeps every digit.
  */
+/**
+ * What a run on the CX23 service changes (#389 review): a G3 scenario run with --service is a G4 S run, never G3 gate
+ * evidence (notGate); and no scenario's LLM spend is read from the runner's key on S (the bot's calls go to the CX23's
+ * own key, which is read separately). -> {notGate: string|null, llmOn: boolean, llmNote: object|null}
+ */
+export function serviceRunPolicy(scenario, bot) {
+    if (bot?.kind !== 'service') return { notGate: null, llmOn: Boolean(scenario.llm), llmNote: null };
+    return {
+        notGate: scenario.gate === 'G3' ? 'a G4 S run (the CX23 service, --service): never G3 gate evidence' : null,
+        llmOn: false,
+        llmNote: scenario.llm ? { accounting: 'off', why: 'a service run: the bot\'s calls go to the CX23\'s own key, which the runner does not read; its spend is read separately' } : null,
+    };
+}
+
 export function parseArgs(argv) {
     const o = { params: {}, driver: [], list: false, scenario: null, out: null, passEnv: [], service: null };
     for (let i = 0; i < argv.length; i++) {
@@ -170,9 +184,11 @@ async function main(argv) {
     let usageBefore = null;
     // Every record, the progress and killed ones too, carries the LLM calls so far (#122 review nit): a run
     // that never finishes still shows what it used. The after-reading exists only in the final result.
+    const svc = serviceRunPolicy(scenario, bot);
     const stamp = (r) => Object.assign(r, { git, server: process.env.TEST_SERVER_NAME ?? null, driver: driverName },
         bot.kind === 'service' ? { service: { goId: bot.goId ?? null, startError: bot.startError ?? null, incident: bot.incident ?? null, stateUnknown: bot.stateUnknown ?? null } } : {},
-        scenario.llm && !r.llm ? { llm: llmRecord(usageBefore, { ok: false, error: 'the run did not finish' }, bot.output()) } : {},
+        svc.llmOn && !r.llm ? { llm: llmRecord(usageBefore, { ok: false, error: 'the run did not finish' }, bot.output()) } : {},
+        svc.llmNote && !r.llm ? { llm: svc.llmNote } : {},
         scenario.gate === 'G3' || scenario.gate === 'G4' ? { batch: policy.batch } : {});
     let finished = false;
     const onProgress = (rec) => {
@@ -204,11 +220,11 @@ async function main(argv) {
     // for this run's bot).
     const scenarioServer = policy.guard ? guardConsole(server, consoleAllowFor(scenario, { ...scenario.defaults, ...o.params })) : server;
     const readUsage = () => readKeyUsage({ key: process.env.OPENROUTER_API_KEY, fetchImpl: keyFetch(process.env) });
-    if (scenario.llm) usageBefore = await readUsage();
+    if (svc.llmOn) usageBefore = await readUsage();
     const result = stamp(await runScenario(scenario, { server: scenarioServer, bot, clock: wallClock, params: o.params, runId, log, onProgress, control }));
     if (finished) return new Promise(() => {});   // a signal arrived first: its handler writes and exits
     finished = true;
-    if (scenario.llm) {
+    if (svc.llmOn) {
         result.llm = llmRecord(usageBefore, await readUsage(), bot.output());
         // Requests sent, then what came back (lead, after round 3: failed calls are never counted as calls).
         const http = Object.entries(result.llm.httpErrors ?? {}).map(([st, n]) => `${n} x HTTP ${st}`).join(', ');
@@ -230,6 +246,7 @@ async function main(argv) {
         addNotGate(result, `an ADR 0009 incident: ${bot.incident}`);
     }
     if (policy.notGate) addNotGate(result, policy.notGate);
+    if (svc.notGate) addNotGate(result, svc.notGate);
     try {
         const ev = evidenceLog(server, result.params.logTail, `scenario-${runId}-begin`);
         if (ev.files) {
