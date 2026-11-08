@@ -19,7 +19,7 @@ import { setImmediate } from 'node:timers';
 import { parseBatchArgs, spendGate, endVerdict, forbiddenOverrides, runOne, llmStopVerdict, llmStopSettings, EXIT_LLM_STOP, SPAWNED_LINE, markInfraFault, runIdOf, driverPreflight, EXIT_SPEND_STOP, EXIT_SPEND_UNKNOWN, scenarioTimeouts, TIMEOUT_MARGIN_MIN, TEST_DEFAULT_TIMEOUT_MIN, TIMEOUT_CAP_FACTOR, ttlProblems, BUILD_ALLOWANCE_MIN, END_ALLOWANCE_MIN, midnightWarning } from '../runner/batch.mjs';
 import { loadScenarios } from '../runner/run.mjs';
 import { crossCheckBatch, isG3Result, INFRA_FAULT_EXIT } from '../runner/lib/g3.mjs';
-import { checkFiles, infraFaultsUnder, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds, smokeBatchesUnder, batchKind } from '../tools/g3-batch-check.mjs';
+import { checkFiles, infraFaultsUnder, resultFilesUnder, jsonFilesUnder, checkEvidenceTree, g3ScenarioIds, smokeBatchesUnder, batchKind, isG4ServiceResult, scenarioGates } from '../tools/g3-batch-check.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BATCH = path.join(HERE, '..', 'runner', 'batch.mjs');
@@ -507,10 +507,43 @@ describe('the G3 gate evidence cross-check: a forged marker is not enough (#122 
         assert.deepEqual(jsonFilesUnder(root).map((p) => path.basename(p)), ['notes.json']);
     });
 
+    test('a G4 service run (#419) is skipped by the tree check; a G4 T rehearsal or anything claiming G3 in g4/ is still checked', () => {
+        const root = fs.mkdtempSync(path.join(os.tmpdir(), 'g4-service-'));
+        const put = (rel, obj) => {
+            fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+            fs.writeFileSync(path.join(root, rel), JSON.stringify(obj));
+        };
+        const service = { gate: 'G4', scenario: 'g4-soak-2h', driver: 'service frcfld via cx23-ctl', service: { goId: 'G4-SOAK-M1-20261108', incident: null }, pass: false };
+        put('g4/m1/result.json', service);
+        const gates = { 'g3-first-night': 'G3', 'g4-soak-2h': 'G4', 'g4-first-night': 'G3' };
+        assert.deepEqual(checkEvidenceTree(root, { g3Scenarios: ['g3-first-night', 'g4-soak-2h'], scenarioGates: gates }), [], 'a G4 service run needs no batch.json');
+        assert.equal(isG4ServiceResult(service), true);
+        // Not skipped, so a missing batch.json is still a problem:
+        for (const [label, r] of [
+            ['a G4 T rehearsal (a driver, no service record)', { gate: 'G4', scenario: 'g4-death-report', driver: 'node mindcraft-driver.mjs' }],
+            ['claims gate G3', { ...service, gate: 'G3' }],
+            ['a g3 scenario under gate G4', { ...service, scenario: 'g3-first-night' }],
+            ['a scenario only the list knows as G3', { ...service, scenario: 'g4-first-night' }],
+            ['no GO id', { ...service, service: { goId: null } }],
+            ['a driver that is not the service', { ...service, driver: 'service frcfld via elsewhere' }],
+            ['gate g4 in lower case', { ...service, gate: 'g4' }],
+        ]) {
+            put('g4/m1/result.json', r);
+            assert.match(checkEvidenceTree(root, { g3Scenarios: ['g3-first-night', 'g4-first-night'], scenarioGates: gates }).join('\n'), /a G3 result that no batch\.json covers/, label);
+        }
+        // A service-shaped result named batch.json is still a problem (it could hide a result).
+        fs.rmSync(path.join(root, 'g4'), { recursive: true });
+        put('g4/m1/batch.json', service);
+        assert.match(checkEvidenceTree(root).join('\n'), /a batch\.json that is itself a G3 result/);
+        // A forged G3 result elsewhere still fails, the exception notwithstanding.
+        put('g3/hand/result.json', res('g3-a', { batch: 'x-1:2' }).result);
+        assert.match(checkEvidenceTree(root).join('\n'), /g3\/hand\/result\.json: a G3 result that no batch\.json covers/);
+    });
+
     test('CI: every G3 result in any *.json under test/evidence/ is covered and vouched for by its batch.json', async (t) => {
         const root = path.join(HERE, '..', 'evidence');
         const g3Scenarios = await g3ScenarioIds();
-        assert.deepEqual(checkEvidenceTree(root, { g3Scenarios }), []);
+        assert.deepEqual(checkEvidenceTree(root, { g3Scenarios, scenarioGates: await scenarioGates() }), []);
         const g3 = resultFilesUnder(root).filter((f) => {
             try {
                 return isG3Result(JSON.parse(fs.readFileSync(f, 'utf8')), g3Scenarios);
