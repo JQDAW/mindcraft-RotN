@@ -62,6 +62,28 @@ test('a random player cannot spoof a giver through the message text, nor a sende
     assert.equal(chatFrom(msg({ translate: PLAYER_CHAT, with: [{ text: 'JQDAW', insertion: 'JQ DAW!' }, '!stop'] }), 'chat'), null);
     assert.equal(chatFrom(msg({ translate: PLAYER_CHAT, with: ['JQDAW'] }), 'chat'), null, 'no message part');
     assert.equal(chatFrom(null, 'chat'), null);
-    assert.equal(senderName('JQDAW'), 'JQDAW');
-    assert.equal(senderName({ text: 'A_very_long_name_17' }), null, 'over 16 characters');
+    assert.equal(senderName({ text: 'JQDAW', insertion: 'JQDAW' }), 'JQDAW');
+    assert.equal(senderName({ text: 'x', insertion: 'A_very_long_name_17' }), null, 'over 16 characters');
 });
+
+test('#400 nit 1: without an insertion only the console\'s exact "Server" is a sender: a command block renamed JQDAW running /tell is ignored', () => {
+    // A command block named "JQDAW" (an anvil-renamed block) runs /tell FRCFLD !stop: its sender is
+    // a plain name, with no insertion (only a player's display name has one).
+    for (const sender of ['JQDAW', { text: 'JQDAW' }, { text: 'JQDAW', clickEvent: { action: 'suggest_command', value: '/msg JQDAW ' } }])
+        assert.equal(chatFrom(msg({ translate: WHISPER_IN, with: [sender, '!stop'] }), 'system'), null, JSON.stringify(sender));
+    assert.equal(senderName('JQDAW'), null);
+    // The console's /tell still works; only the exact name.
+    assert.deepEqual(chatFrom(msg({ translate: WHISPER_IN, with: ['Server', '!stop'] }), 'system'), { kind: 'whisper', username: 'Server', message: '!stop' });
+    assert.deepEqual(chatFrom(msg({ translate: WHISPER_IN, with: [{ text: 'Server' }, '!stop'] }), 'system'), { kind: 'whisper', username: 'Server', message: '!stop' });
+    for (const s of ['server', 'Server ', 'Servers', '[Server]']) assert.equal(senderName(s), null, s);
+    // Player chat needs the insertion too.
+    assert.equal(chatFrom(msg({ translate: PLAYER_CHAT, with: [{ text: 'JQDAW' }, '!stop'] }), 'chat'), null);
+});
+
+test('#400 nit 2: a whisper is accepted only at position system (never chat, game_info or none)', () => {
+    const whisper = () => msg({ translate: WHISPER_IN, with: [player('JQDAW'), '!stop'] });
+    assert.deepEqual(chatFrom(whisper(), 'system'), { kind: 'whisper', username: 'JQDAW', message: '!stop' });
+    for (const pos of ['chat', 'game_info', undefined, null, '']) assert.equal(chatFrom(whisper(), pos), null, String(pos));
+    assert.equal(chatFrom(msg({ translate: WHISPER_IN, with: ['Server', '!stop'] }), 'chat'), null, 'the console too');
+});
+
