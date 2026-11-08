@@ -1,14 +1,33 @@
 # Status: harness-ops
 
-Updated: 2026-11-08 (01:05 UTC, from `date -u`)
+Updated: 2026-11-08 (04:43 UTC, from `date -u`)
 
-## Now: G3 PASSES (lead, after #361). A and D on `0daeef2d` (#353); B and C on `8aaf370c`, rerun after their fixes (#361).
+## Now: G4, offline (no paid run, nothing on the CX23). Waiting for the human's step 0 and a written GO.
+
+- **Merged:**
+  - **#365, the CX23 SSH gate** (ADR 0009). It allows `status`, `start`, `stop`, `metrics BOT` and `journal BOT [--since]` through `sudo -n mindcraft-rotn-ctl`, refuses everything else with exit 126, and logs to syslog under `rotn-ssh-gate`. `deploy/cx23/README.md` has the human's exact G4 step-0 commands.
+  - **#369:** `deploy.sh` deploys only `rotn-v` release tags. Upstream's `v0.1.0` is on develop. The step-0 tag is `rotn-v0.1.1`.
+  - **#371, the service adapter:** `run.mjs --service frcfld` drives the bot through `ssh cx23-ctl`. It is async, needs `ROTN_SERVICE_GO`, never retries a start, and treats exit 126 as an incident.
+  - **#374, `g4-service-reconnect`** (G4 #1): a console kick and a test-server restart must each be followed by an in-process rejoin with the right `agent_process` class, with `NRestarts` unchanged and a clean ctl stop. `effective_settings` checks #325's line.
+  - **#359 and #367:** the Mod Director check follow-ups (`awk ENVIRON`, line breaks, a missing pin fails closed, hashing from stdin, a missing or failing `find` fails closed).
+- **Open:** #379, the #371 and #374 review nits:
+  - no second start for the service;
+  - `stop` retries on 255;
+  - an unknown state after 3 failed status checks;
+  - IPv6 redaction that keeps times;
+  - a reconnect test through the real `serviceBot`.
+- **Next:** the lead's next G4 task. **The step-7 runner, when it starts, gets its own PR for the lead's G4 evidence rule** (2026-11-08). A run counts only if all of these hold, each checked and recorded, otherwise not-gate:
+  - `ROTN_G4_ACCEPT`;
+  - the S service;
+  - one `rotn-v` commit read from the CX23;
+  - the human-confirmed gate and ctl hashes;
+  - a fresh test server, with its host confirmed.
+
+## Earlier: G3 PASSES (lead, after #361). A and D on `0daeef2d` (#353); B and C on `8aaf370c`, rerun after their fixes (#361).
 
 - **The rerun (2026-11-08, the human's GO):** B PASS 5/5 (in its shelter all night, after one unexplained move one block lower), C PASS 7/7 (the task at minute 2.2 while the agenda ran; paused, done, resumed). Spend USD 0.014972; 2 servers, 54 min; all gone (0/0/0). B started after 00:00 UTC (DRIVER.md).
 - **The fixes behind it:** #354 (our C scenario: a 2-min minimum warm-up, the task at the first active-and-progressing moment; an agenda that ends first is an explicit "not reached") and skills-rotn's #355 (B's pillar block; its path was not exercised in the rerun).
-- **Open:**
-  - #359 (the #351 nits: awk ENVIRON, line breaks, a missing pin fails closed; sha256 from stdin);
-  - this wording PR (the gate2 READMEs).
+- **Then open:** #359 (merged since) and the gate2 wording PR (#363, merged).
   - For skills-rotn: B's move one block lower at 00:19:39, and the dawn line "found no safe side to open".
 
 ## Earlier: the first G3 gate batches on `0daeef2d` (#353): A PASS, B FAIL, C FAIL, D PASS.
