@@ -115,6 +115,19 @@ export const SCENARIO_CONSOLE_EXTRA = Object.freeze({
         ...(/^[A-Za-z0-9_]{3,16}$/.test(String(params?.bot ?? '')) ? [new RegExp(`^kick ${esc(String(params.bot))}$`)] : []),
         /^stop$/,
     ],
+    // g4-control-commands (G4 #3; lead, 2026-11-08): the in-game prompts to the trusted player, `say [g4] <printable
+    // text>` (only with that tag), and the distance from the giver (or the bot itself, the probe) to this run's bot:
+    // `execute <giver|bot> ~ ~ ~ testfor @a[name=<bot>,r=<n>]`, with exactly that read-only testfor inside and the exact
+    // names from the parameters (no selector as the executor, no other inner command). The T rehearsal's `tell <bot>
+    // !stop` / `!resume` is G3's `tell`; the S path never sends a tell. Same test-server-only construction as above.
+    'g4-control-commands': (params) => {
+        const named = (n) => /^[A-Za-z0-9_]{3,16}$/.test(String(n ?? ''));
+        const say = /^say \[g4\] [ -~]{1,240}$/;
+        if (!named(params?.bot)) return [say];
+        const bot = esc(String(params.bot));
+        const anchors = [bot, ...(named(params.giver) ? [esc(String(params.giver))] : [])].join('|');
+        return [say, new RegExp(`^execute (${anchors}) ~ ~ ~ testfor @a\\[name=${bot},r=\\d{1,3}\\]$`)];
+    },
     'g4-death-report': (params) => [
         ...(/^[A-Za-z0-9_]{3,16}$/.test(String(params?.bot ?? '')) ? [new RegExp(`^kill ${esc(String(params.bot))}$`)] : []),
         /^scoreboard objectives add [A-Za-z0-9_]{1,16} health$/,

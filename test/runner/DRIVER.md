@@ -518,6 +518,27 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **Not yet decided:** every G4 run is not-gate on a test server (`G4_TEST_SERVER_NOT_GATE`). How an S run becomes G4 evidence is the lead's to set.
 - **Tests:** `test/unit/g4-service-reconnect.test.js` (a simulated server and service, including a log roll-over).
 
+### G4 #3: `g4-control-commands` (offline-built, not yet run)
+
+- **What it shows:** the bot answers a trusted player in chat, comes when called, follows, and stops on `!stop`.
+- **On S:** `ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed run.mjs --scenario g4-control-commands --service frcfld`, with the trusted player on the test server: the human as JQDAW, or a second scripted trusted account (the `giver` parameter, the human's call).
+  - **The scenario gives no command on S.** It prints each step in game (`say [g4] <step>: ...`), waits up to `promptWaitMinutes` (3) for the giver's own chat line, and observes. It never sends a `tell`.
+  - **The giver must be a task giver in the release** (the `[settings] effective task_givers=...` line, #385) and online; it is prompted to join.
+- **On T** (a rehearsal, not-gate): `!stop` only, from the test-only console giver `Server` (the driver's switch; lead). Once the agenda moves the bot (`movingM` in `movingWindowS`, within `movingWaitMinutes`): `tell <bot> !stop`, the stillness window, then `tell <bot> !resume`. Answer, come and follow are "not reached" on T.
+- **The arbiters:**
+  - **Distance:** `execute <giver> ~ ~ ~ testfor @a[name=<bot>,r=N]`. A probe at the start (`execute <bot> ~ ~ ~ testfor @a[name=<bot>,r=2]` must answer `Found <bot>`) shows the server's reply is readable; otherwise every step is "not reached".
+  - **Movement:** the `stat.walkOneCm`, `stat.sprintOneCm` and `stat.swimOneCm` scoreboards, summed, for both players. They are removed at the end.
+  - **Who an answer is for:** agent.js's `<bot> received message from <giver> : <text>` and `<bot> full response to <giver>: ""<text>""`.
+- **The console (this scenario alone, `SCENARIO_CONSOLE_EXTRA`):** `say [g4] <printable text>` and `execute <giver|bot> ~ ~ ~ testfor @a[name=<bot>,r=<n>]`, with the exact names from the parameters and nothing else inside the `execute`.
+- **The checks:**
+  - **`login_online`:** this run's bot (case aside) and an inactive unit (S).
+  - **`chat_answer`:** the giver asks a question (no `!command`). Within `answerS` (90) the bot's log has the question received from the giver and a full response to the giver, and the bot's chat line after the question is that response (its text before any command).
+  - **`come`:** the server confirms the giver is at least `comeFromBlocks` (20) away; the giver calls (`"<bot>, come here"` or `!goToPlayer`). Within `comeMinutes` (2) the bot is within `comeWithinBlocks` (4) of the giver. A giver who moved more than `comeGiverSlackM` (5) meanwhile is "not reached (human timing)".
+  - **`follow`:** the giver asks (`"<bot>, follow me"` or `!followPlayer`) and walks on for `followMinutes` (2). Polled every `followPollS` (10) after `followGraceS` (20): within `followWithinBlocks` (8) at `followInRangeShare` (66%) of the polls, and the bot moved at least `followBotShare` (50%) of the giver's distance. A giver who walked less than `followGiverWalkM` (20) is "not reached".
+  - **`stop`:** the giver types `!stop` and keeps walking. After `stopSettleS` (5), for `stopHoldS` (30), the bot moves at most `stopSlackM` (2 m) while the giver walks at least `stopGiverWalkM` (8 m); a typed `!stop` also needs the hold reply (`stopped; on hold until a task giver types !resume`). The bot must have moved `movingM` (3) in the follow's last `movingWindowS` (30), or the stop proves nothing ("not reached").
+- **Human timing:** a step the giver does not start in time, or a giver who does not do their part, is "not reached (human timing, not a bot result)", never a bot fail. The run ends by asking the giver to type `!resume` (noted).
+- **Tests:** `test/unit/g4-control.test.js`: a simulated server, a scripted trusted player who follows the prompts, and a simulated bot (S and T).
+
 ### G4 #11: `g4-restart-persistence` (agenda half; offline-built, not yet run)
 
 - **What it shows:** the agenda survives a stop and start of the bot and resumes, with no step done twice. Where a giver can queue a task, a running task resumes too. #327 made both say `(resumed after a restart)`.
