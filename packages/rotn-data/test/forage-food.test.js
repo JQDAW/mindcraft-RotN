@@ -260,7 +260,18 @@ test('mushrooms: not food raw; smelting makes them food', () => {
         assert.deepEqual(r.food, []);
         assert.equal(r.cook.length, 1);
         assert.ok(pack.foodValues(r.cook[0].output.name), r.cook[0].output.name);
+        assert.deepEqual(r.cook[0].avoid, pack.avoidFood(r.cook[0].output.name));
     }
+    // Better With Addons (in the pinned zip): the baked mushroom is plain food, the baked amanita always poisons.
+    const bwa = section('Better With Addons ModItems');
+    assert.match(bwa, /String food_mushroom_baked\n[^\n]*ItemFood\n[^\n]*dup\n[^\n]*iconst_3\n[^\n]*float 0\.2f\n[^\n]*iconst_0\n[^\n]*ItemFood\."<init>":\(IFZ\)V\n[^\n]*registerItem/);
+    assert.match(bwa, /String food_amanita_baked\n[^\n]*ItemFood\n[^\n]*dup\n[^\n]*iconst_3\n[^\n]*float 0\.2f\n[^\n]*iconst_0\n[^\n]*ItemFood\."<init>":\(IFZ\)V\n[^\n]*PotionEffect\n[^\n]*dup\n[^\n]*MobEffects\.field_76436_u[^\n]*\n[^\n]*bipush +100\n[^\n]*iconst_0\n[^\n]*PotionEffect\."<init>"[^\n]*\n[^\n]*fconst_1\n[^\n]*func_185070_a/);
+    assert.deepEqual(pack.avoidFood('betterwithaddons:food_amanita_baked').effects, [{ effect: 'poison', seconds: 100 / 20, level: 0 + 1, chance: 1 }]);
+    assert.equal(pack.avoidFood('betterwithaddons:food_mushroom_baked'), null);
+    assert.ok(pack.forageFood('minecraft:red_mushroom').cook[0].avoid);
+    assert.equal(pack.forageFood('minecraft:brown_mushroom').cook[0].avoid, null);
+    const mods = JSON.parse(fs.readFileSync(path.join(HERE, '../3.3.4/manifest.json'), 'utf8')).mods;
+    assert.ok(mods.some((m) => m.id === 'betterwithaddons' && m.version === '0.51'));
 });
 
 test('forageFood, forageSources and forageHazard', () => {
@@ -287,8 +298,10 @@ test('forageFood, forageSources and forageHazard', () => {
     assert.equal(pack.forageFood('minecraft:dirt'), null);
     const ginseng = pack.forageFood('rustic:ginseng', 3);
     assert.deepEqual(ginseng.break.drops, [{ name: 'rustic:ginseng', meta: 0, mean: Math.round((1 + 2 * 4 / 6) * 10000) / 10000, max: 3 }]);
+    // A young herb: breaking is possible ('break') but wasteful; ready says to leave it.
     const young = pack.forageFood('rustic:ginseng', 0);
-    assert.deepEqual([young.ready, young.break.drops[0].mean], [false, 1]);
+    assert.deepEqual([young.how, young.ready, young.break.drops[0].mean], ['break', false, 1]);
+    assert.ok(!pack.forageSources().find((x) => x.id === 'ginseng').readyMetas.includes(0));
     const garden = pack.forageFood('harvestcraft:windygarden');
     assert.equal(garden.break.notWhileSneaking, true);
     assert.ok(garden.food.some((f) => f.name === 'minecraft:carrot'));
