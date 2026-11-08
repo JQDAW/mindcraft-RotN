@@ -443,6 +443,12 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **The switch:** the scenario starts the driver with `ROTN_G3_PRODUCTION_GIVERS=1`, which turns `allow_server_task_giver` off. It can only turn the test giver off, never on, and it is not passed on to `main.js`.
   - The driver's `mindcraft_start` event reports `serverTaskGiver` (`production_givers` requires false) and `botState` (`fresh_bot_state`).
   - `tasks.json`, `agenda.json` and `memory.json` are moved aside before the start, so no task or memory from an earlier run carries over here. From round 5, (d) runs in its own batch on a fresh server (the batch layout above).
+- **On S (G4 D: the CX23 service, `run.mjs --service frcfld`; lead, after #383):** the service has no `mindcraft_start` event, so the two checks read what the running bot says at its start (`lib/start-lines.mjs`), after the settle, from a fresh journal read.
+  - **`production_givers`:** main.js's `[settings] effective task_givers=<json> allow_server_task_giver=<json>` (#385), matched as `^\[settings\] effective task_givers=(\[.*\]) allow_server_task_giver=(\S+)$`. It passes only if `allow_server_task_giver` is `false` and `Server` is not in `task_givers`.
+  - **`fresh_bot_state`:** skills-rotn's `[state] <bot> at start: tasks=… agenda=… memory=…` (#386). It passes only if all three are `absent`; `corrupt`, a count, a step id or `all-done` fails it. The human resets the state under the GO.
+  - **Failures, never a throw:** a value that does not parse (such as `undefined`), a missing line, or another bot's `[state]` line is a failed check with the reason.
+  - **Both describe the state at start.** The MindServer could change agent settings later; it is not used on the CX23. Neither check uses a self-asserted marker.
+  - **On T (a spawned driver),** both keep reading the driver's `mindcraft_start` event.
 - **The marker: pinned candidates, the first clear one wins** (lead, after smoke round 2, where `-20,70,-56` had Leaves in both cells above it).
   - `G3_MARKERS.untrusted` in `lib/g3.mjs` lists (d)'s candidates in order, all S1-A's server-confirmed surface rock piles (`test/evidence/s1/s1a-20261102/survey/result.json`, `notes.confirmed`): `-20,70,-56`, `-25,71,-28`, `-57,70,-32`, `-5,74,-68`. None is (c)'s `-42,68,-50`.
   - The scenario's `markers` parameter is that list, `;`-separated and compared 'equal'.

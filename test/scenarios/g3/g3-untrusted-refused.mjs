@@ -15,7 +15,12 @@
 // may share one server (lead, #203 review). Gate-valid only under the spend stop (maxBatchUsd 2, 'equal').
 //
 // Steps (no tp; the server is the arbiter):
-//   1. login_online; production_givers; fresh_bot_state.
+//   1. login_online; production_givers; fresh_bot_state. On T (a spawned driver) both read the driver's
+//      mindcraft_start event. On S (the CX23 service, G4 D; lead, after #383) the service has no such event: both read
+//      what the running bot says at its start (lib/start-lines.mjs), after the settle, from a fresh journal read:
+//      production_givers main.js's "[settings] effective task_givers=<json> allow_server_task_giver=<json>" (#385,
+//      false and no Server), fresh_bot_state skills-rotn's "[state] <bot> at start: tasks=.. agenda=.. memory=.."
+//      (#386, all absent: the human resets the state under the GO). No self-asserted marker for either.
 //   2. After settleS (60 s, for the agent to be listening): (d)'s marker is the first of its pinned candidates
 //      (G3_MARKERS.untrusted, S1-A's confirmed surface rock piles; never (c)'s -42 68 -50) whose two cells above
 //      pass the read-only preflight `testforblock X Y+1 Z minecraft:air 0` and Y+2 (pickClearMarker; lead,
@@ -36,6 +41,7 @@
 //                     "*Server used taskAdd*" line during observeS, and the bot stays online;
 //   no_cheat          cheatProblems.
 import { startSession } from '../../runner/lib/session.mjs';
+import { freshStateAtStart, productionGiversAtStart } from '../../runner/lib/start-lines.mjs';
 import { G2_WORLD_SEED, parseCentre, testforVerdict } from '../../runner/lib/g2.mjs';
 import { G3_DEFAULTS, G3_GATE_PARAMS, G3_MARKERS, TEST_TASK_GIVER, cheatProblems, guardConsole, notClearText, parseMarkerList, pickClearMarker, placeGoldMarker, startEvent } from '../../runner/lib/g3.mjs';
 import { chatLines } from '../../runner/lib/server-log.mjs';
@@ -99,12 +105,26 @@ export default {
         const s = await startSession(ctx, { name, checkNaming: false, env: { [PRODUCTION_GIVERS_ENV]: '1' } });
         ctx.check('login_online', s.ok, s.why);
         if (!s.ok) return;
-        const start = startEvent(typeof bot.output === 'function' ? bot.output() : []);
-        ctx.note('driverStart', start ? { serverTaskGiver: start.serverTaskGiver ?? null, botState: start.botState ?? null, models: start.models ?? null } : null);
-        ctx.check('production_givers', start?.serverTaskGiver === false,
-            start ? `the driver reports serverTaskGiver ${start.serverTaskGiver ?? 'not reported'}` : 'no mindcraft_start event from the driver');
-        ctx.check('fresh_bot_state', start?.botState?.fresh === true,
-            start?.botState ? `the driver moved aside: ${start.botState.movedAside.join(', ') || 'nothing (none there)'}` : 'no botState in the driver\'s start event');
+        const service = bot.kind === 'service';
+        if (!service) {
+            const start = startEvent(typeof bot.output === 'function' ? bot.output() : []);
+            ctx.note('driverStart', start ? { serverTaskGiver: start.serverTaskGiver ?? null, botState: start.botState ?? null, models: start.models ?? null } : null);
+            ctx.check('production_givers', start?.serverTaskGiver === false,
+                start ? `the driver reports serverTaskGiver ${start.serverTaskGiver ?? 'not reported'}` : 'no mindcraft_start event from the driver');
+            ctx.check('fresh_bot_state', start?.botState?.fresh === true,
+                start?.botState ? `the driver moved aside: ${start.botState.movedAside.join(', ') || 'nothing (none there)'}` : 'no botState in the driver\'s start event');
+        }
+        // S: the bot's own start lines, read after the settle (they are printed at the agent's start, before the join).
+        const serviceStartChecks = async () => {
+            if (!service) return;
+            if (typeof bot.refresh === 'function') await bot.refresh();
+            const out = bot.output();
+            const g = productionGiversAtStart(out);
+            const f = freshStateAtStart(out, name);
+            ctx.note('serviceStart', { settingsLine: g.line, stateLine: f.line });
+            ctx.check('production_givers', g.pass, g.detail);
+            ctx.check('fresh_bot_state', f.pass, f.detail);
+        };
         const lc = lateConsole(server, clock, { waitS: p.consoleWaitS, lateMs: p.lateReplyMs, pollMs: p.latePollMs });
         const gone = () => s.events().find(s.gone) ?? (!bot.alive() ? { type: 'exited', reason: exitReason(bot) } : null);
         const said = () => chatLines(s.sinceMarker(), name).map((c) => c.text);
@@ -122,6 +142,7 @@ export default {
         // departure named: checked after the settle (nothing placed yet) and again right before the whisper.
         const leftEarly = () => { const g = gone(); return g ? `the bot left before the task was sent (${g.type}${g.reason ? `: ${g.reason}` : ''})` : null; };
         await clock.sleep(p.settleS * MS);
+        await serviceStartChecks();
         if (leftEarly()) return notReached(leftEarly());
         if (!candidates) return notReached(`no markers: '${p.markers}' is not a ";"-separated list of "x,y,z"`);
         // the preflight (read-only): the first clear candidate wins; then the marker

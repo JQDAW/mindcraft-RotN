@@ -19,6 +19,7 @@ Steps:
    - Quality gates: always flag, as a separate finding, any change to:
      - `test/lint-baseline.json` or `test/tools/lint-baseline.mjs`;
      - `.github/workflows/`, `eslint.config.js`, `package.json` scripts or `patches/`;
+     - the secret scan: `test/tools/secret-scan.mjs` or its allowlist `test/tools/secret-scan-allow.txt` (every added allowlist entry needs a reason in the PR body; it silences a finding);
      - any new `eslint-disable` comment.
 
      Say whether the change weakens a gate. Raising the lint baseline needs a lead approval cited in the PR body.
