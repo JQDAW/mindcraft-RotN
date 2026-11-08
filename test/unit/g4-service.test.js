@@ -9,7 +9,8 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { GateRefusal, HOST, SSH_OPTS, keptStderr, linesFromStart, parseJournalLine, parseMetrics, serviceBot, sinceStamp } from '../runner/lib/service.mjs';
+import { GateRefusal, HOST, SSH_OPTS, STATUS_FAIL_LIMIT, keptStderr, linesFromStart, parseJournalLine, parseMetrics, redactAddresses, serviceBot, sinceStamp } from '../runner/lib/service.mjs';
+import { startSession } from '../runner/lib/session.mjs';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { parseArgs } from '../runner/run.mjs';
 
@@ -18,6 +19,9 @@ const SRC = fs.readFileSync(path.join(here, '..', 'runner', 'lib', 'service.mjs'
 const T0 = Date.parse('2026-11-08T12:00:00Z');
 const stamp = (ms) => new Date(ms).toISOString().slice(0, 19) + '+0000';
 const GO = { ROTN_SERVICE_GO: 'g4-s1-20261108:test-server-host-confirmed' };
+// Addresses built at run time, so the source holds only <ip>-style placeholders (#371 review): an IPv4 and an IPv6.
+const IP4 = ['192', '0', '2', '7'].join('.');
+const IP6 = ['fd00', '', '7'].join(':');
 
 /** A fake CX23 behind ssh. opts.refuse(verb) -> 126; opts.fail(verb) -> 255 (opts.failTimes of them); opts.ctl2(verb) -> 2; opts.hold(verb) -> held until released. */
 function fakeCx23(opts = {}) {
@@ -231,7 +235,7 @@ describe('the service adapter: refusals and failures', () => {
         assert.equal(s.needsStop(), true, 'a start was sent: the cleanup still stops');
     });
 
-    test('#371 review 2: start and stop are never retried on 255 (state unknown); the reads are retried twice', async () => {
+    test('#371 review 2: start is never retried on 255 (state unknown); the reads and stop are retried twice', async () => {
         const cx = fakeCx23({ fail: (v) => v === 'start' });
         const b = mk(cx);
         await b.start();
@@ -243,11 +247,19 @@ describe('the service adapter: refusals and failures', () => {
         await b.stop();
         assert.ok(cx.verbs().includes('stop'), 'the stop is still sent after a failed start');
         assert.equal(cx.verbs().filter((v) => v === 'start').length, 1, 'never a second start');
-        const cs = fakeCx23({ fail: (v) => v === 'stop' });
+        // stop is idempotent in systemd: up to 2 retries on 255 (#371 review); a third 255 is an error.
+        const cs = fakeCx23({ fail: (v) => v === 'stop', failTimes: 2 });
         const s = mk(cs);
         await s.start();
-        await assert.rejects(() => s.stop(), /service stop: 'stop frcfld' exited 255/);
-        assert.equal(cs.verbs().filter((v) => v === 'stop').length, 1, 'stop not retried');
+        await s.stop();
+        assert.equal(cs.verbs().filter((v) => v === 'stop').length, 3, 'two retries, then the stop went through');
+        assert.equal(s.needsStop(), false);
+        const c3 = fakeCx23({ fail: (v) => v === 'stop', failTimes: 3 });
+        const s3 = mk(c3);
+        await s3.start();
+        await assert.rejects(() => s3.stop(), /service stop: 'stop frcfld' exited 255/);
+        assert.equal(c3.verbs().filter((v) => v === 'stop').length, 3);
+        assert.equal(c3.verbs().filter((v) => v === 'start').length, 1, 'a start is never sent twice');
         const reads = fakeCx23({ fail: (v) => v === 'metrics', failTimes: 2 });
         const r = mk(reads);
         assert.equal((await r.metrics()).ActiveState, 'inactive');
@@ -258,12 +270,15 @@ describe('the service adapter: refusals and failures', () => {
 
     test('#371 review 5: ssh\'s own stderr is never kept (hosts, addresses); the gate\'s and the ctl\'s lines are, addresses redacted', async () => {
         assert.equal(keptStderr('ssh: connect to host cx23.example.net port 22: Connection timed out', 255), '(ssh failed; its stderr is not kept)');
-        assert.equal(keptStderr("Warning: Permanently added '203.0.113.7' (ED25519) to the list of known hosts.\nmindcraft-rotn-ctl: no env file for 'frcfld'", 2),
+        assert.equal(keptStderr(`Warning: Permanently added '${IP4}' (ED25519) to the list of known hosts.\nmindcraft-rotn-ctl: no env file for 'frcfld'`, 2),
             "mindcraft-rotn-ctl: no env file for 'frcfld' (1 other stderr line not kept)");
-        assert.equal(keptStderr('rotn-ssh-gate: refused from 203.0.113.7 and 2001:db8::1', 126), 'rotn-ssh-gate: refused from <ip> and <ip>');
+        assert.equal(keptStderr(`rotn-ssh-gate: refused from ${IP4} and ${IP6}`, 126), 'rotn-ssh-gate: refused from <ip> and <ip>');
+        // A time is not an address (#371 review: the IPv6 pattern took 12:34:56).
+        assert.equal(redactAddresses(`mindcraft-rotn-ctl: at 12:34:56 and 2026-11-08T00:00:30Z, from ${IP6}`), 'mindcraft-rotn-ctl: at 12:34:56 and 2026-11-08T00:00:30Z, from <ip>');
+        assert.equal(redactAddresses('12:34 1:2:3 ab:cd:ef'), '12:34 1:2:3 ab:cd:ef', 'not IPv6 by node\'s own parser');
         const cx = fakeCx23({ ctl2: (v) => v === 'metrics' });
         await assert.rejects(() => mk(cx).metrics(), (e) => !(e instanceof GateRefusal) && /exited 2 \(the ctl refused it\): mindcraft-rotn-ctl: no env file/.test(e.message)
-            && !/example\.net|203\.0\.113/.test(e.message));
+            && !/example\.net/.test(e.message) && !e.message.includes(IP4));
         const c255 = fakeCx23({ fail: (v) => v === 'metrics' });
         await assert.rejects(() => mk(c255).metrics(), (e) => !/example\.net|connect to host/.test(e.message));
     });
@@ -321,7 +336,69 @@ describe('run.mjs --service', () => {
     test('#371 review 9: the result records the driver as "service <bot> via cx23-ctl", with the GO id and any incident', () => {
         const src = fs.readFileSync(path.join(here, '..', 'runner', 'run.mjs'), 'utf8');
         assert.match(src, /const driverName = o\.service !== null \? `service \$\{o\.service\} via \$\{HOST\}` : o\.driver\.join\(' '\);/);
-        assert.match(src, /driver: driverName \},\n\s+bot\.kind === 'service' \? \{ service: \{ goId: bot\.goId \?\? null, startError: bot\.startError \?\? null, incident: bot\.incident \?\? null \} \} : \{\},/);
+        assert.match(src, /driver: driverName \},\n\s+bot\.kind === 'service' \? \{ service: \{ goId: bot\.goId \?\? null, startError: bot\.startError \?\? null, incident: bot\.incident \?\? null, stateUnknown: bot\.stateUnknown \?\? null \} \} : \{\},/);
         assert.match(src, /log\(`INCIDENT: \$\{bot\.incident\}`\);\n\s+addNotGate\(result, `an ADR 0009 incident: \$\{bot\.incident\}`\);/);
+    });
+
+});
+
+describe('#371 review 3: alive() reports the state unknown when status checks keep failing', () => {
+    test(`after ${STATUS_FAIL_LIMIT} failed background refreshes in a row: not alive, unitState 'unknown', stateUnknown recorded; a good one recovers`, async () => {
+        const cx = fakeCx23();
+        const b = mk(cx, { statusRefreshMs: 10000 });
+        await b.start();
+        b.alive();
+        await b.settle();
+        assert.equal(b.unitState(), 'activating');
+        let failing = true;
+        const real = cx.exec;
+        const exec = (prog, argv, o) => (failing && argv[SSH_OPTS.length + 1] === 'metrics'
+            ? Promise.resolve({ code: 2, stdout: '', stderr: 'mindcraft-rotn-ctl: no env file\n' }) : real(prog, argv, o));
+        const b2 = serviceBot('frcfld', null, { exec, env: GO, now: () => cx.clock.t, sleep: () => Promise.resolve(), statusRefreshMs: 10000 });
+        await b2.start();
+        for (let i = 1; i <= STATUS_FAIL_LIMIT; i++) {
+            cx.clock.t += 10000;
+            const up = b2.alive();
+            await b2.settle();
+            if (i < STATUS_FAIL_LIMIT) assert.equal(up, true, `failure ${i}: the last state stands for now`);
+        }
+        assert.equal(b2.alive(), false, 'never a stale active');
+        assert.equal(b2.unitState(), 'unknown');
+        assert.equal(b2.stateUnknown.failures, STATUS_FAIL_LIMIT);
+        assert.match(b2.stateUnknown.lastError, /the ctl refused it/);
+        failing = false;
+        cx.clock.t += 10000;
+        b2.alive();
+        await b2.settle();
+        assert.equal(b2.alive(), true, 'a good refresh recovers');
+        assert.ok(['activating', 'active'].includes(b2.unitState()), b2.unitState());
+    });
+});
+
+describe('#371 review 1 and 6: startSession and the service', () => {
+    const NAME = 'FRCFLD';
+    const mkServer = () => {
+        const log = [];
+        return {
+            console(cmd) { const m = /^say (.*)$/.exec(cmd); if (m) log.push(`[12:00:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [Server] ${m[1]}`); if (cmd === 'seed') log.push('[12:00:00] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Seed: 1'); return log.slice(-1); },
+            log: () => log,
+        };
+    };
+    test('a service whose start fails before joining: one start only (no login retry), and the reason names the unit, not an exit code', async () => {
+        const calls = [];
+        const bot = {
+            kind: 'service', start() { calls.push('start'); }, alive: () => false, exitCode: () => null, unitState: () => 'failed',
+            startError: 'service start: \'start frcfld\' exited 1 (the unit\'s state is unknown)',
+            output: () => [`Error: Failed to obtain profile data for ${NAME}, does the account own minecraft?`],
+        };
+        const notes = {};
+        const ctx = { server: mkServer(), bot, clock: { now: () => 0, sleep: () => Promise.resolve() }, params: { consoleWaitS: 0, logTail: 100, loginTimeoutMs: 1000, pollMs: 100 },
+            runId: 'r', note: (k, v) => { notes[k] = v; }, notGate: () => {}, waitFor: (fn) => Promise.resolve(fn()) };
+        const s = await startSession(ctx, { name: NAME, checkNaming: false });
+        assert.deepEqual(calls, ['start'], 'never a second start for the service');
+        assert.equal(notes.loginRetry.retried, false);
+        assert.equal(s.ok, false);
+        assert.equal(s.why, "the service was not up before joining (unit failed; service start: 'start frcfld' exited 1 (the unit's state is unknown))");
+        assert.doesNotMatch(s.why, /code null/);
     });
 });

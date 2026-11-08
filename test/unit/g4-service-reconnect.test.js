@@ -7,6 +7,7 @@ import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { consoleAllowFor } from '../runner/lib/g3.mjs';
 import reconnect, { restartLines } from '../scenarios/g4/g4-service-reconnect.mjs';
+import { SSH_OPTS, serviceBot } from '../runner/lib/service.mjs';
 
 const NAME = 'FRCFLD';
 const S = 1000;
@@ -31,12 +32,13 @@ function sim(opt = {}) {
     let rolled = [];     // the rolled-over file after a restart (opt.rotate)
     let log = [];
     const journal = [];
+    const journalAt = [];   // the sim time of each journal line (for the serviceBot test's fake journalctl)
     const sent = [];
     const unit = { state: opt.activeAtStart ? 'active' : 'inactive', nrestarts: 0 };
     const pending = [];  // [atMs, fn]
     const at = (ms, fn) => pending.push([ms, fn]);
     const add = (msg) => log.push(line(t, msg));
-    const jr = (msg) => journal.push(msg);
+    const jr = (msg) => { journal.push(msg); journalAt.push(t); };
     let online = false;
     const join = () => {
         online = true;
@@ -111,7 +113,7 @@ function sim(opt = {}) {
         },
     };
     const clock = { now: () => t, sleep: async (ms) => { t += ms; advance(); for (let i = 0; i < 3; i++) await tick(); } };
-    return { server, bot, clock, sent, unit, journal };
+    return { server, bot, clock, sent, unit, journal, journalAt };
 }
 
 const run = (s, params = {}) => runScenario(reconnect, { ...s, runId: 'r1', params: { consoleWaitS: 0, ...params } });
@@ -255,5 +257,63 @@ describe('g4-service-reconnect on a simulated server and service', () => {
         const none = byName(await run(sim({ noSettings: true })));
         assert.equal(none.effective_settings.pass, false);
         assert.match(none.effective_settings.detail, /^no "\[settings\] effective allow_insecure_coding=" line within 60 s of the join$/);
+    });
+
+});
+
+describe('#374 review: the scenario through the real serviceBot (a fake exec), so its forced journal reads are exercised', () => {
+    test('every check passes, and the last remote call before the kick, the server restart and the stop is a journal read', async () => {
+        const T0 = Date.parse('2026-11-08T12:00:00Z');
+        const s = sim();
+        const ops = [];
+        const iso = (ms) => new Date(T0 + ms).toISOString().slice(0, 19) + '+0000';
+        const exec = async (prog, argv) => {
+            const [verb] = argv.slice(SSH_OPTS.length + 1);
+            ops.push(`ssh:${verb}`);
+            if (verb === 'start') { s.bot.start(); return { code: 0, stdout: '', stderr: '' }; }
+            if (verb === 'stop') { await s.bot.stop(); return { code: 0, stdout: '', stderr: '' }; }
+            if (verb === 'metrics') {
+                const m = s.bot.metrics();
+                return { code: 0, stdout: Object.entries(m).map(([k, v]) => `${k}=${v}`).join('\n') + '\n', stderr: '' };
+            }
+            if (verb === 'journal') {
+                s.bot.output();   // let the sim run its pending events first
+                const out = s.journal.map((msg, i) => `${iso(s.journalAt[i])} ${msg.startsWith('Starting ') ? 'systemd[1]' : 'node[123]'}: ${msg}`);
+                return { code: 0, stdout: out.join('\n') + '\n', stderr: '' };
+            }
+            return { code: s.unit.state === 'active' ? 0 : 3, stdout: '', stderr: '' };
+        };
+        const server = {
+            console: (cmd, w) => { ops.push(`console:${cmd}`); return s.server.console(cmd, w); },
+            log: (n) => s.server.log(n),
+            logRotated: (n) => s.server.logRotated(n),
+            restart: (sec) => { ops.push('restart'); return s.server.restart(sec); },
+        };
+        const svc = serviceBot('frcfld', null, { exec, env: { ROTN_SERVICE_GO: 'g4-test:test-server-host-confirmed' }, now: () => T0 + s.clock.now(),
+            sleep: (ms) => s.clock.sleep(ms), statusRefreshMs: 10000, journalRefreshMs: 15000 });
+        // The real adapter, with the scenario's own refresh() completions and output() reads recorded in the same log.
+        const bot = new Proxy(svc, {
+            get(target, prop) {
+                if (prop === 'refresh') return async () => { await target.refresh(); ops.push('refresh-done'); };
+                if (prop === 'output') return () => { ops.push('output'); return target.output(); };
+                if (prop === 'stop') return () => { ops.push('stop'); return target.stop(); };
+                const v = Reflect.get(target, prop, target);
+                return typeof v === 'function' ? v.bind(target) : v;
+            },
+        });
+        const r = await runScenario(reconnect, { server, bot, clock: s.clock, runId: 'r1', params: { consoleWaitS: 0 } });
+        const c = byName(r);
+        for (const k of Object.keys(reconnect.checks)) assert.equal(c[k].pass, true, `${k}: ${c[k].detail} ${r.error ?? ''}`);
+        // Each count (r1 before the kick, r2 before the restart, r3 before the stop) is an output() read right after a
+        // finished refresh(): the scenario's own reads, ssh calls and background refreshes aside.
+        const readsBefore = (op) => {
+            const i = ops.indexOf(op);
+            assert.ok(i > 0, `${op} happened`);
+            return ops.slice(0, i).filter((o) => o === 'refresh-done' || o === 'output').slice(-2);
+        };
+        assert.deepEqual(readsBefore(`console:kick ${NAME}`), ['refresh-done', 'output'], 'r1 counted after a forced read');
+        assert.deepEqual(readsBefore('restart'), ['refresh-done', 'output'], 'r2 counted after a forced read');
+        assert.deepEqual(readsBefore('stop'), ['refresh-done', 'output'], 'r3 counted after a forced read');
+        assert.equal(ops.filter((o) => o === 'ssh:start').length, 1, 'one start');
     });
 });
