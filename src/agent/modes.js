@@ -7,7 +7,9 @@ import * as names112 from './library/names112.js';
 import * as threats from './library/threats.js';
 import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
-import { REPAIR_LABEL } from './library/night.js';
+import { REPAIR_LABEL, nightPhase, minutesToSunset } from './library/night.js';
+import { RESERVE_LEAD_MIN } from './agenda.js';
+import { huntTarget, knownBases } from './library/hunting.js';
 import { isFalling } from './library/shelter.js';
 import { fallingTreeNear } from './library/felling.js';
 
@@ -77,6 +79,14 @@ let shelterSaidAt = -Infinity;
  * the bot in a cell that drowns, suffocates or burns it. Between tries (no job, #355 re-review) the
  * bot fights in place and eats as in any shelter: cowardice and the flee are quiet there too.
  */
+/** G4 #5: the food reserve's rule (food.foodShortfall) says the bot is short of food now. */
+export function foodDue(agent) {
+    const bot = agent.bot;
+    const t = bot?.time?.timeOfDay;
+    return food.foodShortfall({ food: bot?.food, held: food.heldFoodHunger(bot), minutesToSunset: Number.isFinite(t) ? minutesToSunset(t) : Infinity,
+        finished: !!agent.agenda?.finished, reserveLeadMin: RESERVE_LEAD_MIN }) !== null;
+}
+
 function nightRoutineBusy(agent) {
     return agent.actions.currentActionLabel === REPAIR_LABEL || (!!agent._night?.leaveFrom && !!agent._night?.job);
 }
@@ -454,18 +464,32 @@ const modes_list = [
     },
     {
         name: 'hunting',
-        description: 'Hunt nearby animals when idle.',
+        description: 'Hunt a wild animal for food when food is short, by day, with no threat near, when idle. Never one that may belong to a player.',
         interrupts: ['action:followPlayer'],
         on: true,
         active: false,
+        skipped_said: '',
         update: async function (agent) {
-            const huntable = world.getNearestEntityWhere(agent.bot, entity => mc.isHuntable(entity), 8);
-            if (huntable && await world.isClearPath(agent.bot, huntable)) {
-                execute(this, agent, async () => {
-                    say(agent, `Hunting ${huntable.name}!`);
-                    await skills.attackEntity(agent.bot, huntable);
-                });
-            }
+            // G4 #5 (CX23 soak m1: food fell to 1, nothing got food): only when the food reserve is
+            // due (food.foodShortfall), in full daylight, with no threat near, idle, not sheltered;
+            // never an animal that may belong to a player (hunting.js, the lead's hard rule).
+            const bot = agent.bot;
+            if (!foodDue(agent) || bot.rotnSheltered || !agent.isIdle()) return;
+            const t = bot.time?.timeOfDay;
+            if (!Number.isFinite(t) || nightPhase(t) !== 'day') return;
+            let threatened = true;
+            try { threatened = !!threats.threatPlan(bot); } catch { threatened = true; }
+            if (threatened) return;
+            const skipped = [];
+            const target = huntTarget(bot, { bases: knownBases(agent), skipped });
+            const said = skipped.join('; ');
+            if (said && said !== this.skipped_said) console.log(`[reflex] hunting: left alone, it may belong to a player: ${said}`);
+            this.skipped_said = said;
+            if (!target || !await world.isClearPath(bot, target)) return;
+            execute(this, agent, async () => {
+                say(agent, `Hunting ${target.name} for food!`);
+                await skills.attackEntity(bot, target);
+            });
         }
     },
     {

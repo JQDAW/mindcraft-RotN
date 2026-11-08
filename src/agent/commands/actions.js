@@ -9,6 +9,7 @@ import { nightPhase } from '../library/night.js';
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
 import { threatFor, hurtBy } from '../library/threats.js';
+import { mayBelongToPlayer, knownBases } from '../library/hunting.js';
 import { parseStandOn } from '../library/stand_on.js';
 
 /** Modes that keep the bot alive: only a task giver who types !setMode may turn them off (CX23 soak). */
@@ -501,6 +502,21 @@ export const actionsList = [
             const mob = world.getNearbyEntities(agent.bot, 24).find(e => e.name === type);
             if (mob && threatFor(mob)?.reaction === 'ignore-unless-provoked' && !hurtBy(agent.bot, mob)) {
                 skills.log(agent.bot, `Not attacking ${type}: it attacks only when hurt, and it has not hurt you. Leave it alone; if it attacks you, the bot defends itself.`);
+                return;
+            }
+            // G4 #5 (the lead's hard rule for the live server): never an animal that may belong to a
+            // player (a name tag, tamed, leashed, near player-built blocks or a known base). Of this
+            // type, the nearest one that is not; none: refused, with why.
+            if (mob && threatFor(mob)?.reaction === 'ignore') {
+                const skipped = [];
+                const bases = knownBases(agent);
+                const free = world.getNearbyEntities(agent.bot, 24).filter(e => e.name === type)
+                    .find(e => { const why = mayBelongToPlayer(agent.bot, e, { bases }); if (why) skipped.push(why); return !why; });
+                if (!free) {
+                    skills.log(agent.bot, `Not attacking ${type}: it may belong to a player (${[...new Set(skipped)].join('; ')}). Find a wild one away from fences, farms and houses.`);
+                    return;
+                }
+                await skills.attackEntity(agent.bot, free, true);
                 return;
             }
             await skills.attackNearest(agent.bot, type, true);

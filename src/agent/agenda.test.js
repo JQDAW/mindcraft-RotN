@@ -10,7 +10,9 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS } from './agenda.js';
+import { Vec3 } from 'vec3';
+import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
 import { agendaTick, agendaState, agendaGoal, TICK_MS, BACKOFF_MS, STEP_LLM_MS } from './agenda_driver.js';
 import { Agent } from './agent.js';
@@ -528,5 +530,71 @@ test('CX23 soak: at the morning freeze the reserve says the minutes left with th
     assert.equal(at(2_000_000, 2_000_000 - 30 * 60_000), String(Math.round(base - 6)));
     assert.equal(sunsetEstimateMin(MORNING_FREEZE, 0), minutesToSunset(MORNING_FREEZE) + FREEZE_MIN);
     assert.equal(sunsetEstimateMin(dayAt(5), 3), minutesToSunset(dayAt(5)), 'away from the freeze: unchanged');
+});
+
+// G4 #5 (CX23 soak m1, test/evidence/g4/g4soak-m1-20261108): the agenda was done after 8.5 min,
+// nothing then got food, and food fell to 1 (food_floor and ate_when_low failed). The food reserve:
+// after the shelter reserve and before the step, after "agenda done" too, with its own budget.
+function foodAgent(t, items, { food = 12, timeOfDay = 1000, finished = true, now = () => Date.now(), entities = {} } = {}) {
+    const agent = fakeAgent(t, items);
+    agent.agenda = new Agenda('FRCFLD', { dir: tempDir(t), now });
+    if (finished) agent.agenda.finish(); else agent.agenda.start();
+    const self = { id: 0, type: 'player', position: new Vec3(0.5, 64, 0.5) };
+    Object.assign(agent.bot, { food, time: { timeOfDay }, entity: self, entities: { 0: self, ...entities } });
+    return agent;
+}
+
+test('G4 #5: the soak\'s case (agenda done, nothing held, food 12, by day): the food reserve runs, naming the wild animals near and the rules', (t) => {
+    const cow = { id: 1, type: 'mob', name: 'animania:cow_holstein', metadata: {}, position: new Vec3(6.5, 64, 0.5) };
+    const named = { id: 2, type: 'mob', name: 'animania:sow_old_spot', metadata: { 2: 'Wilbur' }, position: new Vec3(3.5, 64, 0.5) };
+    const agent = foodAgent(t, [], { entities: { 1: cow, 2: named } });
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    assert.equal(agent.said.at(-1), 'agenda step food started: keep food for the day and the night');
+    const p = agent.self_prompter.prompt;
+    assert.match(p, /^RotN agenda, step food \(food\): Food: you hold food worth 0 hunger and your food is 12 of 20\. On this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: get to at least 12\. /);
+    assert.match(p, /Near you: animania:cow_holstein: kill one with !attack\("animania:cow_holstein"\)/);
+    assert.doesNotMatch(p, /sow_old_spot/, 'a named animal is never offered');
+    assert.match(p, /Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses/);
+    assert.equal(foodDue(agent), true, 'the hunting reflex agrees');
+    // Food worth 12 held: done; the agenda is idle again.
+    agent.bot.inventory = { items: () => [stack('bread', 0, 4)], slots: [] };
+    assert.equal(agendaTick(agent, { now: TICK_MS }), null);
+    assert.equal(foodDue(agent), false);
+});
+
+test('G4 #5: during the agenda only an urgent need; before night 8 held, after the shelter blocks; at night never', (t) => {
+    // Running agenda, by day, bread held, food 15: the steps go on.
+    const busy = foodAgent(t, [stack('bread', 0, 1)], { food: 15, finished: false });
+    assert.equal(agendaTick(busy, { now: 0 }), 'rocks');
+    // Food 12 and nothing held: food first.
+    const hungry = foodAgent(t, [], { food: 12, finished: false });
+    assert.equal(agendaTick(hungry, { now: 0 }), 'food');
+    // Before night: the shelter blocks first, then food (8 held wanted).
+    const pick = stack('stone_pickaxe', 0, 1);
+    const dusk = foodAgent(t, [pick, stack('bread', 0, 1)], { food: 18, finished: true, timeOfDay: dayAt(7) });
+    assert.equal(agendaTick(dusk, { now: 0 }), 'shelter_blocks');
+    const ready = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_RESERVE), stack('bread', 0, 1)], { food: 18, finished: true, timeOfDay: dayAt(7) });
+    assert.equal(agendaTick(ready, { now: 0 }), 'food', 'blocks held, 3 food held: food');
+    const fed = foodAgent(t, [pick, stack('cobblestone', 0, SHELTER_RESERVE), stack('bread', 0, 3)], { food: 18, finished: true, timeOfDay: dayAt(7) });
+    assert.equal(agendaTick(fed, { now: 0 }), null, '9 held: nothing to do');
+    // Night: never out for food, starving or not.
+    const night = foodAgent(t, [], { food: 2, finished: true, timeOfDay: NIGHT_START + 500 });
+    assert.equal(agendaTick(night, { now: 0 }), null);
+    assert.equal(foodDue(night), false);
+});
+
+test('G4 #5: the food reserve\'s own budget: spent, it says so and is not asked again for FOOD_RETRY_MS; then a fresh budget', (t) => {
+    let clock = 1_000_000;
+    const agent = foodAgent(t, [], { now: () => clock });
+    assert.equal(agendaTick(agent, { now: clock }), 'food');
+    agent.agenda.spent.food = { attempts: 99, llm_ms: 1e9 };
+    assert.equal(agendaTick(agent, { now: clock + TICK_MS }), 'stuck');
+    assert.match(agent.said.at(-1), /^agenda step food stuck: .*; going on without it for 10 min$/);
+    clock += FOOD_RETRY_MS - 1000;
+    assert.equal(agendaTick(agent, { now: clock }), null, 'not asked again yet');
+    clock += 2000;
+    assert.equal(agendaTick(agent, { now: clock }), 'food', 'asked again');
+    assert.deepEqual(agent.agenda.spentOn('food').attempts <= 1, true, 'with a fresh budget');
+    assert.equal(FOOD_RESERVE_STEP.when, 'food');
 });
 
