@@ -11,6 +11,9 @@ import * as world from '../library/world.js';
 import { threatFor, hurtBy } from '../library/threats.js';
 import { parseStandOn } from '../library/stand_on.js';
 
+/** Modes that keep the bot alive: only a task giver who types !setMode may turn them off (CX23 soak). */
+export const SURVIVAL_MODES = ['self_preservation', 'cowardice', 'self_defense'];
+
 /**
  * The block the running task (or else the self-prompt goal) says to stand on, when a walk to
  * x, y, z means that block: its own position or the one above it (G3 round 5 C: the model walked to
@@ -538,10 +541,17 @@ export const actionsList = [
             'mode_name': { type: 'string', description: 'The name of the mode to enable.' },
             'on': { type: 'boolean', description: 'Whether to enable or disable the mode.' }
         },
-        perform: async function (agent, mode_name, on) {
+        perform: async function (agent, mode_name, on, context) {
             const modes = agent.bot.modes;
             if (!modes.exists(mode_name))
             return `Mode ${mode_name} does not exist.` + modes.getDocs();
+            // CX23 soak (rotn-v0.1.3): unarmed after a death, the model turned self_defense off and
+            // left cowardice off, and player zombies killed the bot again and again. The survival
+            // modes are turned off only by a task giver who types it (context.sender); the model is refused.
+            if (!on && SURVIVAL_MODES.includes(mode_name) && !context?.sender && modes.isOn(mode_name)) {
+                console.log(`[modes] refused: the model asked to turn ${mode_name} off; only a task giver may`);
+                return `Mode ${mode_name} stays on: it keeps you alive, and only a task giver may turn it off.`;
+            }
             if (on && modes.isDisabled(mode_name))
             return `Mode ${mode_name} is disabled: ${modes.disabledReason(mode_name)}.`;
             if (modes.isOn(mode_name) === on)
