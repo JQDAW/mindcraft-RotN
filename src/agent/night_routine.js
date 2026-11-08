@@ -15,12 +15,12 @@
 import { Vec3 } from 'vec3';
 import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, REPAIR_LABEL, shelterShell } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE } from './library/shelter.js';
-import { breakBlockAt } from './library/skills.js';
+import { breakBlockAt, descendFromTree } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
 import { digPit, pitOut, moveAwayFrom, PIT } from './library/pit.js';
 import { hasWeapon, shelterEnemy } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
-import { MAX_SAFE_DROP, isTreePart } from './library/fall_safety.js';
+import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
 import { say, isGiverGoal } from './agenda_driver.js';
 import settings from './settings.js';
 
@@ -84,6 +84,7 @@ export function nightState(agent) {
         pitTried: false, // a hole was tried this night
         pitProgress: {}, // the hole being dug (digPit's progress.P), so an interrupted dig goes on in it
         leftDeathSpot: false, // the walk away from a recent death spot was done (or not needed)
+        descended: false, // CX23 soak: the climb down from a tree was tried this build phase
         clears: [], // G3 gate B: when a block in the bot's space was broken from inside (SPACE_CLEAR)
         tolerated: false, // a block in the bot's space that does not suffocate it is kept (it came back too often)
         clearSaid: false, // the clear was said in chat this shelter (then only logged)
@@ -108,7 +109,7 @@ export function resetNight(agent, why) {
     const n = agent?._night;
     if (!n) return;
     restoreCowardice(agent, n);
-    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, pitProgress: {} });
+    Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, descended: false, pitProgress: {} });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
     Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0 });
@@ -320,7 +321,7 @@ export function hostileNear(bot, range = LEAVE_MOB_RANGE) {
 const mobText = (e) => e?.position ? `a ${e.name ?? e.displayName ?? 'hostile mob'} at ${at(e.position.floored())}` : 'a hostile mob';
 
 /** What the routine does in the world (tests pass their own). */
-export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, moveAwayFrom };
+export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, moveAwayFrom, onTree: standsOnTree, descend: (bot) => descendFromTree(bot) };
 
 /**
  * The bot's last death spot when it died less than DEATH_NEAR_MS ago, in this dimension, and is
@@ -374,6 +375,7 @@ function startBuilding(n, now) {
     n.state = 'building';
     n.attempts = 0;
     n.unsettled = 0;
+    n.descended = false;
     n.nextAt = now;
 }
 
@@ -479,13 +481,24 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         bot.rotnSheltered = false;
         n.state = 'day';
         restoreCowardice(agent, n);
-        Object.assign(n, { pitTried: false, leftDeathSpot: false, pitProgress: {}, leaveFrom: null });
+        Object.assign(n, { pitTried: false, leftDeathSpot: false, descended: false, pitProgress: {}, leaveFrom: null });
         line(agent, '[night] morning: back to work');
         return null;
     }
     holdAutonomy(agent);
 
     if (n.state === 'building') {
+        // CX23 soak (rotn-v0.1.3): respawned in a canopy, every shelter and hole try failed there
+        // (leaves under every site). Down to the ground first, once per build phase.
+        if (!n.descended && ops.onTree?.(bot)) {
+            n.descended = true;
+            line(agent, '[night] up on a tree: climbing down before sheltering');
+            startJob(agent, n, 'action:descendFromTree', () => ops.descend(bot), (down) => {
+                if (!down) console.warn('[night] still on the tree; sheltering from here');
+                n.nextAt = 0;
+            });
+            return 'night:building';
+        }
         // Round 9 B (fix h): died here at night not long ago: first away from the spot.
         const spot = n.leftDeathSpot ? null : deathSpotNear(agent, now);
         n.leftDeathSpot = true;

@@ -1456,3 +1456,47 @@ test('#364 review 4: between two morning tries a breach is still found and repai
     assert.equal(o.digs, 1, 'no new dig before RETRY_MS');
     assert.equal(nightState(agent).state, 'inside');
 });
+
+test('CX23 soak: up on a tree at night (a respawn in the canopy), the routine climbs down first, once per build phase, then shelters', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    let onTree = true;
+    const calls = [];
+    o.onTree = () => onTree;
+    o.descend = () => { calls.push('descend'); onTree = false; return Promise.resolve(true); };
+    const build = o.buildShelter;
+    o.buildShelter = (bot, opts) => { calls.push('build'); return build(bot, opts); };
+    assert.equal(nightTick(agent, { now: 0, ops: o }), 'night:building');
+    await settle(agent);
+    assert.ok(agent.chat.includes('[night] up on a tree: climbing down before sheltering'), agent.chat.join('\n'));
+    nightTick(agent, { now: 1, ops: o });
+    await settle(agent);
+    assert.deepEqual(calls, ['descend', 'build']);
+    assert.equal(nightState(agent).state, 'inside');
+
+    // No way down: one try, then it shelters from where it is (no climb loop).
+    const stuck = fakeAgent({ t: NIGHT });
+    const o2 = ops({ closed: false });
+    const calls2 = [];
+    o2.onTree = () => true;
+    o2.descend = () => { calls2.push('descend'); return Promise.resolve(false); };
+    const build2 = o2.buildShelter;
+    o2.buildShelter = (bot, opts) => { calls2.push('build'); return build2(bot, opts); };
+    t.mock.method(console, 'warn', () => {});
+    for (let i = 0; i < 4; i++) { nightTick(stuck, { now: i * RETRY_MS * 2, ops: o2 }); await settle(stuck); }
+    assert.equal(calls2.filter(c => c === 'descend').length, 1, 'once per build phase');
+    assert.ok(calls2.includes('build'));
+
+    // On the ground: no climb at all.
+    const ground = fakeAgent({ t: NIGHT });
+    const o3 = ops();
+    let tried = 0;
+    o3.onTree = () => false;
+    o3.descend = () => { tried++; return Promise.resolve(true); };
+    nightTick(ground, { now: 0, ops: o3 });
+    await settle(ground);
+    assert.equal(tried, 0);
+    assert.equal(nightState(ground).state, 'inside');
+});
+

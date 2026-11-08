@@ -86,7 +86,16 @@ function fakeBot({ blocks = {}, start = at(0), arrive = null, items = [], entiti
         lookAt: () => Promise.resolve(),
         nearestEntity: (match) => Object.values(bot.entities).filter(match)
             .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))[0] ?? null,
-        dig: (b) => { calls.digs.push(key(b.position)); world.set(key(b.position), 'air'); return Promise.resolve(); },
+        dig: (b) => {
+            calls.digs.push(key(b.position));
+            world.set(key(b.position), 'air');
+            // Gravity: a bot with nothing under its feet falls onto the first block below.
+            const feet = bot.entity.position.floored();
+            let y = feet.y;
+            while (y > 0 && blockAt(at(feet.x, y - 1, feet.z)).boundingBox === 'empty') y--;
+            if (y !== feet.y) { calls.falls = [...(calls.falls ?? []), feet.y - y]; bot.entity.position = at(feet.x, y, feet.z).offset(0.5, 0, 0.5); }
+            return Promise.resolve();
+        },
         collectBlock: { collect: (b) => { calls.collected.push(key(b.position)); return Promise.resolve(); } },
         pathfinder: {
             setMovements(m) { bot._moves = m; calls.moves.push(m); }, setGoal() {}, stop() {}, isMoving: () => false,
@@ -238,7 +247,13 @@ test('a collect that starts on a tree climbs down first, or does nothing when th
     assert.equal(bot.calls.gotos[0].moves.maxDropDown, 4, 'down first');
     assert.deepEqual(bot.calls.digs, ['4,64,0']);
 
-    const stuck = fakeBot({ blocks, start: at(0, 67) });
+    // CX23 soak: no walk down, but leaves under it: it digs down through them (falls of 1), then collects.
+    const leafy = fakeBot({ blocks, start: at(0, 67) });
+    assert.equal(await skills.collectBlock(leafy, LEAVES, 1), true);
+    assert.deepEqual(leafy.calls.digs.slice(0, 3), ['0,66,0', '0,65,0', '0,64,0'], 'the leaves under it, one at a time');
+    assert.deepEqual(leafy.calls.falls, [1, 1, 1]);
+    // A branch under it: never dug (it would fell the tree), so no way down; nothing is done.
+    const stuck = fakeBot({ blocks: { ...blocks, '0,66,0': BRANCH }, start: at(0, 67) });
     assert.equal(await skills.collectBlock(stuck, LEAVES, 1), false);
     assert.deepEqual(stuck.calls.digs, []);
     assert.match(stuck.output, /up on a tree and found no safe way down/);
@@ -429,3 +444,50 @@ test('#264 nit: isClearPath uses the safe movements', async () => {
     assert.ok(used.blocksToAvoid.has(FLUIDS[SPIKES].id));
     assert.equal(used.canDig, false);
 });
+
+// CX23 soak (rotn-v0.1.3): the world spawn was in a giant spruce's canopy (y 80, the ground ~64):
+// every respawn on leaves, no walk down (all drops over 3), so no shelter, no hole, the night outside.
+test('CX23 soak: with no walk down, the bot digs the leaf under it by hand; one last-resort larger drop only if health stays at least 10', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    assert.deepEqual(skills.CANOPY_DESCENT.minHealthAfterDrop, 10);
+    const air = (from, to) => Object.fromEntries(Array.from({ length: from - to + 1 }, (_, i) => [`0,${from - i},0`, 'air']));
+    // The ground's top is y 63 (dirt below 64), so the bot lands standing at y 64.
+    // A canopy 16 above the ground: the fall (16, 13 damage) would leave 7 health: refused, nothing dug.
+    const high = fakeBot({ blocks: { '0,79,0': LEAVES }, start: at(0, 80) });
+    high.health = 20;
+    assert.equal(await skills.descendFromTree(high), false);
+    assert.deepEqual(high.calls.digs, []);
+    assert.match(high.output, /Not digging down: a fall of 16 blocks would leave you 7 health/);
+    // 9 above the ground: one fall of 9 (6 damage) leaves 14: the last resort, taken once.
+    const mid = fakeBot({ blocks: { '0,72,0': LEAVES }, start: at(0, 73) });
+    mid.health = 20;
+    assert.equal(await skills.descendFromTree(mid), true);
+    assert.deepEqual([mid.calls.digs, mid.calls.falls], [['0,72,0'], [9]]);
+    assert.match(mid.output, /one fall of 9 blocks as the last resort \(health 20 -> about 14\)/);
+    // The same fall at health 12 would leave 9: refused.
+    const hurt = fakeBot({ blocks: { '0,72,0': LEAVES }, start: at(0, 73) });
+    hurt.health = 12;
+    assert.equal(await skills.descendFromTree(hurt), false);
+    assert.deepEqual(hurt.calls.digs, []);
+    // Two big drops in a row: the first is taken, the second refused (one per descent).
+    const two = fakeBot({ blocks: { '0,76,0': LEAVES, '0,70,0': LEAVES }, start: at(0, 77) });
+    two.health = 20;
+    assert.equal(await skills.descendFromTree(two), false);
+    assert.deepEqual([two.calls.digs, two.calls.falls], [['0,76,0'], [6]]);
+    assert.match(two.output, /Not digging down: a fall of 7 blocks .* only one such drop/);
+    // Leaves all the way down: falls of 1, no big drop needed.
+    const column = fakeBot({ blocks: Object.fromEntries([64, 65, 66, 67].map(y => [`0,${y},0`, LEAVES])), start: at(0, 68) });
+    column.health = 6;
+    assert.equal(await skills.descendFromTree(column), true);
+    assert.deepEqual(column.calls.falls, [1, 1, 1, 1]);
+    // Never into lava; never a trunk shell (or a branch, above).
+    const lava = fakeBot({ blocks: { '0,66,0': LEAVES, ...air(65, 64), '0,63,0': 'lava' }, start: at(0, 67) });
+    lava.health = 20;
+    assert.equal(await skills.descendFromTree(lava), false);
+    assert.deepEqual(lava.calls.digs, []);
+    assert.match(lava.output, /it would land in lava at 0, 63, 0/);
+    const shell = fakeBot({ blocks: { '0,66,0': 'dynamictrees:trunkshell' }, start: at(0, 67) });
+    assert.equal(await skills.descendFromTree(shell), false);
+    assert.deepEqual(shell.calls.digs, []);
+});
+
