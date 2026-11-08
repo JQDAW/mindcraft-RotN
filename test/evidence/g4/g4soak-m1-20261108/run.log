@@ -1,0 +1,13 @@
+[scenario 16:24:14] g4-soak-2h (G4) run 20261108t162413-b1461d; git 94dbd9867bf776ac9da1549073dadff7f52a14b5; driver: service frcfld via cx23-ctl; out: <local>/captures/raw/g4-soak-m1-20261108
+[scenario 16:24:14] not a gate run: the soak ADR's targets are TBD: a measuring run, not an acceptance run
+[scenario 16:24:31] PASS login_online: <bot> joined; UUID <uuid-v4> (version 4, Mojang account)
+[scenario 18:24:37] PASS naming: [naming]: 15 kinds, unknown 0, all real; no entity near (+240s)
+[scenario 18:24:37] PASS no_crash: 120 min up, 25 samples, NRestarts 0 throughout, no agent exit
+[scenario 18:24:37] FAIL peak_memory: not reached: no target yet (TBD); measured peak 634 MB
+[scenario 18:24:37] FAIL usd_per_hour: not reached: no target yet (TBD); measured USD 0.011576/h (USD 0.023171 over 120 min, 178 completions)
+[scenario 18:24:37] PASS agenda_done: "agenda done" within the soak
+[scenario 18:24:37] FAIL food_floor: lowest food 1 (floor 6; 121 food lines)
+[scenario 18:24:37] FAIL ate_when_low: 2 of 3 low food line(s) with no eat after them
+[scenario 18:24:37] PASS deaths_reported: each of 17 death(s) reported
+[scenario 18:24:40] SMOKE run, not a G4 pass: the soak ADR's targets are TBD: a measuring run, not an acceptance run
+[scenario 18:24:40] g4-soak-2h: FAIL; 5 passed, 4 failed (<local>/captures/raw/g4-soak-m1-20261108/result.json)
