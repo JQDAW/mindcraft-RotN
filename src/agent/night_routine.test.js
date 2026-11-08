@@ -1131,6 +1131,26 @@ test('round 10 B: digOut tunnels through a hillside on every side, up to EXIT_DE
     assert.deepEqual(deep.dug, []);
 });
 
+test('#364 follow-up (a): digOut walks through no cell without firm ground right under it (a tunnel over a cave, a wall cell over a hole)', async (t) => {
+    const air = (x, z, from, to) => Object.fromEntries(Array.from({ length: from - to + 1 }, (_, i) => [`${x},${from - i},${z}`, 'air']));
+    // The hillside of the tunnel test: east opens after 2 cells, the other sides after 3. East has
+    // a cave under its 2nd tunnel cell, west under its 3rd, north under its 2nd; south is sound.
+    const hill = { ...ring(64, 'stone'), ...ring(65, 'stone'), ...ring(64, 'stone', 3), ...ring(65, 'stone', 3), ...ring(66, 'stone', 3) };
+    delete hill['3,64,0']; delete hill['3,65,0']; delete hill['3,66,0'];
+    const { bot, dug } = exitWorld({ ...hill, ...air(2, 0, 63, 58), ...air(-3, 0, 63, 58), ...air(0, -2, 63, 58) });
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const side = await digOut(bot, SITE);
+    assert.ok(side?.equals(new Vec3(0, 64, 1)), `opened ${side}`);
+    assert.deepEqual(dug.sort(), ['0,64,1', '0,64,2', '0,64,3', '0,65,1', '0,65,2', '0,65,3'], 'only the south tunnel');
+    for (const [name, cell] of [['east', '2, 64, 0'], ['west', '-3, 64, 0'], ['north', '0, 64, -2']])
+        assert.ok(logs.some(l => l.includes(`not the ${name} side (no firm floor under ${cell} (air))`)), logs.join('\n'));
+    // A level side whose wall cell stands over a hole: refused; the next level side opens.
+    const hole = exitWorld(air(1, 0, 63, 60));
+    assert.ok((await digOut(hole.bot, SITE))?.equals(new Vec3(-1, 64, 0)));
+    assert.ok(!hole.dug.some(k => k.startsWith('1,')), `east untouched: ${hole.dug}`);
+});
+
 test('round 10 B: digOut never digs a step-up or tunnel side with lava next to its cells, and logs why each side was refused', async (t) => {
     quiet(t);
     const logs = [];

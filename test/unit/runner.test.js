@@ -414,7 +414,7 @@ describe('run.mjs', () => {
 
     test('parseArgs', () => {
         assert.deepEqual(parseArgs(['--scenario', 'g1', '--param', 'stayMs=60000', '--param', 'bot=X=Y', '--', 'node', 'd.mjs', '--x']),
-            { params: { stayMs: 60000, bot: 'X=Y' }, driver: ['node', 'd.mjs', '--x'], list: false, scenario: 'g1', out: null, passEnv: [] });
+            { params: { stayMs: 60000, bot: 'X=Y' }, driver: ['node', 'd.mjs', '--x'], list: false, scenario: 'g1', out: null, passEnv: [], service: null });
         assert.deepEqual(parseArgs(['--pass-env', 'OPENROUTER_API_KEY', '--', 'x']).passEnv, ['OPENROUTER_API_KEY']);
         assert.throws(() => parseArgs(['--param', 'nope']), /key=value/);
         assert.throws(() => parseArgs(['--bogus']), /unknown argument/);

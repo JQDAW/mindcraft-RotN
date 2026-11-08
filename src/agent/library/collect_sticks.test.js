@@ -35,7 +35,9 @@ const LEAVES = 'dynamictrees:leaves0', ROOTY = 'dynamictrees:rootydirt', BUSH = 
  * The bot and its world. trees: [{ x, branch, sticks, canopy }]: a 5-block trunk with a canopy leaning
  * east, from y `canopy` (default 69: no leaf is reachable from the ground; 67: the lowest are); a cut
  * trunk fells only that tree, which drops 3 logs and `sticks` sticks east of it after the fall.
- * bushes: [{ x, z, sticks }]: a dead bush that gives `sticks` sticks when broken (by hand).
+ * bushes: [{ x, z, sticks, landsAt, late }]: a dead bush that gives `sticks` sticks when broken (by hand);
+ * with `landsAt` they land there as items instead (picked up by a walk ending next to them), and
+ * `late` more reach the inventory only when the bot next looks for a block (gate2 B: late pickups).
  * leafSticks: what each broken leaf gives, in turn (Pyrotech: a stick half the time). The walks keep
  * the bot on the ground (y 64): a leaf is broken from below.
  */
@@ -69,7 +71,7 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
         const got = items.find(i => i.name === name && i.metadata === meta);
         if (got) got.count += n; else items.push({ name, metadata: meta, count: n, type: reg.itemsByName[name].id });
     };
-    let nextId = 1, leaves = 0;
+    let nextId = 1, leaves = 0, lateSticks = 0;
     const entities = {};
     for (const e of strays) { entities[nextId] = { id: nextId, name: 'item', ...e }; nextId++; } // items lying around
     const log = { digs: [], walks: [] };
@@ -82,6 +84,8 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
         modes: { isOn: () => false, pause() {}, unpause() {} },
         inventory: { items: () => items.filter(i => i.count > 0), slots },
         findBlocks({ matching, maxDistance = 16, count = 1 }) {
+            give('stick', 0, lateSticks);
+            lateSticks = 0;
             const here = bot.entity.position;
             return [...world.keys()].map(k => blockAt(at(...k.split(',').map(Number))))
                 .filter(b => (typeof matching === 'function' ? matching(b) : [].concat(matching).includes(b.type)))
@@ -99,7 +103,14 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
         dig: (b) => {
             const cell = world.get(key(b.position));
             log.digs.push({ pos: key(b.position), name: cell?.name, held: bot.heldItem?.name ?? null });
-            if (cell?.name === BUSH) { world.delete(key(b.position)); give('stick', 0, cell.sticks); return Promise.resolve(); }
+            if (cell?.name === BUSH) {
+                world.delete(key(b.position));
+                const bush = bushes.find(x => key(at(x.x, 64, x.z ?? 0)) === key(b.position));
+                lateSticks += bush?.late ?? 0;
+                if (bush?.landsAt) for (let i = 0; i < cell.sticks; i++) entities[nextId] = { id: nextId++, name: 'item', position: bush.landsAt, drop: 'stick' };
+                else give('stick', 0, cell.sticks);
+                return Promise.resolve();
+            }
             if (cell?.name === LEAVES) { world.delete(key(b.position)); give('stick', 0, leafSticks[leaves++ % leafSticks.length]); return Promise.resolve(); }
             const tr = trees[cell.tree];
             for (const [k, c] of [...world]) if (c.tree === cell.tree) world.delete(k);
@@ -337,4 +348,31 @@ test('round 10 B: a dead bush the walk does not reach is not dug from afar; it u
     await skills.collectBlock(bot, 'stick', 1);
     assert.equal(bushWalks(), 1, 'remembered: no new walk to that bush');
     assert.equal(skills.COLLECT_LIMITS.unreachableTargets, 3);
+});
+
+// Gate2 B (g3b-20261108-gate2, night/driver.log): leaf breaks said "got no stick", then "Picked up 2
+// items" and "Collected 3 stick": a stick that landed late was picked up with a later break.
+test('gate2 B: a stick picked up with a later break: the first break says none right after it, and the final line says a later pickup is in the count', T, async (t) => {
+    fast(t);
+    // The bush at x 8 drops its stick where the bush at x 12 is: the walk there picks it up.
+    const bot = fakeBot({ bushes: [{ x: 8, sticks: 1, landsAt: at(12).offset(0.5, 0, 0.5) }, { x: 12, sticks: 1 }] });
+    assert.equal(await skills.collectBlock(bot, 'stick', 2), true, bot.output);
+    assert.deepEqual(bot.log.digs.map(d => d.pos), ['8,64,0', '12,64,0']);
+    assert.match(bot.output, /Broke deadbush but picked up no stick right after it\./);
+    assert.ok(!/got no stick/.test(bot.output), bot.output);
+    assert.match(bot.output, /Collected 2 stick\. 1 break had none right after it; a drop picked up later is in this count\./);
+    // A collect where every break gave its own: no note.
+    const plain = fakeBot({ bushes: [{ x: 8, sticks: 1 }, { x: 12, sticks: 1 }] });
+    assert.equal(await skills.collectBlock(plain, 'stick', 2), true);
+    assert.match(plain.output, /Collected 2 stick\.$/m);
+});
+
+test('gate2 B: a stick picked up after the last break was counted is in the final count, with a line saying so', T, async (t) => {
+    fast(t);
+    const bot = fakeBot({ bushes: [{ x: 8, sticks: 0, late: 1 }] });
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
+    assert.match(bot.output, /Broke deadbush but picked up no stick right after it\./);
+    assert.match(bot.output, /Picked up 1 more stick after the break that dropped it was counted\./);
+    assert.match(bot.output, /Collected 1 stick\. 1 break had none right after it; a drop picked up later is in this count\./);
+    assert.equal(bot.inventory.items().find(i => i.name === 'stick')?.count, 1);
 });
