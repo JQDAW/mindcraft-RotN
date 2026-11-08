@@ -160,6 +160,28 @@ test('D2b-2: at the sunrise it stays in; at full daylight it digs out and hands 
     assert.equal(nightTick(agent, { now: 3, ops: o }), null, 'the priority stack goes on to tasks and the agenda');
 });
 
+test('gate2 B: out of its shelter, the log says where the bot was and its floor block at closing, and where it is and what the floor is now', async (t) => {
+    quiet(t);
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const agent = fakeAgent({ t: NIGHT });
+    const world = { '0,63,0': 'stone_slab' };
+    Object.assign(agent.bot, { blockAt: (p) => ({ name: world[`${p.x},${p.y},${p.z}`] ?? 'dirt', position: p }) });
+    agent.bot.entity.onGround = true;
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    assert.ok(logs.some(l => /in the shelter at 0, 64, 0 until morning/.test(l)), logs.join('\n'));
+    // The floor went and the bot is one block lower (gate2 B, 00:19:39).
+    world['0,63,0'] = 'air';
+    Object.assign(agent.bot.entity, { position: new Vec3(0.5, 63, 0.5), onGround: true });
+    nightTick(agent, { now: 1, ops: o });
+    assert.equal(nightTick(agent, { now: CHECK_MS + 1, ops: o }), 'night:building');
+    assert.ok(logs.includes('[night] out of the shelter at 0, 64, 0: at closing at 0.50, 64.00, 0.50 (on the ground) on stone_slab; '
+        + 'now at 0.50, 63.00, 0.50 (on the ground), its floor at 0, 63, 0 is air'), logs.join('\n'));
+    assert.match(agent.chat.at(-1), /no longer in the shelter at 0, 64, 0: building a new one$/, 'the chat line stays short');
+});
+
 test('D2b-2: in the priority stack a control hold beats the night, and the night beats a queued task', (t) => {
     quiet(t);
     const agent = fakeAgent({ t: NIGHT });

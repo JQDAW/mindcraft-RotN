@@ -14,7 +14,7 @@
 
 import { Vec3 } from 'vec3';
 import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, REPAIR_LABEL, shelterShell } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems } from './library/shelter.js';
+import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt } from './library/shelter.js';
 import { breakBlockAt } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
 import { digPit, pitOut, moveAwayFrom, PIT } from './library/pit.js';
@@ -90,6 +90,7 @@ export function nightState(agent) {
         leaveFrom: null, // the deadly shelter left with a mob near: 'open' until the bot is out of this cell
         exitTries: 0, // round 10 B: morning tries at digging out of this shelter (EXIT_TRIES)
         exitAt: null, // when the next try may start
+        closedOn: null, // gate2 B: {at, floor}: where the bot was and its floor block when this shelter closed
         mobSince: null, // #364 follow-up (b): when the morning wait for a hostile mob near the shelter began
         mobSaid: false, // that wait was said in chat (then only logged)
         cowardiceOn: false, // the routine turned cowardice on while exposed with no weapon
@@ -109,7 +110,7 @@ export function resetNight(agent, why) {
     Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, pitProgress: {} });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
-    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null });
     n.gen++;
 }
 
@@ -508,6 +509,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null });
                 n.checkedAt = null; // set by the next tick, on its clock
                 bot.rotnSheltered = true;
+                // Gate2 B: where the bot was and what it stood on, for the line if it is ever out of it.
+                n.closedOn = { at: exactAt(bot), floor: bot.blockAt?.(r.feet.offset(0, -1, 0))?.name ?? 'unknown' };
                 line(agent, `[night] in the shelter at ${at(r.feet)} until morning`);
                 return;
             }
@@ -625,6 +628,11 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (!bot.entity.position.floored().equals(n.site)) {
             // Pushed, teleported (AggroTP) or walked out: a new shelter where it is now.
             bot.rotnSheltered = false;
+            // Gate2 B (00:19:39): the move one block lower named nothing; now the line says where
+            // the bot is and what the floor is, at closing and now.
+            const floorNow = bot.blockAt?.(n.site.offset(0, -1, 0))?.name ?? 'unknown';
+            const was = n.closedOn ? `at closing at ${n.closedOn.at} on ${n.closedOn.floor}; ` : '';
+            console.log(`[night] out of the shelter at ${at(n.site)}: ${was}now at ${exactAt(bot)}, its floor at ${at(n.site.offset(0, -1, 0))} is ${floorNow}`);
             line(agent, `[night] no longer in the shelter at ${at(n.site)}: building a new one`);
             startBuilding(n, now);
             return 'night:building';

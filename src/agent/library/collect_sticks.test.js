@@ -160,7 +160,7 @@ function fast(t) {
     t.after(() => { Object.assign(skills.FELL_LIMITS, saved[0]); Object.assign(skills.TREE_FALL, saved[1]); });
 }
 
-test('rotn-data #312: a dead bush gives 0-2 sticks, by hand (its rule; the fallback is gone)', () => {
+test('rotn-data #312: a dead bush gives 0-2 sticks, by hand (its rule)', () => {
     const way = worldSources('stick').find(s => s.blocks.includes(BUSH));
     assert.ok(way, 'a dead bush is a stick source');
     assert.equal(way.id, 'deadbush-sticks');
