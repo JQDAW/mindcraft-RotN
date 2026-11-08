@@ -1,9 +1,21 @@
 # Status: rotn-lead
 
-Updated: 2026-11-08 13:06 UTC (from `date -u`)
+Updated: 2026-11-08 22:28 UTC (from `date -u`)
 
 
-## Current snapshot (2026-11-08 13:00 UTC): G4 offline work done; G4 step 0 under way
+## Current snapshot (2026-11-08 22:28 UTC): G4 step 0 done; measuring soak M1 done; survival and food fixed; rotn-v0.1.4 ready
+
+- **G4 step 0 completed** (2026-11-08, GO G4-S0-20261108; evidence #411). The human deployed `rotn-v0.1.2`, then `rotn-v0.1.3` (#409 X libraries, #410 Coder never crashes on missing templates, #412 check-env refuses a missing PROFILES path, #413 ctl start resets a failed unit). Installed and confirmed on the CX23: ctl `518d507d…8879`, check-env.mjs `7a38e3a8…1501`, gate `911ba9f7…05a7`. First start: FRCFLD online on a test server for 22 min, NRestarts 0.
+- **Measuring soak M1** (GO G4-SOAK-M1-20261108, 16:24-18:24 UTC, `rotn-v0.1.3`; evidence #419): peak 634 MiB flat from minute 55, NRestarts 0, USD 0.0116/h over 178 completions, agenda done in 8.5 min, naming 15 kinds / 0 unknown. **Failed G4 #5:** 17 deaths (a first-night death spiral: the model turned self_defense off; canopy respawns; Zombie Players zombies piling up at spawn; a mob in the shelter opening) and food fell to 1 (nothing provided food after the agenda).
+- **ADR 0010** (#420; scenario defaults #421): soak targets peak memory 850 MiB, USD 0.05/h.
+- **Fixes merged** (skills-rotn unless noted): #414 safety modes on, only a giver turns them off; #415 down from canopies; #416 walk away from spawn and death spots; #417 shelter repair fights the mob and eats; #418/#425 night clock; #422 food reserve and owner-safe hunting; #423/#426 forage data (rotn-data); #424 bounded model `!stay`; #427 forage before hunting; #428 follow-ups. Evidence-check fix for G4 service results #419 (harness-ops, fails closed).
+- **Release `rotn-v0.1.4`** (f6107fc4, CI green): v0.1.3 plus all of the above. `deploy/cx23` identical to v0.1.3, so the CX23 needs only `deploy.sh deploy rotn-v0.1.4`.
+- **Next:** the second soak on `rotn-v0.1.4` (needs the human's GO); if it passes #5 and #7, the G4 step 7 acceptance runs.
+- **Open for net-forge (no Orca terminal running):** agent_process.js restarts a deterministic startup crash forever; no SIGTERM handler (a ctl stop drops the connection instead of quitting); one windowOpen timeout seen.
+- **Open decisions for the human:** answer only when addressed before the live server (every public line read is a model call); the live server's Mod Director choice (ADR 0008).
+- **Spend 2026-11-08:** LLM on the production key about USD 0.04 (step 0 and M1); Hetzner about EUR 1.0 (two CPX42 runs). No server exists.
+
+## Earlier snapshot (2026-11-08 13:00 UTC): G4 offline work done; G4 step 0 under way
 
 - **G3 passed** (docs/PLAN.md, 2026-11-08): smoke round 10 4/4 on `0daeef2d` (#352); gate A/D pass on `0daeef2d` (#353); B/C rerun pass on `8aaf370c` (#361).
 - **G4 offline work merged today (#370-#406):**
