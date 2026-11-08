@@ -1,9 +1,39 @@
 # Status: rotn-lead
 
-Updated: 2026-11-07 05:22 UTC (from `date -u`)
+Updated: 2026-11-08 01:10 UTC (from `date -u`)
 
 
-## Current snapshot (2026-11-07 05:22 UTC): round 8 was 3/4; fixes merged; round 9 waits for the human's GO
+## Current snapshot (2026-11-08 01:10 UTC): G3 passed; G4 starts
+
+- **G3 passed** (docs/PLAN.md status entry, 2026-11-08):
+  - Smoke round 10 on `0daeef2d` (#352): 4/4.
+  - Gate on `0daeef2d` (#353): A and D pass, B and C fail.
+  - The human approved rerunning only B and C. Both passed on `8aaf370c` (#361).
+- **Human decisions recorded today:**
+  - Advance GOs for rounds 8 and 10.
+  - The round 10 restart.
+  - The gate and the B/C rerun.
+  - ADR 0009: the CX33-to-CX23 key, option (b), with `from=`, `restrict` and a forced gate.
+  - First use: `ssh cx23-ctl status frcfld` answered "no env file for 'frcfld'"; the bot has not been added on the CX23 yet.
+- **Process changes today:**
+  - `coord/tools/lead-merge-one.sh` (#348) accepts an author's develop merge only when the tree equals reviewed + develop, outside the five agent STATUS files.
+  - Agents no longer edit STATUS in fix PRs.
+  - Reviewers use random-suffixed scratch paths and never `git stash`.
+  - The lead's branch work happens in `/home/mindcraft-RotN-worktrees/lead`, never by switching the main checkout while merge runs execute the script from it.
+  - Merges run as one plain sequence: no waiter loops, which deadlocked.
+- **Next, after the freeze ends:**
+  - Merge the `[after G3]` PRs: #356-#358 and #360, the stale-memory fix (skills-rotn), #359 (harness-ops #351 nits) and #350 (rotn-data).
+  - Then the morning-exit fix (the B dawn line) and slow sticks, which have no PR yet.
+- **G4, following `test/scenarios/g4/PLAN.md`. The human's items, in coord/NEEDS-HUMAN.md:**
+  - `bootstrap.sh add-bot frcfld` and the production OpenRouter key on the CX23;
+  - FRCFLD's device-code login there;
+  - the reviewed SSH gate with `journal` and `metrics`;
+  - a trusted player;
+  - a second account;
+  - the live server's Mod Director choice (ADR 0008).
+- **Spend:** the key reads 0.961 of the 4.50 stop. No Hetzner server exists.
+
+## Earlier snapshot (2026-11-07 05:22 UTC): round 8 was 3/4; fixes merged; round 9 waits for the human's GO
 
 - **G3 smoke round 8** (develop `e5029f23`, the human's advance GO, evidence #313): **3/4**, so the round is not clean.
   - A FAILED 3/7, stuck at `sticks`. The bot spawned on a tree canopy and went to spruces. Felled Dynamic Trees spruces gave 0 sticks, and one dead bush gave 1 (it held 1 of 3). The 5-minute step limit ran out. This was not a regression from #296/#304.
