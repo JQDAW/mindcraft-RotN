@@ -19,6 +19,8 @@
 // near, again every ENTITY_SCAN.retryMs, at most ENTITY_SCAN.tries times; "+<secs>s" says when.
 // "Near spawn" is near the bot when the scan is taken: up to ~55 s after the spawn for the blocks
 // (the chunk waits), up to ~4 min for the entities.
+// Block keys "#<type>:<meta>" and entity keys such as "#<mod>:<id>" are on separate lines; in every
+// entry the count is after the last colon ("#4321:2:12" is 12 blocks of type 4321, meta 2).
 // No LLM, no chat: console only.
 
 import * as world from './world.js';
