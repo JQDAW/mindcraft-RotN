@@ -34,6 +34,8 @@ import { installChatLimit, withChatPriority } from './chat_limit.js';
 import { installWalkSafety } from './library/fall_safety.js';
 import { bindDamageRecord } from './damage_record.js';
 import { startStateLine } from './state_report.js';
+import { bindSurvivalLog } from './library/survival_log.js';
+import { EAT_AT } from './library/food.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -539,6 +541,8 @@ export class Agent {
         });
         // D3: one death report per death (loss diff, rate-limited chat, respawn retry, re-plan note).
         bindDeathReport(this);
+        // G4 #5: the food level in the journal, once a minute and when it falls to EAT_AT (survival_log.js).
+        bindSurvivalLog(this.bot, { eatAt: EAT_AT });
         // Every walk keeps to falls of 3 at most, never breaks a branch, and keeps out of liquids
         // and hazards, whoever sets the pathfinder's movements (fall_safety.js; #259).
         installWalkSafety(this.bot);
