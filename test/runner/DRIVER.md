@@ -534,6 +534,27 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **Open for the lead:** on S the bot's agenda state persists on the CX23 (`/var/lib/mindcraft-rotn/bots/frcfld/agenda.json`), and the gate has no verb to reset it. A run on a bot whose agenda is already done is "not reached". The human resets the state under the GO.
 - **Tests:** `test/unit/g4-restart-persistence.test.js`: a simulated server and bot (S and T), and one test through the real `serviceBot`.
 
+### G4 #7 (with #2, #4, #5): `g4-soak-2h` (offline-built, not yet run; the targets are TBD)
+
+- **What it shows:** 2 hours of the CX23 service on a fresh test server (`ROTN_SERVICE_GO=... run.mjs --scenario g4-soak-2h --service frcfld`).
+  - Every `sampleMinutes` (5) for `durationMinutes` (120): `metrics` (`MemoryCurrent`, `MemoryPeak`, `NRestarts`, `ActiveState`) and a fresh journal read.
+  - The journal is read with `lib/survival.mjs`.
+- **The targets are TBD** (lead, 2026-11-08). `peakMemoryMaxMb` and `usdPerHourMax` stay `"TBD"` until the soak ADR sets them after the first measuring run.
+  - A check whose target is TBD records the measurement and says "not reached: no target yet (TBD)", never a pass.
+  - The run is not-gate while either target is TBD.
+- **The checks:**
+  - **`login_online`:** as in #374 (this run's bot, an inactive unit).
+  - **`naming` (#2):** the agent's own first `!nearbyBlocks` result lists at least `minNamedBlocks` (5) names, none numeric, `unknown` or a placeholder. Bare vanilla names (`dirt`) count, as the agent lists them.
+  - **`no_crash` (#7):** online to the end; no agent_process restart, fatal or exit line; `NRestarts` unchanged; `active` at every sample (S).
+  - **`peak_memory` (#7, S):** the highest `MemoryCurrent` (or `MemoryPeak`) within the target.
+  - **`usd_per_hour` (#7):** on S the runner cannot read the CX23 key (lead, #389), so it is not reached. The journal's LLM calls per hour (`[openrouter] provider` lines) are recorded, to set against the spend read separately. On T, the batch's key reading has the spend.
+  - **`agenda_done` (#4):** `agenda done` within the soak.
+  - **`food_floor` (#5):** every `[survival] food` line at or above `foodFloor` (6).
+  - **`ate_when_low` (#5):** after each `low` food line, an `ate` line within the next `eatWithinMinutes` (5) food lines (one a minute at most).
+  - **`deaths_reported` (#5, as in #6):** each `[death] died at ...; waiting for the respawn` has its `[death] died at ...; lost ...` report before the next death.
+- **Notes:** every sample, the survival counts (eats, fights by outcome, flees), the deaths, and the LLM calls per hour.
+- **Tests:** `test/unit/g4-soak.test.js`, with fakes only.
+
 ### G4 #6: `g4-death-report`
 
 Ready-to-try: "After death it respawns, reports what it lost and carries on without a chat-spam loop." The bot side is skills-rotn's `src/agent/library/death_report.js` (D3), which this scenario never changes. If it finds something to fix there, harness-ops reports it.
