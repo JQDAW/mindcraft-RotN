@@ -534,6 +534,36 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **Open for the lead:** on S the bot's agenda state persists on the CX23 (`/var/lib/mindcraft-rotn/bots/frcfld/agenda.json`), and the gate has no verb to reset it. A run on a bot whose agenda is already done is "not reached". The human resets the state under the GO.
 - **Tests:** `test/unit/g4-restart-persistence.test.js`: a simulated server and bot (S and T), and one test through the real `serviceBot`.
 
+### G4 #7 (with #2, #4, #5): `g4-soak-2h` (offline-built, not yet run; the targets are TBD)
+
+- **What it shows:** 2 hours of the CX23 service on a fresh test server (`ROTN_SERVICE_GO=... run.mjs --scenario g4-soak-2h --service frcfld`).
+  - Every `sampleMinutes` (5) for `durationMinutes` (120): `metrics` (`MemoryCurrent`, `MemoryPeak`, `NRestarts`, `ActiveState`) and a fresh journal read.
+  - The journal is read with `lib/survival.mjs`.
+- **The targets are TBD** (lead, 2026-11-08). `peakMemoryMaxMb` and `usdPerHourMax` stay `"TBD"` until the soak ADR sets them after the first measuring run.
+  - A check whose target is TBD records the measurement and says "not reached: no target yet (TBD)", never a pass.
+  - The run is not-gate while either target is TBD.
+- **The checks:**
+  - **`login_online`:** as in #374 (this run's bot, an inactive unit).
+  - **`naming` (#2), the lead's decisions on #394:** the deterministic block line from `src/agent/library/naming_report.js` (#396) is the only pass source: `[naming] <bot> near spawn: <kinds> kinds; unknown <n>; <key>:<count> ...` (the count is after the last `:`; an unnamed block's key is `#<type>:<meta>`).
+    - **It passes only with** `unknown 0`, at least `NAMING_MIN_KINDS` (3, as in naming_report.js; a unit test reads the source to keep them equal) kinds, and every name real (`blockNameProblem`: none numeric, `unknown`, `undefined`, `null`, empty, `#…` or a placeholder).
+    - **It fails on:** no block line (the release lacks #396, or the bot never spawned; with a journal gap that is "not reached (infra)" instead), fewer than 3 kinds (0 included), or the warning `[naming] near spawn: could not read the world (...)`.
+    - **The entity line** `[naming] <bot> entities +<secs>s: ...`: when it lists any kind, `unknown` must be 0. The field is the authority, since #397 keys unknown entities `#<entityType>`, `#<modId>:<modEntityTypeId>` or `#?`. Nothing near (0 kinds, or no entity line) is a note (`notes.namingEntities`).
+    - **The agent's own `!nearbyBlocks` results** are a note (`notes.nearbyBlocks`: the names and any `blockNameProblem`), never a pass. Their format: `NEARBY_BLOCKS` on the line after `Agent executed: !nearbyBlocks and got: ` or on the same line; `- water (source|flowing)`; `- Block Below|at Legs|at Head: <name>`; `- First Solid Block Above Head: <name> (N blocks up)` or `none`; `NEARBY_BLOCKS: none`; a bare `-` is an empty name.
+  - **`no_crash` (#7):** online to the end; no agent_process restart, fatal or exit line; `NRestarts` unchanged; `active` at every sample whose metrics read worked (S).
+    - A unit state `unknown` (the adapter's `STATUS_FAIL_LIMIT` failed status reads) is no departure: the soak runs on. Still unknown at the end, the check is "not reached (infra)"; recovered, it is a note (`notes.stateUnknown`).
+  - **`peak_memory` (#7, S):** the highest `MemoryCurrent` (or `MemoryPeak`) within the target.
+  - **`usd_per_hour` (#7):** the sum of `cost_usd` over the run's `[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X` lines (#395), per hour of the journal's covered time. One `cost_usd unknown`, or no usage line at all, makes it not reached, with the count.
+  - **`agenda_done` (#4):** `agenda done` within the soak.
+  - **`food_floor` (#5):** every `[survival] food` line at or above `foodFloor` (6).
+  - **`ate_when_low` (#5):** after each `low` food line, an `ate` line within the next `eatWithinMinutes` (5) food lines (one a minute at most).
+  - **`deaths_reported` (#5, as in #6):** each `[death] died at ...; waiting for the respawn` has its `[death] died at ...; lost ...` report before the next death.
+- **Notes:** every sample, the survival counts (eats, fights by outcome, flees), the deaths, the LLM usage and the journal coverage. A sample whose reads fail (ssh, gate) records `readError` and/or `metricsError` and is an infra note (`notes.infraSamples`), never a crash.
+- **Journal coverage (#394 re-review):** after a failed refresh, the adapter's `output()` is the cached journal of the last good read, so a stale read must not pass.
+  - On S the read covers the soak only if the final read worked (every read is `--since` the start, so it also covers the failed ones before it) and its first line is the unit's `Starting mindcraft-rotn@...` (the ctl caps a read's lines; a cut read loses it). On T the driver's output is complete.
+  - With a gap (`notes.journalCoverage`), a result later lines cannot change still stands: a seen crash, a seen `agenda done`, food seen below the floor.
+  - Every other journal-based result is "not reached (infra): <the gap>; on what was read: ...". `usd_per_hour` is then measured over the covered minutes (the last good read), and is not reached.
+- **Tests:** `test/unit/g4-soak.test.js`, with fakes only.
+
 ### G4 #6: `g4-death-report`
 
 Ready-to-try: "After death it respawns, reports what it lost and carries on without a chat-spam loop." The bot side is skills-rotn's `src/agent/library/death_report.js` (D3), which this scenario never changes. If it finds something to fix there, harness-ops reports it.
