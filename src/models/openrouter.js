@@ -3,6 +3,13 @@ import { getKey, hasKey } from '../utils/keys.js';
 import { strictFormat } from '../utils/text.js';
 import { safeError } from '../agent/safe_error.js';
 
+// One line per completion with its token counts and cost in USD (G4 #7 soak): numbers only, never the body.
+// "unknown" when OpenRouter sent no usage or a field is not a finite non-negative number.
+export function usageLine(usage) {
+    const num = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0) ? String(v) : 'unknown';
+    return `[openrouter] usage prompt_tokens ${num(usage?.prompt_tokens)}, completion_tokens ${num(usage?.completion_tokens)}, cost_usd ${num(usage?.cost)}`;
+}
+
 export class OpenRouter {
     static prefix = 'openrouter';
     constructor(model_name, url) {
@@ -33,6 +40,9 @@ export class OpenRouter {
         };
         // A null or empty stop_seq sends no stop sequence at all (memory summaries).
         if (stop_seq) pack.stop = stop_seq;
+        // RotN (G4 #7, soak USD/h on the CX23): ask OpenRouter for usage accounting,
+        // so each completion reports its own cost without reading the key's balance.
+        pack.usage = { include: true };
 
         let res = null;
         try {
@@ -44,6 +54,7 @@ export class OpenRouter {
             const clean = (v, d) => String(v ?? d).replace(/[^\w .-]/g, '?').slice(0, 40);
             const provider = clean(completion?.provider, 'unknown');
             console.log(`[openrouter] provider ${provider}, finish_reason ${clean(c0?.finish_reason, 'none')}, content ${typeof c0?.message?.content === 'string' ? c0.message.content.length : 'null'} chars`);
+            console.log(usageLine(completion?.usage));
             if (!completion?.choices?.[0]) {
                 // Never the whole response body; only its error summary, if any.
                 console.error(`No completion or choices returned (model ${this.model_name}):`, completion?.error ? safeError(completion.error) : 'no choices in the response');
