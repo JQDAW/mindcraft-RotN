@@ -64,11 +64,36 @@ export function nearbyBlocksResults(lines) {
         if (header === 'NEARBY_BLOCKS: none') { out.push({ at: i, names: [], none: true }); continue; }
         if (header !== 'NEARBY_BLOCKS') continue;
         const names = [];
-        for (; j < lines.length && /^- /.test(lines[j]); j++) { const n = name(lines[j].slice(2)); if (n !== null) names.push(n); }
+        // "- <name>", and a bare "-" (an empty name, flagged by blockNameProblem) (#394 re-review)
+        for (; j < lines.length && /^-( |$)/.test(lines[j]); j++) { const n = name(lines[j].slice(2)); if (n !== null) names.push(n); }
         out.push({ at: i, names, none: false });
     }
     return out;
 }
+
+/**
+ * skills-rotn's one-time naming line after the first spawn (#396):
+ *   [naming] <bot> near spawn: <kinds> kinds; unknown <n>; <name>:<count> <name>:<count> ...
+ * (the top 50 non-air kinds by count; the name is everything before the last ':'; an empty name prints as ""), or its
+ * warning "[naming] near spawn: could not read the blocks (...)". -> the first line for this bot:
+ * {line, kinds, unknown, entries: [{name, count}]}, or {line, error} for the warning, or null.
+ */
+export const NAMING_RE = /^\[naming\] (\S+) near spawn: (\d+) kinds; unknown (\d+);((?: \S+:\d+)*)$/;
+export function namingAtStart(lines, bot) {
+    const lower = String(bot).toLowerCase();
+    for (const l of lines) {
+        const m = NAMING_RE.exec(l);
+        if (m && m[1].toLowerCase() === lower) {
+            const entries = m[4].trim() ? m[4].trim().split(' ').map((e) => { const x = /^(\S+):(\d+)$/.exec(e); return { name: x[1] === '""' ? '' : x[1], count: Number(x[2]) }; }) : [];
+            return { line: l, kinds: Number(m[2]), unknown: Number(m[3]), entries };
+        }
+        if (/^\[naming\] near spawn: could not read the blocks/.test(l)) return { line: l, error: l.slice('[naming] '.length) };
+    }
+    return null;
+}
+
+/** Air in any form is never a named kind (#394 re-review: count unique non-air names). */
+export const isAir = (n) => /^(minecraft:)?(air|cave_air|void_air)$/.test(n);
 
 /**
  * What is wrong with a block name the agent reported (G2/G4 #2: no unknown or numeric ids), or null. The agent lists

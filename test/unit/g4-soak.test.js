@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers';
 import { runScenario } from '../runner/lib/runner.mjs';
 import soak, { TBD } from '../scenarios/g4/g4-soak-2h.mjs';
-import { agentExits, blockNameProblem, deathEvents, llmUsage, nearbyBlocksResults, survivalEvents } from '../runner/lib/survival.mjs';
+import { agentExits, blockNameProblem, deathEvents, isAir, llmUsage, namingAtStart, nearbyBlocksResults, survivalEvents } from '../runner/lib/survival.mjs';
 
 const NAME = 'FRCFLD';
 const MIN = 60000;
@@ -30,7 +30,12 @@ const REAL_NEARBY = ['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS',
  * opt.deaths (minutes of deaths); opt.unreported (deaths with no report); opt.unitBot; opt.unitActive;
  * opt.nearbyAt (minute of the !nearbyBlocks result, default 3); opt.sameLineHeader; opt.nearbyNone (an empty result first);
  * opt.costUsd (per completion, default 0.0002); opt.unknownCost (one completion's cost unknown); opt.noUsage;
- * opt.refreshFailAt (minute from which journal reads fail).
+ * opt.refreshFailAt (minute from which journal reads fail; opt.refreshOkAt, the minute they work again). As in the
+ * adapter, output() is then the cached journal of the last good read (#394 re-review), not the live one.
+ * opt.unknownFrom/opt.unknownUntil (minutes the unit's state is 'unknown': status and metrics reads fail, alive() false,
+ * stateUnknown set); opt.cutStart (the read lost the "Starting mindcraft-rotn@" line to the ctl's line cap);
+ * opt.naming (a "[naming] ..." line at minute 0.5, #396); opt.failFirstReads (the first N refreshes fail, so the
+ * final read is the first good one).
  */
 function sim(opt = {}) {
     let t = 0;
@@ -42,11 +47,20 @@ function sim(opt = {}) {
     const add = (msg) => log.push(line(t, msg));
     const jr = (...msgs) => journal.push(...msgs);
     const done = new Set();
+    let cache = [];
+    const sinceStart = () => (started === null ? -1 : (t - started) / MIN);
+    const within = (from, until) => from !== undefined && sinceStart() >= from && (until === undefined || sinceStart() < until);
+    let refreshes = 0;
+    const readOk = () => !(opt.failFirstReads && refreshes <= opt.failFirstReads) && !within(opt.refreshFailAt, opt.refreshOkAt) && !within(opt.unknownFrom, opt.unknownUntil);
+    const statusOk = () => !within(opt.unknownFrom, opt.unknownUntil);
+    let stateUnknown = null;
+    const read = () => { if (readOk()) cache = opt.cutStart ? journal.slice(1) : [...journal]; return readOk(); };
     // The bot's own lines, written as simulated time passes (once each).
     const at = (min, key, fn) => { if (started !== null && t - started >= min * MIN && !done.has(key)) { done.add(key); fn(); } };
     const advance = () => {
         if (started === null) return;
         at(0.3, 'join', () => { online = true; log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`); add(`${NAME} joined the game`); });
+        if (opt.naming) at(0.5, 'naming', () => jr(opt.naming));
         if (opt.nearbyNone) at(2, 'nearbyNone', () => jr('Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS: none', ''));
         if (!opt.noNearby) {
             at(opt.nearbyAt ?? 3, 'nearby', () => {
@@ -91,21 +105,23 @@ function sim(opt = {}) {
     let sampleN = 0;
     const bot = {
         ...(opt.driver ? {} : { kind: 'service', bot: opt.unitBot ?? 'frcfld',
-            refresh: () => { advance(); return opt.refreshFailAt && started !== null && t - started >= opt.refreshFailAt * MIN ? Promise.reject(new Error("service journal: 'journal frcfld' exited 255")) : Promise.resolve(); } }),
+            refresh: () => { advance(); refreshes++; return read() ? Promise.resolve() : Promise.reject(new Error("service journal: 'journal frcfld' exited 255")); } }),
         start() { started = t; unit.state = 'active'; jr('Starting mindcraft-rotn@frcfld.service - Mindcraft RotN bot frcfld...'); return Promise.resolve(); },
-        alive: () => unit.state === 'active',
+        alive() { advance(); if (!opt.driver && !statusOk()) stateUnknown = stateUnknown ?? { since: `minute ${Math.round(sinceStart())}`, failures: 3 }; return statusOk() && unit.state === 'active'; },
         needsStop: () => unit.state === 'active',
         exitCode: () => null,
         exitSignal: () => null,
-        unitState: () => unit.state,
-        output: () => { advance(); return journal; },
+        unitState: () => (statusOk() ? unit.state : 'unknown'),
+        output: () => { advance(); if (opt.driver) return journal; read(); return cache; },
         metrics() {
             advance();
+            if (!statusOk()) return Promise.reject(new Error("service metrics: 'metrics frcfld' exited 255"));
             const mb = opt.memoryMb ? opt.memoryMb[Math.min(sampleN++, opt.memoryMb.length - 1)] : 300;
             return Promise.resolve({ MemoryCurrent: mb * 1048576, MemoryPeak: '[not set]', NRestarts: unit.nrestarts, ActiveState: unit.state });
         },
         stop() { unit.state = 'inactive'; return Promise.resolve(); },
     };
+    if (!opt.driver) Object.defineProperty(bot, 'stateUnknown', { get: () => stateUnknown });
     const clock = { now: () => t, sleep: async (ms) => { t += ms; advance(); for (let i = 0; i < 3; i++) await tick(); } };
     return { server, bot, clock, unit };
 }
@@ -178,7 +194,7 @@ describe('g4-soak-2h on a simulated service', () => {
         const bad = byName(await run(sim({ badName: '35:2' })));
         assert.equal(bad.naming.pass, false);
         assert.equal(bad.naming.detail, '1 bad name(s): "35:2" (a numeric id)');
-        assert.match(byName(await run(sim({ noNearby: true }))).naming.detail, /^not reached: the agent ran no !nearbyBlocks/);
+        assert.match(byName(await run(sim({ noNearby: true }))).naming.detail, /^not reached: no \[naming\] line and the agent ran no !nearbyBlocks/);
     });
 
     test('no_crash (#7): systemd restarted it, an agent_process restart, or it left: each fails, named', async () => {
@@ -230,7 +246,7 @@ describe('#394 review: naming in the real format, a failed read is no crash, the
         const none = byName(await run(sim({ nearbyNone: true })));
         assert.equal(none.naming.pass, true, none.naming.detail);
         const late = byName(await run(sim({ nearbyAt: 31 })));
-        assert.match(late.naming.detail, /^not reached: the first !nearbyBlocks result came at minute 35, after the 20-min window$/);
+        assert.match(late.naming.detail, /^not reached: no \[naming\] line; the first !nearbyBlocks result came at minute 35, after the 20-min window$/);
     });
 
     test('an undefined, null or unknown name fails naming', async () => {
@@ -241,16 +257,84 @@ describe('#394 review: naming in the real format, a failed read is no crash, the
         }
     });
 
-    test('journal reads that fail from minute 60: an infra note in the samples, never a crash', async () => {
-        const r = await run(sim({ refreshFailAt: 60 }));
+    test('journal reads that fail from minute 60 to 75: an infra note in the samples, never a crash; the later reads cover it', async () => {
+        const r = await run(sim({ refreshFailAt: 60, refreshOkAt: 75 }));
         const c = byName(r);
-        assert.equal(c.no_crash.pass, true, c.no_crash.detail);
-        assert.ok(r.notes.infraSamples.count >= 12, JSON.stringify(r.notes.infraSamples));
-        assert.match(r.notes.infraSamples.first.error, /exited 255/);
+        for (const k of ['no_crash', 'naming', 'agenda_done', 'food_floor', 'ate_when_low', 'deaths_reported']) assert.equal(c[k].pass, true, `${k}: ${c[k].detail}`);
+        assert.equal(r.notes.infraSamples.count, 3, JSON.stringify(r.notes.infraSamples));
+        assert.match(r.notes.infraSamples.first.readError, /exited 255/);
+        assert.equal(r.notes.infraSamples.first.metricsError, undefined, 'the metrics read worked');
+        assert.equal(r.notes.journalCoverage.complete, true);
     });
 
     test('usd_per_hour: a cost_usd unknown, or no usage line at all, is not reached with the count', async () => {
         assert.match(byName(await run(sim({ unknownCost: true }))).usd_per_hour.detail, /^not reached: 1 of 120 usage line\(s\) have cost_usd unknown; the known ones sum to USD 0\.0238$/);
         assert.match(byName(await run(sim({ noUsage: true }))).usd_per_hour.detail, /^not reached: no "\[openrouter\] usage \.\.\." line in the log \(120 LLM calls\): the release prints no usage line \(setup gap\?\)$/);
+    });
+});
+
+describe('#394 re-review: the [naming] line first, journal coverage, an unknown unit state, the final read', () => {
+    const GOOD = '[naming] FRCFLD near spawn: 7 kinds; unknown 0; dynamictrees:trunkshell:40 dirt:30 grass:20 undergroundbiomes:metamorphic_stone:12 rustic:cohosh:3 water:2 biomesoplenty:plant_0:1';
+
+    test('parser: the #396 forms (unknown entries, a name with colons, "" as an empty name, 0 kinds, the warning, another bot)', () => {
+        const n = namingAtStart(['x', '[naming] FRCFLD near spawn: 4 kinds; unknown 3; stone:50 undefined:12 4321:2:2 "":1'], 'frcfld');
+        assert.deepEqual([n.kinds, n.unknown, n.entries], [4, 3, [{ name: 'stone', count: 50 }, { name: 'undefined', count: 12 }, { name: '4321:2', count: 2 }, { name: '', count: 1 }]]);
+        assert.deepEqual(namingAtStart(['[naming] FRCFLD near spawn: 0 kinds; unknown 0;'], NAME).entries, []);
+        assert.match(namingAtStart(['[naming] near spawn: could not read the blocks (no bot)'], NAME).error, /could not read the blocks/);
+        assert.equal(namingAtStart(['[naming] OTHER near spawn: 1 kinds; unknown 0; stone:1'], NAME), null);
+        assert.deepEqual(nearbyBlocksResults(['Agent executed: !nearbyBlocks and got: ', 'NEARBY_BLOCKS', '- dirt', '-']), [{ at: 0, none: false, names: ['dirt', ''] }], 'a bare "-" is an empty name');
+        assert.deepEqual(['air', 'minecraft:cave_air', 'stone'].map(isAir), [true, true, false]);
+    });
+
+    test('naming: a good [naming] line passes and outranks a bad !nearbyBlocks; unknown, an empty or bad name, too few names fail; 0 kinds or the warning is not reached', async () => {
+        const good = byName(await run(sim({ naming: GOOD, badName: '35:2' })));
+        assert.equal(good.naming.pass, true, good.naming.detail);
+        assert.equal(good.naming.detail, '[naming]: 7 unique non-air names, unknown 0, all real (need at least 5)');
+        const unknown = byName(await run(sim({ naming: '[naming] FRCFLD near spawn: 7 kinds; unknown 1; stone:9 dirt:8 grass:7 sand:6 gravel:5 clay:4 mod:unknown_block:1' })));
+        assert.equal(unknown.naming.pass, false);
+        assert.equal(unknown.naming.detail, 'unknown 1 in the [naming] line; 1 bad name(s): "mod:unknown_block" (unknown)');
+        const empty = byName(await run(sim({ naming: '[naming] FRCFLD near spawn: 6 kinds; unknown 0; stone:9 dirt:8 grass:7 sand:6 gravel:5 "":4' })));
+        assert.equal(empty.naming.pass, false);
+        assert.match(empty.naming.detail, /"" \(empty\)/);
+        const few = byName(await run(sim({ naming: '[naming] FRCFLD near spawn: 2 kinds; unknown 0; stone:9 dirt:8' })));
+        assert.equal(few.naming.detail, '2 unique non-air names (need at least 5)');
+        assert.match(byName(await run(sim({ naming: '[naming] FRCFLD near spawn: 0 kinds; unknown 0;' }))).naming.detail, /^not reached: the \[naming\] line lists 0 kinds/);
+        assert.match(byName(await run(sim({ naming: '[naming] near spawn: could not read the blocks (timeout)' }))).naming.detail, /^not reached: the bot could not read the blocks near spawn/);
+    });
+
+    test('the repro: reads fail from minute 70 and a crash at 80 goes unseen: no_crash and the journal checks are not reached (infra), usd per hour over the covered 65 min', async () => {
+        const r = await run(sim({ refreshFailAt: 70, agentRestartAt: 80, deaths: [90], unreported: [90] }));
+        const c = byName(r);
+        assert.equal(c.no_crash.pass, false);
+        assert.match(c.no_crash.detail, /^not reached \(infra\): the journal was last read at minute 65 of 120 \(reads failing: infra\); on what was read: /);
+        for (const k of ['food_floor', 'ate_when_low', 'deaths_reported']) assert.match(c[k].detail, /^not reached \(infra\): the journal was last read at minute 65/, k);
+        assert.match(c.usd_per_hour.detail, /^not reached \(infra\): the journal was last read at minute 65 of 120 .*; measured USD 0\.012\/h over the covered time \(USD 0\.013 over 65 min, 65 completions\)$/);
+        assert.equal(c.agenda_done.pass, true, 'a seen "agenda done" stands on a partial read');
+        assert.deepEqual(r.notes.journalCoverage, { complete: false, coveredMinutes: 65, minutes: 120, gap: 'the journal was last read at minute 65 of 120 (reads failing: infra)' });
+    });
+
+    test('a read that lost the unit\'s start line (the ctl\'s line cap): the journal checks are not reached', async () => {
+        const c = byName(await run(sim({ cutStart: true })));
+        assert.match(c.deaths_reported.detail, /^not reached \(infra\): the journal read does not start at the unit's "Starting mindcraft-rotn@" line/);
+        assert.match(c.no_crash.detail, /^not reached \(infra\)/);
+    });
+
+    test('an unknown unit state (status reads failing) is infra, never a crash: not reached at the end; a note if it recovers', async () => {
+        const r = await run(sim({ unknownFrom: 100 }));
+        const c = byName(r);
+        assert.equal(c.no_crash.pass, false);
+        assert.match(c.no_crash.detail, /^not reached \(infra\): the unit's state is unknown at the end \(status reads failing since minute 10\d\)$/);
+        assert.equal(r.notes.samples.length, 25, 'the soak ran on: an unknown state is no departure');
+        const back = await run(sim({ unknownFrom: 60, unknownUntil: 70 }));
+        const b = byName(back);
+        assert.equal(b.no_crash.pass, true, b.no_crash.detail);
+        assert.match(b.no_crash.detail, /the unit's state was unknown for a while \(status reads failing, infra\)$/);
+        assert.ok(back.notes.stateUnknown);
+        assert.equal(back.notes.infraSamples.count, 2);
+    });
+
+    test('naming: a !nearbyBlocks result found only in the final read is not reached (after the window)', async () => {
+        const c = byName(await run(sim({ failFirstReads: 25 })));
+        assert.equal(c.naming.detail, 'not reached: no [naming] line; the first !nearbyBlocks result was found only in the final read, after the window');
     });
 });

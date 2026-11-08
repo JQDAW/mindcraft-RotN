@@ -8,32 +8,37 @@
 // target yet (TBD)": never a pass.
 //
 // Every sampleMinutes (5) for durationMinutes (120): metrics (MemoryCurrent, MemoryPeak, NRestarts, ActiveState; S only)
-// and a fresh journal read. What the bot logs (lib/survival.mjs): the [survival] lines (#384, #387: ate, fight start/end,
-// flee, food), the [death] lines (a death and its report), agent_process's restarts and exits, the agent's own
-// !nearbyBlocks results, and the agenda's lines.
+// and a fresh journal read. What the bot logs (lib/survival.mjs): the [naming] line (#396), the [survival] lines (#384,
+// #387: ate, fight start/end, flee, food), the [death] lines (a death and its report), the [openrouter] usage lines
+// (#395), agent_process's restarts and exits, the agent's own !nearbyBlocks results, and the agenda's lines.
+// Infra, never the bot's fault (#394 reviews): a sample whose reads fail is an infra note (notes.infraSamples); a unit
+// state 'unknown' (status reads failing, lib/service.mjs) is no departure; and the journal-based checks need a read that
+// covers the soak (on S a good final read starting at the unit's start line; notes.journalCoverage). With a gap, a
+// result later lines cannot change stands (a seen crash, "agenda done", food below the floor); any other is
+// "not reached (infra)", and USD per hour is measured over the covered minutes.
 // Checks:
 //   login_online       S: this run's bot (case aside) from an inactive unit; the join with an online UUID
-//   naming             (#2) the agent's first !nearbyBlocks result with blocks, first seen at a sample within
-//                      namingWindowMinutes, lists at least minNamedBlocks blocks, none with a numeric, unknown, undefined,
-//                      null or placeholder name. None, or later: not reached. (skills-rotn's one-time [naming] line after
-//                      the spawn is to replace it; this stays the fallback.)
-// A sample whose reads fail is an infra note (notes.infraSamples), never a crash.
+//   naming             (#2) the [naming] line: unknown 0, at least minNamedBlocks unique non-air names, each a real name
+//                      (no numeric, unknown, undefined, null, placeholder or empty one); 0 kinds or its warning: not
+//                      reached. No [naming] line: the fallback, the agent's first !nearbyBlocks result with blocks, first
+//                      seen at a good read within namingWindowMinutes (later, or only in the final read: not reached).
 //   no_crash           (#7) online to the end; NRestarts unchanged (S); no agent_process restart, fatal or exit line;
-//                      ActiveState active at every sample (S)
+//                      ActiveState active at every sample whose metrics read worked (S). An unknown state at the end:
+//                      not reached (infra).
 //   peak_memory        (#7, S) the highest MemoryCurrent (and MemoryPeak, if set) within peakMemoryMaxMb (TBD)
 //   usd_per_hour       (#7) the LLM spend per hour within usdPerHourMax (TBD): the sum of cost_usd over the run's
-//                      "[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X" lines (#395), per hour. A
-//                      cost_usd unknown, or no usage line at all, makes it not reached, with the count.
+//                      "[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X" lines (#395), per covered
+//                      hour. A cost_usd unknown, or no usage line at all, makes it not reached, with the count.
 //   agenda_done        (#4) "agenda done" within the soak
 //   food_floor         (#5) the food level in every [survival] food line stays at or above foodFloor
 //   ate_when_low       (#5) every "low" food line is followed by an "ate" line within eatWithinMinutes
 //   deaths_reported    (#5, as in #6) every death has its report line before the next death (journal messages carry no
 //                      time once read, so the order is the bound); no death passes it
-// Notes: every sample, the survival counts (eats, fights by outcome, flees), the deaths, the calls per hour.
+// Notes: every sample, the survival counts (eats, fights by outcome, flees), the deaths, the LLM usage, the coverage.
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED } from '../../runner/lib/g2.mjs';
 import { exitedText } from '../../runner/lib/service.mjs';
-import { agentExits, blockNameProblem, deathEvents, llmUsage, nearbyBlocksResults, survivalEvents } from '../../runner/lib/survival.mjs';
+import { agentExits, blockNameProblem, deathEvents, isAir, llmUsage, namingAtStart, nearbyBlocksResults, survivalEvents } from '../../runner/lib/survival.mjs';
 
 const MS = 1000;
 const MIN = 60 * MS;
@@ -103,23 +108,30 @@ export default {
         ctx.check('login_online', s.ok, s.why);
         if (!s.ok) { notReached(rest, 'the bot did not log in'); return; }
         const fresh = async () => { if (typeof bot.refresh === 'function') await bot.refresh(); };
-        const gone = () => s.events().find(s.gone) ?? (!bot.alive() ? { type: 'exited', reason: exitedText(bot) } : null);
+        // A unit whose state is unknown (STATUS_FAIL_LIMIT status reads failed, lib/service.mjs) is not alive() but has
+        // not left: an infra fault, never a departure (#394 re-review).
+        const unknownState = () => bot.unitState?.() === 'unknown';
+        const gone = () => s.events().find(s.gone) ?? (!bot.alive() && !unknownState() ? { type: 'exited', reason: exitedText(bot) } : null);
 
         // the soak: a sample every sampleMinutes
         const startedAt = clock.now();
         const end = startedAt + p.durationMinutes * MIN;
+        const minuteNow = () => Math.round(((clock.now() - startedAt) / MIN) * 10) / 10;
         const samples = [];
         // A sample whose reads fail (an ssh or gate error, #394 review) records the error: an infra note, never a crash.
+        // After a failed refresh, output() is the cached journal of the last good read (#394 re-review): lastReadMin is
+        // the minute of the last good read, and only a good read can date the !nearbyBlocks fallback.
         let namingSeenMin = null;
+        let lastReadMin = null;
         const sample = async () => {
-            const min = Math.round(((clock.now() - startedAt) / MIN) * 10) / 10;
+            const min = minuteNow();
             let readError = null;
-            try { await fresh(); } catch (e) { readError = String(e?.message ?? e); }
+            try { await fresh(); lastReadMin = min; } catch (e) { readError = String(e?.message ?? e); }
             const m = service ? await bot.metrics().catch((e) => ({ error: String(e?.message ?? e) })) : null;
-            if (namingSeenMin === null && nearbyBlocksResults(bot.output()).some((r) => r.names.length)) namingSeenMin = min;
+            if (!readError && namingSeenMin === null && nearbyBlocksResults(bot.output()).some((r) => r.names.length)) namingSeenMin = min;
             samples.push({ min, ...(m ? { memoryMb: m.MemoryCurrent != null ? Math.round(Number(m.MemoryCurrent) / 1048576) : null,
                 peakMb: Number.isFinite(Number(m.MemoryPeak)) ? Math.round(Number(m.MemoryPeak) / 1048576) : null, nRestarts: m.NRestarts ?? null, state: m.ActiveState ?? null } : {}),
-                ...(readError || m?.error ? { error: [readError, m?.error].filter(Boolean).join('; ') } : {}) });
+                ...(readError ? { readError } : {}), ...(m?.error ? { metricsError: m.error } : {}) });
             ctx.note('samples', samples);
         };
         await sample();
@@ -129,37 +141,79 @@ export default {
             await sample();
             if (!left && gone()) { left = gone(); break; }
         }
-        try { await fresh(); } catch (e) { ctx.note('lastReadError', String(e?.message ?? e)); }
+        let finalReadOk = true;
+        try { await fresh(); lastReadMin = minuteNow(); } catch (e) { finalReadOk = false; ctx.note('lastReadError', String(e?.message ?? e)); }
         const out = bot.output();
         const minutes = (clock.now() - startedAt) / MIN;
-        const failed = samples.filter((x) => x.error);
+        const failed = samples.filter((x) => x.readError || x.metricsError);
         if (failed.length) ctx.note('infraSamples', { count: failed.length, first: failed[0] });
+        if (bot.stateUnknown) ctx.note('stateUnknown', bot.stateUnknown);
 
-        // naming (#2): the agent's first !nearbyBlocks result with names (its own command; the console is no giver), seen
-        // at a sample within namingWindowMinutes. (The lead's next step: skills-rotn's one-time [naming] line after the
-        // spawn; this parser stays as the fallback.)
-        const nb = nearbyBlocksResults(out).find((r) => r.names.length) ?? null;
-        if (!nb) notReached(['naming'], 'the agent ran no !nearbyBlocks with any block in the soak\'s log');
-        else if (namingSeenMin !== null && namingSeenMin > p.namingWindowMinutes) {
-            notReached(['naming'], `the first !nearbyBlocks result came at minute ${namingSeenMin}, after the ${p.namingWindowMinutes}-min window`);
+        // Journal coverage (#394 re-review): the journal-based checks judge the soak only if the log read covers it to the
+        // end. On S that is a good final read (every read is --since the start, so it covers the failed ones before it)
+        // whose first line is the unit's start (the ctl caps a read's lines; a cut read loses the start). On T the driver's
+        // own output is complete.
+        const startLine = /^Starting mindcraft-rotn@\S+\.service/.test(out[0] ?? '');
+        const gap = !service ? null
+            : !finalReadOk ? `the journal was last read at minute ${lastReadMin ?? 'none'} of ${Math.round(minutes)} (reads failing: infra)`
+                : !startLine ? 'the journal read does not start at the unit\'s "Starting mindcraft-rotn@" line (cut by the ctl\'s line cap?)' : null;
+        const coveredMinutes = gap ? (startLine ? lastReadMin ?? 0 : 0) : minutes;
+        ctx.note('journalCoverage', { complete: !gap, coveredMinutes: Math.round(coveredMinutes * 10) / 10, minutes: Math.round(minutes * 10) / 10, ...(gap ? { gap } : {}) });
+        // A result that later lines cannot change stands on a partial read (a seen "agenda done", a seen crash, food seen
+        // below the floor); any other journal-based result is not reached, with what the partial read showed.
+        const infra = (k, detail) => ctx.check(k, false, `not reached (infra): ${gap}; ${detail}`);
+        const partial = (k, pass, detail) => (gap && pass ? infra(k, `on what was read: ${detail}`) : ctx.check(k, pass, detail));
+
+        // naming (#2). The primary source is skills-rotn's one-time "[naming] <bot> near spawn: ..." line (#396): it passes
+        // only with unknown 0, at least minNamedBlocks unique non-air names, each one a real name (blockNameProblem;
+        // an empty name is flagged). The fallback, with no [naming] line, is the agent's own first !nearbyBlocks result
+        // with names, first seen at a good read within namingWindowMinutes.
+        const nl = namingAtStart(out, name);
+        if (nl?.error) notReached(['naming'], `the bot could not read the blocks near spawn: "${nl.line}"`);
+        else if (nl) {
+            const names = [...new Set(nl.entries.map((e) => e.name))].filter((n) => !isAir(n));
+            const bad = names.map((n) => [n, blockNameProblem(n)]).filter(([, w]) => w);
+            ctx.note('naming', { source: '[naming]', kinds: nl.kinds, unknown: nl.unknown, names });
+            if (nl.kinds === 0) notReached(['naming'], 'the [naming] line lists 0 kinds near spawn (an empty world around the bot?)');
+            else {
+                ctx.check('naming', nl.unknown === 0 && bad.length === 0 && names.length >= p.minNamedBlocks,
+                    [nl.unknown && `unknown ${nl.unknown} in the [naming] line`,
+                        bad.length && `${bad.length} bad name(s): ${bad.slice(0, 5).map(([n, w]) => `"${n}" (${w})`).join(', ')}`,
+                        names.length < p.minNamedBlocks && `${names.length} unique non-air names (need at least ${p.minNamedBlocks})`].filter(Boolean).join('; ')
+                    || `[naming]: ${names.length} unique non-air names, unknown 0, all real (need at least ${p.minNamedBlocks})`);
+            }
         } else {
-            const bad = nb.names.map((n) => [n, blockNameProblem(n)]).filter(([, w]) => w);
-            ctx.note('nearbyBlocks', nb.names);
-            ctx.check('naming', nb.names.length >= p.minNamedBlocks && bad.length === 0,
-                bad.length ? `${bad.length} bad name(s): ${bad.slice(0, 5).map(([n, w]) => `"${n}" (${w})`).join(', ')}` : `${nb.names.length} names, all real (need at least ${p.minNamedBlocks})`);
+            const nb = nearbyBlocksResults(out).find((r) => r.names.length) ?? null;
+            if (!nb) notReached(['naming'], `no [naming] line and the agent ran no !nearbyBlocks with any block in the soak's log${gap ? ` (${gap})` : ''}`);
+            else if (namingSeenMin === null) notReached(['naming'], 'no [naming] line; the first !nearbyBlocks result was found only in the final read, after the window');
+            else if (namingSeenMin > p.namingWindowMinutes) {
+                notReached(['naming'], `no [naming] line; the first !nearbyBlocks result came at minute ${namingSeenMin}, after the ${p.namingWindowMinutes}-min window`);
+            } else {
+                const names = [...new Set(nb.names)].filter((n) => !isAir(n));
+                const bad = names.map((n) => [n, blockNameProblem(n)]).filter(([, w]) => w);
+                ctx.note('naming', { source: '!nearbyBlocks', names });
+                ctx.check('naming', names.length >= p.minNamedBlocks && bad.length === 0,
+                    bad.length ? `${bad.length} bad name(s): ${bad.slice(0, 5).map(([n, w]) => `"${n}" (${w})`).join(', ')}` : `!nearbyBlocks (no [naming] line): ${names.length} unique non-air names, all real (need at least ${p.minNamedBlocks})`);
+            }
         }
 
-        // no crash (#7)
+        // no crash (#7). A seen crash fails on any read. With none seen: an unknown unit state at the end (status reads
+        // failing) or a journal gap makes it not reached (infra), never a pass and never the bot's fault.
         const exits = agentExits(out, name);
         const nr = samples.map((x) => x.nRestarts).filter((x) => x !== null && x !== undefined);
-        // Only a sample that read the unit counts: a failed read is an infra note (above), not a crash.
-        const notActive = samples.filter((x) => service && !x.error && x.state !== undefined && x.state !== 'active');
+        // Only a sample whose metrics read worked counts: a failed read is an infra note (above), not a crash.
+        const notActive = samples.filter((x) => service && !x.metricsError && x.state !== undefined && x.state !== 'active');
         const crashBits = [left && `gone at minute ${Math.round(minutes)}: ${left.type}${left.reason ? ` (${left.reason})` : ''}`,
             exits.length && `${exits.length} agent restart or exit line(s): "${exits[0].line}"`,
             service && nr.length && nr.some((x) => x !== nr[0]) && `NRestarts ${nr[0]} -> ${nr.at(-1)}`,
-            notActive.length && `not active at ${notActive.length} sample(s) (${notActive[0].state ?? notActive[0].error})`].filter(Boolean);
-        ctx.check('no_crash', crashBits.length === 0 && minutes >= p.durationMinutes - 0.01,
-            crashBits.length ? crashBits.join('; ') : `${Math.round(minutes)} min up, ${samples.length} samples${service ? `, NRestarts ${nr[0] ?? '?'} throughout` : ''}, no agent exit`);
+            notActive.length && `not active at ${notActive.length} sample(s) (${notActive[0].state})`].filter(Boolean);
+        if (crashBits.length) ctx.check('no_crash', false, crashBits.join('; '));
+        else if (unknownState()) {
+            ctx.check('no_crash', false, `not reached (infra): the unit's state is unknown at the end (status reads failing since ${bot.stateUnknown?.since ?? '?'})`);
+        } else {
+            partial('no_crash', minutes >= p.durationMinutes - 0.01,
+                `${Math.round(minutes)} min up, ${samples.length} samples${service ? `, NRestarts ${nr[0] ?? '?'} throughout` : ''}, no agent exit${bot.stateUnknown ? '; the unit\'s state was unknown for a while (status reads failing, infra)' : ''}`);
+        }
 
         // peak memory (#7, S)
         if (!service) notReached(['peak_memory'], 'not the CX23 service (no metrics)');
@@ -170,21 +224,24 @@ export default {
             else ctx.check('peak_memory', peak <= Number(p.peakMemoryMaxMb), `peak ${peak} MB (target ${p.peakMemoryMaxMb} MB)`);
         }
 
-        // USD per hour (#7): the sum of cost_usd over the run's "[openrouter] usage ..." lines (#395), per hour. A line with
-        // cost_usd unknown makes it not reached, with the count.
+        // USD per hour (#7): the sum of cost_usd over the run's "[openrouter] usage ..." lines (#395), over the minutes the
+        // journal read covers. A cost_usd unknown, no usage line, or a journal gap makes it not reached.
         const calls = out.filter((l) => /^\[openrouter\] provider /.test(l)).length;
         const u = llmUsage(out);
-        const hours = minutes / 60;
+        const hours = coveredMinutes / 60;
         const usdPerHour = hours > 0 ? Math.round((u.usd / hours) * 1e6) / 1e6 : null;
-        ctx.note('llmUsage', { calls, usageLines: u.lines, unknown: u.unknown, usd: u.usd, minutes: Math.round(minutes), usdPerHour });
-        if (!u.lines) notReached(['usd_per_hour'], `no "[openrouter] usage ..." line in the log (${calls} LLM calls): the release prints no usage line (setup gap?)`);
+        const over = `USD ${u.usd} over ${Math.round(coveredMinutes)} min, ${u.lines} completions`;
+        ctx.note('llmUsage', { calls, usageLines: u.lines, unknown: u.unknown, usd: u.usd, minutes: Math.round(coveredMinutes), usdPerHour });
+        if (gap) infra('usd_per_hour', `measured USD ${usdPerHour}/h over the covered time (${over})`);
+        else if (!u.lines) notReached(['usd_per_hour'], `no "[openrouter] usage ..." line in the log (${calls} LLM calls): the release prints no usage line (setup gap?)`);
         else if (u.unknown) notReached(['usd_per_hour'], `${u.unknown} of ${u.lines} usage line(s) have cost_usd unknown; the known ones sum to USD ${u.usd}`);
-        else if (!set(p.usdPerHourMax)) ctx.check('usd_per_hour', false, `not reached: no target yet (TBD); measured USD ${usdPerHour}/h (USD ${u.usd} over ${Math.round(minutes)} min, ${u.lines} completions)`);
-        else ctx.check('usd_per_hour', usdPerHour <= Number(p.usdPerHourMax), `USD ${usdPerHour}/h (target ${p.usdPerHourMax}; USD ${u.usd} over ${Math.round(minutes)} min, ${u.lines} completions)`);
+        else if (!set(p.usdPerHourMax)) ctx.check('usd_per_hour', false, `not reached: no target yet (TBD); measured USD ${usdPerHour}/h (${over})`);
+        else ctx.check('usd_per_hour', usdPerHour <= Number(p.usdPerHourMax), `USD ${usdPerHour}/h (target ${p.usdPerHourMax}; ${over})`);
 
-        // the agenda (#4)
+        // the agenda (#4): a seen "agenda done" stands on a partial read
         const done = out.some((l) => l === 'agenda done') || s.events().some((e) => e.type === 'chat' && e.text === 'agenda done');
-        ctx.check('agenda_done', done, done ? '"agenda done" within the soak' : 'no "agenda done" within the soak');
+        if (done || !gap) ctx.check('agenda_done', done, done ? '"agenda done" within the soak' : 'no "agenda done" within the soak');
+        else infra('agenda_done', `no "agenda done" in what was read`);
 
         // food, eating, fights and flees (#5)
         const sv = survivalEvents(out);
@@ -192,10 +249,10 @@ export default {
         for (const f of sv.fightEnd) outcomes[f.outcome] = (outcomes[f.outcome] ?? 0) + 1;
         ctx.note('survival', { eats: sv.ate.length, fights: sv.fightStart.length, fightOutcomes: outcomes, flees: sv.flee.length, foodLines: sv.food.length });
         const known = sv.food.filter((f) => f.food !== null);
-        if (!known.length) notReached(['food_floor'], 'no [survival] food line in the log');
+        if (!known.length) notReached(['food_floor'], `no [survival] food line in the log${gap ? ` (${gap})` : ''}`);
         else {
             const low = known.reduce((a, b) => (b.food < a.food ? b : a));
-            ctx.check('food_floor', low.food >= Number(p.foodFloor), `lowest food ${low.food} (floor ${p.foodFloor}; ${known.length} food lines)`);
+            partial('food_floor', low.food >= Number(p.foodFloor), `lowest food ${low.food} (floor ${p.foodFloor}; ${known.length} food lines)`);
         }
         // An "ate" line after each "low" one, within eatWithinMinutes: lines carry no time, so the next food line after
         // that window bounds it (one food line a minute at most, FOOD_LOG_MS).
@@ -205,12 +262,16 @@ export default {
             const until = next.length ? next.at(-1).at : Infinity;
             return !sv.ate.some((a) => a.at > l.at && a.at <= until);
         });
-        ctx.check('ate_when_low', unfed.length === 0, lows.length === 0 ? 'the food level was never low' : unfed.length ? `${unfed.length} of ${lows.length} low food line(s) with no eat after them` : `ate after each of ${lows.length} low food line(s)`);
+        const ateDetail = lows.length === 0 ? 'the food level was never low' : unfed.length ? `${unfed.length} of ${lows.length} low food line(s) with no eat after them` : `ate after each of ${lows.length} low food line(s)`;
+        if (gap) infra('ate_when_low', `on what was read: ${ateDetail}`);
+        else ctx.check('ate_when_low', unfed.length === 0, ateDetail);
 
         // deaths (#5, as in #6)
         const { deaths, reports } = deathEvents(out);
         const unreported = deaths.filter((d, i) => !reports.some((r) => r.at > d.at && (deaths[i + 1] === undefined || r.at < deaths[i + 1].at)));
         ctx.note('deaths', { deaths: deaths.length, reports: reports.length });
-        ctx.check('deaths_reported', unreported.length === 0, deaths.length === 0 ? 'no death' : unreported.length ? `${unreported.length} of ${deaths.length} death(s) with no report` : `each of ${deaths.length} death(s) reported`);
+        const deathDetail = deaths.length === 0 ? 'no death' : unreported.length ? `${unreported.length} of ${deaths.length} death(s) with no report` : `each of ${deaths.length} death(s) reported`;
+        if (gap) infra('deaths_reported', `on what was read: ${deathDetail}`);
+        else ctx.check('deaths_reported', unreported.length === 0, deathDetail);
     },
 };

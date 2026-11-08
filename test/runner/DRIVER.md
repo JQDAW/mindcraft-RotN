@@ -544,18 +544,25 @@ A short session of the real agent with the **production** task-giver list. `Serv
   - The run is not-gate while either target is TBD.
 - **The checks:**
   - **`login_online`:** as in #374 (this run's bot, an inactive unit).
-  - **`naming` (#2):** the agent's own first `!nearbyBlocks` result with blocks, first seen at a sample within `namingWindowMinutes` (20), lists at least `minNamedBlocks` (5) names, none numeric, `unknown`, `undefined`, `null` or a placeholder.
-    - The real format: `NEARBY_BLOCKS` on the line after `Agent executed: !nearbyBlocks and got: `, or on the same line; `- water (source|flowing)`; `- Block Below|at Legs|at Head: <name>`; `- First Solid Block Above Head: <name> (N blocks up)` or `none`; `NEARBY_BLOCKS: none`. The suffixes and labels are stripped.
-    - Bare vanilla names (`dirt`) count.
-    - The lead's next step is skills-rotn's one-time `[naming]` line after the spawn; this parser then stays as the fallback.
-  - **`no_crash` (#7):** online to the end; no agent_process restart, fatal or exit line; `NRestarts` unchanged; `active` at every sample (S).
+  - **`naming` (#2):** the primary source is skills-rotn's one-time line after the first spawn (#396): `[naming] <bot> near spawn: <kinds> kinds; unknown <n>; <name>:<count> ...` (the name is everything before the last `:`; an empty name prints as `""`).
+    - It passes only with `unknown 0`, at least `minNamedBlocks` (5) unique non-air names, and each name real: none numeric, `unknown`, `undefined`, `null`, empty or a placeholder (`blockNameProblem`).
+    - `0 kinds`, or the warning `[naming] near spawn: could not read the blocks (...)`, is not reached.
+    - **The fallback, with no `[naming]` line:** the agent's own first `!nearbyBlocks` result with blocks, first seen at a good read within `namingWindowMinutes` (20), judged the same way (unique non-air names). Seen later, or only in the final read, it is not reached.
+    - The `!nearbyBlocks` format: `NEARBY_BLOCKS` on the line after `Agent executed: !nearbyBlocks and got: `, or on the same line; `- water (source|flowing)`; `- Block Below|at Legs|at Head: <name>`; `- First Solid Block Above Head: <name> (N blocks up)` or `none`; `NEARBY_BLOCKS: none`. The suffixes and labels are stripped.
+    - A bare `-` list line is an empty name (flagged). Bare vanilla names (`dirt`) count.
+  - **`no_crash` (#7):** online to the end; no agent_process restart, fatal or exit line; `NRestarts` unchanged; `active` at every sample whose metrics read worked (S).
+    - A unit state `unknown` (the adapter's `STATUS_FAIL_LIMIT` failed status reads) is no departure: the soak runs on. Still unknown at the end, the check is "not reached (infra)"; recovered, it is a note (`notes.stateUnknown`).
   - **`peak_memory` (#7, S):** the highest `MemoryCurrent` (or `MemoryPeak`) within the target.
-  - **`usd_per_hour` (#7):** the sum of `cost_usd` over the run's `[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X` lines (#395), per hour. One `cost_usd unknown`, or no usage line at all, makes it not reached, with the count.
+  - **`usd_per_hour` (#7):** the sum of `cost_usd` over the run's `[openrouter] usage prompt_tokens N, completion_tokens N, cost_usd X` lines (#395), per hour of the journal's covered time. One `cost_usd unknown`, or no usage line at all, makes it not reached, with the count.
   - **`agenda_done` (#4):** `agenda done` within the soak.
   - **`food_floor` (#5):** every `[survival] food` line at or above `foodFloor` (6).
   - **`ate_when_low` (#5):** after each `low` food line, an `ate` line within the next `eatWithinMinutes` (5) food lines (one a minute at most).
   - **`deaths_reported` (#5, as in #6):** each `[death] died at ...; waiting for the respawn` has its `[death] died at ...; lost ...` report before the next death.
-- **Notes:** every sample, the survival counts (eats, fights by outcome, flees), the deaths, and the LLM usage. A sample whose reads fail (ssh, gate) records its error and is an infra note (`notes.infraSamples`), never a crash.
+- **Notes:** every sample, the survival counts (eats, fights by outcome, flees), the deaths, the LLM usage and the journal coverage. A sample whose reads fail (ssh, gate) records `readError` and/or `metricsError` and is an infra note (`notes.infraSamples`), never a crash.
+- **Journal coverage (#394 re-review):** after a failed refresh, the adapter's `output()` is the cached journal of the last good read, so a stale read must not pass.
+  - On S the read covers the soak only if the final read worked (every read is `--since` the start, so it also covers the failed ones before it) and its first line is the unit's `Starting mindcraft-rotn@...` (the ctl caps a read's lines; a cut read loses it). On T the driver's output is complete.
+  - With a gap (`notes.journalCoverage`), a result later lines cannot change still stands: a seen crash, a seen `agenda done`, food seen below the floor.
+  - Every other journal-based result is "not reached (infra): <the gap>; on what was read: ...". `usd_per_hour` is then measured over the covered minutes (the last good read), and is not reached.
 - **Tests:** `test/unit/g4-soak.test.js`, with fakes only.
 
 ### G4 #6: `g4-death-report`
