@@ -54,13 +54,11 @@ Everything below is merged into develop (head f6107fc4 when written). **No skill
   - Lead decision: the hazard cost stays at 100.
 
 ### Open items
-1. **Gate2 B, the move one block lower at 00:19:39:** the diagnostic line plus floor and on-ground checks still wait for a GO. Details are under the rounds 9 and 10 summary below.
-2. **Cosmetic, for the next touch of these files:**
+1. **Cosmetic, for the next touch of these files:**
    - the `skills.stay` doc comment (self_defense now interrupts a model stay);
-   - the `collect_sticks.test.js` title;
    - the #417 nits: the stale `shelter.js` hits comment, saying which bound ended a fight, and the interrupt reason 'stopped';
    - the #392 nits: the task_queue load warning wording, the `say()` behavior-log cut mid-line, and the pruneFinished tie-break.
-3. **Watch at the next soak:**
+2. **Watch at the next soak:**
    - The first live forage. rotn-data's `unverified` notes that `activateBlock` on a Rustic bush has never been run; look for `[reflex] foraging …` and `Foraged N blocks: got …`.
    - The food lines: `food_floor` and `ate_when_low`.
 
@@ -110,7 +108,7 @@ All of the work below is merged into develop (head 0911b9ba when written).
   - The wording fits the last 250 chars of the cut output.
 
 ### Open items
-1. **Gate2 B: the move one block lower at 00:19:39** (`test/evidence/g3/g3b-20261108-gate2/`). Reported to the lead on 2026-11-08; the fix is waiting for a GO.
+1. **Gate2 B: the move one block lower at 00:19:39** (`test/evidence/g3/g3b-20261108-gate2/`). Reported to the lead on 2026-11-08 (since done in #381: a full-height floor, `shelter.js` `onFloorOf` settles the bot on it before building and closing, and a log line says where the bot and the floor were).
    - **What the evidence shows:**
      - The shelter at -74, 60, -67 closed at 00:19:29.
      - The next 10 s check (00:19:39) found the bot's block position at y 59.
@@ -125,7 +123,7 @@ All of the work below is merged into develop (head 0911b9ba when written).
      - When the bot is found out of its shelter, log its exact position and the floor block's name at closing and now, so the next case shows the cause.
      - A new site's floor must be a full-height block that is not a tree part.
      - The build checks that the bot is standing on that floor before it reports the shelter closed.
-2. **Cosmetic, low:** a `collect_sticks.test.js` test title still says "the fallback is gone" (rotn-data #312 test). The matching `skills.js` comment is already gone.
+2. **Cosmetic, low:** a `collect_sticks.test.js` test title still said "the fallback is gone" (rotn-data #312 test) (since done: no longer under `src/`).
 
 ## No chat-spam loop from reflexes: an identical line at most once a minute (branch `agent/skills-rotn/chat-repeat-limit`, 2026-11-07T15:14Z by `date -u`)
 
