@@ -612,8 +612,9 @@ export async function attackNearest(bot, mobType, kill=true) {
      * await skills.attackNearest(bot, "zombie", true);
      **/
     bot.modes.pause('cowardice');
-    if (mobType === 'drowned' || mobType === 'cod' || mobType === 'salmon' || mobType === 'tropical_fish' || mobType === 'squid')
-        bot.modes.pause('self_preservation'); // so it can go underwater. TODO: have an drowning mode so we don't turn off all self_preservation
+    // #424 review: self_preservation is never paused, not even for a water mob (squid, fish): the
+    // pause lasted the whole action, so the model's !attack("squid") turned off the drowning, fire
+    // and lava escapes. The bot fights from where it can; drowning still pulls it up.
     const mob = world.getNearbyEntities(bot, 24).find(entity => entity.name === mobType);
     if (mob) {
         return await attackEntity(bot, mob, kill);
@@ -3117,19 +3118,21 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
     return true;
 }
 
-export async function stay(bot, seconds=30) {
+export async function stay(bot, seconds=30, { pauseSelfDefense = true } = {}) {
     /**
      * Stay in the current position until interrupted. Pauses the modes that would move it, but
      * never self_preservation (fire, lava, drowning, a falling block: #422 follow-up).
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {number} seconds, the number of seconds to stay. Defaults to 30. -1 for indefinite.
+     * @param {{pauseSelfDefense?: boolean}} options, pauseSelfDefense false: self_defense keeps
+     *   running (the model's stay, #424 review: only cowardice, whose flee contradicts a stay, pauses).
      * @returns {Promise<boolean>} true if the bot stayed, false otherwise.
      * @example
      * await skills.stay(bot);
      **/
     bot.modes.pause('unstuck');
     bot.modes.pause('cowardice');
-    bot.modes.pause('self_defense');
+    if (pauseSelfDefense) bot.modes.pause('self_defense');
     bot.modes.pause('hunting');
     bot.modes.pause('torch_placing');
     bot.modes.pause('item_collecting');

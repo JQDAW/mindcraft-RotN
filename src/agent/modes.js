@@ -517,6 +517,9 @@ const modes_list = [
                     await say(agent, `Gathering wild food (${crop.info.block})!`);
                     const got = await skills.forageNearby(bot, { keepGoing });
                     console.log(`[reflex] foraging ${crop.info.block}: ${got ? 'got food' : 'got none'}`);
+                    // #427 review: a run that got nothing (bushes out of reach) does not hold food
+                    // up: the next ticks hunt (no forage search for forage_every_ms).
+                    if (!got) this.forage_none_at = Date.now();
                 });
                 return;
             }

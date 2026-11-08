@@ -17,6 +17,7 @@
 import { Vec3 } from 'vec3';
 import { isBranch, isTrunkShell } from './felling.js';
 import { stateHazard, hazardBlockIds } from '../../../packages/forge-bridge/src/collision.js';
+import { plantSafe } from './foraging.js';
 
 /** The highest drop a walk may take: a fall of 3 blocks does no damage (fall damage is height - 3). */
 export const MAX_SAFE_DROP = 3;
@@ -201,14 +202,16 @@ function liquidAndHazardSafe(movements) {
 /**
  * Make every walk the bot takes fall-safe and liquid- and hazard-safe: whoever sets the
  * pathfinder's movements (our skills, mineflayer-collectblock, mineflayer-pvp, upstream code) gets
- * them through fallSafe. Call once the pathfinder plugin is loaded (after spawn); idempotent.
+ * them through fallSafe. #427 review: and plantSafe (foraging.js), so every walk (a flee, moveAway,
+ * a follow, a collect's walk, a pvp chase) steps around poison ivy and thorns. Call once the
+ * pathfinder plugin is loaded (after spawn); idempotent.
  */
 export function installWalkSafety(bot) {
     const pf = bot?.pathfinder;
     if (!pf || typeof pf.setMovements !== 'function' || pf.rotnWalkSafety) return false;
     const set = pf.setMovements.bind(pf);
-    pf.setMovements = (movements) => set(fallSafe(movements));
-    if (pf.movements) fallSafe(pf.movements);
+    pf.setMovements = (movements) => set(plantSafe(fallSafe(movements)));
+    if (pf.movements) plantSafe(fallSafe(pf.movements));
     pf.rotnWalkSafety = true;
     return true;
 }

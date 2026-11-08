@@ -58,11 +58,17 @@ export function minutesToSunset(timeOfDay) {
  */
 export function sunsetEstimateMin(timeOfDay, frozenForMin = 0) {
     const base = minutesToSunset(timeOfDay);
-    // #418 nit: only at the freeze or just past it (3001-3006). Below 3001 minutesToSunset counts
-    // the whole freeze already (it is still ahead): adding it again counted it twice.
+    // #418 nit: the part still to run is added only at the freeze or just past it (3001-3006).
+    // Below 3001 minutesToSunset counts the whole freeze already (it is still ahead): adding it
+    // again counted it twice.
     const t = norm(timeOfDay);
+    const frozen = Math.max(0, frozenForMin);
+    // #425 review: stuck just before it (2996-3000, the NightClock's freeze window) the time is in
+    // the freeze too: minutesToSunset counts the whole freeze as still ahead, so the part already
+    // stood through comes off (at most FREEZE_MIN).
+    if (t < MORNING_FREEZE && MORNING_FREEZE - t <= FREEZE_TOLERANCE) return base - Math.min(FREEZE_MIN, frozen);
     if (t < MORNING_FREEZE || t - MORNING_FREEZE > FREEZE_TOLERANCE) return base;
-    return base + Math.max(0, FREEZE_MIN - Math.max(0, frozenForMin));
+    return base + Math.max(0, FREEZE_MIN - frozen);
 }
 
 /** 'night', 'dusk' (shelter now: sunset within SHELTER_LEAD_MIN) or 'day'. */
