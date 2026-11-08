@@ -1,4 +1,4 @@
-import { writeFile, readFile, mkdirSync } from 'fs';
+import { writeFile, readFileSync, mkdirSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { makeCompartment, lockdown } from './library/lockdown.js';
@@ -6,29 +6,44 @@ import * as skills from './library/skills.js';
 import * as world from './library/world.js';
 import { Vec3 } from 'vec3';
 import {ESLint} from "eslint";
+import { safeError } from './safe_error.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class Coder {
-    constructor(agent) {
+    constructor(agent, { templates_dir = path.join(__dirname, '../../bots') } = {}) {
         this.agent = agent;
         this.file_counter = 0;
         this.fp = '/bots/'+agent.name+'/action-code/';
         this.code_template = '';
         this.code_lint_template = '';
-
-        readFile(path.join(__dirname, '../../bots/execTemplate.js'), 'utf8', (err, data) => {
-            if (err) throw err;
-            this.code_template = data;
-        });
-        readFile(path.join(__dirname, '../../bots/lintTemplate.js'), 'utf8', (err, data) => {
-            if (err) throw err;
-            this.code_lint_template = data;
-        });
+        // RotN (CX23 first start): the templates were read here in callbacks that threw, so a
+        // missing bots/execTemplate.js killed the agent, also with allow_insecure_coding false.
+        // They are read on first use (generateCode, only reached through !newAction with insecure
+        // coding on); a read error is one log line and coding is unavailable, never a throw.
+        this.templates_dir = templates_dir;
+        this.templates_error = null;
         mkdirSync('.' + this.fp, { recursive: true });
     }
 
+    /** Read the code templates once; true when both are there. A read error is logged once and remembered. */
+    loadTemplates() {
+        if (this.code_template && this.code_lint_template) return true;
+        if (this.templates_error) return false;
+        try {
+            this.code_template = readFileSync(path.join(this.templates_dir, 'execTemplate.js'), 'utf8');
+            this.code_lint_template = readFileSync(path.join(this.templates_dir, 'lintTemplate.js'), 'utf8');
+            return true;
+        } catch (err) {
+            this.code_template = this.code_lint_template = '';
+            this.templates_error = safeError(err);
+            console.warn(`[coder] could not read the code templates (${this.templates_error}); coding is unavailable`);
+            return false;
+        }
+    }
+
     async generateCode(agent_history) {
+        if (!this.loadTemplates()) return `Coding is unavailable: the code templates could not be read (${this.templates_error}).`;
         this.agent.bot.modes.pause('unstuck');
         lockdown();
         // this message history is transient and only maintained in this function
