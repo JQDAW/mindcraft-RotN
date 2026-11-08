@@ -26,6 +26,12 @@ import path from 'node:path';
 export const PRIORITIES = ['urgent', 'normal'];
 export const STATUSES = ['queued', 'active', 'done', 'failed', 'cancelled'];
 const OPEN = new Set(['queued', 'active']);
+/**
+ * G4 #7 (the soak): finished tasks (done, failed, cancelled) kept in memory and in tasks.json, the
+ * newest first. Only the running task is ever looked up by id, so older ones are dropped; before,
+ * every task ever given stayed, and every save rewrote them all.
+ */
+export const FINISHED_KEPT = 50;
 
 /**
  * Whether a sender may give tasks and type commands (lead decision on Request 11).
@@ -104,7 +110,9 @@ export class TaskQueue {
                 requeued = true;
             }
         }
-        if (requeued) {
+        // G4 #7: a file from before the cap may hold every task ever given (nextId is kept above).
+        const pruned = this.pruneFinished() > 0;
+        if (requeued || pruned) {
             // A save failure here must not stop the agent from starting (#146 review).
             try { this.save(); } catch (err) { console.warn(`[tasks] Could not save ${this.file} after re-queueing (${err.message}).`); }
         }
@@ -181,8 +189,18 @@ export class TaskQueue {
         if (!OPEN.has(status)) this.requeuedAtLoad.delete(id); // closed before it restarted (#327 review 3)
         if (result !== null) t.result = result;
         t.updated_at = this.now();
+        this.pruneFinished();
         this.save();
         return t;
+    }
+
+    /** Keep the open tasks and at most FINISHED_KEPT finished ones (the most recently updated). Returns how many were dropped. */
+    pruneFinished() {
+        const finished = this.tasks.filter(t => !OPEN.has(t.status));
+        if (finished.length <= FINISHED_KEPT) return 0;
+        const drop = new Set(finished.sort((a, b) => (b.updated_at ?? 0) - (a.updated_at ?? 0)).slice(FINISHED_KEPT));
+        this.tasks = this.tasks.filter(t => !drop.has(t));
+        return drop.size;
     }
 
     start(id) { return this.setStatus(id, 'active'); }
