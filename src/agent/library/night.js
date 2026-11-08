@@ -50,6 +50,18 @@ export function minutesToSunset(timeOfDay) {
     return ticks / TICKS_PER_MIN + (freezeAhead ? FREEZE_MIN : 0);
 }
 
+/**
+ * Minutes until sunset as the bot is told them (CX23 soak: "Night is near: in about 2 min" at 17:07,
+ * sunset at 17:19). At the morning freeze minutesToSunset counts none of the freeze (the least
+ * certain time, which the reserve's due rule keeps); here the part still to run is counted:
+ * FREEZE_MIN less the minutes the time has stood at it (frozenForMin, from NightClock.frozenMin).
+ */
+export function sunsetEstimateMin(timeOfDay, frozenForMin = 0) {
+    const base = minutesToSunset(timeOfDay);
+    if (Math.abs(norm(timeOfDay) - MORNING_FREEZE) > FREEZE_TOLERANCE) return base;
+    return base + Math.max(0, FREEZE_MIN - Math.max(0, frozenForMin));
+}
+
 /** 'night', 'dusk' (shelter now: sunset within SHELTER_LEAD_MIN) or 'day'. */
 export function nightPhase(timeOfDay) {
     const t = norm(timeOfDay);
@@ -87,6 +99,11 @@ export class NightClock {
             this.log(`[night] the time advances again (${this.last?.t} -> ${t}); using the server's time`);
         }
         this.last = { t, at };
+    }
+
+    /** Minutes the time has stood at its latest value (0 before the first value). */
+    frozenMin(at) {
+        return this.last ? Math.max(0, (at - this.last.at) / 60_000) : 0;
     }
 
     /** The time of day to judge by, or null before the first value. */
