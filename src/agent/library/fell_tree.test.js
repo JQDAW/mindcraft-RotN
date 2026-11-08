@@ -214,7 +214,7 @@ test('drops: none fell (the wait is bounded), and a drop that cannot be reached'
     const none = fakeBot({ drops: [] });
     assert.equal(await skills.collectBlock(none, 'log', 1), false);
     assert.match(none.output, /Broke the tree at 3, 64, 0: no drops appeared within 1\.5 s\./);
-    assert.match(none.output, /Broke dynamictrees:sprucebranch but got no log\./);
+    assert.match(none.output, /Broke dynamictrees:sprucebranch but picked up no log right after it\./);
 
     const stuck = fakeBot({ unreachable: [at(7, 64, 1)] }); // the first log's place
     assert.equal(await skills.collectBlock(stuck, 'log', 1), true);
@@ -519,7 +519,7 @@ test('round 5 A rerun: a felled tree that gave logs but no stick says what it ga
     fast(t);
     const bot = fakeBot({ sticks: 0, canopy: 69 }); // leaves out of reach from the ground (Request 17)
     assert.equal(await skills.collectBlock(bot, 'stick', 1), false);
-    assert.match(bot.output, /Broke dynamictrees:sprucebranch but got no stick \(it gave 3 log:1\)\. A felled tree drops few sticks, often none\./);
+    assert.match(bot.output, /Broke dynamictrees:sprucebranch but picked up no stick right after it \(it gave 3 log:1\)\. A felled tree drops few sticks, often none\./);
 });
 
 test('round 5 A rerun: wood is never targeted underground: collectBlocks and searchForBlock pick the surface tree', T, async (t) => {

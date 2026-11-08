@@ -891,6 +891,12 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     };
 
     let collected = 0;
+    // Gate2 B (late pickups): a drop can land after its break was counted (a stick from leaves,
+    // still falling through the canopy) and be picked up with a later break, or after the last.
+    // The collect's final count is checked against what it started with (below); a break that
+    // gave none right after it says so, and the final line says when a later pickup followed.
+    const startHeld = countsItems ? heldByKey() : null;
+    let noneBreaks = 0, gainAfterNone = false;
 
     const movements = new pf.Movements(bot);
     movements.dontMineUnderFallingBlock = false;
@@ -1129,6 +1135,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                     }
                 }
                 collected += gained;
+                if (gained > 0 && noneBreaks > 0) gainAfterNone = true;
                 // Round 8 A: a felled species that gave none of the item is tried last from now on
                 // (this bot, every collect); one that gave some is back to normal.
                 if (countsItems && fellsTree(block)) {
@@ -1148,7 +1155,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                     const other = Object.entries(allHeld()).map(([key, n]) => [key, n - (allBefore[key] ?? 0)]).filter(([, d]) => d > 0);
                     const gave = other.length ? ` (it gave ${other.map(([key, d]) => `${d} ${key}`).join(', ')})` : '';
                     const rare = baseType === 'stick' && fellsTree(block) ? ' A felled tree drops few sticks, often none.' : '';
-                    log(bot, `Broke ${block.name} but got no ${blockType}${gave}.${rare}`);
+                    noneBreaks++;
+                    log(bot, `Broke ${block.name} but picked up no ${blockType} right after it${gave}.${rare}`);
                 }
             }
             if (run.aborted) break;
@@ -1181,6 +1189,20 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     // Underground Biomes rock): "Collected 3 pyrotech:rock (2 pyrotech_compat:rock_metamorphic:0, ...)".
     // A run that ended up on a tree anyway (a pile, a pickup) climbs down before it returns.
     if (!run.aborted && !bot.interrupt_code && standsOnTree(bot)) await descendFromTree(bot, run); // #340 nit 1: not after a stop
+    // Gate2 B: what was picked up outside the breaks' counts (after the last one, or between two)
+    // counts too; a count that went down (an item used or dropped) adds nothing.
+    if (startHeld) {
+        let late = 0;
+        for (const [key, n] of Object.entries(heldByKey())) {
+            const d = n - (startHeld[key] ?? 0) - (gainedByKey[key] ?? 0);
+            if (d > 0) { late += d; gainedByKey[key] = (gainedByKey[key] ?? 0) + d; }
+        }
+        if (late > 0) {
+            collected += late;
+            if (noneBreaks > 0) gainAfterNone = true;
+            log(bot, `Picked up ${late} more ${blockType} after the break that dropped ${late === 1 ? 'it' : 'them'} was counted.`);
+        }
+    }
     // Sticks short (G3 round 5 A: no tree could be felled safely, 0 sticks): RotN keeps 2 planks
     // (ore:stickMat) -> 4 sticks in the inventory grid, so make the rest from held planks.
     let fromPlanks = 0;
@@ -1190,7 +1212,9 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const gainedNames = Object.entries(gainedByKey);
     const details = gainedNames.length && !(gainedNames.length === 1 && gainedNames[0][0] === blockType)
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
-    log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}.`);
+    const lateNote = gainAfterNone
+        ? ` ${noneBreaks} ${noneBreaks === 1 ? 'break' : 'breaks'} had none right after ${noneBreaks === 1 ? 'it' : 'them'}; a drop picked up later is in this count.` : '';
+    log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}.${lateNote}`);
     return collected > 0;
 }
 
