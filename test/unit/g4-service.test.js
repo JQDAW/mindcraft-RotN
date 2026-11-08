@@ -18,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const SRC = fs.readFileSync(path.join(here, '..', 'runner', 'lib', 'service.mjs'), 'utf8');
 const T0 = Date.parse('2026-11-08T12:00:00Z');
 const stamp = (ms) => new Date(ms).toISOString().slice(0, 19) + '+0000';
-const GO = { ROTN_SERVICE_GO: 'g4-s1-20261108:test-server-host-confirmed' };
+const GO = { ROTN_SERVICE_GO: 'g4-s1-20261108:frcfld:test-server-host-confirmed' };
 // Addresses built at run time, so the source holds only <ip>-style placeholders (#371 review): an IPv4 and an IPv6.
 const IP4 = ['192', '0', '2', '7'].join('.');
 const IP6 = ['fd00', '', '7'].join(':');
@@ -114,15 +114,18 @@ describe('the service adapter: argv through the gate, never a shell string', () 
 });
 
 describe('#371 review 1: the per-run GO marker', () => {
-    test('start and stop refuse without ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed; nothing is sent', async () => {
-        for (const env of [{}, { ROTN_SERVICE_GO: '' }, { ROTN_SERVICE_GO: 'g4-s1' }, { ROTN_SERVICE_GO: 'g4-s1:yes' }, { ROTN_SERVICE_GO: ':test-server-host-confirmed' },
-            { ROTN_SERVICE_GO: 'a b:test-server-host-confirmed' }, { ROTN_SERVICE_GO: 'g4-s1:test-server-host-confirmed ' }]) {
+    test('start and stop refuse without ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed; nothing is sent', async () => {
+        for (const env of [{}, { ROTN_SERVICE_GO: '' }, { ROTN_SERVICE_GO: 'g4-s1' }, { ROTN_SERVICE_GO: 'g4-s1:yes' }, { ROTN_SERVICE_GO: ':frcfld:test-server-host-confirmed' },
+            { ROTN_SERVICE_GO: 'a b:frcfld:test-server-host-confirmed' }, { ROTN_SERVICE_GO: 'g4-s1:frcfld:test-server-host-confirmed ' }, { ROTN_SERVICE_GO: 'g4-s1:FRCFLD:test-server-host-confirmed' }]) {
             const cx = fakeCx23();
             const b = serviceBot('frcfld', null, { exec: cx.exec, env });
-            assert.throws(() => b.start(), /service start refused: no GO marker\. Set ROTN_SERVICE_GO=<the lead's GO id>:test-server-host-confirmed only under the lead's written GO, after the human confirmed/, JSON.stringify(env));
+            assert.throws(() => b.start(), /service start refused: no GO marker\. Set ROTN_SERVICE_GO=<the lead's GO id>:frcfld:test-server-host-confirmed only under the lead's written GO for frcfld, after the human confirmed/, JSON.stringify(env));
             assert.equal(cx.calls.length, 0);
             assert.equal(b.needsStop(), false);
         }
+        // #401 review: the old form without a unit is named as such.
+        const old = serviceBot('frcfld', null, { exec: fakeCx23().exec, env: { ROTN_SERVICE_GO: 'g4-s1:test-server-host-confirmed' } });
+        assert.throws(() => old.start(), /service start refused: the GO marker has the old form without a unit\. Set ROTN_SERVICE_GO=<the lead's GO id>:frcfld:test-server-host-confirmed/);
         // stop needs it too (a start sent under one GO, the marker gone at the stop).
         const cx = fakeCx23();
         const env = { ...GO };
@@ -132,6 +135,33 @@ describe('#371 review 1: the per-run GO marker', () => {
         delete env.ROTN_SERVICE_GO;
         await assert.rejects(() => b.stop(), /service stop refused: no GO marker/);
         assert.deepEqual(cx.verbs(), ['start']);
+    });
+
+    test('#401 review: the marker is per bot: a frcfld GO cannot start or stop rotnbot2, nor a rotnbot2 GO frcfld; nothing is sent', async () => {
+        for (const [unit, other] of [['rotnbot2', 'frcfld'], ['frcfld', 'rotnbot2']]) {
+            const cx = fakeCx23();
+            const env = { ROTN_SERVICE_GO: `g4-12a:${other}:test-server-host-confirmed` };
+            const b = serviceBot(unit, null, { exec: cx.exec, env, now: () => cx.clock.t, sleep: () => Promise.resolve() });
+            assert.deepEqual(b.goStatus(), { ok: false, why: `the GO marker names ${other}, not this unit ${unit}` });
+            assert.throws(() => b.start(), new RegExp(`^Error: service start refused: the GO marker names ${other}, not this unit ${unit}$`));
+            assert.equal(cx.calls.length, 0, `${unit}: nothing sent`);
+            // A start under this unit's own GO, then the marker switched to the other unit: the stop refuses too.
+            env.ROTN_SERVICE_GO = `g4-12a:${unit}:test-server-host-confirmed`;
+            assert.deepEqual(b.goStatus(), { ok: true, goId: 'g4-12a' });
+            await b.start();
+            env.ROTN_SERVICE_GO = `g4-12a:${other}:test-server-host-confirmed`;
+            await assert.rejects(() => b.stop(), new RegExp(`service stop refused: the GO marker names ${other}, not this unit ${unit}`));
+            assert.deepEqual(cx.verbs(), ['start'], `${unit}: only its own start went out`);
+            assert.ok(cx.calls.every((c) => c.argv.at(-1) === unit));
+        }
+    });
+
+    test('#401 review: a failed request carries its exit code (exitCode), so the ctl\'s refusal (2) is told apart', async () => {
+        const cx = fakeCx23({ ctl2: (v) => v === 'metrics' });
+        const b = serviceBot('rotnbot2', null, { exec: cx.exec, env: GO });
+        const e = await b.metrics().then(() => null, (x) => x);
+        assert.equal(e.exitCode, 2);
+        assert.match(e.message, /exited 2 \(the ctl refused it\): mindcraft-rotn-ctl: no env file for 'rotnbot2' \(run bootstrap\.sh add-bot rotnbot2\)/);
     });
 });
 

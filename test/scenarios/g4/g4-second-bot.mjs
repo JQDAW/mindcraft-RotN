@@ -5,15 +5,18 @@
 // needed, because the profile name must equal the account name and one account cannot be online twice. The scenario only
 // starts that unit, checks the join, and stops it.
 //
-// Its own GO marker (lead, queued after #394): besides the adapter's ROTN_SERVICE_GO, the run's environment must have
-// ROTN_SECOND_BOT_GO=<GO id>:<unit>, naming exactly this run's second unit. Without it, or naming another unit, or when
-// the service is the first bot (firstBot, frcfld), nothing is started. On a spawned driver (set-up T) there is no
-// template unit: every check is "not reached" and nothing starts.
+// The GO marker is per bot in the adapter (lead, #401 review): ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed
+// must name this run's unit, or lib/service.mjs refuses start and stop with nothing sent. The scenario reads it first
+// through the adapter (goStatus(), nothing sent), together with the pinned first bot (FIRST_BOT: the unit frcfld, the
+// account FRCFLD; not a parameter): neither may be this run's. Otherwise nothing is started. On a spawned driver (set-up
+// T) there is no template unit: every check is "not reached" and nothing starts.
 //
 // Checks (S):
-//   second_bot_go  the marker names this unit, which is not the first bot
-//   login_online   the unit was inactive; started through the ctl, the account `bot` (the parameter; case aside equal to
-//                  the unit name's account, the human's) joins with an online (version-4) UUID within loginTimeoutMs
+//   second_bot_go  the adapter's GO marker names this unit; neither the unit nor the account `bot` is the first bot's
+//   login_online   the unit was inactive; started through the ctl, the account `bot` (the parameter; the human's)
+//                  joins with an online (version-4) UUID within loginTimeoutMs. Setup gaps are "not reached", never a
+//                  bot fail: the ctl's refusal "no env file for '<unit>'" (the human's add-bot), and no join with the
+//                  bot's "[mcdata] <bot>: device-code login needed" line in the journal (the first login not done)
 //   own_profile    the running agent is this bot: its "[state] <bot> at start: ..." line (#386) names `bot`, so the
 //                  template unit and the env file chose its own profile (no code change). The values are noted.
 //   stays_up       online and the unit active for stayS after the join (no kick, no exit)
@@ -21,24 +24,19 @@
 // Notes: the GO id, the [settings] line's production check (#385), the metrics before and after.
 import { startSession } from '../../runner/lib/session.mjs';
 import { G2_WORLD_SEED } from '../../runner/lib/g2.mjs';
-import { exitedText } from '../../runner/lib/service.mjs';
+import { CTL_REFUSED, exitedText } from '../../runner/lib/service.mjs';
 import { STATE_LOOSE_RE, missingLine, productionGiversAtStart } from '../../runner/lib/start-lines.mjs';
 
 const MS = 1000;
 const MIN = 60 * MS;
-export const SECOND_BOT_GO_ENV = 'ROTN_SECOND_BOT_GO';
-/** <GO id>:<unit>, the unit as the ctl names it (lowercase letters, digits, '-'). */
-export const SECOND_BOT_GO_RE = /^([A-Za-z0-9][A-Za-z0-9._-]{2,63}):([a-z0-9][a-z0-9-]{0,31})$/;
+/** The first bot, pinned (lead, #401 review): this scenario never runs as it. */
+export const FIRST_BOT = Object.freeze({ unit: 'frcfld', account: 'FRCFLD' });
 
-/** The second bot's GO marker for this unit: {ok, goId} or {ok: false, why}. */
-export function secondBotGo(env, unit) {
-    const raw = env?.[SECOND_BOT_GO_ENV];
-    if (!raw) return { ok: false, why: `no ${SECOND_BOT_GO_ENV} in the run's environment (set only under the lead's written GO for this bot: <GO id>:<unit>)` };
-    const m = SECOND_BOT_GO_RE.exec(String(raw));
-    if (!m) return { ok: false, why: `${SECOND_BOT_GO_ENV} is not <GO id>:<unit>` };
-    if (m[2] !== String(unit)) return { ok: false, why: `${SECOND_BOT_GO_ENV} names ${m[2]}, not this run's unit ${unit}` };
-    return { ok: true, goId: m[1] };
-}
+/** forge-bridge's quietMsaCodeHandler line: the account still needs the human's device-code login (never the code). */
+export const deviceCodeNeeded = (lines, bot) => {
+    const re = /^\[mcdata\] (\S+): device-code login needed/;
+    return lines.find((l) => { const m = re.exec(l); return m && m[1].toLowerCase() === String(bot).toLowerCase(); }) ?? null;
+};
 
 /** The "[state] <name> at start: ..." lines (#386): the names, and whether one is `bot` (case aside). */
 export function stateNames(lines, bot) {
@@ -53,7 +51,7 @@ export default {
     llm: false,
     title: 'A second bot profile starts through the template unit (the ctl), logs in with its own account and stops, with no code change (smoke)',
     checks: {
-        second_bot_go: 'The run has its own GO marker naming this second bot\'s unit, which is not the first bot',
+        second_bot_go: 'The run\'s GO marker names this second bot\'s unit, and neither it nor the account is the first bot',
         login_online: 'Started through the template unit, the second bot logs in with its own account (online mode)',
         own_profile: 'The running agent is the second bot\'s own profile (its [state] line names it): no code change',
         stays_up: 'It stays online for a while after the join',
@@ -61,7 +59,6 @@ export default {
     },
     defaults: {
         bot: '',
-        firstBot: 'frcfld',
         worldSeed: G2_WORLD_SEED,
         stayS: 60,
         leaveWaitS: 30,
@@ -86,17 +83,26 @@ export default {
         const unit = String(bot.bot);
         const name = String(p.bot ?? '');
 
-        // second_bot_go: the parameter, not the first bot, and the marker naming this unit. Nothing starts without it.
+        // second_bot_go: the parameter, not the first bot (unit or account), and the adapter's marker for this unit.
+        // Nothing is sent before it passes (goStatus reads the environment only).
+        const g = typeof bot.goStatus === 'function' ? bot.goStatus() : { ok: false, why: 'the adapter has no per-bot GO marker' };
         const why = !/^[A-Za-z0-9_]{3,16}$/.test(name) ? `no valid bot parameter (the second account's name, e.g. --param bot=<name>): '${name}'`
-            : unit.toLowerCase() === String(p.firstBot).toLowerCase() ? `the service is the first bot (${unit}), not a second one`
-                : null;
-        const go = why ? { ok: false, why } : secondBotGo(ctx.env, unit);
-        ctx.check('second_bot_go', go.ok, go.ok ? `GO ${go.goId} names ${unit}` : go.why);
-        if (!go.ok) { notReached(after, 'no GO marker for this second bot; nothing started'); return; }
-        ctx.note('secondBotGo', { goId: go.goId, unit, bot: name });
+            : unit.toLowerCase() === FIRST_BOT.unit ? `the service is the first bot (${unit}), not a second one`
+                : name.toLowerCase() === FIRST_BOT.account.toLowerCase() ? `the account ${name} is the first bot's (${FIRST_BOT.account}), not a second one`
+                    : !g.ok ? g.why : null;
+        ctx.check('second_bot_go', !why, why ?? `GO ${g.goId} names ${unit}; the account ${name} is not the first bot's`);
+        if (why) { notReached(after, 'no GO marker for this second bot, or it is the first bot; nothing started'); return; }
+        ctx.note('secondBotGo', { goId: g.goId, unit, bot: name });
 
-        // login_online: from an inactive unit
-        const m0 = await bot.metrics();
+        // login_online: from an inactive unit. The ctl's "no env file" refusal is the human's add-bot still to do.
+        let m0;
+        try { m0 = await bot.metrics(); } catch (e) {
+            const msg = String(e?.message ?? e);
+            const gap = e?.exitCode === CTL_REFUSED && /no env file for '/.test(msg);
+            notReached(after, gap ? `setup gap: the CX23 has no env file for ${unit} (the human's bootstrap.sh add-bot ${unit}): ${msg}`
+                : `the unit's metrics could not be read (infra): ${msg}`);
+            return;
+        }
         ctx.note('metricsBefore', m0);
         if (m0?.ActiveState !== 'inactive' && m0?.ActiveState !== 'failed') {
             ctx.check('login_online', false, `the unit ${unit} is ${m0?.ActiveState ?? 'unknown'} before the start: stop it first`);
@@ -104,6 +110,12 @@ export default {
             return;
         }
         const s = await startSession(ctx, { name, checkNaming: false });
+        if (!s.ok) {
+            // No join because the account's first device-code login is not done: the human's step, not the bot's.
+            if (typeof bot.refresh === 'function') await bot.refresh().catch(() => {});
+            const dc = deviceCodeNeeded(bot.output(), name);
+            if (dc) { notReached(after, `setup gap: the first device-code login for ${name} is not done (the human's step); the journal says "${dc}"`); return; }
+        }
         ctx.check('login_online', s.ok, s.ok ? `${s.why ?? 'joined'} (unit ${unit})` : s.why);
         if (!s.ok) { notReached(after.slice(1), 'the bot did not log in'); return; }
         const gone = () => s.events().find(s.gone)?.type ?? (!bot.alive() && bot.unitState?.() !== 'unknown' ? exitedText(bot) : null);

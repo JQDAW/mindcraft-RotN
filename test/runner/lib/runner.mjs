@@ -68,7 +68,7 @@ export const KILLED_NOTE = 'the runner did not finish: it rewrites result.json a
  * (G2 batch 6: on Windows `timeout` ends node with TerminateProcess, so no signal handler runs).
  * progress(killedBy) returns the same record on demand, with notes.killed naming the signal.
  */
-export async function runScenario(scenario, { server, bot, clock, params = {}, runId, log = () => {}, onProgress = null, control = {}, env = {} }) {
+export async function runScenario(scenario, { server, bot, clock, params = {}, runId, log = () => {}, onProgress = null, control = {} }) {
     const p = { ...scenario.defaults, ...params };
     const results = new Map();
     const notes = {};
@@ -103,8 +103,7 @@ export async function runScenario(scenario, { server, bot, clock, params = {}, r
     control.progress = progress;
     const report = () => { if (onProgress) onProgress(progress()); };
     const ctx = {
-        // env: run.mjs passes its environment (a scenario's own GO marker, g4-second-bot); the engine reads nothing itself.
-        server, bot, clock, params: p, runId, log, env,
+        server, bot, clock, params: p, runId, log,
         check(name, pass, detail) {
             if (!(name in scenario.checks)) throw new Error(`scenario ${scenario.id} has no check '${name}'`);
             results.set(name, { check: name, pass: Boolean(pass), detail: String(detail ?? '') });
