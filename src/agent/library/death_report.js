@@ -337,8 +337,12 @@ export function deathCauseText(name, message, jsonMsg) {
     return text.startsWith(name) ? text : null;
 }
 
-/** How soon after its own cut a death counts as the falling tree's when the server gave no cause. */
-export const TREE_DEATH_MS = 15_000;
+/**
+ * How soon after its own cut a death counts as the falling tree's when the server gave no cause.
+ * G3 round 10 A: crushed about 27 s after its own cut, so 30 s, as long as fellTree waits for the
+ * fall (TREE_FALL.maxMs).
+ */
+export const TREE_DEATH_MS = 30_000;
 
 /**
  * Whether the bot was crushed by a falling tree (Dynamic Trees; G3 round 3 B): the cause says so
