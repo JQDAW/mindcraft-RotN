@@ -911,10 +911,16 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     let collected = 0;
     // CX23 soak: no target within DEATH_SPOT_RADIUS of a recent death spot for deathSpotMs: a
     // player zombie rose there and never leaves (the agenda dug dirt among them, death after death).
-    const deathSpots = (typeof bot.rotnDeathSpots === 'function' ? bot.rotnDeathSpots() : [])
+    // #416 review 2: not for a crafting table the bot placed and picks up again (pickUpTable).
+    const deathSpots = (baseType === 'crafting_table' || typeof bot.rotnDeathSpots !== 'function' ? [] : bot.rotnDeathSpots())
         .filter(s => s.pos && Date.now() - s.at < COLLECT_LIMITS.deathSpotMs && (s.dimension == null || bot.game?.dimension == null || s.dimension === bot.game.dimension));
     const nearDeath = (p) => deathSpots.some(s => Math.hypot(p.x - s.pos.x, p.z - s.pos.z) <= DEATH_SPOT_RADIUS);
-    let deathSkips = 0;
+    let deathSkips = 0, deathSkipsSaid = false;
+    const sayDeathSkips = () => {
+        if (deathSkips === 0 || deathSkipsSaid) return;
+        deathSkipsSaid = true;
+        log(bot, `Some were left alone: within ${DEATH_SPOT_RADIUS} blocks of where you died recently (a player zombie rises there and never leaves).`);
+    };
     // Gate2 B (late pickups): a drop can land after its break was counted (a stick from leaves,
     // still falling through the canopy) and be picked up with a later break, or after the last.
     // The collect's final count is checked against what it started with (below); a break that
@@ -1010,7 +1016,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 log(bot, `No ${blockType} nearby to collect.`);
             else
                 log(bot, `No more ${blockType} nearby to collect.`);
-            if (deathSkips > 0) log(bot, `Some were left alone: within ${DEATH_SPOT_RADIUS} blocks of where you died recently (a player zombie rises there and never leaves).`);
+            sayDeathSkips();
             // Say which other source the bot could use with the right tool (B2).
             for (const source of needsTool)
                 log(bot, `${source.text} That needs ${describeTool(source.tool)}.`);
@@ -1237,6 +1243,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const gainedNames = Object.entries(gainedByKey);
     const details = gainedNames.length && !(gainedNames.length === 1 && gainedNames[0][0] === blockType)
         ? ` (${gainedNames.map(([key, n]) => `${n} ${key}`).join(', ')})` : '';
+    sayDeathSkips(); // #416 nit: also when the collect ended otherwise (a time limit, its attempts)
     log(bot, `Collected ${collected} ${blockType}${details}${fromPlanks ? `, ${fromPlanks} of them made from planks` : ''}${lateNote}.`);
     return collected > 0;
 }

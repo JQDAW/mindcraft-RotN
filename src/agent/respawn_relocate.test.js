@@ -100,3 +100,66 @@ test('CX23 soak: in the priority stack the walk away comes before the agenda (ag
     assert.equal(agendaTicks, 0, 'the agenda waits');
     await flush();
 });
+
+test('#416 review 1: a goal a task giver typed (or a paused conversation) is never stopped: the walk away waits for it', () => {
+    const now = 1_000_000;
+    const agent = agentAt(SPAWN.offset(2, 0, 3), { deaths: [[-80, 66, -38, 60_000]], now });
+    Object.assign(agent.self_prompter, { goal_by: 'JQDAW', prompt: 'build a hut' });
+    const logs = [];
+    assert.equal(relocateTick(agent, { now, walk: () => Promise.resolve(), log: (l) => logs.push(l) }), null);
+    assert.deepEqual([agent.stops, agent.actions.runs, logs], [[], [], []], 'the giver\'s goal runs on');
+    assert.equal(agent.self_prompter.isActive(), true);
+    // Paused (a bot-to-bot conversation): waits too.
+    const paused = agentAt(SPAWN.offset(2, 0, 3), { deaths: [[-80, 66, -38, 60_000]], now });
+    paused.self_prompter.isPaused = () => true;
+    assert.equal(relocateTick(paused, { now, walk: () => Promise.resolve(), log: () => {} }), null);
+    // Once the goal is over, the walk is still due (once per death, not used up).
+    agent.self_prompter.goal_by = null;
+    assert.equal(relocateTick(agent, { now: now + 1000, walk: () => Promise.resolve(), log: () => {} }), 'relocating');
+});
+
+test('#416 review 3: not while a reflex acts; a walk a reflex interrupted is tried again after RELOCATE.waitMs, at most RELOCATE.tries walks', async () => {
+    const now = 1_000_000;
+    const agent = agentAt(SPAWN.offset(2, 0, 3), { deaths: [[-80, 66, -38, 60_000]], now });
+    let reflex = true;
+    agent.bot.modes.anyActive = () => reflex;
+    assert.equal(relocateTick(agent, { now, walk: () => Promise.resolve(), log: () => {} }), 'relocating:wait', 'the agenda waits with it');
+    assert.deepEqual([agent.stops, agent.actions.runs], [[], []], 'nothing started');
+    reflex = false;
+    // Each walk is interrupted (runAction says so) and gets nowhere.
+    agent.actions.runAction = function (label, fn) { this.runs.push(label); return Promise.resolve(fn()).then(() => ({ interrupted: true })); };
+    const logs = [];
+    let t = now;
+    for (let i = 0; i < 5; i++) {
+        assert.equal(relocateTick(agent, { now: t + 1, clock: () => t, walk: () => Promise.resolve(), log: (l) => logs.push(l) }) === null, i >= RELOCATE.tries, `tick ${i}`);
+        await flush(); await flush();
+        if (i < RELOCATE.tries - 1) assert.equal(relocateTick(agent, { now: t + 2, clock: () => t, log: () => {} }), null, 'waits RELOCATE.waitMs');
+        t += RELOCATE.waitMs + 10;
+    }
+    assert.equal(agent.actions.runs.length, RELOCATE.tries, 'at most RELOCATE.tries walks for one death');
+    assert.equal(logs.filter(l => /was interrupted at \d+ blocks \(try \d of 3\); trying again in 5 s/.test(l)).length, RELOCATE.tries - 1);
+    assert.match(logs.at(-1), /got only \d+ blocks .*; the agenda resumes/);
+});
+
+test('#416 review 4: the zombie-at-spawn trigger waits while an action runs (never cuts into running work)', () => {
+    const now = 5_000_000;
+    const zombie = { id: 7, name: 'zombie_players:zombie_player', type: 'mob', position: SPAWN.offset(10, -10, 5) };
+    const agent = agentAt(SPAWN.offset(5, 0, 0), { now, entities: { 7: zombie } });
+    agent.actions.executing = true;
+    assert.equal(relocationReason(agent, now), null, 'an action runs: not now');
+    agent.actions.executing = false;
+    assert.equal(relocationReason(agent, now)?.kind, 'zombie', 'between steps: now');
+    // After a death it leaves even with an action running (a respawn follows the death; the agenda's step waits anyway).
+    const died = agentAt(SPAWN.offset(5, 0, 0), { deaths: [[-80, 66, -38, 10_000]], now });
+    died.actions.executing = true;
+    assert.equal(relocationReason(died, now)?.kind, 'death');
+});
+
+test('#416 nit: the target is not on water (where loaded): it goes farther out', () => {
+    const places = [{ pos: SPAWN }];
+    const dryFrom = 60;
+    const t = targetAwayFrom(SPAWN.offset(5, 0, 0), places, { surfaceOk: (x) => x - SPAWN.x >= dryFrom });
+    assert.ok(t.x - SPAWN.x >= dryFrom, `${t.x}`);
+    assert.equal(targetAwayFrom(SPAWN.offset(5, 0, 0), places, { surfaceOk: () => false }), null, 'water all the way: none');
+});
+

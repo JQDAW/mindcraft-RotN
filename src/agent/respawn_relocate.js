@@ -8,11 +8,18 @@
 // agenda resumes from where the bot is.
 
 import pf from 'mineflayer-pathfinder';
+import { Vec3 } from 'vec3';
 import { goToGoal } from './library/skills.js';
 import { isPlayerZombie } from './library/threats.js';
 import { safeError } from './safe_error.js';
+import { isGiverGoal } from './agenda_driver.js';
 
-export const RELOCATE = { away: 48, recentMs: 10 * 60_000, zombieNearSpawn: 24, walkMs: 90_000, retryMs: 5 * 60_000, maxTarget: 160 };
+/**
+ * tries: walks per death (or per zombie trigger) when one is interrupted (#416 review 3: a reflex,
+ * now that cowardice is on, often cuts it short), waitMs apart; a walk that ran out its time or
+ * ended short is not retried.
+ */
+export const RELOCATE = { away: 48, recentMs: 10 * 60_000, zombieNearSpawn: 24, walkMs: 90_000, retryMs: 5 * 60_000, maxTarget: 160, tries: 3, waitMs: 5000 };
 
 /** Horizontal distance (what "away" means on the surface). */
 const hdist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
@@ -36,12 +43,15 @@ export function relocationReason(agent, now = Date.now()) {
     const here = bot?.entity?.position;
     if (!here) return null;
     const r = agent._relocate ??= { forDeath: null, triedAt: -Infinity, job: null };
+    if (now < (r.notBefore ?? -Infinity)) return null; // an interrupted walk waits RELOCATE.waitMs before the next try
     const places = placesToLeave(agent, now);
     if (!places.some(p => hdist(p.pos, here) < RELOCATE.away)) return null; // far from all of them already
     const last = agent._death?.last;
     if (last && now - last.at < RELOCATE.recentMs && r.forDeath !== last.at) return { kind: 'death', places, key: last.at };
+    // #416 review 4: the zombie trigger never cuts into running work: only with no action running.
+    const between = !agent.actions?.executing;
     const spawn = places.find(p => p.what === 'spawn');
-    if (spawn && hdist(spawn.pos, here) < RELOCATE.away && now - r.triedAt >= RELOCATE.retryMs) {
+    if (between && spawn && hdist(spawn.pos, here) < RELOCATE.away && now - r.triedAt >= RELOCATE.retryMs) {
         const zombie = Object.values(bot.entities ?? {}).find(e => e && e !== bot.entity && e.position
             && isPlayerZombie(e) && hdist(e.position, spawn.pos) <= RELOCATE.zombieNearSpawn);
         if (zombie) return { kind: 'zombie', places, key: null };
@@ -53,17 +63,32 @@ export function relocationReason(agent, now = Date.now()) {
  * A point at least RELOCATE.away from every place: straight away from their centre (from the bot's
  * position), as near as that allows; or null when none within RELOCATE.maxTarget.
  */
-export function targetAwayFrom(here, places) {
+export function targetAwayFrom(here, places, { surfaceOk = () => true } = {}) {
     const cx = places.reduce((s, p) => s + p.pos.x, 0) / places.length;
     const cz = places.reduce((s, p) => s + p.pos.z, 0) / places.length;
     let dx = here.x - cx, dz = here.z - cz;
     const len = Math.hypot(dx, dz);
     if (len < 1e-6) { dx = 1; dz = 0; } else { dx /= len; dz /= len; }
     for (let d = RELOCATE.away; d <= RELOCATE.maxTarget; d += 4) {
-        const t = { x: cx + dx * d, z: cz + dz * d };
-        if (places.every(p => hdist(p.pos, t) >= RELOCATE.away + 4)) return { x: Math.round(t.x), z: Math.round(t.z) };
+        const t = { x: Math.round(cx + dx * d), z: Math.round(cz + dz * d) };
+        // #416 nit: not a point whose surface (where loaded) is water or lava; on, farther out.
+        if (places.every(p => hdist(p.pos, t) >= RELOCATE.away + 4) && surfaceOk(t.x, t.z)) return t;
     }
     return null;
+}
+
+/** The surface at x, z near the bot's height is not a liquid (unloaded: assumed fine). */
+function dryAt(bot) {
+    const y0 = Math.floor(bot.entity?.position?.y ?? 64);
+    return (x, z) => {
+        for (let y = y0 + 16; y >= y0 - 32; y--) {
+            const b = bot.blockAt?.(new Vec3(x, y, z));
+            if (!b) return true; // not loaded
+            if (b.name === 'air' || b.boundingBox === 'empty' && !/water|lava/.test(b.name)) continue;
+            return !/water|lava/.test(b.name);
+        }
+        return true;
+    };
 }
 
 /** The walk (fall-safe goToGoal) to within 4 blocks of the target, at most RELOCATE.walkMs. */
@@ -78,17 +103,26 @@ async function walkTo(bot, target) {
  * One check, from the priority stack before the agenda: 'relocating' while the walk away runs (the
  * agenda and the model's goal wait), else null. Never throws.
  */
-export function relocateTick(agent, { now = Date.now(), walk = walkTo, log = (l) => console.log(l) } = {}) {
+export function relocateTick(agent, { now = Date.now(), clock = Date.now, walk = walkTo, log = (l) => console.log(l) } = {}) {
     const r = agent._relocate ??= { forDeath: null, triedAt: -Infinity, job: null };
     if (r.job) return 'relocating';
+    // #416 review 1: a goal a task giver typed, or self-prompting a bot-to-bot conversation paused,
+    // is never stopped for this: it waits, as the agenda does (which yields to it below).
+    const sp = agent.self_prompter;
+    if ((sp && isGiverGoal(agent)) || sp?.isPaused?.()) return null;
     const why = relocationReason(agent, now);
     if (!why) return null;
+    // #416 review 3: not while a reflex acts (a flee, a fight, eating): the agenda waits with it.
+    if (agent.bot?.modes?.anyActive?.()) return 'relocating:wait';
+    const key = why.kind === 'death' ? why.key : 'zombie';
+    if (r.triesFor !== key) Object.assign(r, { triesFor: key, tries: 0 });
+    r.tries++;
     if (why.kind === 'death') r.forDeath = why.key;
     r.triedAt = now;
     const bot = agent.bot;
     const deaths = why.places.filter(p => p.what === 'death spot').length;
     const what = [why.places.some(p => p.what === 'spawn') ? 'the spawn' : null, deaths ? `${deaths} recent death spot${deaths === 1 ? '' : 's'}` : null].filter(Boolean).join(' and ');
-    const target = targetAwayFrom(bot.entity.position, why.places);
+    const target = targetAwayFrom(bot.entity.position, why.places, { surfaceOk: dryAt(bot) });
     if (!target) { log(`[respawn] no place ${RELOCATE.away} blocks from ${what} within ${RELOCATE.maxTarget}; the agenda resumes here`); return null; }
     log(`[respawn] ${why.kind === 'death' ? 'after a death' : 'a player zombie is at the spawn'}: moving at least ${RELOCATE.away} blocks from ${what}, towards ${target.x}, ${target.z}, before the agenda resumes`);
     // The agenda's self-prompting waits (as at night): its commands would stop the walk.
@@ -96,14 +130,20 @@ export function relocateTick(agent, { now = Date.now(), walk = walkTo, log = (l)
     agent._agenda_paused = true;
     r.job = Promise.resolve()
         .then(() => agent.actions.runAction('action:leaveDeathArea', () => walk(bot, target)))
-        .catch(err => log(`[respawn] the walk away failed: ${safeError(err)}`))
-        .then(() => {
+        .catch(err => { log(`[respawn] the walk away failed: ${safeError(err)}`); return null; })
+        .then((ret) => {
             r.job = null;
             const here = bot.entity?.position;
             const nearest = here ? Math.min(...why.places.map(p => hdist(p.pos, here))) : 0;
-            log(nearest >= RELOCATE.away
-                ? `[respawn] now ${Math.round(nearest)} blocks from ${what} at ${at(here)}; the agenda resumes`
-                : `[respawn] got only ${Math.round(nearest)} blocks from ${what}${here ? ` (at ${at(here)})` : ''}; the agenda resumes`);
+            if (nearest >= RELOCATE.away) { log(`[respawn] now ${Math.round(nearest)} blocks from ${what} at ${at(here)}; the agenda resumes`); return; }
+            // #416 review 3: cut short by a reflex or a command: tried again after RELOCATE.waitMs, at most RELOCATE.tries walks.
+            if (ret?.interrupted && r.tries < RELOCATE.tries) {
+                if (why.kind === 'death') r.forDeath = null; else r.triedAt = -Infinity;
+                r.notBefore = clock() + RELOCATE.waitMs;
+                log(`[respawn] the walk away was interrupted at ${Math.round(nearest)} blocks (try ${r.tries} of ${RELOCATE.tries}); trying again in ${RELOCATE.waitMs / 1000} s`);
+                return;
+            }
+            log(`[respawn] got only ${Math.round(nearest)} blocks from ${what}${here ? ` (at ${at(here)})` : ''}; the agenda resumes`);
         });
     return 'relocating';
 }
