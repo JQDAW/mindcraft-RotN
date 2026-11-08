@@ -100,7 +100,10 @@ from="<the CX33's IPv4>",restrict,command="/usr/local/sbin/mindcraft-rotn-ssh-ga
   - `journal BOT --since @EPOCH_SECONDS`.
 
   Each runs as `sudo -n mindcraft-rotn-ctl ...`, and the ctl checks the name and the time again.
-- **Refused:** everything else, **exit 126**, which is distinct from the ctl's own refusal (exit 2), so the harness can tell a gate refusal (an ADR 0009 incident) apart. That includes `restart`, `enable`, `disable`, `list`, `daemon-reload`, an interactive login, `scp` and `sftp`.
+- **Refused:** everything else, **exit 126**, which is distinct from the ctl's own refusal (exit 2), so the harness can tell a gate refusal (an ADR 0009 incident) apart.
+  - 126 is also what the shell returns when it finds the gate but cannot execute it (wrong permissions, say). So by exit code alone, a broken install looks like a refusal.
+  - To tell them apart: a real refusal prints the gate's fixed stderr line (`rotn-ssh-gate: refused. Allowed: ...`) and writes a `rotn-ssh-gate` syslog entry. A broken install does neither.
+  - Refused requests include `restart`, `enable`, `disable`, `list`, `daemon-reload`, an interactive login, `scp` and `sftp`.
   - The client gets one fixed line on stderr, never its own input back.
   - Syslog gets `refused (<why>): '<the request, printable ASCII only, others as ?, at most 200 bytes>' (<length> bytes)` under the tag `rotn-ssh-gate` at `auth.warning`.
   - Allowed requests are logged at `auth.info`.
@@ -130,7 +133,7 @@ ADR 0009's rules still apply:
 This is `test/scenarios/g4/PLAN.md` step 0. **Nothing secret goes into the repo, a chat or a status file.** The key, the device code and the addresses stay in your own terminals.
 
 **What you need from the lead first:**
-- **`<TAG>`:** a release tag on `develop` that contains this README, the gate and the ctl's `journal`/`metrics`.
+- **`<TAG>`:** the lead's release tag on `develop`, which contains this README, the gate and the ctl's `journal`/`metrics`. For the first run, **`<TAG>` = `rotn-v0.1.0`**. Only `rotn-v…` tags deploy: the repo's `v0.x` tags are upstream Mindcraft's.
 - **The first-start GO** (for step C3 only): it names the test server, and harness-ops creates that server with `--allow-from <the CX23's IPv4>/32`.
 
 You give the lead the CX23's IPv4 in that GO (H6). Agents do not look it up.
@@ -214,12 +217,15 @@ scp -r /tmp/cx23-<TAG>/deploy/cx23 root@<cx23>:/root/cx23-<TAG>
 ## Deploy and rollback (as `deploy`)
 
 ```bash
-bash deploy.sh deploy v0.1.0     # a tag on develop
+bash deploy.sh deploy rotn-v0.1.0     # a rotn-v release tag on develop
 bash deploy.sh rollback          # back to the previous release
 bash deploy.sh status
 ```
 
 - `repo.git` is a bare clone of the public repo, holding only `develop` and the tags.
+- **Only this fork's release tags:** `rotn-vX.Y.Z`, optionally with a suffix (`rotn-v0.1.0-rc.1`). Anything else is refused before the clone.
+  - The repo also carries upstream Mindcraft's `v0.x` tags, and upstream `v0.1.0` is an ancestor of `develop`.
+  - So `deploy v0.1.0` would pass the on-develop check and deploy plain Mindcraft without RotN. The lead found this at the first release, `rotn-v0.1.0`.
 - A tag must be **on develop** (`git merge-base --is-ancestor`), or the deploy refuses.
 - The release is extracted with `git archive` into `releases/<tag>-<sha12>/`, then `npm ci` runs (with the patch-package postinstall). Its `./bots` links to `/var/lib/mindcraft-rotn/bots`, so memories survive a deploy.
 - **A release is refused unless its `settings.js`, imported with node like `main.js` does, has `allow_insecure_coding === false`.** The import runs with an empty environment.
