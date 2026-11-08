@@ -374,6 +374,21 @@ describe('mindcraft-rotn-ctl (the only thing deploy may sudo)', () => {
         assert.equal(ctl(['list']).stdout.trim(), 'rotn-bot');
     });
 
+    test('start clears a failed unit first (G4 step 0: the start limit refused a plain start): reset-failed, then start; only for start', () => {
+        assert.equal(ctl(['start', 'rotn-bot']).code, 0);
+        assert.deepEqual(called('systemctl'), [['systemctl', 'reset-failed', 'mindcraft-rotn@rotn-bot.service'], ['systemctl', 'start', 'mindcraft-rotn@rotn-bot.service']]);
+        // A reset-failed that fails (nothing to reset on some systemd versions) does not stop the start.
+        const r = ctl(['start', 'rotn-bot'], { FAKE_RC_systemctl: '1' });
+        assert.deepEqual(called('systemctl').slice(-2).map((c) => c[1]), ['reset-failed', 'start']);
+        assert.equal(r.code, 1, 'the start\'s own exit code is the result');
+        for (const a of ['stop', 'restart', 'enable', 'disable']) {
+            const n = called('systemctl').length;
+            assert.equal(ctl([a, 'rotn-bot']).code, 0, a);
+            assert.deepEqual(called('systemctl').slice(n).map((c) => c[1]), [a], `${a}: no reset-failed`);
+        }
+        assert.match(SRC, /if \[\[ \$action == start \]\]; then "\$SYSTEMCTL" reset-failed "\$unit" \|\| true; fi/);
+    });
+
     test('journal (G4, read-only): journalctl on exactly mindcraft-rotn@BOT.service, UTC ISO times, a line cap; --since strictly parsed', () => {
         const base = ['journalctl', '--unit=mindcraft-rotn@rotn-bot.service', '--no-pager', '--no-hostname', '--utc', '--output=short-iso', '--lines=20000'];
         const out = ctl(['journal', 'rotn-bot'], { FAKE_OUT_journalctl: '2026-11-07T05:31:00+0000 node[123]: FRCFLD joined' });
