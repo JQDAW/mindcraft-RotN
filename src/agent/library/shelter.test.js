@@ -817,3 +817,69 @@ test('#381 review 4: a stop ends the wait for the bot to settle at once', async 
     assert.deepEqual(placed, []);
 });
 
+// CX23 soak (rotn-v0.1.3): an ESM zombie dug the stone shelter and stood in the opening; the repair
+// hit it 5 times (with a cobblestone in hand), gave up, "placed nothing" with no word why, and the
+// bot died a second later. The hole shelter's roof went the same way 3 s after it closed.
+test('CX23 soak: a mob in the opening is hit with the best weapon for as long as it stays (no 5-hit cap), then the cell is closed', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_GAP };
+    Object.assign(SHELTER_GAP, { swingMs: 5 });
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    const axe = { name: 'stone_axe', metadata: 0, count: 1 };
+    const { bot, placed } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }), items: [axe] });
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95, health: 20 };
+    bot.entities = { 1: bot.entity, 7: zombie };
+    const hits = [];
+    bot.attack = (e) => { hits.push(bot.heldItem?.name ?? 'hand'); e.health -= 2.5; if (e.health <= 0) delete bot.entities[7]; };
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(hits.length, 8, 'hit until it died, past the old 5');
+    assert.ok(hits.every(h => h === 'stone_axe'), `with the axe: ${hits}`);
+    assert.equal(r.closed, true, r.line);
+    assert.deepEqual(placed, ['1,64,0']);
+});
+
+test('CX23 soak: a repair that leaves cells open says why for each cell; a mob that is not hurt is not hit forever', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const saved = { ...SHELTER_GAP };
+    Object.assign(SHELTER_GAP, { swingMs: 5, maxMs: 2000 });
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    // A zombie whose known health does not go down: SHELTER_GAP.noHurtHits hits, then the cell stays open.
+    const { bot } = fakeBot({ cobble: 2, set: shellAt({ '1,64,0': 'air', '1,65,0': 'air' }) });
+    bot.entities = { 1: bot.entity, 7: { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95, health: 20 } };
+    let hits = 0;
+    bot.attack = () => { hits++; };
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    const n = SHELTER_GAP.noHurtHits;
+    assert.equal(hits, 2 * n, 'bounded: noHurtHits hits per cell it stands in (it is 1.95 tall: both cells)');
+    assert.equal(r.closed, false);
+    assert.equal(r.line, `Shelter at 0, 64, 0 is not closed: 2 open (1, 64, 0: a zombie stands in it (hit ${n} times); 1, 65, 0: a zombie stands in it (hit ${n} times)); placed 0.`);
+});
+
+test('CX23 soak: after hitting a mob out of the opening, a hurt bot too hungry to heal (food below 18) eats', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const saved = { ...SHELTER_GAP };
+    Object.assign(SHELTER_GAP, { swingMs: 5 });
+    t.after(() => Object.assign(SHELTER_GAP, saved));
+    const bread = { name: 'bread', metadata: 0, count: 2 };
+    const { bot } = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }), items: [bread] });
+    Object.assign(bot, { health: 12, food: 14 });
+    bot.consume = () => { bread.count--; bot.food += 5; return Promise.resolve(); };
+    const zombie = { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95, health: 5 };
+    bot.entities = { 1: bot.entity, 7: zombie };
+    bot.attack = (e) => { e.health -= 5; if (e.health <= 0) delete bot.entities[7]; };
+    const r = await buildShelter(bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(r.closed, true, r.line);
+    assert.equal(bread.count, 1, 'one bread eaten');
+    assert.match(bot.output, /Ate between fights \(health 12, food 14 -> 19\)\./);
+    // Not hurt, or fed enough to heal: no eating.
+    const fed = fakeBot({ cobble: 1, set: shellAt({ '1,64,0': 'air' }), items: [{ name: 'bread', metadata: 0, count: 2 }] });
+    Object.assign(fed.bot, { health: 12, food: 18 });
+    let eaten = 0;
+    fed.bot.consume = () => { eaten++; return Promise.resolve(); };
+    fed.bot.entities = { 1: fed.bot.entity, 7: { id: 7, name: 'zombie', type: 'mob', position: new Vec3(1.5, 64, 0.5), height: 1.95, health: 5 } };
+    fed.bot.attack = (e) => { delete fed.bot.entities[7]; };
+    await buildShelter(fed.bot, { site: new Vec3(0, 64, 0), keepSoft: true });
+    assert.equal(eaten, 0);
+});
+

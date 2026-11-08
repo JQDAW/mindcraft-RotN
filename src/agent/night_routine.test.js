@@ -1456,3 +1456,21 @@ test('#364 review 4: between two morning tries a breach is still found and repai
     assert.equal(o.digs, 1, 'no new dig before RETRY_MS');
     assert.equal(nightState(agent).state, 'inside');
 });
+
+test('CX23 soak: a repair that placed some blocks but left cells open says which and why in the journal', async (t) => {
+    quiet(t);
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    o.open = [SITE.offset(1, 0, 0), SITE.offset(1, 1, 0)];
+    const line = 'Shelter at 0, 64, 0 is not closed: 1 open (1, 64, 0: a zombie stands in it (hit 6 times)); placed 1.';
+    o.buildShelter = () => Promise.resolve({ closed: false, placed: 1, feet: SITE, line });
+    nightTick(agent, { now: 1, ops: o });
+    nightTick(agent, { now: CHECK_MS + 2, ops: o });
+    await settle(agent);
+    assert.ok(logs.includes(`[night] the repair placed 1 but left some open (${line})`), logs.join('\n'));
+});
+
