@@ -1,10 +1,70 @@
 # Status: skills-rotn
 
-Updated: 2026-11-08T04:37Z (from `date -u`)
+Updated: 2026-11-08T21:46Z (from `date -u`)
+
+## 2026-11-08: the CX23 soak death spiral and G4 #5 food (summary, 2026-11-08T21:46Z by `date -u`)
+
+Everything below is merged into develop (head f6107fc4 when written). **No skills-rotn PR is open** apart from this STATUS-only one. Per the lead, the death-spiral and food work is complete. I'm idle until the next soak.
+
+### What the soaks showed
+- **The CX23 first start crashed on missing code templates.** Fixed in **#410**: the Coder reads them on first use; when they are missing it writes one log line and coding is unavailable.
+- **CX23 soak (rotn-v0.1.3), a death spiral:**
+  - The world spawn was in a giant spruce's canopy (y about 80, the ground about 64), so every respawn stood on leaves with no walk down.
+  - Unarmed after a death, the model turned self_defense off and left cowardice off.
+  - Player zombies rose at the death spots, and the agenda went back to dig dirt among them.
+  - Repairs of a dug-open shelter placed nothing.
+  - The bot was told "Night is near: in about 2 min" at 17:07, but sunset came at 17:19.
+- **Measuring soak M1** (`test/evidence/g4/g4soak-m1-20261108/`, GO `G4-SOAK-M1-20261108`, release rotn-v0.1.3; a measuring run, not G4 evidence):
+  - `agenda done` came after 8.5 min. Nothing got food after that: food fell to 1, and `food_floor` and `ate_when_low` FAILED.
+  - 17 deaths in three bursts: the first night, the morning after, and the second night. The causes were the shelter losing to digging zombies, and respawns with no blocks and no site.
+  - Measured: peak memory 634 MB and USD 0.0116 per hour. ADR 0010 now sets the targets at 850 MiB and USD 0.05/h.
+
+### Fixes (all merged)
+- **#414:** cowardice and self_defense are on in `profiles/rotn-bot.json`. Only a task giver who types it can turn the survival modes off; the model is refused.
+- **#415:** the bot gets down from a canopy by digging the leaf under it, never a branch or trunk shell. Each fall is at most 3 blocks, except one last-resort drop, and only while health stays at least 10. At night it climbs down first.
+- **#416:** after a respawn the bot walks 48 blocks from the spawn and its recent death spots before the agenda goes on. Collects skip the area around a recent death spot for 20 min.
+- **#417:** the repair says why each cell stays open. While a mob stays in the opening the bot hits it with its weapon (no cap of 5 hits), and it eats between fights.
+- **#418, #425, #428 (3):** the night-near minutes count the part of the morning freeze still to run, and count it once:
+  - just before the freeze (2996–3000), the minutes already frozen come off;
+  - at the freeze or just past it (3001–3006), the part still to run is added.
+- **#422 (G4 #5 food):**
+  - **The targets** (`FOOD_TARGET`) are 12 by day, 8 before night and 6 at dusk.
+  - **The food reserve** is a second agenda reserve, a standing duty also after "agenda done". It is never asked at night, has its own budget (`FOOD_RETRY_MS` 10 min), and gets at most `FOOD_DAY_RUNS` = 3 self-prompter runs per in-game day.
+  - **The hunting reflex** runs only when food is due, by day, idle, with no threat near. Each hunt is bounded at 90 s and ends at dusk.
+  - **Never an animal that may belong to a player**, the lead's hard rule:
+    - unknown metadata, a name tag, an owner or the tame bit;
+    - on a leash, carrying a rider, a saddled pig, or a sheep that isn't white;
+    - within 8 blocks of player-built blocks the bot didn't place;
+    - within 32 blocks of a known base.
+  - **What it hunts:** Animania adult females and vanilla cows, mooshrooms, pigs, rabbits and sheep. Never chickens or llamas.
+  - **`!attack`** checks ownership for every target that is not a player, not a hostile mob by rotn-data's `threatOf`, and not a mob that just hurt the bot.
+- **#424 and #428 (1):** `!stay` never pauses self_preservation. The model's stay is capped at 120 s and keeps self_defense running; only cowardice pauses. A task giver's typed stay may last until stopped and pause both.
+- **#427 (G4 #5 foraging, after rotn-data #423/#426):**
+  - **What it takes:** ripe wild food before hunting, ready states only (`readyMetas`). Rustic wildberry bushes are right-clicked, never broken, and never with bone meal in hand. Herbs and HarvestCraft gardens are broken, never while sneaking. Block names are full names (`rustic:wildberry_bush`).
+  - **What it never takes:**
+    - the hawthorn, poison ivy or thorns;
+    - avoided food;
+    - a crop that may be a player's: within 8 blocks of player-built blocks, farmland, crop stakes, trellises or flower pots, or within 32 of a base.
+  - **Where it shows up:** a new `!forage` command. The food reserve's prompt names the ripe wild food near. `!collectBlocks`, `!activate` and `!useOn` refuse the hazards and the berry bush.
+  - **The #422 nit:** the day's last food run finishes instead of being stopped about 2 s in.
+- **#428:**
+  - (2) `attackNearest` never pauses self_preservation for water mobs.
+  - (4) Every walk (`installWalkSafety`) steps around poison ivy and thorns.
+  - (5) A forage run that got nothing lets the next tick hunt.
+  - Lead decision: the hazard cost stays at 100.
+
+### Open items
+1. **Cosmetic, for the next touch of these files:**
+   - the `skills.stay` doc comment (self_defense now interrupts a model stay);
+   - the #417 nits: the stale `shelter.js` hits comment, saying which bound ended a fight, and the interrupt reason 'stopped';
+   - the #392 nits: the task_queue load warning wording, the `say()` behavior-log cut mid-line, and the pruneFinished tie-break.
+2. **Watch at the next soak:**
+   - The first live forage. rotn-data's `unverified` notes that `activateBlock` on a Rustic bush has never been run; look for `[reflex] foraging …` and `Foraged N blocks: got …`.
+   - The food lines: `food_floor` and `ate_when_low`.
 
 ## Rounds 9 and 10, the G3 gate and the follow-ups (summary, 2026-11-08T04:37Z by `date -u`)
 
-All of the work below is merged into develop (head 0911b9ba when written). **No skills-rotn PR is open.**
+All of the work below is merged into develop (head 0911b9ba when written).
 
 ### Round 9 B (failed 2026-11-07): fixes, all merged
 - **(a) #328:** leaves out of reach no longer use up the stick attempts.
@@ -48,7 +108,7 @@ All of the work below is merged into develop (head 0911b9ba when written). **No 
   - The wording fits the last 250 chars of the cut output.
 
 ### Open items
-1. **Gate2 B: the move one block lower at 00:19:39** (`test/evidence/g3/g3b-20261108-gate2/`). Reported to the lead on 2026-11-08; the fix is waiting for a GO.
+1. **Gate2 B: the move one block lower at 00:19:39** (`test/evidence/g3/g3b-20261108-gate2/`). Reported to the lead on 2026-11-08 (since done in #381: a full-height floor, `shelter.js` `onFloorOf` settles the bot on it before building and closing, and a log line says where the bot and the floor were).
    - **What the evidence shows:**
      - The shelter at -74, 60, -67 closed at 00:19:29.
      - The next 10 s check (00:19:39) found the bot's block position at y 59.
@@ -63,7 +123,7 @@ All of the work below is merged into develop (head 0911b9ba when written). **No 
      - When the bot is found out of its shelter, log its exact position and the floor block's name at closing and now, so the next case shows the cause.
      - A new site's floor must be a full-height block that is not a tree part.
      - The build checks that the bot is standing on that floor before it reports the shelter closed.
-2. **Cosmetic, low:** a `collect_sticks.test.js` test title still says "the fallback is gone" (rotn-data #312 test). The matching `skills.js` comment is already gone.
+2. **Cosmetic, low:** a `collect_sticks.test.js` test title still said "the fallback is gone" (rotn-data #312 test) (since done: no longer under `src/`).
 
 ## No chat-spam loop from reflexes: an identical line at most once a minute (branch `agent/skills-rotn/chat-repeat-limit`, 2026-11-07T15:14Z by `date -u`)
 
