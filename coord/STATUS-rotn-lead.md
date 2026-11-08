@@ -13,7 +13,7 @@ Updated: 2026-11-08 22:28 UTC (from `date -u`)
 - **Next:** the second soak on `rotn-v0.1.4` (needs the human's GO); if it passes #5 and #7, the G4 step 7 acceptance runs.
 - **Open for net-forge (no Orca terminal running):** agent_process.js restarts a deterministic startup crash forever; no SIGTERM handler (a ctl stop drops the connection instead of quitting); one windowOpen timeout seen.
 - **Open decisions for the human:** answer only when addressed before the live server (every public line read is a model call); the live server's Mod Director choice (ADR 0008).
-- **Spend 2026-11-08:** LLM on the production key about USD 0.04 (step 0 and M1); Hetzner about EUR 1.0 (two CPX42 runs). No server exists.
+- **Spend 2026-11-08 (CX23 runs):** LLM on the production key about USD 0.03 (step 0 USD 0.0076, M1 USD 0.0232); Hetzner about EUR 0.55 (two CPX42s: about 1 h and about 2.5 h, billed per started hour). No server exists.
 
 ## Earlier snapshot (2026-11-08 13:00 UTC): G4 offline work done; G4 step 0 under way
 
