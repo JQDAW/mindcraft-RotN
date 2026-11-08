@@ -77,7 +77,9 @@ DONE_REGEX='\]: Done \([0-9.,]+s\)! For help'
 
 has_done_line() { [[ -f $1 ]] && grep -Eq "$DONE_REGEX" "$1"; }
 
-sha256_of() { sha256sum "$1" | cut -d' ' -f1; }
+# From stdin: with a file argument, sha256sum escapes a name holding a backslash or a line break by putting "\" before
+# the hash (#351 review nits), which would make a hash list's line invalid.
+sha256_of() { sha256sum < "$1" | cut -d' ' -f1; }
 
 # wait_for_file PATH TIMEOUT_SECONDS
 wait_for_file() {
@@ -185,8 +187,12 @@ record_extra_mods() {
   : > "$STATE/extra-mods.sha256"
   while IFS= read -r -d '' f; do
     rel=${f#"$SERVER"/}
+    # A hash list holds one path per line: a name with a line break cannot be pinned (#351 review). Refused, never
+    # written as two lines; the check at Done reports such a jar as EXTRA anyway.
+    [[ $rel == *$'\n'* ]] && fail "extra-mod: a jar name with a line break cannot be pinned: ${rel//$'\n'/\\n}"
     # The whole path after "<64 hex>  " (column 67 on), never awk's $2: a jar name can hold spaces (round 10 A).
-    want=$(awk -v r="$rel" 'substr($0, 67) == r { print $1; exit }' "$STATE/pack-jars.sha256")
+    # Passed through ENVIRON, not -v, which would turn a backslash in the name into an escape (#351 review).
+    want=$(RTS_REL=$rel awk 'substr($0, 67) == ENVIRON["RTS_REL"] { print $1; exit }' "$STATE/pack-jars.sha256")
     if [[ -n $want ]]; then
       [[ $(sha256_of "$f") == "$want" ]] || fail "extra-mod: $(basename "$rel") would replace a jar of the pinned zip"
       continue

@@ -145,3 +145,45 @@ export function retreatFrom(base, spot, plan = FELL_PLAN) {
 
 /** The falling tree entity Dynamic Trees spawns when a trunk is cut. */
 export const FALLING_TREE = 'dynamictrees:falling_tree';
+
+/**
+ * How long after its own cut the bot treats the tree as still falling, whether or not it sees the
+ * falling tree entity (G3 round 10 A: the unstuck reflex walked the bot into the fall about 27 s
+ * after a cut, and the bot was crushed).
+ */
+export const FELL_HOLD_MS = 30_000;
+
+/**
+ * How long one falling tree entity in sight may hold the bot (#356 review 2): a fall is over in
+ * seconds (TREE_FALL.maxMs waits 30 s), so an entity seen longer (a missed destroy packet, someone
+ * else's tree that never lands) is ignored from then on.
+ */
+export const FALLING_SEEN_MAX_MS = 60_000;
+
+// Per bot: falling tree entity id -> when this bot first saw it.
+const _fallingSeen = new WeakMap();
+
+/**
+ * A falling tree near the bot, or null: a falling tree entity within `radius` blocks seen for less
+ * than FALLING_SEEN_MAX_MS, else the bot's own cut (bot.rotnLastFell, set by skills.fellTree) less
+ * than FELL_HOLD_MS ago. Returns {pos, why}. Only the unstuck reflex (modes.js) checks this; the
+ * fell's own waits (skills.fellTree, collectFelledDrops) watch the entity themselves.
+ */
+export function fallingTreeNear(bot, { now = Date.now(), radius = 32 } = {}) {
+    const here = bot?.entity?.position;
+    if (here && bot && typeof bot === 'object') {
+        if (!_fallingSeen.has(bot)) _fallingSeen.set(bot, new Map());
+        const seen = _fallingSeen.get(bot);
+        const trees = Object.values(bot.entities ?? {}).filter(e => e?.name === FALLING_TREE && e.position);
+        const ids = new Set(trees.map(e => e.id ?? e));
+        for (const id of seen.keys()) if (!ids.has(id)) seen.delete(id); // gone: forgotten
+        for (const tree of trees) {
+            const id = tree.id ?? tree;
+            if (!seen.has(id)) seen.set(id, now);
+            if (tree.position.distanceTo(here) <= radius && now - seen.get(id) < FALLING_SEEN_MAX_MS) return { pos: tree.position, why: 'a falling tree' };
+        }
+    }
+    const cut = bot?.rotnLastFell;
+    if (cut && Number.isFinite(cut.at) && now >= cut.at && now - cut.at < FELL_HOLD_MS) return { pos: cut.pos, why: 'the tree it just cut' };
+    return null;
+}

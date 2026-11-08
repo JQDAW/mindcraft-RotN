@@ -9,6 +9,7 @@ import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
 import { REPAIR_LABEL } from './library/night.js';
 import { isFalling } from './library/shelter.js';
+import { fallingTreeNear } from './library/felling.js';
 
 /**
  * A falling block at the head in the night shelter (#346 review 1): dig it out by hand and stay, but
@@ -325,6 +326,13 @@ const modes_list = [
                 this.prev_location = null;
                 this.stuck_time = 0;
                 return; // don't get stuck when idle
+            }
+            // A tree falling near the bot (G3 round 10 A: this reflex walked the bot from where it
+            // waited out its own cut into the fall, and it was crushed): hold still until it is down.
+            if (fallingTreeNear(agent.bot)) {
+                this.prev_location = null;
+                this.stuck_time = 0;
+                return;
             }
             const bot = agent.bot;
             const cur_dig_block = bot.targetDigBlock;

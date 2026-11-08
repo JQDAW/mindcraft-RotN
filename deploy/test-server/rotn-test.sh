@@ -53,16 +53,19 @@ state() { tr -d '\n' < "$STATE/$1" 2>/dev/null || true; }
 # zip ($STATE/pack-jars.sha256, hashed by the build right after unpacking the verified zip), a pinned download
 # (/etc/rotn-test/mod-director.sha256; the binding check), or an --extra-mod this harness uploaded
 # ($STATE/extra-mods.sha256, hashed before the first start). Subfolders (mods/memory_repo/, mods/1.12.2/) are never
-# compared: Forge writes into them at run time. A pinned entry outside mods/ (the list's local copy) is checked
-# only if that file is on disk; nothing here fetches. Exit 0 OK, 1 a problem, 3 cannot check. Prints one line per
-# pinned or extra file (the zip's jars only as a count, or when one fails).
+# compared: Forge writes into them at run time. A pinned entry outside mods/ must be on disk too: a missing pinned
+# file of any kind is a problem (#351 review; the list's own copy was never on disk, so #351 dropped its line).
+# Nothing here fetches. Exit 0 OK, 1 a problem, 3 cannot check. Prints one line per pinned or extra file (the zip's
+# jars only as a count, or when one fails); a line break in a name is printed as \n.
 mod_director_check() {
   local list=${ROTN_TEST_MODDIR_LIST:-/etc/rotn-test/mod-director.sha256} packjars=$STATE/pack-jars.sha256 extras=$STATE/extra-mods.sha256
   local problems=0 npinned=0 npack=0 nextra=0 f rel got
   local -A known=()
   md() { printf 'mod-director: %s\n' "$*"; }
   top_jar() { [[ $1 =~ ^mods/[^/]+\.jar$ ]]; }
-  hash_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1 || true; }   # empty for a dangling symlink (never a silent exit)
+  # From stdin (sha256sum puts "\" before the hash of a name with a backslash or a line break); empty for a dangling
+  # symlink (never a silent exit).
+  hash_of() { sha256sum 2>/dev/null < "$1" | cut -d' ' -f1 || true; }
   [[ -r $list ]] || { md "FAILED: cannot check: no pinned list $list"; exit 3; }
   [[ -s $packjars ]] || { md "FAILED: cannot check: no hashes of the pinned zip's jars $packjars"; exit 3; }
   [[ -d $SERVER/mods ]] || { md "FAILED: cannot check: no $SERVER/mods"; exit 3; }
@@ -80,8 +83,7 @@ mod_director_check() {
       (( ok )) || { md "FAILED: cannot check: a bad line in $1"; exit 3; }
       known[$rel]=$2
       if [[ ! -f $SERVER/$rel ]]; then
-        if top_jar "$rel"; then md "MISSING $rel ($2)"; problems=$(( problems + 1 ))
-        else md "$2 $rel not on disk: Mod Director kept no copy here (not checked)"; fi
+        md "MISSING $rel ($2)"; problems=$(( problems + 1 ))   # fails closed for every kind (#351 review)
         continue
       fi
       got=$(hash_of "$SERVER/$rel")
@@ -97,7 +99,7 @@ mod_director_check() {
     rel=${f#"$SERVER"/}
     [[ -n ${known[$rel]:-} ]] && continue
     got=$(hash_of "$f")
-    md "EXTRA $rel sha256 ${got:-unreadable} (not in the pinned zip or the pinned list)"
+    md "EXTRA ${rel//$'\n'/\\n} sha256 ${got:-unreadable} (not in the pinned zip or the pinned list)"
     problems=$(( problems + 1 ))
   done < <(find "$SERVER/mods" -maxdepth 1 -name '*.jar' ! -type d -print0 | sort -z)
   if (( problems )); then md "FAILED: $problems problem(s)"; exit 1; fi
