@@ -23,6 +23,7 @@ import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
 import { say, isGiverGoal } from './agenda_driver.js';
 import settings from './settings.js';
+import { heldFoodHunger, FOOD_TARGET } from './library/food.js';
 
 export { REPAIR_LABEL };
 
@@ -473,6 +474,10 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         }
         n.stopping = false;
         line(agent, `[night] ${phase === 'dusk' ? 'sunset is near' : 'it is night'}: building a shelter`);
+        // G4 #5: the night's food, in the journal. Never out for food at night: the bot stays sealed.
+        const held = heldFoodHunger(bot);
+        console.log(`[night] food for the night: food worth ${held} hunger held, food ${Number.isFinite(bot.food) ? bot.food : 'unknown'}; `
+            + (held >= FOOD_TARGET.dusk ? 'enough' : `less than ${FOOD_TARGET.dusk}: staying sealed anyway (never out for food at night)`));
         startBuilding(n, now);
     }
 
