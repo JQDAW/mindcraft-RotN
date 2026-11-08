@@ -72,7 +72,7 @@ describe('g4-service-reconnect\'s console rules: kick this run\'s bot only, and 
         assert.equal(ok(list, 'stop'), true);
         for (const bad of ['stop now', ' stop', 'stop ', 'restart', 'kill FRCFLD', 'op FRCFLD', 'whitelist remove FRCFLD']) assert.equal(ok(list, bad), false, bad);
         assert.equal(list.length, G3_CONSOLE_ALLOW.length + 2, 'kick and stop only');
-        assert.deepEqual(Object.keys(SCENARIO_CONSOLE_EXTRA).sort(), ['g4-death-report', 'g4-service-reconnect']);
+        assert.deepEqual(Object.keys(SCENARIO_CONSOLE_EXTRA).sort(), ['g4-control-commands', 'g4-death-report', 'g4-service-reconnect']);
         for (const sc of Object.values(await loadScenarios())) {
             if (sc.id === RECONNECT.id) continue;
             for (const cmd of ['kick FRCFLD', 'stop']) assert.equal(ok(consoleAllowFor(sc), cmd), false, `${sc.id}: ${cmd}`);

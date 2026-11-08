@@ -115,6 +115,18 @@ export const SCENARIO_CONSOLE_EXTRA = Object.freeze({
         ...(/^[A-Za-z0-9_]{3,16}$/.test(String(params?.bot ?? '')) ? [new RegExp(`^kick ${esc(String(params.bot))}$`)] : []),
         /^stop$/,
     ],
+    // g4-control-commands (G4 #3; lead-approved in the #399 review): the distance between this run's bot and
+    // the giver (or itself, the probe), `execute <bot> ~ ~ ~ testfor @a[name=<bot|giver>,r=<n>]`: the executor is always
+    // the bot (an op's admin echo then names the bot, which ignores its own name), with exactly that read-only testfor
+    // inside and the exact names from the parameters (no selector as the executor, no other inner command). No `say`:
+    // the prompts are G3's `tell`, to the giver only (the scenario's own guard on S). Test-server only, as above.
+    'g4-control-commands': (params) => {
+        const named = (n) => /^[A-Za-z0-9_]{3,16}$/.test(String(n ?? ''));
+        if (!named(params?.bot)) return [];
+        const bot = esc(String(params.bot));
+        const targets = [bot, ...(named(params.giver) ? [esc(String(params.giver))] : [])].join('|');
+        return [new RegExp(`^execute ${bot} ~ ~ ~ testfor @a\\[name=(${targets}),r=\\d{1,3}\\]$`)];
+    },
     'g4-death-report': (params) => [
         ...(/^[A-Za-z0-9_]{3,16}$/.test(String(params?.bot ?? '')) ? [new RegExp(`^kill ${esc(String(params.bot))}$`)] : []),
         /^scoreboard objectives add [A-Za-z0-9_]{1,16} health$/,
