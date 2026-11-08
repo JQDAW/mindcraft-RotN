@@ -174,7 +174,7 @@ describe('mindcraft-rotn-ssh-gate: everything else is refused and logged safely'
         assert.match(refusedLine(gate(at)), /^refused \(not an allowed request\)/);
     });
 
-    test('a refusal still exits 2 when the logger is missing or fails', () => {
+    test('a refusal still exits 126 when the logger is missing or fails', () => {
         const r = gate('restart frcfld', { FAKE_LOGGER_RC: '1' });
         assert.equal(r.code, 126);
         assert.deepEqual(r.sudo, []);

@@ -28,7 +28,9 @@ BOTS_DIR=/var/lib/mindcraft-rotn/bots
 SVC_GROUP=mindcraft-rotn
 HEALTH_WAIT_S=${HEALTH_WAIT_S:-45}
 KEEP_RELEASES=${KEEP_RELEASES:-5}
-TAG_RE='^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'
+# Only this fork's release tags (lead, rotn-v0.1.0): the repo also carries upstream Mindcraft's v0.x tags, and upstream
+# v0.1.0 is an ancestor of develop, so `deploy v0.1.0` would pass the on-develop check and deploy plain Mindcraft.
+TAG_RE='^rotn-v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'
 CTL=(sudo -n /usr/local/sbin/mindcraft-rotn-ctl)
 
 log() { echo "[deploy $(date -u +%H:%M:%S)] $*" >&2; }
@@ -146,7 +148,7 @@ prune() {
 do_deploy() {
   local tag=${1:-} force=0 sha name cur prev bots
   [[ ${2:-} == --force ]] && force=1
-  [[ $tag =~ $TAG_RE ]] || die "usage: deploy.sh deploy TAG [--force] (bad tag '$tag')"
+  [[ $tag =~ $TAG_RE ]] || die "usage: deploy.sh deploy rotn-vX.Y.Z[-suffix] [--force] (bad tag '$tag': only this fork's rotn-v release tags are deployed; v0.x tags are upstream Mindcraft's)"
   lock
   fetch
   sha=$(git_ rev-parse --verify --quiet "refs/tags/$tag^{commit}") || die "no tag '$tag' in $REPO_URL"

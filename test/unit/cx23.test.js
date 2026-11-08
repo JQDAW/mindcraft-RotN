@@ -968,27 +968,28 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         fs.mkdirSync(src);
         git(src, 'init', '-q', '-b', 'develop');
         fs.writeFileSync(path.join(src, 'package.json'), '{"name":"x","version":"1.0.0","type":"module"}\n');
-        commit('false', 'one'); git(src, 'tag', 'v1');
-        commit('false', 'two'); git(src, 'tag', 'v2');
-        commit('false', 'three'); git(src, 'tag', 'v3');
-        commit('true', 'insecure'); git(src, 'tag', 'vinsecure');
+        commit('false', 'one'); git(src, 'tag', 'rotn-v0.0.1');
+        commit('false', 'two'); git(src, 'tag', 'rotn-v0.0.2');
+        commit('false', 'three'); git(src, 'tag', 'rotn-v0.0.3'); git(src, 'tag', 'rotn-v0.0.3-rc.1');
+        git(src, 'tag', 'v0.1.0', 'rotn-v0.0.1');   // like upstream Mindcraft's tags: on develop, but not a RotN release
+        commit('true', 'insecure'); git(src, 'tag', 'rotn-v0.9.0-insecure');
         // A grep for '"allow_insecure_coding": false' would pass these; evaluating settings.js does not (PR #30 finding 7).
         // 0 also catches a loose == false.
         commit(null, 'sneaky', 'const settings = {\n    // "allow_insecure_coding": false,\n    "allow_insecure_coding": true,\n};\nexport default settings;\n');
-        git(src, 'tag', 'vsneaky');
+        git(src, 'tag', 'rotn-v0.9.0-sneaky');
         commit(null, 'override', 'const settings = { "allow_insecure_coding": false };\nsettings.allow_insecure_coding = 0;\nexport default settings;\n');
-        git(src, 'tag', 'vstring');
+        git(src, 'tag', 'rotn-v0.9.0-string');
         // skills-rotn's task givers (#146, #157 review): the test-only switch and a Server giver never reach the CX23.
         commit(null, 'giverflag', 'export default { "allow_insecure_coding": false, "allow_server_task_giver": true };\n');
-        git(src, 'tag', 'vgiverflag');
+        git(src, 'tag', 'rotn-v0.9.0-giverflag');
         commit(null, 'giverflagnull', 'export default { "allow_insecure_coding": false, "allow_server_task_giver": null };\n');
-        git(src, 'tag', 'vgiverflagnull');
+        git(src, 'tag', 'rotn-v0.9.0-giverflagnull');
         commit(null, 'giverserver', 'export default { "allow_insecure_coding": false, "task_givers": ["JQDAW", "server"] };\n');
-        git(src, 'tag', 'vgiverserver');
+        git(src, 'tag', 'rotn-v0.9.0-giverserver');
         commit(null, 'giverok', 'export default { "allow_insecure_coding": false, "allow_server_task_giver": false, "task_givers": ["JQDAW"] };\n');
-        git(src, 'tag', 'vgiverok');
-        git(src, 'checkout', '-q', '-b', 'side', 'v1');
-        commit('false', 'side'); git(src, 'tag', 'vside');
+        git(src, 'tag', 'rotn-v0.9.0-giverok');
+        git(src, 'checkout', '-q', '-b', 'side', 'rotn-v0.0.1');
+        commit('false', 'side'); git(src, 'tag', 'rotn-v0.9.0-side');
         git(src, 'checkout', '-q', 'develop');
         fs.mkdirSync(rootFile('opt/mindcraft-rotn/releases'), { recursive: true });
     };
@@ -1004,10 +1005,10 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
 
     test('deploy a develop tag: extract, npm ci in the release, link bots, switch, restart only enabled bots', () => {
         setupRepo();
-        const r = dep(['deploy', 'v1']);
+        const r = dep(['deploy', 'rotn-v0.0.1']);
         assert.equal(r.code, 0, r.all);
         const [rel] = releases();
-        assert.match(rel, /^v1-[0-9a-f]{12}$/);
+        assert.match(rel, /^rotn-v0\.0\.1-[0-9a-f]{12}$/);
         assert.ok(exists(`${BASE}/releases/${rel}/.release-ok`) && exists(`${BASE}/releases/${rel}/main.js`));
         assert.deepEqual(state(), { current: rel, previous: '' });
         assert.equal(read(`${BASE}/current`).trim(), `releases/${rel}`);
@@ -1020,13 +1021,13 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         assert.deepEqual(sudo, ['list', 'is-enabled rotn-bot', 'is-enabled idle-bot', 'restart rotn-bot', 'is-active rotn-bot']);
         assert.ok(called('sudo').every((c) => c[1] === '-n' && c[2] === '/usr/local/sbin/mindcraft-rotn-ctl'), 'only the wrapper, non-interactive');
         assert.ok(called('chgrp').some((c) => c.join(' ').startsWith('chgrp -R mindcraft-rotn')));
-        assert.match(read(`${BASE}/deploys.log`), /deploy v1 [0-9a-f]{40} v1-[0-9a-f]{12} ok bots=rotn-bot/);
+        assert.match(read(`${BASE}/deploys.log`), /deploy rotn-v0\.0\.1 [0-9a-f]{40} rotn-v0\.0\.1-[0-9a-f]{12} ok bots=rotn-bot/);
     });
 
     test('deploy then rollback: current and previous swap; the same tag again is a no-op without --force', () => {
         setupRepo();
-        assert.equal(dep(['deploy', 'v1']).code, 0);
-        assert.equal(dep(['deploy', 'v2']).code, 0);
+        assert.equal(dep(['deploy', 'rotn-v0.0.1']).code, 0);
+        assert.equal(dep(['deploy', 'rotn-v0.0.2']).code, 0);
         const [r1, r2] = releases();
         assert.deepEqual(state(), { current: r2, previous: r1 });
         const rb = dep(['rollback']);
@@ -1035,25 +1036,25 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         assert.equal(read(`${BASE}/current`).trim(), `releases/${r1}`);
         assert.match(read(`${BASE}/deploys.log`), new RegExp(`rollback to ${r1} from ${r2} ok`));
         const before = called('sudo').length;
-        assert.match(dep(['deploy', 'v1']).stderr, /is already current/);
+        assert.match(dep(['deploy', 'rotn-v0.0.1']).stderr, /is already current/);
         assert.equal(called('sudo').length, before, 'nothing restarted');
-        assert.equal(dep(['deploy', 'v1', '--force']).code, 0);
+        assert.equal(dep(['deploy', 'rotn-v0.0.1', '--force']).code, 0);
         assert.equal(called('npm').length, 2, 'an existing release is reused, not rebuilt');
     });
 
     test('refuses a tag that is not on develop, an unknown or malformed tag, and a release with insecure coding', () => {
         setupRepo();
         const cases = [
-            [['deploy', 'vside'], /is not on develop; refusing/],
-            [['deploy', 'nope'], /no tag 'nope'/],
+            [['deploy', 'rotn-v0.9.0-side'], /is not on develop; refusing/],
+            [['deploy', 'rotn-v9.9.9'], /no tag 'rotn-v9\.9\.9'/],
             [['deploy', '../../etc'], /bad tag/],
             [['deploy', '--force'], /bad tag/],
-            [['deploy', 'vinsecure'], /settings\.js does not evaluate to allow_insecure_coding === false; refusing/],
-            [['deploy', 'vsneaky'], /settings\.js does not evaluate to allow_insecure_coding === false/],
-            [['deploy', 'vstring'], /settings\.js does not evaluate to allow_insecure_coding === false/],
-            [['deploy', 'vgiverflag'], /settings\.js has allow_server_task_giver not false: it is test-only .* never on the CX23; refusing/],
-            [['deploy', 'vgiverflagnull'], /settings\.js has allow_server_task_giver not false/],
-            [['deploy', 'vgiverserver'], /settings\.js names "Server" as a task giver: the console sender is a test-only giver, never on the CX23; refusing/],
+            [['deploy', 'rotn-v0.9.0-insecure'], /settings\.js does not evaluate to allow_insecure_coding === false; refusing/],
+            [['deploy', 'rotn-v0.9.0-sneaky'], /settings\.js does not evaluate to allow_insecure_coding === false/],
+            [['deploy', 'rotn-v0.9.0-string'], /settings\.js does not evaluate to allow_insecure_coding === false/],
+            [['deploy', 'rotn-v0.9.0-giverflag'], /settings\.js has allow_server_task_giver not false: it is test-only .* never on the CX23; refusing/],
+            [['deploy', 'rotn-v0.9.0-giverflagnull'], /settings\.js has allow_server_task_giver not false/],
+            [['deploy', 'rotn-v0.9.0-giverserver'], /settings\.js names "Server" as a task giver: the console sender is a test-only giver, never on the CX23; refusing/],
         ];
         for (const [args, re] of cases) {
             const r = dep(args);
@@ -1066,37 +1067,54 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         assert.ok(!exists(`${BASE}/.deploy.lock`), 'the lock is released');
     });
 
+    test('lead, rotn-v0.1.0: only rotn-vX.Y.Z[-suffix] tags; upstream\'s v0.x (on develop) and other shapes are refused before anything runs', () => {
+        setupRepo();
+        for (const bad of ['v0.1.0', 'v1', 'rotn-v1', 'rotn-v0.1', 'rotn-0.1.0', 'Rotn-v0.1.0', 'ROTN-v0.1.0', 'rotn-v0.1.0-', 'rotn-v0.1.0+x',
+            'rotn-v0.1.0-rc_1', 'rotn-v0.1.0-rc/1', 'xrotn-v0.1.0', 'rotn-v0.1.0x', 'rotn-va.b.c', '']) {
+            const r = dep(['deploy', bad]);
+            assert.equal(r.code, 1, bad);
+            assert.match(r.stderr, /usage: deploy\.sh deploy rotn-vX\.Y\.Z\[-suffix\] \[--force\] \(bad tag '.*': only this fork's rotn-v release tags are deployed; v0\.x tags are upstream Mindcraft's\)/, bad);
+        }
+        assert.ok(!exists(`${BASE}/repo.git`), 'refused before the clone');
+        assert.deepEqual(releases(), []);
+        assert.equal(called('sudo').length, 0);
+        // A pre-release suffix is a RotN release too.
+        const rc = dep(['deploy', 'rotn-v0.0.3-rc.1']);
+        assert.equal(rc.code, 0, rc.all);
+        assert.match(state().current, /^rotn-v0\.0\.3-rc\.1-[0-9a-f]{12}$/);
+    });
+
     test('the giver settings the lead keeps in settings.js deploy: task_givers with players, the switch false (#157 review)', () => {
         setupRepo();
-        const r = dep(['deploy', 'vgiverok']);
+        const r = dep(['deploy', 'rotn-v0.9.0-giverok']);
         assert.equal(r.code, 0, r.all);
-        assert.equal(state().current.startsWith('vgiverok-'), true, JSON.stringify(state()));
+        assert.equal(state().current.startsWith('rotn-v0.9.0-giverok-'), true, JSON.stringify(state()));
     });
 
     test('a failed health check switches back to the previous release by itself', () => {
         setupRepo();
-        assert.equal(dep(['deploy', 'v1']).code, 0);
-        const r = dep(['deploy', 'v2'], { FAKE_BAD_RELEASE: 'v2-' });
+        assert.equal(dep(['deploy', 'rotn-v0.0.1']).code, 0);
+        const r = dep(['deploy', 'rotn-v0.0.2'], { FAKE_BAD_RELEASE: 'rotn-v0.0.2-' });
         assert.equal(r.code, 1);
-        assert.match(r.stderr, /health check failed: rolling back to v1-/);
+        assert.match(r.stderr, /health check failed: rolling back to rotn-v0\.0\.1-/);
         const [r1, r2] = releases();
         assert.deepEqual(state(), { current: r1, previous: '' });
         assert.equal(read(`${BASE}/current`).trim(), `releases/${r1}`);
-        assert.match(read(`${BASE}/deploys.log`), new RegExp(`deploy v2 [0-9a-f]{40} ${r2} FAILED rolled-back-to=${r1}`));
+        assert.match(read(`${BASE}/deploys.log`), new RegExp(`deploy rotn-v0\\.0\\.2 [0-9a-f]{40} ${r2} FAILED rolled-back-to=${r1}`));
     });
 
     test('npm ci failing leaves no release behind; a held lock refuses; old releases are pruned, never current or previous', () => {
         setupRepo();
-        const r = dep(['deploy', 'v1'], { FAKE_RC_npm: '1' });
+        const r = dep(['deploy', 'rotn-v0.0.1'], { FAKE_RC_npm: '1' });
         assert.equal(r.code, 1);
         assert.match(r.stderr, /npm ci failed/);
         assert.deepEqual(releases(), []);
         fs.mkdirSync(rootFile(`${BASE}/.deploy.lock`));
-        assert.match(dep(['deploy', 'v1']).stderr, /another deploy is running/);
+        assert.match(dep(['deploy', 'rotn-v0.0.1']).stderr, /another deploy is running/);
         fs.rmdirSync(rootFile(`${BASE}/.deploy.lock`));
-        for (const t of ['v1', 'v2', 'v3']) assert.equal(dep(['deploy', t], { KEEP_RELEASES: '0' }).code, 0, t);
+        for (const t of ['rotn-v0.0.1', 'rotn-v0.0.2', 'rotn-v0.0.3']) assert.equal(dep(['deploy', t], { KEEP_RELEASES: '0' }).code, 0, t);
         const left = releases();
         assert.equal(left.length, 2);
-        assert.ok(left.every((d) => /^v[23]-/.test(d)), left.join(','));
+        assert.ok(left.every((d) => /^rotn-v0\.0\.[23]-/.test(d)), left.join(','));
     });
 });
