@@ -19,6 +19,8 @@ import { breakBlockAt } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
 import { digPit, pitOut, moveAwayFrom, PIT } from './library/pit.js';
 import { hasWeapon, shelterEnemy } from './library/threats.js';
+import { isBranch, isTrunkShell } from './library/felling.js';
+import { MAX_SAFE_DROP, isTreePart } from './library/fall_safety.js';
 import { say, isGiverGoal } from './agenda_driver.js';
 import settings from './settings.js';
 
@@ -161,8 +163,8 @@ export const EXIT_TRIES = 3;
 const SIDE_NAMES = new Map([['1,0', 'east'], ['-1,0', 'west'], ['0,1', 'south'], ['0,-1', 'north']]);
 const sideName = (d) => SIDE_NAMES.get(`${d.x},${d.z}`);
 const ALL_AROUND = [...HORIZONTAL, new Vec3(0, 1, 0), new Vec3(0, -1, 0)];
-/** A block the bot can stand on: a solid block with no liquid in it that does not hurt. */
-const standable = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b) && !hot(b) && !hurtsOnContact(b);
+/** A block the bot can stand on: a solid block with no liquid in it that does not hurt, and no part of a tree. */
+const standable = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b) && !hot(b) && !hurtsOnContact(b) && !isTreePart(b);
 
 /**
  * The way out of the shelter at feet towards d, as a plan {dig, how, byHand}, or {why} when there
@@ -172,14 +174,29 @@ const standable = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b) && !ho
  *   the cell over the opening is dug too, so the bot has room to jump;
  * - 'tunnel': neither, so the next two cells are dug as well, up to EXIT_DEPTH deep, until one of
  *   the two holds (a hillside).
- * No cell is dug that has liquid or fire next to it or a falling block over it (#204 review 5).
+ * No cell is dug that has liquid or fire next to it or a falling block over it (#204 review 5), nor a
+ * Dynamic Trees branch or trunk shell (#364 review 1: breaking one fells the tree onto the bot). A
+ * level or tunnel exit needs firm ground with a fall of at most MAX_SAFE_DROP from the exit cell (#364 review 2: no
+ * opening over a cliff, no tunnel into a cave's drop).
  */
 function exitPlan(bot, feet, d) {
     const dig = [];
     const unsafe = (q) => {
         if (ALL_AROUND.some(o => hot(bot.blockAt(q.plus(o))))) return `liquid or fire next to ${at(q)}`;
         if (isFalling(bot.blockAt(q.offset(0, 1, 0)))) return `a falling block over ${at(q)}`;
+        const b = bot.blockAt(q);
+        if (isBranch(b) || isTrunkShell(b)) return `a tree's ${b.name} at ${at(q)}`;
         return null;
+    };
+    // The ground under the exit cell: the first block below that is not free, with a fall of at most
+    // MAX_SAFE_DROP onto it (the ground MAX_SAFE_DROP + 1 below the exit cell, as fall_safety counts).
+    const noGround = (exit) => {
+        for (let dy = 1; dy <= MAX_SAFE_DROP + 1; dy++) {
+            const b = bot.blockAt(exit.offset(0, -dy, 0));
+            if (isEmpty(b)) continue;
+            return standable(b) ? null : `no firm ground under ${at(exit)} (${b?.name ?? 'unloaded'})`;
+        }
+        return `a drop of more than ${MAX_SAFE_DROP} blocks beyond ${at(exit)}`;
     };
     const take = (q) => { if (!isEmpty(bot.blockAt(q))) dig.push(q); };
     for (let k = 1; k <= EXIT_DEPTH; k++) {
@@ -190,7 +207,11 @@ function exitPlan(bot, feet, d) {
         const nextLower = lower.plus(d), nextUpper = upper.plus(d), nextHead = nextUpper.offset(0, 1, 0);
         if ([nextLower, nextUpper].some(q => hot(bot.blockAt(q)))) return { why: `liquid or fire at ${at(nextLower)}` };
         let how = null;
-        if (isEmpty(bot.blockAt(nextLower)) && isEmpty(bot.blockAt(nextUpper))) how = k === 1 ? 'level' : 'tunnel';
+        if (isEmpty(bot.blockAt(nextLower)) && isEmpty(bot.blockAt(nextUpper))) {
+            const drop = noGround(nextLower);
+            if (drop) return { why: drop };
+            how = k === 1 ? 'level' : 'tunnel';
+        }
         else if (standable(bot.blockAt(nextLower)) && isEmpty(bot.blockAt(nextUpper)) && isEmpty(bot.blockAt(nextHead))) {
             const room = upper.offset(0, 1, 0); // over the opening: the jump's headroom
             const roomWhy = isEmpty(bot.blockAt(room)) ? null : unsafe(room);
@@ -510,27 +531,41 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
     }
 
     if (n.state === 'inside') {
-        if (isFullDay(t)) {
-            // Round 10 B: a shelter with no way out is not left as 'day' with the bot still walled
-            // in: digOut is tried again RETRY_MS later, EXIT_TRIES times, then the bot hands back.
-            const walkedOut = (n.exitTries ?? 0) > 0 && !bot.entity.position.floored().equals(n.site);
-            if (n.exitAt != null && now < n.exitAt && !walkedOut) return 'night:inside';
-            const out = walkedOut ? () => Promise.resolve(bot.entity.position.floored()) : n.pit ? () => ops.pitOut(bot, n.site) : () => ops.digOut(bot, n.site);
-            startJob(agent, n, 'action:leaveShelter', out, (side) => {
-                n.exitTries = (n.exitTries ?? 0) + 1;
-                if (!side && n.exitTries < EXIT_TRIES) {
-                    n.exitAt = now + RETRY_MS;
-                    line(agent, `[night] morning: no safe side of the shelter at ${at(n.site)} to open yet (try ${n.exitTries} of ${EXIT_TRIES}); trying again in ${RETRY_MS / 1000} s`);
-                    return;
-                }
-                const site = n.site;
+        // Round 10 B: a shelter with no way out is not left as 'day' with the bot still walled in:
+        // digOut is tried again RETRY_MS later, EXIT_TRIES times, then the bot hands back. Between
+        // tries the shelter's checks below run as at night (#364 review 4: breaches, the dig alarm).
+        const waiting = n.exitAt != null && now < n.exitAt;
+        const walkedOut = (n.exitTries ?? 0) > 0 && !bot.entity.position.floored().equals(n.site);
+        if (isFullDay(t) && (!waiting || walkedOut)) {
+            const handBack = (text) => {
                 bot.rotnSheltered = false;
                 n.state = 'day';
                 n.site = null;
                 Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, pitProgress: {}, exitTries: 0, exitAt: null });
-                line(agent, walkedOut ? `[night] morning: out of the shelter at ${at(site)}; back to work`
-                    : side ? `[night] morning: dug out of the shelter at ${at(side)}; back to work`
-                    : `[night] morning: could not open the shelter at ${at(site)} after ${EXIT_TRIES} tries; back to work, still enclosed: dig a way out`);
+                line(agent, text);
+            };
+            const failedTry = (why) => {
+                n.exitTries = (n.exitTries ?? 0) + 1;
+                if (n.exitTries < EXIT_TRIES) {
+                    n.exitAt = now + RETRY_MS;
+                    line(agent, `[night] morning: ${why} (try ${n.exitTries} of ${EXIT_TRIES}); trying again in ${RETRY_MS / 1000} s`);
+                } else {
+                    handBack(`[night] morning: could not leave the shelter at ${at(n.site)} after ${EXIT_TRIES} tries (${why}); back to work, still enclosed: dig a way out`);
+                }
+            };
+            if (walkedOut) {
+                handBack(`[night] morning: out of the shelter at ${at(n.site)}; back to work`);
+                return null;
+            }
+            // #364 review 3: mobs that do not burn wait outside in the day: no opening while one is near.
+            if (ops.hostileNear?.(bot, LEAVE_MOB_RANGE)) {
+                failedTry(`a hostile mob within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)}; not opening it`);
+                return 'night:inside';
+            }
+            const out = n.pit ? () => ops.pitOut(bot, n.site) : () => ops.digOut(bot, n.site);
+            startJob(agent, n, 'action:leaveShelter', out, (side) => {
+                if (side) handBack(`[night] morning: dug out of the shelter at ${at(side)}; back to work`);
+                else failedTry(`no safe side of the shelter at ${at(n.site)} to open yet`);
             });
             return 'night:inside';
         }
