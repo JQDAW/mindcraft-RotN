@@ -60,8 +60,12 @@ function foodsOf(catalog, entry, drops) {
  * @returns {null | {id, kind, block, meta, state, ready, how: 'right-click'|'break'|'wait',
  *   rightClick: object|null, break: {destroysBlock, drops: [{name, meta, mean, max}], notWhileSneaking,
  *   silkTouch, note}, food: [{name, meta, values, avoid}], hazards: object[], regrow, touch,
- *   cook: object[]|null, confidence}} null for a block (or meta) that is not a forage source.
- *   how: the action that gives food from this state now ('wait' = nothing yet; let it regrow).
+ *   cook: [{via, output, avoid}]|null, confidence}} null for a block (or meta) that is not a forage source.
+ *   how: the action that gives food from this state now ('wait' = nothing yet; let it regrow). It is
+ *   possible, not necessarily worth it: on a herb that is not grown yet (age < 3) `how` is still
+ *   'break' (1 herb, the plant is gone), so pick targets by `ready` / forageSources' readyMetas.
+ *   cook: for mushrooms, what smelting makes, with avoidFood of the output (the baked red mushroom,
+ *   betterwithaddons:food_amanita_baked, always poisons for 5 s: do not eat it).
  *   rightClick: null when right-clicking this state gives nothing; else what it gives and `harm`
  *   (non-null for the hawthorn: never right-click it).
  */
@@ -96,14 +100,15 @@ export function forageFood(catalog, blockInput, meta) {
         hazards: forageHazard(catalog, r.name, m) ?? [],
         regrow: entry.regrow ? structuredClone(entry.regrow) : null,
         touch: entry.touch ? structuredClone(entry.touch) : null,
-        cook: smelt ? (Array.isArray(smelt) ? smelt : [smelt]).map((s) => ({ via: 'smelting', output: s.output })) : null,
+        cook: smelt ? (Array.isArray(smelt) ? smelt : [smelt]).map((s) => ({ via: 'smelting', output: s.output, avoid: catalog.avoidFood(s.output.name, s.output.meta) })) : null,
         confidence: data.confidence,
     };
 }
 
 /**
  * Every forage block to look for, best first: [{ id, kind, block, metas, readyMetas, how }].
- * `metas` are the states worth walking to (ready ones, or for a bush any state that regrows).
+ * `metas` are all the block's forage states; harvest only `readyMetas` (`how` also names an action for
+ * states that are not ready, e.g. 'break' on a young herb, which wastes it).
  * @param {{ includeNotFood?: boolean, includeAvoided?: boolean }} [opts] includeNotFood: also list
  *   mushrooms (food only once smelted); includeAvoided: also list blocks whose food avoidFood flags
  *   (cloudsbluff)
