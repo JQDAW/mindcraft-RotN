@@ -114,6 +114,9 @@ describe('mindcraft-rotn@.service', () => {
         assert.ok(!/^[^#]*allow_insecure_coding/m.test(ex));
         assert.ok(!/^MINDCRAFT_SINGLE_BOT_SERVICE/m.test(ex), 'the unit sets it');
         assert.match(ex, /"auto_open_ui":false/);
+        // G4 step 0: the default profile is one the repo has (FRCFLD's), not ./profiles/<bot>.json.
+        assert.match(ex, /^PROFILES=\["\.\/profiles\/rotn-bot\.json"\]$/m);
+        assert.ok(fs.existsSync(path.join(CX, '..', '..', 'profiles', 'rotn-bot.json')));
     });
 });
 
@@ -201,6 +204,10 @@ describe('check-env (ExecStartPre)', () => {
             [{ PROFILES: '[]' }, /PROFILES must be/],
             [{ PROFILES: '"./profiles/x.json"' }, /PROFILES must be/],
             [{ PROFILES: '[./profiles/x.json' }, /PROFILES is not valid JSON/],
+            // G4 step 0 (2026-11-08): a profile path the release does not have (the old example's frcfld.json) refuses,
+            // before main.js would die with ENOENT and systemd hit its start limit.
+            [{ PROFILES: '["./profiles/frcfld.json"]' }, /PROFILES names \.\/profiles\/frcfld\.json, which the release \(.*\) does not have/],
+            [{ PROFILES: '["./profiles/rotn-bot.json", "./profiles/nope.json"]' }, /PROFILES names \.\/profiles\/nope\.json, which the release/],
             [{ MINECRAFT_PORT: '0' }, /MINECRAFT_PORT must be a port number 1\.\.65535/],
             [{ MINECRAFT_PORT: '70000' }, /MINECRAFT_PORT must be a port/],
             [{ MINDSERVER_PORT: '80a' }, /MINDSERVER_PORT must be a port/],

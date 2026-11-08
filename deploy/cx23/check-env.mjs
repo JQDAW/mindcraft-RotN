@@ -9,6 +9,7 @@
 // Reads the bot's effective environment. check-env.sh starts node with NODE_OPTIONS and NODE_PATH
 // removed and passes the bot's NODE_OPTIONS as CHECK_ENV_NODE_OPTIONS (set only if it was set).
 // Prints one line per problem; exit 0 = safe, 1 = refuse. Never prints a value.
+import fs from 'node:fs';
 import process from 'node:process';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -87,6 +88,16 @@ if (has('PROFILES')) {
     }
     if (list !== undefined && !(Array.isArray(list) && list.length > 0 && list.every((x) => typeof x === 'string' && /^\.\/profiles\/[A-Za-z0-9_-]+\.json$/.test(x)))) {
         bad('PROFILES must be a non-empty JSON array of "./profiles/<name>.json" paths');
+    } else if (list !== undefined) {
+        // Each profile must exist in the release the unit runs (G4 step 0, 2026-11-08: the example's
+        // ./profiles/<bot>.json did not exist, main.js died with ENOENT and systemd hit its start limit).
+        // The path is safe to print: the pattern above allows only ./profiles/<letters, digits, _ ->.json.
+        const release = process.argv[2];
+        for (const p of list) {
+            let ok = false;
+            try { ok = Boolean(release) && fs.statSync(path.join(release, p)).isFile(); } catch { ok = false; }
+            if (!ok) bad(`PROFILES names ${p}, which the release (${release || 'none given'}) does not have`);
+        }
     }
 }
 for (const k of ['MINECRAFT_PORT', 'MINDSERVER_PORT']) {

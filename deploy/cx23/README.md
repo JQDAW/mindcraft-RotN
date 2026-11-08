@@ -171,7 +171,7 @@ scp -r /tmp/cx23-<TAG>/deploy/cx23 root@<cx23>:/root/cx23-<TAG>
 2. **The bot:** `bash /root/cx23-<TAG>/bootstrap.sh add-bot frcfld`. It writes `/etc/mindcraft-rotn/frcfld.env` (root:root 0600) and `/var/lib/mindcraft-rotn/frcfld/msa` (0700). Then run the gate check above.
 3. **The env file:** `nano /etc/mindcraft-rotn/frcfld.env`. Change three lines and nothing else:
    - `OPENROUTER_API_KEY=` the production key with its credit limit (H4; the key named `mindcraft-rotn-frcfld-cx23`).
-   - `PROFILES=["./profiles/rotn-bot.json"]`. The template's `./profiles/frcfld.json` does not exist; FRCFLD's profile is `profiles/rotn-bot.json` (`"name": "FRCFLD"`).
+   - `PROFILES=["./profiles/rotn-bot.json"]`: FRCFLD's profile is `profiles/rotn-bot.json` (`"name": "FRCFLD"`). The template defaults to it now; an env file written from an older template has `./profiles/frcfld.json`, which does not exist, and `check-env` refuses any profile path the release lacks.
    - `SETTINGS_JSON={"host":"<the test server's IPv4 from the GO>","auto_open_ui":false}`. Until that GO, leave the placeholder: `check-env` then refuses a start.
 
    Then check, without showing the key:
@@ -213,6 +213,7 @@ scp -r /tmp/cx23-<TAG>/deploy/cx23 root@<cx23>:/root/cx23-<TAG>
    sudo mindcraft-rotn-ctl journal frcfld --since <the start time, YYYY-MM-DDTHH:MM, UTC>
    sudo mindcraft-rotn-ctl stop frcfld      # when the GO's run is over
    ```
+   - **If the start keeps failing:** systemd allows at most 6 starts in 10 minutes (`StartLimitBurst`), then marks the unit failed. Fix the cause (the journal says it), then start again: the ctl's `start` runs `systemctl reset-failed` first (#413, once the human has installed that ctl). With an older ctl, run as root `systemctl reset-failed mindcraft-rotn@frcfld` first, or wait 10 minutes (G4 step 0, 2026-11-08).
    - **Do not `enable` the bot during G4.** An enabled bot comes back after a CX23 reboot and joins whatever the env file names, by then a deleted test server. `start` works without `enable`. `deploy.sh` restarts only enabled bots.
    - `enable` comes after G4, with the live server's host (PLAN.md).
 
@@ -232,6 +233,7 @@ bash deploy.sh status
   - So `deploy v0.1.0` would pass the on-develop check and deploy plain Mindcraft without RotN. The lead found this at the first release, `rotn-v0.1.0`.
 - A tag must be **on develop** (`git merge-base --is-ancestor`), or the deploy refuses.
 - The release is extracted with `git archive` into `releases/<tag>-<sha12>/`, then `npm ci` runs (with the patch-package postinstall). Its `./bots` links to `/var/lib/mindcraft-rotn/bots`, so memories survive a deploy.
+- The release's tracked `bots/` templates are replaced by that link. They are unused while `allow_insecure_coding` is false: since #410 the Coder reads them only on its first code generation.
 - **A release is refused unless its `settings.js`, imported with node like `main.js` does, has `allow_insecure_coding === false`.** The import runs with an empty environment.
 - **The task-giver settings are checked the same way** (#146, #157 review). A release is refused if its `settings.js` turns on skills-rotn's test-only `allow_server_task_giver` (anything but `false` or absent), or names the console sender `Server` in any task-giver list. Only the G3 driver turns that switch on, on a test server; on the CX23, `check-env` also refuses it in `SETTINGS_JSON`.
 - `current` switches in one rename. Only the bots that are **enabled** are restarted, through `sudo -n mindcraft-rotn-ctl`.

@@ -137,6 +137,9 @@ build() {
     sleep "$NPM_CI_RETRY_S"
     try=$((try + 1))
   done
+  # The release's tracked bots/ files (bots/execTemplate.js, bots/lintTemplate.js) are replaced by the link to the
+  # shared folder. They are unused while allow_insecure_coding is false: since #410 the Coder reads them only on the
+  # first code generation, which insecure coding off never reaches (lead decision after G4 step 0, #412 review).
   rm -rf "$tmp/bots"
   ln -sfn "$BOTS_DIR" "$tmp/bots"
   chgrp -R "$SVC_GROUP" "$tmp"
