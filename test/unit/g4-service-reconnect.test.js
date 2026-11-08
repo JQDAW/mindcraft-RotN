@@ -289,7 +289,7 @@ describe('#374 review: the scenario through the real serviceBot (a fake exec), s
             logRotated: (n) => s.server.logRotated(n),
             restart: (sec) => { ops.push('restart'); return s.server.restart(sec); },
         };
-        const svc = serviceBot('frcfld', null, { exec, env: { ROTN_SERVICE_GO: 'g4-test:test-server-host-confirmed' }, now: () => T0 + s.clock.now(),
+        const svc = serviceBot('frcfld', null, { exec, env: { ROTN_SERVICE_GO: 'g4-test:frcfld:test-server-host-confirmed' }, now: () => T0 + s.clock.now(),
             sleep: (ms) => s.clock.sleep(ms), statusRefreshMs: 10000, journalRefreshMs: 15000 });
         // The real adapter, with the scenario's own refresh() completions and output() reads recorded in the same log.
         const bot = new Proxy(svc, {

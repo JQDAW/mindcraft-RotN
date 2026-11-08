@@ -271,7 +271,7 @@ describe('g4-restart-persistence through the real serviceBot (a fake exec as the
             if (verb === 'journal') return { code: 0, stdout: '', stderr: '' };
             return { code: s.unit.state === 'active' ? 0 : 3, stdout: '', stderr: '' };
         };
-        const bot = serviceBot('frcfld', null, { exec, env: { ROTN_SERVICE_GO: 'g4-test:test-server-host-confirmed' }, now: () => T0 + s.clock.now(), sleep: (ms) => s.clock.sleep(ms) });
+        const bot = serviceBot('frcfld', null, { exec, env: { ROTN_SERVICE_GO: 'g4-test:frcfld:test-server-host-confirmed' }, now: () => T0 + s.clock.now(), sleep: (ms) => s.clock.sleep(ms) });
         const r = await runScenario(persist, { server: s.server, bot, clock: s.clock, runId: 'r1', params: { consoleWaitS: 0 } });
         const c = byName(r);
         for (const k of ['login_online', 'agenda_progress', 'restart_rejoin', 'agenda_resumed', 'no_step_twice']) assert.equal(c[k].pass, true, `${k}: ${c[k].detail} ${r.error ?? ''}`);

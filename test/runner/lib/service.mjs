@@ -5,7 +5,7 @@
 //
 // Driver interface (lib/adapters.mjs driverProcess), so run.mjs, runner.mjs and startSession use it unchanged:
 //   start(env)   `start <bot>`, sent asynchronously (env is ignored: the bot's environment is its env file on the
-//                CX23, which only the human sets). Needs the run's GO marker (below). Returns a promise that never
+//                CX23, which only the human sets). Needs the run's GO marker for this unit (below). Returns a promise that never
 //                rejects; a failure is kept in startError (and shown in output()). The journal is read from 60 s
 //                before the call (clock skew), from the first "Starting mindcraft-rotn@<bot>.service" line on.
 //   alive()      synchronous, from a cache: true while the start is in flight, then the unit's ActiveState (from
@@ -18,14 +18,18 @@
 //                "driver log"), plus a "[service] ..." line for a failed start or an incident.
 //   exitCode()   always null (a unit has no exit code here); unitState() gives the ActiveState.
 //   stop()       async: `stop <bot>` once a start was sent (also after a failed start: its state is unknown), then
-//                waits for inactive and writes the journal to outFile. Needs the GO marker too.
+//                waits for inactive and writes the journal to outFile. It uses the GO checked at that start and does not
+//                re-read the marker (the cleanup must stop what was started); with no start sent it sends nothing.
 //   needsStop()  true once a start was sent and no stop has finished (runner.mjs's cleanup uses it).
 //   Also async: metrics(), journal(since), statusText(), refresh() (force both caches), settle() (await refreshes).
 //
 // Rules (lead, #371 review):
-//   - The GO marker: start and stop refuse unless the environment has ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed,
-//     set only under the lead's written GO after the human confirmed that the env file's host is a disposable test
-//     server (ADR 0009). goId is recorded.
+//   - The GO marker, per bot (lead, #401 review): start refuses unless the environment has
+//     ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed naming THIS adapter's unit, set only under the lead's
+//     written GO for that bot after the human confirmed that its env file's host is a disposable test server (ADR 0009).
+//     A marker for another unit, or the old form without a unit, refuses before anything is sent. goId is recorded, and
+//     the stop of a started unit uses it (never refused: the cleanup must stop what was started);
+//     goStatus() reads the marker without sending anything (a scenario checks it before its own first command).
 //   - argv only, never a shell string; the verb, the bot name (the ctl's rule) and a --since T form are checked first.
 //     The keys are never read: ssh finds them through the alias's own config.
 //   - Exit 126 is a GATE REFUSAL, an ADR 0009 incident: GateRefusal, never retried, kept in `incident` (run.mjs
@@ -44,7 +48,20 @@ export const CTL_REFUSED = 2;
 export const SSH_FAILED = 255;
 export const BOT_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export const SINCE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?Z?$|^@\d{1,12}$/;
-export const GO_RE = /^([A-Za-z0-9][A-Za-z0-9._-]{2,63}):test-server-host-confirmed$/;
+export const GO_RE = /^([A-Za-z0-9][A-Za-z0-9._-]{2,63}):([a-z0-9][a-z0-9-]{0,31}):test-server-host-confirmed$/;
+const OLD_GO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{2,63}:test-server-host-confirmed$/;
+
+/** The run's GO marker for one unit (lead, #401 review): {ok, goId} or {ok: false, why}. Pure: reads only env. */
+export function goMarker(env, bot) {
+    const raw = String(env?.ROTN_SERVICE_GO ?? '');
+    const m = GO_RE.exec(raw);
+    if (!m) {
+        return { ok: false, why: `${OLD_GO_RE.test(raw) ? 'the GO marker has the old form without a unit' : 'no GO marker'}. Set ROTN_SERVICE_GO=<the lead's GO id>:${bot}:test-server-host-confirmed `
+            + `only under the lead's written GO for ${bot}, after the human confirmed that its env file's host is a disposable test server (ADR 0009)` };
+    }
+    if (m[2] !== bot) return { ok: false, why: `the GO marker names ${m[2]}, not this unit ${bot}` };
+    return { ok: true, goId: m[1] };
+}
 export const VERBS = ['status', 'start', 'stop', 'metrics', 'journal'];
 // 255 (ssh's own failure) is retried for the reads and for stop, which systemd makes idempotent; never for start.
 const RETRY_ON_255 = ['status', 'metrics', 'journal', 'stop'];
@@ -164,12 +181,9 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
     const inflight = new Set();
 
     const go = (what) => {
-        const m = GO_RE.exec(String(env.ROTN_SERVICE_GO ?? ''));
-        if (!m) {
-            throw new Error(`service ${what} refused: no GO marker. Set ROTN_SERVICE_GO=<the lead's GO id>:test-server-host-confirmed only under `
-                + `the lead's written GO, after the human confirmed that the env file's host is a disposable test server (ADR 0009)`);
-        }
-        goId = m[1];
+        const g = goMarker(env, bot);
+        if (!g.ok) throw new Error(`service ${what} refused: ${g.why}`);
+        goId = g.goId;
         return goId;
     };
     /** One request through the gate: argv only; GateRefusal on 126; 255 retried for the reads only. */
@@ -194,7 +208,8 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
         return { code: r.code, stdout: r.stdout ?? '', stderr: keptStderr(r.stderr, r.code), request };
     };
     const lines = (s) => s.split('\n').map((l) => l.replace(/\r$/, '')).filter(Boolean);
-    const failed = (r, what) => new Error(`service ${what}: '${r.request}' exited ${r.code ?? 'with no status (ssh did not run)'}${r.code === CTL_REFUSED ? ' (the ctl refused it)' : ''}${r.stderr ? `: ${r.stderr}` : ''}`);
+    // The exit code rides along (exitCode), so a caller can tell the ctl's refusal (CTL_REFUSED) apart.
+    const failed = (r, what) => Object.assign(new Error(`service ${what}: '${r.request}' exited ${r.code ?? 'with no status (ssh did not run)'}${r.code === CTL_REFUSED ? ' (the ctl refused it)' : ''}${r.stderr ? `: ${r.stderr}` : ''}`), { exitCode: r.code ?? null });
 
     const metrics = async () => {
         const r = await call('metrics');
@@ -229,6 +244,7 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
         bot,
         host: HOST,
         get goId() { return goId; },
+        goStatus: () => goMarker(env, bot),
         get incident() { return incident; },
         get startError() { return startError; },
         get lastError() { return lastError; },
@@ -290,8 +306,10 @@ export function serviceBot(bot, outFile, { exec = execSsh, ssh = 'ssh', env = pr
             return { code: r.code, lines: lines(r.stdout) };
         },
         async stop() {
+            // No start sent: nothing to stop, nothing sent. Once a start went out, the stop uses the GO and the unit checked
+            // at that start (goId, bot) and never re-reads the marker, so the runner's cleanup always stops a unit it
+            // started, whatever the environment says by then (#401 re-review).
             if (!startSent || stopped) return;
-            go('stop');
             if (starting) await starting;
             const r = await call('stop');
             if (r.code !== 0) throw failed(r, 'stop');

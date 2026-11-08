@@ -49,6 +49,7 @@ G4 passes when every item of `docs/PLAN.md` "Definition of ready-to-try" is gree
   - For each G4 S run, **the human** sets `"host"` in `/etc/mindcraft-rotn/frcfld.env` to that run's disposable test server before the `start`.
   - Agents cannot see or change the file, and that keeps the live server out of their reach.
   - So every S `start` needs the lead's written GO and the human's GO confirming the host (ADR 0009).
+  - **The GO marker is per bot (lead, #401 review):** `ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed`. The service adapter refuses `start` unless it names the adapter's own unit (a started unit's `stop` uses the GO of its start), so a GO for `frcfld` can never start a second bot (#12), nor the reverse; the old form without a unit is refused.
 - **`mindcraft-rotn-ctl`:** read-only verbs `journal <bot> [--since]` and `metrics <bot>` (`MemoryCurrent`, `MemoryPeak`, `NRestarts`, `ActiveState`). The sudo rule is unchanged: still only the ctl.
 - **`test-server.sh restart`:** console `stop`, wait for the process to end, `systemctl start rotn-server` (on the server, through `rotn-test restart`), wait for a new Done line.
 - **The console allowlist for `kill <bot>` (death), `kick <bot>` and `stop` (restart): test server only, by construction.**

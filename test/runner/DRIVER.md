@@ -482,7 +482,7 @@ A short session of the real agent with the **production** task-giver list. `Serv
 ### G4 set-up S: the CX23 service as the bot (`--service BOT`, `lib/service.mjs`)
 
 - **No spawned bot.** `run.mjs --scenario <id> --service frcfld` takes no driver after `--` and no `--pass-env`. The bot is the CX23's `mindcraft-rotn@frcfld` unit. Its environment is its env file, which only the human sets (ADR 0009).
-- **The GO marker** (#371 review): `start` and `stop` refuse unless the environment has `ROTN_SERVICE_GO=<the lead's GO id>:test-server-host-confirmed`. Set it only under the lead's written GO, after the human confirmed that the env file's host is a disposable test server. `result.json` records `service.goId`.
+- **The GO marker, per bot** (#371 review; per unit since the #401 review): `start` refuses unless the environment has `ROTN_SERVICE_GO=<the lead's GO id>:<unit>:test-server-host-confirmed` naming this run's unit (e.g. `<GO id>:frcfld:test-server-host-confirmed` for `--service frcfld`). A marker for another unit, or the old form without a unit, refuses before anything is sent. Once a start went out, `stop` uses that start's GO and unit and does not re-read the marker, so the runner's cleanup always stops a unit it started; with no start sent, a stop sends nothing. Set it only under the lead's written GO for that bot, after the human confirmed that its env file's host is a disposable test server. `result.json` records `service.goId`; `goStatus()` reads the marker without sending anything.
 - **Every action goes through the human's ssh alias, hard-wired as `cx23-ctl`** (no option changes it): `ssh -o BatchMode=yes -o ConnectTimeout=15 -o ClearAllForwardings=yes -o ForwardAgent=no -o ForwardX11=no -T cx23-ctl <verb> frcfld [--since T]`.
   - It uses async `execFile` with `shell: false`, so arguments are separate argv entries and never a shell string. The key is never read.
   - The verb, the name (the ctl's rule) and `--since` (the gate's T form) are checked before anything is sent.
@@ -501,9 +501,26 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **stderr** (#371 review): ssh's own stderr can name the host and its address, so it is never kept. On a 255 it is dropped; otherwise only the gate's and the ctl's own lines are kept, with any IPv4 or IPv6 address redacted. An IPv6 candidate counts only if node's own parser takes it, so a time such as `12:34:56` stays.
 - **Tests:** `test/unit/g4-service.test.js`, with an async fake ssh playing the gate and the ctl. Nothing runs against the CX23 before the human's step 0 and a written GO.
 
+### G4 #12: `g4-second-bot` (S only, smoke; offline-built, not yet run)
+
+- **What it shows:** a second bot profile starts through the template unit (`mindcraft-rotn@<unit>`), logs in with its own account and stops, with no code change.
+- **The human's part first (NEEDS-HUMAN):** a second Minecraft account; `bootstrap.sh add-bot <unit>`; its env file (the OpenRouter key, the test server's `host`, its profile, whose name is the account's); the account's first device-code login. Agents never see or change the env file.
+- **On S:** `ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed run.mjs --scenario g4-second-bot --service <unit> --param bot=<account name>`.
+  - **The GO marker names this second unit** (the adapter's per-bot marker, #401 review). The scenario reads it first through the adapter (`goStatus()`, nothing sent). With no marker, the old form, a marker for another unit, the first bot's unit or account (pinned: `frcfld` / `FRCFLD`, not a parameter), or no valid `bot` parameter, nothing is started (no marker `say` either).
+  - **Setup gaps are "not reached", never a bot fail:** the ctl's refusal `no env file for '<unit>'` (exit 2; the human's `bootstrap.sh add-bot`), and no join with the bot's `[mcdata] <bot>: device-code login needed` line in the journal (the account's first login not done).
+- **On T:** there is no template unit: every check is "not reached" and nothing starts.
+- **The checks:**
+  - **`second_bot_go`:** the adapter's marker names this unit; neither the unit nor the account is the first bot's.
+  - **`login_online`:** the unit was inactive; started through the ctl, the account joins with an online (version-4) UUID within `loginTimeoutMs` (240 s).
+  - **`own_profile`:** the agent's `[state] <bot> at start: ...` line (#386) names this bot, so the template unit and the env file chose its own profile. Another name, or no line, fails.
+  - **`stays_up`:** online, no kick or exit, for `stayS` (60) after the join.
+  - **`stopped`:** the ctl's `stop` (the adapter waits for inactive), the unit inactive after it, and `<bot> left the game` within `leaveWaitS` (30).
+- **Notes:** the GO id, the `[settings]` production check (#385), the metrics before and after.
+- **Tests:** `test/unit/g4-second-bot.test.js`: a simulated second unit, and one run through the real `serviceBot` whose fake exec checks that every gate call names the second unit.
+
 ### G4 #1: `g4-service-reconnect` (set-up S; offline-built, not yet run)
 
-- **What it shows:** the CX23 service reconnects in-process after a console kick and after a test-server restart, and a ctl stop ends it cleanly. Run it as `ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed run.mjs --scenario g4-service-reconnect --service frcfld` under a test server's `run`, after the human's G4 step 0 and a written GO.
+- **What it shows:** the CX23 service reconnects in-process after a console kick and after a test-server restart, and a ctl stop ends it cleanly. Run it as `ROTN_SERVICE_GO=<GO id>:frcfld:test-server-host-confirmed run.mjs --scenario g4-service-reconnect --service frcfld` under a test server's `run`, after the human's G4 step 0 and a written GO.
 - **The console:** `kick <bot>` (this run's bot by its exact name) and `stop`, for this scenario alone (`SCENARIO_CONSOLE_EXTRA`, #324). `stop` is what `guardConsole` requires before `server.restart()` (`test-server.sh restart`).
 - **The checks:**
   - **`login_online`:** the service's bot must be this run's bot (case aside), and the unit **inactive** before the start (`metrics`). A running unit's journal would be another run's.
@@ -521,7 +538,7 @@ A short session of the real agent with the **production** task-giver list. `Serv
 ### G4 #3: `g4-control-commands` (offline-built, not yet run)
 
 - **What it shows:** the bot answers a trusted player in chat, comes when called, follows, and stops on `!stop`.
-- **On S:** `ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed run.mjs --scenario g4-control-commands --service frcfld`, with the trusted player on the test server: the human as JQDAW, or a second scripted trusted account (the `giver` parameter, the human's call).
+- **On S:** `ROTN_SERVICE_GO=<GO id>:frcfld:test-server-host-confirmed run.mjs --scenario g4-control-commands --service frcfld`, with the trusted player on the test server: the human as JQDAW, or a second scripted trusted account (the `giver` parameter, the human's call).
   - **The scenario gives no command on S.** It whispers each step to the giver (`tell <giver> [g4] <step>: ...`, also printed on the runner's terminal), waits up to `promptWaitMinutes` (3) for the giver's own chat line, and observes. On S every `tell` must be exactly that form (the scenario's own guard).
   - **The giver types in public chat** (open chat with `T`), never `/tell` or `/msg` to the bot: a whisper to the bot is not in the server log, so the scenario cannot see the request and the step ends "not reached". The same goes for typed commands (`!goToPlayer(...)`, `!stop`, `!resume`).
   - **Never a `say` (#399 review):** on 1.12 mineflayer's legacy chat pattern reads `[Server] [g4] JQDAW: ...` as chat FROM JQDAW, so an announcement would reach the bot as a giver's turn. A whisper reaches only the giver.
@@ -545,7 +562,7 @@ A short session of the real agent with the **production** task-giver list. `Serv
 ### G4 #11: `g4-restart-persistence` (agenda half; offline-built, not yet run)
 
 - **What it shows:** the agenda survives a stop and start of the bot and resumes, with no step done twice. Where a giver can queue a task, a running task resumes too. #327 made both say `(resumed after a restart)`.
-- **On S:** `ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed run.mjs --scenario g4-restart-persistence --service frcfld`. The restart is the ctl's `stop` then `start`; the gate has no restart verb.
+- **On S:** `ROTN_SERVICE_GO=<GO id>:frcfld:test-server-host-confirmed run.mjs --scenario g4-restart-persistence --service frcfld`. The restart is the ctl's `stop` then `start`; the gate has no restart verb.
 - **On T** (a rehearsal, not-gate): the driver's stop, then a new start with `ROTN_DRIVER_KEEP_STATE=1`. The driver otherwise moves `agenda.json` and `tasks.json` aside at every start (`botStateAtStart`); a G3 run never sets the variable, and its `fresh_bot_state` check would fail if it did.
 - **The checks:**
   - **`login_online`:** this run's bot (case aside) and an inactive unit (S).
@@ -560,7 +577,7 @@ A short session of the real agent with the **production** task-giver list. `Serv
 
 ### G4 #7 (with #2, #4, #5): `g4-soak-2h` (offline-built, not yet run; the targets are TBD)
 
-- **What it shows:** 2 hours of the CX23 service on a fresh test server (`ROTN_SERVICE_GO=... run.mjs --scenario g4-soak-2h --service frcfld`).
+- **What it shows:** 2 hours of the CX23 service on a fresh test server (`ROTN_SERVICE_GO=<GO id>:frcfld:test-server-host-confirmed run.mjs --scenario g4-soak-2h --service frcfld`).
   - Every `sampleMinutes` (5) for `durationMinutes` (120): `metrics` (`MemoryCurrent`, `MemoryPeak`, `NRestarts`, `ActiveState`) and a fresh journal read.
   - The journal is read with `lib/survival.mjs`.
 - **The targets are TBD** (lead, 2026-11-08). `peakMemoryMaxMb` and `usdPerHourMax` stay `"TBD"` until the soak ADR sets them after the first measuring run.
