@@ -74,6 +74,7 @@ export function agendaState(bot, clock = null) {
         // G4 #5: the food level, the hunger value of the safe food held, and the wild animals near
         // that the bot may hunt (never one that may belong to a player).
         food: () => bot.food,
+        day: () => bot.time?.day, // the in-game day (the food reserve's runs per day)
         foodHeld: () => heldFoodHunger(bot),
         huntable: () => { try { return [...new Set(nearbyHuntable(bot))]; } catch { return []; } },
     };

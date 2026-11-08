@@ -10,7 +10,7 @@ import path from 'node:path';
 import minecraftData from 'minecraft-data';
 import settings from './settings.js';
 import { __setRegistryForTest } from '../utils/mcdata.js';
-import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS } from './agenda.js';
+import { Agenda, ROTN_EARLY_GAME, describeAgenda, SHELTER_RESERVE, RESERVE_LEAD_MIN, SHELTER_RESERVE_STEP, dirtPile, FOOD_RESERVE_STEP, FOOD_RETRY_MS, FOOD_DAY_RUNS } from './agenda.js';
 import { Vec3 } from 'vec3';
 import { foodDue } from './modes.js';
 import { NIGHT_START, TICKS_PER_MIN, MORNING_FREEZE, FREEZE_MIN, NightClock, sunsetEstimateMin, minutesToSunset } from './library/night.js';
@@ -545,8 +545,8 @@ function foodAgent(t, items, { food = 12, timeOfDay = 1000, finished = true, now
 }
 
 test('G4 #5: the soak\'s case (agenda done, nothing held, food 12, by day): the food reserve runs, naming the wild animals near and the rules', (t) => {
-    const cow = { id: 1, type: 'mob', name: 'animania:cow_holstein', metadata: {}, position: new Vec3(6.5, 64, 0.5) };
-    const named = { id: 2, type: 'mob', name: 'animania:sow_old_spot', metadata: { 2: 'Wilbur' }, position: new Vec3(3.5, 64, 0.5) };
+    const cow = { id: 1, type: 'mob', name: 'animania:cow_holstein', metadata: { 7: 10 }, position: new Vec3(6.5, 64, 0.5) };
+    const named = { id: 2, type: 'mob', name: 'animania:sow_old_spot', metadata: { 7: 10, 2: 'Wilbur' }, position: new Vec3(3.5, 64, 0.5) };
     const agent = foodAgent(t, [], { entities: { 1: cow, 2: named } });
     assert.equal(agendaTick(agent, { now: 0 }), 'food');
     assert.equal(agent.said.at(-1), 'agenda step food started: keep food for the day and the night');
@@ -596,5 +596,17 @@ test('G4 #5: the food reserve\'s own budget: spent, it says so and is not asked 
     assert.equal(agendaTick(agent, { now: clock }), 'food', 'asked again');
     assert.deepEqual(agent.agenda.spentOn('food').attempts <= 1, true, 'with a fresh budget');
     assert.equal(FOOD_RESERVE_STEP.when, 'food');
+});
+
+test('#422 review 8: at most FOOD_DAY_RUNS self-prompter runs for the food reserve per in-game day; the next day it runs again', (t) => {
+    const agent = foodAgent(t, []);
+    agent.bot.time.day = 4;
+    const state = agendaState(agent.bot);
+    assert.equal(agent.agenda.foodWanted(state)?.id, 'food');
+    for (let i = 0; i < FOOD_DAY_RUNS; i++) agent.agenda.recordAttempt('food');
+    assert.equal(agent.agenda.foodWanted(state), null, 'this day\'s runs are used');
+    agent.bot.time.day = 5;
+    assert.equal(agent.agenda.foodWanted(agendaState(agent.bot))?.id, 'food', 'a new day');
+    assert.ok(FOOD_DAY_RUNS <= 3, 'bounded spend (ADR 0010)');
 });
 

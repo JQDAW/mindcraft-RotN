@@ -10,6 +10,7 @@ import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
 import { threatFor, hurtBy } from '../library/threats.js';
 import { mayBelongToPlayer, knownBases } from '../library/hunting.js';
+import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
 
 /** Modes that keep the bot alive: only a task giver who types !setMode may turn them off (CX23 soak). */
@@ -505,9 +506,18 @@ export const actionsList = [
                 return;
             }
             // G4 #5 (the lead's hard rule for the live server): never an animal that may belong to a
-            // player (a name tag, tamed, leashed, near player-built blocks or a known base). Of this
-            // type, the nearest one that is not; none: refused, with why.
-            if (mob && threatFor(mob)?.reaction === 'ignore') {
+            // player (unknown metadata, a name tag, tamed, leashed, ridden, saddled or dyed, near
+            // player-built blocks or a known base). #422 review 2: every target that is not a hostile
+            // mob to fight and not a player is checked (rotn-data knows no threat for forge-bridge's
+            // placeholders such as animania:entity_7, nor for an unknown name). Of this type, the
+            // nearest one that is not maybe a player's; none: refused, with why.
+            // Hostile only by rotn-data's own entry: threatFor's fallback (mc.isHostile) calls every
+            // unknown name a fight mob, which would let a placeholder through unchecked.
+            const HOSTILE = ['fight', 'avoid', 'keep-distance', 'take-cover'];
+            let known = null;
+            try { known = mob ? threatOf(mob.name) : null; } catch { known = null; }
+            // A mob that just hurt the bot may be fought back (self-defense comes first).
+            if (mob && mob.type !== 'player' && !HOSTILE.includes(known?.reaction) && !hurtBy(agent.bot, mob)) {
                 const skipped = [];
                 const bases = knownBases(agent);
                 const free = world.getNearbyEntities(agent.bot, 24).filter(e => e.name === type)

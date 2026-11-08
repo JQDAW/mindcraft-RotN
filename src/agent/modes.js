@@ -9,7 +9,7 @@ import * as food from './library/food.js';
 import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
 import { REPAIR_LABEL, nightPhase, minutesToSunset } from './library/night.js';
 import { RESERVE_LEAD_MIN } from './agenda.js';
-import { huntTarget, knownBases } from './library/hunting.js';
+import { huntTarget, knownBases, huntAnimal } from './library/hunting.js';
 import { isFalling } from './library/shelter.js';
 import { fallingTreeNear } from './library/felling.js';
 
@@ -79,13 +79,27 @@ let shelterSaidAt = -Infinity;
  * the bot in a cell that drowns, suffocates or burns it. Between tries (no job, #355 re-review) the
  * bot fights in place and eats as in any shelter: cowardice and the flee are quiet there too.
  */
+/**
+ * The time of day to judge by: the night routine's NightClock (it knows a frozen time and falls
+ * back to the wall clock, #422 review 7), else the server's value; null when unknown.
+ */
+function timeOfDayFor(agent, now = Date.now()) {
+    const fromClock = agent._night?.clock?.timeOfDay?.(now);
+    if (Number.isFinite(fromClock)) return fromClock;
+    const t = agent.bot?.time?.timeOfDay;
+    return Number.isFinite(t) ? t : null;
+}
+
 /** G4 #5: the food reserve's rule (food.foodShortfall) says the bot is short of food now. */
 export function foodDue(agent) {
     const bot = agent.bot;
-    const t = bot?.time?.timeOfDay;
-    return food.foodShortfall({ food: bot?.food, held: food.heldFoodHunger(bot), minutesToSunset: Number.isFinite(t) ? minutesToSunset(t) : Infinity,
+    const t = timeOfDayFor(agent);
+    return food.foodShortfall({ food: bot?.food, held: food.heldFoodHunger(bot), minutesToSunset: t === null ? Infinity : minutesToSunset(t),
         finished: !!agent.agenda?.finished, reserveLeadMin: RESERVE_LEAD_MIN }) !== null;
 }
+
+/** Full daylight by the freeze-aware clock (not dusk, not night). */
+const isDaylight = (agent) => { const t = timeOfDayFor(agent); return t !== null && nightPhase(t) === 'day'; };
 
 function nightRoutineBusy(agent) {
     return agent.actions.currentActionLabel === REPAIR_LABEL || (!!agent._night?.leaveFrom && !!agent._night?.job);
@@ -465,7 +479,8 @@ const modes_list = [
     {
         name: 'hunting',
         description: 'Hunt a wild animal for food when food is short, by day, with no threat near, when idle. Never one that may belong to a player.',
-        interrupts: ['action:followPlayer'],
+        // #422 review 6: it never interrupts anything (a giver's follow included): only when idle.
+        interrupts: [],
         on: true,
         active: false,
         skipped_said: '',
@@ -475,8 +490,7 @@ const modes_list = [
             // never an animal that may belong to a player (hunting.js, the lead's hard rule).
             const bot = agent.bot;
             if (!foodDue(agent) || bot.rotnSheltered || !agent.isIdle()) return;
-            const t = bot.time?.timeOfDay;
-            if (!Number.isFinite(t) || nightPhase(t) !== 'day') return;
+            if (!isDaylight(agent)) return;
             let threatened = true;
             try { threatened = !!threats.threatPlan(bot); } catch { threatened = true; }
             if (threatened) return;
@@ -488,7 +502,10 @@ const modes_list = [
             if (!target || !await world.isClearPath(bot, target)) return;
             execute(this, agent, async () => {
                 say(agent, `Hunting ${target.name} for food!`);
-                await skills.attackEntity(bot, target);
+                // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
+                const keepGoing = () => { if (!isDaylight(agent)) return false; try { return !threats.threatPlan(bot); } catch { return false; } };
+                const end = await huntAnimal(bot, target, { keepGoing, equip: (b) => skills.equipHighestAttack(b) });
+                console.log(`[reflex] hunting ${target.name}: ${end}`);
             });
         }
     },

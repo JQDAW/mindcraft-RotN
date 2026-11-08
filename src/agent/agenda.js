@@ -188,6 +188,13 @@ export const SHELTER_RESERVE_STEP = {
 
 /** After the food reserve's budget is spent, it is not asked again for this long (G4 #5). */
 export const FOOD_RETRY_MS = 10 * 60_000;
+/**
+ * #422 review 8: at most this many self-prompter runs for the food reserve per in-game day (by
+ * bot.time.day; a 20-min window when unknown), so its LLM spend stays well inside ADR 0010's
+ * USD 0.05/h (the soak measured 0.0116/h in all). Counted in memory: a restart starts afresh.
+ */
+export const FOOD_DAY_RUNS = 3;
+const dayKeyOf = (s, now) => { const d = s.day?.(); return Number.isFinite(d) ? `day ${d}` : `t ${Math.floor(now / (20 * 60_000))}`; };
 /** The food reserve's shortfall now (food.foodShortfall with the shelter reserve's window), or null. */
 const foodShort = (s, ctx = {}) => foodShortfall({ food: s.food?.(), held: s.foodHeld?.() ?? 0,
     minutesToSunset: s.minutesToSunset?.() ?? Infinity, finished: !!ctx.finished, reserveLeadMin: RESERVE_LEAD_MIN });
@@ -233,6 +240,7 @@ export class Agenda {
         this.reserve = reserve;
         this.food = food; // G4 #5: the food reserve (FOOD_RESERVE_STEP; null for none)
         this.foodOffUntil = 0; // its budget ran out: not asked again before this time
+        this.foodDay = { key: null, runs: 0 }; // its runs this in-game day (FOOD_DAY_RUNS)
         this.reserveOff = false; // its budget ran out: not again until the night is past
         this.finished = false; // "agenda done": only the reserve runs
         this.active = false;
@@ -321,6 +329,9 @@ export class Agenda {
         }
         if (this.now() < this.foodOffUntil) return null;
         if (this.foodOffUntil) { delete this.spent[r.id]; this.foodOffUntil = 0; } // a fresh budget after the wait
+        const key = dayKeyOf(state, this.now());
+        if (this.foodDay.key !== key) this.foodDay = { key, runs: 0 };
+        if (this.foodDay.runs >= FOOD_DAY_RUNS) return null; // this day's runs are used: the hunting reflex still acts
         return r;
     }
 
@@ -361,6 +372,7 @@ export class Agenda {
     spentOn(id) { return this.spent[id] ?? { attempts: 0, llm_ms: 0 }; }
     /** One more self-prompter run for a step (saved: a crash loop cannot reset it). */
     recordAttempt(id) {
+        if (id === this.food?.id) this.foodDay.runs++; // #422 review 8: the food reserve's runs per day
         const b = this.spentOn(id);
         this.spent[id] = { ...b, attempts: b.attempts + 1 }; // keeps the reserve's need and refresh
         this.save();

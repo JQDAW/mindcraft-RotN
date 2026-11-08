@@ -1,23 +1,29 @@
 // G4 #5 (CX23 soak m1: food fell to 1, nothing got food): the bot may hunt for food, but on the live
 // server never an animal that may belong to a player (lead's hard rule). An animal is left alone
-// when it has a custom name, is tamed or has an owner (an owner UUID in its metadata), is leashed
-// (mineflayer sets entity.vehicle from 1.12's attach_entity, the leash holder), is within
-// HUNT.ownedRadius of player-built blocks (fences, fence gates, walls, beds, chests, crafting tables,
-// torches) the bot did not place itself, or within HUNT.baseRadius of a known player base.
+// when its metadata is unknown (missing, or forge-bridge's metadataError: #422 review 3), it has a
+// custom name, is tamed or has an owner (an owner UUID in its metadata), is leashed (mineflayer sets
+// entity.vehicle from 1.12's attach_entity, the leash holder) or carries passengers, is a saddled pig
+// or a sheep that is not white (#422 review 9), is within HUNT.ownedRadius of player-built blocks
+// (fences, fence gates, walls, beds, chests, crafting tables, torches) the bot did not place itself,
+// or within HUNT.baseRadius of a known player base. The bot's own placed blocks are remembered in
+// memory only (trackBotPlaced): after a restart its earlier tables and torches count as a player's,
+// which only leaves more animals alone (it fails safe).
 
 import * as mc from '../../utils/mcdata.js';
 
-export const HUNT = { radius: 16, ownedRadius: 8, baseRadius: 32, placedMax: 512 };
+export const HUNT = { radius: 16, ownedRadius: 8, baseRadius: 32, placedMax: 512, maxMs: 90_000, checkMs: 500 };
 
 /**
- * Animals the bot may hunt: vanilla's huntable adults (mcdata.isHuntable: chicken, cow, llama,
- * mooshroom, pig, rabbit, sheep), and Animania's adult females, which this pack spawns instead
- * (rotn-data common-mobs: cow_*, sow_*, ewe_*, doe_*, hen_*). Animania names its young apart
- * (calf_, piglet_, lamb_, kit_, kid_, chick_), and its males (bull_, hog_, ram_, buck_, rooster_)
- * are left alone: some charge when hit.
+ * Animals the bot may hunt for food: vanilla's adult cow, mooshroom, pig, rabbit and sheep, and
+ * Animania's adult females, which this pack spawns instead (rotn-data common-mobs: cow_*, sow_*,
+ * ewe_*, doe_*). Never a chicken or a hen (raw chicken is avoided food, rotn-data) nor a llama (no
+ * meat) (#422 review 5). Animania names its young apart (calf_, piglet_, lamb_, kit_, kid_, chick_),
+ * and its males (bull_, hog_, ram_, buck_, rooster_) are left alone: some charge when hit.
  */
-const ANIMANIA_FOOD = /^animania:(cow|sow|ewe|doe|hen)_[a-z_]+$/;
-export const isHuntableAnimal = (e) => !!e?.name && (mc.isHuntable(e) || ANIMANIA_FOOD.test(e.name));
+const VANILLA_FOOD = new Set(['cow', 'mooshroom', 'pig', 'rabbit', 'sheep']);
+const ANIMANIA_FOOD = /^animania:(cow|sow|ewe|doe)_[a-z_]+$/;
+export const isHuntableAnimal = (e) => !!e?.name
+    && ((VANILLA_FOOD.has(e.name) && mc.isHuntable(e)) || ANIMANIA_FOOD.test(e.name));
 
 /** Blocks a player builds: fences, fence gates, walls, beds, chests, crafting tables, torches (any mod's). */
 export const PLAYER_BUILT = /(^|:)([a-z_]*_)?(fence|fence_gate|wall|bed|chest|crafting_table|torch)$/;
@@ -49,10 +55,18 @@ const tamedHorse = (e) => /llama|horse|donkey|mule/.test(e?.name ?? '') && Numbe
  * [{x, y, z}]; the bot's own placed blocks (trackBotPlaced) never count as player-built.
  */
 export function mayBelongToPlayer(bot, e, { bases = [] } = {}) {
+    // #422 review 3: what cannot be read is never taken for wild.
+    const md = e?.metadata;
+    if (!md || typeof md !== 'object' || Object.keys(md).length === 0 || e?.forge?.metadataError) return 'its data (metadata) is unknown';
     const name = customName(e);
     if (name) return 'it has a name tag';
     if (ownerOf(e) || tamedHorse(e)) return 'it is tamed';
     if (e?.vehicle) return 'it is on a leash';
+    // #422 review 9: a rider, a saddle (1.12 EntityPig index 13), a sheep that is not white (1.12
+    // EntitySheep index 13: the low 4 bits are the colour; dyed or bred by a player).
+    if (Array.isArray(e?.passengers) && e.passengers.length > 0) return 'it carries a passenger';
+    if (e?.name === 'pig' && md[13] === true) return 'it has a saddle';
+    if (e?.name === 'sheep' && Number.isInteger(md[13]) && (md[13] & 0x0f) !== 0) return 'it is not a white sheep (dyed or bred)';
     if (!e?.position) return 'its position is unknown';
     for (const b of bases) if (b && Math.hypot(b.x - e.position.x, b.z - e.position.z) <= HUNT.baseRadius) return 'it is near a player\'s base';
     const placed = bot?.rotnPlaced ?? new Set();
@@ -118,5 +132,32 @@ export function nearbyHuntable(bot, { bases = [], radius = 32 } = {}) {
         .sort((a, b) => a.position.distanceTo(here) - b.position.distanceTo(here))
         .filter(e => !mayBelongToPlayer(bot, e, { bases }))
         .map(e => e.name);
+}
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+/**
+ * One bounded hunt (#422 review 1: the reflex's attackEntity looped while the animal was within
+ * 24 blocks, an unreachable cow kept the bot out after dark). mineflayer-pvp attacks; every
+ * HUNT.checkMs the hunt ends when the animal is dead or gone, the bot is stopped, keepGoing() says
+ * no (the phase is no longer day, a threat came), or after maxMs. pvp stops however it ends.
+ * `equip`: the weapon equip (skills.equipHighestAttack; passed in, as skills imports this module's
+ * users). Returns 'killed' | 'gone' | 'interrupted' | 'stopped' | 'time'.
+ */
+export async function huntAnimal(bot, entity, { keepGoing = () => true, maxMs = HUNT.maxMs, equip = null } = {}) {
+    try { await equip?.(bot); } catch { /* fights with what is in hand */ }
+    const start = Date.now();
+    bot.pvp?.attack?.(entity);
+    try {
+        for (;;) {
+            await sleep(HUNT.checkMs);
+            if (!bot.entities?.[entity.id] || entity.isValid === false) return 'killed';
+            if (bot.interrupt_code) return 'interrupted';
+            if (!keepGoing()) return 'stopped';
+            if (Date.now() - start >= maxMs) return 'time';
+            if (bot.entity?.position && entity.position && entity.position.distanceTo(bot.entity.position) > 24) return 'gone';
+        }
+    } finally {
+        try { bot.pvp?.stop?.(); } catch { /* best effort */ }
+    }
 }
 
