@@ -1072,3 +1072,128 @@ test('#355 review 2: a block that hurts on contact (cactus) in the bot\'s space 
     assert.ok(!agent.chat.some(l => /keeps coming back/.test(l)), agent.chat.join('\n'));
     assert.match(agent.chat.at(-1), /no longer usable: cactus at 0, 64, 0 \(a solid block in the 1x2 space\); building a new one$/);
 });
+
+// Round 10 B: at dawn "found no safe side to open; back to work" and the bot stayed walled in at
+// -34 64 -49: digOut only took a side with the two cells beyond it free, and the ground on the west
+// was one block higher (the crafting table stood on it). In this terrain the other sides failed too.
+function exitWorld(extra = {}) {
+    const key = (p) => `${p.x},${p.y},${p.z}`;
+    const world = new Map();
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { world.set(`${x},64,${z}`, 'cobblestone'); world.set(`${x},65,${z}`, 'cobblestone'); }
+    world.set('0,66,0', 'cobblestone'); // the roof
+    for (const [k, v] of Object.entries(extra)) world.set(k, v);
+    const dug = [];
+    const bot = {
+        output: '',
+        entity: { position: new Vec3(0.5, 64, 0.5) },
+        modes: { isOn: () => false },
+        game: { gameMode: 'survival' },
+        tool: { equipForBlock: async () => {} },
+        heldItem: null,
+        inventory: { items: () => [], slots: [] },
+        blockAt: (p) => {
+            const q = p.floored();
+            const name = world.get(key(q)) ?? (q.y < 64 ? 'dirt' : 'air');
+            return { name, metadata: 0, boundingBox: reg.blocksByName[name].boundingBox, position: q, canHarvest: () => name !== 'bedrock' };
+        },
+        dig: (b) => { world.set(key(b.position), 'air'); dug.push(key(b.position)); return Promise.resolve(); },
+    };
+    return { bot, world, dug };
+}
+const ring = (y, name, k = 2) => Object.fromEntries([[k, 0], [-k, 0], [0, k], [0, -k]].map(([x, z]) => [`${x},${y},${z}`, name]));
+
+test('round 10 B: digOut takes a side whose ground is one block higher, and digs the headroom over the opening', async (t) => {
+    quiet(t);
+    // Every side: the ground beyond the wall is one block higher; the ring over the walls is stone.
+    const { bot, world, dug } = exitWorld({ ...ring(64, 'stone'), ...ring(66, 'stone', 1) });
+    const side = await digOut(bot, SITE);
+    assert.ok(side?.equals(new Vec3(1, 64, 0)), `opened ${side}`);
+    assert.deepEqual(dug.sort(), ['1,64,0', '1,65,0', '1,66,0'], 'the two walls and the headroom over the opening');
+    assert.equal(world.get('2,64,0'), 'stone', 'the step stays');
+    assert.equal(world.get('0,66,0'), 'cobblestone', 'the roof over the bot stays');
+});
+
+test('round 10 B: digOut tunnels through a hillside on every side, up to EXIT_DEPTH, to the nearest open cell', async (t) => {
+    quiet(t);
+    const { EXIT_DEPTH } = await import('./night_routine.js');
+    // Every side: a two-high wall of stone beyond the shelter; east is open after it, the rest
+    // only after two more.
+    const hill = { ...ring(64, 'stone'), ...ring(65, 'stone'), ...ring(64, 'stone', 3), ...ring(65, 'stone', 3), ...ring(66, 'stone', 3) };
+    delete hill['3,64,0']; delete hill['3,65,0']; delete hill['3,66,0'];
+    const { bot, dug } = exitWorld(hill);
+    const side = await digOut(bot, SITE);
+    assert.ok(side?.equals(new Vec3(1, 64, 0)), `opened ${side}`);
+    assert.deepEqual(dug.sort(), ['1,64,0', '1,65,0', '2,64,0', '2,65,0']);
+    assert.equal(EXIT_DEPTH, 3);
+    // Deeper than EXIT_DEPTH on every side: nothing is dug.
+    const deep = exitWorld(Object.assign({}, ...[2, 3, 4].flatMap(k => [ring(64, 'stone', k), ring(65, 'stone', k)])));
+    assert.equal(await digOut(deep.bot, SITE), null);
+    assert.deepEqual(deep.dug, []);
+});
+
+test('round 10 B: digOut never digs a step-up or tunnel side with lava next to its cells, and logs why each side was refused', async (t) => {
+    quiet(t);
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    // Step-ups everywhere; east has lava over its step.
+    const { bot, dug } = exitWorld({ ...ring(64, 'stone'), '2,65,0': 'lava' });
+    const side = await digOut(bot, SITE);
+    assert.ok(side?.equals(new Vec3(-1, 64, 0)), `opened ${side}`);
+    assert.ok(!dug.some(k => k.startsWith('1,')), `east untouched: ${dug}`);
+    assert.ok(logs.some(l => /dig out: not the east side \(liquid or fire (next to|at) /.test(l)), logs.join('\n'));
+    // A hill on every side, with lava beside each tunnel's second cell: no side is dug at all.
+    const tunnel = exitWorld({ ...ring(64, 'stone'), ...ring(65, 'stone'), '2,64,1': 'lava', '-2,64,1': 'lava', '1,64,2': 'lava', '-1,64,-2': 'lava' });
+    assert.equal(await digOut(tunnel.bot, SITE), null);
+    assert.deepEqual(tunnel.dug, [], 'every side is planned before anything is dug');
+});
+
+test('round 10 B: in the morning a shelter with no way out is tried again RETRY_MS later, EXIT_TRIES times, then the bot hands back saying it is still enclosed', async (t) => {
+    quiet(t);
+    const { EXIT_TRIES } = await import('./night_routine.js');
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops({ side: null });
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    agent.bot.time.timeOfDay = MORNING;
+    let now = 10;
+    nightTick(agent, { now, ops: o });
+    await settle(agent);
+    assert.equal(o.digs, 1);
+    assert.equal(nightState(agent).state, 'inside', 'not back to work walled in');
+    assert.equal(agent.bot.rotnSheltered, true);
+    assert.match(agent.chat.at(-1), /\[night\] morning: no safe side of the shelter at 0, 64, 0 to open yet \(try 1 of 3\); trying again in 30 s/);
+    assert.equal(nightTick(agent, { now: now + RETRY_MS - 1, ops: o }), 'night:inside');
+    await settle(agent);
+    assert.equal(o.digs, 1, 'waits RETRY_MS');
+    for (let i = 2; i <= EXIT_TRIES; i++) {
+        now += RETRY_MS;
+        nightTick(agent, { now, ops: o });
+        await settle(agent);
+        assert.equal(o.digs, i);
+    }
+    assert.equal(nightState(agent).state, 'day');
+    assert.equal(agent.bot.rotnSheltered, false);
+    assert.match(agent.chat.at(-1), /\[night\] morning: could not open the shelter at 0, 64, 0 after 3 tries; back to work, still enclosed: dig a way out$/);
+    assert.equal(nightTick(agent, { now: now + 1, ops: o }), null);
+    // A later night starts with no tries counted.
+    assert.equal(nightState(agent).exitTries, 0);
+});
+
+test('round 10 B: out of the shelter between two morning tries (pushed, or it dug itself out), the bot hands back at once', async (t) => {
+    quiet(t);
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops({ side: null });
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    agent.bot.time.timeOfDay = MORNING;
+    nightTick(agent, { now: 10, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'inside');
+    agent.bot.entity.position = new Vec3(3.5, 64, 0.5);
+    nightTick(agent, { now: 11, ops: o });
+    await settle(agent);
+    assert.equal(o.digs, 1, 'no second dig');
+    assert.equal(nightState(agent).state, 'day');
+    assert.equal(agent.bot.rotnSheltered, false);
+    assert.match(agent.chat.at(-1), /\[night\] morning: out of the shelter at 0, 64, 0; back to work$/);
+});
