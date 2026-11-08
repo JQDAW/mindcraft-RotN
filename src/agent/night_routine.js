@@ -161,12 +161,6 @@ function startJob(agent, n, label, fn, then) {
 export const EXIT_DEPTH = 3;
 /** Morning tries at digging out (RETRY_MS apart) before the bot hands back still enclosed. */
 export const EXIT_TRIES = 3;
-/**
- * #364 follow-up (b): how long, in all, the bot stays shut in on a morning while a hostile mob is
- * within LEAVE_MOB_RANGE (checked every RETRY_MS; these checks are no tries). Mobs that do not
- * burn wait outside by day; the agenda and the LLM stay held meanwhile, so nothing digs out.
- */
-export const MOB_WAIT_MS = 3 * 60_000;
 
 const SIDE_NAMES = new Map([['1,0', 'east'], ['-1,0', 'west'], ['0,1', 'south'], ['0,-1', 'north']]);
 const sideName = (d) => SIDE_NAMES.get(`${d.x},${d.z}`);
@@ -577,18 +571,16 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             // #364 review 3: mobs that do not burn wait outside in the day: no opening while one is near.
             // #364 follow-up (b): that wait is no try (3 tries used up by a mob handed back enclosed,
             // and the agenda or the LLM then dug out with it still there): the bot stays in, held,
-            // re-checking every RETRY_MS, for up to MOB_WAIT_MS in all, then hands back naming the mob.
+            // re-checking every RETRY_MS, as long as one is near, for at most the full day (#372 review:
+            // a fixed 3 min handed back with the mob still there); the bound is below. A mob that
+            // leaves ends its wait (mobSince): a later one gets its own, said again.
             const mob = ops.hostileNear?.(bot, LEAVE_MOB_RANGE);
+            if (!mob) Object.assign(n, { mobSince: null, mobSaid: false });
             if (mob) {
                 n.mobSince ??= now;
-                const mins = MOB_WAIT_MS / 60_000;
-                if (now - n.mobSince < MOB_WAIT_MS) {
-                    n.exitAt = now + RETRY_MS;
-                    const text = `[night] morning: ${mobText(mob)} is within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)}; staying in until it leaves (up to ${mins} min, checking every ${RETRY_MS / 1000} s)`;
-                    if (n.mobSaid) console.log(text); else { n.mobSaid = true; line(agent, text); }
-                    return 'night:inside';
-                }
-                handBack(`[night] morning: ${mobText(mob)} stayed within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)} for ${mins} min; back to work, still enclosed: open no wall while it is near`);
+                n.exitAt = now + RETRY_MS;
+                const text = `[night] morning: ${mobText(mob)} is within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)}; staying in until it leaves (checking every ${RETRY_MS / 1000} s)`;
+                if (n.mobSaid) console.log(text); else { n.mobSaid = true; line(agent, text); }
                 return 'night:inside';
             }
             const out = n.pit ? () => ops.pitOut(bot, n.site) : () => ops.digOut(bot, n.site);
@@ -597,6 +589,17 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 else failedTry(`no safe side of the shelter at ${at(n.site)} to open yet`);
             });
             return 'night:inside';
+        }
+        // #372 review: the bound of the morning wait for a mob. The lead's noon (6000) comes after
+        // the full day ends on this pack's clock (dusk: SHELTER_LEAD_MIN before sunset, about 5348),
+        // so the bound is the end of the full day: a warning naming the mob, and the bot stays in
+        // this shelter for the night (a hand-back at dusk would only shelter again, here).
+        if (n.mobSince != null && !isFullDay(t)) {
+            const mob = ops.hostileNear?.(bot, LEAVE_MOB_RANGE);
+            const text = `[night] warning: ${mob ? `${mobText(mob)} is still within ${LEAVE_MOB_RANGE} blocks` : 'a hostile mob stayed near'} of the shelter at ${at(n.site)} at the end of the day (waited ${Math.round((now - n.mobSince) / 60_000)} min); staying in it for the night`;
+            console.warn(text);
+            say(agent, text);
+            Object.assign(n, { mobSince: null, mobSaid: false, exitTries: 0, exitAt: null });
         }
         if (n.checkedAt === null) n.checkedAt = now;
         // #331 review 4: while a wall is known open (a repair did not close it, or a fight in place
