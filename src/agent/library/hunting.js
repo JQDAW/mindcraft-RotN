@@ -68,19 +68,30 @@ export function mayBelongToPlayer(bot, e, { bases = [] } = {}) {
     if (e?.name === 'pig' && md[13] === true) return 'it has a saddle';
     if (e?.name === 'sheep' && Number.isInteger(md[13]) && (md[13] & 0x0f) !== 0) return 'it is not a white sheep (dyed or bred)';
     if (!e?.position) return 'its position is unknown';
-    for (const b of bases) if (b && Math.hypot(b.x - e.position.x, b.z - e.position.z) <= HUNT.baseRadius) return 'it is near a player\'s base';
+    if (nearBase(bases, e.position)) return 'it is near a player\'s base';
+    const built = playerBuiltNear(bot, e.position);
+    return built ? `it is near ${built}` : null;
+}
+
+/** Whether a point is within HUNT.baseRadius of a known player base (horizontally). */
+export const nearBase = (bases, p) => bases.some(b => b && Math.hypot(b.x - p.x, b.z - p.z) <= HUNT.baseRadius);
+
+/**
+ * The first player-built block (PLAYER_BUILT, or `isBuilt`) within `radius` of a point that the
+ * bot did not place itself (trackBotPlaced), as "a <name> at x, y, z (a farm or a base)", or null.
+ * Shared by the hunting and foraging checks (G4 #5).
+ */
+export function playerBuiltNear(bot, point, { radius = HUNT.ownedRadius, isBuilt = (name) => PLAYER_BUILT.test(name) } = {}) {
     const placed = bot?.rotnPlaced ?? new Set();
     let found = [];
     try {
-        found = bot.findBlocks?.({ point: e.position, maxDistance: HUNT.ownedRadius, count: 64,
-            matching: (b) => !!b && typeof b.name === 'string' && PLAYER_BUILT.test(b.name) }) ?? [];
+        found = bot.findBlocks?.({ point, maxDistance: radius, count: 64,
+            matching: (b) => !!b && typeof b.name === 'string' && isBuilt(b.name) }) ?? [];
     } catch { found = []; }
     const built = found.find(p => !placed.has(key(p)));
-    if (built) {
-        const b = bot.blockAt?.(built);
-        return `it is near a ${b?.name ?? 'player-built block'} at ${key(built).replace(/,/g, ', ')} (a farm or a base)`;
-    }
-    return null;
+    if (!built) return null;
+    const b = bot.blockAt?.(built);
+    return `a ${b?.name ?? 'player-built block'} at ${key(built).replace(/,/g, ', ')} (a farm or a base)`;
 }
 
 /** The player bases the bot knows: places in its memory named "base" or "home" (or "<x> base"). */
