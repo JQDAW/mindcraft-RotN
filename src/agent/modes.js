@@ -21,6 +21,7 @@ import { createErrorReporter } from './update_loop.js';
 import { safeError } from './safe_error.js';
 import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
 import { mayRepeat, handedToChat } from './chat_repeat.js';
+import { fleeLine, mobName } from './library/survival_log.js';
 
 async function say(agent, message) {
     agent.bot.modes.behavior_log += message + '\n';
@@ -248,6 +249,9 @@ const modes_list = [
                     return;
                 }
                 claimThreat(this.name, Date.now(), { override: true }); // the low-health flee wins at once (#227 review 2)
+                // G4 #5: the journal's flee line names the nearest hostile mob, when one is near.
+                const near = world.getNearestEntityWhere(bot, (e) => threats.shelterEnemy(e), 16);
+                console.log(fleeLine(near ? mobName(near) : 'unknown', `low health ${Math.round(bot.health * 10) / 10}`));
                 say(agent, 'I\'m dying!');
                 execute(this, agent, async () => {
                     await skills.moveAway(bot, 20);
@@ -391,6 +395,7 @@ const modes_list = [
             const plan = threats.threatPlan(agent.bot);
             if (plan?.action === 'flee' && await world.isClearPath(agent.bot, plan.from)) {
                 if (!claimThreat(this.name)) return; // checked after the await: another mode may own it now
+                console.log(fleeLine(mobName(plan.from), plan.why)); // G4 #5
                 say(agent, `Backing off: ${plan.from.name.replace("_", " ")} (${plan.why})!`);
                 execute(this, agent, async () => {
                     await skills.avoidEnemies(agent.bot, plan.away, plan.isEnemy, (e) => threats.threatFor(e)?.reaction === 'fight');
@@ -425,6 +430,7 @@ const modes_list = [
                     await skills.defendSelf(agent.bot, 8, plan.isEnemy, () => threats.threatPlan(agent.bot)?.action === 'fight');
                     const next = threats.threatPlan(agent.bot);
                     if (next?.action === 'flee') {
+                        console.log(fleeLine(mobName(next.from), next.why)); // G4 #5
                         await say(agent, `Backing off: ${next.from.name.replace("_", " ")} (${next.why})!`);
                         await skills.avoidEnemies(agent.bot, next.away, next.isEnemy, (e) => threats.threatFor(e)?.reaction === 'fight');
                     }

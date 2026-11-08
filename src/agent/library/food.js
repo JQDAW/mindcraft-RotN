@@ -7,6 +7,7 @@
 // come from rotn-data's avoidFood(item, meta), plus the few it does not cover (LOCAL_AVOID).
 
 import * as rotnData from '../../../packages/rotn-data/index.js';
+import { logAte } from './survival_log.js';
 
 /** Eat at this food level or lower ("Eat at food 12 or lower; starving is instant death"). */
 export const EAT_AT = 12;
@@ -127,5 +128,7 @@ export async function eatFood(bot, item, { checkMs = CONSUME_CHECK_MS } = {}) {
     }
     // A consume that resolved has eaten; after a throw the food level or the item count tells.
     const ate = !threw || bot.food > before || countKey(bot, key) < had;
+    // G4 #5: "[survival] ate <item> food <before>-><after>" once the food level has changed.
+    if (ate) await logAte(bot, key, before);
     return { ate, threw, before, after: bot.food };
 }
