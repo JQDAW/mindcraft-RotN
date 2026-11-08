@@ -107,11 +107,13 @@ from="<the CX33's IPv4>",restrict,command="/usr/local/sbin/mindcraft-rotn-ssh-ga
   - The client gets one fixed line on stderr, never its own input back.
   - Syslog gets `refused (<why>): '<the request, printable ASCII only, others as ?, at most 200 bytes>' (<length> bytes)` under the tag `rotn-ssh-gate` at `auth.warning`.
   - Allowed requests are logged at `auth.info`.
-- **It trusts nothing from the client.** It runs under `bash -p`, with `LC_ALL=C` (sshd passes the client's `LANG` and `LC_*`), a reset `PATH`, and fixed program paths. sudo resets the environment for the ctl.
+- **It trusts nothing from the client.** It runs under `bash -p`, with `LC_ALL=C` (sshd passes the client's `LANG`, `LC_*`, `COLORTERM` and `NO_COLOR`), a reset `PATH`, and fixed program paths. sudo resets the environment for the ctl.
 - **What the gate itself cannot guard** (#365 review): sshd starts a forced command through `deploy`'s **login shell**, as `$SHELL -c '/usr/local/sbin/mindcraft-rotn-ssh-gate'`, before the gate's own `bash -p`.
   - That shell reads `BASH_ENV` if sshd lets the client set it.
   - Ubuntu's bash also reads `~/.bashrc` when sshd starts it.
-  - So the CX23's sshd must accept no client variables except `LANG` and `LC_*`, with `PermitUserEnvironment no`, and `deploy`'s shell start-up files must be writable by `deploy` only. Step B1 below checks both.
+  - So the CX23's sshd must accept no client variables except `LANG`, `LC_*`, `COLORTERM` and `NO_COLOR`, with `PermitUserEnvironment no`, and `deploy`'s shell start-up files must be writable by `deploy` only. Step B1 below checks both.
+  - `COLORTERM` and `NO_COLOR` are the Debian/Ubuntu openssh package's default (seen on the CX23, G4 step 0 B1, 2026-11-08). They are harmless here: no shell start-up effect, the gate forces `LC_ALL=C`, and sudo resets the environment.
+  - **Dangerous are** `BASH_ENV`, `ENV`, any `LD_*`, `PATH`, or a wildcard `*`.
 - **Tests:** `test/unit/cx23-ssh-gate.test.js`, offline, with a fake `sudo` and `logger`. It is also covered by shellcheck in CI.
 
 **Install the reviewed copy (human, as root, from a reviewed tag):** see step B1 below. Then report both SHA-256 values to the lead, who compares them with the tag.
@@ -160,10 +162,11 @@ scp -r /tmp/cx23-<TAG>/deploy/cx23 root@<cx23>:/root/cx23-<TAG>
    - The `authorized_keys` line (above) stays as it is: it already names `/usr/local/sbin/mindcraft-rotn-ssh-gate`.
    - **What runs before the gate** (the login shell, see "What the gate itself cannot guard"):
    ```bash
-   sshd -T | grep -Ei '^(acceptenv|permituserenvironment) '   # acceptenv: only LANG and LC_*; permituserenvironment no
+   sshd -T | grep -Ei '^(acceptenv|permituserenvironment) '   # acceptenv: only LANG, LC_*, COLORTERM, NO_COLOR; permituserenvironment no
    ls -l /home/deploy/.bashrc /home/deploy/.profile /home/deploy/.bash_profile /home/deploy/.bash_login 2>&1   # owned by deploy; no group or other w
    ```
-   If `acceptenv` lists anything else, or a start-up file is writable by anyone but `deploy`, stop and tell the lead before going on.
+   - **Expected:** `acceptenv` lists only `LANG`, `LC_*`, `COLORTERM` and `NO_COLOR` (the last two are Ubuntu's openssh default and harmless here), and `permituserenvironment no`.
+   - **Stop and tell the lead before going on** if `acceptenv` lists any other name, above all `BASH_ENV`, `ENV`, any `LD_*`, `PATH` or a wildcard `*`, or if `permituserenvironment` is not `no`, or if a start-up file is writable by anyone but `deploy`.
 2. **The bot:** `bash /root/cx23-<TAG>/bootstrap.sh add-bot frcfld`. It writes `/etc/mindcraft-rotn/frcfld.env` (root:root 0600) and `/var/lib/mindcraft-rotn/frcfld/msa` (0700). Then run the gate check above.
 3. **The env file:** `nano /etc/mindcraft-rotn/frcfld.env`. Change three lines and nothing else:
    - `OPENROUTER_API_KEY=` the production key with its credit limit (H4; the key named `mindcraft-rotn-frcfld-cx23`).
