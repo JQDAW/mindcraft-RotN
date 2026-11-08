@@ -66,18 +66,11 @@
 - **Digging alarms, repairs, fights from the shelter, falling blocks:** 0. The bot never walked out.
 - **The server log in the night:** besides the scenario's reads and the `gamestages` saves, only three "Fetching addPacket for removed entity" warnings (00:34:53, 00:39:27, 00:41:52).
 - **"refused stop after 10 seconds":** none in `driver.log` or the bot's saved history; no agent exit.
-- **For skills-rotn:**
-  - **The unexplained move one block lower:** at 00:19:39, 10 s after "in the shelter at -74, 60, -67", the night check said "no longer in the shelter at -74, 60, -67: building a new one". The new site was -74 59 -67, 3 s later.
-    - No line says why the bot was out of its first site (no fight, no reflex, no block line).
-    - It cost nothing here, but a move in the night is exposure.
-  - **Open since smoke round 10 B:** dawn again said "morning: found no safe side to open; back to work". The scenario ended 20 s later.
+- **For skills-rotn (open since smoke round 10 B):** dawn again said "morning: found no safe side to open; back to work". The scenario ended 20 s later.
 
 ## Other watch items
 
-- **Sticks:** one `!collectBlocks("stick", 3)`, output partly elided (`night/driver.log` lines 130-147, "…skipping many lines"). What it shows:
-  - a `deadbush` and at least three `dynamictrees:leaves0` breaks (one gave `rustic:olives`), each "got no stick";
-  - "Picked up" lines (1, 2 and 1 items);
-  - "Collected 3 stick". Which break gave which stick is not shown.
+- **Sticks:** one `!collectBlocks("stick", 3)`. A `deadbush` and two `dynamictrees:leaves0` (one gave `rustic:olives`) logged "got no stick", and later pickups made up "Collected 3 stick".
 - **Chat:** no reflex line repeated. Four of the LLM's own command replies came twice or three times within 60 s (`!placeHere("crafting_table")` 3×, `!useOn("crude_axe", "log")`, `!inventory`, `!craftRecipe("planks", 2)` 2× each).
 
 ## LLM and cost

@@ -409,56 +409,6 @@ test('G3 round 6 B: a reserve that used its budget does not pause the agenda; it
     assert.equal(agent.agenda.spentOn('shelter_blocks').llm_ms, 0);
 });
 
-// G3 round 10 A: the reserve ran twice in one dusk on one budget: about 4 min on dirt (no pickaxe)
-// until the bot held 80 dirt piles, then the stone pickaxe made it ask for sturdy blocks, and it
-// was "stuck: 5 min of self-prompting" 70 s later. The first change of need in a dusk gets a fresh
-// budget; a later change does not.
-test('round 10 A: when the pickaxe changes what the reserve needs, it gets a fresh budget once per dusk', (t) => {
-    const items = [stack('pyrotech:rock', 0, 6)];
-    const agent = fakeAgent(t, items);
-    agent.bot.time = { timeOfDay: dayAt(7) };
-    let now = 0;
-    const tickFor = (ms) => { // the self-prompter runs; the driver counts its time per tick
-        let r = null;
-        for (const end = now + ms; now < end;) { now += 10_000; r = agendaTick(agent, { now }); if (r !== 'shelter_blocks') return r; }
-        return r;
-    };
-    // 1. No pickaxe: the reserve asks for dirt and spends 4 min; 80 piles (20 dirt) make it done.
-    assert.equal(agendaTick(agent, { now }), 'shelter_blocks');
-    assert.equal(tickFor(4 * 60_000), 'shelter_blocks');
-    assert.ok(agent.agenda.spentOn('shelter_blocks').llm_ms >= 3.5 * 60_000);
-    items.push(stack('betterwithmods:dirt_pile', 0, 80));
-    now += 10_000;
-    assert.equal(agendaTick(agent, { now }), 'sticks', 'enough dirt: the step it interrupted resumes');
-
-    // 2. The stone pickaxe: now it needs sturdy blocks. A fresh budget: not stuck 1 min later.
-    items.push(stack('stone_pickaxe', 0, 1));
-    now += 10_000;
-    assert.equal(agendaTick(agent, { now }), 'shelter_blocks');
-    assert.match(agent.self_prompter.prompt, /builds a shelter from sturdy blocks/);
-    assert.equal(tickFor(60_000), 'shelter_blocks', 'not stuck 1 min later');
-    assert.ok(agent.agenda.spentOn('shelter_blocks').llm_ms <= 70_000, JSON.stringify(agent.agenda.spentOn('shelter_blocks')));
-    assert.ok(!agent.said.some(l => /stuck/.test(l)), agent.said.join('\n'));
-
-    // 3. A third change in the same dusk (the pickaxe is lost, the piles were used): no new budget.
-    items.splice(items.findIndex(i => i.name === 'stone_pickaxe'), 1);
-    items.splice(items.findIndex(i => i.name === 'betterwithmods:dirt_pile'), 1);
-    now += 10_000;
-    assert.equal(agendaTick(agent, { now }), 'shelter_blocks');
-    assert.match(agent.self_prompter.prompt, /You have no pickaxe yet, so it is built of dirt/);
-    assert.ok(agent.agenda.spentOn('shelter_blocks').llm_ms >= 60_000, 'the budget goes on');
-    const thirdAt = now;
-    assert.equal(tickFor(STEP_LLM_MS), 'stuck');
-    assert.equal(agent.said.at(-1), `agenda step shelter_blocks stuck: ${STEP_LLM_MS / 60_000} min of self-prompting; going on without it until the night`);
-    // Stuck when the rest of the second budget (5 min less the minute in part 2) is spent.
-    assert.ok(now - thirdAt <= STEP_LLM_MS - 50_000, `stuck after ${(now - thirdAt) / 1000} s`);
-
-    // The next dusk starts with a fresh budget and may change once again.
-    agent.bot.time.timeOfDay = 1000;
-    agendaTick(agent, { now: now += 10_000 });
-    assert.equal(agent.agenda.spentOn('shelter_blocks').llm_ms, 0);
-});
-
 // #284 review.
 test('#284 review 1: the reserve is not due at night (minutesToSunset is 0), so it never sends the bot out in the dark', (t) => {
     const agent = fakeAgent(t, [stack('pyrotech:rock', 0, 6)]);

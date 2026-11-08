@@ -32,7 +32,6 @@ import { runUpdateLoop, createErrorReporter } from './update_loop.js';
 import { bindDeathReport, deathCauseText } from './library/death_report.js';
 import { installChatLimit, withChatPriority } from './chat_limit.js';
 import { installWalkSafety } from './library/fall_safety.js';
-import { bindDamageRecord } from './damage_record.js';
 
 export class Agent {
     async start(load_mem=false, init_message=null, count_id=0) {
@@ -519,9 +518,16 @@ export class Agent {
             this.bot.emit('midnight');
         });
 
-        // The last damage, cleared by a death (G3 round 10 A: the fatal hit made self_preservation
-        // flee from the spawn point at full health).
-        bindDamageRecord(this.bot);
+        let prev_health = this.bot.health;
+        this.bot.lastDamageTime = 0;
+        this.bot.lastDamageTaken = 0;
+        this.bot.on('health', () => {
+            if (this.bot.health < prev_health) {
+                this.bot.lastDamageTime = Date.now();
+                this.bot.lastDamageTaken = prev_health - this.bot.health;
+            }
+            prev_health = this.bot.health;
+        });
         // Logging callbacks
         this.bot.on('error' , (err) => {
             console.error('Error event!', safeError(err));

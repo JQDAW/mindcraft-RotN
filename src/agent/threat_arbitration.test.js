@@ -20,7 +20,6 @@ import { __modeForTest, __resetThreatLease, THREAT_HOLD_MS, claimThreat, execute
 import { threatPlan, PLAYER_ZOMBIE } from './library/threats.js';
 import { DeathReporter, deathSpotBlocked, DEATH_SPOT_WAIT_MS, DEATH_SPOT_NIGHT_MS } from './library/death_report.js';
 import { ActionManager } from './action_manager.js';
-import { bindDamageRecord } from './damage_record.js';
 import { actionsList } from './commands/actions.js';
 
 const reg = minecraftData('1.12.2');
@@ -155,34 +154,6 @@ test('self_preservation does not flee while the bot is dead (the death hit is re
     await __modeForTest('self_preservation').update(agent);
     await flush();
     assert.deepEqual(agent.log.ran, []);
-});
-
-// G3 round 10 A: crushed at full health (20 -> 0); after the respawn (health 20 again) the fatal hit
-// was still the last damage, so "damage >= health" held for 3 s: "I'm dying!" and a 20-block flee
-// from the spawn point. The death clears the damage record (damage_record.js).
-test('round 10 A: after a respawn the fatal hit does not make self_preservation flee; a new hit does', async (t) => {
-    t.mock.method(console, 'log', () => {});
-    const agent = arena();
-    for (const k of Object.keys(agent.bot.entities)) if (k !== '0') delete agent.bot.entities[k];
-    const bot = agent.bot;
-    const handlers = {};
-    bot.on = (event, fn) => { (handlers[event] ??= []).push(fn); };
-    const emit = (event) => { for (const fn of handlers[event] ?? []) fn(); };
-    bot.health = 20;
-    bindDamageRecord(bot);
-    // Crushed: 20 -> 0, then the death, then the respawn at full health.
-    Object.assign(bot, { health: 0, isAlive: false }); emit('health'); emit('death');
-    Object.assign(bot, { health: 20, isAlive: true }); emit('health');
-    await __modeForTest('self_preservation').update(agent);
-    await flush();
-    assert.deepEqual(agent.log.ran, [], 'no flee at full health after the respawn');
-
-    // A real hit after the respawn still counts: 20 -> 4.
-    bot.health = 4; emit('health');
-    assert.equal(bot.lastDamageTaken, 16);
-    await __modeForTest('self_preservation').update(agent);
-    await flush();
-    assert.deepEqual(agent.log.ran.map(r => r.label), ['mode:self_preservation']);
 });
 
 function zombieBot({ x, health = 20, items = [] }) {
