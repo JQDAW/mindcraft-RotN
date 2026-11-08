@@ -69,6 +69,7 @@ export class TaskQueue {
 
     load() {
         this.loadProblem = null; // a sentence for the bot to report, or null
+        this.loadState = 'absent'; // G4 #10: 'absent' | 'corrupt' | 'present' (state_report.js)
         if (!existsSync(this.file)) return;
         let data;
         try {
@@ -81,8 +82,10 @@ export class TaskQueue {
             this.loadProblem = `[tasks] ${this.file} could not be read (${err.message}); moved it to ${aside} and started an empty queue. Its tasks are lost unless restored.`;
             console.warn(this.loadProblem);
             this.tasks = [];
+            this.loadState = 'corrupt';
             return;
         }
+        this.loadState = 'present';
         this.tasks = data.tasks.filter(validTask);
         const dropped = data.tasks.length - this.tasks.length;
         if (dropped > 0) {
