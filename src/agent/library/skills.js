@@ -14,6 +14,7 @@ import { safeError } from "../safe_error.js";
 import { DEATH_SPOT_RADIUS } from "./death_report.js";
 import { logAte, fightJournal } from "./survival_log.js";
 import { foodKey } from "./food.js";
+import { FORAGE, forageTarget, forageInfo, usable, plantSafe, markTried, breakRefusal, rightClickRefusal, touchHazards } from "./foraging.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -917,7 +918,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
         .filter(s => s.pos && Date.now() - s.at < COLLECT_LIMITS.deathSpotMs && (s.dimension == null || bot.game?.dimension == null || s.dimension === bot.game.dimension));
     const nearDeath = (p) => deathSpots.some(s => Math.hypot(p.x - s.pos.x, p.z - s.pos.z) <= DEATH_SPOT_RADIUS);
     let deathSkips = 0, deathSkipsSaid = false;
+    const forageRefusals = new Set(); // G4 #5: wild food blocks left alone, said once at the end
+    let forageSaid = false;
     const sayDeathSkips = () => {
+        // G4 #5: the wild food blocks left alone (breakRefusal), at most 2 reasons, once.
+        if (forageRefusals.size && !forageSaid) {
+            forageSaid = true;
+            log(bot, `Left alone: ${[...forageRefusals].slice(0, 2).join('; ')}.`);
+        }
         if (deathSkips === 0 || deathSkipsSaid) return;
         deathSkipsSaid = true;
         log(bot, `Some were left alone: within ${DEATH_SPOT_RADIUS} blocks of where you died recently (a player zombie rises there and never leaves).`);
@@ -983,6 +991,12 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             }
             // Wood only on the surface: never a log underground (G3 round 5 A rerun).
             if (block.position && woodTarget && world.isUnderground(bot, block.position)) return false;
+            // G4 #5: a wild food block only when ripe, never a berry bush (picked, not broken), a
+            // hazard plant or a crop that may be a player's (foraging.js breakRefusal).
+            if (block.position && forageInfo(block)) {
+                const why = breakRefusal(bot, block, { bases: forageBases(bot) });
+                if (why) { forageRefusals.add(why); return false; }
+            }
             if (exclude) {
                 for (let position of exclude) {
                     if (block.position.x === position.x && block.position.y === position.y && block.position.z === position.z) {
@@ -2562,7 +2576,8 @@ export async function goToGoal(bot, goal, { canDig = true } = {}) {
 
     // Every walk is fall-safe (G3 round 4 B, fall_safety.js): no drop over 3 blocks, and never a
     // broken Dynamic Trees branch, which fells the tree (also the stuck reflex's walk away).
-    const nonDestructiveMovements = fallSafe(new pf.Movements(bot));
+    // G4 #5: and steps around poison ivy and thorns (touch-hazard plants, foraging.js plantSafe).
+    const nonDestructiveMovements = plantSafe(fallSafe(new pf.Movements(bot)));
     const dontBreakBlocks = ['glass', 'glass_pane'];
     for (let block of dontBreakBlocks) {
         nonDestructiveMovements.blocksCantBreak.add(mc.getBlockId(block));
@@ -2573,7 +2588,7 @@ export async function goToGoal(bot, goal, { canDig = true } = {}) {
     // ones here; a drop resting on leaves then led the bot up into the tree (G3 round 4 B).
     if (!canDig) nonDestructiveMovements.canDig = false;
 
-    const destructiveMovements = canDig ? fallSafe(new pf.Movements(bot)) : nonDestructiveMovements;
+    const destructiveMovements = canDig ? plantSafe(fallSafe(new pf.Movements(bot))) : nonDestructiveMovements;
 
     let final_movements = destructiveMovements;
 
@@ -3294,9 +3309,12 @@ export async function activateNearestBlock(bot, type) {
      * @example
      * await skills.activateNearestBlock(bot, "lever");
      * **/
-    let block = world.getNearestBlock(bot, type, 16);
+    // G4 #5: never a hazard plant (the hawthorn's right-click poisons and hurts; poison ivy, thorns).
+    const all = world.getNearestBlocks(bot, type, 16, 16).filter(Boolean);
+    const refused = all.map(b => rightClickRefusal(b) ?? (touchHazards(b).length ? `${b.name} is a hazard plant: never touch it` : null));
+    let block = all.find((b, i) => !refused[i]) ?? null;
     if (!block) {
-        log(bot, `Could not find any ${type} to activate.`);
+        log(bot, refused.find(Boolean) ? `Not activating ${type}: ${refused.find(Boolean)}.` : `Could not find any ${type} to activate.`);
         return false;
     }
     if (bot.entity.position.distanceTo(block.position) > 4.5) {
@@ -3307,6 +3325,104 @@ export async function activateNearestBlock(bot, type) {
     await bot.activateBlock(block);
     log(bot, `Activated ${type} at x:${block.position.x.toFixed(1)}, y:${block.position.y.toFixed(1)}, z:${block.position.z.toFixed(1)}.`);
     return true;
+}
+
+/** The player bases the bot knows (agent.js sets bot.rotnBases from its memory), or []. */
+function forageBases(bot) {
+    try { return bot.rotnBases?.() ?? []; } catch { return []; }
+}
+
+/** Bounds of one forage run (G4 #5): at most `max` blocks, `totalMs` in all, `walkMs` per walk. */
+export const FORAGE_RUN = { max: 6, totalMs: 90_000, walkMs: 20_000, settleMs: 1500, checkMs: 250 };
+
+const isBoneMeal = (item) => item?.name === 'dye' && item.metadata === 15;
+const BREAK_HAND_OFF = /shears|_axe$|_hoe$/; // a held tool that could take a plant whole
+
+/**
+ * Get the food from one forage target ({ block, how } from foraging.forageTarget): walk near
+ * (plant-safe, no digging), check the block again, then right-click it (a berry bush; never with
+ * bone meal in hand, which would grow it instead) or break it (an herb, a garden; never sneaking:
+ * a garden broken while sneaking drops itself), and pick up the drops. Returns 'ok', 'changed'
+ * (it is no longer ready), 'unreachable', 'interrupted' or 'failed'.
+ */
+export async function forageOne(bot, target, run = currentRun(bot), limits = {}) {
+    const L = { ...FORAGE_RUN, ...limits };
+    const pos = target.block.position;
+    if (bot.entity.position.distanceTo(pos.offset(0.5, 0.5, 0.5)) > FORAGE.reach + 0.5) {
+        let walked;
+        try {
+            walked = await within(goToGoal(bot, new pf.goals.GoalNear(pos.x, pos.y, pos.z, FORAGE.reach), { canDig: false }), L.walkMs, () => stopWalking(bot));
+        } catch {
+            walked = false;
+        }
+        if (run.aborted || bot.interrupt_code) return 'interrupted';
+        if (walked !== true || bot.entity.position.distanceTo(pos.offset(0.5, 0.5, 0.5)) > FORAGE.reach + 1.5) return 'unreachable';
+    }
+    const block = bot.blockAt(pos);
+    const info = forageInfo(block);
+    if (usable(info) !== target.how || info.block !== target.info.block) return 'changed';
+    try {
+        if (target.how === 'right-click') {
+            if (isBoneMeal(bot.heldItem)) await bot.unequip('hand');
+            if (isBoneMeal(bot.heldItem)) return 'failed';
+            await bot.activateBlock(block);
+            const until = Date.now() + L.settleMs;
+            while (Date.now() < until && bot.blockAt(pos)?.metadata === block.metadata) await new Promise(r => setTimeout(r, L.checkMs));
+            if (bot.blockAt(pos)?.metadata === block.metadata) return 'failed';
+        } else {
+            bot.setControlState?.('sneak', false);
+            if (bot.heldItem && BREAK_HAND_OFF.test(bot.heldItem.name)) { try { await bot.unequip('hand'); } catch { /* breaks it anyway: by hand or not, a plant breaks at once */ } }
+            await bot.dig(block, true);
+            await new Promise(r => setTimeout(r, L.checkMs));
+        }
+    } catch (err) {
+        if (run.aborted || bot.interrupt_code) return 'interrupted';
+        log(bot, `Could not forage ${info.block}: ${err?.message ?? err}.`);
+        return 'failed';
+    }
+    if (target.how === 'break') await pickupNearbyItems(bot);
+    return 'ok';
+}
+
+export async function forageNearby(bot, { max = FORAGE_RUN.max, keepGoing = () => true, limits = {} } = {}) {
+    /**
+     * Gather ripe wild food near the bot (G4 #5, rotn-data forageFood): right-click Rustic wildberry
+     * bushes that have berries, break ripe wild herbs and HarvestCraft gardens. Never a bare bush or
+     * an unripe herb, never the hawthorn, poison ivy or thorns, never avoided food, never a crop that
+     * may be a player's (near fences, farmland, chests, torches or a known base). Bounded by
+     * FORAGE_RUN (max blocks, total time).
+     * @param {MinecraftBot} bot
+     * @returns {Promise<boolean>} true if any food was gained.
+     **/
+    const L = { ...FORAGE_RUN, ...limits };
+    const run = currentRun(bot);
+    const start = Date.now();
+    const bases = forageBases(bot);
+    const before = {};
+    for (const item of bot.inventory.items()) { const k = inventoryKey(item) ?? item.name; before[k] = (before[k] ?? 0) + item.count; }
+    const skipped = [];
+    let done = 0, failed = 0, timedOut = false;
+    while (done + failed < max) {
+        if (run.aborted || bot.interrupt_code || !keepGoing()) break;
+        if (Date.now() - start >= L.totalMs) { timedOut = true; break; }
+        const target = forageTarget(bot, { bases, skipped });
+        if (!target) break;
+        const r = await forageOne(bot, target, run, L);
+        if (r === 'interrupted') break;
+        if (r === 'ok') done++;
+        else {
+            failed++;
+            markTried(bot, target.block.position); // left alone for a while: no loop on one block
+            if (r === 'unreachable') log(bot, `Could not reach the ${target.info.block} at ${posText(target.block.position)}.`);
+        }
+    }
+    const gained = {};
+    for (const item of bot.inventory.items()) { const k = inventoryKey(item) ?? item.name; gained[k] = (gained[k] ?? 0) + item.count; }
+    const got = Object.entries(gained).map(([k, n]) => [k, n - (before[k] ?? 0)]).filter(([, n]) => n > 0);
+    if (skipped.length) log(bot, `Left alone (may be a player's): ${[...new Set(skipped)].slice(0, 2).join('; ')}.`);
+    if (done === 0 && failed === 0) log(bot, `No ripe wild food within ${FORAGE.radius} blocks (wildberry bushes with berries, ripe herbs, HarvestCraft gardens).`);
+    else log(bot, `Foraged ${done} block${done === 1 ? '' : 's'}${got.length ? `: got ${got.map(([k, n]) => `${n} ${k}`).join(', ')}` : ', got nothing'}${timedOut ? ` (time limit of ${secsText(L.totalMs)} reached)` : ''}.`);
+    return got.length > 0;
 }
 
 /**
@@ -3812,6 +3928,13 @@ export async function useToolOn(bot, toolName, targetName, limits = {}) {
             blocks = world.getNearestBlocks(bot, targetName, L.range, L.candidates);
         }
         blocks = (blocks || []).filter(Boolean);
+        // G4 #5: never a hazard plant (the hawthorn's right-click poisons and hurts; poison ivy, thorns).
+        const hazard = blocks.map(b => rightClickRefusal(b) ?? (touchHazards(b).length ? `${b.name} is a hazard plant: never touch it` : null)).find(Boolean);
+        blocks = blocks.filter(b => !rightClickRefusal(b) && !touchHazards(b).length);
+        if (blocks.length === 0 && hazard) {
+            log(bot, `useOn refused: ${hazard}.`);
+            return false;
+        }
         if (blocks.length === 0) {
             log(bot, `Could not find any ${targetName === 'water' || targetName === 'lava' ? 'source ' : ''}${targetName} within ${L.range} blocks.`);
             return false;

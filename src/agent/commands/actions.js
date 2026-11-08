@@ -439,6 +439,14 @@ export const actionsList = [
         })
     },
     {
+        // G4 #5: wild food before hunting (rotn-data forageFood; library/foraging.js).
+        name: '!forage',
+        description: 'Gather ripe wild food near you: picks the berries off Rustic wildberry bushes (right-click; the bush stays and regrows), breaks ripe wild herbs and HarvestCraft gardens, and picks up the food. Never a bare bush or an unripe herb, never the hawthorn, poison ivy or thorns, never a crop near fences, farmland, chests or houses (it may be a player\'s).',
+        perform: runAsAction(async (agent) => {
+            await skills.forageNearby(agent.bot);
+        })
+    },
+    {
         name: '!craftRecipe',
         description: 'Craft the given recipe a given number of times.',
         params: {

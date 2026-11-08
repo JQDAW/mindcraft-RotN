@@ -634,3 +634,42 @@ test('#422 review 8: at most FOOD_DAY_RUNS self-prompter runs for the food reser
     assert.ok(FOOD_DAY_RUNS <= 3, 'bounded spend (ADR 0010)');
 });
 
+test('G4 #5 forage: the food reserve names the ripe wild food near (full block names) and asks for !forage before a hunt', (t) => {
+    const cow = { id: 1, type: 'mob', name: 'animania:cow_holstein', metadata: { 7: 10 }, position: new Vec3(6.5, 64, 0.5) };
+    const agent = foodAgent(t, [], { entities: { 1: cow } });
+    const crops = { '4,64,0': ['rustic:wildberry_bush', 1], '5,64,0': ['rustic:wildberry_bush', 0], '-6,64,0': ['harvestcraft:aridgarden', 0], '8,64,8': ['biomesoplenty:plant_0', 5] };
+    const at = (k) => ({ name: crops[k][0], metadata: crops[k][1], position: new Vec3(...k.split(',').map(Number)) });
+    agent.bot.blockAt = (p) => { const k = `${p.x},${p.y},${p.z}`; return crops[k] ? at(k) : { name: 'air', metadata: 0, position: p }; };
+    agent.bot.findBlocks = ({ point, maxDistance, matching }) => Object.keys(crops).map(at)
+        .filter(b => b.position.distanceTo(point ?? agent.bot.entity.position) <= maxDistance && matching(b)).map(b => b.position);
+    assert.equal(agendaTick(agent, { now: 0 }), 'food');
+    const p = agent.self_prompter.prompt;
+    assert.match(p, /Ripe wild food near you: rustic:wildberry_bush, harvestcraft:aridgarden: gather it first with !forage/);
+    assert.ok(p.indexOf('!forage') < p.indexOf('!attack'), 'foraging before hunting');
+    assert.doesNotMatch(p, /plant_0/, 'never the hawthorn');
+    assert.match(FOOD_RESERVE_STEP.goal, /Gather ripe wild food first with !forage/);
+});
+
+test('#422 nit: the day\'s last food run is not stopped as it starts: it runs until it ends, and only then is no new one started', (t) => {
+    const agent = foodAgent(t, []);
+    agent.bot.time.day = 4;
+    const sp = agent.self_prompter;
+    let clock = 0;
+    const tick = () => { clock += TICK_MS; return agendaTick(agent, { now: clock }); };
+    // Two runs this day already (each ended by the model).
+    agent.agenda.foodDay = { key: 'day 4', runs: FOOD_DAY_RUNS - 1 };
+    assert.equal(tick(), 'food');
+    assert.equal(sp.starts.length, 1, 'the last run starts');
+    assert.equal(agent.agenda.foodDay.runs, FOOD_DAY_RUNS, 'and is counted');
+    // On develop the next tick saw the cap reached and stopped it about 2 s in.
+    for (let i = 0; i < 5; i++) assert.equal(tick(), 'food', `tick ${i}: the running one goes on`);
+    assert.equal(sp.stops, 0, 'never stopped by the cap');
+    assert.equal(sp.isActive(), true);
+    // The run ends: the cap now holds, and no new run starts this day.
+    sp.stop();
+    clock += BACKOFF_MS * 8;
+    assert.equal(tick(), null);
+    assert.equal(sp.starts.length, 1, 'no 4th run');
+    assert.equal(agent._agenda_step, null);
+});
+

@@ -10,6 +10,7 @@ import { standsOnTree, isLethal, hazardOf } from './library/fall_safety.js';
 import { REPAIR_LABEL, nightPhase, minutesToSunset } from './library/night.js';
 import { RESERVE_LEAD_MIN } from './agenda.js';
 import { huntTarget, knownBases, huntAnimal } from './library/hunting.js';
+import { forageTarget } from './library/foraging.js';
 import { isFalling } from './library/shelter.js';
 import { fallingTreeNear } from './library/felling.js';
 
@@ -478,24 +479,49 @@ const modes_list = [
     },
     {
         name: 'hunting',
-        description: 'Hunt a wild animal for food when food is short, by day, with no threat near, when idle. Never one that may belong to a player.',
+        description: 'When food is short, by day, with no threat near, when idle: gather ripe wild food (berry bushes, herbs, gardens), else hunt a wild animal. Never what may belong to a player.',
         // #422 review 6: it never interrupts anything (a giver's follow included): only when idle.
         interrupts: [],
         on: true,
         active: false,
         skipped_said: '',
+        forage_every_ms: 5_000, // no ripe wild food found: the next search after this
+        forage_none_at: -Infinity,
         update: async function (agent) {
             // G4 #5 (CX23 soak m1: food fell to 1, nothing got food): only when the food reserve is
             // due (food.foodShortfall), in full daylight, with no threat near, idle, not sheltered;
-            // never an animal that may belong to a player (hunting.js, the lead's hard rule).
+            // never an animal or a crop that may belong to a player (hunting.js, foraging.js; the
+            // lead's hard rule).
             const bot = agent.bot;
             if (!foodDue(agent) || bot.rotnSheltered || !agent.isIdle()) return;
             if (!isDaylight(agent)) return;
             let threatened = true;
             try { threatened = !!threats.threatPlan(bot); } catch { threatened = true; }
             if (threatened) return;
+            const bases = knownBases(agent);
+            // Keep going while it is day and no threat is near (#422 review 1).
+            const keepGoing = () => { if (!isDaylight(agent)) return false; try { return !threats.threatPlan(bot); } catch { return false; } };
+            // Foraging first (lead, after rotn-data #423): a ripe berry bush, herb or garden that is
+            // not maybe a player's (foraging.js). Bounded (skills.FORAGE_RUN); a block it could not
+            // take is left alone for a while (markTried), so this never loops on one block.
+            // A block search: when none was found, not again for forage_every_ms.
+            const now = Date.now();
+            let crop = null;
+            if (now - this.forage_none_at >= this.forage_every_ms) {
+                crop = forageTarget(bot, { bases });
+                if (!crop) this.forage_none_at = now;
+            }
+            if (crop) {
+                // Not awaited: execute runs the action without blocking the update loop.
+                void execute(this, agent, async () => {
+                    await say(agent, `Gathering wild food (${crop.info.block})!`);
+                    const got = await skills.forageNearby(bot, { keepGoing });
+                    console.log(`[reflex] foraging ${crop.info.block}: ${got ? 'got food' : 'got none'}`);
+                });
+                return;
+            }
             const skipped = [];
-            const target = huntTarget(bot, { bases: knownBases(agent), skipped });
+            const target = huntTarget(bot, { bases, skipped });
             const said = skipped.join('; ');
             if (said && said !== this.skipped_said) console.log(`[reflex] hunting: left alone, it may belong to a player: ${said}`);
             this.skipped_said = said;
@@ -503,7 +529,6 @@ const modes_list = [
             execute(this, agent, async () => {
                 say(agent, `Hunting ${target.name} for food!`);
                 // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
-                const keepGoing = () => { if (!isDaylight(agent)) return false; try { return !threats.threatPlan(bot); } catch { return false; } };
                 const end = await huntAnimal(bot, target, { keepGoing, equip: (b) => skills.equipHighestAttack(b) });
                 console.log(`[reflex] hunting ${target.name}: ${end}`);
             });

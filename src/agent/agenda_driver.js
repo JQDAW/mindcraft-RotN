@@ -16,6 +16,7 @@ import { isSturdy, placeableDirt, minutesToSunset, sunsetEstimateMin } from './l
 import { safeError } from './safe_error.js';
 import { heldFoodHunger } from './library/food.js';
 import { nearbyHuntable } from './library/hunting.js';
+import { nearbyForage } from './library/foraging.js';
 import { FOOD_RETRY_MS } from './agenda.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
@@ -71,12 +72,14 @@ export function agendaState(bot, clock = null) {
         // #284 review 2: any pickaxe held; the dirt blocks held or made from the dirt piles held.
         hasPickaxe: () => toolLevels(bot, 'pickaxe').length > 0,
         dirtBlocks: () => placeableDirt(bot.inventory?.items?.() ?? []),
-        // G4 #5: the food level, the hunger value of the safe food held, and the wild animals near
-        // that the bot may hunt (never one that may belong to a player).
+        // G4 #5: the food level, the hunger value of the safe food held, and the wild animals and
+        // ripe wild food near that the bot may take (never what may belong to a player).
         food: () => bot.food,
         day: () => bot.time?.day, // the in-game day (the food reserve's runs per day)
         foodHeld: () => heldFoodHunger(bot),
-        huntable: () => { try { return [...new Set(nearbyHuntable(bot))]; } catch { return []; } },
+        huntable: () => { try { return [...new Set(nearbyHuntable(bot, { bases: bot.rotnBases?.() ?? [] }))]; } catch { return []; } },
+        // the ripe wild food blocks near that the bot may take (foraging.js; full block names)
+        forageable: () => { try { return nearbyForage(bot, { bases: bot.rotnBases?.() ?? [] }); } catch { return []; } },
     };
 }
 
@@ -133,6 +136,16 @@ export function say(agent, line) {
 export const minutes = (ms) => `${Math.round(ms / 6_000) / 10} min`;
 
 /**
+ * The agenda state for a tick, with foodRunning: the food reserve's self-prompter run is going now
+ * (the per-day cap stops a new run, never the one running: #422 nit).
+ */
+function tickState(agent) {
+    const state = agendaState(agent.bot, agent._night?.clock);
+    state.foodRunning = () => agent._agenda_step != null && agent._agenda_step === agent.agenda?.food?.id && !!agent.self_prompter?.isActive?.();
+    return state;
+}
+
+/**
  * One agenda tick (throttled). Returns what it did, for tests and logs: null (not due or not
  * active), 'paused' (pause_when_empty and nobody else online), 'yield' (someone else's self-prompting
  * or a paused conversation), 'done', 'stuck', or the current step id.
@@ -146,7 +159,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     const sp = agent.self_prompter;
     // "agenda done": only the before-night reserve runs (G3 round 6 B), and otherwise nothing is
     // touched (the model's own goal, a giver's goal), as before.
-    if (!agenda.active && !agenda.anyReserveWanted(agendaState(agent.bot, agent._night?.clock))) {
+    if (!agenda.active && !agenda.anyReserveWanted(tickState(agent))) {
         if (agenda.isReserveId(agent._agenda_step)) {
             if (sp.isActive() && ownsPrompt(agent)) sp.stop(false);
             agent._agenda_step = null;
@@ -179,7 +192,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         }
     }
 
-    const state = agendaState(agent.bot, agent._night?.clock);
+    const state = tickState(agent);
     const { step, newlyDone } = agenda.evaluate(state);
     // One line for the steps done in this tick (G3 round 4 C+D: an inventory left over from an
     // earlier run completed all 11 steps at once, and 12 lines in one second got the bot kicked

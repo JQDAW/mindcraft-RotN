@@ -206,23 +206,29 @@ const foodShort = (s, ctx = {}) => foodShortfall({ food: s.food?.(), held: s.foo
  * duty), with its own budget. Due by food.foodShortfall: before night FOOD_TARGET.night held; once
  * the agenda is done FOOD_TARGET.day; and at once when food is 12 or lower with none held. Never at
  * night: the bot stays sealed. Hunting only wild animals (the !attack guard and the hunting reflex,
- * library/hunting.js). Wild berries are not offered: there is no cited way to pick them yet.
+ * library/hunting.js). Ripe wild food first (lead, after rotn-data #423): !forage picks wildberry
+ * bushes and breaks ripe herbs and gardens (library/foraging.js), then hunting.
  */
 export const FOOD_RESERVE_STEP = {
     id: 'food', short: 'keep food for the day and the night', reserve: true, when: 'food',
     due: (s, ctx) => foodShort(s, ctx) !== null,
     done: () => false, // done when no longer due (enough held)
-    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Kill a wild cow, pig, sheep or rabbit near you with !attack("<its name>") and pick up the meat (raw meat gives 1 hunger; eat it raw if needed). Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh; keep the bread for last.`,
+    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Gather ripe wild food first with !forage (wildberry bushes, wild herbs, HarvestCraft gardens), else kill a wild cow, pig, sheep or rabbit near you with !attack("<its name>") and pick up the meat (raw meat gives 1 hunger; eat it raw if needed). Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh; keep the bread for last.`,
     goalNow: (s, ctx) => {
         const target = foodShort(s, ctx) ?? FOOD_TARGET.day;
         const held = s.foodHeld?.() ?? 0;
         const food = s.food?.();
         const animals = s.huntable?.() ?? [];
+        const crops = s.forageable?.() ?? [];
+        // Ripe wild food first: quicker and safer than a hunt (lead, after rotn-data #423).
+        const wild = crops.length
+            ? `Ripe wild food near you: ${crops.slice(0, 3).join(', ')}: gather it first with !forage (it picks berry bushes and breaks ripe herbs and gardens, never a player's). `
+            : '';
         const near = animals.length
             ? `Near you: ${animals.slice(0, 3).join(', ')}: kill one with !attack("${animals[0]}") and pick up what it drops. `
-            : 'No wild animal is near: look for one (cows, pigs, sheep, rabbits; on this pack mostly Animania ones such as animania:cow_holstein or animania:sow_old_spot) with !searchForEntity, away from fences and houses, then !attack it. ';
+            : crops.length ? 'No wild animal is near. ' : 'No ripe wild food and no wild animal is near: try !forage once you see berry bushes, herbs or HarvestCraft gardens; or look for an animal (cows, pigs, sheep, rabbits; on this pack mostly Animania ones such as animania:cow_holstein or animania:sow_old_spot) with !searchForEntity, away from fences and houses, then !attack it. ';
         return `Food: you hold food worth ${held} hunger${Number.isFinite(food) ? ` and your food is ${food} of 20` : ''}. On this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: get to at least ${target}. `
-            + near + 'Raw meat gives 1 hunger each; eat it raw if needed. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player (the bot refuses those). '
+            + wild + near + 'Raw meat gives 1 hunger each; eat it raw if needed. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player (the bot refuses those). '
             + 'Do not eat raw chicken or rotten flesh; keep the bread for last.';
     },
 };
@@ -315,7 +321,7 @@ export class Agenda {
 
     /**
      * G4 #5: the food reserve when it is wanted now (due by food.foodShortfall, its budget not spent
-     * or FOOD_RETRY_MS past), else null. When it is not due, its budget is fresh for the next time.
+     * or FOOD_RETRY_MS past, and a run left this day or one running), else null. When it is not due, its budget is fresh for the next time.
      */
     foodWanted(state) {
         const r = this.food;
@@ -331,7 +337,10 @@ export class Agenda {
         if (this.foodOffUntil) { delete this.spent[r.id]; this.foodOffUntil = 0; } // a fresh budget after the wait
         const key = dayKeyOf(state, this.now());
         if (this.foodDay.key !== key) this.foodDay = { key, runs: 0 };
-        if (this.foodDay.runs >= FOOD_DAY_RUNS) return null; // this day's runs are used: the hunting reflex still acts
+        // This day's runs are used: no new run (the hunting and foraging reflexes still act). The cap
+        // is for starting one: a run counted as it started finishes (#422 nit: the 3rd run was
+        // stopped about 2 s later by the "agenda done" branch). state.foodRunning: the driver's.
+        if (this.foodDay.runs >= FOOD_DAY_RUNS && !state.foodRunning?.()) return null;
         return r;
     }
 
