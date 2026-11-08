@@ -5,6 +5,7 @@
 # `restart mindcraft-rotn@x other.service`.
 #
 #   sudo mindcraft-rotn-ctl ACTION BOT     ACTION: start | stop | restart | status | is-active | is-enabled | enable | disable
+#                                          (start runs `systemctl reset-failed` first, so a failed unit starts)
 #   sudo mindcraft-rotn-ctl list           the bots that have an env file in /etc/mindcraft-rotn
 #   sudo mindcraft-rotn-ctl daemon-reload
 #   Read-only, for the G4 scenarios (test/scenarios/g4/PLAN.md; they change nothing):
@@ -65,6 +66,10 @@ case $action in
     unit=$(unit_of "$2")
     extra=()
     [[ $action == status ]] && extra=(--no-pager)
+    # A unit that failed, or hit its start limit (StartLimitBurst: 6 starts in 10 min), refuses `start` until it is
+    # reset (G4 step 0, 2026-11-08). An explicit start is a human's, or an agent's under a written GO, so it clears
+    # that state first; on a unit that has not failed, reset-failed changes nothing. Only for start.
+    if [[ $action == start ]]; then "$SYSTEMCTL" reset-failed "$unit" || true; fi
     exec "$SYSTEMCTL" "$action" "${extra[@]}" "$unit" ;;
   journal)
     # journal BOT, or journal BOT --since TIME; nothing else.
