@@ -20,8 +20,9 @@
 //   4. restart_rejoin: stop (service: the ctl's stop, waits for inactive; driver: the process stop), then start; the
 //      bot joins again within rejoinMinutes.
 //   5. agenda_resumed: within resumeMinutes of the rejoin, the agenda's first step line is "agenda step <id> started:
-//      ... (resumed after a restart)" or "agenda resumed: <id>" (after a resumed task), for a step not done before.
-//      A plain "started" (no restart suffix) is a fail: the agenda began anew.
+//      ... (resumed after a restart)", or "agenda resumed: <id>" only when a task was running at the restart (the
+//      agenda resumes after it), for a step not done before. A plain "started" (no restart suffix) is a fail: the
+//      agenda began anew. With agenda_progress failed, nothing after it runs: no stop or start is sent.
 //   6. no_step_twice: for observeMinutes after the rejoin, no step done before the restart is reported done again.
 //   7. task_resumed (task half): "task <id> started: ... (resumed after a restart)" within resumeMinutes of the rejoin.
 // Notes: the done steps before and after, the agenda and task lines around the restart, the metrics (service).
@@ -142,8 +143,14 @@ export default {
                 + `${service ? ' (on S the agenda state persists from earlier runs: the human resets it under the GO)' : ''}`);
             return;
         }
-        ctx.check('agenda_progress', ag.active && doneBefore.length >= p.minDoneSteps,
+        const progressed = ag.active && doneBefore.length >= p.minDoneSteps;
+        ctx.check('agenda_progress', progressed,
             `${doneBefore.length} steps done (${doneBefore.join(', ') || 'none'}); the agenda is ${ag.active ? 'active' : `not active (last: ${ag.last ?? 'none'})`}`);
+        if (!progressed) {
+            // No restart without a running agenda that has done steps (#383 review): nothing to resume or to do twice.
+            notReached(after.slice(1), `the agenda had not progressed before the restart (${doneBefore.length} of ${p.minDoneSteps} steps done within ${p.progressMaxMinutes} min); no stop or start was sent`);
+            return;
+        }
 
         // 3. the task half: only where the console sender is a task giver
         const start = !service && typeof bot.output === 'function' ? bot.output().map((l) => { try { return l.startsWith('DRIVER ') ? JSON.parse(l.slice(7)) : null; } catch { return null; } })
@@ -194,10 +201,14 @@ export default {
         const afterLines = () => said().slice(said0);
         const first = await ctx.waitFor(() => firstStepLine(afterLines()), p.resumeMinutes * MIN, p.pollMs);
         ctx.note('firstAgendaLineAfterRestart', first?.line ?? null);
-        ctx.check('agenda_resumed', Boolean(first) && first.kind !== 'fresh' && !doneBefore.includes(first.id),
+        // "agenda resumed: <id>" is the agenda coming back after a task, so it counts only when a task was running at the
+        // restart (#383 review); without one, the restart line is the one to see.
+        const resumedWithoutTask = first?.kind === 'resumed' && !taskId;
+        ctx.check('agenda_resumed', Boolean(first) && first.kind !== 'fresh' && !resumedWithoutTask && !doneBefore.includes(first.id),
             !first ? `no agenda step line within ${p.resumeMinutes} min of the rejoin`
                 : first.kind === 'fresh' ? `the agenda began anew: "${first.line}" (no "${RESTART_SUFFIX.trim()}")`
-                    : doneBefore.includes(first.id) ? `it resumed at ${first.id}, a step done before the restart: "${first.line}"` : `"${first.line}"`);
+                    : resumedWithoutTask ? `"${first.line}" with no task running at the restart: not the restart's "${RESTART_SUFFIX.trim()}" line`
+                        : doneBefore.includes(first.id) ? `it resumed at ${first.id}, a step done before the restart: "${first.line}"` : `"${first.line}"`);
 
         // 7 (before 6's wait): the task resumes
         if (taskId) {

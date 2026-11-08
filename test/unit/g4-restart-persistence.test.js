@@ -23,7 +23,8 @@ const line = (ms, msg) => `[${stamp(ms)}] [Server thread/INFO] [net.minecraft.se
 /**
  * opt.driver (set-up T; its console giver is on unless opt.giverOff); opt.unitActive; opt.unitBot; opt.doneBeforeStart
  * (the agenda finished in an earlier run); opt.noRejoin; opt.freshAfterRestart (the agenda starts anew); opt.redo (a step
- * done before is done again); opt.resumeAtDone (it resumes at a done step); opt.taskLost (the task does not resume).
+ * done before is done again); opt.resumeAtDone (it resumes at a done step); opt.taskLost (the task does not resume);
+ * opt.noProgress (the agenda never finishes a step); opt.resumedLine (after a restart with no task, it says "agenda resumed").
  */
 function sim(opt = {}) {
     let t = 0;
@@ -50,7 +51,7 @@ function sim(opt = {}) {
         const step = STEPS[state.idx];
         say(first);
         const next = () => {
-            if (sess !== session || !online || state.task?.status === 'running') return;
+            if (sess !== session || !online || state.task?.status === 'running' || opt.noProgress) return;
             state.done.push(STEPS[state.idx]);
             say(`agenda step ${STEPS[state.idx]} done`);
             state.idx++;
@@ -74,7 +75,8 @@ function sim(opt = {}) {
         }
         if (opt.redo) { state.idx = 0; }
         const id = opt.resumeAtDone ? state.done[0] : STEPS[state.idx];
-        at(t + 3 * S, () => runAgenda(sess, opt.freshAfterRestart ? `agenda step ${id} started: step ${id}` : `agenda step ${id} started: step ${id} (resumed after a restart)`));
+        at(t + 3 * S, () => runAgenda(sess, opt.resumedLine ? `agenda resumed: ${id}`
+            : opt.freshAfterRestart ? `agenda step ${id} started: step ${id}` : `agenda step ${id} started: step ${id} (resumed after a restart)`));
     };
     const server = {
         console(cmd, waitS = 1) {
@@ -210,6 +212,25 @@ describe('g4-restart-persistence on S (the CX23 service)', () => {
         const b = sim({ unitBot: 'otherbot' });
         assert.equal(byName(await run(b)).login_online.detail, "the service's bot 'otherbot' is not this run's bot 'FRCFLD'");
         assert.ok(!b.sent.includes('bot start'));
+    });
+});
+
+describe('#383 review: no restart without progress; "agenda resumed" only after a task', () => {
+    test('an agenda that never advanced: agenda_progress fails, the rest is not reached, and no stop or start is sent', async () => {
+        const s = sim({ noProgress: true });
+        const c = byName(await run(s, { progressMaxMinutes: 3 }));
+        assert.equal(c.agenda_progress.pass, false);
+        assert.match(c.agenda_progress.detail, /^0 steps done \(none\); the agenda is active$/);
+        for (const k of ['task_queued', 'restart_rejoin', 'agenda_resumed', 'no_step_twice', 'task_resumed']) {
+            assert.equal(c[k].detail, 'not reached: the agenda had not progressed before the restart (0 of 2 steps done within 3 min); no stop or start was sent', k);
+        }
+        assert.deepEqual(s.sent.filter((x) => /^bot /.test(x)), ['bot start', 'bot stop'], 'only the start and the runner\'s cleanup stop');
+    });
+
+    test('"agenda resumed: <id>" after a restart with no task running fails agenda_resumed', async () => {
+        const c = byName(await run(sim({ resumedLine: true })));
+        assert.equal(c.agenda_resumed.pass, false);
+        assert.match(c.agenda_resumed.detail, /^"agenda resumed: \S+" with no task running at the restart: not the restart's "\(resumed after a restart\)" line$/);
     });
 });
 
