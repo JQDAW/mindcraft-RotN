@@ -159,7 +159,9 @@ jobs:
       # needed libX11.so.6 and libXext.so.6). ldd on every ELF .node under node_modules: any "not found" fails the
       # job, named; never installed here, because the CX23 would not have it either. Non-ELF files (another
       # platform's prebuilds) are skipped; finding no binding at all fails too (the check must not be empty).
+      # bash, declared: a container job's default shell is `sh -e` (dash), which has no process substitution.
       - name: Every native binding links (ldd on every .node under node_modules)
+        shell: bash
         run: |
           set -euo pipefail
           cd "$GITHUB_WORKSPACE"

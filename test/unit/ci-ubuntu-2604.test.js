@@ -13,7 +13,7 @@ import { Buffer } from 'node:buffer';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { windowsShellSkip } from './fixtures/windows-skip.mjs';
-import { stepScript } from './fixtures/workflow-step.mjs';
+import { stepScript, stepShell } from './fixtures/workflow-step.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(here, '..', '..');
@@ -53,8 +53,11 @@ describe('the workflow\'s own bash (fakes on PATH)', { skip: windowsShellSkip('c
         const bin = path.join(t, 'bin');
         fs.mkdirSync(bin);
         fake(bin, 'apt-get', `printf '%s\\n' "$*" >> "${t}/apt.calls"`);
+        // Under the shell GitHub uses for it: a container job's default is `sh -e` (dash).
+        const [sh, ...shArgs] = stepShell(WF, 'apt packages, exactly bootstrap.sh', { container: true });
+        assert.equal(sh, 'sh');
         const script = stepScript(WF, 'apt packages, exactly bootstrap.sh');
-        const run = (ws) => spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, GITHUB_WORKSPACE: ws } });
+        const run = (ws) => spawnSync(sh, [...shArgs, script], { encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, GITHUB_WORKSPACE: ws } });
         const r = run(ROOT);
         assert.equal(r.status, 0, r.stderr);
         assert.equal(fs.readFileSync(path.join(t, 'apt.calls'), 'utf8').trim(), `install -y -q --no-install-recommends ${LIST.join(' ')}`);
@@ -72,8 +75,21 @@ describe('the workflow\'s own bash (fakes on PATH)', { skip: windowsShellSkip('c
         }
     });
 
+    test('every run step of this container job parses under the shell GitHub gives it (sh -e unless it declares bash)', () => {
+        const names = [...WF.matchAll(/^ {6}- name: (.+)$/gm)].map((m) => m[1]).filter((n) => /\n {8}(shell: \S+\n {8})?run: \|/.test(WF.slice(WF.indexOf(`- name: ${n}`), WF.indexOf(`- name: ${n}`) + 400)));
+        assert.ok(names.length >= 8, names.join(' | '));
+        for (const n of names) {
+            const [sh] = stepShell(WF, n, { container: true });
+            const r = spawnSync(sh, ['-n', '-c', stepScript(WF, n)], { encoding: 'utf8' });
+            assert.equal(r.status, 0, `${n} (${sh}): ${r.stderr}`);
+        }
+    });
+
     test('the ldd gate: every ELF .node must link; a "not found" fails, named; non-ELF files are skipped; no binding at all fails', () => {
         const script = stepScript(WF, 'Every native binding links');
+        // It needs bash (process substitution), so it declares it: under the container default `sh -e` it fails to parse.
+        const [sh, ...shArgs] = stepShell(WF, 'Every native binding links', { container: true });
+        assert.equal(sh, 'bash', 'the ldd step declares shell: bash');
         const setup = (files) => {
             const ws = tmp();
             const bin = path.join(ws, '.bin');
@@ -84,7 +100,7 @@ describe('the workflow\'s own bash (fakes on PATH)', { skip: windowsShellSkip('c
                 fs.mkdirSync(path.join(ws, 'node_modules', path.dirname(rel)), { recursive: true });
                 fs.writeFileSync(path.join(ws, 'node_modules', rel), elf ? Buffer.concat([Buffer.from([0x7f, 0x45, 0x4c, 0x46]), Buffer.alloc(16)]) : 'MZ not an ELF');
             }
-            return spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, GITHUB_WORKSPACE: ws } });
+            return spawnSync(sh, [...shArgs, script], { encoding: 'utf8', env: { PATH: `${bin}:${process.env.PATH}`, GITHUB_WORKSPACE: ws } });
         };
         const ok = setup([['canvas/build/Release/canvas.node', true], ['gl/build/Release/webgl.node', true], ['x/prebuilds/win32-x64/x.node', false]]);
         assert.equal(ok.status, 0, ok.stdout + ok.stderr);
