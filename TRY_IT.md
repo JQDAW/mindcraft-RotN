@@ -9,7 +9,9 @@ Sources (harness-ops, 2026-11-08). Behaviour: src/agent/agent.js (respondFunc, h
 "full response"), src/agent/chat_sender.js (#400: who sent a line), src/agent/commands/actions.js and queries.js (the
 commands), src/agent/control.js (holds, control.json), src/agent/priority.js (the priority stack, task budget),
 src/agent/task_queue.js (task lines), src/agent/agenda.js and agenda_driver.js (the agenda), src/agent/night_routine.js
-(nights), src/agent/library/death_report.js (deaths), src/agent/chat_limit.js (the chat limit), settings.js
+(nights), src/agent/library/death_report.js (deaths: the chat lines, DROPS_LAST_MIN from corpsecomplex.cfg's Drop Despawn Timer
+600, the Zombie Players zombie), src/agent/chat_limit.js (the chat limit), packages/forge-bridge/src/kicks.js and
+exit-contract.js (fatal exits: 3), src/agent/modes.js (reflexes, not gated by a hold), settings.js
 (task_givers, only_chat_with, allow_insecure_coding, show_command_syntax). Service: deploy/cx23/README.md,
 deploy/cx23/mindcraft-rotn-ctl.sh, deploy/cx23/mindcraft-rotn@.service, deploy/cx23/mindcraft-rotn-ssh-gate.sh (ADR 0009).
 Evidence: test/evidence/g3/g3a-20261107-gate (agenda), g3b-20261108-gate2 (first night), g3c-20261108-gate2 (a task
@@ -22,6 +24,7 @@ G4 (follow, come, stop by JQDAW; death report; soak; second bot): test/scenarios
 - **Public chat or a whisper.** Type in chat (`T`), for example `FRCFLD, what are you doing?`, or whisper it with `/tell FRCFLD ...` (`/msg` and `/w` are the same). It answers in public chat either way.
 - **Only real chat counts.** It takes a line only from a player's own chat or a whisper. `/say`, `/me`, `/tellraw`, command blocks and mod broadcasts are never read as anyone's message, so `[Server] JQDAW: !stop` is not you.
 - **Only you give orders.** The task givers are `["JQDAW"]` (`settings.js`); changing that needs a new release from the lead.
+- **It reads every public chat line on the server, from anyone, and may answer it.** Each line it answers is a model call, which costs money (see the cost section), even when the line was not meant for it.
 - **Everyone else may chat, nothing more.**
   - The bot answers their questions.
   - Nothing they type runs: a typed command gets `Sorry <name>, I only run commands from task givers.`, at most one such line per player per 10 s.
@@ -75,15 +78,20 @@ agenda resumed: <step>
   10. craft a stone axe;
   11. make cobblestone from rocks.
 
-  It reports in chat: `agenda step <id> started: …`, `agenda step <id> done`, and at the end `agenda done`. A step whose budget is spent says `agenda step <id> stuck: <why>`, and the agenda pauses. The plan's progress is saved and picks up after a restart. **Seen live** (G3 A: rocks to stone tools from a fresh spawn).
+  It reports in chat: `agenda step <id> started: …`, `agenda step <id> done`, and at the end `agenda done`. A step whose model budget is spent ends in one of two ways:
+  - `agenda step shelter_blocks stuck: <why>; going on without it until the night`: the shelter reserve is skipped, and the agenda goes on.
+  - `agenda step <id> stuck: <why>; agenda paused`, for any other step. The agenda waits. **Type `!agendaStart` to retry that step with a fresh budget** (`!agenda` shows it as `paused (step <id> stuck: …; a giver's !agendaStart retries it)`).
+
+   The plan's progress is saved and picks up after a restart. **Seen live** (G3 A: rocks to stone tools from a fresh spawn).
 - **Nights:** shortly before sunset it gathers blocks for a shelter (cobblestone or stone with a pickaxe, dirt without one). From dusk to full daylight it shuts itself in that shelter and repairs it; tasks and the agenda wait. If it cannot build one, it stays where it is with its normal reflexes until morning. Your `!stop` or `!pause` comes first, so a bot on hold does not build a shelter. **Seen live** (G3 B: a night in the shelter, no death).
-- **Reflexes:** it eats, fights back or flees by itself. These come before everything else.
+- **Reflexes:** it eats, fights back or flees by itself. These come before everything else, and a hold does not turn them off: **a bot on `!stop` still eats and defends itself.**
 - **After a death:**
   - It respawns and measures what it lost. It does not guess.
-  - It says one line: `died at <x, y, z> (<cause>); lost <items>`.
-  - It says at most one death line a minute; after 3 deaths in 10 minutes it stops chatting about them (they are still logged).
+  - It says one line, exactly in this form: `I died at <x>, <y>, <z> (<cause>); lost <n> <item>, <n> <item>, ….` It names up to 6 kinds, then `and <n> more kinds`, or says `lost nothing`. It adds `; XP level <before> -> <after>` when it lost levels, and leaves out the cause when the server named none.
+  - At most one such line a minute. After 3 deaths in 10 minutes it says once `I died 3 times in 10 min; I stop reporting deaths in chat for now.` and then reports deaths only in its log.
   - Then it carries on.
-  - Per the pack's research (not yet seen live): RotN (Corpse Complex) keeps the main hand, off hand, armor and baubles, and everything else stays at the death spot without despawning.
+  - **What is lost:** what it dropped lies at the death spot for **10 minutes** and then despawns (`corpsecomplex.cfg`, Drop Despawn Timer 600 s).
+  - **A hostile `Zombie FRCFLD` rises at the death spot** (the Zombie Players mod). It does not burn in daylight and does not leave. The bot goes back for its things only with a weapon and more than half its health, and not at all once the 10 minutes are over.
   - **Built, not yet seen live** (G4 #6).
 
 ## Known limits
@@ -98,19 +106,23 @@ agenda resumed: <step>
   - long answers may arrive a little late.
 - **One account, one bot.** A second bot needs its own Minecraft account and its own unit (G4 #12, built, not yet seen live).
 - **It plays where its env file points.** The server is the `host` in `/etc/mindcraft-rotn/frcfld.env` on the CX23, set only by you.
-- **A kick is not a stop.** It reconnects after a kick or a server restart (G4 #1, built, not yet seen live). To stop it, use the next section.
+- **A kick is not a stop.** It reconnects after a kick or a server restart (G4 #1, built, not yet seen live). A ban or a whitelist removal does stop it, as a fatal exit. To stop it, use the next section.
 
 ## How to stop it
 
 1. **In game:** type `!stop`. It stops at once and stays on hold, even across a restart, until you type `!resume`.
-2. **The service, from the CX33 as root:** `ssh cx23-ctl stop frcfld` (through the restricted SSH gate, ADR 0009).
-3. **The service, on the CX23 as `deploy`:** `sudo mindcraft-rotn-ctl stop frcfld`.
-   - A stopped unit stays stopped until a `start`. The unit restarts itself when the bot process ends on its own (at most 6 starts in 10 minutes), never after a `stop`.
-   - After G4, once the bot is `enable`d, it also comes back after a reboot of the CX23. To keep it off for good, also run `sudo mindcraft-rotn-ctl disable frcfld`; the SSH gate does not allow `disable`, so do it on the CX23.
+2. **The service, on the CX23 as root:** `mindcraft-rotn-ctl stop frcfld` (as `deploy`: `sudo mindcraft-rotn-ctl stop frcfld`, as `deploy/cx23/README.md` gives it).
+   - It stays stopped until a `start`.
+   - After G4, once the bot is `enable`d, it also comes back after a reboot of the CX23. **To keep it off, also run `mindcraft-rotn-ctl disable frcfld`.**
+
+The lead can also stop it from the dev server, through the restricted SSH gate (ADR 0009). That gate allows `stop` but not `disable`.
+
+**When it restarts itself:** systemd restarts the bot after a crash or a passing failure, 20 s later and at most 6 times in 10 minutes. It does **not** restart it after a `stop`, a clean exit, or a fatal one (`RestartPreventExitStatus=0 3`). Fatal means something a human must fix first: a ban, a removal from the whitelist, a mod rejection, or a login that needs you. After a fatal exit the bot stays off until a `start`.
 
 Check it with `sudo mindcraft-rotn-ctl status frcfld`, or read its log with `sudo mindcraft-rotn-ctl journal frcfld --since <YYYY-MM-DDTHH:MM, UTC>`.
 
 ## What it costs
 
-- **Model calls (OpenRouter): TBD per hour,** measured by the 2-hour soak (G4 #7) and set in the soak ADR. The G3 test runs were short sessions on test servers, so they are no measure of a normal hour; this page gets the soak's number.
+- **Model calls (OpenRouter): TBD per hour.** Its own play costs model calls, and so does every public chat line it answers, from anyone, so a busy chat costs more.
+- **The hourly figure is** measured by the 2-hour soak (G4 #7) and set in the soak ADR. The G3 test runs were short sessions on test servers, so they are no measure of a normal hour; this page gets the soak's number.
 - **The CX23** is the server it runs on (a fixed monthly price).
