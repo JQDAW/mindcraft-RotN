@@ -19,7 +19,8 @@ import { loadRotnData, PACK_VERSION, registryName, botName } from '../../../pack
 import { formatName } from './rotn_names.js';
 import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
-import { log, breakBlockAt, goToGoal, craftRecipe } from './skills.js';
+import { log, breakBlockAt, goToGoal, craftRecipe, equipHighestAttack } from './skills.js';
+import { eatToHeal } from './food.js';
 import { shelterEnemy } from './threats.js';
 import { isTreePart } from './fall_safety.js';
 
@@ -33,8 +34,13 @@ export const LATE_UPDATE_MS = 1200;
  * many dirt blocks ready (crafted from piles after it closes), so a repair only places.
  */
 export const SHELTER_SPARE = { dirt: 4 };
-/** A mob standing in a cell to close: hit it from where the bot stands, at most `hits` times. */
-export const SHELTER_GAP = { hits: 5, swingMs: 600 };
+/**
+ * A mob standing in a cell to close: hit it from where the bot stands, with its best weapon, while
+ * it stays (CX23 soak: the 5-hit cap gave up on the digging zombie, the repair placed nothing and
+ * the bot died a second later). Bounded by maxMs, and by noHurtHits hits on a mob whose known health
+ * does not go down.
+ */
+export const SHELTER_GAP = { maxMs: 30_000, swingMs: 600, noHurtHits: 6 };
 
 /**
  * Real fire or lava: rotn-data's material (G3 round 7 B), so a block whose name only holds "fire"
@@ -316,17 +322,18 @@ export function mobIn(bot, cell) {
  * One placement at target against a solid neighbour outside the 1x2 space. mode.items(bot): the
  * stacks to place, best first; mode.accept(block): what counts as a wall.
  */
-async function placeOnce(bot, target, interior, mode) {
+async function placeOnce(bot, target, interior, mode, why = () => {}) {
     const item = mode.items(bot)[0];
-    if (!item) return false;
+    if (!item) { why('no block left to place'); return false; }
     const mob = mobIn(bot, target);
     if (mob) {
         // #204 nit: say why the cell stays open, instead of a placement that fails without a word.
         log(bot, `Cannot close ${at(target)}: ${mob.name ?? mob.displayName ?? 'a mob'} stands in it.`);
+        why(`a ${mob.name ?? mob.displayName ?? 'mob'} stands in it`);
         return false;
     }
     const refPos = supportFor(target, interior, (q) => isSolid(bot.blockAt(q)));
-    if (!refPos) return false;
+    if (!refPos) { why('nothing to place a block against'); return false; }
     const ref = bot.blockAt(refPos);
     const face = target.minus(refPos);
     try {
@@ -347,11 +354,20 @@ async function placeOnce(bot, target, interior, mode) {
  */
 async function hitOutOf(bot, cell) {
     let hits = 0;
-    for (let mob = mobIn(bot, cell); mob && shelterEnemy(mob) && hits < SHELTER_GAP.hits; mob = mobIn(bot, cell)) {
+    const start = Date.now(), fight = {};
+    const same = { id: null, health: null, hits: 0 };
+    const healthOf = (e) => (Number.isFinite(e?.health) ? e.health : Number.isFinite(e?.metadata?.[7]) ? e.metadata[7] : null);
+    for (let mob = mobIn(bot, cell); mob && shelterEnemy(mob); mob = mobIn(bot, cell)) {
         if (bot.interrupt_code || typeof bot.attack !== 'function') break;
+        if (Date.now() - start >= SHELTER_GAP.maxMs) break;
+        const health = healthOf(mob);
+        if (same.id !== mob.id || health === null || health !== same.health) Object.assign(same, { id: mob.id, health, hits: 0 });
+        else if (same.hits >= SHELTER_GAP.noHurtHits) break; // it does not get hurt: no use
+        try { await equipHighestAttack(bot, fight); } catch { /* fights on with what is in hand */ }
         await bot.lookAt(mob.position.offset(0, (mob.height ?? 1.8) * 0.8, 0), true);
         bot.attack(mob);
         hits++;
+        same.hits++;
         await sleep(SHELTER_GAP.swingMs);
     }
     return hits;
@@ -361,15 +377,20 @@ async function hitOutOf(bot, cell) {
  * Make one cell a wall: place, and when the block is not there, wait for a late update, look
  * again and try once more (#195 review 4). A mob in the cell is hit out of it first (round 9 B).
  */
-async function fillCell(bot, target, interior, mode) {
-    if (!mode.accept(bot.blockAt(target)) && mobIn(bot, target)) await hitOutOf(bot, target);
+async function fillCell(bot, target, interior, mode, reasons = null) {
+    // CX23 soak: why a cell stays open, for the journal (the repair said only "placed 0").
+    let hits = 0;
+    const why = (text) => { if (reasons) reasons.set(key(target), hits ? `${text} (hit ${hits} times)` : text); };
+    if (!mode.accept(bot.blockAt(target)) && mobIn(bot, target)) hits = await hitOutOf(bot, target);
+    if (reasons) reasons.fought = (reasons.fought ?? 0) + hits;
     for (let attempt = 0; attempt < 2; attempt++) {
         if (mode.accept(bot.blockAt(target))) return true;
-        if (!isEmpty(bot.blockAt(target)) && !isLiquid(bot.blockAt(target))) return false;
-        if (await placeOnce(bot, target, interior, mode)) return true;
+        if (!isEmpty(bot.blockAt(target)) && !isLiquid(bot.blockAt(target))) { why(`${bot.blockAt(target)?.name ?? 'something'} is in it`); return false; }
+        if (await placeOnce(bot, target, interior, mode, why)) return true;
         await sleep(LATE_UPDATE_MS);
         if (mode.accept(bot.blockAt(target))) return true;
     }
+    if (reasons && !reasons.has(key(target))) why('the block did not stay (placed twice)');
     return false;
 }
 
@@ -559,25 +580,31 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     const interior = new Set([key(feet), key(feet.offset(0, 1, 0))]);
     const roof = feet.offset(0, 2, 0);
     let placed = 0;
+    const reasons = new Map(); // cell key -> why it stays open (CX23 soak)
     // Building keeps the bot in its cell on purpose: unstuck leaves it alone meanwhile (modes.js).
     bot.rotnStationary = true;
     try {
         for (const pos of wallsAndRoof(feet)) {
-            if (bot.interrupt_code) break;
+            if (bot.interrupt_code) { reasons.stopped = true; break; }
             const b = bot.blockAt(pos);
             if (mode.accept(b)) continue;
             if (!isEmpty(b) && !isLiquid(b)) {
-                if (!await breakBlockAt(bot, pos.x, pos.y, pos.z)) continue;
+                if (!await breakBlockAt(bot, pos.x, pos.y, pos.z)) { reasons.set(key(pos), `could not break the ${b.name} in it`); continue; }
             }
             if (pos.equals(roof) && !supportFor(roof, interior, (q) => isSolid(bot.blockAt(q)))) {
                 // Nothing next to the roof cell: hold it up with one block on top of a finished wall.
                 const prop = propFor(roof, (q) => mode.accept(bot.blockAt(q)), (q) => isEmpty(bot.blockAt(q)));
-                if (prop && await fillCell(bot, prop, interior, mode)) placed++;
+                if (prop && await fillCell(bot, prop, interior, mode, reasons)) placed++;
             }
-            if (await fillCell(bot, pos, interior, mode)) placed++;
+            if (await fillCell(bot, pos, interior, mode, reasons)) placed++;
         }
     } finally {
         bot.rotnStationary = false;
+    }
+    // CX23 soak: after hitting mobs out of the opening, eat while hurt and too hungry to heal.
+    if (site && reasons.fought > 0 && !bot.interrupt_code) {
+        const ate = await eatToHeal(bot);
+        if (ate?.ate) log(bot, `Ate between fights (health ${bot.health}, food ${ate.before} -> ${bot.food}).`);
     }
     const missing = wallsAndRoof(feet).filter(q => !mode.accept(bot.blockAt(q)));
     // Gate2 B: closed only with the bot at rest on the floor inside it (it settles first).
@@ -591,7 +618,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
         ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${softNote}${floorNote}`
         : missing.length === 0
             ? `Shelter at ${at(feet)} is built but you are not standing on its floor (at ${exactAt(bot)}); placed ${placed}.`
-            : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(at).join('; ')}); placed ${placed}.`;
+            : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(q => `${at(q)}: ${reasons.get(key(q)) ?? (reasons.stopped ? 'stopped before it' : 'not tried')}`).join('; ')}); placed ${placed}.`;
     log(bot, line);
     // Round 9 B (fix d): dirt walls can be dug by any zombie; keep dirt ready, so a repair only places.
     if (closed && soft > 0) {
