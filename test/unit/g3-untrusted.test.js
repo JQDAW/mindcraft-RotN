@@ -30,7 +30,9 @@ const line = (ms, msg) => `[${stamp(ms)}] [Server thread/INFO] [net.minecraft.se
  * driver reports state it could not clear; opt.blocked: the cell two above EVERY candidate marker is water;
  * opt.leaves: ["x y z", ...] cells that are Leaves (round 2's case); opt.doneLine: it
  * says "task t1 done" only (no accepted line); opt.testforSilentFrom: testfor polls after this many get no
- * answer at all (0: the server never answers one).
+ * answer at all (0: the server never answers one). opt.service: the bot is the CX23 service (G4 D on S): no driver
+ * event; its journal has opt.settingsLine and opt.stateLine (null: no such line); opt.serviceGiverOn: its running
+ * process has the console giver on.
  */
 function sim(opt = {}) {
     const log = [];
@@ -94,12 +96,20 @@ function sim(opt = {}) {
         log: (n) => { advance(); return log.slice(-n); },
     };
     const bot = {
+        ...(opt.service ? { kind: 'service', bot: 'frcfld', refresh: () => Promise.resolve() } : {}),
         start(env = {}) {
             alive = true;
             online = true;
+            if (opt.service) {
+                serverGiver = Boolean(opt.serviceGiverOn);
+                const settings = opt.settingsLine !== undefined ? opt.settingsLine : '[settings] effective task_givers=["JQDAW"] allow_server_task_giver=false';
+                const state = opt.stateLine !== undefined ? opt.stateLine : `[state] ${NAME} at start: tasks=absent agenda=absent memory=absent`;
+                output.push('Starting mindcraft-rotn@frcfld.service - Mindcraft RotN bot frcfld...', ...[settings, state].filter((x) => x !== null));
+            } else {
             serverGiver = opt.ignoreSwitch ? true : env.ROTN_G3_PRODUCTION_GIVERS !== '1';
             output.push(`DRIVER ${JSON.stringify({ type: 'mindcraft_start', models: { model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable' }, serverTaskGiver: serverGiver,
                 botState: { dir: 'bots/FRCFLD', movedAside: opt.stale ? [] : ['tasks.json.g3-S.bak', 'agenda.json.g3-S.bak'], fresh: !opt.stale } })}`);
+            }
             log.push(`[${stamp(t)}] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player ${NAME} is 0a1b2c3d-4e5f-4a7b-8c9d-0e1f2a3b4c5d`);
             add(`${NAME} joined the game`);
             if (opt.kickAtJoin) {   // smoke round 4 D: the agenda catch-up burst, the kick, and the restart's rejoin
@@ -277,5 +287,60 @@ describe('g3-untrusted-refused: pinned candidate markers, the first clear one wi
             assert.match(c.no_task.detail, /^not reached: no markers: /, JSON.stringify(markers));
             assert.ok(!s.sent.some((x) => x.startsWith('testforblock') || x.startsWith('setblock') || x.startsWith('tell ')));
         }
+    });
+
+});
+
+describe('G4 D on S: production_givers and fresh_bot_state from the bot\'s own start lines (lead, after #383; #385, #386)', () => {
+    test('the service with production givers and a fresh state: every check passes, from the journal (no driver event)', async () => {
+        const s = sim({ service: true });
+        const r = await run(s);
+        const c = byName(r);
+        for (const k of Object.keys(g3d.checks)) assert.equal(c[k].pass, true, `${k}: ${c[k].detail} ${r.error ?? ''}`);
+        assert.equal(c.production_givers.detail, 'at start: allow_server_task_giver=false, task_givers ["JQDAW"]');
+        assert.equal(c.fresh_bot_state.detail, 'at start: tasks, agenda and memory all absent');
+        assert.equal(r.notes.driverStart, undefined, 'the driver-event path is T only');
+        assert.match(r.notes.serviceStart.stateLine, /^\[state\] FRCFLD at start: /);
+    });
+
+    test('production_givers on S: allow true, Server named, a value that is not JSON (undefined), or no line: a failed check, never a throw', async () => {
+        const cases = [
+            ['[settings] effective task_givers=["JQDAW"] allow_server_task_giver=true', /^at start: allow_server_task_giver=true, task_givers \["JQDAW"\]$/],
+            ['[settings] effective task_givers=["JQDAW","Server"] allow_server_task_giver=false', /\(names Server\)$/],
+            ['[settings] effective task_givers=["JQDAW"] allow_server_task_giver=undefined', /^at start: allow_server_task_giver is not JSON \(undefined\)$/],
+            ['[settings] effective task_givers=[JQDAW] allow_server_task_giver=false', /^at start: task_givers is not a JSON array \(\[JQDAW\]\)$/],
+            [null, /^no "\[settings\] effective task_givers=\.\.\. allow_server_task_giver=\.\.\." line from this start$/],
+            ['[settings] effective task_givers=["JQDAW"] allow_server_task_giver=false trailing', /^no "\[settings\]/],
+        ];
+        for (const [settingsLine, re] of cases) {
+            const r = await run(sim({ service: true, settingsLine }));
+            const c = byName(r);
+            assert.equal(r.error ?? null, null, String(settingsLine));
+            assert.equal(c.production_givers.pass, false, String(settingsLine));
+            assert.match(c.production_givers.detail, re, String(settingsLine));
+        }
+    });
+
+    test('fresh_bot_state on S: absent passes; present, corrupt, another bot\'s line or no line fails', async () => {
+        const cases = [
+            [`[state] ${NAME} at start: tasks=2 agenda=crude_axe memory=3`, false, 'at start: tasks=2, agenda=crude_axe, memory=3 (the human resets the state under the GO)'],
+            [`[state] ${NAME} at start: tasks=0 agenda=all-done memory=0`, false, 'at start: tasks=0, agenda=all-done, memory=0 (the human resets the state under the GO)'],
+            [`[state] ${NAME} at start: tasks=corrupt agenda=absent memory=absent`, false, 'at start: tasks=corrupt (the human resets the state under the GO)'],
+            ['[state] OTHER at start: tasks=absent agenda=absent memory=absent', false, `the [state] line names OTHER, not ${NAME}`],
+            [null, false, `no "[state] ${NAME} at start: ..." line from this start`],
+            [`[state] ${NAME.toLowerCase()} at start: tasks=absent agenda=absent memory=absent`, true, 'at start: tasks, agenda and memory all absent'],
+        ];
+        for (const [stateLine, pass, detail] of cases) {
+            const c = byName(await run(sim({ service: true, stateLine })));
+            assert.equal(c.fresh_bot_state.pass, pass, String(stateLine));
+            assert.equal(c.fresh_bot_state.detail, detail, String(stateLine));
+        }
+    });
+
+    test('T keeps the driver event path: a spawned driver\'s checks still read mindcraft_start', async () => {
+        const c = byName(await run(sim({ stale: true })));
+        assert.equal(c.fresh_bot_state.pass, false);
+        assert.match(c.fresh_bot_state.detail, /^the driver moved aside: nothing/);
+        assert.match(c.production_givers.detail, /^the driver reports serverTaskGiver false$/);
     });
 });

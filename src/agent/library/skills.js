@@ -674,39 +674,45 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
     let attacked = false;
     const fight = {}; // one line when the weapon cannot be taken in hand (G3 round 7 B)
     const journal = fightJournal(bot, 'open'); // G4 #5: "[survival] fight start/end"
+    // #384 nit 2: every start gets its end (a throw ends it as 'interrupted').
+    let outcome = 'interrupted';
     let enemy = world.getNearestEntityWhere(bot, isEnemy, range);
-    while (enemy) {
-        journal.start(enemy);
-        await equipHighestAttack(bot, fight);
-        if (bot.entity.position.distanceTo(enemy.position) >= 4 && enemy.name !== 'creeper' && enemy.name !== 'phantom') {
-            try {
-                bot.pathfinder.setMovements(new pf.Movements(bot));
-                await boundedGoto(bot, new pf.goals.GoalFollow(enemy, 3.5), GO_TO_LIMITS.stepMs);
-            } catch (err) {/* might error if entity dies, ignore */}
+    try {
+        while (enemy) {
+            await equipHighestAttack(bot, fight);
+            if (bot.entity.position.distanceTo(enemy.position) >= 4 && enemy.name !== 'creeper' && enemy.name !== 'phantom') {
+                try {
+                    bot.pathfinder.setMovements(new pf.Movements(bot));
+                    await boundedGoto(bot, new pf.goals.GoalFollow(enemy, 3.5), GO_TO_LIMITS.stepMs);
+                } catch (err) {/* might error if entity dies, ignore */}
+            }
+            if (bot.entity.position.distanceTo(enemy.position) <= 2) {
+                try {
+                    bot.pathfinder.setMovements(new pf.Movements(bot));
+                    let inverted_goal = new pf.goals.GoalInvert(new pf.goals.GoalFollow(enemy, 2));
+                    await boundedGoto(bot, inverted_goal, GO_TO_LIMITS.stepMs);
+                } catch (err) {/* might error if entity dies, ignore */}
+            }
+            journal.start(enemy); // #384 nit 1: at the first attack, not before the equip and the walk
+            bot.pvp.attack(enemy);
+            attacked = true;
+            await new Promise(resolve => setTimeout(resolve, 500));
+            enemy = world.getNearestEntityWhere(bot, isEnemy, range);
+            if (bot.interrupt_code) {
+                bot.pvp.stop();
+                outcome = 'interrupted';
+                return false;
+            }
+            if (enemy && !keepFighting()) {
+                log(bot, `Stopped fighting: the situation changed.`);
+                outcome = 'stopped';
+                break;
+            }
         }
-        if (bot.entity.position.distanceTo(enemy.position) <= 2) {
-            try {
-                bot.pathfinder.setMovements(new pf.Movements(bot));
-                let inverted_goal = new pf.goals.GoalInvert(new pf.goals.GoalFollow(enemy, 2));
-                await boundedGoto(bot, inverted_goal, GO_TO_LIMITS.stepMs);
-            } catch (err) {/* might error if entity dies, ignore */}
-        }
-        bot.pvp.attack(enemy);
-        attacked = true;
-        await new Promise(resolve => setTimeout(resolve, 500));
-        enemy = world.getNearestEntityWhere(bot, isEnemy, range);
-        if (bot.interrupt_code) {
-            bot.pvp.stop();
-            journal.end('interrupted');
-            return false;
-        }
-        if (enemy && !keepFighting()) {
-            log(bot, `Stopped fighting: the situation changed.`);
-            journal.end('stopped');
-            break;
-        }
+        if (!enemy) outcome = 'gone'; // no enemy left in range (killed when the first one is dead or gone from the world)
+    } finally {
+        journal.end(outcome);
     }
-    journal.end('gone'); // no enemy left in range (killed when the first one is dead or gone from the world)
     bot.pvp.stop();
     if (attacked)
         log(bot, `Successfully defended self.`);
