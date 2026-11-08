@@ -44,6 +44,7 @@ import { clearTestCommand, clearTestCount, playerScores, scoreboardAddResult } f
 import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
 import { rockRecipes } from '../../../packages/rotn-data/index.js';
+import { exitedText } from '../../runner/lib/service.mjs';
 
 const MS = 1000;
 
@@ -213,7 +214,7 @@ export default {
             const stuck = said.map((t) => STUCK.exec(t)).find(Boolean);
             const gone = s.events().find(s.gone);
             if (gone) end = `the bot is gone: ${gone.type}${gone.reason ? ` (${gone.reason})` : ''}`;
-            else if (!bot.alive()) end = `the driver exited with code ${bot.exitCode()}`;
+            else if (!bot.alive()) end = exitedText(bot);
             else if (score(sc, 'g3a_c_spick') >= 1 && score(sc, 'g3a_c_saxe') >= 1 && said.some(ENDS)) end = 'done: both stone tools crafted and the agent reports its cobblestone step done';
             else if (stuck) end = `the agenda is stuck at step ${stuck[1]}: ${stuck[2]}`;
             else if (clock.now() - joinedAt >= p.maxMinutes * 60 * MS) end = `maxMinutes (${p.maxMinutes}) reached`;

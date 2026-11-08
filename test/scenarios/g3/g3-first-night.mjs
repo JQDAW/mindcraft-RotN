@@ -43,6 +43,7 @@ import { clearTestCommand, clearTestCount, playerScores, scoreboardAddResult, ti
 import { FIRST_JOIN_KIT, START_EMPTY, cobbleOutputs } from './g3-rocks-to-stone-tools.mjs';
 import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
+import { exitedText } from '../../runner/lib/service.mjs';
 
 const MS = 1000;
 export const G3B_STATS = Object.freeze([
@@ -154,7 +155,7 @@ export default {
             if (dn.dawn) end = `dawn: daytime ${dn.dawn.daytime} at minute ${dn.dawn.min}, after dusk at minute ${dn.dusk.min} (${dn.dusk.daytime}) and the night at minute ${dn.night.min} (${dn.night.daytime})`;
             else if (deaths >= 1 || died.length) end = `the bot died: ${died[0]?.msg ?? `stat.deaths ${deaths}`}`;
             else if (gone) end = `the bot is gone: ${gone.type}${gone.reason ? ` (${gone.reason})` : ''}`;
-            else if (!bot.alive()) end = `the driver exited with code ${bot.exitCode()}`;
+            else if (!bot.alive()) end = exitedText(bot);
             else if (clock.now() - joinedAt >= p.maxMinutes * 60 * MS) end = `maxMinutes (${p.maxMinutes}) reached before dawn`;
             else await clock.sleep(Math.min(p.pollMs, Math.max(MS, joinedAt + p.maxMinutes * 60 * MS - clock.now())));
         }

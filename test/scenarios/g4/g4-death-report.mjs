@@ -62,6 +62,7 @@ import { clearTestCommand, clearTestCount, playerScores, scoreboardAddResult } f
 import { lateConsole } from '../../runner/lib/late-console.mjs';
 import { PRODUCTION_GIVERS_ENV } from '../../runner/drivers/mindcraft-driver.mjs';
 import { AGENDA_COUNTER } from '../g3/g3-task-preempts-agenda.mjs';
+import { exitReason } from '../../runner/lib/service.mjs';
 
 const MS = 1000;
 const MIN = 60 * MS;
@@ -274,7 +275,7 @@ export default {
             start?.botState ? `the driver moved aside: ${start.botState.movedAside.join(', ') || 'nothing (none there)'}` : 'no botState in the driver\'s start event');
         const lc = lateConsole(server, clock, { waitS: p.consoleWaitS, lateMs: p.lateReplyMs, pollMs: p.latePollMs });
         const confirm = lc.confirm;
-        const gone = () => s.events().find(s.gone) ?? (!bot.alive() ? { type: 'exited', reason: `code ${bot.exitCode()}` } : null);
+        const gone = () => s.events().find(s.gone) ?? (!bot.alive() ? { type: 'exited', reason: exitReason(bot) } : null);
         const goneText = (g) => `the bot is gone: ${g.type}${g.reason ? ` (${g.reason})` : ''}`;
 
         // 1. objectives: deaths, health (read-only) and the agenda counter
