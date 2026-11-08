@@ -21,6 +21,11 @@
 // Gate reviews accept G3 evidence only from test/evidence/g3/<batch>/ (test/runner/DRIVER.md).
 // G4 results (G4 rehearsals on a test server, 2026-11-07) are checked the same way (isG3Result counts them), and
 // are never gate evidence: crossCheckBatch refuses a G4 result in a gate claim.
+// One exception (lead, #419): a G4 SERVICE run (set-up S, run.mjs --service through cx23-ctl) is no batch: it runs
+// under a written GO on the CX23's own key, so no batch.json vouches for it. isG4ServiceResult skips exactly those:
+// gate exactly "G4", a KNOWN g4- scenario whose own gate is G4, the runner's service record with a GO id, and a
+// "service <unit> via cx23-ctl" driver; it fails closed (an unknown id is checked). Anything less (a G4 T rehearsal,
+// anything claiming G3 or a g3 scenario) is checked as before.
 //
 // Prints one line per problem; exit 0 = consistent, 1 = not, 2 = usage. See crossCheckBatch in
 // test/runner/lib/g3.mjs.
@@ -76,10 +81,26 @@ function nearestBatch(file, root) {
 }
 
 /**
+ * A G4 service run's result (see the header): skipped by the tree check, never by the gate claim check. Fails closed
+ * (lead, #419 review): gate exactly "G4" (no whitespace, no other case); the scenario id exactly as loadScenarios
+ * names it (lower case, g4-), and a KNOWN scenario whose own gate is exactly G4 in scenarioGates ({id: gate} from
+ * scenarioGates()); an unknown id, or no scenarioGates at all, is not skipped.
+ */
+export function isG4ServiceResult(result, scenarioGates = {}) {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) return false;
+    const id = result.scenario;
+    return result.gate === 'G4' && typeof id === 'string' && /^g4-[a-z0-9-]+$/.test(id)
+        && Object.prototype.hasOwnProperty.call(scenarioGates, id) && scenarioGates[id] === 'G4'
+        && typeof result.service?.goId === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$/.test(result.service.goId)
+        && /^service [a-z0-9][a-z0-9-]{0,31} via cx23-ctl$/.test(String(result.driver ?? ''));
+}
+
+
+/**
  * Every G3 result under root must be covered by its nearest batch.json, and each such batch.json must
  * vouch for all the G3 results it covers. Returns the problems (empty = consistent, or no G3 results).
  */
-export function checkEvidenceTree(root, { g3Scenarios = [] } = {}) {
+export function checkEvidenceTree(root, { g3Scenarios = [], scenarioGates = {} } = {}) {
     if (!fs.existsSync(root)) return [];
     const problems = [];
     const byBatch = new Map();
@@ -92,6 +113,7 @@ export function checkEvidenceTree(root, { g3Scenarios = [] } = {}) {
             continue;
         }
         if (!isG3Result(result, g3Scenarios)) continue;
+        if (isG4ServiceResult(result, scenarioGates) && !isBatchFile(f)) continue;   // a G4 service run: no batch
         if (isBatchFile(f)) {
             problems.push(`${f}: a batch.json that is itself a G3 result: not a batch summary, and not gate evidence`);
             continue;
@@ -142,7 +164,13 @@ export function infraFaultsUnder(dir) {
     }).sort();
 }
 
-/** The ids of the scenarios that loadScenarios marks gate G3. */
+/** {id: gate} of every scenario loadScenarios knows (the G4 service exception needs the gate, not just "G3 or G4"). */
+export async function scenarioGates() {
+    const { loadScenarios } = await import('../runner/run.mjs');
+    return Object.fromEntries(Object.values(await loadScenarios()).map((s) => [s.id, String(s.gate)]));
+}
+
+/** The ids of the scenarios that loadScenarios marks gate G3 (isG3Result: G3, and G4 too). */
 export async function g3ScenarioIds() {
     const { loadScenarios } = await import('../runner/run.mjs');
     return Object.values(await loadScenarios()).filter((s) => isG3Result({ gate: s.gate })).map((s) => s.id);
@@ -152,7 +180,7 @@ async function main(args) {
     if (args[0] === '--tree' && args.length === 2) {
         const smoke = smokeBatchesUnder(args[1]);
         const faults = infraFaultsUnder(args[1]);
-        return [checkEvidenceTree(args[1], { g3Scenarios: await g3ScenarioIds() }),
+        return [checkEvidenceTree(args[1], { g3Scenarios: await g3ScenarioIds(), scenarioGates: await scenarioGates() }),
             `every G3 result under ${args[1]} is vouched for by a gate: true or smoke: true batch.json; ${smoke.length} smoke batch(es), never gate evidence${smoke.length ? `: ${smoke.join(', ')}` : ''}`
             + `; ${faults.length} infra fault result(s), not check fails${faults.length ? `: ${faults.join(', ')}` : ''}`];
     }

@@ -1,0 +1,419 @@
+{
+  "scenario": "g4-soak-2h",
+  "gate": "G4",
+  "title": "A 2-hour soak of the CX23 service: no crash, memory and hourly cost within the soak ADR's targets, the agenda done, eats when low, deaths reported",
+  "runId": "20261108t162413-b1461d",
+  "pass": false,
+  "checksPassed": false,
+  "gateValid": false,
+  "weakenedParams": [
+    "the soak ADR's targets are TBD: a measuring run, not an acceptance run",
+    "a G4 scenario on a test server is a rehearsal: G4 evidence comes only from the CX23 service (test/scenarios/g4/PLAN.md)"
+  ],
+  "verdict": "FAIL",
+  "passed": 5,
+  "failed": 4,
+  "durationS": 7226,
+  "params": {
+    "bot": "<bot>",
+    "worldSeed": "1880465901402976865",
+    "durationMinutes": 120,
+    "sampleMinutes": 5,
+    "peakMemoryMaxMb": "TBD",
+    "usdPerHourMax": "TBD",
+    "foodFloor": 6,
+    "eatWithinMinutes": 5,
+    "loginTimeoutMs": 240000,
+    "pollMs": 5000,
+    "logTail": 20000,
+    "consoleWaitS": 1
+  },
+  "checks": [
+    {
+      "check": "login_online",
+      "pass": true,
+      "detail": "<bot> joined; UUID <uuid-v4> (version 4, Mojang account)",
+      "readyToTry": "The bot logs in with its own account (online mode); on S from an inactive unit of this run's bot"
+    },
+    {
+      "check": "naming",
+      "pass": true,
+      "detail": "[naming]: 15 kinds, unknown 0, all real; no entity near (+240s)",
+      "readyToTry": "The bot's [naming] line near spawn shows RotN names: no unknown, numeric or placeholder ids (#2)"
+    },
+    {
+      "check": "no_crash",
+      "pass": true,
+      "detail": "120 min up, 25 samples, NRestarts 0 throughout, no agent exit",
+      "readyToTry": "Two hours with no crash: online to the end, no agent exit or restart, NRestarts unchanged (#7)"
+    },
+    {
+      "check": "peak_memory",
+      "pass": false,
+      "detail": "not reached: no target yet (TBD); measured peak 634 MB",
+      "readyToTry": "Peak memory within the soak ADR's target (#7; the target is TBD until the ADR)"
+    },
+    {
+      "check": "usd_per_hour",
+      "pass": false,
+      "detail": "not reached: no target yet (TBD); measured USD 0.011576/h (USD 0.023171 over 120 min, 178 completions)",
+      "readyToTry": "The LLM spend per hour within the soak ADR's target (#7; the target is TBD until the ADR)"
+    },
+    {
+      "check": "agenda_done",
+      "pass": true,
+      "detail": "\"agenda done\" within the soak",
+      "readyToTry": "The early-game agenda finishes from a fresh spawn (#4)"
+    },
+    {
+      "check": "food_floor",
+      "pass": false,
+      "detail": "lowest food 1 (floor 6; 121 food lines)",
+      "readyToTry": "The food level never falls below the floor (#5)"
+    },
+    {
+      "check": "ate_when_low",
+      "pass": false,
+      "detail": "2 of 3 low food line(s) with no eat after them",
+      "readyToTry": "When the food level is low, the bot eats (#5)"
+    },
+    {
+      "check": "deaths_reported",
+      "pass": true,
+      "detail": "each of 17 death(s) reported",
+      "readyToTry": "Every death is reported (#5, as in #6)"
+    }
+  ],
+  "notes": {
+    "worldSeed": "1880465901402976865",
+    "naming": {
+      "block": {
+        "line": "[naming] <bot> near spawn: 15 kinds; unknown 0; dirt:527 undergroundbiomes:sedimentary_stone:119 dynamictrees:leaves0:77 tallgrass:76 dynamictrees:trunkshell:71 dynamictrees:sprucebranch:46 undergroundbiomes:metamorphic_stone:18 double_plant:16 brown_mushroom:3 biomesoplenty:flower_0:2 dynamictrees:rootydirt:2 pyrotech_compat:rock_sedimentary:2 biomesoplenty:plant_0:1 pyrotech_compat:rock_igneous:1 pyrotech_compat:rock_metamorphic:1",
+        "kinds": 15,
+        "unknown": 0,
+        "entries": [
+          {
+            "name": "dirt",
+            "count": 527
+          },
+          {
+            "name": "undergroundbiomes:sedimentary_stone",
+            "count": 119
+          },
+          {
+            "name": "dynamictrees:leaves0",
+            "count": 77
+          },
+          {
+            "name": "tallgrass",
+            "count": 76
+          },
+          {
+            "name": "dynamictrees:trunkshell",
+            "count": 71
+          },
+          {
+            "name": "dynamictrees:sprucebranch",
+            "count": 46
+          },
+          {
+            "name": "undergroundbiomes:metamorphic_stone",
+            "count": 18
+          },
+          {
+            "name": "double_plant",
+            "count": 16
+          },
+          {
+            "name": "brown_mushroom",
+            "count": 3
+          },
+          {
+            "name": "biomesoplenty:flower_0",
+            "count": 2
+          },
+          {
+            "name": "dynamictrees:rootydirt",
+            "count": 2
+          },
+          {
+            "name": "pyrotech_compat:rock_sedimentary",
+            "count": 2
+          },
+          {
+            "name": "biomesoplenty:plant_0",
+            "count": 1
+          },
+          {
+            "name": "pyrotech_compat:rock_igneous",
+            "count": 1
+          },
+          {
+            "name": "pyrotech_compat:rock_metamorphic",
+            "count": 1
+          }
+        ]
+      },
+      "entity": {
+        "line": "[naming] <bot> entities +240s: 0 kinds; unknown 0;",
+        "secs": 240,
+        "kinds": 0,
+        "unknown": 0,
+        "entries": []
+      }
+    },
+    "loginRetry": {
+      "retried": false
+    },
+    "kicks": [],
+    "uuidVersion": 4,
+    "samples": [
+      {
+        "min": 0,
+        "memoryMb": 352,
+        "peakMb": 352,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 5,
+        "memoryMb": 472,
+        "peakMb": 539,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 10.1,
+        "memoryMb": 477,
+        "peakMb": 590,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 15.2,
+        "memoryMb": 490,
+        "peakMb": 590,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 20.2,
+        "memoryMb": 494,
+        "peakMb": 590,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 25.3,
+        "memoryMb": 494,
+        "peakMb": 590,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 30.4,
+        "memoryMb": 506,
+        "peakMb": 590,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 35.4,
+        "memoryMb": 565,
+        "peakMb": 590,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 40.5,
+        "memoryMb": 586,
+        "peakMb": 590,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 45.6,
+        "memoryMb": 615,
+        "peakMb": 615,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 50.6,
+        "memoryMb": 617,
+        "peakMb": 620,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 55.7,
+        "memoryMb": 629,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 60.8,
+        "memoryMb": 629,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 65.8,
+        "memoryMb": 630,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 70.9,
+        "memoryMb": 630,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 76,
+        "memoryMb": 630,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 81.1,
+        "memoryMb": 630,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 86.1,
+        "memoryMb": 632,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 91.2,
+        "memoryMb": 632,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 96.3,
+        "memoryMb": 632,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 101.3,
+        "memoryMb": 632,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 106.4,
+        "memoryMb": 632,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 111.4,
+        "memoryMb": 632,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 116.5,
+        "memoryMb": 632,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      },
+      {
+        "min": 120,
+        "memoryMb": 632,
+        "peakMb": 634,
+        "nRestarts": 0,
+        "state": "active"
+      }
+    ],
+    "journalCoverage": {
+      "complete": true,
+      "coveredMinutes": 120.1,
+      "minutes": 120.1
+    },
+    "nearbyBlocks": {
+      "names": [
+        "dirt",
+        "hitwithaxe:debarked_spruce",
+        "tallgrass",
+        "log",
+        "pyrotech_compat:rock_igneous",
+        "double_plant",
+        "undergroundbiomes:metamorphic_stone",
+        "dynamictrees:leaves0",
+        "leaves",
+        "dynamictrees:sprucebranch",
+        "undergroundbiomes:sedimentary_stone",
+        "water",
+        "clay",
+        "dynamictrees:trunkshell",
+        "rustic:chamomile",
+        "osv:coal_ore_undergroundbiomes_metamorphic_stone_6",
+        "dirt",
+        "air",
+        "air"
+      ],
+      "problems": []
+    },
+    "namingEntities": "no entity near (+240s)",
+    "peakMemoryMb": 634,
+    "llmUsage": {
+      "calls": 178,
+      "usageLines": 178,
+      "unknown": 0,
+      "usd": 0.023171,
+      "minutes": 120,
+      "usdPerHour": 0.011576
+    },
+    "survival": {
+      "eats": 2,
+      "fights": 7,
+      "fightOutcomes": {
+        "died": 3,
+        "interrupted": 4
+      },
+      "flees": 31,
+      "foodLines": 121
+    },
+    "deaths": {
+      "deaths": 17,
+      "reports": 17
+    }
+  },
+  "botExitCode": null,
+  "botExitSignal": null,
+  "botStoppedByRunner": true,
+  "error": null,
+  "git": {
+    "sha": "94dbd9867bf776ac9da1549073dadff7f52a14b5",
+    "dirty": false,
+    "untracked": 0
+  },
+  "server": "mcr-test-20261108-160235",
+  "driver": "service frcfld via cx23-ctl",
+  "service": {
+    "goId": "G4-SOAK-M1-20261108",
+    "startError": null,
+    "incident": null,
+    "stateUnknown": null
+  },
+  "batch": null
+}
