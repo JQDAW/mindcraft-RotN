@@ -77,10 +77,11 @@ jobs:
           # shellcheck disable=SC2086 # the list splits into package names on purpose
           apt-get install -y -q --no-install-recommends $pkgs
 
-      # Test-only: jq, which the test-server tooling's unit tests need (deploy/test-server*; it runs on
-      # the PC and the test server, never on the CX23, and deploy/cx23/ does not use it). The
-      # ubuntu-24.04 runner image has it. Installed AFTER npm ci and the native checks, so they see only the CX23's
-      # packages.
+      # Test-only: jq and ssh-keygen (openssh-client), which the test-server tooling's unit tests need
+      # (deploy/test-server*, test/scenarios/g0-watchdog.sh; they run on the PC and the test server, never on the
+      # CX23, and deploy/cx23/ does not use them). The ubuntu-24.04 runner image has both; here openssh-client came
+      # only through git's Recommends before #409. Installed AFTER npm ci and the native checks, so those see only
+      # the CX23's packages.
 
       - name: Node 22 from NodeSource (nodistro), key fingerprint pinned in bootstrap.sh
         run: |
@@ -201,8 +202,8 @@ jobs:
           done
           exit $rc
 
-      - name: Test-only tool (jq, for the test-server tooling's tests; not on the CX23)
-        run: apt-get install -y -q --no-install-recommends jq
+      - name: Test-only tools (jq, openssh-client, for the test-server tooling's tests; not on the CX23's list)
+        run: apt-get install -y -q --no-install-recommends jq openssh-client
 
       - name: npm test (offline unit tests)
         run: |

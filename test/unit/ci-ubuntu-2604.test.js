@@ -36,10 +36,13 @@ describe('ci-ubuntu-2604 and bootstrap.sh: one package list, no recommends', () 
         assert.equal(installs.length, 4);
         for (const l of installs) assert.match(l, /apt-get install -y -q --no-install-recommends /, l);
         assert.match(WF, /apt-get install -y -q --no-install-recommends git ca-certificates\n/);
+        // The test-only tools, after the native checks: jq, and ssh-keygen for the test-server tooling's tests
+        // (#409's second CI run: 44 tests failed on "ssh-keygen: command not found" once git's Recommends were cut).
+        assert.match(WF, /apt-get install -y -q --no-install-recommends jq openssh-client\n/);
         for (const p of ['git', 'ca-certificates']) assert.ok(LIST.includes(p), p);
         const at = (n) => WF.indexOf(`- name: ${n}`);
         const order = [at('git and ca-certificates for the checkout'), WF.indexOf('uses: actions/checkout@'), at('apt packages, exactly bootstrap.sh'), at('Node 22 from NodeSource'),
-            at('npm ci'), at('Every native binding links'), at('The native modules load'), at('Test-only tool (jq'), at('npm test')];
+            at('npm ci'), at('Every native binding links'), at('The native modules load'), at('Test-only tools (jq, openssh-client'), at('npm test')];
         assert.ok(order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])), String(order));
     });
 });
