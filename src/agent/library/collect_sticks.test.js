@@ -39,7 +39,7 @@ const LEAVES = 'dynamictrees:leaves0', ROOTY = 'dynamictrees:rootydirt', BUSH = 
  * leafSticks: what each broken leaf gives, in turn (Pyrotech: a stick half the time). The walks keep
  * the bot on the ground (y 64): a leaf is broken from below.
  */
-function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSticks = [1, 0], leaves: loose = [], stuckAt = () => false } = {}) {
+function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSticks = [1, 0], leaves: loose = [], stuckAt = () => false, throwsAt = () => null, pickups = false, items: strays = [] } = {}) {
     const world = new Map(); // key -> { name, tree }
     for (const [i, tr] of trees.entries()) {
         world.set(key(at(tr.x, 63)), { name: ROOTY });
@@ -71,6 +71,7 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
     };
     let nextId = 1, leaves = 0;
     const entities = {};
+    for (const e of strays) { entities[nextId] = { id: nextId, name: 'item', ...e }; nextId++; } // items lying around
     const log = { digs: [], walks: [] };
     const bot = {
         log, world, registry: reg, version: '1.12.2', output: '', interrupt_code: false,
@@ -92,7 +93,9 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
         equip: (item) => { bot.heldItem = item; return Promise.resolve(); },
         tool: { equipForBlock: () => Promise.resolve() },
         lookAt: () => Promise.resolve(),
-        nearestEntity: () => null,
+        // pickups: the real nearest entity (pickupNearbyItems walks to items); else none, as before.
+        nearestEntity: (filter) => (pickups ? Object.values(entities).filter(e => filter(e))
+            .sort((a, b) => a.position.distanceTo(bot.entity.position) - b.position.distanceTo(bot.entity.position))[0] ?? null : null),
         dig: (b) => {
             const cell = world.get(key(b.position));
             log.digs.push({ pos: key(b.position), name: cell?.name, held: bot.heldItem?.name ?? null });
@@ -118,6 +121,10 @@ function fakeBot({ start = at(-2), trees = [], bushes = [], held = null, leafSti
                 // the bot walks. That a real walk never climbs a tree is proven in fall_safety.test.js.
                 // stuckAt(goal): a walk that gets nowhere (the bot stays where it is).
                 log.walks.push(key(at(Math.floor(goal.x), Math.floor(goal.y), Math.floor(goal.z))));
+                // throwsAt(goal): the pathfinder's error for that walk (round 10 B: "Timeout: Took to long
+                // to decide path to goal!").
+                const err = throwsAt(goal);
+                if (err) return Promise.reject(err);
                 if (stuckAt(goal)) return Promise.resolve();
                 bot.entity.position = at(Math.floor(goal.x), 64, Math.floor(goal.z)).offset(0.5, 0, 0.5);
                 for (const [id, e] of Object.entries(entities)) {
@@ -294,4 +301,40 @@ test('round 9 B: at most COLLECT_LIMITS.unreachableLeaves leaves out of reach pe
     assert.equal(skills.COLLECT_LIMITS.unreachableLeaves, 3);
     assert.equal((bot.output.match(/Could not reach/g) ?? []).length, 3, bot.output);
     assert.match(bot.output, /Collected 0 stick\./);
+});
+
+// G3 round 10 B (driver.log 185, 214, 271): !collectBlocks("stick", 1) twice gave "Path not found, but
+// attempting to navigate anyway using destructive movements.", "Failed to collect stick: Timeout: Took
+// to long to decide path to goal!", "Collected 0 stick.". A leaf was broken from the ground, then the
+// pickup's walk to an item with no path threw out of pickupNearbyItems, and the collect lost its one
+// attempt; no tree was felled.
+const TIMEOUT = () => Object.assign(new Error('Took to long to decide path to goal!'), { name: 'Timeout' });
+
+test('round 10 B: an item the pickup cannot walk to is skipped; the collect goes on to a tree and gets its sticks', T, async (t) => {
+    fast(t);
+    const stray = { position: at(-6, 64, 3), drop: 'stick' }; // on the ground, but with no path to it
+    const bot = fakeBot({ leaves: [at(-3, 66)], leafSticks: [0], pickups: true, items: [stray],
+        throwsAt: (g) => (g.entity?.position === stray.position ? TIMEOUT() : null), trees: [{ x: 20, branch: DARK_OAK, sticks: 2 }] }); // the stray is beyond the fell's drop radius
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
+    assert.match(bot.output, /Could not walk to the item at -6, 64, 3 \(Took to long to decide path to goal!\); skipping it\./);
+    assert.doesNotMatch(bot.output, /Failed to collect stick/);
+    assert.deepEqual(bot.log.digs.map(d => d.name), [LEAVES, DARK_OAK], 'the leaf, then the tree');
+    assert.match(bot.output, /Collected 2 stick\./);
+    // pickupNearbyItems itself never throws on such a walk.
+    await assert.doesNotReject(skills.pickupNearbyItems(bot));
+});
+
+test('round 10 B: a dead bush the walk does not reach is not dug from afar; it uses no attempt and the next collect does not walk to it again', T, async (t) => {
+    fast(t);
+    const bot = fakeBot({ bushes: [{ x: -9, sticks: 2 }], stuckAt: (g) => Math.floor(g.x) === -9, trees: [{ x: 10, branch: DARK_OAK, sticks: 2 }] });
+    const bushWalks = () => bot.log.walks.filter(k => k.startsWith('-9,')).length;
+    assert.equal(await skills.collectBlock(bot, 'stick', 1), true, bot.output);
+    assert.match(bot.output, /Could not reach deadbush at -9, 64, 0; skipping it\./);
+    assert.deepEqual(bot.log.digs.map(d => d.name), [DARK_OAK], 'not the bush, from 8 blocks away');
+    assert.match(bot.output, /Collected 2 stick\./);
+    assert.equal(bushWalks(), 1);
+    bot.output = '';
+    await skills.collectBlock(bot, 'stick', 1);
+    assert.equal(bushWalks(), 1, 'remembered: no new walk to that bush');
+    assert.equal(skills.COLLECT_LIMITS.unreachableTargets, 3);
 });

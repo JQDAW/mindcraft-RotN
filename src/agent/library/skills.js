@@ -847,7 +847,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
     const tiered = (handMatchers.length > 0 && fellMatchers.length > 0) || emptySpecies.size > 0;
     let freeMisses = 0; // breaks that gave nothing and used no attempt (capped at CL.freeMisses)
     let leafMisses = 0; // leaves out of reach after the walk (capped at CL.unreachableLeaves, then no leaves)
-    const outOfReach = unreachableLeaves(bot);
+    let walkMisses = 0; // other targets the walk did not reach (capped at CL.unreachableTargets)
+    const outOfReach = unreachableLeaves(bot); // and other targets out of reach (round 10 B)
     const woodTarget = isWoodSearch(blockType);
     const ruleToolFor = (block) => ruleTools.find(([matches]) => matches(block))?.[1] ?? null;
     const avoidToolFor = (block) => avoidTools.find(([matches]) => matches(block))?.[1] ?? null;
@@ -935,7 +936,8 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             // Round 9 B: not leaves once CL.unreachableLeaves were out of reach in this collect, nor
             // one this bot found out of reach in the last CL.unreachableMs.
             if (isLeafBlock(block) && leafMisses >= CL.unreachableLeaves) return false;
-            if (isLeafBlock(block) && block.position) {
+            // Round 10 B: nor any target this bot could not walk to in the last CL.unreachableMs.
+            if (block.position) {
                 const since = outOfReach.get(leafKey(block.position));
                 if (since !== undefined && Date.now() - since < CL.unreachableMs) return false;
             }
@@ -1033,7 +1035,7 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             return false;
         }
         try {
-            let success = false, unreachable = false;
+            let success = false, unreachable = false, missed = false;
             let cancelled = false; // #356 review 1: the block's time limit passed; a fell still running ends
             const before = heldByKey();
             const allBefore = allHeld();
@@ -1068,6 +1070,16 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                     // #340 nit 2: a stopped walk returns (goToGoal gives false on PathStopped): never a
                     // dig at a block the bot did not reach.
                     if (run.aborted || bot.interrupt_code) return false;
+                    // Round 10 B: a walk that ended out of reach (no path) digs nothing; the target is
+                    // skipped and remembered, and uses no attempt (below).
+                    const eye = bot.entity.position.offset(0, bot.entity.eyeHeight ?? 1.62, 0);
+                    if (eye.distanceTo(block.position.offset(0.5, 0.5, 0.5)) > TREE_SAFETY.leafReach + 0.5) {
+                        log(bot, `Could not reach ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}; skipping it.`);
+                        givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                        outOfReach.set(leafKey(block.position), Date.now());
+                        missed = true;
+                        return false;
+                    }
                     if (!await handOff(avoid)) { log(bot, cannotLetGo(block)); return false; } // still not after the walk
                     await bot.dig(block);
                     if (run.aborted) return true; // broken; the gain is still counted below
@@ -1093,6 +1105,10 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
                 log(bot, `Gave up on ${block.name} at ${block.position.x}, ${block.position.y}, ${block.position.z}: time limit of ${secsText(blockMs)} reached.`);
             }
             else success = res;
+            if (missed && res !== TIMED_OUT && walkMisses < CL.unreachableTargets) {
+                walkMisses++;
+                i--; // round 10 B: like a leaf out of reach, no attempt (at most CL.unreachableTargets)
+            }
             if (unreachable && res !== TIMED_OUT) {
                 // Round 9 B: three leaves out of reach used all 3 attempts, and no tree was tried.
                 leafMisses++;
@@ -1146,6 +1162,14 @@ export async function collectBlock(bot, blockType, num=1, exclude=null) {
             else {
                 log(bot, `Failed to collect ${blockType}: ${err}.`);
                 if (bot.interrupt_code) break; // round 9 B: a stop makes the break throw; never the next block
+                // Round 10 B: a walk with no path (the pathfinder's Timeout or NoPath) gives the target
+                // up for this collect and CL.unreachableMs, and uses no attempt, at most
+                // CL.unreachableTargets times: the next target is tried, not the same one again.
+                if (['Timeout', 'NoPath'].includes(err?.name) && block?.position) {
+                    givenUp.push(block.position.clone ? block.position.clone() : block.position);
+                    outOfReach.set(leafKey(block.position), Date.now());
+                    if (walkMisses < CL.unreachableTargets) { walkMisses++; i--; }
+                }
                 continue;
             }
         }
@@ -1592,12 +1616,24 @@ export async function pickupNearbyItems(bot) {
     const distance = 8;
     // Only items on firm ground: one lying on leaves or a branch would lead the bot up into the
     // tree (G3 round 4 B). Never dig on the way (the no-dig movements were lost in goToGoal).
+    // Round 10 B: a walk to an item with no path threw the pathfinder's Timeout out of here, and
+    // collectBlock lost the attempt ("Failed to collect stick: Timeout: Took to long to decide path
+    // to goal!", then "Collected 0 stick."). Such an item is skipped; the pickups go on.
+    const skipped = new Set();
     const getNearestItem = bot => bot.nearestEntity(entity => entity.name === 'item' && bot.entity.position.distanceTo(entity.position) < distance
-        && itemOnGround(bot, entity));
+        && !skipped.has(entity) && itemOnGround(bot, entity));
     let nearestItem = getNearestItem(bot);
     let pickedUp = 0;
     while (nearestItem && !bot.interrupt_code) { // #340 nit 3: a stop ends the pickups
-        await goToGoal(bot, new pf.goals.GoalFollow(nearestItem, 1), { canDig: false });
+        try {
+            await goToGoal(bot, new pf.goals.GoalFollow(nearestItem, 1), { canDig: false });
+        } catch (err) {
+            const p = nearestItem.position;
+            log(bot, `Could not walk to the item at ${Math.floor(p.x)}, ${Math.floor(p.y)}, ${Math.floor(p.z)} (${err?.message ?? err}); skipping it.`);
+            skipped.add(nearestItem);
+            nearestItem = getNearestItem(bot);
+            continue;
+        }
         await new Promise(resolve => setTimeout(resolve, 200));
         let prev = nearestItem;
         nearestItem = getNearestItem(bot);
@@ -3447,8 +3483,11 @@ const STOP_SETTLE_MS = 5000;
 // at most this many zero-yield breaks that use no attempt). unreachableLeaves: G3 round 9 B, leaves
 // that passed the ground check but were out of reach after the walk use no attempt, at most this
 // many per collect, then no more leaves in it; each is not tried again for unreachableMs.
+// unreachableTargets: G3 round 10 B, any other target the walk did not reach (or whose walk threw
+// the pathfinder's Timeout or NoPath) uses no attempt, at most this many per collect; each is not
+// tried again for unreachableMs.
 export const COLLECT_LIMITS = { blockMs: 90_000, totalMs: 8 * 60_000, handFirstRadius: 24, speciesDetour: 16, freeMisses: 6,
-    unreachableLeaves: 3, unreachableMs: 10 * 60_000 };
+    unreachableLeaves: 3, unreachableMs: 10 * 60_000, unreachableTargets: 3 };
 
 /**
  * The command run this skill belongs to (#224 review 1). A command that hit its total limit
