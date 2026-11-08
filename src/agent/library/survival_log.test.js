@@ -10,6 +10,7 @@ import {
     FOOD_LOG_MS, FOOD_UPDATE_MS, FIGHT_OUTCOMES,
 } from './survival_log.js';
 import * as skills from './skills.js';
+import { readFileSync } from 'fs';
 
 __setRegistryForTest(minecraftData('1.12.2'));
 
@@ -156,3 +157,59 @@ test('G4 #5: defendSelf (a fight in the open) logs its start and end: killed', a
     assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
     assert.deepEqual(survival(logs).map(l => l.replace(/after \d+ s/, 'after N s')), ['[survival] fight start zombie (open)', '[survival] fight end zombie killed after N s']);
 });
+
+/** A defendSelf bot: a zombie `at` blocks away; calls (walks, attacks) go into `logs` in order. */
+function openFight(logs, { at = 2, attack = () => {} } = {}) {
+    const self = { id: 0, name: 'player', type: 'player', position: new Vec3(0.5, 64, 0.5), height: 1.8 };
+    const zombie = { id: 1, name: 'zombie', type: 'mob', position: new Vec3(at + 0.5, 64, 0.5), height: 1.8 };
+    const bot = {
+        entity: self, entities: { 0: self, 1: zombie }, health: 20, isAlive: true, interrupt_code: false, output: '',
+        registry: minecraftData('1.12.2'), version: '1.12.2', world: { getBlock: () => null }, blockAt: () => null,
+        inventory: { items: () => [], slots: [] }, heldItem: null, equip: () => Promise.resolve(),
+        pvp: { attack: (e) => { logs.push('<attack>'); attack(bot, e); }, stop() {} },
+        pathfinder: { setMovements() {}, setGoal() {}, stop() {}, goto: () => { logs.push('<walk>'); return Promise.resolve(); }, isMoving: () => false },
+        modes: { pause() {}, unpause() {}, isOn: () => false },
+        nearestEntity: (match) => Object.values(bot.entities).filter(e => e !== self && match(e))[0] ?? null,
+    };
+    return bot;
+}
+
+test('#384 nit 1: defendSelf logs the fight start at its first attack, after the equip and the walk to the mob', async (t) => {
+    const logs = capture(t);
+    let hits = 0;
+    const bot = openFight(logs, { at: 5, attack: (b) => { if (++hits >= 1) delete b.entities[1]; } });
+    assert.equal(await skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), true);
+    const seq = logs.filter(l => l.startsWith('<') || l.startsWith('[survival] ')).map(l => l.replace(/after \d+ s/, 'after N s'));
+    assert.deepEqual(seq, ['<walk>', '[survival] fight start zombie (open)', '<attack>', '[survival] fight end zombie killed after N s']);
+});
+
+test('#384 nit 2: a defendSelf fight that throws after its start still logs its end (interrupted)', async (t) => {
+    const logs = capture(t);
+    let hits = 0;
+    const bot = openFight(logs, { attack: () => { if (++hits === 2) throw new Error('the server closed the window'); } });
+    await assert.rejects(skills.defendSelf(bot, 8, (e) => e.name === 'zombie'), /closed the window/);
+    assert.deepEqual(survival(logs).map(l => l.replace(/after \d+ s/, 'after N s')),
+        ['[survival] fight start zombie (open)', '[survival] fight end zombie interrupted after N s']);
+    // A stop (interrupt_code) after the start: one end, interrupted; nothing logged without an attack.
+    const stopped = [];
+    t.mock.method(console, 'log', (...a) => stopped.push(a.join(' ')));
+    const b2 = openFight(stopped, { attack: (b) => { b.interrupt_code = true; } });
+    assert.equal(await skills.defendSelf(b2, 8, (e) => e.name === 'zombie'), false);
+    assert.deepEqual(survival(stopped).map(l => l.replace(/after \d+ s/, 'after N s')),
+        ['[survival] fight start zombie (open)', '[survival] fight end zombie interrupted after N s']);
+    const none = [];
+    t.mock.method(console, 'log', (...a) => none.push(a.join(' ')));
+    const b3 = openFight(none);
+    b3.entities = { 0: b3.entity };
+    assert.equal(await skills.defendSelf(b3, 8, (e) => e.name === 'zombie'), false);
+    assert.deepEqual(survival(none), [], 'no enemy: no fight lines');
+});
+
+test('#384 nit 4: agent.js wires the food line (bindSurvivalLog with the eat threshold) once, after the bot is made', () => {
+    const src = readFileSync(new URL('../agent.js', import.meta.url), 'utf8');
+    assert.equal(src.split('bindSurvivalLog(this.bot, { eatAt: EAT_AT })').length - 1, 1, 'called once, with food.EAT_AT');
+    assert.match(src, /import \{ bindSurvivalLog \} from '\.\/library\/survival_log\.js';/);
+    assert.match(src, /import \{ EAT_AT \} from '\.\/library\/food\.js';/);
+    assert.ok(src.indexOf('this.bot = initBot(') < src.indexOf('bindSurvivalLog(this.bot'), 'after initBot');
+});
+
