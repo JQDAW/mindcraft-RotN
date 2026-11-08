@@ -494,6 +494,23 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **stderr** (#371 review): ssh's own stderr can name the host and its address, so it is never kept. On a 255 it is dropped; otherwise only the gate's and the ctl's own lines are kept, with any IPv4 or IPv6 address redacted.
 - **Tests:** `test/unit/g4-service.test.js`, with an async fake ssh playing the gate and the ctl. Nothing runs against the CX23 before the human's step 0 and a written GO.
 
+### G4 #1: `g4-service-reconnect` (set-up S; offline-built, not yet run)
+
+- **What it shows:** the CX23 service reconnects in-process after a console kick and after a test-server restart, and a ctl stop ends it cleanly. Run it as `ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed run.mjs --scenario g4-service-reconnect --service frcfld` under a test server's `run`, after the human's G4 step 0 and a written GO.
+- **The console:** `kick <bot>` (this run's bot by its exact name) and `stop`, for this scenario alone (`SCENARIO_CONSOLE_EXTRA`, #324). `stop` is what `guardConsole` requires before `server.restart()` (`test-server.sh restart`).
+- **The checks:**
+  - **`login_online`:** the service's bot must be this run's bot (case aside), and the unit **inactive** before the start (`metrics`). A running unit's journal would be another run's.
+  - **`effective_settings`:** main.js's `[settings] effective allow_insecure_coding=false` (#325) in the journal from this start, within `settingsWaitS` (60) of the join (PLAN #8).
+  - **`kick_rejoin`:** after `kick`, the server shows the bot gone, the journal has a new `[agent_process] <bot>: kicked_by_operator; restarting in N s.` line, and the bot joins again within `kickRejoinMinutes` (3). Another class, no line, or a `FATAL (...)` line fails it.
+  - **`restart_rejoin`:** after `server.restart(restartTimeoutS)` returns (a new Done), a new restart line of class `server_stopping` or `network`, and a rejoin within `restartRejoinMinutes` (10). The backoff doubles from 10 s while the server is down. The log rolls over at the restart, and `sinceMarker` reads the rotated window.
+  - **`no_systemd_restart`:** `NRestarts` after the reconnects equals its value before the kick ("not reached" when no kick landed). A kick or a server stop must never reach systemd.
+  - **`clean_stop`:** after the ctl's stop, `ActiveState` is `inactive` (not `failed`), `NRestarts` is unchanged, and there is no restart or fatal line after the stop.
+- **Every count of restart lines** is taken after a forced journal read (`bot.refresh()`), because `output()` is a 15 s cache.
+- **On a spawned driver (set-up T):** a rehearsal, not-gate. `no_systemd_restart` and `clean_stop` are "not reached".
+  - **`llm: false`, so a T rehearsal records no LLM spend** (#374 review). On S, the bot's calls go to the CX23's own key, which the runner cannot read. A T rehearsal's spend shows only in the key's own usage.
+- **Not yet decided:** every G4 run is not-gate on a test server (`G4_TEST_SERVER_NOT_GATE`). How an S run becomes G4 evidence is the lead's to set.
+- **Tests:** `test/unit/g4-service-reconnect.test.js` (a simulated server and service, including a log roll-over).
+
 ### G4 #6: `g4-death-report`
 
 Ready-to-try: "After death it respawns, reports what it lost and carries on without a chat-spam loop." The bot side is skills-rotn's `src/agent/library/death_report.js` (D3), which this scenario never changes. If it finds something to fix there, harness-ops reports it.
