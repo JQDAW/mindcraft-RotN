@@ -153,7 +153,7 @@ test('review 1: the count is the real gain: piles that drop nothing give "Collec
     t.mock.method(console, 'log', () => {});
     const bot = fakeBot({ blocks: [block('pyrotech:rock', 0, at(1)), block('pyrotech:rock', 0, at(2))], dropsOf: () => [] });
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 2), false);
-    assert.match(bot.output, /Broke pyrotech:rock but picked up no pyrotech:rock right after it\./);
+    assert.match(bot.output, /Broke pyrotech:rock: no pyrotech:rock yet\./);
     assert.match(bot.output, /Collected 0 pyrotech:rock\./);
 });
 
