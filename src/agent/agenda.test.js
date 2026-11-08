@@ -543,6 +543,19 @@ test('#418 nit: just before the morning freeze (2996-3000) the freeze is counted
     assert.equal(sunsetEstimateMin(MORNING_FREEZE + 50, 0), minutesToSunset(MORNING_FREEZE + 50), 'well past it: as minutesToSunset');
 });
 
+test('#425 review: stuck at 2996-3000 (the freeze window) the minutes already frozen come off, at most FREEZE_MIN', () => {
+    const near = (a, b, m) => assert.ok(Math.abs(a - b) < 1e-9, `${m}: ${a} vs ${b}`);
+    for (const t of [2996, 2998, 3000]) {
+        near(sunsetEstimateMin(t, 4), minutesToSunset(t) - 4, `${t}, frozen 4 min`);
+        near(sunsetEstimateMin(t, 30), minutesToSunset(t) - FREEZE_MIN, `${t}, frozen 30 min: the whole freeze, no more`);
+        near(sunsetEstimateMin(t, -2), minutesToSunset(t), `${t}: a negative frozen time counts as 0`);
+    }
+    // Stuck at 3000 for 4 min reads the same as stuck at 3001 for 4 min (within a tick's worth).
+    assert.ok(Math.abs(sunsetEstimateMin(3000, 4) - sunsetEstimateMin(MORNING_FREEZE, 4)) < 0.01);
+    // Outside the window: unchanged.
+    near(sunsetEstimateMin(2990, 4), minutesToSunset(2990), '2990 is not the freeze');
+});
+
 // G4 #5 (CX23 soak m1, test/evidence/g4/g4soak-m1-20261108): the agenda was done after 8.5 min,
 // nothing then got food, and food fell to 1 (food_floor and ate_when_low failed). The food reserve:
 // after the shelter reserve and before the step, after "agenda done" too, with its own budget.
