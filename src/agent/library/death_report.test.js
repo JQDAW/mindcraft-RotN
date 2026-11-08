@@ -6,7 +6,7 @@ import { setImmediate } from 'node:timers';
 import {
     inventoryCounts, lossDiff, formatLoss, sumVariants, DeathReporter, bindDeathReport,
     SETTLE_MS, RESPAWN_RETRY_MS, RESPAWN_RETRY_EVERY_MS, CHAT_GAP_MS, STREAK_MS,
-    deathCauseText, treeDeath, TREE_DEATH_MS, deathSpotBlocked, DEATH_SPOT_WAIT_MS, DROPS_LAST_MIN, lostItemsNote,
+    deathCauseText, treeDeath, TREE_DEATH_MS, deathSpotBlocked, DEATH_SPOT_WAIT_MS, DROPS_LAST_MIN, lostItemsNote, NOTE_KINDS,
 } from './death_report.js';
 import { takeReplanNote, replanPromptDue, clearReplan, QUIET_MS } from '../replan.js';
 
@@ -397,4 +397,38 @@ test('G3 gate B: the re-plan note lists every kind lost and what the bot now hol
     bare.bot.health = 20; bare.bot.isAlive = true; bare.bot.emit('spawn');
     t2.advance(SETTLE_MS + 1000);
     assert.match(takeReplanNote(bare.agent), /You now hold nothing\./);
+});
+
+test('#360 follow-up: the re-plan note names at most NOTE_KINDS kinds in each list (most first, then "N more kinds"); the log line names them all', (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    t.mock.method(console, 'warn', () => {});
+    const timers = fakeTimers();
+    const { agent, bot } = fakeAgent();
+    bindDeathReport(agent, timers);
+    const s = bot.inventory.slots;
+    s.fill(null);
+    // 27 kinds lost (counts 27 down to 1); 9 kinds kept in the hotbar (Corpse Complex keeps it here).
+    for (let i = 0; i < 27; i++) s[9 + i] = item(`lost_${String(i).padStart(2, '0')}`, 27 - i);
+    for (let i = 0; i < 9; i++) s[36 + i] = item(`kept_${i}`, 9 - i);
+    bot.quickBarSlot = 0;
+    Object.defineProperty(bot, 'heldItem', { get: () => s[36], configurable: true });
+    bot.emit('physicsTick');
+    for (let i = 9; i < 36; i++) s[i] = null;
+    bot.health = 0; bot.isAlive = false; bot.emit('death');
+    // 25 more kinds picked up before the report: 34 kinds held.
+    for (let i = 0; i < 25; i++) s[9 + i] = item(`found_${String(i).padStart(2, '0')}`, 1);
+    bot.health = 20; bot.isAlive = true; bot.emit('spawn');
+    timers.advance(SETTLE_MS + 1000);
+    const note = takeReplanNote(agent);
+    assert.equal(NOTE_KINDS, 20);
+    const lost = note.match(/You no longer have (.*?)\. They lie/)?.[1] ?? '';
+    assert.equal(lost.split(', ').length, NOTE_KINDS, lost);
+    assert.ok(lost.startsWith('27 lost_00, 26 lost_01') && lost.endsWith('8 lost_19 and 7 more kinds'), lost);
+    const held = note.match(/You now hold (.*?) \(in your hand/)?.[1] ?? '';
+    assert.ok(held.startsWith('9 kept_0, 8 kept_1') && held.endsWith(' and 14 more kinds'), held);
+    assert.equal(held.split(', ').length, NOTE_KINDS, held);
+    assert.match(note, /\(in your hand: 9 kept_0\); plan only with what you hold now\./);
+    const line = logs.find(l => /^\[death\] died at .*; lost /.test(l));
+    assert.ok(line && !/more kinds/.test(line) && line.includes('1 lost_26'), line);
 });
