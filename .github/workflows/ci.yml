@@ -67,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           shellcheck --version | sed -n 2p
-          shellcheck -S warning deploy/cx23/bootstrap.sh deploy/cx23/deploy.sh deploy/cx23/check-env.sh deploy/cx23/check-env-names.sh deploy/cx23/mindcraft-rotn-ctl.sh
+          shellcheck -S warning deploy/cx23/bootstrap.sh deploy/cx23/deploy.sh deploy/cx23/check-env.sh deploy/cx23/check-env-names.sh deploy/cx23/mindcraft-rotn-ctl.sh deploy/cx23/mindcraft-rotn-ssh-gate.sh
           d=$(mktemp -d)
           printf '#!/bin/sh\nexit 0\n' > "$d/check-env"
           cp "$d/check-env" "$d/check-env-names"

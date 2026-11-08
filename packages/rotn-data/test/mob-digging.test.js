@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import minecraftData from 'minecraft-data';
 import { loadRotnData } from '../src/catalog.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -265,13 +266,13 @@ test('bedrock: Universal Tweaks makes it hardness 200 for every digger; its tool
     assert.ok(!data.unverified.some((u) => /bedrock/i.test(u)));
 });
 
-test('hardness 0: ESM-Tweaks never finishes the dig, so canMobDig says no; ticksByHand comes after the checks', () => {
+test('hardness 0: ESM-Tweaks never finishes the dig, so canMobDig says no for a cited real 0; ticksByHand comes after the checks', () => {
     const strength = method(section('ESM-Tweaks HarvestUtil'), 'getBlockStrength');
     assert.match(strength, /func_185887_b[^\n]*\n\s+\d+: fstore +5\n\s+\d+: fload +5\n\s+\d+: fconst_0\n\s+\d+: fcmpg\n\s+\d+: ifgt +32\n\s+30: fconst_0\n\s+31: freturn/);
     assert.match(method(section('ESM-Tweaks AltEntityAIDigging'), 'public void func_75246_d();'), /getBlockStrength[^\n]*\n[^\n]*\n[^\n]*digTick:I\n[^\n]*i2f\n[^\n]*fconst_1\n[^\n]*fadd\n[^\n]*fmul/);
     for (const mob of ['minecraft:zombie', 'betteranimalsplus:brownbear']) {
         const r = pack.canMobDig(mob, 'minecraft:tnt');
-        assert.deepEqual(r, { canDig: false, byHand: false, needs: null, ticksByHand: null, reason: 'hardness 0: the dig never finishes' }, mob);
+        assert.deepEqual(r, { canDig: false, byHand: false, needs: null, ticksByHand: null, uncertain: false, reason: 'hardness 0: the dig never finishes' }, mob);
     }
     // The unverified note counts the dump's solid hardness-0 states.
     let n = 0;
@@ -279,4 +280,61 @@ test('hardness 0: ESM-Tweaks never finishes the dig, so canMobDig says no; ticks
     assert.ok(data.unverified.some((u) => u.startsWith(`The dump records hardness 0 for ${n} solid states`)), String(n));
     // No answer depends on ticksByHand being computed for a block the mob cannot dig.
     assert.equal(pack.canMobDig('minecraft:zombie', 'minecraft:barrier').ticksByHand, null);
+});
+
+test('hardness 0 elsewhere is uncertain: never a confident mob-proof answer (#350 review)', () => {
+    const hz = data.hardnessZero;
+    assert.deepEqual(hz.knownReal, ['minecraft:slime', 'minecraft:tnt']);
+    // Each known-real 0: every state is 0 in the dump and vanilla's hardness is 0 (minecraft-data 1.12.2).
+    const vanilla = minecraftData('1.12.2');
+    for (const name of hz.knownReal) {
+        assert.ok(blocks[name].states.every((s) => s.hardness === 0), name);
+        assert.equal(vanilla.blocksByName[name.slice('minecraft:'.length)].hardness, 0, name);
+    }
+    assert.equal(blocks['minecraft:tnt'].class, 'net.minecraft.block.BlockTNT');
+    // This pack's slime is Quark's: it extends BlockSlime, sets only its sound, and keeps vanilla's hardness.
+    const quark = read('hardness-zero.javap.txt').split('\n## Quark BlockSpringySlime')[1];
+    assert.ok(quark, 'fixture section');
+    assert.equal(blocks['minecraft:slime'].class, 'vazkii.quark.tweaks.block.BlockSpringySlime');
+    assert.match(quark, /public class vazkii\.quark\.tweaks\.block\.BlockSpringySlime extends net\.minecraft\.block\.BlockSlime \{/);
+    assert.match(quark, /BlockSlime\."<init>":\(\)V\n\s+4: aload_0\n[^\n]*SoundType[^\n]*\n[^\n]*func_149672_a[^\n]*\n\s+11: pop\n\s+12: return/);
+    assert.doesNotMatch(quark, /func_149711_c|func_176195_g/);
+    // Vanilla says these dumped zeros are wrong, so they must not read as certain.
+    for (const name of ['sponge', 'stone_slab2']) assert.ok(vanilla.blocksByName[name].hardness > 0, name);
+    const bear = (b) => pack.canMobDig('betteranimalsplus:brownbear', b);
+    const z = (b, opts) => pack.canMobDig('minecraft:zombie', b, opts);
+    for (const b of ['minecraft:sponge', 'minecraft:stone_slab2', 'contentcreator:limestone_brick_slab']) {
+        const r = bear(b);
+        assert.equal(r.canDig, true, b);
+        assert.equal(r.uncertain, true, b);
+        assert.equal(r.ticksByHand, null, b);
+        assert.match(r.reason, /hardness unknown \(the dump says 0\)/, b);
+    }
+    // A zombie follows the tool rules as if the hardness were above 0: sponge needs no tool, the stone slab a pickaxe.
+    assert.equal(z('minecraft:sponge').canDig, true);
+    assert.equal(z('minecraft:sponge').uncertain, true);
+    const slab = z('minecraft:stone_slab2');
+    assert.deepEqual([slab.canDig, slab.uncertain, slab.needs?.type], [false, true, 'pickaxe']);
+    assert.equal(z('minecraft:stone_slab2', { held: [{ type: 'pickaxe', level: 3 }] }).canDig, true);
+    // Over the whole dump: a hardness-0 answer is certain only for the known-real blocks, and no answer
+    // for any other block is uncertain.
+    let uncertainStates = 0;
+    for (const [name, b] of Object.entries(blocks)) {
+        for (const s of b.states) {
+            const r = pack.canMobDig('betteranimalsplus:brownbear', name, { meta: s.meta });
+            if (!r) continue;
+            const zero = s.hardness === 0 && (s.solid || s.material === 'web');
+            assert.equal(r.uncertain, zero && !hz.knownReal.includes(name), `${name}:${s.meta}`);
+            if (r.uncertain) {
+                uncertainStates++;
+                assert.equal(r.canDig, true, `${name}:${s.meta}`);
+            }
+        }
+    }
+    assert.equal(uncertainStates, 564 - 3);
+    assert.match(hz.note, /564 in 207 blocks/);
+    // Known answers stay certain.
+    assert.equal(z('minecraft:dirt').uncertain, false);
+    assert.equal(z('minecraft:bedrock').uncertain, false);
+    assert.equal(z('minecraft:barrier').uncertain, false);
 });

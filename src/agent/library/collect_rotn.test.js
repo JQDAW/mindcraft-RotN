@@ -46,7 +46,7 @@ function drops(b, held) {
 }
 
 function fakeBot({ blocks = [], items = [], dropsOf = drops } = {}) {
-    const calls = { equip: [], collected: [], dug: [] };
+    const calls = { equip: [], collected: [], dug: [], walks: [] };
     const remaining = [...blocks];
     const bot = {
         calls,
@@ -78,7 +78,14 @@ function fakeBot({ blocks = [], items = [], dropsOf = drops } = {}) {
         },
         collectBlock: { collect: (b) => { calls.collected.push(b); breakBlock(b); return Promise.resolve(); } },
         dig: (b) => { calls.dug.push(b); breakBlock(b); return Promise.resolve(); },
-        pathfinder: { setMovements() {}, stop() {}, setGoal() {}, isMoving: () => false, goto: () => Promise.resolve(), getPathTo: () => ({ status: 'success', path: [] }) },
+        // A walk arrives: the bot stands at the goal (#366 review 1: collectBlock digs only what is in
+        // reach after the walk).
+        pathfinder: { setMovements() {}, stop() {}, setGoal() {}, isMoving: () => false, getPathTo: () => ({ status: 'success', path: [] }),
+            goto: (goal) => {
+                calls.walks.push(goal);
+                if (Number.isFinite(goal?.x)) bot.entity.position = new Vec3(Math.floor(goal.x) + 0.5, Math.floor(goal.y), Math.floor(goal.z) + 0.5);
+                return Promise.resolve();
+            } },
         lookAt: () => Promise.resolve(),
         nearestEntity: () => null,
     };
@@ -256,4 +263,28 @@ test('#311 review: a by-hand rule that always yields (rock piles) gets no free a
     const bot = fakeBot({ blocks: piles, dropsOf: () => [] });
     assert.equal(await skills.collectBlock(bot, 'pyrotech:rock', 2), false);
     assert.equal(bot.calls.dug.length + bot.calls.collected.length, 2, 'two attempts, not every pile in range');
+});
+
+// #366 review 2: a break whose walk throws the pathfinder's Timeout or NoPath (bot.collectBlock's own
+// walk) gives that block up for the collect and for COLLECT_LIMITS.unreachableMs, and uses no attempt.
+test('#366 review 2: a block whose walk throws NoPath or Timeout uses no attempt and is not chosen again', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const sand = [2, 3, 4, 5].map(x => block('sand', 0, at(x)));
+    const bot = fakeBot({ blocks: sand, dropsOf: (b) => (b.name === 'sand' ? [['sand', 0, 1]] : []) });
+    const thrown = { 2: 'NoPath', 3: 'Timeout' };
+    const collect = bot.collectBlock.collect;
+    bot.collectBlock.collect = (b) => {
+        const name = thrown[b.position.x];
+        if (name) { bot.calls.collected.push(b); return Promise.reject(Object.assign(new Error("no way there"), { name })); }
+        return collect(b);
+    };
+    assert.equal(await skills.collectBlock(bot, 'sand', 2), true, bot.output);
+    assert.deepEqual(bot.calls.collected.map(b => b.position.x), [2, 3, 4, 5], 'the two with no path, then two more');
+    assert.match(bot.output, /Collected 2 sand\b/);
+    assert.equal(skills.COLLECT_LIMITS.unreachableTargets, 3);
+    // The next collect does not walk to them again (remembered for unreachableMs).
+    bot.output = '';
+    await skills.collectBlock(bot, 'sand', 1);
+    assert.deepEqual(bot.calls.collected.map(b => b.position.x), [2, 3, 4, 5], 'no new try at 2 or 3');
+    assert.match(bot.output, /No sand nearby to collect\./);
 });
