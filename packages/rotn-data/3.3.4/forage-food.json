@@ -1223,7 +1223,7 @@
       },
       "food": [],
       "edibleRaw": false,
-      "cook": "smeltingOf (smelting.json)"
+      "cook": "smeltingOf (smelting.json), each output with avoidFood"
     },
     {
       "id": "red-mushroom",
@@ -1259,7 +1259,7 @@
       },
       "food": [],
       "edibleRaw": false,
-      "cook": "smeltingOf (smelting.json)"
+      "cook": "smeltingOf (smelting.json), each output with avoidFood"
     }
   ],
   "hazards": [
@@ -1336,7 +1336,7 @@
     "Plant hazards: BlockBOPPlant.onEntityCollidedWithBlock (func_180634_a): POISONIVY (switch index 3) gives a player Poison for 100 ticks, and THORN and TINYCACTUS (16, 22) deal 1 CACTUS damage, unless both armorInventory slots 0 (feet) and 1 (legs) are filled. The dump: plant_0 meta 4 poisonivy; plant_1 meta 2 thorn, meta 6 tinycactus",
     "Rustic herbs: BlockHerbBase.getDrops: BlockBush.getDrops (getItemDropped = getHerb: 1) plus, at getMaxAge 3, 2 + fortune rolls that each add the herb when nextInt(2 x 3) <= age (4 in 6). WorldGenSurfaceHerbs places them at AGE 3. There is no onBlockActivated, so breaking is the harvest. Herbs$4/$6/$8/$10.getHerb = CLOUDSBLUFF/CORE_ROOT/GINSENG/MARSH_MALLOW (ItemHerbEdible, registered under the block's registry name, no potion effect in its constructor or methods); the dump's classes map those to rustic:cloudsbluff, core_root, ginseng, marsh_mallow. Herbs.getRandomHerbForBiome picks by BiomeDictionary type (where). config/rustic.cfg 'Herb Generation Chance'=0.125, 'Max Herb Generation Attempts'=8",
     "HarvestCraft gardens: BlockBaseGarden.getDrops shuffles the garden's drop list and adds the first min(gardendropAmount, size) items, one each; config/harvestcraft.cfg gardendropAmount=2, the six enable*gardenGeneration=true, enablegardenSpread=false, and the drops lists (RotN edited them). harvestBlock (func_180657_a) drops getSilkTouchDrop (the garden itself) when the player is sneaking (func_70093_af) or uses Silk Touch, else the normal drops",
-    "Mushrooms: the dump's minecraft:brown_mushroom and red_mushroom (vanilla BlockMushroom) drop themselves; foodValues gives null for both (not food). smeltingOf: brown -> betterwithaddons:food_mushroom_baked, red -> betterwithaddons:food_amanita_baked"
+    "Mushrooms: the dump's minecraft:brown_mushroom and red_mushroom (vanilla BlockMushroom) drop themselves; foodValues gives null for both (not food). smeltingOf: brown -> betterwithaddons:food_mushroom_baked, red -> betterwithaddons:food_amanita_baked. Better With Addons 0.51 is in the pinned zip (mods/Better With Addons-0.51.jar, SHA-256 fc06cccbd05b6f49b72f3dff5f68d594782df648ec1550439411856e06785f0e): ModItems registers food_mushroom_baked as ItemFood(3, 0.2) with no effect, and food_amanita_baked as ItemFood(3, 0.2).setPotionEffect(Poison, 100 ticks, amplifier 0, chance 1.0), so the baked amanita always poisons for 5 s; avoidFood lists it and forageFood's cook[].avoid carries it (lead's #423 review)"
   ],
   "unverified": [
     "No run has harvested any of these blocks; the bot's right-click (mineflayer activateBlock) on a Rustic bush or BoP berry bush was not tried",

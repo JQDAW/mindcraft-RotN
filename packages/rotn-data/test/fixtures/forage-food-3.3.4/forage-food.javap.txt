@@ -2803,3 +2803,31 @@ public class crafttweaker.mc1120.events.CommonEventHandler
       17: invokespecial #1386               // Method crafttweaker/mc1120/events/handling/MCPlayerRightClickBlockEvent."<init>":(Lnet/minecraftforge/event/entity/player/PlayerInteractEvent$RightClickBlock;)V
       20: invokevirtual #1390               // Method crafttweaker/api/event/MTEventManager.publishPlayerRightClickBlock:(Lcrafttweaker/api/event/PlayerRightClickBlockEvent;)V
       23: return
+
+## Better With Addons ModItems (baked mushroom and amanita; mods/Better With Addons-0.51.jar fc06cccbd05b6f49b72f3dff5f68d594782df648ec1550439411856e06785f0e; func_185070_a ItemFood.setPotionEffect, field_76436_u MobEffects.POISON)
+     602: ldc_w         #460                // String food_mushroom_baked
+     605: new           #462                // class net/minecraft/item/ItemFood
+     608: dup
+     609: iconst_3
+     610: ldc_w         #463                // float 0.2f
+     613: iconst_0
+     614: invokespecial #466                // Method net/minecraft/item/ItemFood."<init>":(IFZ)V
+     617: invokestatic  #323                // Method registerItem:(Ljava/lang/String;Lnet/minecraft/item/Item;)Lnet/minecraft/item/Item;
+     620: pop
+     621: ldc_w         #468                // String food_amanita_baked
+     624: new           #462                // class net/minecraft/item/ItemFood
+     627: dup
+     628: iconst_3
+     629: ldc_w         #463                // float 0.2f
+     632: iconst_0
+     633: invokespecial #466                // Method net/minecraft/item/ItemFood."<init>":(IFZ)V
+     636: new           #470                // class net/minecraft/potion/PotionEffect
+     639: dup
+     640: getstatic     #476                // Field net/minecraft/init/MobEffects.field_76436_u:Lnet/minecraft/potion/Potion;
+     643: bipush        100
+     645: iconst_0
+     646: invokespecial #479                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;II)V
+     649: fconst_1
+     650: invokevirtual #483                // Method net/minecraft/item/ItemFood.func_185070_a:(Lnet/minecraft/potion/PotionEffect;F)Lnet/minecraft/item/ItemFood;
+     653: invokestatic  #323                // Method registerItem:(Ljava/lang/String;Lnet/minecraft/item/Item;)Lnet/minecraft/item/Item;
+     656: pop

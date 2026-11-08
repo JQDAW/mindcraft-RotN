@@ -65,6 +65,8 @@ const AVOID = {
         metas: [3], effects: [{ effect: 'poison', seconds: 60, level: 4, chance: 1 }, { effect: 'hunger', seconds: 15, level: 3, chance: 1 }, { effect: 'nausea', seconds: 15, level: 2, chance: 1 }],
         confidence: 'verified', evidence: ['minecraft_server.1.12.2.jar: ItemFishFood.onFoodEaten (aig.a, func_77849_c), for the pufferfish (meta 3): Poison 1200 ticks amplifier 3, Hunger 300 ticks amplifier 2, Nausea 300 ticks amplifier 1 (bytecode 19-65)'],
     },
+    // Smelting a red mushroom makes this (smelting.json); lead's #423 review, 2026-11-08.
+    'betterwithaddons:food_amanita_baked': { metas: null, effects: [{ effect: 'poison', seconds: 5, level: 1, chance: 1 }], confidence: 'verified', evidence: ['mods/Better With Addons-0.51.jar (pinned zip; SHA-256 fc06cccbd05b6f49b72f3dff5f68d594782df648ec1550439411856e06785f0e): ModItems registers food_amanita_baked as new ItemFood(3, 0.2f, false).setPotionEffect(new PotionEffect(MobEffects.POISON, 100, 0), 1.0f) (func_185070_a; bytecode 621-653)'] },
 };
 // Effects the pack's scripts add on eating; each line is checked against the script at build time.
 const SCRIPT_AVOID = [
