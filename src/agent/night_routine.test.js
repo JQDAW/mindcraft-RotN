@@ -142,6 +142,39 @@ test('D2b-2: when no shelter can be built it retries after RETRY_MS, then stays 
     assert.equal(nightTick(agent, { now: now + 2, ops: o }), null, 'morning: back to work');
 });
 
+test('#381 review 2: a build refused because the bot was not at rest on the floor is no try: planned again at once, a hole is not next; after SETTLE.retries in a row one counts', async (t) => {
+    quiet(t);
+    const { SETTLE } = await import('./library/shelter.js');
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops({ closed: false });
+    let unsettled = true;
+    const build = o.buildShelter;
+    o.buildShelter = (bot, opts) => (unsettled
+        ? (o.builds.push(null), Promise.resolve({ closed: false, unsettled: true, feet: SITE, line: 'Not building the shelter at 0, 64, 0: you are not standing on its floor (at 0.50, 65.40, 0.50 (in the air)).' }))
+        : build(bot, opts));
+    o.digPit = () => { o.calls = (o.calls ?? []).concat('pit'); return Promise.resolve(null); };
+    for (let i = 0; i < SETTLE.retries; i++) {
+        nightTick(agent, { now: i, ops: o });
+        await settle(agent);
+        assert.equal(nightState(agent).attempts, 0, `not a try (${i + 1})`);
+        assert.equal(nightState(agent).nextAt, 0, 'planned again at once');
+        assert.equal(nightState(agent).pitNext, false, 'no hole instead');
+    }
+    assert.equal(o.builds.length, SETTLE.retries);
+    // One more in a row counts as a failed build (bounded: a bot bobbing all night is not stuck here).
+    nightTick(agent, { now: 10, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).attempts, 1);
+    // A closed shelter clears the count.
+    unsettled = false;
+    o.buildShelter = (bot, opts) => { o.builds.push(opts?.site ?? null); return Promise.resolve({ closed: true, feet: SITE, line: 'Shelter closed' }); };
+    nightState(agent).pitNext = false;
+    nightTick(agent, { now: 20, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'inside');
+    assert.equal(nightState(agent).unsettled, 0);
+});
+
 test('D2b-2: at the sunrise it stays in; at full daylight it digs out and hands back to the agenda', async (t) => {
     quiet(t);
     const agent = fakeAgent({ t: NIGHT });

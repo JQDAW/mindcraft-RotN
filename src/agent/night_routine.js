@@ -14,7 +14,7 @@
 
 import { Vec3 } from 'vec3';
 import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, REPAIR_LABEL, shelterShell } from './library/night.js';
-import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt } from './library/shelter.js';
+import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE } from './library/shelter.js';
 import { breakBlockAt } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
 import { digPit, pitOut, moveAwayFrom, PIT } from './library/pit.js';
@@ -91,6 +91,7 @@ export function nightState(agent) {
         exitTries: 0, // round 10 B: morning tries at digging out of this shelter (EXIT_TRIES)
         exitAt: null, // when the next try may start
         closedOn: null, // gate2 B: {at, floor}: where the bot was and its floor block when this shelter closed
+        unsettled: 0, // #381 review 2: builds in a row refused because the bot was not at rest on the floor (uncounted, SETTLE.retries)
         mobSince: null, // #364 follow-up (b): when the morning wait for a hostile mob near the shelter began
         mobSaid: false, // that wait was said in chat (then only logged)
         cowardiceOn: false, // the routine turned cowardice on while exposed with no weapon
@@ -110,7 +111,7 @@ export function resetNight(agent, why) {
     Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, pitProgress: {} });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
-    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false, closedOn: null, unsettled: 0 });
     n.gen++;
 }
 
@@ -372,6 +373,7 @@ function line(agent, text) {
 function startBuilding(n, now) {
     n.state = 'building';
     n.attempts = 0;
+    n.unsettled = 0;
     n.nextAt = now;
 }
 
@@ -500,6 +502,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         const pit = n.pitNext;
         startJob(agent, n, pit ? 'action:digPit' : 'action:buildShelter', () => (pit ? pitShelter(bot, ops, n.pitProgress) : ops.buildShelter(bot)), (r, ret) => {
             if (r?.closed) {
+                n.unsettled = 0;
                 n.pitNext = false;
                 n.state = 'inside';
                 n.site = r.feet;
@@ -521,6 +524,16 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 console.log(`[night] the ${pit ? 'hole shelter' : 'shelter build'} was interrupted; it does not count as a try`);
                 return;
             }
+            // #381 review 2: the bot was not at rest on the floor (mid-jump, bobbing): like an
+            // interruption, not a try; planned again at once from where it is (a hole stays next).
+            // Bounded: after SETTLE.retries such refusals in a row, one counts as a failed build.
+            if (r?.unsettled && (n.unsettled ?? 0) < SETTLE.retries) {
+                n.unsettled = (n.unsettled ?? 0) + 1;
+                n.nextAt = 0;
+                console.log(`[night] the ${pit ? 'hole shelter' : 'shelter build'} waited for the bot to stand on the floor (${r.line}); planning again from here, not a try (${n.unsettled} of ${SETTLE.retries})`);
+                return;
+            }
+            n.unsettled = 0;
             n.pitNext = false;
             const why = r?.line ?? 'the build ended without a result';
             // #337 review 8: the tries are the shelter builds (BUILD_ATTEMPTS); the hole is one more,

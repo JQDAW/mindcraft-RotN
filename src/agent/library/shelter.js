@@ -52,23 +52,32 @@ export const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) &
 const isSolid = (b) => !!b && b.boundingBox === 'block';
 /**
  * The floor of a new site (gate2 B, 00:19:39: the bot was out of its new shelter 10 s after it
- * closed, one block lower): a solid block of full height, so the bot stands at its cell's bottom
- * (rotn-data's fullCube when known, and mineflayer's collision shapes when it has them: soul sand
- * is a full cube to the game but its top is at 0.875); and no part of a tree (leaves, a Dynamic
+ * closed, one block lower): a solid block whose collision reaches its top, so the bot stands at its
+ * cell's bottom; full height is told by the shape only (#381 review 3): rotn-data's collision boxes
+ * for the state (the pack's own: a slab 0.5, farmland 0.9375, soul sand 0.875, glass 1), else
+ * mineflayer's shapes, else a solid block counts as full. And no part of a tree (leaves, a Dynamic
  * Trees branch or trunk shell), which can rot, decay or fall away.
  */
 export const firmFloor = (b) => {
     if (!isSolid(b) || isTreePart(b)) return false;
-    const shapes = Array.isArray(b.shapes) && b.shapes.length > 0 ? b.shapes : null;
-    if (shapes && Math.max(...shapes.map(s => s[4])) < 1) return false;
     const st = dumpState(b);
-    return st && typeof st.fullCube === 'boolean' ? st.fullCube : true; // nothing known: a solid block counts as full
+    const boxes = [st?.collision, b.shapes].find(s => Array.isArray(s) && s.length > 0);
+    return !boxes || Math.max(...boxes.map(s => s[4])) >= 1;
 };
-/** Gate2 B: how long the bot may take to come to rest on the site's floor (a jump or a bob in water ends well within it). */
-export const SETTLE = { maxMs: 1500, stepMs: 50 };
-/** The bot stands on the site's floor: on the ground, in the site's cell, its feet on the floor's top. */
-export const onFloorOf = (bot, feet) => bot.entity?.onGround === true && bot.entity.position.floored().equals(feet)
-    && bot.entity.position.y - feet.y < 0.05;
+/**
+ * Gate2 B: how long the bot may take to come to rest on the site's floor (a jump or a bob in water
+ * ends well within it), and how many such refusals in a row a night's build may have before one
+ * counts as a try (#381 review 2: they are re-planned at once from where the bot is, uncounted).
+ */
+export const SETTLE = { maxMs: 1500, stepMs: 50, retries: 3 };
+/**
+ * The bot is at rest in the site's cell: on the ground, in the cell; for a new site (`strict`) also
+ * with its feet on the floor's top. A repair or a hole shelter may have a carpet or a tolerated
+ * slab at the feet (#381 review 1: the bot stands at y + 0.0625 or y + 0.5 there), so only the
+ * cell counts.
+ */
+export const onFloorOf = (bot, feet, { strict = true } = {}) => bot.entity?.onGround === true && bot.entity.position.floored().equals(feet)
+    && (!strict || bot.entity.position.y - feet.y < 0.05);
 /** Where the bot is, exactly, for a log line: "x.xx, y.yy, z.zz (on the ground | in the air)". */
 export const exactAt = (bot) => {
     const p = bot.entity?.position;
@@ -539,8 +548,13 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
         return refuse(feet, plan.todo, `Could not stand in the middle of the shelter site at ${at(feet)}, so a wall could hit you; not building.`);
     // Gate2 B: a bot mid-jump or bobbing one block up passes the cell check above, and its walls
     // would go up a block too high. It comes to rest on the floor first, or nothing is built.
-    if (!await settleOn(bot, feet))
-        return refuse(feet, plan.todo, `Not building the shelter at ${at(feet)}: you are not standing on its floor (at ${exactAt(bot)}).`);
+    // Only a new site's floor top is checked; a repair or a hole shelter (site given) needs the cell.
+    const strict = !site;
+    if (!await settleOn(bot, feet, { strict })) {
+        if (bot.interrupt_code) return refuse(feet, plan.todo, `Not building the shelter at ${at(feet)}: stopped.`);
+        // #381 review 2: not a failed build; the night routine plans again at once from where the bot is.
+        return { ...refuse(feet, plan.todo, `Not building the shelter at ${at(feet)}: you are not standing on its floor (at ${exactAt(bot)}).`), unsettled: true };
+    }
 
     const interior = new Set([key(feet), key(feet.offset(0, 1, 0))]);
     const roof = feet.offset(0, 2, 0);
@@ -567,7 +581,7 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     }
     const missing = wallsAndRoof(feet).filter(q => !mode.accept(bot.blockAt(q)));
     // Gate2 B: closed only with the bot at rest on the floor inside it (it settles first).
-    const standing = missing.length > 0 || await settleOn(bot, feet);
+    const standing = missing.length > 0 || await settleOn(bot, feet, { strict });
     const soft = wallsAndRoof(feet).filter(q => !isSturdy(bot.blockAt(q)) && isSoftWall(bot.blockAt(q))).length;
     const floor = bot.blockAt(feet.offset(0, -1, 0));
     const floorNote = isSturdy(floor) ? '' : ` The floor is ${floor?.name ?? 'unknown'}, not rock.`;
@@ -587,8 +601,9 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     return { closed, feet, placed, missing, soft, line };
 }
 
-/** Wait (at most SETTLE.maxMs) for the bot to come to rest on the floor of the site at feet. */
-async function settleOn(bot, feet) {
-    for (let waited = 0; !onFloorOf(bot, feet) && waited < SETTLE.maxMs; waited += SETTLE.stepMs) await sleep(SETTLE.stepMs);
-    return onFloorOf(bot, feet);
+/** Wait (at most SETTLE.maxMs; a stop ends it, #381 review 4) for the bot to come to rest on the floor of the site at feet. */
+async function settleOn(bot, feet, { strict = true } = {}) {
+    for (let waited = 0; !onFloorOf(bot, feet, { strict }) && waited < SETTLE.maxMs && !bot.interrupt_code; waited += SETTLE.stepMs)
+        await sleep(SETTLE.stepMs);
+    return onFloorOf(bot, feet, { strict });
 }
