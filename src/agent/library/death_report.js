@@ -93,7 +93,7 @@ export function sumVariants(lost) {
     return [...byName].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 }
 
-/** "12 cobblestone, 3 log:1 and 5 more kinds" (at most `max` kinds named). */
+/** "12 cobblestone, 3 log:1 and 5 more kinds" (at most `max` kinds named; the chat line keeps 6). */
 export function formatLoss(lost, max = 6) {
     if (!lost.length) return 'nothing';
     const named = lost.slice(0, max).map(l => `${l.count} ${l.key}`).join(', ');
@@ -160,7 +160,8 @@ export class DeathReporter {
         const at = p.pos ? `${Math.floor(p.pos.x)}, ${Math.floor(p.pos.y)}, ${Math.floor(p.pos.z)}` : 'unknown';
         const xp = p.xpBefore != null && xpAfter != null && xpAfter < p.xpBefore ? `; XP level ${p.xpBefore} -> ${xpAfter}` : '';
         const cause = p.cause ? ` (${p.cause})` : '';
-        const line = `died at ${at}${cause}; lost ${formatLoss(lost)}${xp}`;
+        // G3 gate B: the log names every kind lost (the chat line stays short, T1).
+        const line = `died at ${at}${cause}; lost ${formatLoss(lost, Infinity)}${xp}`;
         const chatLine = `died at ${at}${cause}; lost ${formatLoss(sumVariants(lost))}${xp}`;
 
         let chat = null;
@@ -351,6 +352,21 @@ export function treeDeath(r, lastFell) {
     return !!lastFell && Number.isFinite(r?.at) && r.at >= lastFell.at && r.at - lastFell.at <= TREE_DEATH_MS;
 }
 
+/**
+ * What the bot holds after the respawn, read from its slots when the report is made (SETTLE_MS
+ * after the spawn, so Corpse Complex has restored what it keeps: the main hand, off hand, armor).
+ * G3 gate B: the note named only 6 of 12 kinds lost and never what was left, and the model's memory
+ * kept "have 10 metamorphic_cobble" as if nothing had changed.
+ */
+export function holdingNote(bot) {
+    const held = Object.entries(inventoryCounts(bot)).map(([key, count]) => ({ key, count }))
+        .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+    if (!held.length) return 'You now hold nothing.';
+    const h = bot?.heldItem;
+    const hand = h?.name && h.count > 0 ? ` (in your hand: ${h.count} ${h.metadata ? `${h.name}:${h.metadata}` : h.name})` : '';
+    return `You now hold ${formatLoss(held, Infinity)}${hand}; plan only with what you hold now.`;
+}
+
 export function reportDeath(agent, { now = Date.now() } = {}) {
     const r = agent._death?.report(agent.bot, { now });
     if (!r) return null;
@@ -366,9 +382,10 @@ export function reportDeath(agent, { now = Date.now() } = {}) {
     // or player's custom name). Where the items went, plainly (rotn-data #226/#243: Corpse Complex
     // drops them at the death spot for 600 s; Zombie Players raises a zombie there that never burns
     // and never despawns; lead decision on rotn-data Request 12).
-    const items = r.lost.length
-        ? `You no longer have ${formatLoss(r.lost)}. ${lostItemsNote(Math.floor(DROPS_LAST_MIN - (now - (r.at ?? now)) / 60_000))}`
-        : 'Your inventory looks unchanged.';
+    // G3 gate B: every kind lost, and what the bot holds now, from its real slots.
+    const items = (r.lost.length
+        ? `You no longer have ${formatLoss(r.lost, Infinity)}. ${lostItemsNote(Math.floor(DROPS_LAST_MIN - (now - (r.at ?? now)) / 60_000))}`
+        : 'Your inventory looks unchanged.') + ` ${holdingNote(agent.bot)}`;
     // A death is due for a prompt even when nothing was running (#215 review 1), except in a
     // death streak: then the note waits for the next prompt, so deaths cannot drive LLM calls.
     requestReplan(agent, 'death', r.label, {
