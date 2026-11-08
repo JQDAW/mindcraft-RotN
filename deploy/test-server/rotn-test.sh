@@ -67,6 +67,8 @@ mod_director_check() {
   # symlink (never a silent exit).
   hash_of() { sha256sum 2>/dev/null < "$1" | cut -d' ' -f1 || true; }
   [[ -r $list ]] || { md "FAILED: cannot check: no pinned list $list"; exit 3; }
+  # A missing tool must never pass as "nothing found" (#359 review): a find that cannot run would list no jar at all.
+  for f in find sort sha256sum; do command -v "$f" > /dev/null || { md "FAILED: cannot check: no $f on PATH"; exit 3; }; done
   [[ -s $packjars ]] || { md "FAILED: cannot check: no hashes of the pinned zip's jars $packjars"; exit 3; }
   [[ -d $SERVER/mods ]] || { md "FAILED: cannot check: no $SERVER/mods"; exit 3; }
   # check_sums FILE KIND: every "<sha256>  <path>" line of FILE must name a file whose full SHA-256 matches.
@@ -95,13 +97,18 @@ mod_director_check() {
   check_sums "$list" pinned
   check_sums "$packjars" pack
   [[ -f $extras ]] && check_sums "$extras" extra-mod
+  # The listing goes to a file first, so find's and sort's exit codes are seen (a process substitution hides them).
+  local listing=$STATE/mod-director.jars st
+  # In a brace group of an || list, set -e does not end the script on the pipeline: its own status is read.
+  { find "$SERVER/mods" -maxdepth 1 -name '*.jar' ! -type d -print0 | sort -z > "$listing"; st=("${PIPESTATUS[@]}"); } || true
+  (( st[0] == 0 && st[1] == 0 )) || { md "FAILED: cannot check: listing $SERVER/mods failed (find ${st[0]}, sort ${st[1]})"; exit 3; }
   while IFS= read -r -d '' f; do
     rel=${f#"$SERVER"/}
     [[ -n ${known[$rel]:-} ]] && continue
     got=$(hash_of "$f")
     md "EXTRA ${rel//$'\n'/\\n} sha256 ${got:-unreadable} (not in the pinned zip or the pinned list)"
     problems=$(( problems + 1 ))
-  done < <(find "$SERVER/mods" -maxdepth 1 -name '*.jar' ! -type d -print0 | sort -z)
+  done < "$listing"
   if (( problems )); then md "FAILED: $problems problem(s)"; exit 1; fi
   md "OK: $npinned pinned download(s) match; $npack jars of the pinned zip match; $nextra extra mod(s)"
 }

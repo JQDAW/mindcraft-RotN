@@ -183,8 +183,14 @@ hash_pack_jars() {
 # that are not jars of the pinned zip), hashed before the first start, so `rotn-test mod-director` accepts exactly
 # these bytes. An upload that replaced a jar of the zip with other bytes is refused (#347 review).
 record_extra_mods() {
-  local f rel want
+  local f rel want st listing=$STATE/extra-mods.jars
   : > "$STATE/extra-mods.sha256"
+  # Fails closed when the listing cannot run (#359 review): a missing or failing find or sort must never read as "no
+  # extra mod". The listing goes to a file first, so their exit codes are seen.
+  for f in find sort sha256sum; do command -v "$f" > /dev/null || fail "extra-mod: cannot list $SERVER/mods: no $f on PATH"; done
+  # In a brace group of an || list, neither set -e nor main's ERR trap fires on the pipeline: its own status is read.
+  { find "$SERVER/mods" -maxdepth 1 -name '*.jar' ! -type d -print0 | sort -z > "$listing"; st=("${PIPESTATUS[@]}"); } || true
+  (( st[0] == 0 && st[1] == 0 )) || fail "extra-mod: cannot list $SERVER/mods (find ${st[0]}, sort ${st[1]})"
   while IFS= read -r -d '' f; do
     rel=${f#"$SERVER"/}
     # A hash list holds one path per line: a name with a line break cannot be pinned (#351 review). Refused, never
@@ -198,7 +204,7 @@ record_extra_mods() {
       continue
     fi
     printf '%s  %s\n' "$(sha256_of "$f")" "$rel" >> "$STATE/extra-mods.sha256"
-  done < <(find "$SERVER/mods" -maxdepth 1 -name '*.jar' ! -type d -print0 | sort -z)
+  done < "$listing"
 }
 
 # check_mod_director: at Done, what Mod Director downloaded must match the pinned list (ADR 0008;
