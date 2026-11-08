@@ -22,6 +22,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { SHELTER_LEAD_MIN, dirtPileRecipes } from './library/night.js';
+import { foodShortfall, FOOD_TARGET } from './library/food.js';
 
 /**
  * RotN's first day, docs/research/rotn-progression.md section 3, steps 1-9. A rock is any
@@ -185,17 +186,61 @@ export const SHELTER_RESERVE_STEP = {
     },
 };
 
+/** After the food reserve's budget is spent, it is not asked again for this long (G4 #5). */
+export const FOOD_RETRY_MS = 10 * 60_000;
+/**
+ * #422 review 8: at most this many self-prompter runs for the food reserve per in-game day (by
+ * bot.time.day; a 20-min window when unknown), so its LLM spend stays well inside ADR 0010's
+ * USD 0.05/h (the soak measured 0.0116/h in all). Counted in memory: a restart starts afresh.
+ */
+export const FOOD_DAY_RUNS = 3;
+const dayKeyOf = (s, now) => { const d = s.day?.(); return Number.isFinite(d) ? `day ${d}` : `t ${Math.floor(now / (20 * 60_000))}`; };
+/** The food reserve's shortfall now (food.foodShortfall with the shelter reserve's window), or null. */
+const foodShort = (s, ctx = {}) => foodShortfall({ food: s.food?.(), held: s.foodHeld?.() ?? 0,
+    minutesToSunset: s.minutesToSunset?.() ?? Infinity, finished: !!ctx.finished, reserveLeadMin: RESERVE_LEAD_MIN });
+
+/**
+ * G4 #5 (CX23 soak m1: food fell to 1; after the deaths nothing to eat, and once the agenda was
+ * done nothing got food). Like the shelter reserve, not a step of the list: judged anew every tick,
+ * after the shelter reserve and before the current step, also after "agenda done" (a standing
+ * duty), with its own budget. Due by food.foodShortfall: before night FOOD_TARGET.night held; once
+ * the agenda is done FOOD_TARGET.day; and at once when food is 12 or lower with none held. Never at
+ * night: the bot stays sealed. Hunting only wild animals (the !attack guard and the hunting reflex,
+ * library/hunting.js). Wild berries are not offered: there is no cited way to pick them yet.
+ */
+export const FOOD_RESERVE_STEP = {
+    id: 'food', short: 'keep food for the day and the night', reserve: true, when: 'food',
+    due: (s, ctx) => foodShort(s, ctx) !== null,
+    done: () => false, // done when no longer due (enough held)
+    goal: `Food: on this pack hunger falls about 1 every 4 minutes, even resting, and starving kills. Keep food worth at least ${FOOD_TARGET.night} hunger before night. Kill a wild cow, pig, sheep or rabbit near you with !attack("<its name>") and pick up the meat (raw meat gives 1 hunger; eat it raw if needed). Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player. Do not eat raw chicken or rotten flesh; keep the bread for last.`,
+    goalNow: (s, ctx) => {
+        const target = foodShort(s, ctx) ?? FOOD_TARGET.day;
+        const held = s.foodHeld?.() ?? 0;
+        const food = s.food?.();
+        const animals = s.huntable?.() ?? [];
+        const near = animals.length
+            ? `Near you: ${animals.slice(0, 3).join(', ')}: kill one with !attack("${animals[0]}") and pick up what it drops. `
+            : 'No wild animal is near: look for one (cows, pigs, sheep, rabbits; on this pack mostly Animania ones such as animania:cow_holstein or animania:sow_old_spot) with !searchForEntity, away from fences and houses, then !attack it. ';
+        return `Food: you hold food worth ${held} hunger${Number.isFinite(food) ? ` and your food is ${food} of 20` : ''}. On this pack hunger falls about 1 every 4 minutes, even resting, and starving kills: get to at least ${target}. `
+            + near + 'Raw meat gives 1 hunger each; eat it raw if needed. Never an animal with a name tag, on a leash, tamed, or near fences, farms or houses: it may belong to a player (the bot refuses those). '
+            + 'Do not eat raw chicken or rotten flesh; keep the bread for last.';
+    },
+};
+
 export class Agenda {
     /**
      * @param {string} botName
      * @param {{dir?: string, steps?: Array, now?: () => number, reserve?: object|null}} [opts]
      *   reserve: the before-night step (SHELTER_RESERVE_STEP; null for none)
      */
-    constructor(botName, { dir = `./bots/${botName}`, steps = ROTN_EARLY_GAME, now = Date.now, reserve = SHELTER_RESERVE_STEP } = {}) {
+    constructor(botName, { dir = `./bots/${botName}`, steps = ROTN_EARLY_GAME, now = Date.now, reserve = SHELTER_RESERVE_STEP, food = FOOD_RESERVE_STEP } = {}) {
         this.file = path.join(dir, 'agenda.json');
         this.steps = steps;
         this.now = now;
         this.reserve = reserve;
+        this.food = food; // G4 #5: the food reserve (FOOD_RESERVE_STEP; null for none)
+        this.foodOffUntil = 0; // its budget ran out: not asked again before this time
+        this.foodDay = { key: null, runs: 0 }; // its runs this in-game day (FOOD_DAY_RUNS)
         this.reserveOff = false; // its budget ran out: not again until the night is past
         this.finished = false; // "agenda done": only the reserve runs
         this.active = false;
@@ -256,7 +301,39 @@ export class Agenda {
     }
     stop() { if (this.active || this.finished) { this.active = false; this.finished = false; this.save(); } }
     /** All steps done: not active, but the before-night reserve still runs (G3 round 6 B). */
-    finish() { this.active = false; this.finished = !!this.reserve; this.save(); }
+    finish() { this.active = false; this.finished = !!this.reserve || !!this.food; this.save(); }
+
+    /** Whether a step id is one of the reserves (the shelter blocks, the food). */
+    isReserveId(id) { return id != null && (id === this.reserve?.id || id === this.food?.id); }
+    /** A reserve, if one is wanted now: the shelter reserve first, then food (G4 #5). */
+    anyReserveWanted(state) { return this.reserveWanted(state) ?? this.foodWanted(state); }
+    /** A reserve's budget is spent: the shelter reserve until the night is past; food for FOOD_RETRY_MS. */
+    reserveStuck(id) {
+        if (id === this.food?.id) this.foodOffUntil = this.now() + FOOD_RETRY_MS;
+        else this.reserveOff = true;
+    }
+
+    /**
+     * G4 #5: the food reserve when it is wanted now (due by food.foodShortfall, its budget not spent
+     * or FOOD_RETRY_MS past), else null. When it is not due, its budget is fresh for the next time.
+     */
+    foodWanted(state) {
+        const r = this.food;
+        if (!r) return null;
+        let due = false;
+        try { due = !!r.due(state, { finished: this.finished }); } catch { due = false; }
+        if (!due) {
+            delete this.spent[r.id];
+            this.foodOffUntil = 0;
+            return null;
+        }
+        if (this.now() < this.foodOffUntil) return null;
+        if (this.foodOffUntil) { delete this.spent[r.id]; this.foodOffUntil = 0; } // a fresh budget after the wait
+        const key = dayKeyOf(state, this.now());
+        if (this.foodDay.key !== key) this.foodDay = { key, runs: 0 };
+        if (this.foodDay.runs >= FOOD_DAY_RUNS) return null; // this day's runs are used: the hunting reflex still acts
+        return r;
+    }
 
     /**
      * The before-night reserve step when it is wanted now (due, too few blocks, budget not spent),
@@ -295,6 +372,7 @@ export class Agenda {
     spentOn(id) { return this.spent[id] ?? { attempts: 0, llm_ms: 0 }; }
     /** One more self-prompter run for a step (saved: a crash loop cannot reset it). */
     recordAttempt(id) {
+        if (id === this.food?.id) this.foodDay.runs++; // #422 review 8: the food reserve's runs per day
         const b = this.spentOn(id);
         this.spent[id] = { ...b, attempts: b.attempts + 1 }; // keeps the reserve's need and refresh
         this.save();
@@ -342,8 +420,8 @@ export class Agenda {
                 step = s;
             }
         }
-        // Before night, too few shelter blocks: the reserve comes first (G3 round 6 B).
-        return { step: this.reserveWanted(state) ?? step, newlyDone };
+        // Before night, too few shelter blocks: the reserve comes first (G3 round 6 B); then food (G4 #5).
+        return { step: this.reserveWanted(state) ?? this.foodWanted(state) ?? step, newlyDone };
     }
 }
 

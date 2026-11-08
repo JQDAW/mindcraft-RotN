@@ -9,8 +9,12 @@ import { nightPhase } from '../library/night.js';
 import { deathSpotBlocked } from '../library/death_report.js';
 import * as world from '../library/world.js';
 import { threatFor, hurtBy } from '../library/threats.js';
+import { mayBelongToPlayer, knownBases } from '../library/hunting.js';
+import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
 
+/** The model's !stay is at most this many seconds; longer (or -1, forever) needs a giver's typed command. */
+export const STAY_LIMITS = { modelMaxS: 120 };
 /** Modes that keep the bot alive: only a task giver who types !setMode may turn them off (CX23 soak). */
 export const SURVIVAL_MODES = ['self_preservation', 'cowardice', 'self_defense'];
 
@@ -503,6 +507,30 @@ export const actionsList = [
                 skills.log(agent.bot, `Not attacking ${type}: it attacks only when hurt, and it has not hurt you. Leave it alone; if it attacks you, the bot defends itself.`);
                 return;
             }
+            // G4 #5 (the lead's hard rule for the live server): never an animal that may belong to a
+            // player (unknown metadata, a name tag, tamed, leashed, ridden, saddled or dyed, near
+            // player-built blocks or a known base). #422 review 2: every target that is not a hostile
+            // mob to fight and not a player is checked (rotn-data knows no threat for forge-bridge's
+            // placeholders such as animania:entity_7, nor for an unknown name). Of this type, the
+            // nearest one that is not maybe a player's; none: refused, with why.
+            // Hostile only by rotn-data's own entry: threatFor's fallback (mc.isHostile) calls every
+            // unknown name a fight mob, which would let a placeholder through unchecked.
+            const HOSTILE = ['fight', 'avoid', 'keep-distance', 'take-cover'];
+            let known = null;
+            try { known = mob ? threatOf(mob.name) : null; } catch { known = null; }
+            // A mob that just hurt the bot may be fought back (self-defense comes first).
+            if (mob && mob.type !== 'player' && !HOSTILE.includes(known?.reaction) && !hurtBy(agent.bot, mob)) {
+                const skipped = [];
+                const bases = knownBases(agent);
+                const free = world.getNearbyEntities(agent.bot, 24).filter(e => e.name === type)
+                    .find(e => { const why = mayBelongToPlayer(agent.bot, e, { bases }); if (why) skipped.push(why); return !why; });
+                if (!free) {
+                    skills.log(agent.bot, `Not attacking ${type}: it may belong to a player (${[...new Set(skipped)].join('; ')}). Find a wild one away from fences, farms and houses.`);
+                    return;
+                }
+                await skills.attackEntity(agent.bot, free, true);
+                return;
+            }
             await skills.attackNearest(agent.bot, type, true);
         })
     },
@@ -528,10 +556,19 @@ export const actionsList = [
     },
     {
         name: '!stay',
-        description: 'Stay in the current location no matter what. Pauses all modes.',
-        params: {'type': { type: 'int', description: 'The number of seconds to stay. -1 for forever.', domain: [-1, Number.MAX_SAFE_INTEGER] }},
-        perform: runAsAction(async (agent, seconds) => {
-            await skills.stay(agent.bot, seconds);
+        description: `Stay in the current location. Pauses the other modes; self-preservation stays on. At most ${STAY_LIMITS.modelMaxS} s unless a task giver types it.`,
+        params: {'type': { type: 'int', description: 'The number of seconds to stay. -1 for forever (a task giver only).', domain: [-1, Number.MAX_SAFE_INTEGER] }},
+        perform: runAsAction(async (agent, seconds, context) => {
+            // #414/#422 follow-up (lead): the model could pause every survival mode for good with
+            // !stay(-1). Its stay is capped at STAY_LIMITS.modelMaxS; longer, or forever, only when a
+            // task giver typed it (context.sender, as !setMode). self_preservation always stays on (skills.stay).
+            let s = seconds;
+            if (!context?.sender && (s === -1 || s > STAY_LIMITS.modelMaxS)) {
+                console.log(`[modes] the model asked to stay ${s === -1 ? 'forever' : `${s} s`}; capped at ${STAY_LIMITS.modelMaxS} s (only a task giver may stay longer)`);
+                skills.log(agent.bot, `Staying ${STAY_LIMITS.modelMaxS} s at most: only a task giver can make you stay longer.`);
+                s = STAY_LIMITS.modelMaxS;
+            }
+            await skills.stay(agent.bot, s);
         })
     },
     {

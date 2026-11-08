@@ -1,0 +1,2805 @@
+# Wild food blocks on RotN 3.3.4 (lead's G4 #5 food task, 2026-11-08). Excerpts from `javap -p -c -constants`
+# (JDK 8 tools) of jars in the pinned server pack zip (SHA-256 90642fd5...f5205); nothing was run.
+#   mods/rustic-1.1.7.jar                                  30976de836d72cf3819338469e3e62c0c6943f5b50a6a2b10221c73909f184d8
+#   mods/BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar     1c53d3ee39f557162591f618c58b79dc6861d24522ef785794ee4a815f8a3908
+#   mods/Pam's HarvestCraft 1.12.2zg.jar                   9542e0863473b2cf61eff3fa7bdb9f096aaf7fc446c54750cbaa9db47a58f2fa
+#   mods/dropt-1.12.2-1.19.4.jar                           21837ce855ad3304fa2aa2cc4d29fe5989cd61f09fa8fc1f9f4e53dedbacfd04
+#   mods/athenaeum-1.12.2-1.19.6.jar                       2aea9497d5414bfaefa05cc7c0162850f01dbb96b72ee3db36b5924573336271
+#   mods/CraftTweaker2-1.12-4.1.20.700.jar                 56f58624e119c16fb421652bbe26a3ec06fbeb8cb53e68dd6bf3f1761ec8c6c2
+# SRG names: func_180639_a onBlockActivated, func_180650_b updateTick (random tick), func_180634_a
+# onEntityCollidedWithBlock, func_180646_a getCollisionBoundingBox, func_176201_c getMetaFromState,
+# func_180657_a harvestBlock, func_180660_a getItemDropped, func_180643_i getSilkTouchDrop,
+# func_70093_af isSneaking, func_175671_l getLightFromNeighbors, func_191521_c addItemStackToInventory,
+# func_70100_b_ onCollideWithPlayer, func_70690_d addPotionEffect, func_70097_a attackEntityFrom,
+# field_76436_u MobEffects.POISON, field_76367_g DamageSource.CACTUS, field_151100_aR Items.DYE,
+# field_70460_b InventoryPlayer.armorInventory (0 feet, 1 legs), field_190927_a ItemStack.EMPTY.
+
+## Rustic BlockBerryBush
+public abstract class rustic.common.blocks.crops.BlockBerryBush extends rustic.common.blocks.BlockBase implements rustic.common.blocks.IColoredBlock,net.minecraftforge.common.IPlantable,net.minecraft.block.IGrowable
+  public rustic.common.blocks.crops.BlockBerryBush(java.lang.String);
+    Code:
+       0: aload_0
+       1: getstatic     #32                 // Field net/minecraft/block/material/Material.field_151585_k:Lnet/minecraft/block/material/Material;
+       4: aload_1
+       5: invokespecial #35                 // Method rustic/common/blocks/BlockBase."<init>":(Lnet/minecraft/block/material/Material;Ljava/lang/String;)V
+       8: aload_0
+       9: getstatic     #41                 // Field rustic/core/Rustic.farmingTab:Lnet/minecraft/creativetab/CreativeTabs;
+      12: invokevirtual #45                 // Method func_149647_a:(Lnet/minecraft/creativetab/CreativeTabs;)Lnet/minecraft/block/Block;
+      15: pop
+      16: aload_0
+      17: getstatic     #51                 // Field net/minecraft/block/SoundType.field_185850_c:Lnet/minecraft/block/SoundType;
+      20: invokevirtual #55                 // Method func_149672_a:(Lnet/minecraft/block/SoundType;)Lnet/minecraft/block/Block;
+      23: pop
+      24: aload_0
+      25: ldc           #56                 // float 0.2f
+      27: invokevirtual #60                 // Method func_149711_c:(F)Lnet/minecraft/block/Block;
+      30: pop
+      31: aload_0
+      32: iconst_1
+      33: invokevirtual #64                 // Method func_149713_g:(I)Lnet/minecraft/block/Block;
+      36: pop
+      37: aload_0
+      38: iconst_1
+      39: invokevirtual #68                 // Method func_149675_a:(Z)Lnet/minecraft/block/Block;
+      42: pop
+      43: aload_0
+      44: aload_0
+      45: getfield      #72                 // Field field_176227_L:Lnet/minecraft/block/state/BlockStateContainer;
+      48: invokevirtual #78                 // Method net/minecraft/block/state/BlockStateContainer.func_177621_b:()Lnet/minecraft/block/state/IBlockState;
+      51: getstatic     #80                 // Field BERRIES:Lnet/minecraft/block/properties/PropertyBool;
+      54: iconst_0
+      55: invokestatic  #86                 // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+      58: invokeinterface #92,  3           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177226_a:(Lnet/minecraft/block/properties/IProperty;Ljava/lang/Comparable;)Lnet/minecraft/block/state/IBlockState;
+      63: invokevirtual #96                 // Method func_180632_j:(Lnet/minecraft/block/state/IBlockState;)V
+      66: getstatic     #102                // Field net/minecraft/init/Blocks.field_150480_ab:Lnet/minecraft/block/BlockFire;
+      69: aload_0
+      70: bipush        40
+      72: bipush        80
+      74: invokevirtual #108                // Method net/minecraft/block/BlockFire.func_180686_a:(Lnet/minecraft/block/Block;II)V
+      77: return
+  public void func_180650_b(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, java.util.Random);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: aload_3
+       4: aload         4
+       6: invokespecial #118                // Method rustic/common/blocks/BlockBase.func_180650_b:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;Ljava/util/Random;)V
+       9: aload_0
+      10: aload_1
+      11: aload_2
+      12: aload_3
+      13: invokevirtual #122                // Method checkAndDropBlock:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)V
+      16: aload_1
+      17: aload_2
+      18: invokevirtual #128                // Method net/minecraft/util/math/BlockPos.func_177984_a:()Lnet/minecraft/util/math/BlockPos;
+      21: invokevirtual #134                // Method net/minecraft/world/World.func_175671_l:(Lnet/minecraft/util/math/BlockPos;)I
+      24: bipush        9
+      26: if_icmplt     111
+      29: aload_3
+      30: getstatic     #80                 // Field BERRIES:Lnet/minecraft/block/properties/PropertyBool;
+      33: invokeinterface #138,  2          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177229_b:(Lnet/minecraft/block/properties/IProperty;)Ljava/lang/Comparable;
+      38: checkcast     #82                 // class java/lang/Boolean
+      41: invokevirtual #142                // Method java/lang/Boolean.booleanValue:()Z
+      44: ifne          111
+      47: fconst_2
+      48: fstore        5
+      50: aload_1
+      51: aload_2
+      52: aload_3
+      53: aload         4
+      55: ldc           #143                // float 40.0f
+      57: fload         5
+      59: fdiv
+      60: f2i
+      61: iconst_1
+      62: iadd
+      63: invokevirtual #149                // Method java/util/Random.nextInt:(I)I
+      66: ifne          73
+      69: iconst_1
+      70: goto          74
+      73: iconst_0
+      74: invokestatic  #155                // Method net/minecraftforge/common/ForgeHooks.onCropsGrowPre:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;Z)Z
+      77: ifeq          111
+      80: aload_1
+      81: aload_2
+      82: aload_3
+      83: getstatic     #80                 // Field BERRIES:Lnet/minecraft/block/properties/PropertyBool;
+      86: iconst_1
+      87: invokestatic  #86                 // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+      90: invokeinterface #92,  3           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177226_a:(Lnet/minecraft/block/properties/IProperty;Ljava/lang/Comparable;)Lnet/minecraft/block/state/IBlockState;
+      95: iconst_3
+      96: invokevirtual #159                // Method net/minecraft/world/World.func_180501_a:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;I)Z
+      99: pop
+     100: aload_1
+     101: aload_2
+     102: aload_3
+     103: aload_1
+     104: aload_2
+     105: invokevirtual #163                // Method net/minecraft/world/World.func_180495_p:(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/state/IBlockState;
+     108: invokestatic  #167                // Method net/minecraftforge/common/ForgeHooks.onCropsGrowPost:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/block/state/IBlockState;)V
+     111: return
+  public java.util.List<net.minecraft.item.ItemStack> getDrops(net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, int);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: aload_3
+       4: iload         4
+       6: invokespecial #228                // Method rustic/common/blocks/BlockBase.getDrops:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;I)Ljava/util/List;
+       9: astore        5
+      11: aload_3
+      12: getstatic     #80                 // Field BERRIES:Lnet/minecraft/block/properties/PropertyBool;
+      15: invokeinterface #138,  2          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177229_b:(Lnet/minecraft/block/properties/IProperty;)Ljava/lang/Comparable;
+      20: checkcast     #82                 // class java/lang/Boolean
+      23: invokevirtual #142                // Method java/lang/Boolean.booleanValue:()Z
+      26: ifeq          55
+      29: aload_0
+      30: invokevirtual #230                // Method getBerries:()Lnet/minecraft/item/Item;
+      33: ifnull        55
+      36: aload         5
+      38: new           #232                // class net/minecraft/item/ItemStack
+      41: dup
+      42: aload_0
+      43: invokevirtual #230                // Method getBerries:()Lnet/minecraft/item/Item;
+      46: invokespecial #235                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;)V
+      49: invokeinterface #209,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      54: pop
+      55: aload         5
+      57: areturn
+  public boolean func_180639_a(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, net.minecraft.entity.player.EntityPlayer, net.minecraft.util.EnumHand, net.minecraft.util.EnumFacing, float, float, float);
+    Code:
+       0: aload         4
+       2: aload         5
+       4: invokevirtual #247                // Method net/minecraft/entity/player/EntityPlayer.func_184586_b:(Lnet/minecraft/util/EnumHand;)Lnet/minecraft/item/ItemStack;
+       7: astore        10
+       9: aload_3
+      10: getstatic     #80                 // Field BERRIES:Lnet/minecraft/block/properties/PropertyBool;
+      13: invokeinterface #138,  2          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177229_b:(Lnet/minecraft/block/properties/IProperty;)Ljava/lang/Comparable;
+      18: checkcast     #82                 // class java/lang/Boolean
+      21: invokevirtual #142                // Method java/lang/Boolean.booleanValue:()Z
+      24: ifeq          119
+      27: aload         10
+      29: invokevirtual #250                // Method net/minecraft/item/ItemStack.func_190926_b:()Z
+      32: ifne          56
+      35: aload         10
+      37: invokevirtual #253                // Method net/minecraft/item/ItemStack.func_77973_b:()Lnet/minecraft/item/Item;
+      40: getstatic     #259                // Field net/minecraft/init/Items.field_151100_aR:Lnet/minecraft/item/Item;
+      43: if_acmpne     56
+      46: aload         10
+      48: invokevirtual #262                // Method net/minecraft/item/ItemStack.func_77960_j:()I
+      51: bipush        15
+      53: if_icmpeq     119
+      56: aload_1
+      57: aload_2
+      58: aload_3
+      59: getstatic     #80                 // Field BERRIES:Lnet/minecraft/block/properties/PropertyBool;
+      62: iconst_0
+      63: invokestatic  #86                 // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+      66: invokeinterface #92,  3           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177226_a:(Lnet/minecraft/block/properties/IProperty;Ljava/lang/Comparable;)Lnet/minecraft/block/state/IBlockState;
+      71: iconst_3
+      72: invokevirtual #159                // Method net/minecraft/world/World.func_180501_a:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;I)Z
+      75: pop
+      76: new           #232                // class net/minecraft/item/ItemStack
+      79: dup
+      80: aload_0
+      81: invokevirtual #230                // Method getBerries:()Lnet/minecraft/item/Item;
+      84: invokespecial #235                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;)V
+      87: astore        11
+      89: aload         4
+      91: aload         11
+      93: invokevirtual #266                // Method net/minecraft/entity/player/EntityPlayer.func_191521_c:(Lnet/minecraft/item/ItemStack;)Z
+      96: ifne          117
+      99: aload_1
+     100: aload_2
+     101: aload         4
+     103: invokevirtual #270                // Method net/minecraft/entity/player/EntityPlayer.func_174811_aO:()Lnet/minecraft/util/EnumFacing;
+     106: invokevirtual #275                // Method net/minecraft/util/EnumFacing.func_176734_d:()Lnet/minecraft/util/EnumFacing;
+     109: invokevirtual #279                // Method net/minecraft/util/math/BlockPos.func_177972_a:(Lnet/minecraft/util/EnumFacing;)Lnet/minecraft/util/math/BlockPos;
+     112: aload         11
+     114: invokestatic  #283                // Method net/minecraft/block/Block.func_180635_a:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/item/ItemStack;)V
+     117: iconst_1
+     118: ireturn
+     119: iconst_0
+     120: ireturn
+  public net.minecraft.util.math.AxisAlignedBB func_180646_a(net.minecraft.block.state.IBlockState, net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos);
+    Code:
+       0: getstatic     #305                // Field field_185506_k:Lnet/minecraft/util/math/AxisAlignedBB;
+       3: areturn
+  public void func_180634_a(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, net.minecraft.entity.Entity);
+    Code:
+       0: aload         4
+       2: dup
+       3: getfield      #314                // Field net/minecraft/entity/Entity.field_70159_w:D
+       6: ldc2_w        #315                // double 0.6000000238418579d
+       9: dmul
+      10: putfield      #314                // Field net/minecraft/entity/Entity.field_70159_w:D
+      13: aload         4
+      15: dup
+      16: getfield      #319                // Field net/minecraft/entity/Entity.field_70179_y:D
+      19: ldc2_w        #315                // double 0.6000000238418579d
+      22: dmul
+      23: putfield      #319                // Field net/minecraft/entity/Entity.field_70179_y:D
+      26: return
+  public int func_176201_c(net.minecraft.block.state.IBlockState);
+    Code:
+       0: aload_1
+       1: getstatic     #80                 // Field BERRIES:Lnet/minecraft/block/properties/PropertyBool;
+       4: invokeinterface #138,  2          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177229_b:(Lnet/minecraft/block/properties/IProperty;)Ljava/lang/Comparable;
+       9: checkcast     #82                 // class java/lang/Boolean
+      12: invokevirtual #142                // Method java/lang/Boolean.booleanValue:()Z
+      15: ifeq          22
+      18: iconst_1
+      19: goto          23
+      22: iconst_0
+      23: ireturn
+
+## Rustic ModBlocks$3 (rustic:wildberry_bush)
+Compiled from "ModBlocks.java"
+final class rustic.common.blocks.ModBlocks$3 extends rustic.common.blocks.crops.BlockBerryBush {
+  rustic.common.blocks.ModBlocks$3(java.lang.String);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokespecial #14                 // Method rustic/common/blocks/crops/BlockBerryBush."<init>":(Ljava/lang/String;)V
+       5: return
+
+  public net.minecraft.item.Item getBerries();
+    Code:
+       0: getstatic     #26                 // Field rustic/common/items/ModItems.WILDBERRIES:Lrustic/common/items/ItemFoodBase;
+       3: areturn
+}
+
+## Rustic WorldGenWildberries
+public class rustic.common.world.WorldGenWildberries extends net.minecraft.world.gen.feature.WorldGenerator
+  private boolean generateBush(net.minecraft.world.World, java.util.Random, net.minecraft.util.math.BlockPos);
+    Code:
+       0: aload_1
+       1: aload_3
+       2: invokevirtual #102                // Method net/minecraft/world/World.func_180495_p:(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/state/IBlockState;
+       5: astore        4
+       7: aload         4
+       9: invokeinterface #108,  1          // InterfaceMethod net/minecraft/block/state/IBlockState.func_185904_a:()Lnet/minecraft/block/material/Material;
+      14: invokevirtual #113                // Method net/minecraft/block/material/Material.func_76224_d:()Z
+      17: ifeq          22
+      20: iconst_0
+      21: ireturn
+      22: getstatic     #119                // Field rustic/common/blocks/ModBlocks.WILDBERRY_BUSH:Lrustic/common/blocks/crops/BlockBerryBush;
+      25: aload_1
+      26: aload_3
+      27: invokevirtual #125                // Method rustic/common/blocks/crops/BlockBerryBush.func_176196_c:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;)Z
+      30: ifeq          62
+      33: aload_1
+      34: aload_3
+      35: getstatic     #119                // Field rustic/common/blocks/ModBlocks.WILDBERRY_BUSH:Lrustic/common/blocks/crops/BlockBerryBush;
+      38: invokevirtual #129                // Method rustic/common/blocks/crops/BlockBerryBush.func_176223_P:()Lnet/minecraft/block/state/IBlockState;
+      41: getstatic     #133                // Field rustic/common/blocks/crops/BlockBerryBush.BERRIES:Lnet/minecraft/block/properties/PropertyBool;
+      44: aload_2
+      45: invokevirtual #136                // Method java/util/Random.nextBoolean:()Z
+      48: invokestatic  #142                // Method java/lang/Boolean.valueOf:(Z)Ljava/lang/Boolean;
+      51: invokeinterface #146,  3          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177226_a:(Lnet/minecraft/block/properties/IProperty;Ljava/lang/Comparable;)Lnet/minecraft/block/state/IBlockState;
+      56: invokevirtual #150                // Method net/minecraft/world/World.func_175656_a:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z
+      59: pop
+      60: iconst_1
+      61: ireturn
+      62: iconst_0
+      63: ireturn
+  static {};
+    Code:
+       0: new           #155                // class java/util/ArrayList
+       3: dup
+       4: invokespecial #156                // Method java/util/ArrayList."<init>":()V
+       7: putstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+      10: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+      13: getstatic     #159                // Field net/minecraftforge/common/BiomeDictionary$Type.COLD:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      16: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      21: pop
+      22: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+      25: getstatic     #166                // Field net/minecraftforge/common/BiomeDictionary$Type.SNOWY:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      28: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      33: pop
+      34: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+      37: getstatic     #169                // Field net/minecraftforge/common/BiomeDictionary$Type.SANDY:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      40: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      45: pop
+      46: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+      49: getstatic     #172                // Field net/minecraftforge/common/BiomeDictionary$Type.SAVANNA:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      52: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      57: pop
+      58: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+      61: getstatic     #175                // Field net/minecraftforge/common/BiomeDictionary$Type.MESA:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      64: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      69: pop
+      70: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+      73: getstatic     #178                // Field net/minecraftforge/common/BiomeDictionary$Type.MUSHROOM:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      76: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      81: pop
+      82: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+      85: getstatic     #181                // Field net/minecraftforge/common/BiomeDictionary$Type.NETHER:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      88: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      93: pop
+      94: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+      97: getstatic     #184                // Field net/minecraftforge/common/BiomeDictionary$Type.END:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     100: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     105: pop
+     106: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+     109: getstatic     #187                // Field net/minecraftforge/common/BiomeDictionary$Type.DEAD:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     112: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     117: pop
+     118: getstatic     #29                 // Field biomeBlacklist:Ljava/util/List;
+     121: getstatic     #190                // Field net/minecraftforge/common/BiomeDictionary$Type.WASTELAND:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     124: invokeinterface #163,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     129: pop
+     130: return
+}
+
+## Rustic BlockHerbBase
+public abstract class rustic.common.blocks.crops.BlockHerbBase extends net.minecraft.block.BlockBush implements net.minecraft.block.IGrowable,net.minecraftforge.common.IPlantable
+  public java.util.List<net.minecraft.item.ItemStack> getDrops(net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, int);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: aload_2
+       3: aload_3
+       4: iload         4
+       6: invokespecial #249                // Method net/minecraft/block/BlockBush.getDrops:(Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;I)Ljava/util/List;
+       9: astore        5
+      11: aload_0
+      12: aload_3
+      13: invokevirtual #198                // Method getAge:(Lnet/minecraft/block/state/IBlockState;)I
+      16: istore        6
+      18: aload_1
+      19: instanceof    #190                // class net/minecraft/world/World
+      22: ifeq          35
+      25: aload_1
+      26: checkcast     #190                // class net/minecraft/world/World
+      29: getfield      #252                // Field net/minecraft/world/World.field_73012_v:Ljava/util/Random;
+      32: goto          42
+      35: new           #208                // class java/util/Random
+      38: dup
+      39: invokespecial #255                // Method java/util/Random."<init>":()V
+      42: astore        7
+      44: iload         6
+      46: aload_0
+      47: invokevirtual #201                // Method getMaxAge:()I
+      50: if_icmplt     110
+      53: iconst_2
+      54: iload         4
+      56: iadd
+      57: istore        8
+      59: iconst_0
+      60: istore        9
+      62: iload         9
+      64: iload         8
+      66: if_icmpge     110
+      69: aload         7
+      71: iconst_2
+      72: aload_0
+      73: invokevirtual #201                // Method getMaxAge:()I
+      76: imul
+      77: invokevirtual #212                // Method java/util/Random.nextInt:(I)I
+      80: iload         6
+      82: if_icmpgt     104
+      85: aload         5
+      87: new           #257                // class net/minecraft/item/ItemStack
+      90: dup
+      91: aload_0
+      92: invokevirtual #261                // Method getHerb:()Lnet/minecraft/item/Item;
+      95: invokespecial #264                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;)V
+      98: invokeinterface #268,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     103: pop
+     104: iinc          9, 1
+     107: goto          62
+     110: aload         5
+     112: areturn
+  public int getMaxAge();
+    Code:
+       0: iconst_3
+       1: ireturn
+  public net.minecraft.item.Item func_180660_a(net.minecraft.block.state.IBlockState, java.util.Random, int);
+    Code:
+       0: aload_0
+       1: invokevirtual #261                // Method getHerb:()Lnet/minecraft/item/Item;
+       4: areturn
+
+## Rustic Herbs getHerb (rustic:cloudsbluff Herbs$4, rustic:core_root Herbs$6, rustic:ginseng Herbs$8, rustic:marsh_mallow Herbs$10)
+final class rustic.common.blocks.crops.Herbs$4 extends rustic.common.blocks.crops.BlockHerbBase
+  public net.minecraft.item.Item getHerb();
+    Code:
+       0: getstatic     #38                 // Field rustic/common/blocks/crops/Herbs.CLOUDSBLUFF:Lrustic/common/items/ItemHerbEdible;
+       3: areturn
+}
+final class rustic.common.blocks.crops.Herbs$6 extends rustic.common.blocks.crops.BlockHerbBase
+  public net.minecraft.item.Item getHerb();
+    Code:
+       0: getstatic     #38                 // Field rustic/common/blocks/crops/Herbs.CORE_ROOT:Lrustic/common/items/ItemHerbEdible;
+       3: areturn
+}
+final class rustic.common.blocks.crops.Herbs$8 extends rustic.common.blocks.crops.BlockHerbBase
+  public net.minecraft.item.Item getHerb();
+    Code:
+       0: getstatic     #38                 // Field rustic/common/blocks/crops/Herbs.GINSENG:Lrustic/common/items/ItemHerbEdible;
+       3: areturn
+}
+final class rustic.common.blocks.crops.Herbs$10 extends rustic.common.blocks.crops.BlockHerbBase
+  public net.minecraft.item.Item getHerb();
+    Code:
+       0: getstatic     #38                 // Field rustic/common/blocks/crops/Herbs.MARSH_MALLOW:Lrustic/common/items/ItemHerbEdible;
+       3: areturn
+}
+
+## Rustic Herbs.getRandomHerbForBiome
+public class rustic.common.blocks.crops.Herbs
+  public static rustic.common.blocks.crops.BlockHerbBase getRandomHerbForBiome(net.minecraft.world.biome.Biome, java.util.Random);
+    Code:
+       0: new           #162                // class java/util/ArrayList
+       3: dup
+       4: invokespecial #163                // Method java/util/ArrayList."<init>":()V
+       7: astore_2
+       8: aload_0
+       9: getstatic     #167                // Field net/minecraftforge/common/BiomeDictionary$Type.JUNGLE:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      12: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+      15: ifeq          61
+      18: aload_2
+      19: getstatic     #73                 // Field BLOOD_ORCHID:Lrustic/common/blocks/crops/BlockHerbBase;
+      22: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      27: pop
+      28: aload_2
+      29: getstatic     #120                // Field HORSETAIL:Lrustic/common/blocks/crops/BlockHerbBase;
+      32: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      37: pop
+      38: aload_2
+      39: getstatic     #125                // Field MARSH_MALLOW_CROP:Lrustic/common/blocks/crops/BlockHerbBase;
+      42: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      47: pop
+      48: aload_2
+      49: getstatic     #130                // Field MOONCAP:Lrustic/common/blocks/crops/BlockHerbBase;
+      52: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      57: pop
+      58: goto          354
+      61: aload_0
+      62: getstatic     #180                // Field net/minecraftforge/common/BiomeDictionary$Type.SANDY:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      65: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+      68: ifeq          84
+      71: aload_2
+      72: getstatic     #68                 // Field ALOE_VERA:Lrustic/common/blocks/crops/BlockHerbBase;
+      75: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      80: pop
+      81: goto          354
+      84: aload_0
+      85: getstatic     #183                // Field net/minecraftforge/common/BiomeDictionary$Type.SAVANNA:Lnet/minecraftforge/common/BiomeDictionary$Type;
+      88: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+      91: ifeq          107
+      94: aload_2
+      95: getstatic     #68                 // Field ALOE_VERA:Lrustic/common/blocks/crops/BlockHerbBase;
+      98: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     103: pop
+     104: goto          354
+     107: aload_0
+     108: getstatic     #186                // Field net/minecraftforge/common/BiomeDictionary$Type.MESA:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     111: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+     114: ifeq          130
+     117: aload_2
+     118: getstatic     #68                 // Field ALOE_VERA:Lrustic/common/blocks/crops/BlockHerbBase;
+     121: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     126: pop
+     127: goto          354
+     130: aload_0
+     131: getstatic     #189                // Field net/minecraftforge/common/BiomeDictionary$Type.MOUNTAIN:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     134: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+     137: ifeq          173
+     140: aload_0
+     141: getstatic     #192                // Field net/minecraftforge/common/BiomeDictionary$Type.SNOWY:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     144: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+     147: ifne          173
+     150: aload_2
+     151: getstatic     #135                // Field WIND_THISTLE:Lrustic/common/blocks/crops/BlockHerbBase;
+     154: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     159: pop
+     160: aload_2
+     161: getstatic     #95                 // Field CLOUDSBLUFF_CROP:Lrustic/common/blocks/crops/BlockHerbBase;
+     164: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     169: pop
+     170: goto          354
+     173: aload_0
+     174: getstatic     #195                // Field net/minecraftforge/common/BiomeDictionary$Type.SWAMP:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     177: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+     180: ifeq          226
+     183: aload_0
+     184: getstatic     #192                // Field net/minecraftforge/common/BiomeDictionary$Type.SNOWY:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     187: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+     190: ifne          226
+     193: aload_2
+     194: getstatic     #90                 // Field CHAMOMILE:Lrustic/common/blocks/crops/BlockHerbBase;
+     197: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     202: pop
+     203: aload_2
+     204: getstatic     #120                // Field HORSETAIL:Lrustic/common/blocks/crops/BlockHerbBase;
+     207: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     212: pop
+     213: aload_2
+     214: getstatic     #125                // Field MARSH_MALLOW_CROP:Lrustic/common/blocks/crops/BlockHerbBase;
+     217: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     222: pop
+     223: goto          354
+     226: aload_0
+     227: getstatic     #198                // Field net/minecraftforge/common/BiomeDictionary$Type.FOREST:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     230: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+     233: ifeq          289
+     236: aload_0
+     237: getstatic     #192                // Field net/minecraftforge/common/BiomeDictionary$Type.SNOWY:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     240: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+     243: ifne          289
+     246: aload_2
+     247: getstatic     #90                 // Field CHAMOMILE:Lrustic/common/blocks/crops/BlockHerbBase;
+     250: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     255: pop
+     256: aload_2
+     257: getstatic     #100                // Field COHOSH:Lrustic/common/blocks/crops/BlockHerbBase;
+     260: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     265: pop
+     266: aload_2
+     267: getstatic     #115                // Field GINSENG_CROP:Lrustic/common/blocks/crops/BlockHerbBase;
+     270: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     275: pop
+     276: aload_2
+     277: getstatic     #120                // Field HORSETAIL:Lrustic/common/blocks/crops/BlockHerbBase;
+     280: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     285: pop
+     286: goto          354
+     289: aload_0
+     290: getstatic     #201                // Field net/minecraftforge/common/BiomeDictionary$Type.PLAINS:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     293: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+     296: ifeq          352
+     299: aload_0
+     300: getstatic     #192                // Field net/minecraftforge/common/BiomeDictionary$Type.SNOWY:Lnet/minecraftforge/common/BiomeDictionary$Type;
+     303: invokestatic  #171                // Method net/minecraftforge/common/BiomeDictionary.hasType:(Lnet/minecraft/world/biome/Biome;Lnet/minecraftforge/common/BiomeDictionary$Type;)Z
+     306: ifne          352
+     309: aload_2
+     310: getstatic     #90                 // Field CHAMOMILE:Lrustic/common/blocks/crops/BlockHerbBase;
+     313: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     318: pop
+     319: aload_2
+     320: getstatic     #115                // Field GINSENG_CROP:Lrustic/common/blocks/crops/BlockHerbBase;
+     323: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     328: pop
+     329: aload_2
+     330: getstatic     #120                // Field HORSETAIL:Lrustic/common/blocks/crops/BlockHerbBase;
+     333: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     338: pop
+     339: aload_2
+     340: getstatic     #135                // Field WIND_THISTLE:Lrustic/common/blocks/crops/BlockHerbBase;
+     343: invokeinterface #177,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     348: pop
+     349: goto          354
+     352: aconst_null
+     353: areturn
+     354: aload_2
+     355: aload_1
+     356: aload_2
+     357: invokeinterface #205,  1          // InterfaceMethod java/util/List.size:()I
+     362: invokevirtual #211                // Method java/util/Random.nextInt:(I)I
+     365: invokeinterface #215,  2          // InterfaceMethod java/util/List.get:(I)Ljava/lang/Object;
+     370: checkcast     #154                // class rustic/common/blocks/crops/BlockHerbBase
+     373: areturn
+
+## Rustic WorldGenSurfaceHerbs
+public class rustic.common.world.WorldGenSurfaceHerbs extends net.minecraft.world.gen.feature.WorldGenerator
+  private boolean generateHerb(net.minecraft.world.World, java.util.Random, net.minecraft.util.math.BlockPos, rustic.common.blocks.crops.BlockHerbBase);
+    Code:
+       0: aload_1
+       1: aload_3
+       2: invokevirtual #85                 // Method net/minecraft/util/math/BlockPos.func_177977_b:()Lnet/minecraft/util/math/BlockPos;
+       5: invokevirtual #89                 // Method net/minecraft/world/World.func_180495_p:(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/state/IBlockState;
+       8: astore        5
+      10: aload_1
+      11: aload_3
+      12: invokevirtual #93                 // Method net/minecraft/world/World.func_175623_d:(Lnet/minecraft/util/math/BlockPos;)Z
+      15: ifeq          68
+      18: aload         5
+      20: invokeinterface #99,  1           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      25: aload         5
+      27: aload_1
+      28: aload_3
+      29: invokevirtual #85                 // Method net/minecraft/util/math/BlockPos.func_177977_b:()Lnet/minecraft/util/math/BlockPos;
+      32: getstatic     #105                // Field net/minecraft/util/EnumFacing.UP:Lnet/minecraft/util/EnumFacing;
+      35: aload         4
+      37: invokevirtual #111                // Method net/minecraft/block/Block.canSustainPlant:(Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/world/IBlockAccess;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/util/EnumFacing;Lnet/minecraftforge/common/IPlantable;)Z
+      40: ifeq          68
+      43: aload_1
+      44: aload_3
+      45: aload         4
+      47: invokevirtual #115                // Method rustic/common/blocks/crops/BlockHerbBase.func_176223_P:()Lnet/minecraft/block/state/IBlockState;
+      50: getstatic     #119                // Field rustic/common/blocks/crops/BlockHerbBase.AGE:Lnet/minecraft/block/properties/PropertyInteger;
+      53: iconst_3
+      54: invokestatic  #125                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+      57: invokeinterface #129,  3          // InterfaceMethod net/minecraft/block/state/IBlockState.func_177226_a:(Lnet/minecraft/block/properties/IProperty;Ljava/lang/Comparable;)Lnet/minecraft/block/state/IBlockState;
+      62: invokevirtual #133                // Method net/minecraft/world/World.func_175656_a:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z
+      65: pop
+      66: iconst_1
+      67: ireturn
+      68: iconst_0
+      69: ireturn
+}
+
+## Rustic ItemHerbEdible (fields and methods; constructor)
+public class rustic.common.items.ItemHerbEdible extends net.minecraft.item.ItemFood implements net.minecraftforge.common.IPlantable {
+  private rustic.common.blocks.crops.BlockHerbBase herbBlock;
+  public rustic.common.items.ItemHerbEdible(rustic.common.blocks.crops.BlockHerbBase, int, float);
+  public void initModel();
+  public net.minecraft.util.EnumActionResult func_180614_a(net.minecraft.entity.player.EntityPlayer, net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.util.EnumHand, net.minecraft.util.EnumFacing, float, float, float);
+  public net.minecraftforge.common.EnumPlantType getPlantType(net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos);
+  public net.minecraft.block.state.IBlockState getPlant(net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos);
+public class rustic.common.items.ItemHerbEdible extends net.minecraft.item.ItemFood implements net.minecraftforge.common.IPlantable
+  public rustic.common.items.ItemHerbEdible(rustic.common.blocks.crops.BlockHerbBase, int, float);
+    Code:
+       0: aload_0
+       1: iload_2
+       2: fload_3
+       3: iconst_0
+       4: invokespecial #14                 // Method net/minecraft/item/ItemFood."<init>":(IFZ)V
+       7: aload_0
+       8: aload_1
+       9: putfield      #16                 // Field herbBlock:Lrustic/common/blocks/crops/BlockHerbBase;
+      12: aload_0
+      13: aload_1
+      14: invokevirtual #22                 // Method rustic/common/blocks/crops/BlockHerbBase.getRegistryName:()Lnet/minecraft/util/ResourceLocation;
+      17: invokevirtual #26                 // Method setRegistryName:(Lnet/minecraft/util/ResourceLocation;)Lnet/minecraftforge/registries/IForgeRegistryEntry;
+      20: pop
+      21: aload_0
+      22: aload_1
+      23: invokevirtual #30                 // Method rustic/common/blocks/crops/BlockHerbBase.func_149739_a:()Ljava/lang/String;
+      26: invokevirtual #34                 // Method func_77655_b:(Ljava/lang/String;)Lnet/minecraft/item/Item;
+      29: pop
+      30: aload_0
+      31: getstatic     #40                 // Field rustic/core/Rustic.alchemyTab:Lnet/minecraft/creativetab/CreativeTabs;
+      34: invokevirtual #44                 // Method func_77637_a:(Lnet/minecraft/creativetab/CreativeTabs;)Lnet/minecraft/item/Item;
+      37: pop
+      38: ldc           #46                 // class net/minecraft/item/Item
+      40: invokestatic  #52                 // Method net/minecraftforge/fml/common/registry/GameRegistry.findRegistry:(Ljava/lang/Class;)Lnet/minecraftforge/registries/IForgeRegistry;
+      43: aload_0
+      44: invokeinterface #58,  2           // InterfaceMethod net/minecraftforge/registries/IForgeRegistry.register:(Lnet/minecraftforge/registries/IForgeRegistryEntry;)V
+      49: return
+## BoP BlockBOPPlant
+public class biomesoplenty.common.block.BlockBOPPlant extends biomesoplenty.common.block.BlockBOPDecoration implements net.minecraftforge.common.IShearable,vazkii.botania.api.item.IHornHarvestable
+  public java.util.List<net.minecraft.item.ItemStack> getDrops(net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, int);
+    Code:
+       0: aload_1
+       1: instanceof    #218                // class net/minecraft/world/World
+       4: ifeq          17
+       7: aload_1
+       8: checkcast     #218                // class net/minecraft/world/World
+      11: getfield      #222                // Field net/minecraft/world/World.field_73012_v:Ljava/util/Random;
+      14: goto          20
+      17: getstatic     #225                // Field RANDOM:Ljava/util/Random;
+      20: astore        5
+      22: new           #229                // class java/util/ArrayList
+      25: dup
+      26: invokespecial #230                // Method java/util/ArrayList."<init>":()V
+      29: astore        6
+      31: aload_3
+      32: aload_0
+      33: getfield      #73                 // Field variantProperty:Lnet/minecraft/block/properties/IProperty;
+      36: invokeinterface #97,  2           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177229_b:(Lnet/minecraft/block/properties/IProperty;)Ljava/lang/Comparable;
+      41: checkcast     #99                 // class biomesoplenty/api/enums/BOPPlants
+      44: astore        7
+      46: getstatic     #103                // Field biomesoplenty/common/block/BlockBOPPlant$2.$SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+      49: aload         7
+      51: invokevirtual #106                // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+      54: iaload
+      55: tableswitch   { // 5 to 24
+                     5: 222
+                     6: 148
+                     7: 148
+                     8: 176
+                     9: 320
+                    10: 320
+                    11: 148
+                    12: 148
+                    13: 320
+                    14: 320
+                    15: 320
+                    16: 320
+                    17: 271
+                    18: 301
+                    19: 243
+                    20: 301
+                    21: 301
+                    22: 301
+                    23: 301
+                    24: 301
+               default: 320
+          }
+     148: aload         5
+     150: bipush        8
+     152: invokevirtual #236                // Method java/util/Random.nextInt:(I)I
+     155: ifne          320
+     158: aload         6
+     160: aload         5
+     162: iload         4
+     164: invokestatic  #242                // Method net/minecraftforge/common/ForgeHooks.getGrassSeed:(Ljava/util/Random;I)Lnet/minecraft/item/ItemStack;
+     167: invokeinterface #246,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     172: pop
+     173: goto          320
+     176: aload         5
+     178: bipush        50
+     180: invokevirtual #236                // Method java/util/Random.nextInt:(I)I
+     183: ifne          320
+     186: aload         6
+     188: new           #248                // class net/minecraft/item/ItemStack
+     191: dup
+     192: aload         5
+     194: iconst_2
+     195: invokevirtual #236                // Method java/util/Random.nextInt:(I)I
+     198: ifne          207
+     201: getstatic     #254                // Field net/minecraft/init/Items.field_151172_bF:Lnet/minecraft/item/Item;
+     204: goto          210
+     207: getstatic     #261                // Field net/minecraft/init/Items.field_151174_bG:Lnet/minecraft/item/Item;
+     210: invokespecial #266                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;)V
+     213: invokeinterface #246,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     218: pop
+     219: goto          320
+     222: aload         6
+     224: new           #248                // class net/minecraft/item/ItemStack
+     227: dup
+     228: getstatic     #271                // Field biomesoplenty/api/item/BOPItems.berries:Lnet/minecraft/item/Item;
+     231: invokespecial #266                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;)V
+     234: invokeinterface #246,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     239: pop
+     240: goto          320
+     243: aload         5
+     245: iconst_5
+     246: invokevirtual #236                // Method java/util/Random.nextInt:(I)I
+     249: ifne          320
+     252: aload         6
+     254: getstatic     #47                 // Field paging:Lbiomesoplenty/common/util/block/VariantPagingHelper;
+     257: aload         7
+     259: invokevirtual #275                // Method biomesoplenty/common/util/block/VariantPagingHelper.getVariantItem:(Ljava/lang/Enum;)Lnet/minecraft/item/ItemStack;
+     262: invokeinterface #246,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     267: pop
+     268: goto          320
+     271: aload         5
+     273: iconst_3
+     274: invokevirtual #236                // Method java/util/Random.nextInt:(I)I
+     277: ifne          320
+     280: aload         6
+     282: new           #248                // class net/minecraft/item/ItemStack
+     285: dup
+     286: getstatic     #278                // Field net/minecraft/init/Items.field_151014_N:Lnet/minecraft/item/Item;
+     289: invokespecial #266                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;)V
+     292: invokeinterface #246,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     297: pop
+     298: goto          320
+     301: aload         6
+     303: getstatic     #47                 // Field paging:Lbiomesoplenty/common/util/block/VariantPagingHelper;
+     306: aload         7
+     308: invokevirtual #275                // Method biomesoplenty/common/util/block/VariantPagingHelper.getVariantItem:(Ljava/lang/Enum;)Lnet/minecraft/item/ItemStack;
+     311: invokeinterface #246,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     316: pop
+     317: goto          320
+     320: aload         6
+     322: areturn
+  public void func_180634_a(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, net.minecraft.entity.Entity);
+    Code:
+       0: getstatic     #103                // Field biomesoplenty/common/block/BlockBOPPlant$2.$SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+       3: aload_3
+       4: aload_0
+       5: getfield      #73                 // Field variantProperty:Lnet/minecraft/block/properties/IProperty;
+       8: invokeinterface #97,  2           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177229_b:(Lnet/minecraft/block/properties/IProperty;)Ljava/lang/Comparable;
+      13: checkcast     #99                 // class biomesoplenty/api/enums/BOPPlants
+      16: invokevirtual #106                // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+      19: iaload
+      20: lookupswitch  { // 3
+                     3: 56
+                    16: 130
+                    22: 130
+               default: 194
+          }
+      56: aload         4
+      58: instanceof    #429                // class net/minecraft/entity/player/EntityPlayer
+      61: ifeq          194
+      64: aload         4
+      66: checkcast     #429                // class net/minecraft/entity/player/EntityPlayer
+      69: getfield      #433                // Field net/minecraft/entity/player/EntityPlayer.field_71071_by:Lnet/minecraft/entity/player/InventoryPlayer;
+      72: astore        5
+      74: aload         5
+      76: getfield      #439                // Field net/minecraft/entity/player/InventoryPlayer.field_70460_b:Lnet/minecraft/util/NonNullList;
+      79: iconst_0
+      80: invokevirtual #445                // Method net/minecraft/util/NonNullList.get:(I)Ljava/lang/Object;
+      83: getstatic     #449                // Field net/minecraft/item/ItemStack.field_190927_a:Lnet/minecraft/item/ItemStack;
+      86: if_acmpeq     107
+      89: aload         5
+      91: getfield      #439                // Field net/minecraft/entity/player/InventoryPlayer.field_70460_b:Lnet/minecraft/util/NonNullList;
+      94: iconst_1
+      95: invokevirtual #445                // Method net/minecraft/util/NonNullList.get:(I)Ljava/lang/Object;
+      98: getstatic     #449                // Field net/minecraft/item/ItemStack.field_190927_a:Lnet/minecraft/item/ItemStack;
+     101: if_acmpeq     107
+     104: goto          194
+     107: aload         4
+     109: checkcast     #451                // class net/minecraft/entity/EntityLivingBase
+     112: new           #453                // class net/minecraft/potion/PotionEffect
+     115: dup
+     116: getstatic     #459                // Field net/minecraft/init/MobEffects.field_76436_u:Lnet/minecraft/potion/Potion;
+     119: bipush        100
+     121: invokespecial #462                // Method net/minecraft/potion/PotionEffect."<init>":(Lnet/minecraft/potion/Potion;I)V
+     124: invokevirtual #466                // Method net/minecraft/entity/EntityLivingBase.func_70690_d:(Lnet/minecraft/potion/PotionEffect;)V
+     127: goto          194
+     130: aload         4
+     132: instanceof    #429                // class net/minecraft/entity/player/EntityPlayer
+     135: ifeq          194
+     138: aload         4
+     140: checkcast     #429                // class net/minecraft/entity/player/EntityPlayer
+     143: getfield      #433                // Field net/minecraft/entity/player/EntityPlayer.field_71071_by:Lnet/minecraft/entity/player/InventoryPlayer;
+     146: astore        5
+     148: aload         5
+     150: getfield      #439                // Field net/minecraft/entity/player/InventoryPlayer.field_70460_b:Lnet/minecraft/util/NonNullList;
+     153: iconst_0
+     154: invokevirtual #445                // Method net/minecraft/util/NonNullList.get:(I)Ljava/lang/Object;
+     157: getstatic     #449                // Field net/minecraft/item/ItemStack.field_190927_a:Lnet/minecraft/item/ItemStack;
+     160: if_acmpeq     181
+     163: aload         5
+     165: getfield      #439                // Field net/minecraft/entity/player/InventoryPlayer.field_70460_b:Lnet/minecraft/util/NonNullList;
+     168: iconst_1
+     169: invokevirtual #445                // Method net/minecraft/util/NonNullList.get:(I)Ljava/lang/Object;
+     172: getstatic     #449                // Field net/minecraft/item/ItemStack.field_190927_a:Lnet/minecraft/item/ItemStack;
+     175: if_acmpeq     181
+     178: goto          194
+     181: aload         4
+     183: getstatic     #472                // Field net/minecraft/util/DamageSource.field_76367_g:Lnet/minecraft/util/DamageSource;
+     186: fconst_1
+     187: invokevirtual #478                // Method net/minecraft/entity/Entity.func_70097_a:(Lnet/minecraft/util/DamageSource;F)Z
+     190: pop
+     191: goto          194
+     194: return
+  public boolean func_180639_a(net.minecraft.world.World, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, net.minecraft.entity.player.EntityPlayer, net.minecraft.util.EnumHand, net.minecraft.util.EnumFacing, float, float, float);
+    Code:
+       0: getstatic     #103                // Field biomesoplenty/common/block/BlockBOPPlant$2.$SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+       3: aload_3
+       4: aload_0
+       5: getfield      #73                 // Field variantProperty:Lnet/minecraft/block/properties/IProperty;
+       8: invokeinterface #97,  2           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177229_b:(Lnet/minecraft/block/properties/IProperty;)Ljava/lang/Comparable;
+      13: checkcast     #99                 // class biomesoplenty/api/enums/BOPPlants
+      16: invokevirtual #106                // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+      19: iaload
+      20: lookupswitch  { // 1
+                     5: 40
+               default: 121
+          }
+      40: aload_1
+      41: aload_2
+      42: getstatic     #47                 // Field paging:Lbiomesoplenty/common/util/block/VariantPagingHelper;
+      45: getstatic     #486                // Field biomesoplenty/api/enums/BOPPlants.BUSH:Lbiomesoplenty/api/enums/BOPPlants;
+      48: invokevirtual #421                // Method biomesoplenty/common/util/block/VariantPagingHelper.getVariantState:(Ljava/lang/Enum;)Lnet/minecraft/block/state/IBlockState;
+      51: invokevirtual #425                // Method net/minecraft/world/World.func_175656_a:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z
+      54: pop
+      55: new           #488                // class net/minecraft/entity/item/EntityItem
+      58: dup
+      59: aload_1
+      60: aload_2
+      61: invokevirtual #389                // Method net/minecraft/util/math/BlockPos.func_177958_n:()I
+      64: i2d
+      65: aload_2
+      66: invokevirtual #396                // Method net/minecraft/util/math/BlockPos.func_177956_o:()I
+      69: i2d
+      70: aload_2
+      71: invokevirtual #400                // Method net/minecraft/util/math/BlockPos.func_177952_p:()I
+      74: i2d
+      75: new           #248                // class net/minecraft/item/ItemStack
+      78: dup
+      79: getstatic     #271                // Field biomesoplenty/api/item/BOPItems.berries:Lnet/minecraft/item/Item;
+      82: invokespecial #266                // Method net/minecraft/item/ItemStack."<init>":(Lnet/minecraft/item/Item;)V
+      85: invokespecial #491                // Method net/minecraft/entity/item/EntityItem."<init>":(Lnet/minecraft/world/World;DDDLnet/minecraft/item/ItemStack;)V
+      88: astore        10
+      90: aload_1
+      91: getfield      #495                // Field net/minecraft/world/World.field_72995_K:Z
+      94: ifne          119
+      97: aload_1
+      98: aload         10
+     100: invokevirtual #499                // Method net/minecraft/world/World.func_72838_d:(Lnet/minecraft/entity/Entity;)Z
+     103: pop
+     104: aload         4
+     106: instanceof    #501                // class net/minecraftforge/common/util/FakePlayer
+     109: ifne          119
+     112: aload         10
+     114: aload         4
+     116: invokevirtual #505                // Method net/minecraft/entity/item/EntityItem.func_70100_b_:(Lnet/minecraft/entity/player/EntityPlayer;)V
+     119: iconst_1
+     120: ireturn
+     121: aload_0
+     122: aload_1
+     123: aload_2
+     124: aload_3
+     125: aload         4
+     127: aload         5
+     129: aload         6
+     131: fload         7
+     133: fload         8
+     135: fload         9
+     137: invokespecial #507                // Method biomesoplenty/common/block/BlockBOPDecoration.func_180639_a:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/util/EnumHand;Lnet/minecraft/util/EnumFacing;FFF)Z
+     140: ireturn
+
+## BoP BlockBOPPlant$2 (switch map)
+class biomesoplenty.common.block.BlockBOPPlant$2
+  static {};
+    Code:
+       0: invokestatic  #21                 // Method biomesoplenty/common/block/BlockBOPPlant$ColoringType.values:()[Lbiomesoplenty/common/block/BlockBOPPlant$ColoringType;
+       3: arraylength
+       4: newarray       int
+       6: putstatic     #23                 // Field $SwitchMap$biomesoplenty$common$block$BlockBOPPlant$ColoringType:[I
+       9: getstatic     #23                 // Field $SwitchMap$biomesoplenty$common$block$BlockBOPPlant$ColoringType:[I
+      12: getstatic     #27                 // Field biomesoplenty/common/block/BlockBOPPlant$ColoringType.LIKE_LEAVES:Lbiomesoplenty/common/block/BlockBOPPlant$ColoringType;
+      15: invokevirtual #31                 // Method biomesoplenty/common/block/BlockBOPPlant$ColoringType.ordinal:()I
+      18: iconst_1
+      19: iastore
+      20: goto          24
+      23: astore_0
+      24: getstatic     #23                 // Field $SwitchMap$biomesoplenty$common$block$BlockBOPPlant$ColoringType:[I
+      27: getstatic     #34                 // Field biomesoplenty/common/block/BlockBOPPlant$ColoringType.LIKE_GRASS:Lbiomesoplenty/common/block/BlockBOPPlant$ColoringType;
+      30: invokevirtual #31                 // Method biomesoplenty/common/block/BlockBOPPlant$ColoringType.ordinal:()I
+      33: iconst_2
+      34: iastore
+      35: goto          39
+      38: astore_0
+      39: invokestatic  #39                 // Method biomesoplenty/api/enums/BOPPlants.values:()[Lbiomesoplenty/api/enums/BOPPlants;
+      42: arraylength
+      43: newarray       int
+      45: putstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+      48: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+      51: getstatic     #45                 // Field biomesoplenty/api/enums/BOPPlants.SHRUB:Lbiomesoplenty/api/enums/BOPPlants;
+      54: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+      57: iconst_1
+      58: iastore
+      59: goto          63
+      62: astore_0
+      63: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+      66: getstatic     #49                 // Field biomesoplenty/api/enums/BOPPlants.LEAFPILE:Lbiomesoplenty/api/enums/BOPPlants;
+      69: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+      72: iconst_2
+      73: iastore
+      74: goto          78
+      77: astore_0
+      78: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+      81: getstatic     #52                 // Field biomesoplenty/api/enums/BOPPlants.POISONIVY:Lbiomesoplenty/api/enums/BOPPlants;
+      84: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+      87: iconst_3
+      88: iastore
+      89: goto          93
+      92: astore_0
+      93: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+      96: getstatic     #55                 // Field biomesoplenty/api/enums/BOPPlants.BUSH:Lbiomesoplenty/api/enums/BOPPlants;
+      99: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     102: iconst_4
+     103: iastore
+     104: goto          108
+     107: astore_0
+     108: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     111: getstatic     #58                 // Field biomesoplenty/api/enums/BOPPlants.BERRYBUSH:Lbiomesoplenty/api/enums/BOPPlants;
+     114: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     117: iconst_5
+     118: iastore
+     119: goto          123
+     122: astore_0
+     123: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     126: getstatic     #61                 // Field biomesoplenty/api/enums/BOPPlants.SHORTGRASS:Lbiomesoplenty/api/enums/BOPPlants;
+     129: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     132: bipush        6
+     134: iastore
+     135: goto          139
+     138: astore_0
+     139: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     142: getstatic     #64                 // Field biomesoplenty/api/enums/BOPPlants.MEDIUMGRASS:Lbiomesoplenty/api/enums/BOPPlants;
+     145: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     148: bipush        7
+     150: iastore
+     151: goto          155
+     154: astore_0
+     155: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     158: getstatic     #67                 // Field biomesoplenty/api/enums/BOPPlants.SPROUT:Lbiomesoplenty/api/enums/BOPPlants;
+     161: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     164: bipush        8
+     166: iastore
+     167: goto          171
+     170: astore_0
+     171: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     174: getstatic     #70                 // Field biomesoplenty/api/enums/BOPPlants.KORU:Lbiomesoplenty/api/enums/BOPPlants;
+     177: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     180: bipush        9
+     182: iastore
+     183: goto          187
+     186: astore_0
+     187: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     190: getstatic     #73                 // Field biomesoplenty/api/enums/BOPPlants.CLOVERPATCH:Lbiomesoplenty/api/enums/BOPPlants;
+     193: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     196: bipush        10
+     198: iastore
+     199: goto          203
+     202: astore_0
+     203: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     206: getstatic     #76                 // Field biomesoplenty/api/enums/BOPPlants.WHEATGRASS:Lbiomesoplenty/api/enums/BOPPlants;
+     209: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     212: bipush        11
+     214: iastore
+     215: goto          219
+     218: astore_0
+     219: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     222: getstatic     #79                 // Field biomesoplenty/api/enums/BOPPlants.DAMPGRASS:Lbiomesoplenty/api/enums/BOPPlants;
+     225: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     228: bipush        12
+     230: iastore
+     231: goto          235
+     234: astore_0
+     235: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     238: getstatic     #82                 // Field biomesoplenty/api/enums/BOPPlants.DEVILWEED:Lbiomesoplenty/api/enums/BOPPlants;
+     241: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     244: bipush        13
+     246: iastore
+     247: goto          251
+     250: astore_0
+     251: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     254: getstatic     #85                 // Field biomesoplenty/api/enums/BOPPlants.DEADGRASS:Lbiomesoplenty/api/enums/BOPPlants;
+     257: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     260: bipush        14
+     262: iastore
+     263: goto          267
+     266: astore_0
+     267: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     270: getstatic     #88                 // Field biomesoplenty/api/enums/BOPPlants.DESERTGRASS:Lbiomesoplenty/api/enums/BOPPlants;
+     273: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     276: bipush        15
+     278: iastore
+     279: goto          283
+     282: astore_0
+     283: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     286: getstatic     #91                 // Field biomesoplenty/api/enums/BOPPlants.THORN:Lbiomesoplenty/api/enums/BOPPlants;
+     289: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     292: bipush        16
+     294: iastore
+     295: goto          299
+     298: astore_0
+     299: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     302: getstatic     #94                 // Field biomesoplenty/api/enums/BOPPlants.BARLEY:Lbiomesoplenty/api/enums/BOPPlants;
+     305: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     308: bipush        17
+     310: iastore
+     311: goto          315
+     314: astore_0
+     315: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     318: getstatic     #97                 // Field biomesoplenty/api/enums/BOPPlants.RAFFLESIA:Lbiomesoplenty/api/enums/BOPPlants;
+     321: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     324: bipush        18
+     326: iastore
+     327: goto          331
+     330: astore_0
+     331: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     334: getstatic     #100                // Field biomesoplenty/api/enums/BOPPlants.WILDRICE:Lbiomesoplenty/api/enums/BOPPlants;
+     337: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     340: bipush        19
+     342: iastore
+     343: goto          347
+     346: astore_0
+     347: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     350: getstatic     #103                // Field biomesoplenty/api/enums/BOPPlants.CATTAIL:Lbiomesoplenty/api/enums/BOPPlants;
+     353: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     356: bipush        20
+     358: iastore
+     359: goto          363
+     362: astore_0
+     363: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     366: getstatic     #106                // Field biomesoplenty/api/enums/BOPPlants.RIVERCANE:Lbiomesoplenty/api/enums/BOPPlants;
+     369: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     372: bipush        21
+     374: iastore
+     375: goto          379
+     378: astore_0
+     379: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     382: getstatic     #109                // Field biomesoplenty/api/enums/BOPPlants.TINYCACTUS:Lbiomesoplenty/api/enums/BOPPlants;
+     385: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     388: bipush        22
+     390: iastore
+     391: goto          395
+     394: astore_0
+     395: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     398: getstatic     #112                // Field biomesoplenty/api/enums/BOPPlants.REED:Lbiomesoplenty/api/enums/BOPPlants;
+     401: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     404: bipush        23
+     406: iastore
+     407: goto          411
+     410: astore_0
+     411: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     414: getstatic     #115                // Field biomesoplenty/api/enums/BOPPlants.ROOT:Lbiomesoplenty/api/enums/BOPPlants;
+     417: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     420: bipush        24
+     422: iastore
+     423: goto          427
+     426: astore_0
+     427: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     430: getstatic     #118                // Field biomesoplenty/api/enums/BOPPlants.DEADLEAFPILE:Lbiomesoplenty/api/enums/BOPPlants;
+     433: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     436: bipush        25
+     438: iastore
+     439: goto          443
+     442: astore_0
+     443: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     446: getstatic     #121                // Field biomesoplenty/api/enums/BOPPlants.DESERTSPROUTS:Lbiomesoplenty/api/enums/BOPPlants;
+     449: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     452: bipush        26
+     454: iastore
+     455: goto          459
+     458: astore_0
+     459: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     462: getstatic     #124                // Field biomesoplenty/api/enums/BOPPlants.DUNEGRASS:Lbiomesoplenty/api/enums/BOPPlants;
+     465: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     468: bipush        27
+     470: iastore
+     471: goto          475
+     474: astore_0
+     475: getstatic     #41                 // Field $SwitchMap$biomesoplenty$api$enums$BOPPlants:[I
+     478: getstatic     #127                // Field biomesoplenty/api/enums/BOPPlants.SPECTRALFERN:Lbiomesoplenty/api/enums/BOPPlants;
+     481: invokevirtual #46                 // Method biomesoplenty/api/enums/BOPPlants.ordinal:()I
+     484: bipush        28
+     486: iastore
+     487: goto          491
+     490: astore_0
+     491: return
+    Exception table:
+       from    to  target type
+           9    20    23   Class java/lang/NoSuchFieldError
+          24    35    38   Class java/lang/NoSuchFieldError
+          48    59    62   Class java/lang/NoSuchFieldError
+          63    74    77   Class java/lang/NoSuchFieldError
+          78    89    92   Class java/lang/NoSuchFieldError
+          93   104   107   Class java/lang/NoSuchFieldError
+         108   119   122   Class java/lang/NoSuchFieldError
+         123   135   138   Class java/lang/NoSuchFieldError
+         139   151   154   Class java/lang/NoSuchFieldError
+         155   167   170   Class java/lang/NoSuchFieldError
+         171   183   186   Class java/lang/NoSuchFieldError
+         187   199   202   Class java/lang/NoSuchFieldError
+         203   215   218   Class java/lang/NoSuchFieldError
+         219   231   234   Class java/lang/NoSuchFieldError
+         235   247   250   Class java/lang/NoSuchFieldError
+         251   263   266   Class java/lang/NoSuchFieldError
+         267   279   282   Class java/lang/NoSuchFieldError
+         283   295   298   Class java/lang/NoSuchFieldError
+         299   311   314   Class java/lang/NoSuchFieldError
+         315   327   330   Class java/lang/NoSuchFieldError
+         331   343   346   Class java/lang/NoSuchFieldError
+         347   359   362   Class java/lang/NoSuchFieldError
+         363   375   378   Class java/lang/NoSuchFieldError
+         379   391   394   Class java/lang/NoSuchFieldError
+         395   407   410   Class java/lang/NoSuchFieldError
+         411   423   426   Class java/lang/NoSuchFieldError
+         427   439   442   Class java/lang/NoSuchFieldError
+         443   455   458   Class java/lang/NoSuchFieldError
+         459   471   474   Class java/lang/NoSuchFieldError
+         475   487   490   Class java/lang/NoSuchFieldError
+}
+
+## BoP BOPPlants (enum order)
+       4: ldc           #84                 // String SHORTGRASS
+      17: ldc           #88                 // String MEDIUMGRASS
+      30: ldc           #91                 // String BUSH
+      43: ldc           #94                 // String SPROUT
+      56: ldc           #97                 // String POISONIVY
+      69: ldc           #100                // String BERRYBUSH
+      82: ldc           #103                // String SHRUB
+      96: ldc           #106                // String WHEATGRASS
+     110: ldc           #109                // String DAMPGRASS
+     124: ldc           #112                // String KORU
+     138: ldc           #115                // String CLOVERPATCH
+     152: ldc           #118                // String LEAFPILE
+     166: ldc           #121                // String DEADLEAFPILE
+     180: ldc           #124                // String DEADGRASS
+     194: ldc           #127                // String DESERTGRASS
+     208: ldc           #130                // String DESERTSPROUTS
+     222: ldc           #133                // String DUNEGRASS
+     236: ldc           #136                // String SPECTRALFERN
+     250: ldc           #139                // String THORN
+     264: ldc           #142                // String WILDRICE
+     278: ldc           #145                // String CATTAIL
+     292: ldc           #148                // String RIVERCANE
+     306: ldc           #151                // String TINYCACTUS
+     320: ldc           #154                // String DEVILWEED
+     334: ldc           #157                // String REED
+     348: ldc           #160                // String ROOT
+     362: ldc           #163                // String RAFFLESIA
+     376: ldc           #166                // String BARLEY
+
+## BoP ModItems (berries)
+     481: new           #233                // class biomesoplenty/common/item/ItemBOPFood
+     484: dup
+     485: iconst_1
+     486: ldc           #234                // float 0.1f
+     488: bipush        8
+     490: invokespecial #237                // Method biomesoplenty/common/item/ItemBOPFood."<init>":(IFI)V
+     493: ldc           #239                // String berries
+     495: invokestatic  #29                 // Method registerItem:(Lnet/minecraft/item/Item;Ljava/lang/String;)Lnet/minecraft/item/Item;
+     498: putstatic     #241                // Field biomesoplenty/api/item/BOPItems.berries:Lnet/minecraft/item/Item;
+
+## BoP ItemBOPFood (fields and methods; constructor)
+public class biomesoplenty.common.item.ItemBOPFood extends net.minecraft.item.ItemFood {
+  public int eatDuration;
+  public biomesoplenty.common.item.ItemBOPFood(int, float, int);
+  public int func_77626_a(net.minecraft.item.ItemStack);
+public class biomesoplenty.common.item.ItemBOPFood extends net.minecraft.item.ItemFood
+  public biomesoplenty.common.item.ItemBOPFood(int, float, int);
+    Code:
+       0: aload_0
+       1: iload_1
+       2: fload_2
+       3: iconst_0
+       4: invokespecial #12                 // Method net/minecraft/item/ItemFood."<init>":(IFZ)V
+       7: aload_0
+       8: iload_3
+       9: putfield      #14                 // Field eatDuration:I
+      12: return
+## HarvestCraft BlockBaseGarden
+public class com.pam.harvestcraft.blocks.blocks.BlockBaseGarden extends net.minecraft.block.BlockBush
+  public void func_180657_a(net.minecraft.world.World, net.minecraft.entity.player.EntityPlayer, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, net.minecraft.tileentity.TileEntity, net.minecraft.item.ItemStack);
+    Code:
+       0: aload_2
+       1: aload_0
+       2: invokestatic  #221                // Method net/minecraft/stats/StatList.func_188055_a:(Lnet/minecraft/block/Block;)Lnet/minecraft/stats/StatBase;
+       5: invokevirtual #227                // Method net/minecraft/entity/player/EntityPlayer.func_71029_a:(Lnet/minecraft/stats/StatBase;)V
+       8: aload_2
+       9: ldc           #228                // float 0.025f
+      11: invokevirtual #232                // Method net/minecraft/entity/player/EntityPlayer.func_71020_j:(F)V
+      14: aload_2
+      15: invokevirtual #235                // Method net/minecraft/entity/player/EntityPlayer.func_70093_af:()Z
+      18: ifne          44
+      21: aload_0
+      22: aload_1
+      23: aload_3
+      24: aload         4
+      26: aload_2
+      27: invokevirtual #239                // Method canSilkHarvest:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;Lnet/minecraft/entity/player/EntityPlayer;)Z
+      30: ifeq          134
+      33: getstatic     #245                // Field net/minecraft/init/Enchantments.field_185306_r:Lnet/minecraft/enchantment/Enchantment;
+      36: aload         6
+      38: invokestatic  #251                // Method net/minecraft/enchantment/EnchantmentHelper.func_77506_a:(Lnet/minecraft/enchantment/Enchantment;Lnet/minecraft/item/ItemStack;)I
+      41: ifle          134
+      44: new           #253                // class java/util/ArrayList
+      47: dup
+      48: invokespecial #256                // Method java/util/ArrayList."<init>":()V
+      51: astore        7
+      53: aload_0
+      54: aload         4
+      56: invokevirtual #260                // Method func_180643_i:(Lnet/minecraft/block/state/IBlockState;)Lnet/minecraft/item/ItemStack;
+      59: astore        8
+      61: aload         8
+      63: ifnull        76
+      66: aload         7
+      68: aload         8
+      70: invokeinterface #266,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+      75: pop
+      76: aload         7
+      78: aload_1
+      79: aload_3
+      80: aload         4
+      82: iconst_0
+      83: fconst_1
+      84: iconst_1
+      85: aload_2
+      86: invokestatic  #274                // Method net/minecraftforge/event/ForgeEventFactory.fireBlockHarvesting:(Ljava/util/List;Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;IFZLnet/minecraft/entity/player/EntityPlayer;)F
+      89: pop
+      90: aload         7
+      92: invokeinterface #275,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+      97: astore        9
+      99: aload         9
+     101: invokeinterface #124,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+     106: ifeq          131
+     109: aload         9
+     111: invokeinterface #128,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+     116: checkcast     #268                // class net/minecraft/item/ItemStack
+     119: astore        10
+     121: aload_1
+     122: aload_3
+     123: aload         10
+     125: invokestatic  #279                // Method func_180635_a:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/item/ItemStack;)V
+     128: goto          99
+     131: goto          170
+     134: aload_0
+     135: getfield      #283                // Field harvesters:Ljava/lang/ThreadLocal;
+     138: aload_2
+     139: invokevirtual #289                // Method java/lang/ThreadLocal.set:(Ljava/lang/Object;)V
+     142: getstatic     #292                // Field net/minecraft/init/Enchantments.field_185308_t:Lnet/minecraft/enchantment/Enchantment;
+     145: aload         6
+     147: invokestatic  #251                // Method net/minecraft/enchantment/EnchantmentHelper.func_77506_a:(Lnet/minecraft/enchantment/Enchantment;Lnet/minecraft/item/ItemStack;)I
+     150: istore        7
+     152: aload_0
+     153: aload_1
+     154: aload_3
+     155: aload         4
+     157: iload         7
+     159: invokevirtual #296                // Method func_176226_b:(Lnet/minecraft/world/World;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;I)V
+     162: aload_0
+     163: getfield      #283                // Field harvesters:Ljava/lang/ThreadLocal;
+     166: aconst_null
+     167: invokevirtual #289                // Method java/lang/ThreadLocal.set:(Ljava/lang/Object;)V
+     170: return
+  public void getDrops(net.minecraft.util.NonNullList<net.minecraft.item.ItemStack>, net.minecraft.world.IBlockAccess, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, int);
+    Code:
+       0: getstatic     #312                // Field drops:Ljava/util/Map;
+       3: aload_0
+       4: getfield      #29                 // Field type:Ljava/lang/String;
+       7: invokeinterface #318,  2          // InterfaceMethod java/util/Map.get:(Ljava/lang/Object;)Ljava/lang/Object;
+      12: checkcast     #262                // class java/util/List
+      15: astore        6
+      17: aload         6
+      19: invokestatic  #324                // Method java/util/Collections.shuffle:(Ljava/util/List;)V
+      22: getstatic     #83                 // Field com/pam/harvestcraft/HarvestCraft.config:Lcom/pam/harvestcraft/config/ConfigHandler;
+      25: getfield      #327                // Field com/pam/harvestcraft/config/ConfigHandler.gardendropAmount:I
+      28: aload         6
+      30: invokeinterface #331,  1          // InterfaceMethod java/util/List.size:()I
+      35: invokestatic  #337                // Method java/lang/Math.min:(II)I
+      38: istore        7
+      40: iconst_0
+      41: istore        8
+      43: iload         8
+      45: iload         7
+      47: if_icmpge     123
+      50: aload         6
+      52: iload         8
+      54: invokeinterface #340,  2          // InterfaceMethod java/util/List.get:(I)Ljava/lang/Object;
+      59: checkcast     #268                // class net/minecraft/item/ItemStack
+      62: astore        9
+      64: aload         9
+      66: ifnonnull     107
+      69: getstatic     #346                // Field java/lang/System.err:Ljava/io/PrintStream;
+      72: new           #348                // class java/lang/StringBuilder
+      75: dup
+      76: invokespecial #349                // Method java/lang/StringBuilder."<init>":()V
+      79: ldc_w         #351                // String Tried to get a null item for garden '
+      82: invokevirtual #355                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      85: aload_0
+      86: getfield      #29                 // Field type:Ljava/lang/String;
+      89: invokevirtual #355                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      92: ldc_w         #357                // String '.
+      95: invokevirtual #355                // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      98: invokevirtual #360                // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     101: invokevirtual #366                // Method java/io/PrintStream.println:(Ljava/lang/String;)V
+     104: goto          117
+     107: aload_1
+     108: aload         9
+     110: invokevirtual #370                // Method net/minecraft/item/ItemStack.func_77946_l:()Lnet/minecraft/item/ItemStack;
+     113: invokevirtual #373                // Method net/minecraft/util/NonNullList.add:(Ljava/lang/Object;)Z
+     116: pop
+     117: iinc          8, 1
+     120: goto          43
+     123: return
+
+## athenaeum RecipeItemParser
+public class com.codetaylor.mc.athenaeum.parser.recipe.item.RecipeItemParser
+  public com.codetaylor.mc.athenaeum.parser.recipe.item.ParseResult parse(java.lang.String) throws com.codetaylor.mc.athenaeum.parser.recipe.item.MalformedRecipeItemException;
+    Code:
+       0: aload_1
+       1: ifnull        16
+       4: ldc           #22                 // String null
+       6: aload_1
+       7: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+      10: invokevirtual #32                 // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+      13: ifeq          20
+      16: getstatic     #38                 // Field com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.NULL:Lcom/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult;
+      19: areturn
+      20: new           #34                 // class com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult
+      23: dup
+      24: invokespecial #39                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult."<init>":()V
+      27: astore_2
+      28: aload_2
+      29: iconst_0
+      30: invokevirtual #43                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setMeta:(I)V
+      33: aload_2
+      34: iconst_1
+      35: invokevirtual #46                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setQuantity:(I)V
+      38: aload_1
+      39: ldc           #48                 // String :
+      41: invokevirtual #52                 // Method java/lang/String.split:(Ljava/lang/String;)[Ljava/lang/String;
+      44: astore_3
+      45: aload_3
+      46: arraylength
+      47: iconst_2
+      48: if_icmplt     57
+      51: aload_3
+      52: arraylength
+      53: iconst_3
+      54: if_icmple     78
+      57: new           #16                 // class com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException
+      60: dup
+      61: ldc           #56                 // String [PARSE] Too many segments in [%s], must be two or three segments: <domain:path> or <domain:path:meta>
+      63: iconst_1
+      64: anewarray     #4                  // class java/lang/Object
+      67: dup
+      68: iconst_0
+      69: aload_1
+      70: aastore
+      71: invokestatic  #60                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+      74: invokespecial #63                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException."<init>":(Ljava/lang/String;)V
+      77: athrow
+      78: aload_2
+      79: aload_3
+      80: iconst_0
+      81: aaload
+      82: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+      85: invokevirtual #66                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setDomain:(Ljava/lang/String;)V
+      88: aload_3
+      89: iconst_1
+      90: aaload
+      91: ldc           #68                 // String \*
+      93: invokevirtual #52                 // Method java/lang/String.split:(Ljava/lang/String;)[Ljava/lang/String;
+      96: astore        4
+      98: aload_2
+      99: aload         4
+     101: iconst_0
+     102: aaload
+     103: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+     106: invokevirtual #71                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setPath:(Ljava/lang/String;)V
+     109: aload         4
+     111: arraylength
+     112: iconst_1
+     113: if_icmple     161
+     116: aload_2
+     117: aload         4
+     119: iconst_1
+     120: aaload
+     121: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+     124: invokestatic  #77                 // Method java/lang/Integer.parseInt:(Ljava/lang/String;)I
+     127: invokevirtual #46                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setQuantity:(I)V
+     130: goto          161
+     133: astore        5
+     135: new           #16                 // class com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException
+     138: dup
+     139: ldc           #79                 // String [PARSE] Expected integer, got [%s]
+     141: iconst_1
+     142: anewarray     #4                  // class java/lang/Object
+     145: dup
+     146: iconst_0
+     147: aload_3
+     148: iconst_1
+     149: aaload
+     150: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+     153: aastore
+     154: invokestatic  #60                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     157: invokespecial #63                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException."<init>":(Ljava/lang/String;)V
+     160: athrow
+     161: aload_3
+     162: arraylength
+     163: iconst_3
+     164: if_icmpne     366
+     167: aload_3
+     168: iconst_2
+     169: aaload
+     170: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+     173: astore        5
+     175: ldc           #81                 // String *
+     177: aload         5
+     179: iconst_0
+     180: iconst_1
+     181: invokevirtual #85                 // Method java/lang/String.substring:(II)Ljava/lang/String;
+     184: invokevirtual #32                 // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+     187: ifeq          258
+     190: aload_2
+     191: sipush        32767
+     194: invokevirtual #43                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setMeta:(I)V
+     197: aload         5
+     199: ldc           #81                 // String *
+     201: ldc           #87                 // String
+     203: invokevirtual #91                 // Method java/lang/String.replace:(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;
+     206: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+     209: astore        6
+     211: aload         6
+     213: invokevirtual #95                 // Method java/lang/String.isEmpty:()Z
+     216: ifne          255
+     219: aload_2
+     220: aload         6
+     222: invokestatic  #77                 // Method java/lang/Integer.parseInt:(Ljava/lang/String;)I
+     225: invokevirtual #46                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setQuantity:(I)V
+     228: goto          255
+     231: astore        7
+     233: new           #16                 // class com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException
+     236: dup
+     237: ldc           #79                 // String [PARSE] Expected integer, got [%s]
+     239: iconst_1
+     240: anewarray     #4                  // class java/lang/Object
+     243: dup
+     244: iconst_0
+     245: aload         6
+     247: aastore
+     248: invokestatic  #60                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     251: invokespecial #63                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException."<init>":(Ljava/lang/String;)V
+     254: athrow
+     255: goto          366
+     258: aload         5
+     260: ldc           #68                 // String \*
+     262: invokevirtual #52                 // Method java/lang/String.split:(Ljava/lang/String;)[Ljava/lang/String;
+     265: astore        6
+     267: aload_2
+     268: aload         6
+     270: iconst_0
+     271: aaload
+     272: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+     275: invokestatic  #77                 // Method java/lang/Integer.parseInt:(Ljava/lang/String;)I
+     278: invokevirtual #43                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setMeta:(I)V
+     281: goto          313
+     284: astore        7
+     286: new           #16                 // class com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException
+     289: dup
+     290: ldc           #79                 // String [PARSE] Expected integer, got [%s]
+     292: iconst_1
+     293: anewarray     #4                  // class java/lang/Object
+     296: dup
+     297: iconst_0
+     298: aload         6
+     300: iconst_0
+     301: aaload
+     302: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+     305: aastore
+     306: invokestatic  #60                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     309: invokespecial #63                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException."<init>":(Ljava/lang/String;)V
+     312: athrow
+     313: aload         6
+     315: arraylength
+     316: iconst_1
+     317: if_icmple     366
+     320: aload_2
+     321: aload         6
+     323: iconst_1
+     324: aaload
+     325: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+     328: invokestatic  #77                 // Method java/lang/Integer.parseInt:(Ljava/lang/String;)I
+     331: invokevirtual #46                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/ParseResult.setQuantity:(I)V
+     334: goto          366
+     337: astore        7
+     339: new           #16                 // class com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException
+     342: dup
+     343: ldc           #79                 // String [PARSE] Expected integer, got [%s]
+     345: iconst_1
+     346: anewarray     #4                  // class java/lang/Object
+     349: dup
+     350: iconst_0
+     351: aload         6
+     353: iconst_1
+     354: aaload
+     355: invokevirtual #28                 // Method java/lang/String.trim:()Ljava/lang/String;
+     358: aastore
+     359: invokestatic  #60                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     362: invokespecial #63                 // Method com/codetaylor/mc/athenaeum/parser/recipe/item/MalformedRecipeItemException."<init>":(Ljava/lang/String;)V
+     365: athrow
+     366: aload_2
+     367: areturn
+    Exception table:
+       from    to  target type
+         116   130   133   Class java/lang/NumberFormatException
+         219   228   231   Class java/lang/NumberFormatException
+         267   281   284   Class java/lang/NumberFormatException
+         320   334   337   Class java/lang/NumberFormatException
+
+## Dropt BlockMatchEntry
+public class com.codetaylor.mc.dropt.modules.dropt.rule.match.BlockMatchEntry
+  public boolean matches(net.minecraft.block.state.IBlockState, com.codetaylor.mc.dropt.modules.dropt.rule.log.DebugFileWrapper, boolean, java.lang.String);
+    Code:
+       0: iload_3
+       1: ifeq          30
+       4: aload_2
+       5: ldc           #31                 // String %s[--] Attempting to match candidate [%s] with: [%s]
+       7: iconst_3
+       8: anewarray     #4                  // class java/lang/Object
+      11: dup
+      12: iconst_0
+      13: aload         4
+      15: aastore
+      16: dup
+      17: iconst_1
+      18: aload_1
+      19: aastore
+      20: dup
+      21: iconst_2
+      22: aload_0
+      23: aastore
+      24: invokestatic  #37                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+      27: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+      30: aload_1
+      31: invokeinterface #49,  1           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+      36: invokevirtual #55                 // Method net/minecraft/block/Block.getRegistryName:()Lnet/minecraft/util/ResourceLocation;
+      39: astore        5
+      41: aload         5
+      43: ifnonnull     80
+      46: iload_3
+      47: ifeq          78
+      50: aload_2
+      51: new           #57                 // class java/lang/StringBuilder
+      54: dup
+      55: invokespecial #58                 // Method java/lang/StringBuilder."<init>":()V
+      58: aload         4
+      60: invokevirtual #62                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      63: ldc           #64                 // String [!!] No registry name for match candidate:
+      65: invokevirtual #62                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      68: aload_1
+      69: invokevirtual #67                 // Method java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+      72: invokevirtual #71                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      75: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+      78: iconst_0
+      79: ireturn
+      80: aload         5
+      82: invokevirtual #76                 // Method net/minecraft/util/ResourceLocation.func_110624_b:()Ljava/lang/String;
+      85: aload_0
+      86: getfield      #19                 // Field domain:Ljava/lang/String;
+      89: invokevirtual #80                 // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+      92: ifne          134
+      95: iload_3
+      96: ifeq          132
+      99: aload_2
+     100: ldc           #82                 // String %s[!!] Domain mismatch: (match) %s != %s (candidate)
+     102: iconst_3
+     103: anewarray     #4                  // class java/lang/Object
+     106: dup
+     107: iconst_0
+     108: aload         4
+     110: aastore
+     111: dup
+     112: iconst_1
+     113: aload_0
+     114: getfield      #19                 // Field domain:Ljava/lang/String;
+     117: aastore
+     118: dup
+     119: iconst_2
+     120: aload         5
+     122: invokevirtual #76                 // Method net/minecraft/util/ResourceLocation.func_110624_b:()Ljava/lang/String;
+     125: aastore
+     126: invokestatic  #37                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     129: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     132: iconst_0
+     133: ireturn
+     134: iload_3
+     135: ifeq          171
+     138: aload_2
+     139: ldc           #84                 // String %s[OK] Domain match: (match) %s == %s (candidate)
+     141: iconst_3
+     142: anewarray     #4                  // class java/lang/Object
+     145: dup
+     146: iconst_0
+     147: aload         4
+     149: aastore
+     150: dup
+     151: iconst_1
+     152: aload_0
+     153: getfield      #19                 // Field domain:Ljava/lang/String;
+     156: aastore
+     157: dup
+     158: iconst_2
+     159: aload         5
+     161: invokevirtual #76                 // Method net/minecraft/util/ResourceLocation.func_110624_b:()Ljava/lang/String;
+     164: aastore
+     165: invokestatic  #37                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     168: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     171: aload         5
+     173: invokevirtual #87                 // Method net/minecraft/util/ResourceLocation.func_110623_a:()Ljava/lang/String;
+     176: aload_0
+     177: getfield      #21                 // Field path:Ljava/lang/String;
+     180: invokevirtual #80                 // Method java/lang/String.equals:(Ljava/lang/Object;)Z
+     183: ifne          225
+     186: iload_3
+     187: ifeq          223
+     190: aload_2
+     191: ldc           #89                 // String %s[!!] Path mismatch: (match) %s != %s (candidate)
+     193: iconst_3
+     194: anewarray     #4                  // class java/lang/Object
+     197: dup
+     198: iconst_0
+     199: aload         4
+     201: aastore
+     202: dup
+     203: iconst_1
+     204: aload_0
+     205: getfield      #21                 // Field path:Ljava/lang/String;
+     208: aastore
+     209: dup
+     210: iconst_2
+     211: aload         5
+     213: invokevirtual #87                 // Method net/minecraft/util/ResourceLocation.func_110623_a:()Ljava/lang/String;
+     216: aastore
+     217: invokestatic  #37                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     220: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     223: iconst_0
+     224: ireturn
+     225: iload_3
+     226: ifeq          262
+     229: aload_2
+     230: ldc           #91                 // String %s[OK] Path match: (match) %s == %s (candidate)
+     232: iconst_3
+     233: anewarray     #4                  // class java/lang/Object
+     236: dup
+     237: iconst_0
+     238: aload         4
+     240: aastore
+     241: dup
+     242: iconst_1
+     243: aload_0
+     244: getfield      #21                 // Field path:Ljava/lang/String;
+     247: aastore
+     248: dup
+     249: iconst_2
+     250: aload         5
+     252: invokevirtual #87                 // Method net/minecraft/util/ResourceLocation.func_110623_a:()Ljava/lang/String;
+     255: aastore
+     256: invokestatic  #37                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     259: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     262: aload_1
+     263: invokeinterface #49,  1           // InterfaceMethod net/minecraft/block/state/IBlockState.func_177230_c:()Lnet/minecraft/block/Block;
+     268: aload_1
+     269: invokevirtual #95                 // Method net/minecraft/block/Block.func_176201_c:(Lnet/minecraft/block/state/IBlockState;)I
+     272: istore        6
+     274: aload_0
+     275: getfield      #23                 // Field meta:I
+     278: sipush        32767
+     281: if_icmpeq     293
+     284: aload_0
+     285: getfield      #23                 // Field meta:I
+     288: iload         6
+     290: if_icmpne     335
+     293: iload_3
+     294: ifeq          333
+     297: aload_2
+     298: ldc           #97                 // String %s[OK] Meta match: (match) %d == %d (candidate)
+     300: iconst_3
+     301: anewarray     #4                  // class java/lang/Object
+     304: dup
+     305: iconst_0
+     306: aload         4
+     308: aastore
+     309: dup
+     310: iconst_1
+     311: aload_0
+     312: getfield      #23                 // Field meta:I
+     315: invokestatic  #103                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     318: aastore
+     319: dup
+     320: iconst_2
+     321: iload         6
+     323: invokestatic  #103                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     326: aastore
+     327: invokestatic  #37                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     330: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     333: iconst_1
+     334: ireturn
+     335: iload_3
+     336: ifeq          375
+     339: aload_2
+     340: ldc           #105                // String %s[!!] Meta mismatch: (match) %d != %d (candidate)
+     342: iconst_3
+     343: anewarray     #4                  // class java/lang/Object
+     346: dup
+     347: iconst_0
+     348: aload         4
+     350: aastore
+     351: dup
+     352: iconst_1
+     353: aload_0
+     354: getfield      #23                 // Field meta:I
+     357: invokestatic  #103                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     360: aastore
+     361: dup
+     362: iconst_2
+     363: iload         6
+     365: invokestatic  #103                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     368: aastore
+     369: invokestatic  #37                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     372: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     375: aload_0
+     376: getfield      #25                 // Field metas:[I
+     379: astore        7
+     381: aload         7
+     383: arraylength
+     384: istore        8
+     386: iconst_0
+     387: istore        9
+     389: iload         9
+     391: iload         8
+     393: if_icmpge     502
+     396: aload         7
+     398: iload         9
+     400: iaload
+     401: istore        10
+     403: iload         10
+     405: sipush        32767
+     408: if_icmpeq     418
+     411: iload         10
+     413: iload         6
+     415: if_icmpne     458
+     418: iload_3
+     419: ifeq          456
+     422: aload_2
+     423: ldc           #97                 // String %s[OK] Meta match: (match) %d == %d (candidate)
+     425: iconst_3
+     426: anewarray     #4                  // class java/lang/Object
+     429: dup
+     430: iconst_0
+     431: aload         4
+     433: aastore
+     434: dup
+     435: iconst_1
+     436: iload         10
+     438: invokestatic  #103                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     441: aastore
+     442: dup
+     443: iconst_2
+     444: iload         6
+     446: invokestatic  #103                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     449: aastore
+     450: invokestatic  #37                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     453: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     456: iconst_1
+     457: ireturn
+     458: iload_3
+     459: ifeq          496
+     462: aload_2
+     463: ldc           #105                // String %s[!!] Meta mismatch: (match) %d != %d (candidate)
+     465: iconst_3
+     466: anewarray     #4                  // class java/lang/Object
+     469: dup
+     470: iconst_0
+     471: aload         4
+     473: aastore
+     474: dup
+     475: iconst_1
+     476: iload         10
+     478: invokestatic  #103                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     481: aastore
+     482: dup
+     483: iconst_2
+     484: iload         6
+     486: invokestatic  #103                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     489: aastore
+     490: invokestatic  #37                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     493: invokevirtual #43                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     496: iinc          9, 1
+     499: goto          389
+     502: iconst_0
+     503: ireturn
+
+## Dropt RuleLocator
+public class com.codetaylor.mc.dropt.modules.dropt.rule.RuleLocator
+  private java.util.List<com.codetaylor.mc.dropt.modules.dropt.rule.data.Rule> matchRules(net.minecraft.world.World, net.minecraft.entity.player.EntityPlayer, net.minecraft.util.math.BlockPos, net.minecraft.block.state.IBlockState, java.util.List<net.minecraft.item.ItemStack>, com.codetaylor.mc.dropt.modules.dropt.rule.match.HeldItemCache, boolean, java.util.List<com.codetaylor.mc.dropt.modules.dropt.rule.data.Rule>);
+    Code:
+       0: aconst_null
+       1: astore        9
+       3: aload_0
+       4: getfield      #17                 // Field ruleMatcherFactory:Lcom/codetaylor/mc/dropt/modules/dropt/rule/match/RuleMatcherFactory;
+       7: aload_1
+       8: aload_2
+       9: aload_3
+      10: aload         4
+      12: aload         5
+      14: iload         7
+      16: invokevirtual #210                // Method com/codetaylor/mc/dropt/modules/dropt/rule/match/RuleMatcherFactory.create:(Lnet/minecraft/world/World;Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;Ljava/util/List;Z)Lcom/codetaylor/mc/dropt/modules/dropt/rule/match/RuleMatcher;
+      19: astore        10
+      21: invokestatic  #73                 // Method java/lang/System.currentTimeMillis:()J
+      24: lstore        11
+      26: iconst_0
+      27: istore        13
+      29: new           #66                 // class java/util/ArrayList
+      32: dup
+      33: aload         8
+      35: invokeinterface #167,  1          // InterfaceMethod java/util/List.size:()I
+      40: invokespecial #213                // Method java/util/ArrayList."<init>":(I)V
+      43: astore        14
+      45: aload         8
+      47: invokeinterface #82,  1           // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+      52: astore        15
+      54: aload         15
+      56: invokeinterface #92,  1           // InterfaceMethod java/util/Iterator.hasNext:()Z
+      61: ifeq          171
+      64: aload         15
+      66: invokeinterface #96,  1           // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+      71: checkcast     #103                // class com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule
+      74: astore        16
+      76: aload         16
+      78: getfield      #106                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.debug:Z
+      81: istore        17
+      83: iinc          13, 1
+      86: iload         17
+      88: ifeq          124
+      91: aload         9
+      93: ifnonnull     111
+      96: new           #86                 // class com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper
+      99: dup
+     100: getstatic     #110                // Field com/codetaylor/mc/dropt/modules/dropt/ModuleDropt.LOG_FILE_WRITER_PROVIDER:Lcom/codetaylor/mc/dropt/modules/dropt/LogFileWriterProvider;
+     103: invokevirtual #116                // Method com/codetaylor/mc/dropt/modules/dropt/LogFileWriterProvider.createLogFileWriter:()Ljava/io/FileWriter;
+     106: invokespecial #119                // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper."<init>":(Ljava/io/FileWriter;)V
+     109: astore        9
+     111: aload_0
+     112: aload_1
+     113: aload_2
+     114: aload_3
+     115: aload         4
+     117: aload         5
+     119: aload         9
+     121: invokespecial #227                // Method printDebugEventInfoToFile:(Lnet/minecraft/world/World;Lnet/minecraft/entity/player/EntityPlayer;Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;Ljava/util/List;Lcom/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper;)V
+     124: aload         10
+     126: aload         16
+     128: getfield      #142                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.match:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch;
+     131: aload         6
+     133: aload_1
+     134: invokevirtual #231                // Method net/minecraft/world/World.func_175694_M:()Lnet/minecraft/util/math/BlockPos;
+     137: aload         9
+     139: iload         17
+     141: invokevirtual #234                // Method com/codetaylor/mc/dropt/modules/dropt/rule/match/RuleMatcher.matches:(Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch;Lcom/codetaylor/mc/dropt/modules/dropt/rule/match/HeldItemCache;Lnet/minecraft/util/math/BlockPos;Lcom/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper;Z)Z
+     144: ifeq          168
+     147: aload         14
+     149: aload         16
+     151: invokeinterface #156,  2          // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     156: pop
+     157: aload         16
+     159: getfield      #237                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.fallthrough:Z
+     162: ifeq          171
+     165: goto          54
+     168: goto          54
+     171: getstatic     #161                // Field com/codetaylor/mc/dropt/modules/dropt/ModuleDroptConfig.ENABLE_PROFILE_LOG_OUTPUT:Z
+     174: ifeq          231
+     177: aload         9
+     179: ifnonnull     197
+     182: new           #86                 // class com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper
+     185: dup
+     186: getstatic     #110                // Field com/codetaylor/mc/dropt/modules/dropt/ModuleDropt.LOG_FILE_WRITER_PROVIDER:Lcom/codetaylor/mc/dropt/modules/dropt/LogFileWriterProvider;
+     189: invokevirtual #116                // Method com/codetaylor/mc/dropt/modules/dropt/LogFileWriterProvider.createLogFileWriter:()Ljava/io/FileWriter;
+     192: invokespecial #119                // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper."<init>":(Ljava/io/FileWriter;)V
+     195: astore        9
+     197: aload         9
+     199: ldc           #239                // String Searched %d rules in %d ms
+     201: iconst_2
+     202: anewarray     #4                  // class java/lang/Object
+     205: dup
+     206: iconst_0
+     207: iload         13
+     209: invokestatic  #173                // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+     212: aastore
+     213: dup
+     214: iconst_1
+     215: invokestatic  #73                 // Method java/lang/System.currentTimeMillis:()J
+     218: lload         11
+     220: lsub
+     221: invokestatic  #178                // Method java/lang/Long.valueOf:(J)Ljava/lang/Long;
+     224: aastore
+     225: invokestatic  #185                // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+     228: invokevirtual #188                // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.info:(Ljava/lang/String;)V
+     231: aload         9
+     233: ifnull        241
+     236: aload         9
+     238: invokevirtual #191                // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.close:()V
+     241: aload         14
+     243: areturn
+
+## Dropt Rule (defaults)
+Compiled from "Rule.java"
+public class com.codetaylor.mc.dropt.modules.dropt.rule.data.Rule {
+  public boolean debug;
+
+  public com.codetaylor.mc.dropt.modules.dropt.rule.data.RuleMatch match;
+
+  public com.codetaylor.mc.dropt.api.reference.EnumReplaceStrategy replaceStrategy;
+
+  public com.codetaylor.mc.dropt.api.reference.EnumDropStrategy dropStrategy;
+
+  public com.codetaylor.mc.dropt.api.api.RandomFortuneInt dropCount;
+
+  public com.codetaylor.mc.dropt.modules.dropt.rule.data.RuleDrop[] drops;
+
+  public boolean fallthrough;
+
+  public com.codetaylor.mc.dropt.modules.dropt.rule.data.Rule();
+    Code:
+       0: aload_0
+       1: invokespecial #22                 // Method java/lang/Object."<init>":()V
+       4: aload_0
+       5: iconst_0
+       6: putfield      #24                 // Field debug:Z
+       9: aload_0
+      10: new           #26                 // class com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch
+      13: dup
+      14: invokespecial #27                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch."<init>":()V
+      17: putfield      #29                 // Field match:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch;
+      20: aload_0
+      21: getstatic     #34                 // Field com/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy.REPLACE_ALL:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+      24: putfield      #36                 // Field replaceStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+      27: aload_0
+      28: getstatic     #41                 // Field com/codetaylor/mc/dropt/api/reference/EnumDropStrategy.REPEAT:Lcom/codetaylor/mc/dropt/api/reference/EnumDropStrategy;
+      31: putfield      #43                 // Field dropStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumDropStrategy;
+      34: aload_0
+      35: new           #45                 // class com/codetaylor/mc/dropt/api/api/RandomFortuneInt
+      38: dup
+      39: iconst_1
+      40: invokespecial #48                 // Method com/codetaylor/mc/dropt/api/api/RandomFortuneInt."<init>":(I)V
+      43: putfield      #50                 // Field dropCount:Lcom/codetaylor/mc/dropt/api/api/RandomFortuneInt;
+      46: aload_0
+      47: iconst_0
+      48: anewarray     #52                 // class com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop
+      51: putfield      #54                 // Field drops:[Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop;
+      54: aload_0
+      55: iconst_0
+      56: putfield      #56                 // Field fallthrough:Z
+      59: return
+}
+
+## Dropt RuleDropItem (defaults)
+public class com.codetaylor.mc.dropt.modules.dropt.rule.data.RuleDropItem
+  public com.codetaylor.mc.dropt.modules.dropt.rule.data.RuleDropItem();
+    Code:
+       0: aload_0
+       1: invokespecial #20                 // Method java/lang/Object."<init>":()V
+       4: aload_0
+       5: new           #22                 // class java/util/ArrayList
+       8: dup
+       9: invokespecial #23                 // Method java/util/ArrayList."<init>":()V
+      12: putfield      #25                 // Field _items:Ljava/util/List;
+      15: aload_0
+      16: getstatic     #30                 // Field com/codetaylor/mc/dropt/api/reference/EnumDropListStrategy.ONE:Lcom/codetaylor/mc/dropt/api/reference/EnumDropListStrategy;
+      19: putfield      #32                 // Field drop:Lcom/codetaylor/mc/dropt/api/reference/EnumDropListStrategy;
+      22: aload_0
+      23: iconst_0
+      24: anewarray     #34                 // class java/lang/String
+      27: putfield      #36                 // Field items:[Ljava/lang/String;
+      30: aload_0
+      31: new           #38                 // class com/codetaylor/mc/dropt/api/api/RandomFortuneInt
+      34: dup
+      35: iconst_1
+      36: invokespecial #41                 // Method com/codetaylor/mc/dropt/api/api/RandomFortuneInt."<init>":(I)V
+      39: putfield      #43                 // Field quantity:Lcom/codetaylor/mc/dropt/api/api/RandomFortuneInt;
+      42: aload_0
+      43: new           #45                 // class com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItemMatchQuantity
+      46: dup
+      47: invokespecial #46                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItemMatchQuantity."<init>":()V
+      50: putfield      #48                 // Field matchQuantity:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItemMatchQuantity;
+      53: return
+}
+
+## Dropt RuleDropSelector
+public class com.codetaylor.mc.dropt.modules.dropt.rule.data.RuleDropSelector
+  public com.codetaylor.mc.dropt.modules.dropt.rule.data.RuleDropSelector();
+    Code:
+       0: aload_0
+       1: invokespecial #15                 // Method java/lang/Object."<init>":()V
+       4: aload_0
+       5: new           #17                 // class com/codetaylor/mc/dropt/api/api/RuleDropSelectorWeight
+       8: dup
+       9: invokespecial #18                 // Method com/codetaylor/mc/dropt/api/api/RuleDropSelectorWeight."<init>":()V
+      12: putfield      #20                 // Field weight:Lcom/codetaylor/mc/dropt/api/api/RuleDropSelectorWeight;
+      15: aload_0
+      16: getstatic     #25                 // Field com/codetaylor/mc/dropt/api/reference/EnumSilktouch.ANY:Lcom/codetaylor/mc/dropt/api/reference/EnumSilktouch;
+      19: putfield      #27                 // Field silktouch:Lcom/codetaylor/mc/dropt/api/reference/EnumSilktouch;
+      22: aload_0
+      23: iconst_0
+      24: putfield      #29                 // Field fortuneLevelRequired:I
+      27: return
+  public boolean isValidCandidate(boolean, int, com.codetaylor.mc.dropt.modules.dropt.rule.log.DebugFileWrapper, boolean);
+    Code:
+       0: iload_2
+       1: aload_0
+       2: getfield      #29                 // Field fortuneLevelRequired:I
+       5: if_icmpge     45
+       8: iload         4
+      10: ifeq          43
+      13: aload_3
+      14: ldc           #35                 // String [DROP] [SELECTOR] [!!] Required fortune level not met: (required) %d > %d (candidate)
+      16: iconst_2
+      17: anewarray     #4                  // class java/lang/Object
+      20: dup
+      21: iconst_0
+      22: aload_0
+      23: getfield      #29                 // Field fortuneLevelRequired:I
+      26: invokestatic  #41                 // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+      29: aastore
+      30: dup
+      31: iconst_1
+      32: iload_2
+      33: invokestatic  #41                 // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+      36: aastore
+      37: invokestatic  #47                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+      40: invokevirtual #53                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+      43: iconst_0
+      44: ireturn
+      45: iload         4
+      47: ifeq          80
+      50: aload_3
+      51: ldc           #55                 // String [DROP] [SELECTOR] [OK] Required fortune level met: (required) %d <= %d (candidate)
+      53: iconst_2
+      54: anewarray     #4                  // class java/lang/Object
+      57: dup
+      58: iconst_0
+      59: aload_0
+      60: getfield      #29                 // Field fortuneLevelRequired:I
+      63: invokestatic  #41                 // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+      66: aastore
+      67: dup
+      68: iconst_1
+      69: iload_2
+      70: invokestatic  #41                 // Method java/lang/Integer.valueOf:(I)Ljava/lang/Integer;
+      73: aastore
+      74: invokestatic  #47                 // Method java/lang/String.format:(Ljava/lang/String;[Ljava/lang/Object;)Ljava/lang/String;
+      77: invokevirtual #53                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+      80: aload_0
+      81: getfield      #27                 // Field silktouch:Lcom/codetaylor/mc/dropt/api/reference/EnumSilktouch;
+      84: getstatic     #58                 // Field com/codetaylor/mc/dropt/api/reference/EnumSilktouch.REQUIRED:Lcom/codetaylor/mc/dropt/api/reference/EnumSilktouch;
+      87: if_acmpne     121
+      90: iload_1
+      91: ifne          107
+      94: iload         4
+      96: ifeq          105
+      99: aload_3
+     100: ldc           #60                 // String [DROP] [SELECTOR] [!!] Silk touch required
+     102: invokevirtual #53                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     105: iconst_0
+     106: ireturn
+     107: iload         4
+     109: ifeq          159
+     112: aload_3
+     113: ldc           #62                 // String [DROP] [SELECTOR] [OK] Silk touch requirement met
+     115: invokevirtual #53                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     118: goto          159
+     121: aload_0
+     122: getfield      #27                 // Field silktouch:Lcom/codetaylor/mc/dropt/api/reference/EnumSilktouch;
+     125: getstatic     #65                 // Field com/codetaylor/mc/dropt/api/reference/EnumSilktouch.EXCLUDED:Lcom/codetaylor/mc/dropt/api/reference/EnumSilktouch;
+     128: if_acmpne     159
+     131: iload_1
+     132: ifeq          148
+     135: iload         4
+     137: ifeq          146
+     140: aload_3
+     141: ldc           #67                 // String [DROP] [SELECTOR] [!!] Must not have silk touch
+     143: invokevirtual #53                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     146: iconst_0
+     147: ireturn
+     148: iload         4
+     150: ifeq          159
+     153: aload_3
+     154: ldc           #69                 // String [DROP] [SELECTOR] [OK] No silk touch requirement met
+     156: invokevirtual #53                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     159: iconst_1
+     160: ireturn
+}
+
+## Dropt DropModifier
+public class com.codetaylor.mc.dropt.modules.dropt.rule.drop.DropModifier
+  public java.util.List<net.minecraft.item.ItemStack> modifyDrops(net.minecraft.world.World, net.minecraft.util.math.BlockPos, com.codetaylor.mc.dropt.modules.dropt.rule.data.Rule, java.util.List<net.minecraft.item.ItemStack>, boolean, int, int, com.codetaylor.mc.dropt.modules.dropt.rule.log.DebugFileWrapper, boolean);
+    Code:
+       0: iload         9
+       2: ifeq          12
+       5: aload         8
+       7: ldc           #22                 // String
+       9: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+      12: new           #30                 // class java/util/ArrayList
+      15: dup
+      16: aload         4
+      18: invokespecial #33                 // Method java/util/ArrayList."<init>":(Ljava/util/Collection;)V
+      21: astore        10
+      23: aload_3
+      24: getfield      #39                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.replaceStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+      27: getstatic     #44                 // Field com/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy.REPLACE_ALL:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+      30: if_acmpne     72
+      33: aload         4
+      35: invokeinterface #49,  1           // InterfaceMethod java/util/List.clear:()V
+      40: iload         9
+      42: ifeq          72
+      45: aload         8
+      47: new           #51                 // class java/lang/StringBuilder
+      50: dup
+      51: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+      54: ldc           #54                 // String [DROP] Cleared drop list, replace strategy:
+      56: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+      59: aload_3
+      60: getfield      #39                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.replaceStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+      63: invokevirtual #61                 // Method java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+      66: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+      69: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+      72: new           #67                 // class com/codetaylor/mc/athenaeum/util/WeightedPicker
+      75: dup
+      76: invokespecial #68                 // Method com/codetaylor/mc/athenaeum/util/WeightedPicker."<init>":()V
+      79: astore        11
+      81: iload         9
+      83: ifeq          93
+      86: aload         8
+      88: ldc           #70                 // String [DROP] Selecting drop candidates...
+      90: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+      93: iconst_0
+      94: istore        12
+      96: new           #30                 // class java/util/ArrayList
+      99: dup
+     100: invokespecial #71                 // Method java/util/ArrayList."<init>":()V
+     103: astore        13
+     105: aload_3
+     106: getfield      #75                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.drops:[Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop;
+     109: astore        14
+     111: aload         14
+     113: arraylength
+     114: istore        15
+     116: iconst_0
+     117: istore        16
+     119: iload         16
+     121: iload         15
+     123: if_icmpge     334
+     126: aload         14
+     128: iload         16
+     130: aaload
+     131: astore        17
+     133: aload         17
+     135: getfield      #86                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.force:Z
+     138: ifeq          154
+     141: aload         13
+     143: aload         17
+     145: invokeinterface #90,  2           // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     150: pop
+     151: goto          328
+     154: aload         17
+     156: getfield      #94                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.selector:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropSelector;
+     159: iload         5
+     161: iload         6
+     163: aload         8
+     165: iload         9
+     167: invokevirtual #100                // Method com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropSelector.isValidCandidate:(ZILcom/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper;Z)Z
+     170: ifeq          328
+     173: aload         17
+     175: getfield      #94                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.selector:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropSelector;
+     178: getfield      #104                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropSelector.weight:Lcom/codetaylor/mc/dropt/api/api/RuleDropSelectorWeight;
+     181: getfield      #110                // Field com/codetaylor/mc/dropt/api/api/RuleDropSelectorWeight.value:I
+     184: iload         6
+     186: aload         17
+     188: getfield      #94                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.selector:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropSelector;
+     191: getfield      #104                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropSelector.weight:Lcom/codetaylor/mc/dropt/api/api/RuleDropSelectorWeight;
+     194: getfield      #113                // Field com/codetaylor/mc/dropt/api/api/RuleDropSelectorWeight.fortuneModifier:I
+     197: imul
+     198: iadd
+     199: istore        18
+     201: iload         18
+     203: ifle          282
+     206: aload         11
+     208: iload         18
+     210: aload         17
+     212: invokevirtual #116                // Method com/codetaylor/mc/athenaeum/util/WeightedPicker.add:(ILjava/lang/Object;)V
+     215: iinc          12, 1
+     218: iload         9
+     220: ifeq          328
+     223: aload         8
+     225: new           #51                 // class java/lang/StringBuilder
+     228: dup
+     229: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     232: ldc           #118                // String [DROP] Added drop to weighted picker:
+     234: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     237: aload         17
+     239: getfield      #122                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.item:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem;
+     242: invokevirtual #123                // Method java/lang/Object.toString:()Ljava/lang/String;
+     245: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     248: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     251: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     254: aload         8
+     256: new           #51                 // class java/lang/StringBuilder
+     259: dup
+     260: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     263: ldc           #125                // String [DROP] Added drop using weight value:
+     265: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     268: iload         18
+     270: invokevirtual #128                // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     273: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     276: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     279: goto          328
+     282: iload         9
+     284: ifeq          328
+     287: aload         8
+     289: new           #51                 // class java/lang/StringBuilder
+     292: dup
+     293: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     296: ldc           #130                // String [DROP] Skipped adding drop
+     298: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     301: aload         17
+     303: getfield      #122                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.item:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem;
+     306: invokevirtual #123                // Method java/lang/Object.toString:()Ljava/lang/String;
+     309: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     312: ldc           #132                // String  to weighted picker due to calculated weight <= 0:
+     314: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     317: iload         18
+     319: invokevirtual #128                // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     322: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     325: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     328: iinc          16, 1
+     331: goto          119
+     334: aload         11
+     336: invokevirtual #136                // Method com/codetaylor/mc/athenaeum/util/WeightedPicker.getTotal:()I
+     339: ifne          392
+     342: aload         13
+     344: invokeinterface #140,  1          // InterfaceMethod java/util/List.isEmpty:()Z
+     349: ifeq          392
+     352: iload         9
+     354: ifeq          389
+     357: aload         8
+     359: ldc           #142                // String [DROP] No valid drop candidates were found
+     361: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     364: aload         8
+     366: new           #51                 // class java/lang/StringBuilder
+     369: dup
+     370: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     373: ldc           #144                // String [DROP] Returning drop list:
+     375: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     378: aload         4
+     380: invokevirtual #61                 // Method java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+     383: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     386: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     389: aload         4
+     391: areturn
+     392: iload         9
+     394: ifeq          480
+     397: aload         8
+     399: new           #51                 // class java/lang/StringBuilder
+     402: dup
+     403: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     406: ldc           #146                // String [DROP] Valid drop candidates found:
+     408: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     411: iload         12
+     413: invokevirtual #128                // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     416: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     419: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     422: aload         8
+     424: new           #51                 // class java/lang/StringBuilder
+     427: dup
+     428: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     431: ldc           #148                // String [DROP] Forced drops found:
+     433: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     436: aload         13
+     438: invokeinterface #151,  1          // InterfaceMethod java/util/List.size:()I
+     443: invokevirtual #128                // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     446: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     449: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     452: aload         8
+     454: new           #51                 // class java/lang/StringBuilder
+     457: dup
+     458: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     461: ldc           #153                // String [DROP] Total weight:
+     463: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     466: aload         11
+     468: invokevirtual #136                // Method com/codetaylor/mc/athenaeum/util/WeightedPicker.getTotal:()I
+     471: invokevirtual #128                // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     474: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     477: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     480: aload_3
+     481: getfield      #157                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.dropCount:Lcom/codetaylor/mc/dropt/api/api/RandomFortuneInt;
+     484: getstatic     #159                // Field RANDOM:Ljava/util/Random;
+     487: iload         6
+     489: invokevirtual #165                // Method com/codetaylor/mc/dropt/api/api/RandomFortuneInt.get:(Ljava/util/Random;I)I
+     492: istore        14
+     494: iload         9
+     496: ifeq          524
+     499: aload         8
+     501: new           #51                 // class java/lang/StringBuilder
+     504: dup
+     505: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     508: ldc           #167                // String [DROP] Drop count:
+     510: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     513: iload         14
+     515: invokevirtual #128                // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     518: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     521: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     524: new           #30                 // class java/util/ArrayList
+     527: dup
+     528: invokespecial #71                 // Method java/util/ArrayList."<init>":()V
+     531: astore        15
+     533: new           #30                 // class java/util/ArrayList
+     536: dup
+     537: aload         13
+     539: invokespecial #33                 // Method java/util/ArrayList."<init>":(Ljava/util/Collection;)V
+     542: astore        16
+     544: iconst_0
+     545: istore        17
+     547: iload         17
+     549: iload         14
+     551: if_icmpge     647
+     554: aload         11
+     556: invokevirtual #170                // Method com/codetaylor/mc/athenaeum/util/WeightedPicker.getSize:()I
+     559: ifne          565
+     562: goto          647
+     565: aload_3
+     566: getfield      #174                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.dropStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumDropStrategy;
+     569: getstatic     #179                // Field com/codetaylor/mc/dropt/api/reference/EnumDropStrategy.UNIQUE:Lcom/codetaylor/mc/dropt/api/reference/EnumDropStrategy;
+     572: if_acmpne     621
+     575: aload         11
+     577: invokevirtual #183                // Method com/codetaylor/mc/athenaeum/util/WeightedPicker.getAndRemove:()Ljava/lang/Object;
+     580: checkcast     #82                 // class com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop
+     583: astore        18
+     585: iload         9
+     587: ifeq          631
+     590: aload         8
+     592: new           #51                 // class java/lang/StringBuilder
+     595: dup
+     596: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     599: ldc           #185                // String [DROP] Removed drop from picker:
+     601: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     604: aload         18
+     606: invokevirtual #123                // Method java/lang/Object.toString:()Ljava/lang/String;
+     609: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     612: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     615: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     618: goto          631
+     621: aload         11
+     623: invokevirtual #187                // Method com/codetaylor/mc/athenaeum/util/WeightedPicker.get:()Ljava/lang/Object;
+     626: checkcast     #82                 // class com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop
+     629: astore        18
+     631: aload         16
+     633: aload         18
+     635: invokeinterface #90,  2           // InterfaceMethod java/util/List.add:(Ljava/lang/Object;)Z
+     640: pop
+     641: iinc          17, 1
+     644: goto          547
+     647: aconst_null
+     648: astore        17
+     650: aload         16
+     652: invokeinterface #191,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+     657: astore        18
+     659: aload         18
+     661: invokeinterface #198,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+     666: ifeq          1161
+     669: aload         18
+     671: invokeinterface #201,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+     676: checkcast     #82                 // class com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop
+     679: astore        19
+     681: aload_0
+     682: iload         6
+     684: aload         8
+     686: iload         9
+     688: aload         10
+     690: aload         19
+     692: invokespecial #205                // Method getItemQuantity:(ILcom/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper;ZLjava/util/List;Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop;)I
+     695: istore        20
+     697: iload         9
+     699: ifeq          755
+     702: aload         8
+     704: new           #51                 // class java/lang/StringBuilder
+     707: dup
+     708: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     711: ldc           #207                // String [DROP] Selected drop:
+     713: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     716: aload         19
+     718: invokevirtual #123                // Method java/lang/Object.toString:()Ljava/lang/String;
+     721: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     724: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     727: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     730: aload         8
+     732: new           #51                 // class java/lang/StringBuilder
+     735: dup
+     736: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     739: ldc           #209                // String [DROP] Selected drop quantity:
+     741: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     744: iload         20
+     746: invokevirtual #128                // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     749: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     752: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     755: aload         17
+     757: ifnonnull     822
+     760: aload         19
+     762: getfield      #213                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.replaceBlock:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropReplaceBlock;
+     765: ifnull        822
+     768: aload         19
+     770: getfield      #213                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.replaceBlock:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropReplaceBlock;
+     773: getfield      #219                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropReplaceBlock._blockState:Lnet/minecraft/block/state/IBlockState;
+     776: ifnull        822
+     779: aload         19
+     781: getfield      #213                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.replaceBlock:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropReplaceBlock;
+     784: getfield      #219                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropReplaceBlock._blockState:Lnet/minecraft/block/state/IBlockState;
+     787: astore        17
+     789: iload         9
+     791: ifeq          822
+     794: aload         8
+     796: new           #51                 // class java/lang/StringBuilder
+     799: dup
+     800: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     803: ldc           #221                // String [DROP] Selected replacement blockState:
+     805: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     808: aload         17
+     810: invokevirtual #123                // Method java/lang/Object.toString:()Ljava/lang/String;
+     813: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     816: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     819: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     822: aload         19
+     824: getfield      #224                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.xp:Lcom/codetaylor/mc/dropt/api/api/RandomFortuneInt;
+     827: getstatic     #159                // Field RANDOM:Ljava/util/Random;
+     830: iload         6
+     832: invokevirtual #165                // Method com/codetaylor/mc/dropt/api/api/RandomFortuneInt.get:(Ljava/util/Random;I)I
+     835: istore        21
+     837: aload         19
+     839: getfield      #228                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.xpReplaceStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumXPReplaceStrategy;
+     842: getstatic     #233                // Field com/codetaylor/mc/dropt/api/reference/EnumXPReplaceStrategy.ADD:Lcom/codetaylor/mc/dropt/api/reference/EnumXPReplaceStrategy;
+     845: if_acmpne     855
+     848: iload         21
+     850: iload         7
+     852: iadd
+     853: istore        21
+     855: iload         21
+     857: ifle          946
+     860: iload         9
+     862: ifeq          890
+     865: aload         8
+     867: new           #51                 // class java/lang/StringBuilder
+     870: dup
+     871: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     874: ldc           #235                // String [DROP] Dropping xp:
+     876: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     879: iload         21
+     881: invokevirtual #128                // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     884: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     887: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     890: iload         21
+     892: ifle          959
+     895: iload         21
+     897: invokestatic  #241                // Method net/minecraft/entity/item/EntityXPOrb.func_70527_a:(I)I
+     900: istore        22
+     902: iload         21
+     904: iload         22
+     906: isub
+     907: istore        21
+     909: aload_1
+     910: new           #237                // class net/minecraft/entity/item/EntityXPOrb
+     913: dup
+     914: aload_1
+     915: aload_2
+     916: invokevirtual #244                // Method net/minecraft/util/math/BlockPos.func_177958_n:()I
+     919: i2d
+     920: aload_2
+     921: invokevirtual #247                // Method net/minecraft/util/math/BlockPos.func_177956_o:()I
+     924: i2d
+     925: ldc2_w        #248                // double 0.5d
+     928: dadd
+     929: aload_2
+     930: invokevirtual #252                // Method net/minecraft/util/math/BlockPos.func_177952_p:()I
+     933: i2d
+     934: iload         22
+     936: invokespecial #255                // Method net/minecraft/entity/item/EntityXPOrb."<init>":(Lnet/minecraft/world/World;DDDI)V
+     939: invokevirtual #259                // Method net/minecraft/world/World.func_72838_d:(Lnet/minecraft/entity/Entity;)Z
+     942: pop
+     943: goto          890
+     946: iload         9
+     948: ifeq          959
+     951: aload         8
+     953: ldc_w         #261                // String [DROP] Dropped zero xp
+     956: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     959: iload         20
+     961: ifgt          998
+     964: iload         9
+     966: ifeq          659
+     969: aload         8
+     971: new           #51                 // class java/lang/StringBuilder
+     974: dup
+     975: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+     978: ldc_w         #263                // String [DROP] Skipping selected drop due to low item quantity roll:
+     981: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     984: iload         20
+     986: invokevirtual #128                // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     989: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     992: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+     995: goto          659
+     998: aload         19
+    1000: getfield      #122                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.item:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem;
+    1003: getfield      #269                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem._items:Ljava/util/List;
+    1006: invokeinterface #140,  1          // InterfaceMethod java/util/List.isEmpty:()Z
+    1011: ifeq          1030
+    1014: iload         9
+    1016: ifeq          659
+    1019: aload         8
+    1021: ldc_w         #271                // String [DROP] Skipping selected drop due to empty drop item list
+    1024: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+    1027: goto          659
+    1030: aload         19
+    1032: getfield      #122                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.item:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem;
+    1035: getfield      #275                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem.drop:Lcom/codetaylor/mc/dropt/api/reference/EnumDropListStrategy;
+    1038: getstatic     #280                // Field com/codetaylor/mc/dropt/api/reference/EnumDropListStrategy.ONE:Lcom/codetaylor/mc/dropt/api/reference/EnumDropListStrategy;
+    1041: if_acmpne     1101
+    1044: aload         19
+    1046: getfield      #122                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.item:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem;
+    1049: getfield      #269                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem._items:Ljava/util/List;
+    1052: getstatic     #159                // Field RANDOM:Ljava/util/Random;
+    1055: aload         19
+    1057: getfield      #122                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.item:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem;
+    1060: getfield      #269                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem._items:Ljava/util/List;
+    1063: invokeinterface #151,  1          // InterfaceMethod java/util/List.size:()I
+    1068: invokevirtual #285                // Method java/util/Random.nextInt:(I)I
+    1071: invokeinterface #288,  2          // InterfaceMethod java/util/List.get:(I)Ljava/lang/Object;
+    1076: checkcast     #290                // class net/minecraft/item/ItemStack
+    1079: invokevirtual #294                // Method net/minecraft/item/ItemStack.func_77946_l:()Lnet/minecraft/item/ItemStack;
+    1082: astore        22
+    1084: aload_0
+    1085: aload         8
+    1087: iload         9
+    1089: aload         15
+    1091: iload         20
+    1093: aload         22
+    1095: invokespecial #298                // Method addDrop:(Lcom/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper;ZLjava/util/List;ILnet/minecraft/item/ItemStack;)V
+    1098: goto          1158
+    1101: aload         19
+    1103: getfield      #122                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDrop.item:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem;
+    1106: getfield      #269                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleDropItem._items:Ljava/util/List;
+    1109: invokeinterface #191,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+    1114: astore        22
+    1116: aload         22
+    1118: invokeinterface #198,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+    1123: ifeq          1158
+    1126: aload         22
+    1128: invokeinterface #201,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+    1133: checkcast     #290                // class net/minecraft/item/ItemStack
+    1136: astore        23
+    1138: aload_0
+    1139: aload         8
+    1141: iload         9
+    1143: aload         15
+    1145: iload         20
+    1147: aload         23
+    1149: invokevirtual #294                // Method net/minecraft/item/ItemStack.func_77946_l:()Lnet/minecraft/item/ItemStack;
+    1152: invokespecial #298                // Method addDrop:(Lcom/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper;ZLjava/util/List;ILnet/minecraft/item/ItemStack;)V
+    1155: goto          1116
+    1158: goto          659
+    1161: aload         17
+    1163: ifnull        1174
+    1166: aload_1
+    1167: aload_2
+    1168: aload         17
+    1170: invokevirtual #302                // Method net/minecraft/world/World.func_175656_a:(Lnet/minecraft/util/math/BlockPos;Lnet/minecraft/block/state/IBlockState;)Z
+    1173: pop
+    1174: aload_3
+    1175: getfield      #39                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.replaceStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+    1178: getstatic     #305                // Field com/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy.REPLACE_ALL_IF_SELECTED:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+    1181: if_acmpne     1233
+    1184: aload         15
+    1186: invokeinterface #140,  1          // InterfaceMethod java/util/List.isEmpty:()Z
+    1191: ifne          1233
+    1194: aload         4
+    1196: invokeinterface #49,  1           // InterfaceMethod java/util/List.clear:()V
+    1201: iload         9
+    1203: ifeq          1233
+    1206: aload         8
+    1208: new           #51                 // class java/lang/StringBuilder
+    1211: dup
+    1212: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+    1215: ldc           #54                 // String [DROP] Cleared drop list, replace strategy:
+    1217: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    1220: aload_3
+    1221: getfield      #39                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.replaceStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+    1224: invokevirtual #61                 // Method java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+    1227: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+    1230: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+    1233: iconst_0
+    1234: istore        18
+    1236: aload_3
+    1237: getfield      #39                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.replaceStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+    1240: getstatic     #308                // Field com/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy.REPLACE_ITEMS:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+    1243: if_acmpne     1267
+    1246: aload_3
+    1247: getfield      #312                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.match:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch;
+    1250: getfield      #317                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch.drops:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchDrops;
+    1253: getfield      #322                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchDrops._drops:Ljava/util/List;
+    1256: invokeinterface #140,  1          // InterfaceMethod java/util/List.isEmpty:()Z
+    1261: ifne          1267
+    1264: iconst_1
+    1265: istore        18
+    1267: aload_3
+    1268: getfield      #39                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.replaceStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+    1271: getstatic     #325                // Field com/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy.REPLACE_ITEMS_IF_SELECTED:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+    1274: if_acmpne     1308
+    1277: aload         15
+    1279: invokeinterface #140,  1          // InterfaceMethod java/util/List.isEmpty:()Z
+    1284: ifne          1308
+    1287: aload_3
+    1288: getfield      #312                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.match:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch;
+    1291: getfield      #317                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch.drops:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchDrops;
+    1294: getfield      #322                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchDrops._drops:Ljava/util/List;
+    1297: invokeinterface #140,  1          // InterfaceMethod java/util/List.isEmpty:()Z
+    1302: ifne          1308
+    1305: iconst_1
+    1306: istore        18
+    1308: iload         18
+    1310: ifeq          1511
+    1313: iload         9
+    1315: ifeq          1346
+    1318: aload         8
+    1320: new           #51                 // class java/lang/StringBuilder
+    1323: dup
+    1324: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+    1327: ldc_w         #327                // String [DROP] Removing all items specified in the item matcher, replace strategy:
+    1330: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    1333: aload_3
+    1334: getfield      #39                 // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.replaceStrategy:Lcom/codetaylor/mc/dropt/api/reference/EnumReplaceStrategy;
+    1337: invokevirtual #61                 // Method java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+    1340: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+    1343: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+    1346: aload         4
+    1348: invokeinterface #191,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+    1353: astore        19
+    1355: aload         19
+    1357: invokeinterface #198,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+    1362: ifeq          1511
+    1365: aload         19
+    1367: invokeinterface #201,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+    1372: checkcast     #290                // class net/minecraft/item/ItemStack
+    1375: astore        20
+    1377: aload_3
+    1378: getfield      #312                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/Rule.match:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch;
+    1381: getfield      #317                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatch.drops:Lcom/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchDrops;
+    1384: getfield      #322                // Field com/codetaylor/mc/dropt/modules/dropt/rule/data/RuleMatchDrops._drops:Ljava/util/List;
+    1387: invokeinterface #191,  1          // InterfaceMethod java/util/List.iterator:()Ljava/util/Iterator;
+    1392: astore        21
+    1394: aload         21
+    1396: invokeinterface #198,  1          // InterfaceMethod java/util/Iterator.hasNext:()Z
+    1401: ifeq          1508
+    1404: aload         21
+    1406: invokeinterface #201,  1          // InterfaceMethod java/util/Iterator.next:()Ljava/lang/Object;
+    1411: checkcast     #329                // class com/codetaylor/mc/dropt/modules/dropt/rule/match/ItemMatchEntry
+    1414: astore        22
+    1416: aload         22
+    1418: aload         20
+    1420: aload         8
+    1422: iload         9
+    1424: ldc_w         #331                // String [DROP]
+    1427: invokevirtual #335                // Method com/codetaylor/mc/dropt/modules/dropt/rule/match/ItemMatchEntry.matches:(Lnet/minecraft/item/ItemStack;Lcom/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper;ZLjava/lang/String;)Z
+    1430: ifeq          1474
+    1433: aload         19
+    1435: invokeinterface #338,  1          // InterfaceMethod java/util/Iterator.remove:()V
+    1440: iload         9
+    1442: ifeq          1508
+    1445: aload         8
+    1447: new           #51                 // class java/lang/StringBuilder
+    1450: dup
+    1451: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+    1454: ldc_w         #340                // String [DROP] Removed:
+    1457: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    1460: aload         20
+    1462: invokevirtual #61                 // Method java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+    1465: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+    1468: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+    1471: goto          1508
+    1474: iload         9
+    1476: ifeq          1505
+    1479: aload         8
+    1481: new           #51                 // class java/lang/StringBuilder
+    1484: dup
+    1485: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+    1488: ldc_w         #342                // String [DROP] Skipping:
+    1491: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    1494: aload         20
+    1496: invokevirtual #61                 // Method java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+    1499: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+    1502: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+    1505: goto          1394
+    1508: goto          1355
+    1511: aload         4
+    1513: aload         15
+    1515: invokeinterface #346,  2          // InterfaceMethod java/util/List.addAll:(Ljava/util/Collection;)Z
+    1520: pop
+    1521: iload         9
+    1523: ifeq          1552
+    1526: aload         8
+    1528: new           #51                 // class java/lang/StringBuilder
+    1531: dup
+    1532: invokespecial #52                 // Method java/lang/StringBuilder."<init>":()V
+    1535: ldc_w         #348                // String Returning drop list:
+    1538: invokevirtual #58                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    1541: aload         4
+    1543: invokevirtual #61                 // Method java/lang/StringBuilder.append:(Ljava/lang/Object;)Ljava/lang/StringBuilder;
+    1546: invokevirtual #65                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+    1549: invokevirtual #28                 // Method com/codetaylor/mc/dropt/modules/dropt/rule/log/DebugFileWrapper.debug:(Ljava/lang/String;)V
+    1552: aload         4
+    1554: areturn
+
+## CraftTweaker MTEventManager
+public class crafttweaker.api.event.MTEventManager implements crafttweaker.api.event.IEventManager
+  public crafttweaker.api.event.IEventHandle onPlayerInteractBlock(crafttweaker.util.IEventHandler<crafttweaker.api.event.PlayerRightClickBlockEvent>);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokevirtual #109                // Method onPlayerRightClickBlock:(Lcrafttweaker/util/IEventHandler;)Lcrafttweaker/api/event/IEventHandle;
+       5: areturn
+
+## CraftTweaker CommonEventHandler
+public class crafttweaker.mc1120.events.CommonEventHandler
+  public void onPlayerRightClickBlockEvent(net.minecraftforge.event.entity.player.PlayerInteractEvent$RightClickBlock);
+    Code:
+       0: getstatic     #430                // Field crafttweaker/CrafttweakerImplementationAPI.events:Lcrafttweaker/api/event/MTEventManager;
+       3: invokevirtual #1382               // Method crafttweaker/api/event/MTEventManager.hasPlayerRightClickBlock:()Z
+       6: ifeq          23
+       9: getstatic     #430                // Field crafttweaker/CrafttweakerImplementationAPI.events:Lcrafttweaker/api/event/MTEventManager;
+      12: new           #1384               // class crafttweaker/mc1120/events/handling/MCPlayerRightClickBlockEvent
+      15: dup
+      16: aload_1
+      17: invokespecial #1386               // Method crafttweaker/mc1120/events/handling/MCPlayerRightClickBlockEvent."<init>":(Lnet/minecraftforge/event/entity/player/PlayerInteractEvent$RightClickBlock;)V
+      20: invokevirtual #1390               // Method crafttweaker/api/event/MTEventManager.publishPlayerRightClickBlock:(Lcrafttweaker/api/event/PlayerRightClickBlockEvent;)V
+      23: return

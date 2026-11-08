@@ -188,3 +188,28 @@ test('#206 review 2: an eat that did not happen backs off, and a food that alway
     assert.deepEqual(eaten, []);
     Object.assign(mode, { wait_until: -Infinity, fails: {}, given_up: new Set() });
 });
+
+// G4 #5 (CX23 soak m1: food fell to 1): the food reserve's rule, shared by the agenda and the hunting reflex.
+test('G4 #5: foodShortfall: never at night; before night 8 held; once the agenda is done 12; at food 12 or lower with none held, always', async () => {
+    const { foodShortfall, FOOD_TARGET } = await import('./food.js');
+    assert.deepEqual(FOOD_TARGET, { day: 12, night: 8, dusk: 6 });
+    const f = (o) => foodShortfall({ food: 15, held: 0, minutesToSunset: 30, finished: false, reserveLeadMin: 10, ...o });
+    assert.equal(f({ minutesToSunset: 0 }), null, 'night: never (stays sealed)');
+    assert.equal(f({ minutesToSunset: 0, food: 2 }), null, 'not even starving');
+    assert.equal(f({ minutesToSunset: 8, held: 7 }), 8, 'before night: 8');
+    assert.equal(f({ minutesToSunset: 8, held: 8 }), null);
+    assert.equal(f({ finished: true, held: 11 }), 12, 'agenda done, by day: 12');
+    assert.equal(f({ finished: true, held: 12 }), null);
+    assert.equal(f({ held: 3 }), null, 'during the agenda by day: only when urgent');
+    assert.equal(f({ food: 12, held: 0 }), 12, 'food 12, nothing held: now');
+    assert.equal(f({ food: 12, held: 3 }), null, 'something held: the eating reflex eats it');
+    assert.equal(f({ food: undefined }), null, 'food unknown: never');
+});
+
+test('G4 #5: heldFoodHunger counts the safe food held by pack values; avoided food (raw chicken, rotten flesh) does not count', async () => {
+    const { heldFoodHunger } = await import('./food.js');
+    const bot = invBot([stack('bread', 0, 2), stack('beef', 0, 3), stack('chicken', 0, 5), stack('rotten_flesh', 0, 4), stack('stick', 0, 9)], 10);
+    assert.equal(heldFoodHunger(bot), 2 * 3 + 3 * 1, 'bread 3 each, raw beef 1 each');
+    assert.equal(heldFoodHunger(invBot([], 10)), 0);
+});
+

@@ -14,6 +14,9 @@ import { itemVariants, toolLevels } from './library/rotn_sources.js';
 import { cobbleChoices } from './library/cobble.js';
 import { isSturdy, placeableDirt, minutesToSunset, sunsetEstimateMin } from './library/night.js';
 import { safeError } from './safe_error.js';
+import { heldFoodHunger } from './library/food.js';
+import { nearbyHuntable } from './library/hunting.js';
+import { FOOD_RETRY_MS } from './agenda.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
 export const TICK_MS = 2_000;
@@ -68,6 +71,12 @@ export function agendaState(bot, clock = null) {
         // #284 review 2: any pickaxe held; the dirt blocks held or made from the dirt piles held.
         hasPickaxe: () => toolLevels(bot, 'pickaxe').length > 0,
         dirtBlocks: () => placeableDirt(bot.inventory?.items?.() ?? []),
+        // G4 #5: the food level, the hunger value of the safe food held, and the wild animals near
+        // that the bot may hunt (never one that may belong to a player).
+        food: () => bot.food,
+        day: () => bot.time?.day, // the in-game day (the food reserve's runs per day)
+        foodHeld: () => heldFoodHunger(bot),
+        huntable: () => { try { return [...new Set(nearbyHuntable(bot))]; } catch { return []; } },
     };
 }
 
@@ -76,9 +85,9 @@ export function agendaGoal(agenda, step, state = null) {
     const n = agenda.steps.indexOf(step) + 1;
     let text = step.goal;
     if (state && typeof step.goalNow === 'function') {
-        try { text = step.goalNow(state) || step.goal; } catch { text = step.goal; }
+        try { text = step.goalNow(state, { finished: !!agenda.finished }) || step.goal; } catch { text = step.goal; }
     }
-    if (step.reserve) return `RotN agenda, step ${step.id} (before night): ${text} When you hold enough, the agenda moves on by itself.`;
+    if (step.reserve) return `RotN agenda, step ${step.id} (${step.when ?? 'before night'}): ${text} When you hold enough, the agenda moves on by itself.`;
     return `RotN agenda, step ${n} of ${agenda.steps.length} (${step.id}): ${text} `
         + 'When this step is done, the agenda moves on by itself.';
 }
@@ -137,8 +146,8 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     const sp = agent.self_prompter;
     // "agenda done": only the before-night reserve runs (G3 round 6 B), and otherwise nothing is
     // touched (the model's own goal, a giver's goal), as before.
-    if (!agenda.active && !agenda.reserveWanted(agendaState(agent.bot, agent._night?.clock))) {
-        if (agent._agenda_step === agenda.reserve?.id) {
+    if (!agenda.active && !agenda.anyReserveWanted(agendaState(agent.bot, agent._night?.clock))) {
+        if (agenda.isReserveId(agent._agenda_step)) {
             if (sp.isActive() && ownsPrompt(agent)) sp.stop(false);
             agent._agenda_step = null;
         }
@@ -192,8 +201,8 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         agent._agenda_stopped_at = undefined;
         // After a task (E3) the agenda says it resumed, not that the step started anew; so does
         // the step the before-night reserve interrupted (G3 round 6 B), when the reserve is done.
-        const fromReserve = prev != null && prev === agenda.reserve?.id && agent._agenda_before_reserve === step.id;
-        if (step.reserve) agent._agenda_before_reserve = prev;
+        const fromReserve = agenda.isReserveId(prev) && agent._agenda_before_reserve === step.id;
+        if (step.reserve && !agenda.isReserveId(prev)) agent._agenda_before_reserve = prev;
         const resumed = agent._agenda_preempted || fromReserve;
         agent._agenda_preempted = false;
         // The first step after a process restart (agenda.json said active) is not a new start (G4
@@ -225,11 +234,12 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     if (spent.llm_ms >= budget.llm_ms) why = `${minutes(spent.llm_ms)} of self-prompting`;
     else if (!sp.isActive() && spent.attempts >= budget.attempts) why = `${spent.attempts} self-prompter runs`;
     if (why && step.reserve) {
-        // The reserve does not pause the agenda: the shelter crafts what it can at dusk.
+        // A reserve does not pause the agenda: the shelter crafts what it can at dusk; food is asked
+        // again after FOOD_RETRY_MS (G4 #5).
         if (sp.isActive()) sp.stop(false);
-        agenda.reserveOff = true;
+        agenda.reserveStuck(step.id);
         agent._agenda_step = null;
-        say(agent, `agenda step ${step.id} stuck: ${why}; going on without it until the night`);
+        say(agent, `agenda step ${step.id} stuck: ${why}; going on without it ${step.id === agenda.food?.id ? `for ${Math.round(FOOD_RETRY_MS / 60_000)} min` : 'until the night'}`);
         return 'stuck';
     }
     if (why) {

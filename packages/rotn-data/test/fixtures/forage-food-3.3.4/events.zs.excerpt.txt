@@ -1,0 +1,41 @@
+# scripts/events.zs from the pinned pack zip (file SHA-256 a9ff248ad084a9f596bbf38a4d7658fa6e27a9aa55dc7e48e1ac9e38c905b6d6), lines 201-227 and 870-880, as "line: text".
+# These are the file's two onPlayerInteractBlock handlers (it has no onPlayerRightClickBlock or onPlayerLeftClickBlock); the second one only checks multiblockmobs:soul_chassis.
+201: events.onPlayerInteractBlock(function(event as crafttweaker.event.PlayerInteractBlockEvent) {
+202: 	var stopDefiledBlocks as string[] = [
+203:         "minecraft:coal_ore",
+204: 		"minecraft:coal_ore",
+205: 		"minecraft:coal_block",
+206: 		"minecraft:iron_ore",
+207: 		"minecraft:iron_block",
+208: 		"minecraft:diamond_ore",
+209: 		"minecraft:diamond_block"
+210:     ] as string[];
+211: 
+212:     if (!isNull(event.item) && event.item.matches(<defiledlands:defilement_powder>) && 
+213:         stopDefiledBlocks has event.block.definition.id) {
+214:         event.cancel();
+215:     }
+216: 	
+217: 	if (event.world.isRemote()) {
+218: 		return;
+219: 	}
+220: 
+221: 	// Hawthorn bush effects
+222: 	if (event.block.definition.id == "biomesoplenty:plant_0" & event.block.meta == 5) {
+223: 		var poisonEffect = <potion:minecraft:poison>.makePotionEffect(40, 1) as IPotionEffect;
+224: 		event.player.addPotionEffect(poisonEffect);
+225: 		event.player.attackEntityFrom(<damageSource:CACTUS>, 4);
+226: 		return;
+227: 	}
+...
+870: // Harvester is only summonable at night. This cancels the interact event during the day.
+871: events.onPlayerInteractBlock(function(event as crafttweaker.event.PlayerInteractBlockEvent){
+872:     if(!event.entity.world.isRemote()){
+873:         if(event.block.definition.id == "multiblockmobs:soul_chassis"){
+874: 			if(event.player.world.isDayTime()){
+875: 				event.player.sendChat("§4Only summonable at night!");
+876: 				event.cancel();
+877: 			}
+878:         }
+879:     }
+880: });

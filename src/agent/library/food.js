@@ -147,3 +147,39 @@ export async function eatToHeal(bot, { checkMs = CONSUME_CHECK_MS } = {}) {
     return await eatFood(bot, item, { checkMs });
 }
 
+/**
+ * G4 #5 (CX23 soak m1: food fell to 1; after the deaths nothing to eat, and nothing got food once
+ * the agenda was done). On this pack hunger falls about 1 every 4 min even idle (the soak's third
+ * night: 10 to 1 in 35 min), early foods give 1 to 3, and starving kills. The hunger value of safe
+ * food the bot should hold (lead decision): by day after the agenda is done, before night (the
+ * shelter reserve's window), and at dusk (the night routine's check).
+ */
+export const FOOD_TARGET = { day: 12, night: 8, dusk: 6 };
+
+/** The hunger value of the safe food held (never avoided food; bread counts). */
+export function heldFoodHunger(bot) {
+    let total = 0;
+    for (const item of bot?.inventory?.items?.() ?? []) {
+        if (isAvoided(item)) continue;
+        const f = foodValue(item);
+        if (f) total += f.hunger * (item.count ?? 1);
+    }
+    return total;
+}
+
+/**
+ * The food target the bot is short of now, or null: never at night (minutesToSunset 0: the bot
+ * stays sealed, never out for food); FOOD_TARGET.night in the before-night window (0 < minutes <=
+ * reserveLeadMin); FOOD_TARGET.day by day once the agenda is done (`finished`); and at any time but
+ * night when food is at EAT_AT or lower and no safe food is held. An unknown food level: null.
+ */
+export function foodShortfall({ food, held, minutesToSunset, finished = false, reserveLeadMin = 10 }) {
+    if (!Number.isFinite(food)) return null;
+    const m = Number.isFinite(minutesToSunset) ? minutesToSunset : Infinity;
+    if (m <= 0) return null;
+    if (m <= reserveLeadMin) return held < FOOD_TARGET.night ? FOOD_TARGET.night : null;
+    if (finished && held < FOOD_TARGET.day) return FOOD_TARGET.day;
+    if (food <= EAT_AT && held <= 0) return FOOD_TARGET.day;
+    return null;
+}
+

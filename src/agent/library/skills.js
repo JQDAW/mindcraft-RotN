@@ -3104,14 +3104,14 @@ export async function avoidEnemies(bot, distance=16, isEnemy=(entity) => mc.isHo
 
 export async function stay(bot, seconds=30) {
     /**
-     * Stay in the current position until interrupted. Disables all modes.
+     * Stay in the current position until interrupted. Pauses the modes that would move it, but
+     * never self_preservation (fire, lava, drowning, a falling block: #422 follow-up).
      * @param {MinecraftBot} bot, reference to the minecraft bot.
      * @param {number} seconds, the number of seconds to stay. Defaults to 30. -1 for indefinite.
      * @returns {Promise<boolean>} true if the bot stayed, false otherwise.
      * @example
      * await skills.stay(bot);
      **/
-    bot.modes.pause('self_preservation');
     bot.modes.pause('unstuck');
     bot.modes.pause('cowardice');
     bot.modes.pause('self_defense');

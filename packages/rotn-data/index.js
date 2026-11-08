@@ -40,6 +40,10 @@ export const threatOf = (entityName) => pack().threatOf(entityName);
 export const nightThreats = (opts) => pack().nightThreats(opts);
 export const mobDigging = (entityName) => pack().mobDigging(entityName);
 export const canMobDig = (entityName, blockName, opts) => pack().canMobDig(entityName, blockName, opts);
+// Wild food (G4 #5): berry bushes, herbs, gardens, mushrooms and plant hazards (3.3.4/forage-food.json).
+export const forageFood = (block, meta) => pack().forageFood(block, meta);
+export const forageSources = (opts) => pack().forageSources(opts);
+export const forageHazard = (block, meta) => pack().forageHazard(block, meta);
 export { NIGHT_THREATS_NOT_REFLECTED } from './src/threats.js';
 export const entity = (name) => pack().entity(name);
 export const entityByModId = (modId, typeId) => pack().entityByModId(modId, typeId);
