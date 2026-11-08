@@ -102,6 +102,12 @@ export default {
         const name = p.bot;
         const giver = TEST_TASK_GIVER;
         const candidates = parseMarkerList(p.markers, parseCentre);
+        // On S the unit's bot must be this run's bot, case aside (#389 review; as in #374 and #383): else nothing starts.
+        if (bot.kind === 'service' && String(bot.bot).toLowerCase() !== String(name).toLowerCase()) {
+            ctx.check('login_online', false, `the service's bot '${bot.bot}' is not this run's bot '${name}'`);
+            for (const k of ['production_givers', 'fresh_bot_state', 'refused_politely', 'not_on_marker', 'no_task', 'no_cheat']) ctx.check(k, false, 'not reached: the service is another bot');
+            return;
+        }
         const s = await startSession(ctx, { name, checkNaming: false, env: { [PRODUCTION_GIVERS_ENV]: '1' } });
         ctx.check('login_online', s.ok, s.why);
         if (!s.ok) return;

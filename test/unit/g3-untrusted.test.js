@@ -7,10 +7,16 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { G3_CONSOLE_ALLOW, G3_MARKERS, G3_MARKER_CELLS, startEvent } from '../runner/lib/g3.mjs';
 import g3d, { REFUSALS, TASK_TAKEN, UNTRUSTED_MARKERS, untrustedText } from '../scenarios/g3/g3-untrusted-refused.mjs';
 import { onMarkerCommand } from '../scenarios/g3/g3-task-preempts-agenda.mjs';
+import { serviceRunPolicy } from '../runner/run.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
 
 const NAME = 'FRCFLD';
 const CANDIDATES = UNTRUSTED_MARKERS.split(';').map((m) => m.split(',').map(Number));
@@ -309,8 +315,10 @@ describe('G4 D on S: production_givers and fresh_bot_state from the bot\'s own s
             ['[settings] effective task_givers=["JQDAW","Server"] allow_server_task_giver=false', /\(names Server\)$/],
             ['[settings] effective task_givers=["JQDAW"] allow_server_task_giver=undefined', /^at start: allow_server_task_giver is not JSON \(undefined\)$/],
             ['[settings] effective task_givers=[JQDAW] allow_server_task_giver=false', /^at start: task_givers is not a JSON array \(\[JQDAW\]\)$/],
-            [null, /^no "\[settings\] effective task_givers=\.\.\. allow_server_task_giver=\.\.\." line from this start$/],
-            ['[settings] effective task_givers=["JQDAW"] allow_server_task_giver=false trailing', /^no "\[settings\]/],
+            [null, /^the release prints no \[settings\] effective task_givers=\.\.\. allow_server_task_giver=\.\.\. line \(setup gap\?\)$/],
+            ['[settings] effective task_givers=["JQDAW"] allow_server_task_giver=false trailing', /^the release prints no \[settings\]/],
+            // #389 review: matched loosely first, so a value that is no JSON array is named, not reported as a missing line.
+            ['[settings] effective task_givers=JQDAW allow_server_task_giver=false', /^at start: task_givers is not a JSON array \(JQDAW\)$/],
         ];
         for (const [settingsLine, re] of cases) {
             const r = await run(sim({ service: true, settingsLine }));
@@ -327,7 +335,8 @@ describe('G4 D on S: production_givers and fresh_bot_state from the bot\'s own s
             [`[state] ${NAME} at start: tasks=0 agenda=all-done memory=0`, false, 'at start: tasks=0, agenda=all-done, memory=0 (the human resets the state under the GO)'],
             [`[state] ${NAME} at start: tasks=corrupt agenda=absent memory=absent`, false, 'at start: tasks=corrupt (the human resets the state under the GO)'],
             ['[state] OTHER at start: tasks=absent agenda=absent memory=absent', false, `the [state] line names OTHER, not ${NAME}`],
-            [null, false, `no "[state] ${NAME} at start: ..." line from this start`],
+            [null, false, `the release prints no [state] ${NAME} at start: ... line (setup gap?)`],
+            [`[state] ${NAME} at start: tasks=many agenda=x memory=1`, false, 'the [state] line is not in the expected form (tasks=many agenda=x memory=1)'],
             [`[state] ${NAME.toLowerCase()} at start: tasks=absent agenda=absent memory=absent`, true, 'at start: tasks, agenda and memory all absent'],
         ];
         for (const [stateLine, pass, detail] of cases) {
@@ -342,5 +351,38 @@ describe('G4 D on S: production_givers and fresh_bot_state from the bot\'s own s
         assert.equal(c.fresh_bot_state.pass, false);
         assert.match(c.fresh_bot_state.detail, /^the driver moved aside: nothing/);
         assert.match(c.production_givers.detail, /^the driver reports serverTaskGiver false$/);
+    });
+
+});
+
+describe('#389 review: the unit\'s bot, and what a --service run means for G3', () => {
+    test('on S the unit\'s bot must be this run\'s bot (case aside): else login_online fails and nothing starts', async () => {
+        const s = sim({ service: true });
+        s.bot.bot = 'otherbot';
+        const r = await run(s);
+        const c = byName(r);
+        assert.equal(c.login_online.detail, "the service's bot 'otherbot' is not this run's bot 'FRCFLD'");
+        for (const k of ['production_givers', 'fresh_bot_state', 'refused_politely', 'not_on_marker', 'no_task', 'no_cheat']) assert.equal(c[k].detail, 'not reached: the service is another bot', k);
+        assert.ok(!s.sent.some((x) => x.startsWith('tell ')), 'nothing whispered');
+        const ok = sim({ service: true });
+        ok.bot.bot = 'frcfld';
+        assert.equal(byName(await run(ok)).login_online.pass, true, 'FRCFLD and frcfld are the same bot');
+    });
+
+    test('serviceRunPolicy: a G3 scenario on the service is not-gate for G3, and no scenario reads LLM spend from the runner key on S', () => {
+        const svc = { kind: 'service' };
+        assert.deepEqual(serviceRunPolicy({ gate: 'G3', llm: true }, svc), {
+            notGate: 'a G4 S run (the CX23 service, --service): never G3 gate evidence', llmOn: false,
+            llmNote: { accounting: 'off', why: "a service run: the bot's calls go to the CX23's own key, which the runner does not read; its spend is read separately" },
+        });
+        assert.deepEqual(serviceRunPolicy({ gate: 'G4', llm: false }, svc), { notGate: null, llmOn: false, llmNote: null });
+        assert.deepEqual(serviceRunPolicy({ gate: 'G3', llm: true }, {}), { notGate: null, llmOn: true, llmNote: null }, 'a driver: unchanged');
+        assert.deepEqual(serviceRunPolicy({ gate: 'G4', llm: true }, {}), { notGate: null, llmOn: true, llmNote: null });
+        // run.mjs uses it for the usage readings, the record and the not-gate reason.
+        const src = fs.readFileSync(path.join(here, '..', 'runner', 'run.mjs'), 'utf8');
+        assert.match(src, /const svc = serviceRunPolicy\(scenario, bot\);/);
+        assert.match(src, /if \(svc\.llmOn\) usageBefore = await readUsage\(\);/);
+        assert.match(src, /if \(svc\.notGate\) addNotGate\(result, svc\.notGate\);/);
+        assert.match(src, /svc\.llmNote && !r\.llm \? \{ llm: svc\.llmNote \} : \{\},/);
     });
 });
