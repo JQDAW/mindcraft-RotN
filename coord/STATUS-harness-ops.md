@@ -1,8 +1,27 @@
 # Status: harness-ops
 
-Updated: 2026-11-08 (04:43 UTC, from `date -u`)
+Updated: 2026-11-08 (12:24 UTC, from `date -u`)
 
-## Now: G4, offline (no paid run, nothing on the CX23). Waiting for the human's step 0 and a written GO.
+## Now: idle until the human finishes G4 step 0 (lead, 2026-11-08). Today's G4 offline work is merged; no paid run, nothing on the CX23.
+
+- **G4 scenarios, built offline with fakes-only tests (none run yet):**
+  - **#383 `g4-restart-persistence`** (#11, the agenda half): the ctl's stop then start; the agenda resumes "(resumed after a restart)" at a step not done before; no step done twice. No stop or start without progress first.
+  - **#389, D on S:** `production_givers` and `fresh_bot_state` from the bot's own `[settings]` (#385) and `[state]` (#386) lines; a missing line is a failed check ("setup gap?").
+  - **#394 `g4-soak-2h`** (#7, with #2, #4, #5): metrics and the journal every 5 min for 2 h. The targets `peakMemoryMaxMb` and `usdPerHourMax` stay "TBD" (measured, not reached) until the soak ADR; USD per hour comes from #395's usage lines. **Naming (#2) passes only on skills-rotn's `[naming] <bot> near spawn` line** (#396, #397): unknown 0, at least 3 kinds, real names; the entity line needs unknown 0. A journal gap (failed reads, a cut start) is "not reached (infra)", never a pass; an unknown unit state is infra, never a crash.
+  - **#399 `g4-control-commands`** (#3): on S the trusted player (JQDAW) gives every command; the scenario only whispers prompts (`tell <giver> [g4] ...`, never `say`, which mineflayer reads as chat from the giver) and observes. Distance by `execute <bot> ~ ~ ~ testfor @a[name=<giver>,r=N]` (lead-approved, this scenario only), movement by stat scoreboards, the answer tied to the question by agent.js's log. `no_command_echo` shows whether the bot hears the console's traffic. On T, the `Server` giver's `!stop` only.
+  - **#401 `g4-second-bot`** (#12, smoke, S only): a second unit through the ctl; own profile by its `[state]` line; setup gaps (no env file, the first device-code login not done) are "not reached".
+- **The GO marker is per bot now (#401, lead's decision):** `ROTN_SERVICE_GO=<GO id>:<unit>:test-server-host-confirmed`. The adapter refuses `start` (nothing sent) unless it names its own unit; the old form is refused. Once a start went out, `stop` uses that start's GO, so the runner's cleanup always stops what it started.
+- **#390 (#8), the repo secret scan in CI**, with a hash-keyed allowlist; run it after `git add` (the #390 lesson).
+- **The GitHub release-download outage (2026-11-08, from about 08:35 UTC):** `github.com/<owner>/<repo>/releases/download/` answered 504 for every repo (GitHub's own request id; the status page said operational). canvas and gl got no prebuilds, and `npm ci` fell to node-gyp and failed on `pkg-config`. It was not node: the last green run had the same `nodejs 22.23.4-1nodesource1`.
+  - **#398:** ci-ubuntu-2604 probes the prebuild URLs first and names an outage as external; `deploy.sh` retries `npm ci` 3 times, 2 min apart.
+  - **#403** (approved, merging after #402): the sweeper's hcloud is cached by version and SHA-256, checked against the pin on every run, with a bounded retry. Also `deploy/cx23/README.md`'s `<TAG>` is the one named in the lead GO / NEEDS-HUMAN.
+  - **Recovery:** GitHub's runners about 11:00 (the lead re-ran the failed jobs); from the CX33 a release download answered 200 again at 12:24.
+- **Open nits, for a later PR (lead):**
+  - #398: the probe skips an asset missing from the lockfile; `deploy.sh` warns that a deterministic failure (a patch that no longer applies) repeats, or skips the retry for it.
+  - #403: a cache checksum mismatch logs `::error::` (a bad entry under the right key would stay); a deterministic checksum mismatch on download is not retried; merge the two sentences at `deploy/cx23/README.md:136`.
+- **Next, once step 0 is done and under a written GO:** the T rehearsals (`g4-control-commands`' `!stop`, which also shows the `execute` echo and `no_command_echo`), then the S runs. **The step-7 runner gets its own PR for the lead's G4 evidence rule** (below).
+
+## Earlier (2026-11-08, 04:43 UTC): G4, offline. Waiting for the human's step 0 and a written GO.
 
 - **Merged:**
   - **#365, the CX23 SSH gate** (ADR 0009). It allows `status`, `start`, `stop`, `metrics BOT` and `journal BOT [--since]` through `sudo -n mindcraft-rotn-ctl`, refuses everything else with exit 126, and logs to syslog under `rotn-ssh-gate`. `deploy/cx23/README.md` has the human's exact G4 step-0 commands.
