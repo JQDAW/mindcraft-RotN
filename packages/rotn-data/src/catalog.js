@@ -22,6 +22,7 @@ import { createTranslator } from './translate.js';
 import { howToGet, rockRecipes } from './howto.js';
 import { threatOf, nightThreats } from './threats.js';
 import { mobDigging, canMobDig } from './digging.js';
+import { forageFood, forageSources, forageHazard } from './forage.js';
 import { canFill } from './craft-fill.js';
 import { parseOld, registryName, WILDCARD_META } from './names.js';
 
@@ -98,6 +99,8 @@ export class RotnData {
         // Which mobs dig toward their target and which blocks they can dig, from Epic Siege Mod,
         // ESM-Tweaks and Tool Progression bytecode (mob-digging.json, hand-written with evidence).
         this.mobDiggingData = readJson(dir, 'mob-digging') ?? null;
+        // Wild food blocks and plant hazards (forage-food.json, hand-written with citations).
+        this.forageData = readJson(dir, 'forage-food') ?? null;
         // Which blocks fall (gravity), from the pack's bytecode and configs (falling-blocks.json,
         // built by tools/build-falling-blocks.mjs).
         this.fallingBlocks = readJson(dir, 'falling-blocks')?.blocks ?? null;
@@ -526,6 +529,21 @@ export class RotnData {
     /** Whether a digging mob can dig a block state (src/digging.js). */
     canMobDig(entityName, blockName, opts) {
         return canMobDig(this, entityName, blockName, opts);
+    }
+
+    /** How to get food from a wild block state (src/forage.js), or null when it is not a forage source. */
+    forageFood(block, meta) {
+        return forageFood(this, block, meta);
+    }
+
+    /** Every forage block to look for, best first (src/forage.js). */
+    forageSources(opts) {
+        return forageSources(this, opts);
+    }
+
+    /** Plant hazards of a block state (poison ivy, thorns, the hawthorn's right-click), or null. */
+    forageHazard(block, meta) {
+        return forageHazard(this, block, meta);
     }
 
     /** Hostile mobs a biome (default: the overworld) spawns at night, most likely first (src/threats.js). */

@@ -1,0 +1,1350 @@
+{
+  "format": "rotn-forage-food/1",
+  "pack": "3.3.4",
+  "description": "Wild food blocks a player can harvest early (berry bushes, herbs, HarvestCraft gardens, mushrooms) and nearby plant hazards, for forageFood, forageSources and forageHazard. Hand-written from the bytecode of the pinned pack jars (Rustic 1.1.7, Biomes O' Plenty 7.0.1.2445, Pam's HarvestCraft zg, Dropt 1.19.4 with athenaeum 1.19.6, CraftTweaker 4.1.20.700), read with javap only, and from the pack's scripts and configs; excerpts and copies in packages/rotn-data/test/fixtures/forage-food-3.3.4/. confidence \"verified\" = read from that bytecode, script and config; nothing here was watched in a run. Food values are not copied here: forageFood attaches foodValues and avoidFood from food-values.json.",
+  "confidence": "verified",
+  "summary": "Best early forage: Rustic wildberry bushes (rustic:wildberry_bush). Right-click one with berries (meta 1): 1 wildberries, the bush stays and regrows berries (about 24 min in daylight). Do not break it: Dropt replaces its drops, mostly sticks. Hawthorn (biomesoplenty:plant_0 meta 5, BoP's berry bush): never right-click it (the pack's script poisons and hits the player for 4), break it instead for 1 berry. Wild Rustic herbs (ginseng, marsh mallow, core root) spawn grown: break for 1-3. HarvestCraft gardens: break without sneaking for 2 different crops. Mushrooms are not food raw (smelt them). Avoid touching poison ivy (biomesoplenty:plant_0 meta 4) and thorns/tiny cacti (plant_1 meta 2, 6) without boots and leggings. None of these foods is poisonous to eat except cloudsbluff (avoidFood); wildberries give only 1 hunger here.",
+  "sources": {
+    "rustic": {
+      "file": "mods/rustic-1.1.7.jar",
+      "sha256": "30976de836d72cf3819338469e3e62c0c6943f5b50a6a2b10221c73909f184d8"
+    },
+    "biomesOPlenty": {
+      "file": "mods/BiomesOPlenty-1.12.2-7.0.1.2445-universal.jar",
+      "sha256": "1c53d3ee39f557162591f618c58b79dc6861d24522ef785794ee4a815f8a3908"
+    },
+    "harvestCraft": {
+      "file": "mods/Pam's HarvestCraft 1.12.2zg.jar",
+      "sha256": "9542e0863473b2cf61eff3fa7bdb9f096aaf7fc446c54750cbaa9db47a58f2fa"
+    },
+    "dropt": {
+      "file": "mods/dropt-1.12.2-1.19.4.jar",
+      "sha256": "21837ce855ad3304fa2aa2cc4d29fe5989cd61f09fa8fc1f9f4e53dedbacfd04"
+    },
+    "athenaeum": {
+      "file": "mods/athenaeum-1.12.2-1.19.6.jar",
+      "sha256": "2aea9497d5414bfaefa05cc7c0162850f01dbb96b72ee3db36b5924573336271"
+    },
+    "craftTweaker": {
+      "file": "mods/CraftTweaker2-1.12-4.1.20.700.jar",
+      "sha256": "56f58624e119c16fb421652bbe26a3ec06fbeb8cb53e68dd6bf3f1761ec8c6c2"
+    },
+    "files": [
+      "scripts/dropt.zs (SHA-256 62cd3a64d9f97c8a5197f160486a00947dbc3ce553602692aef99cb278e547f9)",
+      "scripts/events.zs (SHA-256 a9ff248ad084a9f596bbf38a4d7658fa6e27a9aa55dc7e48e1ac9e38c905b6d6)",
+      "config/rustic.cfg (SHA-256 59c144d3bfe891990a8070516aca436ce00a955b7274e2b9ca54fcd02b4a3c76)",
+      "config/harvestcraft.cfg (SHA-256 b5cc212a6d08a0823732749597551702e3036a4c31c1ff208b269632d16f19e8)"
+    ],
+    "from": "the pinned pack zip (SHA-256 90642fd5...f5205)"
+  },
+  "blocks": [
+    {
+      "id": "wildberry-bush",
+      "block": "rustic:wildberry_bush",
+      "kind": "berry-bush",
+      "metas": [
+        0,
+        1
+      ],
+      "states": {
+        "0": "berries=false",
+        "1": "berries=true"
+      },
+      "readyMetas": [
+        1
+      ],
+      "how": {
+        "0": "wait",
+        "1": "right-click"
+      },
+      "rightClick": {
+        "metas": [
+          1
+        ],
+        "gives": [
+          {
+            "name": "rustic:wildberries",
+            "meta": 0,
+            "count": 1
+          }
+        ],
+        "becomesMeta": 0,
+        "keepsBlock": true,
+        "notWhenHolding": [
+          {
+            "name": "minecraft:dye",
+            "meta": 15
+          }
+        ],
+        "harm": null,
+        "into": "inventory (dropped beside the player when full)"
+      },
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "forced": [],
+            "pickOne": [
+              {
+                "weight": 30,
+                "items": [
+                  {
+                    "name": "minecraft:stick",
+                    "meta": 0,
+                    "count": 1
+                  }
+                ]
+              },
+              {
+                "weight": 15,
+                "items": [
+                  {
+                    "name": "minecraft:stick",
+                    "meta": 0,
+                    "count": 2
+                  }
+                ]
+              },
+              {
+                "weight": 10,
+                "items": [
+                  {
+                    "name": "rustic:wildberries",
+                    "meta": 0,
+                    "count": 1
+                  }
+                ]
+              },
+              {
+                "weight": 1,
+                "items": [
+                  {
+                    "name": "rats:little_black_worm",
+                    "meta": 0,
+                    "count": 1
+                  }
+                ]
+              }
+            ],
+            "replacesBlockDrops": true
+          },
+          "1": {
+            "forced": [
+              {
+                "name": "rustic:wildberries",
+                "meta": 0,
+                "count": 1
+              }
+            ],
+            "pickOne": [
+              {
+                "weight": 15,
+                "items": [
+                  {
+                    "name": "minecraft:stick",
+                    "meta": 0,
+                    "count": 1
+                  }
+                ]
+              },
+              {
+                "weight": 10,
+                "items": [
+                  {
+                    "name": "minecraft:stick",
+                    "meta": 0,
+                    "count": 2
+                  }
+                ]
+              },
+              {
+                "weight": 1,
+                "items": [
+                  {
+                    "name": "rats:little_black_worm",
+                    "meta": 0,
+                    "count": 1
+                  }
+                ]
+              }
+            ],
+            "replacesBlockDrops": true
+          }
+        },
+        "silkTouch": [
+          {
+            "name": "rustic:wildberry_bush",
+            "meta": 0,
+            "count": 1
+          }
+        ],
+        "note": "scripts/dropt.zs list \"Berry_Good\": the rule for \"rustic:wildberry_bush\" (meta 0 only) and \"rustic:wildberry_bush:1\"; without Silk Touch the bush item is never dropped"
+      },
+      "regrow": {
+        "toMeta": 1,
+        "lightAbove": 9,
+        "chancePerRandomTick": 0.047619047619047616,
+        "expectedMinutes": 24
+      },
+      "touch": {
+        "slows": 0.6,
+        "collision": false,
+        "harm": null
+      },
+      "spawn": {
+        "chunkChance": 0.05,
+        "attempts": 4,
+        "berriedChance": 0.5,
+        "notInBiomeTypes": [
+          "COLD",
+          "SNOWY",
+          "SANDY",
+          "SAVANNA",
+          "MESA",
+          "MUSHROOM",
+          "NETHER",
+          "END",
+          "DEAD",
+          "WASTELAND"
+        ]
+      },
+      "food": [
+        "rustic:wildberries"
+      ]
+    },
+    {
+      "id": "hawthorn",
+      "block": "biomesoplenty:plant_0",
+      "kind": "berry-bush",
+      "metas": [
+        5
+      ],
+      "states": {
+        "5": "variant=berrybush (\"Berry Bush\"; the pack's script calls it the hawthorn bush)"
+      },
+      "readyMetas": [
+        5
+      ],
+      "how": {
+        "5": "break"
+      },
+      "rightClick": {
+        "metas": [
+          5
+        ],
+        "gives": [
+          {
+            "name": "biomesoplenty:berries",
+            "meta": 0,
+            "count": 1
+          }
+        ],
+        "becomes": {
+          "block": "biomesoplenty:plant_0",
+          "meta": 2
+        },
+        "keepsBlock": true,
+        "into": "an item entity handed to the player",
+        "harm": {
+          "effects": [
+            {
+              "effect": "poison",
+              "seconds": 2,
+              "level": 2
+            }
+          ],
+          "damage": 4,
+          "damageSource": "cactus",
+          "by": "scripts/events.zs line 222 (onPlayerInteractBlock = right-click)"
+        }
+      },
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "5": {
+            "forced": [
+              {
+                "name": "biomesoplenty:berries",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          }
+        },
+        "harm": null,
+        "note": "BlockBOPPlant.getDrops case BERRYBUSH: 1 berries, not the bush. scripts/dropt.zs may ADD one weighted pick (first matching of \"plants_basic_dry\", \"plants_basic_dead\" by biome, else \"tall_grass_base_drops\" for a player): mostly nothing, else plant fiber, tinder, a worm or (14 in 5489) a mulberry"
+      },
+      "touch": {
+        "collision": false,
+        "harm": null
+      },
+      "food": [
+        "biomesoplenty:berries"
+      ]
+    },
+    {
+      "id": "ginseng",
+      "block": "rustic:ginseng",
+      "kind": "herb",
+      "metas": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "states": {
+        "0": "age=0",
+        "1": "age=1",
+        "2": "age=2",
+        "3": "age=3"
+      },
+      "readyMetas": [
+        3
+      ],
+      "how": {
+        "0": "break",
+        "1": "break",
+        "2": "break",
+        "3": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "forced": [
+              {
+                "name": "rustic:ginseng",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "1": {
+            "forced": [
+              {
+                "name": "rustic:ginseng",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "2": {
+            "forced": [
+              {
+                "name": "rustic:ginseng",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "3": {
+            "forced": [
+              {
+                "name": "rustic:ginseng",
+                "meta": 0,
+                "count": 1
+              }
+            ],
+            "rolls": [
+              {
+                "item": {
+                  "name": "rustic:ginseng",
+                  "meta": 0,
+                  "count": 1
+                },
+                "times": 2,
+                "chance": 0.6666666666666666
+              }
+            ]
+          }
+        },
+        "note": "BlockHerbBase.getDrops: BlockBush.getDrops (getItemDropped = getHerb, 1) plus, at age 3 (getMaxAge), 2 + fortune rolls of nextInt(2 x 3) <= age: 2/3 each. The herb item is also the planting item"
+      },
+      "food": [
+        "rustic:ginseng"
+      ],
+      "blockClass": "rustic.common.blocks.crops.Herbs$8",
+      "where": "surface: FOREST (not SNOWY), one of chamomile, cohosh, ginseng, horsetail"
+    },
+    {
+      "id": "marsh-mallow",
+      "block": "rustic:marsh_mallow",
+      "kind": "herb",
+      "metas": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "states": {
+        "0": "age=0",
+        "1": "age=1",
+        "2": "age=2",
+        "3": "age=3"
+      },
+      "readyMetas": [
+        3
+      ],
+      "how": {
+        "0": "break",
+        "1": "break",
+        "2": "break",
+        "3": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "forced": [
+              {
+                "name": "rustic:marsh_mallow",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "1": {
+            "forced": [
+              {
+                "name": "rustic:marsh_mallow",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "2": {
+            "forced": [
+              {
+                "name": "rustic:marsh_mallow",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "3": {
+            "forced": [
+              {
+                "name": "rustic:marsh_mallow",
+                "meta": 0,
+                "count": 1
+              }
+            ],
+            "rolls": [
+              {
+                "item": {
+                  "name": "rustic:marsh_mallow",
+                  "meta": 0,
+                  "count": 1
+                },
+                "times": 2,
+                "chance": 0.6666666666666666
+              }
+            ]
+          }
+        },
+        "note": "BlockHerbBase.getDrops: BlockBush.getDrops (getItemDropped = getHerb, 1) plus, at age 3 (getMaxAge), 2 + fortune rolls of nextInt(2 x 3) <= age: 2/3 each. The herb item is also the planting item"
+      },
+      "food": [
+        "rustic:marsh_mallow"
+      ],
+      "blockClass": "rustic.common.blocks.crops.Herbs$10",
+      "where": "surface: JUNGLE (with blood orchid, horsetail, mooncap) and SWAMP (not SNOWY; with chamomile, horsetail)"
+    },
+    {
+      "id": "core-root",
+      "block": "rustic:core_root",
+      "kind": "herb",
+      "metas": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "states": {
+        "0": "age=0",
+        "1": "age=1",
+        "2": "age=2",
+        "3": "age=3"
+      },
+      "readyMetas": [
+        3
+      ],
+      "how": {
+        "0": "break",
+        "1": "break",
+        "2": "break",
+        "3": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "forced": [
+              {
+                "name": "rustic:core_root",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "1": {
+            "forced": [
+              {
+                "name": "rustic:core_root",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "2": {
+            "forced": [
+              {
+                "name": "rustic:core_root",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "3": {
+            "forced": [
+              {
+                "name": "rustic:core_root",
+                "meta": 0,
+                "count": 1
+              }
+            ],
+            "rolls": [
+              {
+                "item": {
+                  "name": "rustic:core_root",
+                  "meta": 0,
+                  "count": 1
+                },
+                "times": 2,
+                "chance": 0.6666666666666666
+              }
+            ]
+          }
+        },
+        "note": "BlockHerbBase.getDrops: BlockBush.getDrops (getItemDropped = getHerb, 1) plus, at age 3 (getMaxAge), 2 + fortune rolls of nextInt(2 x 3) <= age: 2/3 each. The herb item is also the planting item"
+      },
+      "food": [
+        "rustic:core_root"
+      ],
+      "blockClass": "rustic.common.blocks.crops.Herbs$6",
+      "where": "not one of the surface herbs (WorldGenCaveHerbs, not read)"
+    },
+    {
+      "id": "cloudsbluff",
+      "block": "rustic:cloudsbluff",
+      "kind": "herb",
+      "metas": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "states": {
+        "0": "age=0",
+        "1": "age=1",
+        "2": "age=2",
+        "3": "age=3"
+      },
+      "readyMetas": [
+        3
+      ],
+      "how": {
+        "0": "break",
+        "1": "break",
+        "2": "break",
+        "3": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "forced": [
+              {
+                "name": "rustic:cloudsbluff",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "1": {
+            "forced": [
+              {
+                "name": "rustic:cloudsbluff",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "2": {
+            "forced": [
+              {
+                "name": "rustic:cloudsbluff",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          },
+          "3": {
+            "forced": [
+              {
+                "name": "rustic:cloudsbluff",
+                "meta": 0,
+                "count": 1
+              }
+            ],
+            "rolls": [
+              {
+                "item": {
+                  "name": "rustic:cloudsbluff",
+                  "meta": 0,
+                  "count": 1
+                },
+                "times": 2,
+                "chance": 0.6666666666666666
+              }
+            ]
+          }
+        },
+        "note": "BlockHerbBase.getDrops: BlockBush.getDrops (getItemDropped = getHerb, 1) plus, at age 3 (getMaxAge), 2 + fortune rolls of nextInt(2 x 3) <= age: 2/3 each. The herb item is also the planting item"
+      },
+      "food": [
+        "rustic:cloudsbluff"
+      ],
+      "blockClass": "rustic.common.blocks.crops.Herbs$4",
+      "where": "surface: MOUNTAIN (not SNOWY), with wind thistle",
+      "avoid": "eating it: see avoidFood"
+    },
+    {
+      "id": "arid-garden",
+      "block": "harvestcraft:aridgarden",
+      "kind": "garden",
+      "metas": [
+        0
+      ],
+      "states": {
+        "0": "garden"
+      },
+      "readyMetas": [
+        0
+      ],
+      "how": {
+        "0": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "fromList": {
+              "distinct": 2,
+              "list": [
+                {
+                  "name": "harvestcraft:cactusfruititem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:agaveitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:sisalitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:cassavaitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:chickpeaitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:lentilitem",
+                  "meta": 0
+                },
+                {
+                  "name": "pyrotech:material",
+                  "meta": 13
+                }
+              ]
+            }
+          }
+        },
+        "notWhileSneaking": true,
+        "note": "BlockBaseGarden.getDrops: shuffle the aridGarden list from config/harvestcraft.cfg and drop the first min(gardendropAmount = 2, size), one of each. harvestBlock drops the garden block itself instead when the player is sneaking or uses Silk Touch"
+      },
+      "food": "from the list: the items foodValues knows"
+    },
+    {
+      "id": "frost-garden",
+      "block": "harvestcraft:frostgarden",
+      "kind": "garden",
+      "metas": [
+        0
+      ],
+      "states": {
+        "0": "garden"
+      },
+      "readyMetas": [
+        0
+      ],
+      "how": {
+        "0": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "fromList": {
+              "distinct": 2,
+              "list": [
+                {
+                  "name": "harvestcraft:raspberryitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:oatsitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:ryeitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:celeryitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:peasitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:beetitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:rutabagaitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:broccoliitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:caulifloweritem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:cabbageitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:spinachitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:cottonitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:huckleberryitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:kohlrabiitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:quinoaitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:juniperitem",
+                  "meta": 0
+                }
+              ]
+            }
+          }
+        },
+        "notWhileSneaking": true,
+        "note": "BlockBaseGarden.getDrops: shuffle the frostGarden list from config/harvestcraft.cfg and drop the first min(gardendropAmount = 2, size), one of each. harvestBlock drops the garden block itself instead when the player is sneaking or uses Silk Touch"
+      },
+      "food": "from the list: the items foodValues knows"
+    },
+    {
+      "id": "shaded-garden",
+      "block": "harvestcraft:shadedgarden",
+      "kind": "garden",
+      "metas": [
+        0
+      ],
+      "states": {
+        "0": "garden"
+      },
+      "readyMetas": [
+        0
+      ],
+      "how": {
+        "0": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "fromList": {
+              "distinct": 2,
+              "list": [
+                {
+                  "name": "harvestcraft:whitemushroomitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:blackberryitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:zucchiniitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:radishitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:rhubarbitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:tealeafitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:garlicitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:sweetpotatoitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:turnipitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:spiceleafitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:beanitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:leekitem",
+                  "meta": 0
+                },
+                {
+                  "name": "rustic:tomato_seeds",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:scallionitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:juteitem",
+                  "meta": 0
+                },
+                {
+                  "name": "pyrotech:material",
+                  "meta": 12
+                }
+              ]
+            }
+          }
+        },
+        "notWhileSneaking": true,
+        "note": "BlockBaseGarden.getDrops: shuffle the shadedGarden list from config/harvestcraft.cfg and drop the first min(gardendropAmount = 2, size), one of each. harvestBlock drops the garden block itself instead when the player is sneaking or uses Silk Touch"
+      },
+      "food": "from the list: the items foodValues knows"
+    },
+    {
+      "id": "soggy-garden",
+      "block": "harvestcraft:soggygarden",
+      "kind": "garden",
+      "metas": [
+        0
+      ],
+      "states": {
+        "0": "garden"
+      },
+      "readyMetas": [
+        0
+      ],
+      "how": {
+        "0": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "fromList": {
+              "distinct": 2,
+              "list": [
+                {
+                  "name": "harvestcraft:brusselsproutitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:spiceleafitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:blueberryitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:asparagusitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:cranberryitem",
+                  "meta": 0
+                },
+                {
+                  "name": "growthcraft_rice:rice",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:seaweeditem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:waterchestnutitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:okraitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:cottonitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:kaleitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:milletitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:jicamaitem",
+                  "meta": 0
+                },
+                {
+                  "name": "growthcraft_grapes:grape_seed",
+                  "meta": 13
+                },
+                {
+                  "name": "betterwithaddons:food_mulberry",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:tomatilloitem",
+                  "meta": 0
+                },
+                {
+                  "name": "pyrotech:material",
+                  "meta": 12
+                }
+              ]
+            }
+          }
+        },
+        "notWhileSneaking": true,
+        "note": "BlockBaseGarden.getDrops: shuffle the soggyGarden list from config/harvestcraft.cfg and drop the first min(gardendropAmount = 2, size), one of each. harvestBlock drops the garden block itself instead when the player is sneaking or uses Silk Touch"
+      },
+      "food": "from the list: the items foodValues knows"
+    },
+    {
+      "id": "tropical-garden",
+      "block": "harvestcraft:tropicalgarden",
+      "kind": "garden",
+      "metas": [
+        0
+      ],
+      "states": {
+        "0": "garden"
+      },
+      "readyMetas": [
+        0
+      ],
+      "how": {
+        "0": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "fromList": {
+              "distinct": 2,
+              "list": [
+                {
+                  "name": "growthcraft_grapes:grape_seed",
+                  "meta": 14
+                },
+                {
+                  "name": "growthcraft_grapes:grape_seed",
+                  "meta": 10
+                },
+                {
+                  "name": "harvestcraft:pineappleitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:kiwiitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:sesameseedsitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:curryleafitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:bambooshootitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:cantaloupeitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:gingeritem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:coffeebeanitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:soybeanitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:eggplantitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:kenafitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:arrowrootitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:taroitem",
+                  "meta": 0
+                },
+                {
+                  "name": "pyrotech:material",
+                  "meta": 12
+                }
+              ]
+            }
+          }
+        },
+        "notWhileSneaking": true,
+        "note": "BlockBaseGarden.getDrops: shuffle the tropicalGarden list from config/harvestcraft.cfg and drop the first min(gardendropAmount = 2, size), one of each. harvestBlock drops the garden block itself instead when the player is sneaking or uses Silk Touch"
+      },
+      "food": "from the list: the items foodValues knows"
+    },
+    {
+      "id": "windy-garden",
+      "block": "harvestcraft:windygarden",
+      "kind": "garden",
+      "metas": [
+        0
+      ],
+      "states": {
+        "0": "garden"
+      },
+      "readyMetas": [
+        0
+      ],
+      "how": {
+        "0": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "fromList": {
+              "distinct": 2,
+              "list": [
+                {
+                  "name": "harvestcraft:strawberryitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:barleyitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:cornitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:cucumberitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:wintersquashitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:mustardseedsitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:onionitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:parsnipitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:peanutitem",
+                  "meta": 0
+                },
+                {
+                  "name": "minecraft:potato",
+                  "meta": 0
+                },
+                {
+                  "name": "minecraft:carrot",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:lettuceitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:artichokeitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:bellpepperitem",
+                  "meta": 0
+                },
+                {
+                  "name": "rustic:chili_pepper_seeds",
+                  "meta": 0
+                },
+                {
+                  "name": "minecraft:wheat",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:flaxitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:amaranthitem",
+                  "meta": 0
+                },
+                {
+                  "name": "harvestcraft:elderberryitem",
+                  "meta": 0
+                },
+                {
+                  "name": "pyrotech:material",
+                  "meta": 13
+                }
+              ]
+            }
+          }
+        },
+        "notWhileSneaking": true,
+        "note": "BlockBaseGarden.getDrops: shuffle the windyGarden list from config/harvestcraft.cfg and drop the first min(gardendropAmount = 2, size), one of each. harvestBlock drops the garden block itself instead when the player is sneaking or uses Silk Touch"
+      },
+      "food": "from the list: the items foodValues knows"
+    },
+    {
+      "id": "brown-mushroom",
+      "block": "minecraft:brown_mushroom",
+      "kind": "mushroom",
+      "metas": [
+        0
+      ],
+      "states": {
+        "0": "mushroom"
+      },
+      "readyMetas": [
+        0
+      ],
+      "how": {
+        "0": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "forced": [
+              {
+                "name": "minecraft:brown_mushroom",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          }
+        },
+        "note": "the dump (vanilla BlockMushroom drops itself)"
+      },
+      "food": [],
+      "edibleRaw": false,
+      "cook": "smeltingOf (smelting.json)"
+    },
+    {
+      "id": "red-mushroom",
+      "block": "minecraft:red_mushroom",
+      "kind": "mushroom",
+      "metas": [
+        0
+      ],
+      "states": {
+        "0": "mushroom"
+      },
+      "readyMetas": [
+        0
+      ],
+      "how": {
+        "0": "break"
+      },
+      "rightClick": null,
+      "break": {
+        "destroysBlock": true,
+        "byMeta": {
+          "0": {
+            "forced": [
+              {
+                "name": "minecraft:red_mushroom",
+                "meta": 0,
+                "count": 1
+              }
+            ]
+          }
+        },
+        "note": "the dump (vanilla BlockMushroom drops itself)"
+      },
+      "food": [],
+      "edibleRaw": false,
+      "cook": "smeltingOf (smelting.json)"
+    }
+  ],
+  "hazards": [
+    {
+      "id": "poison-ivy",
+      "block": "biomesoplenty:plant_0",
+      "metas": [
+        4
+      ],
+      "on": "touch",
+      "players": true,
+      "effects": [
+        {
+          "effect": "poison",
+          "seconds": 5,
+          "level": 1
+        }
+      ],
+      "damage": 0,
+      "unlessWearing": [
+        "feet",
+        "legs"
+      ],
+      "note": "BlockBOPPlant.onEntityCollidedWithBlock (POISONIVY): Poison 100 ticks unless armour slots 0 (feet) and 1 (legs) are both filled"
+    },
+    {
+      "id": "thorns",
+      "block": "biomesoplenty:plant_1",
+      "metas": [
+        2,
+        6
+      ],
+      "on": "touch",
+      "players": true,
+      "effects": [],
+      "damage": 1,
+      "damageSource": "cactus",
+      "unlessWearing": [
+        "feet",
+        "legs"
+      ],
+      "note": "BlockBOPPlant.onEntityCollidedWithBlock (THORN, TINYCACTUS): 1 cactus damage per collision unless armour slots 0 and 1 are both filled"
+    },
+    {
+      "id": "hawthorn",
+      "block": "biomesoplenty:plant_0",
+      "metas": [
+        5
+      ],
+      "on": "right-click",
+      "players": true,
+      "effects": [
+        {
+          "effect": "poison",
+          "seconds": 2,
+          "level": 2
+        }
+      ],
+      "damage": 4,
+      "damageSource": "cactus",
+      "unlessWearing": [],
+      "note": "scripts/events.zs lines 221-226: makePotionEffect(40, 1) and attackEntityFrom(CACTUS, 4); it does not cancel the click, so BoP still hands over the berry"
+    }
+  ],
+  "evidence": [
+    "Wildberry right-click: Rustic BlockBerryBush.onBlockActivated (func_180639_a): when BERRIES is true and the held stack is not bone meal (Items.DYE meta 15), it sets BERRIES false (setBlockState, flag 3), makes new ItemStack(getBerries()) (count 1), gives it with addItemStackToInventory or else spawnAsEntity on the player's side, and returns true; with BERRIES false it returns false. ModBlocks$3 (the dump's class for rustic:wildberry_bush) getBerries = ModItems.WILDBERRIES",
+    "Wildberry states: getMetaFromState (func_176201_c) is 1 for BERRIES true, else 0; the dump's states agree (meta 0 berries=false, meta 1 berries=true). Constructor: Material.PLANTS, hardness 0.2",
+    "Wildberry regrowth: updateTick (func_180650_b): when getLightFromNeighbors(pos.up()) >= 9 and BERRIES is false, nextInt((int) (40.0 / 2.0) + 1) == 0 (1 in 21, through ForgeHooks.onCropsGrowPre) sets BERRIES true. With the default randomTickSpeed 3 a block gets a random tick about every 4096 / 3 = 1365 game ticks, so about 21 x 1365 ticks = 24 minutes on average",
+    "Wildberry touch: getCollisionBoundingBox (func_180646_a) returns NULL_AABB (no collision); onEntityCollidedWithBlock multiplies motionX and motionZ by 0.6. No damage",
+    "Wildberry spawn: WorldGenWildberries.biomeBlacklist (static init) COLD, SNOWY, SANDY, SAVANNA, MESA, MUSHROOM, NETHER, END, DEAD, WASTELAND; generateBush sets BERRIES to Random.nextBoolean(); config/rustic.cfg 'Wildberry Generation Chance'=0.05, 'Max Wildberry Generation Attempts'=4",
+    "Dropt rules (scripts/dropt.zs, loaded by CraftTweaker): athenaeum RecipeItemParser.parse sets meta 0 unless there is a third segment ('*' = 32767), and Dropt's BlockMatchEntry.matches compares Block.getMetaFromState with it (32767 = any meta). So \"rustic:wildberry_bush\" (list Berry_Good) matches only meta 0 and \"rustic:wildberry_bush:1\" only meta 1. RuleLocator.matchRules keeps the first matching rule unless it sets fallthrough (Rule default false). Rule defaults: replaceStrategy REPLACE_ALL, dropStrategy REPEAT, dropCount 1; RuleDropItem quantity 1. DropModifier.modifyDrops adds every force() drop, puts the other drops that RuleDropSelector.isValidCandidate allows (silktouch REQUIRED needs Silk Touch, EXCLUDED forbids it; fortune level) into a WeightedPicker with weight + fortune modifier, picks dropCount times, and with REPLACE_ALL_IF_SELECTED clears the block's own drops when it picked something. No other rule in scripts/dropt.zs or the pack's other Dropt scripts (dropt_loose_materials.zs, dropt_magicite.zs, future-mc.zs, contentweaker/contentTweaker_Dropt.zs) names the wildberry bush; Pyrotech's Dropt plugin categories (config/pyrotech/plugin.Dropt.cfg) are all off",
+    "Hawthorn: biomesoplenty:plant_0 meta 5 is BOPPlants.BERRYBUSH (enum order; the dump's state variant=berrybush). BlockBOPPlant.onBlockActivated: for BERRYBUSH (BlockBOPPlant$2 switch index 5) it sets the BUSH variant (plant_0 meta 2), spawns an EntityItem of BOPItems.berries and calls onCollideWithPlayer (not for a FakePlayer), and returns true. getDrops: BERRYBUSH gives one BOPItems.berries. ModItems: berries = new ItemBOPFood(1, 0.1, 8); ItemBOPFood's constructor and methods set no potion effect",
+    "Hawthorn harm: scripts/events.zs line 201 events.onPlayerInteractBlock. CraftTweaker's MTEventManager.onPlayerInteractBlock delegates to onPlayerRightClickBlock, which CommonEventHandler.onPlayerRightClickBlockEvent (Forge PlayerInteractEvent$RightClickBlock) publishes. Lines 221-226: for biomesoplenty:plant_0 meta 5, addPotionEffect(poison, 40 ticks, amplifier 1) and attackEntityFrom(CACTUS, 4), then return without event.cancel(). The pack's scripts have no other block right-click or left-click handler for these blocks (events.zs line 871 only checks multiblockmobs:soul_chassis; no other .zs file hooks block interaction), so breaking the bush (a left click) is safe; BoP berry bushes have no collision effect",
+    "Plant hazards: BlockBOPPlant.onEntityCollidedWithBlock (func_180634_a): POISONIVY (switch index 3) gives a player Poison for 100 ticks, and THORN and TINYCACTUS (16, 22) deal 1 CACTUS damage, unless both armorInventory slots 0 (feet) and 1 (legs) are filled. The dump: plant_0 meta 4 poisonivy; plant_1 meta 2 thorn, meta 6 tinycactus",
+    "Rustic herbs: BlockHerbBase.getDrops: BlockBush.getDrops (getItemDropped = getHerb: 1) plus, at getMaxAge 3, 2 + fortune rolls that each add the herb when nextInt(2 x 3) <= age (4 in 6). WorldGenSurfaceHerbs places them at AGE 3. There is no onBlockActivated, so breaking is the harvest. Herbs$4/$6/$8/$10.getHerb = CLOUDSBLUFF/CORE_ROOT/GINSENG/MARSH_MALLOW (ItemHerbEdible, registered under the block's registry name, no potion effect in its constructor or methods); the dump's classes map those to rustic:cloudsbluff, core_root, ginseng, marsh_mallow. Herbs.getRandomHerbForBiome picks by BiomeDictionary type (where). config/rustic.cfg 'Herb Generation Chance'=0.125, 'Max Herb Generation Attempts'=8",
+    "HarvestCraft gardens: BlockBaseGarden.getDrops shuffles the garden's drop list and adds the first min(gardendropAmount, size) items, one each; config/harvestcraft.cfg gardendropAmount=2, the six enable*gardenGeneration=true, enablegardenSpread=false, and the drops lists (RotN edited them). harvestBlock (func_180657_a) drops getSilkTouchDrop (the garden itself) when the player is sneaking (func_70093_af) or uses Silk Touch, else the normal drops",
+    "Mushrooms: the dump's minecraft:brown_mushroom and red_mushroom (vanilla BlockMushroom) drop themselves; foodValues gives null for both (not food). smeltingOf: brown -> betterwithaddons:food_mushroom_baked, red -> betterwithaddons:food_amanita_baked"
+  ],
+  "unverified": [
+    "No run has harvested any of these blocks; the bot's right-click (mineflayer activateBlock) on a Rustic bush or BoP berry bush was not tried",
+    "The 24-minute regrowth assumes the default randomTickSpeed 3 and light 9 or more above the bush",
+    "Where BoP berry bushes (hawthorn) and HarvestCraft gardens generate (BoP biome decorators, HarvestCraft garden worldgen) was not read",
+    "harvestcraft:juniperitem in the frostGarden list is not a registered item (the registry has juniperberryitem); how HarvestCraft fills that slot was not checked",
+    "Which Dropt list ADDs its pick when hawthorn is broken depends on Dropt's list order and the biome; not modelled",
+    "Food values of biomesoplenty:berries and the HarvestCraft crops are not computed (food-values.json notComputed)",
+    "Where core root grows (WorldGenCaveHerbs) was not read"
+  ]
+}
