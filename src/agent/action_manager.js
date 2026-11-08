@@ -121,7 +121,7 @@ export class ActionManager {
             clearTimeout(TIMEOUT);
 
             // get bot activity summary
-            let output = this.getBotOutputSummary();
+            let output = this.getBotOutputSummary(actionLabel);
             let interrupted = this.agent.bot.interrupt_code;
             let timedout = this.timedout;
             this.agent.clearBotLogs();
@@ -145,7 +145,7 @@ export class ActionManager {
 
             // The agent (and the LLM) gets the same capped, redacted summary and
             // a few frames, never the raw error text or stack.
-            let message = this.getBotOutputSummary() +
+            let message = this.getBotOutputSummary(actionLabel) +
                 '!!Code threw exception!!\n' +
                 'Error: ' + safeStack(err, { maxFrames: 4 }) + '\n';
 
@@ -158,18 +158,17 @@ export class ActionManager {
         }
     }
 
-    getBotOutputSummary() {
+    getBotOutputSummary(label = '') {
         const { bot } = this.agent;
-        if (bot.interrupt_code && !this.timedout) return '';
-        let output = bot.output;
-        const MAX_OUT = 500;
-        if (output.length > MAX_OUT) {
-            output = `Action output is very long (${output.length} chars) and has been shortened.\n
-          First outputs:\n${output.substring(0, MAX_OUT / 2)}\n...skipping many lines.\nFinal outputs:\n ${output.substring(output.length - MAX_OUT / 2)}`;
+        if (bot.interrupt_code && !this.timedout) {
+            // The interrupted action's output still goes to the log, never to the LLM (G3 round 10
+            // A: a collect interrupted by a reflex left only "got: undefined", so where it cut a
+            // tree could not be read back).
+            if (bot.output) console.log(`[action] ${label || 'the action'} was interrupted; its output: ${shortenOutput(String(bot.output), 2000)}`);
+            bot.output = '';
+            return '';
         }
-        else {
-            output = 'Action output:\n' + output.toString();
-        }
+        const output = shortenOutput(String(bot.output ?? ''));
         bot.output = '';
         return output;
     }
@@ -183,4 +182,13 @@ export class ActionManager {
         }, TIMEOUT_MINS * 60 * 1000);
     }
 
+}
+
+/** An action's output as the agent reads it: whole when short, else its first and last part. */
+export function shortenOutput(output, MAX_OUT = 500) {
+    if (output.length > MAX_OUT) {
+        return `Action output is very long (${output.length} chars) and has been shortened.\n
+          First outputs:\n${output.substring(0, MAX_OUT / 2)}\n...skipping many lines.\nFinal outputs:\n ${output.substring(output.length - MAX_OUT / 2)}`;
+    }
+    return 'Action output:\n' + output;
 }

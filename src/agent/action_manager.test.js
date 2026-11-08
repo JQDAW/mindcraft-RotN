@@ -80,3 +80,21 @@ test('only player and LLM commands (action:) drop a pending re-plan; npc:, itemG
     await manager.runAction('action:collectBlocks', () => Promise.resolve(), { timeout: 0 });
     assert.equal(agent.replan, null);
 });
+
+// G3 round 10 A: a reflex interrupted a collect and its output was dropped ("got: undefined"), so
+// where it had cut a tree could not be read back. The LLM still gets nothing; the log keeps it.
+test('an interrupted action keeps its output in the log, not in the result', async (t) => {
+    const logged = [];
+    t.mock.method(console, 'log', (...args) => logged.push(args.map(String).join(' ')));
+    const agent = fakeAgent();
+    const manager = new ActionManager(agent);
+    const result = await manager.runAction('action:collectBlocks', () => {
+        agent.bot.output = 'Cut the tree at -80, 63, -88 from -78, 63, -89, away from its canopy; stepping back.\n';
+        agent.bot.interrupt_code = true; // a reflex asked it to stop
+    }, { timeout: 0 });
+    assert.equal(result.interrupted, true);
+    assert.equal(result.message, '');
+    const line = logged.find(l => l.startsWith('[action] action:collectBlocks was interrupted; its output: '));
+    assert.ok(line, logged.join('\n'));
+    assert.match(line, /Cut the tree at -80, 63, -88/);
+});
