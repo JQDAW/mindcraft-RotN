@@ -12,7 +12,7 @@ import * as world from './library/world.js';
 import { countItem, formatName } from './library/rotn_names.js';
 import { itemVariants, toolLevels } from './library/rotn_sources.js';
 import { cobbleChoices } from './library/cobble.js';
-import { isSturdy, placeableDirt, minutesToSunset } from './library/night.js';
+import { isSturdy, placeableDirt, minutesToSunset, sunsetEstimateMin } from './library/night.js';
 import { safeError } from './safe_error.js';
 import { loadRotnData, PACK_VERSION, botName, WILDCARD_META } from '../../packages/rotn-data/index.js';
 
@@ -49,8 +49,8 @@ export function oreMemberNames(ore) {
     return oreNames.get(ore);
 }
 
-/** What a step's done check may ask about the bot. */
-export function agendaState(bot) {
+/** What a step's done check may ask about the bot. `clock`: the night routine's NightClock, when there is one. */
+export function agendaState(bot, clock = null) {
     return {
         // A bare name counts every variant; "pyrotech:rock" counts every rock (rotn-data's ore).
         count: (name) => itemVariants(name).reduce((n, v) => n + countItem(bot, v), 0),
@@ -63,6 +63,8 @@ export function agendaState(bot) {
         shelterBlocks: () => (bot.inventory?.items?.() ?? [])
             .filter(i => isSturdy({ name: i.name, metadata: i.metadata ?? 0 })).reduce((n, i) => n + i.count, 0),
         minutesToSunset: () => (Number.isFinite(bot.time?.timeOfDay) ? minutesToSunset(bot.time.timeOfDay) : Infinity),
+        // CX23 soak: the minutes the bot is told, with the morning freeze's part still to run.
+        sunsetEstimateMin: () => (Number.isFinite(bot.time?.timeOfDay) ? sunsetEstimateMin(bot.time.timeOfDay, clock?.frozenMin?.(Date.now()) ?? 0) : Infinity),
         // #284 review 2: any pickaxe held; the dirt blocks held or made from the dirt piles held.
         hasPickaxe: () => toolLevels(bot, 'pickaxe').length > 0,
         dirtBlocks: () => placeableDirt(bot.inventory?.items?.() ?? []),
@@ -135,7 +137,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
     const sp = agent.self_prompter;
     // "agenda done": only the before-night reserve runs (G3 round 6 B), and otherwise nothing is
     // touched (the model's own goal, a giver's goal), as before.
-    if (!agenda.active && !agenda.reserveWanted(agendaState(agent.bot))) {
+    if (!agenda.active && !agenda.reserveWanted(agendaState(agent.bot, agent._night?.clock))) {
         if (agent._agenda_step === agenda.reserve?.id) {
             if (sp.isActive() && ownsPrompt(agent)) sp.stop(false);
             agent._agenda_step = null;
@@ -168,7 +170,7 @@ export function agendaTick(agent, { now = Date.now() } = {}) {
         }
     }
 
-    const state = agendaState(agent.bot);
+    const state = agendaState(agent.bot, agent._night?.clock);
     const { step, newlyDone } = agenda.evaluate(state);
     // One line for the steps done in this tick (G3 round 4 C+D: an inventory left over from an
     // earlier run completed all 11 steps at once, and 12 lines in one second got the bot kicked
