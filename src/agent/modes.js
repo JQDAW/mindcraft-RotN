@@ -23,8 +23,17 @@ import { requestReplan, replanPromptDue, takeReplanNote } from './replan.js';
 import { mayRepeat, handedToChat } from './chat_repeat.js';
 import { fleeLine, mobName } from './library/survival_log.js';
 
+/**
+ * G4 #7 (the soak): the most of the behavior log kept between two LLM messages. It is flushed only
+ * when a message is handled (agent.handleMessage, which reads its last 500 chars), so a bot on
+ * hold, in its night shelter or with nothing to do grew it by every reflex line, for hours.
+ */
+export const BEHAVIOR_LOG_MAX = 2000;
+
 async function say(agent, message) {
-    agent.bot.modes.behavior_log += message + '\n';
+    const modes = agent.bot.modes;
+    modes.behavior_log += message + '\n';
+    if (modes.behavior_log.length > BEHAVIOR_LOG_MAX) modes.behavior_log = modes.behavior_log.slice(-BEHAVIOR_LOG_MAX);
     if (agent.shut_up || !settings.narrate_behavior) return;
     // No chat-spam loop (lead, after G3 round 9): an identical reflex line at most once a minute.
     if (!mayRepeat(agent, message, { tag: '[reflex]' })) return;
