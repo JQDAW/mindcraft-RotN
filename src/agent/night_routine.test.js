@@ -1236,7 +1236,7 @@ test('#364 review 2: digOut opens no side over a drop of more than MAX_SAFE_DROP
     assert.deepEqual(cliffs.dug, []);
 });
 
-test('#364 review 3: in the morning no side is opened while a hostile mob is near; that is a try, and the bot opens once it is gone', async (t) => {
+test('#364 review 3: in the morning no side is opened while a hostile mob is near; the bot opens once it is gone', async (t) => {
     quiet(t);
     const agent = fakeAgent({ t: NIGHT });
     const o = ops();
@@ -1249,24 +1249,65 @@ test('#364 review 3: in the morning no side is opened while a hostile mob is nea
     await settle(agent);
     assert.equal(o.digs, 0, 'not opened with a mob near');
     assert.equal(agent.bot.rotnSheltered, true);
-    assert.match(agent.chat.at(-1), /\[night\] morning: a hostile mob within 8 blocks of the shelter at 0, 64, 0; not opening it \(try 1 of 3\); trying again in 30 s/);
+    assert.match(agent.chat.at(-1), /\[night\] morning: a hostile mob is within 8 blocks of the shelter at 0, 64, 0; staying in until it leaves \(up to 3 min, checking every 30 s\)/);
     mob = false;
     nightTick(agent, { now: 10 + RETRY_MS, ops: o });
     await settle(agent);
     assert.equal(o.digs, 1);
     assert.equal(nightState(agent).state, 'day');
     assert.match(agent.chat.at(-1), /dug out of the shelter at 1, 64, 0; back to work/);
-    // Bounded: a mob that stays hands back after EXIT_TRIES, never opening the shelter.
-    const stay = fakeAgent({ t: NIGHT });
-    const o2 = ops();
-    o2.hostileNear = () => true;
-    nightTick(stay, { now: 0, ops: o2 });
-    await settle(stay);
-    stay.bot.time.timeOfDay = MORNING;
-    for (let i = 0; i < 3; i++) { nightTick(stay, { now: 10 + i * RETRY_MS, ops: o2 }); await settle(stay); }
-    assert.equal(o2.digs, 0);
-    assert.equal(nightState(stay).state, 'day');
-    assert.match(stay.chat.at(-1), /could not leave the shelter at 0, 64, 0 after 3 tries \(a hostile mob within 8 blocks.*\); back to work, still enclosed/);
+});
+
+test('#364 follow-up (b): a mob that stays near keeps the bot shut in and held past EXIT_TRIES, up to MOB_WAIT_MS; then it hands back naming the mob', async (t) => {
+    quiet(t);
+    const { MOB_WAIT_MS, EXIT_TRIES, hostileNear } = await import('./night_routine.js');
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops();
+    const zombie = { name: 'zombie', type: 'hostile', kind: 'Hostile mobs', position: new Vec3(3.4, 64, -2.7) };
+    o.hostileNear = () => zombie;
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    agent.bot.time.timeOfDay = MORNING;
+    const chats = agent.chat.length;
+    const checks = MOB_WAIT_MS / RETRY_MS;
+    assert.ok(checks > EXIT_TRIES);
+    for (let i = 0; i < checks; i++) {
+        // A night:... result holds the agenda and tasks in the priority stack: nothing else runs (and digs out).
+        assert.equal(nightTick(agent, { now: 10 + i * RETRY_MS, ops: o }), 'night:inside');
+        await settle(agent);
+        assert.equal(nightState(agent).state, 'inside', `still in at check ${i + 1}`);
+        assert.equal(nightTick(agent, { now: 11 + i * RETRY_MS, ops: o }), 'night:inside', 'held between checks');
+    }
+    assert.equal(o.digs, 0, 'never opened');
+    assert.equal(agent.chat.length - chats, 1, `the wait is said once: ${agent.chat.slice(chats).join(' | ')}`);
+    assert.match(agent.chat.at(-1), /a zombie at 3, 64, -3 is within 8 blocks of the shelter at 0, 64, 0; staying in until it leaves/);
+    nightTick(agent, { now: 10 + MOB_WAIT_MS, ops: o });
+    await settle(agent);
+    assert.equal(o.digs, 0);
+    assert.equal(nightState(agent).state, 'day');
+    assert.equal(agent.bot.rotnSheltered, false);
+    assert.match(agent.chat.at(-1), /\[night\] morning: a zombie at 3, 64, -3 stayed within 8 blocks of the shelter at 0, 64, 0 for 3 min; back to work, still enclosed: open no wall while it is near/);
+
+    // The wait used no try: a mob that leaves after 2 min, then 3 failed tries, still hands back after EXIT_TRIES.
+    const later = fakeAgent({ t: NIGHT });
+    const o2 = ops({ side: null });
+    let near = true;
+    o2.hostileNear = () => near;
+    nightTick(later, { now: 0, ops: o2 });
+    await settle(later);
+    later.bot.time.timeOfDay = MORNING;
+    for (let i = 0; i < 4; i++) { nightTick(later, { now: 10 + i * RETRY_MS, ops: o2 }); await settle(later); }
+    near = false;
+    for (let i = 4; i < 4 + EXIT_TRIES; i++) { nightTick(later, { now: 10 + i * RETRY_MS, ops: o2 }); await settle(later); }
+    assert.equal(o2.digs, EXIT_TRIES);
+    assert.ok(later.chat.some(l => /no safe side of the shelter at 0, 64, 0 to open yet \(try 1 of 3\)/.test(l)), later.chat.join('\n'));
+    assert.match(later.chat.at(-1), /could not leave the shelter at 0, 64, 0 after 3 tries \(no safe side/);
+
+    // hostileNear names the nearest hostile mob in range (null when none).
+    const bot = { entity: { position: new Vec3(0.5, 64, 0.5) }, entities: {} };
+    bot.entities = { 1: bot.entity, 2: { ...zombie, position: new Vec3(6, 64, 0) }, 3: zombie, 4: { name: 'cow', type: 'animal', position: new Vec3(1, 64, 1) } };
+    assert.equal(hostileNear(bot, 8), zombie);
+    assert.equal(hostileNear(bot, 2), null);
 });
 
 test('#364 review 4: between two morning tries a breach is still found and repaired', async (t) => {

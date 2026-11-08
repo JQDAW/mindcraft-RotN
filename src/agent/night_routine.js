@@ -90,6 +90,8 @@ export function nightState(agent) {
         leaveFrom: null, // the deadly shelter left with a mob near: 'open' until the bot is out of this cell
         exitTries: 0, // round 10 B: morning tries at digging out of this shelter (EXIT_TRIES)
         exitAt: null, // when the next try may start
+        mobSince: null, // #364 follow-up (b): when the morning wait for a hostile mob near the shelter began
+        mobSaid: false, // that wait was said in chat (then only logged)
         cowardiceOn: false, // the routine turned cowardice on while exposed with no weapon
         gen: 0, // bumped by resetNight, so a job that ends after a reset changes nothing
     };
@@ -107,7 +109,7 @@ export function resetNight(agent, why) {
     Object.assign(n, { pit: false, pitNext: false, pitTried: false, leftDeathSpot: false, pitProgress: {} });
     if (n.state !== 'day') console.log(`[night] ${why}: not in a shelter any more`);
     Object.assign(n, { state: 'day', site: null, attempts: 0, nextAt: 0, checkedAt: null, duskAt: null, stopping: false, toldGiver: false, repairStall: null, digAt: null });
-    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false });
     n.gen++;
 }
 
@@ -122,7 +124,7 @@ export function leaveShelterFor(agent, why) {
     if (agent.bot) agent.bot.rotnSheltered = false;
     console.log(`[night] ${why} takes over: the shelter's rules are off until it is done`);
     Object.assign(n, { state: 'building', attempts: 0, nextAt: 0, site: null, digAt: null, repairStall: null });
-    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null });
+    Object.assign(n, { clears: [], tolerated: false, clearSaid: false, leaveFrom: null, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false });
     return true;
 }
 
@@ -159,6 +161,12 @@ function startJob(agent, n, label, fn, then) {
 export const EXIT_DEPTH = 3;
 /** Morning tries at digging out (RETRY_MS apart) before the bot hands back still enclosed. */
 export const EXIT_TRIES = 3;
+/**
+ * #364 follow-up (b): how long, in all, the bot stays shut in on a morning while a hostile mob is
+ * within LEAVE_MOB_RANGE (checked every RETRY_MS; these checks are no tries). Mobs that do not
+ * burn wait outside by day; the agenda and the LLM stay held meanwhile, so nothing digs out.
+ */
+export const MOB_WAIT_MS = 3 * 60_000;
 
 const SIDE_NAMES = new Map([['1,0', 'east'], ['-1,0', 'west'], ['0,1', 'south'], ['0,-1', 'north']]);
 const sideName = (d) => SIDE_NAMES.get(`${d.x},${d.z}`);
@@ -292,12 +300,21 @@ function digAlarm(n, now) {
     return false;
 }
 
-/** A hostile mob (one the shelter fight would hit) within range of the bot. */
+/** The nearest hostile mob (one the shelter fight would hit) within range of the bot, or null. */
 export function hostileNear(bot, range = LEAVE_MOB_RANGE) {
     const here = bot?.entity?.position;
-    if (!here) return false;
-    return Object.values(bot.entities ?? {}).some(e => e && e !== bot.entity && e.position && shelterEnemy(e) && e.position.distanceTo(here) <= range);
+    if (!here) return null;
+    let best = null, bestD = Infinity;
+    for (const e of Object.values(bot.entities ?? {})) {
+        if (!e || e === bot.entity || !e.position || !shelterEnemy(e)) continue;
+        const d = e.position.distanceTo(here);
+        if (d <= range && d < bestD) { best = e; bestD = d; }
+    }
+    return best;
 }
+
+/** "a zombie at x, y, z" for hostileNear's mob (tests' ops may return just true). */
+const mobText = (e) => e?.position ? `a ${e.name ?? e.displayName ?? 'hostile mob'} at ${at(e.position.floored())}` : 'a hostile mob';
 
 /** What the routine does in the world (tests pass their own). */
 export const NIGHT_OPS = { buildShelter, digOut, siteNeeds, siteProblem, clearSpace, hostileNear, digPit, pitOut, moveAwayFrom };
@@ -535,13 +552,13 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         // digOut is tried again RETRY_MS later, EXIT_TRIES times, then the bot hands back. Between
         // tries the shelter's checks below run as at night (#364 review 4: breaches, the dig alarm).
         const waiting = n.exitAt != null && now < n.exitAt;
-        const walkedOut = (n.exitTries ?? 0) > 0 && !bot.entity.position.floored().equals(n.site);
+        const walkedOut = n.exitAt != null && !bot.entity.position.floored().equals(n.site);
         if (isFullDay(t) && (!waiting || walkedOut)) {
             const handBack = (text) => {
                 bot.rotnSheltered = false;
                 n.state = 'day';
                 n.site = null;
-                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, pitProgress: {}, exitTries: 0, exitAt: null });
+                Object.assign(n, { pit: false, pitTried: false, leftDeathSpot: false, pitProgress: {}, exitTries: 0, exitAt: null, mobSince: null, mobSaid: false });
                 line(agent, text);
             };
             const failedTry = (why) => {
@@ -558,8 +575,20 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 return null;
             }
             // #364 review 3: mobs that do not burn wait outside in the day: no opening while one is near.
-            if (ops.hostileNear?.(bot, LEAVE_MOB_RANGE)) {
-                failedTry(`a hostile mob within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)}; not opening it`);
+            // #364 follow-up (b): that wait is no try (3 tries used up by a mob handed back enclosed,
+            // and the agenda or the LLM then dug out with it still there): the bot stays in, held,
+            // re-checking every RETRY_MS, for up to MOB_WAIT_MS in all, then hands back naming the mob.
+            const mob = ops.hostileNear?.(bot, LEAVE_MOB_RANGE);
+            if (mob) {
+                n.mobSince ??= now;
+                const mins = MOB_WAIT_MS / 60_000;
+                if (now - n.mobSince < MOB_WAIT_MS) {
+                    n.exitAt = now + RETRY_MS;
+                    const text = `[night] morning: ${mobText(mob)} is within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)}; staying in until it leaves (up to ${mins} min, checking every ${RETRY_MS / 1000} s)`;
+                    if (n.mobSaid) console.log(text); else { n.mobSaid = true; line(agent, text); }
+                    return 'night:inside';
+                }
+                handBack(`[night] morning: ${mobText(mob)} stayed within ${LEAVE_MOB_RANGE} blocks of the shelter at ${at(n.site)} for ${mins} min; back to work, still enclosed: open no wall while it is near`);
                 return 'night:inside';
             }
             const out = n.pit ? () => ops.pitOut(bot, n.site) : () => ops.digOut(bot, n.site);
