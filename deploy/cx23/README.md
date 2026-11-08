@@ -46,7 +46,8 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
    - turns on unattended **security** upgrades (`20auto-upgrades`; Ubuntu's default `50unattended-upgrades` limits them to the security pocket);
    - sets ufw to deny incoming except SSH. It allows SSH *before* enabling ufw, so the session survives. It also checks that the SSH rule is listed (`ufw show added`) before enabling, and that `ufw status` is active afterwards; a mismatch stops setup;
    - adds a 2 GB `/swapfile` (with `vm.swappiness=10`) if no swap exists;
-   - installs **Node 22** from NodeSource's apt repo, then git. The repo key's fingerprint is pinned (see "NodeSource key" below), and setup refuses on a mismatch. Changing the pin needs both `NODESOURCE_KEY_FPR=<new>` and `--allow-fpr-override`;
+   - installs its OS packages, the one list `SETUP_PACKAGES` in `bootstrap.sh` (`unattended-upgrades git ufw ca-certificates curl gnupg libx11-6 libxext6`), with `--no-install-recommends`. `libx11-6` and `libxext6` are there for gl's prebuilt binding (G4 step 0 C1, 2026-11-08). The Ubuntu 26.04 CI job installs exactly that list the same way, read from `bootstrap.sh`, and then checks with `ldd` that every native binding links;
+   - installs **Node 22** from NodeSource's apt repo, with no recommends. The repo key's fingerprint is pinned (see "NodeSource key" below), and setup refuses on a mismatch. Changing the pin needs both `NODESOURCE_KEY_FPR=<new>` and `--allow-fpr-override`;
    - installs a sudoers rule letting `deploy` run only `mindcraft-rotn-ctl` without a password. It is checked twice:
      - with `visudo -c` before it goes in place;
      - with `sudo -l -U deploy` afterwards, because Ubuntu 26.04 ships **sudo-rs** as `sudo`.

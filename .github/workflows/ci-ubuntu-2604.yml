@@ -2,14 +2,18 @@
 # pull request and every push to develop (harness-ops). It must pass before GO 2, the CX23 bootstrap.
 #
 # What it mirrors from deploy/cx23/bootstrap.sh setup, so a failure here is a failure on the CX23:
-#   - the same apt packages setup installs, and nothing else: no build-essential, so a native
-#     dependency (canvas, gl) that cannot use a prebuilt binary fails here as it would on the CX23;
+#   - the same apt packages setup installs, and nothing else: bootstrap.sh's SETUP_PACKAGES line, read from that
+#     file, with --no-install-recommends on both sides (G4 step 0 C1, 2026-11-08: a Recommends chain here, git ->
+#     openssh-client -> xauth, brought libx11-6 and libxext6, which the CX23 lacked, and gl's binding needs them). No
+#     build-essential, so a native dependency (canvas, gl) that cannot use a prebuilt binary fails here as on the CX23;
 #   - Node 22 from NodeSource's `nodistro` repository, with the repository key checked against the
 #     fingerprint pinned in bootstrap.sh (read from that file, so the two cannot drift apart);
 #   - npm ci (its postinstall runs patch-package --error-on-fail) and npm test as a non-root user,
 #     as `deploy` runs npm ci on the CX23 (deploy/cx23/deploy.sh).
-# The image is ubuntu:26.04, pinned by digest. The CX23's cloud image has more packages than this
-# container (python3 comes in here through unattended-upgrades), so this is the stricter of the two.
+#   - after npm ci, every native binding (.node) must link: ldd finds every library it needs.
+# The image is ubuntu:26.04, pinned by digest. The CX23's cloud image has more packages than this container, but
+# not necessarily the ones a Recommends chain pulls in here: hence no recommends on either side, the one list, and
+# the ldd gate.
 #
 # Secrets: none. No GitHub Environment, `pull_request` only (never `pull_request_target`), a
 # read-only GITHUB_TOKEN, and the checkout does not keep it.
@@ -48,19 +52,35 @@ jobs:
           grep -q '^VERSION_ID="26.04"$' /etc/os-release
           ldd --version | head -1
 
-      - name: apt packages, exactly as bootstrap.sh setup installs them
+      # The checkout needs git first. Both packages are on bootstrap.sh's list (checked in the next step but one), and
+      # come with no recommends, so this adds nothing the full list below would not.
+      - name: git and ca-certificates for the checkout (both on bootstrap.sh's list; no recommends)
         run: |
           set -eu
           apt-get update -q
-          apt-get install -y -q unattended-upgrades git ufw ca-certificates curl gnupg
-
-      # Test-only: jq, which the test-server tooling's unit tests need (deploy/test-server*; it runs on
-      # the PC and the test server, never on the CX23, and deploy/cx23/ does not use it). The
-      # ubuntu-24.04 runner image has it. Installed AFTER npm ci, so npm ci sees only the CX23's packages.
+          apt-get install -y -q --no-install-recommends git ca-certificates
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: apt packages, exactly bootstrap.sh setup's SETUP_PACKAGES (read from it), no recommends
+        run: |
+          set -eu
+          cd "$GITHUB_WORKSPACE"
+          pkgs=$(sed -n 's/^readonly SETUP_PACKAGES="\([a-z0-9.+ -]*\)"$/\1/p' deploy/cx23/bootstrap.sh)
+          [ -n "$pkgs" ] || { echo "::error::no SETUP_PACKAGES line in deploy/cx23/bootstrap.sh"; exit 1; }
+          for need in git ca-certificates; do
+            case " $pkgs " in *" $need "*) ;; *) echo "::error::$need was installed for the checkout but is not on bootstrap.sh's list"; exit 1 ;; esac
+          done
+          echo "bootstrap.sh SETUP_PACKAGES: $pkgs"
+          # shellcheck disable=SC2086 # the list splits into package names on purpose
+          apt-get install -y -q --no-install-recommends $pkgs
+
+      # Test-only: jq, which the test-server tooling's unit tests need (deploy/test-server*; it runs on
+      # the PC and the test server, never on the CX23, and deploy/cx23/ does not use it). The
+      # ubuntu-24.04 runner image has it. Installed AFTER npm ci and the native checks, so they see only the CX23's
+      # packages.
 
       - name: Node 22 from NodeSource (nodistro), key fingerprint pinned in bootstrap.sh
         run: |
@@ -77,7 +97,7 @@ jobs:
           chmod 0644 /etc/apt/keyrings/nodesource.gpg
           echo 'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main' > /etc/apt/sources.list.d/nodesource.list
           apt-get update -q
-          apt-get install -y -q nodejs
+          apt-get install -y -q --no-install-recommends nodejs
           v=$(node --version)
           echo "node $v, npm $(npm --version)"
           case $v in v22.*) ;; *) echo "node is $v, expected v22.x (ADR 0002)"; exit 1 ;; esac
@@ -135,6 +155,32 @@ jobs:
       # What it proves (#135 review nit): each binding LINKS (the dynamic loader finds every library it
       # needs) and initialises. It does not prove that anything renders: no canvas is drawn and no GL
       # context is created (that needs a display, which the bot does not use on the CX23).
+      # Every native binding must link with only the CX23's packages (G4 step 0 C1, 2026-11-08: gl's webgl.node
+      # needed libX11.so.6 and libXext.so.6). ldd on every ELF .node under node_modules: any "not found" fails the
+      # job, named; never installed here, because the CX23 would not have it either. Non-ELF files (another
+      # platform's prebuilds) are skipped; finding no binding at all fails too (the check must not be empty).
+      - name: Every native binding links (ldd on every .node under node_modules)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          n=0
+          bad=0
+          while IFS= read -r -d '' so; do
+            if [ "$(head -c 4 "$so" | od -An -c | tr -d ' ')" != '177ELF' ]; then echo "skipped (not ELF): $so"; continue; fi
+            n=$((n + 1))
+            missing=$(ldd "$so" 2>&1 | grep 'not found' || true)
+            if [ -n "$missing" ]; then
+              bad=1
+              echo "::error::$so needs a library that the CX23's packages do not provide:"
+              echo "$missing"
+            else
+              echo "links: $so"
+            fi
+          done < <(find node_modules -name '*.node' -type f -print0 | sort -z)
+          if [ "$n" -eq 0 ]; then echo "::error::no native .node binding under node_modules: the check would prove nothing"; exit 1; fi
+          echo "$n native binding(s) checked"
+          exit "$bad"
+
       - name: The native modules load (canvas, gl) with only the CX23's packages
         run: |
           set -u
@@ -154,7 +200,7 @@ jobs:
           exit $rc
 
       - name: Test-only tool (jq, for the test-server tooling's tests; not on the CX23)
-        run: apt-get install -y -q jq
+        run: apt-get install -y -q --no-install-recommends jq
 
       - name: npm test (offline unit tests)
         run: |

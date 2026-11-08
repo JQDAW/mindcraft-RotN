@@ -45,6 +45,13 @@ readonly NODESOURCE_KEY_FPR_PINNED=6F71F525282841EEDAF851B42F59B5F99B1BE0B4
 FPR_FROM_ENV=${NODESOURCE_KEY_FPR:-}
 NODESOURCE_KEY_FPR=$NODESOURCE_KEY_FPR_PINNED   # only `setup --allow-fpr-override` takes $NODESOURCE_KEY_FPR instead
 NODESOURCE_KEY_URL=https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+# The OS packages `setup` installs: the whole list, on one line, always with --no-install-recommends.
+# .github/workflows/ci-ubuntu-2604.yml reads this exact line and installs exactly these the same way, so CI cannot
+# get a library the CX23 lacks through a Recommends chain (G4 step 0 C1, 2026-11-08: CI's git pulled openssh-client
+# with its Recommends xauth, and so libx11-6 and libxext6; the CX23's cloud image had openssh-client without xauth).
+#   libx11-6, libxext6: gl's prebuilt binding (node_modules/gl/build/Release/webgl.node) needs libX11.so.6 and
+#   libXext.so.6 (readelf -d: NEEDED). canvas bundles its own libraries (RUNPATH $ORIGIN) and needs no package.
+readonly SETUP_PACKAGES="unattended-upgrades git ufw ca-certificates curl gnupg libx11-6 libxext6"
 
 log()  { echo "[bootstrap] $*" >&2; }
 die()  { echo "[bootstrap] ERROR: $*" >&2; exit 1; }
@@ -190,9 +197,10 @@ EOF
 }
 
 setup_packages() {
-  log "apt: unattended-upgrades, git, ufw, prerequisites"
+  log "apt (no recommends): $SETUP_PACKAGES"
   DEBIAN_FRONTEND=noninteractive apt-get update -q
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -q unattended-upgrades git ufw ca-certificates curl gnupg
+  # shellcheck disable=SC2086 # the list splits into package names on purpose
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends $SETUP_PACKAGES
   # Ubuntu's 50unattended-upgrades already limits automatic upgrades to the security pocket.
   file_owned 0644 root:root /etc/apt/apt.conf.d/20auto-upgrades <<'EOF'
 APT::Periodic::Update-Package-Lists "1";
@@ -218,7 +226,7 @@ setup_node() {
 deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main
 EOF
   DEBIAN_FRONTEND=noninteractive apt-get update -q
-  DEBIAN_FRONTEND=noninteractive apt-get install -y -q nodejs
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-install-recommends nodejs
   local v; v=$(node --version)
   [[ $v == v$NODE_MAJOR.* ]] || die "node --version is '$v', expected v$NODE_MAJOR.x"
   log "node $v"
