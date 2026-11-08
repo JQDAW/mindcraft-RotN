@@ -3,7 +3,7 @@
 G4 passes when every item of `docs/PLAN.md` "Definition of ready-to-try" is green **on the CX23** (PLAN.md, phases). **G4 accepts no test-server evidence for any item** (lead, #316 review). A pass with the bot on the CX33 counts for G3 at most. Below, each item names what exists today, what G4 still needs, where it runs, and what needs the human.
 
 **Two set-ups.**
-- **S (service), the only G4 evidence:** the bot runs as `mindcraft-rotn@frcfld` on the CX23 and joins a disposable CPX42 test server (`test-server.sh run --allow-from <CX23 IP>/32`). That is the human's decision on #101: the first start joins a test server, never the live one. The harness on the CX33 reads the test server (console, log, `testfor`) as in G3, and reads the bot side through `mindcraft-rotn-ctl` (status, journal, memory).
+- **S (service), the only G4 evidence:** the bot runs as `mindcraft-rotn@frcfld` on the CX23 and joins a disposable CPX42 test server (`test-server.sh run --allow-from <CX23 IP>/32`). That is the human's decision on #101: the first start joins a test server, never the live one. The harness on the CX33 reads the test server (console, log, `testfor`) as in G3. It reads and drives the bot side through `mindcraft-rotn-ctl`, over the restricted SSH key and its gate (ADR 0009, below): status, start, stop, journal and metrics.
 - **T (rehearsal only, never evidence):** the Mindcraft driver on the CX33 joins a CPX42, as in G3. It is used to build and debug a scenario cheaply before its S run.
 
 **Already proven on the CX23** (`test/evidence/cx23/`):
@@ -33,12 +33,19 @@ G4 passes when every item of `docs/PLAN.md` "Definition of ready-to-try" is gree
 
 ## Harness work needed (offline first, each a small PR)
 
-- **The CX33 must drive the CX23.**
-  - Before the move this went through an Orca terminal on `cx23-deploy`, by hand, step by step.
-  - A scenario that runs for 2 h needs a scripted channel:
-    - (a) an Orca terminal driven by `orca terminal send/read` from the scenario;
-    - (b) a dedicated SSH key from the CX33 to `deploy@cx23`. On its own, that key gives **a normal shell as `deploy`**. The existing sudo rule only limits what `deploy` may run **as root** (only `mindcraft-rotn-ctl`); it does not limit the key. Limiting the key itself needs an `authorized_keys` entry with `restrict` plus a forced `command="..."` wrapper that allows only `mindcraft-rotn-ctl` verbs (as NEEDS-HUMAN, #318, now says).
-  - **Which one is the human's decision, probably an ADR.** Today agents never run `ssh` themselves.
+- **The CX33 drives the CX23 over a restricted SSH key: decided, ADR 0009 (the human, 2026-11-07).**
+  - **The key and its line:** a dedicated key of root's on the CX33. Its `authorized_keys` line on the CX23 has `from="<the CX33>"`, `restrict` and `command="/usr/local/sbin/mindcraft-rotn-ssh-gate"`.
+  - **The gate** is `deploy/cx23/mindcraft-rotn-ssh-gate.sh`, with tests in `test/unit/cx23-ssh-gate.test.js`.
+    - It allows only `status`, `start`, `stop`, `metrics BOT` and `journal BOT [--since YYYY-MM-DDTHH:MM[:SS][Z]|@EPOCH]`, through `sudo -n mindcraft-rotn-ctl`. `restart` is deliberately left out: `stop` then `start` covers #11.
+    - It refuses and logs everything else (syslog tag `rotn-ssh-gate`).
+  - **The human installs the reviewed copy and reports its SHA-256** (`deploy/cx23/README.md`, G4 step 0, B1).
+  - **Agent rules (ADR 0009):**
+    - only the lead and harness-ops use the key, only under a written GO;
+    - only `status` until the installed gate's hash matches the repo;
+    - every `start` needs the human's GO, confirming the env file names a disposable test server;
+    - a refusal in the gate's log is an incident.
+  - **What scenarios still need:** a service adapter that runs `ssh <deploy@cx23> <request>` through the gate (below).
+- **The env file's `host` changes per S run** (each run has a new test server), and agents can neither see nor change the file. So the human sets `"host"` before each S `start`. This is a cost per run that the lead may want to reduce (for example, a fixed address for the test server).
 - **`mindcraft-rotn-ctl`:** read-only verbs `journal <bot> [--since]` and `metrics <bot>` (`MemoryCurrent`, `MemoryPeak`, `NRestarts`, `ActiveState`). The sudo rule is unchanged: still only the ctl.
 - **`test-server.sh restart`:** console `stop`, wait for the process to end, `systemctl start rotn-server` (on the server, through `rotn-test restart`), wait for a new Done line.
 - **The console allowlist for `kill <bot>` (death), `kick <bot>` and `stop` (restart): test server only, by construction.**
@@ -51,7 +58,8 @@ G4 passes when every item of `docs/PLAN.md` "Definition of ready-to-try" is gree
 
 | What | For |
 | --- | --- |
-| The CX33-to-CX23 channel, (a) or (b) above (the human's decision, probably an ADR) | every S scenario |
+| ~~The CX33-to-CX23 channel~~: decided, ADR 0009 (restricted key and gate). Left for the human: install the reviewed gate and report its SHA-256 (README, G4 step 0) | every S scenario |
+| The env file's `"host"`, set to each S run's test server before its `start` | every S scenario |
 | **H4**: the production OpenRouter key with a credit limit in `/etc/mindcraft-rotn/frcfld.env` | the first start; every S scenario |
 | **H5**: FRCFLD's device-code login on the CX23 (`/var/lib/mindcraft-rotn/frcfld/msa`) | every S scenario |
 | **H6**: the CX23's IPv4 for `--allow-from`, in each GO message | every S scenario |
@@ -66,7 +74,7 @@ CPX42 at EUR 0.1381/h, each server billed at least 1 h; the CX23 is already paid
 
 | Step | What | Servers | Server time | Cost |
 | --- | --- | --- | --- | --- |
-| 0 | CX23 first release (`deploy.sh`) and first start against a CPX42 (`STATUS` "CX23 first run", steps 6-8), after H4, H5, H6 | 1 | ~45 min | EUR 0.14 |
+| 0 | CX23 first release (`deploy.sh`) and first start against a CPX42, after H4, H5, H6: the human's exact commands are in `deploy/cx23/README.md`, "G4 step 0" | 1 | ~45 min | EUR 0.14 |
 | 1 | `g4-death-report`: T rehearsal (needs no CX23), then a dry run on S | 2 | ~20 min each | EUR 0.28 + ~USD 0.02 |
 | 2 | `g4-service-reconnect` (S) | 1 | ~40 min | EUR 0.14 + ~USD 0.01 |
 | 3 | `g4-restart-persistence` (S, agenda half) and D on S (its own fresh world) | 2 | ~40 min | EUR 0.28 + ~USD 0.01 |
