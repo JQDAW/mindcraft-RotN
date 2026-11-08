@@ -41,11 +41,42 @@ function huntAgent({ food = 12, items = [], timeOfDay = 1000, animals = [], idle
     };
     return agent;
 }
-const hunt = async (agent) => { const m = __modeForTest('hunting'); m.active = false; m.skipped_said = ''; await m.update(agent); await flush(); m.active = false; return agent.runs; };
+const hunt = async (agent) => { const m = __modeForTest('hunting'); m.active = false; m.skipped_said = ''; m.forage_none_at = -Infinity; await m.update(agent); await flush(); m.active = false; return agent.runs; };
+/** Wild food blocks ({ "x,y,z": [name, meta] }) in the agent's world, findBlocks as mineflayer's. */
+function withCrops(agent, crops) {
+    const self = agent.bot.entity;
+    const at = (k) => { const [name, metadata] = crops[k]; return { name, metadata, position: new Vec3(...k.split(',').map(Number)) }; };
+    agent.bot.blockAt = (p) => { const k = `${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}`; return crops[k] ? at(k) : { name: 'air', metadata: 0, position: p }; };
+    agent.bot.findBlocks = ({ point, maxDistance, matching }) => Object.keys(crops).map(at)
+        .filter(b => b.position.distanceTo(point ?? self.position) <= maxDistance && matching(b)).map(b => b.position);
+    return agent;
+}
 
 test('G4 #5: the hunting reflex hunts a wild animal when food is due, by day, with no threat near, when idle', async (t) => {
     t.mock.method(console, 'log', () => {});
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)] })), ['mode:hunting'], 'food 12, nothing held, a wild cow');
+});
+
+test('G4 #5 forage: ripe wild food comes before a hunt; a bare bush, an unripe herb or a player\'s garden does not', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    // A ripe wildberry bush in reach and a wild cow: the reflex's action picks the berries (a
+    // right-click), and starts no hunt.
+    const items = [];
+    const crops = { '2,64,0': ['rustic:wildberry_bush', 1] };
+    const ripe = withCrops(huntAgent({ animals: [cow(1, 3)], items }), crops);
+    const attacked = [];
+    ripe.bot.pvp = { attack: (e) => attacked.push(e), stop() {} };
+    ripe.bot.activateBlock = () => { crops['2,64,0'] = ['rustic:wildberry_bush', 0]; items.push({ name: 'rustic:wildberries', metadata: 0, count: 1 }); return Promise.resolve(); };
+    ripe.actions.runAction = async (label, fn) => { ripe.runs.push(label); await fn(); return { message: '', interrupted: false }; };
+    assert.deepEqual(await hunt(ripe), ['mode:hunting']);
+    assert.match(ripe.bot.output, /Foraged 1 block: got 1 rustic:wildberries/);
+    assert.deepEqual(attacked, [], 'no hunt');
+    assert.deepEqual(crops['2,64,0'], ['rustic:wildberry_bush', 0], 'the bush stays');
+    const bare = withCrops(huntAgent({ animals: [] }), { '6,64,0': ['rustic:wildberry_bush', 0], '7,64,0': ['rustic:ginseng', 2], '8,64,0': ['biomesoplenty:plant_0', 5] });
+    assert.deepEqual(await hunt(bare), [], 'nothing ripe, no animal: nothing');
+    const yard = withCrops(huntAgent({ animals: [] }), { '6,64,0': ['harvestcraft:aridgarden', 0], '9,64,0': ['oak_fence', 0] });
+    assert.deepEqual(await hunt(yard), [], 'a garden by a fence may be a player\'s');
+    assert.deepEqual(await hunt(withCrops(huntAgent({ food: 18, animals: [] }), { '6,64,0': ['rustic:wildberry_bush', 1] })), [], 'food not due: no foraging either');
 });
 
 test('G4 #5: the hunting reflex does nothing when food is not due, at dusk or night, with a threat near, when busy, or sheltered', async (t) => {
