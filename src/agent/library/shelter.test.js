@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import minecraftData from 'minecraft-data';
 import { Vec3 } from 'vec3';
 import { __setRegistryForTest } from '../../utils/mcdata.js';
-import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP } from './shelter.js';
+import { shelterItems, siteNeeds, siteProblem, chooseSite, buildShelter, firmFloor, LATE_UPDATE_MS, SHELTER_SPARE, SHELTER_GAP, SETTLE } from './shelter.js';
 import { getCommand } from '../commands/index.js';
 
 const reg = minecraftData('1.12.2');
@@ -16,9 +16,9 @@ const key = (p) => `${p.x},${p.y},${p.z}`;
 // A world cell is a block name, or {name, metadata} (G3 round 6 B: modded blocks, which the
 // vanilla registry does not know, are whole blocks here).
 const blockOf = (v, position) => {
-    const { name, metadata = 0 } = typeof v === 'string' ? { name: v } : v;
+    const { name, metadata = 0, shapes } = typeof v === 'string' ? { name: v } : v;
     const b = reg.blocksByName[name];
-    return { name, metadata, boundingBox: b?.boundingBox ?? 'block', material: b?.material, position, canHarvest: () => true };
+    return { name, metadata, boundingBox: b?.boundingBox ?? 'block', material: b?.material, position, canHarvest: () => true, ...(shapes ? { shapes } : {}) };
 };
 const REACH = 4.5;
 
@@ -36,7 +36,7 @@ function fakeBot({ cobble = 10, pickaxe = true, set = {}, at = new Vec3(0.5, 64,
     let looking = null;
     const bot = {
         output: '',
-        entity: { position: at.clone() },
+        entity: { position: at.clone(), onGround: true },
         inventory: { items: () => items.filter(i => i.count > 0) },
         modes: { isOn: () => false },
         game: { gameMode: 'survival' },
@@ -593,7 +593,7 @@ test('G3 round 7 B: siteProblem names what is where; in the shelter the bot is i
     assert.equal(problem({ '0,64,0': 'lava' }, true), 'lava at 0, 64, 0 (lava in the 1x2 space)');
     assert.equal(problem({ '0,65,0': 'flowing_lava' }, true), 'flowing_lava at 0, 65, 0 (lava in the 1x2 space)');
     assert.equal(problem({ '0,63,0': 'air' }, true), null, 'the floor: when it goes, the bot falls out of the shelter');
-    assert.equal(problem({ '0,63,0': 'air' }, false), 'air at 0, 63, 0 (the floor is not solid)');
+    assert.equal(problem({ '0,63,0': 'air' }, false), 'air at 0, 63, 0 (the floor is not a solid full block, or is part of a tree)');
     // What does count, by name and place.
     assert.equal(problem({ '0,65,0': 'cobblestone' }, true), 'cobblestone at 0, 65, 0 (a solid block in the 1x2 space)');
     assert.equal(problem({ '0,64,0': 'fire' }, true), 'fire at 0, 64, 0 (fire in the 1x2 space)');
@@ -708,3 +708,112 @@ test('round 9 B (f): with no pickaxe and too little dirt the refusal leads with 
     // #336 review: the piles still needed: (10 - 5) x 4 - 2 held = 18.
     assert.match(some.bot.output, /!collectBlocks\("betterwithmods:dirt_pile", 18\)/);
 });
+
+// Gate2 B (g3b-20261108-gate2, 00:19:39): 10 s after "in the shelter at -74, 60, -67" the bot was
+// at y 59 and built again one block lower. A new site's floor must be a firm full block, and the
+// build waits for the bot to rest on that floor before it builds and before it says closed.
+test('gate2 B: a new site\'s floor must be a full-height block and no tree part (leaves, a branch, a trunk shell); a slab-floored cell is passed over', (t) => {
+    t.mock.method(console, 'log', () => {});
+    const feet = new Vec3(0, 64, 0);
+    const problem = (floor) => siteProblem(fakeBot({ set: { '0,63,0': floor } }).bot, feet)?.text ?? null;
+    const why = '(the floor is not a solid full block, or is part of a tree)';
+    // By the collision shape's height (#381 review 3): a bottom slab 0.5, farmland and a grass path
+    // 0.9375, soul sand 0.875 (a full cube to the game); and no tree part.
+    for (const floor of ['stone_slab', 'farmland', 'grass_path', 'soul_sand', 'leaves', 'dynamictrees:oakbranch', 'dynamictrees:trunkshell'])
+        assert.equal(problem(floor), `${floor} at 0, 63, 0 ${why}`, floor);
+    // Full height: glass (not a full cube to the game) and a top slab are fine.
+    for (const floor of ['dirt', 'stone', 'cobblestone', 'glass', { name: 'stone_slab', metadata: 8 }, { name: 'undergroundbiomes:metamorphic_cobble', metadata: 6 }, 'dynamictrees:rootydirt'])
+        assert.equal(problem(floor), null, JSON.stringify(floor));
+    // A block rotn-data does not know: mineflayer's shapes, else a solid block counts as full.
+    assert.equal(firmFloor({ name: 'mod:half', metadata: 0, boundingBox: 'block', shapes: [[0, 0, 0, 1, 0.5, 1]] }), false);
+    assert.equal(firmFloor({ name: 'mod:whole', metadata: 0, boundingBox: 'block', shapes: [[0, 0, 0, 1, 1, 1]] }), true);
+    assert.equal(firmFloor({ name: 'mod:unknown', metadata: 0, boundingBox: 'block' }), true);
+    // The shelter the bot is in is not judged by its floor (when it goes, the bot falls out).
+    assert.equal(siteProblem(fakeBot({ set: { '0,63,0': 'stone_slab' } }).bot, feet, { occupied: true }), null);
+    // A slab under the bot's own cell: the site chosen is another cell, on dirt.
+    const site = chooseSite(fakeBot({ set: { '0,63,0': 'stone_slab' } }).bot);
+    assert.ok(site && !site.feet.equals(feet), `chose ${site?.feet}`);
+    assert.equal(fakeBot().bot.blockAt(site.feet.offset(0, -1, 0)).name, 'dirt');
+});
+
+test('gate2 B: a bot not at rest on the site\'s floor (bobbing or mid-jump one block up) builds nothing; one that lands within SETTLE.maxMs closes the shelter', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    assert.ok(SETTLE.maxMs <= 2000, 'a short wait');
+    // The client sees a block at 0 64 0 and the bot above it at y 65.4, in the air. The block was
+    // not really there (the server's update comes 300 ms later): the bot drops to y 64. Built on
+    // at once, the walls would be at y 65-66, one block too high.
+    // A cobblestone shell is ready around 0 65 0 but for its east side (over a block) and roof: the cheapest site.
+    const raised = { '0,64,0': 'cobblestone', '1,64,0': 'cobblestone', '-1,65,0': 'cobblestone', '-1,66,0': 'cobblestone', '0,65,1': 'cobblestone', '0,66,1': 'cobblestone', '0,65,-1': 'cobblestone', '0,66,-1': 'cobblestone' };
+    const ghost = fakeBot({ set: { ...raised }, at: new Vec3(0.5, 65.4, 0.5) });
+    ghost.bot.entity.onGround = false;
+    setTimeout(() => {
+        ghost.world.set('0,64,0', 'air');
+        Object.assign(ghost.bot.entity, { position: new Vec3(0.5, 64, 0.5), onGround: true });
+    }, 300);
+    const r = await buildShelter(ghost.bot);
+    assert.equal(r.closed, false);
+    assert.equal(r.unsettled, true, 'the night routine re-plans it at once, uncounted (#381 review 2)');
+    assert.deepEqual(ghost.placed, [], 'no wall placed one block too high');
+    assert.ok(r.feet.equals(new Vec3(0, 65, 0)), `the site it chose: ${r.feet}`);
+    assert.match(r.line, /^Not building the shelter at 0, 65, 0: you are not standing on its floor \(at 0\.50, 64\.00, 0\.50 \(on the ground\)\)\.$/);
+    // The next try, from where it is now, closes at y 64.
+    const again = await buildShelter(ghost.bot);
+    assert.equal(again.closed, true, again.line);
+    assert.ok(again.feet.equals(new Vec3(0, 64, 0)));
+
+    // Mid-jump over a real block: it lands on it within the wait, and the shelter closes there.
+    const jump = fakeBot({ set: { ...raised }, at: new Vec3(0.5, 65.4, 0.5) });
+    jump.bot.entity.onGround = false;
+    setTimeout(() => Object.assign(jump.bot.entity, { position: new Vec3(0.5, 65, 0.5), onGround: true }), 200);
+    const landed = await buildShelter(jump.bot);
+    assert.equal(landed.closed, true, landed.line);
+    assert.ok(landed.feet.equals(new Vec3(0, 65, 0)));
+    assert.match(landed.line, /^Shelter closed at 0, 65, 0/);
+});
+
+test('gate2 B: a shelter whose walls are up is not reported closed while the bot is not on its floor', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const { bot, placed } = fakeBot();
+    // The floor goes while the walls go up (the bot is knocked or falls): it is not closed.
+    const place = bot.placeBlock;
+    bot.placeBlock = async (ref, face) => {
+        await place(ref, face);
+        if (placed.at(-1) === '0,66,0') Object.assign(bot.entity, { position: new Vec3(0.5, 63, 0.5), onGround: true }); // the roof is the last
+    };
+    const r = await buildShelter(bot);
+    assert.ok(placed.includes('0,66,0') && r.missing.length === 0, 'the walls and roof are up');
+    assert.equal(r.closed, false);
+    assert.match(r.line, new RegExp(`^Shelter at 0, 64, 0 is built but you are not standing on its floor \\(at 0\\.50, 63\\.00, 0\\.50 \\(on the ground\\)\\); placed ${placed.length}\\.$`));
+});
+
+// #381 review 1: in the shelter the bot is in, a carpet (the bot at y + 0.0625) or a tolerated slab
+// (y + 0.5) may be at its feet; a repair there must go ahead (before, it was refused with 0 placed).
+test('#381 review 1: a repair with the bot on a carpet (y 64.0625) or on a tolerated slab (y 64.5) closes the shelter', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const feet = new Vec3(0, 64, 0);
+    const carpet = fakeBot({ cobble: 2, set: shellAt({ '0,64,0': 'carpet', '1,65,0': 'air' }), at: new Vec3(0.5, 64.0625, 0.5) });
+    const r1 = await buildShelter(carpet.bot, { site: feet, keepSoft: true });
+    assert.equal(r1.closed, true, r1.line);
+    assert.deepEqual(carpet.placed, ['1,65,0']);
+    const slab = fakeBot({ cobble: 2, set: shellAt({ '0,64,0': 'stone_slab', '-1,64,0': 'air' }), at: new Vec3(0.5, 64.5, 0.5) });
+    const r2 = await buildShelter(slab.bot, { site: feet, keepSoft: true, tolerateBody: true });
+    assert.equal(r2.closed, true, r2.line);
+    assert.deepEqual(slab.placed, ['-1,64,0']);
+    // A new site is still judged strictly (its floor's top): the gate2 B tests above.
+});
+
+test('#381 review 4: a stop ends the wait for the bot to settle at once', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const raised = { '0,64,0': 'cobblestone', '1,64,0': 'cobblestone', '-1,65,0': 'cobblestone', '-1,66,0': 'cobblestone', '0,65,1': 'cobblestone', '0,66,1': 'cobblestone', '0,65,-1': 'cobblestone', '0,66,-1': 'cobblestone' };
+    const { bot, placed } = fakeBot({ set: raised, at: new Vec3(0.5, 65.4, 0.5) });
+    bot.entity.onGround = false;
+    setTimeout(() => { bot.interrupt_code = true; }, 100);
+    const start = Date.now();
+    const r = await buildShelter(bot);
+    assert.ok(Date.now() - start < SETTLE.maxMs - 500, `ended after ${Date.now() - start} ms`);
+    assert.equal(r.closed, false);
+    assert.equal(r.unsettled, undefined, 'a stop, not a refusal to re-plan');
+    assert.match(r.line, /: stopped\.$/);
+    assert.deepEqual(placed, []);
+});
+

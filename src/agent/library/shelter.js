@@ -21,6 +21,7 @@ import { toolLevels, stowCarried, describeCarried } from './rotn_sources.js';
 import { cobbleChoices } from './cobble.js';
 import { log, breakBlockAt, goToGoal, craftRecipe } from './skills.js';
 import { shelterEnemy } from './threats.js';
+import { isTreePart } from './fall_safety.js';
 
 const HORIZONTAL = [new Vec3(1, 0, 0), new Vec3(-1, 0, 0), new Vec3(0, 0, 1), new Vec3(0, 0, -1)];
 const SIX = [new Vec3(0, -1, 0), ...HORIZONTAL, new Vec3(0, 1, 0)];
@@ -49,6 +50,40 @@ export const hazardOf = (b) => {
 export const isLiquid = (b) => !!b && (/water|lava/.test(b.name ?? '') || dumpState(b)?.liquid === true);
 export const isEmpty = (b) => !!b && b.boundingBox === 'empty' && !isLiquid(b) && !hazardOf(b);
 const isSolid = (b) => !!b && b.boundingBox === 'block';
+/**
+ * The floor of a new site (gate2 B, 00:19:39: the bot was out of its new shelter 10 s after it
+ * closed, one block lower): a solid block whose collision reaches its top, so the bot stands at its
+ * cell's bottom; full height is told by the shape only (#381 review 3): rotn-data's collision boxes
+ * for the state (the pack's own: a slab 0.5, farmland 0.9375, soul sand 0.875, glass 1), else
+ * mineflayer's shapes, else a solid block counts as full. And no part of a tree (leaves, a Dynamic
+ * Trees branch or trunk shell), which can rot, decay or fall away.
+ */
+export const firmFloor = (b) => {
+    if (!isSolid(b) || isTreePart(b)) return false;
+    const st = dumpState(b);
+    const boxes = [st?.collision, b.shapes].find(s => Array.isArray(s) && s.length > 0);
+    return !boxes || Math.max(...boxes.map(s => s[4])) >= 1;
+};
+/**
+ * Gate2 B: how long the bot may take to come to rest on the site's floor (a jump or a bob in water
+ * ends well within it), and how many such refusals in a row a night's build may have before one
+ * counts as a try (#381 review 2: they are re-planned at once from where the bot is, uncounted).
+ */
+export const SETTLE = { maxMs: 1500, stepMs: 50, retries: 3 };
+/**
+ * The bot is at rest in the site's cell: on the ground, in the cell; for a new site (`strict`) also
+ * with its feet on the floor's top. A repair or a hole shelter may have a carpet or a tolerated
+ * slab at the feet (#381 review 1: the bot stands at y + 0.0625 or y + 0.5 there), so only the
+ * cell counts.
+ */
+export const onFloorOf = (bot, feet, { strict = true } = {}) => bot.entity?.onGround === true && bot.entity.position.floored().equals(feet)
+    && (!strict || bot.entity.position.y - feet.y < 0.05);
+/** Where the bot is, exactly, for a log line: "x.xx, y.yy, z.zz (on the ground | in the air)". */
+export const exactAt = (bot) => {
+    const p = bot.entity?.position;
+    if (!p) return 'unknown';
+    return `${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)} (${bot.entity.onGround ? 'on the ground' : 'in the air'})`;
+};
 /**
  * A block the bot's body cannot share a cell with: rotn-data's solid material with a collision box
  * (a carpet, a snow layer, a torch or grass are not); mineflayer's bounding box for an unknown block.
@@ -131,7 +166,7 @@ function propFor(roof, solidAt, emptyAt) {
  * and where it is; kind: 'hazard' (fire or lava), 'drown', 'body' (a solid block in the bot's two
  * cells, with `suffocates`: it is at head height and suffocates, and `hurts`: it hurts on contact),
  * 'unloaded' or 'site' (a new site's
- * floor or space). A new site needs a solid floor, a free 1x2 space and no fire or lava in its walls
+ * floor or space). A new site needs a firm floor (firmFloor), a free 1x2 space and no fire or lava in its walls
  * and roof. `occupied` (the shelter the bot is in, G3 round 7 B): only real fire or lava there, a
  * solid block in the bot's two cells, or a liquid at head height (drowning, #296 review 1) counts;
  * a torch, a carpet, a snow layer, grass or water at its feet does not, nor the floor (when it goes,
@@ -144,7 +179,7 @@ export function siteProblem(bot, feet, { occupied = false, tolerateBody = false 
     const p = new Vec3(Math.floor(feet.x), Math.floor(feet.y), Math.floor(feet.z));
     const found = (pos, b, why, kind) => ({ pos, block: b?.name ?? 'unloaded', why, kind, text: `${b?.name ?? 'an unloaded block'} at ${at(pos)} (${why})` });
     const floor = p.offset(0, -1, 0);
-    if (!occupied && !isSolid(bot.blockAt(floor))) return found(floor, bot.blockAt(floor), 'the floor is not solid', 'site');
+    if (!occupied && !firmFloor(bot.blockAt(floor))) return found(floor, bot.blockAt(floor), 'the floor is not a solid full block, or is part of a tree', 'site');
     for (const q of [p, p.offset(0, 1, 0)]) {
         const b = bot.blockAt(q);
         if (!b) return found(q, b, 'not loaded', 'unloaded');
@@ -173,7 +208,7 @@ export function siteProblem(bot, feet, { occupied = false, tolerateBody = false 
  * Dry run of a shelter at feet, in the build order: the cells to fill, the blocks that takes (a
  * roof prop included), the cells that would have no face to be placed against (`unsupported`), and
  * why digging would be unsafe (`unsafe`: a falling block above or a liquid next to a cell to dig).
- * null when the site cannot be used at all (siteProblem says why): the floor is not solid, the 1x2
+ * null when the site cannot be used at all (siteProblem says why): the floor is not a solid full block (or is a tree part), the 1x2
  * space is not free, a shell cell is lava or fire, or a block is not loaded. `occupied`: the
  * shelter the bot is in (siteProblem); tolerateBody: see siteProblem.
  */
@@ -511,6 +546,15 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
     }
     if (!await centerIn(bot, feet))
         return refuse(feet, plan.todo, `Could not stand in the middle of the shelter site at ${at(feet)}, so a wall could hit you; not building.`);
+    // Gate2 B: a bot mid-jump or bobbing one block up passes the cell check above, and its walls
+    // would go up a block too high. It comes to rest on the floor first, or nothing is built.
+    // Only a new site's floor top is checked; a repair or a hole shelter (site given) needs the cell.
+    const strict = !site;
+    if (!await settleOn(bot, feet, { strict })) {
+        if (bot.interrupt_code) return refuse(feet, plan.todo, `Not building the shelter at ${at(feet)}: stopped.`);
+        // #381 review 2: not a failed build; the night routine plans again at once from where the bot is.
+        return { ...refuse(feet, plan.todo, `Not building the shelter at ${at(feet)}: you are not standing on its floor (at ${exactAt(bot)}).`), unsettled: true };
+    }
 
     const interior = new Set([key(feet), key(feet.offset(0, 1, 0))]);
     const roof = feet.offset(0, 2, 0);
@@ -536,18 +580,30 @@ export async function buildShelter(bot, { site = null, radius = 4, keepSoft = fa
         bot.rotnStationary = false;
     }
     const missing = wallsAndRoof(feet).filter(q => !mode.accept(bot.blockAt(q)));
+    // Gate2 B: closed only with the bot at rest on the floor inside it (it settles first).
+    const standing = missing.length > 0 || await settleOn(bot, feet, { strict });
     const soft = wallsAndRoof(feet).filter(q => !isSturdy(bot.blockAt(q)) && isSoftWall(bot.blockAt(q))).length;
     const floor = bot.blockAt(feet.offset(0, -1, 0));
     const floorNote = isSturdy(floor) ? '' : ` The floor is ${floor?.name ?? 'unknown'}, not rock.`;
     const softNote = soft > 0 ? ` ${soft} of its walls and roof are dirt, which mobs can dig through.` : '';
-    const line = missing.length === 0
+    const closed = missing.length === 0 && standing;
+    const line = closed
         ? `Shelter closed at ${at(feet)}: placed ${placed} blocks.${softNote}${floorNote}`
-        : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(at).join('; ')}); placed ${placed}.`;
+        : missing.length === 0
+            ? `Shelter at ${at(feet)} is built but you are not standing on its floor (at ${exactAt(bot)}); placed ${placed}.`
+            : `Shelter at ${at(feet)} is not closed: ${missing.length} open (${missing.map(at).join('; ')}); placed ${placed}.`;
     log(bot, line);
     // Round 9 B (fix d): dirt walls can be dug by any zombie; keep dirt ready, so a repair only places.
-    if (missing.length === 0 && soft > 0) {
+    if (closed && soft > 0) {
         const held = countOf(softItems(bot));
         if (held < SHELTER_SPARE.dirt) await craftMore(bot, 'dirt', SHELTER_SPARE.dirt - held, craft, { spare: true });
     }
-    return { closed: missing.length === 0, feet, placed, missing, soft, line };
+    return { closed, feet, placed, missing, soft, line };
+}
+
+/** Wait (at most SETTLE.maxMs; a stop ends it, #381 review 4) for the bot to come to rest on the floor of the site at feet. */
+async function settleOn(bot, feet, { strict = true } = {}) {
+    for (let waited = 0; !onFloorOf(bot, feet, { strict }) && waited < SETTLE.maxMs && !bot.interrupt_code; waited += SETTLE.stepMs)
+        await sleep(SETTLE.stepMs);
+    return onFloorOf(bot, feet, { strict });
 }

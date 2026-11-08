@@ -36,7 +36,7 @@ function fakeBot({ set = {}, at = new Vec3(0, 64, 0) } = {}) {
     };
     const bot = {
         output: '', interrupt_code: false, entities: {}, registry: reg, version: '1.12.2',
-        entity: { position: at.offset(0.5, 0, 0.5) },
+        entity: { position: at.offset(0.5, 0, 0.5), onGround: true },
         inventory: { items: () => items.filter(i => i.count > 0) },
         modes: { isOn: () => false },
         game: { gameMode: 'survival' },

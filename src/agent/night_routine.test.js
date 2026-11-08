@@ -142,6 +142,39 @@ test('D2b-2: when no shelter can be built it retries after RETRY_MS, then stays 
     assert.equal(nightTick(agent, { now: now + 2, ops: o }), null, 'morning: back to work');
 });
 
+test('#381 review 2: a build refused because the bot was not at rest on the floor is no try: planned again at once, a hole is not next; after SETTLE.retries in a row one counts', async (t) => {
+    quiet(t);
+    const { SETTLE } = await import('./library/shelter.js');
+    const agent = fakeAgent({ t: NIGHT });
+    const o = ops({ closed: false });
+    let unsettled = true;
+    const build = o.buildShelter;
+    o.buildShelter = (bot, opts) => (unsettled
+        ? (o.builds.push(null), Promise.resolve({ closed: false, unsettled: true, feet: SITE, line: 'Not building the shelter at 0, 64, 0: you are not standing on its floor (at 0.50, 65.40, 0.50 (in the air)).' }))
+        : build(bot, opts));
+    o.digPit = () => { o.calls = (o.calls ?? []).concat('pit'); return Promise.resolve(null); };
+    for (let i = 0; i < SETTLE.retries; i++) {
+        nightTick(agent, { now: i, ops: o });
+        await settle(agent);
+        assert.equal(nightState(agent).attempts, 0, `not a try (${i + 1})`);
+        assert.equal(nightState(agent).nextAt, 0, 'planned again at once');
+        assert.equal(nightState(agent).pitNext, false, 'no hole instead');
+    }
+    assert.equal(o.builds.length, SETTLE.retries);
+    // One more in a row counts as a failed build (bounded: a bot bobbing all night is not stuck here).
+    nightTick(agent, { now: 10, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).attempts, 1);
+    // A closed shelter clears the count.
+    unsettled = false;
+    o.buildShelter = (bot, opts) => { o.builds.push(opts?.site ?? null); return Promise.resolve({ closed: true, feet: SITE, line: 'Shelter closed' }); };
+    nightState(agent).pitNext = false;
+    nightTick(agent, { now: 20, ops: o });
+    await settle(agent);
+    assert.equal(nightState(agent).state, 'inside');
+    assert.equal(nightState(agent).unsettled, 0);
+});
+
 test('D2b-2: at the sunrise it stays in; at full daylight it digs out and hands back to the agenda', async (t) => {
     quiet(t);
     const agent = fakeAgent({ t: NIGHT });
@@ -158,6 +191,28 @@ test('D2b-2: at the sunrise it stays in; at full daylight it digs out and hands 
     assert.equal(agent.bot.rotnSheltered, false);
     assert.match(agent.chat.at(-1), /\[night\] morning: dug out of the shelter at 1, 64, 0; back to work/);
     assert.equal(nightTick(agent, { now: 3, ops: o }), null, 'the priority stack goes on to tasks and the agenda');
+});
+
+test('gate2 B: out of its shelter, the log says where the bot was and its floor block at closing, and where it is and what the floor is now', async (t) => {
+    quiet(t);
+    const logs = [];
+    t.mock.method(console, 'log', (l) => logs.push(String(l)));
+    const agent = fakeAgent({ t: NIGHT });
+    const world = { '0,63,0': 'stone_slab' };
+    Object.assign(agent.bot, { blockAt: (p) => ({ name: world[`${p.x},${p.y},${p.z}`] ?? 'dirt', position: p }) });
+    agent.bot.entity.onGround = true;
+    const o = ops();
+    nightTick(agent, { now: 0, ops: o });
+    await settle(agent);
+    assert.ok(logs.some(l => /in the shelter at 0, 64, 0 until morning/.test(l)), logs.join('\n'));
+    // The floor went and the bot is one block lower (gate2 B, 00:19:39).
+    world['0,63,0'] = 'air';
+    Object.assign(agent.bot.entity, { position: new Vec3(0.5, 63, 0.5), onGround: true });
+    nightTick(agent, { now: 1, ops: o });
+    assert.equal(nightTick(agent, { now: CHECK_MS + 1, ops: o }), 'night:building');
+    assert.ok(logs.includes('[night] out of the shelter at 0, 64, 0: at closing at 0.50, 64.00, 0.50 (on the ground) on stone_slab; '
+        + 'now at 0.50, 63.00, 0.50 (on the ground), its floor at 0, 63, 0 is air'), logs.join('\n'));
+    assert.match(agent.chat.at(-1), /no longer in the shelter at 0, 64, 0: building a new one$/, 'the chat line stays short');
 });
 
 test('D2b-2: in the priority stack a control hold beats the night, and the night beats a queued task', (t) => {
