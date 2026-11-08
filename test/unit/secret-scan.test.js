@@ -10,7 +10,7 @@ import { execFileSync } from 'node:child_process';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_ALLOW, formatFinding, isRealIPv4, loadAllow, matchHash, scanRepo, scanText, secretFile } from '../tools/secret-scan.mjs';
+import { DEFAULT_ALLOW, formatFinding, isRealIPv4, loadAllow, matchHash, scanFile, scanRepo, scanText, secretFile } from '../tools/secret-scan.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const q = (...n) => n.join('.');                                         // a dotted quad from its parts
@@ -45,13 +45,15 @@ describe('#390 review 1 and 2: the allowlist holds hashes, never plaintext; the 
     });
 
     test('a finding prints its kind, length, at most 6 leading characters and its hash, never the match', () => {
-        for (const secret of [OR_KEY, HETZNER, REAL, PEM]) {
+        for (const secret of [OR_KEY, HETZNER, PEM]) {
             const [f] = scanText('a.md', `x ${secret}`);
             const out = formatFinding(f);
             assert.ok(!out.includes(secret), out);
             assert.ok(f.prefix.length <= 6, f.prefix);
             assert.match(out, new RegExp(`^a\\.md:1: ${f.kind} \\(length ${secret.length}, starts "[^"]{0,6}", hash ${matchHash(secret)}\\)$`));
         }
+        // #390 re-review: an ipv4 finding shows no start at all (a few octets narrow an address down).
+        assert.equal(formatFinding(scanText('a.md', `x ${REAL}`)[0]), `a.md:1: ipv4 (length ${REAL.length}, hash ${matchHash(REAL)})`);
     });
 });
 
@@ -108,7 +110,7 @@ describe('#390 review 4: file names that must never be committed', () => {
 });
 
 describe('a git checkout', () => {
-    test('#390 review 3 and 7: test/evidence gets every rule but ipv4; large files are named; symlinks and binaries skipped', () => {
+    test('#390 review 3 and 7: test/evidence gets every rule but ipv4; symlinks and binaries skipped; a large file scanned in chunks', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-scan-repo-'));
         const git = (...a) => execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...a], { encoding: 'utf8' });
         git('init', '-q');
@@ -121,25 +123,38 @@ describe('a git checkout', () => {
         fs.writeFileSync(path.join(dir, 'big.txt'), `${OR_KEY}\n${'x'.repeat(5000)}\n`);
         fs.symlinkSync('leak.md', path.join(dir, 'link.md'));
         git('add', '-A');
-        const r = scanRepo(dir, { allowFile: path.join(dir, 'none.txt'), maxBytes: 4096 });
+        const r = scanRepo(dir, { allowFile: path.join(dir, 'none.txt'), chunkBytes: 1024 });
         const got = r.findings.map((f) => `${f.path}:${f.kind}`).sort();
-        assert.deepEqual(got, ['.env:openrouter-key', '.env:secret-file', 'leak.md:ipv4', 'test/evidence/run.log:openrouter-key']);
-        assert.deepEqual(r.skippedLarge, ['big.txt']);
+        assert.deepEqual(got, ['.env:openrouter-key', '.env:secret-file', 'big.txt:openrouter-key', 'leak.md:ipv4', 'test/evidence/run.log:openrouter-key']);
         assert.equal(r.skippedLinks, 1);
     });
 
-    test('the CLI summary names the skipped large files and symlinks, and prints no match', () => {
+    test('#390 re-review: a file is read in chunks of whole lines: a secret late in a big file, or across a chunk edge, is found on its line', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-scan-chunk-'));
+        const f = path.join(dir, 'big.txt');
+        const filler = Array.from({ length: 300 }, (_, i) => `line ${i} ${'y'.repeat(40)}`).join('\n');
+        fs.writeFileSync(f, `${filler}\nkey ${OR_KEY}\n${filler}\nhost ${REAL}`);
+        for (const chunkBytes of [64, 1000, 4096, 1 << 20]) {
+            const found = scanFile('big.txt', f, new Set(), { chunkBytes });
+            assert.deepEqual(found.map((x) => `${x.line}:${x.kind}`), ['301:openrouter-key', '602:ipv4'], `chunk ${chunkBytes}`);
+        }
+        fs.writeFileSync(path.join(dir, 'bin.dat'), Buffer.from([1, 0, 2]));
+        assert.equal(scanFile('bin.dat', path.join(dir, 'bin.dat'), new Set()), null, 'binary');
+    });
+
+    test('the CLI scans a 3 MB file in full, names skipped symlinks, and prints no match', () => {
         const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-scan-cli-'));
         const git = (...a) => execFileSync('git', ['-C', dir, ...a], { encoding: 'utf8' });
         git('init', '-q');
         fs.writeFileSync(path.join(dir, 'leak.md'), `host ${REAL}\n`);
-        fs.writeFileSync(path.join(dir, 'big.txt'), 'x'.repeat(3 * 1024 * 1024));
+        fs.writeFileSync(path.join(dir, 'big.txt'), `${'x'.repeat(3 * 1024 * 1024)}\nhost ${REAL}\n`);
         fs.symlinkSync('leak.md', path.join(dir, 'link.md'));
         git('add', '-A');
         let out = '';
         try { execFileSync(process.execPath, [path.join(here, '..', 'tools', 'secret-scan.mjs'), '--root', dir], { encoding: 'utf8' }); } catch (e) { out = e.stdout; assert.equal(e.status, 1); }
-        assert.match(out, /^leak\.md:1: ipv4 \(length \d+, starts "[^"]{0,6}", hash [0-9a-f]{16}\)$/m);
-        assert.match(out, /1 file\(s\) over 2 MB not read: big\.txt; 1 symlink\(s\) skipped/);
+        assert.match(out, /^leak\.md:1: ipv4 \(length \d+, hash [0-9a-f]{16}\)$/m);
+        assert.match(out, /^big\.txt:2: ipv4 \(length \d+, hash [0-9a-f]{16}\)$/m, 'past 3 MB, on its line');
+        assert.match(out, /secret-scan: 2 finding\(s\) in 3 tracked files \(\d+ ms\); 1 symlink\(s\) skipped/);
         assert.ok(!out.includes(REAL), 'the address is never printed');
     });
 });
