@@ -473,6 +473,22 @@ A short session of the real agent with the **production** task-giver list. `Serv
   - `isG3Result` counts G4 results too, so every G4 result under `test/evidence/` needs a vouching `batch.json` (`g3-batch-check --tree`);
   - `crossCheckBatch` never accepts one in a gate claim.
 
+### G4 set-up S: the CX23 service as the bot (`--service BOT`, `lib/service.mjs`)
+
+- **No spawned bot.** `run.mjs --scenario <id> --service frcfld [--service-host cx23-ctl]` takes no driver after `--` and no `--pass-env`. The bot is the CX23's `mindcraft-rotn@frcfld` unit. Its environment is its env file, which only the human sets (ADR 0009).
+- **Every action goes through the human's ssh alias** for the restricted key, as `ssh -o BatchMode=yes -o ConnectTimeout=15 -T cx23-ctl <verb> frcfld [--since T]`.
+  - The arguments are separate argv entries, never a shell string. The key is never read.
+  - The verb is one of the gate's, the name follows the ctl's rule, and `--since` is the gate's T form. All are checked before anything is sent.
+- **What each call does:**
+  - **`start(env)`:** `start`. `env` is ignored.
+  - **`alive()`:** the unit's `ActiveState` from `metrics`, where `active`, `activating` (ExecStartPre, a systemd auto-restart) and `reloading` count as up. Not `status`'s exit code, which is 3 for an activating unit too. Cached for 10 s.
+  - **`output()`:** the "driver log". It is the unit's journal, read with `--since` 60 s before the start (for clock skew) and counted from the first `Starting mindcraft-rotn@<bot>.service` line. Messages only; cached for 15 s.
+  - **`stop()`:** `stop`, then waits for `inactive` and writes the raw journal to the run's `driver.log`.
+  - **`exitCode()`:** the `ActiveState` once the unit is down.
+  - **`metrics()`:** returns `{MemoryCurrent, MemoryPeak, NRestarts, ActiveState}`.
+- **Exit 126 is a gate refusal: an ADR 0009 incident.** `GateRefusal` is thrown at once, with no retry, which ends the scenario. Report it to the human. The ctl's own refusal (2) is an ordinary error. ssh's own failure (255) is retried twice; `start` and `stop` are safe to repeat.
+- **Tests:** `test/unit/g4-service.test.js`, with a fake ssh playing the gate and the ctl. Nothing runs against the CX23 before the human's step 0 and a written GO.
+
 ### G4 #6: `g4-death-report`
 
 Ready-to-try: "After death it respawns, reports what it lost and carries on without a chat-spam loop." The bot side is skills-rotn's `src/agent/library/death_report.js` (D3), which this scenario never changes. If it finds something to fix there, harness-ops reports it.
