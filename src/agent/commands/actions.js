@@ -13,6 +13,8 @@ import { mayBelongToPlayer, knownBases } from '../library/hunting.js';
 import { threatOf } from '../../../packages/rotn-data/index.js';
 import { parseStandOn } from '../library/stand_on.js';
 
+/** The model's !stay is at most this many seconds; longer (or -1, forever) needs a giver's typed command. */
+export const STAY_LIMITS = { modelMaxS: 120 };
 /** Modes that keep the bot alive: only a task giver who types !setMode may turn them off (CX23 soak). */
 export const SURVIVAL_MODES = ['self_preservation', 'cowardice', 'self_defense'];
 
@@ -554,10 +556,19 @@ export const actionsList = [
     },
     {
         name: '!stay',
-        description: 'Stay in the current location no matter what. Pauses all modes.',
-        params: {'type': { type: 'int', description: 'The number of seconds to stay. -1 for forever.', domain: [-1, Number.MAX_SAFE_INTEGER] }},
-        perform: runAsAction(async (agent, seconds) => {
-            await skills.stay(agent.bot, seconds);
+        description: `Stay in the current location. Pauses the other modes; self-preservation stays on. At most ${STAY_LIMITS.modelMaxS} s unless a task giver types it.`,
+        params: {'type': { type: 'int', description: 'The number of seconds to stay. -1 for forever (a task giver only).', domain: [-1, Number.MAX_SAFE_INTEGER] }},
+        perform: runAsAction(async (agent, seconds, context) => {
+            // #414/#422 follow-up (lead): the model could pause every survival mode for good with
+            // !stay(-1). Its stay is capped at STAY_LIMITS.modelMaxS; longer, or forever, only when a
+            // task giver typed it (context.sender, as !setMode). self_preservation always stays on (skills.stay).
+            let s = seconds;
+            if (!context?.sender && (s === -1 || s > STAY_LIMITS.modelMaxS)) {
+                console.log(`[modes] the model asked to stay ${s === -1 ? 'forever' : `${s} s`}; capped at ${STAY_LIMITS.modelMaxS} s (only a task giver may stay longer)`);
+                skills.log(agent.bot, `Staying ${STAY_LIMITS.modelMaxS} s at most: only a task giver can make you stay longer.`);
+                s = STAY_LIMITS.modelMaxS;
+            }
+            await skills.stay(agent.bot, s);
         })
     },
     {
