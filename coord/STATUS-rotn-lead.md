@@ -1,6 +1,6 @@
 # Status: rotn-lead
 
-Updated: 2026-11-08 01:10 UTC (from `date -u`)
+Updated: 2026-11-08 13:06 UTC (from `date -u`)
 
 
 ## Current snapshot (2026-11-08 13:00 UTC): G4 offline work done; G4 step 0 under way
@@ -13,7 +13,7 @@ Updated: 2026-11-08 01:10 UTC (from `date -u`)
   - Security: the chat sender now comes only from the chat component (#400); a non-op cannot pose as JQDAW.
   - CI secret scan (#390, #393); reviewers flag scan and allowlist changes (#391).
   - Shelter and morning-exit fixes (#370, #372, #381), death-note cap (#373), stick logging (#375, #376).
-  - TRY_IT.md draft (#405; the human reviews it at G4 step 7). Research correction: death drops despawn after 10 min (#406).
+  - TRY_IT.md draft (#405, approved, merging after a CI re-run; the human reviews it at G4 step 7). Research correction: death drops despawn after 10 min (#406).
 - **Incident, 2026-11-08 ~08:40-12:00 UTC:** GitHub release downloads answered 504 on and off, breaking `npm ci` in ci-ubuntu-2604 (canvas/gl prebuilds) and the sweeper's hcloud install. External, not node (the lead first misread it as a node bump). Hardened: CI probe names the outage (#398), `deploy.sh` retries `npm ci` (#398), the sweeper caches a verified hcloud (#403). No test server existed; each server's own delete-after watchdog does not depend on GitHub.
 - **Release:** `rotn-v0.1.2` (develop `9971d26`, CI green) replaces `rotn-v0.1.1` for G4 step 0.
 - **G4 step 0 (the human, on the CX23):** B1 done 2026-11-08 ~13:00 UTC: the installed `mindcraft-rotn-ctl` (`613c02d9…8b94`) and `mindcraft-rotn-ssh-gate` (`911ba9f7…05a7`) match the repo exactly (same at `rotn-v0.1.1` and `rotn-v0.1.2`). Under ADR 0009, `start`/`stop` through the CX33 key are now allowed in principle; every start still needs the lead's written GO and the human's GO confirming the env host is a test server. Waiting for: the rest of B1 (sshd -T, permissions), B2-B4, C1 (deploy; check GitHub downloads first), C2 (FRCFLD login), C3 (first start).
