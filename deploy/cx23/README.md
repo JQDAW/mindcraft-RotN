@@ -59,7 +59,7 @@ So far these files are **tested offline only** (`test/unit/cx23.test.js`, with f
      - If either check fails, it puts back what was there, so sshd is never left half-configured.
      - `PermitRootLogin` is not touched: root keeps its key login (`prohibit-password`);
    - installs the unit, `check-env` and `mindcraft-rotn-ctl`;
-   - creates `/opt/mindcraft-rotn` (`deploy:mindcraft-rotn`, 0750), `/var/lib/mindcraft-rotn` (`mindcraft-rotn:mindcraft-rotn`, 0750), `/var/lib/mindcraft-rotn/bots` (`mindcraft-rotn:mindcraft-rotn`, **2770**: `deploy` installs each release's tracked `bots/` files there, see `deploy.sh`), and `/etc/mindcraft-rotn` (`root:mindcraft-rotn`, 0750).
+   - creates `/opt/mindcraft-rotn` (`deploy:mindcraft-rotn`, 0750), `/var/lib/mindcraft-rotn` and `/var/lib/mindcraft-rotn/bots` (`mindcraft-rotn:mindcraft-rotn`, 0750), and `/etc/mindcraft-rotn` (`root:mindcraft-rotn`, 0750).
 
    After `setup`, SSH password login is **off**, and root login by key stays **on**.
 
@@ -213,7 +213,7 @@ scp -r /tmp/cx23-<TAG>/deploy/cx23 root@<cx23>:/root/cx23-<TAG>
    sudo mindcraft-rotn-ctl journal frcfld --since <the start time, YYYY-MM-DDTHH:MM, UTC>
    sudo mindcraft-rotn-ctl stop frcfld      # when the GO's run is over
    ```
-   - **If the start keeps failing:** systemd allows at most 6 starts in 10 minutes (`StartLimitBurst`), then refuses `start` with the unit failed. Fix the cause (the journal says it), then as root `systemctl reset-failed mindcraft-rotn@frcfld`, or wait 10 minutes, and start again (G4 step 0, 2026-11-08).
+   - **If the start keeps failing:** systemd allows at most 6 starts in 10 minutes (`StartLimitBurst`), then marks the unit failed. Fix the cause (the journal says it), then start again: the ctl's `start` runs `systemctl reset-failed` first (#413, once the human has installed that ctl). With an older ctl, run as root `systemctl reset-failed mindcraft-rotn@frcfld` first, or wait 10 minutes (G4 step 0, 2026-11-08).
    - **Do not `enable` the bot during G4.** An enabled bot comes back after a CX23 reboot and joins whatever the env file names, by then a deleted test server. `start` works without `enable`. `deploy.sh` restarts only enabled bots.
    - `enable` comes after G4, with the live server's host (PLAN.md).
 
@@ -233,9 +233,7 @@ bash deploy.sh status
   - So `deploy v0.1.0` would pass the on-develop check and deploy plain Mindcraft without RotN. The lead found this at the first release, `rotn-v0.1.0`.
 - A tag must be **on develop** (`git merge-base --is-ancestor`), or the deploy refuses.
 - The release is extracted with `git archive` into `releases/<tag>-<sha12>/`, then `npm ci` runs (with the patch-package postinstall). Its `./bots` links to `/var/lib/mindcraft-rotn/bots`, so memories survive a deploy.
-- **The release's tracked `bots/` files** (`bots/execTemplate.js` and `bots/lintTemplate.js`, which the Coder reads) are kept in the release as `.bots-tracked/`, with their list (`git ls-tree`) in `.bots-files`. Before every switch, deploy and rollback alike, they are installed into `/var/lib/mindcraft-rotn/bots`, overwriting, mode 0644 (copy, then rename), and compared. After the switch the health check compares them again; a missing or different one rolls back like an inactive bot (G4 step 0, 2026-11-08: deleting them crash-looped the bot).
-  - The folder must be writable by `deploy`. `bootstrap.sh` makes it 2770. **On a CX23 set up before this change, run once as root: `chmod 2770 /var/lib/mindcraft-rotn/bots`.** Otherwise a deploy stops before the switch and says so.
-  - A release built before this change has no list; installing for it logs that and installs nothing.
+- The release's tracked `bots/` templates are replaced by that link. They are unused while `allow_insecure_coding` is false: since #410 the Coder reads them only on its first code generation.
 - **A release is refused unless its `settings.js`, imported with node like `main.js` does, has `allow_insecure_coding === false`.** The import runs with an empty environment.
 - **The task-giver settings are checked the same way** (#146, #157 review). A release is refused if its `settings.js` turns on skills-rotn's test-only `allow_server_task_giver` (anything but `false` or absent), or names the console sender `Server` in any task-giver list. Only the G3 driver turns that switch on, on a test server; on the CX23, `check-env` also refuses it in `SETTINGS_JSON`.
 - `current` switches in one rename. Only the bots that are **enabled** are restarted, through `sudo -n mindcraft-rotn-ctl`.

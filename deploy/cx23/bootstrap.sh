@@ -321,10 +321,7 @@ setup_files() {
   dir_owned 0750 "$DEPLOY_USER:$SVC_USER" /opt/mindcraft-rotn
   dir_owned 0750 "$DEPLOY_USER:$SVC_USER" /opt/mindcraft-rotn/releases
   dir_owned 0750 "$SVC_USER:$SVC_USER" /var/lib/mindcraft-rotn
-  # 2770 (G4 step 0, 2026-11-08): deploy (in the group) installs each release's tracked bots/ files here (the Coder's
-  # templates; deploy.sh install_bot_files), and setgid keeps the group on what it writes. deploy already ships the
-  # code the bots run, so this widens nothing. The bots' own folders inside stay theirs.
-  dir_owned 2770 "$SVC_USER:$SVC_USER" /var/lib/mindcraft-rotn/bots
+  dir_owned 0750 "$SVC_USER:$SVC_USER" /var/lib/mindcraft-rotn/bots
   dir_owned 0750 "root:$SVC_USER" /etc/mindcraft-rotn
   dir_owned 0755 root:root /usr/local/lib/mindcraft-rotn
   file_owned 0755 root:root /usr/local/lib/mindcraft-rotn/check-env < "$HERE/check-env.sh"

@@ -540,8 +540,6 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         for (const f of ['usr/local/lib/mindcraft-rotn/check-env', 'usr/local/sbin/mindcraft-rotn-ctl', 'etc/mindcraft-rotn/bot.env.example'])
             assert.ok(!read(f).includes('\r'), `${f} has no CR`);
         for (const d of ['opt/mindcraft-rotn/releases', 'var/lib/mindcraft-rotn/bots', 'etc/mindcraft-rotn']) assert.ok(exists(d), d);
-        // G4 step 0: deploy (in the group) installs the tracked bots/ files there, so the shared folder is 2770.
-        assert.ok(called('chmod').some((c) => c.join(' ') === `chmod 2770 ${ROOT}/var/lib/mindcraft-rotn/bots`), JSON.stringify(called('chmod').filter((c) => /bots/.test(c.join(' ')))));
         assert.ok(called('systemctl').some((c) => c[1] === 'daemon-reload'));
         // password login off (the human's decision for GO 2); root login untouched; no lockdown drop-in
         assert.ok(exists(SSHD_DROPIN));
@@ -995,12 +993,7 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         fs.mkdirSync(src);
         git(src, 'init', '-q', '-b', 'develop');
         fs.writeFileSync(path.join(src, 'package.json'), '{"name":"x","version":"1.0.0","type":"module"}\n');
-        // The Coder's tracked templates (G4 step 0): v1 at rotn-v0.0.1, then v2 from rotn-v0.0.2 on.
-        fs.mkdirSync(path.join(src, 'bots'));
-        fs.writeFileSync(path.join(src, 'bots', 'execTemplate.js'), '// exec v1\n');
-        fs.writeFileSync(path.join(src, 'bots', 'lintTemplate.js'), '// lint v1\n');
         commit('false', 'one'); git(src, 'tag', 'rotn-v0.0.1');
-        fs.writeFileSync(path.join(src, 'bots', 'execTemplate.js'), '// exec v2\n');
         commit('false', 'two'); git(src, 'tag', 'rotn-v0.0.2');
         commit('false', 'three'); git(src, 'tag', 'rotn-v0.0.3'); git(src, 'tag', 'rotn-v0.0.3-rc.1');
         git(src, 'tag', 'v0.1.0', 'rotn-v0.0.1');   // like upstream Mindcraft's tags: on develop, but not a RotN release
@@ -1024,7 +1017,6 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         commit('false', 'side'); git(src, 'tag', 'rotn-v0.9.0-side');
         git(src, 'checkout', '-q', 'develop');
         fs.mkdirSync(rootFile('opt/mindcraft-rotn/releases'), { recursive: true });
-        fs.mkdirSync(rootFile('var/lib/mindcraft-rotn/bots'), { recursive: true });   // bootstrap.sh makes it (2770)
     };
     const BASE = 'opt/mindcraft-rotn';
     const env = () => ({ MINDCRAFT_ROTN_REPO_URL: fwd(src), HEALTH_WAIT_S: '0', NPM_CI_RETRY_S: '0', FAKE_BOTS: 'rotn-bot idle-bot', FAKE_ENABLED: 'rotn-bot',
@@ -1055,59 +1047,6 @@ describe('deploy.sh (real git and tar on a local repo)', { skip: windowsShellSki
         assert.ok(called('sudo').every((c) => c[1] === '-n' && c[2] === '/usr/local/sbin/mindcraft-rotn-ctl'), 'only the wrapper, non-interactive');
         assert.ok(called('chgrp').some((c) => c.join(' ').startsWith('chgrp -R mindcraft-rotn')));
         assert.match(read(`${BASE}/deploys.log`), /deploy rotn-v0\.0\.1 [0-9a-f]{40} rotn-v0\.0\.1-[0-9a-f]{12} ok bots=rotn-bot/);
-    });
-
-    // G4 step 0 (2026-11-08): the release's bots/ is the link to the shared folder, so deploy.sh installs the tracked
-    // bots/ files (the Coder's templates) there before the switch; deleting them crash-looped the bot.
-    const shared = (f) => rootFile(`var/lib/mindcraft-rotn/bots/${f}`);
-    const resolve = (rel, f) => {
-        const link = read(`${BASE}/releases/${rel}/bots`).trim();   // the fake ln writes the link's target
-        return fs.readFileSync(rootFile(`${link.replace(/^\//, '')}/${f}`), 'utf8');
-    };
-    test('the release resolves bots/execTemplate.js and bots/lintTemplate.js after the switch; a stale copy is overwritten', () => {
-        setupRepo();
-        fs.writeFileSync(shared('execTemplate.js'), '// the human\'s hand copy, older\n');
-        fs.mkdirSync(shared('frcfld'));
-        fs.writeFileSync(shared('frcfld/memory.json'), '{}');
-        const r = dep(['deploy', 'rotn-v0.0.1']);
-        assert.equal(r.code, 0, r.all);
-        const cur = state().current;
-        assert.equal(resolve(cur, 'execTemplate.js'), '// exec v1\n');
-        assert.equal(resolve(cur, 'lintTemplate.js'), '// lint v1\n');
-        assert.equal(read(`${BASE}/releases/${cur}/.bots-files`), 'bots/execTemplate.js\nbots/lintTemplate.js\n');
-        assert.equal(read(`${BASE}/releases/${cur}/.bots-tracked/execTemplate.js`), '// exec v1\n');
-        assert.equal(fs.readFileSync(shared('frcfld/memory.json'), 'utf8'), '{}', 'a bot\'s own folder is left alone');
-        assert.ok(called('chmod').some((c) => c[1] === '0644' && /\.execTemplate\.js\.new-\d+$/.test(c[2])), '0644 before the rename');
-        assert.match(r.stderr, /installed 2 tracked bots\/ file\(s\) into \/var\/lib\/mindcraft-rotn\/bots/);
-        assert.ok(!fs.readdirSync(rootFile('var/lib/mindcraft-rotn/bots')).some((n) => n.includes('.new-')), 'no temp file left');
-    });
-
-    test('each deploy and each rollback installs its own release\'s files: v2 after the upgrade, v1 again after the rollback', () => {
-        setupRepo();
-        assert.equal(dep(['deploy', 'rotn-v0.0.1']).code, 0);
-        assert.equal(dep(['deploy', 'rotn-v0.0.2']).code, 0);
-        assert.equal(fs.readFileSync(shared('execTemplate.js'), 'utf8'), '// exec v2\n');
-        const rb = dep(['rollback']);
-        assert.equal(rb.code, 0, rb.all);
-        assert.equal(fs.readFileSync(shared('execTemplate.js'), 'utf8'), '// exec v1\n');
-    });
-
-    test('a shared folder deploy cannot use refuses before the switch; a template gone after the restart fails the health check and rolls back', () => {
-        setupRepo();
-        assert.equal(dep(['deploy', 'rotn-v0.0.1']).code, 0);
-        const before = state();
-        fs.rmSync(rootFile('var/lib/mindcraft-rotn/bots'), { recursive: true });
-        const r = dep(['deploy', 'rotn-v0.0.2']);
-        assert.equal(r.code, 1);
-        assert.match(r.stderr, /\/var\/lib\/mindcraft-rotn\/bots is not a folder deploy can write: as root, once: chmod 2770 \/var\/lib\/mindcraft-rotn\/bots/);
-        assert.deepEqual(state(), before, 'nothing switched');
-        fs.mkdirSync(rootFile('var/lib/mindcraft-rotn/bots'), { recursive: true });
-        const gone = dep(['deploy', 'rotn-v0.0.2'], { FAKE_RESTART_RM: shared('execTemplate.js') });
-        assert.equal(gone.code, 1);
-        assert.match(gone.stderr, /missing or different in \/var\/lib\/mindcraft-rotn\/bots: execTemplate\.js/);
-        assert.match(gone.stderr, /health check failed: rolling back to /);
-        assert.deepEqual(state(), before, 'rolled back');
-        assert.match(read(`${BASE}/deploys.log`), /deploy rotn-v0\.0\.2 [0-9a-f]{40} \S+ FAILED rolled-back-to=/);
     });
 
     test('deploy then rollback: current and previous swap; the same tag again is a no-op without --force', () => {
