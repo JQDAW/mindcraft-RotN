@@ -592,12 +592,21 @@ const modes_list = [
 // if it did not, { outcome: 'failed', error } if it gave up first (no path, or anything else).
 export async function moveAwayWithin(bot, distance, timeoutMs) {
     let timer;
-    const timedOut = new Promise((resolve) => { timer = setTimeout(() => resolve({ outcome: 'timeout' }), timeoutMs); });
+    // #415 review 1: the climb down has its own run token, aborted at the timeout, so its dig
+    // (digDownThroughLeaves) ends with the reflex instead of running on beside the next action.
+    const run = { aborted: false };
+    const timedOut = new Promise((resolve) => {
+        timer = setTimeout(() => {
+            run.aborted = true;
+            try { bot.stopDigging?.(); } catch { /* best effort */ }
+            resolve({ outcome: 'timeout' });
+        }, timeoutMs);
+    });
     // Stuck up on a tree (G3 round 4 B: the bot fell to its death 3 s after this reflex took over
     // in a tree): climb down to firm ground, no drop over 3 blocks, instead of a walk in any direction.
     // Every walk away is fall-safe too (skills.goToGoal).
     const free = standsOnTree(bot)
-        ? skills.descendFromTree(bot).then((down) => { if (!down) throw new Error('no safe way down from the tree'); })
+        ? skills.descendFromTree(bot, run).then((down) => { if (!down) throw new Error('no safe way down from the tree'); })
         : skills.moveAway(bot, distance);
     const moved = free.then(() => ({ outcome: 'freed' }), (error) => ({ outcome: 'failed', error }));
     try {
