@@ -181,7 +181,7 @@ test('rotn-data #288: !collectBlocks("dirt") without a level-1 shovel collects 4
     assert.equal(calls.dug.length, 3, '10 piles still needed (2 held): 3 blocks by hand');
     assert.match(bot.output, /dirt drops itself only with a shovel of level 1 or higher\. By hand: .*Collecting betterwithmods:dirt_pile \(4 per dirt\) and crafting\./);
     assert.match(bot.output, /Collected 3 dirt \(crafted from betterwithmods:dirt_pile\)\./);
-    assert.doesNotMatch(bot.output, /got no dirt/);
+    assert.doesNotMatch(bot.output, /no dirt yet/); // #375 nit 1: the per-break line's wording (no dirt block broken by hand)
 
     // A level-1 shovel: the shovel route, no piles, no crafting.
     const withShovel = fakeBot({ items: [item('iron_shovel')] });
