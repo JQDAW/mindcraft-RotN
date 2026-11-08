@@ -22,8 +22,8 @@ Updated: 2026-11-08 01:10 UTC (from `date -u`)
   - The lead's branch work happens in `/home/mindcraft-RotN-worktrees/lead`, never by switching the main checkout while merge runs execute the script from it.
   - Merges run as one plain sequence: no waiter loops, which deadlocked.
 - **Next, after the freeze ends:**
-  - Merge the `[after G3]` PRs: #356-#358 and the stale-memory fix (skills-rotn), #359 (harness-ops #351 nits) and #350 (rotn-data).
-  - Then the morning-exit fix and the B dawn line.
+  - Merge the `[after G3]` PRs: #356-#358 and #360, the stale-memory fix (skills-rotn), #359 (harness-ops #351 nits) and #350 (rotn-data).
+  - Then the morning-exit fix (the B dawn line) and slow sticks, which have no PR yet.
 - **G4, following `test/scenarios/g4/PLAN.md`. The human's items, in coord/NEEDS-HUMAN.md:**
   - `bootstrap.sh add-bot frcfld` and the production OpenRouter key on the CX23;
   - FRCFLD's device-code login there;
