@@ -9,7 +9,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { GateRefusal, HOST, SSH_OPTS, STATUS_FAIL_LIMIT, keptStderr, linesFromStart, parseJournalLine, parseMetrics, redactAddresses, serviceBot, sinceStamp } from '../runner/lib/service.mjs';
+import { GateRefusal, HOST, SSH_OPTS, STATUS_FAIL_LIMIT, exitReason, exitedText, keptStderr, linesFromStart, parseJournalLine, parseMetrics, redactAddresses, serviceBot, sinceStamp } from '../runner/lib/service.mjs';
 import { startSession } from '../runner/lib/session.mjs';
 import { runScenario } from '../runner/lib/runner.mjs';
 import { parseArgs } from '../runner/run.mjs';
@@ -400,5 +400,34 @@ describe('#371 review 1 and 6: startSession and the service', () => {
         assert.equal(s.ok, false);
         assert.equal(s.why, "the service was not up before joining (unit failed; service start: 'start frcfld' exited 1 (the unit's state is unknown))");
         assert.doesNotMatch(s.why, /code null/);
+    });
+
+});
+
+describe('#379 review: bounded redaction work; how a stopped bot is named', () => {
+    test('redactAddresses stays fast on long input (it took 26 s on 4000 characters); keptStderr cuts each line to 300 first', () => {
+        for (const n of [4000, 100000]) {
+            const t = Date.now();
+            redactAddresses('a:'.repeat(n / 2) + 'x');
+            assert.ok(Date.now() - t < 500, `${n} characters took ${Date.now() - t} ms`);
+        }
+        const long = `mindcraft-rotn-ctl: ${'b:'.repeat(3000)} ${IP4}`;
+        const t = Date.now();
+        const kept = keptStderr(long, 2);
+        assert.ok(Date.now() - t < 500);
+        assert.ok(kept.length <= 300, String(kept.length));
+        assert.equal(redactAddresses(`from ${IP6} at 12:34:56`), 'from <ip> at 12:34:56', 'the bound changes nothing for real input');
+    });
+
+    test('exitReason and exitedText: a driver by its exit code, the service by its unit state and start error', () => {
+        const driver = { exitCode: () => 1 };
+        assert.equal(exitReason(driver), 'code 1');
+        assert.equal(exitedText(driver), 'the driver exited with code 1');
+        const svc = { kind: 'service', exitCode: () => null, unitState: () => 'failed', startError: null };
+        assert.equal(exitReason(svc), 'unit failed');
+        assert.equal(exitedText(svc), 'the service is down (unit failed)');
+        const svc2 = { kind: 'service', exitCode: () => null, unitState: () => null, startError: "service start: 'start frcfld' exited 255 (the unit's state is unknown)" };
+        assert.equal(exitedText(svc2), "the service is down (unit state unknown; service start: 'start frcfld' exited 255 (the unit's state is unknown))");
+        assert.doesNotMatch(exitedText(svc), /code null/);
     });
 });

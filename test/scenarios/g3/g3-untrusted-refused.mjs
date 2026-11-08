@@ -42,6 +42,7 @@ import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
 import { PRODUCTION_GIVERS_ENV } from '../../runner/drivers/mindcraft-driver.mjs';
 import { onMarkerCommand } from './g3-task-preempts-agenda.mjs';
+import { exitReason } from '../../runner/lib/service.mjs';
 
 const MS = 1000;
 /** (d)'s pinned candidate markers, in order, as the ";"-separated `markers` parameter (G3_MARKERS.untrusted). */
@@ -105,7 +106,7 @@ export default {
         ctx.check('fresh_bot_state', start?.botState?.fresh === true,
             start?.botState ? `the driver moved aside: ${start.botState.movedAside.join(', ') || 'nothing (none there)'}` : 'no botState in the driver\'s start event');
         const lc = lateConsole(server, clock, { waitS: p.consoleWaitS, lateMs: p.lateReplyMs, pollMs: p.latePollMs });
-        const gone = () => s.events().find(s.gone) ?? (!bot.alive() ? { type: 'exited', reason: `code ${bot.exitCode()}` } : null);
+        const gone = () => s.events().find(s.gone) ?? (!bot.alive() ? { type: 'exited', reason: exitReason(bot) } : null);
         const said = () => chatLines(s.sinceMarker(), name).map((c) => c.text);
         const finish = () => {
             const cheat = cheatProblems(s.sinceMarker(), name);

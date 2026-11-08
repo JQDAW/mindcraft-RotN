@@ -57,6 +57,7 @@ import { G3_DEFAULTS, G3_GATE_PARAMS, G3_MARKERS, TEST_TASK_GIVER, airAbove, che
 import { playerScores, scoreboardAddResult } from '../../runner/lib/s1.mjs';
 import { chatLines } from '../../runner/lib/server-log.mjs';
 import { lateConsole } from '../../runner/lib/late-console.mjs';
+import { exitReason } from '../../runner/lib/service.mjs';
 
 const MS = 1000;
 const MIN = 60 * MS;
@@ -200,7 +201,7 @@ export default {
             ctx.note('counterReadings', readings);
             return v;
         };
-        const gone = () => s.events().find(s.gone) ?? (!bot.alive() ? { type: 'exited', reason: `code ${bot.exitCode()}` } : null);
+        const gone = () => s.events().find(s.gone) ?? (!bot.alive() ? { type: 'exited', reason: exitReason(bot) } : null);
         const goneText = (g) => `the bot is gone: ${g.type}${g.reason ? ` (${g.reason})` : ''}`;
         const said = () => chatLines(s.sinceMarker(), name).map((c) => c.text);
         let openTask = null;   // accepted, with no done or failed line yet

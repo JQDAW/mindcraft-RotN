@@ -66,6 +66,20 @@ export class GateRefusal extends Error {
     }
 }
 
+/**
+ * How a bot that is no longer up is named in a check's detail (#379 review): a spawned driver by its exit code, the
+ * CX23 service by its unit's state (it has no exit code: exitCode() is null) and any start error.
+ *   exitReason(bot) -> "code 1" | "unit failed; <start error>"
+ *   exitedText(bot) -> "the driver exited with code 1" | "the service is down (unit failed; <start error>)"
+ */
+export function exitReason(bot) {
+    if (bot?.kind !== 'service') return `code ${bot.exitCode()}`;
+    return `unit ${bot.unitState?.() ?? 'state unknown'}${bot.startError ? `; ${bot.startError}` : ''}`;
+}
+export function exitedText(bot) {
+    return bot?.kind === 'service' ? `the service is down (${exitReason(bot)})` : `the driver exited with ${exitReason(bot)}`;
+}
+
 /** The gate's T form, UTC, seconds kept: 2026-11-08T12:34:56Z. */
 export const sinceStamp = (ms) => new Date(ms).toISOString().slice(0, 19) + 'Z';
 
@@ -77,15 +91,17 @@ export const sinceStamp = (ms) => new Date(ms).toISOString().slice(0, 19) + 'Z';
 export function keptStderr(stderr, code) {
     if (code === SSH_FAILED) return '(ssh failed; its stderr is not kept)';
     const lines = String(stderr ?? '').split('\n').map((l) => l.replace(/\r$/, '')).filter(Boolean);
-    const kept = lines.filter((l) => /^(rotn-ssh-gate|mindcraft-rotn-ctl): /.test(l)).map(redactAddresses);
+    // Each line is cut to 300 characters before the redaction runs (#379 review: bounded work on any input).
+    const kept = lines.filter((l) => /^(rotn-ssh-gate|mindcraft-rotn-ctl): /.test(l)).map((l) => redactAddresses(l.slice(0, 300)));
     const dropped = lines.length - kept.length;
     return [kept.join(' | ').slice(0, 300), dropped ? `(${dropped} other stderr line${dropped === 1 ? '' : 's'} not kept)` : ''].filter(Boolean).join(' ');
 }
 export function redactAddresses(s) {
-    // IPv6: a run of hex digits and colons counts only if node's own parser takes it as an address, so a time such as
-    // 12:34:56 stays (#371 review).
+    // IPv6: one bounded run of hex digits and colons (at most 45, an address's longest form; the old unbounded pattern
+    // backtracked for seconds on a long line, #379 review), and it counts only if node's own parser takes it as an
+    // address, so a time such as 12:34:56 stays (#371 review).
     return s.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '<ip>')
-        .replace(/(?<![\w:])[0-9a-f:]*:[0-9a-f:]*:[0-9a-f:]*(?![\w:])/gi, (m) => (net.isIPv6(m) ? '<ip>' : m));
+        .replace(/(?<![\w:])[0-9a-f:]{2,45}(?![\w:])/gi, (m) => (m.includes(':') && net.isIPv6(m) ? '<ip>' : m));
 }
 
 /**
