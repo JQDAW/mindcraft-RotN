@@ -37,7 +37,7 @@ G4 passes when every item of `docs/PLAN.md` "Definition of ready-to-try" is gree
   - **The key and its line:** a dedicated key of root's on the CX33. Its `authorized_keys` line on the CX23 has `from="<the CX33>"`, `restrict` and `command="/usr/local/sbin/mindcraft-rotn-ssh-gate"`.
   - **The gate** is `deploy/cx23/mindcraft-rotn-ssh-gate.sh`, with tests in `test/unit/cx23-ssh-gate.test.js`.
     - It allows only `status`, `start`, `stop`, `metrics BOT` and `journal BOT [--since YYYY-MM-DDTHH:MM[:SS][Z]|@EPOCH]`, through `sudo -n mindcraft-rotn-ctl`. `restart` is deliberately left out: `stop` then `start` covers #11.
-    - It refuses and logs everything else (syslog tag `rotn-ssh-gate`).
+    - It refuses and logs everything else (syslog tag `rotn-ssh-gate`), **exit 126**. The ctl's own refusal is exit 2, so a scenario can tell a gate refusal (an incident) apart.
   - **The human installs the reviewed copy and reports its SHA-256** (`deploy/cx23/README.md`, G4 step 0, B1).
   - **Agent rules (ADR 0009):**
     - only the lead and harness-ops use the key, only under a written GO;
@@ -45,7 +45,10 @@ G4 passes when every item of `docs/PLAN.md` "Definition of ready-to-try" is gree
     - every `start` needs the human's GO, confirming the env file names a disposable test server;
     - a refusal in the gate's log is an incident.
   - **What scenarios still need:** a service adapter that runs `ssh <deploy@cx23> <request>` through the gate (below).
-- **The env file's `host` changes per S run** (each run has a new test server), and agents can neither see nor change the file. So the human sets `"host"` before each S `start`. This is a cost per run that the lead may want to reduce (for example, a fixed address for the test server).
+- **The env file's `host`, per S run (lead's decision, after #365's review):**
+  - For each G4 S run, **the human** sets `"host"` in `/etc/mindcraft-rotn/frcfld.env` to that run's disposable test server before the `start`.
+  - Agents cannot see or change the file, and that keeps the live server out of their reach.
+  - So every S `start` needs the lead's written GO and the human's GO confirming the host (ADR 0009).
 - **`mindcraft-rotn-ctl`:** read-only verbs `journal <bot> [--since]` and `metrics <bot>` (`MemoryCurrent`, `MemoryPeak`, `NRestarts`, `ActiveState`). The sudo rule is unchanged: still only the ctl.
 - **`test-server.sh restart`:** console `stop`, wait for the process to end, `systemctl start rotn-server` (on the server, through `rotn-test restart`), wait for a new Done line.
 - **The console allowlist for `kill <bot>` (death), `kick <bot>` and `stop` (restart): test server only, by construction.**
@@ -59,7 +62,7 @@ G4 passes when every item of `docs/PLAN.md` "Definition of ready-to-try" is gree
 | What | For |
 | --- | --- |
 | ~~The CX33-to-CX23 channel~~: decided, ADR 0009 (restricted key and gate). Left for the human: install the reviewed gate and report its SHA-256 (README, G4 step 0) | every S scenario |
-| The env file's `"host"`, set to each S run's test server before its `start` | every S scenario |
+| The env file's `"host"`, set by the human to each S run's disposable test server before its `start` (the lead's decision; agents cannot change it) | every S scenario |
 | **H4**: the production OpenRouter key with a credit limit in `/etc/mindcraft-rotn/frcfld.env` | the first start; every S scenario |
 | **H5**: FRCFLD's device-code login on the CX23 (`/var/lib/mindcraft-rotn/frcfld/msa`) | every S scenario |
 | **H6**: the CX23's IPv4 for `--allow-from`, in each GO message | every S scenario |

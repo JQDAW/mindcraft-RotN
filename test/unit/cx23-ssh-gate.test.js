@@ -85,13 +85,23 @@ describe('mindcraft-rotn-ssh-gate: the allowed requests (ADR 0009)', () => {
         for (const name of ['a', '0', 'frcfld', 'bot-2', 'a'.repeat(32)]) assert.equal(gate(`status ${name}`).code, 0, name);
         for (const name of ['A', 'FRCFLD', 'Frcfld', '-x', 'a'.repeat(33), 'bot_2', 'bot.2', 'bot/2', '..', 'é']) {
             const r = gate(`status ${name}`);
-            assert.equal(r.code, 2, name);
+            assert.equal(r.code, 126, name);
             assert.deepEqual(r.sudo, [], name);
         }
     });
 
     test('the ctl\'s exit code comes back to the client (exec), e.g. 3 from a stopped unit\'s status', () => {
         assert.equal(gate('status frcfld', { FAKE_RC: '3' }).code, 3);
+    });
+
+    test('#365 review: a gate refusal (126) is told apart from the ctl\'s own refusal (2), which comes back unchanged', () => {
+        const ctlRefused = gate('status nobot', { FAKE_RC: '2' });   // allowed by the gate; the ctl refuses (no env file)
+        assert.equal(ctlRefused.code, 2);
+        assert.deepEqual(ctlRefused.sudo, [['-n', CTL, 'status', 'nobot']]);
+        const gateRefused = gate('restart frcfld');
+        assert.equal(gateRefused.code, 126);
+        assert.deepEqual(gateRefused.sudo, []);
+        assert.match(SRC, /^readonly REFUSED=126 /m);
     });
 
     test('a logger that fails or is missing never blocks an allowed request', () => {
@@ -122,12 +132,12 @@ describe('mindcraft-rotn-ssh-gate: everything else is refused and logged safely'
         'scp -t /tmp', 'internal-sftp', '/usr/lib/openssh/sftp-server', 'bash', 'sh -c id',
     ];
 
-    test('each refused request: exit 2, sudo never runs, one auth.warning line, and the client never gets its input back', () => {
+    test('each refused request: exit 126, sudo never runs, one auth.warning line, and the client never gets its input back', () => {
         for (const cmd of REFUSED) {
             fs.rmSync(sudoLog, { force: true });
             fs.rmSync(loggerLog, { force: true });
             const r = gate(cmd);
-            assert.equal(r.code, 2, JSON.stringify(cmd));
+            assert.equal(r.code, 126, JSON.stringify(cmd));
             assert.deepEqual(r.sudo, [], JSON.stringify(cmd));
             assert.deepEqual(r.pathSudo, [], JSON.stringify(cmd));
             assert.equal(r.logger.length, 1, JSON.stringify(cmd));
@@ -140,14 +150,14 @@ describe('mindcraft-rotn-ssh-gate: everything else is refused and logged safely'
 
     test('an interactive login (no SSH_ORIGINAL_COMMAND) is refused and logged as such', () => {
         const r = gate(undefined);
-        assert.equal(r.code, 2);
+        assert.equal(r.code, 126);
         assert.deepEqual(r.sudo, []);
         assert.equal(refusedLine(r), "refused (no command (an interactive login)): '' (0 bytes)");
     });
 
     test('the log line is made safe: printable ASCII kept, every other byte "?", the full length in bytes', () => {
         const r = gate('status frcfld\x1b[2J\x07; rm -rf / é');
-        assert.equal(r.code, 2);
+        assert.equal(r.code, 126);
         const line = refusedLine(r);
         assert.equal(line, `refused (not an allowed request): 'status frcfld?[2J?; rm -rf / ??' (${Buffer.byteLength('status frcfld\x1b[2J\x07; rm -rf / é')} bytes)`);
         assert.ok([...line].every((ch) => ch >= ' ' && ch <= '~'), 'no control or non-ASCII byte reaches syslog');
@@ -156,7 +166,7 @@ describe('mindcraft-rotn-ssh-gate: everything else is refused and logged safely'
     test('a long request is refused before matching, and its log line is cut at 200 bytes', () => {
         const long = `status ${'a'.repeat(5000)}`;
         const r = gate(long);
-        assert.equal(r.code, 2);
+        assert.equal(r.code, 126);
         assert.equal(refusedLine(r), `refused (longer than 128 bytes): '${long.slice(0, 200)}' (${long.length} bytes)`);
         // Just at the limit still goes to the patterns (and is refused there for its 120-char name).
         const at = `status ${'a'.repeat(121)}`;
@@ -166,7 +176,7 @@ describe('mindcraft-rotn-ssh-gate: everything else is refused and logged safely'
 
     test('a refusal still exits 2 when the logger is missing or fails', () => {
         const r = gate('restart frcfld', { FAKE_LOGGER_RC: '1' });
-        assert.equal(r.code, 2);
+        assert.equal(r.code, 126);
         assert.deepEqual(r.sudo, []);
     });
 });
@@ -175,7 +185,7 @@ describe('mindcraft-rotn-ssh-gate: it trusts nothing in its environment', () => 
     test('a client locale (sshd AcceptEnv LANG, LC_*) cannot widen the patterns; PATH cannot swap sudo', () => {
         for (const loc of ['tr_TR.UTF-8', 'en_US.UTF-8', 'de_DE.UTF-8', 'xx']) {
             const env = { LANG: loc, LC_ALL: loc, LC_CTYPE: loc, LC_COLLATE: loc };
-            assert.equal(gate('status FRCFLD', env).code, 2, loc);
+            assert.equal(gate('status FRCFLD', env).code, 126, loc);
             assert.equal(gate('status frcfld', env).code, 0, loc);
         }
         const r = gate('status frcfld');

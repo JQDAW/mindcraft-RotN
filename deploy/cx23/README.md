@@ -100,11 +100,15 @@ from="<the CX33's IPv4>",restrict,command="/usr/local/sbin/mindcraft-rotn-ssh-ga
   - `journal BOT --since @EPOCH_SECONDS`.
 
   Each runs as `sudo -n mindcraft-rotn-ctl ...`, and the ctl checks the name and the time again.
-- **Refused:** everything else, exit 2. That includes `restart`, `enable`, `disable`, `list`, `daemon-reload`, an interactive login, `scp` and `sftp`.
+- **Refused:** everything else, **exit 126**, which is distinct from the ctl's own refusal (exit 2), so the harness can tell a gate refusal (an ADR 0009 incident) apart. That includes `restart`, `enable`, `disable`, `list`, `daemon-reload`, an interactive login, `scp` and `sftp`.
   - The client gets one fixed line on stderr, never its own input back.
   - Syslog gets `refused (<why>): '<the request, printable ASCII only, others as ?, at most 200 bytes>' (<length> bytes)` under the tag `rotn-ssh-gate` at `auth.warning`.
   - Allowed requests are logged at `auth.info`.
 - **It trusts nothing from the client.** It runs under `bash -p`, with `LC_ALL=C` (sshd passes the client's `LANG` and `LC_*`), a reset `PATH`, and fixed program paths. sudo resets the environment for the ctl.
+- **What the gate itself cannot guard** (#365 review): sshd starts a forced command through `deploy`'s **login shell**, as `$SHELL -c '/usr/local/sbin/mindcraft-rotn-ssh-gate'`, before the gate's own `bash -p`.
+  - That shell reads `BASH_ENV` if sshd lets the client set it.
+  - Ubuntu's bash also reads `~/.bashrc` when sshd starts it.
+  - So the CX23's sshd must accept no client variables except `LANG` and `LC_*`, with `PermitUserEnvironment no`, and `deploy`'s shell start-up files must be writable by `deploy` only. Step B1 below checks both.
 - **Tests:** `test/unit/cx23-ssh-gate.test.js`, offline, with a fake `sudo` and `logger`. It is also covered by shellcheck in CI.
 
 **Install the reviewed copy (human, as root, from a reviewed tag):** see step B1 below. Then report both SHA-256 values to the lead, who compares them with the tag.
@@ -112,7 +116,7 @@ from="<the CX33's IPv4>",restrict,command="/usr/local/sbin/mindcraft-rotn-ssh-ga
 **Check it on the CX23 without SSH**, after `add-bot` (B2), as root:
 ```bash
 sudo -u deploy env SSH_ORIGINAL_COMMAND='status frcfld' /usr/local/sbin/mindcraft-rotn-ssh-gate; echo "exit $?"   # the unit's status (3 = inactive)
-sudo -u deploy env SSH_ORIGINAL_COMMAND='restart frcfld' /usr/local/sbin/mindcraft-rotn-ssh-gate; echo "exit $?"  # refused: exit 2
+sudo -u deploy env SSH_ORIGINAL_COMMAND='restart frcfld' /usr/local/sbin/mindcraft-rotn-ssh-gate; echo "exit $?"  # refused: exit 126
 journalctl -t rotn-ssh-gate -n 5 --no-pager
 ```
 
@@ -151,6 +155,12 @@ scp -r /tmp/cx23-<TAG>/deploy/cx23 root@<cx23>:/root/cx23-<TAG>
    ```
    - Send the lead these two hashes. They must equal `sha256sum deploy/cx23/mindcraft-rotn-ctl.sh deploy/cx23/mindcraft-rotn-ssh-gate.sh` at `<TAG>`.
    - The `authorized_keys` line (above) stays as it is: it already names `/usr/local/sbin/mindcraft-rotn-ssh-gate`.
+   - **What runs before the gate** (the login shell, see "What the gate itself cannot guard"):
+   ```bash
+   sshd -T | grep -Ei '^(acceptenv|permituserenvironment) '   # acceptenv: only LANG and LC_*; permituserenvironment no
+   ls -l /home/deploy/.bashrc /home/deploy/.profile /home/deploy/.bash_profile /home/deploy/.bash_login 2>&1   # owned by deploy; no group or other w
+   ```
+   If `acceptenv` lists anything else, or a start-up file is writable by anyone but `deploy`, stop and tell the lead before going on.
 2. **The bot:** `bash /root/cx23-<TAG>/bootstrap.sh add-bot frcfld`. It writes `/etc/mindcraft-rotn/frcfld.env` (root:root 0600) and `/var/lib/mindcraft-rotn/frcfld/msa` (0700). Then run the gate check above.
 3. **The env file:** `nano /etc/mindcraft-rotn/frcfld.env`. Change three lines and nothing else:
    - `OPENROUTER_API_KEY=` the production key with its credit limit (H4; the key named `mindcraft-rotn-frcfld-cx23`).
@@ -184,8 +194,11 @@ scp -r /tmp/cx23-<TAG>/deploy/cx23 root@<cx23>:/root/cx23-<TAG>
      node packages/forge-bridge/tools/msa-login.mjs FRCFLD --check; echo "exit $?"   # 0
    ```
    It prints only Microsoft's instructions and the profile name, never a token.
-3. **The first start, only under the lead's written first-start GO:**
-   - First, as root, set `"host"` in `SETTINGS_JSON` to that GO's test server (B3).
+3. **The first start, only with two GOs** (ADR 0009):
+   - **the lead's written first-start GO**, which names the test server;
+   - **your own GO**, confirming that the env file's `"host"` is that disposable test server and never the live server.
+
+   First, as root, set `"host"` in `SETTINGS_JSON` to that GO's test server (B3).
    - Then, as `deploy`:
    ```bash
    sudo mindcraft-rotn-ctl start frcfld
@@ -196,7 +209,7 @@ scp -r /tmp/cx23-<TAG>/deploy/cx23 root@<cx23>:/root/cx23-<TAG>
    - **Do not `enable` the bot during G4.** An enabled bot comes back after a CX23 reboot and joins whatever the env file names, by then a deleted test server. `start` works without `enable`. `deploy.sh` restarts only enabled bots.
    - `enable` comes after G4, with the live server's host (PLAN.md).
 
-**Open, for the lead:** every S run uses a new test server, so the `"host"` in `frcfld.env` must be changed by the human before each S run's `start`. Agents can neither see nor change that file through the gate.
+**Each later S run (lead's decision, #365 review):** before each G4 S run's `start`, you set the env file's `"host"` to that run's disposable test server, as in B3. Agents cannot change it, which keeps the live server out of their reach.
 
 ## Deploy and rollback (as `deploy`)
 
