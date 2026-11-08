@@ -21,7 +21,10 @@ const line = (ms, msg) => `[${stamp(ms)}] [Server thread/INFO] [net.minecraft.se
  * opt.driver: a spawned driver (set-up T), not the service; opt.activeAtStart: the unit runs already;
  * opt.noKickRejoin; opt.fatalAfterKick; opt.systemdRestart (NRestarts rises at the kick); opt.restartFails;
  * opt.restartRejoinS (default 60 after the new Done); opt.rotate: the restart rolls latest.log over;
- * opt.stopFailed (the unit ends failed); opt.restartAfterStop (a restart line after the stop).
+ * opt.stopFailed (the unit ends failed); opt.restartAfterStop (a restart line after the stop);
+ * opt.kickIgnored (the server never shows the bot gone); opt.noKickLine (it rejoins with no restart line);
+ * opt.kickClass / opt.restartClass (another class in the restart line); opt.unitBot (the service's bot name);
+ * opt.insecure (the settings line says true); opt.noSettings (no settings line).
  */
 function sim(opt = {}) {
     let t = 0;
@@ -53,13 +56,13 @@ function sim(opt = {}) {
             let m;
             if ((m = /^say (.*)$/.exec(cmd))) add(`[Server] ${m[1]}`);
             else if (cmd === 'seed') add('Seed: 1880465901402976865');
-            else if (cmd === `kick ${NAME}` && online) {
+            else if (cmd === `kick ${NAME}` && online && !opt.kickIgnored) {
                 add(`Kicked ${NAME} from the game: 'Kicked by an operator'`);
                 leave('Kicked by an operator');
                 if (opt.systemdRestart) unit.nrestarts++;
                 if (opt.fatalAfterKick) at(t + 1 * S, () => jr(`[agent_process] ${NAME}: FATAL (kicked_by_operator: 3 times in a row). Not restarting; a human must act (see coord/NEEDS-HUMAN.md).`));
                 else {
-                    at(t + 1 * S, () => jr(`[agent_process] ${NAME}: kicked_by_operator; restarting in 10 s.`));
+                    if (!opt.noKickLine) at(t + 1 * S, () => jr(`[agent_process] ${NAME}: ${opt.kickClass ?? 'kicked_by_operator'}; restarting in 10 s.`));
                     if (!opt.noKickRejoin) at(t + 15 * S, join);
                 }
             }
@@ -74,9 +77,9 @@ function sim(opt = {}) {
             if (opt.restartFails) throw new Error('restart failed (5): rotn-test: no new Done line 300s after the start');
             add('Stopping server');
             leave('Server closed');
-            jr(`[agent_process] ${NAME}: server_stopping; restarting in 20 s.`);
+            jr(`[agent_process] ${NAME}: ${opt.restartClass ?? 'server_stopping'}; restarting in 20 s.`);
             t += 90 * S;
-            jr(`[agent_process] ${NAME}: network; restarting in 40 s.`);
+            jr(`[agent_process] ${NAME}: ${opt.restartClass ?? 'network'}; restarting in 40 s.`);
             if (opt.rotate) { rolled = log; log = []; }
             add('Done (41.2s)! For help, type "help" or "?"');
             at(t + (opt.restartRejoinS ?? 60) * S, join);
@@ -84,11 +87,12 @@ function sim(opt = {}) {
         },
     };
     const bot = {
-        ...(opt.driver ? {} : { kind: 'service' }),
+        ...(opt.driver ? {} : { kind: 'service', bot: opt.unitBot ?? 'frcfld' }),
         start() {
             sent.push('ctl start');
             unit.state = 'active';
             jr(`Starting mindcraft-rotn@frcfld.service - Mindcraft RotN bot frcfld...`);
+            if (!opt.noSettings) at(t + 5 * S, () => jr(`[settings] effective allow_insecure_coding=${opt.insecure ? 'true' : 'false'}`));
             at(t + 20 * S, join);
         },
         alive: () => unit.state === 'active',
@@ -117,12 +121,12 @@ describe('g4-service-reconnect: the module', () => {
     test('G4, set-up S, no LLM record (the CX23 key is not the runner\'s); the console allows exactly kick <bot> and stop', () => {
         assert.equal(reconnect.gate, 'G4');
         assert.equal(reconnect.llm, false);
-        assert.deepEqual(Object.keys(reconnect.checks), ['login_online', 'kick_rejoin', 'restart_rejoin', 'no_systemd_restart', 'clean_stop']);
+        assert.deepEqual(Object.keys(reconnect.checks), ['login_online', 'effective_settings', 'kick_rejoin', 'restart_rejoin', 'no_systemd_restart', 'clean_stop']);
         const list = consoleAllowFor(reconnect, reconnect.defaults);
         assert.ok(list.some((re) => re.test(`kick ${NAME}`)) && list.some((re) => re.test('stop')));
         assert.ok(!list.some((re) => re.test('kick JQDAW')) && !list.some((re) => re.test('kill FRCFLD')));
-        // run time: login 4 + warm 2 + kick 3 + restart 11 + rejoin 10 + settle 1 + stop 1
-        assert.equal(reconnect.runMinutes(reconnect.defaults), 32);
+        // run time: login 4 + settings 1 + warm 2 + kick 3 + restart 11 + rejoin 10 + settle 1 + stop 1
+        assert.equal(reconnect.runMinutes(reconnect.defaults), 33);
     });
 
     test('restartLines: restart, fatal and requested lines of this bot only, in order', () => {
@@ -144,7 +148,7 @@ describe('g4-service-reconnect on a simulated server and service', () => {
         assert.equal(c.no_systemd_restart.detail, 'NRestarts 0 -> 0: the reconnects stayed in-process');
         assert.equal(c.clean_stop.detail, 'ActiveState inactive, NRestarts 0; no restart line after the stop');
         assert.deepEqual(s.sent.filter((x) => !/^say |^seed$/.test(x)), ['ctl start', `kick ${NAME}`, 'restart 300', 'ctl stop']);
-        assert.match(r.notes.effectiveSettingsLine, /not checked: main\.js prints no effective/);
+        assert.equal(c.effective_settings.detail, 'the running process says allow_insecure_coding=false');
     });
 
     test('the restart rolls latest.log over: the rejoin is still found (the rotated window)', async () => {
@@ -158,7 +162,7 @@ describe('g4-service-reconnect on a simulated server and service', () => {
         const s = sim({ activeAtStart: true });
         const c = byName(await run(s));
         assert.match(c.login_online.detail, /^the unit is active before the start: stop it first/);
-        for (const k of ['kick_rejoin', 'restart_rejoin', 'no_systemd_restart', 'clean_stop']) assert.match(c[k].detail, /^not reached: the unit was not inactive/, k);
+        for (const k of ['effective_settings', 'kick_rejoin', 'restart_rejoin', 'no_systemd_restart', 'clean_stop']) assert.match(c[k].detail, /^not reached: the unit was not inactive/, k);
         assert.ok(!s.sent.includes('ctl start'));
     });
 
@@ -166,7 +170,7 @@ describe('g4-service-reconnect on a simulated server and service', () => {
         const s = sim({ noKickRejoin: true });
         const c = byName(await run(s));
         assert.equal(c.kick_rejoin.pass, false);
-        assert.match(c.kick_rejoin.detail, /^no rejoin with a new restart line within 3 min of the kick/);
+        assert.match(c.kick_rejoin.detail, /^no rejoin with a kicked_by_operator restart line within 3 min of the kick/);
         assert.match(c.restart_rejoin.detail, /^not reached: the kick's rejoin failed/);
         assert.ok(!s.sent.some((x) => x.startsWith('restart ')));
     });
@@ -187,7 +191,7 @@ describe('g4-service-reconnect on a simulated server and service', () => {
     test('a slow rejoin after the restart (past restartRejoinMinutes) fails restart_rejoin; a failing ctl restart is named', async () => {
         const slow = byName(await run(sim({ restartRejoinS: 11 * 60 })));
         assert.equal(slow.restart_rejoin.pass, false);
-        assert.match(slow.restart_rejoin.detail, /^no rejoin with a new restart line within 10 min of the new Done/);
+        assert.match(slow.restart_rejoin.detail, /^no rejoin with a server_stopping or network restart line within 10 min of the new Done/);
         const failed = byName(await run(sim({ restartFails: true })));
         assert.match(failed.restart_rejoin.detail, /^the test-server restart failed: restart failed \(5\)/);
     });
@@ -210,5 +214,46 @@ describe('g4-service-reconnect on a simulated server and service', () => {
         assert.match(c.clean_stop.detail, /^not reached: not the CX23 service/);
         assert.equal(r.gateValid, false);
         assert.ok(r.weakenedParams.some((w) => /not the CX23 service \(set-up T\)/.test(w)), r.weakenedParams.join('; '));
+    });
+
+    test('#374 review 6: a rejoin without a restart line fails kick_rejoin (a reconnect the journal does not show is not agent_process\'s)', async () => {
+        const c = byName(await run(sim({ noKickLine: true })));
+        assert.equal(c.kick_rejoin.pass, false);
+        assert.match(c.kick_rejoin.detail, /restart lines none\)$/);
+    });
+
+    test('#374 review 1: the restart line\'s class is checked: kicked_by_operator for the kick; server_stopping or network for the restart', async () => {
+        const k = byName(await run(sim({ kickClass: 'network' })));
+        assert.equal(k.kick_rejoin.pass, false);
+        assert.match(k.kick_rejoin.detail, /restart lines network\)$/);
+        const r = byName(await run(sim({ restartClass: 'timeout' })));
+        assert.equal(r.kick_rejoin.pass, true);
+        assert.equal(r.restart_rejoin.pass, false);
+        assert.match(r.restart_rejoin.detail, /restart lines timeout, timeout\)$/);
+    });
+
+    test('#374 review 2 and 6: no kick landed: kick_rejoin fails and no_systemd_restart is not reached', async () => {
+        const c = byName(await run(sim({ kickIgnored: true })));
+        assert.equal(c.kick_rejoin.detail, 'the server never showed the bot gone after `kick`');
+        assert.match(c.no_systemd_restart.detail, /^not reached: no kick landed/);
+        assert.equal(c.no_systemd_restart.pass, false);
+    });
+
+    test('#374 review 4: the service\'s bot must be this run\'s bot, case aside', async () => {
+        const ok = byName(await run(sim({ unitBot: 'frcfld' }), { bot: 'FRCFLD' }));
+        assert.equal(ok.login_online.pass, true);
+        const s = sim({ unitBot: 'otherbot' });
+        const c = byName(await run(s));
+        assert.equal(c.login_online.detail, "the service's bot 'otherbot' is not this run's bot 'FRCFLD'");
+        assert.ok(!s.sent.includes('ctl start'));
+    });
+
+    test('effective_settings (#325): the running process\'s "[settings] effective allow_insecure_coding=false"; true or missing fails', async () => {
+        const bad = byName(await run(sim({ insecure: true })));
+        assert.equal(bad.effective_settings.pass, false);
+        assert.equal(bad.effective_settings.detail, 'the running process says allow_insecure_coding=true');
+        const none = byName(await run(sim({ noSettings: true })));
+        assert.equal(none.effective_settings.pass, false);
+        assert.match(none.effective_settings.detail, /^no "\[settings\] effective allow_insecure_coding=" line within 60 s of the join$/);
     });
 });
