@@ -11,6 +11,8 @@ import { fallSafe, treeSafe, standsOnTree, isFirmGround, isUnsafeBlock, isLeafBl
 import { standCheck, sameBlock, describeTarget } from "./stand_on.js";
 import prismarineRecipe from "prismarine-recipe";
 import { safeError } from "../safe_error.js";
+import { logAte, fightJournal } from "./survival_log.js";
+import { foodKey } from "./food.js";
 import pf from 'mineflayer-pathfinder';
 import Vec3 from 'vec3';
 import settings from "../../../settings.js";
@@ -671,8 +673,10 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
     bot.modes.pause('cowardice');
     let attacked = false;
     const fight = {}; // one line when the weapon cannot be taken in hand (G3 round 7 B)
+    const journal = fightJournal(bot, 'open'); // G4 #5: "[survival] fight start/end"
     let enemy = world.getNearestEntityWhere(bot, isEnemy, range);
     while (enemy) {
+        journal.start(enemy);
         await equipHighestAttack(bot, fight);
         if (bot.entity.position.distanceTo(enemy.position) >= 4 && enemy.name !== 'creeper' && enemy.name !== 'phantom') {
             try {
@@ -693,13 +697,16 @@ export async function defendSelf(bot, range=9, isEnemy=(entity) => mc.isHostile(
         enemy = world.getNearestEntityWhere(bot, isEnemy, range);
         if (bot.interrupt_code) {
             bot.pvp.stop();
+            journal.end('interrupted');
             return false;
         }
         if (enemy && !keepFighting()) {
             log(bot, `Stopped fighting: the situation changed.`);
+            journal.end('stopped');
             break;
         }
     }
+    journal.end('gone'); // no enemy left in range (killed when the first one is dead or gone from the world)
     bot.pvp.stop();
     if (attacked)
         log(bot, `Successfully defended self.`);
@@ -742,26 +749,30 @@ export async function defendInPlace(bot, isEnemy=(entity) => mc.isHostile(entity
     let swings = 0, why = 'nothing left in reach';
     const same = { id: null, health: null, hits: 0 };
     const nearest = () => world.getNearestEntityWhere(bot, (e) => isEnemy(e) && inShelterReach(bot, e), SHELTER_FIGHT.reach + 1);
+    const journal = fightJournal(bot, 'shelter'); // G4 #5: "[survival] fight start/end"
+    let outcome = 'gone';
     bot.rotnFightingInPlace = true;
     try {
         for (let enemy = nearest(); enemy; enemy = nearest()) {
-            if (Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; break; }
-            if (swings >= SHELTER_FIGHT.maxSwings) { why = `${swings} swings`; break; }
+            if (Date.now() - start >= SHELTER_FIGHT.maxMs) { why = `time limit of ${secsText(SHELTER_FIGHT.maxMs)}`; outcome = 'capped'; break; }
+            if (swings >= SHELTER_FIGHT.maxSwings) { why = `${swings} swings`; outcome = 'capped'; break; }
             const health = healthOf(enemy);
             if (same.id !== enemy.id || health === null || health !== same.health) Object.assign(same, { id: enemy.id, health, hits: 0 });
-            else if (same.hits >= SHELTER_FIGHT.sameTargetSwings) { why = `${same.hits} hits did not hurt the ${enemy.name}`; break; }
+            else if (same.hits >= SHELTER_FIGHT.sameTargetSwings) { why = `${same.hits} hits did not hurt the ${enemy.name}`; outcome = 'capped'; break; }
+            journal.start(enemy);
             await bot.lookAt(enemy.position.offset(0, (enemy.height ?? 1.8) * 0.8, 0), true);
             await equipHighestAttack(bot, fight); // just before the swing (#334 nit)
             bot.attack(enemy);
             swings++;
             same.hits++;
             await new Promise(resolve => setTimeout(resolve, SHELTER_FIGHT.swingMs));
-            if (bot.interrupt_code) { why = 'interrupted'; break; }
-            if (!keepFighting()) { why = 'the situation changed'; break; }
+            if (bot.interrupt_code) { why = 'interrupted'; outcome = 'interrupted'; break; }
+            if (!keepFighting()) { why = 'the situation changed'; outcome = 'stopped'; break; }
         }
     } finally {
         bot.rotnFightingInPlace = false;
         bot.rotnFightEndedAt = Date.now();
+        journal.end(outcome);
     }
     log(bot, swings > 0 ? `Fought from inside the shelter: ${swings} swing${swings === 1 ? '' : 's'}, stopped: ${why}.` : 'Nothing in reach to fight.');
     return swings > 0;
@@ -2346,7 +2357,9 @@ export async function consume(bot, itemName="") {
         return false;
     }
     await bot.equip(item, 'hand');
+    const before = bot.food;
     await bot.consume();
+    await logAte(bot, foodKey(item), before); // G4 #5: the journal's eat line (the same item form as the eating reflex)
     log(bot, `Consumed ${item.name}.`);
     return true;
 }

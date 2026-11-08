@@ -157,6 +157,32 @@ test('self_preservation does not flee while the bot is dead (the death hit is re
     assert.deepEqual(agent.log.ran, []);
 });
 
+// G4 #5: the journal's flee lines (cowardice, and the low-health flee) name the mob; chat is unchanged.
+test('G4 #5: a flee logs "[survival] flee <mob> (<why>)": cowardice from a creeper, the low-health flee from the zombie near', async (t) => {
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
+    const agent = arena();
+    for (const k of Object.keys(agent.bot.entities)) if (k !== '0') delete agent.bot.entities[k];
+    const creeper = mob('creeper', 4);
+    agent.bot.entities[creeper.id] = creeper;
+    const plan = threatPlan(agent.bot);
+    assert.equal(plan?.action, 'flee');
+    await __modeForTest('cowardice').update(agent);
+    await flush();
+    assert.ok(logs.includes(`[survival] flee creeper (${plan.why})`), logs.join('\n'));
+    __modeForTest('cowardice').active = false;
+
+    const hurt = arena();
+    const zombie = Object.values(hurt.bot.entities).find(e => e.name === 'zombie');
+    hurt.bot.nearestEntity = (match) => [zombie].find(e => match(e)) ?? null;
+    Object.assign(hurt.bot, { health: 4, lastDamageTime: Date.now(), lastDamageTaken: 3 });
+    await __modeForTest('self_preservation').update(hurt);
+    await flush();
+    assert.ok(logs.includes('[survival] flee zombie (low health 4)'), logs.join('\n'));
+    __modeForTest('self_preservation').active = false;
+    assert.ok(logs.filter(l => l.startsWith('[survival] flee ')).every(l => /^\[survival\] flee \S+ \([^()]+\)$/.test(l)));
+});
+
 // G3 round 10 A: crushed at full health (20 -> 0); after the respawn (health 20 again) the fatal hit
 // was still the last damage, so "damage >= health" held for 3 s: "I'm dying!" and a 20-block flee
 // from the spawn point. The death clears the damage record (damage_record.js).

@@ -84,7 +84,8 @@ test('round 9 B (c): with a wall open, self_defense does not interrupt the night
 });
 
 test('round 9 B (c): with a wall open, the bot fights the mob in the opening from where it stands: no walk, no pvp follow', async (t) => {
-    t.mock.method(console, 'log', () => {});
+    const logs = [];
+    t.mock.method(console, 'log', (...a) => logs.push(a.join(' ')));
     const { agent, bot, calls, ran, self } = shelter();
     const before = self.position.clone();
     await selfDefense(agent);
@@ -94,6 +95,9 @@ test('round 9 B (c): with a wall open, the bot fights the mob in the opening fro
     assert.deepEqual(calls.attacks, [1, 1], 'hit in place until it died');
     assert.ok(self.position.equals(before), 'still in the shelter');
     assert.equal(bot.rotnSheltered, 'open');
+    // G4 #5: the journal's fight lines.
+    assert.deepEqual(logs.filter(l => l.startsWith('[survival] ')).map(l => l.replace(/after \d+ s$/, 'after N s')),
+        ['[survival] fight start zombie (shelter)', '[survival] fight end zombie killed after N s']);
 });
 
 test('round 9 B (c): with a wall open, a mob out of reach is not chased', async (t) => {
