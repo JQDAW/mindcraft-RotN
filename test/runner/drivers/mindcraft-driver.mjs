@@ -191,6 +191,18 @@ export function clearBotState(dir, { stamp = new Date().toISOString().replace(/[
     return { dir, movedAside, pruned, fresh: left.length === 0 };
 }
 
+/**
+ * The bot state at a start: cleared as above, unless env.ROTN_DRIVER_KEEP_STATE is '1', which a scenario sets for a
+ * restart WITHIN one run (g4-restart-persistence's T rehearsal: the state the first start made must survive the
+ * second). Kept: {dir, kept: true, movedAside: [], pruned: [], fresh: false, files}. A G3 scenario never sets it, and
+ * its fresh_bot_state check reads `fresh`, so a kept state there fails that check.
+ */
+export function botStateAtStart(dir, env) {
+    if (env?.ROTN_DRIVER_KEEP_STATE !== '1') return clearBotState(dir);
+    const files = BOT_STATE_FILES.filter((f) => fs.existsSync(path.join(dir, f)));
+    return { dir, kept: true, movedAside: [], pruned: [], fresh: false, files };
+}
+
 /** A free local TCP port for the MindServer (bound to localhost by Mindcraft). */
 export function freePort() {
     return new Promise((resolve, reject) => {
@@ -223,8 +235,9 @@ async function main(argv) {
         return EXIT_FATAL;
     }
 
-    // No state from an earlier run (#207 review): no open task, and the agenda starts as on a fresh bot.
-    const botState = clearBotState(path.resolve(process.cwd(), 'bots', bot));
+    // No state from an earlier run (#207 review): no open task, and the agenda starts as on a fresh bot. A restart
+    // within one run (ROTN_DRIVER_KEEP_STATE=1) keeps it: that state is what g4-restart-persistence tests.
+    const botState = botStateAtStart(path.resolve(process.cwd(), 'bots', bot), process.env);
     const mindserverPort = await freePort();
     const posix = process.platform !== 'win32';
     const child = spawn(process.execPath, [o.main], {
