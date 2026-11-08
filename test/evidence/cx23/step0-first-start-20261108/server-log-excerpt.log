@@ -1,0 +1,121 @@
+[14:00:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: Done (27.054s)! For help, type "help" or "?"
+[14:34:45] [User Authenticator #1/INFO] [net.minecraft.server.network.NetHandlerLoginServer]: UUID of player <bot> is <uuid-v4>
+[14:34:46] [Netty Epoll Server IO #5/INFO] [dimstack]: Sending dimension stack configuration packet to <bot>
+[14:34:46] [Server thread/ERROR] [cyclicmagic]: Data not found for <bot>
+[14:34:46] [Server thread/INFO] [net.minecraft.server.management.PlayerList]: <bot>[/<ip>:60920] logged in with entity id 527 at (-48.5, 82.0, -64.5)
+[14:34:46] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <bot> joined the game
+[14:34:46] [Server thread/INFO] [gamestages]: Syncing 0 stages for <bot>.
+[14:34:46] [Server thread/INFO] [Waila]: Player EntityPlayerMP['<bot>'/527, l='world', x=-48.50, y=82.00, z=-64.50] connected. Sending ping
+[14:34:46] [Server thread/INFO] [bountifulbaubles]: Attempting to sync config to player <bot>
+[14:34:47] [Server thread/INFO] [antiqueatlas]: Sent custom biome data to player <bot>
+[14:34:47] [Server thread/INFO] [antiqueatlas]: Sent markers data #-1 to player <bot>
+[14:34:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule commandBlockOutput has been updated to false]
+[14:34:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule sendCommandFeedback has been updated to false]
+[14:34:47] [Server thread/INFO] [gamestages]: Syncing 1 stages for <bot>.
+[14:34:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Given    [Bread] * 1 to <bot>]
+[14:34:47] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Given    [Bundle] * 1 to <bot>]
+[14:34:49] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step rocks started: collect 6 rocks
+[14:34:52] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> On it! !collectBlocks("pyrotech:rock", 6)
+[14:35:23] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:35:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step rocks done
+[14:35:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step sticks started: collect 3 sticks
+[14:35:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got all 6 rocks! Step 1 done.
+[14:35:39] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Now for sticks! !collectBlocks("stick", 3)
+[14:35:52] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Dead bushes are all out of reach. Let me try river cane instead: !collectBlocks("biomesoplenty:plant_1:5", 3)
+[14:35:55] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> No cane around either. Trying bamboo: !collectBlocks("biomesoplenty:bamboo", 3)
+[14:35:57] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> No luck there either. Let me find some trees to fell: !searchForBlock("log", 64)
+[14:36:01] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> No response received.
+[14:36:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Widening the search: !searchForBlock("log", 128)
+[14:36:08] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:36:09] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> This steppe is treeless. Maybe leaves? !searchForBlock("leaves", 128)
+[14:36:12] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> No trees in range at all. Trying river cane by the water: !collectBlocks("biomesoplenty:plant_1:5", 3)
+[14:36:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> This area is barren. I'll trek somewhere new to find trees: !newAction("Explore outward from spawn (daytime, steppe biome) by walking a few hundred blocks in one direction, occasionally checking !searchForBlock('log', 64) and nearbyBlocks, until trees or a
+[14:36:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> river with cane/bamboo are found, then collect 3 sticks (or river cane/bamboo as stick substitutes) by breaking dead bushes, reachable leaves, or trunks by hand.")
+[14:36:16] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> newAction is disabled. Enable with allow_insecure_coding=true in settings.js
+[14:36:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Code writing is off, so I'll just walk manually. Heading east: !goToCoordinates(50, 88, -86, 5)
+[14:36:53] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:37:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Coordinates were off. Moving along the beach: !moveAway(64)
+[14:37:18] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step shelter_blocks started: keep 10 blocks for the night's shelter
+[14:37:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Let me search for dead bushes, they drop sticks: !searchForBlock("deadbush", 128)
+[14:37:38] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:37:41] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !collectBlocks("stick", 3)
+[14:38:23] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:38:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule commandBlockOutput has been updated to false]
+[14:38:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: [<bot>: Game rule sendCommandFeedback has been updated to false]
+[14:38:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda steps done: sticks, logs
+[14:38:43] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got 3 sticks! Now collecting dirt piles for the night shelter: !collectBlocks("betterwithmods:dirt_pile", 40)
+[14:39:03] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crude_axe started: craft a crude axe
+[14:39:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> That should be 46 piles total = 11 dirt blocks, enough for the 10-block shelter. Checking the agenda: !agenda
+[14:39:07] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Rocks collected and sticks done. Crafting the crude axe: !craftRecipe("pyrotech:crude_axe", 1)
+[14:39:09] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:39:09] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crude_axe done
+[14:39:09] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step first_plank started: make the first plank
+[14:39:11] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Crude axe crafted! That wraps up step 3 — onto the next one. !agenda
+[14:39:13] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Time for the first plank! Placing a log: !placeHere("log")
+[14:39:17] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Now debarking it with the crude axe: !useOn("pyrotech:crude_axe", "log")
+[14:39:21] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Debarked! Now the axe on the debarked log for the plank: !useOn("pyrotech:crude_axe", "hitwithaxe:debarked_oak")
+[14:39:24] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Picking up item!
+[14:39:24] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Checking if I got the plank: !inventory
+[14:39:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step first_plank done
+[14:39:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_tools started: craft Crafting Tools
+[14:39:27] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got 1 plank — first plank made! Step complete. 🪵 !agenda
+[14:39:31] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> I have 1 stick, 1 rock, the crude axe and my plank — everything for Crafting Tools! Crafting now: !craftRecipe("contenttweaker:crafting_tools", 1)
+[14:39:33] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_tools done
+[14:39:33] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_table started: craft a crafting table
+[14:39:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Crafting Tools crafted! 🔨 Step 6 done — the crude axe got used up as planned. !agenda
+[14:39:36] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> On to step 7 — crafting table time: !craftRecipe("crafting_table", 1)
+[14:39:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step crafting_table done
+[14:39:38] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step planks_sticks started: make planks and sticks at the table
+[14:39:40] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Crafting table made! Placing it so I can use it: !placeHere("crafting_table")
+[14:39:42] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Table's down at (149, 64, -61). Step 8 — planks & sticks: !craftRecipe("planks", 2)
+[14:39:45] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 6 planks — enough! Now sticks: !craftRecipe("stick", 1)
+[14:39:46] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step planks_sticks done
+[14:39:48] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_pickaxe started: craft a stone pickaxe
+[14:39:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Got sticks covered. Rocks check: I've got 4 rocks in inventory — let's try the pickaxe: !craftRecipe("stone_pickaxe", 1)
+[14:39:52] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_pickaxe done
+[14:39:54] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:39:54] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step shelter_blocks started: keep 10 blocks for the night's shelter
+[14:39:56] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Pickaxe ready! Checking where the agenda stands: !agenda
+[14:39:58] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Now for shelter blocks — gathering rocks with my pickaxe: !collectBlocks("pyrotech:rock", 8)
+[14:40:32] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Rocks collected! Crafting them into cobblestone: !craftRecipe("cobblestone", 2)
+[14:40:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 2 cobblestone total now — 8 to go. Gathering more rocks: !collectBlocks("pyrotech:rock", 16)
+[14:40:39] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:41:24] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:41:50] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 17 more rocks — crafting those into cobblestone: !craftRecipe("cobblestone", 4)
+[14:41:59] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Let me check my block count: !inventory
+[14:42:04] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 5 cobble so far. Let me try crafting with my metamorphic rocks: !craftRecipe("cobblestone", 1)
+[14:42:06] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 7 cobble now, 3 to go. Need more rocks: !collectBlocks("pyrotech:rock", 12)
+[14:42:09] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:42:23] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !craftRecipe("cobblestone", 3)
+[14:42:26] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> 9 blocks now — one more needed. Grabbing a couple rocks: !collectBlocks("pyrotech:rock", 4)
+[14:42:33] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !craftRecipe("cobblestone", 1)
+[14:42:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step cobblestone done
+[14:42:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_axe started: craft a stone axe
+[14:42:37] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Now for the stone axe — need 3 rocks and 2 sticks. Sticks are ready, grabbing 3 rocks: !collectBlocks("pyrotech:rock", 3)
+[14:42:44] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> !craftRecipe("stone_axe", 1)
+[14:42:54] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:43:39] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:44:24] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:45:09] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:45:54] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:46:07] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> Pathfinding got stuck. Let me head to the crafting table first: !goToCoordinates(149, 64, -61, 1)
+[14:46:39] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:47:24] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:47:35] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> agenda step stone_axe stuck: 5 min of self-prompting; agenda paused
+[14:48:09] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:48:54] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:49:15] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> [night] sunset is near: building a shelter
+[14:49:15] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <<bot>> [night] in the shelter at 157, 53, -62 until morning
+[14:49:39] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:50:24] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:51:09] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:51:54] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:52:39] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:53:24] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:54:09] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:54:54] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:55:39] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:56:13] [Server thread/INFO] [net.minecraft.network.NetHandlerPlayServer]: <bot> lost connection: Internal Exception: io.netty.channel.unix.Errors$NativeIoException: syscall:read(..) failed: Connection reset by peer
+[14:56:13] [Server thread/INFO] [net.minecraft.server.dedicated.DedicatedServer]: <bot> left the game
+[14:56:13] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
+[14:56:13] [Server thread/INFO] [gamestages]: Saved 1 stages for <bot>.
