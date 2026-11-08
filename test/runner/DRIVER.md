@@ -512,6 +512,22 @@ A short session of the real agent with the **production** task-giver list. `Serv
 - **Not yet decided:** every G4 run is not-gate on a test server (`G4_TEST_SERVER_NOT_GATE`). How an S run becomes G4 evidence is the lead's to set.
 - **Tests:** `test/unit/g4-service-reconnect.test.js` (a simulated server and service, including a log roll-over).
 
+### G4 #11: `g4-restart-persistence` (agenda half; offline-built, not yet run)
+
+- **What it shows:** the agenda survives a stop and start of the bot and resumes, with no step done twice. Where a giver can queue a task, a running task resumes too. #327 made both say `(resumed after a restart)`.
+- **On S:** `ROTN_SERVICE_GO=<GO id>:test-server-host-confirmed run.mjs --scenario g4-restart-persistence --service frcfld`. The restart is the ctl's `stop` then `start`; the gate has no restart verb.
+- **On T** (a rehearsal, not-gate): the driver's stop, then a new start with `ROTN_DRIVER_KEEP_STATE=1`. The driver otherwise moves `agenda.json` and `tasks.json` aside at every start (`botStateAtStart`); a G3 run never sets the variable, and its `fresh_bot_state` check would fail if it did.
+- **The checks:**
+  - **`login_online`:** this run's bot (case aside) and an inactive unit (S).
+  - **`agenda_progress`:** the agenda is active with at least `minDoneSteps` (2) steps done, within `progressMaxMinutes` (10). An agenda that has already finished is "not reached: ... a scenario-timing gap". On S the note adds that the state persists from earlier runs and that the human resets it under the GO. An agenda that never progressed fails this check, the rest is "not reached", and **no stop or start is sent** (#383 review).
+  - **`task_queued`:** only where the console sender is a giver (T). The G3 gold marker, then the whisper; the restart follows as soon as `task <id> started` is seen. On S it is "not reached: needs a trusted giver on S: the human as JQDAW (PLAN #11)".
+  - **`restart_rejoin`:** a stop and a start, and the bot joins again within `rejoinMinutes` (5).
+  - **`agenda_resumed`:** the agenda's first step line after the rejoin is `agenda step <id> started: ... (resumed after a restart)`, for a step not done before. `agenda resumed: <id>` counts only when a task was running at the restart, since the agenda comes back after it (#383 review). A plain `started` fails it ("the agenda began anew").
+  - **`no_step_twice`:** for `observeMinutes` (5), no step done before the restart is done again.
+  - **`task_resumed`:** `task <id> started: ... (resumed after a restart)` within `resumeMinutes` (5).
+- **Open for the lead:** on S the bot's agenda state persists on the CX23 (`/var/lib/mindcraft-rotn/bots/frcfld/agenda.json`), and the gate has no verb to reset it. A run on a bot whose agenda is already done is "not reached". The human resets the state under the GO.
+- **Tests:** `test/unit/g4-restart-persistence.test.js`: a simulated server and bot (S and T), and one test through the real `serviceBot`.
+
 ### G4 #6: `g4-death-report`
 
 Ready-to-try: "After death it respawns, reports what it lost and carries on without a chat-spam loop." The bot side is skills-rotn's `src/agent/library/death_report.js` (D3), which this scenario never changes. If it finds something to fix there, harness-ops reports it.

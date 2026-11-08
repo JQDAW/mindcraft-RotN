@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { parseDriverArgs, envProblems, profileProblems, settingsProblems, settingsFileOf, mindcraftEnv, freePort, clearBotState, EXIT_FATAL } from '../runner/drivers/mindcraft-driver.mjs';
+import { parseDriverArgs, envProblems, profileProblems, settingsProblems, settingsFileOf, mindcraftEnv, freePort, clearBotState, EXIT_FATAL, botStateAtStart } from '../runner/drivers/mindcraft-driver.mjs';
 
 // A profile as skills-rotn's RotN profile sets it: the bot's name and the preset model (lib/g3.mjs LLM_MODEL).
 const GOOD_PROFILE = JSON.stringify({ name: 'FRCFLD', model: 'openrouter/@preset/glm-5-3-flash-cheap-reliable' });
@@ -275,5 +275,22 @@ describe('mindcraft-driver end to end with a fake main.js', () => {
         assert.match(r.out, /DRIVER \{.*"type":"mindcraft_exit","code":3/);
         const pids = readJson(path.join(dir, 'pids.json'));
         assert.ok(await waitFor(() => !alive(pids.agent), 15000), `the agent ${pids.agent} outlived main.js`);
+    });
+
+});
+
+describe('botStateAtStart: a restart within one run keeps the state (ROTN_DRIVER_KEEP_STATE=1; g4-restart-persistence)', () => {
+    test('without the variable: cleared as on every start; with it: kept, fresh false, nothing moved', () => {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rotn-keep-'));
+        for (const f of ['tasks.json', 'agenda.json']) fs.writeFileSync(path.join(dir, f), '{}');
+        const kept = botStateAtStart(dir, { ROTN_DRIVER_KEEP_STATE: '1' });
+        assert.deepEqual(kept, { dir, kept: true, movedAside: [], pruned: [], fresh: false, files: ['tasks.json', 'agenda.json'] });
+        assert.ok(fs.existsSync(path.join(dir, 'agenda.json')));
+        for (const env of [{}, { ROTN_DRIVER_KEEP_STATE: 'yes' }, { ROTN_DRIVER_KEEP_STATE: '0' }]) {
+            fs.writeFileSync(path.join(dir, 'agenda.json'), '{}');
+            const r = botStateAtStart(dir, env);
+            assert.equal(r.kept, undefined, JSON.stringify(env));
+            assert.ok(!fs.existsSync(path.join(dir, 'agenda.json')), 'moved aside');
+        }
     });
 });

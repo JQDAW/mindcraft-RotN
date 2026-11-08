@@ -71,6 +71,8 @@ if (process.env.SETTINGS_JSON) {
 }
 // RotN (G4 ready-to-try: "insecure coding is off"): log the value every agent receives, after all overrides.
 console.log(`[settings] effective allow_insecure_coding=${JSON.stringify(settings.allow_insecure_coding)}`);
+// RotN (G4 #10, D on the CX23 service): who may give tasks, after all overrides, so a scenario reads it from the journal.
+console.log(`[settings] effective task_givers=${JSON.stringify(settings.task_givers)} allow_server_task_giver=${JSON.stringify(settings.allow_server_task_giver)}`);
 
 
 Mindcraft.init(false, settings.mindserver_port, settings.auto_open_ui);
