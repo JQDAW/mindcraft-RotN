@@ -12,24 +12,10 @@ import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { windowsShellSkip } from './fixtures/windows-skip.mjs';
+import { stepScript } from './fixtures/workflow-step.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const WF = fs.readFileSync(path.join(here, '..', '..', '.github', 'workflows', 'test-server-sweeper.yml'), 'utf8');
-
-/** The `run: |` block of the step whose name starts with `stepName`, dedented (by indentation, no YAML library). */
-function stepScript(text, stepName) {
-    const lines = text.split('\n');
-    const at = lines.findIndex((l) => l.trim().startsWith(`- name: ${stepName}`));
-    assert.ok(at >= 0, `step ${stepName}`);
-    const run = lines.findIndex((l, i) => i > at && /^\s+run: \|$/.test(l));
-    const indent = lines[run + 1].match(/^ */)[0].length;
-    const body = [];
-    for (const l of lines.slice(run + 1)) {
-        if (l.trim() && l.match(/^ */)[0].length < indent) break;
-        body.push(l.slice(indent));
-    }
-    return body.join('\n');
-}
 
 const SCRIPT = stepScript(WF, 'Install hcloud');
 

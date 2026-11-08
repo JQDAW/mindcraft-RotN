@@ -485,13 +485,16 @@ describe('bootstrap.sh', { skip: windowsShellSkip('bootstrap.sh', '148 s') }, ()
         assert.ok(called('visudo').length === 1 && called('chmod').some((c) => c[1] === '0440'));
         // unattended security upgrades
         assert.equal(read('etc/apt/apt.conf.d/20auto-upgrades'), 'APT::Periodic::Update-Package-Lists "1";\nAPT::Periodic::Unattended-Upgrade "1";\n');
-        assert.ok(called('apt-get').some((c) => c.includes('unattended-upgrades') && c.includes('git') && c.includes('ufw')));
+        // G4 step 0 C1: the one list (gl's X libraries in it), with no recommends, exactly as ci-ubuntu-2604 installs it.
+        assert.ok(called('apt-get').some((c) => c.join(' ') === 'apt-get install -y -q --no-install-recommends unattended-upgrades git ufw ca-certificates curl gnupg libx11-6 libxext6'),
+            JSON.stringify(called('apt-get')));
         // Node 22 from NodeSource, key pinned
         assert.ok(called('curl').some((c) => c.includes('https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key') && c.includes('=https')));
         assert.equal(read('etc/apt/sources.list.d/nodesource.list'),
             'deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main\n');
         assert.ok(exists('etc/apt/keyrings/nodesource.gpg'));
-        assert.ok(called('apt-get').some((c) => c.includes('nodejs')));
+        assert.ok(called('apt-get').some((c) => c.join(' ') === 'apt-get install -y -q --no-install-recommends nodejs'));
+        assert.ok(called('apt-get').filter((c) => c[1] === 'install').every((c) => c.includes('--no-install-recommends')));
         // swap
         assert.deepEqual(called('fallocate')[0].slice(0, 3), ['fallocate', '-l', '2G']);
         assert.ok(called('mkswap').length === 1 && called('swapon').length === 2);
