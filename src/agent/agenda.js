@@ -207,6 +207,7 @@ export class Agenda {
     }
 
     load() {
+        this.loadState = 'absent'; // G4 #10: 'absent' | 'corrupt' | 'present' (state_report.js)
         if (!existsSync(this.file)) return;
         try {
             const data = JSON.parse(readFileSync(this.file, 'utf8'));
@@ -218,7 +219,9 @@ export class Agenda {
             this.stuck = data.stuck && typeof data.stuck.id === 'string' ? data.stuck : null;
             this.finished = data.finished === true;
             this.existed = true;
+            this.loadState = 'present';
         } catch (err) {
+            this.loadState = 'corrupt';
             const aside = `${this.file}.corrupt-${this.now()}`;
             try { renameSync(this.file, aside); } catch { /* left in place */ }
             this.loadProblem = `[agenda] ${this.file} could not be read (${err.message}); moved it to ${aside}. The agenda starts fresh (its steps are judged from the world, so little is lost).`;
