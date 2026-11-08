@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 import '../agent.js'; // the real import order (commands/index.js first)
 import { executeCommand } from './index.js';
 import { SURVIVAL_MODES, STAY_LIMITS } from './actions.js';
+import * as skills from '../library/skills.js';
 
 const profile = JSON.parse(readFileSync(new URL('../../../profiles/rotn-bot.json', import.meta.url), 'utf8'));
 const assistant = JSON.parse(readFileSync(new URL('../../../profiles/defaults/assistant.json', import.meta.url), 'utf8'));
@@ -79,6 +80,7 @@ test('#422 follow-up: the model\'s !stay is capped at STAY_LIMITS.modelMaxS (als
     assert.match(model.bot.output, /Staying 1 s at most: only a task giver can make you stay longer\./);
     assert.ok(!model.paused.includes('self_preservation'), `paused: ${model.paused}`);
     assert.ok(model.paused.includes('cowardice') && model.paused.includes('unstuck'));
+    assert.ok(!model.paused.includes('self_defense'), `#424 review: the model's stay keeps self_defense; paused: ${model.paused}`);
     // The model, 600 s: capped too.
     logs.length = 0;
     await executeCommand(stayAgent(), '!stay(600)');
@@ -92,5 +94,18 @@ test('#422 follow-up: the model\'s !stay is capped at STAY_LIMITS.modelMaxS (als
     assert.ok(Date.now() - g0 >= 1500, 'past the model\'s cap');
     assert.ok(!logs.some(l => /capped/.test(l)));
     assert.ok(!giver.paused.includes('self_preservation'));
+    assert.ok(giver.paused.includes('self_defense') && giver.paused.includes('cowardice'), 'a giver\'s stay may pause both, as before');
+});
+
+test('#424 review: !attack on a water mob (squid) never pauses self_preservation', async () => {
+    const paused = [];
+    const bot = { output: '', interrupt_code: false, entity: { position: { x: 0, y: 64, z: 0 } }, entities: {}, modes: { pause: (m) => paused.push(m), unpause() {} } };
+    const agent = { bot, actions: { runAction: (label, fn) => Promise.resolve(fn()).then(() => ({ message: bot.output, interrupted: false })) } };
+    for (const mob of ['squid', 'cod', 'salmon', 'tropical_fish', 'drowned']) {
+        paused.length = 0;
+        await skills.attackNearest(agent.bot, mob, true);
+        assert.ok(!paused.includes('self_preservation'), `${mob}: paused ${paused}`);
+        assert.match(bot.output, new RegExp(`Could not find any ${mob} to attack`));
+    }
 });
 

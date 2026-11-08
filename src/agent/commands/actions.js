@@ -564,7 +564,7 @@ export const actionsList = [
     },
     {
         name: '!stay',
-        description: `Stay in the current location. Pauses the other modes; self-preservation stays on. At most ${STAY_LIMITS.modelMaxS} s unless a task giver types it.`,
+        description: `Stay in the current location. Pauses the other modes; self-preservation and self-defense stay on. At most ${STAY_LIMITS.modelMaxS} s unless a task giver types it.`,
         params: {'type': { type: 'int', description: 'The number of seconds to stay. -1 for forever (a task giver only).', domain: [-1, Number.MAX_SAFE_INTEGER] }},
         perform: runAsAction(async (agent, seconds, context) => {
             // #414/#422 follow-up (lead): the model could pause every survival mode for good with
@@ -576,7 +576,9 @@ export const actionsList = [
                 skills.log(agent.bot, `Staying ${STAY_LIMITS.modelMaxS} s at most: only a task giver can make you stay longer.`);
                 s = STAY_LIMITS.modelMaxS;
             }
-            await skills.stay(agent.bot, s);
+            // #424 review: the model's stay keeps self_defense (only cowardice pauses: its flee
+            // contradicts a stay); a task giver's stay may pause both, as before.
+            await skills.stay(agent.bot, s, { pauseSelfDefense: !!context?.sender });
         })
     },
     {

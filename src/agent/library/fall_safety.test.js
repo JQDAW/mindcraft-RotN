@@ -399,6 +399,24 @@ test('#259: installWalkSafety makes every movements anyone sets fall-, liquid- a
     assert.equal(installWalkSafety(bot), false, 'once');
 });
 
+test('#427 review: every movements anyone sets (a flee, a follow, a pvp chase) steps around poison ivy and thorns, once', () => {
+    const bot = fakeBot();
+    const set = [];
+    bot.pathfinder = { setMovements: (m) => set.push(m), movements: new pf.Movements(bot) };
+    installWalkSafety(bot);
+    const steps = (m, name, metadata) => m.exclusionAreasStep.reduce((n, f) => n + f({ name, metadata, position: new Vec3(0, 64, 0) }), 0);
+    assert.equal(bot.pathfinder.movements.rotnPlantSafe, true, 'the current movements too');
+    bot.pathfinder.setMovements(new pf.Movements(bot)); // e.g. mineflayer-pvp's chase
+    const m = set[0];
+    assert.equal(m.rotnPlantSafe, true);
+    assert.ok(steps(m, 'biomesoplenty:plant_0', 4) >= 100, 'poison ivy');
+    assert.ok(steps(m, 'biomesoplenty:plant_1', 2) >= 100, 'thorns');
+    assert.equal(steps(m, 'biomesoplenty:plant_0', 0), 0, 'another BoP plant');
+    const before = m.exclusionAreasStep.length;
+    bot.pathfinder.setMovements(m); // set again: not added twice
+    assert.equal(set[1].exclusionAreasStep.length, before);
+});
+
 // ---- #264 review ----
 
 test('#264 review 1: vanilla water is left to the pathfinder: wading and swimming still give moves', () => {

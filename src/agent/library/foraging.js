@@ -129,7 +129,7 @@ export function mayBeAPlayersCrop(bot, point, { bases = [] } = {}) {
 }
 
 /**
- * Why the bot must not take a block by breaking it (!collectBlocks, !breakBlockAt), or null: a
+ * Why the bot must not take a block by breaking it (skills.collectBlock: !collectBlocks), or null: a
  * forage source that is not ready, is right-clicked (a berry bush: never broken), has a plant
  * hazard or may be a player's. Any other block: null.
  */
@@ -176,7 +176,8 @@ export function forageTargets(bot, { bases = [], radius = FORAGE.radius, count =
     let found = [];
     try {
         found = bot.findBlocks({ maxDistance: radius, count: 64,
-            matching: (b) => !!b && typeof b.name === 'string' && !!sources.get(fullName(b.name))?.has(b.metadata) }) ?? [];
+            // #427 review: the cheap name filter first; fullName (rotn-data) only for a forage mod's block.
+            matching: (b) => !!b && mayForage(b.name) && !!sources.get(fullName(b.name))?.has(b.metadata) }) ?? [];
     } catch { found = []; }
     const out = [];
     for (const p of found.sort((a, b) => a.distanceTo(here) - b.distanceTo(here))) {

@@ -79,6 +79,30 @@ test('G4 #5 forage: ripe wild food comes before a hunt; a bare bush, an unripe h
     assert.deepEqual(await hunt(withCrops(huntAgent({ food: 18, animals: [] }), { '6,64,0': ['rustic:wildberry_bush', 1] })), [], 'food not due: no foraging either');
 });
 
+test('#427 review: a forage run that got nothing (bushes out of reach) does not hold food up: the next tick hunts', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    // Eight ripe bushes no walk reaches (a run tries at most FORAGE_RUN.max = 6) and a wild cow.
+    const crops = Object.fromEntries([6, 7, 8, 9, 10, 11, 12, 13].map(x => [`${x},64,8`, ['rustic:wildberry_bush', 1]]));
+    const agent = withCrops(huntAgent({ animals: [cow(1, 3)] }), crops);
+    const bot = agent.bot;
+    Object.assign(bot.pathfinder, { setMovements() {}, stop() {}, setGoal() {}, isMoving: () => false,
+        getPathTo: () => ({ status: 'noPath', path: [] }), goto: () => Promise.reject(new Error('No path to the goal!')) });
+    const attacked = [];
+    bot.pvp = { attack: (e) => { attacked.push(e.name); delete bot.entities[e.id]; }, stop() {} };
+    bot.activateBlock = () => Promise.reject(new Error('never reached'));
+    agent.actions.runAction = async (label, fn) => { agent.runs.push(label); await fn(); return { message: '', interrupted: false }; };
+    const m = __modeForTest('hunting');
+    m.active = false; m.skipped_said = ''; m.forage_none_at = -Infinity;
+    await m.update(agent); await flush();
+    assert.match(bot.output, /Foraged 0 blocks, got nothing/);
+    assert.deepEqual(attacked, [], 'the first tick foraged');
+    // Two bushes were never tried; still, the next tick hunts.
+    m.active = false;
+    await m.update(agent); await flush();
+    assert.deepEqual(attacked, ['animania:cow_holstein'], 'the next tick hunts');
+});
+
 test('G4 #5: the hunting reflex does nothing when food is not due, at dusk or night, with a threat near, when busy, or sheltered', async (t) => {
     t.mock.method(console, 'log', () => {});
     assert.deepEqual(await hunt(huntAgent({ animals: [cow(1, 6)], food: 16 })), [], 'food 16: not due');
