@@ -2,6 +2,7 @@
 // env check, the control wrapper, bootstrap.sh and deploy.sh. System commands are fakes
 // (fixtures/fake-sys.sh) and every path is under a temp ROOT; deploy.sh uses real git and tar on a
 // throwaway local repo. Nothing connects to the CX23.
+import './isolate-tmp.mjs';
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

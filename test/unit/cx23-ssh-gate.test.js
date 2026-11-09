@@ -2,6 +2,7 @@
 // deploy@cx23 (ADR 0009). A copy runs with its three program paths pointed at fakes: `sudo` and `logger` record
 // their exact argv (NUL-separated), so the tests see what root would run and what syslog would get. Nothing connects
 // to the CX23.
+import './isolate-tmp.mjs';
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
