@@ -13,11 +13,12 @@
 // first too, and the bot says the shelter waits for it.
 
 import { Vec3 } from 'vec3';
-import { NightClock, nightPhase, NIGHT_START, isWall, handDiggable, REPAIR_LABEL, shelterShell } from './library/night.js';
+import pf from 'mineflayer-pathfinder';
+import { NightClock, nightPhase, NIGHT_START, isWall, REPAIR_LABEL, shelterShell } from './library/night.js';
 import { buildShelter, siteNeeds, siteProblem, clearSpace, isLiquid, isFalling, isEmpty, hurtsOnContact, shelterItems, softItems, exactAt, SETTLE } from './library/shelter.js';
-import { breakBlockAt, descendFromTree } from './library/skills.js';
+import { goToGoal, descendFromTree } from './library/skills.js';
 import { stowCarried } from './library/rotn_sources.js';
-import { digPit, pitOut, moveAwayFrom, PIT } from './library/pit.js';
+import { digPit, pitOut, moveAwayFrom, PIT, quickByHand, digWithin, digBudget } from './library/pit.js';
 import { hasWeapon, shelterEnemy } from './library/threats.js';
 import { isBranch, isTrunkShell } from './library/felling.js';
 import { MAX_SAFE_DROP, isTreePart, standsOnTree } from './library/fall_safety.js';
@@ -169,7 +170,11 @@ function startJob(agent, n, label, fn, then) {
     const gen = n.gen;
     let result = null, ret = null;
     n.job = Promise.resolve()
-        .then(() => agent.actions.runAction(label, async () => { result = await fn(); }))
+        .then(() => {
+            // #431 review 2: only a stop of this run is attributed to its stopper, not an older one.
+            if (agent.rotnLastInterrupt?.of === label) agent.rotnLastInterrupt = null;
+            return agent.actions.runAction(label, async () => { result = await fn(); });
+        })
         .then(r => { ret = r ?? null; })
         .catch(err => console.warn(`[night] ${label} failed: ${err?.message ?? err}`))
         .then(() => {
@@ -206,25 +211,77 @@ const standable = (b) => !!b && b.boundingBox === 'block' && !isLiquid(b) && !ho
  * opening over a cliff, no tunnel into a cave's drop), and every cell walked through on the way
  * (the side's wall cell and each tunnel cell) needs firm ground right under it (#364 follow-up a).
  */
+/** Why a cell must not be dug on the way out (unloaded, liquid or fire next to it, a falling block over it, a tree part), or null. */
+function unsafeCell(bot, q) {
+    // #435 review 4: blockAt is null in a chunk not loaded; nothing is known about the cell.
+    if ([q, ...ALL_AROUND.map(o => q.plus(o))].some(c => !bot.blockAt(c))) return `an unloaded cell at or next to ${at(q)}`;
+    if (ALL_AROUND.some(o => hot(bot.blockAt(q.plus(o))))) return `liquid or fire next to ${at(q)}`;
+    if (isFalling(bot.blockAt(q.offset(0, 1, 0)))) return `a falling block over ${at(q)}`;
+    const b = bot.blockAt(q);
+    if (isBranch(b) || isTrunkShell(b)) return `a tree's ${b.name} at ${at(q)}`;
+    return null;
+}
+
+/**
+ * The ground under an exit cell: the first block below that is not free, with a fall of at most
+ * MAX_SAFE_DROP onto it (the ground MAX_SAFE_DROP + 1 below the exit cell, as fall_safety counts).
+ */
+function noGroundUnder(bot, exit) {
+    for (let dy = 1; dy <= MAX_SAFE_DROP + 1; dy++) {
+        const b = bot.blockAt(exit.offset(0, -dy, 0));
+        if (isEmpty(b)) continue;
+        return standable(b) ? null : `no firm ground under ${at(exit)} (${b?.name ?? 'unloaded'})`;
+    }
+    return `a drop of more than ${MAX_SAFE_DROP} blocks beyond ${at(exit)}`;
+}
+
+/**
+ * Soak 2 (rotn-v0.1.4, 23:21): the night shelter was the stone pit the bot had dug while collecting
+ * rocks: every side was rock for more than EXIT_DEPTH, and digOut only goes sideways, so all three
+ * morning tries failed. With no sideways exit, stairs up towards d: up to UP_STEPS steps, each one
+ * up and one across (the headroom over the bot, then the step's two cells; the step stands on the
+ * block beside the bot), until the two cells beyond the top step are free with ground under them.
+ * The same safety rules as the sideways exits. A plan {dig, how: 'stairs', byHand, exit} or {why}.
+ */
+export const UP_STEPS = 4;
+const WORLD_TOP = 256; // 1.12
+/**
+ * #435 review 3: nothing but air, plants or a tree's leaves and branches over q, up to the top of
+ * the world: stairs that end in a cave are no way out. A column not loaded is not open.
+ */
+function openSky(bot, q) {
+    for (let y = q.y; y < WORLD_TOP; y++) {
+        const b = bot.blockAt(new Vec3(q.x, y, q.z));
+        if (!b || isLiquid(b) || (b.boundingBox !== 'empty' && !isTreePart(b))) return false;
+    }
+    return true;
+}
+function stairsUpPlan(bot, feet, d) {
+    const dig = [];
+    const take = (q) => { if (!isEmpty(bot.blockAt(q))) dig.push(q); };
+    let p = feet;
+    for (let k = 1; k <= UP_STEPS; k++) {
+        const next = p.plus(d).offset(0, 1, 0);
+        const cells = [p.offset(0, 2, 0), next, next.offset(0, 1, 0)];
+        for (const q of cells) { const why = unsafeCell(bot, q); if (why) return { why }; }
+        const step = p.plus(d); // what the step stands on
+        if (!isEmpty(bot.blockAt(step)) && !standable(bot.blockAt(step))) return { why: `no firm step at ${at(step)} (${bot.blockAt(step)?.name ?? 'unloaded'})` };
+        if (isEmpty(bot.blockAt(step))) return { why: `no step at ${at(step)} (it is open)` };
+        cells.forEach(take);
+        p = next;
+        const out = p.plus(d);
+        if (isEmpty(bot.blockAt(out)) && isEmpty(bot.blockAt(out.offset(0, 1, 0))) && !hot(bot.blockAt(out)) && !noGroundUnder(bot, out)) {
+            if (!openSky(bot, out)) return { why: `no open sky over ${at(out)}` };
+            return { dig, how: 'stairs', byHand: dig.every(q => quickByHand(bot.blockAt(q))), exit: out, steps: k };
+        }
+    }
+    return { why: `no way up within ${UP_STEPS} steps` };
+}
+
 function exitPlan(bot, feet, d) {
     const dig = [];
-    const unsafe = (q) => {
-        if (ALL_AROUND.some(o => hot(bot.blockAt(q.plus(o))))) return `liquid or fire next to ${at(q)}`;
-        if (isFalling(bot.blockAt(q.offset(0, 1, 0)))) return `a falling block over ${at(q)}`;
-        const b = bot.blockAt(q);
-        if (isBranch(b) || isTrunkShell(b)) return `a tree's ${b.name} at ${at(q)}`;
-        return null;
-    };
-    // The ground under the exit cell: the first block below that is not free, with a fall of at most
-    // MAX_SAFE_DROP onto it (the ground MAX_SAFE_DROP + 1 below the exit cell, as fall_safety counts).
-    const noGround = (exit) => {
-        for (let dy = 1; dy <= MAX_SAFE_DROP + 1; dy++) {
-            const b = bot.blockAt(exit.offset(0, -dy, 0));
-            if (isEmpty(b)) continue;
-            return standable(b) ? null : `no firm ground under ${at(exit)} (${b?.name ?? 'unloaded'})`;
-        }
-        return `a drop of more than ${MAX_SAFE_DROP} blocks beyond ${at(exit)}`;
-    };
+    const unsafe = (q) => unsafeCell(bot, q);
+    const noGround = (exit) => noGroundUnder(bot, exit);
     // #364 follow-up (a): every cell the bot walks through has firm ground right under it (a dug
     // tunnel cell over a cave would drop the bot into it on the way out).
     const noFloor = (q) => {
@@ -252,34 +309,73 @@ function exitPlan(bot, feet, d) {
             take(room);
             how = k === 1 ? 'step' : 'tunnel';
         }
-        if (how) return { dig, how, byHand: dig.every(q => handDiggable(bot.blockAt(q))) };
+        if (how) return { dig, how, byHand: dig.every(q => quickByHand(bot.blockAt(q))) };
     }
     return { why: `no free cell within ${EXIT_DEPTH} blocks` };
+}
+
+/**
+ * #435 review 1: the block no tool the bot has can harvest (breaking it would be refused), among the
+ * plan's blocks: the hand or a pickaxe carried, or null when all of them can be broken.
+ */
+function unharvestable(bot, plan) {
+    if (bot.game?.gameMode === 'creative') return null;
+    const tools = [null, ...(bot.inventory?.items?.() ?? []).filter(i => /pickaxe/.test(i.name)).map(i => i.type)];
+    return plan.dig.map(q => bot.blockAt(q)).find(b => typeof b?.canHarvest === 'function' && !tools.some(t => b.canHarvest(t))) ?? null;
+}
+
+/** How near a block must be to break it (as breakBlockAt): the higher steps are walked up to. */
+const EXIT_REACH = 4.5;
+/** Dig one cell of an exit within the per-block limit (#435 review 2, digBudget): true when it is gone or was free. */
+async function digExitCell(bot, q) {
+    if (isEmpty(bot.blockAt(q))) return true;
+    if (bot.entity.position.distanceTo(q) > EXIT_REACH) {
+        try { await goToGoal(bot, new pf.goals.GoalNear(q.x, q.y, q.z, 4), { canDig: false }); }
+        catch (err) { console.log(`[night] dig out: no walk to ${at(q)}: ${err?.message ?? err}`); return false; }
+        if (bot.entity.position.distanceTo(q) > EXIT_REACH) return false;
+    }
+    const block = bot.blockAt(q);
+    const { limitMs } = digBudget(bot, block);
+    const dug = await digWithin(bot, block, limitMs);
+    if (dug === 'timeout') console.log(`[night] dig out: ${block.name} at ${at(q)} was not dug within ${(limitMs / 1000).toFixed(1)} s`);
+    return dug === true;
 }
 
 /**
  * Open one side of the shelter so the bot can walk out (exitPlan): a side dug by hand first (dirt,
  * G3 round 6 B: it needs no pickaxe, which a bot that died and built its shelter of dirt does not
  * have), then the plan with the fewest blocks; each side's refusal is logged. The opening is
- * checked after digging. Returns the side's lower wall position, or null.
+ * checked after digging. A plan with a block the bot cannot harvest is dropped before anything is
+ * dug (#435 review 1: the roof stays on), and with no sideways plan left it takes stairs up. Returns
+ * the side's lower wall position (stairs: the cell at the top), or null.
  */
 export async function digOut(bot, feet) {
     // The pickaxe must be where breakBlockAt's equipForBlock looks (#229 review).
     const moved = await stowCarried(bot, (i) => /pickaxe/.test(i.name), { resyncMs: 0 }); // no wait: it is night
     if (moved.length) console.log(`[night] moved ${moved.join(' and ')} back into the inventory to dig out`);
     const plans = [];
-    for (const d of HORIZONTAL) {
-        const plan = exitPlan(bot, feet, d);
-        if (plan.why) console.log(`[night] dig out: not the ${sideName(d)} side (${plan.why})`);
+    const consider = (plan, d, refused) => {
+        const hard = plan.why ? null : unharvestable(bot, plan);
+        const why = plan.why ?? (hard ? `no tool to break ${hard.name} at ${at(hard.position)}` : null);
+        if (why) console.log(`[night] dig out: ${refused} (${why})`);
         else plans.push({ ...plan, d });
+    };
+    for (const d of HORIZONTAL) consider(exitPlan(bot, feet, d), d, `not the ${sideName(d)} side`);
+    // Soak 2: no sideways exit (a shelter at the bottom of a pit): stairs up.
+    if (plans.length === 0) {
+        for (const d of HORIZONTAL) consider(stairsUpPlan(bot, feet, d), d, `no stairs up on the ${sideName(d)} side`);
     }
     plans.sort((a, b) => (b.byHand - a.byHand) || (a.dig.length - b.dig.length)); // stable: HORIZONTAL order on a tie
     for (const plan of plans) {
         let dug = true;
-        for (const q of plan.dig) dug &&= isEmpty(bot.blockAt(q)) || await breakBlockAt(bot, q.x, q.y, q.z);
+        for (const q of plan.dig) {
+            if (bot.interrupt_code) return null;
+            dug = await digExitCell(bot, q);
+            if (!dug) break;
+        }
         if (dug && plan.dig.every(q => isEmpty(bot.blockAt(q)))) {
-            if (plan.how !== 'level') console.log(`[night] dig out: the ${sideName(plan.d)} side (${plan.how === 'step' ? 'a step up' : 'a tunnel'}, ${plan.dig.length} blocks)`);
-            return feet.plus(plan.d);
+            if (plan.how !== 'level') console.log(`[night] dig out: the ${sideName(plan.d)} side (${plan.how === 'step' ? 'a step up' : plan.how === 'stairs' ? `stairs up, ${plan.steps} steps` : 'a tunnel'}, ${plan.dig.length} blocks)`);
+            return plan.how === 'stairs' ? plan.exit : feet.plus(plan.d); // stairs: the cell at the top
         }
         console.log(`[night] dig out: could not open the ${sideName(plan.d)} side`);
     }

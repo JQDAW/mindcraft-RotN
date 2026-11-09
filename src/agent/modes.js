@@ -542,6 +542,8 @@ const modes_list = [
             this.skipped_said = said;
             if (!target || !await world.isClearPath(bot, target)) return;
             execute(this, agent, async () => {
+                // #431 review 7: only a stop of this hunt counts below, not an older hunt's.
+                if (agent.rotnLastInterrupt?.of === `mode:${this.name}`) agent.rotnLastInterrupt = null;
                 say(agent, `Hunting ${target.name} for food!`);
                 // #422 review 1: bounded (HUNT.maxMs), and over once the day is (dusk) or a threat comes.
                 const end = await huntAnimal(bot, target, { keepGoing, equip: (b) => skills.equipHighestAttack(b) });
