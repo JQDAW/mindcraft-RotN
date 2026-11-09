@@ -32,6 +32,26 @@ export const CHECK_MS = 10_000;
 /** Wait before another try after a shelter could not be built. */
 export const RETRY_MS = 30_000;
 export const BUILD_ATTEMPTS = 3;
+/**
+ * Soak 2 (rotn-v0.1.4, night 2): the unstuck reflex stopped the hole shelter every ~22 s, and an
+ * interruption was never a try, so the night never got a shelter. This many interruptions per
+ * build phase are free (a reflex that really had to act); after that each one counts as a failed try,
+ * so the tries (BUILD_ATTEMPTS, the hole) run out and the night ends in a shelter or in 'exposed'.
+ */
+export const FREE_INTERRUPTS = 2;
+/**
+ * #431 review 2: a threat reflex (a fight, a flee) that stops the build had to act: such
+ * interruptions are counted apart, with this larger bound, and then count as a failed try too.
+ */
+export const THREAT_INTERRUPTS = 6;
+const THREAT_MODES = ['self_defense', 'cowardice', 'self_preservation'];
+/**
+ * #431 review 2: an exposed night (no shelter after the tries) tries again once it has been quiet
+ * (no hostile mob within QUIET_RANGE) this long, at most EXPOSED_RETRIES times a night.
+ */
+export const EXPOSED_RETRY_MS = 60_000;
+export const EXPOSED_RETRIES = 4;
+const QUIET_RANGE = 16;
 /** At dusk a running action gets this long to finish; by night it is stopped at once (#204 review 3). */
 export const DUSK_WAIT_MS = 60_000;
 /**
@@ -362,8 +382,10 @@ function restoreCowardice(agent, n) {
  * the hole (which crafts the roof's dirt from the dug piles).
  */
 async function pitShelter(bot, ops, progress) {
+    progress.why = null;
     const feet = await ops.digPit(bot, { progress });
-    if (!feet) return { closed: false, feet: null, line: 'found no place to dig a hole shelter' };
+    // #431 review 4: a dig that timed out says so (not "no place").
+    if (!feet) return { closed: false, feet: null, line: progress.why ?? 'found no place to dig a hole shelter' };
     return ops.buildShelter(bot, { site: feet, keepSoft: true });
 }
 
@@ -376,6 +398,8 @@ function startBuilding(n, now) {
     n.state = 'building';
     n.attempts = 0;
     n.unsettled = 0;
+    n.interrupts = 0;
+    n.threatInterrupts = 0;
     n.descended = false;
     n.nextAt = now;
 }
@@ -478,6 +502,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         const held = heldFoodHunger(bot);
         console.log(`[night] food for the night: food worth ${held} hunger held, food ${Number.isFinite(bot.food) ? bot.food : 'unknown'}; `
             + (held >= FOOD_TARGET.dusk ? 'enough' : `less than ${FOOD_TARGET.dusk}: staying sealed anyway (never out for food at night)`));
+        n.exposedRetries = 0;
         startBuilding(n, now);
     }
 
@@ -491,6 +516,24 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         return null;
     }
     holdAutonomy(agent);
+
+    // #431 review 2: exposed (no shelter after the tries, often because fights kept stopping the
+    // build): once no hostile mob has been within QUIET_RANGE for EXPOSED_RETRY_MS, a fresh try
+    // (the builds and a hole), at most EXPOSED_RETRIES times a night.
+    if (n.state === 'exposed' && (n.exposedRetries ?? 0) < EXPOSED_RETRIES) {
+        if (ops.hostileNear?.(bot, QUIET_RANGE)) n.quietSince = null;
+        else {
+            n.quietSince ??= now;
+            if (now - n.quietSince >= EXPOSED_RETRY_MS) {
+                n.exposedRetries = (n.exposedRetries ?? 0) + 1;
+                n.quietSince = null;
+                Object.assign(n, { pitTried: false, pitNext: false });
+                restoreCowardice(agent, n);
+                line(agent, `[night] quiet for ${EXPOSED_RETRY_MS / 1000} s: trying a shelter again (${n.exposedRetries} of ${EXPOSED_RETRIES})`);
+                startBuilding(n, now);
+            }
+        }
+    }
 
     if (n.state === 'building') {
         // CX23 soak (rotn-v0.1.3): respawned in a canopy, every shelter and hole try failed there
@@ -518,7 +561,8 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
         if (n.nextAt === null) n.nextAt = now + RETRY_MS;
         if (now < n.nextAt) return 'night:building';
         const pit = n.pitNext;
-        startJob(agent, n, pit ? 'action:digPit' : 'action:buildShelter', () => (pit ? pitShelter(bot, ops, n.pitProgress) : ops.buildShelter(bot)), (r, ret) => {
+        const label = pit ? 'action:digPit' : 'action:buildShelter';
+        startJob(agent, n, label, () => (pit ? pitShelter(bot, ops, n.pitProgress) : ops.buildShelter(bot)), (r, ret) => {
             if (r?.closed) {
                 n.unsettled = 0;
                 n.pitNext = false;
@@ -535,11 +579,18 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
                 line(agent, `[night] in the shelter at ${at(r.feet)} until morning`);
                 return;
             }
-            if (ret?.interrupted) {
+            // #431 review 2: by a threat reflex (THREAT_INTERRUPTS) or by anything else (FREE_INTERRUPTS).
+            const stopper = ret?.interrupted && agent.rotnLastInterrupt?.of === label ? agent.rotnLastInterrupt.by : null;
+            const threat = THREAT_MODES.includes(stopper);
+            const counter = threat ? 'threatInterrupts' : 'interrupts';
+            const bound = threat ? THREAT_INTERRUPTS : FREE_INTERRUPTS;
+            if (ret?.interrupted && (n[counter] ?? 0) < bound) {
                 // A reflex or a command stopped it: not a try; build again once it is done. A hole
                 // stays next (#337 review 6), and its dig goes on in the same hole (pitProgress).
+                // Soak 2: only so many of them per build phase; later ones count (below).
+                n[counter] = (n[counter] ?? 0) + 1;
                 n.nextAt = 0;
-                console.log(`[night] the ${pit ? 'hole shelter' : 'shelter build'} was interrupted; it does not count as a try`);
+                console.log(`[night] the ${pit ? 'hole shelter' : 'shelter build'} was interrupted${stopper ? ` by ${stopper}` : ''}; it does not count as a try (${n[counter]} of ${bound}${threat ? ' by a threat reflex' : ''})`);
                 return;
             }
             // #381 review 2: the bot was not at rest on the floor (mid-jump, bobbing): like an
@@ -553,7 +604,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             }
             n.unsettled = 0;
             n.pitNext = false;
-            const why = r?.line ?? 'the build ended without a result';
+            const why = ret?.interrupted ? `interrupted again (more than ${bound} times${threat ? ' by a threat reflex' : ''})` : (r?.line ?? 'the build ended without a result');
             // #337 review 8: the tries are the shelter builds (BUILD_ATTEMPTS); the hole is one more,
             // once a night, right after the first failed build, and it is not counted.
             if (!pit) n.attempts++;
@@ -568,6 +619,7 @@ export function nightTick(agent, { now = Date.now(), ops = NIGHT_OPS } = {}) {
             }
             if (n.attempts >= BUILD_ATTEMPTS) {
                 n.state = 'exposed';
+                n.quietSince = null;
                 if (n.leaveFrom && bot.rotnSheltered === 'open') bot.rotnSheltered = false; // no shelter: the normal rules
                 n.leaveFrom = null;
                 // #337 review 7: the line says what the bot does.

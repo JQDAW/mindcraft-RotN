@@ -388,3 +388,121 @@ test('#356 review 2: a falling tree entity seen for FALLING_SEEN_MAX_MS no longe
     while (mode.active && Date.now() - started < 2000) await new Promise(r => setTimeout(r, 10));
     assert.equal(gotos.length, 1, 'unstuck moved away');
 });
+
+// Soak 2 (rotn-v0.1.4, night 2): unstuck moved the bot off its hole shelter every ~22 s while it dug
+// a slow block, and stopped a hunt 6 times. Lead's rule: unstuck never moves the bot while the
+// action makes progress (a block broken or placed, a dig within 2 x its time, the target closer).
+test('soak 2: unstuck never moves the bot while the action makes progress; with none it still does', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const position = new Vec3(-42, 67, -53);
+    const setup = (extra = {}, memo = {}) => {
+        const agent = fakeAgent();
+        agent.isIdle = () => false;
+        initModes(agent);
+        agent.bot.modes.setOn('cheat', false);
+        const gotos = [];
+        Object.assign(agent.bot, {
+            registry: minecraftData('1.12.2'), version: '1.12.2', output: '',
+            entity: { position: position.clone() }, entities: {}, targetDigBlock: null,
+            pathfinder: { setMovements() {}, getPathTo: () => ({ status: 'success', path: [] }), goto: (g) => { gotos.push(g); return Promise.resolve(); }, stop() {} },
+        }, extra);
+        const mode = __modeForTest('unstuck');
+        mode.prev_location = position.clone();
+        mode.stuck_time = mode.max_stuck_time + 1; // 20 s in one place
+        mode.last_time = Date.now();
+        mode.progress_memo = memo;
+        mode.prev_dig_block = null; // a case before may have left its dig here
+        return { agent, mode, gotos };
+    };
+    const run = async ({ agent, mode, gotos }) => {
+        await mode.update(agent);
+        for (let i = 0; i < 100 && (mode.active || i < 2); i++) await new Promise(r => setTimeout(r, 10)); // let a started move finish
+        return { moved: gotos.length > 0, mode };
+    };
+    const dirt = { name: 'dynamictrees:rootydirt', position: position.offset(0, -1, 0) };
+    // A block broken or placed since the last tick.
+    let r = await run(setup({ rotnProgressAt: Date.now() }, { progressSeen: Date.now() - 1000 }));
+    assert.equal(r.moved, false, 'a block broken or placed: no move');
+    assert.equal(r.mode.stuck_time, 0);
+    // A slow dig (30 s by hand): its start is only recorded (#431 review 1); on the next tick, and
+    // 50 s in (within 2 x 30 s), it is progress.
+    const memo = {};
+    const started = setup({ targetDigBlock: dirt, digTime: () => 30_000 }, memo);
+    started.mode.stuck_time = 0; // the dig starts after a moment in place
+    r = await run(started);
+    assert.equal(memo.digKey, '-42,66,-53', 'the start is recorded');
+    r = await run(setup({ targetDigBlock: dirt, digTime: () => 30_000 }, memo));
+    assert.equal(r.moved, false, 'the same dig on the next tick: no move');
+    const key = '-42,66,-53';
+    r = await run(setup({ targetDigBlock: dirt, digTime: () => 30_000 }, { digKey: key, digSince: Date.now() - 50_000, digAllowMs: 60_000 }));
+    assert.equal(r.moved, false, 'a dig within twice its time: no move');
+    // The fight's target getting closer.
+    const sow = { id: 9, position: position.offset(4, 0, 0) };
+    r = await run(setup({ pvp: { target: sow } }, { targetKey: 'pvp:9', targetBest: 8 }));
+    assert.equal(r.moved, false, 'the target is closer than before: no move');
+    // No progress: the dig past twice its time, the target no closer: it moves the bot, as before.
+    r = await run(setup({ targetDigBlock: dirt, digTime: () => 30_000 }, { digKey: key, digSince: Date.now() - 61_000, digAllowMs: 60_000 }));
+    assert.equal(r.moved, true, 'a dig past twice its time: stuck');
+    r = await run(setup({ pvp: { target: sow } }, { targetKey: 'pvp:9', targetBest: 4 }));
+    assert.equal(r.moved, true, 'the target no closer: stuck');
+});
+
+test('soak 2: installProgress stamps a block broken (diggingCompleted) or placed by the bot', async () => {
+    const { installProgress } = await import('./library/progress.js');
+    const { EventEmitter } = await import('node:events');
+    const bot = new EventEmitter();
+    bot.placeBlock = () => Promise.resolve('placed');
+    assert.equal(installProgress(bot), true);
+    assert.equal(installProgress(bot), false, 'once');
+    assert.equal(bot.rotnProgressAt, undefined);
+    bot.emit('diggingCompleted', {});
+    const dug = bot.rotnProgressAt;
+    assert.ok(dug > 0);
+    await new Promise(r => setTimeout(r, 5));
+    assert.equal(await bot.placeBlock({}, {}), 'placed');
+    assert.ok(bot.rotnProgressAt > dug);
+});
+
+test('#431 review 1: a retry loop that starts over in place (a new goal or a new dig each time, no closer) is still freed by unstuck', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    t.mock.method(console, 'warn', () => {});
+    const { GoalNear } = (await import('mineflayer-pathfinder')).default.goals;
+    const position = new Vec3(5, 64, 5);
+    const setup = (extra, memo) => {
+        const agent = fakeAgent();
+        agent.isIdle = () => false;
+        initModes(agent);
+        agent.bot.modes.setOn('cheat', false);
+        const gotos = [];
+        Object.assign(agent.bot, {
+            registry: minecraftData('1.12.2'), version: '1.12.2', output: '',
+            entity: { position: position.clone() }, entities: {}, targetDigBlock: null,
+            pathfinder: { setMovements() {}, getPathTo: () => ({ status: 'success', path: [] }), goto: (g) => { gotos.push(g); return Promise.resolve(); }, stop() {} },
+        });
+        Object.assign(agent.bot.pathfinder, extra.pathfinder ?? {});
+        if (extra.targetDigBlock) agent.bot.targetDigBlock = extra.targetDigBlock;
+        const mode = __modeForTest('unstuck');
+        Object.assign(mode, { prev_location: position.clone(), stuck_time: mode.max_stuck_time + 1, last_time: Date.now(), progress_memo: memo, prev_dig_block: null });
+        return { agent, mode, gotos };
+    };
+    const run = async (s) => { await s.mode.update(s.agent); for (let i = 0; i < 100 && (s.mode.active || i < 2); i++) await new Promise(r => setTimeout(r, 10)); return s.gotos.length > 0; };
+    // A command retrying its walk: a new goal object each time, never closer.
+    const memo = { targetKey: new GoalNear(30, 64, 5, 1), targetBest: 25 };
+    assert.equal(await run(setup({ pathfinder: { goal: new GoalNear(30, 64, 5, 1) } }, memo)), true, 'a new goal is no progress: freed');
+    // A dig that keeps starting over on new blocks it never finishes.
+    const memo2 = { digKey: '5,63,5', digSince: Date.now(), digAllowMs: 60_000 };
+    assert.equal(await run(setup({ targetDigBlock: { name: 'dirt', position: new Vec3(6, 63, 5) } }, memo2)), true, 'a new dig is no progress: freed');
+});
+
+test('#431 review 2 and 7: a reflex that stops an action records who stopped which (agent.rotnLastInterrupt)', async (t) => {
+    t.mock.method(console, 'log', () => {});
+    const agent = fakeAgent();
+    agent.actions.currentActionLabel = 'action:digPit';
+    await execute({ name: 'unstuck', active: false }, agent, () => Promise.resolve());
+    assert.equal(agent.rotnLastInterrupt.by, 'unstuck');
+    assert.equal(agent.rotnLastInterrupt.of, 'action:digPit');
+    agent.actions.currentActionLabel = '';
+    await execute({ name: 'self_defense', active: false }, agent, () => Promise.resolve());
+    assert.equal(agent.rotnLastInterrupt.by, 'unstuck', 'nothing was stopped: unchanged');
+});
