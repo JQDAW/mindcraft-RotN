@@ -38,6 +38,7 @@ import { chatFrom } from './chat_sender.js';
 import { reportNamingNearSpawn } from './library/naming_report.js';
 import { bindSurvivalLog } from './library/survival_log.js';
 import { trackBotPlaced, knownBases } from './library/hunting.js';
+import { installProgress } from './library/progress.js';
 import { EAT_AT } from './library/food.js';
 
 export class Agent {
@@ -101,6 +102,8 @@ export class Agent {
         guardInventory(this.bot);
         // G4 #5: the blocks the bot places itself never make an animal look like a player's (hunting.js).
         trackBotPlaced(this.bot);
+        // Soak 2: blocks the bot breaks or places count as progress for the unstuck reflex.
+        installProgress(this.bot);
         // G4 #5: the player bases the bot knows (its memory), for the skills' ownership checks (foraging.js).
         this.bot.rotnBases = () => knownBases(this);
         
