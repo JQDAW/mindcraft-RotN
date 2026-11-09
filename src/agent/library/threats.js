@@ -100,13 +100,33 @@ export const isPlayerZombie = (entity) => entity?.name === PLAYER_ZOMBIE;
  * otherwise the bot keeps away from it. Tiny slimes are fought as before. rotn-data's entry for
  * slime stays 'fight' (vanilla); the size rule is the bot's (a size-aware entry is requested).
  */
-export const SLIME = { bigSize: 2, minHealth: 14, sizeIndex: 12 };
-const SLIMES = /(^|:)[a-z_]*slime$/;
+export const SLIME = { bigSize: 2, minHealth: 14, sizeIndex: 12, minAttack: 4 };
+// #434 review: magma cubes split and hit by size the same way.
+const SLIMES = /(^|:)([a-z_]*slime|magma_cube)$/;
+/**
+ * #434 review (a): a crude axe is no real weapon. Attack damage on this pack: the pack's
+ * config/materialchanger.cfg (active ATTACK_DAMAGE lines: stone axe 3, stone sword 3.5, crude axe 3,
+ * diamond sword 8, diamond axe 7, redstone sword 7, bone sword 4; the iron and golden lines at the top
+ * of that file are commented-out examples), else vanilla 1.12 for the items it leaves alone (wooden
+ * sword 4, iron sword 6, golden sword 4, wooden axe 7, iron axe 9, golden axe 7). An item not listed
+ * counts as no real weapon (fail safe). To move to rotn-data as a cited table.
+ */
+export const WEAPON_ATTACK = {
+    'pyrotech:crude_axe': 3, 'minecraft:stone_axe': 3, 'minecraft:stone_sword': 3.5, 'minecraft:wooden_sword': 4, 'minecraft:wooden_axe': 7,
+    'minecraft:iron_sword': 6, 'minecraft:iron_axe': 9, 'minecraft:golden_sword': 4, 'minecraft:golden_axe': 7,
+    'minecraft:diamond_sword': 8, 'minecraft:diamond_axe': 7, 'pyrotech:redstone_sword': 7, 'mod_lavacow:bonesword': 4,
+};
+const fullItemName = (n) => (n.includes(':') ? n : `minecraft:${n}`);
+/** The bot's best attack damage among the weapons it carries (WEAPON_ATTACK), or 0. */
+export function bestAttack(bot) {
+    const items = [...(bot?.inventory?.items?.() ?? []), bot?.inventory?.slots?.[45]];
+    return Math.max(0, ...items.map(i => (typeof i?.name === 'string' ? WEAPON_ATTACK[fullItemName(i.name)] ?? 0 : 0)));
+}
 /** A slime's size (1.12 EntitySlime metadata index 12), or null when it cannot be read. */
 export const slimeSize = (e) => (Number.isInteger(e?.metadata?.[SLIME.sizeIndex]) ? e.metadata[SLIME.sizeIndex] : null);
-/** A slime (any mod's: slime, specialmobs:lemonslime, primitivemobs:brain_slime) that is big, or of unknown size. */
+/** A slime (any mod's: slime, specialmobs:lemonslime, primitivemobs:brain_slime) or a magma cube that is big, or of unknown size. */
 export const isBigSlime = (e) => typeof e?.name === 'string' && SLIMES.test(e.name) && !(slimeSize(e) !== null && slimeSize(e) < SLIME.bigSize);
-export const canFightSlime = (bot) => hasWeapon(bot) && bot?.health >= SLIME.minHealth;
+export const canFightSlime = (bot) => bestAttack(bot) >= SLIME.minAttack && bot?.health >= SLIME.minHealth;
 
 /** A sword or an axe (not a pickaxe) in the inventory or the off hand (slot 45; #227 nit). */
 export function hasWeapon(bot) {
@@ -174,13 +194,6 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
         return { action: 'flee', why: 'a player zombie, and no weapon or health at half or less', from: zombies[0].e,
             away: RANGES.avoid.away, isEnemy: isPlayerZombie };
     }
-    // Soak 2: a big slime, with no weapon or health under SLIME.minHealth: keep away from it.
-    const slimes = near.filter(x => isBigSlime(x.e) && x.d <= RANGES.fight.near);
-    if (slimes.length && !canFightSlime(bot)) {
-        const size = slimeSize(slimes[0].e);
-        return { action: 'flee', why: `a big slime (size ${size ?? 'unknown'}), and no weapon or health under ${SLIME.minHealth}`, from: slimes[0].e,
-            away: RANGES.fight.away, isEnemy: isBigSlime };
-    }
     const within = (reaction) => near.filter(x => x.t.reaction === reaction && x.d <= RANGES[reaction].near);
     const is = (reaction) => (e) => threatFor(e)?.reaction === reaction;
 
@@ -191,6 +204,15 @@ export function threatPlan(bot, { now = Date.now() } = {}) {
     const melee = within('fight');
     if (melee.length >= OUTNUMBERED) {
         return { action: 'flee', why: 'outnumbered', from: melee[0].e, away: RANGES.fight.away, isEnemy: (e) => ['fight', 'take-cover'].includes(threatFor(e)?.reaction) };
+    }
+    // Soak 2: a big slime, with no real weapon (attack SLIME.minAttack) or health under
+    // SLIME.minHealth: keep away from it. #434 review (b): after a creeper (it steers by the
+    // creeper) and after being outnumbered. No parentheses in the why: fleeLine turns them to spaces.
+    const slimes = near.filter(x => isBigSlime(x.e) && x.d <= RANGES.fight.near);
+    if (slimes.length && !canFightSlime(bot)) {
+        const size = slimeSize(slimes[0].e);
+        return { action: 'flee', why: `a big slime of size ${size ?? 'unknown'}, and no weapon of attack ${SLIME.minAttack} or more, or health under ${SLIME.minHealth}`,
+            from: slimes[0].e, away: RANGES.fight.away, isEnemy: isBigSlime };
     }
     const ranged = within('take-cover');
     if (ranged.length) return { action: 'flee', why: 'ranged', from: ranged[0].e, away: RANGES['take-cover'].away, isEnemy: is('take-cover') };

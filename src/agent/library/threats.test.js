@@ -257,7 +257,7 @@ test('G3 round 7 B and #296 review 2: an equip the server rejects does not end s
 // Soak 2 (rotn-v0.1.4, 22:47): fighting a slime bare-handed took the bot from health 20 to 2 in about 4 s.
 test('soak 2: a big slime is kept away from without a weapon or below health 14; a tiny one is fought; with a weapon and health it is fought', async () => {
     const { SLIME, isBigSlime, slimeSize } = await import('./threats.js');
-    assert.deepEqual(SLIME, { bigSize: 2, minHealth: 14, sizeIndex: 12 });
+    assert.deepEqual(SLIME, { bigSize: 2, minHealth: 14, sizeIndex: 12, minAttack: 4 });
     const slime = (id, size, name = 'slime') => ({ id, name, type: 'mob', position: new Vec3(3, 64, 0), metadata: size === null ? {} : { 12: size } });
     assert.equal(slimeSize(slime(1, 4)), 4);
     assert.equal(isBigSlime(slime(1, 4)), true);
@@ -265,13 +265,34 @@ test('soak 2: a big slime is kept away from without a weapon or below health 14;
     assert.equal(isBigSlime(slime(1, null)), true, 'size unknown: taken as big');
     assert.equal(isBigSlime(slime(1, 3, 'specialmobs:lemonslime')), true, 'a modded slime');
     assert.equal(isBigSlime({ name: 'zombie', metadata: { 12: 4 } }), false);
-    const sword = { name: 'stone_sword', count: 1 };
+    const sword = { name: 'iron_sword', count: 1 };
     const plan = (e, { health = 20, items = [] } = {}) => threatPlan(fakeBot([e], { health, inventory: { items: () => items, slots: [] } }));
     const bare = plan(slime(1, 4));
     assert.equal(bare.action, 'flee');
-    assert.equal(bare.why, 'a big slime (size 4), and no weapon or health under 14');
+    assert.equal(bare.why, 'a big slime of size 4, and no weapon of attack 4 or more, or health under 14');
     assert.equal(bare.away, RANGES.fight.away);
     assert.equal(plan(slime(1, 4), { items: [sword], health: 10 }).action, 'flee', 'a weapon but health 10');
     assert.equal(plan(slime(1, 4), { items: [sword], health: 18 }).action, 'fight', 'a weapon and health 18: fought');
     assert.equal(plan(slime(1, 1)).action, 'fight', 'a tiny one: fought bare-handed');
+});
+
+test('#434 review: a crude axe or a stone sword is no real weapon for a big slime (attack 4 or more); a creeper or a crowd still decides first; magma cubes too', async () => {
+    const { bestAttack, isBigSlime } = await import('./threats.js');
+    const slime = (id, x = 3) => ({ id, name: 'slime', type: 'mob', position: new Vec3(x, 64, 0), metadata: { 12: 4 } });
+    const plan = (es, items, health = 20) => threatPlan(fakeBot(es, { health, inventory: { items: () => items, slots: [] } }));
+    for (const [item, attack] of [['pyrotech:crude_axe', 3], ['stone_sword', 3.5], ['stone_axe', 3]]) {
+        assert.equal(bestAttack({ inventory: { items: () => [{ name: item }], slots: [] } }), attack, item);
+        assert.equal(plan([slime(1)], [{ name: item }]).action, 'flee', `${item}: kept away from`);
+    }
+    assert.equal(plan([slime(1)], [{ name: 'iron_sword' }]).action, 'fight', 'an iron sword (6): fought');
+    assert.equal(plan([slime(1)], [{ name: 'pyrotech:flint_axe' }]).action, 'flee', 'a weapon of unknown attack: not counted');
+    // A creeper near as well: the plan is the creeper's.
+    const creeper = { id: 9, name: 'creeper', type: 'mob', position: new Vec3(4, 64, 0) };
+    const both = plan([slime(1), creeper], []);
+    assert.equal(both.why, 'explodes');
+    assert.equal(both.from, creeper);
+    // Two melee mobs: outnumbered decides.
+    assert.equal(plan([slime(1), { id: 8, name: 'zombie', type: 'mob', position: new Vec3(-3, 64, 0) }], []).why, 'outnumbered');
+    assert.equal(isBigSlime({ name: 'magma_cube', metadata: { 12: 3 } }), true);
+    assert.equal(isBigSlime({ name: 'magma_cube', metadata: { 12: 1 } }), false);
 });
